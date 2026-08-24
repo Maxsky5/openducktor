@@ -1,17 +1,18 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { RuntimeKind } from "@openducktor/contracts";
 import { ODT_MCP_TOOL_NAMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentRole, PolicyBoundSessionRef, SessionRef } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./index";
-import type { ParsedOpencodeMessage, ParsedOpencodeGlobalEventPayload } from "./opencode-ingress";
+import type { ParsedOpencodeMessage } from "./opencode-ingress";
+import type { ParsedOpencodeGlobalEventPayload } from "./opencode-global-event-ingress";
 import { buildQueuedRequestSignature } from "./user-message-signatures";
 import { asUnknownRecord, readStringProp } from "./guards";
 import {
   createOpencodeEventFixtures,
   createOpencodeMessageInfoFixture,
   createOpencodePartFixture,
+  createParsedOpencodeEventFixture,
 } from "./opencode-protocol-test-fixtures";
 
 type OpencodePolicyBoundSessionRef = Extract<PolicyBoundSessionRef, { runtimeKind: "opencode" }>;
@@ -42,13 +43,7 @@ const completeMockMessage = (message: MockSessionMessage): ParsedOpencodeMessage
 export const completeMockEvent = (
   event: UnknownRecord,
   index: number,
-): ParsedOpencodeGlobalEventPayload => {
-  const fixtures = createOpencodeEventFixtures(event, index);
-  if (fixtures.length !== 1) {
-    throw new Error("Expected one OpenCode event fixture.");
-  }
-  return fixtures[0];
-};
+): ParsedOpencodeGlobalEventPayload => createParsedOpencodeEventFixture(event, index);
 
 type MockChildSession = {
   id: string;
@@ -514,7 +509,7 @@ export const makeMockClient = ({
             agentsResult?.mode === "api_error"
               ? undefined
               : agentsResponse.map((agent) =>
-                  hasRuntimeType(agent, "object") && agent !== null
+                  typeof agent === "object" && agent !== null
                     ? { options: {}, permission: [], ...agent }
                     : agent,
                 ),

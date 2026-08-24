@@ -1,4 +1,4 @@
-import { hasRuntimeType, runtimeTypeName } from "@openducktor/contracts";
+import { runtimeTypeName } from "@openducktor/contracts";
 import type { ExtractTablesWithRelations } from "drizzle-orm/relations";
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import {
@@ -69,9 +69,9 @@ const unsupportedParameterValue = (value: SqliteValue): HostOperationError =>
 const toSqliteValue = (value: SqliteValue): Effect.Effect<SqliteValue, HostOperationError> => {
   if (
     value === null ||
-    hasRuntimeType(value, "bigint") ||
-    hasRuntimeType(value, "number") ||
-    hasRuntimeType(value, "string") ||
+    typeof value === "bigint" ||
+    typeof value === "number" ||
+    typeof value === "string" ||
     value instanceof Uint8Array
   ) {
     return Effect.succeed(value);

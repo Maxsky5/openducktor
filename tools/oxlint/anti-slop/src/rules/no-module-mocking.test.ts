@@ -39,5 +39,9 @@ tester.run("anti-slop/no-module-mocking", noModuleMockingRule, {
       code: "import * as bunTest from 'bun:test'; bunTest.mock.module('./user-store', () => ({}));",
       errors: [error],
     },
+    {
+      code: "import { mock } from 'bun:test'; mock['module']('./user-store', () => ({}));",
+      errors: [error],
+    },
   ],
 });

@@ -1,9 +1,5 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
-import {
-  CODEX_RUNTIME_DESCRIPTOR,
-  OPENCODE_RUNTIME_DESCRIPTOR,
-  hasRuntimeType,
-} from "@openducktor/contracts";
+import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { act, createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
@@ -106,9 +102,10 @@ const createSession = (
   legacyExternalSessionIdOrOverrides: string | CreateSessionOverrides = {},
   maybeOverrides: CreateSessionOverrides = {},
 ): AgentSessionState => {
-  const overrides = hasRuntimeType(legacyExternalSessionIdOrOverrides, "string")
-    ? { ...maybeOverrides, externalSessionId: legacyExternalSessionIdOrOverrides }
-    : legacyExternalSessionIdOrOverrides;
+  const overrides =
+    typeof legacyExternalSessionIdOrOverrides === "string"
+      ? { ...maybeOverrides, externalSessionId: legacyExternalSessionIdOrOverrides }
+      : legacyExternalSessionIdOrOverrides;
   return createAgentSessionFixture({
     externalSessionId,
     status: "running",

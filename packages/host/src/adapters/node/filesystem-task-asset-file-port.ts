@@ -12,7 +12,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
-import { taskAssetIdSchema, hasRuntimeType } from "@openducktor/contracts";
+import { taskAssetIdSchema } from "@openducktor/contracts";
 import { Effect, Exit } from "effect";
 import { TaskAssetError } from "../../application/task-assets/task-asset-error";
 import type { TaskAssetFilePort, TaskAssetQuarantine } from "../../ports/task-asset-file-port";
@@ -34,7 +34,7 @@ import {
 type QuarantineMove = { from: string; to: string };
 
 const isMissing = (cause: unknown): boolean =>
-  hasRuntimeType(cause, "object") && cause !== null && "code" in cause && cause.code === "ENOENT";
+  typeof cause === "object" && cause !== null && "code" in cause && cause.code === "ENOENT";
 
 const existingStat = async (target: string) => {
   try {

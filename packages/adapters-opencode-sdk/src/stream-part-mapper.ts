@@ -1,7 +1,6 @@
 import {
   type FileContent,
   type FileDiff,
-  hasRuntimeType,
   isJsonObject,
   type JsonObject,
   jsonValueSchema,
@@ -12,13 +11,7 @@ import {
   countRenderableFileDiffLines,
   selectRenderableFileDiff,
 } from "@openducktor/core";
-import {
-  asUnknownRecord,
-  readBooleanProp,
-  readNumberProp,
-  readStringProp,
-  readUnknownProp,
-} from "./guards";
+import { asUnknownRecord, readBooleanProp, readNumberProp, readStringProp } from "./guards";
 import { toTokenTotal } from "./message-normalizers";
 import { deriveToolPreview, deriveToolType } from "./tool-preview";
 import { resolveOpencodeToolStrategy } from "./tool-strategy-catalog";
@@ -30,14 +23,14 @@ const toDisplayText = (value: unknown): string | undefined => {
     return undefined;
   }
   const displayValue = parsed.data;
-  if (hasRuntimeType(displayValue, "string")) {
+  if (typeof displayValue === "string") {
     const trimmed = displayValue.trim();
     return trimmed.length > 0 ? trimmed : undefined;
   }
   if (displayValue === null) {
     return undefined;
   }
-  if (hasRuntimeType(displayValue, "number") || hasRuntimeType(displayValue, "boolean")) {
+  if (typeof displayValue === "number" || typeof displayValue === "boolean") {
     return String(displayValue);
   }
   if (Array.isArray(displayValue) && displayValue.length === 0) {
@@ -80,8 +73,8 @@ const outputTextFromMcpPayload = (value: JsonObject | undefined): string | undef
       if (!entryRecord) {
         return null;
       }
-      const text = readUnknownProp(entryRecord, "text");
-      return hasRuntimeType(text, "string") ? text.trim() : null;
+      const text = entryRecord.text;
+      return typeof text === "string" ? text.trim() : null;
     })
     .filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
   if (textChunks.length === 0) {
@@ -95,7 +88,7 @@ const readToolOutputText = (value: string | undefined): string | undefined => to
 const MCP_TRANSPORT_ERROR_PREFIX = /^MCP error\s+-?\d+:/i;
 
 const readErrorValueMessage = (value: unknown): string | undefined => {
-  if (hasRuntimeType(value, "string")) {
+  if (typeof value === "string") {
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : undefined;
   }
@@ -109,12 +102,12 @@ const readErrorValueMessage = (value: unknown): string | undefined => {
 };
 
 const readEnvelopeErrorMessage = (value: string | JsonObject | undefined): string | undefined => {
-  const record = hasRuntimeType(value, "string") ? parseStructuredTextObject(value) : value;
+  const record = typeof value === "string" ? parseStructuredTextObject(value) : value;
   if (!record) {
     return undefined;
   }
 
-  if (readUnknownProp(record, "ok") !== false) {
+  if (record.ok !== false) {
     return undefined;
   }
 
@@ -124,7 +117,7 @@ const readEnvelopeErrorMessage = (value: string | JsonObject | undefined): strin
     return message.length > 0 ? message : "Tool failed";
   }
 
-  return readErrorValueMessage(readUnknownProp(record, "error")) ?? "Tool failed";
+  return readErrorValueMessage(record.error) ?? "Tool failed";
 };
 
 const readMcpTransportError = (value: string | undefined): string | undefined => {
@@ -146,25 +139,25 @@ const readMcpContentTextError = (value: JsonObject | undefined): string | undefi
 };
 
 const readStructuredToolError = (value: string | JsonObject | undefined): string | undefined => {
-  const record = hasRuntimeType(value, "string") ? parseStructuredTextObject(value) : value;
+  const record = typeof value === "string" ? parseStructuredTextObject(value) : value;
   const contentTextError = readMcpContentTextError(record);
-  const transportError = readMcpTransportError(hasRuntimeType(value, "string") ? value : undefined);
+  const transportError = readMcpTransportError(typeof value === "string" ? value : undefined);
   if (!record) {
     return contentTextError ?? transportError;
   }
 
-  const isError = readUnknownProp(record, "isError");
-  const directError = readUnknownProp(record, "error");
+  const isError = record.isError;
+  const directError = record.error;
   const directErrorMessage = readErrorValueMessage(directError);
-  const structuredContentValue = readUnknownProp(record, "structuredContent");
+  const structuredContentValue = record.structuredContent;
   const parsedStructuredContent = jsonValueSchema.safeParse(structuredContentValue);
   const structuredContent =
     parsedStructuredContent.success && isJsonObject(parsedStructuredContent.data)
       ? parsedStructuredContent.data
       : undefined;
-  const structuredError = readUnknownProp(structuredContent, "error");
+  const structuredError = structuredContent?.error;
   const structuredErrorMessage = readErrorValueMessage(structuredError);
-  const structuredOk = readUnknownProp(structuredContent, "ok");
+  const structuredOk = structuredContent?.ok;
   const flattenedEnvelopeMessage = readEnvelopeErrorMessage(record);
   const structuredEnvelopeMessage = readEnvelopeErrorMessage(structuredContent);
 
@@ -204,7 +197,7 @@ const normalizeMetadata = (value: Record<string, unknown> | undefined): JsonObje
 };
 
 const normalizeFileDiffType = (value: unknown): FileDiff["type"] => {
-  if (!hasRuntimeType(value, "string")) {
+  if (!(typeof value === "string")) {
     return "modified";
   }
   const normalized = value.trim().toLowerCase();
@@ -269,7 +262,7 @@ const fileDiffFromToolFileMetadata = (value: unknown): FileDiff | null => {
   return normalizeToolMetadataFileDiff({
     file: readStringProp(record, ["relativePath"]) ?? readStringProp(record, ["filePath"]),
     diffFile: readStringProp(record, ["filePath"]),
-    type: normalizeFileDiffType(readUnknownProp(record, "type")),
+    type: normalizeFileDiffType(record.type),
     patch: readFileDiffPatch(record),
     additions: readNumberProp(record, ["additions"]),
     deletions: readNumberProp(record, ["deletions"]),
@@ -282,16 +275,16 @@ const fileDiffFromToolFileDiffMetadata = (value: unknown, input: unknown): FileD
     return null;
   }
   const inputRecord = asUnknownRecord(input);
-  const oldString = readUnknownProp(inputRecord, "oldString");
+  const oldString = inputRecord?.oldString;
 
   return normalizeToolMetadataFileDiff({
     file:
       readStringProp(record, ["file"]) ??
       readStringProp(inputRecord, ["filePath", "file_path", "path", "file"]),
     type:
-      hasRuntimeType(oldString, "string") && oldString.length === 0
+      typeof oldString === "string" && oldString.length === 0
         ? "added"
-        : normalizeFileDiffType(readUnknownProp(record, "status")),
+        : normalizeFileDiffType(record.status),
     patch: readFileDiffPatch(record),
     additions: readNumberProp(record, ["additions"]),
     deletions: readNumberProp(record, ["deletions"]),
@@ -369,21 +362,18 @@ const readToolMetadataFileEditPayload = (
 
   const fileDiffs: FileDiff[] = [];
   if (tool === "write") {
-    const writeDiff = fileDiffFromWriteMetadata(metadata, readUnknownProp(toolState, "input"));
+    const writeDiff = fileDiffFromWriteMetadata(metadata, toolState.input);
     if (writeDiff) {
       fileDiffs.push(writeDiff);
     }
   }
 
-  const filediff = fileDiffFromToolFileDiffMetadata(
-    readUnknownProp(metadata, "filediff"),
-    readUnknownProp(toolState, "input"),
-  );
+  const filediff = fileDiffFromToolFileDiffMetadata(metadata.filediff, toolState.input);
   if (filediff) {
     fileDiffs.push(filediff);
   }
 
-  const files = readUnknownProp(metadata, "files");
+  const files = metadata.files;
   if (Array.isArray(files)) {
     for (const file of files) {
       const fileDiff = fileDiffFromToolFileMetadata(file);
@@ -401,7 +391,7 @@ const readToolMetadataFileEditPayload = (
     return {};
   }
 
-  const fileContent = fileContentFromWriteMetadata(metadata, readUnknownProp(toolState, "input"));
+  const fileContent = fileContentFromWriteMetadata(metadata, toolState.input);
   return fileContent ? { fileContent: [fileContent] } : {};
 };
 
@@ -411,8 +401,8 @@ const extractPartTiming = (toolState: ToolPart["state"]) => {
   const endedAtMs = stateTime && "end" in stateTime ? stateTime.end : undefined;
 
   return {
-    ...(hasRuntimeType(startedAtMs, "number") ? { startedAtMs } : undefined),
-    ...(hasRuntimeType(endedAtMs, "number") ? { endedAtMs } : undefined),
+    ...(typeof startedAtMs === "number" ? { startedAtMs } : undefined),
+    ...(typeof endedAtMs === "number" ? { endedAtMs } : undefined),
   } satisfies {
     startedAtMs?: number;
     endedAtMs?: number;
@@ -439,14 +429,14 @@ const normalizeSubagentExecutionMode = (value: unknown): SubagentStreamPart["exe
   if (!parsed.success) {
     return undefined;
   }
-  if (hasRuntimeType(parsed.data, "string")) {
+  if (typeof parsed.data === "string") {
     const normalized = parsed.data.trim().toLowerCase();
     if (normalized === "background" || normalized === "foreground") {
       return normalized;
     }
   }
 
-  if (hasRuntimeType(parsed.data, "boolean")) {
+  if (typeof parsed.data === "boolean") {
     return parsed.data ? "background" : "foreground";
   }
 
@@ -499,7 +489,7 @@ const isRunningBackgroundSubagentResult = (metadata: JsonObject | undefined): bo
 const omitEndedTiming = (
   timing: ReturnType<typeof extractPartTiming>,
 ): ReturnType<typeof extractPartTiming> =>
-  hasRuntimeType(timing.startedAtMs, "number") ? { startedAtMs: timing.startedAtMs } : {};
+  typeof timing.startedAtMs === "number" ? { startedAtMs: timing.startedAtMs } : {};
 
 type OptionalUnknownRecord = Record<string, unknown> | undefined;
 
@@ -577,10 +567,8 @@ const buildSubagentStreamPart = (input: {
     ...(input.externalSessionId ? { externalSessionId: input.externalSessionId } : undefined),
     ...(input.executionMode ? { executionMode: input.executionMode } : undefined),
     ...(input.metadata ? { metadata: input.metadata } : undefined),
-    ...(hasRuntimeType(input.startedAtMs, "number")
-      ? { startedAtMs: input.startedAtMs }
-      : undefined),
-    ...(hasRuntimeType(input.endedAtMs, "number") ? { endedAtMs: input.endedAtMs } : undefined),
+    ...(typeof input.startedAtMs === "number" ? { startedAtMs: input.startedAtMs } : undefined),
+    ...(typeof input.endedAtMs === "number" ? { endedAtMs: input.endedAtMs } : undefined),
   };
 };
 
@@ -629,7 +617,7 @@ const buildSubagentFromToolPart = (
   const rawOutput = toolState.status === "completed" ? toolState.output : undefined;
   const input = rawInput;
   const output = parseStructuredTextObject(rawOutput);
-  const outputIdentity = asUnknownRecord(readUnknownProp(output, "metadata")) ?? output;
+  const outputIdentity = asUnknownRecord(output?.metadata) ?? output;
   const externalSessionId = resolveSubagentExternalSessionId(metadata, input, outputIdentity);
   const agent = resolveSubagentAgent(input, metadata, output);
   const prompt = resolveSubagentPrompt(input, metadata, output);
@@ -801,7 +789,7 @@ export const mapPartToAgentStreamPart = (payload: unknown): AgentStreamPart | nu
         phase: "finish",
         reason: part.reason,
         cost: part.cost,
-        ...(hasRuntimeType(totalTokens, "number") ? { totalTokens } : undefined),
+        ...(typeof totalTokens === "number" ? { totalTokens } : undefined),
       };
     }
     case "subtask": {

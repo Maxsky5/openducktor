@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import {
   type CSSProperties,
   type ReactElement,
@@ -133,7 +132,7 @@ export function BorderRay({
       updateFromHost(host);
     };
 
-    if (hasRuntimeType(globalThis.ResizeObserver, "undefined")) {
+    if (typeof globalThis.ResizeObserver === "undefined") {
       window.addEventListener("resize", syncRect);
       return () => {
         window.removeEventListener("resize", syncRect);

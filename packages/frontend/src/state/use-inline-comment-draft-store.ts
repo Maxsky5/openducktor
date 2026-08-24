@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { create } from "zustand";
 import type { DiffScope } from "@/features/agent-studio-git";
 
@@ -114,7 +113,7 @@ const formatSelectedContextBlock = (
   codeContext: InlineCommentContextLine[],
   language: string | null,
 ): string => {
-  const fence = hasRuntimeType(language, "string") && language.length > 0 ? language : "text";
+  const fence = typeof language === "string" && language.length > 0 ? language : "text";
   return ["Context:", `\`\`\`${fence}`, ...formatSelectedCodeLines(codeContext), "```"].join("\n");
 };
 

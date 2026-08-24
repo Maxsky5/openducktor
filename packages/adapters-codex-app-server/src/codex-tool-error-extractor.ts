@@ -3,7 +3,6 @@ import {
   odtToolErrorPayloadSchema,
   type CodexAppServerThreadItem,
   type CodexAppServerJsonValue,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 import {
   arrayFromUnknown,
@@ -19,7 +18,7 @@ type CodexMcpToolCallItem = Extract<CodexAppServerThreadItem, { type: "mcpToolCa
 const parseJsonObjectString = (
   value: CodexAppServerJsonValue | undefined,
 ): Record<string, CodexAppServerJsonValue> | null => {
-  if (!hasRuntimeType(value, "string")) {
+  if (!(typeof value === "string")) {
     return null;
   }
   const trimmed = value.trim();
@@ -41,7 +40,7 @@ const asRecord = (
   isPlainObject(value) ? value : parseJsonObjectString(value);
 
 const nonEmptyString = (value: CodexAppServerJsonValue | undefined): string | null => {
-  if (!hasRuntimeType(value, "string")) {
+  if (!(typeof value === "string")) {
     return null;
   }
   const trimmed = value.trim();
@@ -62,7 +61,7 @@ const contentText = (value: CodexAppServerJsonValue | undefined): string | null 
 
   const text = content
     .map((entry) => {
-      if (hasRuntimeType(entry, "string")) {
+      if (typeof entry === "string") {
         return entry.trim();
       }
       if (!isPlainObject(entry)) {

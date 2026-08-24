@@ -1,10 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import {
-  TERMINAL_PROTOCOL_VERSION,
-  type TerminalServerMessage,
-  hasRuntimeType,
-} from "@openducktor/contracts";
+import { TERMINAL_PROTOCOL_VERSION, type TerminalServerMessage } from "@openducktor/contracts";
 import {
   type InteractiveTerminalMount,
   mountInteractiveTerminal,
@@ -14,7 +10,7 @@ import type {
   TerminalTransportController,
 } from "./terminal-transport-controller";
 
-if (hasRuntimeType(globalThis.document, "undefined")) {
+if (typeof globalThis.document === "undefined") {
   GlobalRegistrator.register();
 }
 

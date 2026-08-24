@@ -3,7 +3,6 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeCheck,
   type TaskStoreCheck,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
@@ -739,7 +738,7 @@ describe("use-checks", () => {
       return timer;
     };
     const setTimeoutMock = mock((handler: TimerHandler, delay?: number) => {
-      if (!hasRuntimeType(handler, "function")) {
+      if (!(typeof handler === "function")) {
         throw new Error("Expected timeout callback function");
       }
 
@@ -840,7 +839,7 @@ describe("use-checks", () => {
     Object.defineProperty(globalThis, "setTimeout", {
       configurable: true,
       value: (handler: TimerHandler, delay?: number) => {
-        if (!hasRuntimeType(handler, "function")) {
+        if (!(typeof handler === "function")) {
           throw new Error("Expected timeout callback function");
         }
 

@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { toAssistantMessageMeta } from "../support/assistant-meta";
 import { toReasoningMessageId, toTextMessageId } from "../support/chat-message-ids";
@@ -241,21 +240,17 @@ const handleSubagentPart = (
       correlationKey: part.correlationKey,
       sourceMessageId: part.messageId,
       status: part.status,
-      ...(hasRuntimeType(part.agent, "string") ? { agent: part.agent } : undefined),
-      ...(hasRuntimeType(part.prompt, "string") ? { prompt: part.prompt } : undefined),
-      ...(hasRuntimeType(part.description, "string")
-        ? { description: part.description }
-        : undefined),
-      ...(hasRuntimeType(part.error, "string") ? { error: part.error } : undefined),
-      ...(hasRuntimeType(part.externalSessionId, "string")
+      ...(typeof part.agent === "string" ? { agent: part.agent } : undefined),
+      ...(typeof part.prompt === "string" ? { prompt: part.prompt } : undefined),
+      ...(typeof part.description === "string" ? { description: part.description } : undefined),
+      ...(typeof part.error === "string" ? { error: part.error } : undefined),
+      ...(typeof part.externalSessionId === "string"
         ? { externalSessionId: part.externalSessionId }
         : undefined),
       ...(part.executionMode ? { executionMode: part.executionMode } : undefined),
       ...(part.metadata ? { metadata: part.metadata } : undefined),
-      ...(hasRuntimeType(part.startedAtMs, "number")
-        ? { startedAtMs: part.startedAtMs }
-        : undefined),
-      ...(hasRuntimeType(part.endedAtMs, "number") ? { endedAtMs: part.endedAtMs } : undefined),
+      ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : undefined),
+      ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : undefined),
     };
     return {
       ...prepared,
@@ -277,8 +272,7 @@ export const handleAssistantPart = (
   const recordsTurnActivity = part.kind !== "step" && shouldRecordPartAsTurnActivity(context, part);
   if (recordsTurnActivity) {
     const activityTimestamp =
-      (part.kind === "tool" || part.kind === "subagent") &&
-      hasRuntimeType(part.startedAtMs, "number")
+      (part.kind === "tool" || part.kind === "subagent") && typeof part.startedAtMs === "number"
         ? part.startedAtMs
         : event.timestamp;
     context.turn.recordTurnActivityTimestamp(context.session.key, activityTimestamp);

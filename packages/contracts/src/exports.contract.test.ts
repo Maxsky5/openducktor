@@ -583,7 +583,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "generalSettingsSchema",
   "globalConfigSchema",
   "hasOwnKey",
-  "hasRuntimeType",
   "persistedGlobalConfigV2Schema",
   "globalGitConfigSchema",
   "GetWorkspacesInputSchema",

@@ -7,7 +7,10 @@ import {
   questionAskedEvent,
   runEventStreamWithSession,
 } from "./event-stream.test-support";
-import { createInvalidOpencodeEventFixture } from "./test-fixture";
+import {
+  createParsedOpencodeEventFixture,
+  createParsedOpencodeEventFixtures,
+} from "./opencode-protocol-test-fixtures";
 
 type AssistantPartEvent = Extract<AgentEvent, { type: "assistant_part" }>;
 type SubagentPart = Extract<AssistantPartEvent["part"], { kind: "subagent" }>;
@@ -28,7 +31,7 @@ const readSubagentEvents = (events: AgentEvent[]): SubagentPartEvent[] =>
   );
 
 const assistantRoleEvent = (messageId: string): Event =>
-  createInvalidOpencodeEventFixture({
+  createParsedOpencodeEventFixture({
     type: "message.updated",
     properties: {
       info: {
@@ -40,7 +43,7 @@ const assistantRoleEvent = (messageId: string): Event =>
   });
 
 const userRoleEvent = (messageId: string): Event =>
-  createInvalidOpencodeEventFixture({
+  createParsedOpencodeEventFixture({
     type: "message.updated",
     properties: {
       info: {
@@ -56,7 +59,7 @@ const makeAssistantSubtaskPartUpdatedEvent = (input: {
   partId: string;
   description: string;
 }): Event =>
-  createInvalidOpencodeEventFixture({
+  createParsedOpencodeEventFixture({
     type: "message.part.updated",
     properties: {
       part: {
@@ -79,7 +82,7 @@ const makeChildSessionCreatedEvent = (input: {
 }): Event => {
   const parentExternalSessionId = input.parentExternalSessionId ?? "external-session-1";
   const parentPlacement = input.parentPlacement ?? "info";
-  return createInvalidOpencodeEventFixture({
+  return createParsedOpencodeEventFixture({
     type: "session.created",
     properties: {
       sessionID: input.childSessionId,
@@ -148,7 +151,7 @@ const makeSubagentToolPartUpdatedEvent = (input: {
     prompt: "Inspect repo",
     ...(input.childSessionId ? { externalSessionId: input.childSessionId } : undefined),
   };
-  return createInvalidOpencodeEventFixture({
+  return createParsedOpencodeEventFixture({
     type: "message.part.updated",
     properties: {
       part: {
@@ -189,7 +192,7 @@ const makeBackgroundTaskRunningPartUpdatedEvent = (input: {
   callId: string;
   childSessionId: string;
 }): Event =>
-  createInvalidOpencodeEventFixture({
+  createParsedOpencodeEventFixture({
     type: "message.part.updated",
     properties: {
       part: {
@@ -235,9 +238,9 @@ const makeBackgroundTaskResultUserMessageUpdatedEvent = (input: {
   state: "completed" | "error";
   summary: string;
   text: string;
-}): Event => {
+}): Event[] => {
   const resultTag = input.state === "error" ? "task_error" : "task_result";
-  return createInvalidOpencodeEventFixture({
+  return createParsedOpencodeEventFixtures({
     type: "message.updated",
     properties: {
       info: {
@@ -280,7 +283,7 @@ const makeBackgroundTaskResultUserPartUpdatedEvent = (input: {
   eventTimestampMs?: number;
 }): Event => {
   const resultTag = input.state === "error" ? "task_error" : "task_result";
-  return createInvalidOpencodeEventFixture({
+  return createParsedOpencodeEventFixture({
     type: "message.part.updated",
     properties: {
       ...(input.eventTimestampMs !== undefined || input.timestampMs !== undefined
@@ -505,7 +508,7 @@ describe("event-stream subagent correlation", () => {
         callId: "call-a",
         childSessionId: "child-a",
       }),
-      makeBackgroundTaskResultUserMessageUpdatedEvent({
+      ...makeBackgroundTaskResultUserMessageUpdatedEvent({
         messageId: "user-background-task-completed",
         partId: "text-background-task-completed",
         childSessionId: "child-a",
@@ -622,7 +625,7 @@ describe("event-stream subagent correlation", () => {
   test("keeps early synthetic background task results queued until the real subagent binding exists", async () => {
     const { emitted } = await runEventStreamWithSession([
       assistantRoleEvent("assistant-background-task-early-result"),
-      makeBackgroundTaskResultUserMessageUpdatedEvent({
+      ...makeBackgroundTaskResultUserMessageUpdatedEvent({
         messageId: "user-background-task-early-completed",
         partId: "text-background-task-early-completed",
         childSessionId: "child-a",
@@ -673,7 +676,7 @@ describe("event-stream subagent correlation", () => {
         callId: "call-a",
         childSessionId: "child-a",
       }),
-      makeBackgroundTaskResultUserMessageUpdatedEvent({
+      ...makeBackgroundTaskResultUserMessageUpdatedEvent({
         messageId: "user-background-task-error",
         partId: "text-background-task-error",
         childSessionId: "child-a",
@@ -807,8 +810,8 @@ describe("event-stream subagent correlation", () => {
     );
   });
 
-  test("reports child session creation when info.parentID is missing", async () => {
-    const { emitted } = await runEventStreamWithSession([
+  test("does not infer child lineage when info.parentID is missing", async () => {
+    const { emitted, sessionRecord } = await runEventStreamWithSession([
       assistantRoleEvent("assistant-subagent-top-level-parent"),
       makeAssistantSubtaskPartUpdatedEvent({
         messageId: "assistant-subagent-top-level-parent",
@@ -821,19 +824,18 @@ describe("event-stream subagent correlation", () => {
       }),
     ]);
 
-    expect(emitted).toContainEqual(
-      expect.objectContaining({
-        type: "session_error",
-        message: expect.stringContaining("info.parentID"),
-      }),
+    expect(emitted.some((event) => event.type === "session_error")).toBe(false);
+    expect(sessionRecord.subagentPartIdByExternalSessionId.has("external-child-session")).toBe(
+      false,
     );
   });
 
   test("reports child session creation when info.parentID is blank", async () => {
     const { emitted } = await runEventStreamWithSession([
-      createInvalidOpencodeEventFixture({
+      createParsedOpencodeEventFixture({
         type: "session.created",
         properties: {
+          sessionID: "external-child-session",
           info: {
             ...childSessionInfo("external-child-session"),
             parentID: " ",

@@ -1,8 +1,4 @@
-import {
-  type SystemOpenInToolId,
-  systemOpenInToolIdValues,
-  hasRuntimeType,
-} from "@openducktor/contracts";
+import { type SystemOpenInToolId, systemOpenInToolIdValues } from "@openducktor/contracts";
 import { toRightPanelStorageKey } from "@/pages/agents/agents-page-selection";
 import { z } from "zod";
 
@@ -17,7 +13,7 @@ const isSystemOpenInToolId = (value: string): value is SystemOpenInToolId =>
 const openInPreferencesStorageKey = (): string => toRightPanelStorageKey();
 
 export function readPreferredOpenInTool(): SystemOpenInToolId | null {
-  if (hasRuntimeType(globalThis.localStorage, "undefined")) {
+  if (typeof globalThis.localStorage === "undefined") {
     return null;
   }
 
@@ -35,7 +31,7 @@ export function readPreferredOpenInTool(): SystemOpenInToolId | null {
     }
 
     const toolId = parsed.data.openInToolId;
-    if (!hasRuntimeType(toolId, "string") || !isSystemOpenInToolId(toolId)) {
+    if (!(typeof toolId === "string") || !isSystemOpenInToolId(toolId)) {
       return null;
     }
 
@@ -50,7 +46,7 @@ export function readPreferredOpenInTool(): SystemOpenInToolId | null {
 }
 
 export function persistPreferredOpenInTool(toolId: SystemOpenInToolId): void {
-  if (hasRuntimeType(globalThis.localStorage, "undefined")) {
+  if (typeof globalThis.localStorage === "undefined") {
     return;
   }
 

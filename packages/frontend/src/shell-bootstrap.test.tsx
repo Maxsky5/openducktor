@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -8,7 +7,7 @@ import { createDisabledAppUpdateBridge, type ShellBridge } from "./lib/shell-bri
 import { runOpenDucktorShellBootstrap } from "./shell-bootstrap-workflow";
 import { createHostClientFixture } from "./test-utils/focused-fixture";
 
-if (hasRuntimeType(globalThis.document, "undefined")) {
+if (typeof globalThis.document === "undefined") {
   GlobalRegistrator.register();
 }
 

@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { afterEach, beforeEach, mock } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { GitWorktreeStatus, GitWorktreeStatusSummary } from "@openducktor/contracts";
@@ -12,7 +11,7 @@ import {
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 
 enableReactActEnvironment();
-if (hasRuntimeType(globalThis.document, "undefined")) {
+if (typeof globalThis.document === "undefined") {
   GlobalRegistrator.register();
 }
 

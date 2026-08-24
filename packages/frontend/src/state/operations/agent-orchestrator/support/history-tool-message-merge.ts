@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { toToolMessageId } from "./chat-message-ids";
 import { applyPreferredMessageTimestamp } from "./message-timestamp";
@@ -44,7 +43,7 @@ const toolStatusRank = (status: ToolStatus): number => {
 };
 
 const trimToolCallId = (callId: string | undefined): string =>
-  hasRuntimeType(callId, "string") ? callId.trim() : "";
+  typeof callId === "string" ? callId.trim() : "";
 
 const shouldPreserveCurrentToolMessage = (
   loadedStatus: ToolStatus,

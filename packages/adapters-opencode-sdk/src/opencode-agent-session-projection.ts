@@ -5,10 +5,11 @@ import { emitAdmittedUserMessage } from "./event-stream/message-events/user-emit
 import { handleSessionEvent } from "./event-stream/session-events";
 import type { EventStreamRuntime, SubagentSessionLink } from "./event-stream/shared";
 import {
+  parseOpencodeDirectEvent,
   parseOpencodeGlobalEventPayload,
   type OpencodeGlobalEventPayload,
   type ParsedOpencodeEvent as Event,
-} from "./opencode-ingress";
+} from "./opencode-global-event-ingress";
 import {
   clearAwaitingRuntimeTurnStart,
   finishUserMessageSend,
@@ -226,14 +227,7 @@ export const normalizeOpencodeGlobalEventPayload = (
     return { kind: "heartbeat" };
   }
   if (!("syncEvent" in parsed)) {
-    return {
-      kind: "event",
-      event: {
-        ...(parsed.id ? { id: parsed.id } : undefined),
-        type: parsed.type,
-        properties: parsed.properties,
-      },
-    };
+    return { kind: "event", event: parsed };
   }
 
   const syncEvent = parsed.syncEvent;
@@ -247,11 +241,11 @@ export const normalizeOpencodeGlobalEventPayload = (
   const eventType = NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE[syncEventType];
   return {
     kind: "event",
-    event: {
-      ...(syncEvent.id ? { id: syncEvent.id } : undefined),
+    event: parseOpencodeDirectEvent({
+      id: syncEvent.id,
       type: eventType,
       properties: syncEvent.data,
-    },
+    }),
   };
 };
 

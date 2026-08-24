@@ -1,4 +1,4 @@
-import { exactOptionalSchema, hasRuntimeType, type ExactOptional } from "@openducktor/contracts";
+import { exactOptionalSchema, type ExactOptional } from "@openducktor/contracts";
 import type { Session, SessionStatus } from "@opencode-ai/sdk/v2/client";
 import type {
   AgentPendingApprovalRequest,
@@ -119,7 +119,7 @@ const toOpencodeSessionStatusMap = (
 };
 
 const normalizeSessionDirectory = (directory: unknown): string | undefined => {
-  if (!hasRuntimeType(directory, "string")) {
+  if (!(typeof directory === "string")) {
     return undefined;
   }
   let normalized = directory.trim();

@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { DirectoryListing, FilesystemListDirectoryInput } from "@openducktor/contracts";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -24,7 +23,7 @@ const createListing = (overrides: Partial<DirectoryListing> = {}): DirectoryList
 
 type ListDirectoryInput = string | FilesystemListDirectoryInput | undefined;
 const pathFromInput = (input: ListDirectoryInput): string | undefined =>
-  hasRuntimeType(input, "string") ? input : input?.path;
+  typeof input === "string" ? input : input?.path;
 const filesystemListDirectoryMock = mock(
   async (_input?: ListDirectoryInput): Promise<DirectoryListing> => createListing(),
 );
@@ -154,7 +153,7 @@ describe("FolderPickerDialog", () => {
   test("selects a file and requests file entries only in file mode", async () => {
     const onConfirm = mock(async (_path: string) => {});
     filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {
-      expect(hasRuntimeType(input, "object") ? input.includeFiles : false).toBe(true);
+      expect(typeof input === "object" ? input.includeFiles : false).toBe(true);
       return createListing({
         entries: [
           {

@@ -7,12 +7,7 @@ import type {
   AppUpdateOperation,
   AppUpdateState,
 } from "@openducktor/contracts";
-import {
-  canDownloadAppUpdate,
-  canInstallAppUpdate,
-  jsonValueSchema,
-  hasRuntimeType,
-} from "@openducktor/contracts";
+import { canDownloadAppUpdate, canInstallAppUpdate, jsonValueSchema } from "@openducktor/contracts";
 import { parse as parseYaml } from "yaml";
 import { ElectronLifecycleError } from "../../effect/electron-errors";
 import { createElectronDetachedTaskOwner } from "../electron-main-task-owner";
@@ -114,12 +109,7 @@ const defaultReadUpdateConfig = async (path: string): Promise<string | null> => 
   try {
     return await readFile(path, "utf8");
   } catch (cause) {
-    if (
-      hasRuntimeType(cause, "object") &&
-      cause !== null &&
-      "code" in cause &&
-      cause.code === "ENOENT"
-    ) {
+    if (typeof cause === "object" && cause !== null && "code" in cause && cause.code === "ENOENT") {
       return null;
     }
     throw cause;
@@ -147,13 +137,13 @@ const isMacOsUpdateSignatureMismatch = (platform: NodeJS.Platform, cause: unknow
 const readErrorCode = (cause: unknown): string | undefined => {
   if (cause instanceof Error) {
     const code = "code" in cause ? cause.code : undefined;
-    return hasRuntimeType(code, "string") ? code : undefined;
+    return typeof code === "string" ? code : undefined;
   }
 
   const parsedDetails = jsonValueSchema.safeParse(cause);
   if (
     !parsedDetails.success ||
-    !hasRuntimeType(parsedDetails.data, "object") ||
+    !(typeof parsedDetails.data === "object") ||
     parsedDetails.data === null ||
     Array.isArray(parsedDetails.data)
   ) {
@@ -161,7 +151,7 @@ const readErrorCode = (cause: unknown): string | undefined => {
   }
 
   const code = parsedDetails.data.code;
-  return hasRuntimeType(code, "string") ? code : undefined;
+  return typeof code === "string" ? code : undefined;
 };
 
 const missingManifestPattern = /Cannot find (?:channel ")?(latest(?:-[a-z0-9]+)*\.ya?ml)/i;
@@ -228,16 +218,12 @@ const hasUpdateProviderConfig = (rawConfig: string | null): boolean => {
   }
 
   const parsedConfig: unknown = parseYaml(rawConfig);
-  if (
-    !hasRuntimeType(parsedConfig, "object") ||
-    parsedConfig === null ||
-    Array.isArray(parsedConfig)
-  ) {
+  if (!(typeof parsedConfig === "object") || parsedConfig === null || Array.isArray(parsedConfig)) {
     return false;
   }
 
   const provider = "provider" in parsedConfig ? parsedConfig.provider : undefined;
-  return hasRuntimeType(provider, "string") && provider.trim().length > 0;
+  return typeof provider === "string" && provider.trim().length > 0;
 };
 
 type DisabledAppUpdateState = Extract<AppUpdateState, { status: "disabled" }>;

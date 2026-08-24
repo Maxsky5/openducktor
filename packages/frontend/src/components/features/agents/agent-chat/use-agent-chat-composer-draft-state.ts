@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   type AgentChatComposerDraft,
@@ -95,10 +94,7 @@ export function useAgentChatComposerDraftState({
   }, [nextKey, nextPersistence]);
 
   useEffect(() => {
-    if (
-      hasRuntimeType(globalThis.window, "undefined") ||
-      hasRuntimeType(globalThis.document, "undefined")
-    ) {
+    if (typeof globalThis.window === "undefined" || typeof globalThis.document === "undefined") {
       return;
     }
 

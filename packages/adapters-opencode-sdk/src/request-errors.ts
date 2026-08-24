@@ -1,4 +1,4 @@
-import { type FailureKind, failureKindSchema, hasRuntimeType } from "@openducktor/contracts";
+import { type FailureKind, failureKindSchema } from "@openducktor/contracts";
 
 type ResponseMetadata = {
   status?: unknown;
@@ -66,35 +66,28 @@ type RequestFailureProperties = {
 const isRequestFailureRecord = (cause: unknown): cause is RequestFailureProperties =>
   typeof cause === "object" && cause !== null && !Array.isArray(cause);
 
-const readUnknownProp = (
-  cause: unknown,
-  key: keyof RequestFailureProperties,
-): RequestFailureProperties[keyof RequestFailureProperties] => {
-  if (!isRequestFailureRecord(cause)) {
-    return undefined;
-  }
-  return cause[key];
-};
-
 const readStringProp = (
   cause: unknown,
   key: keyof RequestFailureProperties,
 ): string | undefined => {
-  const candidate = readUnknownProp(cause, key);
-  return hasRuntimeType(candidate, "string") && candidate.trim().length > 0 ? candidate : undefined;
+  if (!isRequestFailureRecord(cause)) return undefined;
+  const candidate = cause[key];
+  return typeof candidate === "string" && candidate.trim().length > 0 ? candidate : undefined;
 };
 
 const readNumberProp = (
   cause: unknown,
   key: keyof RequestFailureProperties,
 ): number | undefined => {
-  const candidate = readUnknownProp(cause, key);
-  return hasRuntimeType(candidate, "number") ? candidate : undefined;
+  if (!isRequestFailureRecord(cause)) return undefined;
+  const candidate = cause[key];
+  return typeof candidate === "number" ? candidate : undefined;
 };
 
 const readCodeProp = (cause: unknown, key: keyof RequestFailureProperties): string | undefined => {
-  const candidate = readUnknownProp(cause, key);
-  return hasRuntimeType(candidate, "string") || hasRuntimeType(candidate, "number")
+  if (!isRequestFailureRecord(cause)) return undefined;
+  const candidate = cause[key];
+  return typeof candidate === "string" || typeof candidate === "number"
     ? String(candidate)
     : undefined;
 };
@@ -139,7 +132,8 @@ const readCodePropFromSources = (
 };
 
 const readFailureKind = (cause: unknown): OpenCodeRequestFailureKind | undefined => {
-  const candidate = readUnknownProp(cause, "failureKind");
+  if (!isRequestFailureRecord(cause)) return undefined;
+  const candidate = cause.failureKind;
   const result = failureKindSchema.safeParse(candidate);
   return result.success ? result.data : undefined;
 };
@@ -148,7 +142,7 @@ const classifyOpenCodeRequestFailureKind = (failure: {
   status: number | undefined;
   code: string | undefined;
 }): OpenCodeRequestFailureKind => {
-  if (hasRuntimeType(failure.status, "number") && TIMEOUT_STATUS_CODES.has(failure.status)) {
+  if (typeof failure.status === "number" && TIMEOUT_STATUS_CODES.has(failure.status)) {
     return "timeout";
   }
 
@@ -172,7 +166,7 @@ const buildOpenCodeRequestErrorMessage = (
   const prefix = `OpenCode request failed: ${action}`;
   const detailParts: string[] = [];
 
-  if (hasRuntimeType(failure.status, "number")) {
+  if (typeof failure.status === "number") {
     detailParts.push(
       failure.statusText && failure.statusText.trim().length > 0
         ? `${failure.status} ${failure.statusText}`
@@ -194,7 +188,7 @@ const buildOpenCodeRequestErrorMessage = (
 };
 
 const buildFailureSources = (cause: unknown): unknown[] => {
-  return [cause, readUnknownProp(cause, "cause"), readUnknownProp(cause, "data")];
+  return isRequestFailureRecord(cause) ? [cause, cause.cause, cause.data] : [cause];
 };
 
 const extractRequestFailure = (
@@ -220,14 +214,15 @@ const extractRequestFailure = (
   const status = readNumberPropFromSources(sources, "status");
   const statusText = readStringPropFromSources(sources, "statusText");
   const code = readCodePropFromSources(sources, "code");
-  const resolvedStatus = hasRuntimeType(status, "number")
-    ? status
-    : hasRuntimeType(response?.status, "number")
-      ? response.status
-      : undefined;
+  const resolvedStatus =
+    typeof status === "number"
+      ? status
+      : typeof response?.status === "number"
+        ? response.status
+        : undefined;
   const resolvedStatusText =
     statusText ??
-    (hasRuntimeType(response?.statusText, "string") && response.statusText.trim().length > 0
+    (typeof response?.statusText === "string" && response.statusText.trim().length > 0
       ? response.statusText
       : undefined);
 

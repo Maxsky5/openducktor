@@ -1,4 +1,4 @@
-import type { ParsedOpencodeEvent as Event } from "../opencode-ingress";
+import type { ParsedOpencodeEvent as Event } from "../opencode-global-event-ingress";
 import {
   handleMessagePartDeltaEvent,
   handleMessagePartRemovedEvent,

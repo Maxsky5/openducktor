@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type {
   AnyExtension,
   JSONContent,
@@ -24,7 +23,7 @@ const requireMarkdownHook = <Hook>(
   hookName: string,
   hook: Hook | undefined,
 ): NonNullable<Hook> => {
-  if (!hasRuntimeType(hook, "function")) {
+  if (!(typeof hook === "function")) {
     throw new Error(
       `TipTap 3.30.0 ${extensionName}.${hookName} is required by the task-description Markdown dialect. Align all TipTap packages before starting the editor.`,
     );
@@ -360,7 +359,7 @@ const listItemPrefix = (context: RenderContext): string => {
   }
   const start = Number(context.meta?.parentAttrs?.start ?? 1);
   const rawType = context.meta?.parentAttrs?.type;
-  const type = hasRuntimeType(rawType, "string") ? rawType : undefined;
+  const type = typeof rawType === "string" ? rawType : undefined;
   return getListMarker(type, start - 1 + context.index, ". ");
 };
 

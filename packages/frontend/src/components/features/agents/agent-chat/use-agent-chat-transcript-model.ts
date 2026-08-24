@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import {
   startTransition,
   useEffect,
@@ -148,7 +147,7 @@ const createInitialTranscriptModelCache = (
 };
 
 const now = (): number => {
-  return hasRuntimeType(globalThis.performance?.now, "function")
+  return typeof globalThis.performance?.now === "function"
     ? globalThis.performance.now()
     : Date.now();
 };

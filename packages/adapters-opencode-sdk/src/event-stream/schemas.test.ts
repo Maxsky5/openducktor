@@ -77,6 +77,8 @@ describe("event-stream schemas", () => {
   });
 
   test("readSessionErrorMessage falls back when nested message is absent", () => {
-    expect(readSessionErrorMessage({ error: { data: {} } })).toBe("Unknown session error");
+    expect(readSessionErrorMessage({ name: "MessageOutputLengthError", data: {} })).toBe(
+      "Unknown session error",
+    );
   });
 });

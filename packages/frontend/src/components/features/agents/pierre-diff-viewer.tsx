@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import {
   type BaseDiffOptions,
   type DiffLineAnnotation,
@@ -494,7 +493,7 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
     (annotation: DiffLineAnnotation<unknown>) => {
       const metadata = annotation.metadata;
       if (
-        hasRuntimeType(metadata, "object") &&
+        typeof metadata === "object" &&
         metadata !== null &&
         "kind" in metadata &&
         metadata.kind === "hunk-reset"

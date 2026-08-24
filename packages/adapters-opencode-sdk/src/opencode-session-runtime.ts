@@ -9,7 +9,7 @@ import type {
   StartAgentSessionInput,
   UpdateAgentSessionModelInput,
 } from "@openducktor/core";
-import type { ParsedOpencodeEvent as Event } from "./opencode-ingress";
+import type { ParsedOpencodeEvent as Event } from "./opencode-global-event-ingress";
 import { buildDefaultFactory, nowIso } from "./client-factory";
 import {
   listOpencodeRuntimeSnapshotSources,

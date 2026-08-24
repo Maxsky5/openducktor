@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import { render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
@@ -61,7 +60,7 @@ describe("AgentChatMarkdownRenderer", () => {
 
   test("keeps code blocks locally horizontally scrollable without app-hidden scrollbars", () => {
     const Pre = MARKDOWN_COMPONENTS.document.pre;
-    if (!hasRuntimeType(Pre, "function")) {
+    if (!(typeof Pre === "function")) {
       throw new Error("Expected document markdown code blocks to use a pre component");
     }
 

@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { KanbanColumn as KanbanColumnData } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
@@ -137,7 +136,7 @@ let viewportSyncFrameHandle: number | null = null;
 let hasViewportWindowListeners = false;
 
 const scheduleViewportSubscribersSync = (): void => {
-  if (hasRuntimeType(globalThis.window, "undefined") || viewportSyncFrameHandle !== null) {
+  if (typeof globalThis.window === "undefined" || viewportSyncFrameHandle !== null) {
     return;
   }
 
@@ -154,7 +153,7 @@ const onViewportWindowEvent = (): void => {
 };
 
 const retainViewportWindowListeners = (): void => {
-  if (hasRuntimeType(globalThis.window, "undefined") || hasViewportWindowListeners) {
+  if (typeof globalThis.window === "undefined" || hasViewportWindowListeners) {
     return;
   }
 
@@ -165,7 +164,7 @@ const retainViewportWindowListeners = (): void => {
 
 const releaseViewportWindowListeners = (): void => {
   if (
-    hasRuntimeType(globalThis.window, "undefined") ||
+    typeof globalThis.window === "undefined" ||
     !hasViewportWindowListeners ||
     viewportSubscribers.size > 0 ||
     viewportScrollContainers.size > 0
@@ -290,7 +289,7 @@ export function useKanbanVirtualization({
       totalHeight: virtualLayout.totalHeight,
       viewportStart: -VIRTUAL_OVERSCAN_PX,
       viewportEnd:
-        (hasRuntimeType(globalThis.window, "undefined")
+        (typeof globalThis.window === "undefined"
           ? INITIAL_VIEWPORT_HEIGHT_FALLBACK_PX
           : window.innerHeight) + VIRTUAL_OVERSCAN_PX,
     }),
@@ -298,7 +297,7 @@ export function useKanbanVirtualization({
 
   const syncViewportRef = useRef<() => void>(() => {});
   syncViewportRef.current = () => {
-    if (!shouldVirtualize || hasRuntimeType(globalThis.window, "undefined")) {
+    if (!shouldVirtualize || typeof globalThis.window === "undefined") {
       return;
     }
 
@@ -339,7 +338,7 @@ export function useKanbanVirtualization({
   };
 
   useEffect(() => {
-    if (!shouldVirtualize || hasRuntimeType(globalThis.window, "undefined") || !containerElement) {
+    if (!shouldVirtualize || typeof globalThis.window === "undefined" || !containerElement) {
       return;
     }
 
@@ -355,14 +354,14 @@ export function useKanbanVirtualization({
     if (
       !shouldVirtualize ||
       !containerElement ||
-      hasRuntimeType(globalThis.ResizeObserver, "undefined")
+      typeof globalThis.ResizeObserver === "undefined"
     ) {
       return;
     }
 
     let frameHandle: number | null = null;
     const scheduleMeasurementInvalidation = (): void => {
-      if (hasRuntimeType(globalThis.window, "undefined")) {
+      if (typeof globalThis.window === "undefined") {
         dispatchMeasurement({ type: "invalidate" });
         return;
       }
@@ -385,7 +384,7 @@ export function useKanbanVirtualization({
     observer.observe(containerElement);
     return () => {
       observer.disconnect();
-      if (frameHandle !== null && !hasRuntimeType(globalThis.window, "undefined")) {
+      if (frameHandle !== null && !(typeof globalThis.window === "undefined")) {
         window.cancelAnimationFrame(frameHandle);
       }
     };

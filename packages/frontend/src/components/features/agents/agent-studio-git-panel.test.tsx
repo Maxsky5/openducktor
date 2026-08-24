@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
   fireEvent,
@@ -1921,12 +1920,11 @@ describe("AgentStudioGitPanel", () => {
     );
 
     const fileNameNode = pathNode.findAll(
-      (node) =>
-        hasRuntimeType(node.type, "string") && node.children.includes("file-diff-entry.tsx"),
+      (node) => typeof node.type === "string" && node.children.includes("file-diff-entry.tsx"),
     )[0];
     const dirNameNode = pathNode.findAll(
       (node) =>
-        hasRuntimeType(node.type, "string") &&
+        typeof node.type === "string" &&
         node.children.includes(
           "packages/frontend/src/components/features/agents/agent-studio-git-panel",
         ),

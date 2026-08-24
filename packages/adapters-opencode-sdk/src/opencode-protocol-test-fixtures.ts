@@ -1,13 +1,17 @@
-import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
+import { jsonValueSchema } from "@openducktor/contracts";
 import type { Session } from "@opencode-ai/sdk/v2/client";
-import { asUnknownRecord, readStringProp, readUnknownProp, type UnknownRecord } from "./guards";
+import { asUnknownRecord, readStringProp, type UnknownRecord } from "./guards";
 import {
   opencodeMessageInfoPayloadSchema,
   opencodePartPayloadSchema,
-  parseOpencodeGlobalEventPayload,
-  type ParsedOpencodeGlobalEventPayload,
   type ParsedOpencodePart,
 } from "./opencode-ingress";
+import {
+  parseOpencodeDirectEvent,
+  parseOpencodeGlobalEventPayload,
+  type ParsedOpencodeEvent,
+  type ParsedOpencodeGlobalEventPayload,
+} from "./opencode-global-event-ingress";
 
 const DEFAULT_TOKENS = {
   cache: { read: 0, write: 0 },
@@ -91,7 +95,7 @@ const serializeToolResult = (value: unknown): string => {
     return "";
   }
   const parsed = jsonValueSchema.parse(value);
-  return hasRuntimeType(parsed, "string") ? parsed : JSON.stringify(parsed);
+  return typeof parsed === "string" ? parsed : JSON.stringify(parsed);
 };
 
 export const createOpencodePartFixture = (part: UnknownRecord): ParsedOpencodePart => {
@@ -149,6 +153,9 @@ export const createOpencodePartFixture = (part: UnknownRecord): ParsedOpencodePa
         state: { time: { start: 1 }, ...state, input, status },
       });
     case "completed":
+      if (!state) {
+        return opencodePartPayloadSchema.parse(part);
+      }
       return opencodePartPayloadSchema.parse({
         ...part,
         state: {
@@ -157,17 +164,20 @@ export const createOpencodePartFixture = (part: UnknownRecord): ParsedOpencodePa
           title: "",
           ...state,
           input,
-          output: serializeToolResult(readUnknownProp(state, "output")),
+          output: serializeToolResult(state.output),
           status,
         },
       });
     case "error":
+      if (!state) {
+        return opencodePartPayloadSchema.parse(part);
+      }
       return opencodePartPayloadSchema.parse({
         ...part,
         state: {
           time: { end: 2, start: 1 },
           ...state,
-          error: serializeToolResult(readUnknownProp(state, "error")),
+          error: serializeToolResult(state.error),
           input,
           status,
         },
@@ -180,10 +190,10 @@ export const createOpencodePartFixture = (part: UnknownRecord): ParsedOpencodePa
 export const createOpencodeEventFixtures = (
   event: UnknownRecord,
   index: number,
-): ParsedOpencodeGlobalEventPayload[] => {
+): Array<ParsedOpencodeGlobalEventPayload | UnknownRecord> => {
   const id = readStringProp(event, ["id"]) ?? `test-event-${index}`;
   if (event.type === "sync") {
-    return [parseOpencodeGlobalEventPayload({ ...event, id })];
+    return [{ ...event, id }];
   }
 
   const properties = asUnknownRecord(event.properties) ?? {};
@@ -240,17 +250,35 @@ export const createOpencodeEventFixtures = (
         properties: {
           part,
           sessionID: readStringProp(properties, ["sessionID"]) ?? part.sessionID,
-          time: hasRuntimeType(properties.time, "number") ? properties.time : 1,
+          time: typeof properties.time === "number" ? properties.time : 1,
         },
       }),
     ];
   }
 
   return [
-    parseOpencodeGlobalEventPayload({
+    {
       ...event,
       id,
       properties,
-    }),
+    },
   ];
+};
+
+export const createParsedOpencodeEventFixtures = (
+  event: UnknownRecord,
+  index = 0,
+): ParsedOpencodeEvent[] =>
+  createOpencodeEventFixtures(event, index).map((fixture) => parseOpencodeDirectEvent(fixture));
+
+export const createParsedOpencodeEventFixture = (
+  event: UnknownRecord,
+  index = 0,
+): ParsedOpencodeEvent => {
+  const fixtures = createParsedOpencodeEventFixtures(event, index);
+  const [fixture] = fixtures;
+  if (fixtures.length !== 1 || !fixture) {
+    throw new Error("Expected one OpenCode event fixture.");
+  }
+  return fixture;
 };

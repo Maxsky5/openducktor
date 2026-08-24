@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { extractStringField, extractText, isPlainObject } from "../codex-app-server-shared";
 import {
   codexItemId,
@@ -163,7 +162,7 @@ export const tokenUsageMapper: CodexEventMapper = {
             partId: `${messageId}-token-usage`,
             phase: "finish",
             totalTokens: tokenUsage.totalTokens,
-            ...(hasRuntimeType(tokenUsage.contextWindow, "number")
+            ...(typeof tokenUsage.contextWindow === "number"
               ? { contextWindow: tokenUsage.contextWindow }
               : undefined),
           },

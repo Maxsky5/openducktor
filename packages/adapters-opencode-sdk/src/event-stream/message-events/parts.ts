@@ -1,24 +1,10 @@
-import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
+import { jsonValueSchema } from "@openducktor/contracts";
 import type { Part } from "@opencode-ai/sdk/v2/client";
-import { readNumberProp, readStringProp, readUnknownProp, type UnknownRecord } from "../../guards";
-import {
-  opencodePartPayloadSchema,
-  type ParsedOpencodeEvent as Event,
-} from "../../opencode-ingress";
-import { readEventPart, readEventProperties } from "../schemas";
+import { readNumberProp } from "../../guards";
+import { type ParsedOpencodeEvent as Event } from "../../opencode-global-event-ingress";
 import type { EventStreamRuntime } from "../shared";
-import {
-  applyDeltaToPart,
-  deleteMessagePart,
-  isReasoningDeltaField,
-  markSessionActive,
-  setMessagePart,
-} from "../shared";
-import {
-  emitAssistantPart,
-  maybeEmitCompletedAssistantMessage,
-  shouldSuppressAssistantStreamingAfterIdle,
-} from "./assistant";
+import { applyDeltaToPart, deleteMessagePart, setMessagePart } from "../shared";
+import { emitAssistantPart, maybeEmitCompletedAssistantMessage } from "./assistant";
 import { applyPendingDeltas, suppressCompactionMessage } from "./helpers";
 import { removeSubagentCorrelationForPart } from "./subagent";
 import { handleUserPartUpdated } from "./user";
@@ -36,17 +22,14 @@ const readIsoTimestampFromTime = (time: unknown): string | undefined => {
   if (!parsed.success) {
     return undefined;
   }
-  if (hasRuntimeType(parsed.data, "number")) {
+  if (typeof parsed.data === "number") {
     return toIsoTimestamp(parsed.data);
   }
   return toIsoTimestamp(readNumberProp(parsed.data, ["end", "completed", "updated", "created"]));
 };
 
-const readPartUpdatedTimestamp = (
-  properties: UnknownRecord | undefined,
-  part: Part,
-): string | undefined => {
-  const eventTimestamp = readIsoTimestampFromTime(readUnknownProp(properties, "time"));
+const readPartUpdatedTimestamp = (eventTime: number, part: Part): string | undefined => {
+  const eventTimestamp = readIsoTimestampFromTime(eventTime);
   if (eventTimestamp) {
     return eventTimestamp;
   }
@@ -65,15 +48,7 @@ export const handleMessagePartDeltaEvent = (event: Event, runtime: EventStreamRu
     return false;
   }
 
-  const deltaEvent = readEventProperties(event);
-  if (!deltaEvent) {
-    return true;
-  }
-  const partId = readStringProp(deltaEvent, ["partID", "partId", "part_id"]) ?? "";
-  const messageId = readStringProp(deltaEvent, ["messageID", "messageId", "message_id"]);
-  const field = readStringProp(deltaEvent, ["field"]) ?? "";
-  const deltaValue = readUnknownProp(deltaEvent, "delta");
-  const delta = hasRuntimeType(deltaValue, "string") ? deltaValue : "";
+  const { delta, field, messageID: messageId, partID: partId } = event.properties;
 
   const knownPart = partId ? runtime.session.partsById.get(partId) : undefined;
   const deltaMessageId = knownPart?.messageID ?? messageId;
@@ -102,31 +77,6 @@ export const handleMessagePartDeltaEvent = (event: Event, runtime: EventStreamRu
     return true;
   }
 
-  if (delta.length === 0) {
-    return true;
-  }
-  if (!messageId) {
-    return true;
-  }
-  const deltaRole = runtime.session.messageRoleById.get(messageId);
-  if (deltaRole !== "assistant") {
-    return true;
-  }
-  if (shouldSuppressAssistantStreamingAfterIdle(runtime, messageId, deltaRole)) {
-    return true;
-  }
-  const channel = isReasoningDeltaField(field) ? "reasoning" : "text";
-
-  markSessionActive(runtime);
-
-  runtime.emit(runtime.externalSessionId, {
-    type: "assistant_delta",
-    externalSessionId: runtime.externalSessionId,
-    timestamp: runtime.now(),
-    channel,
-    messageId,
-    delta,
-  });
   return true;
 };
 
@@ -138,19 +88,10 @@ export const handleMessagePartUpdatedEvent = (
     return false;
   }
 
-  const properties = readEventProperties(event);
-  const rawPartRecord = properties ? readEventPart(properties) : undefined;
-  if (!rawPartRecord) {
-    return true;
-  }
-
-  const partId = readStringProp(rawPartRecord, ["id"]);
-  if (!partId) {
-    return true;
-  }
-
-  const messageId = readStringProp(rawPartRecord, ["messageID", "messageId", "message_id"]);
-  if (readStringProp(rawPartRecord, ["type"]) === "compaction") {
+  const { part: current, time } = event.properties;
+  const partId = current.id;
+  const messageId = current.messageID;
+  if (current.type === "compaction") {
     if (messageId) {
       suppressCompactionMessage(runtime, messageId);
     }
@@ -164,7 +105,6 @@ export const handleMessagePartUpdatedEvent = (
     return true;
   }
 
-  const current = opencodePartPayloadSchema.parse(rawPartRecord);
   const nextPart = applyPendingDeltas(runtime, partId, current);
   setMessagePart(runtime.session, nextPart);
   emitAssistantPart(runtime, nextPart);
@@ -177,7 +117,7 @@ export const handleMessagePartUpdatedEvent = (
     return true;
   }
   if (role === "user") {
-    handleUserPartUpdated(runtime, nextMessageId, readPartUpdatedTimestamp(properties, nextPart));
+    handleUserPartUpdated(runtime, nextMessageId, readPartUpdatedTimestamp(time, nextPart));
   }
   return true;
 };
@@ -190,13 +130,7 @@ export const handleMessagePartRemovedEvent = (
     return false;
   }
 
-  const properties = readEventProperties(event);
-  const removedPartId = properties
-    ? readStringProp(properties, ["partID", "partId", "part_id"])
-    : undefined;
-  if (!removedPartId) {
-    return true;
-  }
+  const removedPartId = event.properties.partID;
 
   deleteMessagePart(runtime.session, removedPartId);
   runtime.session.pendingDeltasByPartId.delete(removedPartId);

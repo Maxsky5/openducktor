@@ -1,4 +1,4 @@
-import { agentRoleSchema, hasRuntimeType, runtimeTypeName } from "@openducktor/contracts";
+import { agentRoleSchema, runtimeTypeName } from "@openducktor/contracts";
 import type {
   AgentSessionDeleteInput,
   AgentSessionUpsertInput,
@@ -78,7 +78,7 @@ export const parseListAgentSessionsForTasksInput = (
   }
   const taskIds = record.taskIds.map((taskId, index) => {
     const field = `taskIds[${index}]`;
-    if (!hasRuntimeType(taskId, "string")) {
+    if (!(typeof taskId === "string")) {
       throw new HostValidationError({
         message: `${field} must be a string.`,
         field,
@@ -243,7 +243,7 @@ export const parseTaskSessionBootstrapPrepareInput = (
     });
   }
   const targetWorkingDirectory =
-    hasRuntimeType(record.targetWorkingDirectory, "string") && record.targetWorkingDirectory.trim()
+    typeof record.targetWorkingDirectory === "string" && record.targetWorkingDirectory.trim()
       ? record.targetWorkingDirectory.trim()
       : undefined;
   return {
@@ -298,7 +298,7 @@ export const parseTaskSessionStartupLeaseFinalizeInput = (
 
 export const parseBuildBlockedInput = (input: unknown): BuildBlockedInput => {
   const record = requireRecord(input, "build_blocked input");
-  const reason = hasRuntimeType(record.reason, "string") ? record.reason.trim() : "";
+  const reason = typeof record.reason === "string" ? record.reason.trim() : "";
   if (!reason) {
     throw new HostValidationError({
       message: "build_blocked requires a non-empty reason",

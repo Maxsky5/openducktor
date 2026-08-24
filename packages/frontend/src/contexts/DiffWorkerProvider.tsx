@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { preloadHighlighter, type SupportedLanguages } from "@pierre/diffs";
 import { WorkerPoolContextProvider } from "@pierre/diffs/react";
 import { type ReactElement, type ReactNode, useEffect, useMemo } from "react";
@@ -27,7 +26,7 @@ const PRELOAD_THEMES = ["pierre-light", "pierre-dark"] as const;
  */
 export function DiffWorkerProvider({ children }: { children: ReactNode }): ReactElement {
   const poolSize = useMemo(() => {
-    if (hasRuntimeType(globalThis.navigator, "undefined")) {
+    if (typeof globalThis.navigator === "undefined") {
       return 2;
     }
 

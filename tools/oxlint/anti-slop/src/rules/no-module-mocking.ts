@@ -93,6 +93,7 @@ function moduleMockCall(sourceCode: SourceCode, callee: ESTree.Expression): bool
     ? property.type === "Literal" &&
       (property.value === "doMock" ||
         property.value === "mock" ||
+        property.value === "module" ||
         property.value === "unstable_mockModule")
       ? property.value
       : null

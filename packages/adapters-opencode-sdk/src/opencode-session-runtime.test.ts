@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { createPrepareOpencodeSessionRuntime, type OpencodeSessionRuntimeSignal } from "./index";
@@ -96,7 +95,7 @@ const createLiveClientHarness = (
       list: async () => {
         callOrder.push("list");
         input.onList?.();
-        if (hasRuntimeType(input.listBarrier, "function")) {
+        if (typeof input.listBarrier === "function") {
           await input.listBarrier();
         } else {
           await input.listBarrier;
@@ -130,22 +129,23 @@ const createLiveClientHarness = (
         input.onMessages?.();
         await input.messagesBarrier;
         return {
-          data: hasRuntimeType(input.totalTokens, "number")
-            ? [
-                {
-                  info: createOpencodeMessageInfoFixture({
-                    id: "assistant-latest",
-                    role: "assistant",
-                    sessionID: externalSessionId,
-                    providerID: "openai",
-                    modelID: "gpt-5",
-                    tokens: { input: input.totalTokens - 100, output: 100 },
-                    time: { created: Date.parse("2026-07-16T10:01:00.000Z") },
-                  }),
-                  parts: [],
-                },
-              ]
-            : [],
+          data:
+            typeof input.totalTokens === "number"
+              ? [
+                  {
+                    info: createOpencodeMessageInfoFixture({
+                      id: "assistant-latest",
+                      role: "assistant",
+                      sessionID: externalSessionId,
+                      providerID: "openai",
+                      modelID: "gpt-5",
+                      tokens: { input: input.totalTokens - 100, output: 100 },
+                      time: { created: Date.parse("2026-07-16T10:01:00.000Z") },
+                    }),
+                    parts: [],
+                  },
+                ]
+              : [],
           error: undefined,
         };
       },
@@ -169,7 +169,7 @@ const createLiveClientHarness = (
             }))
           : [];
         input.onPermissionList?.();
-        if (hasRuntimeType(input.permissionListBarrier, "function")) {
+        if (typeof input.permissionListBarrier === "function") {
           await input.permissionListBarrier();
         } else {
           await input.permissionListBarrier;
@@ -205,7 +205,7 @@ const createLiveClientHarness = (
             ]
           : [];
         input.onQuestionList?.();
-        if (hasRuntimeType(input.questionListBarrier, "function")) {
+        if (typeof input.questionListBarrier === "function") {
           await input.questionListBarrier();
         } else {
           await input.questionListBarrier;
@@ -721,7 +721,7 @@ describe("OpenCode session runtime connection", () => {
       type: "session.error",
       properties: {
         sessionID: "session-1",
-        error: { data: { message: "Provider failed" } },
+        error: { name: "UnknownError", data: { message: "Provider failed" } },
       },
     });
 

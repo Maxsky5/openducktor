@@ -1,9 +1,8 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { dismissOpenDucktorStartupSplash, showOpenDucktorStartupFailure } from "./runtime";
 
-if (hasRuntimeType(globalThis.document, "undefined")) {
+if (typeof globalThis.document === "undefined") {
   GlobalRegistrator.register();
 }
 
@@ -40,7 +39,7 @@ const captureScheduledTimeout = () => {
   Object.defineProperty(window, "setTimeout", {
     configurable: true,
     value: (handler: TimerHandler, timeout?: number) => {
-      if (!hasRuntimeType(handler, "function")) {
+      if (!(typeof handler === "function")) {
         throw new TypeError("Expected a timeout callback.");
       }
       scheduled.push({ callback: () => handler(), delayMs: timeout });

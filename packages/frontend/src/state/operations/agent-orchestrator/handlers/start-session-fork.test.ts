@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentSessionRecord } from "@openducktor/contracts";
@@ -271,7 +270,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     adapter.loadSessionHistory = async () => [];
     adapter.stopSession = async (sessionRef) => {
       stoppedSessionIds.push(
-        hasRuntimeType(sessionRef, "string") ? sessionRef : sessionRef.externalSessionId,
+        typeof sessionRef === "string" ? sessionRef : sessionRef.externalSessionId,
       );
     };
 
@@ -332,7 +331,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     adapter.loadSessionHistory = async () => [];
     adapter.stopSession = async (sessionRef) => {
       stoppedSessionIds.push(
-        hasRuntimeType(sessionRef, "string") ? sessionRef : sessionRef.externalSessionId,
+        typeof sessionRef === "string" ? sessionRef : sessionRef.externalSessionId,
       );
     };
 
@@ -640,7 +639,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     };
     adapter.stopSession = async (sessionRef) => {
       stoppedSessionIds.push(
-        hasRuntimeType(sessionRef, "string") ? sessionRef : sessionRef.externalSessionId,
+        typeof sessionRef === "string" ? sessionRef : sessionRef.externalSessionId,
       );
     };
 
@@ -778,7 +777,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     };
     adapter.stopSession = async (sessionRef) => {
       stoppedSessionIds.push(
-        hasRuntimeType(sessionRef, "string") ? sessionRef : sessionRef.externalSessionId,
+        typeof sessionRef === "string" ? sessionRef : sessionRef.externalSessionId,
       );
     };
 

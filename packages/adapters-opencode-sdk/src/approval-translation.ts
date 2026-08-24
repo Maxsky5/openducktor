@@ -1,7 +1,6 @@
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeApprovalReplyOutcome,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { JsonObject } from "@openducktor/contracts";
 import { type AgentPendingApprovalRequest, classifyAgentApprovalMutation } from "@openducktor/core";
@@ -14,7 +13,7 @@ const OPENCODE_ODT_WORKFLOW_TOOL_ALIASES =
 
 const readOptionalString = (record: JsonObject | undefined, key: string): string | undefined => {
   const value = record?.[key];
-  return hasRuntimeType(value, "string") && value.trim().length > 0 ? value : undefined;
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 };
 
 export type ParsedOpenCodePermissionRequest = {

@@ -1,4 +1,4 @@
-import { hasOwnKey, hasRuntimeType } from "@openducktor/contracts";
+import { hasOwnKey } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import { getShellBridge, type HostBridge } from "./shell-bridge";
 
@@ -12,7 +12,7 @@ const readShellClientValue = (propertyKey: PropertyKey): HostClientValue | undef
     return undefined;
   }
   const value = client[propertyKey];
-  if (!hasRuntimeType(value, "function")) {
+  if (!(typeof value === "function")) {
     return value;
   }
 

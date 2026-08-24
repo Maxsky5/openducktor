@@ -1,4 +1,4 @@
-import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
+import { jsonValueSchema } from "@openducktor/contracts";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { extractAllFileEditData } from "./file-edit-tool";
 import { extractPathFromInput, readInputString } from "./tool-input-utils";
@@ -100,11 +100,11 @@ const parseStructuredOutputSummary = (output: string): string | null => {
       return null;
     }
     const record = parsed;
-    if (hasRuntimeType(record.message, "string") && record.message.trim().length > 0) {
+    if (typeof record.message === "string" && record.message.trim().length > 0) {
       return compactText(record.message, 160);
     }
 
-    if (hasRuntimeType(record.result, "string") && record.result.trim().length > 0) {
+    if (typeof record.result === "string" && record.result.trim().length > 0) {
       return compactText(record.result, 160);
     }
 
@@ -167,7 +167,7 @@ const normalizeDisplaySummary = (
 
 const extractTaskId = (input: Record<string, unknown> | undefined): string | null => {
   const taskId = input?.taskId;
-  return hasRuntimeType(taskId, "string") && taskId.trim().length > 0 ? taskId.trim() : null;
+  return typeof taskId === "string" && taskId.trim().length > 0 ? taskId.trim() : null;
 };
 
 export const buildToolSummary = (
@@ -217,7 +217,7 @@ export const buildToolSummary = (
   }
 
   const command = meta.input?.command;
-  if (toolType === "bash" && hasRuntimeType(command, "string") && command.trim().length > 0) {
+  if (toolType === "bash" && typeof command === "string" && command.trim().length > 0) {
     return compactText(command, 120);
   }
 
@@ -225,7 +225,7 @@ export const buildToolSummary = (
     return "";
   }
 
-  if (hasRuntimeType(meta.preview, "string") && meta.preview.trim().length > 0) {
+  if (typeof meta.preview === "string" && meta.preview.trim().length > 0) {
     return compactText(normalizeDisplaySummary(lowerTool, meta.preview, workingDirectory), 160);
   }
 

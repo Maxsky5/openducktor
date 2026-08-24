@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
 import { isClaudeSyntheticAssistantMessage } from "./claude-agent-sdk-local-commands";
@@ -6,7 +5,7 @@ import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
 export const readHistoryTimestamp = (entry: ClaudeHistoryMessage, now: () => string): string => {
   const timestamp = entry.timestamp;
-  if (!hasRuntimeType(timestamp, "string")) {
+  if (!(typeof timestamp === "string")) {
     return now();
   }
   return Number.isNaN(Date.parse(timestamp)) ? now() : timestamp;
@@ -50,6 +49,6 @@ export const isNestedHistoryEntry = (entry: ClaudeHistoryMessage): boolean => {
   return (
     (entry.type === "assistant" && Boolean(entry.parent_tool_use_id)) ||
     entry.isSidechain === true ||
-    (hasRuntimeType(subagentType, "string") && subagentType.trim().length > 0)
+    (typeof subagentType === "string" && subagentType.trim().length > 0)
   );
 };

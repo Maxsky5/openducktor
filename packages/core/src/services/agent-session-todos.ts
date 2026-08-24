@@ -1,7 +1,6 @@
 import {
   agentSessionTodoPrioritySchema,
   agentSessionTodoStatusSchema,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { AgentSessionTodoItem } from "../types/agent-orchestrator";
 
@@ -22,7 +21,7 @@ export type NormalizeAgentSessionTodoInput = {
 export const normalizeAgentSessionTodoStatus = (
   value: string | undefined,
 ): AgentSessionTodoItem["status"] => {
-  const normalized = hasRuntimeType(value, "string") ? value.trim().toLowerCase() : "";
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
   if (!normalized) {
     return "pending";
   }
@@ -49,7 +48,7 @@ export const normalizeAgentSessionTodoStatus = (
 export const normalizeAgentSessionTodoPriority = (
   value: string | undefined,
 ): AgentSessionTodoItem["priority"] => {
-  const normalized = hasRuntimeType(value, "string") ? value.trim().toLowerCase() : "";
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
   return isAgentSessionTodoPriority(normalized) ? normalized : "medium";
 };
 
@@ -63,11 +62,8 @@ export const normalizeAgentSessionTodoItem = (
   }
 
   const status = normalizeAgentSessionTodoStatus(value.status);
-  const statusFromBoolean = hasRuntimeType(value.completed, "boolean")
-    ? value.completed
-      ? "completed"
-      : "pending"
-    : undefined;
+  const statusFromBoolean =
+    typeof value.completed === "boolean" ? (value.completed ? "completed" : "pending") : undefined;
 
   return {
     id,

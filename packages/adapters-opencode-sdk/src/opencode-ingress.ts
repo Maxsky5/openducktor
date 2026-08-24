@@ -2,78 +2,19 @@ import type {
   Agent,
   Command,
   ConfigProvidersResponse,
-  GlobalEvent,
   Message,
   Part,
   Session,
 } from "@opencode-ai/sdk/v2/client";
 import { exactOptionalSchema, type ExactOptional } from "@openducktor/contracts";
 import { z } from "zod";
-import type { UnknownRecord } from "./guards";
 
 const unknownRecordSchema = z.record(z.string(), z.unknown());
-
-type SdkGlobalEventPayload = GlobalEvent["payload"];
-type ServerHeartbeatPayload = {
-  id: string;
-  type: "server.heartbeat";
-  properties: Record<string, never>;
-};
-export type OpencodeGlobalEventPayload = SdkGlobalEventPayload | ServerHeartbeatPayload;
-
-const directEventSchema = z.object({
-  id: z.string(),
-  type: z.string().refine((type) => type !== "sync"),
-  properties: unknownRecordSchema,
-});
-
-const syncEventSchema = z.object({
-  aggregateID: z.string(),
-  data: unknownRecordSchema,
-  id: z.string(),
-  seq: z.number(),
-  type: z.string(),
-});
-
-const syncEnvelopeSchema = z.object({
-  id: z.string(),
-  type: z.literal("sync"),
-  syncEvent: syncEventSchema,
-});
-
-export const opencodeGlobalEventPayloadSchema = z.union([directEventSchema, syncEnvelopeSchema]);
-
-export type ParsedOpencodeGlobalEventPayload = z.infer<typeof opencodeGlobalEventPayloadSchema>;
 
 const formatIngressIssues = (issues: readonly z.core.$ZodIssue[]): string =>
   issues
     .map((issue) => `${issue.path.length > 0 ? issue.path.join(".") : "payload"}: ${issue.message}`)
     .join("; ");
-
-export const parseOpencodeGlobalEventPayload = (
-  value: unknown,
-): ParsedOpencodeGlobalEventPayload => {
-  const record = unknownRecordSchema.safeParse(value);
-  if (!record.success) {
-    throw new Error("Invalid OpenCode global event payload: payload: Expected an object.");
-  }
-
-  const schema = record.data.type === "sync" ? syncEnvelopeSchema : directEventSchema;
-  const parsed = schema.safeParse(record.data);
-  if (!parsed.success) {
-    throw new Error(
-      `Invalid OpenCode global event payload: ${formatIngressIssues(parsed.error.issues)}`,
-    );
-  }
-  return parsed.data;
-};
-
-export type ParsedOpencodeEvent = {
-  id?: string;
-  type: string;
-  properties: UnknownRecord;
-  syncEvent?: UnknownRecord;
-};
 
 const permissionRuleSchema = z.object({
   action: z.enum(["allow", "deny", "ask"]),
@@ -495,7 +436,7 @@ const snapshotFileDiffSchema = z.object({
   status: z.enum(["added", "deleted", "modified"]).optional(),
 });
 
-const messageErrorSchema = z.discriminatedUnion("name", [
+export const opencodeMessageErrorSchema = z.discriminatedUnion("name", [
   z.object({
     data: z.object({ message: z.string(), providerID: z.string() }),
     name: z.literal("ProviderAuthError"),
@@ -559,7 +500,7 @@ const userMessageInfoSchema = z.object({
 const assistantMessageInfoSchema = z.object({
   agent: z.string(),
   cost: z.number(),
-  error: messageErrorSchema.optional(),
+  error: opencodeMessageErrorSchema.optional(),
   finish: z.string().optional(),
   id: z.string(),
   mode: z.string(),

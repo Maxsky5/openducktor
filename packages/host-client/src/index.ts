@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { PlannerTools } from "@openducktor/core";
 
 export { createAgentSessionLiveAttachment } from "./agent-session-live-attachment";
@@ -231,7 +230,7 @@ const bindDelegates = <
 ): void => {
   for (const methodName of methods) {
     const candidate = client[methodName];
-    if (!hasRuntimeType(candidate, "function")) {
+    if (!(typeof candidate === "function")) {
       throw new Error(`Cannot delegate non-function member: ${String(methodName)}`);
     }
 

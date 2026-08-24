@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { TaskCard } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { hostClient as host } from "@/lib/host-client";
@@ -83,7 +82,7 @@ const cachedKanbanQueryKeysForRepo = (
         queryKey[0] === taskQueryKeys.all[0] &&
         queryKey[1] === "repo-data" &&
         queryKey[2] === repoPath &&
-        hasRuntimeType(queryKey[3], "number") &&
+        typeof queryKey[3] === "number" &&
         queryKey[3] >= 0
       ) {
         // SAFETY: The preceding runtime guard establishes `ReturnType<typeof taskQueryKeys.repoData>` before this assertion.

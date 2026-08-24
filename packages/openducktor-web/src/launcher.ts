@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { OPENDUCKTOR_DEV_INSTANCE_ENV, hasRuntimeType } from "@openducktor/contracts";
+import { OPENDUCKTOR_DEV_INSTANCE_ENV } from "@openducktor/contracts";
 import type { McpBridgeDiscoveryMode } from "@openducktor/host";
 import { Effect } from "effect";
 import {
@@ -344,7 +344,7 @@ const startViteServerEffect = (
         if (
           !httpServer ||
           !("closeAllConnections" in httpServer) ||
-          !hasRuntimeType(httpServer.closeAllConnections, "function")
+          !(typeof httpServer.closeAllConnections === "function")
         ) {
           return yield* Effect.fail(
             new WebDependencyError({
@@ -391,7 +391,7 @@ const startViteServerEffect = (
           ),
         );
         const address = httpServer.address();
-        if (!address || hasRuntimeType(address, "string")) {
+        if (!address || typeof address === "string") {
           return yield* preserveLauncherFailureAfterStop(
             new WebDependencyError({
               dependency: "vite",

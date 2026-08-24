@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import "katex/dist/katex.min.css";
 import type { TaskAssetRenderContext, TaskAssetStageResult } from "@openducktor/contracts";
 import type { Editor } from "@tiptap/core";
@@ -217,7 +216,7 @@ export default function TaskDescriptionVisualEditor({
           state={toolbar}
           onEditLink={() => {
             const href = editor.getAttributes("link").href;
-            setLinkHref(hasRuntimeType(href, "string") ? href : "");
+            setLinkHref(typeof href === "string" ? href : "");
           }}
           onEditMath={(kind) => setMathEdit({ kind, latex: "" })}
         />

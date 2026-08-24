@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { FileDiff } from "@openducktor/contracts";
 import { countRenderableFileDiffLines, selectRenderableFileDiff } from "@openducktor/core";
 import { createTwoFilesPatch } from "diff";
@@ -23,12 +22,12 @@ const readRecordProp = (
 
 const readNumberProp = (record: Record<string, unknown>, key: string): number | undefined => {
   const value = record[key];
-  return hasRuntimeType(value, "number") && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 };
 
 const readStringValue = (record: Record<string, unknown>, key: string): string | undefined => {
   const value = record[key];
-  return hasRuntimeType(value, "string") ? value : undefined;
+  return typeof value === "string" ? value : undefined;
 };
 
 const diffHeaderPath = (file: string): string =>
@@ -122,7 +121,7 @@ const readPatchFromRecord = (
 
   for (const key of ["gitDiff", "structuredPatch", "fileDiff", "filediff"] as const) {
     const nested = record[key];
-    if (hasRuntimeType(nested, "string") && nested.trim().length > 0) {
+    if (typeof nested === "string" && nested.trim().length > 0) {
       return nested;
     }
     const structuredPatch = readStructuredPatch(nested, file);
@@ -215,7 +214,7 @@ const changeTypeFromToolInput = (
     return readStringProp(record, "type")?.toLowerCase() === "create" ? "added" : "modified";
   }
   const oldString = input?.old_string ?? input?.oldString;
-  return hasRuntimeType(oldString, "string") && oldString.length === 0 ? "added" : "modified";
+  return typeof oldString === "string" && oldString.length === 0 ? "added" : "modified";
 };
 
 const normalizeClaudeFileDiff = ({

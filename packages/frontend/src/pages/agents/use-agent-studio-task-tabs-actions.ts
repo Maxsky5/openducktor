@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { type Dispatch, type SetStateAction, useCallback } from "react";
 import { closeTaskTab, reorderTaskTabs } from "./agent-studio-task-tabs-list";
 
@@ -6,7 +5,7 @@ type SetState<T> = Dispatch<SetStateAction<T>>;
 
 const focusTaskTabTrigger = (taskId: string): void => {
   globalThis.setTimeout(() => {
-    if (hasRuntimeType(globalThis.document, "undefined")) {
+    if (typeof globalThis.document === "undefined") {
       return;
     }
 

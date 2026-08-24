@@ -1,5 +1,4 @@
 import type { GlobalEvent, OpencodeClient } from "@opencode-ai/sdk/v2/client";
-import { jsonValueSchema, hasRuntimeType } from "@openducktor/contracts";
 import {
   isRelevantEvent,
   readEventDirectory,
@@ -13,8 +12,12 @@ import {
   type ProjectOpencodeAgentSessionEventInput,
   projectOpencodeAgentSessionEvent,
 } from "./opencode-agent-session-projection";
-import { asUnknownRecord } from "./guards";
-import type { OpencodeGlobalEventPayload, ParsedOpencodeEvent as Event } from "./opencode-ingress";
+import { asUnknownRecord, readStringProp } from "./guards";
+import {
+  parseOpencodeDirectEvent,
+  type OpencodeGlobalEventPayload,
+  type ParsedOpencodeEvent as Event,
+} from "./opencode-global-event-ingress";
 import type { EventStreamSubscriber, OpencodeEventLogger } from "./types";
 
 type ProcessOpencodeEventInput = ProjectOpencodeAgentSessionEventInput;
@@ -60,7 +63,7 @@ type GlobalEventApi = {
 
 const getGlobalEventApi = (client: GlobalEventClient): GlobalEventApi => {
   const globalApi = client.global;
-  if (!hasRuntimeType(globalApi.event, "function")) {
+  if (!(typeof globalApi.event === "function")) {
     throw new Error(
       "OpenCode SDK does not expose global event streaming via client.global.event(). Update @opencode-ai/sdk before using the adapter.",
     );
@@ -74,11 +77,11 @@ const resolveGlobalEventStream = async (
 ): Promise<AsyncIterable<OpencodeGlobalEvent>> => {
   const stream = await getGlobalEventApi(client).event({ signal });
   if (
-    hasRuntimeType(stream, "object") &&
+    typeof stream === "object" &&
     stream !== null &&
     "stream" in stream &&
     stream.stream &&
-    hasRuntimeType(stream.stream[Symbol.asyncIterator], "function")
+    typeof stream.stream[Symbol.asyncIterator] === "function"
   ) {
     return stream.stream;
   }
@@ -86,32 +89,36 @@ const resolveGlobalEventStream = async (
 };
 
 const toDirectoryScopedEvent = (event: Event, directory: string): Event => {
-  return {
+  return parseOpencodeDirectEvent({
     ...event,
     properties: {
       ...event.properties,
       directory,
     },
-  };
+  });
 };
 
 const readGlobalEventFailureScope = (
   event: OpencodeGlobalEvent,
 ): OpencodeGlobalEventFailureScope => {
-  const parsedPayload = jsonValueSchema.safeParse(event.payload);
-  const payload = parsedPayload.success ? asUnknownRecord(parsedPayload.data) : undefined;
+  const payload = asUnknownRecord(event.payload);
   const syncEvent = payload?.type === "sync" ? asUnknownRecord(payload.syncEvent) : undefined;
   const properties = syncEvent
     ? asUnknownRecord(syncEvent.data)
     : asUnknownRecord(payload?.properties);
-  const scopedEvent: Event = {
-    type: String(payload?.type ?? "unknown"),
-    properties: properties ?? {},
-  };
   const externalSessionId =
-    readEventSessionId(scopedEvent) ??
-    (hasRuntimeType(syncEvent?.aggregateID, "string") ? syncEvent.aggregateID : undefined);
-  const parentExternalSessionId = readEventParentExternalSessionId(properties);
+    (properties
+      ? readStringProp(properties, ["sessionID", "sessionId", "session_id"])
+      : undefined) ??
+    (typeof syncEvent?.aggregateID === "string" ? syncEvent.aggregateID : undefined);
+  const payloadType = typeof payload?.type === "string" ? payload.type : undefined;
+  const info = properties ? asUnknownRecord(properties.info) : undefined;
+  const parentExternalSessionId =
+    payloadType === "session.created" ||
+    payloadType === "session.updated" ||
+    payloadType === "session.deleted"
+      ? readStringProp(info, ["parentID"])
+      : undefined;
   return {
     directory: event.directory,
     ...(externalSessionId ? { externalSessionId } : undefined),
@@ -194,10 +201,9 @@ export const isRelevantSubscriberEvent = (
     ? lifecycleEvent.externalSessionId
     : readEventSessionId(event);
   if (eventExternalSessionId) {
-    const properties = event.properties;
     const parentExternalSessionId = lifecycleEvent
       ? lifecycleEvent.parentExternalSessionId
-      : readEventParentExternalSessionId(properties);
+      : readEventParentExternalSessionId(event);
 
     if (parentExternalSessionId) {
       return parentExternalSessionId === subscriber.externalSessionId;

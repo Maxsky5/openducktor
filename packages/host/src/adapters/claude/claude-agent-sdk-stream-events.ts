@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import {
   type ClaudeEventSession,
@@ -74,7 +73,7 @@ export const handleClaudeStreamEvent = ({
     return;
   }
   if (eventType === "content_block_stop") {
-    const index = hasRuntimeType(event.index, "number") ? event.index : null;
+    const index = typeof event.index === "number" ? event.index : null;
     if (index === null) {
       return;
     }
@@ -97,7 +96,7 @@ export const handleClaudeStreamEvent = ({
     return;
   }
   if (eventType === "content_block_start") {
-    const index = hasRuntimeType(event.index, "number") ? event.index : null;
+    const index = typeof event.index === "number" ? event.index : null;
     const block = isRecord(event.content_block) ? event.content_block : null;
     if (index === null || !block) {
       return;
@@ -125,14 +124,14 @@ export const handleClaudeStreamEvent = ({
     return;
   }
 
-  const index = hasRuntimeType(event.index, "number") ? event.index : null;
+  const index = typeof event.index === "number" ? event.index : null;
   const delta = isRecord(event.delta) ? event.delta : null;
   if (index === null || !delta) {
     return;
   }
   const deltaType = readStringProp(delta, "type");
   if (deltaType === "text_delta") {
-    const text = hasRuntimeType(delta.text, "string") ? delta.text : "";
+    const text = typeof delta.text === "string" ? delta.text : "";
     if (text.length === 0) {
       return;
     }
@@ -147,7 +146,7 @@ export const handleClaudeStreamEvent = ({
     return;
   }
   if (deltaType === "thinking_delta") {
-    const text = hasRuntimeType(delta.thinking, "string") ? delta.thinking : "";
+    const text = typeof delta.thinking === "string" ? delta.thinking : "";
     if (text.length === 0 || !session.streamAssistantResponseId) {
       return;
     }
@@ -160,7 +159,7 @@ export const handleClaudeStreamEvent = ({
     return;
   }
   const partialJson = delta.partial_json;
-  if (!hasRuntimeType(partialJson, "string") || partialJson.length === 0) {
+  if (!(typeof partialJson === "string") || partialJson.length === 0) {
     return;
   }
   const toolUse = appendClaudeStreamToolInputJson(session, index, partialJson);

@@ -14,7 +14,6 @@ import {
   type WorkspaceRepoHooksInput,
   type WorkspaceRepoSettingsInput,
   workspaceRecordSchema,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 import { parseArray } from "./invoke-utils";
@@ -35,14 +34,14 @@ export type ResolvedLocalAttachment = {
 };
 
 const parseStagedLocalAttachment = (payload: unknown): StagedLocalAttachment => {
-  if (!payload || !hasRuntimeType(payload, "object")) {
+  if (!payload || !(typeof payload === "object")) {
     throw new Error("Expected staged local attachment payload from host command");
   }
 
   // SAFETY: The preceding runtime guard establishes `Record<string, unknown>` before this assertion.
   const candidate = payload as Record<string, unknown>;
   const path = candidate.path;
-  if (!hasRuntimeType(path, "string") || path.trim().length === 0) {
+  if (!(typeof path === "string") || path.trim().length === 0) {
     throw new Error("Expected non-empty 'path' in staged local attachment payload");
   }
 

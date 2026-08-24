@@ -37,11 +37,15 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "../agent-studio-test-utils";
-import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentsPageModalContentModel } from "./agents-page-modal-content";
 import type { AgentStudioRightPanelBridgeModel } from "./use-agent-studio-right-panel-bridge";
 import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigation";
 import type { useAgentStudioSessionActions } from "../use-agent-studio-session-actions";
+import {
+  createAgentChatModelFixture,
+  createAgentStudioHeaderModelFixture,
+  createAgentStudioTaskTabsModelFixture,
+} from "./use-agents-page-shell-model.test-support";
 
 interface RepoSettingsStateContract {
   repoSettings: RepoSettingsInput | null;
@@ -173,147 +177,9 @@ type OrchestrationControllerArgs = {
   draftStateKey: string;
 };
 
-const agentStudioTaskTabsModel: AgentStudioTaskTabsModel = {
-  tabs: [],
-  availableTabTasks: [],
-  isLoadingAvailableTabTasks: false,
-  onSelectTab: () => {},
-  onCreateTab: () => {},
-  onCloseTab: () => {},
-  onReorderTab: () => {},
-  agentStudioReady: true,
-};
-
-const agentStudioHeaderModel: AgentStudioHeaderModel = {
-  taskTitle: "Task 1",
-  taskId: "task-1",
-  onOpenTaskDetails: () => {},
-  selectedRole: "planner",
-  workflowSteps: [],
-  onWorkflowStepSelect: () => {},
-  sessionSelector: {
-    value: "",
-    groups: [],
-    disabled: false,
-    onValueChange: () => {},
-    shouldAutofocusComposerForValue: () => false,
-  },
-  sessionCreateOptions: [],
-  onPrepareMessageFirstSession: () => {},
-  quickActions: [],
-  primaryQuickAction: null,
-  onQuickAction: () => {},
-  onResolveGitConflictQuickAction: null,
-  isCreatingSession: false,
-  agentStudioReady: true,
-};
-
-const agentChatScrollRef = { current: null };
-const agentChatModel: AgentChatModel = {
-  chatSettings: createChatSettingsFixture(),
-  thread: {
-    modelCatalog: null,
-    transcript: {
-      kind: "empty",
-      target: null,
-      displayedSessionKey: null,
-      notice: null,
-      session: null,
-      shouldResetWindow: false,
-    },
-    runtimePresentation: {
-      runtimeKind: null,
-      presentToolCall: (toolName) => ({ kind: "regular", displayName: toolName }),
-      supportedApprovalReplyOutcomes: null,
-    },
-    isSessionWorking: false,
-    isInteractionEnabled: false,
-    emptyState: null,
-    isStarting: false,
-    isSending: false,
-    sessionAgentColors: {},
-    pendingApprovalRequests: [],
-    pendingQuestionRequests: [],
-    todos: [],
-    canSubmitQuestionAnswers: false,
-    isSubmittingQuestionByRequestId: {},
-    onSubmitQuestionAnswers: async () => {},
-    canReplyToApprovals: false,
-    isSubmittingApprovalByRequestId: {},
-    approvalReplyErrorByRequestId: {},
-    onReplyApproval: async () => {},
-    sessionAuxiliaryError: null,
-    todoPanelCollapsed: false,
-    onToggleTodoPanel: () => {},
-    messagesContainerRef: { current: null },
-    scrollToBottomOnSendRef: agentChatScrollRef,
-    syncBottomAfterComposerLayoutRef: { current: null },
-  },
-  composer: {
-    displayedSessionKey: null,
-    isInteractionEnabled: false,
-    isReadOnly: true,
-    readOnlyReason: "No session selected.",
-    busySendBlockedReason: null,
-    draftScope: { key: "task-1", persistence: null },
-    onSend: async () => false,
-    isSending: false,
-    isStarting: false,
-    isSessionWorking: false,
-    isWaitingInput: false,
-    isModelSelectionPending: false,
-    selectedModelSelection: null,
-    isSelectionCatalogLoading: false,
-    supportsAttachments: false,
-    supportsSlashCommands: false,
-    supportsFileSearch: false,
-    supportsSkillReferences: false,
-    supportsSubagentReferences: false,
-    slashCommandCatalog: null,
-    slashCommands: [],
-    slashCommandsError: null,
-    isSlashCommandsLoading: false,
-    skillCatalog: null,
-    skills: [],
-    skillsError: null,
-    isSkillsLoading: false,
-    subagentCatalog: null,
-    subagents: [],
-    subagentsError: null,
-    isSubagentsLoading: false,
-    searchFiles: async () => [],
-    agentOptions: [],
-    modelPicker: {
-      runtimes: [],
-      value: null,
-      selectionPolicy: { kind: "editable" },
-      favoriteState: {
-        favorites: [],
-        isLoading: false,
-        readError: null,
-        isMutationPending: false,
-        mutationError: null,
-        canMutate: true,
-        toggleFavorite: () => {},
-        retryRead: () => {},
-        retryMutation: () => {},
-      },
-      onValueChange: () => {},
-      onOpenChange: () => {},
-    },
-    variantOptions: [],
-    onSelectAgent: () => {},
-    onSelectVariant: () => {},
-    contextUsage: null,
-    canStopSession: false,
-    onStopSession: () => {},
-    composerFormRef: { current: null },
-    composerEditorRef: { current: null },
-    onComposerEditorInput: () => {},
-    scrollToBottomOnSendRef: agentChatScrollRef,
-    syncBottomAfterComposerLayoutRef: { current: null },
-  },
-};
+const agentStudioTaskTabsModel = createAgentStudioTaskTabsModelFixture();
+const agentStudioHeaderModel = createAgentStudioHeaderModelFixture();
+const agentChatModel = createAgentChatModelFixture();
 
 type AgentsPageShellModelState = {
   activeWorkspace: WorkspaceStateContextValue["activeWorkspace"];

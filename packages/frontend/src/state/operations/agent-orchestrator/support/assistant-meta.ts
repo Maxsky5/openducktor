@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type {
   AgentChatMessage,
@@ -22,7 +21,7 @@ export const toSessionContextUsage = (
   totalTokens: number | undefined,
   model?: AgentSessionState["selectedModel"],
 ): AgentSessionContextUsage | null => {
-  if (!hasRuntimeType(totalTokens, "number") || totalTokens <= 0) {
+  if (!(typeof totalTokens === "number") || totalTokens <= 0) {
     return null;
   }
 
@@ -58,12 +57,10 @@ export const createAssistantMessageMeta = ({
     ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : undefined),
     ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : undefined),
     ...(effectiveModel?.profileId ? { profileId: effectiveModel.profileId } : undefined),
-    ...(hasRuntimeType(durationMs, "number") ? { durationMs } : undefined),
-    ...(hasRuntimeType(totalTokens, "number") && totalTokens > 0 ? { totalTokens } : undefined),
-    ...(hasRuntimeType(contextWindow, "number") && contextWindow > 0
-      ? { contextWindow }
-      : undefined),
-    ...(hasRuntimeType(outputLimit, "number") && outputLimit > 0 ? { outputLimit } : undefined),
+    ...(typeof durationMs === "number" ? { durationMs } : undefined),
+    ...(typeof totalTokens === "number" && totalTokens > 0 ? { totalTokens } : undefined),
+    ...(typeof contextWindow === "number" && contextWindow > 0 ? { contextWindow } : undefined),
+    ...(typeof outputLimit === "number" && outputLimit > 0 ? { outputLimit } : undefined),
   };
 };
 

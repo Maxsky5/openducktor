@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { areSessionMessagesSameRevision } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentChatTranscriptSession } from "./agent-chat.types";
@@ -33,7 +32,7 @@ const touchTranscriptModelCacheEntry = (
 
   while (cache.size > TRANSCRIPT_MODEL_CACHE_LIMIT) {
     const oldestKey = cache.keys().next().value;
-    if (!hasRuntimeType(oldestKey, "string")) {
+    if (!(typeof oldestKey === "string")) {
       break;
     }
     cache.delete(oldestKey);

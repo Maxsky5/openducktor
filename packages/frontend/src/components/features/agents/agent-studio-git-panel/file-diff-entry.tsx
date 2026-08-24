@@ -1,4 +1,4 @@
-import { hasOwnKey, hasRuntimeType, type FileDiff } from "@openducktor/contracts";
+import { hasOwnKey, type FileDiff } from "@openducktor/contracts";
 import type { DiffLineAnnotation, SelectedLineRange } from "@pierre/diffs";
 import {
   AlertTriangle,
@@ -71,15 +71,13 @@ type GitDiffCommentAnnotationMetadata =
 const isGitDiffCommentAnnotationMetadata = (
   value: unknown,
 ): value is GitDiffCommentAnnotationMetadata => {
-  if (!hasRuntimeType(value, "object") || value === null || !("kind" in value)) {
+  if (!(typeof value === "object") || value === null || !("kind" in value)) {
     return false;
   }
   if (value.kind === "new-comment-form") {
     return true;
   }
-  return (
-    value.kind === "comment" && "commentId" in value && hasRuntimeType(value.commentId, "string")
-  );
+  return value.kind === "comment" && "commentId" in value && typeof value.commentId === "string";
 };
 
 type FileDiffAnnotationState = {

@@ -6,9 +6,9 @@ import {
   opencodeProviderCatalogPayloadSchema,
   opencodeSessionDetailPayloadSchema,
   opencodeSessionMessagesPayloadSchema,
-  parseOpencodeGlobalEventPayload,
   parseOpencodeSessionListPayload,
 } from "./opencode-ingress";
+import { parseOpencodeGlobalEventPayload } from "./opencode-global-event-ingress";
 import {
   createOpencodeMessageInfoFixture,
   createOpencodePartFixture,

@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { DevServerGroupState } from "@openducktor/contracts";
@@ -18,7 +17,7 @@ import {
 } from "./use-agent-studio-dev-server-panel-test-fixtures";
 import { renderDevServerPanelHook } from "./use-agent-studio-dev-server-panel-test-harness";
 
-if (hasRuntimeType(globalThis.document, "undefined")) {
+if (typeof globalThis.document === "undefined") {
   GlobalRegistrator.register();
 }
 

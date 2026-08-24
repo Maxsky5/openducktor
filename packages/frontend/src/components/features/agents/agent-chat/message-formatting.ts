@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
 import { findCatalogModel } from "@/lib/model-catalog-selection";
 import { isFinalAssistantChatMessage } from "@/state/operations/agent-orchestrator/support/messages";
@@ -83,7 +82,7 @@ export const getAssistantFooterData = (
   const parts: string[] = [];
 
   const agentLabel = assistantMeta.profileId;
-  if (hasRuntimeType(agentLabel, "string") && agentLabel.trim().length > 0) {
+  if (typeof agentLabel === "string" && agentLabel.trim().length > 0) {
     parts.push(agentLabel.trim());
   }
 
@@ -91,9 +90,9 @@ export const getAssistantFooterData = (
   const modelLabel = assistantMeta.modelId;
   const catalogModel =
     modelCatalog &&
-    hasRuntimeType(providerLabel, "string") &&
+    typeof providerLabel === "string" &&
     providerLabel.trim().length > 0 &&
-    hasRuntimeType(modelLabel, "string") &&
+    typeof modelLabel === "string" &&
     modelLabel.trim().length > 0
       ? findCatalogModel(modelCatalog, {
           providerId: providerLabel.trim(),
@@ -103,7 +102,7 @@ export const getAssistantFooterData = (
   const displayedModelLabel = catalogModel?.modelName ?? modelLabel;
   const providerModelParts: string[] = [];
   for (const value of [providerLabel, displayedModelLabel]) {
-    if (hasRuntimeType(value, "string") && value.trim().length > 0) {
+    if (typeof value === "string" && value.trim().length > 0) {
       providerModelParts.push(value.trim());
     }
   }
@@ -113,7 +112,7 @@ export const getAssistantFooterData = (
   }
 
   const variantLabel = assistantMeta.variant;
-  if (hasRuntimeType(variantLabel, "string") && variantLabel.trim().length > 0) {
+  if (typeof variantLabel === "string" && variantLabel.trim().length > 0) {
     parts.push(variantLabel.trim());
   }
 

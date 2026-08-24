@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { projectClaudeCompletedToolResult } from "./claude-agent-sdk-completed-tool-result";
@@ -111,7 +110,7 @@ export const handleClaudeUserToolResultMessage = ({
       messageId,
       raw: result.raw,
       resultText: result.text,
-      ...(hasRuntimeType(startedAtMs, "number") ? { startedAtMs } : undefined),
+      ...(typeof startedAtMs === "number" ? { startedAtMs } : undefined),
       state: session.todosById,
       tool,
     });

@@ -45,6 +45,22 @@ export const noUnknownReturnsRule = defineRule({
       visited = new Set<string>(),
     ): boolean => {
       if (type.type === "TSUnknownKeyword") return true;
+      if (type.type === "TSIndexedAccessType" && type.indexType.type === "TSStringKeyword") {
+        if (
+          type.objectType.type === "TSTypeReference" &&
+          type.objectType.typeName.type === "Identifier"
+        ) {
+          if (type.objectType.typeName.name === "UnknownRecord") return true;
+          if (type.objectType.typeName.name === "Record") {
+            const [key, value] = type.objectType.typeArguments?.params ?? [];
+            return (
+              key?.type === "TSStringKeyword" &&
+              value !== undefined &&
+              resolvesToUnknown(value, shadowedAliases, visited)
+            );
+          }
+        }
+      }
       if (
         /^Parameters\s*<\s*typeof\s+.+\.(?:parse|safeParse)\s*>\s*\[\s*0\s*\]$/u.test(
           context.sourceCode.getText(type),

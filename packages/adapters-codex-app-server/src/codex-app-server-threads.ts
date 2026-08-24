@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentSessionAssociation, AgentSessionSummary } from "@openducktor/core";
 import type {
   CodexAppServerSessionSource,
@@ -129,11 +128,11 @@ const codexThreadSnapshot = (thread: CodexAppServerThread): CodexThreadSnapshot 
 const codexSubAgentSourceMetadata = (
   source: CodexAppServerSessionSource | null | undefined,
 ): CodexSubAgentSourceMetadata | null => {
-  if (!source || hasRuntimeType(source, "string") || !("subAgent" in source)) {
+  if (!source || typeof source === "string" || !("subAgent" in source)) {
     return null;
   }
   const subAgent = source.subAgent;
-  if (hasRuntimeType(subAgent, "string") || "other" in subAgent) {
+  if (typeof subAgent === "string" || "other" in subAgent) {
     return null;
   }
   if (!("thread_spawn" in subAgent)) {

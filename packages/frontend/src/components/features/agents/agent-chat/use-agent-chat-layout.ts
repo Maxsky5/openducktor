@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
@@ -43,7 +42,7 @@ const readComposerEditorHeight = (
     return inlineHeight;
   }
   if (
-    hasRuntimeType(previousHeightPx, "number") &&
+    typeof previousHeightPx === "number" &&
     Number.isFinite(previousHeightPx) &&
     previousHeightPx > 0
   ) {
@@ -165,7 +164,7 @@ export const useAgentChatLayout = ({
 
   const resizeComposerEditor = useCallback((): void => {
     const requestAnimationFrameFn = globalThis.requestAnimationFrame;
-    if (!hasRuntimeType(requestAnimationFrameFn, "function")) {
+    if (!(typeof requestAnimationFrameFn === "function")) {
       flushComposerEditorResize();
       return;
     }
@@ -203,7 +202,7 @@ export const useAgentChatLayout = ({
 
   const resizeComposerTextarea = useCallback((): void => {
     const requestAnimationFrameFn = globalThis.requestAnimationFrame;
-    if (!hasRuntimeType(requestAnimationFrameFn, "function")) {
+    if (!(typeof requestAnimationFrameFn === "function")) {
       flushComposerTextareaResize();
       return;
     }
@@ -220,14 +219,11 @@ export const useAgentChatLayout = ({
 
   const cancelPendingResizeFrames = useCallback((): void => {
     const cancelAnimationFrameFn = globalThis.cancelAnimationFrame;
-    if (resizeFrameIdRef.current !== null && hasRuntimeType(cancelAnimationFrameFn, "function")) {
+    if (resizeFrameIdRef.current !== null && typeof cancelAnimationFrameFn === "function") {
       cancelAnimationFrameFn(resizeFrameIdRef.current);
       resizeFrameIdRef.current = null;
     }
-    if (
-      resizeTextareaFrameIdRef.current !== null &&
-      hasRuntimeType(cancelAnimationFrameFn, "function")
-    ) {
+    if (resizeTextareaFrameIdRef.current !== null && typeof cancelAnimationFrameFn === "function") {
       cancelAnimationFrameFn(resizeTextareaFrameIdRef.current);
       resizeTextareaFrameIdRef.current = null;
     }
@@ -240,7 +236,7 @@ export const useAgentChatLayout = ({
     const hasDisplayedSession = displayedSessionKey !== null;
     if (hasDisplayedSession && resizeFrameIdRef.current !== null) {
       const cancelAnimationFrameFn = globalThis.cancelAnimationFrame;
-      if (hasRuntimeType(cancelAnimationFrameFn, "function")) {
+      if (typeof cancelAnimationFrameFn === "function") {
         cancelAnimationFrameFn(resizeFrameIdRef.current);
       }
       resizeFrameIdRef.current = null;

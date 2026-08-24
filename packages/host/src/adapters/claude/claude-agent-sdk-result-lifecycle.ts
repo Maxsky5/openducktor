@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 export type ClaudeResultLike = {
   duration_ms?: unknown;
   errors?: unknown;
@@ -16,13 +15,12 @@ export const failedClaudeResultText = (message: ClaudeResultLike): string => {
   if (errors.length > 0) {
     return errors.join("\n");
   }
-  const result = hasRuntimeType(message.result, "string") ? message.result.trim() : "";
+  const result = typeof message.result === "string" ? message.result.trim() : "";
   if (result.length > 0) {
     return result;
   }
-  const terminalReason = hasRuntimeType(message.terminal_reason, "string")
-    ? message.terminal_reason
-    : undefined;
+  const terminalReason =
+    typeof message.terminal_reason === "string" ? message.terminal_reason : undefined;
   return `Claude Agent SDK result failed: ${terminalReason ?? String(message.subtype)}`;
 };
 
@@ -33,10 +31,10 @@ export type ClaudeResultLifecycleOutcome =
   | "awaiting_sdk_idle";
 
 const readClaudeResultTerminalReason = (message: ClaudeResultLike): string | undefined =>
-  hasRuntimeType(message.terminal_reason, "string") ? message.terminal_reason : undefined;
+  typeof message.terminal_reason === "string" ? message.terminal_reason : undefined;
 
 const readClaudeResultStopReason = (message: ClaudeResultLike): string | undefined =>
-  hasRuntimeType(message.stop_reason, "string") ? message.stop_reason : undefined;
+  typeof message.stop_reason === "string" ? message.stop_reason : undefined;
 
 export const isFailedClaudeResult = (message: ClaudeResultLike): boolean => {
   if (message.subtype !== "success" || message.is_error === true) {
@@ -55,7 +53,7 @@ export const successfulClaudeResultText = (message: ClaudeResultLike): string | 
   if (isFailedClaudeResult(message)) {
     return null;
   }
-  const text = hasRuntimeType(message.result, "string") ? message.result.trim() : "";
+  const text = typeof message.result === "string" ? message.result.trim() : "";
   return text.length > 0 ? text : null;
 };
 

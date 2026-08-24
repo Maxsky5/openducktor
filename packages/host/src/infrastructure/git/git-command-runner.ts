@@ -2,7 +2,6 @@ import { execFile, spawn } from "node:child_process";
 import { realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { hasRuntimeType } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   HostOperationError,
@@ -229,17 +228,17 @@ export const createDefaultGitRunner = (
       if (options?.allowFailure) {
         const failed = exit.left;
         const stdout =
-          hasRuntimeType(failed, "object") &&
+          typeof failed === "object" &&
           failed !== null &&
           "stdout" in failed &&
-          hasRuntimeType(failed.stdout, "string")
+          typeof failed.stdout === "string"
             ? failed.stdout
             : "";
         const stderr =
-          hasRuntimeType(failed, "object") &&
+          typeof failed === "object" &&
           failed !== null &&
           "stderr" in failed &&
-          hasRuntimeType(failed.stderr, "string")
+          typeof failed.stderr === "string"
             ? failed.stderr
             : String(failed);
         return {

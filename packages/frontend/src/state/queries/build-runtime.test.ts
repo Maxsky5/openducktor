@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { TaskWorktreeSummary } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
@@ -82,7 +81,7 @@ describe("build runtime queries", () => {
     const originalSetTimeout = globalThis.setTimeout;
     const originalClearTimeout = globalThis.clearTimeout;
     const setTimeoutMock = mock((handler: TimerHandler, _delay?: number) => {
-      if (!hasRuntimeType(handler, "function")) {
+      if (!(typeof handler === "function")) {
         throw new Error("Expected timeout callback function");
       }
       return originalSetTimeout(() => {

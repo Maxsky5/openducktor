@@ -570,13 +570,12 @@ export type CodexAppServerClientRequest = CodexAppServerParsedClientRequest;
 export type CodexAppServerRequestResult =
   CodexAppServerClientRequestMap[CodexAppServerRequestMethod]["result"];
 
-export const parseCodexAppServerClientRequest = <Input>(
-  value: Input,
-): CodexAppServerClientRequest => parseClientRequest(value);
+export const parseCodexAppServerClientRequest = (value: unknown): CodexAppServerClientRequest =>
+  parseClientRequest(value);
 
-export const parseCodexAppServerRequestResult = <Method extends CodexAppServerRequestMethod, Input>(
+export const parseCodexAppServerRequestResult = <Method extends CodexAppServerRequestMethod>(
   method: Method,
-  value: Input,
+  value: unknown,
 ): CodexAppServerClientRequestMap[Method]["result"] =>
   parseCodexAppServerRequestResultValue(method, value);
 

@@ -139,9 +139,9 @@ export const claudeUserToolResultIngressSchema = claudeUnknownRecordSchema.exten
   uuid: z.string().optional(),
 });
 
-const parseClaudeIngress = <Schema extends z.ZodType, Input>(
+const parseClaudeIngress = <Schema extends z.ZodType>(
   schema: Schema,
-  value: Input,
+  value: unknown,
   field: string,
 ): z.output<Schema> => {
   const parsed = schema.safeParse(value);
@@ -178,19 +178,29 @@ export type ClaudeUserToolResultIngress = {
 export const parseClaudeHistoryStoreEntry = (value: SessionStoreEntry) =>
   parseClaudeIngress(claudeHistoryStoreEntrySchema, value, "claudeSessionHistoryEntry");
 
-export const parseClaudeHistoryConversationEntry = <Input>(value: Input) =>
+export const parseClaudeHistoryConversationEntry = (
+  value: unknown,
+): z.output<typeof claudeHistoryConversationEntrySchema> =>
   parseClaudeIngress(claudeHistoryConversationEntrySchema, value, "claudeHistoryMessage");
 
-export const parseClaudeHistoryAssistantEntry = <Input>(value: Input) =>
+export const parseClaudeHistoryAssistantEntry = (
+  value: unknown,
+): z.output<typeof claudeHistoryAssistantEntrySchema> =>
   parseClaudeIngress(claudeHistoryAssistantEntrySchema, value, "claudeHistoryAssistantMessage");
 
-export const parseClaudeHistoryAttachment = <Input>(value: Input) =>
+export const parseClaudeHistoryAttachment = (
+  value: unknown,
+): z.output<typeof claudeHistoryAttachmentSchema> =>
   parseClaudeIngress(claudeHistoryAttachmentSchema, value, "claudeHistoryAttachment");
 
-export const parseClaudeHistoryAttachmentEntry = <Input>(value: Input) =>
+export const parseClaudeHistoryAttachmentEntry = (
+  value: unknown,
+): z.output<typeof claudeHistoryAttachmentEntrySchema> =>
   parseClaudeIngress(claudeHistoryAttachmentEntrySchema, value, "claudeHistoryAttachmentEntry");
 
-export const parseClaudeMetaQueuedCommandAttachment = <Input>(value: Input) =>
+export const parseClaudeMetaQueuedCommandAttachment = (
+  value: unknown,
+): z.output<typeof claudeMetaQueuedCommandAttachmentSchema> =>
   parseClaudeIngress(
     claudeMetaQueuedCommandAttachmentSchema,
     value,
@@ -203,10 +213,12 @@ export const parseClaudePreToolUseIngress = (value: HookInput) =>
 export const parseClaudePostToolUseIngress = (value: HookInput): ClaudePostToolUseIngress =>
   parseClaudeIngress(claudePostToolUseIngressSchema, value, "claudePostToolUse");
 
-export const parseClaudeFileEditToolResponse = <Input>(value: Input) =>
+export const parseClaudeFileEditToolResponse = (
+  value: unknown,
+): z.output<typeof claudePlainUnknownRecordSchema> =>
   parseClaudeIngress(claudePlainUnknownRecordSchema, value, "claudeFileEditToolResponse");
 
-export const parseClaudeCanonicalJsonObject = <Input>(value: Input, field: string): JsonObject =>
+export const parseClaudeCanonicalJsonObject = (value: unknown, field: string): JsonObject =>
   parseClaudeIngress(claudeCanonicalJsonObjectSchema, value, field);
 
 export const parseClaudeUserToolResultIngress = (

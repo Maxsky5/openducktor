@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import { useState } from "react";
 import {
@@ -555,7 +554,7 @@ describe("useRepoNavigationPersistence", () => {
       configurable: true,
       value: (callback: TimerHandler) => {
         const timerId = createTimerHandle();
-        if (!hasRuntimeType(callback, "function")) {
+        if (!(typeof callback === "function")) {
           throw new Error("Expected function timer callback");
         }
         scheduledCallbacks.set(timerId, () => callback());

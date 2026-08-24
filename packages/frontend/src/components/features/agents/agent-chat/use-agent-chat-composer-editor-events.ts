@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentSkillReference,
@@ -329,11 +328,11 @@ export const useAgentChatComposerEditorEvents = ({
         event.target,
       );
       const inputType =
-        "inputType" in event.nativeEvent && hasRuntimeType(event.nativeEvent.inputType, "string")
+        "inputType" in event.nativeEvent && typeof event.nativeEvent.inputType === "string"
           ? event.nativeEvent.inputType
           : null;
       const data =
-        "data" in event.nativeEvent && hasRuntimeType(event.nativeEvent.data, "string")
+        "data" in event.nativeEvent && typeof event.nativeEvent.data === "string"
           ? event.nativeEvent.data
           : null;
       const selectionTarget = resolveSelectionTargetFromActiveSelection(

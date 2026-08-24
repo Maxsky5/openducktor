@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import type { EventStreamRuntime } from "../shared";
 import {
@@ -193,7 +192,7 @@ export const normalizeLiveSubagentCorrelation = (
     : [];
   const pendingSessionId = effectiveExternalSessionId;
   const shouldDeferAmbiguousSessionBinding =
-    hasRuntimeType(pendingSessionId, "string") &&
+    typeof pendingSessionId === "string" &&
     pendingSessionId.length > 0 &&
     !sessionCorrelationKey &&
     pendingCorrelationKeys.length > 1;

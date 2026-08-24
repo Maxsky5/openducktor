@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { TaskCard } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { type MutableRefObject, useCallback, useEffect, useMemo, useRef } from "react";
@@ -92,7 +91,7 @@ export function useTaskReadFlow({ activeRepoPath }: UseTaskReadFlowArgs): UseTas
 }
 
 const toTaskIds = (taskIdOrIds?: string | string[]): string[] | null => {
-  if (hasRuntimeType(taskIdOrIds, "string")) {
+  if (typeof taskIdOrIds === "string") {
     return [taskIdOrIds];
   }
   if (Array.isArray(taskIdOrIds)) {

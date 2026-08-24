@@ -3,7 +3,6 @@ import {
   RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeDescriptor,
   runtimeDescriptorSchema,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 
 export type RuntimeDefinitionsService = {
@@ -11,7 +10,7 @@ export type RuntimeDefinitionsService = {
 };
 
 const describeRuntimeDescriptor = (descriptor: RuntimeDescriptor): string => {
-  return hasRuntimeType(descriptor.kind, "string") && descriptor.kind.length > 0
+  return typeof descriptor.kind === "string" && descriptor.kind.length > 0
     ? descriptor.kind
     : "unknown";
 };

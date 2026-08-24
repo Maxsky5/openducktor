@@ -2,7 +2,6 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeDescriptor,
   type RuntimeKind,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 import type {
   AcceptedAgentUserMessage,
@@ -634,7 +633,7 @@ export class OpencodeSdkAdapter
     const historyInput = {
       ...runtimeClientInput,
       externalSessionId: input.externalSessionId,
-      ...(hasRuntimeType(input.limit, "number") ? { limit: input.limit } : undefined),
+      ...(typeof input.limit === "number" ? { limit: input.limit } : undefined),
       ...(preservedDisplayPartsByMessageId.size > 0
         ? { preservedDisplayPartsByMessageId }
         : undefined),
@@ -944,7 +943,7 @@ export class OpencodeSdkAdapter
 
     if (
       session.workflowToolSelectionCache &&
-      hasRuntimeType(session.workflowToolSelectionCachedAt, "number") &&
+      typeof session.workflowToolSelectionCachedAt === "number" &&
       nowMs - session.workflowToolSelectionCachedAt < WORKFLOW_TOOL_CACHE_TTL_MS
     ) {
       return session.workflowToolSelectionCache;

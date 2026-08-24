@@ -1,4 +1,4 @@
-import { hasRuntimeType, isJsonObject, type JsonValue } from "@openducktor/contracts";
+import { isJsonObject, type JsonValue } from "@openducktor/contracts";
 import { toDisplayRelativePath } from "@openducktor/path-support";
 
 const DISPLAY_PATH_KEYS = new Set([
@@ -40,7 +40,7 @@ export const relativizeDisplayPathsInValue = (
   workingDirectory?: string | null,
   key?: string,
 ): JsonValue => {
-  if (hasRuntimeType(value, "string")) {
+  if (typeof value === "string") {
     return key && DISPLAY_PATH_KEYS.has(key)
       ? relativizeDisplayPath(value, workingDirectory)
       : value;

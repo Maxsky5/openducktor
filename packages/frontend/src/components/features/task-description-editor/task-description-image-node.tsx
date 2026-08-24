@@ -1,4 +1,4 @@
-import { parseTaskAssetUri, hasRuntimeType } from "@openducktor/contracts";
+import { parseTaskAssetUri } from "@openducktor/contracts";
 import { NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
 import { useContext, useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
@@ -24,7 +24,7 @@ export function TaskDescriptionImageNode({
   updateAttributes,
 }: TaskDescriptionImageNodeProps) {
   const { previews, renderContext } = useContext(TaskDescriptionImageContext);
-  const source = hasRuntimeType(node.attrs.src, "string") ? node.attrs.src : "";
+  const source = typeof node.attrs.src === "string" ? node.attrs.src : "";
   const assetId = parseTaskAssetUri(source);
   const preview = assetId ? previews.get(assetId) : undefined;
   const workspaceId = renderContext?.workspaceId ?? null;
@@ -74,8 +74,8 @@ export function TaskDescriptionImageNode({
         {resolvedSource ? (
           <img
             src={resolvedSource}
-            alt={hasRuntimeType(node.attrs.alt, "string") ? node.attrs.alt : ""}
-            title={hasRuntimeType(node.attrs.title, "string") ? node.attrs.title : undefined}
+            alt={typeof node.attrs.alt === "string" ? node.attrs.alt : ""}
+            title={typeof node.attrs.title === "string" ? node.attrs.title : undefined}
             className="mx-auto max-h-96 max-w-full rounded object-contain"
             onError={() => {
               setResolvedSource(null);
@@ -90,13 +90,13 @@ export function TaskDescriptionImageNode({
         {selected ? (
           <figcaption className="mt-2 grid gap-2 sm:grid-cols-2">
             <Input
-              value={hasRuntimeType(node.attrs.alt, "string") ? node.attrs.alt : ""}
+              value={typeof node.attrs.alt === "string" ? node.attrs.alt : ""}
               aria-label="Image alt text"
               placeholder="Alt text"
               onChange={(event) => updateAttributes({ alt: event.currentTarget.value })}
             />
             <Input
-              value={hasRuntimeType(node.attrs.title, "string") ? node.attrs.title : ""}
+              value={typeof node.attrs.title === "string" ? node.attrs.title : ""}
               aria-label="Image title"
               placeholder="Optional title"
               onChange={(event) => updateAttributes({ title: event.currentTarget.value || null })}

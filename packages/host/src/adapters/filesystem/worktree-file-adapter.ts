@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { cp, lstat, mkdir, readdir, readlink, realpath, rm, symlink } from "node:fs/promises";
 import path from "node:path";
 import { Effect } from "effect";
@@ -12,7 +11,7 @@ import type { WorktreeFileError, WorktreeFilePort } from "../../ports/worktree-f
 const metadataDirectoryName = ".git";
 const normalizeMissingPath = (inputPath: string): string => path.resolve(inputPath);
 const hasErrorCode = (cause: unknown, code: string): boolean =>
-  hasRuntimeType(cause, "object") && cause !== null && "code" in cause && cause.code === code;
+  typeof cause === "object" && cause !== null && "code" in cause && cause.code === code;
 const resolvePathThroughExistingAncestor = (
   inputPath: string,
   missingSegments: string[] = [],

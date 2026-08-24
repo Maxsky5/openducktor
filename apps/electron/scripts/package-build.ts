@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { Dirent } from "node:fs";
 import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -175,10 +174,7 @@ export const resolveElectronBuilderEnv = (
 };
 
 const nodeErrorCode = (cause: unknown): string | null =>
-  hasRuntimeType(cause, "object") &&
-  cause !== null &&
-  "code" in cause &&
-  hasRuntimeType(cause.code, "string")
+  typeof cause === "object" && cause !== null && "code" in cause && typeof cause.code === "string"
     ? cause.code
     : null;
 

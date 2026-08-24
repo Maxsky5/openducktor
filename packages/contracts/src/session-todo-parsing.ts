@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "./runtime-type";
 import { z } from "zod";
 import type { JsonValue } from "./json-types";
 
@@ -19,7 +18,7 @@ const normalizeLooseTodoEntry = (
   fallbackId: string,
   options: ParseAgentSessionTodoPayloadOptions,
 ): AgentSessionTodoPayloadRecord | null => {
-  if (options.allowStringEntries && hasRuntimeType(entry, "string")) {
+  if (options.allowStringEntries && typeof entry === "string") {
     const content = entry.trim();
     if (!content) {
       return null;
@@ -27,20 +26,20 @@ const normalizeLooseTodoEntry = (
     return { id: fallbackId, content };
   }
 
-  if (!entry || !hasRuntimeType(entry, "object") || Array.isArray(entry)) {
+  if (!entry || !(typeof entry === "object") || Array.isArray(entry)) {
     return null;
   }
 
   const id =
-    (hasRuntimeType(entry.id, "string") ? entry.id.trim() : "") ||
-    (hasRuntimeType(entry.todoId, "string") ? entry.todoId.trim() : "") ||
+    (typeof entry.id === "string" ? entry.id.trim() : "") ||
+    (typeof entry.todoId === "string" ? entry.todoId.trim() : "") ||
     fallbackId;
   const content = (
-    hasRuntimeType(entry.content, "string")
+    typeof entry.content === "string"
       ? entry.content
-      : hasRuntimeType(entry.text, "string")
+      : typeof entry.text === "string"
         ? entry.text
-        : hasRuntimeType(entry.title, "string")
+        : typeof entry.title === "string"
           ? entry.title
           : ""
   ).trim();
@@ -51,9 +50,9 @@ const normalizeLooseTodoEntry = (
   return {
     id,
     content,
-    ...(hasRuntimeType(entry.status, "string") ? { status: entry.status } : undefined),
-    ...(hasRuntimeType(entry.priority, "string") ? { priority: entry.priority } : undefined),
-    ...(hasRuntimeType(entry.completed, "boolean") ? { completed: entry.completed } : undefined),
+    ...(typeof entry.status === "string" ? { status: entry.status } : undefined),
+    ...(typeof entry.priority === "string" ? { priority: entry.priority } : undefined),
+    ...(typeof entry.completed === "boolean" ? { completed: entry.completed } : undefined),
   };
 };
 

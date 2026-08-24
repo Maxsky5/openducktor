@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { PolicyBoundSessionRef, StartAgentSessionInput } from "@openducktor/core";
 import { toAgentRuntimePolicyBinding } from "@openducktor/core";
 import type { SessionInput } from "./types";
@@ -6,7 +5,7 @@ import type { SessionInput } from "./types";
 type SessionInputSource = StartAgentSessionInput | PolicyBoundSessionRef;
 
 export const toIsoFromEpoch = (value: unknown, fallback: () => string): string => {
-  if (!hasRuntimeType(value, "number") || Number.isNaN(value)) {
+  if (!(typeof value === "number") || Number.isNaN(value)) {
     return fallback();
   }
   const iso = new Date(value).toISOString();

@@ -1,4 +1,4 @@
-import { devServerGroupStateSchema, hasRuntimeType } from "@openducktor/contracts";
+import { devServerGroupStateSchema } from "@openducktor/contracts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { DevServerGroupState } from "@openducktor/contracts";
@@ -21,7 +21,7 @@ type TestDevServerEventSubscription = {
   unsubscribe: () => void;
 };
 
-if (hasRuntimeType(globalThis.document, "undefined")) {
+if (typeof globalThis.document === "undefined") {
   GlobalRegistrator.register();
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ODT_TOOL_SCHEMAS, hasRuntimeType, type JsonValue } from "@openducktor/contracts";
+import { ODT_TOOL_SCHEMAS, type JsonValue } from "@openducktor/contracts";
 import { OdtHostBridgeClient } from "./host-bridge-client";
 import { OdtToolError } from "./tool-results";
 
@@ -48,7 +48,7 @@ describe("OdtHostBridgeClient", () => {
         url: String(input),
         method: init?.method,
         headers: init?.headers,
-        body: hasRuntimeType(init?.body, "string") ? init.body : undefined,
+        body: typeof init?.body === "string" ? init.body : undefined,
       });
       return jsonResponse({
         bridgeVersion: 1,

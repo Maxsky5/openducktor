@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { z } from "zod";
 
 export type UnknownRecord = Record<string, unknown>;
@@ -27,14 +26,6 @@ const safeProp = <T>(
   return guard(value) ? value : undefined;
 };
 
-export const readUnknownProp = (
-  source: unknown,
-  key: string,
-): UnknownRecord[string] | undefined => {
-  const parsed = unknownRecordSchema.safeParse(source);
-  return parsed.success ? parsed.data[key] : undefined;
-};
-
 export const readRecordProp = (source: unknown, key: string): UnknownRecord | undefined => {
   const parsed = unknownRecordSchema.safeParse(source);
   return parsed.success
@@ -60,7 +51,7 @@ export const readStringProp = (source: unknown, keys: readonly string[]): string
 
   for (const key of keys) {
     const value = record[key];
-    if (hasRuntimeType(value, "string") && value.length > 0) {
+    if (typeof value === "string" && value.length > 0) {
       return value;
     }
   }
@@ -76,7 +67,7 @@ export const readNumberProp = (source: unknown, keys: string[]): number | undefi
 
   for (const key of keys) {
     const value = record[key];
-    if (hasRuntimeType(value, "number") && Number.isFinite(value) && !Number.isNaN(value)) {
+    if (typeof value === "number" && Number.isFinite(value) && !Number.isNaN(value)) {
       return value;
     }
   }
@@ -92,7 +83,7 @@ export const readBooleanProp = (source: unknown, keys: string[]): boolean | unde
 
   for (const key of keys) {
     const value = record[key];
-    if (hasRuntimeType(value, "boolean")) {
+    if (typeof value === "boolean") {
       return value;
     }
   }
@@ -108,7 +99,7 @@ export const readStringArrayProp = (source: unknown, key: string): string[] | un
 
   const stringArray: string[] = [];
   for (const value of values) {
-    if (!hasRuntimeType(value, "string")) {
+    if (!(typeof value === "string")) {
       return undefined;
     }
     stringArray.push(value);

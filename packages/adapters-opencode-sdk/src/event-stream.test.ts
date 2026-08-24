@@ -52,6 +52,7 @@ import {
   createInvalidOpencodeEventFixture,
   createInvalidOpencodePartFixture,
 } from "./test-fixture";
+import { createParsedOpencodeEventFixture } from "./opencode-protocol-test-fixtures";
 
 const IMAGE_ATTACHMENT_DISPLAY_PART = {
   kind: "attachment" as const,
@@ -305,52 +306,20 @@ const buildQueuedSignature = (message: string, model?: AgentModelSelection | nul
   return buildQueuedRequestSignature(parts, model ?? undefined);
 };
 
-test("readEventParentExternalSessionId accepts OpenCode parent id spellings", () => {
-  for (const key of ["parentID", "parentId", "parent_id"] as const) {
-    expect(readEventParentExternalSessionId({ [key]: "external-parent-session" })).toBe(
-      "external-parent-session",
-    );
-    expect(readEventParentExternalSessionId({ info: { [key]: "external-parent-session" } })).toBe(
-      "external-parent-session",
-    );
-  }
-
-  expect(readEventParentExternalSessionId({ parentID: "" })).toBeUndefined();
-  expect(readEventParentExternalSessionId({ parentID: "   " })).toBeUndefined();
-  expect(readEventParentExternalSessionId({ parentID: 123 })).toBeUndefined();
-  expect(readEventParentExternalSessionId(undefined)).toBeUndefined();
-});
-
-test("readEventParentExternalSessionId prefers parent ids from event info", () => {
+test("readEventParentExternalSessionId reads only lifecycle lineage", () => {
+  expect(readEventParentExternalSessionId(childSessionCreatedEvent("external-child-session"))).toBe(
+    "external-session-1",
+  );
   expect(
-    readEventParentExternalSessionId({
-      parentID: "event-parent-session",
-      info: { parentID: "info-parent-session" },
-    }),
-  ).toBe("info-parent-session");
-});
-
-test("readEventSessionId accepts info.id only for session lifecycle events", () => {
-  expect(
-    readEventSessionId(
-      createInvalidOpencodeEventFixture({
-        type: "session.created",
-        properties: {
-          info: { id: "external-child-session" },
-        },
-      }),
-    ),
-  ).toBe("external-child-session");
-  expect(
-    readEventSessionId(
-      createInvalidOpencodeEventFixture({
-        type: "message.updated",
-        properties: {
-          info: { id: "message-1" },
-        },
-      }),
-    ),
+    readEventParentExternalSessionId(assistantRoleEvent("assistant-message-1")),
   ).toBeUndefined();
+});
+
+test("readEventSessionId reads the producer sessionID field", () => {
+  expect(readEventSessionId(childSessionCreatedEvent("external-child-session"))).toBe(
+    "external-child-session",
+  );
+  expect(readEventSessionId(assistantRoleEvent("message-1"))).toBe("external-session-1");
 });
 
 test("readSessionLifecycleEvent reads exact lifecycle lineage", () => {
@@ -358,26 +327,14 @@ test("readSessionLifecycleEvent reads exact lifecycle lineage", () => {
 
   expect(readSessionLifecycleEvent(event)).toEqual({
     type: "session.created",
-    properties: event.properties,
     info: event.properties.info,
     externalSessionId: "external-child-session",
     parentExternalSessionId: "external-session-1",
   });
 });
 
-test("readSessionLifecycleEvent ignores parent aliases and non-lifecycle events", () => {
-  const event = childSessionCreatedEvent("external-child-session");
-  const aliasEvent = childSessionCreatedEventWithParentAlias("external-child-session", "parentId");
-
-  expect(readSessionLifecycleEvent(aliasEvent)?.parentExternalSessionId).toBeUndefined();
-  expect(
-    readSessionLifecycleEvent(
-      createInvalidOpencodeEventFixture({
-        type: "message.updated",
-        properties: event.properties,
-      }),
-    ),
-  ).toBeUndefined();
+test("readSessionLifecycleEvent ignores non-lifecycle events", () => {
+  expect(readSessionLifecycleEvent(assistantRoleEvent("message-1"))).toBeUndefined();
 });
 
 test("runEventStreamWithSession uses the configured session input", async () => {
@@ -524,7 +481,7 @@ test("flushPendingSubagentInputEventsForSession preserves original timestamps", 
 });
 
 const assistantRoleEvent = (messageId: string): Event =>
-  createInvalidOpencodeEventFixture({
+  createParsedOpencodeEventFixture({
     type: "message.updated",
     properties: {
       info: {
@@ -536,7 +493,7 @@ const assistantRoleEvent = (messageId: string): Event =>
   });
 
 const makeSessionIdleEvent = (): Event =>
-  createInvalidOpencodeEventFixture({
+  createParsedOpencodeEventFixture({
     type: "session.idle",
     properties: {
       sessionID: "external-session-1",
@@ -2278,7 +2235,7 @@ describe("event-stream", () => {
         type: "todo.updated",
         properties: {
           sessionID: "external-other-session",
-          todos: [{ content: "ignored" }],
+          todos: [{ content: "ignored", status: "pending", priority: "medium" }],
         },
       }),
       createInvalidOpencodeEventFixture({
@@ -2289,6 +2246,7 @@ describe("event-stream", () => {
             {
               content: "Implement tests",
               status: "active",
+              priority: "medium",
             },
           ],
         },
@@ -2316,12 +2274,14 @@ describe("event-stream", () => {
         type: "session.idle",
         properties: {
           directory: "/other",
+          sessionID: "external-session-1",
         },
       }),
       createInvalidOpencodeEventFixture({
         type: "session.idle",
         properties: {
           directory: "/repo",
+          sessionID: "external-session-1",
         },
       }),
     ]);
@@ -2339,14 +2299,14 @@ describe("event-stream", () => {
           type: "todo.updated",
           properties: {
             sessionID: "external-other-session",
-            todos: [{ content: "ignored" }],
+            todos: [{ content: "ignored", status: "pending", priority: "medium" }],
           },
         }),
         createInvalidOpencodeEventFixture({
           type: "todo.updated",
           properties: {
             sessionID: "external-session-1",
-            todos: [{ content: "handled" }],
+            todos: [{ content: "handled", status: "pending", priority: "medium" }],
           },
         }),
       ],
@@ -2404,7 +2364,7 @@ describe("event-stream", () => {
     ).toBe(false);
   });
 
-  test("prefers explicit pending-input parents over conflicting confirmed lineage", () => {
+  test("uses confirmed lineage and ignores unsupported pending-input parent fields", () => {
     const confirmedParentSubscriber = {
       externalSessionId: "external-confirmed-parent",
       input: makeSessionInput(),
@@ -2437,12 +2397,12 @@ describe("event-stream", () => {
         isRelevantSubscriberEvent(confirmedParentSubscriber, event, {
           resolveParentExternalSessionId: resolveConfirmedParent,
         }),
-      ).toBe(false);
+      ).toBe(true);
       expect(
         isRelevantSubscriberEvent(explicitParentSubscriber, event, {
           resolveParentExternalSessionId: resolveConfirmedParent,
         }),
-      ).toBe(true);
+      ).toBe(false);
     }
   });
 
@@ -2712,7 +2672,7 @@ describe("event-stream", () => {
     expect(emitted.filter((event) => event.type === "assistant_delta")).toHaveLength(0);
   });
 
-  test("emits reasoning channel for reasoning fallback deltas", async () => {
+  test("queues exact reasoning deltas until their part arrives", async () => {
     const emitted = await runEventStream([
       assistantRoleEvent("assistant-message-reasoning"),
       createInvalidOpencodeEventFixture({
@@ -2720,6 +2680,7 @@ describe("event-stream", () => {
         properties: {
           sessionID: "external-session-1",
           messageID: "assistant-message-reasoning",
+          partID: "reasoning-part-1",
           field: "reasoning_content",
           delta: "Hidden chain of thought",
         },
@@ -2727,15 +2688,7 @@ describe("event-stream", () => {
     ]);
 
     const deltas = emitted.filter((event) => event.type === "assistant_delta");
-    expect(deltas).toHaveLength(1);
-    if (deltas[0]?.type !== "assistant_delta") {
-      throw new Error("Expected assistant_delta event");
-    }
-    expect(deltas[0]).toMatchObject({
-      channel: "reasoning",
-      messageId: "assistant-message-reasoning",
-      delta: "Hidden chain of thought",
-    });
+    expect(deltas).toHaveLength(0);
   });
 
   test("suppresses non-assistant reasoning parts", async () => {
@@ -3055,7 +3008,7 @@ describe("event-stream", () => {
     });
   });
 
-  test("forwards child question events with parent id before the child link is known", async () => {
+  test("does not trust unsupported child-question parent fields", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
         questionAskedEvent({
@@ -3068,18 +3021,10 @@ describe("event-stream", () => {
     );
 
     const questionEvents = emitted.filter((event) => event.type === "question_required");
-    expect(questionEvents).toHaveLength(1);
-    expect(questionEvents[0]).toMatchObject({
-      type: "question_required",
-      externalSessionId: "external-session-1",
-      requestId: "question-child-1",
-      childExternalSessionId: "external-child-session",
-      parentExternalSessionId: "external-session-1",
-    });
-    expect(questionEvents[0].subagentCorrelationKey).toBeUndefined();
+    expect(questionEvents).toHaveLength(0);
   });
 
-  test("correlates child question events immediately when a pending subagent key exists", async () => {
+  test("does not route a child question before later lifecycle evidence arrives", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
         questionAskedEvent({
@@ -3102,13 +3047,7 @@ describe("event-stream", () => {
     );
 
     const questionEvents = emitted.filter((event) => event.type === "question_required");
-    expect(questionEvents).toHaveLength(1);
-    expect(questionEvents[0]).toMatchObject({
-      requestId: "question-child-1",
-      childExternalSessionId: "external-child-session",
-      parentExternalSessionId: "external-session-1",
-      subagentCorrelationKey: "part:assistant-1:subtask-1",
-    });
+    expect(questionEvents).toHaveLength(0);
   });
 
   test("does not consume a pending subagent key for child input events from another directory", async () => {
@@ -3129,20 +3068,14 @@ describe("event-stream", () => {
     );
 
     const questionEvents = emitted.filter((event) => event.type === "question_required");
-    expect(questionEvents).toHaveLength(1);
-    expect(questionEvents[0]).toMatchObject({
-      requestId: "question-child-1",
-      childExternalSessionId: "external-child-session",
-      parentExternalSessionId: "external-session-1",
-    });
-    expect(questionEvents[0]).not.toHaveProperty("subagentCorrelationKey");
+    expect(questionEvents).toHaveLength(0);
     expect(sessionRecord.pendingSubagentCorrelationKeys).toEqual(["part:assistant-1:subtask-1"]);
     expect(
       sessionRecord.subagentCorrelationKeyByExternalSessionId.has("external-child-session"),
     ).toBe(false);
   });
 
-  test("correlates child question events with the running subagent card before completion arrives", async () => {
+  test("does not trust unsupported question lineage before tool completion", async () => {
     const { emitted } = await runEventStreamWithSession([
       assistantRoleEvent("assistant-subagent-question-bind"),
       makeAssistantSubtaskPartUpdatedEvent({
@@ -3184,22 +3117,7 @@ describe("event-stream", () => {
     ]);
 
     const questionEvents = emitted.filter((event) => event.type === "question_required");
-    expect(questionEvents).toHaveLength(1);
-    expect(questionEvents[0]).toMatchObject({
-      requestId: "question-child-1",
-      childExternalSessionId: "external-child-session",
-      parentExternalSessionId: "external-session-1",
-      subagentCorrelationKey: "part:assistant-subagent-question-bind:subtask-a",
-    });
-
-    const subagentParts = emitted.flatMap((event) =>
-      event.type === "assistant_part" && event.part.kind === "subagent" ? [event.part] : [],
-    );
-    expect(subagentParts.map((part) => part.externalSessionId)).toEqual([
-      undefined,
-      "external-child-session",
-      "external-child-session",
-    ]);
+    expect(questionEvents).toHaveLength(0);
   });
 
   test("runtime event transport forwards known child permission events to parent subscribers", async () => {
@@ -3322,7 +3240,7 @@ describe("event-stream", () => {
     ).toBeUndefined();
   });
 
-  test("forwards child permission events with parent id before the child link is known", async () => {
+  test("does not trust unsupported child-permission parent fields", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
         permissionAskedEvent({
@@ -3336,15 +3254,7 @@ describe("event-stream", () => {
     );
 
     const permissionEvents = emitted.filter((event) => event.type === "approval_required");
-    expect(permissionEvents).toHaveLength(1);
-    expect(permissionEvents[0]).toMatchObject({
-      type: "approval_required",
-      externalSessionId: "external-session-1",
-      requestId: "perm-child-1",
-      childExternalSessionId: "external-child-session",
-      parentExternalSessionId: "external-session-1",
-    });
-    expect(permissionEvents[0].subagentCorrelationKey).toBeUndefined();
+    expect(permissionEvents).toHaveLength(0);
   });
 
   test("runtime event transport ignores child permission links for other parents", async () => {
@@ -3419,6 +3329,7 @@ describe("event-stream", () => {
         type: "message.part.removed",
         properties: {
           sessionID: "external-session-1",
+          messageID: "assistant-message-3",
           partID: "text-part-2",
         },
       }),
@@ -3455,6 +3366,7 @@ describe("event-stream", () => {
           type: "message.part.removed",
           properties: {
             sessionID: "external-session-1",
+            messageID: "assistant-message-4",
             partID: "subtask-part-1",
           },
         }),
@@ -3497,6 +3409,7 @@ describe("event-stream", () => {
           type: "message.part.removed",
           properties: {
             sessionID: "external-session-1",
+            messageID: "assistant-message-4",
             partID: "subtask-part-1",
           },
         }),
@@ -3536,6 +3449,7 @@ describe("event-stream", () => {
           type: "message.part.removed",
           properties: {
             sessionID: "external-session-1",
+            messageID: "assistant-message-4",
             partID: "subtask-part-1",
           },
         }),
@@ -3596,7 +3510,7 @@ describe("event-stream", () => {
           type: "session.error",
           properties: {
             sessionID: "external-session-1",
-            error: { data: {} },
+            error: { name: "MessageOutputLengthError", data: {} },
           },
         }),
       ],
@@ -3628,7 +3542,7 @@ describe("event-stream", () => {
         type: "session.error",
         properties: {
           sessionID: "external-session-1",
-          error: { data: { message: "Provider failed" } },
+          error: { name: "UnknownError", data: { message: "Provider failed" } },
         },
       }),
     ]);

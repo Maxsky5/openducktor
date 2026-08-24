@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { TaskPolicyError } from "../../domain/task";
 import { HostOperationError } from "../../effect/host-errors";
@@ -1257,7 +1256,7 @@ describe("createTaskService pull requests", () => {
     );
     const resolvedGhChecks = calls.filter(
       (call) =>
-        hasRuntimeType(call, "object") &&
+        typeof call === "object" &&
         call !== null &&
         "type" in call &&
         call.type === "resolveCommand" &&

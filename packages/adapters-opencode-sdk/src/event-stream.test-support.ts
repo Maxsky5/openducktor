@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type {
   EventPermissionAsked,
   EventPermissionReplied,
@@ -379,7 +378,7 @@ export const makeClientWithEvents = (events: UnknownRecord[]): OpencodeClient =>
       for (const [index, rawEvent] of events.entries()) {
         const properties = asUnknownRecord(rawEvent.properties);
         const directoryValue = properties?.directory;
-        const directory = hasRuntimeType(directoryValue, "string") ? directoryValue : "/repo";
+        const directory = typeof directoryValue === "string" ? directoryValue : "/repo";
         for (const payload of createOpencodeEventFixtures(rawEvent, index)) {
           yield { directory, payload };
         }

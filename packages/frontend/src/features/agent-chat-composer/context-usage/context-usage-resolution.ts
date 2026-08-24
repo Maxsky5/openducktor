@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { AgentSessionContextUsage } from "@/types/agent-orchestrator";
 
@@ -43,7 +42,7 @@ export const indexModelDescriptorsByProviderAndModel = (
 
 const pickPositiveNumber = (...values: Array<number | undefined>): number | undefined => {
   for (const value of values) {
-    if (hasRuntimeType(value, "number") && value > 0) {
+    if (typeof value === "number" && value > 0) {
       return value;
     }
   }

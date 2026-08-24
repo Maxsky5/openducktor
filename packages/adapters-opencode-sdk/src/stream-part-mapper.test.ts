@@ -1,4 +1,4 @@
-import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
+import { jsonValueSchema } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import { mapOpenCodeBackgroundTaskResultPart } from "./opencode-background-task-result";
@@ -12,7 +12,7 @@ const serializeToolResult = (value: unknown): string => {
     return "";
   }
   const parsed = jsonValueSchema.parse(value);
-  return hasRuntimeType(parsed, "string") ? parsed : JSON.stringify(parsed);
+  return typeof parsed === "string" ? parsed : JSON.stringify(parsed);
 };
 
 const createToolPart = ({

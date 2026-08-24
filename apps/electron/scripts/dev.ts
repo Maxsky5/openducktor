@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -93,10 +92,7 @@ const runStepEffect = (
   });
 
 const nodeErrorCode = (cause: unknown): string | null =>
-  hasRuntimeType(cause, "object") &&
-  cause !== null &&
-  "code" in cause &&
-  hasRuntimeType(cause.code, "string")
+  typeof cause === "object" && cause !== null && "code" in cause && typeof cause.code === "string"
     ? cause.code
     : null;
 

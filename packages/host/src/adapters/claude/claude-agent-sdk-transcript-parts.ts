@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
 import { readClaudeFileEditPayload } from "./claude-agent-sdk-file-edits";
 import { parseClaudeCanonicalJsonObject } from "./claude-agent-sdk-ingress-schemas";
@@ -98,7 +97,7 @@ export const createClaudeCompletedToolPart = ({
     ...(canonicalInput ? { input: canonicalInput } : undefined),
     ...(resolvedPreview ? { preview: resolvedPreview } : undefined),
     ...(canonicalMetadata ? { metadata: canonicalMetadata } : undefined),
-    ...(hasRuntimeType(startedAtMs, "number") ? { startedAtMs } : undefined),
+    ...(typeof startedAtMs === "number" ? { startedAtMs } : undefined),
     endedAtMs,
     ...(isError ? { error: text } : { output: text }),
   };

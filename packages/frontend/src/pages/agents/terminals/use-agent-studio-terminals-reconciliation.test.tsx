@@ -1,4 +1,4 @@
-import { hasRuntimeType, runtimeTypeName } from "@openducktor/contracts";
+import { runtimeTypeName } from "@openducktor/contracts";
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { TerminalSummary } from "@openducktor/contracts";
@@ -15,7 +15,7 @@ import { QueryProvider } from "@/lib/query-provider";
 import { createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { useAgentStudioTerminals } from "./use-agent-studio-terminals";
 
-if (hasRuntimeType(globalThis.document, "undefined")) {
+if (typeof globalThis.document === "undefined") {
   GlobalRegistrator.register();
 }
 

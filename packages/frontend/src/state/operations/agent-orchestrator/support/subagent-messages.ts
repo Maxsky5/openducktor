@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentChatMessage, AgentChatMessageMeta } from "@/types/agent-orchestrator";
 import {
   applyPreferredMessageTimestamp,
@@ -56,8 +55,8 @@ const isLaterSubagentRestart = (
   incomingMeta: SubagentMeta,
 ): boolean =>
   incomingMeta.status === "running" &&
-  hasRuntimeType(existingMeta?.endedAtMs, "number") &&
-  hasRuntimeType(incomingMeta.startedAtMs, "number") &&
+  typeof existingMeta?.endedAtMs === "number" &&
+  typeof incomingMeta.startedAtMs === "number" &&
   incomingMeta.startedAtMs > existingMeta.endedAtMs;
 
 const isPreviousRunTerminalUpdate = (
@@ -66,8 +65,8 @@ const isPreviousRunTerminalUpdate = (
 ): boolean =>
   existingMeta?.status === "running" &&
   isTerminalSubagentStatus(incomingMeta.status) &&
-  hasRuntimeType(existingMeta.startedAtMs, "number") &&
-  hasRuntimeType(incomingMeta.endedAtMs, "number") &&
+  typeof existingMeta.startedAtMs === "number" &&
+  typeof incomingMeta.endedAtMs === "number" &&
   incomingMeta.endedAtMs < existingMeta.startedAtMs;
 
 export const formatSubagentContent = (meta: {
@@ -123,8 +122,8 @@ const canLinkSessionScopedSubagentToPartScopedRow = (
     isSessionScopedSubagentKey(incoming.correlationKey) &&
     !candidate.meta.externalSessionId &&
     isPartScopedSubagentKey(candidate.meta.correlationKey) &&
-    hasRuntimeType(incoming.agent, "string") &&
-    hasRuntimeType(incoming.prompt, "string") &&
+    typeof incoming.agent === "string" &&
+    typeof incoming.prompt === "string" &&
     candidate.meta.agent === incoming.agent &&
     candidate.meta.prompt === incoming.prompt,
   );
@@ -206,13 +205,13 @@ const mergeSubagentMeta = (
   } else if (
     existingMeta?.status === "running" &&
     incomingMeta.status === "running" &&
-    hasRuntimeType(existingMeta.startedAtMs, "number") &&
-    hasRuntimeType(incomingMeta.startedAtMs, "number")
+    typeof existingMeta.startedAtMs === "number" &&
+    typeof incomingMeta.startedAtMs === "number"
   ) {
     startedAtMs = Math.max(existingMeta.startedAtMs, incomingMeta.startedAtMs);
   } else if (
-    hasRuntimeType(existingMeta?.startedAtMs, "number") &&
-    hasRuntimeType(incomingMeta.startedAtMs, "number")
+    typeof existingMeta?.startedAtMs === "number" &&
+    typeof incomingMeta.startedAtMs === "number"
   ) {
     startedAtMs = Math.min(existingMeta.startedAtMs, incomingMeta.startedAtMs);
   } else {
@@ -223,8 +222,8 @@ const mergeSubagentMeta = (
   if (isRestart || isPreviousRunUpdate) {
     endedAtMs = undefined;
   } else if (
-    hasRuntimeType(existingMeta?.endedAtMs, "number") &&
-    hasRuntimeType(incomingMeta.endedAtMs, "number")
+    typeof existingMeta?.endedAtMs === "number" &&
+    typeof incomingMeta.endedAtMs === "number"
   ) {
     endedAtMs = Math.max(existingMeta.endedAtMs, incomingMeta.endedAtMs);
   } else if (isTerminalSubagentStatus(status)) {
@@ -251,15 +250,15 @@ const mergeSubagentMeta = (
     correlationKey: incomingMeta.correlationKey,
     ...(sourceMessageId ? { sourceMessageId } : undefined),
     status,
-    ...(hasRuntimeType(agent, "string") ? { agent } : undefined),
-    ...(hasRuntimeType(prompt, "string") ? { prompt } : undefined),
-    ...(hasRuntimeType(description, "string") ? { description } : undefined),
-    ...(hasRuntimeType(error, "string") ? { error } : undefined),
-    ...(hasRuntimeType(externalSessionId, "string") ? { externalSessionId } : undefined),
+    ...(typeof agent === "string" ? { agent } : undefined),
+    ...(typeof prompt === "string" ? { prompt } : undefined),
+    ...(typeof description === "string" ? { description } : undefined),
+    ...(typeof error === "string" ? { error } : undefined),
+    ...(typeof externalSessionId === "string" ? { externalSessionId } : undefined),
     ...(executionMode ? { executionMode } : undefined),
     ...(metadata ? { metadata } : undefined),
-    ...(hasRuntimeType(startedAtMs, "number") ? { startedAtMs } : undefined),
-    ...(hasRuntimeType(endedAtMs, "number") ? { endedAtMs } : undefined),
+    ...(typeof startedAtMs === "number" ? { startedAtMs } : undefined),
+    ...(typeof endedAtMs === "number" ? { endedAtMs } : undefined),
   };
 };
 
@@ -281,7 +280,7 @@ export const upsertSubagentMessage = ({
   const nextMeta = mergeSubagentMeta(
     existingMessage?.meta ?? null,
     incomingMeta,
-    hasRuntimeType(startedAtMsFallback, "number") ? { startedAtMsFallback } : undefined,
+    typeof startedAtMsFallback === "number" ? { startedAtMsFallback } : undefined,
   );
   const ownerWithoutDuplicate =
     duplicateMessageId === null
@@ -474,11 +473,11 @@ const matchesLoadedSubagentActivity = (
 
   return (
     existingMessage.timestamp === incomingMessage.timestamp &&
-    hasRuntimeType(existingAgent, "string") &&
-    hasRuntimeType(incomingAgent, "string") &&
+    typeof existingAgent === "string" &&
+    typeof incomingAgent === "string" &&
     existingAgent === incomingAgent &&
-    hasRuntimeType(existingPrompt, "string") &&
-    hasRuntimeType(incomingPrompt, "string") &&
+    typeof existingPrompt === "string" &&
+    typeof incomingPrompt === "string" &&
     existingPrompt === incomingPrompt
   );
 };

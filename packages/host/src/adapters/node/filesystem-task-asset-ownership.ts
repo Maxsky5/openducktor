@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { link, lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { hasRuntimeType, jsonValueSchema, taskAssetIdSchema } from "@openducktor/contracts";
+import { jsonValueSchema, taskAssetIdSchema } from "@openducktor/contracts";
 import { z } from "zod";
 import { processIsAlive } from "../../infrastructure/process/process-tree";
 
@@ -54,7 +54,7 @@ const readProcessStartedAtMs = async (processId: number): Promise<number> => {
 };
 
 const isMissing = (cause: unknown): boolean =>
-  hasRuntimeType(cause, "object") && cause !== null && "code" in cause && cause.code === "ENOENT";
+  typeof cause === "object" && cause !== null && "code" in cause && cause.code === "ENOENT";
 
 const existingStat = async (target: string) => {
   try {
@@ -147,7 +147,7 @@ export const createTaskAssetFileOwnership = (
       await link(publication, marker);
     } catch (cause) {
       if (
-        !hasRuntimeType(cause, "object") ||
+        !(typeof cause === "object") ||
         cause === null ||
         !("code" in cause) ||
         cause.code !== "EEXIST"

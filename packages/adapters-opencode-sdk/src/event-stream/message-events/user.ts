@@ -1,4 +1,3 @@
-import type { Part } from "@opencode-ai/sdk/v2/client";
 import type { AgentUserMessageDisplayPart } from "@openducktor/core";
 import {
   normalizeUserMessageDisplayParts,
@@ -12,7 +11,6 @@ import { getKnownMessageParts } from "./helpers";
 import { buildVisibleUserMessage } from "./user-display";
 import { emitKnownUserMessage, emitUserMessage, persistUserMessageMetadata } from "./user-emitter";
 import {
-  readExplicitUserMessageState,
   resolveLiveUserMessageState,
   resolveUserMessageStateFromPendingAssistant,
   takeQueuedUserSendMatch,
@@ -87,18 +85,12 @@ export const handleUserMessageUpdated = (
   input: {
     messageId: string;
     messageTimestamp: string;
-    infoRecord: unknown;
-    properties: unknown;
-    normalizedParts: Part[];
     messageModel?: ReturnType<typeof readMessageModelSelection>;
   },
 ): boolean => {
   const { session } = runtime;
   admitUserMessage(session, input.messageId);
-  const userParts =
-    input.normalizedParts.length > 0
-      ? input.normalizedParts
-      : getKnownMessageParts(runtime, input.messageId);
+  const userParts = getKnownMessageParts(runtime, input.messageId);
   emitBackgroundTaskResultSubagentParts(runtime, {
     parts: userParts,
     timestamp: input.messageTimestamp,
@@ -128,7 +120,6 @@ export const handleUserMessageUpdated = (
     displayParts,
   });
 
-  const explicitState = readExplicitUserMessageState(input.infoRecord, input.properties);
   return emitUserMessage(runtime, {
     messageId: input.messageId,
     timestamp,
@@ -137,7 +128,6 @@ export const handleUserMessageUpdated = (
     state: resolveLiveUserMessageState(runtime, {
       messageId: input.messageId,
       matchedQueuedSend,
-      ...(explicitState ? { explicitState } : undefined),
     }),
     ...(input.messageModel ? { model: input.messageModel } : undefined),
   });

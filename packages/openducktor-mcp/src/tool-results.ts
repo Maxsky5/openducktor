@@ -6,7 +6,7 @@ import type {
   OdtToolErrorIssue,
   OdtToolErrorPayload,
 } from "@openducktor/contracts";
-import { hasRuntimeType, isJsonObject, readTaskAssetsResultSchema } from "@openducktor/contracts";
+import { isJsonObject, readTaskAssetsResultSchema } from "@openducktor/contracts";
 import { z } from "zod";
 
 export type ToolResult = CallToolResult;
@@ -40,10 +40,10 @@ export const toErrorMessage = (cause: unknown): string => {
   if (cause instanceof Error && cause.message.trim().length > 0) {
     return cause.message;
   }
-  if (hasRuntimeType(cause, "string") && cause.trim().length > 0) {
+  if (typeof cause === "string" && cause.trim().length > 0) {
     return cause.trim();
   }
-  if (hasRuntimeType(cause, "number") || hasRuntimeType(cause, "boolean")) {
+  if (typeof cause === "number" || typeof cause === "boolean") {
     return String(cause);
   }
   return "Unknown error";

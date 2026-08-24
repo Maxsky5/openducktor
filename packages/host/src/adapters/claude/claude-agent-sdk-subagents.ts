@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
@@ -203,9 +202,8 @@ export const emitClaudeAgentToolResultSubagentPart = ({
         ) ?? `Claude subagent ${agentId} failed.`)
       : undefined;
   const endedAtMs = timestampMs(timestamp);
-  const totalDurationMs = hasRuntimeType(structuredResult.totalDurationMs, "number")
-    ? structuredResult.totalDurationMs
-    : null;
+  const totalDurationMs =
+    typeof structuredResult.totalDurationMs === "number" ? structuredResult.totalDurationMs : null;
   const startedAtMs =
     totalDurationMs === null ? undefined : Math.max(0, endedAtMs - totalDurationMs);
   const resolvedModel = readStringProp(structuredResult, "resolvedModel");
@@ -216,11 +214,11 @@ export const emitClaudeAgentToolResultSubagentPart = ({
     sourceToolUseId: toolUseId,
     ...(resolvedModel ? { resolvedModel } : undefined),
     ...(totalDurationMs !== null ? { totalDurationMs } : undefined),
-    ...(hasRuntimeType(structuredResult.totalTokens, "number")
+    ...(typeof structuredResult.totalTokens === "number"
       ? { totalTokens: structuredResult.totalTokens }
       : undefined),
     ...(outputFile ? { outputFile } : undefined),
-    ...(hasRuntimeType(structuredResult.canReadOutputFile, "boolean")
+    ...(typeof structuredResult.canReadOutputFile === "boolean"
       ? { canReadOutputFile: structuredResult.canReadOutputFile }
       : undefined),
     ...(sessionUrl ? { sessionUrl } : undefined),
@@ -246,7 +244,7 @@ export const emitClaudeAgentToolResultSubagentPart = ({
       ...(prompt ? { prompt } : undefined),
       ...(description ? { description } : undefined),
       ...(error ? { error } : undefined),
-      ...(hasRuntimeType(startedAtMs, "number") ? { startedAtMs } : undefined),
+      ...(typeof startedAtMs === "number" ? { startedAtMs } : undefined),
       ...(status === "running" ? undefined : { endedAtMs }),
       metadata,
     },

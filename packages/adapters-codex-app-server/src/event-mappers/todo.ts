@@ -1,9 +1,5 @@
-import type { AgentSessionTodoItem } from "@openducktor/core";
-import {
-  jsonValueSchema,
-  type CodexAppServerJsonValue,
-  hasRuntimeType,
-} from "@openducktor/contracts";
+import type { AgentSessionTodoItem, NormalizeAgentSessionTodoInput } from "@openducktor/core";
+import { jsonValueSchema, type CodexAppServerJsonValue } from "@openducktor/contracts";
 import { normalizeAgentSessionTodoList } from "@openducktor/core";
 import {
   arrayFromUnknown,
@@ -35,7 +31,7 @@ const parseJsonObject = (
   value: CodexAppServerJsonValue | undefined,
 ): Record<string, CodexAppServerJsonValue> | null => {
   if (isPlainObject(value)) return value;
-  if (!hasRuntimeType(value, "string")) return null;
+  if (!(typeof value === "string")) return null;
   try {
     const parsed = jsonValueSchema.safeParse(JSON.parse(value));
     return parsed.success && isPlainObject(parsed.data) ? parsed.data : null;
@@ -71,8 +67,14 @@ const normalizePlanTextStatus = (value: string): AgentSessionTodoItem["status"] 
   return null;
 };
 
-const codexTodoItemsFromPlanText = (text: string): Record<string, CodexAppServerJsonValue>[] => {
-  const todos: Record<string, CodexAppServerJsonValue>[] = [];
+type CodexPlanTextTodo = {
+  id: NormalizeAgentSessionTodoInput["id"];
+  content: NormalizeAgentSessionTodoInput["content"];
+  status: string;
+};
+
+const codexTodoItemsFromPlanText = (text: string): CodexPlanTextTodo[] => {
+  const todos: CodexPlanTextTodo[] = [];
   for (const [index, line] of text.split(/\r?\n/).entries()) {
     const checkboxMatch = line.match(/^\s*(?:[-*+]\s+|\d+[.)]\s+)\[([ xX~-])\]\s+(.+?)\s*$/);
     if (checkboxMatch) {
@@ -99,32 +101,39 @@ const codexTodoItemsFromPlanText = (text: string): Record<string, CodexAppServer
   return todos;
 };
 
+type CodexTodoItemSource =
+  | { kind: "structured"; items: CodexAppServerJsonValue[] }
+  | { kind: "plan_text"; items: CodexPlanTextTodo[] };
+
 const codexTodoItemsFromPayload = (
   payload: Record<string, CodexAppServerJsonValue>,
-): CodexAppServerJsonValue[] => {
+): CodexTodoItemSource => {
   const todo = arrayFromUnknown(payload.todo);
   if (todo.length > 0) {
-    return todo;
+    return { kind: "structured", items: todo };
   }
   const plan = arrayFromUnknown(payload.plan);
   if (plan.length > 0) {
-    return plan;
+    return { kind: "structured", items: plan };
   }
   const text = extractStringField(payload, ["text"]);
-  return text ? codexTodoItemsFromPlanText(text) : [];
+  return { kind: "plan_text", items: text ? codexTodoItemsFromPlanText(text) : [] };
 };
 
 const codexTodoToolInputFromPayload = (
   payload: Record<string, CodexAppServerJsonValue>,
 ): Record<string, CodexAppServerJsonValue> | null => {
-  const rawTodos = codexTodoItemsFromPayload(payload);
-  if (rawTodos.length === 0) {
+  const source = codexTodoItemsFromPayload(payload);
+  if (source.items.length === 0) {
     return null;
   }
-  const todos = rawTodos.filter(isPlainObject).map((item) => ({
-    step: extractStringField(item, ["step", "content", "text", "title"]) ?? "",
-    status: extractStringField(item, ["status"]) ?? "pending",
-  }));
+  const todos =
+    source.kind === "plan_text"
+      ? source.items.map((item) => ({ step: item.content, status: item.status }))
+      : source.items.filter(isPlainObject).map((item) => ({
+          step: extractStringField(item, ["step", "content", "text", "title"]) ?? "",
+          status: extractStringField(item, ["status"]) ?? "pending",
+        }));
   if (todos.length === 0) {
     return null;
   }
@@ -138,17 +147,19 @@ const codexTodoToolInputFromPayload = (
 const codexTodoUpdateFromPayload = (
   payload: Record<string, CodexAppServerJsonValue>,
 ): CodexTodoUpdate | null => {
-  const rawTodos = codexTodoItemsFromPayload(payload);
-  if (rawTodos.length === 0) {
+  const source = codexTodoItemsFromPayload(payload);
+  if (source.items.length === 0) {
     return null;
   }
   const todos = normalizeAgentSessionTodoList(
-    rawTodos.filter(isPlainObject).map((item, index) => ({
-      id: extractStringField(item, ["id", "todoId", "todo_id"]) ?? `codex-todo:${index}`,
-      content: extractStringField(item, ["content", "text", "title", "step"]) ?? "",
-      ...(hasRuntimeType(item.status, "string") ? { status: item.status } : undefined),
-      ...(hasRuntimeType(item.priority, "string") ? { priority: item.priority } : undefined),
-    })),
+    source.kind === "plan_text"
+      ? source.items
+      : source.items.filter(isPlainObject).map((item, index) => ({
+          id: extractStringField(item, ["id", "todoId", "todo_id"]) ?? `codex-todo:${index}`,
+          content: extractStringField(item, ["content", "text", "title", "step"]) ?? "",
+          ...(typeof item.status === "string" ? { status: item.status } : undefined),
+          ...(typeof item.priority === "string" ? { priority: item.priority } : undefined),
+        })),
   );
   if (todos.length === 0) {
     return null;

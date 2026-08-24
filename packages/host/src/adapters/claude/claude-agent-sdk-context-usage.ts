@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
 import { errorMessage, HostOperationError } from "../../effect/host-errors";
@@ -188,9 +187,9 @@ const readStreamEventType = (message: SDKMessage): string | undefined =>
   message.type === "stream_event" &&
   "event" in message &&
   message.event &&
-  hasRuntimeType(message.event, "object") &&
+  typeof message.event === "object" &&
   "type" in message.event &&
-  hasRuntimeType(message.event.type, "string")
+  typeof message.event.type === "string"
     ? message.event.type
     : undefined;
 

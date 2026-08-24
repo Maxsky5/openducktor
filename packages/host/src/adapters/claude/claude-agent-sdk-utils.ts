@@ -1,4 +1,4 @@
-import { type OdtToolName, toClaudeOdtToolAliases, hasRuntimeType } from "@openducktor/contracts";
+import { type OdtToolName, toClaudeOdtToolAliases } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
   AgentPendingApprovalRequest,
@@ -72,7 +72,7 @@ export const withTimeout = async <A>(
 };
 
 export const readText = (value: unknown): string | undefined =>
-  hasRuntimeType(value, "string") && value.trim().length > 0 ? value : undefined;
+  typeof value === "string" && value.trim().length > 0 ? value : undefined;
 
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -227,7 +227,7 @@ export const toolPartPresentation = (
 };
 
 export const textFromContentBlocks = (content: unknown): string => {
-  if (hasRuntimeType(content, "string")) {
+  if (typeof content === "string") {
     return content;
   }
   if (!Array.isArray(content)) {

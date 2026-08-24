@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { renderHook } from "@testing-library/react";
 import type { ComponentType, PropsWithChildren } from "react";
 import { act } from "react";
@@ -13,7 +12,7 @@ const flushHookEffects = async (): Promise<void> => {
   await act(async () => {
     await Promise.resolve();
     await new Promise<void>((resolve) => {
-      if (hasRuntimeType(MessageChannel, "undefined")) {
+      if (typeof MessageChannel === "undefined") {
         setTimeout(resolve, 0);
         return;
       }

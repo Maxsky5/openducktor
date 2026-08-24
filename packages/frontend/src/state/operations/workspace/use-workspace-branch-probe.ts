@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { CancelledError, type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -199,8 +198,8 @@ export function useWorkspaceBranchProbe({
   useEffect(() => {
     if (
       !activeRepoPath ||
-      hasRuntimeType(globalThis.window, "undefined") ||
-      hasRuntimeType(globalThis.document, "undefined")
+      typeof globalThis.window === "undefined" ||
+      typeof globalThis.document === "undefined"
     ) {
       return;
     }

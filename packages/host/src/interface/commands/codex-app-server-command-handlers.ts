@@ -13,11 +13,7 @@ import { CODEX_APP_SERVER_REQUEST_METHODS } from "../../ports/codex-app-server-p
 import type { CodexAppServerRequestResult } from "../../ports/codex-app-server-protocol";
 import type { HostCommandHandlers } from "../router/host-command-router";
 import { requireRecord, requireString } from "./command-inputs";
-import {
-  parseCodexAppServerClientRequest,
-  jsonValueSchema,
-  hasRuntimeType,
-} from "@openducktor/contracts";
+import { parseCodexAppServerClientRequest, jsonValueSchema } from "@openducktor/contracts";
 
 type CodexAppServerCommandHandlerOptions = {
   logger?: HostLifecycleLogger;
@@ -52,7 +48,7 @@ const recordFromValue = (value: unknown, label: string): Record<string, unknown>
 
 const stringField = (record: Record<string, unknown>, field: string): string | undefined => {
   const value = record[field];
-  return hasRuntimeType(value, "string") && value.trim().length > 0 ? value : undefined;
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 };
 
 const logValue = (value: unknown): string | undefined => {
@@ -60,10 +56,10 @@ const logValue = (value: unknown): string | undefined => {
     return undefined;
   }
   const parsed = jsonValueSchema.parse(value);
-  if (hasRuntimeType(parsed, "string") && parsed.trim().length > 0) {
+  if (typeof parsed === "string" && parsed.trim().length > 0) {
     return parsed;
   }
-  if (hasRuntimeType(parsed, "boolean") || hasRuntimeType(parsed, "number")) {
+  if (typeof parsed === "boolean" || typeof parsed === "number") {
     return String(parsed);
   }
   if (parsed === null) {
@@ -105,7 +101,7 @@ const cwdFromSandboxPolicy = (sandboxPolicy: unknown): string | undefined => {
     return undefined;
   }
   const firstWritableRoot = sandboxPolicy.writableRoots[0];
-  return hasRuntimeType(firstWritableRoot, "string") && firstWritableRoot.trim().length > 0
+  return typeof firstWritableRoot === "string" && firstWritableRoot.trim().length > 0
     ? firstWritableRoot
     : undefined;
 };
@@ -225,7 +221,7 @@ const optionalNullablePositiveInteger = (
   if (value === undefined || value === null) {
     return value;
   }
-  if (!hasRuntimeType(value, "number") || !Number.isInteger(value) || value <= 0) {
+  if (!(typeof value === "number") || !Number.isInteger(value) || value <= 0) {
     throw new HostValidationError({
       message: `${field} must be a positive integer.`,
       field,

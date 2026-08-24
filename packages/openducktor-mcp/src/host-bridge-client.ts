@@ -9,7 +9,6 @@ import {
   jsonValueSchema,
   type JsonValue,
   type WorkspaceScopedOdtToolName,
-  hasRuntimeType,
   runtimeTypeName,
 } from "@openducktor/contracts";
 import type { z } from "zod";
@@ -48,10 +47,10 @@ const toCauseMessage = (cause: unknown): string => {
   if (cause instanceof Error && cause.message.trim().length > 0) {
     return cause.message;
   }
-  if (hasRuntimeType(cause, "string") && cause.trim().length > 0) {
+  if (typeof cause === "string" && cause.trim().length > 0) {
     return cause.trim();
   }
-  if (hasRuntimeType(cause, "number") || hasRuntimeType(cause, "boolean")) {
+  if (typeof cause === "number" || typeof cause === "boolean") {
     return String(cause);
   }
   return "Unknown bridge error";

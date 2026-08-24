@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { act, type NamedExoticComponent, type ReactElement, useState } from "react";
@@ -156,7 +155,7 @@ afterEach(() => {
 });
 
 afterAll(() => {
-  if (hasRuntimeType(previousActEnvironmentValue, "undefined")) {
+  if (typeof previousActEnvironmentValue === "undefined") {
     delete reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT;
   } else {
     reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT = previousActEnvironmentValue;

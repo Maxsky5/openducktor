@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentSessionTodoItem } from "@openducktor/core";
 import { AlertTriangle, Info, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
 import { memo, type ReactElement, type RefObject, useCallback, useEffect, useRef } from "react";
@@ -363,7 +362,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     }
 
     const bottomStack = bottomStackRef.current;
-    if (!bottomStack || hasRuntimeType(globalThis.ResizeObserver, "undefined")) {
+    if (!bottomStack || typeof globalThis.ResizeObserver === "undefined") {
       return;
     }
 

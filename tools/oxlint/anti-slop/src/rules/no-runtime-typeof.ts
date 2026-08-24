@@ -2,41 +2,50 @@ import { defineRule } from "@oxlint/plugins";
 
 import type { ESTree } from "@oxlint/plugins";
 
-type RuntimeFunction = ESTree.ArrowFunctionExpression | ESTree.Function;
 type NoRuntimeTypeofOption = {
   allowInTypeGuards?: boolean;
 };
 
-function isRuntimeFunction(node: ESTree.Node): node is RuntimeFunction {
+const equalityOperators = new Set(["===", "!==", "==", "!="]);
+const runtimeTypeNames = new Set([
+  "bigint",
+  "boolean",
+  "function",
+  "number",
+  "object",
+  "string",
+  "symbol",
+  "undefined",
+]);
+
+function isRuntimeTypeName(node: ESTree.Expression): boolean {
   return (
-    node.type === "ArrowFunctionExpression" ||
-    node.type === "FunctionDeclaration" ||
-    node.type === "FunctionExpression"
+    node.type === "Literal" && typeof node.value === "string" && runtimeTypeNames.has(node.value)
   );
 }
 
-function isInsideTypeGuard(node: ESTree.Node): boolean {
-  let current: ESTree.Node | null = node.parent;
-  while (current !== null && current.type !== "Program") {
-    if (isRuntimeFunction(current)) {
-      return current.returnType?.typeAnnotation.type === "TSTypePredicate";
-    }
-    current = current.parent;
-  }
-  return false;
+function isNarrowingComparison(node: ESTree.UnaryExpression): boolean {
+  const parent = node.parent;
+  if (parent.type !== "BinaryExpression" || !equalityOperators.has(parent.operator)) return false;
+  if (parent.left === node) return isRuntimeTypeName(parent.right);
+  return (
+    parent.right === node &&
+    parent.left.type !== "PrivateIdentifier" &&
+    isRuntimeTypeName(parent.left)
+  );
 }
 
-/** Disallow runtime typeof checks that narrow unparsed values instead of decoding them. */
+/** Disallow runtime type-name inspection while preserving idiomatic TypeScript narrowing. */
 export const noRuntimeTypeofRule = defineRule({
   meta: {
     type: "problem",
     docs: {
       description:
-        "Disallow runtime typeof checks; external values must be decoded into meaningful types at their I/O boundary.",
+        "Disallow runtime type-name inspection; direct primitive comparisons remain valid TypeScript narrowing.",
     },
     messages: {
       runtimeTypeof:
-        "A `typeof` check narrows a representation without establishing its contract. Parse input at its I/O boundary, then branch on the domain value.",
+        "Do not use `typeof` as runtime type metadata. Compare it directly with a primitive type name for narrowing, or parse external input at its I/O boundary.",
     },
     schema: [
       {
@@ -55,7 +64,7 @@ export const noRuntimeTypeofRule = defineRule({
         // SAFETY: The rule metadata schema validates this exact option before rule execution.
         const option = context.options?.[0] as NoRuntimeTypeofOption | undefined;
         const allowInTypeGuards = option?.allowInTypeGuards === true;
-        if (node.operator === "typeof" && (!allowInTypeGuards || !isInsideTypeGuard(node))) {
+        if (node.operator === "typeof" && (!allowInTypeGuards || !isNarrowingComparison(node))) {
           context.report({ node, messageId: "runtimeTypeof" });
         }
       },

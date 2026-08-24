@@ -1,5 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
-
 const TIMEOUT_ERROR_NAMES = new Set(["TimeoutError"]);
 const TIMEOUT_ERROR_CODES = new Set([
   "ABORT_ERR",
@@ -17,20 +15,20 @@ interface RuntimeFailure {
 }
 
 const isRuntimeFailure = (cause: unknown): cause is RuntimeFailure =>
-  hasRuntimeType(cause, "object") && cause !== null;
+  typeof cause === "object" && cause !== null;
 
 const readStringField = (cause: unknown, field: "code" | "name"): string | null => {
   if (!isRuntimeFailure(cause)) return null;
   const value = cause[field];
-  return hasRuntimeType(value, "string") ? value : null;
+  return typeof value === "string" ? value : null;
 };
 
 const readFailureKind = (cause: unknown): string | null => {
   if (!isRuntimeFailure(cause)) return null;
   const { details } = cause;
-  if (!hasRuntimeType(details, "object") || details === null || !("failureKind" in details))
+  if (!(typeof details === "object") || details === null || !("failureKind" in details))
     return null;
-  return hasRuntimeType(details.failureKind, "string") ? details.failureKind : null;
+  return typeof details.failureKind === "string" ? details.failureKind : null;
 };
 
 export const isTimeoutError = (cause: unknown): boolean => {

@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   type AssistantTurnTimingState,
@@ -26,7 +25,7 @@ export type SessionTurnTiming = {
 };
 
 const toTimestampMs = (timestamp: string | number): number | undefined => {
-  if (hasRuntimeType(timestamp, "number")) {
+  if (typeof timestamp === "number") {
     return Number.isFinite(timestamp) ? timestamp : undefined;
   }
 
@@ -50,9 +49,8 @@ export const createSessionTurnTiming = (): SessionTurnTiming => {
       const current = timingBySession[sessionKey]?.activityStartedAtMs;
       timingBySession[sessionKey] = {
         ...timingBySession[sessionKey],
-        activityStartedAtMs: hasRuntimeType(current, "number")
-          ? Math.min(current, timestampMs)
-          : timestampMs,
+        activityStartedAtMs:
+          typeof current === "number" ? Math.min(current, timestampMs) : timestampMs,
       };
     },
     recordTurnUserMessageTimestamp: (sessionKey, timestamp) => {
@@ -61,9 +59,8 @@ export const createSessionTurnTiming = (): SessionTurnTiming => {
         return timingBySession[sessionKey]?.userAnchorAtMs;
       }
       const current = timingBySession[sessionKey]?.userAnchorAtMs;
-      const userAnchorAtMs = hasRuntimeType(current, "number")
-        ? Math.min(current, timestampMs)
-        : timestampMs;
+      const userAnchorAtMs =
+        typeof current === "number" ? Math.min(current, timestampMs) : timestampMs;
       timingBySession[sessionKey] = {
         ...timingBySession[sessionKey],
         userAnchorAtMs,
@@ -90,9 +87,9 @@ export const createSessionTurnTiming = (): SessionTurnTiming => {
       const userAnchorAtMs = currentTiming.userAnchorAtMs;
       return resolveAssistantTurnDurationMs({
         completedAtMs,
-        ...(hasRuntimeType(activityStartedAtMs, "number") ? { activityStartedAtMs } : undefined),
-        ...(hasRuntimeType(userAnchorAtMs, "number") ? { userAnchorAtMs } : undefined),
-        ...(hasRuntimeType(previousAssistantCompletedAtMs, "number")
+        ...(typeof activityStartedAtMs === "number" ? { activityStartedAtMs } : undefined),
+        ...(typeof userAnchorAtMs === "number" ? { userAnchorAtMs } : undefined),
+        ...(typeof previousAssistantCompletedAtMs === "number"
           ? { previousAssistantCompletedAtMs }
           : undefined),
       });
@@ -103,7 +100,7 @@ export const createSessionTurnTiming = (): SessionTurnTiming => {
       const nextTiming = { ...timingBySession[sessionKey] };
       delete nextTiming.activityStartedAtMs;
       delete nextTiming.userAnchorAtMs;
-      if (hasRuntimeType(completedAtMs, "number")) {
+      if (typeof completedAtMs === "number") {
         nextTiming.previousAssistantCompletedAtMs = completedAtMs;
       }
       if (Object.keys(nextTiming).length === 0) {

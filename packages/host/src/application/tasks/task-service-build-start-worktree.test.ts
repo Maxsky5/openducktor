@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
@@ -924,10 +923,7 @@ describe("createTaskService build start worktree handling", () => {
     expect(
       calls.some(
         (call) =>
-          hasRuntimeType(call, "object") &&
-          call !== null &&
-          "type" in call &&
-          call.type === "transition",
+          typeof call === "object" && call !== null && "type" in call && call.type === "transition",
       ),
     ).toBe(false);
   });
@@ -1066,7 +1062,7 @@ describe("createTaskService build start worktree handling", () => {
     expect(
       calls.filter(
         (call) =>
-          hasRuntimeType(call, "object") &&
+          typeof call === "object" &&
           call !== null &&
           "type" in call &&
           call.type === "createWorktree",
@@ -1130,7 +1126,7 @@ describe("createTaskService build start worktree handling", () => {
     expect(
       calls.filter(
         (call) =>
-          hasRuntimeType(call, "object") &&
+          typeof call === "object" &&
           call !== null &&
           "type" in call &&
           ["deleteReference", "removeWorktree", "deleteLocalBranch"].includes(String(call.type)),

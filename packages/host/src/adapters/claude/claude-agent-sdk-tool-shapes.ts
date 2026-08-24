@@ -1,4 +1,4 @@
-import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
+import { jsonValueSchema } from "@openducktor/contracts";
 import type { JsonValue } from "@openducktor/contracts";
 import type { AgentStreamPart } from "@openducktor/core";
 import { parseClaudeCanonicalJsonObject } from "./claude-agent-sdk-ingress-schemas";
@@ -145,7 +145,7 @@ const stringifyToolResultContent = (value: JsonValue | undefined): string => {
   if (value === null) {
     return "";
   }
-  if (hasRuntimeType(value, "number") || hasRuntimeType(value, "boolean")) {
+  if (typeof value === "number" || typeof value === "boolean") {
     return String(value);
   }
   return JSON.stringify(value, null, 2);
@@ -156,7 +156,7 @@ const toolResultBlockText = (block: unknown): string => {
     return stringifyToolResultContent(block);
   }
   const parsed = jsonValueSchema.parse(block);
-  if (hasRuntimeType(parsed, "string")) {
+  if (typeof parsed === "string") {
     return parsed;
   }
   if (!isRecord(parsed)) {

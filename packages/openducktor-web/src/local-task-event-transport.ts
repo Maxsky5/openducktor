@@ -1,5 +1,4 @@
 import {
-  hasRuntimeType,
   type JsonValue,
   jsonValueSchema,
   type TaskEventCursor,
@@ -240,7 +239,7 @@ export const subscribeLocalTaskEventStreamEffect = (
       markInitialReadiness();
     };
     const handleFrameEvent: EventListener = (event) => {
-      if (!(event instanceof MessageEvent) || !hasRuntimeType(event.data, "string")) {
+      if (!(event instanceof MessageEvent) || !(typeof event.data === "string")) {
         failSetupOrReportTerminalFailure(
           new WebDependencyError({
             dependency: "task-event-stream",

@@ -8,46 +8,18 @@ export type RuntimeTypeName =
   | "symbol"
   | "undefined";
 
-type RuntimeTypeMap = {
-  bigint: bigint;
-  boolean: boolean;
-  function: (...args: never[]) => never;
-  number: number;
-  object: object | null;
-  string: string;
-  symbol: symbol;
-  undefined: undefined;
-};
-
-type ExistingFunction<Value> = Value extends (...args: infer Parameters) => infer Result
-  ? (...args: Parameters) => Result
-  : never;
-
-type FunctionNarrow<Value> = [ExistingFunction<Value>] extends [never]
-  ? RuntimeTypeMap["function"]
-  : ExistingFunction<Value>;
-
-type RuntimeTypeNarrow<Value, Type extends RuntimeTypeName> = Type extends "function"
-  ? FunctionNarrow<Value>
-  : RuntimeTypeMap[Type];
-
-export const hasRuntimeType = <Value, Type extends RuntimeTypeName>(
-  value: Value,
-  type: Type,
-): value is Value & RuntimeTypeNarrow<Value, Type> => typeof value === type;
-
 export const hasOwnKey = <Value extends object>(
   value: Value,
   key: PropertyKey,
 ): key is keyof Value => Object.hasOwn(value, key);
 
 export const runtimeTypeName = <Value>(value: Value): RuntimeTypeName => {
-  if (hasRuntimeType(value, "bigint")) return "bigint";
-  if (hasRuntimeType(value, "boolean")) return "boolean";
-  if (hasRuntimeType(value, "function")) return "function";
-  if (hasRuntimeType(value, "number")) return "number";
-  if (hasRuntimeType(value, "string")) return "string";
-  if (hasRuntimeType(value, "symbol")) return "symbol";
-  if (hasRuntimeType(value, "undefined")) return "undefined";
+  if (typeof value === "bigint") return "bigint";
+  if (typeof value === "boolean") return "boolean";
+  if (typeof value === "function") return "function";
+  if (typeof value === "number") return "number";
+  if (typeof value === "string") return "string";
+  if (typeof value === "symbol") return "symbol";
+  if (typeof value === "undefined") return "undefined";
   return "object";
 };

@@ -1,7 +1,6 @@
 import {
   ODT_WORKFLOW_AGENT_TOOL_NAMES,
   type RuntimeRoute,
-  hasRuntimeType,
   runtimeTypeName,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -115,7 +114,7 @@ const requireObjectPayload = (value: unknown, context: string) => {
 
 const readStringProperty = (value: Record<string, unknown>, property: string): string | null => {
   const raw = value[property];
-  return hasRuntimeType(raw, "string") && raw.trim().length > 0 ? raw.trim() : null;
+  return typeof raw === "string" && raw.trim().length > 0 ? raw.trim() : null;
 };
 
 const timeoutMcpProbeResult = (detail: string): RuntimeMcpStatusProbeResult => ({
@@ -139,9 +138,7 @@ const parseToolIds = (payload: unknown) => {
   return Effect.succeed(
     Array.from(
       new Set(
-        payload
-          .map((entry) => (hasRuntimeType(entry, "string") ? entry.trim() : ""))
-          .filter(Boolean),
+        payload.map((entry) => (typeof entry === "string" ? entry.trim() : "")).filter(Boolean),
       ),
     ),
   );

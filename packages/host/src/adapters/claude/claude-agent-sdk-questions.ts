@@ -1,4 +1,4 @@
-import { hasRuntimeType, isJsonObject, type JsonObject } from "@openducktor/contracts";
+import { isJsonObject, type JsonObject } from "@openducktor/contracts";
 import type { OnUserDialog, UserDialogResult } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
@@ -50,7 +50,7 @@ const isClaudeAskUserQuestionDialogKind = (dialogKind: string): boolean =>
   );
 
 const readString = (value: unknown): string | null =>
-  hasRuntimeType(value, "string") && value.trim().length > 0 ? value.trim() : null;
+  typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 
 const readOptions = (value: unknown): ClaudeAskUserQuestionOption[] | null => {
   if (!Array.isArray(value)) {
@@ -66,7 +66,7 @@ const readOptions = (value: unknown): ClaudeAskUserQuestionOption[] | null => {
     if (!label || !description) {
       return null;
     }
-    const preview = hasRuntimeType(option.preview, "string") ? option.preview : undefined;
+    const preview = typeof option.preview === "string" ? option.preview : undefined;
     options.push({
       label,
       description,

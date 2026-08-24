@@ -6,7 +6,6 @@ import {
   TERMINAL_PROTOCOL_VERSION,
   type TerminalFailure,
   type TerminalServerMessage,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 import {
   createTerminalClientSession,
@@ -94,7 +93,7 @@ const getClientSession = (socket: TerminalServerSocket): TerminalClientSession =
 };
 
 const runClientMessage = (socket: TerminalServerSocket, raw: string | Buffer): void => {
-  if (hasRuntimeType(raw, "string")) {
+  if (typeof raw === "string") {
     sendProtocolError(socket, {
       code: "protocol_error",
       message: "Terminal WebSocket messages must be binary.",

@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -83,7 +82,7 @@ const replyRepoPath = (
   workspaceRepoPath: string | null,
   identity: AgentSessionIdentity,
 ): string => {
-  if ("repoPath" in identity && hasRuntimeType(identity.repoPath, "string")) {
+  if ("repoPath" in identity && typeof identity.repoPath === "string") {
     return identity.repoPath;
   }
   return requireWorkspaceRepoPath(workspaceRepoPath);

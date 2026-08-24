@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentStreamPart } from "@openducktor/core";
 import {
   applyClaudeTaskToolResult,
@@ -55,7 +54,7 @@ export const projectClaudeCompletedToolResult = ({
         ...(preview ? { preview } : undefined),
       }),
       ...(metadata ? { metadata } : undefined),
-      ...(hasRuntimeType(startedAtMs, "number") ? { startedAtMs } : undefined),
+      ...(typeof startedAtMs === "number" ? { startedAtMs } : undefined),
     }),
   } satisfies {
     part: CompletedToolPart;

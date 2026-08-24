@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   forEachSessionMessageFrom,
@@ -98,7 +97,7 @@ const appendMessageRows = (
   const turnDurationMs = assistantMeta?.durationMs;
   const shouldShowTurnDuration =
     isFinalAssistantChatMessage(message) &&
-    hasRuntimeType(turnDurationMs, "number") &&
+    typeof turnDurationMs === "number" &&
     turnDurationMs > 0;
   const rowKey = `${sessionKey}:${messageIndex}:${message.id}`;
   const forkBoundaryMeta =

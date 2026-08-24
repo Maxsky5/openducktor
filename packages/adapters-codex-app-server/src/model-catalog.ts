@@ -1,7 +1,6 @@
 import {
   CODEX_RUNTIME_DESCRIPTOR,
   codexAppServerReasoningEffortSchema,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 import type {
   AgentModelAttachmentSupport,
@@ -92,7 +91,7 @@ export class CodexModels {
     const cached = this.modelListByRuntimeId.get(runtimeId);
     if (
       cached?.value &&
-      hasRuntimeType(cached.fetchedAtMs, "number") &&
+      typeof cached.fetchedAtMs === "number" &&
       now - cached.fetchedAtMs < CODEX_MODEL_CATALOG_TTL_MS
     ) {
       return cached.value;
@@ -111,7 +110,7 @@ export class CodexModels {
       },
     );
     this.modelListByRuntimeId.set(runtimeId, {
-      ...(cached?.value && hasRuntimeType(cached.fetchedAtMs, "number")
+      ...(cached?.value && typeof cached.fetchedAtMs === "number"
         ? { value: cached.value, fetchedAtMs: cached.fetchedAtMs }
         : undefined),
       pending,

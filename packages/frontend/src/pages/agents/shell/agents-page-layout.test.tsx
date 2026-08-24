@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import { act, fireEvent, render as testingLibraryRender } from "@testing-library/react";
 import { type ChangeEvent, createElement, type ReactElement, useState } from "react";
@@ -128,7 +127,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
     act(() => {
       const event = new Event("change");
       for (const listener of listeners) {
-        if (hasRuntimeType(listener, "function")) listener(event);
+        if (typeof listener === "function") listener(event);
         else listener.handleEvent(event);
       }
     });

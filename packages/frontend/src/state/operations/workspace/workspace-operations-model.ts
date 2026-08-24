@@ -1,4 +1,4 @@
-import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
+import { jsonValueSchema } from "@openducktor/contracts";
 import type { GitCurrentBranch } from "@openducktor/contracts";
 import { errorMessage } from "@/lib/errors";
 
@@ -75,7 +75,7 @@ export const shouldSkipBranchSwitch = (
 ): boolean => activeBranch?.name === branchName && !activeBranch.detached;
 
 const toOptionalString = (value: unknown): string | null =>
-  hasRuntimeType(value, "string") && value.trim().length > 0 ? value : null;
+  typeof value === "string" && value.trim().length > 0 ? value : null;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);

@@ -1,19 +1,13 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { Part, Session } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
-import { asUnknownRecord, readRecordProp, readStringProp, type UnknownRecord } from "../guards";
-import {
-  opencodePartPayloadSchema,
-  opencodeSessionDetailPayloadSchema,
-  type ParsedOpencodeEvent as Event,
-} from "../opencode-ingress";
+import { opencodePartPayloadSchema } from "../opencode-ingress";
+import { type ParsedOpencodeEvent as Event } from "../opencode-global-event-ingress";
 import {
   isAwaitingRuntimeTurnStart,
   markStreamTurnActive,
   markStreamTurnIdle,
 } from "../session-activity";
 import type { SessionInput, SessionRecord } from "../types";
-import { readEventInfo, readEventProperties } from "./schemas";
 
 export type PendingPartDelta = {
   field: string;
@@ -42,7 +36,6 @@ export type PendingSubagentSessionBinding = {
 
 type SessionLifecycleEvent = {
   type: "session.created" | "session.updated" | "session.deleted";
-  properties: UnknownRecord;
   info: Session;
   externalSessionId: string;
   parentExternalSessionId: string | undefined;
@@ -119,35 +112,15 @@ export const getMessageParts = (state: MessagePartState, messageId: string): Par
   return parts;
 };
 
-const PARENT_EXTERNAL_SESSION_ID_KEYS = ["parentID", "parentId", "parent_id"] as const;
-const EVENT_SESSION_ID_KEYS = ["sessionID", "sessionId", "session_id", "session"] as const;
-const NESTED_SESSION_ID_KEYS = ["sessionID", "sessionId", "session_id"] as const;
-
-const readParentExternalSessionIdFromRecord = (
-  source: UnknownRecord | undefined,
-): string | undefined => {
-  const record = asUnknownRecord(source);
-  if (!record) {
+export const readEventParentExternalSessionId = (event: Event): string | undefined => {
+  if (
+    event.type !== "session.created" &&
+    event.type !== "session.updated" &&
+    event.type !== "session.deleted"
+  ) {
     return undefined;
   }
-
-  for (const key of PARENT_EXTERNAL_SESSION_ID_KEYS) {
-    const value = record[key];
-    if (hasRuntimeType(value, "string") && value.trim().length > 0) {
-      return value;
-    }
-  }
-
-  return undefined;
-};
-
-export const readEventParentExternalSessionId = (
-  properties: UnknownRecord | undefined,
-): string | undefined => {
-  return (
-    readParentExternalSessionIdFromRecord(readRecordProp(properties, "info")) ??
-    readParentExternalSessionIdFromRecord(properties)
-  );
+  return event.properties.info.parentID;
 };
 
 export const flushPendingSubagentInputEventsForSession = (
@@ -260,48 +233,21 @@ const normalizePartDeltaField = (field: string): string => {
 export const applyDeltaToPart = (part: Part, field: string, delta: string): Part | null => {
   const normalizedField = normalizePartDeltaField(field);
   const existing = Object.getOwnPropertyDescriptor(part, normalizedField)?.value;
-  if (existing !== undefined && !hasRuntimeType(existing, "string")) {
+  if (existing !== undefined && !(typeof existing === "string")) {
     return null;
   }
 
   return opencodePartPayloadSchema.parse({
     ...part,
-    [normalizedField]: `${hasRuntimeType(existing, "string") ? existing : ""}${delta}`,
+    [normalizedField]: `${typeof existing === "string" ? existing : ""}${delta}`,
   });
 };
 
 export const readEventSessionId = (event: Event): string | undefined => {
   const properties = event.properties;
-  if (!properties) {
-    return undefined;
-  }
-
-  const directSessionId = readStringProp(properties, EVENT_SESSION_ID_KEYS);
-  if (directSessionId) {
-    return directSessionId;
-  }
-
-  const part = readRecordProp(properties, "part");
-  if (part) {
-    const partSessionId = readStringProp(part, NESTED_SESSION_ID_KEYS);
-    if (partSessionId) {
-      return partSessionId;
-    }
-  }
-
-  const info = readRecordProp(properties, "info");
-  if (info) {
-    const infoSessionId = readStringProp(info, NESTED_SESSION_ID_KEYS);
-    if (infoSessionId) {
-      return infoSessionId;
-    }
-
-    if (event.type === "session.created" || event.type === "session.updated") {
-      return readStringProp(info, ["id"]);
-    }
-  }
-
-  return undefined;
+  return "sessionID" in properties && typeof properties.sessionID === "string"
+    ? properties.sessionID
+    : undefined;
 };
 
 export const readSessionLifecycleEvent = (event: Event): SessionLifecycleEvent | undefined => {
@@ -313,15 +259,7 @@ export const readSessionLifecycleEvent = (event: Event): SessionLifecycleEvent |
     return undefined;
   }
 
-  const properties = event.properties;
-  const parsedInfo = opencodeSessionDetailPayloadSchema.safeParse(readEventInfo(properties));
-  if (!parsedInfo.success) {
-    const issues = parsedInfo.error.issues
-      .map((issue) => `info.${issue.path.join(".")}: ${issue.message}`)
-      .join("; ");
-    throw new Error(`Invalid OpenCode ${event.type} info payload: ${issues}`);
-  }
-  const info = parsedInfo.data;
+  const info = event.properties.info;
   if (info.parentID !== undefined && info.parentID.trim().length === 0) {
     throw new Error(
       `Invalid OpenCode ${event.type} info payload: info.parentID must be a non-empty session id`,
@@ -329,7 +267,6 @@ export const readSessionLifecycleEvent = (event: Event): SessionLifecycleEvent |
   }
   return {
     type: event.type,
-    properties,
     info,
     externalSessionId: info.id,
     parentExternalSessionId: info.parentID,
@@ -337,45 +274,7 @@ export const readSessionLifecycleEvent = (event: Event): SessionLifecycleEvent |
 };
 
 export const readEventDirectory = (event: Event): string | undefined => {
-  const properties = readEventProperties(event);
-  if (!properties) {
-    return undefined;
-  }
-
-  const directDirectory = readStringProp(properties, [
-    "directory",
-    "workingDirectory",
-    "working_directory",
-  ]);
-  if (directDirectory) {
-    return directDirectory;
-  }
-
-  const part = readRecordProp(properties, "part");
-  if (part) {
-    const partDirectory = readStringProp(part, [
-      "directory",
-      "workingDirectory",
-      "working_directory",
-    ]);
-    if (partDirectory) {
-      return partDirectory;
-    }
-  }
-
-  const info = readRecordProp(properties, "info");
-  if (info) {
-    const infoDirectory = readStringProp(info, [
-      "directory",
-      "workingDirectory",
-      "working_directory",
-    ]);
-    if (infoDirectory) {
-      return infoDirectory;
-    }
-  }
-
-  return undefined;
+  return event.properties.directory;
 };
 
 export const isRelevantEvent = (externalSessionId: string, event: Event): boolean => {

@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type {
   GitBranch,
   GitTargetBranch,
@@ -332,7 +331,7 @@ export function useSessionStartModalRunner({
 
   const confirmModal = useCallback(
     async (input?: Parameters<SessionStartModalModel["onConfirm"]>[0]) => {
-      if (!input || hasRuntimeType(input, "boolean")) {
+      if (!input || typeof input === "boolean") {
         return;
       }
 

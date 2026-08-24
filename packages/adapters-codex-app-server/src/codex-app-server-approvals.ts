@@ -1,10 +1,9 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { CodexAppServerRequestId } from "@openducktor/contracts";
 
 const STRING_CODEX_SERVER_REQUEST_KEY_PREFIX = "codex-string-id:";
 
 export const codexServerRequestKey = (requestId: CodexAppServerRequestId): string => {
-  if (hasRuntimeType(requestId, "number")) {
+  if (typeof requestId === "number") {
     return String(requestId);
   }
   if (/^\d+$/.test(requestId) || requestId.startsWith(STRING_CODEX_SERVER_REQUEST_KEY_PREFIX)) {

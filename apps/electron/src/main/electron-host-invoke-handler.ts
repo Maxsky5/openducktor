@@ -4,7 +4,7 @@ import {
   type ElectronHostInvokeRequest,
   type ElectronHostInvokeResponse,
 } from "../shared/electron-bridge-contract";
-import { jsonValueSchema, hasRuntimeType } from "@openducktor/contracts";
+import { jsonValueSchema } from "@openducktor/contracts";
 import { hostInvokeFailureFromError, parseHostCommandResponse } from "@openducktor/host";
 import type { IpcMainInvokeEvent } from "electron";
 import type { UnvalidatedElectronHostInvokeResult } from "./electron-host-invoke";
@@ -46,7 +46,7 @@ const readElectronHostInvokeRequest = (
       field: "request",
     });
   }
-  if (!hasRuntimeType(parsedRequest.data.command, "string")) {
+  if (!(typeof parsedRequest.data.command === "string")) {
     throw new ElectronValidationError({
       operation: "electron.ipc.host-invoke.validate",
       message: "Electron host invoke command must be a string.",

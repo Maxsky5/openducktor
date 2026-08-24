@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import type { SessionRef } from "@openducktor/core";
 import { toOpenCodePermissionReply } from "./approval-translation";
@@ -50,7 +49,7 @@ export const readLatestOpencodeContextUsage = async (
     return null;
   }
   const totalTokens = extractMessageTotalTokens(latestAssistant.info, latestAssistant.parts);
-  if (!hasRuntimeType(totalTokens, "number")) {
+  if (!(typeof totalTokens === "number")) {
     return null;
   }
   const model = readMessageModelSelection(latestAssistant.info);

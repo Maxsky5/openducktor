@@ -1,9 +1,4 @@
-import {
-  hasRuntimeType,
-  isJsonObject,
-  type JsonValue,
-  jsonValueSchema,
-} from "@openducktor/contracts";
+import { isJsonObject, type JsonValue, jsonValueSchema } from "@openducktor/contracts";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 
 export type QuestionToolDetail = {
@@ -39,7 +34,7 @@ const readQuestionPrompt = (value: JsonValue | undefined): string | null => {
     value.name,
   ];
   for (const candidate of candidates) {
-    if (hasRuntimeType(candidate, "string") && candidate.trim().length > 0) {
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
       return candidate.trim();
     }
   }
@@ -47,7 +42,7 @@ const readQuestionPrompt = (value: JsonValue | undefined): string | null => {
 };
 
 const normalizeAnswerValues = (value: JsonValue | undefined): string[] => {
-  if (hasRuntimeType(value, "string")) {
+  if (typeof value === "string") {
     const trimmed = value.trim();
     return trimmed.length > 0 ? [trimmed] : [];
   }

@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { createHash } from "node:crypto";
 import { access, lstat, open, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -18,10 +17,7 @@ const revisionForFile = (bytes: Uint8Array, identity: { dev: number; ino: number
   `sha256:${createHash("sha256").update(bytes).digest("hex")}:file:${identity.dev}:${identity.ino}`;
 
 const nodeErrorCode = (cause: unknown): string | null =>
-  hasRuntimeType(cause, "object") &&
-  cause !== null &&
-  "code" in cause &&
-  hasRuntimeType(cause.code, "string")
+  typeof cause === "object" && cause !== null && "code" in cause && typeof cause.code === "string"
     ? cause.code
     : null;
 

@@ -1,4 +1,4 @@
-import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
+import { jsonValueSchema } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { z } from "zod";
@@ -58,7 +58,7 @@ const cloneDefaultOpenByRole = (): Record<AgentRole, boolean> =>
   openByRoleSchema.parse(DEFAULT_OPEN_BY_ROLE);
 
 const readPersistedRightPanelPayload = (): Record<string, unknown> | null => {
-  if (hasRuntimeType(globalThis.localStorage, "undefined")) {
+  if (typeof globalThis.localStorage === "undefined") {
     return null;
   }
 
@@ -72,7 +72,7 @@ const readPersistedRightPanelPayload = (): Record<string, unknown> | null => {
 };
 
 const readPersistedOpenByRole = (): Record<AgentRole, boolean> => {
-  if (hasRuntimeType(globalThis.localStorage, "undefined")) {
+  if (typeof globalThis.localStorage === "undefined") {
     return cloneDefaultOpenByRole();
   }
 
@@ -82,7 +82,7 @@ const readPersistedOpenByRole = (): Record<AgentRole, boolean> => {
     if (parsed) {
       for (const role of RIGHT_PANEL_ROLES) {
         const value = parsed[role];
-        if (hasRuntimeType(value, "boolean")) {
+        if (typeof value === "boolean") {
           next[role] = value;
         }
       }
@@ -183,7 +183,7 @@ export function useAgentStudioRightPanel({
   hasTaskContext = true,
 }: UseAgentStudioRightPanelInput): UseAgentStudioRightPanelState {
   const [isOpenByRole, setIsOpenByRole] = useState<Record<AgentRole, boolean>>(() => {
-    if (hasRuntimeType(globalThis.localStorage, "undefined")) {
+    if (typeof globalThis.localStorage === "undefined") {
       return cloneDefaultOpenByRole();
     }
 
@@ -191,7 +191,7 @@ export function useAgentStudioRightPanel({
   });
 
   useEffect(() => {
-    if (hasRuntimeType(globalThis.localStorage, "undefined")) {
+    if (typeof globalThis.localStorage === "undefined") {
       return;
     }
 

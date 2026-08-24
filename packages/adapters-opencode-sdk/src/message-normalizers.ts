@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
   AgentSubagentReference,
@@ -353,7 +352,7 @@ const sumTokenBreakdown = (breakdown: TokenBreakdown): number => {
 };
 
 export const toTokenTotal = (value: TokenBreakdown | number | undefined): number | undefined => {
-  if (hasRuntimeType(value, "number")) {
+  if (typeof value === "number") {
     const direct = toFiniteNumber(value);
     return direct === null ? undefined : Math.max(0, direct);
   }

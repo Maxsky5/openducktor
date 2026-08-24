@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import { toAssistantMessageMeta, toSessionContextUsage } from "../support/assistant-meta";
@@ -67,7 +66,7 @@ const resolveFinalAssistantSnapshot = ({
 }) => {
   const baseContextUsage = toSessionContextUsage(current, event.totalTokens, model ?? undefined);
   const nextContextUsage =
-    baseContextUsage && hasRuntimeType(event.contextWindow, "number")
+    baseContextUsage && typeof event.contextWindow === "number"
       ? { ...baseContextUsage, contextWindow: event.contextWindow }
       : baseContextUsage;
   const resolvedContextUsage = shouldPreserveContextUsage
@@ -82,10 +81,10 @@ const resolveFinalAssistantSnapshot = ({
       model ?? undefined,
     ),
   };
-  if (hasRuntimeType(resolvedContextUsage?.contextWindow, "number")) {
+  if (typeof resolvedContextUsage?.contextWindow === "number") {
     assistantMeta.contextWindow = resolvedContextUsage.contextWindow;
   }
-  if (hasRuntimeType(resolvedContextUsage?.outputLimit, "number")) {
+  if (typeof resolvedContextUsage?.outputLimit === "number") {
     assistantMeta.outputLimit = resolvedContextUsage.outputLimit;
   }
 

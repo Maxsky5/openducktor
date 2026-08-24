@@ -3,7 +3,7 @@ import * as fsPromises from "node:fs/promises";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ODT_MCP_TOOL_NAMES, hasRuntimeType, runtimeTypeName } from "@openducktor/contracts";
+import { ODT_MCP_TOOL_NAMES, runtimeTypeName } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { normalizePathForComparison } from "@openducktor/path-support";
 import { Effect } from "effect";
@@ -230,7 +230,7 @@ describe("buildClaudeAgentSdkOptions", () => {
       ODT_FORBID_WORKSPACE_ID_INPUT: "true",
       ODT_ALLOWED_TOOLS: expect.stringContaining("odt_read_task"),
     });
-    if (!hasRuntimeType(workflowAllowedTools, "string")) {
+    if (!(typeof workflowAllowedTools === "string")) {
       throw new Error("Expected workflow ODT tool policy in the Claude MCP environment.");
     }
     expect(workflowAllowedTools.split(",")).not.toEqual(
@@ -238,7 +238,7 @@ describe("buildClaudeAgentSdkOptions", () => {
     );
     expect(openducktorEnv).not.toHaveProperty("ODT_HOST_TOKEN");
     const hostTokenFile = openducktorEnv?.ODT_HOST_TOKEN_FILE;
-    if (!hasRuntimeType(hostTokenFile, "string")) {
+    if (!(typeof hostTokenFile === "string")) {
       throw new Error("Expected Claude MCP setup to create a host token file.");
     }
     expect(await readFile(hostTokenFile, "utf8")).toBe("bridge-secret-value");
@@ -252,7 +252,7 @@ describe("buildClaudeAgentSdkOptions", () => {
     expect(options).not.toHaveProperty("allowedTools");
     expect(options.skills).toBe("all");
     const systemPrompt = options.systemPrompt;
-    if (!systemPrompt || !hasRuntimeType(systemPrompt, "object") || Array.isArray(systemPrompt)) {
+    if (!systemPrompt || !(typeof systemPrompt === "object") || Array.isArray(systemPrompt)) {
       throw new Error("Expected Claude Code's system prompt preset.");
     }
     expect(systemPrompt.preset).toBe("claude_code");

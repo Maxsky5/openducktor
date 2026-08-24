@@ -828,13 +828,11 @@ describe("OpencodeSdkAdapter event stream", () => {
           sessionID: "session-opencode-1",
           todos: [
             {
-              id: "todo-1",
               content: "Inspect auth flow",
               status: "in_progress",
               priority: "high",
             },
             {
-              id: "todo-2",
               content: "Write spec",
               status: "completed",
               priority: "medium",
@@ -867,13 +865,13 @@ describe("OpencodeSdkAdapter event stream", () => {
     }
     expect(todoEvent.todos).toEqual([
       {
-        id: "todo-1",
+        id: "todo:0",
         content: "Inspect auth flow",
         status: "in_progress",
         priority: "high",
       },
       {
-        id: "todo-2",
+        id: "todo:1",
         content: "Write spec",
         status: "completed",
         priority: "medium",
@@ -881,7 +879,7 @@ describe("OpencodeSdkAdapter event stream", () => {
     ]);
   });
 
-  test("maps todo.updated events with missing id/status aliases", async () => {
+  test("maps producer todo status strings and assigns local ids", async () => {
     const streamEvents: UnknownRecord[] = [
       {
         type: "todo.updated",
@@ -894,8 +892,9 @@ describe("OpencodeSdkAdapter event stream", () => {
               priority: "low",
             },
             {
-              text: "Second",
-              completed: true,
+              content: "Second",
+              status: "completed",
+              priority: "medium",
             },
           ],
         },

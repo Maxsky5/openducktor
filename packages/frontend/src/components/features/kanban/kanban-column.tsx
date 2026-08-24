@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type {
   AgentRole,
   KanbanColumn as KanbanColumnData,
@@ -153,7 +152,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
       }
     };
 
-    if (hasRuntimeType(globalThis.window, "undefined")) {
+    if (typeof globalThis.window === "undefined") {
       reportHeight();
       return;
     }

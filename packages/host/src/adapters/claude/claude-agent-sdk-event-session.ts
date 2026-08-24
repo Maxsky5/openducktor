@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { claudeSubagentExternalSessionId } from "./claude-agent-sdk-subagent-transcripts";
 import type { ClaudeTodoProjection, ClaudeTodoState } from "./claude-agent-sdk-todos";
@@ -176,7 +175,7 @@ const acceptedUserTurnCount = (session: ClaudeEventSession): number => {
 };
 
 const pendingUserTurnCount = (session: ClaudeEventSession): number => {
-  return hasRuntimeType(session.pendingUserTurnCount, "number") ? session.pendingUserTurnCount : 0;
+  return typeof session.pendingUserTurnCount === "number" ? session.pendingUserTurnCount : 0;
 };
 
 const activeAssistantTurnIndex = (session: ClaudeEventSession): number => {

@@ -2,7 +2,6 @@ import {
   BROWSER_LIVE_RECONNECTED_EVENT_KIND,
   BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
 } from "@/lib/browser-live/constants";
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { BrowserLiveControlEvent, BrowserLiveControlEventKind } from "@/types";
 
 export function browserLiveControlEvent(
@@ -36,7 +35,7 @@ export function browserLiveControlEvent(
 }
 
 export const isBrowserLiveControlEvent = (payload: unknown): payload is BrowserLiveControlEvent => {
-  if (!hasRuntimeType(payload, "object") || payload === null) {
+  if (!(typeof payload === "object") || payload === null) {
     return false;
   }
 
@@ -47,7 +46,7 @@ export const isBrowserLiveControlEvent = (payload: unknown): payload is BrowserL
   if ("kind" in payload && payload.kind === BROWSER_LIVE_RECONNECTED_EVENT_KIND) {
     return (
       "transportEpoch" in payload &&
-      hasRuntimeType(payload.transportEpoch, "string") &&
+      typeof payload.transportEpoch === "string" &&
       payload.transportEpoch.length > 0
     );
   }
@@ -57,6 +56,6 @@ export const isBrowserLiveControlEvent = (payload: unknown): payload is BrowserL
     payload.kind === BROWSER_LIVE_STREAM_WARNING_EVENT_KIND &&
     (!("message" in payload) ||
       payload.message === undefined ||
-      hasRuntimeType(payload.message, "string"))
+      typeof payload.message === "string")
   );
 };

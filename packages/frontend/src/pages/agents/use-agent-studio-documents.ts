@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { TaskCard } from "@openducktor/contracts";
 import { normalizeOdtWorkflowToolName } from "@openducktor/core";
 import { useEffect, useRef } from "react";
@@ -232,12 +231,11 @@ export function useAgentStudioDocuments({
         extractCompletionTimestamp(meta.output) ?? extractCompletionTimestamp(message.content);
       // SAFETY: The preceding runtime guard establishes `Record<string, unknown>` before this assertion.
       const toolInput =
-        hasRuntimeType(meta.input, "object") && meta.input !== null
+        typeof meta.input === "object" && meta.input !== null
           ? (meta.input as Record<string, unknown>)
           : null;
       const inputMarkdown = toolInput?.[target.inputKey];
-      const hasInputMarkdown =
-        hasRuntimeType(inputMarkdown, "string") && inputMarkdown.trim().length > 0;
+      const hasInputMarkdown = typeof inputMarkdown === "string" && inputMarkdown.trim().length > 0;
 
       let effectiveUpdatedAtTimestamp = target.state.updatedAt
         ? parseTimestamp(target.state.updatedAt)

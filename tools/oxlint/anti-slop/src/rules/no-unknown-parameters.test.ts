@@ -23,7 +23,7 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     "function normalizeText(input: unknown): string { const value = typeof input === 'string' ? input : ''; return value.trim(); }",
     "function compare(left: unknown, right: unknown): boolean { if (typeof left !== 'string') return false; if (typeof right !== 'string') return false; return left === right; }",
     "function optionalText(input: unknown): string | null | undefined { if (input === undefined || input === null) return input; return requireString(input); }",
-    "function positiveInteger(input: unknown): number | null | undefined { if (input === undefined || input === null) return input; if (!hasRuntimeType(input, 'number') || !Number.isInteger(input) || input <= 0) throw new Error('invalid'); return input; }",
+    "function positiveInteger(input: unknown): number | null | undefined { if (input === undefined || input === null) return input; if (typeof input !== 'number' || !Number.isInteger(input) || input <= 0) throw new Error('invalid'); return input; }",
     "function stringArray(input: unknown): string[] { if (!Array.isArray(input)) throw new HostValidationError({ details: { inputType: runtimeTypeName(input) } }); return input.map(requireString); }",
     "function stringArrayEffect(input: unknown) { if (!Array.isArray(input)) return Effect.fail(new HostValidationError({ details: { inputType: runtimeTypeName(input) } })); return Effect.succeed(input.map(requireString)); }",
     "function readKind(input: unknown): string | undefined { if (!isPlainObject(input)) return undefined; switch (input.kind) { case 'known': return input.kind; default: return undefined; } }",

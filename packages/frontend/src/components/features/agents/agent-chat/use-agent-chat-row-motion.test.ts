@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { render } from "@testing-library/react";
 import { act, createElement, Fragment } from "react";
@@ -48,7 +47,7 @@ describe("useAgentChatRowMotion", () => {
   });
 
   afterEach(() => {
-    if (hasRuntimeType(originalWindowDescriptor, "undefined")) {
+    if (typeof originalWindowDescriptor === "undefined") {
       Reflect.deleteProperty(globalThis, "window");
     } else {
       Object.defineProperty(globalThis, "window", originalWindowDescriptor);

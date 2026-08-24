@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
-  hasRuntimeType,
   type CodexAppServerThreadItem,
 } from "@openducktor/contracts";
 import type { AgentEvent, AgentModelSelection } from "@openducktor/core";
@@ -591,12 +590,12 @@ describe("CodexRuntimeSessionEvents", () => {
 
     const subagentParts = emittedEvents.flatMap((event) => {
       if (
-        !hasRuntimeType(event, "object") ||
+        !(typeof event === "object") ||
         event === null ||
         !("type" in event) ||
         event.type !== "assistant_part" ||
         !("part" in event) ||
-        !hasRuntimeType(event.part, "object") ||
+        !(typeof event.part === "object") ||
         event.part === null ||
         !("kind" in event.part) ||
         event.part.kind !== "subagent"
@@ -702,12 +701,12 @@ describe("CodexRuntimeSessionEvents", () => {
 
     const statuses = emittedEvents.flatMap((event) => {
       if (
-        !hasRuntimeType(event, "object") ||
+        !(typeof event === "object") ||
         event === null ||
         !("type" in event) ||
         event.type !== "assistant_part" ||
         !("part" in event) ||
-        !hasRuntimeType(event.part, "object") ||
+        !(typeof event.part === "object") ||
         event.part === null ||
         !("kind" in event.part) ||
         event.part.kind !== "subagent" ||
@@ -1654,10 +1653,7 @@ describe("CodexRuntimeSessionEvents", () => {
     const eventsByType = (events: unknown[], type: string) =>
       events.filter(
         (event) =>
-          hasRuntimeType(event, "object") &&
-          event !== null &&
-          "type" in event &&
-          event.type === type,
+          typeof event === "object" && event !== null && "type" in event && event.type === type,
       );
     const parentRequired = eventsByType(parentEvents, "question_required");
     const childRequired = eventsByType(childEvents, "question_required");

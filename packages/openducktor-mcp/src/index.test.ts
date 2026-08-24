@@ -8,7 +8,6 @@ import type { RegisteredToolName } from "./listed-tool-schema";
 import { ODT_TOOL_SCHEMAS } from "./lib";
 import { createMcpServer } from "./mcp-server";
 import {
-  hasRuntimeType,
   type JsonObject,
   type JsonValue,
   jsonValueSchema,
@@ -154,7 +153,7 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
     if (url === "/invoke/odt_read_task") {
       const body = await readJsonBody(request);
       requests.push({ url, body });
-      if (hasRuntimeType(body, "object") && body !== null && body.taskId === "missing-task") {
+      if (typeof body === "object" && body !== null && body.taskId === "missing-task") {
         writeJson(
           response,
           {
@@ -168,7 +167,7 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
         );
         return;
       }
-      if (hasRuntimeType(body, "object") && body !== null && body.taskId === "bad-response") {
+      if (typeof body === "object" && body !== null && body.taskId === "bad-response") {
         writeJson(response, { task: { id: "bad-response" } });
         return;
       }
@@ -234,7 +233,7 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
   });
 
   const address = server.address();
-  if (!address || hasRuntimeType(address, "string")) {
+  if (!address || typeof address === "string") {
     throw new Error("Mock bridge failed to bind to a TCP port.");
   }
 

@@ -4,7 +4,6 @@ import type { AddressInfo } from "node:net";
 import {
   ODT_WORKSPACE_SCOPED_TOOL_NAMES,
   type WorkspaceScopedOdtToolName,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 import { Deferred, Effect, FiberId } from "effect";
 import type { OdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
@@ -143,7 +142,7 @@ const listen = (server: Server): Effect.Effect<number, HostOperationError> =>
     try {
       server.listen(0, "127.0.0.1", () => {
         const address = server.address();
-        if (!address || hasRuntimeType(address, "string")) {
+        if (!address || typeof address === "string") {
           closeThenFinish(
             Effect.fail(
               new HostOperationError({

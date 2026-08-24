@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { ExternalTaskSyncEvent, SettingsSnapshot, TaskCard } from "@openducktor/contracts";
 import { isCancelledError, type QueryClient } from "@tanstack/react-query";
 import { hostClient as host } from "@/lib/host-client";
@@ -49,7 +48,7 @@ const cachedDocumentEntries = (queryClient: QueryClient, repoPath: string) =>
       if (
         scope !== documentQueryKeys.all[0] ||
         cachedRepoPath !== repoPath ||
-        !hasRuntimeType(taskId, "string")
+        !(typeof taskId === "string")
       ) {
         return [];
       }

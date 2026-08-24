@@ -1,7 +1,7 @@
 import { realpath } from "node:fs/promises";
 import { isAbsolute, relative } from "node:path";
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
-import { CLAUDE_RUNTIME_DESCRIPTOR, hasRuntimeType, type JsonObject } from "@openducktor/contracts";
+import { CLAUDE_RUNTIME_DESCRIPTOR, type JsonObject } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY, type AgentEvent } from "@openducktor/core";
 import {
   normalizePathForComparison,
@@ -105,7 +105,7 @@ const normalizeToolInputForSession = (
 
   for (const key of SESSION_PATH_INPUT_KEYS) {
     const value = nextInput[key];
-    if (!hasRuntimeType(value, "string")) {
+    if (!(typeof value === "string")) {
       continue;
     }
     const rewritten = rewriteSessionPath(session, value);
@@ -130,7 +130,7 @@ const readOnlyToolPathValues = (
 
   for (const key of SESSION_PATH_INPUT_KEYS) {
     const value = toolInput[key];
-    if (hasRuntimeType(value, "string") && value.trim().length > 0) {
+    if (typeof value === "string" && value.trim().length > 0) {
       paths.push(value);
     }
   }

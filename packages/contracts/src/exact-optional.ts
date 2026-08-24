@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { hasRuntimeType } from "./runtime-type";
 
 export type ExactOptional<Type, Leaf = never> = Type extends Leaf
   ? Type
@@ -26,7 +25,7 @@ const hasExplicitUndefined = <Value extends object>(value: Value): boolean => {
     if (entry === undefined) {
       return true;
     }
-    if (hasRuntimeType(entry, "object") && entry !== null && hasExplicitUndefined(entry)) {
+    if (typeof entry === "object" && entry !== null && hasExplicitUndefined(entry)) {
       return true;
     }
   }

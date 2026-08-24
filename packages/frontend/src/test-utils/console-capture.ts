@@ -1,5 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
-
 type ConsoleMethod = "debug" | "error" | "info" | "log" | "warn";
 type ConsoleArguments = Parameters<Console["log"]>;
 
@@ -82,9 +80,8 @@ export const withCapturedOutputStreams = async <Result>(
       callback?: WriteCallback,
     ): boolean {
       chunksByStream[streamName].push(String(chunk));
-      const writeCallback = hasRuntimeType(encodingOrCallback, "function")
-        ? encodingOrCallback
-        : callback;
+      const writeCallback =
+        typeof encodingOrCallback === "function" ? encodingOrCallback : callback;
       writeCallback?.();
       return true;
     }

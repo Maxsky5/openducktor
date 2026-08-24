@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import type { AgentStreamPart, AgentSubagentStatus } from "@openducktor/core";
 import type { ParsedOpencodePart } from "./opencode-ingress";
@@ -131,7 +130,7 @@ const parseOpenCodeBackgroundTaskResult = (value: string): ParsedTaskResult | nu
 };
 
 const readEndedAtMs = (part: TextPart, timestamp: string | undefined): number | undefined => {
-  if (hasRuntimeType(part.time?.end, "number")) {
+  if (typeof part.time?.end === "number") {
     return part.time.end;
   }
   if (!timestamp) {
@@ -176,6 +175,6 @@ export const mapOpenCodeBackgroundTaskResultPart = (
     metadata: {
       background: true,
     },
-    ...(hasRuntimeType(endedAtMs, "number") ? { endedAtMs } : undefined),
+    ...(typeof endedAtMs === "number" ? { endedAtMs } : undefined),
   };
 };

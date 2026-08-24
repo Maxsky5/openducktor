@@ -1,4 +1,4 @@
-import { agentSessionTodoPayloadListSchema, hasRuntimeType } from "@openducktor/contracts";
+import { agentSessionTodoPayloadListSchema } from "@openducktor/contracts";
 import { type AgentSessionTodoItem, normalizeAgentSessionTodoList } from "@openducktor/core";
 import type { JsonValue } from "@openducktor/contracts";
 
@@ -13,7 +13,7 @@ export const parseTodosFromToolOutput = (
     if (Array.isArray(parsed)) {
       return normalizeAgentSessionTodoList(agentSessionTodoPayloadListSchema().parse(parsed));
     }
-    if (parsed && hasRuntimeType(parsed, "object")) {
+    if (parsed && typeof parsed === "object") {
       if (Array.isArray(parsed.todos)) {
         return normalizeAgentSessionTodoList(
           agentSessionTodoPayloadListSchema().parse(parsed.todos),

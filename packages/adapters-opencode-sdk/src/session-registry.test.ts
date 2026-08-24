@@ -585,7 +585,7 @@ describe("session registry runtime event transport", () => {
     ).toBe(false);
   });
 
-  test("rejects direct child lifecycle parentId aliases without recording lineage", async () => {
+  test("ignores direct child lifecycle parentId aliases without recording lineage", async () => {
     let transport: RuntimeEventTransportRecord | undefined;
     const emitted = await runRuntimeEventTransport(
       [
@@ -599,18 +599,13 @@ describe("session registry runtime event transport", () => {
       },
     );
 
-    expect(emitted).toContainEqual(
-      expect.objectContaining({
-        type: "session_error",
-        message: expect.stringContaining("info.parentID"),
-      }),
-    );
+    expect(emitted).toEqual([]);
     expect(
       transport?.parentExternalSessionIdByChildExternalSessionId.has("external-child-session"),
     ).toBe(false);
   });
 
-  test("rejects runtime-source nested parent_id aliases without recording lineage", async () => {
+  test("ignores runtime-source nested parent_id aliases without recording lineage", async () => {
     let transport: RuntimeEventTransportRecord | undefined;
     const emitted = await runRuntimeEventTransport(
       [
@@ -627,18 +622,13 @@ describe("session registry runtime event transport", () => {
       },
     );
 
-    expect(emitted).toContainEqual(
-      expect.objectContaining({
-        type: "session_error",
-        message: expect.stringContaining("info.parentID"),
-      }),
-    );
+    expect(emitted).toEqual([]);
     expect(
       transport?.parentExternalSessionIdByChildExternalSessionId.has("external-child-session"),
     ).toBe(false);
   });
 
-  test("reports sync child lifecycle events that omit info.parentID", async () => {
+  test("does not infer child lineage when sync lifecycle events omit info.parentID", async () => {
     const emitted = await runRuntimeEventTransport([
       assistantRoleEvent("assistant-sync-subagent-session-created"),
       syncAssistantSubtaskEvent({
@@ -649,12 +639,7 @@ describe("session registry runtime event transport", () => {
       syncChildSessionCreatedEventWithoutParent("external-child-session"),
     ]);
 
-    expect(emitted).toContainEqual(
-      expect.objectContaining({
-        type: "session_error",
-        message: expect.stringContaining("info.parentID"),
-      }),
-    );
+    expect(emitted.some((event) => event.type === "session_error")).toBe(false);
   });
 
   test("reports recognized sync lifecycle events with malformed data", async () => {
@@ -663,7 +648,7 @@ describe("session registry runtime event transport", () => {
     expect(emitted).toContainEqual(
       expect.objectContaining({
         type: "session_error",
-        message: expect.stringContaining("syncEvent.data"),
+        message: expect.stringContaining("sync session.created.1"),
       }),
     );
   });

@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import {
   type AgentChatComposerDraft,
@@ -70,7 +69,7 @@ const installManualTimers = () => {
       const timerId = createTimerHandle();
       timers.set(timerId, {
         handler: () => {
-          if (hasRuntimeType(handler, "function")) {
+          if (typeof handler === "function") {
             handler();
           }
         },

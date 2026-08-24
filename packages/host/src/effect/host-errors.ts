@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { Cause, Chunk, Data, Option } from "effect";
 
 export type HostErrorDetailValue =
@@ -95,10 +94,7 @@ export const errorMessage = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
 
 const nodeErrorCode = (cause: unknown): string | null =>
-  hasRuntimeType(cause, "object") &&
-  cause !== null &&
-  "code" in cause &&
-  hasRuntimeType(cause.code, "string")
+  typeof cause === "object" && cause !== null && "code" in cause && typeof cause.code === "string"
     ? cause.code
     : null;
 

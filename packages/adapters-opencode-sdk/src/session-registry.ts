@@ -16,7 +16,7 @@ import {
   readSessionLifecycleEvent,
   type SubagentSessionLink,
 } from "./event-stream/shared";
-import type { ParsedOpencodeEvent as Event } from "./opencode-ingress";
+import type { ParsedOpencodeEvent as Event } from "./opencode-global-event-ingress";
 import type {
   ClientFactory,
   OpencodeEventLogger,
@@ -80,16 +80,14 @@ const processRuntimeSessionLineage = (
 
   const {
     type: eventType,
-    properties,
     externalSessionId: childExternalSessionId,
     parentExternalSessionId,
   } = lifecycleEvent;
 
   if (!parentExternalSessionId) {
-    const hasNonAuthoritativeParent = Boolean(readEventParentExternalSessionId(properties));
     const isConfirmedChild =
       eventTransport.parentExternalSessionIdByChildExternalSessionId.has(childExternalSessionId);
-    if (!hasNonAuthoritativeParent && !isConfirmedChild) {
+    if (!isConfirmedChild) {
       return;
     }
     throw new Error(
@@ -198,9 +196,8 @@ const ensureRuntimeEventTransport = (input: {
     runtimeEndpoint: input.runtimeEndpoint,
     controller,
     dispatch: async (event) => {
-      const properties = "properties" in event ? event.properties : undefined;
       const externalSessionId = readEventSessionId(event);
-      const parentExternalSessionId = readEventParentExternalSessionId(properties);
+      const parentExternalSessionId = readEventParentExternalSessionId(event);
       const scope: OpencodeGlobalEventFailureScope = {
         directory: readEventDirectory(event) ?? "",
         ...(externalSessionId ? { externalSessionId } : undefined),

@@ -4,7 +4,6 @@ import {
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeInstanceSummary,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { AgentEvent, PolicyBoundSessionRef, RuntimeKind, SessionRef } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
@@ -1817,10 +1816,10 @@ describe("opencode-sdk-adapter", () => {
         command: async (input?: ClientMethodInput<"session", "command">) => {
           commandCalls.push(input);
           const messageID =
-            hasRuntimeType(input, "object") && input !== null && !Array.isArray(input)
+            typeof input === "object" && input !== null && !Array.isArray(input)
               ? input.messageID
               : undefined;
-          if (!hasRuntimeType(messageID, "string")) {
+          if (!(typeof messageID === "string")) {
             throw new Error("Expected slash command input to include messageID.");
           }
           commandStarted.resolve({ messageID });

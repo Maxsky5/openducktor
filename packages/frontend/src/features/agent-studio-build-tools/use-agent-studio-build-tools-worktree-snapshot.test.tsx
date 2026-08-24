@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { QueryClient } from "@tanstack/react-query";
@@ -21,7 +20,7 @@ import {
 } from "./use-agent-studio-build-tools-worktree-snapshot";
 
 enableReactActEnvironment();
-if (hasRuntimeType(globalThis.document, "undefined")) {
+if (typeof globalThis.document === "undefined") {
   GlobalRegistrator.register();
 }
 

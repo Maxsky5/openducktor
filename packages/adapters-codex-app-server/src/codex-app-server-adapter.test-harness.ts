@@ -8,7 +8,6 @@ import {
   type CodexRuntimeConfig,
   DEFAULT_CODEX_RUNTIME_POLICY,
   type RuntimeInstanceSummary,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { CodexAppServerJsonValue } from "@openducktor/contracts";
 import type {
@@ -375,7 +374,7 @@ export const codexThreadStartResultFixture = (
 });
 
 export const requestThreadId = (params: CodexAppServerJsonValue | undefined): string => {
-  if (!isPlainObject(params) || !hasRuntimeType(params.threadId, "string")) {
+  if (!isPlainObject(params) || !(typeof params.threadId === "string")) {
     throw new Error("Expected request params.threadId.");
   }
   return params.threadId;
@@ -453,7 +452,7 @@ export class RecordingTransport implements CodexJsonRpcTransport {
           throw new Error("Invalid request: missing field `type`");
         }
         for (const part of params.input) {
-          if (!isPlainObject(part) || !hasRuntimeType(part.type, "string")) {
+          if (!isPlainObject(part) || !(typeof part.type === "string")) {
             throw new Error("Invalid request: missing field `type`");
           }
         }

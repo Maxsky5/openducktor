@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import path from "node:path";
 import { Effect } from "effect";
 import { createServer, type ViteDevServer } from "vite";
@@ -49,14 +48,14 @@ const callRendererConnectionCloseMethod = (
   if (
     method === "closeIdleConnections" &&
     "closeIdleConnections" in httpServer &&
-    hasRuntimeType(httpServer.closeIdleConnections, "function")
+    typeof httpServer.closeIdleConnections === "function"
   ) {
     httpServer.closeIdleConnections();
   }
   if (
     method === "closeAllConnections" &&
     "closeAllConnections" in httpServer &&
-    hasRuntimeType(httpServer.closeAllConnections, "function")
+    typeof httpServer.closeAllConnections === "function"
   ) {
     httpServer.closeAllConnections();
   }

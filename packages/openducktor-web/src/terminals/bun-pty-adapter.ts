@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import {
   type ProcessTreeInspector,
   type ProcessTreeTerminator,
@@ -353,7 +352,7 @@ export const createBunPtyPort = ({
   start: (plan: TerminalPtyLaunchPlan, handlers: TerminalPtyHandlers) =>
     Effect.try({
       try: (): TerminalPtyHandle => {
-        if (!hasRuntimeType(Bun.Terminal, "function")) throw unsupported();
+        if (!(typeof Bun.Terminal === "function")) throw unsupported();
         const session = new BunPtySession(
           handlers,
           platform,

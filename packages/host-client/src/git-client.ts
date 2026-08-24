@@ -41,7 +41,6 @@ import {
   gitWorktreeStatusSchema,
   gitWorktreeStatusSummarySchema,
   gitWorktreeSummarySchema,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 import { parseArray, parseOkResult } from "./invoke-utils";
@@ -469,7 +468,7 @@ export class HostGitClient {
 
   async gitCanonicalizePath(path: string): Promise<string> {
     const payload = await this.invokeFn("git_canonicalize_path", { repoPath: path });
-    if (!hasRuntimeType(payload, "string") || payload.length === 0) {
+    if (!(typeof payload === "string") || payload.length === 0) {
       throw new Error("git_canonicalize_path returned an invalid path.");
     }
     return payload;

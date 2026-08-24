@@ -1,4 +1,4 @@
-import { hasRuntimeType, runtimeTypeName } from "@openducktor/contracts";
+import { runtimeTypeName } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   type HostErrorDetails,
@@ -90,9 +90,9 @@ const importRuntimeModule = (specifier: string): Promise<SqliteRuntimeModule> =>
 
 const isSqliteValue = (value: SqliteValue): boolean =>
   value === null ||
-  hasRuntimeType(value, "bigint") ||
-  hasRuntimeType(value, "number") ||
-  hasRuntimeType(value, "string") ||
+  typeof value === "bigint" ||
+  typeof value === "number" ||
+  typeof value === "string" ||
   value instanceof Uint8Array;
 
 const unsupportedSqliteDriver = (

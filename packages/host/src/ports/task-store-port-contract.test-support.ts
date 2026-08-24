@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { afterEach, describe, expect, test } from "bun:test";
 import type {
   AgentSessionRecord,
@@ -31,11 +30,11 @@ const firstFailure = async <A, E>(effect: Effect.Effect<A, E>): Promise<E> => {
 };
 
 const readTag = <Value>(value: Value | null | undefined): string | undefined => {
-  if (!hasRuntimeType(value, "object") || value === null || !("_tag" in value)) {
+  if (!(typeof value === "object") || value === null || !("_tag" in value)) {
     return undefined;
   }
   const tag = value._tag;
-  return hasRuntimeType(tag, "string") ? tag : undefined;
+  return typeof tag === "string" ? tag : undefined;
 };
 
 export const expectFailureTag = async <A, E>(

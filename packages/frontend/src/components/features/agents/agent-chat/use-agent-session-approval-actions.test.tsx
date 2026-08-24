@@ -1,5 +1,4 @@
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
-import { hasRuntimeType } from "@openducktor/contracts";
 import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createDeferred, TEST_EXTERNAL_SESSION_IDS } from "@/test-utils/shared-test-fixtures";
@@ -218,8 +217,8 @@ describe("useAgentSessionApprovalActions", () => {
       await harness.run(async (state) => {
         await state.onReplyApproval("req-1", "reject");
       });
-      await harness.waitFor((state) =>
-        hasRuntimeType(state.approvalReplyErrorByRequestId["req-1"], "string"),
+      await harness.waitFor(
+        (state) => typeof state.approvalReplyErrorByRequestId["req-1"] === "string",
       );
 
       await harness.update({
@@ -247,8 +246,8 @@ describe("useAgentSessionApprovalActions", () => {
       await harness.run(async (state) => {
         await state.onReplyApproval("req-1", "reject");
       });
-      await harness.waitFor((state) =>
-        hasRuntimeType(state.approvalReplyErrorByRequestId["req-1"], "string"),
+      await harness.waitFor(
+        (state) => typeof state.approvalReplyErrorByRequestId["req-1"] === "string",
       );
 
       await harness.update({

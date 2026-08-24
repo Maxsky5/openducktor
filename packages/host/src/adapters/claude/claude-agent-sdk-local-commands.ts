@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type {
   ClaudeHistoryEntryMetadata,
   ClaudeHistoryMessage,
@@ -23,7 +22,7 @@ export const readClaudeCommandEnvelope = (text: string): string | null => {
 };
 
 export const readClaudeLocalCommandOutput = (content: unknown): string | null => {
-  if (!hasRuntimeType(content, "string")) {
+  if (!(typeof content === "string")) {
     return null;
   }
   const match = LOCAL_COMMAND_STDOUT_PATTERN.exec(content.trim());

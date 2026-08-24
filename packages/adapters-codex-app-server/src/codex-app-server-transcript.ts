@@ -49,7 +49,6 @@ import {
   type CodexAppServerTurn,
   type CodexAppServerWebSearchAction,
   type CodexAppServerJsonValue,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { CodexThreadHistoryReadResponse } from "./types";
 import type { CodexTimedThreadItem } from "./codex-event-mapper";
@@ -185,7 +184,7 @@ export const codexTurnItemsFromThreadRead = (
     const completedAtSeconds = turn.completedAt;
     const durationMs =
       turn.durationMs ??
-      (hasRuntimeType(startedAtSeconds, "number") && hasRuntimeType(completedAtSeconds, "number")
+      (typeof startedAtSeconds === "number" && typeof completedAtSeconds === "number"
         ? Math.max(0, (completedAtSeconds - startedAtSeconds) * 1000)
         : null);
     return items.map((item) => {
@@ -213,7 +212,7 @@ export const codexTurnItemsFromThreadRead = (
         ...(timestampIsApproximate ? { timestampIsApproximate: true as const } : undefined),
         isFinalAgentMessage: itemIsFinalAgentMessage,
         turnTiming:
-          itemIsFinalAgentMessage && hasRuntimeType(durationMs, "number") && durationMs > 0
+          itemIsFinalAgentMessage && typeof durationMs === "number" && durationMs > 0
             ? { durationMs }
             : null,
       };
@@ -290,7 +289,7 @@ export const codexTokenUsageHistoryFields = (
   tokenUsage: CodexTokenUsageTotals,
 ): CodexHistoryTokenUsageFields => ({
   totalTokens: tokenUsage.totalTokens,
-  ...(hasRuntimeType(tokenUsage.contextWindow, "number")
+  ...(typeof tokenUsage.contextWindow === "number"
     ? { contextWindow: tokenUsage.contextWindow }
     : undefined),
 });
@@ -391,7 +390,7 @@ const codexObjectInput = (
   if (isPlainObject(value)) {
     return value;
   }
-  if (!hasRuntimeType(value, "string")) {
+  if (!(typeof value === "string")) {
     return undefined;
   }
   try {
@@ -406,7 +405,7 @@ const codexToolResultText = (value: CodexAppServerJsonValue | undefined): string
   if (value === undefined || value === null) {
     return null;
   }
-  if (hasRuntimeType(value, "string")) {
+  if (typeof value === "string") {
     return value;
   }
   const content = Array.isArray(value)
@@ -416,7 +415,7 @@ const codexToolResultText = (value: CodexAppServerJsonValue | undefined): string
       : [];
   const text = content
     .map((entry) => {
-      if (hasRuntimeType(entry, "string")) {
+      if (typeof entry === "string") {
         return entry;
       }
       if (!isPlainObject(entry)) {
@@ -490,7 +489,7 @@ export const extractCodexTokenUsageTotals = (
   const totalTokens =
     extractNumberField(last, ["totalTokens", "total_tokens"]) ??
     extractNumberField(usage, ["totalTokens", "total_tokens"]);
-  if (!hasRuntimeType(totalTokens, "number") || totalTokens <= 0) {
+  if (!(typeof totalTokens === "number") || totalTokens <= 0) {
     return null;
   }
   const contextWindow = extractNumberField(usage, [
@@ -501,9 +500,7 @@ export const extractCodexTokenUsageTotals = (
   ]);
   return {
     totalTokens,
-    ...(hasRuntimeType(contextWindow, "number") && contextWindow > 0
-      ? { contextWindow }
-      : undefined),
+    ...(typeof contextWindow === "number" && contextWindow > 0 ? { contextWindow } : undefined),
   };
 };
 

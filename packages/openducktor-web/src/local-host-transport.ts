@@ -4,7 +4,6 @@ import {
   type HostErrorResponse,
   type HostEventChannel,
   type HostEventEnvelope,
-  hasRuntimeType,
   parseHostEventEnvelope,
   type TaskEventCursor,
 } from "@openducktor/contracts";
@@ -305,7 +304,7 @@ const subscribeSseChannelEffect = (
         resolveReady = resolve;
       });
       const handleMessage: EventListener = (event) => {
-        if (!("data" in event) || !hasRuntimeType(event.data, "string")) {
+        if (!("data" in event) || !(typeof event.data === "string")) {
           throw new Error("EventSource message events must contain string data.");
         }
         const hostEvent = parseHostEvent(event.data);
@@ -366,7 +365,7 @@ const subscribeSseChannelEffect = (
         hasReportedConnectionError = true;
       };
       const handleStreamWarning: EventListener = (event) => {
-        if (!("data" in event) || !hasRuntimeType(event.data, "string")) {
+        if (!("data" in event) || !(typeof event.data === "string")) {
           throw new Error("EventSource stream-warning events must contain string data.");
         }
         const warningPayload = browserLiveControlEvent(

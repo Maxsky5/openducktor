@@ -1,4 +1,4 @@
-import { hasOwnKey, hasRuntimeType } from "@openducktor/contracts";
+import { hasOwnKey } from "@openducktor/contracts";
 import { basename } from "node:path";
 import type {
   AgentFileReference,
@@ -152,7 +152,7 @@ export const readClaudeHistoryDisplayParts = (
     return [];
   }
   const content = message.content;
-  if (hasRuntimeType(content, "string") && content.length > 0) {
+  if (typeof content === "string" && content.length > 0) {
     return readClaudeHistoryTextDisplayParts(content);
   }
   if (!Array.isArray(content)) {

@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { runWebSyncBoundary, WebValidationError } from "./effect/web-errors";
 
@@ -17,7 +16,7 @@ export const configureBrowserRuntimeConfig = (config: BrowserRuntimeConfig): voi
 // SAFETY: The preceding runtime guard establishes `ImportMeta & { env?: Record<string, string | undefined> }` before this assertion.
 const readBrowserEnv = (): BrowserEnv =>
   (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ??
-  (!hasRuntimeType(globalThis.process, "undefined") ? process.env : undefined);
+  (!(typeof globalThis.process === "undefined") ? process.env : undefined);
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 const OPAQUE_BROWSER_ORIGIN = "null";
@@ -26,7 +25,7 @@ const isUsableBrowserOrigin = (origin: string | undefined): origin is string =>
   typeof origin === "string" && origin.length > 0 && origin !== OPAQUE_BROWSER_ORIGIN;
 
 const readBrowserLocationOrigin = (): string | undefined => {
-  if (hasRuntimeType(globalThis.window, "undefined")) {
+  if (typeof globalThis.window === "undefined") {
     return undefined;
   }
 

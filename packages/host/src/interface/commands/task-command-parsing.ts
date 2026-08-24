@@ -17,7 +17,6 @@ import {
   taskDirectMergeInputSchema,
   taskStatusSchema,
   taskUpdatePatchSchema,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 import { z } from "zod";
 import { compactAgentSessionRecord } from "../../domain/agent-session-records";
@@ -35,7 +34,7 @@ type PullRequestContent = {
 };
 
 export const requireRecord = (value: unknown, label: string): Record<string, unknown> => {
-  if (!value || !hasRuntimeType(value, "object") || Array.isArray(value)) {
+  if (!value || !(typeof value === "object") || Array.isArray(value)) {
     throw invalidInput(`${label} must be an object.`, label);
   }
 
@@ -44,7 +43,7 @@ export const requireRecord = (value: unknown, label: string): Record<string, unk
 };
 
 export const requireString = (value: unknown, label: string): string => {
-  if (!hasRuntimeType(value, "string") || value.trim().length === 0) {
+  if (!(typeof value === "string") || value.trim().length === 0) {
     throw invalidInput(`${label} is required.`, label);
   }
 
@@ -56,7 +55,7 @@ export const optionalNonNegativeInteger = (value: unknown, label: string): numbe
     return undefined;
   }
 
-  if (!Number.isInteger(value) || !hasRuntimeType(value, "number") || value < 0) {
+  if (!Number.isInteger(value) || !(typeof value === "number") || value < 0) {
     throw invalidInput(`${label} must be greater than or equal to 0.`, label);
   }
 
@@ -110,7 +109,7 @@ export const optionalBoolean = (value: unknown, label: string): boolean | undefi
   if (value === undefined || value === null) {
     return undefined;
   }
-  if (!hasRuntimeType(value, "boolean")) {
+  if (!(typeof value === "boolean")) {
     throw invalidInput(`${label} must be a boolean when provided.`, label);
   }
 
@@ -118,7 +117,7 @@ export const optionalBoolean = (value: unknown, label: string): boolean | undefi
 };
 
 export const parseRequiredMarkdown = (value: unknown, label: string): string => {
-  if (!hasRuntimeType(value, "string")) {
+  if (!(typeof value === "string")) {
     throw invalidInput(`${label} markdown cannot be empty.`, label);
   }
 
@@ -134,7 +133,7 @@ export const parseOptionalNote = (value: unknown, label: string): string | undef
   if (value === undefined || value === null) {
     return undefined;
   }
-  if (!hasRuntimeType(value, "string")) {
+  if (!(typeof value === "string")) {
     throw invalidInput(`${label} must be a string when present.`, label);
   }
 
@@ -171,7 +170,7 @@ const normalizedAgentSessionInputSchema = z
     const normalized = { ...record };
     for (const key of agentSessionStringKeys) {
       const value = normalized[key];
-      if (hasRuntimeType(value, "string")) {
+      if (typeof value === "string") {
         normalized[key] = value.trim();
       }
     }
@@ -244,7 +243,7 @@ export const parsePullRequest = (value: unknown): PullRequest => {
 export const parsePullRequestContent = (value: unknown): PullRequestContent => {
   const record = requireRecord(value, "task_pull_request_upsert input.input");
   const title = requireString(record.title, "input.title");
-  if (!hasRuntimeType(record.body, "string")) {
+  if (!(typeof record.body === "string")) {
     throw invalidInput("input.body is required.", "input.body");
   }
 

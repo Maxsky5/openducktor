@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type {
   DiffLineAnnotation,
   FileDiffMetadata,
@@ -169,7 +168,7 @@ export const getRenderableFileDiff = (patch: string, filePath: string) => {
   renderableFileDiffCache.set(cacheKey, result);
   if (renderableFileDiffCache.size > MAX_RENDERABLE_DIFF_CACHE_ENTRIES) {
     const oldestKey = renderableFileDiffCache.keys().next().value;
-    if (hasRuntimeType(oldestKey, "string")) {
+    if (typeof oldestKey === "string") {
       renderableFileDiffCache.delete(oldestKey);
     }
   }

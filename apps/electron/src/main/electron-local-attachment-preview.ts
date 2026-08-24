@@ -1,4 +1,4 @@
-import { hasRuntimeType, runtimeTypeName } from "@openducktor/contracts";
+import { runtimeTypeName } from "@openducktor/contracts";
 import { pathToFileURL } from "node:url";
 import { Cause, Chunk, Effect, Exit, Option } from "effect";
 import {
@@ -30,7 +30,7 @@ type RegisterElectronLocalAttachmentPreviewProtocolInput = {
 };
 
 export const readLocalAttachmentPreviewPath = (filePath: string): string => {
-  if (!hasRuntimeType(filePath, "string") || filePath.trim().length === 0) {
+  if (!(typeof filePath === "string") || filePath.trim().length === 0) {
     throw new ElectronValidationError({
       operation: "electron.preview.read-path",
       message: "Local attachment preview path must be a non-empty string.",

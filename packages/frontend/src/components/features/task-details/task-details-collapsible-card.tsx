@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { ChevronDown } from "lucide-react";
 import { type ReactElement, type ReactNode, useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -30,9 +29,7 @@ export function TaskDetailsCollapsibleCard({
   const summaryLabel = statusLabel ?? (updatedAt ? humanDate(updatedAt) : null);
   const isExpanded = expandedOverride ?? defaultExpanded;
 
-  const resolvedChildren = hasRuntimeType(children, "function")
-    ? children({ isExpanded })
-    : children;
+  const resolvedChildren = typeof children === "function" ? children({ isExpanded }) : children;
 
   return (
     <Collapsible

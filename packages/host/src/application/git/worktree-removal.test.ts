@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { createFocusedTestService } from "../../test-support/focused-service";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
@@ -60,7 +59,7 @@ const createCleanupHarness = ({
       throw new Error("defaultWorktreeBasePath is not used with a managed root");
     },
     pathExists: () =>
-      Effect.sync(() => (hasRuntimeType(pathExists, "function") ? pathExists() : pathExists)),
+      Effect.sync(() => (typeof pathExists === "function" ? pathExists() : pathExists)),
     readConfig: () => Effect.die("readConfig is not used with a managed root"),
     resolveConfiguredPath: () => {
       throw new Error("resolveConfiguredPath is not used with a managed root");

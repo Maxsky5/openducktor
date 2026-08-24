@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import {
   type AgentModelSelection,
   type AgentUserMessageDisplayPart,
@@ -281,7 +280,7 @@ const prepareManualSessionCompactionSend = (): PreparedUserSend => ({
         new Error("OpenCode session compaction requires a selected provider and model."),
       );
     }
-    if (!hasRuntimeType(session.client.session.summarize, "function")) {
+    if (!(typeof session.client.session.summarize === "function")) {
       throw toOpenCodeRequestError(
         "compact session",
         new Error("OpenCode runtime client does not expose session summarization."),

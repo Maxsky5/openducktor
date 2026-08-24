@@ -1,7 +1,6 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
 import { toAgentApprovalRequestFromOpenCodePermission } from "../approval-translation";
-import type { ParsedOpencodeEvent as Event } from "../opencode-ingress";
+import type { ParsedOpencodeEvent as Event } from "../opencode-global-event-ingress";
 import { normalizeTodoList } from "../todo-normalizers";
 import {
   emitCompletedAssistantMessages,
@@ -12,12 +11,10 @@ import { flushPendingBackgroundTaskResultSubagentParts } from "./message-events/
 import {
   type ParsedSessionControlEvent,
   parseSessionControlEvent,
-  readEventProperties,
   readSessionErrorMessage,
 } from "./schemas";
 import type { EventStreamRuntime, PendingSubagentSessionBinding } from "./shared";
 import { isStreamTurnIdle } from "../session-activity";
-import type { UnknownRecord } from "../guards";
 import {
   bindSubagentExternalSession,
   flushPendingSubagentInputEventsForSession,
@@ -216,7 +213,6 @@ const resolveLocalSubagentInputLink = (
 
 const resolveSubagentInputRouting = (
   event: Event,
-  properties: UnknownRecord | undefined,
   runtime: EventStreamRuntime,
 ): SubagentInputRouting => {
   const childExternalSessionId = readEventSessionId(event) ?? runtime.externalSessionId;
@@ -229,7 +225,7 @@ const resolveSubagentInputRouting = (
       childExternalSessionId,
       isEventScopedToRuntimeWorkingDirectory,
     );
-  const eventParentExternalSessionId = readEventParentExternalSessionId(properties);
+  const eventParentExternalSessionId = readEventParentExternalSessionId(event);
   const parentExternalSessionId =
     subagentLink?.parentExternalSessionId ?? eventParentExternalSessionId;
   const subagentCorrelationKey =
@@ -292,7 +288,7 @@ const handlePermissionAsked = (
   runtime: EventStreamRuntime,
 ): void => {
   markSessionActive(runtime);
-  const subagentRouting = resolveSubagentInputRouting(event, readEventProperties(event), runtime);
+  const subagentRouting = resolveSubagentInputRouting(event, runtime);
   const permissionEvent: Extract<AgentEvent, { type: "approval_required" }> = {
     type: "approval_required",
     externalSessionId: runtime.externalSessionId,
@@ -310,7 +306,7 @@ const handleQuestionAsked = (
   runtime: EventStreamRuntime,
 ): void => {
   markSessionActive(runtime);
-  const subagentRouting = resolveSubagentInputRouting(event, readEventProperties(event), runtime);
+  const subagentRouting = resolveSubagentInputRouting(event, runtime);
   const questionEvent: Extract<AgentEvent, { type: "question_required" }> = {
     type: "question_required",
     externalSessionId: runtime.externalSessionId,
@@ -334,7 +330,7 @@ const handlePendingInputResolved = (
   controlEvent: Extract<ParsedSessionControlEvent, { type: "pending_input_resolved" }>,
   runtime: EventStreamRuntime,
 ): void => {
-  const routing = resolveSubagentInputRouting(event, readEventProperties(event), runtime);
+  const routing = resolveSubagentInputRouting(event, runtime);
   removeQueuedSubagentInputEvent(runtime, routing.childExternalSessionId, controlEvent.requestId);
   const resolvedEvent: PendingInputResolvedEvent = {
     type: controlEvent.resolvedType,
@@ -373,7 +369,6 @@ const handleSessionErrorEvent = (event: Event, runtime: EventStreamRuntime): boo
     return false;
   }
 
-  const properties = readEventProperties(event);
   markSessionIdle(runtime);
   emitCompletedAssistantMessages(runtime);
   publishUserMessageReadStateChanges(runtime);
@@ -381,7 +376,7 @@ const handleSessionErrorEvent = (event: Event, runtime: EventStreamRuntime): boo
     type: "session_error",
     externalSessionId: runtime.externalSessionId,
     timestamp: runtime.now(),
-    message: properties ? readSessionErrorMessage(properties) : "Unknown session error",
+    message: readSessionErrorMessage(event.properties.error),
   });
   return true;
 };
@@ -413,8 +408,7 @@ const handleTodoUpdatedEvent = (event: Event, runtime: EventStreamRuntime): bool
     return false;
   }
 
-  const properties = readEventProperties(event);
-  const todos = normalizeTodoList(properties?.todos);
+  const todos = normalizeTodoList(event.properties.todos);
   runtime.emit(runtime.externalSessionId, {
     type: "session_todos_updated",
     externalSessionId: runtime.externalSessionId,
@@ -455,7 +449,7 @@ const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime):
       runtime.session.pendingSubagentSessionsByExternalSessionId.size + 1,
   };
   const nextCreatedAtMs = createdAtMs ?? existingSessionBinding?.createdAtMs;
-  if (hasRuntimeType(nextCreatedAtMs, "number")) {
+  if (typeof nextCreatedAtMs === "number") {
     nextSessionBinding.createdAtMs = nextCreatedAtMs;
   }
   runtime.session.pendingSubagentSessionsByExternalSessionId.set(

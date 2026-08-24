@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { OpencodeClient, Session } from "@opencode-ai/sdk/v2/client";
 import type {
   AgentSessionHistoryMessage,
@@ -70,11 +69,11 @@ const buildPartScopedSubagentCorrelationKey = (
 const readChildSessionCreatedAt = (session: Session): number | undefined => session.time?.created;
 
 const toChildSessionLink = (session: Session): ChildSessionLink | null => {
-  if (!hasRuntimeType(session.id, "string") || session.id.trim().length === 0) {
+  if (!(typeof session.id === "string") || session.id.trim().length === 0) {
     return null;
   }
   const createdAtMs = readChildSessionCreatedAt(session);
-  if (!hasRuntimeType(createdAtMs, "number")) {
+  if (!(typeof createdAtMs === "number")) {
     return null;
   }
 
@@ -106,7 +105,7 @@ const takeChildSessionLinkForSubagentPart = (
   part: MappedSubagentPart,
 ): ChildSessionLink | undefined => {
   const startedAtMs = part.startedAtMs;
-  if (part.externalSessionId || !hasRuntimeType(startedAtMs, "number")) {
+  if (part.externalSessionId || !(typeof startedAtMs === "number")) {
     return undefined;
   }
 
@@ -359,7 +358,7 @@ export const loadSessionHistory = async (
   const response = await client.session.messages({
     sessionID: input.externalSessionId,
     directory: input.workingDirectory,
-    ...(hasRuntimeType(input.limit, "number") ? { limit: input.limit } : undefined),
+    ...(typeof input.limit === "number" ? { limit: input.limit } : undefined),
   });
   const data = opencodeSessionMessagesPayloadSchema.parse(
     unwrapData(response, "load session messages"),
@@ -400,7 +399,7 @@ export const loadSessionHistory = async (
         entry,
         timestamp,
         text,
-        ...(hasRuntimeType(totalTokens, "number") ? { totalTokens } : undefined),
+        ...(typeof totalTokens === "number" ? { totalTokens } : undefined),
         ...(model ? { model } : undefined),
         ...(parentId ? { parentId } : undefined),
         ...(entry.info.role === "user" ? { displayParts } : undefined),
@@ -460,9 +459,7 @@ export const loadSessionHistory = async (
         role: "assistant",
         timestamp: item.timestamp,
         text: item.text,
-        ...(hasRuntimeType(item.totalTokens, "number")
-          ? { totalTokens: item.totalTokens }
-          : undefined),
+        ...(typeof item.totalTokens === "number" ? { totalTokens: item.totalTokens } : undefined),
         ...(item.model ? { model: item.model } : undefined),
         parts: item.parts,
       });

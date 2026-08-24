@@ -9,7 +9,6 @@ import {
   agentSessionTranscriptEventSchema,
   isAgentSessionTranscriptEventType,
   type RuntimeInstanceSummary,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
@@ -108,7 +107,7 @@ const subagentStartedAt = (
   },
   fallback: string,
 ): string => {
-  if (!hasRuntimeType(part.startedAtMs, "number")) {
+  if (!(typeof part.startedAtMs === "number")) {
     return fallback;
   }
   const startedAt = new Date(part.startedAtMs);

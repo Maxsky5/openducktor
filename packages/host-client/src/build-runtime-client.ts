@@ -42,7 +42,6 @@ import {
   taskSessionBootstrapSchema,
   taskStoreCheckSchema,
   taskWorktreeSummarySchema,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 import { parseArray, parseOkResult } from "./invoke-utils";
@@ -313,7 +312,7 @@ const taskSessionStartupLeasePrepare = async (
   role: AgentRole,
 ): Promise<string> => {
   const payload = await invokeFn("task_session_startup_lease_prepare", { repoPath, taskId, role });
-  if (!hasRuntimeType(payload, "string") || !payload.trim()) {
+  if (!(typeof payload === "string") || !payload.trim()) {
     throw new Error("task_session_startup_lease_prepare returned an invalid lease id.");
   }
   return payload;

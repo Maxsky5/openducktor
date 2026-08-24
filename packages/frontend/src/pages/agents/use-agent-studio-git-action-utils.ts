@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { GitConflictOperation, GitDiffRefresh } from "@/features/agent-studio-git";
 import { getGitConflictCopy } from "@/features/git-conflict-resolution";
 
@@ -12,7 +11,7 @@ export const toErrorMessage = (cause: unknown, fallback: string): string => {
   if (cause instanceof Error && cause.message.trim().length > 0) {
     return cause.message;
   }
-  if (hasRuntimeType(cause, "string") && cause.trim().length > 0) {
+  if (typeof cause === "string" && cause.trim().length > 0) {
     return cause;
   }
   return fallback;

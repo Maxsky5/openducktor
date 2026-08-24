@@ -1,5 +1,5 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
-import { jsonValueSchema, hasRuntimeType } from "@openducktor/contracts";
+import { jsonValueSchema } from "@openducktor/contracts";
 import {
   extractMessageTotalTokens,
   readMessageModelSelection,
@@ -257,7 +257,7 @@ export const maybeEmitCompletedAssistantMessage = (
     timestamp,
     messageId: input.messageId,
     message: visible,
-    ...(hasRuntimeType(totalTokens, "number") ? { totalTokens } : undefined),
+    ...(typeof totalTokens === "number" ? { totalTokens } : undefined),
     ...(assistantModel ? { model: assistantModel } : undefined),
   });
   session.emittedAssistantMessageIds.add(input.messageId);

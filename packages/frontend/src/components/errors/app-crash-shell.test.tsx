@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { lazy, Suspense } from "react";
@@ -531,7 +530,7 @@ describe("AppCrashShell", () => {
     ): unknown[] {
       const calls: unknown[][] = errorMock.mock.calls;
       const match = calls.find(
-        (args) => hasRuntimeType(args[0], "string") && args[0].includes(sourceFilter),
+        (args) => typeof args[0] === "string" && args[0].includes(sourceFilter),
       );
       if (!match) throw new Error(`No console.error call matching "${sourceFilter}"`);
       return match;

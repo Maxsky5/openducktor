@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 export const readInputString = (
   input: Record<string, unknown> | undefined,
   keys: string[],
@@ -8,7 +7,7 @@ export const readInputString = (
   }
   for (const key of keys) {
     const value = input[key];
-    if (hasRuntimeType(value, "string") && value.trim().length > 0) {
+    if (typeof value === "string" && value.trim().length > 0) {
       return value.trim();
     }
   }
@@ -18,7 +17,7 @@ export const readInputString = (
 export const extractPathFromInput = (input: Record<string, unknown> | undefined): string | null => {
   const candidate =
     input?.filePath ?? input?.file_path ?? input?.path ?? input?.file ?? input?.filename;
-  if (hasRuntimeType(candidate, "string")) {
+  if (typeof candidate === "string") {
     const normalized = candidate.trim();
     if (normalized.length > 0 && normalized !== ".") {
       return normalized;

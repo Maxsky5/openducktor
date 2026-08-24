@@ -16,7 +16,7 @@ import type {
   PendingSubagentPartEmission,
   PendingSubagentSessionBinding,
 } from "./event-stream/shared";
-import type { ParsedOpencodeEvent as Event } from "./opencode-ingress";
+import type { ParsedOpencodeEvent as Event } from "./opencode-global-event-ingress";
 
 /**
  * Cache TTL for workflow tool selection (5 minutes).

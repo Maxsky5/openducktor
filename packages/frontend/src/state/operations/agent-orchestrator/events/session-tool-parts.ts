@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentChatMessageMeta, AgentSessionState } from "@/types/agent-orchestrator";
 import { formatToolContent } from "../agent-tool-messages";
 import { toToolMessageId } from "../support/chat-message-ids";
@@ -48,21 +47,23 @@ const composeToolTimingMeta = (
   status: ToolPartStatus,
   input: Record<string, unknown> | undefined,
 ): ToolTimingMeta => {
-  const observedStartedAtMs = hasRuntimeType(existingToolMeta?.observedStartedAtMs, "number")
-    ? existingToolMeta.observedStartedAtMs
-    : observedEventTimestampMs;
+  const observedStartedAtMs =
+    typeof existingToolMeta?.observedStartedAtMs === "number"
+      ? existingToolMeta.observedStartedAtMs
+      : observedEventTimestampMs;
   const observedEndedAtMs =
     status === "completed" || status === "error" ? observedEventTimestampMs : undefined;
-  const inputReadyAtMs = hasRuntimeType(existingToolMeta?.inputReadyAtMs, "number")
-    ? existingToolMeta.inputReadyAtMs
-    : hasMeaningfulToolInput(input)
-      ? observedEventTimestampMs
-      : undefined;
+  const inputReadyAtMs =
+    typeof existingToolMeta?.inputReadyAtMs === "number"
+      ? existingToolMeta.inputReadyAtMs
+      : hasMeaningfulToolInput(input)
+        ? observedEventTimestampMs
+        : undefined;
 
   return {
     observedStartedAtMs,
-    ...(hasRuntimeType(observedEndedAtMs, "number") ? { observedEndedAtMs } : undefined),
-    ...(hasRuntimeType(inputReadyAtMs, "number") ? { inputReadyAtMs } : undefined),
+    ...(typeof observedEndedAtMs === "number" ? { observedEndedAtMs } : undefined),
+    ...(typeof inputReadyAtMs === "number" ? { inputReadyAtMs } : undefined),
   };
 };
 
@@ -91,15 +92,15 @@ const composeToolMessageMeta = (
     ...(part.fileContent ? { fileContent: part.fileContent } : undefined),
     ...(part.fileChanges ? { fileChanges: part.fileChanges } : undefined),
     ...(part.metadata ? { metadata: part.metadata } : undefined),
-    ...(hasRuntimeType(part.startedAtMs, "number") ? { startedAtMs: part.startedAtMs } : undefined),
-    ...(hasRuntimeType(part.endedAtMs, "number") ? { endedAtMs: part.endedAtMs } : undefined),
-    ...(hasRuntimeType(timingMeta.observedStartedAtMs, "number")
+    ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : undefined),
+    ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : undefined),
+    ...(typeof timingMeta.observedStartedAtMs === "number"
       ? { observedStartedAtMs: timingMeta.observedStartedAtMs }
       : undefined),
-    ...(hasRuntimeType(timingMeta.observedEndedAtMs, "number")
+    ...(typeof timingMeta.observedEndedAtMs === "number"
       ? { observedEndedAtMs: timingMeta.observedEndedAtMs }
       : undefined),
-    ...(hasRuntimeType(timingMeta.inputReadyAtMs, "number")
+    ...(typeof timingMeta.inputReadyAtMs === "number"
       ? { inputReadyAtMs: timingMeta.inputReadyAtMs }
       : undefined),
   };
@@ -169,12 +170,10 @@ const composeToolPartSessionUpdate = ({
     ...(part.fileChanges === undefined && existingToolMeta?.fileChanges !== undefined
       ? { fileChanges: existingToolMeta.fileChanges }
       : undefined),
-    ...(!hasRuntimeType(part.startedAtMs, "number") &&
-    hasRuntimeType(existingToolMeta?.startedAtMs, "number")
+    ...(!(typeof part.startedAtMs === "number") && typeof existingToolMeta?.startedAtMs === "number"
       ? { startedAtMs: existingToolMeta.startedAtMs }
       : undefined),
-    ...(!hasRuntimeType(part.endedAtMs, "number") &&
-    hasRuntimeType(existingToolMeta?.endedAtMs, "number")
+    ...(!(typeof part.endedAtMs === "number") && typeof existingToolMeta?.endedAtMs === "number"
       ? { endedAtMs: existingToolMeta.endedAtMs }
       : undefined),
   };
@@ -194,10 +193,10 @@ const composeToolPartSessionUpdate = ({
       content: formatToolContent({
         ...resolvedPart,
         status,
-        ...(hasRuntimeType(resolvedError, "string") && resolvedError.length > 0
+        ...(typeof resolvedError === "string" && resolvedError.length > 0
           ? { error: resolvedError }
           : undefined),
-        ...(hasRuntimeType(resolvedOutput, "string") && resolvedOutput.length > 0
+        ...(typeof resolvedOutput === "string" && resolvedOutput.length > 0
           ? { output: resolvedOutput }
           : undefined),
       }),

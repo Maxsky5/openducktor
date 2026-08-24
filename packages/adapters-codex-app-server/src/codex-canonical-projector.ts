@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
 import type { CodexCanonicalEvent } from "./codex-canonical-events";
 import { requireNormalizedCodexToolInvocation } from "./codex-tool-normalizer";
@@ -43,10 +42,8 @@ const projectCodexCanonicalEvent = (event: CodexCanonicalEvent): AgentEvent => {
       timestamp,
       messageId: event.messageId,
       message: event.message,
-      ...(hasRuntimeType(event.totalTokens, "number")
-        ? { totalTokens: event.totalTokens }
-        : undefined),
-      ...(hasRuntimeType(event.contextWindow, "number")
+      ...(typeof event.totalTokens === "number" ? { totalTokens: event.totalTokens } : undefined),
+      ...(typeof event.contextWindow === "number"
         ? { contextWindow: event.contextWindow }
         : undefined),
       ...(event.model ? { model: event.model } : undefined),

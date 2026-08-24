@@ -1,4 +1,4 @@
-import { agentRoleValues, hasRuntimeType } from "@openducktor/contracts";
+import { agentRoleValues } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import { z } from "zod";
@@ -68,7 +68,7 @@ const isRole = (value: string | null): value is AgentRole =>
   value != null && AGENT_ROLE_SET.has(value);
 
 const readOptionalString = (value: string | null | undefined): string | undefined => {
-  if (!hasRuntimeType(value, "string")) {
+  if (!(typeof value === "string")) {
     return undefined;
   }
   const trimmed = value.trim();

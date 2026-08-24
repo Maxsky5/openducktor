@@ -1,19 +1,18 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 
 const TOOL_CANCELLED_PATTERN = /\b(cancel(?:ed|led)|aborted|stopped|interrupted|terminated)\b/i;
 
 const hasMeaningfulInputValue = (value: unknown): boolean => {
-  if (hasRuntimeType(value, "string")) {
+  if (typeof value === "string") {
     return value.trim().length > 0;
   }
-  if (hasRuntimeType(value, "number") || hasRuntimeType(value, "boolean")) {
+  if (typeof value === "number" || typeof value === "boolean") {
     return true;
   }
   if (Array.isArray(value)) {
     return value.some((entry) => hasMeaningfulInputValue(entry));
   }
-  if (!value || !hasRuntimeType(value, "object")) {
+  if (!value || !(typeof value === "object")) {
     return false;
   }
   // SAFETY: The preceding runtime guard establishes `Record<string, unknown>` before this assertion.

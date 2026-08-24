@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostInvariantError, HostResourceError } from "../../effect/host-errors";
 import type {
@@ -14,19 +13,19 @@ export const createLiveSessionAdapterRegistry = (): AgentSessionLiveAdapterRegis
     adapter: AgentSessionLiveAdapterPort,
   ): adapter is AgentSessionRuntimeAdapterPort =>
     "startSession" in adapter &&
-    hasRuntimeType(adapter.startSession, "function") &&
+    typeof adapter.startSession === "function" &&
     "resumeSession" in adapter &&
-    hasRuntimeType(adapter.resumeSession, "function") &&
+    typeof adapter.resumeSession === "function" &&
     "forkSession" in adapter &&
-    hasRuntimeType(adapter.forkSession, "function") &&
+    typeof adapter.forkSession === "function" &&
     "sendUserMessage" in adapter &&
-    hasRuntimeType(adapter.sendUserMessage, "function") &&
+    typeof adapter.sendUserMessage === "function" &&
     "updateSessionModel" in adapter &&
-    hasRuntimeType(adapter.updateSessionModel, "function") &&
+    typeof adapter.updateSessionModel === "function" &&
     "stopSession" in adapter &&
-    hasRuntimeType(adapter.stopSession, "function") &&
+    typeof adapter.stopSession === "function" &&
     "releaseSession" in adapter &&
-    hasRuntimeType(adapter.releaseSession, "function");
+    typeof adapter.releaseSession === "function";
 
   const requireControlAdapter = (
     adapter: AgentSessionLiveAdapterPort,

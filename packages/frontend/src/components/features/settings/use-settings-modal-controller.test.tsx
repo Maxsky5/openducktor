@@ -10,7 +10,6 @@ import {
   type RuntimeKind,
   type SettingsSnapshot,
   type WorkspaceRecord,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -556,7 +555,7 @@ describe("useSettingsModalController", () => {
           initialValidationByKind[kind].reject(new Error("Executable validation failed"));
         }
       });
-      await harness.waitFor((state) => hasRuntimeType(state.runtimeExecutablesError, "string"));
+      await harness.waitFor((state) => typeof state.runtimeExecutablesError === "string");
       await harness.run(async () => {
         await Promise.resolve();
         await Promise.resolve();

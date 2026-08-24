@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { cva } from "class-variance-authority";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { type ReactElement, type ReactNode, useMemo, useRef, useState } from "react";
@@ -229,7 +228,7 @@ export function Combobox({
   const searchTerms = useMemo(() => normalizeSearchTerms(searchQuery), [searchQuery]);
   const portalContainer =
     open &&
-    !hasRuntimeType(globalThis.document, "undefined") &&
+    !(typeof globalThis.document === "undefined") &&
     document.activeElement instanceof HTMLElement
       ? document.activeElement.closest<HTMLElement>("[data-slot='dialog-content']")
       : null;

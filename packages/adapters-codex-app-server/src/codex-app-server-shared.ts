@@ -1,4 +1,4 @@
-import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
+import { jsonValueSchema } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import type { CodexAppServerThreadItem, CodexAppServerJsonValue } from "@openducktor/contracts";
 import type { CodexSessionState, CodexTurnStartResult, CodexUserInput } from "./types";
@@ -52,7 +52,7 @@ export const trimOldestMapKeys = <Value>(map: Map<string, Value>, maxSize: numbe
   }
 };
 export const extractText = (value: CodexAppServerJsonValue | undefined): string | null => {
-  if (hasRuntimeType(value, "string")) {
+  if (typeof value === "string") {
     return value;
   }
   if (!isPlainObject(value)) {
@@ -60,7 +60,7 @@ export const extractText = (value: CodexAppServerJsonValue | undefined): string 
   }
   for (const key of ["text", "message", "content", "summary", "delta"]) {
     const candidate = value[key];
-    if (hasRuntimeType(candidate, "string") && candidate.trim().length > 0) {
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
       return candidate;
     }
   }
@@ -92,7 +92,7 @@ export const extractStringField = (
   }
   for (const key of keys) {
     const candidate = value[key];
-    if (hasRuntimeType(candidate, "string") && candidate.trim().length > 0) {
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
       return candidate;
     }
   }
@@ -108,7 +108,7 @@ export const extractNumberField = (
   }
   for (const key of keys) {
     const candidate = value[key];
-    if (hasRuntimeType(candidate, "number") && Number.isFinite(candidate)) {
+    if (typeof candidate === "number" && Number.isFinite(candidate)) {
       return candidate;
     }
   }
@@ -144,7 +144,7 @@ export const stringifyJsonValue = (value: unknown): string | null => {
   if (parsed.data === null) {
     return null;
   }
-  if (hasRuntimeType(parsed.data, "string")) {
+  if (typeof parsed.data === "string") {
     return parsed.data;
   }
   return JSON.stringify(parsed.data, null, 2);

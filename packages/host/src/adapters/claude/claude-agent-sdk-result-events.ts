@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AgentModelSelection } from "@openducktor/core";
 import {
@@ -76,7 +75,7 @@ export const handleClaudeResultMessage = ({
   delete session.assistantTurnOriginKind;
   const failed = isFailedClaudeResult(message);
   const resultText =
-    "result" in message && hasRuntimeType(message.result, "string") ? message.result.trim() : "";
+    "result" in message && typeof message.result === "string" ? message.result.trim() : "";
   const handledManualCompaction =
     !failed && settleClaudeManualCompactionResult({ emit, result: resultText, session, timestamp });
   if (!handledManualCompaction && shouldFinalize) {
@@ -86,9 +85,9 @@ export const handleClaudeResultMessage = ({
     clearClaudeManualCompaction(session);
     const errors = "errors" in message && Array.isArray(message.errors) ? message.errors : [];
     const resultMessage =
-      "result" in message && hasRuntimeType(message.result, "string") ? message.result.trim() : "";
+      "result" in message && typeof message.result === "string" ? message.result.trim() : "";
     const terminalReason =
-      "terminal_reason" in message && hasRuntimeType(message.terminal_reason, "string")
+      "terminal_reason" in message && typeof message.terminal_reason === "string"
         ? message.terminal_reason
         : undefined;
     emit({
@@ -121,7 +120,7 @@ export const handleClaudeResultMessage = ({
 };
 
 const pendingUserTurnCount = (session: ClaudeResultEventSession): number => {
-  return hasRuntimeType(session.pendingUserTurnCount, "number") ? session.pendingUserTurnCount : 0;
+  return typeof session.pendingUserTurnCount === "number" ? session.pendingUserTurnCount : 0;
 };
 
 const acceptedUserTurnCount = (session: ClaudeResultEventSession): number => {
@@ -195,7 +194,7 @@ export const emitClaudePermissionDeniedToolPart = ({
       tool: toolName,
       ...(input ? { input } : undefined),
       ...(permission.metadata ? { metadata: permission.metadata } : undefined),
-      ...(hasRuntimeType(startedAtMs, "number") ? { startedAtMs } : undefined),
+      ...(typeof startedAtMs === "number" ? { startedAtMs } : undefined),
     }),
   });
 };
@@ -213,7 +212,7 @@ const emitSuccessfulResultText = ({
   if (isFailedClaudeResult(message)) {
     return;
   }
-  const text = hasRuntimeType(message.result, "string") ? message.result.trim() : "";
+  const text = typeof message.result === "string" ? message.result.trim() : "";
   const duplicatesAssistantTextFromSameTurn =
     text === session.lastAssistantText &&
     session.lastAssistantTextTurnIndex === completedUserTurnIndex;

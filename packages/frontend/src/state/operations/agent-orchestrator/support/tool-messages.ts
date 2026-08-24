@@ -1,9 +1,4 @@
-import {
-  hasRuntimeType,
-  type JsonObject,
-  type JsonValue,
-  jsonValueSchema,
-} from "@openducktor/contracts";
+import { type JsonObject, type JsonValue, jsonValueSchema } from "@openducktor/contracts";
 import { isRunningToolStatus } from "../agent-tool-messages";
 import {
   findLastToolSessionMessage,
@@ -29,14 +24,14 @@ export const normalizeToolText = (value: unknown): string | undefined => {
     return undefined;
   }
   const parsed = jsonValueSchema.parse(value);
-  if (hasRuntimeType(parsed, "string")) {
+  if (typeof parsed === "string") {
     const trimmed = parsed.trim();
     return trimmed.length > 0 ? trimmed : undefined;
   }
   if (parsed === null) {
     return undefined;
   }
-  if (hasRuntimeType(parsed, "number") || hasRuntimeType(parsed, "boolean")) {
+  if (typeof parsed === "number" || typeof parsed === "boolean") {
     return String(parsed);
   }
   if (Array.isArray(parsed) && parsed.length === 0) {
@@ -121,11 +116,11 @@ export const normalizeSessionErrorMessage = (value: string): string => {
       return withoutQuotes;
     }
     const record = parsed;
-    if (hasRuntimeType(record.message, "string") && record.message.trim().length > 0) {
+    if (typeof record.message === "string" && record.message.trim().length > 0) {
       return record.message.trim();
     }
     const nestedError = record.error;
-    if (isJsonRecord(nestedError) && hasRuntimeType(nestedError.message, "string")) {
+    if (isJsonRecord(nestedError) && typeof nestedError.message === "string") {
       return nestedError.message.trim();
     }
     return withoutQuotes;

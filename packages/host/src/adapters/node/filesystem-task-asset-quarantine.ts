@@ -1,11 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import {
-  taskAssetIdSchema,
-  taskAssetRenderContextSchema,
-  hasRuntimeType,
-} from "@openducktor/contracts";
+import { taskAssetIdSchema, taskAssetRenderContextSchema } from "@openducktor/contracts";
 import type { TaskAssetQuarantine } from "../../ports/task-asset-file-port";
 
 export type QuarantineManifest = TaskAssetQuarantine & { version: 1 };
@@ -14,7 +10,7 @@ const ACTIVE_PUBLICATIONS = new Set<string>();
 const PUBLICATION_PREFIX = ".publishing-";
 
 const isMissing = (cause: unknown): boolean =>
-  hasRuntimeType(cause, "object") && cause !== null && "code" in cause && cause.code === "ENOENT";
+  typeof cause === "object" && cause !== null && "code" in cause && cause.code === "ENOENT";
 
 const existingStat = async (target: string) => {
   try {
@@ -28,7 +24,7 @@ const existingStat = async (target: string) => {
 };
 
 const validateManifest = (value: unknown): QuarantineManifest => {
-  if (!hasRuntimeType(value, "object") || value === null) {
+  if (!(typeof value === "object") || value === null) {
     throw new Error("Task asset quarantine manifest must be an object.");
   }
   // SAFETY: the manifest fields are validated below; the record is re-exported

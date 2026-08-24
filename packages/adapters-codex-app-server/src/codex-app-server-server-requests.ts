@@ -1,4 +1,4 @@
-import { ODT_MCP_TOOL_NAMES, hasRuntimeType } from "@openducktor/contracts";
+import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
 import {
   AGENT_ROLE_TOOL_POLICY,
   type AgentEvent,
@@ -218,7 +218,7 @@ export const handleCodexServerRequest = async (
     }
   };
 
-  if (!hasRuntimeType(rawRequest.method, "string") || rawRequest.method.trim().length === 0) {
+  if (!(typeof rawRequest.method === "string") || rawRequest.method.trim().length === 0) {
     throw new Error("Codex app-server server request is missing method.");
   }
 

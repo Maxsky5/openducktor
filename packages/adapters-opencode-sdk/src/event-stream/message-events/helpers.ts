@@ -1,11 +1,8 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { Part } from "@opencode-ai/sdk/v2/client";
-import { asUnknownRecord, readArrayProp, readStringProp, type UnknownRecord } from "../../guards";
-import { opencodePartPayloadSchema } from "../../opencode-ingress";
 import type { readMessageModelSelection } from "../../message-normalizers";
 import type { mapPartToAgentStreamPart } from "../../stream-part-mapper";
 import type { SessionMessageMetadata } from "../../types";
-import type { ParsedOpencodeEvent as Event } from "../../opencode-ingress";
+import type { ParsedOpencodeEvent as Event } from "../../opencode-global-event-ingress";
 import type { EventStreamRuntime } from "../shared";
 import { applyDeltaToPart, getMessageParts } from "../shared";
 import { removeMessageProjectionState } from "./message-state";
@@ -67,31 +64,16 @@ export const hasTerminalStopSignalInParts = (
   return parts.some(
     (part) =>
       part.type === "step-finish" &&
-      hasRuntimeType(part.reason, "string") &&
+      typeof part.reason === "string" &&
       isTerminalStepFinishReason(part.reason),
   );
 };
 
-const hasTerminalStopSignalInRawParts = (parts: unknown[]): boolean => {
-  return parts.some((part) => {
-    const record = asUnknownRecord(part);
-    return (
-      record !== undefined &&
-      readStringProp(record, ["type"]) === "step-finish" &&
-      isTerminalStepFinishReason(readStringProp(record, ["reason"]))
-    );
-  });
-};
-
 export const hasMessageStopSignal = (input: {
   finish: string | undefined;
-  rawParts: unknown[];
   parts: Part[];
 }): boolean => {
-  return (
-    hasTerminalStopSignalInRawParts(input.rawParts) ||
-    hasTerminalStopSignalInParts(input.parts, input.finish)
-  );
+  return hasTerminalStopSignalInParts(input.parts, input.finish);
 };
 
 export const isAssistantMessageSettled = (input: {
@@ -135,19 +117,5 @@ export const updateMessageMetadata = (
     ...(displayParts ? { displayParts } : undefined),
   });
 };
-
-export const readRawMessageParts = (
-  properties: UnknownRecord,
-  info: UnknownRecord | undefined,
-): unknown[] => {
-  const directParts = readArrayProp(properties, "parts");
-  if (directParts) {
-    return directParts;
-  }
-  return readArrayProp(info, "parts") ?? [];
-};
-
-export const normalizeMessagePart = (rawPartRecord: UnknownRecord): Part =>
-  opencodePartPayloadSchema.parse(rawPartRecord);
 
 export type MessageEventHandler = (event: Event, runtime: EventStreamRuntime) => boolean;

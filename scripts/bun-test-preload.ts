@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { createRequire } from "node:module";
 
 const frontendRequire = createRequire(
@@ -8,7 +7,7 @@ const { GlobalRegistrator } = await import(
   frontendRequire.resolve("@happy-dom/global-registrator")
 );
 
-if (hasRuntimeType(globalThis.document, "undefined")) {
+if (typeof globalThis.document === "undefined") {
   GlobalRegistrator.register();
 }
 

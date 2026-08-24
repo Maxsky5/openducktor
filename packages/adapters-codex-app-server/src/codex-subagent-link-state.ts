@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentStreamPart, AgentSubagentStatus } from "@openducktor/core";
 import type { CodexSubAgentSourceMetadata, CodexThreadSnapshot } from "./codex-app-server-threads";
 
@@ -105,8 +104,8 @@ const isPreviousRunTerminalUpdate = (
 ): boolean =>
   existing?.status === "running" &&
   isTerminalStatus(input.status) &&
-  hasRuntimeType(existing.startedAtMs, "number") &&
-  hasRuntimeType(input.endedAtMs, "number") &&
+  typeof existing.startedAtMs === "number" &&
+  typeof input.endedAtMs === "number" &&
   input.endedAtMs < existing.startedAtMs;
 
 const isExplicitRunningRestart = (
@@ -118,15 +117,15 @@ const isExplicitRunningRestart = (
     input.status !== "running" ||
     !existing ||
     !isTerminalStatus(existing.status) ||
-    !hasRuntimeType(input.startedAtMs, "number")
+    !(typeof input.startedAtMs === "number")
   ) {
     return false;
   }
   let lifecycleBoundaryMs = existing.endedAtMs;
-  if (!hasRuntimeType(lifecycleBoundaryMs, "number") && existing.status === "completed") {
+  if (!(typeof lifecycleBoundaryMs === "number") && existing.status === "completed") {
     lifecycleBoundaryMs = existing.startedAtMs;
   }
-  return hasRuntimeType(lifecycleBoundaryMs, "number") && input.startedAtMs > lifecycleBoundaryMs;
+  return typeof lifecycleBoundaryMs === "number" && input.startedAtMs > lifecycleBoundaryMs;
 };
 
 const resolveStatus = (
@@ -227,7 +226,7 @@ export class CodexSubagentLinkState {
       status = existing?.status === "cancelled" ? "cancelled" : "completed";
     }
     let timing: Pick<CodexSubagentLinkInput, "startedAtMs" | "endedAtMs"> = {};
-    if (hasRuntimeType(thread.updatedAtMs, "number")) {
+    if (typeof thread.updatedAtMs === "number") {
       timing = isActive ? { startedAtMs: thread.updatedAtMs } : { endedAtMs: thread.updatedAtMs };
     }
     this.upsertLink({
@@ -306,8 +305,8 @@ export class CodexSubagentLinkState {
     if (
       status === "running" &&
       existing?.status === "running" &&
-      hasRuntimeType(existing.startedAtMs, "number") &&
-      hasRuntimeType(input.startedAtMs, "number")
+      typeof existing.startedAtMs === "number" &&
+      typeof input.startedAtMs === "number"
     ) {
       startedAtMs = Math.max(existing.startedAtMs, input.startedAtMs);
     }
@@ -317,8 +316,8 @@ export class CodexSubagentLinkState {
         : (input.endedAtMs ?? existing?.endedAtMs);
     if (
       isTerminalStatus(status) &&
-      hasRuntimeType(existing?.endedAtMs, "number") &&
-      hasRuntimeType(input.endedAtMs, "number")
+      typeof existing?.endedAtMs === "number" &&
+      typeof input.endedAtMs === "number"
     ) {
       endedAtMs = Math.max(existing.endedAtMs, input.endedAtMs);
     }
@@ -334,8 +333,8 @@ export class CodexSubagentLinkState {
       ...(agent ? { agent } : undefined),
       ...(metadata ? { metadata } : undefined),
       ...(executionMode ? { executionMode } : undefined),
-      ...(hasRuntimeType(startedAtMs, "number") ? { startedAtMs } : undefined),
-      ...(hasRuntimeType(endedAtMs, "number") ? { endedAtMs } : undefined),
+      ...(typeof startedAtMs === "number" ? { startedAtMs } : undefined),
+      ...(typeof endedAtMs === "number" ? { endedAtMs } : undefined),
     };
     this.storeLink(link, parentItemKey);
     const route = routeFromLink(link);
@@ -602,10 +601,8 @@ export class CodexSubagentLinkState {
       ...(link.childThreadId ? { externalSessionId: link.childThreadId } : undefined),
       ...(link.executionMode ? { executionMode: link.executionMode } : undefined),
       ...(link.metadata ? { metadata: link.metadata } : undefined),
-      ...(hasRuntimeType(link.startedAtMs, "number")
-        ? { startedAtMs: link.startedAtMs }
-        : undefined),
-      ...(hasRuntimeType(link.endedAtMs, "number") ? { endedAtMs: link.endedAtMs } : undefined),
+      ...(typeof link.startedAtMs === "number" ? { startedAtMs: link.startedAtMs } : undefined),
+      ...(typeof link.endedAtMs === "number" ? { endedAtMs: link.endedAtMs } : undefined),
     };
   }
 }

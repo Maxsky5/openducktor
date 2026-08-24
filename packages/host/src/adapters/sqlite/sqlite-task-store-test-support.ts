@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { Database } from "bun:sqlite";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -96,10 +95,10 @@ export const readDocumentCount = (databasePath: string, taskId: string, kind: st
       "select count(*) as count from task_documents where task_id = ? and kind = ?",
       (statement) => statement.get(taskId, kind),
     );
-    return hasRuntimeType(row, "object") &&
+    return typeof row === "object" &&
       row !== null &&
       "count" in row &&
-      hasRuntimeType(row.count, "number")
+      typeof row.count === "number"
       ? row.count
       : 0;
   } finally {
@@ -117,10 +116,7 @@ export const readTableNames = (databasePath: string): string[] => {
     );
     return rows
       .map((row) =>
-        hasRuntimeType(row, "object") &&
-        row !== null &&
-        "name" in row &&
-        hasRuntimeType(row.name, "string")
+        typeof row === "object" && row !== null && "name" in row && typeof row.name === "string"
           ? row.name
           : null,
       )
@@ -140,10 +136,7 @@ export const readDrizzleMigrationRows = (databasePath: string): Array<{ hash: st
     );
     return rows
       .map((row) =>
-        hasRuntimeType(row, "object") &&
-        row !== null &&
-        "hash" in row &&
-        hasRuntimeType(row.hash, "string")
+        typeof row === "object" && row !== null && "hash" in row && typeof row.hash === "string"
           ? { hash: row.hash }
           : null,
       )
@@ -162,17 +155,17 @@ export const readTaskColumnNullability = (
     const rows = useStatement(database, "PRAGMA table_info(tasks)", (statement) => statement.all());
     const column = rows.find(
       (row) =>
-        hasRuntimeType(row, "object") &&
+        typeof row === "object" &&
         row !== null &&
         "name" in row &&
         row.name === columnName &&
         "notnull" in row,
     );
     if (
-      hasRuntimeType(column, "object") &&
+      typeof column === "object" &&
       column !== null &&
       "notnull" in column &&
-      hasRuntimeType(column.notnull, "number")
+      typeof column.notnull === "number"
     ) {
       return column.notnull === 0;
     }

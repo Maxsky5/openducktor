@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { execFile } from "node:child_process";
 import type { EventEmitter } from "node:events";
 import { Effect } from "effect";
@@ -117,11 +116,7 @@ const runProcessCommand: ProcessCommandRunner = (command, args) =>
       { encoding: "buffer", windowsHide: true },
       (error, stdout, stderr) => {
         const status =
-          error && "code" in error && hasRuntimeType(error.code, "number")
-            ? error.code
-            : error
-              ? 1
-              : 0;
+          error && "code" in error && typeof error.code === "number" ? error.code : error ? 1 : 0;
         resume(
           Effect.succeed({
             status,

@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
   AgentRole,
@@ -116,12 +115,10 @@ const historyPartToChatMessage = (
             ...(part.fileContent ? { fileContent: part.fileContent } : undefined),
             ...(part.fileChanges ? { fileChanges: part.fileChanges } : undefined),
             ...(part.metadata ? { metadata: part.metadata } : undefined),
-            ...(hasRuntimeType(part.startedAtMs, "number")
+            ...(typeof part.startedAtMs === "number"
               ? { startedAtMs: part.startedAtMs }
               : undefined),
-            ...(hasRuntimeType(part.endedAtMs, "number")
-              ? { endedAtMs: part.endedAtMs }
-              : undefined),
+            ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : undefined),
           },
         },
         message,
@@ -143,12 +140,10 @@ const historyPartToChatMessage = (
             ...(part.externalSessionId ? { externalSessionId: part.externalSessionId } : undefined),
             ...(part.executionMode ? { executionMode: part.executionMode } : undefined),
             ...(part.metadata ? { metadata: part.metadata } : undefined),
-            ...(hasRuntimeType(part.startedAtMs, "number")
+            ...(typeof part.startedAtMs === "number"
               ? { startedAtMs: part.startedAtMs }
               : undefined),
-            ...(hasRuntimeType(part.endedAtMs, "number")
-              ? { endedAtMs: part.endedAtMs }
-              : undefined),
+            ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : undefined),
           },
         }),
         message,
@@ -253,11 +248,9 @@ export const historyToChatMessages = (
         ? (message.durationMs ??
           resolveAssistantTurnDurationMs({
             completedAtMs,
-            ...(hasRuntimeType(activityStartedAtMs, "number")
-              ? { activityStartedAtMs }
-              : undefined),
-            ...(hasRuntimeType(userAnchorAtMs, "number") ? { userAnchorAtMs } : undefined),
-            ...(hasRuntimeType(previousAssistantCompletedAtMs, "number")
+            ...(typeof activityStartedAtMs === "number" ? { activityStartedAtMs } : undefined),
+            ...(typeof userAnchorAtMs === "number" ? { userAnchorAtMs } : undefined),
+            ...(typeof previousAssistantCompletedAtMs === "number"
               ? { previousAssistantCompletedAtMs }
               : undefined),
           }))

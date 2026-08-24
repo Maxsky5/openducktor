@@ -1,13 +1,10 @@
 import {
   type AgentSessionTranscriptEventType,
   isAgentSessionTranscriptEventType,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { AgentEvent, AgentModelSelection } from "@openducktor/core";
-import { readEventSessionId } from "./event-stream/shared";
-import { readRecordProp } from "./guards";
-import { extractMessageTotalTokens, readMessageModelSelection } from "./message-normalizers";
-import type { ParsedOpencodeEvent as Event } from "./opencode-ingress";
+import { readMessageModelSelection, toTokenTotal } from "./message-normalizers";
+import type { ParsedOpencodeEvent as Event } from "./opencode-global-event-ingress";
 
 export type OpencodeSessionContextUsage = {
   readonly totalTokens: number;
@@ -43,15 +40,12 @@ export const readMessageUpdatedContextSignal = (
   if (event.type !== "message.updated") {
     return null;
   }
-  const properties = event.properties;
-  const info = readRecordProp(properties, "info");
-  const externalSessionId = readEventSessionId(event);
-  if (!info || !externalSessionId) {
+  const { info, sessionID: externalSessionId } = event.properties;
+  if (info.role !== "assistant") {
     return null;
   }
-  const rawParts = Array.isArray(properties?.parts) ? properties.parts : [];
-  const totalTokens = extractMessageTotalTokens(info, rawParts);
-  if (!hasRuntimeType(totalTokens, "number")) {
+  const totalTokens = toTokenTotal(info.tokens);
+  if (totalTokens === undefined) {
     return null;
   }
   const model = readMessageModelSelection(info);

@@ -1,4 +1,4 @@
-import { jsonValueSchema, type HostInvokeFailure, hasRuntimeType } from "@openducktor/contracts";
+import { jsonValueSchema, type HostInvokeFailure } from "@openducktor/contracts";
 import type { HostCommandName } from "@openducktor/host";
 import type { JsonValue } from "@openducktor/contracts";
 import { z } from "zod";
@@ -28,7 +28,7 @@ export const toCommandArgs = <T>(parsed: T): Record<string, unknown> => {
     throw new Error("Host command arguments must be a JSON object.");
   }
   const value = jsonValueSchema.parse(JSON.parse(serialized));
-  if (value === null || !hasRuntimeType(value, "object") || Array.isArray(value)) {
+  if (value === null || !(typeof value === "object") || Array.isArray(value)) {
     throw new Error("Host command arguments must be a JSON object.");
   }
   return value;

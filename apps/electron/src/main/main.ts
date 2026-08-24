@@ -9,7 +9,6 @@ import {
   appUpdateCheckInputSchema,
   appUpdateCommandResultSchema,
   appUpdateStateSchema,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 import { OPEN_DUCKTOR_STARTUP_BACKGROUND } from "@openducktor/frontend/startup-splash/theme";
 import {
@@ -570,10 +569,10 @@ const resolveLocalAttachmentPathForPreviewEffect = (
         }),
       );
     if (
-      !hasRuntimeType(resolved, "object") ||
+      !(typeof resolved === "object") ||
       resolved === null ||
       !("path" in resolved) ||
-      !hasRuntimeType(resolved.path, "string")
+      !(typeof resolved.path === "string")
     ) {
       return yield* Effect.fail(
         new ElectronValidationError({

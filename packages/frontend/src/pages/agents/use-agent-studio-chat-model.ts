@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { ChatSettings, RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { useMemo } from "react";
@@ -104,7 +103,7 @@ const toChatContextUsage = (
   return {
     totalTokens: selectedSessionContextUsage.totalTokens,
     contextWindow: selectedSessionContextUsage.contextWindow,
-    ...(hasRuntimeType(selectedSessionContextUsage.outputLimit, "number")
+    ...(typeof selectedSessionContextUsage.outputLimit === "number"
       ? { outputLimit: selectedSessionContextUsage.outputLimit }
       : undefined),
   };

@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "./messages";
@@ -24,10 +23,8 @@ const makeSubagentMessage = (
     ...(input.prompt ? { prompt: input.prompt } : undefined),
     ...(input.description ? { description: input.description } : undefined),
     ...(input.externalSessionId ? { externalSessionId: input.externalSessionId } : undefined),
-    ...(hasRuntimeType(input.startedAtMs, "number")
-      ? { startedAtMs: input.startedAtMs }
-      : undefined),
-    ...(hasRuntimeType(input.endedAtMs, "number") ? { endedAtMs: input.endedAtMs } : undefined),
+    ...(typeof input.startedAtMs === "number" ? { startedAtMs: input.startedAtMs } : undefined),
+    ...(typeof input.endedAtMs === "number" ? { endedAtMs: input.endedAtMs } : undefined),
   };
 
   return {

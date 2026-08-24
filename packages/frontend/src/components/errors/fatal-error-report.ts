@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 export interface FatalErrorReport {
   title: string;
   message: string;
@@ -66,7 +65,7 @@ export function buildFatalErrorReport(
     }
     return {
       title: "Unhandled promise rejection",
-      message: hasRuntimeType(reason, "string") ? reason : safeStringify(reason),
+      message: typeof reason === "string" ? reason : safeStringify(reason),
       stack: undefined,
       source,
       timestamp,
@@ -83,7 +82,7 @@ export function buildFatalErrorReport(
     };
   }
 
-  if (hasRuntimeType(cause, "string")) {
+  if (typeof cause === "string") {
     return { title: "Error", message: cause, stack: undefined, source, timestamp };
   }
 
@@ -153,7 +152,7 @@ function formatErrorLocation(event: ErrorEvent): string | undefined {
 function safeStringify(cause: unknown): string {
   try {
     const json = JSON.stringify(cause);
-    return hasRuntimeType(json, "string") ? json : String(cause);
+    return typeof json === "string" ? json : String(cause);
   } catch {
     return String(cause);
   }

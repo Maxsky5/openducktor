@@ -1,6 +1,5 @@
 import { Buffer } from "node:buffer";
 import { createRequire } from "node:module";
-import { hasRuntimeType } from "@openducktor/contracts";
 import {
   type ProcessTreeInspector,
   type ProcessTreeTerminator,
@@ -39,10 +38,10 @@ const loadNodePty = (): NodePtyModule => {
   const require = createRequire(import.meta.url);
   const candidate: unknown = require("node-pty");
   if (
-    !hasRuntimeType(candidate, "object") ||
+    !(typeof candidate === "object") ||
     candidate === null ||
     !("spawn" in candidate) ||
-    !hasRuntimeType(candidate.spawn, "function")
+    !(typeof candidate.spawn === "function")
   ) {
     throw new Error("The installed node-pty module does not export spawn().");
   }

@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { buildTodoItem } from "./agent-chat-test-fixtures";
@@ -14,7 +13,7 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  if (hasRuntimeType(previousActEnvironmentValue, "undefined")) {
+  if (typeof previousActEnvironmentValue === "undefined") {
     delete reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT;
     return;
   }

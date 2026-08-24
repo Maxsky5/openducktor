@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import {
   closestCenter,
   type DragEndEvent,
@@ -46,9 +45,7 @@ export const useHorizontalSortableTabs = ({
   itemIds: string[];
   onReorder: (draggedId: string, targetId: string, position: HorizontalTabDropPosition) => void;
 }) => {
-  const PrimarySensor = hasRuntimeType(globalThis.PointerEvent, "function")
-    ? PointerSensor
-    : MouseSensor;
+  const PrimarySensor = typeof globalThis.PointerEvent === "function" ? PointerSensor : MouseSensor;
   const sensors = useSensors(
     useSensor(PrimarySensor, {
       activationConstraint: { distance: 6 },
