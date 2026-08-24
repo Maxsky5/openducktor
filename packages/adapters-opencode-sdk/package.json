@@ -11,7 +11,7 @@
     "lint": "oxlint -c ../../.oxlintrc.json src"
   },
   "dependencies": {
-    "@opencode-ai/sdk": "^1.18.18",
+    "@opencode-ai/sdk": "^1.18.19",
     "@openducktor/contracts": "workspace:*",
     "@openducktor/core": "workspace:*",
     "@openducktor/path-support": "workspace:*",

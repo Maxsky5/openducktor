@@ -11,6 +11,6 @@
     "lint": "oxlint -c ../../.oxlintrc.json src"
   },
   "devDependencies": {
-    "bun-types": "^1.3.14"
+    "bun-types": "^1.4.0"
   }
 }
