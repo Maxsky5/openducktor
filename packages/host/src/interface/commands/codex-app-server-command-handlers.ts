@@ -69,10 +69,11 @@ const logValue = (value: unknown): string | undefined => {
 };
 
 const sandboxModeFromSandboxPolicy = (sandboxPolicy: unknown): string | undefined => {
-  if (!isRecordValue(sandboxPolicy)) {
+  const parsed = jsonValueSchema.safeParse(sandboxPolicy);
+  if (!parsed.success || !isRecordValue(parsed.data)) {
     return undefined;
   }
-  switch (sandboxPolicy.type) {
+  switch (parsed.data.type) {
     case "dangerFullAccess":
       return "danger-full-access";
     case "readOnly":
@@ -87,20 +88,22 @@ const sandboxModeFromSandboxPolicy = (sandboxPolicy: unknown): string | undefine
 };
 
 const networkAccessFromSandboxPolicy = (sandboxPolicy: unknown): string | undefined => {
-  if (!isRecordValue(sandboxPolicy)) {
+  const parsed = jsonValueSchema.safeParse(sandboxPolicy);
+  if (!parsed.success || !isRecordValue(parsed.data)) {
     return undefined;
   }
-  if (sandboxPolicy.type === "dangerFullAccess") {
+  if (parsed.data.type === "dangerFullAccess") {
     return "unrestricted";
   }
-  return logValue(sandboxPolicy.networkAccess);
+  return logValue(parsed.data.networkAccess);
 };
 
 const cwdFromSandboxPolicy = (sandboxPolicy: unknown): string | undefined => {
-  if (!isRecordValue(sandboxPolicy) || !Array.isArray(sandboxPolicy.writableRoots)) {
+  const parsed = jsonValueSchema.safeParse(sandboxPolicy);
+  if (!parsed.success || !isRecordValue(parsed.data) || !Array.isArray(parsed.data.writableRoots)) {
     return undefined;
   }
-  const firstWritableRoot = sandboxPolicy.writableRoots[0];
+  const firstWritableRoot = parsed.data.writableRoots[0];
   return typeof firstWritableRoot === "string" && firstWritableRoot.trim().length > 0
     ? firstWritableRoot
     : undefined;
@@ -164,7 +167,11 @@ const isCodexRequestMethod = (method: string): method is CodexAppServerRequestMe
   CODEX_APP_SERVER_REQUEST_METHODS.some((candidate) => candidate === method);
 
 const requireCodexRequestMethod = (value: unknown): CodexAppServerRequestMethod => {
-  const method = requireString(value, "method");
+  const parsed = jsonValueSchema.safeParse(value);
+  const method = parsed.success && typeof parsed.data === "string" ? parsed.data.trim() : "";
+  if (!method) {
+    throw new HostValidationError({ message: "method is required.", field: "method" });
+  }
   if (!isCodexRequestMethod(method)) {
     throw new HostValidationError({
       message: `Unsupported Codex app-server request method: ${method}`,
@@ -211,7 +218,11 @@ const optionalNullableString = (value: unknown, field: string): string | null | 
   if (value === undefined || value === null) {
     return value;
   }
-  return requireString(value, field);
+  const parsed = jsonValueSchema.safeParse(value);
+  if (!parsed.success || typeof parsed.data !== "string" || parsed.data.trim().length === 0) {
+    throw new HostValidationError({ message: `${field} is required.`, field });
+  }
+  return parsed.data.trim();
 };
 
 const optionalNullablePositiveInteger = (
@@ -238,8 +249,9 @@ const optionalNullableLiteral = <Value extends string>(
   if (value === undefined || value === null) {
     return value;
   }
-  const parsed = requireString(value, field);
-  const match = allowed.find((candidate) => candidate === parsed);
+  const parsed = jsonValueSchema.safeParse(value);
+  const candidate = parsed.success && typeof parsed.data === "string" ? parsed.data.trim() : "";
+  const match = allowed.find((allowedValue) => allowedValue === candidate);
   if (!match) {
     throw new HostValidationError({
       message: `${field} must be one of: ${allowed.join(", ")}.`,

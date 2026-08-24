@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { HostValidationError } from "../../effect/host-errors";
 
 const invalidInput = (message: string, field?: string): HostValidationError =>
@@ -13,6 +14,19 @@ export const requireRecord = (value: unknown, label: string): Record<string, unk
 
   // SAFETY: The preceding runtime guard establishes `Record<string, unknown>` before this assertion.
   return value as Record<string, unknown>;
+};
+
+export const unknownRecordSchema = z.record(z.string(), z.unknown());
+
+export const requireParsedRecord = (
+  result: z.ZodSafeParseResult<Record<string, unknown>>,
+  label: string,
+): Record<string, unknown> => {
+  if (!result.success) {
+    throw invalidInput(`${label} must be an object.`, label);
+  }
+
+  return result.data;
 };
 
 export const requireString = (value: unknown, label: string): string => {

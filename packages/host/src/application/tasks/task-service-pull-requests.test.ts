@@ -289,7 +289,8 @@ describe("createTaskService pull requests", () => {
     );
 
     expect(error).toBeInstanceOf(TaskPolicyError);
-    expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
+    if (!(error instanceof TaskPolicyError)) throw error;
+    expect(error.code).toBe("TASK_POLICY_ERROR");
   });
   test("links a pull request by number after fetching provider metadata", async () => {
     const calls: unknown[] = [];
@@ -3556,7 +3557,8 @@ describe("createTaskService pull requests", () => {
     );
 
     expect(error).toBeInstanceOf(TaskPolicyError);
-    expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
+    if (!(error instanceof TaskPolicyError)) throw error;
+    expect(error.code).toBe("TASK_POLICY_ERROR");
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },

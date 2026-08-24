@@ -48,9 +48,7 @@ const parseStagedLocalAttachment = (payload: unknown): StagedLocalAttachment => 
   return { path };
 };
 
-const parseResolvedLocalAttachment = (payload: unknown): ResolvedLocalAttachment => {
-  return parseStagedLocalAttachment(payload);
-};
+const parseResolvedLocalAttachment = parseStagedLocalAttachment;
 
 const workspaceList = async (invokeFn: InvokeFn): Promise<WorkspaceRecord[]> => {
   const payload = await invokeFn("workspace_list");

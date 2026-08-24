@@ -21,10 +21,8 @@ describe("task cleanup support", () => {
     });
 
     expect(error).toBeInstanceOf(HostOperationError);
-    expect((error as HostOperationError).operation).toBe("task_reset_implementation.cleanup");
-    if (!(error instanceof Error)) {
-      throw new TypeError("Expected an Error instance.");
-    }
+    if (!(error instanceof HostOperationError)) throw error;
+    expect(error.operation).toBe("task_reset_implementation.cleanup");
     expect(error.message).toContain(
       "Reset implementation cleanup already removed worktrees: /worktrees/repo/task-1.",
     );

@@ -3,6 +3,7 @@ import {
   type FileDiff,
   isJsonObject,
   type JsonObject,
+  type JsonValue,
   jsonValueSchema,
   odtToolErrorPayloadSchema,
 } from "@openducktor/contracts";
@@ -87,7 +88,7 @@ const readToolOutputText = (value: string | undefined): string | undefined => to
 
 const MCP_TRANSPORT_ERROR_PREFIX = /^MCP error\s+-?\d+:/i;
 
-const readErrorValueMessage = (value: unknown): string | undefined => {
+const readErrorValueMessage = (value: JsonValue | undefined): string | undefined => {
   if (typeof value === "string") {
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : undefined;
@@ -253,7 +254,7 @@ const normalizeToolMetadataFileDiff = (input: {
   };
 };
 
-const fileDiffFromToolFileMetadata = (value: unknown): FileDiff | null => {
+const fileDiffFromToolFileMetadata = (value: JsonValue): FileDiff | null => {
   const record = asUnknownRecord(value);
   if (!record) {
     return null;
@@ -269,7 +270,10 @@ const fileDiffFromToolFileMetadata = (value: unknown): FileDiff | null => {
   });
 };
 
-const fileDiffFromToolFileDiffMetadata = (value: unknown, input: unknown): FileDiff | null => {
+const fileDiffFromToolFileDiffMetadata = (
+  value: JsonValue | undefined,
+  input: Record<string, unknown>,
+): FileDiff | null => {
   const record = asUnknownRecord(value);
   if (!record) {
     return null;
@@ -291,7 +295,10 @@ const fileDiffFromToolFileDiffMetadata = (value: unknown, input: unknown): FileD
   });
 };
 
-const fileDiffFromWriteMetadata = (metadata: JsonObject, input: unknown): FileDiff | null => {
+const fileDiffFromWriteMetadata = (
+  metadata: JsonObject,
+  input: Record<string, unknown>,
+): FileDiff | null => {
   const inputRecord = asUnknownRecord(input);
   const exists = readBooleanProp(metadata, ["exists"]);
   const file =
@@ -323,7 +330,10 @@ const fileDiffFromWriteMetadata = (metadata: JsonObject, input: unknown): FileDi
   });
 };
 
-const fileContentFromWriteMetadata = (metadata: JsonObject, input: unknown): FileContent | null => {
+const fileContentFromWriteMetadata = (
+  metadata: JsonObject,
+  input: Record<string, unknown>,
+): FileContent | null => {
   const inputRecord = asUnknownRecord(input);
   const exists = readBooleanProp(metadata, ["exists"]);
   if (!inputRecord || exists !== true || readStringProp(metadata, ["diff"]) !== undefined) {

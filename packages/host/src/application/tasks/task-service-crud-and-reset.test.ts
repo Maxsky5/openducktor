@@ -461,8 +461,9 @@ describe("createTaskService task mutations and reset", () => {
     );
 
     expect(error).toBeInstanceOf(TaskPolicyError);
-    expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
-    expect((error as TaskPolicyError).message).toBe("Only epics can have subtasks.");
+    if (!(error instanceof TaskPolicyError)) throw error;
+    expect(error.code).toBe("TASK_POLICY_ERROR");
+    expect(error.message).toBe("Only epics can have subtasks.");
   });
   test("deletes a task without subtasks and stops task-scoped dev servers", async () => {
     const calls: unknown[] = [];
@@ -2299,8 +2300,9 @@ describe("createTaskService task mutations and reset", () => {
     );
 
     expect(error).toBeInstanceOf(TaskPolicyError);
-    expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
-    expect((error as TaskPolicyError).message).toBe("Tasks with subtasks cannot become subtasks.");
+    if (!(error instanceof TaskPolicyError)) throw error;
+    expect(error.code).toBe("TASK_POLICY_ERROR");
+    expect(error.message).toBe("Tasks with subtasks cannot become subtasks.");
   });
   test("transitions a task after validating workflow rules and enriches the result", async () => {
     const calls: unknown[] = [];

@@ -70,50 +70,38 @@ function directlyReceivesParameter(
   );
 }
 
-function isParserCall(
-  expression: ESTree.Expression,
-  parameterName: string,
-  allowNamedParser: boolean,
-): boolean {
+function isParserCall(expression: ESTree.Expression, parameterName: string): boolean {
   if (expression.type === "ParenthesizedExpression") {
-    return isParserCall(expression.expression, parameterName, allowNamedParser);
+    return isParserCall(expression.expression, parameterName);
   }
   if (expression.type === "MemberExpression" && expression.object.type !== "Super") {
-    return isParserCall(expression.object, parameterName, allowNamedParser);
+    return isParserCall(expression.object, parameterName);
   }
   if (expression.type === "AwaitExpression") {
-    return isParserCall(expression.argument, parameterName, allowNamedParser);
+    return isParserCall(expression.argument, parameterName);
   }
   if (expression.type === "LogicalExpression") {
     return (
-      isParserCall(expression.left, parameterName, allowNamedParser) ||
-      isParserCall(expression.right, parameterName, allowNamedParser)
+      isParserCall(expression.left, parameterName) || isParserCall(expression.right, parameterName)
     );
   }
   if (expression.type === "ConditionalExpression") {
     return (
       isNarrowingExpression(expression.test, parameterName) ||
-      isParserCall(expression.consequent, parameterName, allowNamedParser) ||
-      isParserCall(expression.alternate, parameterName, allowNamedParser)
+      isParserCall(expression.consequent, parameterName) ||
+      isParserCall(expression.alternate, parameterName)
     );
   }
   if (expression.type !== "CallExpression") {
     return false;
   }
   const name = calleeName(expression.callee);
-  const isParser =
-    name === "parse" ||
-    name === "safeParse" ||
-    (allowNamedParser &&
-      name !== "parseInt" &&
-      name !== "parseFloat" &&
-      /^(?:as|assert|decode|parse|require|validate)[A-Z_]/u.test(name ?? ""));
+  const isParser = name === "parse" || name === "safeParse";
   if (isParser && directlyReceivesParameter(expression, parameterName)) {
     return true;
   }
   return expression.arguments.some(
-    (argument) =>
-      argument.type !== "SpreadElement" && isParserCall(argument, parameterName, allowNamedParser),
+    (argument) => argument.type !== "SpreadElement" && isParserCall(argument, parameterName),
   );
 }
 
@@ -200,9 +188,15 @@ function isNarrowingExpression(expression: ESTree.Expression, parameterName: str
     return binaryNarrowingPolarity(expression, parameterName) === "true";
   }
   if (expression.type !== "CallExpression") return false;
-  const name = calleeName(expression.callee);
-  const isGuard = name === "isArray" || /^(?:has|is)[A-Z_]/u.test(name ?? "");
-  return isGuard && directlyReceivesParameter(expression, parameterName);
+  return (
+    expression.callee.type === "MemberExpression" &&
+    !expression.callee.computed &&
+    expression.callee.object.type === "Identifier" &&
+    expression.callee.object.name === "Array" &&
+    expression.callee.property.type === "Identifier" &&
+    expression.callee.property.name === "isArray" &&
+    directlyReceivesParameter(expression, parameterName)
+  );
 }
 
 function isNegativeNarrowingExpression(
@@ -326,7 +320,6 @@ function expressionReferencesParameter(
 function hasUnparsedParameterReference(
   expression: ESTree.Expression,
   parameterName: string,
-  allowNamedParser: boolean,
 ): boolean {
   if (expression.type === "Identifier") return expression.name === parameterName;
   if (
@@ -335,16 +328,16 @@ function hasUnparsedParameterReference(
     expression.type === "TSTypeAssertion" ||
     expression.type === "TSNonNullExpression"
   ) {
-    return hasUnparsedParameterReference(expression.expression, parameterName, allowNamedParser);
+    return hasUnparsedParameterReference(expression.expression, parameterName);
   }
   if (expression.type === "AwaitExpression") {
-    return hasUnparsedParameterReference(expression.argument, parameterName, allowNamedParser);
+    return hasUnparsedParameterReference(expression.argument, parameterName);
   }
   if (expression.type === "ConditionalExpression") {
     if (!expressionReferencesParameter(expression.test, parameterName)) {
       return (
-        hasUnparsedParameterReference(expression.consequent, parameterName, allowNamedParser) ||
-        hasUnparsedParameterReference(expression.alternate, parameterName, allowNamedParser)
+        hasUnparsedParameterReference(expression.consequent, parameterName) ||
+        hasUnparsedParameterReference(expression.alternate, parameterName)
       );
     }
     const positiveGuard =
@@ -359,7 +352,7 @@ function hasUnparsedParameterReference(
     return expressionReferencesParameter(expression, parameterName);
   }
   if (expression.type === "MemberExpression" && expression.object.type !== "Super") {
-    return hasUnparsedParameterReference(expression.object, parameterName, allowNamedParser);
+    return hasUnparsedParameterReference(expression.object, parameterName);
   }
   if (expression.type !== "CallExpression") {
     return expressionReferencesParameter(expression, parameterName);
@@ -367,15 +360,12 @@ function hasUnparsedParameterReference(
 
   const name = calleeName(expression.callee);
   const isDirectParser =
-    (name === "parse" ||
-      name === "safeParse" ||
-      (allowNamedParser &&
-        /^(?:as|assert|decode|parse|require|validate)[A-Z_]/u.test(name ?? ""))) &&
+    (name === "parse" || name === "safeParse") &&
     directlyReceivesParameter(expression, parameterName);
   return expression.arguments.some((argument) => {
     const value = argument.type === "SpreadElement" ? argument.argument : argument;
     if (isDirectParser && value.type === "Identifier" && value.name === parameterName) return false;
-    return hasUnparsedParameterReference(value, parameterName, allowNamedParser);
+    return hasUnparsedParameterReference(value, parameterName);
   });
 }
 
@@ -461,11 +451,11 @@ function statementReferencesParameter(statement: ESTree.Statement, parameterName
 function returnExpressionValidatesParameter(
   expression: ESTree.Expression,
   parameterName: string,
-  hasOutputContract: boolean,
+  _hasOutputContract: boolean,
 ): boolean {
   return (
-    (isParserCall(expression, parameterName, hasOutputContract) &&
-      !hasUnparsedParameterReference(expression, parameterName, hasOutputContract)) ||
+    (isParserCall(expression, parameterName) &&
+      !hasUnparsedParameterReference(expression, parameterName)) ||
     isNarrowingExpression(expression, parameterName) ||
     isNegativeNarrowingExpression(expression, parameterName)
   );
@@ -661,15 +651,9 @@ function analyzeStatement(
     }
     if (narrowed) return safeFlow(true, true);
     if (statement.expression.type !== "CallExpression") return unsafeFlow;
-    const name = calleeName(statement.expression.callee);
-    const assertsParameter =
-      hasOutputContract &&
-      /^(?:assert|require)[A-Z_]/u.test(name ?? "") &&
-      directlyReceivesParameter(statement.expression, parameterName);
-    if (assertsParameter) return safeFlow(true, true);
     const parsesParameter =
-      isParserCall(statement.expression, parameterName, hasOutputContract) &&
-      !hasUnparsedParameterReference(statement.expression, parameterName, hasOutputContract);
+      isParserCall(statement.expression, parameterName) &&
+      !hasUnparsedParameterReference(statement.expression, parameterName);
     return parsesParameter ? safeFlow(false, true) : unsafeFlow;
   }
   if (statement.type === "IfStatement") {
@@ -728,8 +712,11 @@ function bodyValidatesParameter(
 }
 
 function isValidatedUnknownParameter(node: ParameterOwner, name: string): boolean {
+  if (node.returnType?.typeAnnotation.type === "TSTypePredicate") {
+    return true;
+  }
   if (!isRuntimeFunction(node)) {
-    return node.returnType?.typeAnnotation.type === "TSTypePredicate";
+    return false;
   }
   if (node.body === null) return false;
   return bodyValidatesParameter(node.body, name, node.returnType != null);

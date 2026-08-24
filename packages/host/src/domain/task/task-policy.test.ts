@@ -53,10 +53,8 @@ describe("task domain policy", () => {
       throw new Error("Expected transition validation to fail.");
     } catch (error) {
       expect(error).toBeInstanceOf(TaskPolicyError);
-      expect((error as TaskPolicyError).code).toBe("TASK_TRANSITION_NOT_ALLOWED");
-      if (!(error instanceof Error)) {
-        throw new TypeError("Expected an Error instance.");
-      }
+      if (!(error instanceof TaskPolicyError)) throw error;
+      expect(error.code).toBe("TASK_TRANSITION_NOT_ALLOWED");
       expect(error.message).toContain("human_review -> blocked");
     }
   });
@@ -81,10 +79,8 @@ describe("task domain policy", () => {
       throw new Error("Expected epic completion validation to fail.");
     } catch (error) {
       expect(error).toBeInstanceOf(TaskPolicyError);
-      expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
-      if (!(error instanceof Error)) {
-        throw new TypeError("Expected an Error instance.");
-      }
+      if (!(error instanceof TaskPolicyError)) throw error;
+      expect(error.code).toBe("TASK_POLICY_ERROR");
       expect(error.message).toContain("Epic cannot be completed");
     }
   });
@@ -187,10 +183,8 @@ describe("task domain policy", () => {
       throw new Error("Expected manual close validation to fail.");
     } catch (error) {
       expect(error).toBeInstanceOf(TaskPolicyError);
-      expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
-      if (!(error instanceof Error)) {
-        throw new TypeError("Expected an Error instance.");
-      }
+      if (!(error instanceof TaskPolicyError)) throw error;
+      expect(error.code).toBe("TASK_POLICY_ERROR");
       expect(error.message).toContain("is already closed");
     }
   });
@@ -221,10 +215,8 @@ describe("task domain policy", () => {
       throw new Error("Expected manual close validation to fail.");
     } catch (error) {
       expect(error).toBeInstanceOf(TaskPolicyError);
-      expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
-      if (!(error instanceof Error)) {
-        throw new TypeError("Expected an Error instance.");
-      }
+      if (!(error instanceof TaskPolicyError)) throw error;
+      expect(error.code).toBe("TASK_POLICY_ERROR");
       expect(error.message).toContain("Epic cannot be completed");
     }
   });

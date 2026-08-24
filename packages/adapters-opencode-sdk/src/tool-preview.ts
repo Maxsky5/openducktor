@@ -1,5 +1,6 @@
 import type { AgentToolType } from "@openducktor/core";
 import { basenameForPath } from "@openducktor/path-support";
+import { z } from "zod";
 import { asUnknownRecord } from "./guards";
 import { resolveOpencodeToolStrategy } from "./tool-strategy-catalog";
 
@@ -78,10 +79,11 @@ const countCollectionItems = (value: unknown): number | null => {
   if (Array.isArray(value)) {
     return value.length;
   }
-  const record = asUnknownRecord(value);
-  if (!record) {
+  const parsed = z.record(z.string(), z.unknown()).safeParse(value);
+  if (!parsed.success) {
     return null;
   }
+  const record = parsed.data;
   if (Array.isArray(record.todos)) {
     return record.todos.length;
   }

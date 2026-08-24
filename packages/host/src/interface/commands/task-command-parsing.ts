@@ -21,6 +21,7 @@ import {
 import { z } from "zod";
 import { compactAgentSessionRecord } from "../../domain/agent-session-records";
 import { HostValidationError } from "../../effect/host-errors";
+import { requireParsedRecord, unknownRecordSchema } from "./command-inputs";
 
 const invalidInput = (message: string, field?: string): HostValidationError =>
   new HostValidationError({
@@ -241,7 +242,10 @@ export const parsePullRequest = (value: unknown): PullRequest => {
 };
 
 export const parsePullRequestContent = (value: unknown): PullRequestContent => {
-  const record = requireRecord(value, "task_pull_request_upsert input.input");
+  const record = requireParsedRecord(
+    unknownRecordSchema.safeParse(value),
+    "task_pull_request_upsert input.input",
+  );
   const title = requireString(record.title, "input.title");
   if (!(typeof record.body === "string")) {
     throw invalidInput("input.body is required.", "input.body");

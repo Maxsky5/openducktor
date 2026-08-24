@@ -9,6 +9,7 @@ import type {
 } from "@openducktor/core";
 import { isOdtMutationToolName, normalizeOdtToolName } from "@openducktor/core";
 import { Effect } from "effect";
+import { z } from "zod";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type {
   ClaudeAgentSdkServiceError,
@@ -77,8 +78,12 @@ export const readText = (value: unknown): string | undefined =>
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-export const readStringProp = (value: unknown, key: string): string | undefined =>
-  isRecord(value) ? readText(value[key]) : undefined;
+export const claudeUnknownRecordSchema = z.record(z.string(), z.unknown());
+
+export const readStringProp = (value: unknown, key: string): string | undefined => {
+  const parsed = claudeUnknownRecordSchema.safeParse(value);
+  return parsed.success ? readText(parsed.data[key]) : undefined;
+};
 
 export const claudeSessionScope = (input: ClaudeSessionInput) => input.sessionScope;
 
@@ -249,10 +254,11 @@ export const textFromContentBlocks = (content: unknown): string => {
 };
 
 export const historyMessageText = (message: unknown): string => {
-  if (!isRecord(message)) {
+  const parsed = claudeUnknownRecordSchema.safeParse(message);
+  if (!parsed.success) {
     return "";
   }
-  return textFromContentBlocks(message.content);
+  return textFromContentBlocks(parsed.data.content);
 };
 
 export const modelSelection = (model: string): AgentModelSelection => ({

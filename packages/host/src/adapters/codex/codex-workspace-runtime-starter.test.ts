@@ -602,8 +602,6 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
 
   test("rejects pending Codex transport requests before waiting on process-tree cleanup", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-codex-transport-first-"));
-    const originalSetTimeout = globalThis.setTimeout;
-    const originalClearTimeout = globalThis.clearTimeout;
     try {
       const repo = join(root, "repo");
       await mkdir(repo);
@@ -613,17 +611,22 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       });
       const codexAppServer = createCodexAppServerTransportRegistry();
       let pendingRequestSettled = false;
-      let requestTimeoutClearedBeforeProcessCleanup = false;
-      let requestTimeout: ReturnType<typeof setTimeout> | null = null;
-      let requestTimeoutCleared = false;
+      let markProcessCleanupStarted: () => void = () => undefined;
+      let releaseProcessCleanup: () => void = () => undefined;
+      const processCleanupStarted = new Promise<void>((resolve) => {
+        markProcessCleanupStarted = resolve;
+      });
+      const processCleanupGate = new Promise<void>((resolve) => {
+        releaseProcessCleanup = resolve;
+      });
 
       const starter = createCodexWorkspaceRuntimeStarter({
         codexAppServer,
         processEnv: { ...process.env, PATH: `${root}:${process.env.PATH ?? ""}` },
         processTreeTerminator: () =>
           Effect.gen(function* () {
-            yield* Effect.promise(() => Promise.resolve());
-            requestTimeoutClearedBeforeProcessCleanup = requestTimeoutCleared;
+            markProcessCleanupStarted();
+            yield* Effect.promise(() => processCleanupGate);
             return yield* Effect.fail(
               new HostOperationError({
                 operation: "process-tree.stop",
@@ -652,32 +655,6 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         }),
       );
 
-      const replacementSetTimeout = (
-        handler: (...args: unknown[]) => void,
-        timeout?: number,
-        ...args: unknown[]
-      ) => {
-        const timer = originalSetTimeout(handler, timeout, ...args);
-        if (timeout === 4_000) {
-          requestTimeout = timer;
-        }
-        return timer;
-      };
-      const replacementClearTimeout = (timer: NodeJS.Timeout | undefined) => {
-        if (timer === requestTimeout) {
-          requestTimeoutCleared = true;
-        }
-        return originalClearTimeout(timer);
-      };
-      Object.defineProperty(globalThis, "setTimeout", {
-        configurable: true,
-        value: replacementSetTimeout,
-      });
-      Object.defineProperty(globalThis, "clearTimeout", {
-        configurable: true,
-        value: replacementClearTimeout,
-      });
-
       const requestPromise = Effect.runPromise(
         codexAppServer.request({
           runtimeId,
@@ -692,14 +669,13 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
       expect(pendingRequestSettled).toBe(false);
 
-      await expect(Effect.runPromise(handle.stop())).rejects.toThrow(
-        "process tree: process tree stayed alive",
-      );
-      expect(requestTimeoutClearedBeforeProcessCleanup).toBe(true);
-      await expect(requestPromise).resolves.toBeInstanceOf(Error);
+      const stopping = Effect.runPromise(handle.stop());
+      await processCleanupStarted;
+      const requestError = await requestPromise;
+      releaseProcessCleanup();
+      expect(requestError).toBeInstanceOf(Error);
+      await expect(stopping).rejects.toThrow("process tree: process tree stayed alive");
     } finally {
-      globalThis.setTimeout = originalSetTimeout;
-      globalThis.clearTimeout = originalClearTimeout;
       await removeTestDirectory(root);
     }
   });

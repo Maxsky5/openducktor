@@ -16,8 +16,8 @@ import type { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import type { CodexSessionState } from "./types";
 
 export type CodexSessionRuntimeSnapshotReaderDeps = {
-  runtimeClients: CodexRuntimeClientResolver;
-  threadInventory: CodexThreadInventoryReader;
+  runtimeClients: Pick<CodexRuntimeClientResolver, "clientForRuntime" | "resolve">;
+  threadInventory: Pick<CodexThreadInventoryReader, "read" | "refresh" | "readForDirectories">;
   sessions: CodexSessionLookup;
   pendingInput: CodexPendingInputState;
   hasActiveTurn: (externalSessionId: string) => boolean;

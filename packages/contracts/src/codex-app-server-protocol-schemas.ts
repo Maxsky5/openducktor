@@ -879,10 +879,11 @@ export const codexAppServerRequestResultSchema = z.union([
 
 export const parseCodexAppServerRequestResultValue = <
   Method extends keyof CodexAppServerRequestResultMap,
-  Input,
 >(
   method: Method,
-  value: Input,
-): CodexAppServerRequestResultMap[Method] =>
-  // SAFETY: The method key selects one schema, and Zod returns that same key's inferred output.
-  codexAppServerRequestResultSchemas[method].parse(value) as CodexAppServerRequestResultMap[Method];
+  value: unknown,
+): CodexAppServerRequestResultMap[Method] => {
+  const parsed = codexAppServerRequestResultSchemas[method].parse(value);
+  // SAFETY: `method` selects the schema whose output defines the same method key in the result map.
+  return parsed as CodexAppServerRequestResultMap[Method];
+};

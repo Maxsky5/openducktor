@@ -1,14 +1,15 @@
 import { jsonValueSchema } from "@openducktor/contracts";
 import type { Session } from "@opencode-ai/sdk/v2/client";
-import { asUnknownRecord, readStringProp, type UnknownRecord } from "./guards";
 import {
   opencodeMessageInfoPayloadSchema,
   opencodePartPayloadSchema,
+  type ParsedOpencodeMessage,
   type ParsedOpencodePart,
 } from "./opencode-ingress";
 import {
   parseOpencodeDirectEvent,
   parseOpencodeGlobalEventPayload,
+  type IgnoredOpencodeEventType,
   type ParsedOpencodeEvent,
   type ParsedOpencodeGlobalEventPayload,
 } from "./opencode-global-event-ingress";
@@ -41,35 +42,47 @@ export const createOpencodeSessionFixture = (
   },
 });
 
-export const createOpencodeMessageInfoFixture = (info: UnknownRecord) => {
-  const parsed = opencodeMessageInfoPayloadSchema.safeParse(info);
-  if (parsed.success) {
-    return parsed.data;
-  }
+type UserMessageInfo = Extract<ParsedOpencodeMessage["info"], { role: "user" }>;
+type AssistantMessageInfo = Extract<ParsedOpencodeMessage["info"], { role: "assistant" }>;
 
+export type OpencodeMessageInfoFixtureInput =
+  | (Omit<Partial<UserMessageInfo>, "model" | "role" | "time"> & {
+      id: string;
+      role: "user";
+      model?: Partial<UserMessageInfo["model"]>;
+      modelID?: string;
+      providerID?: string;
+      time?: Partial<UserMessageInfo["time"]>;
+      variant?: string;
+    })
+  | (Omit<Partial<AssistantMessageInfo>, "path" | "role" | "time" | "tokens"> & {
+      id: string;
+      role: "assistant";
+      path?: Partial<AssistantMessageInfo["path"]>;
+      time?: Partial<AssistantMessageInfo["time"]>;
+      tokens?: Partial<AssistantMessageInfo["tokens"]> & {
+        cache?: Partial<AssistantMessageInfo["tokens"]["cache"]>;
+      };
+    });
+
+export const createOpencodeMessageInfoFixture = (info: OpencodeMessageInfoFixtureInput) => {
   if (info.role === "user") {
-    const model = asUnknownRecord(info.model);
-    const providerID =
-      readStringProp(info, ["providerID"]) ?? readStringProp(model, ["providerID"]);
-    const modelID = readStringProp(info, ["modelID"]) ?? readStringProp(model, ["modelID"]);
-    const variant = readStringProp(info, ["variant"]) ?? readStringProp(model, ["variant"]);
+    const { model, modelID, providerID, time, variant, ...fields } = info;
+    const selectedVariant = variant ?? model?.variant;
     return opencodeMessageInfoPayloadSchema.parse({
       agent: "build",
       model: {
-        modelID: modelID ?? "gpt-5",
-        providerID: providerID ?? "openai",
-        ...(variant ? { variant } : undefined),
+        modelID: modelID ?? model?.modelID ?? "gpt-5",
+        providerID: providerID ?? model?.providerID ?? "openai",
+        ...(selectedVariant ? { variant: selectedVariant } : undefined),
       },
       sessionID: "session-opencode-1",
-      time: { created: 1 },
-      ...info,
+      ...fields,
+      time: { created: 1, ...time },
     });
   }
 
-  const tokens = asUnknownRecord(info.tokens);
-  const cache = asUnknownRecord(tokens?.cache);
-  const path = asUnknownRecord(info.path);
-  const time = asUnknownRecord(info.time);
+  const { path, role: _role, time, tokens, ...fields } = info;
   return opencodeMessageInfoPayloadSchema.parse({
     agent: "build",
     cost: 0,
@@ -80,12 +93,12 @@ export const createOpencodeMessageInfoFixture = (info: UnknownRecord) => {
     providerID: "openai",
     role: "assistant",
     sessionID: "session-opencode-1",
-    ...info,
+    ...fields,
     time: { created: 1, ...time },
     tokens: {
       ...DEFAULT_TOKENS,
       ...tokens,
-      cache: { ...DEFAULT_TOKENS.cache, ...cache },
+      cache: { ...DEFAULT_TOKENS.cache, ...tokens?.cache },
     },
   });
 };
@@ -98,12 +111,22 @@ const serializeToolResult = (value: unknown): string => {
   return typeof parsed === "string" ? parsed : JSON.stringify(parsed);
 };
 
-export const createOpencodePartFixture = (part: UnknownRecord): ParsedOpencodePart => {
-  const parsed = opencodePartPayloadSchema.safeParse(part);
-  if (parsed.success) {
-    return parsed.data;
-  }
+type PartialVariant<Variant, Discriminator extends keyof Variant> = Variant extends Variant
+  ? Pick<Variant, Discriminator> & Partial<Omit<Variant, Discriminator>>
+  : never;
+type ToolPart = Extract<ParsedOpencodePart, { type: "tool" }>;
+type ToolStateFixture = ToolPart["state"] extends infer State
+  ? State extends { status: string }
+    ? Pick<State, "status"> & Partial<Omit<State, "status">>
+    : never
+  : never;
 
+export type OpencodePartFixtureInput =
+  | PartialVariant<Exclude<ParsedOpencodePart, ToolPart>, "type">
+  | (Pick<ToolPart, "type"> &
+      Partial<Omit<ToolPart, "state" | "type">> & { state: ToolStateFixture });
+
+export const createOpencodePartFixture = (part: OpencodePartFixtureInput): ParsedOpencodePart => {
   if (part.type === "reasoning") {
     return opencodePartPayloadSchema.parse({ time: { start: 1 }, ...part });
   }
@@ -111,23 +134,21 @@ export const createOpencodePartFixture = (part: UnknownRecord): ParsedOpencodePa
     return opencodePartPayloadSchema.parse({ hash: "test-patch", ...part });
   }
   if (part.type === "step-finish") {
-    const tokens = asUnknownRecord(part.tokens);
-    const cache = asUnknownRecord(tokens?.cache);
     return opencodePartPayloadSchema.parse({
       ...part,
       cost: part.cost ?? 0,
       reason: part.reason ?? "stop",
       tokens: {
         ...DEFAULT_TOKENS,
-        ...tokens,
-        cache: { ...DEFAULT_TOKENS.cache, ...cache },
+        ...part.tokens,
+        cache: { ...DEFAULT_TOKENS.cache, ...part.tokens?.cache },
       },
     });
   }
   if (part.type === "file") {
-    const source = asUnknownRecord(part.source);
+    const source = part.source;
     if (source?.type === "file" && source.text === undefined) {
-      const path = readStringProp(source, ["path"]) ?? "fixture";
+      const path = source.path ?? "fixture";
       return opencodePartPayloadSchema.parse({
         ...part,
         source: { ...source, text: { end: path.length, start: 0, value: path } },
@@ -138,14 +159,14 @@ export const createOpencodePartFixture = (part: UnknownRecord): ParsedOpencodePa
     return opencodePartPayloadSchema.parse(part);
   }
 
-  const state = asUnknownRecord(part.state);
-  const status = readStringProp(state, ["status"]);
-  const input = asUnknownRecord(state?.input) ?? {};
+  const state = part.state;
+  const status = state.status;
+  const input = state.input ?? {};
   switch (status) {
     case "pending":
       return opencodePartPayloadSchema.parse({
         ...part,
-        state: { input, raw: readStringProp(state, ["raw"]) ?? "", status },
+        state: { input, raw: state.raw ?? "", status },
       });
     case "running":
       return opencodePartPayloadSchema.parse({
@@ -153,9 +174,6 @@ export const createOpencodePartFixture = (part: UnknownRecord): ParsedOpencodePa
         state: { time: { start: 1 }, ...state, input, status },
       });
     case "completed":
-      if (!state) {
-        return opencodePartPayloadSchema.parse(part);
-      }
       return opencodePartPayloadSchema.parse({
         ...part,
         state: {
@@ -169,9 +187,6 @@ export const createOpencodePartFixture = (part: UnknownRecord): ParsedOpencodePa
         },
       });
     case "error":
-      if (!state) {
-        return opencodePartPayloadSchema.parse(part);
-      }
       return opencodePartPayloadSchema.parse({
         ...part,
         state: {
@@ -187,92 +202,157 @@ export const createOpencodePartFixture = (part: UnknownRecord): ParsedOpencodePa
   }
 };
 
-export const createOpencodeEventFixtures = (
-  event: UnknownRecord,
-  index: number,
-): Array<ParsedOpencodeGlobalEventPayload | UnknownRecord> => {
-  const id = readStringProp(event, ["id"]) ?? `test-event-${index}`;
-  if (event.type === "sync") {
-    return [{ ...event, id }];
-  }
+export type DirectEventFixtureInput<Variant = ParsedOpencodeEvent> = Variant extends {
+  id: string;
+  properties: infer Properties;
+  type: infer Type;
+}
+  ? Type extends "message.updated"
+    ? {
+        id?: string;
+        type: Type;
+        properties: Omit<Properties, "info" | "sessionID"> & {
+          info: OpencodeMessageInfoFixtureInput;
+          sessionID?: string;
+        };
+      }
+    : Type extends "message.part.updated"
+      ? {
+          id?: string;
+          type: Type;
+          properties: Omit<Properties, "part" | "sessionID" | "time"> & {
+            part: OpencodePartFixtureInput;
+            sessionID?: string;
+            time?: number;
+          };
+        }
+      : { id?: string; properties: Properties; type: Type }
+  : never;
 
-  const properties = asUnknownRecord(event.properties) ?? {};
-  if (event.type === "message.updated") {
-    const info = asUnknownRecord(properties.info) ?? {};
-    const messageInfo = createOpencodeMessageInfoFixture(info);
-    const sessionID = readStringProp(properties, ["sessionID"]) ?? messageInfo.sessionID;
-    const messageEvent = parseOpencodeGlobalEventPayload({
-      id,
-      type: "message.updated",
-      properties: { info: messageInfo, sessionID },
-    });
-    const suppliedParts = Array.isArray(properties.parts) ? properties.parts : [];
-    const text = messageInfo.role === "user" ? readStringProp(info, ["text"]) : undefined;
-    const hasSuppliedTextPart = suppliedParts.some(
-      (part) => asUnknownRecord(part)?.type === "text",
-    );
-    const parts =
-      text && !hasSuppliedTextPart
-        ? [
-            ...suppliedParts,
-            {
-              id: `${messageInfo.id}-text`,
-              messageID: messageInfo.id,
-              sessionID,
-              text,
-              type: "text",
-            },
-          ]
-        : suppliedParts;
+type SyncEventFixtureInput = Omit<
+  Extract<ParsedOpencodeGlobalEventPayload, { type: "sync" }>,
+  "id"
+> & { id?: string };
+
+export type MalformedOpencodeControlEventFixture = {
+  id: string;
+  type:
+    | "permission.v2.replied"
+    | "question.asked"
+    | "question.rejected"
+    | "question.replied"
+    | "question.v2.asked"
+    | "question.v2.rejected"
+    | "question.v2.replied"
+    | "session.status";
+  properties: Record<string, unknown>;
+};
+
+type IgnoredEventFixtureInput = {
+  id?: string;
+  type: IgnoredOpencodeEventType | "server.heartbeat";
+  properties: Record<string, unknown>;
+};
+
+export type OpencodeMessageEventGroupFixture = {
+  fixture: "message-events";
+  id?: string;
+  info: OpencodeMessageInfoFixtureInput;
+  parts?: OpencodePartFixtureInput[];
+  sessionID?: string;
+};
+
+export const createOpencodeMessageEventGroupFixture = (
+  input: Omit<OpencodeMessageEventGroupFixture, "fixture">,
+): OpencodeMessageEventGroupFixture => ({ fixture: "message-events", ...input });
+
+export type OpencodeEventFixtureInput =
+  | DirectEventFixtureInput
+  | IgnoredEventFixtureInput
+  | MalformedOpencodeControlEventFixture
+  | OpencodeMessageEventGroupFixture
+  | SyncEventFixtureInput;
+
+export const createOpencodeEventFixtures = (
+  event: OpencodeEventFixtureInput,
+  index: number,
+): Array<
+  IgnoredEventFixtureInput | MalformedOpencodeControlEventFixture | ParsedOpencodeGlobalEventPayload
+> => {
+  if ("fixture" in event) {
+    const messageInfo = createOpencodeMessageInfoFixture(event.info);
+    const sessionID = event.sessionID ?? messageInfo.sessionID;
+    const id = event.id ?? `test-event-${index}`;
     return [
-      messageEvent,
-      ...parts.map((part, partIndex) => {
-        const partRecord = asUnknownRecord(part) ?? {};
-        const parsedPart = createOpencodePartFixture(partRecord);
+      parseOpencodeGlobalEventPayload({
+        id,
+        type: "message.updated",
+        properties: { info: messageInfo, sessionID },
+      }),
+      ...(event.parts ?? []).map((partInput, partIndex) => {
+        const part = createOpencodePartFixture(partInput);
         return parseOpencodeGlobalEventPayload({
           id: `${id}-part-${partIndex}`,
           type: "message.part.updated",
-          properties: {
-            part: parsedPart,
-            sessionID: parsedPart.sessionID,
-            time: messageInfo.time.created,
-          },
+          properties: { part, sessionID: part.sessionID, time: messageInfo.time.created },
         });
       }),
     ];
   }
+
+  const id = event.id ?? `test-event-${index}`;
+  if (event.type === "sync") {
+    return [parseOpencodeGlobalEventPayload({ ...event, id })];
+  }
+
+  if (event.type === "message.updated") {
+    const messageInfo = createOpencodeMessageInfoFixture(event.properties.info);
+    return [
+      parseOpencodeGlobalEventPayload({
+        id,
+        type: "message.updated",
+        properties: {
+          ...event.properties,
+          info: messageInfo,
+          sessionID: event.properties.sessionID ?? messageInfo.sessionID,
+        },
+      }),
+    ];
+  }
   if (event.type === "message.part.updated") {
-    const part = createOpencodePartFixture(asUnknownRecord(properties.part) ?? {});
+    const part = createOpencodePartFixture(event.properties.part);
     return [
       parseOpencodeGlobalEventPayload({
         id,
         type: "message.part.updated",
         properties: {
+          ...event.properties,
           part,
-          sessionID: readStringProp(properties, ["sessionID"]) ?? part.sessionID,
-          time: typeof properties.time === "number" ? properties.time : 1,
+          sessionID: event.properties.sessionID ?? part.sessionID,
+          time: event.properties.time ?? 1,
         },
       }),
     ];
   }
 
-  return [
-    {
-      ...event,
-      id,
-      properties,
-    },
-  ];
+  return [{ ...event, id }];
 };
 
+export const createParsedOpencodeMessageEventGroupFixtures = (
+  input: Omit<OpencodeMessageEventGroupFixture, "fixture">,
+): ParsedOpencodeEvent[] =>
+  createOpencodeEventFixtures(createOpencodeMessageEventGroupFixture(input), 0).map((fixture) =>
+    parseOpencodeDirectEvent(fixture),
+  );
+
 export const createParsedOpencodeEventFixtures = (
-  event: UnknownRecord,
+  event: DirectEventFixtureInput,
   index = 0,
 ): ParsedOpencodeEvent[] =>
   createOpencodeEventFixtures(event, index).map((fixture) => parseOpencodeDirectEvent(fixture));
 
 export const createParsedOpencodeEventFixture = (
-  event: UnknownRecord,
+  event: DirectEventFixtureInput,
   index = 0,
 ): ParsedOpencodeEvent => {
   const fixtures = createParsedOpencodeEventFixtures(event, index);

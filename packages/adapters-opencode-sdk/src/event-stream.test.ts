@@ -52,7 +52,11 @@ import {
   createInvalidOpencodeEventFixture,
   createInvalidOpencodePartFixture,
 } from "./test-fixture";
-import { createParsedOpencodeEventFixture } from "./opencode-protocol-test-fixtures";
+import {
+  createOpencodeMessageEventGroupFixture,
+  createParsedOpencodeEventFixture,
+  type OpencodePartFixtureInput,
+} from "./opencode-protocol-test-fixtures";
 
 const IMAGE_ATTACHMENT_DISPLAY_PART = {
   kind: "attachment" as const,
@@ -116,7 +120,7 @@ test("global event observation becomes ready only after the lazy SSE stream conn
 
   connect?.();
   await observation;
-  expect(order).toEqual(["server.connected", "ready"]);
+  expect(order).toEqual(["ready"]);
 });
 
 test("global event observation drops the raw envelope after normalizing sync events", async () => {
@@ -519,7 +523,7 @@ const makeAssistantTextPart = (input: {
       start: input.start ?? 1,
       end: input.end ?? 1,
     },
-  }) satisfies Record<string, unknown>;
+  }) satisfies OpencodePartFixtureInput;
 
 const makeAssistantMessageUpdatedEvent = (input: {
   messageId: string;
@@ -527,9 +531,9 @@ const makeAssistantMessageUpdatedEvent = (input: {
   partId?: string;
   finish?: string;
   completedAt?: number;
-  parts?: unknown[];
-  info?: Record<string, unknown>;
-}): Event => {
+  parts?: OpencodePartFixtureInput[];
+  info?: { modelID?: string; providerID?: string; summary?: boolean };
+}): TestGlobalEventPayload => {
   const parts =
     input.parts ??
     (input.text !== undefined
@@ -542,21 +546,54 @@ const makeAssistantMessageUpdatedEvent = (input: {
         ]
       : undefined);
 
-  return createInvalidOpencodeEventFixture({
-    type: "message.updated",
-    properties: {
-      info: {
-        id: input.messageId,
-        role: "assistant",
-        sessionID: "external-session-1",
-        ...(input.finish ? { finish: input.finish } : undefined),
-        ...(input.completedAt !== undefined
-          ? { time: { completed: input.completedAt } }
-          : undefined),
-        ...input.info,
-      },
-      ...(parts ? { parts } : undefined),
+  return createOpencodeMessageEventGroupFixture({
+    info: {
+      id: input.messageId,
+      role: "assistant",
+      sessionID: "external-session-1",
+      ...(input.finish ? { finish: input.finish } : undefined),
+      ...(input.completedAt !== undefined ? { time: { completed: input.completedAt } } : undefined),
+      ...input.info,
     },
+    ...(parts ? { parts } : undefined),
+  });
+};
+
+const makeUserMessageUpdatedEvent = (input: {
+  messageId: string;
+  createdAt: number;
+  text?: string;
+  agent?: string;
+  modelID?: string;
+  providerID?: string;
+  variant?: string;
+  parts?: OpencodePartFixtureInput[];
+}): TestGlobalEventPayload => {
+  const parts =
+    input.parts ??
+    (input.text === undefined
+      ? undefined
+      : [
+          {
+            id: `${input.messageId}-text`,
+            sessionID: "external-session-1",
+            messageID: input.messageId,
+            type: "text" as const,
+            text: input.text,
+          },
+        ]);
+  return createOpencodeMessageEventGroupFixture({
+    info: {
+      id: input.messageId,
+      role: "user",
+      sessionID: "external-session-1",
+      time: { created: input.createdAt },
+      ...(input.agent ? { agent: input.agent } : undefined),
+      ...(input.modelID ? { modelID: input.modelID } : undefined),
+      ...(input.providerID ? { providerID: input.providerID } : undefined),
+      ...(input.variant ? { variant: input.variant } : undefined),
+    },
+    ...(parts ? { parts } : undefined),
   });
 };
 
@@ -724,23 +761,14 @@ describe("event-stream", () => {
 
   test("emits user_message when opencode acknowledges a user turn", async () => {
     const emitted = await runEventStream([
-      createInvalidOpencodeEventFixture({
-        type: "message.updated",
-        properties: {
-          info: {
-            id: "user-message-1",
-            role: "user",
-            sessionID: "external-session-1",
-            providerID: "openai",
-            modelID: "gpt-5",
-            agent: "Hephaestus",
-            variant: "high",
-            text: "Generate the PR",
-            time: {
-              created: Date.parse("2026-02-22T12:00:03.000Z"),
-            },
-          },
-        },
+      makeUserMessageUpdatedEvent({
+        messageId: "user-message-1",
+        text: "Generate the PR",
+        createdAt: Date.parse("2026-02-22T12:00:03.000Z"),
+        providerID: "openai",
+        modelID: "gpt-5",
+        agent: "Hephaestus",
+        variant: "high",
       }),
     ]);
 
@@ -862,19 +890,10 @@ describe("event-stream", () => {
 
   test("re-emits user_message when later parts update the visible text", async () => {
     const emitted = await runEventStream([
-      createInvalidOpencodeEventFixture({
-        type: "message.updated",
-        properties: {
-          info: {
-            id: "user-message-4",
-            role: "user",
-            sessionID: "external-session-1",
-            text: "Old text",
-            time: {
-              created: Date.parse("2026-02-22T12:00:06.000Z"),
-            },
-          },
-        },
+      makeUserMessageUpdatedEvent({
+        messageId: "user-message-4",
+        text: "Old text",
+        createdAt: Date.parse("2026-02-22T12:00:06.000Z"),
       }),
       createInvalidOpencodeEventFixture({
         type: "message.part.updated",
@@ -963,19 +982,10 @@ describe("event-stream", () => {
 
   test("preserves visible user text when later file parts arrive without visible text parts", async () => {
     const emitted = await runEventStream([
-      createInvalidOpencodeEventFixture({
-        type: "message.updated",
-        properties: {
-          info: {
-            id: "user-message-5",
-            role: "user",
-            sessionID: "external-session-1",
-            text: "check @src/main.ts please",
-            time: {
-              created: Date.parse("2026-02-22T12:00:07.000Z"),
-            },
-          },
-        },
+      makeUserMessageUpdatedEvent({
+        messageId: "user-message-5",
+        text: "check @src/main.ts please",
+        createdAt: Date.parse("2026-02-22T12:00:07.000Z"),
       }),
       createInvalidOpencodeEventFixture({
         type: "message.part.updated",
@@ -1051,19 +1061,10 @@ describe("event-stream", () => {
           },
         },
       }),
-      createInvalidOpencodeEventFixture({
-        type: "message.updated",
-        properties: {
-          info: {
-            id: "message-200",
-            role: "user",
-            sessionID: "external-session-1",
-            text: "Ship it",
-            time: {
-              created: Date.parse("2026-02-22T12:00:02.000Z"),
-            },
-          },
-        },
+      makeUserMessageUpdatedEvent({
+        messageId: "message-200",
+        text: "Ship it",
+        createdAt: Date.parse("2026-02-22T12:00:02.000Z"),
       }),
       createInvalidOpencodeEventFixture({
         type: "session.idle",
@@ -1092,19 +1093,10 @@ describe("event-stream", () => {
   test("does not leave a late queued-send acknowledgement stuck queued after idle", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession(
       [
-        createInvalidOpencodeEventFixture({
-          type: "message.updated",
-          properties: {
-            info: {
-              id: "message-200",
-              role: "user",
-              sessionID: "external-session-1",
-              text: "Ship it",
-              time: {
-                created: Date.parse("2026-02-22T12:00:02.000Z"),
-              },
-            },
-          },
+        makeUserMessageUpdatedEvent({
+          messageId: "message-200",
+          text: "Ship it",
+          createdAt: Date.parse("2026-02-22T12:00:02.000Z"),
         }),
       ],
       (nextSessionRecord) => {
@@ -1171,11 +1163,22 @@ describe("event-stream", () => {
             id: "msg-200",
             role: "user",
             sessionID: "external-session-1",
-            text: "Ship it",
             status: "read",
             time: {
               created: Date.parse("2026-02-22T12:00:02.000Z"),
             },
+          },
+        },
+      }),
+      createInvalidOpencodeEventFixture({
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "msg-200-text",
+            sessionID: "external-session-1",
+            messageID: "msg-200",
+            type: "text",
+            text: "Ship it",
           },
         },
       }),
@@ -1193,23 +1196,14 @@ describe("event-stream", () => {
   test("matches queued sends by exact model selection when content repeats", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession(
       [
-        createInvalidOpencodeEventFixture({
-          type: "message.updated",
-          properties: {
-            info: {
-              id: "msg-200",
-              role: "user",
-              sessionID: "external-session-1",
-              providerID: "openai",
-              modelID: "gpt-5",
-              agent: "Hephaestus",
-              variant: "high",
-              text: "Ship it",
-              time: {
-                created: Date.parse("2026-02-22T12:00:02.000Z"),
-              },
-            },
-          },
+        makeUserMessageUpdatedEvent({
+          messageId: "msg-200",
+          text: "Ship it",
+          createdAt: Date.parse("2026-02-22T12:00:02.000Z"),
+          providerID: "openai",
+          modelID: "gpt-5",
+          agent: "Hephaestus",
+          variant: "high",
         }),
       ],
       (nextSessionRecord) => {
@@ -1245,36 +1239,27 @@ describe("event-stream", () => {
   test("preserves queued local attachment preview paths when the runtime echoes a non-file attachment url", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession(
       [
-        createInvalidOpencodeEventFixture({
-          type: "message.updated",
-          properties: {
-            info: {
-              id: "msg-attachment-1",
-              role: "user",
+        makeUserMessageUpdatedEvent({
+          messageId: "msg-attachment-1",
+          createdAt: Date.parse("2026-02-22T12:00:02.000Z"),
+          parts: [
+            {
+              id: "part-text-1",
               sessionID: "external-session-1",
-              time: {
-                created: Date.parse("2026-02-22T12:00:02.000Z"),
-              },
+              messageID: "msg-attachment-1",
+              type: "text",
+              text: "Describe what is in this screenshot",
             },
-            parts: [
-              {
-                id: "part-text-1",
-                sessionID: "external-session-1",
-                messageID: "msg-attachment-1",
-                type: "text",
-                text: "Describe what is in this screenshot",
-              },
-              {
-                id: "part-file-1",
-                sessionID: "external-session-1",
-                messageID: "msg-attachment-1",
-                type: "file",
-                mime: "image/png",
-                filename: "Screenshot-2026-03-17-at-12.04.45.png",
-                url: "https://files.example.invalid/uploaded-image",
-              },
-            ],
-          },
+            {
+              id: "part-file-1",
+              sessionID: "external-session-1",
+              messageID: "msg-attachment-1",
+              type: "file",
+              mime: "image/png",
+              filename: "Screenshot-2026-03-17-at-12.04.45.png",
+              url: "https://files.example.invalid/uploaded-image",
+            },
+          ],
         }),
       ],
       (nextSessionRecord) => {
@@ -1334,19 +1319,10 @@ describe("event-stream", () => {
   test("matches queued attachment sends when the runtime fills user parts through message.part.updated", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession(
       [
-        createInvalidOpencodeEventFixture({
-          type: "message.updated",
-          properties: {
-            info: {
-              id: "msg-attachment-partial-1",
-              role: "user",
-              sessionID: "external-session-1",
-              text: "Describe what is in this screenshot",
-              time: {
-                created: Date.parse("2026-02-22T12:00:02.000Z"),
-              },
-            },
-          },
+        makeUserMessageUpdatedEvent({
+          messageId: "msg-attachment-partial-1",
+          text: "Describe what is in this screenshot",
+          createdAt: Date.parse("2026-02-22T12:00:02.000Z"),
         }),
         createInvalidOpencodeEventFixture({
           type: "message.part.updated",
@@ -1409,45 +1385,36 @@ describe("event-stream", () => {
   test("keeps pdf attachment echoes out of inline file-reference rendering", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
-        createInvalidOpencodeEventFixture({
-          type: "message.updated",
-          properties: {
-            info: {
-              id: "msg-pdf-1",
-              role: "user",
+        makeUserMessageUpdatedEvent({
+          messageId: "msg-pdf-1",
+          createdAt: Date.parse("2026-02-22T12:00:02.000Z"),
+          parts: [
+            {
+              id: "part-text-1",
               sessionID: "external-session-1",
-              time: {
-                created: Date.parse("2026-02-22T12:00:02.000Z"),
-              },
+              messageID: "msg-pdf-1",
+              type: "text",
+              text: "Summarize this PDF",
             },
-            parts: [
-              {
-                id: "part-text-1",
-                sessionID: "external-session-1",
-                messageID: "msg-pdf-1",
-                type: "text",
-                text: "Summarize this PDF",
-              },
-              {
-                id: "part-file-1",
-                sessionID: "external-session-1",
-                messageID: "msg-pdf-1",
+            {
+              id: "part-file-1",
+              sessionID: "external-session-1",
+              messageID: "msg-pdf-1",
+              type: "file",
+              mime: "application/pdf",
+              filename: "brief.pdf",
+              url: "https://files.example.invalid/brief.pdf",
+              source: {
                 type: "file",
-                mime: "application/pdf",
-                filename: "brief.pdf",
-                url: "https://files.example.invalid/brief.pdf",
-                source: {
-                  type: "file",
-                  path: "brief.pdf",
-                  text: {
-                    value: "brief.pdf",
-                    start: 0,
-                    end: 9,
-                  },
+                path: "brief.pdf",
+                text: {
+                  value: "brief.pdf",
+                  start: 0,
+                  end: 9,
                 },
               },
-            ],
-          },
+            },
+          ],
         }),
       ],
       (nextSessionRecord) => {
@@ -1509,19 +1476,10 @@ describe("event-stream", () => {
           },
         },
       }),
-      createInvalidOpencodeEventFixture({
-        type: "message.updated",
-        properties: {
-          info: {
-            id: "msg-200",
-            role: "user",
-            sessionID: "external-session-1",
-            text: "Ship it",
-            time: {
-              created: Date.parse("2026-02-22T12:00:02.000Z"),
-            },
-          },
-        },
+      makeUserMessageUpdatedEvent({
+        messageId: "msg-200",
+        text: "Ship it",
+        createdAt: Date.parse("2026-02-22T12:00:02.000Z"),
       }),
       createInvalidOpencodeEventFixture({
         type: "message.updated",

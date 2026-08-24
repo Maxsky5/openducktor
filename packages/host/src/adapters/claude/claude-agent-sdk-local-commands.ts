@@ -2,15 +2,17 @@ import type {
   ClaudeHistoryEntryMetadata,
   ClaudeHistoryMessage,
 } from "./claude-agent-sdk-history-import";
-import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import { claudeUnknownRecordSchema, isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
 const CLAUDE_SYNTHETIC_MODEL = "<synthetic>";
 const COMMAND_NAME_PATTERN = /<command-name>([\s\S]*?)<\/command-name>/;
 const COMMAND_ARGS_PATTERN = /<command-args>([\s\S]*?)<\/command-args>/;
 const LOCAL_COMMAND_STDOUT_PATTERN = /^<local-command-stdout>([\s\S]*)<\/local-command-stdout>$/;
 
-export const isClaudeSyntheticAssistantMessage = (message: unknown): boolean =>
-  isRecord(message) && readStringProp(message.message, "model") === CLAUDE_SYNTHETIC_MODEL;
+export const isClaudeSyntheticAssistantMessage = (message: unknown): boolean => {
+  const parsed = claudeUnknownRecordSchema.safeParse(message);
+  return parsed.success && readStringProp(parsed.data.message, "model") === CLAUDE_SYNTHETIC_MODEL;
+};
 
 export const readClaudeCommandEnvelope = (text: string): string | null => {
   const commandName = COMMAND_NAME_PATTERN.exec(text)?.[1]?.trim();

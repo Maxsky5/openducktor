@@ -9,7 +9,7 @@ import {
 } from "./event-stream.test-support";
 import {
   createParsedOpencodeEventFixture,
-  createParsedOpencodeEventFixtures,
+  createParsedOpencodeMessageEventGroupFixtures,
 } from "./opencode-protocol-test-fixtures";
 
 type AssistantPartEvent = Extract<AgentEvent, { type: "assistant_part" }>;
@@ -240,35 +240,32 @@ const makeBackgroundTaskResultUserMessageUpdatedEvent = (input: {
   text: string;
 }): Event[] => {
   const resultTag = input.state === "error" ? "task_error" : "task_result";
-  return createParsedOpencodeEventFixtures({
-    type: "message.updated",
-    properties: {
-      info: {
-        id: input.messageId,
-        role: "user",
-        sessionID: "external-session-1",
-        time: {
-          created: Date.parse("2026-02-22T12:00:45.000Z"),
-        },
+  return createParsedOpencodeMessageEventGroupFixtures({
+    info: {
+      id: input.messageId,
+      role: "user",
+      sessionID: "external-session-1",
+      time: {
+        created: Date.parse("2026-02-22T12:00:45.000Z"),
       },
-      parts: [
-        {
-          id: input.partId,
-          sessionID: "external-session-1",
-          messageID: input.messageId,
-          type: "text",
-          synthetic: true,
-          text: [
-            `<task id="${input.childSessionId}" state="${input.state}">`,
-            `<summary>${input.summary}</summary>`,
-            `<${resultTag}>`,
-            input.text,
-            `</${resultTag}>`,
-            "</task>",
-          ].join("\n"),
-        },
-      ],
     },
+    parts: [
+      {
+        id: input.partId,
+        sessionID: "external-session-1",
+        messageID: input.messageId,
+        type: "text",
+        synthetic: true,
+        text: [
+          `<task id="${input.childSessionId}" state="${input.state}">`,
+          `<summary>${input.summary}</summary>`,
+          `<${resultTag}>`,
+          input.text,
+          `</${resultTag}>`,
+          "</task>",
+        ].join("\n"),
+      },
+    ],
   });
 };
 

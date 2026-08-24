@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { UnknownRecord } from "./guards";
 import type { AgentEvent } from "@openducktor/core";
-import { sessionStatusEvent } from "./event-stream.test-support";
+import { sessionStatusEvent, type TestGlobalEventPayload } from "./event-stream.test-support";
+import { createOpencodeMessageEventGroupFixture } from "./opencode-protocol-test-fixtures";
 import {
   flushAsync,
   makeMockClient,
@@ -12,49 +12,46 @@ import {
 
 describe("OpencodeSdkAdapter event stream", () => {
   test("maps message.updated events into assistant parts and assistant message", async () => {
-    const streamEvents: UnknownRecord[] = [
+    const streamEvents: TestGlobalEventPayload[] = [
       sessionStatusEvent({ type: "busy" }, "session-opencode-1"),
-      {
-        type: "message.updated",
-        properties: {
-          info: {
-            id: "assistant-1",
-            role: "assistant",
-            sessionID: "session-opencode-1",
-            providerID: "openai",
-            modelID: "gpt-5",
-            agent: "Hephaestus",
-            variant: "high",
-            tokens: {
-              input: 1_200,
-              output: 300,
-              reasoning: 90,
-            },
-            time: {
-              completed: Date.parse("2026-02-17T12:00:05Z"),
-            },
-            finish: "stop",
+      createOpencodeMessageEventGroupFixture({
+        info: {
+          id: "assistant-1",
+          role: "assistant",
+          sessionID: "session-opencode-1",
+          providerID: "openai",
+          modelID: "gpt-5",
+          agent: "Hephaestus",
+          variant: "high",
+          tokens: {
+            input: 1_200,
+            output: 300,
+            reasoning: 90,
           },
-          parts: [
-            {
-              id: "reason-1",
-              sessionID: "session-opencode-1",
-              messageID: "assistant-1",
-              type: "reasoning",
-              text: "Reasoning trace",
-              time: { start: Date.now(), end: Date.now() },
-            },
-            {
-              id: "text-1",
-              sessionID: "session-opencode-1",
-              messageID: "assistant-1",
-              type: "text",
-              text: "Assistant output",
-              time: { start: Date.now(), end: Date.now() },
-            },
-          ],
+          time: {
+            completed: Date.parse("2026-02-17T12:00:05Z"),
+          },
+          finish: "stop",
         },
-      },
+        parts: [
+          {
+            id: "reason-1",
+            sessionID: "session-opencode-1",
+            messageID: "assistant-1",
+            type: "reasoning",
+            text: "Reasoning trace",
+            time: { start: Date.now(), end: Date.now() },
+          },
+          {
+            id: "text-1",
+            sessionID: "session-opencode-1",
+            messageID: "assistant-1",
+            type: "text",
+            text: "Assistant output",
+            time: { start: Date.now(), end: Date.now() },
+          },
+        ],
+      }),
       sessionStatusEvent({ type: "idle" }, "session-opencode-1"),
     ];
 
@@ -94,37 +91,34 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("emits session_idle from the authoritative runtime idle event", async () => {
-    const streamEvents: UnknownRecord[] = [
+    const streamEvents: TestGlobalEventPayload[] = [
       sessionStatusEvent({ type: "busy" }, "session-opencode-1"),
-      {
-        type: "message.updated",
-        properties: {
-          info: {
-            id: "assistant-terminal-1",
-            role: "assistant",
-            sessionID: "session-opencode-1",
-            providerID: "openai",
-            modelID: "gpt-5",
-            agent: "Hephaestus",
-            variant: "high",
-            finish: "stop",
-            time: {
-              created: Date.parse("2026-02-17T12:00:03Z"),
-              completed: Date.parse("2026-02-17T12:00:05Z"),
-            },
+      createOpencodeMessageEventGroupFixture({
+        info: {
+          id: "assistant-terminal-1",
+          role: "assistant",
+          sessionID: "session-opencode-1",
+          providerID: "openai",
+          modelID: "gpt-5",
+          agent: "Hephaestus",
+          variant: "high",
+          finish: "stop",
+          time: {
+            created: Date.parse("2026-02-17T12:00:03Z"),
+            completed: Date.parse("2026-02-17T12:00:05Z"),
           },
-          parts: [
-            {
-              id: "text-terminal-1",
-              sessionID: "session-opencode-1",
-              messageID: "assistant-terminal-1",
-              type: "text",
-              text: "Done",
-              time: { start: 1, end: 1 },
-            },
-          ],
         },
-      },
+        parts: [
+          {
+            id: "text-terminal-1",
+            sessionID: "session-opencode-1",
+            messageID: "assistant-terminal-1",
+            type: "text",
+            text: "Done",
+            time: { start: 1, end: 1 },
+          },
+        ],
+      }),
       {
         type: "session.idle",
         properties: { sessionID: "session-opencode-1" },
@@ -150,7 +144,7 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("maps terminal assistant metadata onto previously streamed text parts", async () => {
-    const streamEvents: UnknownRecord[] = [
+    const streamEvents: TestGlobalEventPayload[] = [
       {
         type: "message.part.updated",
         properties: {
@@ -220,38 +214,35 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("does not re-emit assistant streaming events after idle is already preserved", async () => {
-    const streamEvents: UnknownRecord[] = [
+    const streamEvents: TestGlobalEventPayload[] = [
       sessionStatusEvent({ type: "busy" }, "session-opencode-1"),
       sessionStatusEvent({ type: "idle" }, "session-opencode-1"),
-      {
-        type: "message.updated",
-        properties: {
-          info: {
-            id: "assistant-idle-preserved-1",
-            role: "assistant",
-            sessionID: "session-opencode-1",
-            providerID: "openai",
-            modelID: "gpt-5",
-            agent: "Hephaestus",
-            variant: "high",
-            finish: "stop",
-            time: {
-              created: Date.parse("2026-02-17T12:00:06Z"),
-              completed: Date.parse("2026-02-17T12:00:08Z"),
-            },
+      createOpencodeMessageEventGroupFixture({
+        info: {
+          id: "assistant-idle-preserved-1",
+          role: "assistant",
+          sessionID: "session-opencode-1",
+          providerID: "openai",
+          modelID: "gpt-5",
+          agent: "Hephaestus",
+          variant: "high",
+          finish: "stop",
+          time: {
+            created: Date.parse("2026-02-17T12:00:06Z"),
+            completed: Date.parse("2026-02-17T12:00:08Z"),
           },
-          parts: [
-            {
-              id: "text-idle-preserved-1",
-              sessionID: "session-opencode-1",
-              messageID: "assistant-idle-preserved-1",
-              type: "text",
-              text: "All done",
-              time: { start: 1, end: 1 },
-            },
-          ],
         },
-      },
+        parts: [
+          {
+            id: "text-idle-preserved-1",
+            sessionID: "session-opencode-1",
+            messageID: "assistant-idle-preserved-1",
+            type: "text",
+            text: "All done",
+            time: { start: 1, end: 1 },
+          },
+        ],
+      }),
       {
         type: "message.part.delta",
         properties: {
@@ -286,7 +277,7 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("emits the final assistant message when idle-preserved parts arrive after terminal metadata", async () => {
-    const streamEvents: UnknownRecord[] = [
+    const streamEvents: TestGlobalEventPayload[] = [
       sessionStatusEvent({ type: "busy" }, "session-opencode-1"),
       sessionStatusEvent({ type: "idle" }, "session-opencode-1"),
       {
@@ -351,7 +342,7 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("does not finalize previously streamed assistant text without a stop signal", async () => {
-    const streamEvents: UnknownRecord[] = [
+    const streamEvents: TestGlobalEventPayload[] = [
       {
         type: "message.part.updated",
         properties: {
@@ -408,7 +399,19 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("maps acknowledged user message.updated events into user_message", async () => {
-    const streamEvents: UnknownRecord[] = [
+    const streamEvents: TestGlobalEventPayload[] = [
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "text-user-1",
+            sessionID: "session-opencode-1",
+            messageID: "user-1",
+            type: "text",
+            text: "Generate the pull request",
+          },
+        },
+      },
       {
         type: "message.updated",
         properties: {
@@ -420,7 +423,6 @@ describe("OpencodeSdkAdapter event stream", () => {
             modelID: "gpt-5",
             agent: "Hephaestus",
             variant: "high",
-            text: "Generate the pull request",
             time: {
               created: Date.parse("2026-02-17T12:00:04Z"),
             },
@@ -463,7 +465,7 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("maps user message parts into user_message when message.updated omits text", async () => {
-    const streamEvents: UnknownRecord[] = [
+    const streamEvents: TestGlobalEventPayload[] = [
       {
         type: "message.part.updated",
         properties: {
@@ -529,36 +531,33 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("includes step-finish total tokens on assistant part events", async () => {
-    const streamEvents: UnknownRecord[] = [
-      {
-        type: "message.updated",
-        properties: {
-          info: {
-            id: "assistant-1",
-            role: "assistant",
+    const streamEvents: TestGlobalEventPayload[] = [
+      createOpencodeMessageEventGroupFixture({
+        info: {
+          id: "assistant-1",
+          role: "assistant",
+          sessionID: "session-opencode-1",
+        },
+        parts: [
+          {
+            id: "step-1",
             sessionID: "session-opencode-1",
-          },
-          parts: [
-            {
-              id: "step-1",
-              sessionID: "session-opencode-1",
-              messageID: "assistant-1",
-              type: "step-finish",
-              reason: "tool-calls",
-              cost: 0,
-              tokens: {
-                input: 898,
-                output: 245,
-                reasoning: 0,
-                cache: {
-                  read: 0,
-                  write: 33_879,
-                },
+            messageID: "assistant-1",
+            type: "step-finish",
+            reason: "tool-calls",
+            cost: 0,
+            tokens: {
+              input: 898,
+              output: 245,
+              reasoning: 0,
+              cache: {
+                read: 0,
+                write: 33_879,
               },
             },
-          ],
-        },
-      },
+          },
+        ],
+      }),
     ];
 
     const mock = makeMockClient({
@@ -595,40 +594,37 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("maps completed MCP tool part with isError=true as error status", async () => {
-    const streamEvents: UnknownRecord[] = [
+    const streamEvents: TestGlobalEventPayload[] = [
       sessionStatusEvent({ type: "busy" }, "session-opencode-1"),
-      {
-        type: "message.updated",
-        properties: {
-          info: {
-            id: "assistant-1",
-            role: "assistant",
-            sessionID: "session-opencode-1",
-            time: {
-              completed: Date.parse("2026-02-17T12:00:05Z"),
-            },
-            finish: "tool-calls",
+      createOpencodeMessageEventGroupFixture({
+        info: {
+          id: "assistant-1",
+          role: "assistant",
+          sessionID: "session-opencode-1",
+          time: {
+            completed: Date.parse("2026-02-17T12:00:05Z"),
           },
-          parts: [
-            {
-              id: "tool-1",
-              sessionID: "session-opencode-1",
-              messageID: "assistant-1",
-              callID: "call-1",
-              type: "tool",
-              tool: "openducktor_odt_set_spec",
-              state: {
-                status: "completed",
-                input: { taskId: "facebook-oauth" },
-                output: {
-                  content: [{ type: "text", text: "Task not found: facebook-oauth" }],
-                  isError: true,
-                },
+          finish: "tool-calls",
+        },
+        parts: [
+          {
+            id: "tool-1",
+            sessionID: "session-opencode-1",
+            messageID: "assistant-1",
+            callID: "call-1",
+            type: "tool",
+            tool: "openducktor_odt_set_spec",
+            state: {
+              status: "completed",
+              input: { taskId: "facebook-oauth" },
+              output: {
+                content: [{ type: "text", text: "Task not found: facebook-oauth" }],
+                isError: true,
               },
             },
-          ],
-        },
-      },
+          },
+        ],
+      }),
     ];
 
     const mock = makeMockClient({
@@ -664,47 +660,44 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("maps flattened MCP tool error JSON output as error status", async () => {
-    const streamEvents: UnknownRecord[] = [
+    const streamEvents: TestGlobalEventPayload[] = [
       sessionStatusEvent({ type: "busy" }, "session-opencode-1"),
-      {
-        type: "message.updated",
-        properties: {
-          info: {
-            id: "assistant-1",
-            role: "assistant",
-            sessionID: "session-opencode-1",
-            time: {
-              completed: Date.parse("2026-02-17T12:00:05Z"),
-            },
-            finish: "tool-calls",
+      createOpencodeMessageEventGroupFixture({
+        info: {
+          id: "assistant-1",
+          role: "assistant",
+          sessionID: "session-opencode-1",
+          time: {
+            completed: Date.parse("2026-02-17T12:00:05Z"),
           },
-          parts: [
-            {
-              id: "tool-1",
-              sessionID: "session-opencode-1",
-              messageID: "assistant-1",
-              callID: "call-1",
-              type: "tool",
-              tool: "openducktor_odt_set_plan",
-              state: {
-                status: "completed",
-                input: { taskId: "facebook-oauth" },
-                output: JSON.stringify(
-                  {
-                    ok: false,
-                    error: {
-                      code: "ODT_TOOL_EXECUTION_ERROR",
-                      message: "Only epics can receive subtask proposals during planning.",
-                    },
-                  },
-                  null,
-                  2,
-                ),
-              },
-            },
-          ],
+          finish: "tool-calls",
         },
-      },
+        parts: [
+          {
+            id: "tool-1",
+            sessionID: "session-opencode-1",
+            messageID: "assistant-1",
+            callID: "call-1",
+            type: "tool",
+            tool: "openducktor_odt_set_plan",
+            state: {
+              status: "completed",
+              input: { taskId: "facebook-oauth" },
+              output: JSON.stringify(
+                {
+                  ok: false,
+                  error: {
+                    code: "ODT_TOOL_EXECUTION_ERROR",
+                    message: "Only epics can receive subtask proposals during planning.",
+                  },
+                },
+                null,
+                2,
+              ),
+            },
+          },
+        ],
+      }),
     ];
 
     const mock = makeMockClient({
@@ -746,45 +739,42 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("maps a completed todowrite tool part", async () => {
-    const streamEvents: UnknownRecord[] = [
-      {
-        type: "message.updated",
-        properties: {
-          info: {
-            id: "assistant-1",
-            role: "assistant",
+    const streamEvents: TestGlobalEventPayload[] = [
+      createOpencodeMessageEventGroupFixture({
+        info: {
+          id: "assistant-1",
+          role: "assistant",
+          sessionID: "session-opencode-1",
+        },
+        parts: [
+          {
+            id: "tool-1",
             sessionID: "session-opencode-1",
-          },
-          parts: [
-            {
-              id: "tool-1",
-              sessionID: "session-opencode-1",
-              messageID: "assistant-1",
-              callID: "call-1",
-              type: "tool",
-              tool: "todowrite",
-              state: {
-                status: "completed",
-                input: {
-                  todos: [
-                    {
-                      id: "todo-1",
-                      content: "A",
-                    },
-                  ],
-                },
-                output: "",
-                title: "",
-                metadata: {},
-                time: {
-                  start: 100,
-                  end: 175,
-                },
+            messageID: "assistant-1",
+            callID: "call-1",
+            type: "tool",
+            tool: "todowrite",
+            state: {
+              status: "completed",
+              input: {
+                todos: [
+                  {
+                    id: "todo-1",
+                    content: "A",
+                  },
+                ],
+              },
+              output: "",
+              title: "",
+              metadata: {},
+              time: {
+                start: 100,
+                end: 175,
               },
             },
-          ],
-        },
-      },
+          },
+        ],
+      }),
     ];
 
     const mock = makeMockClient({
@@ -821,7 +811,7 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("maps todo.updated events into session_todos_updated", async () => {
-    const streamEvents: UnknownRecord[] = [
+    const streamEvents: TestGlobalEventPayload[] = [
       {
         type: "todo.updated",
         properties: {
@@ -880,7 +870,7 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("maps producer todo status strings and assigns local ids", async () => {
-    const streamEvents: UnknownRecord[] = [
+    const streamEvents: TestGlobalEventPayload[] = [
       {
         type: "todo.updated",
         properties: {

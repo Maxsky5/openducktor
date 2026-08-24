@@ -1,10 +1,11 @@
-import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import { claudeUnknownRecordSchema, isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
 export const readClaudeTurnOriginKind = (message: unknown): string | undefined => {
-  if (!isRecord(message) || message.shouldQuery === false) {
+  const parsed = claudeUnknownRecordSchema.safeParse(message);
+  if (!parsed.success || parsed.data.shouldQuery === false) {
     return undefined;
   }
-  return isRecord(message.origin) ? readStringProp(message.origin, "kind") : undefined;
+  return isRecord(parsed.data.origin) ? readStringProp(parsed.data.origin, "kind") : undefined;
 };
 
 export const shouldFinalizeClaudeTurn = (
@@ -16,9 +17,10 @@ export const shouldFinalizeClaudeTurn = (
   (originKind === "task-notification" && activeBackgroundSubagentTaskCount === 0);
 
 export const isClaudeHumanUserMessage = (message: unknown): boolean => {
-  if (!isRecord(message) || message.isSynthetic === true || message.shouldQuery === false) {
+  const parsed = claudeUnknownRecordSchema.safeParse(message);
+  if (!parsed.success || parsed.data.isSynthetic === true || parsed.data.shouldQuery === false) {
     return false;
   }
-  const originKind = readClaudeTurnOriginKind(message);
+  const originKind = readClaudeTurnOriginKind(parsed.data);
   return originKind === undefined || originKind === "human";
 };

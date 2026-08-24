@@ -324,7 +324,9 @@ describe("electron task stream IPC", () => {
     const owner = createSender(1);
     harness.invoke(ELECTRON_TASK_STREAM_SUBSCRIBE_CHANNEL, eventFor(owner), { cursor: null });
 
-    harness.sink()?.({ type: "change" } satisfies TaskEventStreamFrame);
+    // SAFETY: This negative test sends a deliberately malformed frame to the runtime validation boundary.
+    const malformedFrame = { type: "change" } as TaskEventStreamFrame;
+    harness.sink()?.(malformedFrame);
 
     expect(owner.mainFrame.send).toHaveBeenCalledWith(
       ELECTRON_TASK_STREAM_TERMINAL_FAILURE_CHANNEL,

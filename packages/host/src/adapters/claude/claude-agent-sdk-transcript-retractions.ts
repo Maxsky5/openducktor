@@ -6,13 +6,14 @@ import {
 } from "./claude-agent-sdk-event-session";
 import { retractClaudeTodoToolResults } from "./claude-agent-sdk-todos";
 import { retractClaudeTranscriptCorrelations } from "./claude-agent-sdk-transcript-correlation";
-import { isRecord } from "./claude-agent-sdk-utils";
+import { claudeUnknownRecordSchema } from "./claude-agent-sdk-utils";
 
 const readStringArrayProp = (value: unknown, key: string): string[] => {
-  if (!isRecord(value)) {
+  const parsed = claudeUnknownRecordSchema.safeParse(value);
+  if (!parsed.success) {
     return [];
   }
-  const candidate = value[key];
+  const candidate = parsed.data[key];
   if (!Array.isArray(candidate)) {
     return [];
   }

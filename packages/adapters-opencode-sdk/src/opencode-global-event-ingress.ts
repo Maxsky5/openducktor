@@ -261,11 +261,17 @@ const ignoredDirectEventTypes = [
   "global.disposed",
   "server.instance.disposed",
 ] as const;
-const ignoredDirectEventSchema = z.object({
-  id: z.string(),
-  type: z.enum(ignoredDirectEventTypes),
-  properties: z.intersection(unknownRecordSchema, z.object({ directory: z.string().optional() })),
-});
+export type IgnoredOpencodeEventType = (typeof ignoredDirectEventTypes)[number];
+const ignoredDirectEventSchema = z
+  .object({
+    id: z.string(),
+    type: z.enum(ignoredDirectEventTypes),
+    properties: z.unknown(),
+  })
+  .transform(({ id, type }) => ({ kind: "ignored" as const, id, type }));
+
+export const isIgnoredOpencodeEventType = (type: string): type is IgnoredOpencodeEventType =>
+  ignoredDirectEventTypes.some((candidate) => candidate === type);
 
 export const opencodeDirectEventSchema = z.union([
   sessionCreatedEventSchema,
@@ -291,7 +297,6 @@ export const opencodeDirectEventSchema = z.union([
   opencodeQuestionRepliedEventSchema,
   opencodeQuestionRejectedEventSchema,
   sessionCompactedEventSchema,
-  ignoredDirectEventSchema,
 ]);
 
 const syncEventSchema = z.object({
@@ -314,6 +319,7 @@ const ingressEventDescriptorSchema = z.object({
 
 export const opencodeGlobalEventPayloadSchema = z.union([
   opencodeDirectEventSchema,
+  ignoredDirectEventSchema,
   syncEnvelopeSchema,
   serverHeartbeatSchema,
 ]);

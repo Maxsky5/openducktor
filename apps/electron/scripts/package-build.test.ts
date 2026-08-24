@@ -260,7 +260,8 @@ describe("build Electron release artifact", () => {
       }).catch((cause: unknown) => cause);
 
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).not.toContain("Electron release directory is missing");
+      if (!(error instanceof Error)) throw error;
+      expect(error.message).not.toContain("Electron release directory is missing");
     } finally {
       await rm(baseDirectory, { force: true, recursive: true });
     }

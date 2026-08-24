@@ -139,12 +139,10 @@ export const claudeUserToolResultIngressSchema = claudeUnknownRecordSchema.exten
   uuid: z.string().optional(),
 });
 
-const parseClaudeIngress = <Schema extends z.ZodType>(
-  schema: Schema,
-  value: unknown,
+const parseClaudeIngress = <Output>(
+  parsed: z.ZodSafeParseResult<Output>,
   field: string,
-): z.output<Schema> => {
-  const parsed = schema.safeParse(value);
+): Output => {
   if (parsed.success) {
     return parsed.data;
   }
@@ -176,57 +174,61 @@ export type ClaudeUserToolResultIngress = {
 };
 
 export const parseClaudeHistoryStoreEntry = (value: SessionStoreEntry) =>
-  parseClaudeIngress(claudeHistoryStoreEntrySchema, value, "claudeSessionHistoryEntry");
+  parseClaudeIngress(claudeHistoryStoreEntrySchema.safeParse(value), "claudeSessionHistoryEntry");
 
 export const parseClaudeHistoryConversationEntry = (
   value: unknown,
 ): z.output<typeof claudeHistoryConversationEntrySchema> =>
-  parseClaudeIngress(claudeHistoryConversationEntrySchema, value, "claudeHistoryMessage");
+  parseClaudeIngress(claudeHistoryConversationEntrySchema.safeParse(value), "claudeHistoryMessage");
 
 export const parseClaudeHistoryAssistantEntry = (
   value: unknown,
 ): z.output<typeof claudeHistoryAssistantEntrySchema> =>
-  parseClaudeIngress(claudeHistoryAssistantEntrySchema, value, "claudeHistoryAssistantMessage");
+  parseClaudeIngress(
+    claudeHistoryAssistantEntrySchema.safeParse(value),
+    "claudeHistoryAssistantMessage",
+  );
 
 export const parseClaudeHistoryAttachment = (
   value: unknown,
 ): z.output<typeof claudeHistoryAttachmentSchema> =>
-  parseClaudeIngress(claudeHistoryAttachmentSchema, value, "claudeHistoryAttachment");
+  parseClaudeIngress(claudeHistoryAttachmentSchema.safeParse(value), "claudeHistoryAttachment");
 
 export const parseClaudeHistoryAttachmentEntry = (
   value: unknown,
 ): z.output<typeof claudeHistoryAttachmentEntrySchema> =>
-  parseClaudeIngress(claudeHistoryAttachmentEntrySchema, value, "claudeHistoryAttachmentEntry");
+  parseClaudeIngress(
+    claudeHistoryAttachmentEntrySchema.safeParse(value),
+    "claudeHistoryAttachmentEntry",
+  );
 
 export const parseClaudeMetaQueuedCommandAttachment = (
   value: unknown,
 ): z.output<typeof claudeMetaQueuedCommandAttachmentSchema> =>
   parseClaudeIngress(
-    claudeMetaQueuedCommandAttachmentSchema,
-    value,
+    claudeMetaQueuedCommandAttachmentSchema.safeParse(value),
     "claudeMetaQueuedCommandAttachment",
   );
 
 export const parseClaudePreToolUseIngress = (value: HookInput) =>
-  parseClaudeIngress(claudePreToolUseIngressSchema, value, "claudePreToolUse");
+  parseClaudeIngress(claudePreToolUseIngressSchema.safeParse(value), "claudePreToolUse");
 
 export const parseClaudePostToolUseIngress = (value: HookInput): ClaudePostToolUseIngress =>
-  parseClaudeIngress(claudePostToolUseIngressSchema, value, "claudePostToolUse");
+  parseClaudeIngress(claudePostToolUseIngressSchema.safeParse(value), "claudePostToolUse");
 
 export const parseClaudeFileEditToolResponse = (
   value: unknown,
 ): z.output<typeof claudePlainUnknownRecordSchema> =>
-  parseClaudeIngress(claudePlainUnknownRecordSchema, value, "claudeFileEditToolResponse");
+  parseClaudeIngress(claudePlainUnknownRecordSchema.safeParse(value), "claudeFileEditToolResponse");
 
 export const parseClaudeCanonicalJsonObject = (value: unknown, field: string): JsonObject =>
-  parseClaudeIngress(claudeCanonicalJsonObjectSchema, value, field);
+  parseClaudeIngress(claudeCanonicalJsonObjectSchema.safeParse(value), field);
 
 export const parseClaudeUserToolResultIngress = (
   value: ClaudeSdkUserMessage,
 ): ClaudeUserToolResultIngress => {
   const message = parseClaudeIngress(
-    claudeUserToolResultIngressSchema,
-    value,
+    claudeUserToolResultIngressSchema.safeParse(value),
     "claudeUserToolResult",
   );
   const contentToolResults = Array.isArray(message.message.content)

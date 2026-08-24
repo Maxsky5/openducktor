@@ -1,4 +1,5 @@
 import { createInterface } from "node:readline";
+import { jsonValueSchema } from "@openducktor/contracts";
 import { Effect, Exit } from "effect";
 import {
   HostOperationError,
@@ -252,7 +253,8 @@ export const createCodexAppServerTransport = (
   };
 
   const handleMessage = (message: unknown): void => {
-    if (!isJsonRecord(message)) {
+    const parsed = jsonValueSchema.safeParse(message);
+    if (!parsed.success || !isJsonRecord(parsed.data)) {
       failFast(
         new HostValidationError({
           message: `Codex app-server stdout message for ${runtimeId} must be an object`,
@@ -262,11 +264,15 @@ export const createCodexAppServerTransport = (
       return;
     }
 
-    const responseId = typeof message.id === "number" ? message.id : null;
+    const messageRecord = parsed.data;
+
+    const responseId = typeof messageRecord.id === "number" ? messageRecord.id : null;
     const serverRequestId =
-      typeof message.id === "number" || typeof message.id === "string" ? message.id : null;
-    const hasMethod = typeof message.method === "string";
-    const hasResponse = "result" in message || "error" in message;
+      typeof messageRecord.id === "number" || typeof messageRecord.id === "string"
+        ? messageRecord.id
+        : null;
+    const hasMethod = typeof messageRecord.method === "string";
+    const hasResponse = "result" in messageRecord || "error" in messageRecord;
 
     if (hasResponse) {
       if (responseId === null) {
@@ -279,13 +285,13 @@ export const createCodexAppServerTransport = (
         );
         return;
       }
-      resolveResponse(responseId, message);
+      resolveResponse(responseId, messageRecord);
       return;
     }
 
     if (hasMethod && serverRequestId === null) {
       try {
-        const notification = parseStreamMessage(runtimeId, message, "notification");
+        const notification = parseStreamMessage(runtimeId, messageRecord, "notification");
         emitEvent({
           runtimeId,
           kind: "notification",
@@ -303,7 +309,7 @@ export const createCodexAppServerTransport = (
 
     if (hasMethod && serverRequestId !== null) {
       try {
-        const request = parseStreamMessage(runtimeId, message, "server_request");
+        const request = parseStreamMessage(runtimeId, messageRecord, "server_request");
         if (respondToAutomaticServerRequest(request, sendMessage, failFast)) {
           return;
         }

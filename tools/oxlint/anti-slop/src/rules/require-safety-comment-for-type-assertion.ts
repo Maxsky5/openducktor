@@ -45,33 +45,13 @@ function hasSafetyComment(sourceCode: SourceCode, node: ESTree.Node): boolean {
   });
 }
 
-function compactSource(text: string): string {
-  return text.replace(/\s+/gu, "");
-}
-
-function hasRuntimeTypeProof(
-  sourceCode: SourceCode,
-  owner: ESTree.Node,
-  node: TypeAssertion,
-): boolean {
-  const proofWindow = compactSource(
-    sourceCode.text.slice(Math.max(0, owner.start - 600), owner.start),
-  );
-  const expression = compactSource(sourceCode.getText(node.expression));
-  const targetType = compactSource(sourceCode.getText(node.typeAnnotation));
-  return (
-    proofWindow.includes(`expect(${expression}).toBeInstanceOf(${targetType})`) ||
-    proofWindow.includes(`${expression}instanceof${targetType}`)
-  );
-}
-
-/** Require every non-const type assertion to have a local runtime proof or state its invariant. */
+/** Require every non-const type assertion to state its local invariant. */
 export const requireSafetyCommentForTypeAssertionRule = defineRule({
   meta: {
     type: "problem",
     docs: {
       description:
-        "Require a local runtime type proof or specific nearby SAFETY comment for every TypeScript type assertion except const assertions.",
+        "Require a specific nearby SAFETY comment for every TypeScript type assertion except const assertions.",
     },
     messages: {
       missingSafetyComment:
@@ -85,7 +65,6 @@ export const requireSafetyCommentForTypeAssertionRule = defineRule({
     const checkAssertion = (node: TypeAssertion) => {
       if (isConstAssertion(node) || hasSafetyComment(context.sourceCode, node)) return;
       const owner = assertionCommentOwner(node);
-      if (owner !== null && hasRuntimeTypeProof(context.sourceCode, owner, node)) return;
       if (owner === null || !hasSafetyComment(context.sourceCode, owner)) {
         context.report({ node, messageId: "missingSafetyComment" });
         return;

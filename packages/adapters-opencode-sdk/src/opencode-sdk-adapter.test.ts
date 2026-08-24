@@ -163,7 +163,7 @@ test("rejects non-OpenCode runtime policy bindings at the adapter boundary", asy
         },
       },
       systemPrompt: "system",
-    } satisfies never),
+    }),
   ).rejects.toThrow(
     "Cannot start OpenCode session with runtime 'opencode' and 'codex' runtime policy.",
   );
@@ -193,7 +193,7 @@ test("rejects fork policy mismatches before runtime side effects", async () => {
         },
       },
       systemPrompt: "system",
-    } satisfies never),
+    }),
   ).rejects.toThrow(
     "Cannot fork OpenCode session with runtime 'opencode' and 'codex' runtime policy.",
   );
@@ -709,13 +709,39 @@ describe("opencode-sdk-adapter", () => {
     if (!session) {
       throw new Error("Expected test session to be registered.");
     }
+    const approval = {
+      type: "approval_required",
+      externalSessionId: "external-session-1",
+      timestamp: "2026-02-22T12:00:00.000Z",
+      requestId: "request-1",
+      requestType: "permission_grant",
+      title: "Approve write",
+      summary: "Approval request for write.",
+      affectedPaths: ["src/**"],
+      action: { name: "write" },
+      mutation: "mutating",
+      supportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
+    } as const;
+    const question = {
+      type: "question_required",
+      externalSessionId: "external-session-1",
+      timestamp: "2026-02-22T12:00:00.000Z",
+      requestId: "request-2",
+      questions: [
+        {
+          header: "Scope",
+          question: "Pick target",
+          options: [{ label: "A", description: "Option A" }],
+        },
+      ],
+    } as const;
     session.pendingSubagentInputEventsByExternalSessionId.set("external-session-1", [
-      { type: "approval_required", requestId: "request-1" },
-      { type: "question_required", requestId: "request-2" },
-    ] satisfies never[]);
+      approval,
+      question,
+    ]);
     session.pendingSubagentInputEventsByExternalSessionId.set("child-b", [
-      { type: "question_required", requestId: "request-1" },
-    ] satisfies never[]);
+      { ...question, requestId: "request-1" },
+    ]);
 
     await adapter.replyApproval({
       ...sessionRuntimeRef("external-session-1", {
@@ -726,10 +752,10 @@ describe("opencode-sdk-adapter", () => {
     });
 
     expect(session.pendingSubagentInputEventsByExternalSessionId.get("external-session-1")).toEqual(
-      [{ type: "question_required", requestId: "request-2" }],
+      [question],
     );
     expect(session.pendingSubagentInputEventsByExternalSessionId.get("child-b")).toEqual([
-      { type: "question_required", requestId: "request-1" },
+      { ...question, requestId: "request-1" },
     ]);
   });
 

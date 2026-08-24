@@ -41,7 +41,8 @@ describe("task validation effects", () => {
     );
 
     expect(error).toBeInstanceOf(TaskPolicyError);
-    expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
+    if (!(error instanceof TaskPolicyError)) throw error;
+    expect(error.code).toBe("TASK_POLICY_ERROR");
   });
 
   test("blockBuildCompletionTask preserves transition policy errors", async () => {
@@ -57,6 +58,7 @@ describe("task validation effects", () => {
     );
 
     expect(error).toBeInstanceOf(TaskPolicyError);
-    expect((error as TaskPolicyError).code).toBe("TASK_TRANSITION_NOT_ALLOWED");
+    if (!(error instanceof TaskPolicyError)) throw error;
+    expect(error.code).toBe("TASK_TRANSITION_NOT_ALLOWED");
   });
 });

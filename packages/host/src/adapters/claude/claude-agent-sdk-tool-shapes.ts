@@ -3,6 +3,7 @@ import type { JsonValue } from "@openducktor/contracts";
 import type { AgentStreamPart } from "@openducktor/core";
 import { parseClaudeCanonicalJsonObject } from "./claude-agent-sdk-ingress-schemas";
 import {
+  claudeUnknownRecordSchema,
   isRecord,
   previewInput,
   readStringProp,
@@ -196,10 +197,12 @@ export const decodeClaudeToolResultValue = (
   fallbackToolUseId: string | null,
   options: { allowNonToolResultType?: boolean } = {},
 ): ClaudeDecodedToolResult | null => {
-  if (!isRecord(value)) {
+  const parsed = claudeUnknownRecordSchema.safeParse(value);
+  if (!parsed.success) {
     return null;
   }
-  const type = readStringProp(value, "type");
+  const record = parsed.data;
+  const type = readStringProp(record, "type");
   if (
     type &&
     type !== "tool_result" &&
@@ -209,20 +212,20 @@ export const decodeClaudeToolResultValue = (
     return null;
   }
   const toolUseId =
-    readStringProp(value, "tool_use_id") ??
-    readStringProp(value, "custom_tool_use_id") ??
-    readStringProp(value, "id") ??
+    readStringProp(record, "tool_use_id") ??
+    readStringProp(record, "custom_tool_use_id") ??
+    readStringProp(record, "id") ??
     fallbackToolUseId;
   if (!toolUseId) {
     return null;
   }
-  const isErrorValue = value.is_error ?? value.isError;
-  const toolName = readStringProp(value, "tool_name") ?? readStringProp(value, "name");
+  const isErrorValue = record.is_error ?? record.isError;
+  const toolName = readStringProp(record, "tool_name") ?? readStringProp(record, "name");
   return {
     toolUseId,
     ...(toolName ? { toolName } : undefined),
     isError: isErrorValue === true,
-    raw: value,
-    text: claudeToolResultContentText(value),
+    raw: record,
+    text: claudeToolResultContentText(record),
   };
 };

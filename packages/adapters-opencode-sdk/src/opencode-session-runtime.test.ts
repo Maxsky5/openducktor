@@ -6,11 +6,12 @@ import {
   permissionRepliedEvent,
   sessionStatusEvent,
 } from "./event-stream.test-support";
-import type { UnknownRecord } from "./guards";
 import {
   createOpencodeEventFixtures,
   createOpencodeMessageInfoFixture,
+  createOpencodeMessageEventGroupFixture,
   createOpencodeSessionFixture,
+  type OpencodeEventFixtureInput,
 } from "./opencode-protocol-test-fixtures";
 
 type LiveClientHarness = {
@@ -22,8 +23,8 @@ type LiveClientHarness = {
   questionReplyCalls: unknown[];
   setPermissionReplyError: (error: unknown | null) => void;
   setPendingApproval: (pending: boolean) => void;
-  emit: (event: UnknownRecord) => void;
-  emitAndWait: (event: UnknownRecord) => Promise<void>;
+  emit: (event: OpencodeEventFixtureInput) => void;
+  emitAndWait: (event: OpencodeEventFixtureInput) => Promise<void>;
   completeStream: () => Promise<void>;
   failStream: (error: Error) => Promise<void>;
   streamSignal: () => AbortSignal | null;
@@ -35,7 +36,7 @@ type PermissionReplyRequest = Parameters<OpencodeClient["permission"]["reply"]>[
 type QuestionReplyRequest = Parameters<OpencodeClient["question"]["reply"]>[0];
 
 type QueuedStreamEntry =
-  | { type: "event"; event: UnknownRecord; consumed?: () => void }
+  | { type: "event"; event: OpencodeEventFixtureInput; consumed?: () => void }
   | { type: "complete"; consumed: () => void }
   | { type: "failure"; error: Error; consumed: () => void };
 
@@ -593,9 +594,8 @@ describe("OpenCode session runtime connection", () => {
     });
     const preparing = createPrepareRuntime(harness)(runtimeInput);
     await listStarted;
-    harness.emit({
-      type: "message.updated",
-      properties: {
+    harness.emit(
+      createOpencodeMessageEventGroupFixture({
         info: {
           id: "assistant-buffered",
           sessionID: "session-1",
@@ -613,8 +613,8 @@ describe("OpenCode session runtime connection", () => {
             time: { start: 1, end: 2 },
           },
         ],
-      },
-    });
+      }),
+    );
     releaseList();
     const prepared = await preparing;
 
@@ -639,9 +639,8 @@ describe("OpenCode session runtime connection", () => {
     });
     await firstStarted;
 
-    await harness.emitAndWait({
-      type: "message.updated",
-      properties: {
+    await harness.emitAndWait(
+      createOpencodeMessageEventGroupFixture({
         info: {
           id: "assistant-live",
           sessionID: "session-1",
@@ -659,8 +658,8 @@ describe("OpenCode session runtime connection", () => {
             time: { start: 3, end: 4 },
           },
         ],
-      },
-    });
+      }),
+    );
     expect(messages).toEqual(["Buffered transcript"]);
 
     releaseFirst();

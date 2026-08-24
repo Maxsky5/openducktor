@@ -107,9 +107,7 @@ const readGlobalEventFailureScope = (
     ? asUnknownRecord(syncEvent.data)
     : asUnknownRecord(payload?.properties);
   const externalSessionId =
-    (properties
-      ? readStringProp(properties, ["sessionID", "sessionId", "session_id"])
-      : undefined) ??
+    (properties ? readStringProp(properties, ["sessionID"]) : undefined) ??
     (typeof syncEvent?.aggregateID === "string" ? syncEvent.aggregateID : undefined);
   const payloadType = typeof payload?.type === "string" ? payload.type : undefined;
   const info = properties ? asUnknownRecord(properties.info) : undefined;
@@ -170,10 +168,9 @@ export const subscribeGlobalEvents = async (input: SubscribeGlobalEventsInput): 
     }
     try {
       const payloadDecision = normalizeOpencodeGlobalEventPayload(event.payload);
-      if (payloadDecision.kind === "heartbeat") {
-        continue;
+      if (payloadDecision.kind === "event") {
+        await input.onEvent(toDirectoryScopedEvent(payloadDecision.event, event.directory));
       }
-      await input.onEvent(toDirectoryScopedEvent(payloadDecision.event, event.directory));
     } catch (error) {
       if (!input.onEventError) {
         throw error;

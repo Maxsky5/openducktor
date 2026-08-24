@@ -7,12 +7,15 @@ import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./index";
 import type { ParsedOpencodeMessage } from "./opencode-ingress";
 import type { ParsedOpencodeGlobalEventPayload } from "./opencode-global-event-ingress";
 import { buildQueuedRequestSignature } from "./user-message-signatures";
-import { asUnknownRecord, readStringProp } from "./guards";
 import {
   createOpencodeEventFixtures,
   createOpencodeMessageInfoFixture,
   createOpencodePartFixture,
   createParsedOpencodeEventFixture,
+  type DirectEventFixtureInput,
+  type OpencodeEventFixtureInput,
+  type OpencodeMessageInfoFixtureInput,
+  type OpencodePartFixtureInput,
 } from "./opencode-protocol-test-fixtures";
 
 type OpencodePolicyBoundSessionRef = Extract<PolicyBoundSessionRef, { runtimeKind: "opencode" }>;
@@ -26,13 +29,8 @@ type ClientMethodInput<
 type MockApiError = Error | { message: string };
 
 type MockSessionMessage = {
-  info: {
-    id: string;
-    role: "user" | "assistant";
-    time: { created: number };
-    [key: string]: unknown;
-  };
-  parts: UnknownRecord[];
+  info: OpencodeMessageInfoFixtureInput;
+  parts: OpencodePartFixtureInput[];
 };
 
 const completeMockMessage = (message: MockSessionMessage): ParsedOpencodeMessage => ({
@@ -41,7 +39,7 @@ const completeMockMessage = (message: MockSessionMessage): ParsedOpencodeMessage
 });
 
 export const completeMockEvent = (
-  event: UnknownRecord,
+  event: DirectEventFixtureInput,
   index: number,
 ): ParsedOpencodeGlobalEventPayload => createParsedOpencodeEventFixture(event, index);
 
@@ -188,7 +186,7 @@ export type MockQuestion = {
 };
 
 export type MockEventStream = {
-  events: UnknownRecord[];
+  events: OpencodeEventFixtureInput[];
 };
 
 export type TodoMockResult =
@@ -253,7 +251,7 @@ export type MakeMockClientInput = {
   sessionUpdateResult?: SessionUpdateMockResult;
   promptAsyncResult?: PromptAsyncMockResult;
   commandResult?: CommandMockResult;
-  streamEvents?: UnknownRecord[];
+  streamEvents?: OpencodeEventFixtureInput[];
   messagesResponse?: MockSessionMessage[];
   childrenResponse?: MockChildSession[];
   todoResult?: TodoMockResult;
@@ -559,10 +557,11 @@ export const makeMockClient = ({
             if (options?.signal?.aborted) {
               return;
             }
-            const properties = asUnknownRecord(rawEvent.properties);
+            const properties = "properties" in rawEvent ? rawEvent.properties : undefined;
             const directory =
-              readStringProp(properties, ["directory"]) ??
-              defaultRuntimeConnection.workingDirectory;
+              properties && "directory" in properties && typeof properties.directory === "string"
+                ? properties.directory
+                : defaultRuntimeConnection.workingDirectory;
             for (const payload of createOpencodeEventFixtures(rawEvent, index)) {
               yield { directory, payload };
             }

@@ -2,13 +2,11 @@
 // Reference schema:
 // https://github.com/openai/codex/tree/main/codex-rs/app-server-protocol/schema/typescript
 
-import { parseCodexAppServerClientRequest as parseClientRequest } from "./codex-app-server-request-schemas";
 import type {
   CodexAppServerParsedClientRequest,
   CodexAppServerRequestParamsMap,
   CodexAppServerRequestReasoningEffort,
 } from "./codex-app-server-request-schemas";
-import { parseCodexAppServerRequestResultValue } from "./codex-app-server-protocol-schemas";
 import type {
   CodexAppServerAdditionalFileSystemPermissions,
   CodexAppServerAdditionalNetworkPermissions,
@@ -25,8 +23,12 @@ export {
   codexAppServerClientRequestSchema,
   codexAppServerReasoningEffortSchema,
   codexAppServerRequestParamsSchemas,
+  parseCodexAppServerClientRequest,
 } from "./codex-app-server-request-schemas";
-export { codexAppServerRequestResultSchema } from "./codex-app-server-protocol-schemas";
+export {
+  codexAppServerRequestResultSchema,
+  parseCodexAppServerRequestResultValue as parseCodexAppServerRequestResult,
+} from "./codex-app-server-protocol-schemas";
 export type {
   CodexAppServerAdditionalFileSystemPermissions,
   CodexAppServerAdditionalNetworkPermissions,
@@ -569,15 +571,6 @@ export type CodexAppServerRequestParams<
 export type CodexAppServerClientRequest = CodexAppServerParsedClientRequest;
 export type CodexAppServerRequestResult =
   CodexAppServerClientRequestMap[CodexAppServerRequestMethod]["result"];
-
-export const parseCodexAppServerClientRequest = (value: unknown): CodexAppServerClientRequest =>
-  parseClientRequest(value);
-
-export const parseCodexAppServerRequestResult = <Method extends CodexAppServerRequestMethod>(
-  method: Method,
-  value: unknown,
-): CodexAppServerClientRequestMap[Method]["result"] =>
-  parseCodexAppServerRequestResultValue(method, value);
 
 export type CodexAppServerRespondResult =
   | CodexAppServerCommandExecutionApprovalResponse

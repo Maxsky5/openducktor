@@ -93,15 +93,17 @@ const isJsonRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isLiveSessionStatus = (value: unknown): boolean => {
-  if (!isJsonRecord(value)) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
   }
-  const status = value.type;
+  // SAFETY: The guard above excludes null and arrays, so the string-key lookup is valid.
+  const record = value as Record<string, unknown>;
+  const status = record.type;
   return status === "busy" || status === "retry";
 };
 
 const requireObjectPayload = (value: unknown, context: string) => {
-  if (!isJsonRecord(value)) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return Effect.fail(
       new HostValidationError({
         message: `${context} must be an object`,
@@ -109,7 +111,8 @@ const requireObjectPayload = (value: unknown, context: string) => {
       }),
     );
   }
-  return Effect.succeed(value);
+  // SAFETY: The guard above excludes null and arrays, so the payload is a string-keyed object.
+  return Effect.succeed(value as Record<string, unknown>);
 };
 
 const readStringProperty = (value: Record<string, unknown>, property: string): string | null => {

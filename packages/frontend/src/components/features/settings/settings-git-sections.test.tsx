@@ -381,7 +381,8 @@ describe("settings git sections", () => {
       });
       const detectButton = screen.getByRole("button", { name: /detect from origin/i });
       expect(detectButton).toBeInstanceOf(HTMLButtonElement);
-      expect((detectButton as HTMLButtonElement).disabled).toBe(false);
+      if (!(detectButton instanceof HTMLButtonElement)) throw new TypeError("Expected a button");
+      expect(detectButton.disabled).toBe(false);
     } finally {
       rendered?.unmount();
     }

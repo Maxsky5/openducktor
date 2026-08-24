@@ -217,7 +217,8 @@ describe("workflow-tool-selection", () => {
     }).catch((cause: unknown) => cause);
 
     expect(selection).toBeInstanceOf(Error);
-    expect((selection as Error).message).toBe("boom");
+    if (!(selection instanceof Error)) throw selection;
+    expect(selection.message).toBe("boom");
   });
 
   test("throws actionable error when trusted MCP server is disconnected", async () => {
@@ -232,11 +233,12 @@ describe("workflow-tool-selection", () => {
     }).catch((cause: unknown) => cause);
 
     expect(selectionError).toBeInstanceOf(Error);
-    expect((selectionError as Error).message).toContain('unavailable for "/repo"');
-    expect((selectionError as Error).message).toContain(
+    if (!(selectionError instanceof Error)) throw selectionError;
+    expect(selectionError.message).toContain('unavailable for "/repo"');
+    expect(selectionError.message).toContain(
       'MCP server "openducktor" stayed unavailable after reconnect',
     );
-    expect((selectionError as Error).message).toContain("connection closed");
+    expect(selectionError.message).toContain("connection closed");
   });
 
   test("reconnects a failed trusted MCP server for the same worktree before tool selection", async () => {
@@ -302,7 +304,8 @@ describe("workflow-tool-selection", () => {
     }).catch((cause: unknown) => cause);
 
     expect(selectionError).toBeInstanceOf(Error);
-    expect((selectionError as Error).message).toBe("mcp-connect-down");
+    if (!(selectionError instanceof Error)) throw selectionError;
+    expect(selectionError.message).toBe("mcp-connect-down");
   });
 
   test("propagates trusted MCP status lookup failures", async () => {
@@ -317,7 +320,8 @@ describe("workflow-tool-selection", () => {
     }).catch((cause: unknown) => cause);
 
     expect(selectionError).toBeInstanceOf(Error);
-    expect((selectionError as Error).message).toBe("mcp-down");
+    if (!(selectionError instanceof Error)) throw selectionError;
+    expect(selectionError.message).toBe("mcp-down");
   });
 
   test("keeps canonical trusted role tools when runtime discovery misses ODT ids", async () => {

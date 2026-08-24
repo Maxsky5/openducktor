@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
+import { ODT_MCP_TOOL_NAMES, type AgentSessionControlStartInput } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/core";
 import {
   codexSessionRuntimeRef,
@@ -430,17 +430,19 @@ describe("CodexAppServerAdapter repository sessions", () => {
 
   test("rejects a start without session scope before runtime side effects", async () => {
     const { adapter, requireRepoRuntime, transportFactory } = createHarness();
+    // SAFETY: This negative test deliberately omits sessionScope to exercise runtime validation at the adapter boundary.
+    const input = {
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    } as AgentSessionControlStartInput;
 
-    await expect(
-      adapter.startSession({
-        repoPath: "/repo",
-        runtimeKind: "codex",
-        workingDirectory: "/repo",
-        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
-        systemPrompt: "Use the repo rules.",
-        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-      } satisfies never),
-    ).rejects.toThrow("Cannot start Codex session without session context.");
+    await expect(adapter.startSession(input)).rejects.toThrow(
+      "Cannot start Codex session without session context.",
+    );
     expect(requireRepoRuntime).toHaveBeenCalledTimes(0);
     expect(transportFactory).toHaveBeenCalledTimes(0);
   });

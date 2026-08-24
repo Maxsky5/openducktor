@@ -1,7 +1,7 @@
 import type { FileDiff } from "@openducktor/contracts";
 import { countRenderableFileDiffLines, selectRenderableFileDiff } from "@openducktor/core";
 import { createTwoFilesPatch } from "diff";
-import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import { claudeUnknownRecordSchema, isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
 type ClaudeFileEditPayload = {
   fileDiffs?: FileDiff[];
@@ -36,14 +36,16 @@ const diffHeaderPath = (file: string): string =>
 const structuredPatchRange = (start: number, lines: number): string => `${start},${lines}`;
 
 const readStructuredPatchHunk = (value: unknown): string | null => {
-  if (!isRecord(value)) {
+  const parsed = claudeUnknownRecordSchema.safeParse(value);
+  if (!parsed.success) {
     return null;
   }
-  const oldStart = readNumberProp(value, "oldStart");
-  const oldLines = readNumberProp(value, "oldLines");
-  const newStart = readNumberProp(value, "newStart");
-  const newLines = readNumberProp(value, "newLines");
-  const lines = value.lines;
+  const record = parsed.data;
+  const oldStart = readNumberProp(record, "oldStart");
+  const oldLines = readNumberProp(record, "oldLines");
+  const newStart = readNumberProp(record, "newStart");
+  const newLines = readNumberProp(record, "newLines");
+  const lines = record.lines;
   if (
     oldStart === undefined ||
     oldLines === undefined ||

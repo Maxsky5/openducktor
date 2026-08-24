@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { createCodexAppServerClient } from "./app-server-client";
+import { defaultCodexEffectivePolicy } from "./codex-app-server-adapter.test-harness";
 import type { CodexThreadInventory, CodexThreadSnapshot } from "./codex-app-server-threads";
 import { codexThreadStatusSnapshot } from "./codex-app-server-threads";
 import { CodexPendingInputState } from "./codex-pending-input-state";
@@ -33,14 +35,14 @@ const createDeps = (
   sessions: CodexSessionState[] = [],
 ): CodexSessionRuntimeSnapshotReaderDeps => ({
   runtimeClients: {
-    clientForRuntime: () => ({}) satisfies never,
-    resolve: async () => ({ runtimeId: "runtime-1", client: {} satisfies never }),
+    clientForRuntime: () => client,
+    resolve: async () => ({ runtimeId: "runtime-1", client }),
   },
   threadInventory: {
     read: async () => inventory,
     refresh: async () => inventory,
     readForDirectories: async () => inventory,
-  } satisfies never,
+  },
   sessions: {
     get: (threadId) => sessions.find((session) => session.threadId === threadId),
     values: function* () {
@@ -49,6 +51,12 @@ const createDeps = (
   },
   pendingInput: new CodexPendingInputState(),
   hasActiveTurn: () => false,
+});
+
+const client = createCodexAppServerClient({
+  request: async (request) => {
+    throw new Error(`Unexpected Codex request in runtime snapshot reader test: ${request.method}`);
+  },
 });
 
 describe("Codex session runtime snapshot reader", () => {
@@ -65,12 +73,11 @@ describe("Codex session runtime snapshot reader", () => {
         status: "running",
       },
       systemPrompt: "",
-      role: null,
       runtimeId: "runtime-1",
       repoPath: "/repo",
       threadId: thread.id,
       workingDirectory: "/repo",
-      taskId: "task-1",
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       liveStatus: codexThreadStatusSnapshot("active"),
     };
     const deps = createDeps(inventory, [localSession]);

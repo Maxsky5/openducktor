@@ -116,15 +116,18 @@ export const extractNumberField = (
 };
 
 export const arrayFromUnknown = (value: unknown): CodexAppServerJsonValue[] => {
-  const directArray = jsonValueSchema.safeParse(value);
-  if (directArray.success && Array.isArray(directArray.data)) {
-    return directArray.data;
+  const parsed = jsonValueSchema.safeParse(value);
+  if (!parsed.success) {
+    return [];
   }
-  if (!isPlainObject(value)) {
+  if (Array.isArray(parsed.data)) {
+    return parsed.data;
+  }
+  if (!isPlainObject(parsed.data)) {
     return [];
   }
   for (const key of ["messages", "items", "turns", "data"]) {
-    const candidate = value[key];
+    const candidate = parsed.data[key];
     const parsedCandidate = jsonValueSchema.safeParse(candidate);
     if (parsedCandidate.success && Array.isArray(parsedCandidate.data)) {
       return parsedCandidate.data;

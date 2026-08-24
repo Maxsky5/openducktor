@@ -1,4 +1,5 @@
 import { jsonValueSchema } from "@openducktor/contracts";
+import { z } from "zod";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { extractAllFileEditData } from "./file-edit-tool";
 import { extractPathFromInput, readInputString } from "./tool-input-utils";
@@ -118,10 +119,11 @@ const countTodosFromUnknown = (value: unknown): number | null => {
   if (Array.isArray(value)) {
     return value.length;
   }
-  if (!isJsonRecord(value)) {
+  const parsed = z.record(z.string(), z.unknown()).safeParse(value);
+  if (!parsed.success) {
     return null;
   }
-  const record = value;
+  const record = parsed.data;
   if (Array.isArray(record.todos)) {
     return record.todos.length;
   }

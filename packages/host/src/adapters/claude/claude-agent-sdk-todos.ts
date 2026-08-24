@@ -15,7 +15,7 @@ import {
   isClaudeToolUseRetracted,
   retractClaudeTranscriptCorrelations,
 } from "./claude-agent-sdk-transcript-correlation";
-import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import { claudeUnknownRecordSchema, isRecord, readStringProp } from "./claude-agent-sdk-utils";
 
 export type ClaudeTodoState = Map<string, AgentSessionTodoItem>;
 
@@ -65,12 +65,13 @@ const readTaskStatus = (value: unknown): AgentSessionTodoItem["status"] | null =
 };
 
 const readTaskItem = (value: unknown): AgentSessionTodoItem | null => {
-  if (!isRecord(value)) {
+  const parsed = claudeUnknownRecordSchema.safeParse(value);
+  if (!parsed.success) {
     return null;
   }
-  const id = readStringProp(value, "id");
-  const content = readStringProp(value, "subject");
-  const status = readTaskStatus(value.status);
+  const id = readStringProp(parsed.data, "id");
+  const content = readStringProp(parsed.data, "subject");
+  const status = readTaskStatus(parsed.data.status);
   if (!id || !content || !status) {
     return null;
   }

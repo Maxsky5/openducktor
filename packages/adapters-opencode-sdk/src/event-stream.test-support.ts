@@ -11,7 +11,6 @@ import type {
   EventQuestionV2Replied,
   EventSessionCreated,
   EventSessionStatus,
-  GlobalEvent,
   OpencodeClient,
   QuestionInfo,
   Session,
@@ -23,8 +22,12 @@ import type { JsonObject } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { subscribeSessionToRuntimeEvents } from "./session-registry";
-import { asUnknownRecord, type UnknownRecord } from "./guards";
-import { createOpencodeEventFixtures } from "./opencode-protocol-test-fixtures";
+import { asUnknownRecord } from "./guards";
+import {
+  createOpencodeEventFixtures,
+  type MalformedOpencodeControlEventFixture,
+  type OpencodeEventFixtureInput,
+} from "./opencode-protocol-test-fixtures";
 import type {
   OpencodeEventLogger,
   RuntimeEventTransportRecord,
@@ -36,26 +39,13 @@ type RunEventStreamOptions = {
   logEvent?: OpencodeEventLogger;
 };
 
-type GlobalEventPayload = GlobalEvent["payload"];
 type ParentAlias = "parentId" | "parent_id";
 type ParentAliasSessionInfo = Session & Partial<Record<ParentAlias, string>>;
 type ControlEventProperties = Record<string, unknown>;
 
-export type MalformedControlEvent = {
-  id: string;
-  type:
-    | "permission.v2.replied"
-    | "question.asked"
-    | "question.rejected"
-    | "question.replied"
-    | "question.v2.asked"
-    | "question.v2.rejected"
-    | "question.v2.replied"
-    | "session.status";
-  properties: ControlEventProperties;
-};
+export type MalformedControlEvent = MalformedOpencodeControlEventFixture;
 
-export type TestGlobalEventPayload = GlobalEventPayload | MalformedControlEvent;
+export type TestGlobalEventPayload = OpencodeEventFixtureInput;
 export type UnsupportedParentAliasSessionCreatedEvent = Omit<EventSessionCreated, "properties"> & {
   properties: Omit<EventSessionCreated["properties"], "info"> & {
     info: ParentAliasSessionInfo;
@@ -371,12 +361,12 @@ export const malformedControlEvent = (
   properties: ControlEventProperties,
 ): MalformedControlEvent => ({ id: `malformed-${type}`, type, properties });
 
-export const makeClientWithEvents = (events: UnknownRecord[]): OpencodeClient => {
+export const makeClientWithEvents = (events: TestGlobalEventPayload[]): OpencodeClient => {
   const baseClient = createOpencodeClient({ baseUrl: "http://127.0.0.1:12345" });
   const event = async () => {
     async function* iterator() {
       for (const [index, rawEvent] of events.entries()) {
-        const properties = asUnknownRecord(rawEvent.properties);
+        const properties = "properties" in rawEvent ? asUnknownRecord(rawEvent.properties) : null;
         const directoryValue = properties?.directory;
         const directory = typeof directoryValue === "string" ? directoryValue : "/repo";
         for (const payload of createOpencodeEventFixtures(rawEvent, index)) {

@@ -11,7 +11,12 @@ import type {
   ClaudeHistoryMessage,
 } from "./claude-agent-sdk-history-import";
 import { decodeClaudeToolResultValue } from "./claude-agent-sdk-tool-shapes";
-import { detectFileKind, isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import {
+  claudeUnknownRecordSchema,
+  detectFileKind,
+  isRecord,
+  readStringProp,
+} from "./claude-agent-sdk-utils";
 
 export type ClaudeLiveUserMessage = {
   isManualCompaction?: true;
@@ -148,10 +153,11 @@ export const readClaudeHistoryDisplayParts = (
   messageId: string,
   message: unknown,
 ): AgentUserMessageDisplayPart[] => {
-  if (!isRecord(message)) {
+  const parsed = claudeUnknownRecordSchema.safeParse(message);
+  if (!parsed.success) {
     return [];
   }
-  const content = message.content;
+  const content = parsed.data.content;
   if (typeof content === "string" && content.length > 0) {
     return readClaudeHistoryTextDisplayParts(content);
   }
@@ -319,10 +325,11 @@ export const readHistoryToolResults = (message: ClaudeHistoryConversationMessage
 };
 
 const readStringArrayProp = (value: unknown, key: string): string[] => {
-  if (!isRecord(value)) {
+  const parsed = claudeUnknownRecordSchema.safeParse(value);
+  if (!parsed.success) {
     return [];
   }
-  const candidate = value[key];
+  const candidate = parsed.data[key];
   if (!Array.isArray(candidate)) {
     return [];
   }

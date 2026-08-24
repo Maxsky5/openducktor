@@ -5,6 +5,7 @@ import { emitAdmittedUserMessage } from "./event-stream/message-events/user-emit
 import { handleSessionEvent } from "./event-stream/session-events";
 import type { EventStreamRuntime, SubagentSessionLink } from "./event-stream/shared";
 import {
+  isIgnoredOpencodeEventType,
   parseOpencodeDirectEvent,
   parseOpencodeGlobalEventPayload,
   type OpencodeGlobalEventPayload,
@@ -41,7 +42,9 @@ type SdkGlobalEventPayload = Exclude<OpencodeGlobalEventPayload, { type: "server
 type SyncGlobalEventPayload = Extract<SdkGlobalEventPayload, { type: "sync" }>;
 type SyncEventType = SyncGlobalEventPayload["syncEvent"]["type"];
 
-type OpencodeGlobalEventPayloadDecision = { kind: "heartbeat" } | { kind: "event"; event: Event };
+type OpencodeGlobalEventPayloadDecision =
+  | { kind: "heartbeat" | "ignored" }
+  | { kind: "event"; event: Event };
 
 const NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE = {
   "message.updated.1": "message.updated",
@@ -88,11 +91,6 @@ type OpencodeEventPolicy = {
   usesParentSessionRouting: boolean;
 };
 
-const IGNORE_EVENT = {
-  route: "ignore",
-  invalidatesSessions: false,
-  usesParentSessionRouting: false,
-} as const satisfies OpencodeEventPolicy;
 const MESSAGE_EVENT = {
   route: "message",
   invalidatesSessions: false,
@@ -120,10 +118,6 @@ const INVALIDATION_ONLY_EVENT = {
 } as const satisfies OpencodeEventPolicy;
 
 const OPENCODE_EVENT_POLICY_BY_TYPE = {
-  "models-dev.refreshed": IGNORE_EVENT,
-  "integration.updated": IGNORE_EVENT,
-  "integration.connection.updated": IGNORE_EVENT,
-  "catalog.updated": IGNORE_EVENT,
   "session.created": INVALIDATING_SESSION_EVENT,
   "session.updated": INVALIDATING_SESSION_EVENT,
   "session.deleted": INVALIDATION_ONLY_EVENT,
@@ -131,85 +125,23 @@ const OPENCODE_EVENT_POLICY_BY_TYPE = {
   "message.removed": MESSAGE_EVENT,
   "message.part.updated": MESSAGE_EVENT,
   "message.part.removed": MESSAGE_EVENT,
-  "session.next.agent.switched": IGNORE_EVENT,
-  "session.next.model.switched": IGNORE_EVENT,
-  "session.next.moved": IGNORE_EVENT,
-  "session.next.prompted": IGNORE_EVENT,
-  "session.next.prompt.admitted": IGNORE_EVENT,
-  "session.next.context.updated": IGNORE_EVENT,
-  "session.next.synthetic": IGNORE_EVENT,
-  "session.next.shell.started": IGNORE_EVENT,
-  "session.next.shell.ended": IGNORE_EVENT,
-  "session.next.step.started": IGNORE_EVENT,
-  "session.next.step.ended": IGNORE_EVENT,
-  "session.next.step.failed": IGNORE_EVENT,
-  "session.next.text.started": IGNORE_EVENT,
-  "session.next.text.delta": IGNORE_EVENT,
-  "session.next.text.ended": IGNORE_EVENT,
-  "session.next.reasoning.started": IGNORE_EVENT,
-  "session.next.reasoning.delta": IGNORE_EVENT,
-  "session.next.reasoning.ended": IGNORE_EVENT,
-  "session.next.tool.input.started": IGNORE_EVENT,
-  "session.next.tool.input.delta": IGNORE_EVENT,
-  "session.next.tool.input.ended": IGNORE_EVENT,
-  "session.next.tool.called": IGNORE_EVENT,
-  "session.next.tool.progress": IGNORE_EVENT,
-  "session.next.tool.success": IGNORE_EVENT,
-  "session.next.tool.failed": IGNORE_EVENT,
-  "session.next.retried": IGNORE_EVENT,
-  "session.next.compaction.started": IGNORE_EVENT,
-  "session.next.compaction.delta": IGNORE_EVENT,
-  "session.next.compaction.ended": IGNORE_EVENT,
-  "session.next.revert.staged": IGNORE_EVENT,
-  "session.next.revert.cleared": IGNORE_EVENT,
-  "session.next.revert.committed": IGNORE_EVENT,
   "message.part.delta": MESSAGE_EVENT,
-  "session.diff": IGNORE_EVENT,
   "session.error": SESSION_EVENT,
-  "installation.updated": IGNORE_EVENT,
-  "installation.update-available": IGNORE_EVENT,
-  "file.edited": IGNORE_EVENT,
-  "reference.updated": IGNORE_EVENT,
   "permission.v2.asked": INVALIDATING_PARENT_ROUTED_EVENT,
   "permission.v2.replied": INVALIDATING_PARENT_ROUTED_EVENT,
-  "plugin.added": IGNORE_EVENT,
-  "project.directories.updated": IGNORE_EVENT,
-  "file.watcher.updated": IGNORE_EVENT,
-  "pty.created": IGNORE_EVENT,
-  "pty.updated": IGNORE_EVENT,
-  "pty.exited": IGNORE_EVENT,
-  "pty.deleted": IGNORE_EVENT,
   "question.v2.asked": INVALIDATING_PARENT_ROUTED_EVENT,
   "question.v2.replied": INVALIDATING_PARENT_ROUTED_EVENT,
   "question.v2.rejected": INVALIDATING_PARENT_ROUTED_EVENT,
   "todo.updated": SESSION_EVENT,
-  "lsp.updated": IGNORE_EVENT,
   "permission.asked": INVALIDATING_PARENT_ROUTED_EVENT,
   "permission.replied": INVALIDATING_PARENT_ROUTED_EVENT,
-  "tui.prompt.append": IGNORE_EVENT,
-  "tui.command.execute": IGNORE_EVENT,
-  "tui.toast.show": IGNORE_EVENT,
-  "tui.session.select": IGNORE_EVENT,
-  "mcp.tools.changed": IGNORE_EVENT,
-  "mcp.browser.open.failed": IGNORE_EVENT,
-  "command.executed": IGNORE_EVENT,
-  "project.updated": IGNORE_EVENT,
   "session.status": SESSION_EVENT,
   "session.idle": SESSION_EVENT,
   "question.asked": INVALIDATING_PARENT_ROUTED_EVENT,
   "question.replied": INVALIDATING_PARENT_ROUTED_EVENT,
   "question.rejected": INVALIDATING_PARENT_ROUTED_EVENT,
   "session.compacted": SESSION_EVENT,
-  "vcs.branch.updated": IGNORE_EVENT,
-  "workspace.ready": IGNORE_EVENT,
-  "workspace.failed": IGNORE_EVENT,
-  "workspace.status": IGNORE_EVENT,
-  "worktree.ready": IGNORE_EVENT,
-  "worktree.failed": IGNORE_EVENT,
-  "server.connected": IGNORE_EVENT,
-  "global.disposed": IGNORE_EVENT,
-  "server.instance.disposed": IGNORE_EVENT,
-} as const satisfies Record<SdkEvent["type"], OpencodeEventPolicy>;
+} as const satisfies Record<Event["type"], OpencodeEventPolicy>;
 
 const isKnownSyncEventType = (
   value: string,
@@ -226,6 +158,9 @@ export const normalizeOpencodeGlobalEventPayload = (
   if (parsed.type === "server.heartbeat") {
     return { kind: "heartbeat" };
   }
+  if ("kind" in parsed) {
+    return { kind: "ignored" };
+  }
   if (!("syncEvent" in parsed)) {
     return { kind: "event", event: parsed };
   }
@@ -239,6 +174,9 @@ export const normalizeOpencodeGlobalEventPayload = (
   }
 
   const eventType = NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE[syncEventType];
+  if (isIgnoredOpencodeEventType(eventType)) {
+    return { kind: "ignored" };
+  }
   return {
     kind: "event",
     event: parseOpencodeDirectEvent({

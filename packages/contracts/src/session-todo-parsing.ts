@@ -1,5 +1,4 @@
 import { z } from "zod";
-import type { JsonValue } from "./json-types";
 
 export type AgentSessionTodoPayloadRecord = {
   id: string;
@@ -13,21 +12,31 @@ export type ParseAgentSessionTodoPayloadOptions = {
   allowStringEntries?: boolean;
 };
 
+type LooseAgentSessionTodoPayloadRecord = {
+  id?: string | undefined;
+  todoId?: string | undefined;
+  content?: string | undefined;
+  text?: string | undefined;
+  title?: string | undefined;
+  status?: string | undefined;
+  priority?: string | undefined;
+  completed?: boolean | undefined;
+};
+
 const normalizeLooseTodoEntry = (
-  entry: JsonValue | undefined,
+  entry: string | LooseAgentSessionTodoPayloadRecord,
   fallbackId: string,
   options: ParseAgentSessionTodoPayloadOptions,
 ): AgentSessionTodoPayloadRecord | null => {
-  if (options.allowStringEntries && typeof entry === "string") {
+  if (typeof entry === "string") {
+    if (!options.allowStringEntries) {
+      return null;
+    }
     const content = entry.trim();
     if (!content) {
       return null;
     }
     return { id: fallbackId, content };
-  }
-
-  if (!entry || !(typeof entry === "object") || Array.isArray(entry)) {
-    return null;
   }
 
   const id =
@@ -64,14 +73,29 @@ export const agentSessionTodoPayloadSchema = z.object({
   completed: z.boolean().optional(),
 });
 
+const looseTodoEntrySchema = z.union([
+  z.string(),
+  z.object({
+    id: z.string().optional(),
+    todoId: z.string().optional(),
+    content: z.string().optional(),
+    text: z.string().optional(),
+    title: z.string().optional(),
+    status: z.string().optional(),
+    priority: z.string().optional(),
+    completed: z.boolean().optional(),
+  }),
+]);
+
 export const agentSessionTodoPayloadListSchema = (
   options: ParseAgentSessionTodoPayloadOptions = {},
 ) =>
-  z.preprocess((payload: JsonValue | undefined) => {
-    if (!Array.isArray(payload)) {
+  z.preprocess((payload: unknown) => {
+    const parsed = z.array(looseTodoEntrySchema).safeParse(payload);
+    if (!parsed.success) {
       return [];
     }
-    return payload
+    return parsed.data
       .map((entry, index) => normalizeLooseTodoEntry(entry, `todo:${index}`, options))
       .filter((entry): entry is AgentSessionTodoPayloadRecord => entry !== null);
   }, z.array(agentSessionTodoPayloadSchema));

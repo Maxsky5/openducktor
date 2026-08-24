@@ -41,17 +41,17 @@ import {
   parseTaskDirectMergeInput,
   parseTransitionStatus,
   parseUpdatePatch,
-  requireRecord,
   requireString,
 } from "./task-command-parsing";
+import { requireParsedRecord, unknownRecordSchema } from "./command-inputs";
 
 export const parseRepoPathInput = (input: unknown, label: string): RepoPathInput => {
-  const record = requireRecord(input, label);
+  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), label);
   return { repoPath: requireString(record.repoPath, "repoPath") };
 };
 
 export const parseTaskIdInput = (input: unknown, label: string): TaskIdInput => {
-  const record = requireRecord(input, label);
+  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), label);
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
@@ -59,7 +59,7 @@ export const parseTaskIdInput = (input: unknown, label: string): TaskIdInput => 
 };
 
 export const parseListTasksInput = (input: unknown): ListTasksInput => {
-  const record = requireRecord(input, "tasks_list input");
+  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), "tasks_list input");
   const repoPath = requireString(record.repoPath, "repoPath");
   const doneVisibleDays = optionalNonNegativeInteger(record.doneVisibleDays, "doneVisibleDays");
   return doneVisibleDays === undefined ? { repoPath } : { repoPath, doneVisibleDays };
@@ -68,7 +68,10 @@ export const parseListTasksInput = (input: unknown): ListTasksInput => {
 export const parseListAgentSessionsForTasksInput = (
   input: unknown,
 ): ListAgentSessionsForTasksInput => {
-  const record = requireRecord(input, "agent_sessions_list_for_tasks input");
+  const record = requireParsedRecord(
+    unknownRecordSchema.safeParse(input),
+    "agent_sessions_list_for_tasks input",
+  );
   if (!Array.isArray(record.taskIds)) {
     throw new HostValidationError({
       message: "taskIds must be an array of strings.",
@@ -95,7 +98,10 @@ export const parseListAgentSessionsForTasksInput = (
 };
 
 export const parseAgentSessionUpsertInput = (input: unknown): AgentSessionUpsertInput => {
-  const record = requireRecord(input, "agent_session_upsert input");
+  const record = requireParsedRecord(
+    unknownRecordSchema.safeParse(input),
+    "agent_session_upsert input",
+  );
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
@@ -104,7 +110,10 @@ export const parseAgentSessionUpsertInput = (input: unknown): AgentSessionUpsert
 };
 
 export const parseAgentSessionDeleteInput = (input: unknown): AgentSessionDeleteInput => {
-  const record = requireRecord(input, "agent_session_delete input");
+  const record = requireParsedRecord(
+    unknownRecordSchema.safeParse(input),
+    "agent_session_delete input",
+  );
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
@@ -113,7 +122,10 @@ export const parseAgentSessionDeleteInput = (input: unknown): AgentSessionDelete
 };
 
 export const parsePullRequestUpsertInput = (input: unknown): PullRequestUpsertInput => {
-  const record = requireRecord(input, "task_pull_request_upsert input");
+  const record = requireParsedRecord(
+    unknownRecordSchema.safeParse(input),
+    "task_pull_request_upsert input",
+  );
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
@@ -122,7 +134,10 @@ export const parsePullRequestUpsertInput = (input: unknown): PullRequestUpsertIn
 };
 
 export const parsePullRequestLinkMergedInput = (input: unknown): PullRequestLinkMergedInput => {
-  const record = requireRecord(input, "task_pull_request_link_merged input");
+  const record = requireParsedRecord(
+    unknownRecordSchema.safeParse(input),
+    "task_pull_request_link_merged input",
+  );
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
@@ -131,7 +146,10 @@ export const parsePullRequestLinkMergedInput = (input: unknown): PullRequestLink
 };
 
 export const parseDirectMergeInput = (input: unknown): DirectMergeInput => {
-  const record = requireRecord(input, "task_direct_merge input");
+  const record = requireParsedRecord(
+    unknownRecordSchema.safeParse(input),
+    "task_direct_merge input",
+  );
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
@@ -140,7 +158,7 @@ export const parseDirectMergeInput = (input: unknown): DirectMergeInput => {
 };
 
 export const parseCreateTaskInput = (input: unknown): CreateTaskUseCaseInput => {
-  const record = requireRecord(input, "task_create input");
+  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), "task_create input");
   const descriptionAssets = parseDescriptionAssets(record.descriptionAssets);
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
@@ -150,7 +168,7 @@ export const parseCreateTaskInput = (input: unknown): CreateTaskUseCaseInput => 
 };
 
 export const parseDeleteTaskInput = (input: unknown): DeleteTaskInput => {
-  const record = requireRecord(input, "task_delete input");
+  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), "task_delete input");
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
@@ -159,7 +177,7 @@ export const parseDeleteTaskInput = (input: unknown): DeleteTaskInput => {
 };
 
 export const parseUpdateTaskInput = (input: unknown): UpdateTaskInput => {
-  const record = requireRecord(input, "task_update input");
+  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), "task_update input");
   const patch = parseUpdatePatch(record.patch);
   const descriptionAssets = parseDescriptionAssets(record.descriptionAssets);
   if (descriptionAssets && !Object.hasOwn(patch, "description")) {
@@ -177,7 +195,7 @@ export const parseUpdateTaskInput = (input: unknown): UpdateTaskInput => {
 };
 
 export const parseTransitionTaskInput = (input: unknown): TransitionTaskInput => {
-  const record = requireRecord(input, "task_transition input");
+  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), "task_transition input");
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
@@ -190,7 +208,7 @@ export const parseMarkdownDocumentInput = (
   commandLabel: string,
   markdownLabel: string,
 ): MarkdownDocumentInput => {
-  const record = requireRecord(input, commandLabel);
+  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), commandLabel);
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
@@ -202,7 +220,7 @@ export const parseQaOutcomeInput = (
   input: unknown,
   commandLabel: string,
 ): MarkdownDocumentInput => {
-  const record = requireRecord(input, commandLabel);
+  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), commandLabel);
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
@@ -211,8 +229,11 @@ export const parseQaOutcomeInput = (
 };
 
 export const parseSetPlanInput = (input: unknown): SetPlanInput => {
-  const record = requireRecord(input, "set_plan input");
-  const planInput = requireRecord(record.input, "set_plan input.input");
+  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), "set_plan input");
+  const planInput = requireParsedRecord(
+    unknownRecordSchema.safeParse(record.input),
+    "set_plan input.input",
+  );
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
@@ -223,7 +244,7 @@ export const parseSetPlanInput = (input: unknown): SetPlanInput => {
 };
 
 export const parseBuildStartInput = (input: unknown): BuildStartInput => {
-  const record = requireRecord(input, "build_start input");
+  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), "build_start input");
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
@@ -234,7 +255,10 @@ export const parseBuildStartInput = (input: unknown): BuildStartInput => {
 export const parseTaskSessionBootstrapPrepareInput = (
   input: unknown,
 ): TaskSessionBootstrapPrepareInput => {
-  const record = requireRecord(input, "task_session_bootstrap_prepare input");
+  const record = requireParsedRecord(
+    unknownRecordSchema.safeParse(input),
+    "task_session_bootstrap_prepare input",
+  );
   const parsedRole = agentRoleSchema.safeParse(record.role);
   if (!parsedRole.success) {
     throw new HostValidationError({
@@ -259,7 +283,7 @@ export const parseTaskSessionBootstrapFinalizeInput = (
   input: unknown,
   label: string,
 ): TaskSessionBootstrapFinalizeInput => {
-  const record = requireRecord(input, label);
+  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), label);
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
@@ -270,7 +294,10 @@ export const parseTaskSessionBootstrapFinalizeInput = (
 export const parseTaskSessionStartupLeasePrepareInput = (
   input: unknown,
 ): TaskSessionStartupLeasePrepareInput => {
-  const record = requireRecord(input, "task_session_startup_lease_prepare input");
+  const record = requireParsedRecord(
+    unknownRecordSchema.safeParse(input),
+    "task_session_startup_lease_prepare input",
+  );
   const role = agentRoleSchema.safeParse(record.role);
   if (!role.success)
     throw new HostValidationError({
@@ -288,7 +315,7 @@ export const parseTaskSessionStartupLeaseFinalizeInput = (
   input: unknown,
   label: string,
 ): TaskSessionStartupLeaseFinalizeInput => {
-  const record = requireRecord(input, label);
+  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), label);
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
@@ -297,7 +324,7 @@ export const parseTaskSessionStartupLeaseFinalizeInput = (
 };
 
 export const parseBuildBlockedInput = (input: unknown): BuildBlockedInput => {
-  const record = requireRecord(input, "build_blocked input");
+  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), "build_blocked input");
   const reason = typeof record.reason === "string" ? record.reason.trim() : "";
   if (!reason) {
     throw new HostValidationError({
@@ -313,11 +340,14 @@ export const parseBuildBlockedInput = (input: unknown): BuildBlockedInput => {
 };
 
 export const parseBuildCompletedInput = (input: unknown): BuildCompletedInput => {
-  const record = requireRecord(input, "build_completed input");
+  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), "build_completed input");
   const inputRecord =
     record.input === undefined || record.input === null
       ? undefined
-      : requireRecord(record.input, "build_completed input.input");
+      : requireParsedRecord(
+          unknownRecordSchema.safeParse(record.input),
+          "build_completed input.input",
+        );
   const summary = parseOptionalNote(inputRecord?.summary, "build_completed summary");
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
@@ -331,7 +361,7 @@ export const parseOptionalNoteInput = (
   label: string,
   noteLabel: string,
 ): OptionalNoteInput => {
-  const record = requireRecord(input, label);
+  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), label);
   const note = parseOptionalNote(record.note, noteLabel);
   return {
     repoPath: requireString(record.repoPath, "repoPath"),

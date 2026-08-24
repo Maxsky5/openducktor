@@ -16,15 +16,14 @@ import {
 import { mapPartToAgentStreamPart } from "./stream-part-mapper";
 
 describe("OpenCode ingress schemas", () => {
-  test("preserves producer-declared unknown data in non-sync global events", () => {
-    const connectedAt = new Date();
+  test("reduces ignored global events to their routing decision", () => {
     expect(
       parseOpencodeGlobalEventPayload({
         id: "event-1",
         type: "server.connected",
-        properties: { transport: { connectedAt } },
-      }).properties,
-    ).toEqual({ transport: { connectedAt } });
+        properties: {},
+      }),
+    ).toEqual({ kind: "ignored", id: "event-1", type: "server.connected" });
   });
 
   test("preserves producer-declared unknown provider and agent options", () => {

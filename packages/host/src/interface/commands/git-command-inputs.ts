@@ -19,10 +19,16 @@ import type {
   GitWorktreeStatusInput,
 } from "../../application/git/git-service-inputs";
 import { HostValidationError } from "../../effect/host-errors";
-import { optionalBoolean, optionalString, requireRecord, requireString } from "./command-inputs";
+import {
+  optionalBoolean,
+  optionalString,
+  requireParsedRecord,
+  requireString,
+  unknownRecordSchema,
+} from "./command-inputs";
 
 export const parseGitScopeInput = (input: unknown): GitScopeInput => {
-  const record = requireRecord(input, "Git command input");
+  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), "Git command input");
   const repoPath = requireString(record.repoPath, "repoPath");
   const workingDir = optionalString(record.workingDir, "workingDir");
 
@@ -30,7 +36,10 @@ export const parseGitScopeInput = (input: unknown): GitScopeInput => {
 };
 
 export const parseGitAheadBehindInput = (input: unknown): GitAheadBehindInput => {
-  const record = requireRecord(input, "Git ahead/behind input");
+  const record = requireParsedRecord(
+    unknownRecordSchema.safeParse(input),
+    "Git ahead/behind input",
+  );
   const repoPath = requireString(record.repoPath, "repoPath");
   const targetBranch = requireString(record.targetBranch, "targetBranch");
   const workingDir = optionalString(record.workingDir, "workingDir");
@@ -39,7 +48,10 @@ export const parseGitAheadBehindInput = (input: unknown): GitAheadBehindInput =>
 };
 
 export const parseGitSwitchBranchInput = (input: unknown): GitSwitchBranchInput => {
-  const record = requireRecord(input, "Git switch branch input");
+  const record = requireParsedRecord(
+    unknownRecordSchema.safeParse(input),
+    "Git switch branch input",
+  );
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     branch: requireString(record.branch, "branch"),
@@ -48,7 +60,10 @@ export const parseGitSwitchBranchInput = (input: unknown): GitSwitchBranchInput 
 };
 
 export const parseGitCreateWorktreeInput = (input: unknown): GitCreateWorktreeInput => {
-  const record = requireRecord(input, "Git create worktree input");
+  const record = requireParsedRecord(
+    unknownRecordSchema.safeParse(input),
+    "Git create worktree input",
+  );
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     worktreePath: requireString(record.worktreePath, "worktreePath"),
@@ -58,7 +73,10 @@ export const parseGitCreateWorktreeInput = (input: unknown): GitCreateWorktreeIn
 };
 
 export const parseGitRemoveWorktreeInput = (input: unknown): GitRemoveWorktreeInput => {
-  const record = requireRecord(input, "Git remove worktree input");
+  const record = requireParsedRecord(
+    unknownRecordSchema.safeParse(input),
+    "Git remove worktree input",
+  );
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     worktreePath: requireString(record.worktreePath, "worktreePath"),
@@ -67,7 +85,7 @@ export const parseGitRemoveWorktreeInput = (input: unknown): GitRemoveWorktreeIn
 };
 
 export const parseGitCommitAllInput = (input: unknown): GitCommitAllInput => {
-  const record = requireRecord(input, "Git commit input");
+  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), "Git commit input");
   const repoPath = requireString(record.repoPath, "repoPath");
   const message = requireString(record.message, "message");
   const workingDir = optionalString(record.workingDir, "workingDir");
@@ -76,7 +94,7 @@ export const parseGitCommitAllInput = (input: unknown): GitCommitAllInput => {
 };
 
 export const parseGitPushBranchInput = (input: unknown): GitPushBranchInput => {
-  const record = requireRecord(input, "Git push input");
+  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), "Git push input");
   const repoPath = requireString(record.repoPath, "repoPath");
   const branch = requireString(record.branch, "branch");
   const remote = optionalString(record.remote, "remote") ?? "origin";
@@ -95,7 +113,7 @@ export const parseGitPushBranchInput = (input: unknown): GitPushBranchInput => {
 };
 
 export const parseGitRebaseBranchInput = (input: unknown): GitRebaseBranchInput => {
-  const record = requireRecord(input, "Git rebase input");
+  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), "Git rebase input");
   const repoPath = requireString(record.repoPath, "repoPath");
   const targetBranch = requireString(record.targetBranch, "targetBranch");
   const workingDir = optionalString(record.workingDir, "workingDir");
@@ -104,7 +122,10 @@ export const parseGitRebaseBranchInput = (input: unknown): GitRebaseBranchInput 
 };
 
 export const parseGitAbortConflictInput = (input: unknown): GitAbortConflictInput => {
-  const record = requireRecord(input, "Git conflict abort input");
+  const record = requireParsedRecord(
+    unknownRecordSchema.safeParse(input),
+    "Git conflict abort input",
+  );
   const repoPath = requireString(record.repoPath, "repoPath");
   const operation = gitConflictOperationSchema.parse(record.operation);
   const workingDir = optionalString(record.workingDir, "workingDir");
@@ -113,7 +134,7 @@ export const parseGitAbortConflictInput = (input: unknown): GitAbortConflictInpu
 };
 
 export const parseGitDiffInput = (input: unknown): GitDiffInput => {
-  const record = requireRecord(input, "Git diff input");
+  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), "Git diff input");
   const repoPath = requireString(record.repoPath, "repoPath");
   const targetBranch = optionalString(record.targetBranch, "targetBranch");
   const workingDir = optionalString(record.workingDir, "workingDir");
@@ -126,7 +147,10 @@ export const parseGitDiffInput = (input: unknown): GitDiffInput => {
 };
 
 export const parseGitWorktreeStatusInput = (input: unknown): GitWorktreeStatusInput => {
-  const record = requireRecord(input, "Git worktree status input");
+  const record = requireParsedRecord(
+    unknownRecordSchema.safeParse(input),
+    "Git worktree status input",
+  );
   const repoPath = requireString(record.repoPath, "repoPath");
   const targetBranch = requireString(record.targetBranch, "targetBranch");
   const diffScopeValue =

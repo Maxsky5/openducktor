@@ -1,4 +1,3 @@
-import type { JsonObject, JsonValue } from "./json-types";
 import { z } from "zod";
 import { directMergeRecordSchema, gitTargetBranchSchema, pullRequestSchema } from "./git-schemas";
 import { agentSessionRecordSchema } from "./session-schemas";
@@ -27,24 +26,26 @@ export const taskMetadataQaReportSchema = z.object({
 });
 export type TaskMetadataQaReport = z.infer<typeof taskMetadataQaReportSchema>;
 
-const isPlainObject = (value: JsonValue | undefined): value is JsonObject =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+const unknownRecordSchema = z.record(z.string(), z.unknown());
 
-const normalizeLegacyTaskMetadataPayload = (value: JsonValue | undefined) => {
-  if (!isPlainObject(value)) {
-    return value;
+const normalizeLegacyTaskMetadataPayload = (value: unknown): Record<string, unknown> | null => {
+  const payload = unknownRecordSchema.safeParse(value);
+  if (!payload.success) {
+    return null;
   }
 
-  const payload = value;
-  const delivery = payload.delivery;
-  if (!isPlainObject(delivery)) {
-    return value;
+  const delivery = unknownRecordSchema.safeParse(payload.data.delivery);
+  if (!delivery.success) {
+    return payload.data;
   }
+
+  const pullRequest = payload.data.pullRequest ?? delivery.data.linkedPullRequest;
+  const directMerge = payload.data.directMerge ?? delivery.data.directMerge;
 
   return {
-    ...payload,
-    pullRequest: payload.pullRequest ?? delivery.linkedPullRequest,
-    directMerge: payload.directMerge ?? delivery.directMerge,
+    ...payload.data,
+    ...(pullRequest === undefined ? undefined : { pullRequest }),
+    ...(directMerge === undefined ? undefined : { directMerge }),
   };
 };
 

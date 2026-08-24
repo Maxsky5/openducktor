@@ -666,12 +666,12 @@ describe("createElectronHostCommandRouter", () => {
           });
           const failureReported = yield* Deferred.make<unknown>();
           let settingsReadFails = false;
+          // SAFETY: This negative test deliberately returns malformed config from the port to exercise host validation.
+          const malformedConfig = { workspaces: null } as GlobalConfig;
           const settingsConfig: SettingsConfigPort = {
             ...createSettingsConfig(),
             readConfig: () =>
-              settingsReadFails
-                ? Effect.succeed({ workspaces: null } satisfies GlobalConfig)
-                : Effect.succeed(null),
+              settingsReadFails ? Effect.succeed(malformedConfig) : Effect.succeed(null),
           };
           const { eventBus } = createEventBus();
           const router = createElectronEffectHostCommandRouter({

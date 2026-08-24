@@ -168,7 +168,8 @@ describe("workspaceFileTreeQueryOptions", () => {
     });
     await waitFor(() => expect(result.current.mutation.isError).toBe(true));
     expect(mutationError).toBeInstanceOf(Error);
-    expect((mutationError as Error).message).toBe("The file changed after it was loaded.");
+    if (!(mutationError instanceof Error)) throw mutationError;
+    expect(mutationError.message).toBe("The file changed after it was loaded.");
     expect(result.current.queryClient.getQueryData<WorkspaceTextFileReadResult>(key)).toEqual(
       baseline,
     );

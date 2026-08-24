@@ -1,4 +1,4 @@
-import { isRecord } from "./claude-agent-sdk-utils";
+import { claudeUnknownRecordSchema } from "./claude-agent-sdk-utils";
 
 type ClaudeContextUsageFields = {
   usedTokens?: number;
@@ -15,11 +15,12 @@ const positiveNumber = (value: unknown): number | undefined => {
 export const contextUsageFromClaudeControlResponse = (
   response: unknown,
 ): ClaudeContextUsageFields => {
-  if (!isRecord(response)) {
+  const parsed = claudeUnknownRecordSchema.safeParse(response);
+  if (!parsed.success) {
     return {};
   }
-  const usedTokens = positiveNumber(response.totalTokens);
-  const maxTokens = positiveNumber(response.maxTokens);
+  const usedTokens = positiveNumber(parsed.data.totalTokens);
+  const maxTokens = positiveNumber(parsed.data.maxTokens);
   return {
     ...(usedTokens !== undefined ? { usedTokens } : undefined),
     ...(maxTokens !== undefined ? { maxTokens } : undefined),
