@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import type { ScheduleTask } from "@/lib/scheduling";
 import {
   type AgentChatComposerDraft,
   createComposerAttachment,
@@ -19,6 +20,7 @@ import {
   setAgentChatDraftAttachmentStagerForTests,
   setAgentChatDraftNowProviderForTests,
   setAgentChatDraftPersistenceErrorReporter,
+  setAgentChatDraftScheduleTaskForTests,
   setAgentChatDraftStorageForTests,
 } from "./agent-chat-draft-store";
 
@@ -50,66 +52,27 @@ const createMemoryStorage = (spies?: {
   };
 };
 
-const installManualTimers = () => {
-  const originalSetTimeout = globalThis.setTimeout;
-  const originalClearTimeout = globalThis.clearTimeout;
-  const createTimerHandle = () => {
-    const timer = originalSetTimeout(() => {}, 60_000);
-    originalClearTimeout(timer);
-    return timer;
+const createManualScheduler = () => {
+  const scheduledTasks: Array<{ callback: () => void; delayMs: number; cancelled: boolean }> = [];
+  const scheduleTask: ScheduleTask = (callback, delayMs) => {
+    const task = { callback, delayMs, cancelled: false };
+    scheduledTasks.push(task);
+    return () => {
+      task.cancelled = true;
+    };
   };
-  const timers = new Map<
-    ReturnType<typeof globalThis.setTimeout>,
-    { handler: () => void; delay: number; cleared: boolean }
-  >();
-
-  Object.defineProperty(globalThis, "setTimeout", {
-    configurable: true,
-    value: (handler: TimerHandler, delay?: number) => {
-      const timerId = createTimerHandle();
-      timers.set(timerId, {
-        handler: () => {
-          if (typeof handler === "function") {
-            handler();
-          }
-        },
-        delay: delay ?? 0,
-        cleared: false,
-      });
-      return timerId;
-    },
-  });
-
-  Object.defineProperty(globalThis, "clearTimeout", {
-    configurable: true,
-    value: (timerId?: ReturnType<typeof globalThis.setTimeout>) => {
-      const timer = timerId ? timers.get(timerId) : undefined;
-      if (timer) {
-        timer.cleared = true;
-      }
-    },
-  });
 
   return {
-    runNextByDelay: (delay: number) => {
-      const timer = Array.from(timers.entries()).find(
-        ([, value]) => value.delay === delay && !value.cleared,
+    scheduleTask,
+    runNextByDelay: (delayMs: number) => {
+      const task = scheduledTasks.find(
+        (candidate) => candidate.delayMs === delayMs && !candidate.cancelled,
       );
-      if (!timer) {
-        throw new Error(`Expected timer with delay ${delay}`);
+      if (!task) {
+        throw new Error(`Expected scheduled task with delay ${delayMs}`);
       }
-      timer[1].cleared = true;
-      timer[1].handler();
-    },
-    restore: () => {
-      Object.defineProperty(globalThis, "setTimeout", {
-        configurable: true,
-        value: originalSetTimeout,
-      });
-      Object.defineProperty(globalThis, "clearTimeout", {
-        configurable: true,
-        value: originalClearTimeout,
-      });
+      task.cancelled = true;
+      task.callback();
     },
   };
 };
@@ -169,46 +132,40 @@ describe("agent chat draft store", () => {
   test("coalesces dirty writes instead of writing on every draft change", async () => {
     const setItem = mock((_key: string, _value: string) => {});
     const storage = createMemoryStorage({ setItem });
-    const timers = installManualTimers();
+    const scheduler = createManualScheduler();
     setAgentChatDraftStorageForTests(storage);
+    setAgentChatDraftScheduleTaskForTests(scheduler.scheduleTask);
     setAgentChatDraftNowProviderForTests(() => new Date("2026-07-08T10:00:00.000Z"));
 
-    try {
-      setAgentChatDraft(identity, "task-1", buildDraft("one"));
-      setAgentChatDraft(identity, "task-1", buildDraft("two"));
-      setAgentChatDraft(identity, "task-1", buildDraft("three"));
+    setAgentChatDraft(identity, "task-1", buildDraft("one"));
+    setAgentChatDraft(identity, "task-1", buildDraft("two"));
+    setAgentChatDraft(identity, "task-1", buildDraft("three"));
 
-      expect(setItem).not.toHaveBeenCalled();
-      timers.runNextByDelay(1_000);
-      await Promise.resolve();
+    expect(setItem).not.toHaveBeenCalled();
+    scheduler.runNextByDelay(1_000);
+    await Promise.resolve();
 
-      expect(setItem).toHaveBeenCalledTimes(1);
-      const raw = storage.getItem(toAgentChatDraftStorageKey(identity));
-      expect(raw).toContain("three");
-    } finally {
-      timers.restore();
-    }
+    expect(setItem).toHaveBeenCalledTimes(1);
+    const raw = storage.getItem(toAgentChatDraftStorageKey(identity));
+    expect(raw).toContain("three");
   });
 
   test("persists the latest draft when the max wait timer fires", async () => {
     const setItem = mock((_key: string, _value: string) => {});
     const storage = createMemoryStorage({ setItem });
-    const timers = installManualTimers();
+    const scheduler = createManualScheduler();
     setAgentChatDraftStorageForTests(storage);
+    setAgentChatDraftScheduleTaskForTests(scheduler.scheduleTask);
     setAgentChatDraftNowProviderForTests(() => new Date("2026-07-08T10:00:00.000Z"));
 
-    try {
-      setAgentChatDraft(identity, "task-1", buildDraft("first"));
-      setAgentChatDraft(identity, "task-1", buildDraft("latest"));
+    setAgentChatDraft(identity, "task-1", buildDraft("first"));
+    setAgentChatDraft(identity, "task-1", buildDraft("latest"));
 
-      timers.runNextByDelay(2_000);
-      await Promise.resolve();
+    scheduler.runNextByDelay(2_000);
+    await Promise.resolve();
 
-      expect(setItem).toHaveBeenCalledTimes(1);
-      expect(storage.getItem(toAgentChatDraftStorageKey(identity))).toContain("latest");
-    } finally {
-      timers.restore();
-    }
+    expect(setItem).toHaveBeenCalledTimes(1);
+    expect(storage.getItem(toAgentChatDraftStorageKey(identity))).toContain("latest");
   });
 
   test("stages file-backed attachments asynchronously before durable persistence", async () => {

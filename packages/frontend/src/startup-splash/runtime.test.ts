@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import type { ScheduleTask } from "@/lib/scheduling";
 import { dismissOpenDucktorStartupSplash, showOpenDucktorStartupFailure } from "./runtime";
 
 if (typeof globalThis.document === "undefined") {
@@ -33,46 +34,28 @@ const renderStartupSplash = (): HTMLElement => {
 };
 
 const captureScheduledTimeout = () => {
-  const scheduled: Array<{ callback: () => void; delayMs: number | undefined }> = [];
-  const cleared = new Set<unknown>();
-  const originalSetTimeout = window.setTimeout;
-  Object.defineProperty(window, "setTimeout", {
-    configurable: true,
-    value: (handler: TimerHandler, timeout?: number) => {
-      if (!(typeof handler === "function")) {
-        throw new TypeError("Expected a timeout callback.");
-      }
-      scheduled.push({ callback: () => handler(), delayMs: timeout });
-      return scheduled.length;
-    },
-    writable: true,
-  });
-  const clearTimeoutSpy = spyOn(window, "clearTimeout").mockImplementation((timeoutId) => {
-    if (timeoutId !== undefined) {
-      cleared.add(timeoutId);
-    }
-  });
+  const scheduled: Array<{ callback: () => void; delayMs: number; cancelled: boolean }> = [];
+  const scheduleTask: ScheduleTask = (callback, delayMs) => {
+    const task = { callback, delayMs, cancelled: false };
+    scheduled.push(task);
+    return () => {
+      task.cancelled = true;
+    };
+  };
 
   return {
+    scheduleTask,
     delayMs: (index = 0) => scheduled[index]?.delayMs,
-    isCleared: (index = 0) => cleared.has(index + 1),
+    isCleared: (index = 0) => scheduled[index]?.cancelled ?? false,
     run: (index = 0) => {
-      if (cleared.has(index + 1)) {
+      const timeout = scheduled[index];
+      if (timeout?.cancelled) {
         return;
       }
-      const timeout = scheduled[index];
       if (!timeout) {
         throw new Error("No timeout was scheduled.");
       }
       timeout.callback();
-    },
-    restore: () => {
-      clearTimeoutSpy.mockRestore();
-      Object.defineProperty(window, "setTimeout", {
-        configurable: true,
-        value: originalSetTimeout,
-        writable: true,
-      });
     },
   };
 };
@@ -91,22 +74,18 @@ describe("startup splash", () => {
     const splash = renderStartupSplash();
     const scheduledTimeout = captureScheduledTimeout();
 
-    try {
-      dismissOpenDucktorStartupSplash();
+    dismissOpenDucktorStartupSplash(scheduledTimeout.scheduleTask);
 
-      expect(splash.classList.contains("odt-startup--leaving")).toBe(false);
-      expect(splash.getAttribute("aria-hidden")).toBeNull();
-      expect(scheduledTimeout.delayMs()).toBeGreaterThan(950);
-      expect(scheduledTimeout.delayMs()).toBeLessThanOrEqual(1_000);
+    expect(splash.classList.contains("odt-startup--leaving")).toBe(false);
+    expect(splash.getAttribute("aria-hidden")).toBeNull();
+    expect(scheduledTimeout.delayMs()).toBeGreaterThan(950);
+    expect(scheduledTimeout.delayMs()).toBeLessThanOrEqual(1_000);
 
-      scheduledTimeout.run();
+    scheduledTimeout.run();
 
-      expect(splash.classList.contains("odt-startup--leaving")).toBe(true);
-      expect(splash.getAttribute("aria-hidden")).toBe("true");
-      expect(scheduledTimeout.delayMs(1)).toBe(250);
-    } finally {
-      scheduledTimeout.restore();
-    }
+    expect(splash.classList.contains("odt-startup--leaving")).toBe(true);
+    expect(splash.getAttribute("aria-hidden")).toBe("true");
+    expect(scheduledTimeout.delayMs(1)).toBe(250);
 
     const transitionEvent = new Event("transitionend");
     Object.defineProperty(transitionEvent, "propertyName", { value: "opacity" });
@@ -125,12 +104,11 @@ describe("startup splash", () => {
     const scheduledTimeout = captureScheduledTimeout();
 
     try {
-      dismissOpenDucktorStartupSplash();
+      dismissOpenDucktorStartupSplash(scheduledTimeout.scheduleTask);
 
       expect(splash.classList.contains("odt-startup--leaving")).toBe(true);
       expect(scheduledTimeout.delayMs()).toBe(250);
     } finally {
-      scheduledTimeout.restore();
       nowSpy.mockRestore();
     }
   });
@@ -145,12 +123,11 @@ describe("startup splash", () => {
     const scheduledTimeout = captureScheduledTimeout();
 
     try {
-      dismissOpenDucktorStartupSplash();
+      dismissOpenDucktorStartupSplash(scheduledTimeout.scheduleTask);
       scheduledTimeout.run();
 
       expect(splash.isConnected).toBe(false);
     } finally {
-      scheduledTimeout.restore();
       nowSpy.mockRestore();
     }
   });
@@ -160,39 +137,31 @@ describe("startup splash", () => {
     const scheduledTimeout = captureScheduledTimeout();
     window.matchMedia = (query: string) => createMediaQueryList(query, true);
 
-    try {
-      dismissOpenDucktorStartupSplash();
+    dismissOpenDucktorStartupSplash(scheduledTimeout.scheduleTask);
 
-      expect(splash.isConnected).toBe(true);
+    expect(splash.isConnected).toBe(true);
 
-      scheduledTimeout.run();
+    scheduledTimeout.run();
 
-      expect(splash.isConnected).toBe(false);
-    } finally {
-      scheduledTimeout.restore();
-    }
+    expect(splash.isConnected).toBe(false);
   });
 
   test("cancels pending dismissal and shows a clear startup failure", () => {
     const splash = renderStartupSplash();
     const scheduledTimeout = captureScheduledTimeout();
 
-    try {
-      dismissOpenDucktorStartupSplash();
-      showOpenDucktorStartupFailure();
+    dismissOpenDucktorStartupSplash(scheduledTimeout.scheduleTask);
+    showOpenDucktorStartupFailure();
 
-      expect(scheduledTimeout.isCleared()).toBe(true);
-      expect(splash.classList.contains("odt-startup--failed")).toBe(true);
-      expect(splash.getAttribute("role")).toBe("alert");
-      expect(splash.getAttribute("aria-live")).toBeNull();
-      expect(splash.getAttribute("aria-hidden")).toBeNull();
-      expect(splash.textContent).toContain("OpenDucktor could not start");
+    expect(scheduledTimeout.isCleared()).toBe(true);
+    expect(splash.classList.contains("odt-startup--failed")).toBe(true);
+    expect(splash.getAttribute("role")).toBe("alert");
+    expect(splash.getAttribute("aria-live")).toBeNull();
+    expect(splash.getAttribute("aria-hidden")).toBeNull();
+    expect(splash.textContent).toContain("OpenDucktor could not start");
 
-      scheduledTimeout.run();
-      expect(splash.isConnected).toBe(true);
-    } finally {
-      scheduledTimeout.restore();
-    }
+    scheduledTimeout.run();
+    expect(splash.isConnected).toBe(true);
   });
 
   test("cancels active removal and keeps the startup failure visible", () => {
@@ -205,7 +174,7 @@ describe("startup splash", () => {
     const scheduledTimeout = captureScheduledTimeout();
 
     try {
-      dismissOpenDucktorStartupSplash();
+      dismissOpenDucktorStartupSplash(scheduledTimeout.scheduleTask);
       expect(splash.classList.contains("odt-startup--leaving")).toBe(true);
       expect(splash.getAttribute("aria-hidden")).toBe("true");
 
@@ -224,7 +193,6 @@ describe("startup splash", () => {
       expect(splash.isConnected).toBe(true);
       expect(splash.textContent).toContain("OpenDucktor could not start");
     } finally {
-      scheduledTimeout.restore();
       nowSpy.mockRestore();
     }
   });

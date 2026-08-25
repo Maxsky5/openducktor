@@ -6,6 +6,7 @@ import {
 } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
+import type { ScheduleTask } from "@/lib/scheduling";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createDeferred,
@@ -726,52 +727,22 @@ describe("use-checks", () => {
       return taskStoreCallCount === 1 ? makeTaskStoreCheck() : taskStoreDeferred.promise;
     });
 
-    const originalSetTimeout = globalThis.setTimeout;
-    const originalClearTimeout = globalThis.clearTimeout;
-    const diagnosticsTimeoutHandlers = new Map<
-      ReturnType<typeof globalThis.setTimeout>,
-      () => void
-    >();
-    const createTimerHandle = () => {
-      const timer = originalSetTimeout(() => {}, 60_000);
-      originalClearTimeout(timer);
-      return timer;
-    };
-    const setTimeoutMock = mock((handler: TimerHandler, delay?: number) => {
-      if (!(typeof handler === "function")) {
-        throw new Error("Expected timeout callback function");
-      }
-
-      if (delay === 2_000) {
-        return createTimerHandle();
-      }
-
-      if (delay === 15_000) {
-        const timeoutId = createTimerHandle();
-        diagnosticsTimeoutHandlers.set(timeoutId, () => handler());
-        return timeoutId;
-      }
-
-      return originalSetTimeout(() => {
-        handler();
-      }, 0);
-    });
-    const clearTimeoutMock = mock((timeoutId: ReturnType<typeof globalThis.setTimeout>) => {
-      diagnosticsTimeoutHandlers.delete(timeoutId);
-      originalClearTimeout(timeoutId);
+    const diagnosticsTimeoutHandlers = new Set<() => void>();
+    const scheduleTask = mock<ScheduleTask>((callback, delayMs) => {
+      expect(delayMs).toBe(15_000);
+      diagnosticsTimeoutHandlers.add(callback);
+      return () => {
+        diagnosticsTimeoutHandlers.delete(callback);
+      };
     });
 
     runtimeCheckHandler = runtimeCheck;
     taskStoreCheckHandler = taskStoreCheck;
-    Object.defineProperty(globalThis, "setTimeout", { configurable: true, value: setTimeoutMock });
-    Object.defineProperty(globalThis, "clearTimeout", {
-      configurable: true,
-      value: clearTimeoutMock,
-    });
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      scheduleTask,
     });
 
     let refreshPromise: Promise<void> | null = null;
@@ -788,7 +759,7 @@ describe("use-checks", () => {
       await harness.waitFor((value) => value.isLoadingChecks === true);
       expect(diagnosticsTimeoutHandlers.size).toBe(1);
 
-      for (const handler of diagnosticsTimeoutHandlers.values()) {
+      for (const handler of diagnosticsTimeoutHandlers) {
         handler();
       }
       diagnosticsTimeoutHandlers.clear();
@@ -809,14 +780,6 @@ describe("use-checks", () => {
       expect(harness.getLatest().isLoadingChecks).toBe(false);
     } finally {
       await harness.unmount();
-      Object.defineProperty(globalThis, "setTimeout", {
-        configurable: true,
-        value: originalSetTimeout,
-      });
-      Object.defineProperty(globalThis, "clearTimeout", {
-        configurable: true,
-        value: originalClearTimeout,
-      });
       void taskStoreDeferred.promise.catch(() => {});
       taskStoreDeferred.reject(new Error("cleanup"));
     }
@@ -825,49 +788,26 @@ describe("use-checks", () => {
   test("projects runtime and task-store query timeouts into concrete states instead of leaving checks pending", async () => {
     const runtimeDeferred = createDeferred<RuntimeCheck>();
     const taskStoreDeferred = createDeferred<TaskStoreCheck>();
-    const originalSetTimeout = globalThis.setTimeout;
-    const originalClearTimeout = globalThis.clearTimeout;
-    const createTimerHandle = () => {
-      const timer = originalSetTimeout(() => {}, 60_000);
-      originalClearTimeout(timer);
-      return timer;
-    };
+    const scheduleTask = mock<ScheduleTask>((callback, delayMs) => {
+      expect(delayMs).toBe(15_000);
+      let cancelled = false;
+      queueMicrotask(() => {
+        if (!cancelled) {
+          callback();
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    });
 
     runtimeCheckHandler = mock(async () => runtimeDeferred.promise);
     taskStoreCheckHandler = mock(async () => taskStoreDeferred.promise);
 
-    Object.defineProperty(globalThis, "setTimeout", {
-      configurable: true,
-      value: (handler: TimerHandler, delay?: number) => {
-        if (!(typeof handler === "function")) {
-          throw new Error("Expected timeout callback function");
-        }
-
-        if (delay === 2_000) {
-          return createTimerHandle();
-        }
-
-        if (delay === 15_000) {
-          return originalSetTimeout(() => {
-            handler();
-          }, 0);
-        }
-
-        return originalSetTimeout(() => {
-          handler();
-        }, delay);
-      },
-    });
-    Object.defineProperty(globalThis, "clearTimeout", {
-      configurable: true,
-      value: (timeoutId: ReturnType<typeof globalThis.setTimeout>) => {
-        originalClearTimeout(timeoutId);
-      },
-    });
-
     const harness = createHookHarness({
       activeRepo: "/repo-a",
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      scheduleTask,
     });
 
     try {
@@ -884,14 +824,6 @@ describe("use-checks", () => {
       expect(toastMessage).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
-      Object.defineProperty(globalThis, "setTimeout", {
-        configurable: true,
-        value: originalSetTimeout,
-      });
-      Object.defineProperty(globalThis, "clearTimeout", {
-        configurable: true,
-        value: originalClearTimeout,
-      });
       void runtimeDeferred.promise.catch(() => {});
       void taskStoreDeferred.promise.catch(() => {});
       runtimeDeferred.reject(new Error("cleanup"));

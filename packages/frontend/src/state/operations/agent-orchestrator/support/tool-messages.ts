@@ -77,7 +77,6 @@ export const resolveToolMessageId = (
   return byRunningTool?.id ?? fallbackId;
 };
 
-// SAFETY: JSON.parse can only produce JSON data, which satisfies `Record<string, unknown>` at this boundary.
 export const normalizeSessionErrorMessage = (value: string): string => {
   const trimmed = value.trim();
   const withoutQuotes = trimmed
@@ -90,7 +89,6 @@ export const normalizeSessionErrorMessage = (value: string): string => {
   }
 
   try {
-    // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue` at this boundary.
     const parsed = jsonValueSchema.parse(JSON.parse(withoutQuotes));
     if (!isJsonRecord(parsed)) {
       return withoutQuotes;

@@ -21,6 +21,7 @@ tester.run("anti-slop/no-unknown-returns", noUnknownReturnsRule, {
     "type Result = { value: unknown }; function load(): Result { return result; }",
     "function load(): Promise<User> { return promise; }",
     "function load(): Record<string, User>[string] { return user; }",
+    "type KnownRecord = Record<string, User>; function load(): KnownRecord[string] { return user; }",
   ],
   invalid: [
     { code: "function load(): unknown { return input; }", errors: [error] },
@@ -35,7 +36,7 @@ tester.run("anti-slop/no-unknown-returns", noUnknownReturnsRule, {
       errors: [error],
     },
     {
-      code: "function load(): UnknownRecord[string] { return input; }",
+      code: "type UnknownRecord = Record<string, unknown>; function load(): UnknownRecord[string] { return input; }",
       errors: [error],
     },
     {

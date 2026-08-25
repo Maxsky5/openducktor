@@ -39,27 +39,51 @@ export const noUnknownReturnsRule = defineRule({
   createOnce(context) {
     const aliases = new Map<string, ESTree.TSTypeAliasDeclaration>();
 
-    const resolvesToUnknown = (
+    function indexedStringValueResolvesToUnknown(
+      type: ESTree.TSType,
+      shadowedAliases: ReadonlySet<string>,
+      visited: Set<string>,
+    ): boolean {
+      if (type.type === "TSParenthesizedType") {
+        return indexedStringValueResolvesToUnknown(type.typeAnnotation, shadowedAliases, visited);
+      }
+      if (type.type !== "TSTypeReference" || type.typeName.type !== "Identifier") return false;
+
+      if (type.typeName.name === "Record") {
+        const [key, value] = type.typeArguments?.params ?? [];
+        return (
+          key?.type === "TSStringKeyword" &&
+          value !== undefined &&
+          resolvesToUnknown(value, shadowedAliases, visited)
+        );
+      }
+
+      const name = referencedAliasName(type);
+      if (name === null || visited.has(name) || shadowedAliases.has(name)) return false;
+      const alias = aliases.get(name);
+      if (
+        alias === undefined ||
+        (alias.typeParameters !== null && alias.typeParameters !== undefined)
+      ) {
+        return false;
+      }
+      const nextVisited = new Set(visited);
+      nextVisited.add(name);
+      return indexedStringValueResolvesToUnknown(
+        alias.typeAnnotation,
+        shadowedAliases,
+        nextVisited,
+      );
+    }
+
+    function resolvesToUnknown(
       type: ESTree.TSType,
       shadowedAliases: ReadonlySet<string>,
       visited = new Set<string>(),
-    ): boolean => {
+    ): boolean {
       if (type.type === "TSUnknownKeyword") return true;
       if (type.type === "TSIndexedAccessType" && type.indexType.type === "TSStringKeyword") {
-        if (
-          type.objectType.type === "TSTypeReference" &&
-          type.objectType.typeName.type === "Identifier"
-        ) {
-          if (type.objectType.typeName.name === "UnknownRecord") return true;
-          if (type.objectType.typeName.name === "Record") {
-            const [key, value] = type.objectType.typeArguments?.params ?? [];
-            return (
-              key?.type === "TSStringKeyword" &&
-              value !== undefined &&
-              resolvesToUnknown(value, shadowedAliases, visited)
-            );
-          }
-        }
+        return indexedStringValueResolvesToUnknown(type.objectType, shadowedAliases, visited);
       }
       if (type.type === "TSParenthesizedType") {
         return resolvesToUnknown(type.typeAnnotation, shadowedAliases, visited);
@@ -87,7 +111,7 @@ export const noUnknownReturnsRule = defineRule({
       const nextVisited = new Set(visited);
       nextVisited.add(name);
       return resolvesToUnknown(alias.typeAnnotation, shadowedAliases, nextVisited);
-    };
+    }
 
     const checkReturnType = (node: FunctionWithReturnType) => {
       const annotation = node.returnType;

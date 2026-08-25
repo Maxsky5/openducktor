@@ -22,7 +22,7 @@ export const noUnknownTypeAliasesRule = defineRule({
     },
     messages: {
       unknownAlias:
-        "Type alias `{{alias}}` hides `unknown`. Keep `unknown` explicit at the parsing boundary or on an allowed `cause` field; otherwise use the parsed owner type.",
+        "Type alias `{{alias}}` hides `unknown`. Keep `unknown` explicit at the boundary that owns parsing, or use the parsed owner type.",
     },
   },
   createOnce(context) {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { useState } from "react";
+import type { ScheduleTask } from "@/lib/scheduling";
 import {
   createMemoryStorage,
   seedWorkspaceNavigationContexts,
@@ -24,6 +25,7 @@ enableReactActEnvironment();
 type HookArgs = {
   activeWorkspaceId: string | null;
   initialNavigation?: AgentStudioNavigationState;
+  scheduleTask?: ScheduleTask;
 };
 
 const sessionExternalIdParam = (sessionExternalId: string) => sessionExternalId;
@@ -86,7 +88,7 @@ const createThrowingStorage = (args: {
   };
 };
 
-const useHookHarness = ({ activeWorkspaceId, initialNavigation }: HookArgs) => {
+const useHookHarness = ({ activeWorkspaceId, initialNavigation, scheduleTask }: HookArgs) => {
   const [navigation, setNavigation] = useState<AgentStudioNavigationState>(
     initialNavigation ?? {
       taskId: "",
@@ -100,6 +102,7 @@ const useHookHarness = ({ activeWorkspaceId, initialNavigation }: HookArgs) => {
       activeWorkspaceId,
       navigation,
       setNavigation,
+      scheduleTask,
     });
 
   return {
@@ -537,51 +540,31 @@ describe("useRepoNavigationPersistence", () => {
   test("surfaces actionable error when context storage persistence fails and allows retry", async () => {
     const memoryStorage = createMemoryStorage();
     const originalStorage = globalThis.localStorage;
-    const originalSetTimeout = globalThis.setTimeout;
-    const originalClearTimeout = globalThis.clearTimeout;
-    const createTimerHandle = () => {
-      const timer = originalSetTimeout(() => {}, 60_000);
-      originalClearTimeout(timer);
-      return timer;
+    const scheduledCallbacks = new Set<() => void>();
+    const scheduleTask: ScheduleTask = (callback) => {
+      scheduledCallbacks.add(callback);
+      return () => {
+        scheduledCallbacks.delete(callback);
+      };
     };
-    const scheduledCallbacks = new Map<ReturnType<typeof globalThis.setTimeout>, () => void>();
 
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
       value: memoryStorage,
     });
-    Object.defineProperty(globalThis, "setTimeout", {
-      configurable: true,
-      value: (callback: TimerHandler) => {
-        const timerId = createTimerHandle();
-        if (!(typeof callback === "function")) {
-          throw new Error("Expected function timer callback");
-        }
-        scheduledCallbacks.set(timerId, () => callback());
-        return timerId;
-      },
-    });
-    Object.defineProperty(globalThis, "clearTimeout", {
-      configurable: true,
-      value: (timerId?: ReturnType<typeof globalThis.setTimeout>) => {
-        if (timerId) {
-          scheduledCallbacks.delete(timerId);
-        }
-      },
-    });
     const takeLatestScheduledCallback = (message: string): (() => void) => {
-      const latestEntry = [...scheduledCallbacks.entries()].at(-1);
-      if (!latestEntry) {
+      const callback = [...scheduledCallbacks].at(-1);
+      if (!callback) {
         throw new Error(message);
       }
-      const [timerId, callback] = latestEntry;
-      scheduledCallbacks.delete(timerId);
+      scheduledCallbacks.delete(callback);
       return callback;
     };
 
     try {
       const harness = createHookHarness({
         activeWorkspaceId: "workspace-repo",
+        scheduleTask,
       });
 
       await harness.mount();
@@ -656,14 +639,6 @@ describe("useRepoNavigationPersistence", () => {
 
       await harness.unmount();
     } finally {
-      Object.defineProperty(globalThis, "setTimeout", {
-        configurable: true,
-        value: originalSetTimeout,
-      });
-      Object.defineProperty(globalThis, "clearTimeout", {
-        configurable: true,
-        value: originalClearTimeout,
-      });
       Object.defineProperty(globalThis, "localStorage", {
         configurable: true,
         value: originalStorage,

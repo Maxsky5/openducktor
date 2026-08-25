@@ -7,6 +7,7 @@ import type {
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { errorMessage } from "@/lib/errors";
 import { isRepoRuntimeHealthPendingReadiness } from "@/lib/repo-runtime-health";
+import { scheduleTask, type ScheduleTask } from "@/lib/scheduling";
 import type {
   RepoRuntimeFailureKind,
   RepoRuntimeHealthCheck,
@@ -58,20 +59,19 @@ export const classifyDiagnosticsQueryError = (cause: unknown) => {
   } satisfies { message: string; failureKind: Exclude<RepoRuntimeFailureKind, null> };
 };
 
-const withDiagnosticsQueryTimeout = async <T>(promise: Promise<T>): Promise<T> => {
-  let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
-  const timeoutPromise = new Promise<never>((_resolve, reject) => {
-    timeoutId = globalThis.setTimeout(() => {
-      reject(new DiagnosticsQueryTimeoutError(DIAGNOSTICS_QUERY_TIMEOUT_MS));
-    }, DIAGNOSTICS_QUERY_TIMEOUT_MS);
-  });
+const withDiagnosticsQueryTimeout = async <T>(
+  promise: Promise<T>,
+  scheduler: ScheduleTask,
+): Promise<T> => {
+  const { promise: timeoutPromise, reject: rejectTimeout } = Promise.withResolvers<never>();
+  const cancelTimeout = scheduler(() => {
+    rejectTimeout(new DiagnosticsQueryTimeoutError(DIAGNOSTICS_QUERY_TIMEOUT_MS));
+  }, DIAGNOSTICS_QUERY_TIMEOUT_MS);
 
   try {
     return await Promise.race([promise, timeoutPromise]);
   } finally {
-    if (timeoutId !== null) {
-      globalThis.clearTimeout(timeoutId);
-    }
+    cancelTimeout();
   }
 };
 
@@ -114,20 +114,24 @@ export const repoRuntimeHealthRefetchInterval = (
 export const runtimeCheckQueryOptions = (
   force = false,
   runtimeCheck: ChecksQueryDependencies["runtimeCheck"] = DEFAULT_CHECKS_QUERY_DEPENDENCIES.runtimeCheck,
+  scheduler: ScheduleTask = scheduleTask,
 ) =>
   queryOptions({
     queryKey: checksQueryKeys.runtime(),
-    queryFn: (): Promise<RuntimeCheck> => withDiagnosticsQueryTimeout(runtimeCheck(force)),
+    queryFn: (): Promise<RuntimeCheck> =>
+      withDiagnosticsQueryTimeout(runtimeCheck(force), scheduler),
     staleTime: RUNTIME_CHECK_STALE_TIME_MS,
   });
 
 export const taskStoreCheckQueryOptions = (
   repoPath: string,
   taskStoreCheck: ChecksQueryDependencies["taskStoreCheck"] = DEFAULT_CHECKS_QUERY_DEPENDENCIES.taskStoreCheck,
+  scheduler: ScheduleTask = scheduleTask,
 ) =>
   queryOptions({
     queryKey: checksQueryKeys.taskStore(repoPath),
-    queryFn: (): Promise<TaskStoreCheck> => withDiagnosticsQueryTimeout(taskStoreCheck(repoPath)),
+    queryFn: (): Promise<TaskStoreCheck> =>
+      withDiagnosticsQueryTimeout(taskStoreCheck(repoPath), scheduler),
     staleTime: TASK_STORE_CHECK_STALE_TIME_MS,
   });
 
@@ -167,11 +171,14 @@ export const repoRuntimeHealthQueryOptions = (
 export const loadRuntimeCheckFromQuery = (
   queryClient: QueryClient,
   runtimeCheck: ChecksQueryDependencies["runtimeCheck"] = DEFAULT_CHECKS_QUERY_DEPENDENCIES.runtimeCheck,
-): Promise<RuntimeCheck> => queryClient.fetchQuery(runtimeCheckQueryOptions(false, runtimeCheck));
+  scheduler: ScheduleTask = scheduleTask,
+): Promise<RuntimeCheck> =>
+  queryClient.fetchQuery(runtimeCheckQueryOptions(false, runtimeCheck, scheduler));
 
 export const loadTaskStoreCheckFromQuery = (
   queryClient: QueryClient,
   repoPath: string,
   taskStoreCheck: ChecksQueryDependencies["taskStoreCheck"] = DEFAULT_CHECKS_QUERY_DEPENDENCIES.taskStoreCheck,
+  scheduler: ScheduleTask = scheduleTask,
 ): Promise<TaskStoreCheck> =>
-  queryClient.fetchQuery(taskStoreCheckQueryOptions(repoPath, taskStoreCheck));
+  queryClient.fetchQuery(taskStoreCheckQueryOptions(repoPath, taskStoreCheck, scheduler));
