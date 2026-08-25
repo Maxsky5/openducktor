@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { codexUint32Schema, codexUsizeSchema } from "./codex-app-server-number-schemas";
+import {
+  codexUint32Schema,
+  codexUint64Schema,
+  codexUsizeSchema,
+} from "./codex-app-server-number-schemas";
 import { jsonObjectSchema, jsonValueSchema } from "./json-types";
 
 export const codexAppServerReasoningEffortSchema = z.string().min(1);
@@ -113,7 +117,7 @@ const functionCallOutputBodySchema = z.union([
 const localShellActionSchema = z.strictObject({
   type: z.literal("exec"),
   command: z.array(z.string()),
-  timeout_ms: z.number().int().nonnegative().nullable(),
+  timeout_ms: codexUint64Schema.nullable(),
   working_directory: z.string().nullable(),
   env: z.record(z.string(), z.string()).nullable(),
   user: z.string().nullable(),

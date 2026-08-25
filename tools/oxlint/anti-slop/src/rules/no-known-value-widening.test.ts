@@ -34,6 +34,8 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
     `${prelude} type Commands = { readonly start: Command }; const commands: Commands = { start: startCommand };`,
     `${prelude} type PermissionLevels = { readonly [Level in Permission]: number }; const levels: PermissionLevels = { admin: 1 };`,
     `${prelude} const commands: Record<'start', Command> = { start: startCommand };`,
+    `${prelude} const commands: Record<string & 'only', Command> = { only: startCommand };`,
+    'type Command = () => void; const startCommand = () => {}; const commands: Record<`key-${"start"}`, Command> = { "key-start": startCommand };',
     `${prelude} const commands: Pick<Record<string, Command>, 'start'> = { start: startCommand };`,
     `${prelude} const commands: Omit<Record<string, Command>, string> = {};`,
     `${prelude} function create() { return { start: startCommand }; }`,
@@ -82,6 +84,14 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
     },
     {
       code: `${prelude} const commands: Record<keyof any, Command> = { start: startCommand };`,
+      errors: [error],
+    },
+    {
+      code: `${prelude} const commands: Record<string & keyof any, Command> = { start: startCommand };`,
+      errors: [error],
+    },
+    {
+      code: 'type Command = () => void; const startCommand = () => {}; const commands: Record<`key-${string}`, Command> = { "key-start": startCommand };',
       errors: [error],
     },
     {

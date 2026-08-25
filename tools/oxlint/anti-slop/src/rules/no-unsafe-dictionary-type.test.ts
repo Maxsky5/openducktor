@@ -49,6 +49,8 @@ tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
     'type Safe = Pick<Record<string, object>, "only">;',
     "type Safe = Omit<Record<string, object>, string>;",
     'interface Safe extends Record<"only", object> {}',
+    'type Safe = Record<string & "only", object>;',
+    'type Safe = Record<`key-${"one" | "two"}`, object>;',
     {
       filename: importedTypeFixtureFilename,
       code: "import type { InputKey } from './no-known-value-widening-types'; type Safe = Pick<Record<string, object>, InputKey>;",
@@ -63,6 +65,8 @@ tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
     { code: "type A = { [K in PropertyKey]: object };", errors: [error] },
     { code: "type A = Record<string, {}>;", errors: [error] },
     { code: "type A = Record<keyof any, object>;", errors: [error] },
+    { code: "type A = Record<string & keyof any, object>;", errors: [error] },
+    { code: "type A = Record<`key-${string}`, object>;", errors: [error] },
     { code: "interface Escape {} type A = Record<string, Escape>;", errors: [error] },
     {
       code: "interface Escape { readonly __brand?: never } type A = Record<string, Escape>;",

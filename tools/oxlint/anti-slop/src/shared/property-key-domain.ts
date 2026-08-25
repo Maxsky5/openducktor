@@ -1,4 +1,14 @@
 import type { PortableTSType } from "./portable-ast.ts";
+import { resolveObjectPropertyKeyDomain } from "./keyof-property-key-domain.ts";
+import {
+  emptyPropertyKeyDomain,
+  intersectPropertyKeyDomains,
+  propertyKeyDomainValueId,
+  propertyKeyDomainValueText,
+  subtractPropertyKeyDomains,
+  unionPropertyKeyDomains,
+  type PropertyKeyDomain,
+} from "./property-key-domain-model.ts";
 import {
   aliasSubstitution,
   enterTypeResolution,
@@ -13,36 +23,69 @@ import {
   type TypeSubstitutions,
 } from "./portable-type-resolution.ts";
 
-export type PropertyKeyDomain = {
-  readonly numbers: boolean;
-  readonly strings: boolean;
-  readonly symbols: boolean;
-  readonly values: ReadonlySet<string>;
-};
+export { portablePropertyKeyValue } from "./keyof-property-key-domain.ts";
+export {
+  intersectPropertyKeyDomains,
+  propertyKeyDomainIncludes,
+  propertyKeyDomainIsBroad,
+  propertyKeyDomainMatches,
+  propertyKeySurvivesTransform,
+  subtractPropertyKeyDomains,
+} from "./property-key-domain-model.ts";
+export type { PropertyKeyDomain } from "./property-key-domain-model.ts";
 
-const emptyDomain = (): PropertyKeyDomain => ({
-  numbers: false,
-  strings: false,
-  symbols: false,
-  values: new Set(),
-});
-
-const valueId = (value: number | string): string =>
-  `${typeof value === "number" ? "number" : "string"}\0${String(value)}`;
-
-function unionDomains(domains: readonly PropertyKeyDomain[]): PropertyKeyDomain {
-  return {
-    numbers: domains.some((domain) => domain.numbers),
-    strings: domains.some((domain) => domain.strings),
-    symbols: domains.some((domain) => domain.symbols),
-    values: new Set(domains.flatMap((domain) => [...domain.values])),
-  };
+function escapeRegularExpression(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
-function acceptsValue(domain: PropertyKeyDomain, id: string): boolean {
-  if (domain.values.has(id)) return true;
-  if (id.startsWith("number\0")) return domain.numbers;
-  return domain.strings;
+function templateInterpolationPattern(domain: PropertyKeyDomain): string | null {
+  if (domain.strings) return ".*";
+  const alternatives = [
+    ...(domain.numbers
+      ? ["(?:NaN|Infinity|-Infinity|-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)"]
+      : []),
+    ...[...domain.values].map((value) =>
+      escapeRegularExpression(propertyKeyDomainValueText(value)),
+    ),
+    ...[...domain.patterns].map((pattern) => pattern.replace(/^\^|\$$/gu, "")),
+  ];
+  if (alternatives.length === 0) return null;
+  return alternatives.length === 1 ? (alternatives[0] ?? null) : `(?:${alternatives.join("|")})`;
+}
+
+function templateLiteralKeyDomain(
+  type: Extract<PortableTSType, { type: "TSTemplateLiteralType" }>,
+  environment: PortableTypeEnvironment,
+  substitutions: TypeSubstitutions,
+  resolveImportedType: PortableTypeResolver | undefined,
+  resolving: ReadonlySet<string>,
+): PropertyKeyDomain {
+  const interpolationDomains = type.types.map((member) =>
+    resolvePropertyKeyDomain(member, environment, substitutions, resolveImportedType, resolving),
+  );
+  const allFinite = interpolationDomains.every(
+    (domain) => !domain.numbers && !domain.strings && !domain.symbols && domain.patterns.size === 0,
+  );
+  if (allFinite) {
+    let values = [type.quasis[0]?.value.cooked ?? ""];
+    for (const [index, domain] of interpolationDomains.entries()) {
+      const suffix = type.quasis[index + 1]?.value.cooked ?? "";
+      values = values.flatMap((prefix) =>
+        [...domain.values].map((value) => `${prefix}${propertyKeyDomainValueText(value)}${suffix}`),
+      );
+    }
+    return {
+      ...emptyPropertyKeyDomain(),
+      values: new Set(values.map((value) => propertyKeyDomainValueId(value))),
+    };
+  }
+  const parts = [escapeRegularExpression(type.quasis[0]?.value.cooked ?? "")];
+  for (const [index, domain] of interpolationDomains.entries()) {
+    const interpolation = templateInterpolationPattern(domain);
+    if (interpolation === null) return emptyPropertyKeyDomain();
+    parts.push(interpolation, escapeRegularExpression(type.quasis[index + 1]?.value.cooked ?? ""));
+  }
+  return { ...emptyPropertyKeyDomain(), patterns: new Set([`^${parts.join("")}$`]) };
 }
 
 /** Resolve the string, number, symbol, and literal keys admitted by a type. */
@@ -55,23 +98,35 @@ export function resolvePropertyKeyDomain(
 ): PropertyKeyDomain {
   const unwrapped = unwrapTransparentType(type);
   if (unwrapped.type === "TSStringKeyword") {
-    return { ...emptyDomain(), strings: true };
+    return { ...emptyPropertyKeyDomain(), strings: true };
   }
   if (unwrapped.type === "TSNumberKeyword") {
-    return { ...emptyDomain(), numbers: true };
+    return { ...emptyPropertyKeyDomain(), numbers: true };
   }
   if (unwrapped.type === "TSSymbolKeyword") {
-    return { ...emptyDomain(), symbols: true };
+    return { ...emptyPropertyKeyDomain(), symbols: true };
   }
   if (unwrapped.type === "TSLiteralType") {
     const literal = unwrapped.literal;
     return literal.type === "Literal" &&
       (typeof literal.value === "string" || typeof literal.value === "number")
-      ? { ...emptyDomain(), values: new Set([valueId(literal.value)]) }
-      : emptyDomain();
+      ? {
+          ...emptyPropertyKeyDomain(),
+          values: new Set([propertyKeyDomainValueId(literal.value)]),
+        }
+      : emptyPropertyKeyDomain();
+  }
+  if (unwrapped.type === "TSTemplateLiteralType") {
+    return templateLiteralKeyDomain(
+      unwrapped,
+      environment,
+      substitutions,
+      resolveImportedType,
+      resolving,
+    );
   }
   if (unwrapped.type === "TSUnionType") {
-    return unionDomains(
+    return unionPropertyKeyDomains(
       unwrapped.types.map((member) =>
         resolvePropertyKeyDomain(
           member,
@@ -85,7 +140,7 @@ export function resolvePropertyKeyDomain(
   }
   if (unwrapped.type === "TSIntersectionType") {
     const [first, ...rest] = unwrapped.types;
-    if (first === undefined) return emptyDomain();
+    if (first === undefined) return emptyPropertyKeyDomain();
     return rest.reduce(
       (domain, member) =>
         intersectPropertyKeyDomains(
@@ -102,18 +157,16 @@ export function resolvePropertyKeyDomain(
     );
   }
   if (unwrapped.type === "TSTypeOperator" && unwrapped.operator === "keyof") {
-    const operand = unwrapTransparentType(unwrapped.typeAnnotation);
-    return operand.type === "TSAnyKeyword"
-      ? { ...emptyDomain(), numbers: true, strings: true, symbols: true }
-      : resolveOpenDictionaryKeyDomain(
-          operand,
-          environment,
-          substitutions,
-          resolveImportedType,
-          resolving,
-        );
+    return resolveObjectPropertyKeyDomain(
+      unwrapped.typeAnnotation,
+      environment,
+      substitutions,
+      resolveImportedType,
+      resolving,
+      resolvePropertyKeyDomain,
+    );
   }
-  if (unwrapped.type !== "TSTypeReference") return emptyDomain();
+  if (unwrapped.type !== "TSTypeReference") return emptyPropertyKeyDomain();
   const name = typeReferenceName(unwrapped);
   if (name !== null) {
     const substitution = substitutions.get(name);
@@ -127,7 +180,12 @@ export function resolvePropertyKeyDomain(
       );
     }
     if (name === "PropertyKey" && isBuiltInType(name, environment)) {
-      return { ...emptyDomain(), numbers: true, strings: true, symbols: true };
+      return {
+        ...emptyPropertyKeyDomain(),
+        numbers: true,
+        strings: true,
+        symbols: true,
+      };
     }
   }
   const domains: PropertyKeyDomain[] = [];
@@ -157,74 +215,7 @@ export function resolvePropertyKeyDomain(
       ),
     );
   }
-  return unionDomains(domains);
-}
-
-export function propertyKeyDomainIsBroad(domain: PropertyKeyDomain): boolean {
-  return domain.numbers || domain.strings || domain.symbols;
-}
-
-export function propertyKeyDomainIncludes(
-  domain: PropertyKeyDomain,
-  candidate: PropertyKeyDomain,
-): boolean {
-  if (candidate.numbers && !domain.numbers) return false;
-  if (candidate.strings && !domain.strings) return false;
-  if (candidate.symbols && !domain.symbols) return false;
-  return [...candidate.values].every((value) => acceptsValue(domain, value));
-}
-
-export function propertyKeyDomainMatches(
-  domain: PropertyKeyDomain,
-  value: number | string,
-): boolean {
-  return acceptsValue(domain, valueId(value));
-}
-
-export function intersectPropertyKeyDomains(
-  left: PropertyKeyDomain,
-  right: PropertyKeyDomain,
-): PropertyKeyDomain {
-  const values = new Set<string>();
-  for (const value of left.values) {
-    if (acceptsValue(right, value)) values.add(value);
-  }
-  for (const value of right.values) {
-    if (acceptsValue(left, value)) values.add(value);
-  }
-  return {
-    numbers: left.numbers && right.numbers,
-    strings: left.strings && right.strings,
-    symbols: left.symbols && right.symbols,
-    values,
-  };
-}
-
-export function subtractPropertyKeyDomains(
-  source: PropertyKeyDomain,
-  excluded: PropertyKeyDomain,
-): PropertyKeyDomain {
-  return {
-    numbers: source.numbers && !excluded.numbers,
-    strings: source.strings && !excluded.strings,
-    symbols: source.symbols && !excluded.symbols,
-    values: new Set([...source.values].filter((value) => !acceptsValue(excluded, value))),
-  };
-}
-
-/** Decide whether a concrete property remains visible after Pick or Omit. */
-export function propertyKeySurvivesTransform(
-  transform: "Omit" | "Pick",
-  sourceOpenDomain: PropertyKeyDomain,
-  selectedDomain: PropertyKeyDomain,
-  value: number | string,
-): boolean {
-  if (transform === "Pick") return propertyKeyDomainMatches(selectedDomain, value);
-  if (!propertyKeyDomainMatches(selectedDomain, value)) return true;
-  return propertyKeyDomainMatches(
-    subtractPropertyKeyDomains(sourceOpenDomain, selectedDomain),
-    value,
-  );
+  return unionPropertyKeyDomains(domains);
 }
 
 /** Resolve the remaining open key space of a dictionary-like type. */
@@ -237,7 +228,7 @@ export function resolveOpenDictionaryKeyDomain(
 ): PropertyKeyDomain {
   const unwrapped = unwrapTransparentType(type);
   if (unwrapped.type === "TSTypeLiteral") {
-    return unionDomains(
+    return unionPropertyKeyDomains(
       unwrapped.members.flatMap((member): readonly PropertyKeyDomain[] => {
         if (member.type !== "TSIndexSignature") return [];
         const keyType = member.parameters[0]?.typeAnnotation.typeAnnotation;
@@ -264,7 +255,7 @@ export function resolveOpenDictionaryKeyDomain(
       resolving,
     );
   }
-  if (unwrapped.type !== "TSTypeReference") return emptyDomain();
+  if (unwrapped.type !== "TSTypeReference") return emptyPropertyKeyDomain();
   const name = typeReferenceName(unwrapped);
   if (name !== null) {
     const substitution = substitutions.get(name);
@@ -280,7 +271,7 @@ export function resolveOpenDictionaryKeyDomain(
     if (TRANSPARENT_TYPE_WRAPPERS.has(name) && isBuiltInType(name, environment)) {
       const wrapped = unwrapped.typeArguments?.params[0];
       return wrapped === undefined
-        ? emptyDomain()
+        ? emptyPropertyKeyDomain()
         : resolveOpenDictionaryKeyDomain(
             wrapped,
             environment,
@@ -292,12 +283,12 @@ export function resolveOpenDictionaryKeyDomain(
     if (name === "Record" && isBuiltInType(name, environment)) {
       const key = unwrapped.typeArguments?.params[0];
       return key === undefined
-        ? emptyDomain()
+        ? emptyPropertyKeyDomain()
         : resolvePropertyKeyDomain(key, environment, substitutions, resolveImportedType, resolving);
     }
     if ((name === "Pick" || name === "Omit") && isBuiltInType(name, environment)) {
       const [source, selected] = unwrapped.typeArguments?.params ?? [];
-      if (source === undefined || selected === undefined) return emptyDomain();
+      if (source === undefined || selected === undefined) return emptyPropertyKeyDomain();
       const sourceDomain = resolveOpenDictionaryKeyDomain(
         source,
         environment,
@@ -344,5 +335,5 @@ export function resolveOpenDictionaryKeyDomain(
       ),
     );
   }
-  return unionDomains(domains);
+  return unionPropertyKeyDomains(domains);
 }

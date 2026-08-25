@@ -304,7 +304,7 @@ describe("Codex app-server protocol", () => {
         },
       }).success,
     ).toBe(false);
-    for (const globScanMaxDepth of [0, -1, 1.5]) {
+    for (const globScanMaxDepth of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
       expect(
         codexAppServerRequestPermissionProfileSchema.safeParse({
           network: null,
@@ -312,6 +312,53 @@ describe("Codex app-server protocol", () => {
         }).success,
       ).toBe(false);
     }
+  });
+
+  test("matches Codex MCP elicitation integer widths", () => {
+    const request = {
+      threadId: "thread-1",
+      turnId: "turn-1",
+      serverName: "openducktor",
+      mode: "form",
+      _meta: null,
+      message: "Provide values",
+      requestedSchema: { type: "object", properties: {} },
+    } as const;
+    const requestedSchema = {
+      type: "object",
+      properties: { label: { type: "string", minLength: 4_294_967_295 } },
+    } as const;
+
+    expect(
+      codexAppServerMcpServerElicitationRequestParamsSchema.safeParse({
+        ...request,
+        requestedSchema,
+      }).success,
+    ).toBe(true);
+    expect(
+      codexAppServerMcpServerElicitationRequestParamsSchema.safeParse({
+        ...request,
+        requestedSchema: {
+          ...requestedSchema,
+          properties: { label: { type: "string", minLength: 4_294_967_296 } },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      codexAppServerMcpServerElicitationRequestParamsSchema.safeParse({
+        ...request,
+        requestedSchema: {
+          ...requestedSchema,
+          properties: {
+            labels: {
+              type: "array",
+              minItems: Number.MAX_SAFE_INTEGER + 1,
+              items: { type: "string", enum: ["one"] },
+            },
+          },
+        },
+      }).success,
+    ).toBe(false);
   });
 
   test("requires the upstream v2 permission approval fields", () => {
@@ -468,6 +515,13 @@ describe("Codex app-server protocol", () => {
     expect(
       codexAppServerThreadItemSchema.safeParse({ ...commandExecutionItem, durationMs: 1.5 })
         .success,
+    ).toBe(false);
+    expect(
+      codexAppServerThreadItemSchema.safeParse({
+        type: "sleep",
+        id: "sleep-1",
+        durationMs: Number.MAX_SAFE_INTEGER + 1,
+      }).success,
     ).toBe(false);
     const agentMessageItem = {
       type: "agentMessage",

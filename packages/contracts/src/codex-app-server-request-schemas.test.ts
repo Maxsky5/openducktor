@@ -314,6 +314,34 @@ describe("Codex app-server 0.149 experimental request schemas", () => {
     }
   });
 
+  test("rejects invalid u64 local shell timeouts", () => {
+    for (const timeout_ms of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() =>
+        parseCodexAppServerClientRequest({
+          method: "thread/resume",
+          params: {
+            threadId: "thread-1",
+            history: [
+              {
+                type: "local_shell_call",
+                call_id: "shell-1",
+                status: "completed",
+                action: {
+                  type: "exec",
+                  command: ["git", "status"],
+                  timeout_ms,
+                  working_directory: "/repo",
+                  env: null,
+                  user: null,
+                },
+              },
+            ],
+          },
+        }),
+      ).toThrow();
+    }
+  });
+
   test("parses model/list future reasoning efforts", () => {
     const response = {
       data: [

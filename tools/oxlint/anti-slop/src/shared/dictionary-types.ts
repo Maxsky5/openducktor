@@ -538,7 +538,13 @@ function indexedValueResolvesToUnknown(
     (name === "Array" || name === "ReadonlyArray") &&
     isBuiltInType(name, environment) &&
     propertyKeyDomainIncludes(
-      { numbers: true, strings: false, symbols: false, values: new Set() },
+      {
+        numbers: true,
+        patterns: new Set(),
+        strings: false,
+        symbols: false,
+        values: new Set(),
+      },
       indexDomain,
     )
   ) {

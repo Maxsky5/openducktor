@@ -9,6 +9,8 @@ import {
   codexInt64Schema,
   codexUint16Schema,
   codexUint32Schema,
+  codexUint64Schema,
+  codexUsizeSchema,
 } from "./codex-app-server-number-schemas";
 import { jsonValueSchema } from "./json-types";
 
@@ -91,7 +93,7 @@ export const codexAppServerFileSystemSandboxEntrySchema = z.object({
 export const codexAppServerAdditionalFileSystemPermissionsSchema = z.object({
   read: z.array(z.string()).nullable(),
   write: z.array(z.string()).nullable(),
-  globScanMaxDepth: z.number().int().positive().optional(),
+  globScanMaxDepth: codexUsizeSchema.positive().optional(),
   entries: z.array(codexAppServerFileSystemSandboxEntrySchema).optional(),
 });
 
@@ -115,7 +117,7 @@ export const codexAppServerCurrentTimeReadParamsSchema = z.object({
 });
 
 export const codexAppServerCurrentTimeReadResponseSchema = z.object({
-  currentTimeAt: z.number().int(),
+  currentTimeAt: codexInt64Schema,
 });
 
 const mcpElicitationSchemaDescription = {
@@ -130,8 +132,8 @@ export const codexAppServerMcpElicitationPrimitiveSchema = z.union([
   z.object({
     type: z.literal("string"),
     ...mcpElicitationSchemaDescription,
-    minLength: z.number().int().nonnegative().optional(),
-    maxLength: z.number().int().nonnegative().optional(),
+    minLength: codexUint32Schema.optional(),
+    maxLength: codexUint32Schema.optional(),
     format: z.enum(["email", "uri", "date", "date-time"]).optional(),
     default: z.string().optional(),
   }),
@@ -163,8 +165,8 @@ export const codexAppServerMcpElicitationPrimitiveSchema = z.union([
   z.object({
     type: z.literal("array"),
     ...mcpElicitationSchemaDescription,
-    minItems: z.number().int().nonnegative().optional(),
-    maxItems: z.number().int().nonnegative().optional(),
+    minItems: codexUint64Schema.optional(),
+    maxItems: codexUint64Schema.optional(),
     items: z.union([
       z.object({ type: z.literal("string"), enum: z.array(z.string()) }),
       z.object({ anyOf: z.array(mcpElicitationConstOptionSchema) }),
@@ -237,7 +239,7 @@ export const codexAppServerCommandExecutionApprovalDecisionSchema = z.union([
 
 export const codexAppServerCommandExecutionRequestApprovalParamsSchema = z.object({
   itemId: z.string(),
-  startedAtMs: z.number().int(),
+  startedAtMs: codexInt64Schema,
   threadId: z.string(),
   turnId: z.string(),
   environmentId: z.string().nullable(),
@@ -264,7 +266,7 @@ export const codexAppServerPermissionsRequestApprovalParamsSchema = z.object({
   turnId: z.string(),
   itemId: z.string(),
   environmentId: z.string().nullable(),
-  startedAtMs: z.number().int(),
+  startedAtMs: codexInt64Schema,
   cwd: z.string(),
   reason: z.string().nullable(),
   permissions: codexAppServerRequestPermissionProfileSchema,
@@ -571,7 +573,7 @@ export const codexAppServerThreadItemSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("sleep"),
     id: z.string(),
-    durationMs: z.number().int().nonnegative(),
+    durationMs: codexUint64Schema,
   }),
   z.object({
     type: z.literal("imageGeneration"),

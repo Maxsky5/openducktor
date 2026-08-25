@@ -5,6 +5,7 @@ import type {
   PortableTSTupleElement,
 } from "./portable-ast.ts";
 import {
+  portablePropertyKeyValue,
   propertyKeyDomainMatches,
   propertyKeySurvivesTransform,
   resolveOpenDictionaryKeyDomain,
@@ -44,12 +45,9 @@ function intersectionPathResolution(results: readonly TypePathResolution[]): Typ
   return results.includes("unknown") ? "unknown" : "absent";
 }
 
-function memberKeyName(key: PortableNode): string | null {
-  if (key.type === "Identifier" || key.type === "PrivateIdentifier") return key.name;
-  if (key.type === "Literal" && (typeof key.value === "string" || typeof key.value === "number")) {
-    return String(key.value);
-  }
-  return null;
+function memberKeyMatches(key: PortableNode, segment: TypePropertyPathSegment): boolean {
+  const value = portablePropertyKeyValue(key);
+  return value !== null && String(value) === String(segment);
 }
 
 function tupleElementType(element: PortableTSTupleElement): PortableTSType {
@@ -101,7 +99,7 @@ function typeMembersPathResolution(
     if (
       member.type !== "TSPropertySignature" ||
       member.typeAnnotation === null ||
-      memberKeyName(member.key) !== String(segment)
+      !memberKeyMatches(member.key, segment)
     ) {
       return [];
     }

@@ -36,6 +36,7 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     "type First = Second; type Second = First; function safe({ input }: First) { return input; }",
     "type Omit<T, K> = { input: string }; function safe({ input }: Omit<{ input: unknown }, 'other'>) { return input; }",
     "type Box<T> = { [T in 'input']: T }; function safe({ input }: Box<unknown>) { return input; }",
+    'function safe({ only }: Record<string & "only", string>) { return only; }',
   ],
   invalid: [
     { code: "function load(input: unknown) { return input; }", errors: [error] },
@@ -178,11 +179,39 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
       errors: [error],
     },
     {
+      code: "function unsafe({ input }: Record<string & keyof any, unknown>) { return input; }",
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "1": input }: Record<number, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "key-input": input }: Record<`key-${string}`, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
       code: "function unsafe({ input }: { [key: string]: unknown }) { return input; }",
       errors: [error],
     },
     {
       code: "function unsafe({ input }: Pick<{ input: unknown; other: string }, 'input'>) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "function unsafe({ input }: Pick<{ input: unknown }, keyof { input: unknown }>) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "interface Keys { input: unknown } function unsafe({ input }: Pick<Keys, keyof Keys>) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "interface Base { input: unknown } interface Keys extends Base {} function unsafe({ input }: Pick<Keys, keyof Keys>) { return input; }",
+      errors: [error],
+    },
+    {
+      code: 'interface Keys extends Record<"input", unknown> {} function unsafe({ input }: Pick<Keys, keyof Keys>) { return input; }',
       errors: [error],
     },
     {
