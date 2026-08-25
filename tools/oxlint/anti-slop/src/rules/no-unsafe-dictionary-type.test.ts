@@ -48,6 +48,7 @@ tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
     'class Escape { id = "x" } interface Escape {} type Safe = Record<string, Escape>;',
     'type Safe = Pick<Record<string, object>, "only">;',
     "type Safe = Omit<Record<string, object>, string>;",
+    'interface Safe extends Record<"only", object> {}',
     {
       filename: importedTypeFixtureFilename,
       code: "import type { InputKey } from './no-known-value-widening-types'; type Safe = Pick<Record<string, object>, InputKey>;",
@@ -61,6 +62,7 @@ tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
     },
     { code: "type A = { [K in PropertyKey]: object };", errors: [error] },
     { code: "type A = Record<string, {}>;", errors: [error] },
+    { code: "type A = Record<keyof any, object>;", errors: [error] },
     { code: "interface Escape {} type A = Record<string, Escape>;", errors: [error] },
     {
       code: "interface Escape { readonly __brand?: never } type A = Record<string, Escape>;",
@@ -131,6 +133,10 @@ tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
     },
     {
       code: 'type Unsafe = Omit<Record<string, object>, "reserved">;',
+      errors: [error],
+    },
+    {
+      code: 'type Unsafe = Pick<{ nested: Record<string, object> }, "nested">;',
       errors: [error],
     },
     {

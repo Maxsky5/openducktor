@@ -180,7 +180,7 @@ export const codexMcpToolErrorFromResult = (item: CodexMcpToolCallItem): string 
 
 export const codexDynamicToolDisplayPayload = (
   item: CodexDynamicToolCallItem,
-): CodexAppServerJsonValue | undefined => item.contentItems ?? undefined;
+): CodexDynamicToolCallItem["contentItems"] => item.contentItems;
 
 export const codexDynamicToolErrorFromItem = (item: CodexDynamicToolCallItem): string | null =>
   dynamicToolErrorFromValue(codexDynamicToolDisplayPayload(item)) ??

@@ -276,6 +276,44 @@ describe("Codex app-server 0.149 experimental request schemas", () => {
     });
   }
 
+  test("rejects invalid u32 pagination limits", () => {
+    for (const limit of [-1, 1.5, 4_294_967_296]) {
+      const requests = [
+        { method: "model/list", params: { limit } },
+        { method: "thread/list", params: { limit } },
+        { method: "thread/loaded/list", params: { limit } },
+        { method: "thread/turns/list", params: { threadId: "thread-1", limit } },
+        {
+          method: "thread/resume",
+          params: { threadId: "thread-1", initialTurnsPage: { limit } },
+        },
+      ];
+      for (const request of requests) {
+        expect(() => parseCodexAppServerClientRequest(request)).toThrow();
+      }
+    }
+  });
+
+  test("rejects invalid usize text byte ranges", () => {
+    for (const start of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() =>
+        parseCodexAppServerClientRequest({
+          method: "turn/start",
+          params: {
+            threadId: "thread-1",
+            input: [
+              {
+                type: "text",
+                text: "Review @src/index.ts",
+                text_elements: [{ byteRange: { start, end: 20 }, placeholder: "source" }],
+              },
+            ],
+          },
+        }),
+      ).toThrow();
+    }
+  });
+
   test("parses model/list future reasoning efforts", () => {
     const response = {
       data: [

@@ -92,14 +92,11 @@ function isDictionaryTransformSource(
       const source: ESTree.TSType | undefined = parent.typeArguments?.params[0];
       if (
         source !== undefined &&
+        source === node &&
         (name === "Pick" || name === "Omit") &&
         isBuiltInType(name, createTypeEnvironment(parent, visitorKeys))
       ) {
-        let sourceAncestor: ESTree.Node | null = node;
-        while (sourceAncestor !== null && sourceAncestor !== parent) {
-          if (sourceAncestor === source) return true;
-          sourceAncestor = sourceAncestor.parent;
-        }
+        return true;
       }
     }
     current = parent;

@@ -461,8 +461,12 @@ export function classifyUnsafeInterfaceHeritage(
 ): UnsafeDictionary | null {
   const name = heritage.expression.type === "Identifier" ? heritage.expression.name : null;
   if (name === "Record" && isBuiltInType(name, environment)) {
-    const value = heritage.typeArguments?.params[1];
-    return value === undefined
+    const [key, value] = heritage.typeArguments?.params ?? [];
+    return key === undefined ||
+      value === undefined ||
+      !propertyKeyDomainIsBroad(
+        resolvePropertyKeyDomain(key, environment, new Map(), resolveImportedType),
+      )
       ? null
       : classifyUnsafeDictionaryValue(value, environment, resolveImportedType);
   }

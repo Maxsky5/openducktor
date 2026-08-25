@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { codexInt64Schema, codexUint64Schema } from "./codex-app-server-number-schemas";
 import {
   codexAppServerCommandExecutionRequestApprovalParamsSchema,
   codexAppServerCurrentTimeReadParamsSchema,
@@ -13,9 +14,7 @@ import { jsonObjectSchema, jsonValueSchema, type JsonValue } from "./json-types"
 const nonBlankStringSchema = z
   .string()
   .refine((value) => value.trim().length > 0, { error: "String must not be blank" });
-const signedIntegerSchema = z.number().int();
-const unsignedIntegerSchema = signedIntegerSchema.nonnegative();
-const requestIdSchema = z.union([z.string(), signedIntegerSchema]);
+const requestIdSchema = z.union([z.string(), codexInt64Schema]);
 const receivedAtSchema = z.string().refine((value) => Number.isFinite(Date.parse(value)), {
   error: "Expected a parseable timestamp",
 });
@@ -35,17 +34,17 @@ const serverRequest = <Method extends string, Params extends z.ZodType>(
 
 const threadTurnParamsSchema = z.object({ threadId: z.string(), turn: codexAppServerTurnSchema });
 const tokenUsageBreakdownSchema = z.object({
-  totalTokens: signedIntegerSchema,
-  inputTokens: signedIntegerSchema,
-  cachedInputTokens: signedIntegerSchema,
-  cacheWriteInputTokens: signedIntegerSchema,
-  outputTokens: signedIntegerSchema,
-  reasoningOutputTokens: signedIntegerSchema,
+  totalTokens: codexInt64Schema,
+  inputTokens: codexInt64Schema,
+  cachedInputTokens: codexInt64Schema,
+  cacheWriteInputTokens: codexInt64Schema,
+  outputTokens: codexInt64Schema,
+  reasoningOutputTokens: codexInt64Schema,
 });
 const threadTokenUsageSchema = z.object({
   total: tokenUsageBreakdownSchema,
   last: tokenUsageBreakdownSchema,
-  modelContextWindow: signedIntegerSchema.nullable(),
+  modelContextWindow: codexInt64Schema.nullable(),
 });
 const turnPlanStepSchema = z.object({
   step: z.string(),
@@ -76,16 +75,16 @@ const itemDeltaParamsSchema = z.object({
   turnId: z.string(),
 });
 const reasoningTextDeltaParamsSchema = itemDeltaParamsSchema.extend({
-  contentIndex: signedIntegerSchema,
+  contentIndex: codexInt64Schema,
 });
 const reasoningSummaryDeltaParamsSchema = itemDeltaParamsSchema.extend({
-  summaryIndex: signedIntegerSchema,
+  summaryIndex: codexInt64Schema,
 });
 const itemLifecycleParamsSchema = z.object({
   item: codexAppServerThreadItemSchema,
   threadId: z.string(),
   turnId: z.string(),
-  startedAtMs: signedIntegerSchema,
+  startedAtMs: codexInt64Schema,
 });
 
 const toolRequestUserInputOptionSchema = z.object({
@@ -101,7 +100,7 @@ const toolRequestUserInputQuestionSchema = z.object({
   question: z.string(),
 });
 const toolRequestUserInputParamsSchema = z.object({
-  autoResolutionMs: unsignedIntegerSchema.nullable(),
+  autoResolutionMs: codexUint64Schema.nullable(),
   isBlocking: z.boolean(),
   itemId: z.string(),
   questions: z.array(toolRequestUserInputQuestionSchema),
@@ -157,7 +156,7 @@ export const codexAppServerConsumedRuntimeNotificationSchema = z.discriminatedUn
     "item/completed",
     itemLifecycleParamsSchema
       .omit({ startedAtMs: true })
-      .extend({ completedAtMs: signedIntegerSchema }),
+      .extend({ completedAtMs: codexInt64Schema }),
   ),
   notification(
     "item/fileChange/patchUpdated",
@@ -227,7 +226,7 @@ export const codexAppServerServerRequestSchema = z.discriminatedUnion("method", 
       grantRoot: z.string().nullable().optional(),
       itemId: z.string(),
       reason: z.string().nullable().optional(),
-      startedAtMs: signedIntegerSchema,
+      startedAtMs: codexInt64Schema,
       threadId: z.string(),
       turnId: z.string(),
     }),

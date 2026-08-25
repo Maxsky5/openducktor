@@ -83,6 +83,36 @@ export function resolvePropertyKeyDomain(
       ),
     );
   }
+  if (unwrapped.type === "TSIntersectionType") {
+    const [first, ...rest] = unwrapped.types;
+    if (first === undefined) return emptyDomain();
+    return rest.reduce(
+      (domain, member) =>
+        intersectPropertyKeyDomains(
+          domain,
+          resolvePropertyKeyDomain(
+            member,
+            environment,
+            substitutions,
+            resolveImportedType,
+            resolving,
+          ),
+        ),
+      resolvePropertyKeyDomain(first, environment, substitutions, resolveImportedType, resolving),
+    );
+  }
+  if (unwrapped.type === "TSTypeOperator" && unwrapped.operator === "keyof") {
+    const operand = unwrapTransparentType(unwrapped.typeAnnotation);
+    return operand.type === "TSAnyKeyword"
+      ? { ...emptyDomain(), numbers: true, strings: true, symbols: true }
+      : resolveOpenDictionaryKeyDomain(
+          operand,
+          environment,
+          substitutions,
+          resolveImportedType,
+          resolving,
+        );
+  }
   if (unwrapped.type !== "TSTypeReference") return emptyDomain();
   const name = typeReferenceName(unwrapped);
   if (name !== null) {
@@ -180,6 +210,21 @@ export function subtractPropertyKeyDomains(
     symbols: source.symbols && !excluded.symbols,
     values: new Set([...source.values].filter((value) => !acceptsValue(excluded, value))),
   };
+}
+
+/** Decide whether a concrete property remains visible after Pick or Omit. */
+export function propertyKeySurvivesTransform(
+  transform: "Omit" | "Pick",
+  sourceOpenDomain: PropertyKeyDomain,
+  selectedDomain: PropertyKeyDomain,
+  value: number | string,
+): boolean {
+  if (transform === "Pick") return propertyKeyDomainMatches(selectedDomain, value);
+  if (!propertyKeyDomainMatches(selectedDomain, value)) return true;
+  return propertyKeyDomainMatches(
+    subtractPropertyKeyDomains(sourceOpenDomain, selectedDomain),
+    value,
+  );
 }
 
 /** Resolve the remaining open key space of a dictionary-like type. */

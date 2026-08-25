@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { codexUint32Schema, codexUsizeSchema } from "./codex-app-server-number-schemas";
 import { jsonObjectSchema, jsonValueSchema } from "./json-types";
 
 export const codexAppServerReasoningEffortSchema = z.string().min(1);
@@ -9,7 +10,7 @@ export type CodexAppServerRequestReasoningEffort = z.output<
 
 const nullableString = z.string().nullable().optional();
 const nullableBoolean = z.boolean().nullable().optional();
-const nullableNumber = z.number().finite().nullable().optional();
+const nullableUint32 = codexUint32Schema.nullable().optional();
 const approvalsReviewerSchema = z.enum(["auto_review", "guardian_subagent", "user"]);
 const personalitySchema = z.enum(["friendly", "none", "pragmatic"]);
 const sortDirectionSchema = z.enum(["asc", "desc"]);
@@ -49,7 +50,7 @@ const sandboxPolicySchema = z.discriminatedUnion("type", [
 ]);
 
 const textElementSchema = z.strictObject({
-  byteRange: z.strictObject({ start: z.number(), end: z.number() }),
+  byteRange: z.strictObject({ start: codexUsizeSchema, end: codexUsizeSchema }),
   placeholder: z.string().nullable(),
 });
 
@@ -296,7 +297,7 @@ const selectedCapabilityRootSchema = z.strictObject({
 });
 
 const initialTurnsPageSchema = z.strictObject({
-  limit: nullableNumber,
+  limit: nullableUint32,
   sortDirection: sortDirectionSchema.nullable().optional(),
   itemsView: turnItemsViewSchema.nullable().optional(),
 });
@@ -334,7 +335,7 @@ export const codexAppServerRequestParamsSchemas = {
   }),
   "model/list": z.strictObject({
     cursor: nullableString,
-    limit: nullableNumber,
+    limit: nullableUint32,
     includeHidden: nullableBoolean,
   }),
   "thread/fork": z.strictObject({
@@ -350,7 +351,7 @@ export const codexAppServerRequestParamsSchemas = {
   }),
   "thread/list": z.strictObject({
     cursor: nullableString,
-    limit: nullableNumber,
+    limit: nullableUint32,
     sortKey: z
       .enum(["created_at", "updated_at", "recency_at", "section_position"])
       .nullable()
@@ -386,7 +387,7 @@ export const codexAppServerRequestParamsSchemas = {
     parentThreadId: nullableString,
     ancestorThreadId: nullableString,
   }),
-  "thread/loaded/list": z.strictObject({ cursor: nullableString, limit: nullableNumber }),
+  "thread/loaded/list": z.strictObject({ cursor: nullableString, limit: nullableUint32 }),
   "thread/read": z.strictObject({ threadId: z.string(), includeTurns: z.boolean().optional() }),
   "thread/resume": z.strictObject({
     threadId: z.string(),
@@ -419,7 +420,7 @@ export const codexAppServerRequestParamsSchemas = {
   "thread/turns/list": z.strictObject({
     threadId: z.string(),
     cursor: nullableString,
-    limit: nullableNumber,
+    limit: nullableUint32,
     sortDirection: sortDirectionSchema.nullable().optional(),
     itemsView: turnItemsViewSchema.nullable().optional(),
   }),

@@ -174,6 +174,10 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
       errors: [error],
     },
     {
+      code: "function unsafe({ input }: Record<keyof any, unknown>) { return input; }",
+      errors: [error],
+    },
+    {
       code: "function unsafe({ input }: { [key: string]: unknown }) { return input; }",
       errors: [error],
     },
@@ -183,6 +187,10 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     },
     {
       code: "function unsafe({ input }: Omit<{ input: unknown; other: string }, 'other'>) { return input; }",
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ reserved }: Omit<Record<string, unknown>, "reserved">) { return reserved; }',
       errors: [error],
     },
     {

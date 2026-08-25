@@ -1,13 +1,20 @@
 import { describe, expect, test } from "bun:test";
+import type { CodexAppServerThreadItem } from "@openducktor/contracts";
 import {
   codexDynamicToolDisplayPayload,
   codexDynamicToolErrorFromItem,
 } from "./codex-tool-error-extractor";
 import { codexDynamicToolCallFixture } from "./test-fixtures/codex-protocol";
 
+type CodexDynamicToolContentItems = NonNullable<
+  Extract<CodexAppServerThreadItem, { type: "dynamicToolCall" }>["contentItems"]
+>;
+
 describe("Codex dynamic tool error extraction", () => {
   test("extracts errors from the current protocol content items", () => {
-    const contentItems = [{ type: "text", text: "Plan update output" }];
+    const contentItems = [
+      { type: "inputText", text: "Plan update output" },
+    ] satisfies CodexDynamicToolContentItems;
     const item = codexDynamicToolCallFixture({
       id: "plan-1",
       tool: "update_plan",
@@ -24,7 +31,7 @@ describe("Codex dynamic tool error extraction", () => {
       tool: "update_plan",
       contentItems: [
         {
-          type: "text",
+          type: "inputText",
           text: JSON.stringify({
             ok: false,
             error: { message: "Visible content failed" },

@@ -81,6 +81,10 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
       errors: [error],
     },
     {
+      code: `${prelude} const commands: Record<keyof any, Command> = { start: startCommand };`,
+      errors: [error],
+    },
+    {
       code: `${prelude} const commands: Pick<Record<string, Command>, string> = { start: startCommand };`,
       errors: [error],
     },

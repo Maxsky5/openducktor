@@ -4,7 +4,12 @@ import type {
   PortableTSType,
   PortableTSTupleElement,
 } from "./portable-ast.ts";
-import { propertyKeyDomainMatches, resolvePropertyKeyDomain } from "./property-key-domain.ts";
+import {
+  propertyKeyDomainMatches,
+  propertyKeySurvivesTransform,
+  resolveOpenDictionaryKeyDomain,
+  resolvePropertyKeyDomain,
+} from "./property-key-domain.ts";
 import {
   aliasSubstitution,
   enterTypeResolution,
@@ -322,15 +327,21 @@ function builtInTypeArgumentsPathResolution(
     if (segment === undefined || sourceType === undefined || selectedKeys === undefined) {
       return "absent";
     }
-    const keyMatches = propertyKeyMatches(
+    const selectedDomain = resolvePropertyKeyDomain(
       selectedKeys,
-      segment,
       environment,
       substitutions,
-      resolving,
       resolveImportedType,
+      resolving,
     );
-    return (name === "Pick" && !keyMatches) || (name === "Omit" && keyMatches)
+    const sourceOpenDomain = resolveOpenDictionaryKeyDomain(
+      sourceType,
+      environment,
+      substitutions,
+      resolveImportedType,
+      resolving,
+    );
+    return !propertyKeySurvivesTransform(name, sourceOpenDomain, selectedDomain, segment)
       ? "absent"
       : typePathResolution(
           sourceType,
