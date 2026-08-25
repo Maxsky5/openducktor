@@ -35,12 +35,7 @@ type PullRequestContent = {
 };
 
 export const requireRecord = (value: unknown, label: string): Record<string, unknown> => {
-  if (!value || !(typeof value === "object") || Array.isArray(value)) {
-    throw invalidInput(`${label} must be an object.`, label);
-  }
-
-  // SAFETY: The preceding runtime guard establishes `Record<string, unknown>` before this assertion.
-  return value as Record<string, unknown>;
+  return requireParsedRecord(unknownRecordSchema.safeParse(value), label);
 };
 
 export const requireString = (value: unknown, label: string): string => {

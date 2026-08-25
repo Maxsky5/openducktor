@@ -1103,14 +1103,11 @@ describe("TypeScript web host backend", () => {
 
       disposeReleased.resolve();
       await shutdown;
-      const terminalRead = await reader.read().then(
-        (result) => ({ result }),
-        (cause: unknown) => ({ error: cause }),
-      );
-      if ("error" in terminalRead) {
-        expect(terminalRead.error).toBeInstanceOf(Error);
-      } else {
-        expect(terminalRead.result.done).toBe(true);
+      try {
+        const terminalRead = await reader.read();
+        expect(terminalRead.done).toBe(true);
+      } catch (cause) {
+        expect(cause).toBeInstanceOf(Error);
       }
     } finally {
       disposeReleased.resolve();

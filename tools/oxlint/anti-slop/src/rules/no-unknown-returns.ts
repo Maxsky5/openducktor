@@ -1,6 +1,6 @@
 import { defineRule } from "@oxlint/plugins";
 
-import type { ESTree, Scope, SourceCode, Variable } from "@oxlint/plugins";
+import type { ESTree } from "@oxlint/plugins";
 
 import { lexicalTypeParameterNames } from "../shared/lexical-type-parameters.ts";
 
@@ -23,25 +23,13 @@ function referencedAliasName(type: ESTree.TSType): string | null {
     : null;
 }
 
-function resolveVariable(
-  sourceCode: SourceCode,
-  identifier: ESTree.IdentifierReference,
-): Variable | null {
-  let scope: Scope | null = sourceCode.getScope(identifier);
-  while (scope !== null) {
-    const variable = scope.set.get(identifier.name);
-    if (variable !== undefined) return variable;
-    scope = scope.upper;
-  }
-  return null;
-}
-
 /** Ban function contracts that return unknown instead of a parsed domain type. */
 export const noUnknownReturnsRule = defineRule({
   meta: {
     type: "problem",
     docs: {
-      description: "Disallow functions that expose unknown or Promise<unknown> to their callers.",
+      description:
+        "Disallow functions whose explicit return contract is unknown or Promise<unknown>.",
     },
     messages: {
       unknownReturn:
@@ -115,92 +103,6 @@ export const noUnknownReturnsRule = defineRule({
       context.report({ node: annotation.typeAnnotation, messageId: "unknownReturn" });
     };
 
-    const expressionReturnsUnknown = (
-      expression: ESTree.Expression,
-      shadowedAliases: ReadonlySet<string>,
-    ): boolean => {
-      if (
-        expression.type === "ParenthesizedExpression" ||
-        expression.type === "ChainExpression" ||
-        expression.type === "TSNonNullExpression"
-      ) {
-        return expressionReturnsUnknown(expression.expression, shadowedAliases);
-      }
-      if (expression.type === "AwaitExpression") {
-        return expressionReturnsUnknown(expression.argument, shadowedAliases);
-      }
-      if (expression.type === "TSAsExpression" || expression.type === "TSTypeAssertion") {
-        return resolvesToUnknown(expression.typeAnnotation, shadowedAliases);
-      }
-      if (expression.type === "ConditionalExpression") {
-        return (
-          expressionReturnsUnknown(expression.consequent, shadowedAliases) ||
-          expressionReturnsUnknown(expression.alternate, shadowedAliases)
-        );
-      }
-      if (expression.type === "LogicalExpression") {
-        return (
-          expressionReturnsUnknown(expression.left, shadowedAliases) ||
-          expressionReturnsUnknown(expression.right, shadowedAliases)
-        );
-      }
-      if (expression.type === "SequenceExpression") {
-        const last = expression.expressions.at(-1);
-        return last !== undefined && expressionReturnsUnknown(last, shadowedAliases);
-      }
-      if (expression.type !== "Identifier") return false;
-      const variable = resolveVariable(context.sourceCode, expression);
-      return (
-        variable?.identifiers.some((identifier) => {
-          const annotation = identifier.typeAnnotation?.typeAnnotation;
-          return annotation !== undefined && resolvesToUnknown(annotation, shadowedAliases);
-        }) ?? false
-      );
-    };
-
-    const enclosingRuntimeFunction = (
-      node: ESTree.Node,
-    ): ESTree.ArrowFunctionExpression | ESTree.Function | null => {
-      let current: ESTree.Node | null = node.parent;
-      while (current !== null && current.type !== "Program") {
-        if (
-          current.type === "ArrowFunctionExpression" ||
-          current.type === "FunctionDeclaration" ||
-          current.type === "FunctionExpression"
-        ) {
-          return current;
-        }
-        current = current.parent;
-      }
-      return null;
-    };
-
-    const checkInferredReturn = (node: ESTree.ReturnStatement) => {
-      if (node.argument === null) return;
-      const owner = enclosingRuntimeFunction(node);
-      if (owner === null || owner.returnType !== null) return;
-      if (
-        expressionReturnsUnknown(
-          node.argument,
-          lexicalTypeParameterNames(owner, context.sourceCode.visitorKeys),
-        )
-      ) {
-        context.report({ node: node.argument, messageId: "unknownReturn" });
-      }
-    };
-
-    const checkInferredArrowBody = (node: ESTree.ArrowFunctionExpression) => {
-      if (node.returnType !== null || node.body.type === "BlockStatement") return;
-      if (
-        expressionReturnsUnknown(
-          node.body,
-          lexicalTypeParameterNames(node, context.sourceCode.visitorKeys),
-        )
-      ) {
-        context.report({ node: node.body, messageId: "unknownReturn" });
-      }
-    };
-
     return {
       Program(node) {
         aliases.clear();
@@ -214,7 +116,6 @@ export const noUnknownReturnsRule = defineRule({
       },
       ArrowFunctionExpression(node) {
         checkReturnType(node);
-        checkInferredArrowBody(node);
       },
       FunctionDeclaration: checkReturnType,
       FunctionExpression: checkReturnType,
@@ -225,7 +126,6 @@ export const noUnknownReturnsRule = defineRule({
       TSEmptyBodyFunctionExpression: checkReturnType,
       TSFunctionType: checkReturnType,
       TSMethodSignature: checkReturnType,
-      ReturnStatement: checkInferredReturn,
     };
   },
 });

@@ -245,17 +245,15 @@ describe("launcher internals", () => {
       },
     };
 
-    const result = await closeFrontendServer(frontendServer).then(
-      () => ({ ok: true as const }),
-      (cause: unknown) => ({ ok: false as const, error: cause }),
-    );
-
-    if (result.ok) {
-      throw new Error("Expected closeFrontendServer to reject");
+    let error: unknown;
+    try {
+      await closeFrontendServer(frontendServer);
+    } catch (cause) {
+      error = cause;
     }
 
-    expect(result.error).toMatchObject({ _tag: "WebDependencyError" });
-    expect(result.error).toEqual(expect.objectContaining({ message: "close failed" }));
+    expect(error).toMatchObject({ _tag: "WebDependencyError" });
+    expect(error).toEqual(expect.objectContaining({ message: "close failed" }));
     expect(closeIdleConnectionsCalls).toBe(0);
     expect(closeAllConnectionsCalls).toBe(0);
   });

@@ -659,7 +659,7 @@ describe("createRuntimeRegistry", () => {
     };
     const ensure = Effect.runPromise(registry.ensureWorkspaceRuntime(input)).then(
       (runtime) => ({ type: "started" as const, runtime }),
-      (cause: unknown) => ({ type: "cancelled" as const, error: cause }),
+      () => ({ type: "cancelled" as const }),
     );
     await startEntered;
     const stopAllRuntimes = requireMethod(registry.stopAllRuntimes, "stopAllRuntimes");

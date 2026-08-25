@@ -7,16 +7,16 @@ const invalidInput = (message: string, field?: string): HostValidationError =>
     field,
   });
 
+export const unknownRecordSchema = z.record(z.string(), z.unknown());
+
 export const requireRecord = (value: unknown, label: string): Record<string, unknown> => {
-  if (!value || !(typeof value === "object") || Array.isArray(value)) {
+  const parsed = unknownRecordSchema.safeParse(value);
+  if (!parsed.success) {
     throw invalidInput(`${label} must be an object.`, label);
   }
 
-  // SAFETY: The preceding runtime guard establishes `Record<string, unknown>` before this assertion.
-  return value as Record<string, unknown>;
+  return parsed.data;
 };
-
-export const unknownRecordSchema = z.record(z.string(), z.unknown());
 
 export const requireParsedRecord = (
   result: z.ZodSafeParseResult<Record<string, unknown>>,

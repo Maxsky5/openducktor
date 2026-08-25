@@ -84,20 +84,18 @@ describe("HostTerminalClient", () => {
       });
     });
 
-    const result = await client
-      .terminalCreate({
+    let error: unknown;
+    try {
+      await client.terminalCreate({
         workingDir: "/repo/worktree",
         context: { repoPath: "/repo", taskId: "task-1" },
-      })
-      .then(
-        () => ({ ok: true as const }),
-        (cause: unknown) => ({ ok: false as const, error: cause }),
-      );
+      });
+    } catch (cause) {
+      error = cause;
+    }
 
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("Expected terminalCreate to reject.");
-    expect(result.error).toBeInstanceOf(HostTerminalClientError);
-    expect(result.error).toMatchObject({
+    expect(error).toBeInstanceOf(HostTerminalClientError);
+    expect(error).toMatchObject({
       code: "unsupported_runtime",
       message: "Interactive terminals are unavailable in this runtime.",
     });

@@ -386,7 +386,7 @@ describe("agent session query cache helpers", () => {
       },
       (cause: unknown) => {
         loadOutcome = "rejected";
-        return { status: "rejected" as const, error: cause };
+        throw cause;
       },
     );
     const hydrationKey = agentSessionQueryKeys.hydration("/repo", ["task-1"]);

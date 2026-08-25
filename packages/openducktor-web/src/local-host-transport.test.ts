@@ -235,16 +235,13 @@ describe("createLocalHostClient", () => {
     globalThis.fetch = createFetchFixture(fetchMock);
 
     const client = createLocalHostClient();
-    const result = await client.runtimeEnsure("/repo", "opencode").then(
-      () => ({ ok: true as const }),
-      (cause: unknown) => ({ ok: false as const, error: cause }),
-    );
-
-    if (result.ok) {
-      throw new Error("Expected runtimeEnsure to reject");
+    let error: unknown;
+    try {
+      await client.runtimeEnsure("/repo", "opencode");
+    } catch (cause) {
+      error = cause;
     }
 
-    const { error } = result;
     expect(error instanceof Error).toBe(true);
     if (!(error instanceof Error)) {
       throw new Error("Expected runtimeEnsure to reject with an Error");

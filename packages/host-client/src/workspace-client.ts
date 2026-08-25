@@ -34,13 +34,11 @@ export type ResolvedLocalAttachment = {
 };
 
 const parseStagedLocalAttachment = (payload: unknown): StagedLocalAttachment => {
-  if (!payload || !(typeof payload === "object")) {
+  if (!payload || !(typeof payload === "object") || !("path" in payload)) {
     throw new Error("Expected staged local attachment payload from host command");
   }
 
-  // SAFETY: The preceding runtime guard establishes `Record<string, unknown>` before this assertion.
-  const candidate = payload as Record<string, unknown>;
-  const path = candidate.path;
+  const path = payload.path;
   if (!(typeof path === "string") || path.trim().length === 0) {
     throw new Error("Expected non-empty 'path' in staged local attachment payload");
   }

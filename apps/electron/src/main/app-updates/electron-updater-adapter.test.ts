@@ -201,14 +201,14 @@ describe("electron updater adapter", () => {
     await adapter.checkForUpdates();
 
     const downloadResult = adapter.downloadUpdate();
-    const settledDownload = downloadResult.then(
-      () => ({ error: null }),
-      (cause: unknown) => ({ error: cause }),
-    );
+    let error: unknown;
+    const settledDownload = downloadResult.catch((cause: unknown): void => {
+      error = cause;
+    });
     await adapter.dispose();
     finishLoading(nativeUpdater);
 
-    const { error } = await settledDownload;
+    await settledDownload;
     expect(error).toMatchObject({ operation: "electron.updater.initialize" });
     expect(nativeUpdater.on).not.toHaveBeenCalled();
     expect(nativeUpdater.checkForUpdates).not.toHaveBeenCalled();

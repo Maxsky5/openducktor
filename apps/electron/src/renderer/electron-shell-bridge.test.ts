@@ -405,15 +405,15 @@ describe("electron shell bridge", () => {
     setElectronApi(electronApi);
 
     const bridge = createElectronShellBridge();
-    const result = await bridge.client.terminalCreate({ workingDir: "/repo", context: {} }).then(
-      () => ({ ok: true as const }),
-      (cause: unknown) => ({ ok: false as const, error: cause }),
-    );
+    let error: unknown;
+    try {
+      await bridge.client.terminalCreate({ workingDir: "/repo", context: {} });
+    } catch (cause) {
+      error = cause;
+    }
 
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("Expected terminalCreate to reject.");
-    expect(result.error).toBeInstanceOf(HostTerminalClientError);
-    expect(result.error).toMatchObject({
+    expect(error).toBeInstanceOf(HostTerminalClientError);
+    expect(error).toMatchObject({
       code: "unsupported_runtime",
       message: "Interactive terminals are unavailable in this runtime.",
     });
@@ -438,22 +438,20 @@ describe("electron shell bridge", () => {
     }));
     setElectronApi(electronApi);
 
-    const result = await createElectronShellBridge()
-      .client.filesystemWriteTextFile({
+    let error: unknown;
+    try {
+      await createElectronShellBridge().client.filesystemWriteTextFile({
         rootPath: "/repo",
         relativePath: "src/file.ts",
         contents: "draft",
         revision: "sha256:old",
-      })
-      .then(
-        () => ({ ok: true as const }),
-        (cause: unknown) => ({ ok: false as const, error: cause }),
-      );
+      });
+    } catch (cause) {
+      error = cause;
+    }
 
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("Expected filesystemWriteTextFile to reject.");
-    expect(result.error).toBeInstanceOf(HostInvokeError);
-    expect(result.error).toMatchObject({
+    expect(error).toBeInstanceOf(HostInvokeError);
+    expect(error).toMatchObject({
       failure: {
         kind: "workspace_text_file_write",
         workspaceTextFileWriteFailure: { code: "stale_revision" },

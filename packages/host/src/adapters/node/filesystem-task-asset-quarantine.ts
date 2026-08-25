@@ -23,28 +23,33 @@ const existingStat = async (target: string) => {
   }
 };
 
+const isJsonRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const isQuarantineManifest = (value: unknown): value is QuarantineManifest =>
+  isJsonRecord(value) &&
+  value.version === 1 &&
+  taskAssetIdSchema.safeParse(value.id).success &&
+  (value.operation === "create" || value.operation === "update" || value.operation === "delete") &&
+  Array.isArray(value.assetIds) &&
+  value.assetIds.every((id) => taskAssetIdSchema.safeParse(id).success) &&
+  Array.isArray(value.promotedAssetIds) &&
+  value.promotedAssetIds.every((id) => taskAssetIdSchema.safeParse(id).success) &&
+  taskAssetRenderContextSchema.safeParse({
+    workspaceId: value.workspaceId,
+    taskId: value.taskId,
+    scope: "description",
+    assetId: value.id,
+  }).success;
+
 const validateManifest = (value: unknown): QuarantineManifest => {
-  if (!(typeof value === "object") || value === null) {
+  if (!isJsonRecord(value)) {
     throw new Error("Task asset quarantine manifest must be an object.");
   }
-  // SAFETY: the manifest fields are validated below; the record is re-exported
-  // through the typed QuarantineManifest boundary only after every field passes.
-  const manifest = value as Partial<QuarantineManifest>;
-  if (
-    manifest.version !== 1 ||
-    !taskAssetIdSchema.safeParse(manifest.id).success ||
-    !["create", "update", "delete"].includes(manifest.operation ?? "") ||
-    !Array.isArray(manifest.assetIds) ||
-    !manifest.assetIds.every((id) => taskAssetIdSchema.safeParse(id).success) ||
-    !Array.isArray(manifest.promotedAssetIds) ||
-    !manifest.promotedAssetIds.every((id) => taskAssetIdSchema.safeParse(id).success) ||
-    !taskAssetRenderContextSchema["shape"].workspaceId.safeParse(manifest.workspaceId).success ||
-    !taskAssetRenderContextSchema["shape"].taskId.safeParse(manifest.taskId).success
-  ) {
+  if (!isQuarantineManifest(value)) {
     throw new Error("Task asset quarantine manifest is invalid.");
   }
-  // SAFETY: The preceding runtime guard establishes `QuarantineManifest` before this assertion.
-  return manifest as QuarantineManifest;
+  return value;
 };
 
 export const createTaskAssetQuarantineFiles = ({

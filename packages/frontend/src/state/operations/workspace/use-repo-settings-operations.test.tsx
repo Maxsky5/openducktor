@@ -10,7 +10,6 @@ import { checksQueryKeys } from "../../queries/checks";
 import { runtimeQueryKeys } from "../../queries/runtime";
 import { host } from "../shared/host";
 import { useRepoSettingsOperations } from "./use-repo-settings-operations";
-import type { JsonValue } from "@openducktor/contracts";
 
 const reactActEnvironment: typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -782,12 +781,8 @@ describe("use-repo-settings-operations", () => {
   test("forwards every prompt override key when saving snapshot", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
-    let forwardedSnapshot: Parameters<typeof host.workspaceSaveSettingsSnapshot>[0] | null = null;
     const workspaceSaveSettingsSnapshot = mock(
-      async (snapshotArg: Parameters<typeof host.workspaceSaveSettingsSnapshot>[0]) => {
-        forwardedSnapshot = snapshotArg;
-        return [];
-      },
+      async (_snapshotArg: Parameters<typeof host.workspaceSaveSettingsSnapshot>[0]) => [],
     );
     const workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshot());
 
@@ -850,21 +845,16 @@ describe("use-repo-settings-operations", () => {
       await harness.mount();
       await harness.getLatest().saveSettingsSnapshot(snapshot);
       expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith(snapshot);
-      expect(forwardedSnapshot).toBeDefined();
-      if (!forwardedSnapshot) {
+      const savedSnapshot = workspaceSaveSettingsSnapshot.mock.calls[0]?.[0];
+      if (savedSnapshot === undefined) {
         throw new Error("Expected settings snapshot to be forwarded.");
       }
-      const parsedForwarded: {
-        globalPromptOverrides: Record<string, unknown>;
-        agentRuntimes: JsonValue;
-        workspaces: Record<string, { promptOverrides: Record<string, unknown> }>;
-      } = forwardedSnapshot;
-      expect(Object.keys(parsedForwarded.globalPromptOverrides).sort()).toEqual(
+      expect(Object.keys(savedSnapshot.globalPromptOverrides).sort()).toEqual(
         agentPromptTemplateIdValues.toSorted(),
       );
-      expect(
-        Object.keys(parsedForwarded.workspaces["repo-a"]?.promptOverrides ?? {}).sort(),
-      ).toEqual(agentPromptTemplateIdValues.toSorted());
+      expect(Object.keys(savedSnapshot.workspaces["repo-a"]?.promptOverrides ?? {}).sort()).toEqual(
+        agentPromptTemplateIdValues.toSorted(),
+      );
     } finally {
       await harness.unmount();
       host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;

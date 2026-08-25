@@ -158,16 +158,11 @@ describe("ThemeProvider", () => {
 
     try {
       const queryClient = renderThemeProvider({ withSettingsSnapshot: false });
-      const awaitedLoad = queryClient
-        .fetchQuery(
-          settingsSnapshotQueryOptions({
-            workspaceGetSettingsSnapshot: async () => initialLoad.promise,
-          }),
-        )
-        .then(
-          (snapshot) => ({ snapshot, error: null }),
-          (cause: unknown) => ({ snapshot: null, error: cause }),
-        );
+      const awaitedLoad = queryClient.fetchQuery(
+        settingsSnapshotQueryOptions({
+          workspaceGetSettingsSnapshot: async () => initialLoad.promise,
+        }),
+      );
 
       fireEvent.click(screen.getByRole("button", { name: "Dark" }));
 
@@ -176,9 +171,8 @@ describe("ThemeProvider", () => {
         await flushQueryUpdates();
       });
 
-      const loadResult = await awaitedLoad;
-      expect(loadResult.error).toBeNull();
-      expect(loadResult.snapshot?.theme).toBe("light");
+      const loadedSnapshot = await awaitedLoad;
+      expect(loadedSnapshot.theme).toBe("light");
       expectThemeState("dark");
     } finally {
       hostBridge.client.setTheme = originalSetTheme;

@@ -96,25 +96,28 @@ export const createTaskChatDraftCleanup = ({
     shouldCleanup = () => true,
     ...input
   }: RunTaskMutationWithChatDraftCleanupInput<TResult>): Promise<TResult> => {
-    const cleanupPreparation = await prepareTargets(input).then(
-      (targets) => ({ targets, error: null }),
-      (cause: unknown) => ({ targets: null, error: cause }),
-    );
+    let cleanupTargets: TaskChatDraftCleanupPlan | null = null;
+    let cleanupPreparationError: unknown;
+    try {
+      cleanupTargets = await prepareTargets(input);
+    } catch (cause) {
+      cleanupPreparationError = cause;
+    }
 
     const result = await mutation();
     if (!shouldCleanup(result)) {
       return result;
     }
-    if (cleanupPreparation.error) {
-      reportFailure(cleanupPreparation.error);
+    if (cleanupPreparationError) {
+      reportFailure(cleanupPreparationError);
       return result;
     }
-    if (!cleanupPreparation.targets || cleanupPreparation.targets.targets.length === 0) {
+    if (cleanupTargets === null || cleanupTargets.targets.length === 0) {
       return result;
     }
 
     try {
-      draftClearPort.clearDraftsForTargets(cleanupPreparation.targets.targets);
+      draftClearPort.clearDraftsForTargets(cleanupTargets.targets);
     } catch (error) {
       reportFailure(error);
     }

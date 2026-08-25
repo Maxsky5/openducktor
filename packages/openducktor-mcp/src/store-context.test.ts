@@ -513,22 +513,18 @@ describe("resolveStoreContext", () => {
       throw new Error(`Unexpected URL: ${url}`);
     });
 
-    const contextOutcome = resolveStoreContext({}).then(
-      () => ({ status: "fulfilled" as const }),
-      (cause: unknown) => ({ status: "rejected" as const, error: cause }),
-    );
+    let error: unknown;
+    const contextOutcome = resolveStoreContext({}).catch((cause: unknown): void => {
+      error = cause;
+    });
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     releaseReadiness();
 
-    const outcome = await contextOutcome;
-    expect(outcome.status).toBe("rejected");
-    if (outcome.status !== "rejected") {
-      throw new Error("Expected resolveStoreContext() to reject.");
+    await contextOutcome;
+    if (!(error instanceof Error)) {
+      throw error;
     }
-    if (!(outcome.error instanceof Error)) {
-      throw outcome.error;
-    }
-    expect(outcome.error.message).toStartWith(
+    expect(error.message).toStartWith(
       `No healthy OpenDucktor host was discovered. Checked ${discoveryPath}. http://127.0.0.1:14327: OpenDucktor host bridge is missing required MCP tools:`,
     );
   });

@@ -15,10 +15,7 @@ const hasMeaningfulInputValue = (value: unknown): boolean => {
   if (!value || !(typeof value === "object")) {
     return false;
   }
-  // SAFETY: The preceding runtime guard establishes `Record<string, unknown>` before this assertion.
-  return Object.values(value as Record<string, unknown>).some((entry) =>
-    hasMeaningfulInputValue(entry),
-  );
+  return Object.values(value).some((entry) => hasMeaningfulInputValue(entry));
 };
 
 export const hasNonEmptyInput = (input: Record<string, unknown> | undefined): boolean => {

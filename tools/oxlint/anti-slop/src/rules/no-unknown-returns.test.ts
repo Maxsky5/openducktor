@@ -11,6 +11,8 @@ tester.run("anti-slop/no-unknown-returns", noUnknownReturnsRule, {
     "function parse(): ImportedValue { return input; }",
     "function parse(): User { return user; }",
     "function infer() { return input; }",
+    "function inferFromCall() { return importedUnknownSource(); }",
+    "function inferFromVariable() { const value = importedUnknownSource(); return value; }",
     "function generic<Value>(): Value { return value; }",
     "type Value = unknown; function generic<Value>(): Value { return value; }",
     "type Key = unknown; type Mapped<Input> = { [Key in keyof Input]: () => Key };",
@@ -23,14 +25,6 @@ tester.run("anti-slop/no-unknown-returns", noUnknownReturnsRule, {
   invalid: [
     { code: "function load(): unknown { return input; }", errors: [error] },
     { code: "const load = (): unknown => input;", errors: [error] },
-    {
-      code: "const value: unknown = input; function load() { return value; }",
-      errors: [error],
-    },
-    {
-      code: "const value: unknown = input; const load = () => value;",
-      errors: [error],
-    },
     { code: "type Loader = () => unknown;", errors: [error] },
     { code: "interface Loader { load(): unknown }", errors: [error] },
     { code: "declare function load(): unknown;", errors: [error] },
