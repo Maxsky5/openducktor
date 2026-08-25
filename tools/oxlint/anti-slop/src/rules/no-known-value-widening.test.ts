@@ -36,6 +36,8 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
     `${prelude} const commands: Record<'start', Command> = { start: startCommand };`,
     `${prelude} const commands: Record<string & 'only', Command> = { only: startCommand };`,
     'type Command = () => void; const startCommand = () => {}; const commands: Record<`key-${"start"}`, Command> = { "key-start": startCommand };',
+    'type Command = () => void; const startCommand = () => {}; const commands: Record<`flag-${boolean}`, Command> = { "flag-false": startCommand, "flag-true": startCommand };',
+    'type Command = () => void; const startCommand = () => {}; const commands: Record<`${null}-${undefined}`, Command> = { "null-undefined": startCommand };',
     `${prelude} const commands: Pick<Record<string, Command>, 'start'> = { start: startCommand };`,
     `${prelude} const commands: Omit<Record<string, Command>, string> = {};`,
     `${prelude} function create() { return { start: startCommand }; }`,
@@ -66,6 +68,7 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
   ],
   invalid: [
     { code: "const value: unknown = {};", errors: [error] },
+    { code: "const value: unknown & unknown = {};", errors: [error] },
     { code: "const { value }: Record<string, unknown> = { value: 1 };", errors: [error] },
     { code: "const value: object = {};", errors: [error] },
     { code: "let value: unknown; value = {};", errors: [error] },
@@ -91,7 +94,19 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
       errors: [error],
     },
     {
+      code: `${prelude} const commands: Record<keyof never, Command> = { start: startCommand };`,
+      errors: [error],
+    },
+    {
       code: 'type Command = () => void; const startCommand = () => {}; const commands: Record<`key-${string}`, Command> = { "key-start": startCommand };',
+      errors: [error],
+    },
+    {
+      code: 'type Command = () => void; const startCommand = () => {}; const commands: Record<`id-${bigint}`, Command> = { "id-1": startCommand };',
+      errors: [error],
+    },
+    {
+      code: 'type Command = () => void; const startCommand = () => {}; const commands: Record<`foo-${string}` & `${string}-bar`, Command> = { "foo-value-bar": startCommand };',
       errors: [error],
     },
     {

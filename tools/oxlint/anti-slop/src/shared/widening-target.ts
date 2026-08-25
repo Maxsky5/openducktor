@@ -223,6 +223,20 @@ function classifyWideningTargetWithState(
     }
     return null;
   }
+  if (unwrapped.type === "TSIntersectionType") {
+    const targets = unwrapped.types.map((member) =>
+      classifyWideningTargetWithState(
+        member,
+        environment,
+        substitutions,
+        resolvingAliases,
+        mode,
+        resolveImportedType,
+      ),
+    );
+    if (targets.some((target) => target === null)) return null;
+    return targets.find((target) => target?.kind !== "unknown") ?? targets[0] ?? null;
+  }
   if (unwrapped.type === "TSTypeLiteral") {
     return unwrapped.members.some((member) => member.type === "TSIndexSignature")
       ? { kind: "open dictionary" }

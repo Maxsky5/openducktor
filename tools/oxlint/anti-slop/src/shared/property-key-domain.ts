@@ -5,9 +5,13 @@ import {
   intersectPropertyKeyDomains,
   propertyKeyDomainValueId,
   propertyKeyDomainValueText,
+  regularExpressionPropertyKeyPattern,
   subtractPropertyKeyDomains,
+  templatePropertyKeyPattern,
   unionPropertyKeyDomains,
+  unionPropertyKeyPatterns,
   type PropertyKeyDomain,
+  type PropertyKeyPattern,
 } from "./property-key-domain-model.ts";
 import {
   aliasSubstitution,
@@ -38,19 +42,149 @@ function escapeRegularExpression(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
-function templateInterpolationPattern(domain: PropertyKeyDomain): string | null {
-  if (domain.strings) return ".*";
-  const alternatives = [
-    ...(domain.numbers
-      ? ["(?:NaN|Infinity|-Infinity|-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)"]
-      : []),
+const numberInterpolationPattern = regularExpressionPropertyKeyPattern(
+  "^(?:NaN|Infinity|-Infinity|-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)$",
+);
+const bigintInterpolationPattern = regularExpressionPropertyKeyPattern("^-?(?:0|[1-9]\\d*)$");
+
+function stringValueDomain(values: readonly string[]): PropertyKeyDomain {
+  return {
+    ...emptyPropertyKeyDomain(),
+    values: new Set(values.map((value) => propertyKeyDomainValueId(value))),
+  };
+}
+
+function templateInterpolationPattern(domain: PropertyKeyDomain): PropertyKeyPattern | null {
+  const patterns = [
+    ...(domain.strings ? [regularExpressionPropertyKeyPattern("^.*$")] : []),
+    ...(domain.numbers ? [numberInterpolationPattern] : []),
     ...[...domain.values].map((value) =>
-      escapeRegularExpression(propertyKeyDomainValueText(value)),
+      regularExpressionPropertyKeyPattern(
+        `^${escapeRegularExpression(propertyKeyDomainValueText(value))}$`,
+      ),
     ),
-    ...[...domain.patterns].map((pattern) => pattern.replace(/^\^|\$$/gu, "")),
+    ...domain.patterns,
   ];
-  if (alternatives.length === 0) return null;
-  return alternatives.length === 1 ? (alternatives[0] ?? null) : `(?:${alternatives.join("|")})`;
+  return patterns.length === 0 ? null : unionPropertyKeyPatterns(patterns);
+}
+
+function resolveTemplateInterpolationDomain(
+  type: PortableTSType,
+  environment: PortableTypeEnvironment,
+  substitutions: TypeSubstitutions,
+  resolveImportedType: PortableTypeResolver | undefined,
+  resolving: ReadonlySet<string>,
+): PropertyKeyDomain {
+  const unwrapped = unwrapTransparentType(type);
+  if (unwrapped.type === "TSStringKeyword") {
+    return { ...emptyPropertyKeyDomain(), strings: true };
+  }
+  if (unwrapped.type === "TSNumberKeyword") {
+    return { ...emptyPropertyKeyDomain(), patterns: [numberInterpolationPattern] };
+  }
+  if (unwrapped.type === "TSBigIntKeyword") {
+    return { ...emptyPropertyKeyDomain(), patterns: [bigintInterpolationPattern] };
+  }
+  if (unwrapped.type === "TSBooleanKeyword") return stringValueDomain(["false", "true"]);
+  if (unwrapped.type === "TSNullKeyword") return stringValueDomain(["null"]);
+  if (unwrapped.type === "TSUndefinedKeyword") return stringValueDomain(["undefined"]);
+  if (unwrapped.type === "TSLiteralType") {
+    const literal = unwrapped.literal;
+    if (literal.type !== "Literal" || literal.value === null) return emptyPropertyKeyDomain();
+    return typeof literal.value === "string" ||
+      typeof literal.value === "number" ||
+      typeof literal.value === "boolean"
+      ? stringValueDomain([String(literal.value)])
+      : emptyPropertyKeyDomain();
+  }
+  if (unwrapped.type === "TSTemplateLiteralType") {
+    return resolvePropertyKeyDomain(
+      unwrapped,
+      environment,
+      substitutions,
+      resolveImportedType,
+      resolving,
+    );
+  }
+  if (unwrapped.type === "TSUnionType") {
+    return unionPropertyKeyDomains(
+      unwrapped.types.map((member) =>
+        resolveTemplateInterpolationDomain(
+          member,
+          environment,
+          substitutions,
+          resolveImportedType,
+          resolving,
+        ),
+      ),
+    );
+  }
+  if (unwrapped.type === "TSIntersectionType") {
+    const [first, ...rest] = unwrapped.types;
+    if (first === undefined) return emptyPropertyKeyDomain();
+    return rest.reduce(
+      (domain, member) =>
+        intersectPropertyKeyDomains(
+          domain,
+          resolveTemplateInterpolationDomain(
+            member,
+            environment,
+            substitutions,
+            resolveImportedType,
+            resolving,
+          ),
+        ),
+      resolveTemplateInterpolationDomain(
+        first,
+        environment,
+        substitutions,
+        resolveImportedType,
+        resolving,
+      ),
+    );
+  }
+  if (unwrapped.type !== "TSTypeReference") return emptyPropertyKeyDomain();
+  const name = typeReferenceName(unwrapped);
+  if (name !== null) {
+    const substitution = substitutions.get(name);
+    if (substitution !== undefined && !isUnappliedReferenceTo(substitution.type, name)) {
+      return resolveTemplateInterpolationDomain(
+        substitution.type,
+        substitution.environment,
+        substitution.substitutions,
+        substitution.resolveImportedType,
+        resolving,
+      );
+    }
+  }
+  const domains: PropertyKeyDomain[] = [];
+  for (const resolved of resolveTypeReference(
+    unwrapped,
+    environment,
+    substitutions,
+    resolveImportedType,
+  )) {
+    if (resolved.kind !== "alias") continue;
+    const nextResolving = enterTypeResolution(resolving, resolved.key, "template-interpolation");
+    if (nextResolving === null) continue;
+    const aliasSubstitutions = aliasSubstitution(
+      resolved.declaration,
+      resolved.arguments,
+      resolved.environment,
+      resolved.resolveImportedType,
+    );
+    if (aliasSubstitutions === null) continue;
+    domains.push(
+      resolveTemplateInterpolationDomain(
+        resolved.declaration.typeAnnotation,
+        resolved.environment,
+        aliasSubstitutions,
+        resolved.resolveImportedType,
+        nextResolving,
+      ),
+    );
+  }
+  return unionPropertyKeyDomains(domains);
 }
 
 function templateLiteralKeyDomain(
@@ -61,10 +195,17 @@ function templateLiteralKeyDomain(
   resolving: ReadonlySet<string>,
 ): PropertyKeyDomain {
   const interpolationDomains = type.types.map((member) =>
-    resolvePropertyKeyDomain(member, environment, substitutions, resolveImportedType, resolving),
+    resolveTemplateInterpolationDomain(
+      member,
+      environment,
+      substitutions,
+      resolveImportedType,
+      resolving,
+    ),
   );
   const allFinite = interpolationDomains.every(
-    (domain) => !domain.numbers && !domain.strings && !domain.symbols && domain.patterns.size === 0,
+    (domain) =>
+      !domain.numbers && !domain.strings && !domain.symbols && domain.patterns.length === 0,
   );
   if (allFinite) {
     let values = [type.quasis[0]?.value.cooked ?? ""];
@@ -79,13 +220,21 @@ function templateLiteralKeyDomain(
       values: new Set(values.map((value) => propertyKeyDomainValueId(value))),
     };
   }
-  const parts = [escapeRegularExpression(type.quasis[0]?.value.cooked ?? "")];
-  for (const [index, domain] of interpolationDomains.entries()) {
+  const patterns: PropertyKeyPattern[] = [];
+  for (const domain of interpolationDomains) {
     const interpolation = templateInterpolationPattern(domain);
     if (interpolation === null) return emptyPropertyKeyDomain();
-    parts.push(interpolation, escapeRegularExpression(type.quasis[index + 1]?.value.cooked ?? ""));
+    patterns.push(interpolation);
   }
-  return { ...emptyPropertyKeyDomain(), patterns: new Set([`^${parts.join("")}$`]) };
+  return {
+    ...emptyPropertyKeyDomain(),
+    patterns: [
+      templatePropertyKeyPattern(
+        type.quasis.map((quasi) => quasi.value.cooked ?? ""),
+        patterns,
+      ),
+    ],
+  };
 }
 
 /** Resolve the string, number, symbol, and literal keys admitted by a type. */

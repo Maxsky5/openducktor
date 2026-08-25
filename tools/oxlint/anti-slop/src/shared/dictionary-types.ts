@@ -540,7 +540,7 @@ function indexedValueResolvesToUnknown(
     propertyKeyDomainIncludes(
       {
         numbers: true,
-        patterns: new Set(),
+        patterns: [],
         strings: false,
         symbols: false,
         values: new Set(),
@@ -702,6 +702,17 @@ function typeResolvesToUnknownWithState(
   }
   if (unwrapped.type === "TSUnionType") {
     return unwrapped.types.some((member) =>
+      typeResolvesToUnknownWithState(
+        member,
+        environment,
+        substitutions,
+        resolving,
+        resolveImportedType,
+      ),
+    );
+  }
+  if (unwrapped.type === "TSIntersectionType") {
+    return unwrapped.types.every((member) =>
       typeResolvesToUnknownWithState(
         member,
         environment,

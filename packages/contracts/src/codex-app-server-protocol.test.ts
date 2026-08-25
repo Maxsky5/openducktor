@@ -21,6 +21,7 @@ import {
 import {
   codexAppServerCommandExecutionRequestApprovalParamsSchema,
   codexAppServerCurrentTimeReadResponseSchema,
+  codexAppServerMcpElicitationPrimitiveSchema,
   codexAppServerMcpServerElicitationRequestParamsSchema,
   codexAppServerPermissionsRequestApprovalParamsSchema,
   codexAppServerRequestPermissionProfileSchema,
@@ -357,6 +358,31 @@ describe("Codex app-server protocol", () => {
             },
           },
         },
+      }).success,
+    ).toBe(false);
+  });
+
+  test("preserves strict Codex MCP elicitation enum variants", () => {
+    const legacyEnum = {
+      type: "string",
+      enum: ["repo", "workspace"],
+      enumNames: ["Repository", "Workspace"],
+    } as const;
+    const titledEnum = {
+      type: "string",
+      oneOf: [
+        { const: "repo", title: "Repository" },
+        { const: "workspace", title: "Workspace" },
+      ],
+    } as const;
+
+    expect(codexAppServerMcpElicitationPrimitiveSchema.parse(legacyEnum)).toEqual(legacyEnum);
+    expect(codexAppServerMcpElicitationPrimitiveSchema.parse(titledEnum)).toEqual(titledEnum);
+    expect(
+      codexAppServerMcpElicitationPrimitiveSchema.safeParse({
+        type: "string",
+        oneOf: titledEnum.oneOf,
+        unsupported: true,
       }).success,
     ).toBe(false);
   });

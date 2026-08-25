@@ -124,63 +124,79 @@ const mcpElicitationSchemaDescription = {
   title: z.string().optional(),
   description: z.string().optional(),
 };
-const mcpElicitationConstOptionSchema = z.object({
-  const: z.string(),
-  title: z.string(),
-});
+const mcpElicitationConstOptionSchema = z
+  .object({
+    const: z.string(),
+    title: z.string(),
+  })
+  .strict();
 export const codexAppServerMcpElicitationPrimitiveSchema = z.union([
-  z.object({
-    type: z.literal("string"),
-    ...mcpElicitationSchemaDescription,
-    minLength: codexUint32Schema.optional(),
-    maxLength: codexUint32Schema.optional(),
-    format: z.enum(["email", "uri", "date", "date-time"]).optional(),
-    default: z.string().optional(),
-  }),
-  z.object({
-    type: z.enum(["number", "integer"]),
-    ...mcpElicitationSchemaDescription,
-    minimum: z.number().optional(),
-    maximum: z.number().optional(),
-    default: z.number().optional(),
-  }),
-  z.object({
-    type: z.literal("boolean"),
-    ...mcpElicitationSchemaDescription,
-    default: z.boolean().optional(),
-  }),
-  z.object({
-    type: z.literal("string"),
-    ...mcpElicitationSchemaDescription,
-    enum: z.array(z.string()),
-    enumNames: z.array(z.string()).optional(),
-    default: z.string().optional(),
-  }),
-  z.object({
-    type: z.literal("string"),
-    ...mcpElicitationSchemaDescription,
-    oneOf: z.array(mcpElicitationConstOptionSchema),
-    default: z.string().optional(),
-  }),
-  z.object({
-    type: z.literal("array"),
-    ...mcpElicitationSchemaDescription,
-    minItems: codexUint64Schema.optional(),
-    maxItems: codexUint64Schema.optional(),
-    items: z.union([
-      z.object({ type: z.literal("string"), enum: z.array(z.string()) }),
-      z.object({ anyOf: z.array(mcpElicitationConstOptionSchema) }),
-    ]),
-    default: z.array(z.string()).optional(),
-  }),
+  z
+    .object({
+      type: z.literal("string"),
+      ...mcpElicitationSchemaDescription,
+      minLength: codexUint32Schema.optional(),
+      maxLength: codexUint32Schema.optional(),
+      format: z.enum(["email", "uri", "date", "date-time"]).optional(),
+      default: z.string().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.enum(["number", "integer"]),
+      ...mcpElicitationSchemaDescription,
+      minimum: z.number().optional(),
+      maximum: z.number().optional(),
+      default: z.number().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("boolean"),
+      ...mcpElicitationSchemaDescription,
+      default: z.boolean().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("string"),
+      ...mcpElicitationSchemaDescription,
+      enum: z.array(z.string()),
+      enumNames: z.array(z.string()).optional(),
+      default: z.string().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("string"),
+      ...mcpElicitationSchemaDescription,
+      oneOf: z.array(mcpElicitationConstOptionSchema),
+      default: z.string().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("array"),
+      ...mcpElicitationSchemaDescription,
+      minItems: codexUint64Schema.optional(),
+      maxItems: codexUint64Schema.optional(),
+      items: z.union([
+        z.object({ type: z.literal("string"), enum: z.array(z.string()) }).strict(),
+        z.object({ anyOf: z.array(mcpElicitationConstOptionSchema) }).strict(),
+      ]),
+      default: z.array(z.string()).optional(),
+    })
+    .strict(),
 ]);
 
-const codexAppServerMcpElicitationFormSchema = z.object({
-  $schema: z.string().optional(),
-  type: z.literal("object"),
-  properties: z.record(z.string(), codexAppServerMcpElicitationPrimitiveSchema),
-  required: z.array(z.string()).optional(),
-});
+const codexAppServerMcpElicitationFormSchema = z
+  .object({
+    $schema: z.string().optional(),
+    type: z.literal("object"),
+    properties: z.record(z.string(), codexAppServerMcpElicitationPrimitiveSchema),
+    required: z.array(z.string()).optional(),
+  })
+  .strict();
 
 export const codexAppServerMcpServerElicitationRequestParamsSchema = z.discriminatedUnion("mode", [
   z.object({

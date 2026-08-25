@@ -318,6 +318,9 @@ export function resolveObjectPropertyKeyDomain(
       ),
     );
   }
+  if (unwrapped.type === "TSNeverKeyword") {
+    return { ...emptyPropertyKeyDomain(), numbers: true, strings: true, symbols: true };
+  }
   if (unwrapped.type === "TSArrayType" || unwrapped.type === "TSTupleType") {
     return { ...emptyPropertyKeyDomain(), numbers: true };
   }

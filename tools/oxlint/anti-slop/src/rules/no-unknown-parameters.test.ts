@@ -40,6 +40,10 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
   ],
   invalid: [
     { code: "function load(input: unknown) { return input; }", errors: [error] },
+    {
+      code: "function unsafe(input: unknown): unknown & unknown { return input; }",
+      errors: [error],
+    },
     { code: "function load(input: unknown | string) { return input; }", errors: [error] },
     {
       code: "function load(input: unknown) { const alias = input; return alias; }",
@@ -179,6 +183,10 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
       errors: [error],
     },
     {
+      code: "function unsafe({ input }: Record<keyof never, unknown>) { return input; }",
+      errors: [error],
+    },
+    {
       code: "function unsafe({ input }: Record<string & keyof any, unknown>) { return input; }",
       errors: [error],
     },
@@ -188,6 +196,42 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     },
     {
       code: 'function unsafe({ "key-input": input }: Record<`key-${string}`, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "id-1": input }: Record<`id-${bigint}`, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "foo-value-bar": input }: Record<`foo-${string}` & `${string}-bar`, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "flag-true": input }: Record<`flag-${boolean}`, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "value-null": input }: Record<`value-${null}`, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "value-undefined": input }: Record<`value-${undefined}`, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: "function unsafe({ NaN: input }: Record<number, unknown>) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "function unsafe({ Infinity: input }: Record<number, unknown>) { return input; }",
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "-Infinity": input }: Record<number, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe(input: unknown): Record<number, unknown>["NaN"] { return input; }',
       errors: [error],
     },
     {
