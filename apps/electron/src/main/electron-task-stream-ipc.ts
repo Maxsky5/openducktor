@@ -71,7 +71,7 @@ export type ElectronTaskStreamIpcRequest =
 export type ElectronTaskStreamIpcResult = ElectronTaskStreamSubscription | void;
 export type ElectronTaskStreamIpcHandler = (
   event: ElectronTaskStreamEvent,
-  value: ElectronTaskStreamIpcRequest,
+  value: unknown,
 ) => ElectronTaskStreamIpcResult | Promise<ElectronTaskStreamIpcResult>;
 
 type ElectronIpcMainLike = {
@@ -131,7 +131,7 @@ const readTrustedSender = (event: ElectronTaskStreamEvent, operation: string) =>
 
 const parseOrThrow = <Value>(
   schema: z.ZodType<Value>,
-  value: ElectronTaskStreamIpcRequest,
+  value: unknown,
   operation: string,
   field: string,
 ): Value => {

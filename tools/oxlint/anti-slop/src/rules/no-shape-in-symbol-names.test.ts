@@ -17,8 +17,10 @@ tester.run("anti-slop/no-shape-in-symbol-names", noForbiddenTermInSymbolNamesRul
     "function normalizePayload() { return value; }",
     "const panel = <Panel />;",
     "const fields = schema.shape;",
+    "const fields = schema['shape'];",
     "const value = source.shape;",
     "const { shape: schemaFields } = schema;",
+    "const model = { [external.responseShape]: input };",
   ],
   invalid: [
     { code: "const responseShape = input;", errors: [error] },
@@ -28,5 +30,8 @@ tester.run("anti-slop/no-shape-in-symbol-names", noForbiddenTermInSymbolNamesRul
     { code: "class Example { #shapeCache = new Map(); }", errors: [error] },
     { code: "const ShapePanel = Panel; const view = <ShapePanel />;", errors: [error] },
     { code: "const model = { responseShape: input };", errors: [error] },
+    { code: 'const model = { "responseShape": input };', errors: [error] },
+    { code: 'interface Model { "responseShape": string }', errors: [error] },
+    { code: 'class Model { ["responseShape"] = input; }', errors: [error] },
   ],
 });

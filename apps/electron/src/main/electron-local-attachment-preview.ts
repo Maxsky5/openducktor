@@ -28,7 +28,7 @@ type RegisterElectronLocalAttachmentPreviewProtocolInput = {
   session: ElectronPreviewSession;
 };
 
-export const readLocalAttachmentPreviewPath = (filePath: string): string => {
+export const readLocalAttachmentPreviewPath = (filePath: unknown): string => {
   if (typeof filePath !== "string" || filePath.trim().length === 0) {
     throw new ElectronValidationError({
       operation: "electron.preview.read-path",
@@ -42,7 +42,7 @@ export const readLocalAttachmentPreviewPath = (filePath: string): string => {
 };
 
 export const readLocalAttachmentPreviewPathEffect = (
-  filePath: string,
+  filePath: unknown,
 ): Effect.Effect<string, ElectronValidationError> =>
   Effect.try({
     try: () => readLocalAttachmentPreviewPath(filePath),

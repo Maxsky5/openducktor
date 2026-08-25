@@ -30,6 +30,33 @@ function hasFrameworkImport(
   });
 }
 
+function hasFrameworkNamespaceImport(
+  sourceCode: SourceCode,
+  identifier: ESTree.IdentifierReference,
+  sourceName: string,
+): boolean {
+  const variable = resolveVariable(sourceCode, identifier);
+  if (variable === null || variable.defs.length === 0) return false;
+  return variable.defs.some(
+    (definition) =>
+      definition.type === "ImportBinding" &&
+      definition.node.type === "ImportNamespaceSpecifier" &&
+      definition.parent?.type === "ImportDeclaration" &&
+      definition.parent.source.value === sourceName,
+  );
+}
+
+function staticPropertyName(expression: ESTree.MemberExpression): string | null {
+  if (!expression.computed && expression.property.type === "Identifier") {
+    return expression.property.name;
+  }
+  return expression.computed &&
+    expression.property.type === "Literal" &&
+    typeof expression.property.value === "string"
+    ? expression.property.value
+    : null;
+}
+
 function isBunMockObject(sourceCode: SourceCode, expression: ESTree.Expression): boolean {
   if (expression.type === "Identifier") {
     return hasFrameworkImport(sourceCode, expression, "bun:test", "mock");
@@ -61,6 +88,15 @@ function isTestFrameworkObject(sourceCode: SourceCode, expression: ESTree.Expres
     isGlobalObjectReference(sourceCode, expression, "jest")
   ) {
     return true;
+  }
+  if (expression.type === "MemberExpression" && expression.object.type === "Identifier") {
+    const propertyName = staticPropertyName(expression);
+    return (
+      (propertyName === "vi" &&
+        hasFrameworkNamespaceImport(sourceCode, expression.object, "vitest")) ||
+      (propertyName === "jest" &&
+        hasFrameworkNamespaceImport(sourceCode, expression.object, "@jest/globals"))
+    );
   }
   if (expression.type !== "Identifier") return false;
 

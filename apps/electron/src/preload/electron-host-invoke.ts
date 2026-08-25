@@ -4,21 +4,18 @@ import {
   electronHostInvokeResponseSchema,
   type ElectronHostInvokeRequest,
   type ElectronHostInvokeResult,
-  type ElectronHostInvokeWireResponse,
   type OpenDucktorElectronApi,
 } from "../shared/electron-bridge-contract";
+import type { IpcRenderer } from "electron";
 
 const ELECTRON_HOST_INVOKE_PROTOCOL_ERROR_MESSAGE =
   "Received an invalid host invoke response from the Electron main process.";
 
 type ElectronIpcRendererLike = {
-  invoke(
-    channel: string,
-    request: ElectronHostInvokeRequest,
-  ): Promise<ElectronHostInvokeWireResponse>;
+  invoke: IpcRenderer["invoke"];
 };
 
-const unwrapResponse = (response: ElectronHostInvokeWireResponse): ElectronHostInvokeResult => {
+const unwrapResponse = (response: unknown): ElectronHostInvokeResult => {
   const parsedResponse = electronHostInvokeResponseSchema.safeParse(response);
   if (!parsedResponse.success) {
     throw new Error(ELECTRON_HOST_INVOKE_PROTOCOL_ERROR_MESSAGE);
@@ -35,5 +32,6 @@ export const createElectronHostInvoke =
   (ipcRenderer: ElectronIpcRendererLike): OpenDucktorElectronApi["invoke"] =>
   async (command, args) => {
     const request: ElectronHostInvokeRequest = args === undefined ? { command } : { command, args };
-    return unwrapResponse(await ipcRenderer.invoke(ELECTRON_HOST_INVOKE_CHANNEL, request));
+    const response: unknown = await ipcRenderer.invoke(ELECTRON_HOST_INVOKE_CHANNEL, request);
+    return unwrapResponse(response);
   };

@@ -356,7 +356,15 @@ const configureElectronDockIcon = (): void => {
   );
 };
 
-const validateExternalUrl = (url: string): string => {
+const validateExternalUrl = (url: unknown): string => {
+  if (typeof url !== "string") {
+    throw new ElectronValidationError({
+      operation: "electron.ipc.open-external-url.validate",
+      message: "OpenDucktor Electron can only open absolute http or https URLs.",
+      field: "url",
+      details: { valueTag: Object.prototype.toString.call(url) },
+    });
+  }
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(url.trim());
@@ -382,7 +390,7 @@ const validateExternalUrl = (url: string): string => {
 };
 
 const openExternalUrlEffect = (
-  url: string,
+  url: unknown,
 ): Effect.Effect<void, ElectronOperationError | ElectronValidationError> =>
   Effect.gen(function* () {
     const externalUrl = yield* Effect.try({
@@ -395,7 +403,7 @@ const openExternalUrlEffect = (
               message: errorMessage(cause),
               field: "url",
               cause,
-              details: { url },
+              details: { valueTag: Object.prototype.toString.call(url) },
             }),
     });
     yield* Effect.tryPromise({
@@ -688,11 +696,11 @@ const registerIpcHandlers = (
     },
   });
 
-  ipcMain.handle(ELECTRON_OPEN_EXTERNAL_URL_CHANNEL, async (_event, url: string) => {
+  ipcMain.handle(ELECTRON_OPEN_EXTERNAL_URL_CHANNEL, async (_event, url: unknown) => {
     await runElectronEffect(openExternalUrlEffect(url));
   });
 
-  ipcMain.handle(ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL, async (_event, filePath: string) => {
+  ipcMain.handle(ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL, async (_event, filePath: unknown) => {
     const resolvedPath = await resolveLocalAttachmentPathForPreview(
       hostCommandRouter,
       readLocalAttachmentPreviewPath(filePath),
@@ -704,24 +712,21 @@ const registerIpcHandlers = (
     readAppUpdateStateForIpc(appUpdateService.getState()),
   );
 
-  ipcMain.handle(
-    ELECTRON_APP_UPDATE_CHECK_CHANNEL,
-    async (_event, input: ElectronAppUpdateCheckInput) => {
-      let checkInput: ElectronAppUpdateCheckInput;
-      try {
-        checkInput = readElectronAppUpdateCheckInput(input);
-      } catch (cause) {
-        return readAppUpdateCommandResultForIpc(
-          createRejectedAppUpdateCommandResult(appUpdateService, "check", cause),
-          "check",
-        );
-      }
+  ipcMain.handle(ELECTRON_APP_UPDATE_CHECK_CHANNEL, async (_event, input: unknown) => {
+    let checkInput: ElectronAppUpdateCheckInput;
+    try {
+      checkInput = readElectronAppUpdateCheckInput(input);
+    } catch (cause) {
       return readAppUpdateCommandResultForIpc(
-        await runElectronMainOperation(appUpdateService.check(checkInput)),
+        createRejectedAppUpdateCommandResult(appUpdateService, "check", cause),
         "check",
       );
-    },
-  );
+    }
+    return readAppUpdateCommandResultForIpc(
+      await runElectronMainOperation(appUpdateService.check(checkInput)),
+      "check",
+    );
+  });
 
   ipcMain.handle(ELECTRON_APP_UPDATE_DOWNLOAD_CHANNEL, async () =>
     readAppUpdateCommandResultForIpc(

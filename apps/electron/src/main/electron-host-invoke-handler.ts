@@ -1,7 +1,6 @@
 import { errorMessage, ElectronValidationError } from "../effect/electron-errors";
 import {
   ELECTRON_HOST_INVOKE_CHANNEL,
-  type ElectronHostInvokeRequest,
   type ElectronHostInvokeResponse,
 } from "../shared/electron-bridge-contract";
 import { jsonValueSchema } from "@openducktor/contracts";
@@ -12,10 +11,7 @@ import type { UnvalidatedElectronHostInvokeResult } from "./electron-host-invoke
 type ElectronIpcMainLike = {
   handle(
     channel: string,
-    listener: (
-      event: IpcMainInvokeEvent,
-      request: ElectronHostInvokeRequest,
-    ) => Promise<ElectronHostInvokeResponse>,
+    listener: (event: IpcMainInvokeEvent, request: unknown) => Promise<ElectronHostInvokeResponse>,
   ): void;
 };
 
@@ -35,9 +31,7 @@ type ValidatedElectronHostInvokeRequest = {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const readElectronHostInvokeRequest = (
-  request: ElectronHostInvokeRequest,
-): ValidatedElectronHostInvokeRequest => {
+const readElectronHostInvokeRequest = (request: unknown): ValidatedElectronHostInvokeRequest => {
   const parsedRequest = jsonValueSchema.safeParse(request);
   if (!parsedRequest.success || !isRecord(parsedRequest.data)) {
     throw new ElectronValidationError({

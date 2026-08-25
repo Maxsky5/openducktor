@@ -10,7 +10,6 @@ import {
 import {
   type ElectronTaskStreamEvent,
   type ElectronTaskStreamIpcHandler,
-  type ElectronTaskStreamIpcRequest,
   type ElectronTaskStreamIpcOptions,
   registerElectronTaskStreamIpc,
 } from "./electron-task-stream-ipc";
@@ -131,11 +130,7 @@ const createHarness = (subscriptionIds = [subscriptionId]) => {
     reportDeliveryFailure,
     taskEventStream: stream,
   });
-  const invoke = (
-    channel: string,
-    event: ElectronTaskStreamEvent,
-    value: ElectronTaskStreamIpcRequest,
-  ) => {
+  const invoke = (channel: string, event: ElectronTaskStreamEvent, value: unknown) => {
     const handler = handlers.get(channel);
     if (!handler) throw new Error(`No handler registered for ${channel}.`);
     return handler(event, value);
@@ -150,6 +145,15 @@ const createHarness = (subscriptionIds = [subscriptionId]) => {
 };
 
 describe("electron task stream IPC", () => {
+  test("rejects malformed input at the raw IPC boundary", () => {
+    const harness = createHarness();
+    const owner = createSender(1);
+
+    expect(() =>
+      harness.invoke(ELECTRON_TASK_STREAM_SUBSCRIBE_CHANNEL, eventFor(owner), null),
+    ).toThrow("Electron task stream IPC payload is invalid.");
+  });
+
   test("authorizes ACK and unsubscribe by sender and document IDs, not frame wrapper identity", () => {
     const harness = createHarness();
     const owner = createSender(1);

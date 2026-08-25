@@ -8,11 +8,13 @@ import { type TerminalService, TerminalServiceError } from "@openducktor/host";
 import { Effect } from "effect";
 import {
   createElectronTerminalIpcController,
+  type ElectronTerminalIpcHandler,
+  registerElectronTerminalIpc,
   shouldDetachTerminalSenderForNavigation,
 } from "./electron-terminal-ipc";
 
 describe("Electron terminal IPC", () => {
-  test("validates frames and scopes attachments to the sender", async () => {
+  test("decodes frames and scopes attachments to the sender", async () => {
     const calls: string[] = [];
     const terminalService: TerminalService = {
       attach: (input: { attachmentId: string; terminalId: string }) =>
@@ -37,9 +39,41 @@ describe("Electron terminal IPC", () => {
       "attach:electron:7:client-a:terminal-1",
       "detach:electron:7:client-a:terminal-1",
     ]);
+  });
+
+  test("rejects malformed frames at the raw IPC boundary", async () => {
+    let sendHandler: ElectronTerminalIpcHandler | undefined;
+    registerElectronTerminalIpc({
+      ipcMain: {
+        handle(channel, handler) {
+          if (channel === "openducktor:terminal:send") sendHandler = handler;
+        },
+      },
+      terminalService: {
+        attach: () => Effect.void,
+        detach: () => Effect.void,
+      },
+    });
+    if (sendHandler === undefined) throw new Error("Expected terminal send handler registration.");
+
     await expect(
-      Effect.runPromise(controller.handleFrame(sender, "client-a", "bad")),
-    ).rejects.toThrow("Uint8Array");
+      sendHandler(
+        {
+          sender: {
+            id: 7,
+            isDestroyed: () => false,
+            on: () => undefined,
+            once: () => undefined,
+            send: () => undefined,
+          },
+        },
+        { clientId: "client-a", frame: "bad" },
+      ),
+    ).rejects.toMatchObject({
+      _tag: "ElectronValidationError",
+      field: "request",
+      operation: "electron.terminal.request",
+    });
   });
 
   test("disconnects one logical renderer client without waiting for WebContents teardown", async () => {

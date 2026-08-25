@@ -6,7 +6,9 @@ import {
   type HostInvokeFailure,
   hostErrorResponseSchema,
   hostInvokeFailureSchema,
+  isJsonObject,
   jsonValueSchema,
+  type JsonObject,
   type JsonValue,
   TERMINAL_PROTOCOL_SUBPROTOCOL,
 } from "@openducktor/contracts";
@@ -514,11 +516,7 @@ const webHostRequestErrorResponse = (
   );
 };
 
-const isJsonObject = (value: unknown): value is Record<string, unknown> => isJsonRecord(value);
-
-const parseJsonObjectBody = (
-  request: Request,
-): Effect.Effect<Record<string, unknown>, WebHostRequestError> =>
+const parseJsonObjectBody = (request: Request): Effect.Effect<JsonObject, WebHostRequestError> =>
   Effect.gen(function* () {
     const parsed: JsonValue = yield* Effect.tryPromise({
       try: async () => {

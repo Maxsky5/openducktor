@@ -22,6 +22,11 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     "function read(value: unknown) { { const value = 1; return value; } }",
     "function read(value: unknown) { return ((value: number) => value)(1); }",
     "function read(value: unknown) { try { throw 1; } catch (value) { return value; } }",
+    "function safe(input: unknown) { const loop = () => { return loop; }; return loop; }",
+    "function safe(input: unknown) { const loop = function () { return loop; }; return loop; }",
+    "function safe({ input }: { input: unknown }) { return userSchema.parse(input); }",
+    "function safe({ input }: { input: unknown }) { { const input = 1; return input; } }",
+    "type First = Second; type Second = First; function safe({ input }: First) { return 1; }",
   ],
   invalid: [
     { code: "function load(input: unknown) { return input; }", errors: [error] },
@@ -89,6 +94,42 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     },
     {
       code: "function unsafe(input: unknown) { function leak() { return input; } return leak; }",
+      errors: [error],
+    },
+    {
+      code: "function unsafe({ input }: { input: unknown }) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "const unsafe = ({ input }: { input: unknown }) => input;",
+      errors: [error],
+    },
+    {
+      code: "function unsafe({ input: value }: { input: unknown }) { return value; }",
+      errors: [error],
+    },
+    {
+      code: "function unsafe({ nested: { input } }: { nested: { input: unknown } }) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "function unsafe({ input = source }: { input?: unknown }) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "function unsafe([input]: [unknown]) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "type Payload = { input: unknown }; function unsafe({ input }: Payload) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "interface Payload { input: unknown } function unsafe({ input }: Payload) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "type Payload<T> = { input: T }; function unsafe({ input }: Payload<unknown>) { return input; }",
       errors: [error],
     },
     {

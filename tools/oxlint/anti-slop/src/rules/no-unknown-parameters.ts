@@ -9,6 +9,12 @@ import {
 import { unwrapTransparentExpression } from "../shared/transparent-expression.ts";
 import { resolveVariable } from "../shared/global-reference.ts";
 import { isStableBinding } from "../shared/stable-binding.ts";
+import {
+  isBuiltInType,
+  referencedTypeScopes,
+  typeReferenceName,
+  type TypeEnvironment,
+} from "../shared/type-environment.ts";
 
 type RuntimeFunction = ESTree.ArrowFunctionExpression | ESTree.Function;
 type StableAlias =
@@ -24,6 +30,14 @@ type StableAlias =
     };
 
 type Parameter = ESTree.ParamPattern;
+type ScopedType = {
+  readonly environment: TypeEnvironment;
+  readonly substitutions: ReadonlyMap<string, ScopedType>;
+  readonly type: ESTree.TSType;
+};
+type ReferencedAliasType = ScopedType & {
+  readonly declaration: ESTree.Node;
+};
 
 function parameterAnnotation(parameter: Parameter): ESTree.TSTypeAnnotation | null | undefined {
   if (parameter.type === "TSParameterProperty") {
@@ -53,11 +67,234 @@ function parameterName(parameter: Parameter, sourceText: string): string {
     : sourceText.replace(/\s*:\s*unknown\s*$/u, "");
 }
 
-function parameterIdentifier(parameter: Parameter): ESTree.BindingIdentifier | null {
-  if (parameter.type === "TSParameterProperty") return parameterIdentifier(parameter.parameter);
-  if (parameter.type === "AssignmentPattern") return parameterIdentifier(parameter.left);
-  if (parameter.type === "RestElement") return parameterIdentifier(parameter.argument);
-  return parameter.type === "Identifier" ? parameter : null;
+function staticPropertyName(key: ESTree.Node, computed: boolean): string | null {
+  if (!computed && key.type === "Identifier") return key.name;
+  return key.type === "Literal" && typeof key.value === "string" ? key.value : null;
+}
+
+function unwrapTupleElement(type: ESTree.TSTupleElement): ESTree.TSType {
+  let current = type;
+  while (
+    current.type === "TSOptionalType" ||
+    current.type === "TSRestType" ||
+    current.type === "TSNamedTupleMember"
+  ) {
+    current = current.type === "TSNamedTupleMember" ? current.elementType : current.typeAnnotation;
+  }
+  return current;
+}
+
+function declarationSubstitutions(
+  parameters: ESTree.TSTypeParameterDeclaration | null | undefined,
+  arguments_: ESTree.TSTypeParameterInstantiation | null | undefined,
+  referenceType: ScopedType,
+): ReadonlyMap<string, ScopedType> {
+  const substitutions = new Map(referenceType.substitutions);
+  for (const [index, parameter] of (parameters?.params ?? []).entries()) {
+    const argument = arguments_?.params[index] ?? parameter.default;
+    if (argument === null || argument === undefined) continue;
+    substitutions.set(parameter.name.name, {
+      environment:
+        arguments_?.params[index] === undefined
+          ? createTypeEnvironment(argument, referenceType.environment.visitorKeys)
+          : referenceType.environment,
+      substitutions,
+      type: argument,
+    });
+  }
+  return substitutions;
+}
+
+function unwrappedScopedType(scopedType: ScopedType): ScopedType {
+  let current = scopedType;
+  const resolving = new Set<string>();
+  for (;;) {
+    if (
+      current.type.type === "TSParenthesizedType" ||
+      (current.type.type === "TSTypeOperator" && current.type.operator === "readonly")
+    ) {
+      current = { ...current, type: current.type.typeAnnotation };
+      continue;
+    }
+    if (current.type.type !== "TSTypeReference") return current;
+    const name = typeReferenceName(current.type);
+    if (name === null || resolving.has(name)) return current;
+    const substitution = current.substitutions.get(name);
+    if (substitution === undefined) return current;
+    resolving.add(name);
+    current = substitution;
+  }
+}
+
+function referencedAliasTypes(
+  scopedType: ScopedType,
+  resolving: ReadonlySet<ESTree.Node>,
+): readonly ReferencedAliasType[] {
+  const unwrapped = unwrappedScopedType(scopedType);
+  if (unwrapped.type.type !== "TSTypeReference") return [];
+  const reference = unwrapped.type;
+  const name = typeReferenceName(reference);
+  if (
+    name !== null &&
+    isBuiltInType(name, unwrapped.environment) &&
+    (name === "Readonly" || name === "Partial" || name === "Required" || name === "NonNullable")
+  ) {
+    const wrapped = reference.typeArguments?.params[0];
+    return wrapped === undefined
+      ? []
+      : [{ ...unwrapped, declaration: unwrapped.type, type: wrapped }];
+  }
+  return referencedTypeScopes(reference.typeName, unwrapped.environment).flatMap((scope) => {
+    const alias = scope.environment.aliases.get(scope.name);
+    if (alias === undefined || resolving.has(alias)) return [];
+    return [
+      {
+        declaration: alias,
+        environment: createTypeEnvironment(alias.typeAnnotation, unwrapped.environment.visitorKeys),
+        substitutions: declarationSubstitutions(
+          alias.typeParameters,
+          reference.typeArguments,
+          unwrapped,
+        ),
+        type: alias.typeAnnotation,
+      },
+    ];
+  });
+}
+
+function objectPropertyTypes(
+  scopedType: ScopedType,
+  propertyName: string,
+  resolving: ReadonlySet<ESTree.Node> = new Set(),
+): readonly ScopedType[] {
+  const unwrapped = unwrappedScopedType(scopedType);
+  if (unwrapped.type.type === "TSUnionType" || unwrapped.type.type === "TSIntersectionType") {
+    return unwrapped.type.types.flatMap((member) =>
+      objectPropertyTypes({ ...unwrapped, type: member }, propertyName, resolving),
+    );
+  }
+  if (unwrapped.type.type === "TSTypeLiteral") {
+    return unwrapped.type.members.flatMap((member): readonly ScopedType[] => {
+      if (
+        member.type !== "TSPropertySignature" ||
+        member.typeAnnotation === null ||
+        staticPropertyName(member.key, member.computed) !== propertyName
+      ) {
+        return [];
+      }
+      const type = member.typeAnnotation.typeAnnotation;
+      return [
+        {
+          environment: createTypeEnvironment(type, unwrapped.environment.visitorKeys),
+          substitutions: unwrapped.substitutions,
+          type,
+        },
+      ];
+    });
+  }
+  if (unwrapped.type.type !== "TSTypeReference") return [];
+  const reference = unwrapped.type;
+
+  const aliasMembers = referencedAliasTypes(unwrapped, resolving).flatMap((alias) => {
+    const nextResolving = new Set(resolving);
+    nextResolving.add(alias.declaration);
+    return objectPropertyTypes(alias, propertyName, nextResolving);
+  });
+  const interfaceMembers = referencedTypeScopes(reference.typeName, unwrapped.environment).flatMap(
+    (scope) =>
+      (scope.environment.interfaces.get(scope.name) ?? []).flatMap(
+        (declaration): readonly ScopedType[] => {
+          if (resolving.has(declaration)) return [];
+          const substitutions = declarationSubstitutions(
+            declaration.typeParameters,
+            reference.typeArguments,
+            unwrapped,
+          );
+          return declaration.body.body.flatMap((member): readonly ScopedType[] => {
+            if (
+              member.type !== "TSPropertySignature" ||
+              member.typeAnnotation === null ||
+              staticPropertyName(member.key, member.computed) !== propertyName
+            ) {
+              return [];
+            }
+            const type = member.typeAnnotation.typeAnnotation;
+            return [
+              {
+                environment: createTypeEnvironment(type, unwrapped.environment.visitorKeys),
+                substitutions,
+                type,
+              },
+            ];
+          });
+        },
+      ),
+  );
+  return [...aliasMembers, ...interfaceMembers];
+}
+
+function tupleElementTypes(
+  scopedType: ScopedType,
+  index: number,
+  resolving: ReadonlySet<ESTree.Node> = new Set(),
+): readonly ScopedType[] {
+  const unwrapped = unwrappedScopedType(scopedType);
+  if (unwrapped.type.type === "TSUnionType" || unwrapped.type.type === "TSIntersectionType") {
+    return unwrapped.type.types.flatMap((member) =>
+      tupleElementTypes({ ...unwrapped, type: member }, index, resolving),
+    );
+  }
+  if (unwrapped.type.type === "TSTupleType") {
+    const element = unwrapped.type.elementTypes[index];
+    return element === undefined ? [] : [{ ...unwrapped, type: unwrapTupleElement(element) }];
+  }
+  if (unwrapped.type.type === "TSArrayType") {
+    return [{ ...unwrapped, type: unwrapped.type.elementType }];
+  }
+  if (unwrapped.type.type !== "TSTypeReference" || resolving.has(unwrapped.type)) return [];
+  return referencedAliasTypes(unwrapped, resolving).flatMap((alias) => {
+    const nextResolving = new Set(resolving);
+    nextResolving.add(alias.declaration);
+    return tupleElementTypes(alias, index, nextResolving);
+  });
+}
+
+function unknownBindingVariables(
+  pattern: Parameter | ESTree.BindingPattern,
+  scopedType: ScopedType,
+  sourceCode: SourceCode,
+): readonly Variable[] {
+  if (pattern.type === "TSParameterProperty") {
+    return unknownBindingVariables(pattern.parameter, scopedType, sourceCode);
+  }
+  if (pattern.type === "AssignmentPattern") {
+    return unknownBindingVariables(pattern.left, scopedType, sourceCode);
+  }
+  if (pattern.type === "RestElement") return [];
+  if (pattern.type === "Identifier") {
+    const unwrapped = unwrappedScopedType(scopedType);
+    if (!typeResolvesToUnknown(unwrapped.type, unwrapped.environment, unwrapped.substitutions)) {
+      return [];
+    }
+    const variable = resolveVariable(sourceCode, pattern);
+    return variable === null ? [] : [variable];
+  }
+  if (pattern.type === "ObjectPattern") {
+    return pattern.properties.flatMap((property): readonly Variable[] => {
+      if (property.type === "RestElement") return [];
+      const name = staticPropertyName(property.key, property.computed);
+      if (name === null) return [];
+      return objectPropertyTypes(scopedType, name).flatMap((propertyType) =>
+        unknownBindingVariables(property.value, propertyType, sourceCode),
+      );
+    });
+  }
+  return pattern.elements.flatMap((element, index): readonly Variable[] => {
+    if (element === null || element.type === "RestElement") return [];
+    return tupleElementTypes(scopedType, index).flatMap((elementType) =>
+      unknownBindingVariables(element, elementType, sourceCode),
+    );
+  });
 }
 
 function enclosingRuntimeFunction(node: ESTree.Node): RuntimeFunction | null {
@@ -137,7 +374,7 @@ function directlyExposesParameter(
     if (expression.body === null) return false;
     return expression.body.type === "BlockStatement"
       ? expression.body.body.some((statement) =>
-          statementReturnsParameter(statement, parameterVariable, sourceCode),
+          statementReturnsParameter(statement, parameterVariable, sourceCode, resolvingAliases),
         )
       : directlyExposesParameter(expression.body, parameterVariable, sourceCode, resolvingAliases);
   }
@@ -279,15 +516,6 @@ function statementReturnsParameter(
   return false;
 }
 
-function parameterTypeResolvesToUnknown(
-  annotation: ESTree.TSTypeAnnotation | null | undefined,
-  visitorKeys: Readonly<Record<string, readonly string[]>>,
-): boolean {
-  if (annotation === null || annotation === undefined) return false;
-  const environment = createTypeEnvironment(annotation.typeAnnotation, visitorKeys);
-  return typeResolvesToUnknown(annotation.typeAnnotation, environment);
-}
-
 function hasKnownOutputContract(
   functionNode: RuntimeFunction,
   visitorKeys: Readonly<Record<string, readonly string[]>>,
@@ -329,21 +557,28 @@ export const noUnknownParametersRule = defineRule({
       });
     };
 
-    const resolvedParameter = (parameter: Parameter): Variable | null => {
-      const identifier = parameterIdentifier(parameter);
-      return identifier === null ? null : resolveVariable(context.sourceCode, identifier);
+    const resolvedUnknownBindings = (parameter: Parameter): readonly Variable[] => {
+      const annotation = parameterAnnotation(parameter);
+      if (annotation === null || annotation === undefined) return [];
+      const environment = createTypeEnvironment(
+        annotation.typeAnnotation,
+        context.sourceCode.visitorKeys,
+      );
+      return unknownBindingVariables(
+        parameter,
+        { environment, substitutions: new Map(), type: annotation.typeAnnotation },
+        context.sourceCode,
+      );
     };
 
     const checkAssertion = (node: ESTree.TSAsExpression | ESTree.TSTypeAssertion): void => {
       const functionNode = enclosingRuntimeFunction(node);
       if (functionNode === null) return;
       for (const parameter of functionNode.params) {
-        const annotation = parameterAnnotation(parameter);
-        if (!parameterTypeResolvesToUnknown(annotation, context.sourceCode.visitorKeys)) continue;
-        const variable = resolvedParameter(parameter);
         if (
-          variable !== null &&
-          directlyExposesParameter(node.expression, variable, context.sourceCode)
+          resolvedUnknownBindings(parameter).some((variable) =>
+            directlyExposesParameter(node.expression, variable, context.sourceCode),
+          )
         ) {
           report(parameter);
         }
@@ -358,13 +593,12 @@ export const noUnknownParametersRule = defineRule({
         ) {
           return;
         }
+        const body = node.body;
         for (const parameter of node.params) {
-          const annotation = parameterAnnotation(parameter);
-          if (!parameterTypeResolvesToUnknown(annotation, context.sourceCode.visitorKeys)) continue;
-          const variable = resolvedParameter(parameter);
           if (
-            variable !== null &&
-            directlyExposesParameter(node.body, variable, context.sourceCode)
+            resolvedUnknownBindings(parameter).some((variable) =>
+              directlyExposesParameter(body, variable, context.sourceCode),
+            )
           ) {
             report(parameter);
           }
@@ -372,6 +606,7 @@ export const noUnknownParametersRule = defineRule({
       },
       ReturnStatement(node) {
         if (node.argument === null) return;
+        const argument = node.argument;
         const functionNode = enclosingRuntimeFunction(node);
         if (
           functionNode === null ||
@@ -380,12 +615,10 @@ export const noUnknownParametersRule = defineRule({
           return;
         }
         for (const parameter of functionNode.params) {
-          const annotation = parameterAnnotation(parameter);
-          if (!parameterTypeResolvesToUnknown(annotation, context.sourceCode.visitorKeys)) continue;
-          const variable = resolvedParameter(parameter);
           if (
-            variable !== null &&
-            directlyExposesParameter(node.argument, variable, context.sourceCode)
+            resolvedUnknownBindings(parameter).some((variable) =>
+              directlyExposesParameter(argument, variable, context.sourceCode),
+            )
           ) {
             report(parameter);
           }

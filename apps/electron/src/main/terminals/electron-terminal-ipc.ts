@@ -55,17 +55,15 @@ type ElectronTerminalInvokeEvent = {
   readonly sender: ElectronTerminalLifecycleSender;
 };
 
+export type ElectronTerminalIpcHandler = (
+  event: ElectronTerminalInvokeEvent,
+  request: unknown,
+) => Promise<void>;
+
 type ElectronTerminalIpcMain = {
   handle(
-    channel: typeof ELECTRON_TERMINAL_SEND_CHANNEL,
-    listener: (
-      event: ElectronTerminalInvokeEvent,
-      request: ElectronTerminalSendRequest,
-    ) => Promise<void>,
-  ): void;
-  handle(
-    channel: typeof ELECTRON_TERMINAL_DISCONNECT_CHANNEL,
-    listener: (event: ElectronTerminalInvokeEvent, clientId: string) => Promise<void>,
+    channel: typeof ELECTRON_TERMINAL_SEND_CHANNEL | typeof ELECTRON_TERMINAL_DISCONNECT_CHANNEL,
+    listener: ElectronTerminalIpcHandler,
   ): void;
 };
 
@@ -127,23 +125,12 @@ export const createElectronTerminalIpcController = (terminalService: TerminalSer
   };
   const handleFrame = (
     sender: ElectronTerminalSender,
-    rawClientId: string,
-    rawFrame: unknown,
+    clientId: string,
+    frame: Uint8Array,
   ): Effect.Effect<void, ElectronValidationError> => {
-    const parsedFrame = electronTerminalFrameSchema.safeParse(rawFrame);
-    if (!parsedFrame.success) {
-      return Effect.fail(
-        new ElectronValidationError({
-          operation: "electron.terminal.decode",
-          field: "frame",
-          message: "Electron terminal frames must be Uint8Array values.",
-        }),
-      );
-    }
     return Effect.gen(function* () {
-      const clientId = yield* readClientId(rawClientId);
-      const frame = yield* Effect.try({
-        try: () => decodeTerminalProtocolFrame(parsedFrame.data),
+      const decoded = yield* Effect.try({
+        try: () => decodeTerminalProtocolFrame(frame),
         catch: (cause) =>
           new ElectronValidationError({
             operation: "electron.terminal.decode",
@@ -152,7 +139,7 @@ export const createElectronTerminalIpcController = (terminalService: TerminalSer
             cause,
           }),
       });
-      if (!isTerminalClientMessage(frame.message)) {
+      if (!isTerminalClientMessage(decoded.message)) {
         return yield* Effect.fail(
           new ElectronValidationError({
             operation: "electron.terminal.direction",
@@ -161,15 +148,14 @@ export const createElectronTerminalIpcController = (terminalService: TerminalSer
           }),
         );
       }
-      yield* getClient(sender, clientId).handle(frame.message, frame.payload);
+      yield* getClient(sender, clientId).handle(decoded.message, decoded.payload);
     });
   };
   const detachClient = (
     senderId: number,
-    rawClientId: string,
-  ): Effect.Effect<void, TerminalServiceError | ElectronValidationError> =>
+    clientId: string,
+  ): Effect.Effect<void, TerminalServiceError> =>
     Effect.gen(function* () {
-      const clientId = yield* readClientId(rawClientId);
       const senderClients = clientsBySender.get(senderId);
       if (!senderClients) return;
       const client = senderClients.get(clientId);
