@@ -37,6 +37,10 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
       filename: importedTypeFixtureFilename,
       code: `${prelude} import type { ClosedCommands } from './no-known-value-widening-types'; const commands: ClosedCommands = { start: startCommand };`,
     },
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type { OpenCommandsByKey } from './no-known-value-widening-types'; const commands: OpenCommandsByKey<'start'> = { start: startCommand };`,
+    },
     "function build() { type Record<Key, Value> = { value: Value }; type Command = () => void; const start = () => {}; const commands: Record<string, Command> = { value: start }; }",
     "namespace Owner { type Record<Key, Value> = { value: Value }; type Command = () => void; const start = () => {}; const commands: Record<string, Command> = { value: start }; }",
   ],
@@ -165,6 +169,46 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
     {
       filename: importedTypeFixtureFilename,
       code: `${prelude} import type { OpenCommands } from './no-known-value-widening-types'; const commands: OpenCommands = { start: startCommand };`,
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type { OpenCommandsByKey } from './no-known-value-widening-types'; const commands: OpenCommandsByKey<string> = { start: startCommand };`,
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type DefaultOpenCommands from './no-known-value-widening-types'; const commands: DefaultOpenCommands = { start: startCommand };`,
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type { OpenCommands } from './no-known-value-widening-types'; const commands = { start: startCommand } as OpenCommands;`,
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type { OpenCommands } from './no-known-value-widening-types'; const commands = <OpenCommands>{ start: startCommand };`,
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type { OpenCommands } from './no-known-value-widening-types'; type Commands = OpenCommands; const commands: Commands = { start: startCommand };`,
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type { OpenCommandsByKey } from './no-known-value-widening-types'; type Commands<Key extends PropertyKey> = OpenCommandsByKey<Key>; const commands: Commands<string> = { start: startCommand };`,
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type DefaultOpenCommands from './no-known-value-widening-reexports'; const commands: DefaultOpenCommands = { start: startCommand };`,
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type { OpenCommandsByKey } from './no-known-value-widening-reexports'; const commands = { start: startCommand } as OpenCommandsByKey<string>;`,
       errors: [error],
     },
   ],

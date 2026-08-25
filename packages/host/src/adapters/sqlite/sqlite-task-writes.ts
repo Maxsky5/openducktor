@@ -6,7 +6,12 @@ import {
 import { eq, inArray } from "drizzle-orm";
 import { Effect } from "effect";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
-import { decodeWithSchema, encodeJson, normalizeLabels } from "./sqlite-json-codecs";
+import {
+  encodeJson,
+  normalizeLabels,
+  toValidatedJsonValue,
+  validateWithSchema,
+} from "./sqlite-json-codecs";
 import { getTaskCard } from "./sqlite-task-card-read-model";
 import { requireTaskRow } from "./sqlite-task-queries";
 import {
@@ -70,7 +75,7 @@ export const setDirectMergeRecord = (
     const directMerge =
       input.directMerge === null
         ? null
-        : yield* decodeWithSchema(directMergeRecordSchema, input.directMerge, "directMergeJson", {
+        : yield* validateWithSchema(directMergeRecordSchema, input.directMerge, "directMergeJson", {
             taskId: input.taskId,
           });
     if (directMerge === null) {
@@ -89,7 +94,7 @@ export const setDirectMergeRecord = (
         database
           .update(tasks)
           .set({
-            directMergeJson: encodeJson(directMerge),
+            directMergeJson: encodeJson(toValidatedJsonValue(directMerge)),
             pullRequestJson: null,
             updatedAt: input.updatedAt,
           })
@@ -107,7 +112,7 @@ export const setPullRequestRecord = (
     const pullRequest =
       input.pullRequest === null
         ? null
-        : yield* decodeWithSchema(pullRequestSchema, input.pullRequest, "pullRequestJson", {
+        : yield* validateWithSchema(pullRequestSchema, input.pullRequest, "pullRequestJson", {
             taskId: input.taskId,
           });
     if (pullRequest === null) {
@@ -127,7 +132,7 @@ export const setPullRequestRecord = (
           .update(tasks)
           .set({
             directMergeJson: null,
-            pullRequestJson: encodeJson(pullRequest),
+            pullRequestJson: encodeJson(toValidatedJsonValue(pullRequest)),
             updatedAt: input.updatedAt,
           })
           .where(eq(tasks.id, input.taskId)),
@@ -178,7 +183,7 @@ export const applyTaskPatch = (
         });
       }
       const targetBranch = parsed.data;
-      updates.targetBranchJson = encodeJson(targetBranch);
+      updates.targetBranchJson = encodeJson(toValidatedJsonValue(targetBranch));
     }
     if (Object.keys(updates).length > 0) {
       yield* session.execute(

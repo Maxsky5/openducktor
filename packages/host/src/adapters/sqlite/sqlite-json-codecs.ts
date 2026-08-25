@@ -14,8 +14,8 @@ type SafeParseResult<A> =
   | { readonly success: true; readonly data: A }
   | { readonly success: false; readonly error: { readonly message: string } };
 
-type SafeParser<A> = {
-  readonly safeParse: (value: JsonValue | A) => SafeParseResult<A>;
+type SafeParser<Input, Output> = {
+  readonly safeParse: (value: Input) => SafeParseResult<Output>;
 };
 
 const labelsSchema = z.array(z.string());
@@ -23,14 +23,16 @@ const labelsSchema = z.array(z.string());
 export const normalizeLabels = (labels: string[]): string[] =>
   Array.from(new Set(labels.map((label) => label.trim()).filter(Boolean))).sort();
 
-export const encodeJson = <A>(value: A): string => JSON.stringify(value);
+export const encodeJson = (value: JsonValue): string => JSON.stringify(value);
 
-export const decodeWithSchema = <A>(
-  parser: SafeParser<A>,
-  value: JsonValue | A,
+export const toValidatedJsonValue = <A>(value: A): JsonValue => jsonValueSchema.parse(value);
+
+const parseWithSchema = <Input, Output>(
+  parser: SafeParser<Input, Output>,
+  value: Input,
   field: string,
   details?: Readonly<Record<string, unknown>>,
-): Effect.Effect<A, SqliteTaskStoreDataError> => {
+): Effect.Effect<Output, SqliteTaskStoreDataError> => {
   const parsed = parser.safeParse(value);
   if (parsed.success) {
     return Effect.succeed(parsed.data);
@@ -43,6 +45,21 @@ export const decodeWithSchema = <A>(
     }),
   );
 };
+
+export const decodeWithSchema = <A>(
+  parser: SafeParser<JsonValue, A>,
+  value: JsonValue,
+  field: string,
+  details?: Readonly<Record<string, unknown>>,
+): Effect.Effect<A, SqliteTaskStoreDataError> => parseWithSchema(parser, value, field, details);
+
+export const validateWithSchema = <Input, Output>(
+  parser: SafeParser<Input, Output>,
+  value: Input,
+  field: string,
+  details?: Readonly<Record<string, unknown>>,
+): Effect.Effect<Output, SqliteTaskStoreDataError> =>
+  parseWithSchema(parser, value, field, details);
 
 export const parseJsonColumnValue = (
   value: string | null,

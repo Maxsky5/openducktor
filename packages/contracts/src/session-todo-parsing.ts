@@ -91,11 +91,15 @@ export const agentSessionTodoPayloadListSchema = (
   options: ParseAgentSessionTodoPayloadOptions = {},
 ) =>
   z.preprocess((payload: unknown) => {
-    const parsed = z.array(looseTodoEntrySchema).safeParse(payload);
-    if (!parsed.success) {
+    if (!Array.isArray(payload)) {
       return [];
     }
-    return parsed.data
-      .map((entry, index) => normalizeLooseTodoEntry(entry, `todo:${index}`, options))
-      .filter((entry): entry is AgentSessionTodoPayloadRecord => entry !== null);
+    return payload.flatMap((entry, index) => {
+      const parsed = looseTodoEntrySchema.safeParse(entry);
+      if (!parsed.success) {
+        return [];
+      }
+      const normalized = normalizeLooseTodoEntry(parsed.data, `todo:${index}`, options);
+      return normalized === null ? [] : [normalized];
+    });
   }, z.array(agentSessionTodoPayloadSchema));

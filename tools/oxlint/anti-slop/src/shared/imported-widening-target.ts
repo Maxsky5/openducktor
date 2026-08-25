@@ -7,6 +7,7 @@ import {
   classifyNamedAliasWideningTarget,
   classifyNamedInterfaceWideningTarget,
   createWideningModuleEnvironment,
+  type WideningTypeArgument,
   type WideningTypeEnvironment,
   type WideningTarget,
 } from "./widening-target.ts";
@@ -109,28 +110,37 @@ function localTarget(
   filename: string,
   module: ParsedModule,
   localName: string,
+  arguments_: readonly WideningTypeArgument[],
   resolving: ReadonlySet<string>,
 ): WideningTarget | null {
-  const aliasTarget = classifyNamedAliasWideningTarget(localName, module.environment);
+  const aliasTarget = classifyNamedAliasWideningTarget(localName, module.environment, arguments_);
   if (aliasTarget !== null) return aliasTarget;
   const interfaceTarget = classifyNamedInterfaceWideningTarget(localName, module.environment);
   if (interfaceTarget !== null) return interfaceTarget;
   const imported = importedBinding(module, localName);
   return imported === null
     ? null
-    : importedTarget(filename, imported.moduleSpecifier, imported.exportedName, resolving);
+    : importedTarget(
+        filename,
+        imported.moduleSpecifier,
+        imported.exportedName,
+        arguments_,
+        resolving,
+      );
 }
 
 function importedTarget(
   containingFile: string,
   moduleSpecifier: string,
   exportedName: string,
+  arguments_: readonly WideningTypeArgument[],
   resolving: ReadonlySet<string>,
 ): WideningTarget | null {
   const filename = resolveModule(containingFile, moduleSpecifier);
   if (filename === null) return null;
   const cacheKey = `${filename}\0${exportedName}`;
-  if (targetCache.has(cacheKey)) return targetCache.get(cacheKey) ?? null;
+  const cacheable = arguments_.length === 0;
+  if (cacheable && targetCache.has(cacheKey)) return targetCache.get(cacheKey) ?? null;
   if (resolving.has(cacheKey)) return null;
   const nextResolving = new Set(resolving);
   nextResolving.add(cacheKey);
@@ -139,8 +149,8 @@ function importedTarget(
   for (const statement of module.statements) {
     if (statement.type === "ExportNamedDeclaration") {
       if (declarationName(statement.declaration) === exportedName) {
-        const target = localTarget(filename, module, exportedName, nextResolving);
-        targetCache.set(cacheKey, target);
+        const target = localTarget(filename, module, exportedName, arguments_, nextResolving);
+        if (cacheable) targetCache.set(cacheKey, target);
         return target;
       }
       for (const specifier of statement.specifiers) {
@@ -153,22 +163,39 @@ function importedTarget(
           specifier.local.type === "Identifier" ? specifier.local.name : specifier.local.value;
         const target =
           statement.source === null
-            ? localTarget(filename, module, local, nextResolving)
-            : importedTarget(filename, statement.source.value, local, nextResolving);
-        targetCache.set(cacheKey, target);
+            ? localTarget(filename, module, local, arguments_, nextResolving)
+            : importedTarget(filename, statement.source.value, local, arguments_, nextResolving);
+        if (cacheable) targetCache.set(cacheKey, target);
+        return target;
+      }
+    }
+    if (statement.type === "ExportDefaultDeclaration" && exportedName === "default") {
+      const localName =
+        statement.declaration?.type === "Identifier"
+          ? statement.declaration.name
+          : declarationName(statement.declaration);
+      if (localName !== null) {
+        const target = localTarget(filename, module, localName, arguments_, nextResolving);
+        if (cacheable) targetCache.set(cacheKey, target);
         return target;
       }
     }
     if (statement.type === "ExportAllDeclaration") {
-      const target = importedTarget(filename, statement.source.value, exportedName, nextResolving);
+      const target = importedTarget(
+        filename,
+        statement.source.value,
+        exportedName,
+        arguments_,
+        nextResolving,
+      );
       if (target !== null) {
-        targetCache.set(cacheKey, target);
+        if (cacheable) targetCache.set(cacheKey, target);
         return target;
       }
     }
   }
 
-  targetCache.set(cacheKey, null);
+  if (cacheable) targetCache.set(cacheKey, null);
   return null;
 }
 
@@ -177,6 +204,7 @@ export function classifyImportedWideningTarget(
   containingFile: string,
   moduleSpecifier: string,
   exportedName: string,
+  arguments_: readonly WideningTypeArgument[] = [],
 ): WideningTarget | null {
-  return importedTarget(containingFile, moduleSpecifier, exportedName, new Set());
+  return importedTarget(containingFile, moduleSpecifier, exportedName, arguments_, new Set());
 }

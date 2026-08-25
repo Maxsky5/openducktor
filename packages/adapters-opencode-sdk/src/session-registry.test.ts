@@ -173,8 +173,8 @@ const syncAssistantSubtaskEvent = (input: {
     },
   }) satisfies SyncEventMessagePartUpdated;
 
-const syncChildSessionCreatedEventWithoutParent = (childSessionId: string): GlobalEventPayload => {
-  return {
+const syncChildSessionCreatedEventWithoutParent = (childSessionId: string) =>
+  ({
     type: "sync",
     id: `sync-${childSessionId}`,
     syncEvent: {
@@ -199,8 +199,7 @@ const syncChildSessionCreatedEventWithoutParent = (childSessionId: string): Glob
         },
       },
     },
-  };
-};
+  }) as const;
 
 const syncChildSessionUpdatedEvent = (childSessionId: string): SyncEventSessionUpdated =>
   ({
@@ -237,17 +236,18 @@ const syncChildSessionDeletedEvent = (
     },
   }) satisfies SyncEventSessionDeleted;
 
-const malformedSyncLifecycleDataEvent = (): GlobalEventPayload => ({
-  type: "sync",
-  id: "sync-malformed-session-created",
-  syncEvent: {
-    type: "session.created.1",
-    id: "sync-event-malformed-session-created",
-    seq: 1,
-    aggregateID: "external-child-session",
-    data: null,
-  },
-});
+const malformedSyncLifecycleDataEvent = () =>
+  ({
+    type: "sync",
+    id: "sync-malformed-session-created",
+    syncEvent: {
+      type: "session.created.1",
+      id: "sync-event-malformed-session-created",
+      seq: 1,
+      aggregateID: "external-child-session",
+      data: null,
+    },
+  }) as const;
 
 const childSessionDeletedEvent = (childSessionId: string): EventSessionDeleted =>
   ({

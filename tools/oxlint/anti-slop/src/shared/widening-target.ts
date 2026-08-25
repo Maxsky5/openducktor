@@ -42,6 +42,8 @@ type ScopedType = {
   readonly type: PortableTSType;
 };
 
+export type WideningTypeArgument = ScopedType;
+
 type TypeAliasEnvironment = ReadonlyMap<string, ScopedType>;
 
 function declaration(statement: PortableModuleItem): PortableNode | null {
@@ -203,22 +205,35 @@ function resolvedSubstitutionArgument(
 
 function aliasSubstitution(
   alias: PortableTSTypeAliasDeclaration,
-  type: { readonly typeArguments?: { readonly params: readonly PortableTSType[] } | null },
-  referenceEnvironment: WideningTypeEnvironment,
+  arguments_: readonly WideningTypeArgument[],
+  defaultEnvironment: WideningTypeEnvironment,
   base: TypeAliasEnvironment,
 ): TypeAliasEnvironment | null {
   const parameters = alias.typeParameters?.params ?? [];
-  const arguments_ = type.typeArguments?.params ?? [];
   const next = new Map(base);
   for (const [index, parameter] of parameters.entries()) {
-    const argument = arguments_[index] ?? parameter.default;
-    if (argument === null || argument === undefined) return null;
-    next.set(
-      parameter.name.name,
-      resolvedSubstitutionArgument({ type: argument, environment: referenceEnvironment }, next),
-    );
+    const suppliedArgument = arguments_[index];
+    const defaultArgument = parameter.default;
+    let argument: WideningTypeArgument;
+    if (suppliedArgument !== undefined) {
+      argument = suppliedArgument;
+    } else {
+      if (defaultArgument === null || defaultArgument === undefined) return null;
+      argument = { type: defaultArgument, environment: defaultEnvironment };
+    }
+    next.set(parameter.name.name, resolvedSubstitutionArgument(argument, next));
   }
   return next;
+}
+
+function scopedTypeArguments(
+  type: PortableTSTypeReference,
+  environment: WideningTypeEnvironment,
+): readonly WideningTypeArgument[] {
+  return (type.typeArguments?.params ?? []).map((argument) => ({
+    environment,
+    type: argument,
+  }));
 }
 
 function interfaceWideningTarget(
@@ -260,11 +275,21 @@ function interfaceWideningTarget(
         if (target !== null) return target;
       }
       const heritageAlias = environment.aliases.get(heritageName);
-      if (heritageAlias !== undefined && (heritageAlias.typeParameters?.params.length ?? 0) === 0) {
+      if (heritageAlias !== undefined) {
+        const substitutions = aliasSubstitution(
+          heritageAlias,
+          (heritage.typeArguments?.params ?? []).map((argument) => ({
+            environment,
+            type: argument,
+          })),
+          environment,
+          new Map(),
+        );
+        if (substitutions === null) continue;
         const target = classifyAliasBroadTarget(
           heritageAlias.typeAnnotation,
           environment,
-          new Map(),
+          substitutions,
           new Set([heritageName]),
         );
         if (target !== null) return target;
@@ -297,11 +322,14 @@ export function classifyNamedInterfaceWideningTarget(
 export function classifyNamedAliasWideningTarget(
   name: string,
   environment: WideningTypeEnvironment,
+  arguments_: readonly WideningTypeArgument[] = [],
 ): WideningTarget | null {
   const alias = environment.aliases.get(name);
-  return alias === undefined
+  if (alias === undefined) return null;
+  const substitutions = aliasSubstitution(alias, arguments_, environment, new Map());
+  return substitutions === null
     ? null
-    : classifyAliasBroadTarget(alias.typeAnnotation, environment, new Map(), new Set([name]));
+    : classifyAliasBroadTarget(alias.typeAnnotation, environment, substitutions, new Set([name]));
 }
 
 function classifyWideningTargetWithState(
@@ -369,7 +397,12 @@ function classifyWideningTargetWithState(
     }
     const alias = scope.environment.aliases.get(scope.name);
     if (alias === undefined) continue;
-    const nextSubstitutions = aliasSubstitution(alias, unwrapped, environment, substitutions);
+    const nextSubstitutions = aliasSubstitution(
+      alias,
+      scopedTypeArguments(unwrapped, environment),
+      scope.environment,
+      substitutions,
+    );
     if (nextSubstitutions === null) continue;
     const nextResolving = new Set(resolvingAliases);
     nextResolving.add(referenceKey);
@@ -472,7 +505,12 @@ function classifyAliasBroadTarget(
     }
     const alias = scope.environment.aliases.get(scope.name);
     if (alias === undefined) continue;
-    const nextSubstitutions = aliasSubstitution(alias, unwrapped, environment, substitutions);
+    const nextSubstitutions = aliasSubstitution(
+      alias,
+      scopedTypeArguments(unwrapped, environment),
+      scope.environment,
+      substitutions,
+    );
     if (nextSubstitutions === null) continue;
     const nextResolving = new Set(resolvingAliases);
     nextResolving.add(referenceKey);

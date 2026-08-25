@@ -8,7 +8,12 @@ import {
 import { gte, ne, or } from "drizzle-orm";
 import { Effect } from "effect";
 import type { TaskStoreListTasksInput } from "../../ports/task-repository-ports";
-import { decodeWithSchema, labelsFromRow, optionalJsonFromRow } from "./sqlite-json-codecs";
+import {
+  decodeWithSchema,
+  labelsFromRow,
+  optionalJsonFromRow,
+  validateWithSchema,
+} from "./sqlite-json-codecs";
 import { documentSummariesByTaskId, documentSummary } from "./sqlite-task-document-queries";
 import { requireTaskRow, taskRows } from "./sqlite-task-queries";
 import type { SqliteTaskStoreReadError } from "./sqlite-task-store-errors";
@@ -67,7 +72,7 @@ const rowToTaskCard = (
       title: row.title,
       updatedAt: row.updatedAt.toISOString(),
     };
-    return yield* decodeWithSchema(taskCardSchema, taskCard, "task card read model", {
+    return yield* validateWithSchema(taskCardSchema, taskCard, "task card read model", {
       taskId: row.id,
     });
   });

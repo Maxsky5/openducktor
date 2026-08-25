@@ -65,4 +65,14 @@ describe("session todo payload parsing", () => {
   test("returns empty list for non-array payloads", () => {
     expect(agentSessionTodoPayloadListSchema().parse({})).toEqual([]);
   });
+
+  test("keeps valid todo entries when sibling entries are malformed", () => {
+    expect(
+      agentSessionTodoPayloadListSchema().parse([
+        { id: "todo-1", content: "Keep this todo" },
+        { id: 2, content: "Reject this todo" },
+        null,
+      ]),
+    ).toEqual([{ id: "todo-1", content: "Keep this todo" }]);
+  });
 });

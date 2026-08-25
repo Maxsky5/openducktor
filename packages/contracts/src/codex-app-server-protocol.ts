@@ -13,6 +13,8 @@ import type {
   CodexAppServerCommandExecutionApprovalDecision,
   CodexAppServerCurrentTimeReadResponse,
   CodexAppServerNetworkPolicyAmendment,
+  CodexAppServerThread,
+  CodexAppServerThreadItem,
   CodexAppServerThreadStatus,
   CodexAppServerRequestResultMap,
 } from "./codex-app-server-protocol-schemas";
@@ -75,115 +77,64 @@ export type CodexAppServerThreadActiveFlag = Extract<
   CodexAppServerThreadStatus,
   { type: "active" }
 >["activeFlags"][number];
-export type CodexAppServerThreadSource = string;
+export type CodexAppServerThreadSource = CodexAppServerThread["source"];
 export type CodexAppServerThreadStartSource = "clear" | "startup";
-export type CodexAppServerSubAgentThreadSpawnSource = {
-  parent_thread_id: string;
-  depth: number;
-  agent_path: string | null;
-  agent_nickname: string | null;
-  agent_role: string | null;
-};
-export type CodexAppServerSubAgentSource =
-  | "review"
-  | "compact"
-  | "memory_consolidation"
-  | { other: string }
-  | { thread_spawn: CodexAppServerSubAgentThreadSpawnSource };
-export type CodexAppServerSessionSource =
-  | "appServer"
-  | "cli"
-  | "exec"
-  | "unknown"
-  | "vscode"
-  | { custom: string }
-  | { subAgent: CodexAppServerSubAgentSource };
-export type CodexAppServerCollabAgentTool =
-  | "spawnAgent"
-  | "sendInput"
-  | "resumeAgent"
-  | "wait"
-  | "closeAgent";
-export type CodexAppServerCollabAgentToolCallStatus = "inProgress" | "completed" | "failed";
-export type CodexAppServerCollabAgentStatus =
-  | "pendingInit"
-  | "running"
-  | "interrupted"
-  | "completed"
-  | "errored"
-  | "shutdown"
-  | "notFound";
-export type CodexAppServerCollabAgentState = {
-  status: CodexAppServerCollabAgentStatus;
-  message: string | null;
-};
-export type CodexAppServerCollabAgentToolCallThreadItem = {
-  type: "collabAgentToolCall";
-  id: string;
-  tool: CodexAppServerCollabAgentTool;
-  status: CodexAppServerCollabAgentToolCallStatus;
-  senderThreadId: string;
-  receiverThreadIds: string[];
-  prompt: string | null;
-  model: string | null;
-  reasoningEffort: CodexAppServerReasoningEffort | null;
-  agentsStates: { [key in string]?: CodexAppServerCollabAgentState };
-};
-export type CodexAppServerSubAgentActivityKind = "started" | "interacted" | "interrupted";
-export type CodexAppServerSubAgentActivityThreadItem = {
-  type: "subAgentActivity";
-  id: string;
-  kind: CodexAppServerSubAgentActivityKind;
-  agentThreadId: string;
-  agentPath: string;
-};
+export type CodexAppServerSessionSource = CodexAppServerThread["source"];
+export type CodexAppServerSubAgentSource = Extract<
+  CodexAppServerSessionSource,
+  { subAgent: object }
+>["subAgent"];
+export type CodexAppServerSubAgentThreadSpawnSource = Extract<
+  CodexAppServerSubAgentSource,
+  { thread_spawn: object }
+>["thread_spawn"];
+export type CodexAppServerCollabAgentToolCallThreadItem = Extract<
+  CodexAppServerThreadItem,
+  { type: "collabAgentToolCall" }
+>;
+export type CodexAppServerCollabAgentTool = CodexAppServerCollabAgentToolCallThreadItem["tool"];
+export type CodexAppServerCollabAgentToolCallStatus =
+  CodexAppServerCollabAgentToolCallThreadItem["status"];
+export type CodexAppServerCollabAgentState =
+  CodexAppServerCollabAgentToolCallThreadItem["agentsStates"][string];
+export type CodexAppServerCollabAgentStatus = CodexAppServerCollabAgentState["status"];
+export type CodexAppServerSubAgentActivityThreadItem = Extract<
+  CodexAppServerThreadItem,
+  { type: "subAgentActivity" }
+>;
+export type CodexAppServerSubAgentActivityKind = CodexAppServerSubAgentActivityThreadItem["kind"];
 export type CodexAppServerSubagentThreadItem =
   | CodexAppServerCollabAgentToolCallThreadItem
   | CodexAppServerSubAgentActivityThreadItem;
-export type CodexAppServerHookPromptFragment = {
-  text: string;
-  hookRunId: string;
-};
-export type CodexAppServerMemoryCitationEntry = {
-  path: string;
-  lineStart: number;
-  lineEnd: number;
-  note: string;
-};
-export type CodexAppServerMemoryCitation = {
-  entries: CodexAppServerMemoryCitationEntry[];
-  threadIds: string[];
-};
-export type CodexAppServerPatchChangeKind =
-  | { type: "add" }
-  | { type: "delete" }
-  | { type: "update"; move_path: string | null };
-export type CodexAppServerFileUpdateChange = {
-  path: string;
-  kind: CodexAppServerPatchChangeKind;
-  diff: string;
-};
-export type CodexAppServerMcpToolCallAppContext = {
-  connectorId: string;
-  linkId: string | null;
-  resourceUri: string | null;
-  appName: string | null;
-  actionName: string | null;
-};
-export type CodexAppServerMcpToolCallResult = {
-  content: CodexAppServerJsonValue[];
-  structuredContent: CodexAppServerJsonValue | null;
-  _meta: CodexAppServerJsonValue | null;
-};
-export type CodexAppServerDynamicToolCallOutputContentItem =
-  | { type: "inputText"; text: string }
-  | { type: "inputImage"; imageUrl: string }
-  | { type: "inputAudio"; audioUrl: string };
-export type CodexAppServerWebSearchAction =
-  | { type: "search"; query: string | null; queries: string[] | null }
-  | { type: "openPage"; url: string | null }
-  | { type: "findInPage"; url: string | null; pattern: string | null }
-  | { type: "other" };
+export type CodexAppServerHookPromptFragment = Extract<
+  CodexAppServerThreadItem,
+  { type: "hookPrompt" }
+>["fragments"][number];
+export type CodexAppServerMemoryCitation = NonNullable<
+  Extract<CodexAppServerThreadItem, { type: "agentMessage" }>["memoryCitation"]
+>;
+export type CodexAppServerMemoryCitationEntry = CodexAppServerMemoryCitation["entries"][number];
+export type CodexAppServerFileUpdateChange = Extract<
+  CodexAppServerThreadItem,
+  { type: "fileChange" }
+>["changes"][number];
+export type CodexAppServerPatchChangeKind = CodexAppServerFileUpdateChange["kind"];
+type CodexAppServerMcpToolCallThreadItem = Extract<
+  CodexAppServerThreadItem,
+  { type: "mcpToolCall" }
+>;
+export type CodexAppServerMcpToolCallAppContext = NonNullable<
+  CodexAppServerMcpToolCallThreadItem["appContext"]
+>;
+export type CodexAppServerMcpToolCallResult = NonNullable<
+  CodexAppServerMcpToolCallThreadItem["result"]
+>;
+export type CodexAppServerDynamicToolCallOutputContentItem = NonNullable<
+  Extract<CodexAppServerThreadItem, { type: "dynamicToolCall" }>["contentItems"]
+>[number];
+export type CodexAppServerWebSearchAction = NonNullable<
+  Extract<CodexAppServerThreadItem, { type: "webSearch" }>["action"]
+>;
 export type CodexAppServerAskForApproval =
   | "never"
   | "on-request"
