@@ -5,7 +5,7 @@ import {
 import type { TaskAssetStagingService } from "../../application/task-assets/task-asset-staging-service";
 import type { z } from "zod";
 import { HostValidationError } from "../../effect/host-errors";
-import type { HostCommandHandlers } from "../router/host-command-router";
+import { defineHostCommandHandlers } from "../router/host-command-router";
 
 const parseInput = <T>(schema: z.ZodType<T>, value: unknown, command: string): T => {
   const parsed = schema.safeParse(value);
@@ -18,13 +18,12 @@ const parseInput = <T>(schema: z.ZodType<T>, value: unknown, command: string): T
   });
 };
 
-export const createTaskAssetCommandHandlers = (
-  stagingService: TaskAssetStagingService,
-): HostCommandHandlers => ({
-  task_asset_discard_staged: (args) =>
-    stagingService.discard(
-      parseInput(taskAssetDiscardStagedInputSchema, args, "task_asset_discard_staged"),
-    ),
-  task_asset_stage: (args) =>
-    stagingService.stage(parseInput(taskAssetStageInputSchema, args, "task_asset_stage")),
-});
+export const createTaskAssetCommandHandlers = (stagingService: TaskAssetStagingService) =>
+  defineHostCommandHandlers({
+    task_asset_discard_staged: (args) =>
+      stagingService.discard(
+        parseInput(taskAssetDiscardStagedInputSchema, args, "task_asset_discard_staged"),
+      ),
+    task_asset_stage: (args) =>
+      stagingService.stage(parseInput(taskAssetStageInputSchema, args, "task_asset_stage")),
+  });

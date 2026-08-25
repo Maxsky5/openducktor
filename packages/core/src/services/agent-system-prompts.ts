@@ -848,7 +848,7 @@ export const buildReadOnlyPermissionRejectionMessage = (
 export const mergePromptOverrides = ({
   globalOverrides,
   repoOverrides,
-}: MergePromptOverridesInput): RepoPromptOverrides => {
+}: MergePromptOverridesInput) => {
   const result: RepoPromptOverrides = {};
   const keys = agentPromptTemplateIdValues.filter(
     (templateId) => globalOverrides?.[templateId] || repoOverrides?.[templateId],

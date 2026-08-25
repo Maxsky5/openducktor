@@ -8,6 +8,7 @@ import {
 } from "../shared/dictionary-types.ts";
 import { unwrapTransparentExpression } from "../shared/transparent-expression.ts";
 import { resolveVariable } from "../shared/global-reference.ts";
+import { isStableBinding } from "../shared/stable-binding.ts";
 
 type RuntimeFunction = ESTree.ArrowFunctionExpression | ESTree.Function;
 type StableAlias = {
@@ -74,9 +75,7 @@ function stableAliasInitializer(
     definition.node.type !== "VariableDeclarator" ||
     definition.node.id.type !== "Identifier" ||
     definition.node.init === null ||
-    definition.parent?.type !== "VariableDeclaration" ||
-    definition.parent.kind !== "const" ||
-    variable.references.some((reference) => reference.isWrite() && !reference.init)
+    !isStableBinding(variable, definition.node)
   ) {
     return null;
   }

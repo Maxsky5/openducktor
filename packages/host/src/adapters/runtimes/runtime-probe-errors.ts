@@ -32,11 +32,17 @@ const readFailureKind = (cause: unknown): string | null => {
 };
 
 export const isTimeoutError = (cause: unknown): boolean => {
-  if (readFailureKind(cause) === "timeout") return true;
-  const name = readStringField(cause, "name");
-  if (name && TIMEOUT_ERROR_NAMES.has(name)) return true;
-  const code = readStringField(cause, "code");
-  if (code && TIMEOUT_ERROR_CODES.has(code)) return true;
-  const nestedCause = isRuntimeFailure(cause) ? (cause.cause ?? null) : null;
-  return nestedCause !== null && nestedCause !== cause && isTimeoutError(nestedCause);
+  const visited = new WeakSet<RuntimeFailure>();
+  let current = cause;
+  while (isRuntimeFailure(current)) {
+    if (visited.has(current)) return false;
+    visited.add(current);
+    if (readFailureKind(current) === "timeout") return true;
+    const name = readStringField(current, "name");
+    if (name && TIMEOUT_ERROR_NAMES.has(name)) return true;
+    const code = readStringField(current, "code");
+    if (code && TIMEOUT_ERROR_CODES.has(code)) return true;
+    current = current.cause;
+  }
+  return false;
 };

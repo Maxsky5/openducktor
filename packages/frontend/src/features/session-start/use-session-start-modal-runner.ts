@@ -51,6 +51,10 @@ type SessionStartModalConfirmPayload = Exclude<
 
 type SessionStartDecisionInput = Omit<SessionStartModalConfirmPayload, "runInBackground">;
 
+type SessionStartTargetBranchFields = {
+  targetBranch?: GitTargetBranch;
+};
+
 type SessionStartDecisionRequestContext = Pick<
   SessionStartModalRunRequest,
   "role" | "launchActionId" | "taskId"
@@ -109,7 +113,7 @@ export const buildSessionStartModalDecision = ({
   requestContext: SessionStartDecisionRequestContext;
   selectedModel: AgentModelSelection | null;
 }): SessionStartModalDecision => {
-  const buildTargetBranchFields = (): { targetBranch?: GitTargetBranch } =>
+  const buildTargetBranchFields = (): SessionStartTargetBranchFields =>
     input.targetBranch ? { targetBranch: targetBranchFromSelection(input.targetBranch) } : {};
 
   if (input.startMode === "reuse") {

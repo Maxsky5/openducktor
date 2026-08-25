@@ -2,11 +2,10 @@ import type {} from "./bun-test";
 import { toCommandArgs } from "./invoke-utils";
 
 describe("toCommandArgs", () => {
-  test("serializes JSON object arguments", () => {
+  test("validates JSON object arguments without changing them", () => {
     const args = toCommandArgs({
       taskId: "task-1",
       options: { includeArchived: false },
-      optional: undefined,
     });
 
     expect(args).toEqual({
@@ -20,5 +19,11 @@ describe("toCommandArgs", () => {
       "Host command arguments must be a JSON object.",
     );
     expect(() => toCommandArgs(undefined)).toThrow("Host command arguments must be a JSON object.");
+    expect(() => toCommandArgs({ optional: undefined })).toThrow(
+      "Host command arguments must be a JSON object.",
+    );
+    expect(() => toCommandArgs({ count: Number.NaN })).toThrow(
+      "Host command arguments must be a JSON object.",
+    );
   });
 });

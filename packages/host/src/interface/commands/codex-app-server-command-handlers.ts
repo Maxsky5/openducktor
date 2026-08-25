@@ -11,7 +11,7 @@ import type {
 } from "../../ports/codex-app-server-port";
 import { CODEX_APP_SERVER_REQUEST_METHODS } from "../../ports/codex-app-server-port";
 import type { CodexAppServerRequestResult } from "../../ports/codex-app-server-protocol";
-import type { HostCommandHandlers } from "../router/host-command-router";
+import { defineHostCommandHandlers } from "../router/host-command-router";
 import { requireRecord, requireString } from "./command-inputs";
 import { parseCodexAppServerClientRequest, jsonValueSchema } from "@openducktor/contracts";
 
@@ -294,19 +294,20 @@ const requestCodexAppServer = (
 export const createCodexAppServerCommandHandlers = (
   codexAppServerService: CodexAppServerService,
   options: CodexAppServerCommandHandlerOptions = defaultCodexAppServerCommandHandlerOptions,
-): HostCommandHandlers => ({
-  codex_app_server_request: (args) => {
-    const input = parseRequestInput(args);
-    return requestCodexAppServer(codexAppServerService, input).pipe(
-      Effect.tap((result) =>
-        Effect.either(logCodexPolicyRequest(options.logger, input, result)).pipe(
-          Effect.flatMap((loggingResult) =>
-            loggingResult._tag === "Left"
-              ? options.onBackgroundFailure(loggingResult.left)
-              : Effect.void,
+) =>
+  defineHostCommandHandlers({
+    codex_app_server_request: (args) => {
+      const input = parseRequestInput(args);
+      return requestCodexAppServer(codexAppServerService, input).pipe(
+        Effect.tap((result) =>
+          Effect.either(logCodexPolicyRequest(options.logger, input, result)).pipe(
+            Effect.flatMap((loggingResult) =>
+              loggingResult._tag === "Left"
+                ? options.onBackgroundFailure(loggingResult.left)
+                : Effect.void,
+            ),
           ),
         ),
-      ),
-    );
-  },
-});
+      );
+    },
+  });

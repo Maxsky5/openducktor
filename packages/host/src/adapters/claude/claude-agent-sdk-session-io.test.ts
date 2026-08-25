@@ -256,7 +256,6 @@ describe("sendClaudeUserMessage", () => {
             timestamp: "2026-06-25T20:00:10.000Z",
             is_error: false,
             stop_reason: "tool_use",
-            terminal_reason: "tool_use",
             usage: {
               input_tokens: 20_000,
               output_tokens: 1_000,

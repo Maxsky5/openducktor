@@ -32,6 +32,8 @@ type GlobalEventPayload = UnknownRecord;
 type AssistantPartEvent = Extract<AgentEvent, { type: "assistant_part" }>;
 type SubagentPart = Extract<AssistantPartEvent["part"], { kind: "subagent" }>;
 type SubagentPartEvent = AssistantPartEvent & { part: SubagentPart };
+type MessageUpdatedEvent = Extract<Event, { type: "message.updated" }>;
+type MessagePartUpdatedEvent = Extract<Event, { type: "message.part.updated" }>;
 
 const readSubagentParts = (events: AgentEvent[]): SubagentPart[] =>
   events
@@ -41,64 +43,85 @@ const readSubagentParts = (events: AgentEvent[]): SubagentPart[] =>
     )
     .map((event) => event.part);
 
-const assistantRoleEvent = (messageId: string): UnknownRecord => ({
-  type: "message.updated",
-  properties: {
-    info: {
-      id: messageId,
-      role: "assistant",
+const assistantRoleEvent = (messageId: string) =>
+  ({
+    id: `event-${messageId}`,
+    type: "message.updated",
+    properties: {
       sessionID: "external-session-1",
+      info: {
+        id: messageId,
+        role: "assistant",
+        sessionID: "external-session-1",
+        time: { created: Date.parse("2026-02-22T12:00:10.000Z") },
+        parentID: "user-message-1",
+        modelID: "gpt-5",
+        providerID: "openai",
+        mode: "build",
+        agent: "build",
+        path: { cwd: "/repo", root: "/repo" },
+        cost: 0,
+        tokens: {
+          input: 0,
+          output: 0,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
+      },
     },
-  },
-});
+  }) satisfies MessageUpdatedEvent;
 
-const assistantSubtaskEvent = (input: {
-  messageId: string;
-  partId: string;
-  description: string;
-}): UnknownRecord => ({
-  type: "message.part.updated",
-  properties: {
-    part: {
-      id: input.partId,
+const assistantSubtaskEvent = (input: { messageId: string; partId: string; description: string }) =>
+  ({
+    id: `event-${input.partId}`,
+    type: "message.part.updated",
+    properties: {
       sessionID: "external-session-1",
-      messageID: input.messageId,
-      type: "subtask",
-      agent: "build",
-      prompt: "Inspect repo",
-      description: input.description,
+      time: Date.parse("2026-02-22T12:00:10.000Z"),
+      part: {
+        id: input.partId,
+        sessionID: "external-session-1",
+        messageID: input.messageId,
+        type: "subtask",
+        agent: "build",
+        prompt: "Inspect repo",
+        description: input.description,
+      },
     },
-  },
-});
+  }) satisfies MessagePartUpdatedEvent;
 
 const assistantTaskToolEvent = (input: {
   messageId: string;
   partId: string;
   description: string;
-}): UnknownRecord => ({
-  type: "message.part.updated",
-  properties: {
-    part: {
-      id: input.partId,
+}) =>
+  ({
+    id: `event-${input.partId}`,
+    type: "message.part.updated",
+    properties: {
       sessionID: "external-session-1",
-      messageID: input.messageId,
-      type: "tool",
-      callID: `call-${input.partId}`,
-      tool: "task",
-      state: {
-        status: "running",
-        input: {
-          description: input.description,
-          prompt: "Inspect repo",
-          subagent_type: "explorer",
-        },
-        time: {
-          start: Date.parse("2026-02-22T12:00:10.000Z"),
+      time: Date.parse("2026-02-22T12:00:10.000Z"),
+      part: {
+        id: input.partId,
+        sessionID: "external-session-1",
+        messageID: input.messageId,
+        type: "tool",
+        callID: `call-${input.partId}`,
+        tool: "task",
+        state: {
+          status: "running",
+          input: {
+            description: input.description,
+            prompt: "Inspect repo",
+            subagent_type: "explorer",
+          },
+          time: {
+            start: Date.parse("2026-02-22T12:00:10.000Z"),
+          },
         },
       },
     },
-  },
-});
+  }) satisfies MessagePartUpdatedEvent;
 
 const childPermissionEvent = (childSessionId: string): Event =>
   permissionAskedEvent({

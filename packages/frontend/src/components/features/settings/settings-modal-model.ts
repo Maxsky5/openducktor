@@ -192,7 +192,7 @@ export const canClearPromptOverride = (
 export const clearPromptOverride = (
   overrides: RepoPromptOverrides,
   templateId: AgentPromptTemplateId,
-): RepoPromptOverrides => {
+) => {
   const existing = overrides[templateId];
   if (!existing) {
     return overrides;
@@ -209,7 +209,7 @@ export const togglePromptOverrideEnabled = (
   nextEnabled: boolean,
   fallbackTemplate: string,
   fallbackBaseVersion: number,
-): RepoPromptOverrides => {
+) => {
   const existing = overrides[templateId];
   if (nextEnabled) {
     return {
@@ -245,7 +245,7 @@ export const updatePromptOverrideTemplate = (
   templateId: AgentPromptTemplateId,
   nextTemplate: string,
   fallbackBaseVersion: number,
-): RepoPromptOverrides => {
+) => {
   const existing = overrides[templateId];
   return {
     ...overrides,

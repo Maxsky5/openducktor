@@ -4,7 +4,7 @@ import {
 } from "@openducktor/contracts";
 import type { WorkspaceFilesService } from "../../application/filesystem/workspace-files-service";
 import { HostValidationError } from "../../effect/host-errors";
-import type { HostCommandHandlers } from "../router/host-command-router";
+import { defineHostCommandHandlers } from "../router/host-command-router";
 import { optionalString, requireRecord, requireStringPreservingWhitespace } from "./command-inputs";
 
 const parseListTreeInput = (args: Record<string, unknown> | undefined) => {
@@ -38,12 +38,11 @@ const parseWriteTextFileInput = (
   });
 };
 
-export const createWorkspaceFilesCommandHandlers = (
-  workspaceFilesService: WorkspaceFilesService,
-): HostCommandHandlers => ({
-  filesystem_list_tree: (args) => workspaceFilesService.listTree(parseListTreeInput(args)),
-  filesystem_read_text_file: (args) =>
-    workspaceFilesService.readTextFile(parseReadTextFileInput(args)),
-  filesystem_write_text_file: (args) =>
-    workspaceFilesService.writeTextFile(parseWriteTextFileInput(args)),
-});
+export const createWorkspaceFilesCommandHandlers = (workspaceFilesService: WorkspaceFilesService) =>
+  defineHostCommandHandlers({
+    filesystem_list_tree: (args) => workspaceFilesService.listTree(parseListTreeInput(args)),
+    filesystem_read_text_file: (args) =>
+      workspaceFilesService.readTextFile(parseReadTextFileInput(args)),
+    filesystem_write_text_file: (args) =>
+      workspaceFilesService.writeTextFile(parseWriteTextFileInput(args)),
+  });

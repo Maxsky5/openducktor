@@ -68,12 +68,12 @@ type MarkdownJsonContent = JSONContent & {
   spread?: unknown;
 };
 
-const semanticTree = ({
+const semanticTree: (node: MarkdownJsonContent) => JSONContent = ({
   position: _position,
   spread: _spread,
   content,
   ...node
-}: MarkdownJsonContent): JSONContent => ({
+}) => ({
   ...node,
   ...(content === undefined ? undefined : { content: content.map(semanticTree) }),
 });

@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import type { RuntimeDefinitionsService } from "../../application/runtimes/runtime-definitions-service";
 import { HostValidationError } from "../../effect/host-errors";
-import type { HostCommandHandlers } from "../router/host-command-router";
+import { defineHostCommandHandlers } from "../router/host-command-router";
 
 const requireNoArgs = (command: string, args: Record<string, unknown> | undefined): void => {
   if (args !== undefined && Object.keys(args).length > 0) {
@@ -15,19 +15,20 @@ const requireNoArgs = (command: string, args: Record<string, unknown> | undefine
 
 export const createRuntimeDefinitionsCommandHandlers = (
   runtimeDefinitionsService: RuntimeDefinitionsService,
-): HostCommandHandlers => ({
-  runtime_definitions_list: (args) =>
-    Effect.try({
-      try: () => {
-        requireNoArgs("runtime_definitions_list", args);
-        return runtimeDefinitionsService.listRuntimeDefinitions();
-      },
-      catch: (cause) =>
-        cause instanceof HostValidationError
-          ? cause
-          : new HostValidationError({
-              message: cause instanceof Error ? cause.message : String(cause),
-              field: "args",
-            }),
-    }),
-});
+) =>
+  defineHostCommandHandlers({
+    runtime_definitions_list: (args) =>
+      Effect.try({
+        try: () => {
+          requireNoArgs("runtime_definitions_list", args);
+          return runtimeDefinitionsService.listRuntimeDefinitions();
+        },
+        catch: (cause) =>
+          cause instanceof HostValidationError
+            ? cause
+            : new HostValidationError({
+                message: cause instanceof Error ? cause.message : String(cause),
+                field: "args",
+              }),
+      }),
+  });

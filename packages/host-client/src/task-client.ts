@@ -138,7 +138,7 @@ export class HostTaskClient {
       "tasks_list",
       toCommandArgs({
         repoPath,
-        doneVisibleDays,
+        ...(doneVisibleDays === undefined ? undefined : { doneVisibleDays }),
       }),
     );
     return parseArray(taskCardSchema, payload, "tasks_list");
@@ -256,7 +256,7 @@ export class HostTaskClient {
         repoPath,
         taskId,
         status,
-        reason,
+        ...(reason === undefined ? undefined : { reason }),
       }),
     );
     return taskCardSchema.parse(payload);
@@ -299,7 +299,7 @@ export class HostTaskClient {
         taskId: input.taskId,
         input: {
           markdown: input.markdown,
-          subtasks: input.subtasks,
+          ...(input.subtasks === undefined ? undefined : { subtasks: input.subtasks }),
         },
       }),
     );

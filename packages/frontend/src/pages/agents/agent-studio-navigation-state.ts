@@ -307,8 +307,9 @@ const hasLocalSelectionAheadOfRoute = ({
   );
 };
 
-const clearAgentStudioRouteSelection = (): AgentStudioQueryUpdate => ({
-  [AGENT_STUDIO_QUERY_KEYS.task]: undefined,
-  [AGENT_STUDIO_QUERY_KEYS.session]: undefined,
-  [AGENT_STUDIO_QUERY_KEYS.agent]: undefined,
-});
+const clearAgentStudioRouteSelection = () =>
+  ({
+    [AGENT_STUDIO_QUERY_KEYS.task]: undefined,
+    [AGENT_STUDIO_QUERY_KEYS.session]: undefined,
+    [AGENT_STUDIO_QUERY_KEYS.agent]: undefined,
+  }) satisfies AgentStudioQueryUpdate;

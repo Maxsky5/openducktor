@@ -847,9 +847,9 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
     });
 
     expect(assistantTextMessageIds).toEqual([
-      "claude-stream:session-1:1:1:0",
+      "a0c39cdd-689b-4b8d-8cc8-f8ad2086ee65",
       "301bf08f-23c5-4c36-8057-ba638661910b",
-      "claude-stream:session-1:1:3:0",
+      "08d7e85c-29cf-4d89-813f-bb75bc65caf2",
       "9b5e0484-15a0-4db8-8191-d96800c2791a",
     ]);
   });
@@ -1026,12 +1026,12 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
     expect(events).toEqual([
       expect.objectContaining({
         type: "assistant_delta",
-        messageId: "claude-stream:session-1:1:1:0",
+        messageId: "a0c39cdd-689b-4b8d-8cc8-f8ad2086ee65",
         delta: "First block",
       }),
       expect.objectContaining({
         type: "assistant_delta",
-        messageId: "claude-stream:session-1:1:1:1",
+        messageId: "a0c39cdd-689b-4b8d-8cc8-f8ad2086ee65",
         delta: "Second block",
       }),
       expect.objectContaining({
@@ -1041,7 +1041,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       }),
       expect.objectContaining({
         type: "transcript_retracted",
-        messageIds: ["claude-stream:session-1:1:1:0", "claude-stream:session-1:1:1:1"],
+        messageIds: ["a0c39cdd-689b-4b8d-8cc8-f8ad2086ee65"],
       }),
     ]);
   });

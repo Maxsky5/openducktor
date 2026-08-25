@@ -6,6 +6,7 @@ import {
   isKnownEvidenceExpression,
 } from "../shared/dictionary-types.ts";
 import { unwrapTransparentExpression } from "../shared/transparent-expression.ts";
+import { isStableBinding } from "../shared/stable-binding.ts";
 
 import type { ESTree, Scope, SourceCode, Variable } from "@oxlint/plugins";
 
@@ -30,14 +31,6 @@ function variableDeclarator(variable: Variable): ESTree.VariableDeclarator | nul
     : null;
 }
 
-function isStableConst(variable: Variable, declarator: ESTree.VariableDeclarator): boolean {
-  return (
-    declarator.parent.type === "VariableDeclaration" &&
-    declarator.parent.kind === "const" &&
-    variable.references.every((reference) => reference.init || !reference.isWrite())
-  );
-}
-
 function hasKnownEvidence(
   sourceCode: SourceCode,
   expression: ESTree.Expression,
@@ -49,7 +42,7 @@ function hasKnownEvidence(
   const variable = resolveVariable(sourceCode, unwrapped);
   if (variable === null || visitedVariables.has(variable)) return false;
   const declarator = variableDeclarator(variable);
-  if (declarator === null || declarator.init === null || !isStableConst(variable, declarator)) {
+  if (declarator === null || declarator.init === null || !isStableBinding(variable, declarator)) {
     return false;
   }
   visitedVariables.add(variable);
@@ -64,8 +57,7 @@ function isBroadBoundaryType(
   return (
     wideningTarget?.kind === "unknown" ||
     wideningTarget?.kind === "object" ||
-    wideningTarget?.kind === "open dictionary" ||
-    wideningTarget?.kind === "generic container"
+    wideningTarget?.kind === "open dictionary"
   );
 }
 
@@ -136,7 +128,7 @@ function aliasesBroadBoundaryInput(
       declarator !== null &&
       declarator.init !== null &&
       declarator.end < assertion.start &&
-      isStableConst(variable, declarator)
+      isStableBinding(variable, declarator)
     ) {
       const sourceIdentifier = aliasedIdentifier(declarator.init, visitorKeys);
       if (sourceIdentifier !== null) {

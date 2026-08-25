@@ -3,7 +3,7 @@ import type {
   LocalAttachmentService,
   LocalAttachmentStageInput,
 } from "../../application/attachments/local-attachment-service";
-import type { HostCommandHandlers } from "../router/host-command-router";
+import { defineHostCommandHandlers } from "../router/host-command-router";
 import { requireRecord, requireString } from "./command-inputs";
 
 const parseStageInput = (args: Record<string, unknown> | undefined): LocalAttachmentStageInput => {
@@ -23,8 +23,9 @@ const parseResolveInput = (
 
 export const createLocalAttachmentCommandHandlers = (
   localAttachmentService: LocalAttachmentService,
-): HostCommandHandlers => ({
-  workspace_resolve_local_attachment_path: (args) =>
-    localAttachmentService.resolve(parseResolveInput(args)),
-  workspace_stage_local_attachment: (args) => localAttachmentService.stage(parseStageInput(args)),
-});
+) =>
+  defineHostCommandHandlers({
+    workspace_resolve_local_attachment_path: (args) =>
+      localAttachmentService.resolve(parseResolveInput(args)),
+    workspace_stage_local_attachment: (args) => localAttachmentService.stage(parseStageInput(args)),
+  });

@@ -4,7 +4,7 @@ import {
 } from "@openducktor/contracts";
 import type { FilesystemService } from "../../application/filesystem/filesystem-service";
 import { HostValidationError } from "../../effect/host-errors";
-import type { HostCommandHandlers } from "../router/host-command-router";
+import { defineHostCommandHandlers } from "../router/host-command-router";
 
 const parseFilesystemListDirectoryArgs = (
   args: Record<string, unknown> | undefined,
@@ -19,9 +19,8 @@ const parseFilesystemListDirectoryArgs = (
   return parsed.data;
 };
 
-export const createFilesystemCommandHandlers = (
-  filesystemService: FilesystemService,
-): HostCommandHandlers => ({
-  filesystem_list_directory: (args) =>
-    filesystemService.listDirectory(parseFilesystemListDirectoryArgs(args)),
-});
+export const createFilesystemCommandHandlers = (filesystemService: FilesystemService) =>
+  defineHostCommandHandlers({
+    filesystem_list_directory: (args) =>
+      filesystemService.listDirectory(parseFilesystemListDirectoryArgs(args)),
+  });

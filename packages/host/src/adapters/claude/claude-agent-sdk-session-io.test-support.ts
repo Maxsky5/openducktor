@@ -9,7 +9,6 @@ import type {
 import { Effect } from "effect";
 import type { HostOperationError } from "../../effect/host-errors";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
-import type { ClaudeSdkMessageProjection } from "./claude-agent-sdk-message-projection";
 import type { ClaudeSession, ClaudeSessionQuery } from "./claude-agent-sdk-types";
 
 export const ignoreClaudeBackgroundFailure = (_failure: HostOperationError) => Effect.void;
@@ -93,7 +92,7 @@ const isClaudeMessageStream = (
 ): query is Partial<Query> & AsyncGenerator<SDKMessage, void> => Symbol.asyncIterator in query;
 
 const createClaudeProjectionQuery = (
-  stream: AsyncGenerator<ClaudeSdkMessageProjection, void>,
+  stream: AsyncGenerator<SDKMessage, void>,
 ): ClaudeSessionQuery => Object.assign(stream, defaultQueryControls());
 
 const defaultInitializationResponse = (): SDKControlInitializeResponse => ({
@@ -171,26 +170,22 @@ const defaultQueryControls = (): ClaudeQueryControlMethods => ({
 });
 
 export const emptyClaudeQuery = (): ClaudeSession["query"] =>
-  createClaudeProjectionQuery(
-    (async function* (): AsyncGenerator<ClaudeSdkMessageProjection> {})(),
-  );
+  createClaudeProjectionQuery((async function* (): AsyncGenerator<SDKMessage> {})());
 
-export const claudeQueryWithMessages = (
-  messages: ClaudeSdkMessageProjection[],
-): ClaudeSession["query"] =>
+export const claudeQueryWithMessages = (messages: SDKMessage[]): ClaudeSession["query"] =>
   createClaudeProjectionQuery(
-    (async function* (): AsyncGenerator<ClaudeSdkMessageProjection> {
+    (async function* (): AsyncGenerator<SDKMessage> {
       yield* messages;
     })(),
   );
 
-export const openClaudeQueryWithMessages = (messages: ClaudeSdkMessageProjection[]) => {
+export const openClaudeQueryWithMessages = (messages: SDKMessage[]) => {
   let release!: () => void;
   const openStream = new Promise<void>((resolve) => {
     release = resolve;
   });
   const query = Object.assign(
-    (async function* (): AsyncGenerator<ClaudeSdkMessageProjection> {
+    (async function* (): AsyncGenerator<SDKMessage> {
       yield* messages;
       await openStream;
     })(),
@@ -206,10 +201,10 @@ export const openClaudeQueryWithMessages = (messages: ClaudeSdkMessageProjection
 
 export const throwingClaudeQuery = (
   error: Error,
-  messages: ClaudeSdkMessageProjection[] = emptySdkMessages,
+  messages: SDKMessage[] = emptySdkMessages,
 ): ClaudeSession["query"] =>
   createClaudeProjectionQuery(
-    (async function* (): AsyncGenerator<ClaudeSdkMessageProjection> {
+    (async function* (): AsyncGenerator<SDKMessage> {
       yield* messages;
       throw error;
     })(),

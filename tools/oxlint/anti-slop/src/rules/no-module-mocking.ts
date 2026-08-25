@@ -1,6 +1,7 @@
 import { defineRule } from "@oxlint/plugins";
 
 import type { ESTree, SourceCode } from "@oxlint/plugins";
+import { isCallableMemberReference } from "../shared/callable-member.ts";
 import { isGlobalObjectReference, resolveVariable } from "../shared/global-reference.ts";
 
 const moduleMockMethods = new Set(["doMock", "mock", "module", "unstable_mockModule"]);
@@ -74,21 +75,12 @@ function isTestFrameworkObject(sourceCode: SourceCode, expression: ESTree.Expres
 }
 
 function moduleMockCall(sourceCode: SourceCode, callee: ESTree.Expression): boolean {
-  if (!("property" in callee) || !("object" in callee) || !("computed" in callee)) return false;
-  if (!isTestFrameworkObject(sourceCode, callee.object)) return false;
-  const property = callee.property;
-  const method = callee.computed
-    ? property.type === "Literal" &&
-      (property.value === "doMock" ||
-        property.value === "mock" ||
-        property.value === "module" ||
-        property.value === "unstable_mockModule")
-      ? property.value
-      : null
-    : property.type === "Identifier"
-      ? property.name
-      : null;
-  return method !== null && moduleMockMethods.has(method);
+  return isCallableMemberReference(
+    sourceCode,
+    callee,
+    (object, propertyName) =>
+      moduleMockMethods.has(propertyName) && isTestFrameworkObject(sourceCode, object),
+  );
 }
 
 /** Ban test framework module mocking in favor of real dependency seams. */

@@ -38,6 +38,12 @@ export type HostCommandHandler = (
   context: HostCommandContext,
 ) => Effect.Effect<UnvalidatedHostCommandResult, HostCommandHandlerError>;
 export type HostCommandHandlers = Partial<Record<HostCommandName, HostCommandHandler>>;
+
+/** Preserve a handler map's exact command keys while applying the shared handler signature. */
+export const defineHostCommandHandlers = <const Command extends HostCommandName>(
+  handlers: Record<Command, HostCommandHandler>,
+): Record<Command, HostCommandHandler> => handlers;
+
 export type EffectHostCommandRouter = {
   dispose(): Effect.Effect<void, HostCommandHandlerError>;
   initialize(): Effect.Effect<void, HostCommandHandlerError>;

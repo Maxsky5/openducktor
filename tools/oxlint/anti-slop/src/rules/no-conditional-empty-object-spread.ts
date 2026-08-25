@@ -17,12 +17,11 @@ function isConditionalEmptyObjectSpread(node: ESTree.Expression): boolean {
 
 function isEmptyObjectReturn(node: ESTree.Statement): boolean {
   if (node.type === "ReturnStatement") {
-    return (
-      node.argument !== null &&
-      isEmptyObjectExpression(
-        unwrapTransparentExpression(node.argument, { includeTypeAssertions: true }),
-      )
-    );
+    if (node.argument === null) return false;
+    const returned = unwrapTransparentExpression(node.argument, {
+      includeTypeAssertions: true,
+    });
+    return isEmptyObjectExpression(returned) || isConditionalEmptyObjectSpread(returned);
   }
   if (node.type === "BlockStatement") {
     return node.body.some(isEmptyObjectReturn);
@@ -40,7 +39,10 @@ function isEmptyObjectSpreadIife(node: ESTree.Expression): boolean {
   const call = unwrapTransparentExpression(node, { includeTypeAssertions: true });
   if (call.type !== "CallExpression" || call.arguments.length !== 0) return false;
   const callee = unwrapTransparentExpression(call.callee, { includeTypeAssertions: true });
-  if (callee.type !== "ArrowFunctionExpression") return false;
+  if (callee.type !== "ArrowFunctionExpression" && callee.type !== "FunctionExpression") {
+    return false;
+  }
+  if (callee.body === null) return false;
   return callee.body.type === "BlockStatement"
     ? callee.body.body.some(isEmptyObjectReturn)
     : isConditionalEmptyObjectSpread(callee.body);

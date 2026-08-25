@@ -1,4 +1,5 @@
 import { RuleTester } from "oxlint/plugins-dev";
+import { fileURLToPath } from "node:url";
 
 import { noKnownValueWideningRule } from "./no-known-value-widening.ts";
 
@@ -7,6 +8,9 @@ const tester = new RuleTester({ languageOptions: { parserOptions: { lang: "ts" }
 const error = { messageId: "widening" };
 
 const prelude = "type Command = () => void; const startCommand = () => {};";
+const importedTypeFixtureFilename = fileURLToPath(
+  new URL("./__fixtures__/no-known-value-widening-input.ts", import.meta.url),
+);
 
 tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
   valid: [
@@ -29,7 +33,10 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
     `${prelude} function create() { return { start: startCommand }; }`,
     `${prelude} interface Commands { readonly start: Command } function create(): Commands { return { start: startCommand }; }`,
     `${prelude} declare function make(): Record<string, Command>; const commands: Record<string, Command> = make();`,
-    `${prelude} import { Commands } from './types'; const commands: Commands = { start: startCommand };`,
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type { ClosedCommands } from './no-known-value-widening-types'; const commands: ClosedCommands = { start: startCommand };`,
+    },
     "function build() { type Record<Key, Value> = { value: Value }; type Command = () => void; const start = () => {}; const commands: Record<string, Command> = { value: start }; }",
     "namespace Owner { type Record<Key, Value> = { value: Value }; type Command = () => void; const start = () => {}; const commands: Record<string, Command> = { value: start }; }",
   ],
@@ -127,6 +134,15 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
       errors: [error],
     },
     { code: "const value: unknown = 1;", errors: [error] },
+    {
+      code: "const value: unknown = condition ? { id: 1 } : { id: 2 };",
+      errors: [error],
+    },
+    {
+      code: "const left = { id: 1 }; const value: unknown = left || { id: 2 };",
+      errors: [error],
+    },
+    { code: "const value: unknown = (prepare(), { id: 2 });", errors: [error] },
     { code: "const value: object = [];", errors: [error] },
     { code: "const value: unknown | string = {};", errors: [error] },
     { code: "const value = { answer: 42 } satisfies unknown;", errors: [error] },
@@ -144,6 +160,11 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
     },
     {
       code: "function owner() { function Record() {} type Command = () => void; type Open = Record<string, Command>; const start = () => {}; const commands: Open = { start }; }",
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type { OpenCommands } from './no-known-value-widening-types'; const commands: OpenCommands = { start: startCommand };`,
       errors: [error],
     },
   ],

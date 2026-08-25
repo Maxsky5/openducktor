@@ -1,7 +1,7 @@
 import { APP_PLATFORM_VALUES, appPlatformSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
-import type { HostCommandHandlers } from "../router/host-command-router";
+import { defineHostCommandHandlers } from "../router/host-command-router";
 
 type PlatformSource = () => string;
 
@@ -26,27 +26,28 @@ const noArgsValidationError = (
 
 export const createSystemPlatformCommandHandlers = (
   platformSource: PlatformSource = () => process.platform,
-): HostCommandHandlers => ({
-  system_get_platform: (args) =>
-    Effect.gen(function* () {
-      const argsError = noArgsValidationError("system_get_platform", args);
-      if (argsError) {
-        return yield* Effect.fail(argsError);
-      }
+) =>
+  defineHostCommandHandlers({
+    system_get_platform: (args) =>
+      Effect.gen(function* () {
+        const argsError = noArgsValidationError("system_get_platform", args);
+        if (argsError) {
+          return yield* Effect.fail(argsError);
+        }
 
-      const platform = platformSource();
-      const parsed = appPlatformSchema.safeParse(platform);
+        const platform = platformSource();
+        const parsed = appPlatformSchema.safeParse(platform);
 
-      if (!parsed.success) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: `Unsupported OpenDucktor app platform: ${platform}. Supported platforms are ${supportedPlatformsText}.`,
-            field: "platform",
-            details: { platform, supportedPlatforms: APP_PLATFORM_VALUES },
-          }),
-        );
-      }
+        if (!parsed.success) {
+          return yield* Effect.fail(
+            new HostValidationError({
+              message: `Unsupported OpenDucktor app platform: ${platform}. Supported platforms are ${supportedPlatformsText}.`,
+              field: "platform",
+              details: { platform, supportedPlatforms: APP_PLATFORM_VALUES },
+            }),
+          );
+        }
 
-      return parsed.data;
-    }),
-});
+        return parsed.data;
+      }),
+  });

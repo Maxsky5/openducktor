@@ -2,7 +2,7 @@ import type {
   GithubRepositoryDetectionInput,
   GithubRepositoryDetectionService,
 } from "../../application/git/github-repository-detection-service";
-import type { HostCommandHandlers } from "../router/host-command-router";
+import { defineHostCommandHandlers } from "../router/host-command-router";
 import { requireRecord, requireString } from "./command-inputs";
 
 const parseDetectionInput = (
@@ -14,7 +14,8 @@ const parseDetectionInput = (
 
 export const createGithubRepositoryDetectionCommandHandlers = (
   service: GithubRepositoryDetectionService,
-): HostCommandHandlers => ({
-  workspace_detect_github_repository: (args) =>
-    service.detectGithubRepository(parseDetectionInput(args)),
-});
+) =>
+  defineHostCommandHandlers({
+    workspace_detect_github_repository: (args) =>
+      service.detectGithubRepository(parseDetectionInput(args)),
+  });

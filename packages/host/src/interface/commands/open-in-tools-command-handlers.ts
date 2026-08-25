@@ -7,7 +7,7 @@ import type {
   OpenExternalUrlInput,
   OpenInToolsService,
 } from "../../application/system/open-in-tools-service";
-import type { HostCommandHandlers } from "../router/host-command-router";
+import { defineHostCommandHandlers } from "../router/host-command-router";
 import { requireRecord, requireString } from "./command-inputs";
 
 const parseOpenExternalUrlInput = (
@@ -17,15 +17,14 @@ const parseOpenExternalUrlInput = (
   return { url: requireString(record.url, "url") };
 };
 
-export const createOpenInToolsCommandHandlers = (
-  service: OpenInToolsService,
-): HostCommandHandlers => ({
-  system_list_open_in_tools: (args) =>
-    service.listOpenInTools(systemListOpenInToolsRequestSchema.parse(args ?? {})),
-  system_open_directory_in_tool: (args) =>
-    service
-      .openDirectoryInTool(systemOpenDirectoryInToolRequestSchema.parse(args))
-      .pipe(Effect.as({ ok: true })),
-  open_external_url: (args) =>
-    service.openExternalUrl(parseOpenExternalUrlInput(args)).pipe(Effect.as({ ok: true })),
-});
+export const createOpenInToolsCommandHandlers = (service: OpenInToolsService) =>
+  defineHostCommandHandlers({
+    system_list_open_in_tools: (args) =>
+      service.listOpenInTools(systemListOpenInToolsRequestSchema.parse(args ?? {})),
+    system_open_directory_in_tool: (args) =>
+      service
+        .openDirectoryInTool(systemOpenDirectoryInToolRequestSchema.parse(args))
+        .pipe(Effect.as({ ok: true })),
+    open_external_url: (args) =>
+      service.openExternalUrl(parseOpenExternalUrlInput(args)).pipe(Effect.as({ ok: true })),
+  });

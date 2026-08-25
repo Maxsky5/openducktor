@@ -14,7 +14,7 @@ export type LoadedGlobalConfig = GlobalConfig;
 export const createDefaultGlobalConfig = (): LoadedGlobalConfig =>
   globalConfigSchema.parse({ version: 3 });
 
-const migratePersistedConfig = (payload: JsonObject): JsonObject => {
+const migratePersistedConfig = (payload: JsonObject) => {
   const chat = payload.chat;
   const customPrompts = chat && isJsonObject(chat) ? chat.customPrompts : undefined;
   if (payload.reusablePrompts !== undefined || !Array.isArray(customPrompts)) {

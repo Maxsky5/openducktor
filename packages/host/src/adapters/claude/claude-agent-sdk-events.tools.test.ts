@@ -112,6 +112,7 @@ describe("handleClaudeSdkMessage tool events", () => {
               type: "mcp_tool_use",
               id: "tool-1",
               name: "mcp__openducktor__odt_read_task",
+              server_name: "openducktor",
               input: { taskId: "task-1" },
             },
           ],
@@ -137,7 +138,7 @@ describe("handleClaudeSdkMessage tool events", () => {
           role: "user",
           content: [
             {
-              type: "mcp_tool_result",
+              type: "tool_result",
               tool_use_id: "tool-1",
               content: [{ type: "text", text: "task loaded" }],
             },
@@ -340,9 +341,9 @@ describe("handleClaudeSdkMessage tool events", () => {
           content: [
             {
               type: "server_tool_use",
-              tool_use_id: "tool-1",
-              tool_name: "Read",
-              tool_input: { file_path: "apps/api/src/lib/auth.ts" },
+              id: "tool-1",
+              name: "code_execution",
+              input: { file_path: "apps/api/src/lib/auth.ts" },
             },
           ],
         },
@@ -403,8 +404,8 @@ describe("handleClaudeSdkMessage tool events", () => {
           callId: "tool-1",
           messageId: "8396b93d-f45e-40a5-895d-43b82c68f129",
           status: "pending",
-          tool: "Read",
-          toolType: "read",
+          tool: "code_execution",
+          toolType: "generic",
         }),
       }),
       expect.objectContaining({

@@ -21,6 +21,10 @@ tester.run("anti-slop/no-widen-then-assert", noWidenThenAssertRule, {
       errors: [error],
     },
     {
+      code: "declare const input: unknown; let alias = input; const parsed = alias as User;",
+      errors: [error],
+    },
+    {
       code: "declare const input: unknown; const first = input; const second = first; const parsed = (second) as User;",
       errors: [error],
     },

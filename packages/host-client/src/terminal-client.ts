@@ -8,6 +8,8 @@ import {
   type TerminalListResponse,
   type TerminalPreparePathInputRequest,
   type TerminalPreparePathInputResponse,
+  type JsonObject,
+  type JsonValue,
   terminalCloseRequestSchema,
   terminalCloseResponseSchema,
   terminalCreateRequestSchema,
@@ -18,7 +20,6 @@ import {
   terminalPreparePathInputResponseSchema,
 } from "@openducktor/contracts";
 import { HostInvokeError, type InvokeFn } from "./invoke-utils";
-import type { JsonValue } from "@openducktor/contracts";
 
 export class HostTerminalClientError extends Error {
   readonly code: TerminalFailure["code"];
@@ -39,7 +40,7 @@ export class HostTerminalClient {
 
   private async invoke<TResponse>(
     command: "terminal_create" | "terminal_list" | "terminal_prepare_path_input" | "terminal_close",
-    request: Record<string, unknown>,
+    request: JsonObject,
     parse: (value: JsonValue) => TResponse,
   ): Promise<TResponse> {
     try {

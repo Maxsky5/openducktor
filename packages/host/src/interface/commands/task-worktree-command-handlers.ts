@@ -2,7 +2,7 @@ import type {
   TaskWorktreeInput,
   TaskWorktreeService,
 } from "../../application/tasks/worktrees/task-worktree-service";
-import type { HostCommandHandlers } from "../router/host-command-router";
+import { defineHostCommandHandlers } from "../router/host-command-router";
 import { requireRecord, requireString } from "./command-inputs";
 
 const parseTaskWorktreeInput = (args: Record<string, unknown> | undefined): TaskWorktreeInput => {
@@ -13,8 +13,7 @@ const parseTaskWorktreeInput = (args: Record<string, unknown> | undefined): Task
   };
 };
 
-export const createTaskWorktreeCommandHandlers = (
-  taskWorktreeService: TaskWorktreeService,
-): HostCommandHandlers => ({
-  task_worktree_get: (args) => taskWorktreeService.getTaskWorktree(parseTaskWorktreeInput(args)),
-});
+export const createTaskWorktreeCommandHandlers = (taskWorktreeService: TaskWorktreeService) =>
+  defineHostCommandHandlers({
+    task_worktree_get: (args) => taskWorktreeService.getTaskWorktree(parseTaskWorktreeInput(args)),
+  });

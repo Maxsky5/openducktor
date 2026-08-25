@@ -201,9 +201,7 @@ const createRepoSettings = (
   },
 });
 
-const createReadyRuntimeHealthMap = (
-  runtimeDefinitions: RuntimeDescriptor[],
-): RepoRuntimeHealthMap => {
+const createReadyRuntimeHealthMap = (runtimeDefinitions: RuntimeDescriptor[]) => {
   const definitionsByKind = new Map<RuntimeKind, RuntimeDescriptor>();
   for (const definition of [...SESSION_START_TEST_RUNTIME_DEFINITIONS, ...runtimeDefinitions]) {
     definitionsByKind.set(definition.kind, definition);

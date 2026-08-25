@@ -6,7 +6,7 @@ import type {
   RuntimeStopInput,
 } from "../../application/runtimes/runtime-orchestrator-service";
 import { HostValidationError } from "../../effect/host-errors";
-import type { HostCommandHandlers } from "../router/host-command-router";
+import { defineHostCommandHandlers } from "../router/host-command-router";
 import { optionalString, requireRecord, requireString } from "./command-inputs";
 
 const parseRuntimeListInput = (args: Record<string, unknown> | undefined): RuntimeListInput => {
@@ -48,21 +48,22 @@ const parseAgentSessionStopInput = (args: Record<string, unknown> | undefined) =
 
 export const createRuntimeOrchestratorCommandHandlers = (
   runtimeOrchestratorService: RuntimeOrchestratorService,
-): HostCommandHandlers => ({
-  agent_session_stop: (args) =>
-    runtimeOrchestratorService.agentSessionStop(parseAgentSessionStopInput(args)),
-  runtime_ensure: (args) =>
-    runtimeOrchestratorService.runtimeEnsure(parseRuntimeRepoInput(args, "runtime_ensure")),
-  runtime_require: (args) =>
-    runtimeOrchestratorService.runtimeRequire(parseRuntimeRepoInput(args, "runtime_require")),
-  runtime_list: (args) => runtimeOrchestratorService.runtimeList(parseRuntimeListInput(args)),
-  runtime_stop: (args) => runtimeOrchestratorService.runtimeStop(parseRuntimeStopInput(args)),
-  repo_runtime_health: (args) =>
-    runtimeOrchestratorService.repoRuntimeHealth(
-      parseRuntimeRepoInput(args, "repo_runtime_health"),
-    ),
-  repo_runtime_health_status: (args) =>
-    runtimeOrchestratorService.repoRuntimeHealthStatus(
-      parseRuntimeRepoInput(args, "repo_runtime_health_status"),
-    ),
-});
+) =>
+  defineHostCommandHandlers({
+    agent_session_stop: (args) =>
+      runtimeOrchestratorService.agentSessionStop(parseAgentSessionStopInput(args)),
+    runtime_ensure: (args) =>
+      runtimeOrchestratorService.runtimeEnsure(parseRuntimeRepoInput(args, "runtime_ensure")),
+    runtime_require: (args) =>
+      runtimeOrchestratorService.runtimeRequire(parseRuntimeRepoInput(args, "runtime_require")),
+    runtime_list: (args) => runtimeOrchestratorService.runtimeList(parseRuntimeListInput(args)),
+    runtime_stop: (args) => runtimeOrchestratorService.runtimeStop(parseRuntimeStopInput(args)),
+    repo_runtime_health: (args) =>
+      runtimeOrchestratorService.repoRuntimeHealth(
+        parseRuntimeRepoInput(args, "repo_runtime_health"),
+      ),
+    repo_runtime_health_status: (args) =>
+      runtimeOrchestratorService.repoRuntimeHealthStatus(
+        parseRuntimeRepoInput(args, "repo_runtime_health_status"),
+      ),
+  });

@@ -12,6 +12,7 @@ tester.run("anti-slop/no-module-mocking", noModuleMockingRule, {
     "const vi = { mock() {} }; vi.mock();",
     "function test(jest: { mock(): void }) { jest.mock(); }",
     "import { vi as localVi } from './helpers'; localVi.mock('./module');",
+    "let moduleMock = vi.mock; moduleMock = localMock; moduleMock('./module');",
   ],
   invalid: [
     { code: "vi.mock('./user-store');", errors: [error] },
@@ -44,5 +45,7 @@ tester.run("anti-slop/no-module-mocking", noModuleMockingRule, {
       code: "import { mock } from 'bun:test'; mock['module']('./user-store', () => ({}));",
       errors: [error],
     },
+    { code: "const moduleMock = vi.mock; moduleMock('./user-store');", errors: [error] },
+    { code: "const { mock: moduleMock } = vi; moduleMock('./user-store');", errors: [error] },
   ],
 });

@@ -12,6 +12,7 @@ tester.run("anti-slop/no-reflect-get", noReflectGetRule, {
     "Reflect.set(owner, key, value);",
     "const Reflect = { get() { return 1; } }; Reflect.get();",
     "function read(Reflect: { get(): number }) { return Reflect.get(); }",
+    "let get = Reflect.get; get = localGet; get(owner, key);",
   ],
   invalid: [
     { name: "static access", code: "const value = Reflect.get(owner, key);", errors: [error] },
@@ -22,5 +23,11 @@ tester.run("anti-slop/no-reflect-get", noReflectGetRule, {
     },
     { name: "computed access", code: "const value = Reflect['get'](owner, key);", errors: [error] },
     { name: "globalThis access", code: "globalThis.Reflect.get(owner, key);", errors: [error] },
+    { name: "stable alias", code: "const get = Reflect.get; get(owner, key);", errors: [error] },
+    {
+      name: "destructured alias",
+      code: "const { get: read } = Reflect; read(owner, key);",
+      errors: [error],
+    },
   ],
 });

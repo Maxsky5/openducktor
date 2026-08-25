@@ -42,11 +42,11 @@ const selectVisibleActivitySessions = ({
 
 const selectTaskTitlesForActivity = (taskIds: readonly string[]) => {
   if (taskIds.length === 0) {
-    return (): AgentActivityTaskTitleLookup => EMPTY_TASK_TITLES;
+    return () => EMPTY_TASK_TITLES;
   }
 
   const visibleTaskIds = new Set(taskIds);
-  return (tasks: ReadonlyArray<{ id: string; title: string }>): AgentActivityTaskTitleLookup => {
+  return (tasks: ReadonlyArray<{ id: string; title: string }>) => {
     const taskTitleById: Record<string, string> = {};
     for (const task of tasks) {
       if (!visibleTaskIds.has(task.id)) {

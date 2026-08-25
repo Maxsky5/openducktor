@@ -29,6 +29,8 @@ export type InlineCommentDraft = {
 
 export type InlineCommentDraftSnapshot = Pick<InlineCommentDraft, "id" | "revision">;
 
+type InlineCommentLineRange = Pick<InlineCommentDraft, "startLine" | "endLine">;
+
 export type AddInlineCommentDraftInput = {
   filePath: string;
   diffScope: DiffScope;
@@ -68,10 +70,7 @@ const generateId = (): string => `draft-${Date.now()}-${++nextId}`;
 const generateRevision = (): number => ++nextRevision;
 const generateSubmissionId = (): string => `submission-${Date.now()}-${++nextSubmissionId}`;
 
-const normalizeLineRange = (
-  startLine: number,
-  endLine: number,
-): { startLine: number; endLine: number } => {
+const normalizeLineRange = (startLine: number, endLine: number): InlineCommentLineRange => {
   return startLine <= endLine ? { startLine, endLine } : { startLine: endLine, endLine: startLine };
 };
 

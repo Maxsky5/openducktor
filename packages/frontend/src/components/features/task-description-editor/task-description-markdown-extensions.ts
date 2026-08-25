@@ -65,7 +65,7 @@ export const TaskDescriptionImage = Image.extend({
 const isEmptyParagraph = (node: JSONContent | undefined): boolean =>
   node?.type === "paragraph" && (!node.content || node.content.length === 0);
 
-const ensureLeadingMathParagraph = (node: JSONContent): JSONContent => {
+const ensureLeadingMathParagraph = (node: JSONContent) => {
   if (node.type !== "listItem" || node.content?.[0]?.type !== "blockMath") {
     return node;
   }
@@ -78,7 +78,7 @@ const ensureLeadingMathParagraph = (node: JSONContent): JSONContent => {
 const ensureOrderedListMathParagraphs = (
   parsed: JSONContent | JSONContent[],
 ): JSONContent | JSONContent[] => {
-  const ensureNode = (node: JSONContent): JSONContent => {
+  const ensureNode = (node: JSONContent) => {
     if (node.type !== "orderedList" || !node.content) {
       return node;
     }
@@ -172,7 +172,7 @@ const preserveOrderedListStart = (
 
 // TipTap leaves one list-indent space on prose after a second block-math token.
 // Remove only that paragraph-start artifact before parsing the trailing tokens.
-const trimParagraphTokenStart = (token: MarkdownToken): MarkdownToken => {
+const trimParagraphTokenStart = (token: MarkdownToken) => {
   if (token.type !== "paragraph") {
     return token;
   }
@@ -223,7 +223,7 @@ const findTrailingTokens = (
   );
 };
 
-const withLeadingListItemMathTokens = (token: MarkdownToken): MarkdownToken => {
+const withLeadingListItemMathTokens = (token: MarkdownToken) => {
   const itemSource = listItemSource(token);
   if (itemSource === undefined) {
     return token;
@@ -257,7 +257,7 @@ const withLeadingListItemMathTokens = (token: MarkdownToken): MarkdownToken => {
 const withOrderedListItemParagraphTokens = (
   token: MarkdownToken,
   helpers: MarkdownParseHelpers,
-): MarkdownToken => {
+) => {
   if (!Array.isArray(token.items)) {
     return token;
   }
