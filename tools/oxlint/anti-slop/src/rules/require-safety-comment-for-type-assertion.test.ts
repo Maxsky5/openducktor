@@ -18,6 +18,10 @@ tester.run(
       "// SAFETY: The parser established the UserId invariant.\nexport const id = value as UserId;",
       "expect(error).toBeInstanceOf(Error);\n// SAFETY: The preceding assertion proves that error is an Error.\nconst failure = error as Error;",
       "if (!(value instanceof UserId)) throw new Error('invalid');\n// SAFETY: The preceding guard proves that value is a UserId.\nconst id = value as UserId;",
+      "// SAFETY: This test controls the fixture and supplies UserId.\nconst id = value as UserId;",
+      "// SAFETY: This test creates the DOM fixture before this lookup.\nconst button = value as HTMLButtonElement;",
+      "// SAFETY: This test drives the failure path before this assertion.\nconst failure = value as Error;",
+      "// SAFETY: okay.\nconst id = value as UserId;",
     ],
     invalid: [
       { code: "const id = value as UserId;", errors: [error] },
@@ -25,18 +29,6 @@ tester.run(
       { code: "const id = value as UserId; // SAFETY: Too late.", errors: [error] },
       {
         code: "// This cast seems fine.\nconst id = value as UserId;",
-        errors: [error],
-      },
-      {
-        code: "// SAFETY: This test controls the fixture and supplies UserId.\nconst id = value as UserId;",
-        errors: [error],
-      },
-      {
-        code: "// SAFETY: This test creates the DOM fixture before this lookup.\nconst button = value as HTMLButtonElement;",
-        errors: [error],
-      },
-      {
-        code: "// SAFETY: This test drives the failure path before this assertion.\nconst failure = value as Error;",
         errors: [error],
       },
       {

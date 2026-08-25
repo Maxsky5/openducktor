@@ -129,7 +129,9 @@ describe("merge mac update manifests", () => {
         ),
       ]);
 
-      const error = await mergeMacUpdateManifests(assetsDirectory).catch((cause: unknown) => cause);
+      const error = await mergeMacUpdateManifests(assetsDirectory).catch((cause: unknown): Error =>
+        cause instanceof Error ? cause : new Error(String(cause), { cause }),
+      );
 
       expect(error).toBeInstanceOf(Error);
       if (!(error instanceof Error)) throw error;

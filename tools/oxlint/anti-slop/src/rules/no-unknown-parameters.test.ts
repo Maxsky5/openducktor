@@ -8,10 +8,10 @@ const error = { messageId: "unknownParameter" };
 tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
   valid: [
     "function load(input: User) { return input; }",
-    "const fail = (cause: unknown) => cause;",
     "function isUser(input: unknown): input is User { return userSchema.safeParse(input).success; }",
-    "function parseUser(input: unknown) { return userSchema.parse(input); }",
-    "function normalizeUser(input: unknown) { return normalize(userSchema.parse(input)); }",
+    "function isUser(input: unknown): input is User { return importedUserGuard(input); }",
+    "function parseUser(input: unknown): User { return userSchema.parse(input); }",
+    "function normalizeUser(input: unknown): User { return normalize(userSchema.parse(input)); }",
     "function parseUser(input: unknown): User { return useCache ? cachedUserSchema.parse(input) : userSchema.parse(input); }",
     "function readText(input: unknown): string | null { return typeof input === 'string' ? input : null; }",
     "function readError(input: unknown): Error | null { if (!(input instanceof Error)) return null; return input; }",
@@ -19,22 +19,46 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     "function compare(left: unknown, right: unknown): boolean { if (typeof left !== 'string') return false; if (typeof right !== 'string') return false; return left === right; }",
     "function positiveInteger(input: unknown): number | null | undefined { if (input === undefined || input === null) return input; if (typeof input !== 'number' || !Number.isInteger(input) || input <= 0) throw new Error('invalid'); return input; }",
     "function stringArray(input: unknown): string[] { if (!Array.isArray(input)) throw new HostValidationError({ details: { inputType: runtimeTypeName(input) } }); return input.map(requireString); }",
-    "function stringArrayEffect(input: unknown) { if (!Array.isArray(input)) return Effect.fail(new HostValidationError({ details: { inputType: runtimeTypeName(input) } })); return Effect.succeed(input.map(requireString)); }",
+    "function stringArrayEffect(input: unknown): Effect.Effect<string[], HostValidationError> { if (!Array.isArray(input)) return Effect.fail(new HostValidationError({ details: { inputType: runtimeTypeName(input) } })); return Effect.succeed(input.map(requireString)); }",
     "function readOptions(input: unknown): string[] | null { if (!Array.isArray(input)) return null; const options = []; for (const option of input) options.push(requireString(option)); return options; }",
+    "function optionalText(input: unknown): string | null | undefined { if (input === undefined || input === null) return input; return requireString(input); }",
     "const isLabel = (input: unknown): boolean => typeof input === 'string';",
-    "function isUser(input: unknown): input is User { return true; }",
+    "function parseUser(input: unknown): User { return decodeDomainValue(input); }",
+    "function readUser(input: unknown): User | null { if (!isUser(input)) return null; return input; }",
     "type Loader = (input: string) => void;",
     "function load(...parts: string[]) { return parts.join(''); }",
     "function logValues(...parts: unknown[]) { console.log(...parts); }",
+    "type UnknownConsumer = (value: unknown) => void;",
+    "function consumeUnknown(value: unknown) { report(value); }",
+    "promise.catch((error: unknown) => { report(error); });",
+    "Effect.try({ try: work, catch: (error: unknown) => toDomainError(error) });",
+    "z.preprocess((input: unknown) => ({ value: input }), schema);",
+    "function errorMessage(value: unknown): string { return String(value); }",
   ],
   invalid: [
-    { code: "function load(input: unknown) { return input; }", errors: [error] },
-    { code: "const load = (input: unknown = source) => input;", errors: [error] },
-    { code: "type Loader = (input: unknown) => void;", errors: [error] },
+    { code: "const fail = (cause: unknown) => cause;", errors: [error] },
     {
-      code: "function load(input: Parameters<typeof schema.parse>[0]) { return input; }",
+      code: "promise.catch((error: unknown) => error);",
       errors: [error],
     },
+    {
+      code: "z.preprocess((input: unknown) => input, schema);",
+      errors: [error],
+    },
+    {
+      code: "function errorMessage(value: unknown) { return value; }",
+      errors: [error],
+    },
+    {
+      code: "function isUser(input: unknown): input is User { return true; }",
+      errors: [error],
+    },
+    {
+      code: "function load(input: unknown) { return passthrough.parse(input); }",
+      errors: [error],
+    },
+    { code: "function load(input: unknown) { return input; }", errors: [error] },
+    { code: "const load = (input: unknown = source) => input;", errors: [error] },
     {
       code: "function load(input: unknown) { parseInt(input); return input; }",
       errors: [error],
@@ -53,30 +77,6 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     },
     {
       code: "function load(input: unknown) { const parsed = userSchema.parse(input); return input; }",
-      errors: [error],
-    },
-    {
-      code: "function load(input: unknown): User { const parsed = userSchema.parse(input); return input as User; }",
-      errors: [error],
-    },
-    {
-      code: "function load(input: unknown): User { return choose(userSchema.parse(input), input as User); }",
-      errors: [error],
-    },
-    {
-      code: "function load(input: unknown): User { if (!isUser(input) && allowRaw) return fallback; return input as User; }",
-      errors: [error],
-    },
-    {
-      code: "function parseUser(input: unknown): User { return parseDomainValue(input); }",
-      errors: [error],
-    },
-    {
-      code: "function optionalText(input: unknown): string | null | undefined { if (input === undefined || input === null) return input; return requireString(input); }",
-      errors: [error],
-    },
-    {
-      code: "function readUser(input: unknown): User | null { if (!isUser(input)) return null; return input; }",
       errors: [error],
     },
     {

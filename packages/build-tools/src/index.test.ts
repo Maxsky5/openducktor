@@ -55,7 +55,9 @@ describe("build tools", () => {
       command: ["bun", "-e", "process.exit(7)"],
       cwd: process.cwd(),
       label: "Failing command",
-    }).catch((cause: unknown) => cause);
+    }).catch((cause: unknown): Error =>
+      cause instanceof Error ? cause : new Error(String(cause), { cause }),
+    );
 
     expect(error).toBeInstanceOf(Error);
     if (!(error instanceof Error)) throw error;

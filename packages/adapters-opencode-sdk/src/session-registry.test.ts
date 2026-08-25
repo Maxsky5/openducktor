@@ -328,7 +328,8 @@ describe("session registry runtime event transport", () => {
     const admission = waitForUserMessageAdmission(session, "message-1");
     const settledAdmission = admission.promise.then(
       () => null,
-      (cause: unknown) => cause,
+      (cause: unknown): Error =>
+        cause instanceof Error ? cause : new Error(String(cause), { cause }),
     );
 
     await releaseSessionRuntime(session, sessions, runtimeEventTransports);

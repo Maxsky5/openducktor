@@ -12,6 +12,9 @@ import {
 const testIfUnixModeIsAvailable = process.platform === "win32" ? test.skip : test;
 const releaseDirectories = new Set<string>();
 
+const caughtError = (cause: unknown): Error =>
+  cause instanceof Error ? cause : new Error(String(cause), { cause });
+
 const makeReleaseDirectory = async (): Promise<string> => {
   const releaseDirectory = await mkdtemp(join(tmpdir(), "openducktor-electron-package-sidecars-"));
   releaseDirectories.add(releaseDirectory);
@@ -162,7 +165,7 @@ describe("verifyPackagedElectronSidecars", () => {
       arch: "x64",
       platform: "windows",
       releaseDirectory,
-    }).catch((cause: unknown) => cause);
+    }).catch(caughtError);
 
     expect(error).toMatchObject({
       _tag: "ElectronOperationError",
@@ -212,7 +215,7 @@ describe("verifyPackagedElectronSidecars", () => {
       arch: "x64",
       platform: "linux",
       releaseDirectory,
-    }).catch((cause: unknown) => cause);
+    }).catch(caughtError);
 
     expect(error).toMatchObject({
       _tag: "ElectronOperationError",

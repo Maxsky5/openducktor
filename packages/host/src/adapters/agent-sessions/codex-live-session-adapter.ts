@@ -277,11 +277,13 @@ export const createCodexLiveSessionAdapterPreparer =
         );
       };
 
-      const sessionError = (operation: string, externalSessionId: string) => (cause: unknown) =>
-        toHostOperationError(cause, operation, {
-          runtimeId: runtime.runtimeId,
-          externalSessionId,
-        });
+      const sessionError =
+        (operation: string, externalSessionId: string) =>
+        (cause: unknown): HostOperationError =>
+          toHostOperationError(cause, operation, {
+            runtimeId: runtime.runtimeId,
+            externalSessionId,
+          });
 
       // SAFETY: The runtime adapter builds this value from the contract fields required by the asserted shape.
       const adapter: AgentSessionRuntimeAdapterPort = {

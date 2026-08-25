@@ -144,7 +144,7 @@ export const createTaskAssetReadService = (input: {
     cause: unknown,
     context: Omit<TaskAssetRenderContext, "assetId">,
     assetIds: string[],
-  ) => {
+  ): TaskAssetError => {
     const missingWorkspace = cause instanceof HostValidationError && cause.field === "workspaceId";
     return new TaskAssetError({
       operation: "serve",

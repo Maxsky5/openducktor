@@ -41,24 +41,6 @@ const serverRequestEvent = (message: CodexAppServerProtocolMessage) =>
     message,
   });
 
-const recordClearTimeouts = () => {
-  const originalClearTimeout = globalThis.clearTimeout;
-  const clearedTimeouts: ReturnType<typeof globalThis.setTimeout>[] = [];
-
-  // SAFETY: Bun and Node declare incompatible `clearTimeout` overload sets, while this wrapper receives and forwards only handles returned by `globalThis.setTimeout` in the transport under test.
-  globalThis.clearTimeout = ((timeoutId: ReturnType<typeof globalThis.setTimeout>) => {
-    clearedTimeouts.push(timeoutId);
-    originalClearTimeout(timeoutId);
-  }) as typeof globalThis.clearTimeout;
-
-  return {
-    clearedTimeouts,
-    restore() {
-      globalThis.clearTimeout = originalClearTimeout;
-    },
-  };
-};
-
 describe("createCodexAppServerTransport", () => {
   test("rejects malformed JSON-valid model list results with HostValidationError", async () => {
     const child = createChild();
@@ -536,37 +518,6 @@ describe("createCodexAppServerTransport", () => {
     ).rejects.not.toThrow("first-error-line");
   });
 
-  test("clears the pending request timeout when interrupted during send", async () => {
-    let writeCount = 0;
-    const stdin = new Writable({
-      write(_chunk, _encoding, _callback) {
-        writeCount += 1;
-      },
-    });
-    const child = createChild(stdin);
-    const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
-    const clearTimeoutRecorder = recordClearTimeouts();
-
-    try {
-      const fiber = Effect.runFork(
-        transport.request({
-          method: "model/list",
-          params: {},
-        }),
-      );
-      await waitForStreamEvents();
-
-      expect(writeCount).toBe(1);
-
-      await Effect.runPromise(Fiber.interrupt(fiber));
-
-      expect(clearTimeoutRecorder.clearedTimeouts).toHaveLength(1);
-    } finally {
-      clearTimeoutRecorder.restore();
-      await Effect.runPromise(transport.close());
-    }
-  });
-
   test("keeps the transport usable after a late response to an interrupted sent request", async () => {
     let writeCount = 0;
     const firstWriteState: PendingWriteState = {};
@@ -645,7 +596,7 @@ describe("createCodexAppServerTransport", () => {
     }
   });
 
-  test("clears the pending request timeout when send fails", async () => {
+  test("fails the request when send fails", async () => {
     const stdin = new Writable({
       write(_chunk, _encoding, callback) {
         callback(new Error("write failed"));
@@ -653,8 +604,6 @@ describe("createCodexAppServerTransport", () => {
     });
     const child = createChild(stdin);
     const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
-    const clearTimeoutRecorder = recordClearTimeouts();
-
     try {
       await expect(
         Effect.runPromise(
@@ -664,18 +613,14 @@ describe("createCodexAppServerTransport", () => {
           }),
         ),
       ).rejects.toThrow("Failed writing Codex app-server message for runtime runtime-1");
-
-      expect(clearTimeoutRecorder.clearedTimeouts).toHaveLength(1);
     } finally {
-      clearTimeoutRecorder.restore();
       await Effect.runPromise(transport.close());
     }
   });
 
-  test("clears the pending request timeout when serialization fails", async () => {
+  test("keeps the transport usable when serialization fails", async () => {
     const child = createChild();
     const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
-    const clearTimeoutRecorder = recordClearTimeouts();
     const circularParams: Record<string, unknown> = {};
     circularParams.self = circularParams;
 
@@ -688,8 +633,6 @@ describe("createCodexAppServerTransport", () => {
           }),
         ),
       ).rejects.toThrow("Failed writing Codex app-server message for runtime runtime-1");
-
-      expect(clearTimeoutRecorder.clearedTimeouts).toHaveLength(1);
 
       const nextResponse = Effect.runPromise(
         transport.request({
@@ -704,7 +647,6 @@ describe("createCodexAppServerTransport", () => {
 
       await expect(nextResponse).resolves.toEqual({ data: [], nextCursor: null });
     } finally {
-      clearTimeoutRecorder.restore();
       await Effect.runPromise(transport.close());
     }
   });

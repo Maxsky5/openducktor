@@ -12,7 +12,8 @@ export const createElectronMainRuntimeBindings = (logger: ElectronMainLogger) =>
 
   return {
     appUpdateLogger: {
-      error: (message: string, cause?: unknown) => runElectronEffect(logger.error(message, cause)),
+      error: (message: string, cause?: unknown): Promise<void> =>
+        runElectronEffect(logger.error(message, cause)),
       info: (message: string) => runElectronEffect(logger.info(message)),
       warn: (message: string) => runElectronEffect(logger.warn(message)),
     },

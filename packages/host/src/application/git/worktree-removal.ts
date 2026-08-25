@@ -51,12 +51,15 @@ const inspectFilesystemCleanup = (
     ]);
     return { ...resolvedPath, managedBasePath: managedBase, targetExists };
   });
-const cleanupRefused = (effectiveWorktreePath: string, cause?: unknown) =>
+const cleanupRefused = (effectiveWorktreePath: string, cause?: unknown): HostValidationError =>
   new HostValidationError({
     message: `Refusing worktree cleanup outside managed roots for ${effectiveWorktreePath}`,
     cause,
   });
-const cleanupIdentityChanged = (effectiveWorktreePath: string, cause?: unknown) =>
+const cleanupIdentityChanged = (
+  effectiveWorktreePath: string,
+  cause?: unknown,
+): HostValidationError =>
   new HostValidationError({
     message: `Refusing worktree cleanup because its filesystem identity changed for ${effectiveWorktreePath}`,
     cause,

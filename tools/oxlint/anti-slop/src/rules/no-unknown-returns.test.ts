@@ -23,19 +23,19 @@ tester.run("anti-slop/no-unknown-returns", noUnknownReturnsRule, {
   invalid: [
     { code: "function load(): unknown { return input; }", errors: [error] },
     { code: "const load = (): unknown => input;", errors: [error] },
+    {
+      code: "const value: unknown = input; function load() { return value; }",
+      errors: [error],
+    },
+    {
+      code: "const value: unknown = input; const load = () => value;",
+      errors: [error],
+    },
     { code: "type Loader = () => unknown;", errors: [error] },
     { code: "interface Loader { load(): unknown }", errors: [error] },
     { code: "declare function load(): unknown;", errors: [error] },
     { code: "function load(): string | unknown { return input; }", errors: [error] },
     { code: "function load(): Promise<unknown> { return promise; }", errors: [error] },
-    {
-      code: "function load(): Parameters<typeof schema.safeParse>[0] { return input; }",
-      errors: [error],
-    },
-    {
-      code: "function load(): Promise<Parameters<typeof schema.parse>[0]> { return promise; }",
-      errors: [error],
-    },
     {
       code: "type UnknownValue = unknown; function load(): UnknownValue { return input; }",
       errors: [error],

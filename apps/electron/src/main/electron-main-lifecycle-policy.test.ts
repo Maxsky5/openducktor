@@ -615,7 +615,8 @@ describe("Electron main lifecycle policy", () => {
       .runHostCommand("runtime.session.context-usage", Effect.fail(commandFailure))
       .then(
         () => null,
-        (cause: unknown) => cause,
+        (cause: unknown): Error =>
+          cause instanceof Error ? cause : new Error(String(cause), { cause }),
       );
     await controller.shutdownHostAndQuit({ reason: "window-close" });
     const rejectedCommand = await commandOutcome;

@@ -18,6 +18,7 @@ import {
 } from "../../application/runtimes/claude-workspace-runtime";
 import {
   type HostError,
+  type HostOperationError,
   HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
@@ -196,11 +197,13 @@ export const createClaudeLiveSessionAdapterPreparer =
       });
       const unsubscribe = eventHub.subscribe(runtime.runtimeId, eventCoordinator.enqueueEvent);
 
-      const sessionError = (operation: string, externalSessionId: string) => (cause: unknown) =>
-        toHostOperationError(cause, operation, {
-          runtimeId: runtime.runtimeId,
-          externalSessionId,
-        });
+      const sessionError =
+        (operation: string, externalSessionId: string) =>
+        (cause: unknown): HostOperationError =>
+          toHostOperationError(cause, operation, {
+            runtimeId: runtime.runtimeId,
+            externalSessionId,
+          });
 
       const requireSessionContext = (externalSessionId: string) =>
         Effect.try({

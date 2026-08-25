@@ -7,8 +7,8 @@ import {
 } from "./messages";
 
 export const normalizeToolInput = (
-  input: Record<string, unknown> | undefined,
-): Record<string, unknown> | undefined => {
+  input: Record<string, JsonValue> | undefined,
+): Record<string, JsonValue> | undefined => {
   if (!input) {
     return undefined;
   }
@@ -18,29 +18,9 @@ export const normalizeToolInput = (
 const isJsonRecord = (value: JsonValue | undefined): value is JsonObject =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-// SAFETY: Object.keys reads the own keys of this typed object, so each key belongs to `Record<string, unknown>`.
-export const normalizeToolText = (value: unknown): string | undefined => {
-  if (value === undefined) {
-    return undefined;
-  }
-  const parsed = jsonValueSchema.parse(value);
-  if (typeof parsed === "string") {
-    const trimmed = parsed.trim();
-    return trimmed.length > 0 ? trimmed : undefined;
-  }
-  if (parsed === null) {
-    return undefined;
-  }
-  if (typeof parsed === "number" || typeof parsed === "boolean") {
-    return String(parsed);
-  }
-  if (Array.isArray(parsed) && parsed.length === 0) {
-    return undefined;
-  }
-  if (isJsonRecord(parsed) && Object.keys(parsed).length === 0) {
-    return undefined;
-  }
-  return JSON.stringify(parsed, null, 2);
+export const normalizeToolText = (value: string | undefined): string | undefined => {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : undefined;
 };
 
 export const resolveToolMessageId = (

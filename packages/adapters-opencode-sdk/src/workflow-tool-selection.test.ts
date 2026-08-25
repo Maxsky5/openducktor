@@ -10,6 +10,9 @@ import {
   resolveWorkflowToolSelection,
 } from "./workflow-tool-selection";
 
+const caughtError = (cause: unknown): Error =>
+  cause instanceof Error ? cause : new Error(String(cause), { cause });
+
 const makeClient = (input: {
   toolIds?: unknown;
   modelTools?: unknown;
@@ -214,7 +217,7 @@ describe("workflow-tool-selection", () => {
       role: "spec",
       runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       workingDirectory: "/repo",
-    }).catch((cause: unknown) => cause);
+    }).catch(caughtError);
 
     expect(selection).toBeInstanceOf(Error);
     if (!(selection instanceof Error)) throw selection;
@@ -230,7 +233,7 @@ describe("workflow-tool-selection", () => {
       role: "spec",
       runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       workingDirectory: "/repo",
-    }).catch((cause: unknown) => cause);
+    }).catch(caughtError);
 
     expect(selectionError).toBeInstanceOf(Error);
     if (!(selectionError instanceof Error)) throw selectionError;
@@ -301,7 +304,7 @@ describe("workflow-tool-selection", () => {
       role: "build",
       runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       workingDirectory: "/repo/.openducktor/worktrees/task-1",
-    }).catch((cause: unknown) => cause);
+    }).catch(caughtError);
 
     expect(selectionError).toBeInstanceOf(Error);
     if (!(selectionError instanceof Error)) throw selectionError;
@@ -317,7 +320,7 @@ describe("workflow-tool-selection", () => {
       role: "spec",
       runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       workingDirectory: "/repo",
-    }).catch((cause: unknown) => cause);
+    }).catch(caughtError);
 
     expect(selectionError).toBeInstanceOf(Error);
     if (!(selectionError instanceof Error)) throw selectionError;

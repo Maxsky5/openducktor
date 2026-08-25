@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { CodexAppServerClientRequest } from "@openducktor/contracts";
 
-const createWriteError = (runtimeId: string, cause: unknown) =>
+const createWriteError = (runtimeId: string, cause: unknown): HostOperationError =>
   new HostOperationError({
     operation: "codexAppServerTransport.sendMessage",
     message: `Failed writing Codex app-server message for runtime ${runtimeId}`,

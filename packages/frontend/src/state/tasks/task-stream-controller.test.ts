@@ -99,7 +99,9 @@ const createHarness = ({
     taskViewSync,
     transport,
     emit: (index: number, frame: TaskStreamFrame) => records[index]?.listener(frame),
-    failTerminally: (index: number, cause: unknown) => records[index]?.onTerminalFailure(cause),
+    failTerminally: (index: number, cause: unknown): void => {
+      records[index]?.onTerminalFailure(cause);
+    },
   };
 };
 

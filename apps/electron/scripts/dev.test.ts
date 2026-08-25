@@ -311,7 +311,9 @@ describe("electron dev script", () => {
 
     const error = await runElectronEffect(
       stopElectronEffect(electron, async () => undefined),
-    ).catch((cause: unknown) => cause);
+    ).catch((cause: unknown): Error =>
+      cause instanceof Error ? cause : new Error(String(cause), { cause }),
+    );
 
     expect(signals).toEqual([electronGracefulShutdownSignal(process.platform), 9]);
     expect(error).toMatchObject({

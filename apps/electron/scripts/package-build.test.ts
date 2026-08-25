@@ -13,6 +13,9 @@ import {
   resolveElectronReleaseVersionMetadata,
 } from "./package-build";
 
+const caughtError = (cause: unknown): Error =>
+  cause instanceof Error ? cause : new Error(String(cause), { cause });
+
 describe("build Electron release artifact", () => {
   it("builds signed macOS artifacts without disabling notarization", () => {
     expect(
@@ -257,7 +260,7 @@ describe("build Electron release artifact", () => {
         outputDirectory,
         platform: "macos",
         releaseDirectory,
-      }).catch((cause: unknown) => cause);
+      }).catch(caughtError);
 
       expect(error).toBeInstanceOf(Error);
       if (!(error instanceof Error)) throw error;
@@ -277,7 +280,7 @@ describe("build Electron release artifact", () => {
         outputDirectory,
         platform: "macos",
         releaseDirectory,
-      }).catch((cause: unknown) => cause);
+      }).catch(caughtError);
 
       expect(error).toMatchObject({
         _tag: "ElectronOperationError",
@@ -305,7 +308,7 @@ describe("build Electron release artifact", () => {
         outputDirectory,
         platform: "macos",
         releaseDirectory,
-      }).catch((cause: unknown) => cause);
+      }).catch(caughtError);
 
       expect(error).toMatchObject({
         _tag: "ElectronOperationError",
@@ -337,7 +340,7 @@ describe("build Electron release artifact", () => {
         outputDirectory,
         platform: "windows",
         releaseDirectory,
-      }).catch((cause: unknown) => cause);
+      }).catch(caughtError);
 
       expect(error).toMatchObject({
         _tag: "ElectronOperationError",

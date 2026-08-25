@@ -46,6 +46,8 @@ export const createDeferred = <T>() => {
   return {
     promise,
     resolve: (value: T) => resolve?.(value),
-    reject: (cause?: unknown) => reject?.(cause),
+    reject: (cause?: unknown): void => {
+      reject?.(cause);
+    },
   };
 };

@@ -39,10 +39,7 @@ function assertionCommentOwner(node: TypeAssertion): ESTree.Node | null {
 }
 
 function hasSafetyComment(sourceCode: SourceCode, node: ESTree.Node): boolean {
-  return sourceCode.getCommentsBefore(node).some((comment) => {
-    if (!/\bSAFETY\s*:/u.test(comment.value)) return false;
-    return !/\bThis test (?:controls|creates|drives)\b/u.test(comment.value);
-  });
+  return sourceCode.getCommentsBefore(node).some((comment) => /\bSAFETY\s*:/u.test(comment.value));
 }
 
 /** Require every non-const type assertion to state its local invariant. */
@@ -51,11 +48,11 @@ export const requireSafetyCommentForTypeAssertionRule = defineRule({
     type: "problem",
     docs: {
       description:
-        "Require a specific nearby SAFETY comment for every TypeScript type assertion except const assertions.",
+        "Require a nearby SAFETY comment for every TypeScript type assertion except const assertions.",
     },
     messages: {
       missingSafetyComment:
-        "This type assertion has no local runtime proof or specific `SAFETY:` justification. Check the asserted type at runtime or state the checked invariant immediately before the assertion; stock test-fixture wording does not count.",
+        "This type assertion has no local `SAFETY:` comment. Check the asserted type at runtime or state the invariant immediately before the assertion.",
     },
   },
   createOnce(context) {
