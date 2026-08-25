@@ -51,6 +51,9 @@ tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
     'interface Safe extends Record<"only", object> {}',
     'type Safe = Record<string & "only", object>;',
     'type Safe = Record<Exclude<"one" | "two", "two">, object>;',
+    'type Safe = Record<Exclude<1, "1">, object>;',
+    'type Safe = Record<Exclude<"1", 1>, object>;',
+    'type Safe = Record<Exclude<("one" | "two") & string, "two">, object>;',
     'type Exclude<T, U> = "only"; type Safe = Record<Exclude<string, "reserved">, object>;',
     'type Safe = Record<`key-${"one" | "two"}`, object>;',
     "type Safe = Record<`flag-${boolean}`, object>;",
@@ -72,6 +75,7 @@ tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
     { code: "type A = Record<keyof never, object>;", errors: [error] },
     { code: "type A = Record<string & keyof any, object>;", errors: [error] },
     { code: 'type A = Record<Exclude<string, "reserved">, object>;', errors: [error] },
+    { code: "type A = Record<Exclude<number, string>, object>;", errors: [error] },
     { code: "type A = Record<`key-${string}`, object>;", errors: [error] },
     { code: "type A = Record<`id-${bigint}`, object>;", errors: [error] },
     {

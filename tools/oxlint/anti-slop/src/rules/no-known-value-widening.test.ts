@@ -35,6 +35,9 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
     `${prelude} type PermissionLevels = { readonly [Level in Permission]: number }; const levels: PermissionLevels = { admin: 1 };`,
     `${prelude} const commands: Record<'start', Command> = { start: startCommand };`,
     `${prelude} const commands: Record<Exclude<'start' | 'stop', 'stop'>, Command> = { start: startCommand };`,
+    `${prelude} const commands: Record<Exclude<1, '1'>, Command> = { 1: startCommand };`,
+    `${prelude} const commands: Record<Exclude<'1', 1>, Command> = { '1': startCommand };`,
+    `${prelude} const commands: Record<Exclude<('start' | 'stop') & string, 'stop'>, Command> = { start: startCommand };`,
     `${prelude} type Exclude<T, U> = 'only'; const commands: Record<Exclude<string, 'reserved'>, Command> = { only: startCommand };`,
     `${prelude} const commands: Record<string & 'only', Command> = { only: startCommand };`,
     'type Command = () => void; const startCommand = () => {}; const commands: Record<`key-${"start"}`, Command> = { "key-start": startCommand };',
@@ -97,6 +100,10 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
     },
     {
       code: `${prelude} const commands: Record<Exclude<string, 'reserved'>, Command> = { start: startCommand };`,
+      errors: [error],
+    },
+    {
+      code: `${prelude} const commands: Record<Exclude<number, string>, Command> = { 1: startCommand };`,
       errors: [error],
     },
     {

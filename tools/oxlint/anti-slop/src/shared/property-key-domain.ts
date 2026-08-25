@@ -5,7 +5,6 @@ import {
   emptyPropertyKeyDomain,
   intersectPropertyKeyDomains,
   numberInterpolationPropertyKeyPattern,
-  propertyKeyDomainIncludes,
   propertyKeyDomainValueId,
   propertyKeyDomainValueText,
   regularExpressionPropertyKeyPattern,
@@ -125,93 +124,11 @@ function resolveExcludePropertyKeyDomain(
   resolveImportedType: PortableTypeResolver | undefined,
   resolving: ReadonlySet<string>,
   resolveDomain: PropertyKeyDomainResolver,
-  resolutionKind: string,
 ): PropertyKeyDomain {
-  const excludedDomain = resolveDomain(
-    excluded,
-    environment,
-    substitutions,
-    resolveImportedType,
-    resolving,
+  return subtractPropertyKeyDomains(
+    resolveDomain(source, environment, substitutions, resolveImportedType, resolving),
+    resolveDomain(excluded, environment, substitutions, resolveImportedType, resolving),
   );
-
-  const resolveSource = (
-    sourceType: PortableTSType,
-    sourceEnvironment: PortableTypeEnvironment,
-    sourceSubstitutions: TypeSubstitutions,
-    sourceImportedType: PortableTypeResolver | undefined,
-    sourceResolving: ReadonlySet<string>,
-  ): PropertyKeyDomain => {
-    const unwrapped = unwrapTransparentType(sourceType);
-    if (unwrapped.type === "TSUnionType") {
-      return unionPropertyKeyDomains(
-        unwrapped.types.map((member) =>
-          resolveSource(
-            member,
-            sourceEnvironment,
-            sourceSubstitutions,
-            sourceImportedType,
-            sourceResolving,
-          ),
-        ),
-      );
-    }
-    if (unwrapped.type === "TSTypeReference") {
-      const name = typeReferenceName(unwrapped);
-      if (name !== null) {
-        const substitution = sourceSubstitutions.get(name);
-        if (substitution !== undefined && !isUnappliedReferenceTo(substitution.type, name)) {
-          return resolveSource(
-            substitution.type,
-            substitution.environment,
-            substitution.substitutions,
-            substitution.resolveImportedType,
-            sourceResolving,
-          );
-        }
-      }
-      const aliasDomains: PropertyKeyDomain[] = [];
-      for (const resolved of resolveTypeReference(
-        unwrapped,
-        sourceEnvironment,
-        sourceSubstitutions,
-        sourceImportedType,
-      )) {
-        if (resolved.kind !== "alias") continue;
-        const nextResolving = enterTypeResolution(sourceResolving, resolved.key, resolutionKind);
-        if (nextResolving === null) continue;
-        const aliasSubstitutions = aliasSubstitution(
-          resolved.declaration,
-          resolved.arguments,
-          resolved.environment,
-          resolved.resolveImportedType,
-        );
-        if (aliasSubstitutions === null) continue;
-        aliasDomains.push(
-          resolveSource(
-            resolved.declaration.typeAnnotation,
-            resolved.environment,
-            aliasSubstitutions,
-            resolved.resolveImportedType,
-            nextResolving,
-          ),
-        );
-      }
-      if (aliasDomains.length > 0) return unionPropertyKeyDomains(aliasDomains);
-    }
-    const sourceDomain = resolveDomain(
-      sourceType,
-      sourceEnvironment,
-      sourceSubstitutions,
-      sourceImportedType,
-      sourceResolving,
-    );
-    return propertyKeyDomainIncludes(excludedDomain, sourceDomain)
-      ? emptyPropertyKeyDomain()
-      : sourceDomain;
-  };
-
-  return resolveSource(source, environment, substitutions, resolveImportedType, resolving);
 }
 
 function resolveTemplateInterpolationDomain(
@@ -309,7 +226,6 @@ function resolveTemplateInterpolationDomain(
             resolveImportedType,
             resolving,
             resolveTemplateInterpolationDomain,
-            "template-interpolation-exclude",
           );
     }
   }
@@ -503,7 +419,6 @@ export function resolvePropertyKeyDomain(
             resolveImportedType,
             resolving,
             resolvePropertyKeyDomain,
-            "property-key-domain-exclude",
           );
     }
   }

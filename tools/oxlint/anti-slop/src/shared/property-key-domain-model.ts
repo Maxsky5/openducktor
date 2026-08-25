@@ -115,24 +115,41 @@ export function templatePropertyKeyPattern(
 function templatePatternMatches(
   pattern: Extract<PropertyKeyPattern, { kind: "template" }>,
   value: string,
-  interpolationIndex = 0,
-  offset = 0,
 ): boolean {
-  const quasi = pattern.quasis[interpolationIndex] ?? "";
-  if (!value.startsWith(quasi, offset)) return false;
-  const interpolationStart = offset + quasi.length;
-  const interpolation = pattern.interpolations[interpolationIndex];
-  if (interpolation === undefined) return interpolationStart === value.length;
-  for (
-    let interpolationEnd = interpolationStart;
-    interpolationEnd <= value.length;
-    interpolationEnd += 1
-  ) {
-    if (!patternMatches(interpolation, value.slice(interpolationStart, interpolationEnd))) continue;
-    if (templatePatternMatches(pattern, value, interpolationIndex + 1, interpolationEnd))
-      return true;
-  }
-  return false;
+  const offsetsPerInterpolation = value.length + 1;
+  const matchesByState = new Map<number, boolean>();
+  const matchesFrom = (interpolationIndex: number, offset: number): boolean => {
+    const state = interpolationIndex * offsetsPerInterpolation + offset;
+    const cached = matchesByState.get(state);
+    if (cached !== undefined) return cached;
+    const quasi = pattern.quasis[interpolationIndex] ?? "";
+    if (!value.startsWith(quasi, offset)) {
+      matchesByState.set(state, false);
+      return false;
+    }
+    const interpolationStart = offset + quasi.length;
+    const interpolation = pattern.interpolations[interpolationIndex];
+    if (interpolation === undefined) {
+      const matches = interpolationStart === value.length;
+      matchesByState.set(state, matches);
+      return matches;
+    }
+    for (
+      let interpolationEnd = interpolationStart;
+      interpolationEnd <= value.length;
+      interpolationEnd += 1
+    ) {
+      if (!patternMatches(interpolation, value.slice(interpolationStart, interpolationEnd)))
+        continue;
+      if (matchesFrom(interpolationIndex + 1, interpolationEnd)) {
+        matchesByState.set(state, true);
+        return true;
+      }
+    }
+    matchesByState.set(state, false);
+    return false;
+  };
+  return matchesFrom(0, 0);
 }
 
 function patternMatches(pattern: PropertyKeyPattern, value: string): boolean {

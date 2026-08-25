@@ -38,6 +38,7 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     "type Box<T> = { [T in 'input']: T }; function safe({ input }: Box<unknown>) { return input; }",
     'function safe({ only }: Record<string & "only", string>) { return only; }',
     'function safe({ stop }: Record<Exclude<"start" | "stop", "stop">, unknown>) { return stop; }',
+    'function safe({ stop }: Record<Exclude<("start" | "stop") & string, "stop">, unknown>) { return stop; }',
     'type Exclude<T, U> = "only"; function safe({ input }: Record<Exclude<string, "reserved">, unknown>) { return input; }',
     "function safe({ NaN: input }: Record<`${number}`, unknown>) { return input; }",
     "function safe({ Infinity: input }: Record<`${number}`, unknown>) { return input; }",
@@ -45,6 +46,7 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     'function safe({ "": input }: Record<`${number}`, unknown>) { return input; }',
     'function safe({ "+1": input }: Record<`${bigint}`, unknown>) { return input; }',
     'function safe({ "01": input }: Record<`${bigint}`, unknown>) { return input; }',
+    'function safe({ "111111111111111111111111x": input }: Record<`${number}${number}${number}${number}${number}${number}${number}${number}${number}${number}${number}${number}`, unknown>) { return input; }',
   ],
   invalid: [
     { code: "function load(input: unknown) { return input; }", errors: [error] },
@@ -204,6 +206,22 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     },
     {
       code: "function unsafe({ start }: Record<Exclude<'start' | 'stop', 'stop'>, unknown>) { return start; }",
+      errors: [error],
+    },
+    {
+      code: "function unsafe({ start }: Record<Exclude<('start' | 'stop') & string, 'stop'>, unknown>) { return start; }",
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "1": input }: Record<Exclude<number, string>, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "1": input }: Record<Exclude<1, "1">, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "1": input }: Record<Exclude<"1", 1>, unknown>) { return input; }',
       errors: [error],
     },
     {
