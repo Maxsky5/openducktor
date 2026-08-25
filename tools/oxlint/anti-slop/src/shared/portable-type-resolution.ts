@@ -1,4 +1,7 @@
+import type { ESTree } from "@oxlint/plugins";
+
 import type {
+  PortableClass,
   PortableModuleItem,
   PortableNode,
   PortableTSInterfaceDeclaration,
@@ -8,12 +11,16 @@ import type {
   PortableTSTypeName,
   PortableTSTypeReference,
 } from "./portable-ast.ts";
+import { lexicalStructuralTypeParameterNames } from "./lexical-type-parameters.ts";
 
 const BUILT_INS = new Set([
   "Array",
   "NonNullable",
+  "Omit",
   "Partial",
   "Pick",
+  "Promise",
+  "PromiseLike",
   "PropertyKey",
   "Readonly",
   "ReadonlyArray",
@@ -28,48 +35,52 @@ export const TRANSPARENT_TYPE_WRAPPERS: ReadonlySet<string> = new Set([
   "NonNullable",
 ]);
 
-export type WideningTypeEnvironment = {
+export type PortableTypeEnvironment = {
   readonly aliases: ReadonlyMap<string, PortableTSTypeAliasDeclaration>;
+  readonly classes: ReadonlyMap<string, readonly PortableClass[]>;
+  readonly declaredTypeNames: ReadonlySet<string>;
+  readonly importedTypeNames: ReadonlySet<string>;
   readonly interfaces: ReadonlyMap<string, readonly PortableTSInterfaceDeclaration[]>;
   readonly namespaces: ReadonlyMap<string, readonly PortableTSModuleDeclaration[]>;
   readonly shadowedBuiltIns: ReadonlySet<string>;
+  readonly visitorKeys: Readonly<Record<string, readonly string[]>>;
 };
 
-export type WideningTypeArgument = {
-  readonly environment: WideningTypeEnvironment;
+export type PortableTypeArgument = {
+  readonly environment: PortableTypeEnvironment;
   readonly type: PortableTSType;
 };
 
-export type ResolvedWideningType =
+export type ResolvedPortableType =
   | {
-      readonly arguments: readonly WideningTypeArgument[];
+      readonly arguments: readonly PortableTypeArgument[];
       readonly declaration: PortableTSTypeAliasDeclaration;
-      readonly environment: WideningTypeEnvironment;
+      readonly environment: PortableTypeEnvironment;
       readonly key: string;
       readonly kind: "alias";
-      readonly resolveImportedType: WideningTypeResolver | undefined;
+      readonly resolveImportedType: PortableTypeResolver | undefined;
     }
   | {
-      readonly arguments: readonly WideningTypeArgument[];
+      readonly arguments: readonly PortableTypeArgument[];
       readonly declarations: readonly PortableTSInterfaceDeclaration[];
-      readonly environment: WideningTypeEnvironment;
+      readonly environment: PortableTypeEnvironment;
       readonly key: string;
       readonly kind: "interface";
       readonly name: string;
-      readonly resolveImportedType: WideningTypeResolver | undefined;
+      readonly resolveImportedType: PortableTypeResolver | undefined;
     };
 
-export type WideningTypeResolver = (
+export type PortableTypeResolver = (
   typeNameParts: readonly string[],
-  arguments_: readonly WideningTypeArgument[],
-) => ResolvedWideningType | null;
+  arguments_: readonly PortableTypeArgument[],
+) => ResolvedPortableType | null;
 
-export type TypeSubstitutions = ReadonlyMap<string, WideningTypeArgument>;
+export type TypeSubstitutions = ReadonlyMap<string, PortableTypeArgument>;
 
-const environmentIds = new WeakMap<WideningTypeEnvironment, number>();
+const environmentIds = new WeakMap<PortableTypeEnvironment, number>();
 let nextEnvironmentId = 1;
 
-function environmentId(environment: WideningTypeEnvironment): number {
+function environmentId(environment: PortableTypeEnvironment): number {
   const existing = environmentIds.get(environment);
   if (existing !== undefined) return existing;
   const id = nextEnvironmentId;
@@ -79,7 +90,7 @@ function environmentId(environment: WideningTypeEnvironment): number {
 }
 
 function localResolutionKey(
-  environment: WideningTypeEnvironment,
+  environment: PortableTypeEnvironment,
   parts: readonly string[],
 ): string {
   return `local\0${environmentId(environment)}\0${parts.join("\0")}`;
@@ -107,13 +118,16 @@ function declarationName(node: PortableNode): string | null {
 }
 
 /** Build the declaration index used by portable type queries. */
-export function createWideningModuleEnvironment(
+export function createPortableModuleTypeEnvironment(
   statements: readonly PortableModuleItem[],
-): WideningTypeEnvironment {
+  visitorKeys: Readonly<Record<string, readonly string[]>> = {},
+): PortableTypeEnvironment {
   const aliases = new Map<string, PortableTSTypeAliasDeclaration>();
+  const classes = new Map<string, PortableClass[]>();
   const interfaces = new Map<string, PortableTSInterfaceDeclaration[]>();
   const namespaces = new Map<string, PortableTSModuleDeclaration[]>();
   const typeNames = new Set<string>();
+  const importedTypeNames = new Set<string>();
   const competingInterfaceNames = new Set<string>();
 
   for (const statement of statements) {
@@ -121,6 +135,7 @@ export function createWideningModuleEnvironment(
     if (node?.type === "ImportDeclaration") {
       for (const specifier of node.specifiers) {
         typeNames.add(specifier.local.name);
+        importedTypeNames.add(specifier.local.name);
         competingInterfaceNames.add(specifier.local.name);
       }
       continue;
@@ -150,15 +165,172 @@ export function createWideningModuleEnvironment(
       interfaces.set(name, declarations);
       continue;
     }
+    if (node.type === "ClassDeclaration") {
+      const declarations = classes.get(name) ?? [];
+      declarations.push(node);
+      classes.set(name, declarations);
+      continue;
+    }
     competingInterfaceNames.add(name);
   }
 
   for (const name of competingInterfaceNames) interfaces.delete(name);
   return {
     aliases,
+    classes,
+    declaredTypeNames: typeNames,
     interfaces,
+    importedTypeNames,
     namespaces,
     shadowedBuiltIns: new Set([...typeNames].filter((name) => BUILT_INS.has(name))),
+    visitorKeys,
+  };
+}
+
+function scopeStatements(node: ESTree.Node): readonly ESTree.Statement[] | null {
+  if (
+    node.type === "Program" ||
+    node.type === "BlockStatement" ||
+    node.type === "StaticBlock" ||
+    node.type === "TSModuleBlock"
+  ) {
+    return node.body;
+  }
+  return node.type === "SwitchStatement" ? node.cases.flatMap((case_) => case_.consequent) : null;
+}
+
+function shadowTypeName(
+  name: string,
+  environment: {
+    aliases: Map<string, PortableTSTypeAliasDeclaration>;
+    classes: Map<string, readonly PortableClass[]>;
+    interfaces: Map<string, readonly PortableTSInterfaceDeclaration[]>;
+    namespaces: Map<string, readonly PortableTSModuleDeclaration[]>;
+    importedTypeNames: Set<string>;
+    shadowedBuiltIns: Set<string>;
+  },
+): void {
+  environment.aliases.delete(name);
+  environment.classes.delete(name);
+  environment.interfaces.delete(name);
+  environment.namespaces.delete(name);
+  environment.importedTypeNames.delete(name);
+  if (BUILT_INS.has(name)) environment.shadowedBuiltIns.add(name);
+}
+
+function emptyTypeEnvironment(
+  visitorKeys: Readonly<Record<string, readonly string[]>>,
+): PortableTypeEnvironment {
+  return {
+    aliases: new Map(),
+    classes: new Map(),
+    declaredTypeNames: new Set(),
+    importedTypeNames: new Set(),
+    interfaces: new Map(),
+    namespaces: new Map(),
+    shadowedBuiltIns: new Set(),
+    visitorKeys,
+  };
+}
+
+function extendTypeEnvironment(
+  environment: PortableTypeEnvironment,
+  statements: readonly PortableModuleItem[],
+): PortableTypeEnvironment {
+  const aliases = new Map(environment.aliases);
+  const classes = new Map(environment.classes);
+  const declaredTypeNames = new Set(environment.declaredTypeNames);
+  const importedTypeNames = new Set(environment.importedTypeNames);
+  const interfaces = new Map(environment.interfaces);
+  const namespaces = new Map(environment.namespaces);
+  const shadowedBuiltIns = new Set(environment.shadowedBuiltIns);
+  const mutable = {
+    aliases,
+    classes,
+    importedTypeNames,
+    interfaces,
+    namespaces,
+    shadowedBuiltIns,
+  };
+  const layer = createPortableModuleTypeEnvironment(statements, environment.visitorKeys);
+  for (const name of layer.declaredTypeNames) {
+    shadowTypeName(name, mutable);
+    declaredTypeNames.add(name);
+  }
+  for (const name of layer.importedTypeNames) importedTypeNames.add(name);
+  for (const [name, alias] of layer.aliases) aliases.set(name, alias);
+  for (const [name, declarations] of layer.classes) classes.set(name, declarations);
+  for (const [name, declarations] of layer.interfaces) interfaces.set(name, declarations);
+  for (const [name, declarations] of layer.namespaces) namespaces.set(name, declarations);
+  return {
+    aliases,
+    classes,
+    declaredTypeNames,
+    importedTypeNames,
+    interfaces,
+    namespaces,
+    shadowedBuiltIns,
+    visitorKeys: environment.visitorKeys,
+  };
+}
+
+/** Build the visible TypeScript type declarations at one AST node. */
+export function createTypeEnvironment(
+  node: ESTree.Node,
+  visitorKeys: Readonly<Record<string, readonly string[]>>,
+): PortableTypeEnvironment {
+  let visible = emptyTypeEnvironment(visitorKeys);
+  const ancestry: ESTree.Node[] = [];
+  let current: ESTree.Node | null = node;
+  while (current !== null) {
+    ancestry.push(current);
+    current = current.parent;
+  }
+
+  for (const ancestor of ancestry.reverse()) {
+    const statements = scopeStatements(ancestor);
+    if (statements !== null) visible = extendTypeEnvironment(visible, statements);
+    if ("typeParameters" in ancestor) {
+      for (const parameter of ancestor.typeParameters?.params ?? []) {
+        visible = withoutVisibleTypeName(visible, parameter.name.name);
+      }
+    }
+  }
+
+  for (const name of lexicalStructuralTypeParameterNames(node, visitorKeys)) {
+    visible = withoutVisibleTypeName(visible, name);
+  }
+  return visible;
+}
+
+/** Return an environment where one lexical type binding shadows declarations and imports. */
+export function withoutVisibleTypeName(
+  environment: PortableTypeEnvironment,
+  name: string,
+): PortableTypeEnvironment {
+  const aliases = new Map(environment.aliases);
+  const classes = new Map(environment.classes);
+  const interfaces = new Map(environment.interfaces);
+  const namespaces = new Map(environment.namespaces);
+  const importedTypeNames = new Set(environment.importedTypeNames);
+  const shadowedBuiltIns = new Set(environment.shadowedBuiltIns);
+  shadowTypeName(name, {
+    aliases,
+    classes,
+    importedTypeNames,
+    interfaces,
+    namespaces,
+    shadowedBuiltIns,
+  });
+  return {
+    aliases,
+    classes,
+    declaredTypeNames: new Set([...environment.declaredTypeNames, name]),
+    importedTypeNames,
+    interfaces,
+    namespaces,
+    shadowedBuiltIns,
+    visitorKeys: environment.visitorKeys,
   };
 }
 
@@ -185,7 +357,7 @@ export function expressionTypeNameParts(expression: PortableNode): readonly stri
   return ownerParts.length === 0 ? [] : [...ownerParts, expression.property.name];
 }
 
-export function isBuiltInType(name: string, environment: WideningTypeEnvironment): boolean {
+export function isBuiltInType(name: string, environment: PortableTypeEnvironment): boolean {
   return BUILT_INS.has(name) && !environment.shadowedBuiltIns.has(name);
 }
 
@@ -212,10 +384,10 @@ export function isUnappliedReferenceTo(type: PortableTSType, name: string): bool
 }
 
 export function resolvedSubstitutionArgument(
-  scopedType: WideningTypeArgument,
+  scopedType: PortableTypeArgument,
   base: TypeSubstitutions,
   resolving: ReadonlySet<string> = new Set(),
-): WideningTypeArgument {
+): PortableTypeArgument {
   const unwrapped = unwrapTransparentType(scopedType.type);
   if (unwrapped.type !== "TSTypeReference") return scopedType;
   const name = typeReferenceName(unwrapped);
@@ -229,15 +401,15 @@ export function resolvedSubstitutionArgument(
 
 export function typeParameterSubstitution(
   parameters: NonNullable<PortableTSTypeAliasDeclaration["typeParameters"]>["params"],
-  arguments_: readonly WideningTypeArgument[],
-  defaultEnvironment: WideningTypeEnvironment,
+  arguments_: readonly PortableTypeArgument[],
+  defaultEnvironment: PortableTypeEnvironment,
   base: TypeSubstitutions,
 ): TypeSubstitutions | null {
   const next = new Map(base);
   for (const [index, parameter] of parameters.entries()) {
     const suppliedArgument = arguments_[index];
     const defaultArgument = parameter.default;
-    let argument: WideningTypeArgument;
+    let argument: PortableTypeArgument;
     if (suppliedArgument !== undefined) {
       argument = suppliedArgument;
     } else {
@@ -251,8 +423,8 @@ export function typeParameterSubstitution(
 
 export function aliasSubstitution(
   alias: PortableTSTypeAliasDeclaration,
-  arguments_: readonly WideningTypeArgument[],
-  defaultEnvironment: WideningTypeEnvironment,
+  arguments_: readonly PortableTypeArgument[],
+  defaultEnvironment: PortableTypeEnvironment,
   base: TypeSubstitutions,
 ): TypeSubstitutions | null {
   return typeParameterSubstitution(
@@ -265,9 +437,9 @@ export function aliasSubstitution(
 
 export function scopedTypeArguments(
   type: PortableTSTypeReference,
-  environment: WideningTypeEnvironment,
+  environment: PortableTypeEnvironment,
   substitutions: TypeSubstitutions = new Map(),
-): readonly WideningTypeArgument[] {
+): readonly PortableTypeArgument[] {
   return (type.typeArguments?.params ?? []).map((argument) =>
     resolvedSubstitutionArgument({ environment, type: argument }, substitutions),
   );
@@ -275,20 +447,20 @@ export function scopedTypeArguments(
 
 function namespaceEnvironments(
   name: string,
-  environment: WideningTypeEnvironment,
-): readonly WideningTypeEnvironment[] {
+  environment: PortableTypeEnvironment,
+): readonly PortableTypeEnvironment[] {
   return (environment.namespaces.get(name) ?? []).flatMap((module) =>
     module.body?.type === "TSModuleBlock"
-      ? [createWideningModuleEnvironment(module.body.body)]
+      ? [extendTypeEnvironment(environment, module.body.body)]
       : [],
   );
 }
 
-function referencedTypePartScopes(
+export function referencedTypeScopes(
   parts: readonly string[],
-  environment: WideningTypeEnvironment,
-): readonly { readonly environment: WideningTypeEnvironment; readonly name: string }[] {
-  let environments: readonly WideningTypeEnvironment[] = [environment];
+  environment: PortableTypeEnvironment,
+): readonly { readonly environment: PortableTypeEnvironment; readonly name: string }[] {
+  let environments: readonly PortableTypeEnvironment[] = [environment];
   for (const namespaceName of parts.slice(0, -1)) {
     environments = environments.flatMap((candidate) =>
       namespaceEnvironments(namespaceName, candidate),
@@ -303,13 +475,13 @@ function referencedTypePartScopes(
 /** Resolve local, namespaced, and imported declarations through one shared path. */
 export function resolveNamedTypes(
   parts: readonly string[],
-  arguments_: readonly WideningTypeArgument[],
-  environment: WideningTypeEnvironment,
-  resolveImportedType?: WideningTypeResolver,
-): readonly ResolvedWideningType[] {
-  const results: ResolvedWideningType[] = [];
+  arguments_: readonly PortableTypeArgument[],
+  environment: PortableTypeEnvironment,
+  resolveImportedType?: PortableTypeResolver,
+): readonly ResolvedPortableType[] {
+  const results: ResolvedPortableType[] = [];
   const key = localResolutionKey(environment, parts);
-  for (const scope of referencedTypePartScopes(parts, environment)) {
+  for (const scope of referencedTypeScopes(parts, environment)) {
     const declarations = scope.environment.interfaces.get(scope.name);
     if (declarations !== undefined) {
       results.push({
@@ -334,17 +506,20 @@ export function resolveNamedTypes(
       });
     }
   }
-  const imported = resolveImportedType?.(parts, arguments_);
+  const imported =
+    parts[0] !== undefined && environment.importedTypeNames.has(parts[0])
+      ? resolveImportedType?.(parts, arguments_)
+      : undefined;
   if (imported !== null && imported !== undefined) results.push(imported);
   return results;
 }
 
 export function resolveTypeReference(
   type: PortableTSTypeReference,
-  environment: WideningTypeEnvironment,
+  environment: PortableTypeEnvironment,
   substitutions: TypeSubstitutions,
-  resolveImportedType?: WideningTypeResolver,
-): readonly ResolvedWideningType[] {
+  resolveImportedType?: PortableTypeResolver,
+): readonly ResolvedPortableType[] {
   return resolveNamedTypes(
     typeNameParts(type.typeName),
     scopedTypeArguments(type, environment, substitutions),
@@ -355,10 +530,10 @@ export function resolveTypeReference(
 
 export function resolveInterfaceHeritage(
   heritage: PortableTSInterfaceDeclaration["extends"][number],
-  environment: WideningTypeEnvironment,
+  environment: PortableTypeEnvironment,
   substitutions: TypeSubstitutions,
-  resolveImportedType?: WideningTypeResolver,
-): readonly ResolvedWideningType[] {
+  resolveImportedType?: PortableTypeResolver,
+): readonly ResolvedPortableType[] {
   const parts = expressionTypeNameParts(heritage.expression);
   const arguments_ = (heritage.typeArguments?.params ?? []).map((argument) =>
     resolvedSubstitutionArgument({ environment, type: argument }, substitutions),
@@ -369,9 +544,9 @@ export function resolveInterfaceHeritage(
 /** Return whether a mapped/index key accepts an arbitrary property key. */
 export function isBroadPropertyKey(
   type: PortableTSType,
-  environment: WideningTypeEnvironment,
+  environment: PortableTypeEnvironment,
   substitutions: TypeSubstitutions,
-  resolveImportedType?: WideningTypeResolver,
+  resolveImportedType?: PortableTypeResolver,
   resolving: ReadonlySet<string> = new Set(),
 ): boolean {
   const unwrapped = unwrapTransparentType(type);

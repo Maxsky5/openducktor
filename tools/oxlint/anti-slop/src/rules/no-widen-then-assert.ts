@@ -6,12 +6,12 @@ import {
   isKnownEvidenceExpression,
 } from "../shared/dictionary-types.ts";
 import { resolveVariable, singleVariableDeclarator } from "../shared/global-reference.ts";
-import { createImportedWideningTypeResolver } from "../shared/imported-widening-target.ts";
+import { createImportedTypeResolver } from "../shared/imported-type-resolution.ts";
 import { unwrapTransparentExpression } from "../shared/transparent-expression.ts";
 import { isStableBinding } from "../shared/stable-binding.ts";
 
 import type { ESTree, SourceCode, Variable } from "@oxlint/plugins";
-import type { WideningTypeResolver } from "../shared/widening-target.ts";
+import type { PortableTypeResolver } from "../shared/widening-target.ts";
 
 function hasKnownEvidence(
   sourceCode: SourceCode,
@@ -34,7 +34,7 @@ function hasKnownEvidence(
 function isBroadBoundaryType(
   type: ESTree.TSType,
   visitorKeys: Readonly<Record<string, readonly string[]>>,
-  resolveImportedType: WideningTypeResolver,
+  resolveImportedType: PortableTypeResolver,
 ): boolean {
   const wideningTarget = classifyWideningTarget(
     type,
@@ -51,7 +51,7 @@ function isBroadBoundaryType(
 function variableHasBroadAnnotation(
   variable: Variable,
   visitorKeys: Readonly<Record<string, readonly string[]>>,
-  resolveImportedType: WideningTypeResolver,
+  resolveImportedType: PortableTypeResolver,
 ): boolean {
   return variable.identifiers.some((identifier) => {
     const annotation = identifier.typeAnnotation?.typeAnnotation;
@@ -65,7 +65,7 @@ function isBroadBoundaryInput(
   sourceCode: SourceCode,
   variable: Variable,
   visitorKeys: Readonly<Record<string, readonly string[]>>,
-  resolveImportedType: WideningTypeResolver,
+  resolveImportedType: PortableTypeResolver,
 ): boolean {
   const identifier = variable.identifiers[0];
   if (
@@ -93,7 +93,7 @@ function isBroadBoundaryInput(
 function aliasedIdentifier(
   expression: ESTree.Expression,
   visitorKeys: Readonly<Record<string, readonly string[]>>,
-  resolveImportedType: WideningTypeResolver,
+  resolveImportedType: PortableTypeResolver,
 ): ESTree.IdentifierReference | null {
   let current = unwrapTransparentExpression(expression);
   if (current.type === "TSAsExpression" || current.type === "TSTypeAssertion") {
@@ -108,7 +108,7 @@ function aliasesBroadBoundaryInput(
   assertedIdentifier: ESTree.IdentifierReference,
   assertion: ESTree.TSAsExpression | ESTree.TSTypeAssertion,
   visitorKeys: Readonly<Record<string, readonly string[]>>,
-  resolveImportedType: WideningTypeResolver,
+  resolveImportedType: PortableTypeResolver,
 ): boolean {
   let variable = resolveVariable(sourceCode, assertedIdentifier);
   const visited = new Set<Variable>();
@@ -153,12 +153,12 @@ export const noWidenThenAssertRule = defineRule({
     },
   },
   createOnce(context) {
-    let resolveImportedType: WideningTypeResolver | null = null;
-    const importedTypeResolver = (node: ESTree.Node): WideningTypeResolver => {
+    let resolveImportedType: PortableTypeResolver | null = null;
+    const importedTypeResolver = (node: ESTree.Node): PortableTypeResolver => {
       if (resolveImportedType !== null) return resolveImportedType;
       let root = node;
       while (root.parent !== null) root = root.parent;
-      resolveImportedType = createImportedWideningTypeResolver(
+      resolveImportedType = createImportedTypeResolver(
         context.filename,
         root.type === "Program" ? root.body : [],
       );

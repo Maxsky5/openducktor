@@ -6,6 +6,8 @@ import {
   classifyUnsafeDictionaryValue,
   createTypeEnvironment,
 } from "../shared/dictionary-types.ts";
+import { createImportedTypeResolver } from "../shared/imported-type-resolution.ts";
+import type { PortableTypeResolver } from "../shared/portable-type-resolution.ts";
 
 import type { ESTree } from "@oxlint/plugins";
 
@@ -78,15 +80,20 @@ function isPlainAliasConsumerUse(
 function shouldReportType(
   node: ESTree.TSType,
   visitorKeys: Readonly<Record<string, readonly string[]>>,
+  resolveImportedType: PortableTypeResolver,
 ): boolean {
   const environment = createTypeEnvironment(node, visitorKeys);
   if (isPlainAliasConsumerUse(node, environment)) return false;
-  if (classifyUnsafeDictionary(node, environment) === null) return false;
+  if (classifyUnsafeDictionary(node, environment, resolveImportedType) === null) return false;
   let current: ESTree.Node | null = node.parent;
   while (current !== null && current.type !== "Program") {
     if (
       isTypeNode(current) &&
-      classifyUnsafeDictionary(current, createTypeEnvironment(current, visitorKeys)) !== null
+      classifyUnsafeDictionary(
+        current,
+        createTypeEnvironment(current, visitorKeys),
+        resolveImportedType,
+      ) !== null
     ) {
       return false;
     }
@@ -109,14 +116,27 @@ export const noUnsafeDictionaryTypeRule = defineRule({
     },
   },
   createOnce(context) {
+    let resolveImportedType: PortableTypeResolver | null = null;
+    const importedTypeResolver = (node: ESTree.Node): PortableTypeResolver => {
+      if (resolveImportedType !== null) return resolveImportedType;
+      let root = node;
+      while (root.parent !== null) root = root.parent;
+      resolveImportedType = createImportedTypeResolver(
+        context.filename,
+        root.type === "Program" ? root.body : [],
+      );
+      return resolveImportedType;
+    };
+
     const report = (node: ESTree.Node, value: string) => {
       context.report({ node, messageId: "unsafeDictionary", data: { value } });
     };
     const reportIfUnsafe = (node: ESTree.TSType) => {
       const visitorKeys = context.sourceCode.visitorKeys;
-      if (!shouldReportType(node, visitorKeys)) return;
+      const resolver = importedTypeResolver(node);
+      if (!shouldReportType(node, visitorKeys, resolver)) return;
       const environment = createTypeEnvironment(node, visitorKeys);
-      const unsafe = classifyUnsafeDictionary(node, environment);
+      const unsafe = classifyUnsafeDictionary(node, environment, resolver);
       if (unsafe === null) return;
       report(node, unsafe.unsafeValue);
     };
@@ -128,7 +148,11 @@ export const noUnsafeDictionaryTypeRule = defineRule({
       TSInterfaceDeclaration(node) {
         const environment = createTypeEnvironment(node, context.sourceCode.visitorKeys);
         for (const heritage of node.extends) {
-          const unsafe = classifyUnsafeInterfaceHeritage(heritage, environment);
+          const unsafe = classifyUnsafeInterfaceHeritage(
+            heritage,
+            environment,
+            importedTypeResolver(heritage),
+          );
           if (unsafe !== null) report(heritage, unsafe.unsafeValue);
         }
       },
@@ -141,6 +165,7 @@ export const noUnsafeDictionaryTypeRule = defineRule({
         const unsafe = classifyUnsafeDictionaryValue(
           node.typeAnnotation.typeAnnotation,
           environment,
+          importedTypeResolver(node),
         );
         if (unsafe !== null) report(node, unsafe.unsafeValue);
       },

@@ -1,10 +1,14 @@
 import { RuleTester } from "oxlint/plugins-dev";
+import { fileURLToPath } from "node:url";
 
 import { noUnsafeDictionaryTypeRule } from "./no-unsafe-dictionary-type.ts";
 
 const tester = new RuleTester({ languageOptions: { parserOptions: { lang: "ts" } } });
 
 const error = { messageId: "unsafeDictionary" };
+const importedTypeFixtureFilename = fileURLToPath(
+  new URL("./__fixtures__/no-known-value-widening-input.ts", import.meta.url),
+);
 
 tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
   valid: [
@@ -79,6 +83,10 @@ tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
       errors: [error],
     },
     {
+      code: "type Escape = {}; namespace Owner { type A = Record<string, Escape>; }",
+      errors: [error],
+    },
+    {
       code: "type Index<T> = Record<string, T>; function owner() { type Escape = {}; type A = Index<Escape>; }",
       errors: [error],
     },
@@ -104,6 +112,11 @@ tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
     },
     {
       code: "interface Escape extends Record<string, any> {}",
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: "import type { BroadObject } from './no-known-value-widening-types'; type Unsafe = Record<string, BroadObject>;",
       errors: [error],
     },
   ],

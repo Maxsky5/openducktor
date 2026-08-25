@@ -16,6 +16,7 @@ export interface UnknownPayload {
 }
 export interface InheritedUnknownPayload extends UnknownPayload {}
 export type UnknownArray = ReadonlyArray<unknown>;
+export type AnyAlias = any;
 export type PickedUnknownPayload = Pick<UnknownPayload, "input">;
 export type BroadObject = object;
 export interface KnownOwner {

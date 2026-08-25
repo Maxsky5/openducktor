@@ -4,17 +4,17 @@ import { parseSync } from "oxc-parser";
 import ts from "typescript";
 
 import {
-  createWideningModuleEnvironment,
-  type ResolvedWideningType,
-  type WideningTypeArgument,
-  type WideningTypeEnvironment,
-  type WideningTypeResolver,
-} from "./widening-target.ts";
+  createPortableModuleTypeEnvironment,
+  type ResolvedPortableType,
+  type PortableTypeArgument,
+  type PortableTypeEnvironment,
+  type PortableTypeResolver,
+} from "./portable-type-resolution.ts";
 
 import type { PortableModuleItem, PortableNode } from "./portable-ast.ts";
 
 type ParsedModule = {
-  readonly environment: WideningTypeEnvironment;
+  readonly environment: PortableTypeEnvironment;
   readonly statements: readonly PortableModuleItem[];
 };
 
@@ -74,7 +74,7 @@ function parsedModule(filename: string): ParsedModule {
   }
   const statements = result.program.body;
   const parsed = {
-    environment: createWideningModuleEnvironment(statements),
+    environment: createPortableModuleTypeEnvironment(statements),
     statements,
   };
   moduleCache.set(filename, parsed);
@@ -144,7 +144,7 @@ function importedTypeResolver(
   containingFile: string,
   module: ParsedModule,
   resolving: ReadonlySet<string>,
-): WideningTypeResolver {
+): PortableTypeResolver {
   return (typeNameParts, arguments_) => {
     const imported = importedReference(module, typeNameParts);
     return imported === null
@@ -163,10 +163,10 @@ function localTypeDefinition(
   filename: string,
   module: ParsedModule,
   localName: string,
-  arguments_: readonly WideningTypeArgument[],
+  arguments_: readonly PortableTypeArgument[],
   resolving: ReadonlySet<string>,
   key: string,
-): ResolvedWideningType | null {
+): ResolvedPortableType | null {
   const resolveImportedType = importedTypeResolver(filename, module, new Set());
   const alias = module.environment.aliases.get(localName);
   if (alias !== undefined) {
@@ -216,17 +216,17 @@ function namespaceModule(module: ParsedModule, namespaceName: string): ParsedMod
   });
   return statements.length === 0
     ? null
-    : { environment: createWideningModuleEnvironment(statements), statements };
+    : { environment: createPortableModuleTypeEnvironment(statements), statements };
 }
 
 function localPathDefinition(
   filename: string,
   module: ParsedModule,
   exportPath: readonly string[],
-  arguments_: readonly WideningTypeArgument[],
+  arguments_: readonly PortableTypeArgument[],
   resolving: ReadonlySet<string>,
   key: string,
-): ResolvedWideningType | null {
+): ResolvedPortableType | null {
   const [localName, ...rest] = exportPath;
   if (localName === undefined) return null;
   const imported = importedReference(module, exportPath);
@@ -252,10 +252,10 @@ function exportedPathDefinition(
   filename: string,
   module: ParsedModule,
   exportPath: readonly string[],
-  arguments_: readonly WideningTypeArgument[],
+  arguments_: readonly PortableTypeArgument[],
   resolving: ReadonlySet<string>,
   key: string,
-): ResolvedWideningType | null {
+): ResolvedPortableType | null {
   const [exportedName, ...rest] = exportPath;
   if (exportedName === undefined) return null;
 
@@ -328,9 +328,9 @@ function importedTypeDefinition(
   containingFile: string,
   moduleSpecifier: string,
   exportPath: readonly string[],
-  arguments_: readonly WideningTypeArgument[],
+  arguments_: readonly PortableTypeArgument[],
   resolving: ReadonlySet<string>,
-): ResolvedWideningType | null {
+): ResolvedPortableType | null {
   const filename = resolveModule(containingFile, moduleSpecifier);
   if (filename === null) return null;
   const key = `${filename}\0${exportPath.join("\0")}`;
@@ -341,13 +341,13 @@ function importedTypeDefinition(
   return exportedPathDefinition(filename, module, exportPath, arguments_, nextResolving, key);
 }
 
-/** Build import resolution for the canonical widening classifier at one program boundary. */
-export function createImportedWideningTypeResolver(
+/** Build import resolution for portable type queries at one program boundary. */
+export function createImportedTypeResolver(
   containingFile: string,
   statements: readonly PortableModuleItem[],
-): WideningTypeResolver {
+): PortableTypeResolver {
   const module = {
-    environment: createWideningModuleEnvironment(statements),
+    environment: createPortableModuleTypeEnvironment(statements),
     statements,
   };
   return importedTypeResolver(containingFile, module, new Set());

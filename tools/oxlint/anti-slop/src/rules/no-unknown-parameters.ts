@@ -6,7 +6,7 @@ import {
   typeResolvesToAny,
   typeResolvesToUnknown,
 } from "../shared/dictionary-types.ts";
-import { createImportedWideningTypeResolver } from "../shared/imported-widening-target.ts";
+import { createImportedTypeResolver } from "../shared/imported-type-resolution.ts";
 import { unwrapTransparentExpression } from "../shared/transparent-expression.ts";
 import { resolveVariable } from "../shared/global-reference.ts";
 import { isStableBinding } from "../shared/stable-binding.ts";
@@ -14,7 +14,7 @@ import {
   typePropertyPathResolvesToUnknown,
   type TypePropertyPathSegment,
 } from "../shared/type-property-path.ts";
-import type { WideningTypeResolver } from "../shared/portable-type-resolution.ts";
+import type { PortableTypeResolver } from "../shared/portable-type-resolution.ts";
 
 type RuntimeFunction = ESTree.ArrowFunctionExpression | ESTree.Function;
 type StableAlias =
@@ -319,12 +319,14 @@ function statementReturnsParameter(
 function hasKnownOutputContract(
   functionNode: RuntimeFunction,
   visitorKeys: Readonly<Record<string, readonly string[]>>,
+  resolveImportedType: PortableTypeResolver,
 ): boolean {
   const returnType = functionNode.returnType?.typeAnnotation;
   if (returnType === undefined) return false;
   const environment = createTypeEnvironment(returnType, visitorKeys);
   return (
-    !typeResolvesToAny(returnType, environment) && !typeResolvesToUnknown(returnType, environment)
+    !typeResolvesToAny(returnType, environment, resolveImportedType) &&
+    !typeResolvesToUnknown(returnType, environment, resolveImportedType)
   );
 }
 
@@ -343,13 +345,13 @@ export const noUnknownParametersRule = defineRule({
   },
   createOnce(context) {
     const reportedParameters = new WeakSet<ESTree.TSTypeAnnotation>();
-    let resolveImportedType: WideningTypeResolver | null = null;
+    let resolveImportedType: PortableTypeResolver | null = null;
 
-    const importedTypeResolver = (node: ESTree.Node): WideningTypeResolver => {
+    const importedTypeResolver = (node: ESTree.Node): PortableTypeResolver => {
       if (resolveImportedType !== null) return resolveImportedType;
       let root = node;
       while (root.parent !== null) root = root.parent;
-      resolveImportedType = createImportedWideningTypeResolver(
+      resolveImportedType = createImportedTypeResolver(
         context.filename,
         root.type === "Program" ? root.body : [],
       );
@@ -406,7 +408,7 @@ export const noUnknownParametersRule = defineRule({
       ArrowFunctionExpression(node) {
         if (
           node.body.type === "BlockStatement" ||
-          hasKnownOutputContract(node, context.sourceCode.visitorKeys)
+          hasKnownOutputContract(node, context.sourceCode.visitorKeys, importedTypeResolver(node))
         ) {
           return;
         }
@@ -427,7 +429,11 @@ export const noUnknownParametersRule = defineRule({
         const functionNode = enclosingRuntimeFunction(node);
         if (
           functionNode === null ||
-          hasKnownOutputContract(functionNode, context.sourceCode.visitorKeys)
+          hasKnownOutputContract(
+            functionNode,
+            context.sourceCode.visitorKeys,
+            importedTypeResolver(functionNode),
+          )
         ) {
           return;
         }

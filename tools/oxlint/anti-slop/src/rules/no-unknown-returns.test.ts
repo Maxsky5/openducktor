@@ -1,9 +1,13 @@
 import { RuleTester } from "oxlint/plugins-dev";
+import { fileURLToPath } from "node:url";
 
 import { noUnknownReturnsRule } from "./no-unknown-returns.ts";
 
 const tester = new RuleTester({ languageOptions: { parserOptions: { lang: "ts" } } });
 const error = { messageId: "unknownReturn" };
+const importedTypeFixtureFilename = fileURLToPath(
+  new URL("./__fixtures__/no-known-value-widening-input.ts", import.meta.url),
+);
 
 tester.run("anti-slop/no-unknown-returns", noUnknownReturnsRule, {
   valid: [
@@ -63,6 +67,16 @@ tester.run("anti-slop/no-unknown-returns", noUnknownReturnsRule, {
     },
     {
       code: "type Item = unknown; type Fallback<Input> = Input extends infer Item ? string : () => Item;",
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: "import type { UnknownArray } from './no-known-value-widening-types'; function unsafe(): UnknownArray[number] { return input; }",
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: "import type { UnknownArray } from './no-known-value-widening-types'; function unsafe(): Promise<UnknownArray[number]> { return input; }",
       errors: [error],
     },
   ],

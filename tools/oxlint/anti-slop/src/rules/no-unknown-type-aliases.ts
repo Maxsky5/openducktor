@@ -1,6 +1,9 @@
 import { defineRule } from "@oxlint/plugins";
+import type { ESTree } from "@oxlint/plugins";
 
 import { createTypeEnvironment, typeResolvesToUnknown } from "../shared/dictionary-types.ts";
+import { createImportedTypeResolver } from "../shared/imported-type-resolution.ts";
+import type { PortableTypeResolver } from "../shared/portable-type-resolution.ts";
 
 /** Ban named aliases that merely conceal TypeScript's unknown top type. */
 export const noUnknownTypeAliasesRule = defineRule({
@@ -16,6 +19,18 @@ export const noUnknownTypeAliasesRule = defineRule({
     },
   },
   createOnce(context) {
+    let resolveImportedType: PortableTypeResolver | null = null;
+    const importedTypeResolver = (node: ESTree.Node): PortableTypeResolver => {
+      if (resolveImportedType !== null) return resolveImportedType;
+      let root = node;
+      while (root.parent !== null) root = root.parent;
+      resolveImportedType = createImportedTypeResolver(
+        context.filename,
+        root.type === "Program" ? root.body : [],
+      );
+      return resolveImportedType;
+    };
+
     return {
       TSTypeAliasDeclaration(alias) {
         const environment = createTypeEnvironment(
@@ -23,12 +38,7 @@ export const noUnknownTypeAliasesRule = defineRule({
           context.sourceCode.visitorKeys,
         );
         if (
-          !typeResolvesToUnknown(
-            alias.typeAnnotation,
-            environment,
-            new Map(),
-            new Set([alias.id.name]),
-          )
+          !typeResolvesToUnknown(alias.typeAnnotation, environment, importedTypeResolver(alias))
         ) {
           return;
         }

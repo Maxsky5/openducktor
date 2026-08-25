@@ -12,19 +12,19 @@ import {
   typeParameterSubstitution,
   typeReferenceName,
   unwrapTransparentType,
-  type ResolvedWideningType,
+  type ResolvedPortableType,
   type TypeSubstitutions,
-  type WideningTypeArgument,
-  type WideningTypeEnvironment,
-  type WideningTypeResolver,
+  type PortableTypeArgument,
+  type PortableTypeEnvironment,
+  type PortableTypeResolver,
 } from "./portable-type-resolution.ts";
 
 export {
-  createWideningModuleEnvironment,
-  type ResolvedWideningType,
-  type WideningTypeArgument,
-  type WideningTypeEnvironment,
-  type WideningTypeResolver,
+  createPortableModuleTypeEnvironment,
+  type ResolvedPortableType,
+  type PortableTypeArgument,
+  type PortableTypeEnvironment,
+  type PortableTypeResolver,
 } from "./portable-type-resolution.ts";
 
 export type WideningTargetKind = "anonymous object" | "object" | "open dictionary" | "unknown";
@@ -37,9 +37,9 @@ type WideningClassificationMode = "annotation" | "alias";
 
 function interfaceWideningTarget(
   declarations: readonly PortableTSInterfaceDeclaration[],
-  environment: WideningTypeEnvironment,
-  arguments_: readonly WideningTypeArgument[] = [],
-  resolveImportedType?: WideningTypeResolver,
+  environment: PortableTypeEnvironment,
+  arguments_: readonly PortableTypeArgument[] = [],
+  resolveImportedType?: PortableTypeResolver,
   resolving: ReadonlySet<string> = new Set(),
 ): WideningTarget | null {
   for (const interface_ of declarations) {
@@ -100,7 +100,7 @@ function interfaceWideningTarget(
 }
 
 function classifyResolvedWideningType(
-  resolved: ResolvedWideningType,
+  resolved: ResolvedPortableType,
   resolvingAliases: ReadonlySet<string>,
 ): WideningTarget | null {
   const nextResolving = enterTypeResolution(resolvingAliases, resolved.key, "widening");
@@ -135,8 +135,8 @@ function classifyResolvedWideningType(
 /** Classify a target type that discards known structural evidence. */
 export function classifyWideningTarget(
   type: PortableTSType,
-  environment: WideningTypeEnvironment,
-  resolveImportedType?: WideningTypeResolver,
+  environment: PortableTypeEnvironment,
+  resolveImportedType?: PortableTypeResolver,
 ): WideningTarget | null {
   return classifyWideningTargetWithState(
     type,
@@ -151,9 +151,9 @@ export function classifyWideningTarget(
 /** Classify a named interface through its declarations and heritage. */
 export function classifyNamedInterfaceWideningTarget(
   name: string,
-  environment: WideningTypeEnvironment,
-  arguments_: readonly WideningTypeArgument[] = [],
-  resolveImportedType?: WideningTypeResolver,
+  environment: PortableTypeEnvironment,
+  arguments_: readonly PortableTypeArgument[] = [],
+  resolveImportedType?: PortableTypeResolver,
 ): WideningTarget | null {
   const declarations = environment.interfaces.get(name);
   return declarations === undefined
@@ -175,9 +175,9 @@ export function classifyNamedInterfaceWideningTarget(
 /** Classify a named alias without treating a closed object alias as anonymous. */
 export function classifyNamedAliasWideningTarget(
   name: string,
-  environment: WideningTypeEnvironment,
-  arguments_: readonly WideningTypeArgument[] = [],
-  resolveImportedType?: WideningTypeResolver,
+  environment: PortableTypeEnvironment,
+  arguments_: readonly PortableTypeArgument[] = [],
+  resolveImportedType?: PortableTypeResolver,
 ): WideningTarget | null {
   const alias = environment.aliases.get(name);
   if (alias === undefined) return null;
@@ -196,11 +196,11 @@ export function classifyNamedAliasWideningTarget(
 
 function classifyWideningTargetWithState(
   type: PortableTSType,
-  environment: WideningTypeEnvironment,
+  environment: PortableTypeEnvironment,
   substitutions: TypeSubstitutions,
   resolvingAliases: ReadonlySet<string>,
   mode: WideningClassificationMode,
-  resolveImportedType?: WideningTypeResolver,
+  resolveImportedType?: PortableTypeResolver,
 ): WideningTarget | null {
   const unwrapped = unwrapTransparentType(type);
   if (unwrapped.type === "TSUnknownKeyword") return { kind: "unknown" };

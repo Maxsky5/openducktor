@@ -34,6 +34,8 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     "interface Base { input: string } interface Payload extends Base {} function safe({ input }: Payload) { return input; }",
     "function safe({ input }: { input: unknown } & { input: string }) { return input; }",
     "type First = Second; type Second = First; function safe({ input }: First) { return input; }",
+    "type Omit<T, K> = { input: string }; function safe({ input }: Omit<{ input: unknown }, 'other'>) { return input; }",
+    "type Box<T> = { [T in 'input']: T }; function safe({ input }: Box<unknown>) { return input; }",
   ],
   invalid: [
     { code: "function load(input: unknown) { return input; }", errors: [error] },
@@ -164,6 +166,10 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
       errors: [error],
     },
     {
+      code: "interface Payload extends Pick<{ input: unknown; other: string }, 'input'> {} function unsafe({ input }: Payload) { return input; }",
+      errors: [error],
+    },
+    {
       code: "function unsafe({ input }: Record<string, unknown>) { return input; }",
       errors: [error],
     },
@@ -173,6 +179,10 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     },
     {
       code: "function unsafe({ input }: Pick<{ input: unknown; other: string }, 'input'>) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "function unsafe({ input }: Omit<{ input: unknown; other: string }, 'other'>) { return input; }",
       errors: [error],
     },
     {
@@ -196,6 +206,10 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
       errors: [error],
     },
     {
+      code: "type Outer = { input: unknown }; namespace Types { export type Payload = Outer; } function unsafe({ input }: Types.Payload) { return input; }",
+      errors: [error],
+    },
+    {
       filename: importedTypeFixtureFilename,
       code: "import type { InheritedUnknownPayload } from './no-known-value-widening-types'; function unsafe({ input }: InheritedUnknownPayload) { return input; }",
       errors: [error],
@@ -211,7 +225,17 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
       errors: [error],
     },
     {
+      filename: importedTypeFixtureFilename,
+      code: "import type { UnknownArray } from './no-known-value-widening-types'; function unsafe(input: unknown): UnknownArray[number] { return input; }",
+      errors: [error],
+    },
+    {
       code: "type UnsafeOutput = any; function unsafe(input: unknown): UnsafeOutput { return input; }",
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: "import type { AnyAlias } from './no-known-value-widening-types'; function unsafe(input: unknown): AnyAlias { return input; }",
       errors: [error],
     },
   ],

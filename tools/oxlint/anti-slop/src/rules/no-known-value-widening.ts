@@ -7,7 +7,7 @@ import {
   type WideningTarget,
 } from "../shared/dictionary-types.ts";
 import { resolveVariable, singleVariableDeclarator } from "../shared/global-reference.ts";
-import { createImportedWideningTypeResolver } from "../shared/imported-widening-target.ts";
+import { createImportedTypeResolver } from "../shared/imported-type-resolution.ts";
 import { unwrapTransparentExpression } from "../shared/transparent-expression.ts";
 import { isStableBinding } from "../shared/stable-binding.ts";
 
@@ -59,7 +59,7 @@ function typeTarget(
   let root: ESTree.Node = type;
   while (root.parent !== null) root = root.parent;
   const resolveImportedType =
-    root.type === "Program" ? createImportedWideningTypeResolver(filename, root.body) : undefined;
+    root.type === "Program" ? createImportedTypeResolver(filename, root.body) : undefined;
   return classifyWideningTarget(type, environment, resolveImportedType);
 }
 

@@ -17,11 +17,12 @@ import {
   typeParameterSubstitution,
   typeReferenceName,
   unwrapTransparentType,
-  type ResolvedWideningType,
+  withoutVisibleTypeName,
+  type ResolvedPortableType,
   type TypeSubstitutions,
-  type WideningTypeArgument,
-  type WideningTypeEnvironment,
-  type WideningTypeResolver,
+  type PortableTypeArgument,
+  type PortableTypeEnvironment,
+  type PortableTypeResolver,
 } from "./portable-type-resolution.ts";
 
 export type TypePropertyPathSegment = number | string;
@@ -84,10 +85,10 @@ function literalKeyMatches(type: PortableTSType, segment: TypePropertyPathSegmen
 function propertyKeyMatches(
   type: PortableTSType,
   segment: TypePropertyPathSegment,
-  environment: WideningTypeEnvironment,
+  environment: PortableTypeEnvironment,
   substitutions: TypeSubstitutions,
   resolving: ReadonlySet<string>,
-  resolveImportedType?: WideningTypeResolver,
+  resolveImportedType?: PortableTypeResolver,
 ): boolean {
   return (
     isBroadPropertyKey(type, environment, substitutions, resolveImportedType, resolving) ||
@@ -98,10 +99,10 @@ function propertyKeyMatches(
 function typeMembersPathResolution(
   members: readonly PortableNode[],
   path: readonly TypePropertyPathSegment[],
-  environment: WideningTypeEnvironment,
+  environment: PortableTypeEnvironment,
   substitutions: TypeSubstitutions,
   resolving: ReadonlySet<string>,
-  resolveImportedType?: WideningTypeResolver,
+  resolveImportedType?: PortableTypeResolver,
 ): TypePathResolution {
   const [segment, ...rest] = path;
   if (segment === undefined) return "known";
@@ -156,7 +157,7 @@ function typeMembersPathResolution(
 }
 
 function resolvedTypePathResolution(
-  resolved: ResolvedWideningType,
+  resolved: ResolvedPortableType,
   path: readonly TypePropertyPathSegment[],
   resolving: ReadonlySet<string>,
   baseSubstitutions: TypeSubstitutions,
@@ -193,10 +194,10 @@ function resolvedTypePathResolution(
 
 function interfaceTypePathResolution(
   declarations: readonly PortableTSInterfaceDeclaration[],
-  environment: WideningTypeEnvironment,
-  arguments_: readonly WideningTypeArgument[],
+  environment: PortableTypeEnvironment,
+  arguments_: readonly PortableTypeArgument[],
   path: readonly TypePropertyPathSegment[],
-  resolveImportedType: WideningTypeResolver | undefined,
+  resolveImportedType: PortableTypeResolver | undefined,
   resolving: ReadonlySet<string>,
 ): TypePathResolution {
   const results: TypePathResolution[] = [];
@@ -220,33 +221,20 @@ function interfaceTypePathResolution(
     for (const heritage of declaration.extends) {
       const heritageParts = expressionTypeNameParts(heritage.expression);
       const heritageName = heritageParts.length === 1 ? heritageParts[0] : undefined;
-      if (heritageName === "Record" && isBuiltInType(heritageName, environment)) {
-        const [keyType, valueType] = heritage.typeArguments?.params ?? [];
-        const [segment, ...rest] = path;
-        if (
-          segment !== undefined &&
-          keyType !== undefined &&
-          valueType !== undefined &&
-          propertyKeyMatches(
-            keyType,
-            segment,
-            environment,
-            substitutions,
-            resolving,
-            resolveImportedType,
-          )
-        ) {
-          results.push(
-            typePathResolution(
-              valueType,
-              rest,
+      const builtIn =
+        heritageName === undefined
+          ? null
+          : builtInTypeArgumentsPathResolution(
+              heritageName,
+              heritage.typeArguments?.params ?? [],
+              path,
               environment,
               substitutions,
               resolving,
               resolveImportedType,
-            ),
-          );
-        }
+            );
+      if (builtIn !== null) {
+        results.push(builtIn);
         continue;
       }
       for (const resolved of resolveInterfaceHeritage(
@@ -265,14 +253,35 @@ function interfaceTypePathResolution(
 function builtInReferencePathResolution(
   type: Extract<PortableTSType, { type: "TSTypeReference" }>,
   path: readonly TypePropertyPathSegment[],
-  environment: WideningTypeEnvironment,
+  environment: PortableTypeEnvironment,
   substitutions: TypeSubstitutions,
   resolving: ReadonlySet<string>,
-  resolveImportedType?: WideningTypeResolver,
+  resolveImportedType?: PortableTypeResolver,
 ): TypePathResolution | null {
   const name = typeReferenceName(type);
-  if (name === null || !isBuiltInType(name, environment)) return null;
-  const arguments_ = type.typeArguments?.params ?? [];
+  return name === null
+    ? null
+    : builtInTypeArgumentsPathResolution(
+        name,
+        type.typeArguments?.params ?? [],
+        path,
+        environment,
+        substitutions,
+        resolving,
+        resolveImportedType,
+      );
+}
+
+function builtInTypeArgumentsPathResolution(
+  name: string,
+  arguments_: readonly PortableTSType[],
+  path: readonly TypePropertyPathSegment[],
+  environment: PortableTypeEnvironment,
+  substitutions: TypeSubstitutions,
+  resolving: ReadonlySet<string>,
+  resolveImportedType?: PortableTypeResolver,
+): TypePathResolution | null {
+  if (!isBuiltInType(name, environment)) return null;
   if (TRANSPARENT_TYPE_WRAPPERS.has(name)) {
     const wrapped = arguments_[0];
     return wrapped === undefined
@@ -323,19 +332,20 @@ function builtInReferencePathResolution(
           resolveImportedType,
         );
   }
-  if (name === "Pick") {
+  if (name === "Pick" || name === "Omit") {
     const [sourceType, selectedKeys] = arguments_;
-    return segment === undefined ||
-      sourceType === undefined ||
-      selectedKeys === undefined ||
-      !propertyKeyMatches(
-        selectedKeys,
-        segment,
-        environment,
-        substitutions,
-        resolving,
-        resolveImportedType,
-      )
+    if (segment === undefined || sourceType === undefined || selectedKeys === undefined) {
+      return "absent";
+    }
+    const keyMatches = propertyKeyMatches(
+      selectedKeys,
+      segment,
+      environment,
+      substitutions,
+      resolving,
+      resolveImportedType,
+    );
+    return (name === "Pick" && !keyMatches) || (name === "Omit" && keyMatches)
       ? "absent"
       : typePathResolution(
           sourceType,
@@ -352,10 +362,10 @@ function builtInReferencePathResolution(
 function typePathResolution(
   type: PortableTSType,
   path: readonly TypePropertyPathSegment[],
-  environment: WideningTypeEnvironment,
+  environment: PortableTypeEnvironment,
   substitutions: TypeSubstitutions,
   resolving: ReadonlySet<string>,
-  resolveImportedType?: WideningTypeResolver,
+  resolveImportedType?: PortableTypeResolver,
 ): TypePathResolution {
   const unwrapped = unwrapTransparentType(type);
   if (unwrapped.type === "TSUnionType") {
@@ -445,11 +455,13 @@ function typePathResolution(
     ) {
       return "absent";
     }
+    const valueSubstitutions = new Map(substitutions);
+    valueSubstitutions.delete(unwrapped.key.name);
     return typePathResolution(
       unwrapped.typeAnnotation,
       rest,
-      environment,
-      substitutions,
+      withoutVisibleTypeName(environment, unwrapped.key.name),
+      valueSubstitutions,
       resolving,
       resolveImportedType,
     );
@@ -484,8 +496,8 @@ function typePathResolution(
 export function typePropertyPathResolvesToUnknown(
   type: PortableTSType,
   path: readonly TypePropertyPathSegment[],
-  environment: WideningTypeEnvironment,
-  resolveImportedType?: WideningTypeResolver,
+  environment: PortableTypeEnvironment,
+  resolveImportedType?: PortableTypeResolver,
 ): boolean {
   return (
     typePathResolution(type, path, environment, new Map(), new Set(), resolveImportedType) ===

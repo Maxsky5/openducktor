@@ -13,6 +13,7 @@ export type PortableAst<Value> = Value extends readonly (infer Item)[]
 
 export type PortableModuleItem = PortableAst<ESTree.Program["body"][number]>;
 export type PortableNode = PortableAst<ESTree.Node>;
+export type PortableClass = PortableAst<ESTree.Class>;
 export type PortableTSInterfaceDeclaration = PortableAst<ESTree.TSInterfaceDeclaration>;
 export type PortableTSModuleDeclaration = PortableAst<ESTree.TSModuleDeclaration>;
 export type PortableTSType = PortableAst<ESTree.TSType>;

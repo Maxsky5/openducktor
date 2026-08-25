@@ -57,6 +57,10 @@ tester.run("anti-slop/no-object-parameters", noObjectParametersRule, {
       errors: [error],
     },
     {
+      code: "type Outer = object; namespace Owner { export type Payload = Outer; } function read(value: Owner.Payload): void {}",
+      errors: [error],
+    },
+    {
       code: "type Item = object; type Fallback<Input> = Input extends infer Item ? string : (value: Item) => void;",
       errors: [error],
     },

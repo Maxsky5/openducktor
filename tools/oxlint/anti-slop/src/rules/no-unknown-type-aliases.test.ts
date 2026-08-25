@@ -1,9 +1,13 @@
 import { RuleTester } from "oxlint/plugins-dev";
+import { fileURLToPath } from "node:url";
 
 import { noUnknownTypeAliasesRule } from "./no-unknown-type-aliases.ts";
 
 const tester = new RuleTester({ languageOptions: { parserOptions: { lang: "ts" } } });
 const error = { messageId: "unknownAlias" };
+const importedTypeFixtureFilename = fileURLToPath(
+  new URL("./__fixtures__/no-known-value-widening-input.ts", import.meta.url),
+);
 
 tester.run("anti-slop/no-unknown-type-aliases", noUnknownTypeAliasesRule, {
   valid: [
@@ -17,5 +21,10 @@ tester.run("anti-slop/no-unknown-type-aliases", noUnknownTypeAliasesRule, {
     { code: "type UnknownValue = unknown; type Alias = UnknownValue;", errors: [error, error] },
     { code: "function owner() { type Payload = unknown; }", errors: [error] },
     { code: "namespace Owner { export type Payload = unknown; }", errors: [error] },
+    {
+      filename: importedTypeFixtureFilename,
+      code: "import type { UnknownArray } from './no-known-value-widening-types'; type Hidden = UnknownArray[number];",
+      errors: [error],
+    },
   ],
 });
