@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isJsonObject } from "./json-types";
+import { isJsonObject, jsonObjectSchema } from "./json-types";
 
 describe("JSON type guards", () => {
   test("accepts records and rejects every other JSON value", () => {
@@ -8,5 +8,15 @@ describe("JSON type guards", () => {
     expect(isJsonObject(null)).toBe(false);
     expect(isJsonObject("value")).toBe(false);
     expect(isJsonObject(undefined)).toBe(false);
+  });
+
+  test("parses only JSON objects", () => {
+    expect(jsonObjectSchema.parse({ answer: 42, nested: [true, null] })).toEqual({
+      answer: 42,
+      nested: [true, null],
+    });
+    expect(jsonObjectSchema.safeParse([]).success).toBe(false);
+    expect(jsonObjectSchema.safeParse(new Date()).success).toBe(false);
+    expect(jsonObjectSchema.safeParse({ value: undefined }).success).toBe(false);
   });
 });

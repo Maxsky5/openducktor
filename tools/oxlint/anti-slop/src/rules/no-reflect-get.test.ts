@@ -25,6 +25,11 @@ tester.run("anti-slop/no-reflect-get", noReflectGetRule, {
     { name: "globalThis access", code: "globalThis.Reflect.get(owner, key);", errors: [error] },
     { name: "stable alias", code: "const get = Reflect.get; get(owner, key);", errors: [error] },
     {
+      name: "stable receiver alias",
+      code: "const RuntimeReflect = Reflect; RuntimeReflect.get(owner, key);",
+      errors: [error],
+    },
+    {
       name: "destructured alias",
       code: "const { get: read } = Reflect; read(owner, key);",
       errors: [error],

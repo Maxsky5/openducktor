@@ -12,7 +12,7 @@ import {
   agentSessionScopeSchema,
 } from "./agent-session-schemas";
 import { slashCommandCatalogSchema } from "./slash-command-schemas";
-import { jsonValueSchema } from "./json-types";
+import { jsonObjectSchema } from "./json-types";
 import { fileDiffSchema } from "./git-schemas";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
@@ -69,7 +69,7 @@ export const agentSessionLivePendingApprovalRequestSchema = z
       .object({
         name: z.string(),
         title: z.string().optional(),
-        input: z.record(z.string(), jsonValueSchema).optional(),
+        input: jsonObjectSchema.optional(),
       })
       .strict()
       .optional(),

@@ -1,9 +1,13 @@
 import { RuleTester } from "oxlint/plugins-dev";
+import { fileURLToPath } from "node:url";
 
 import { noObjectParametersRule } from "./no-object-parameters.ts";
 
 const tester = new RuleTester({ languageOptions: { parserOptions: { lang: "ts" } } });
 const error = { messageId: "objectParameter" };
+const importedTypeFixtureFilename = fileURLToPath(
+  new URL("./__fixtures__/no-object-parameter-input.ts", import.meta.url),
+);
 
 tester.run("anti-slop/no-object-parameters", noObjectParametersRule, {
   valid: [
@@ -21,6 +25,18 @@ tester.run("anti-slop/no-object-parameters", noObjectParametersRule, {
     "type Item = object; type Unpacked<Input> = Input extends Promise<infer Item> ? (value: Item) => void : never;",
     "type Value = object; function outer() { type Value = { id: string }; function read(value: Value): void {} }",
     "namespace Owner { type Value = { id: string }; export function read(value: Value): void {} }",
+    {
+      filename: importedTypeFixtureFilename,
+      code: "import type { KnownOwner } from './no-known-value-widening-types'; function f(value: KnownOwner) {}",
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: "import type * as Types from './no-known-value-widening-types'; function f(value: Types.OwnerTypes.KnownOwner) {}",
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: "import type { BroadObject as Value } from './no-known-value-widening-types'; function f<Value>(value: Value) {}",
+    },
   ],
   invalid: [
     { code: "function f(value: object) {}", errors: [error] },
@@ -42,6 +58,21 @@ tester.run("anti-slop/no-object-parameters", noObjectParametersRule, {
     },
     {
       code: "type Item = object; type Fallback<Input> = Input extends infer Item ? string : (value: Item) => void;",
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: "import type { BroadObject } from './no-known-value-widening-types'; function f(value: BroadObject) {}",
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: "import type { BroadObject } from './no-object-parameter-reexports'; function f(value: BroadObject) {}",
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: "import type * as Types from './no-known-value-widening-types'; function f(value: Types.OwnerTypes.BroadObject) {}",
       errors: [error],
     },
   ],

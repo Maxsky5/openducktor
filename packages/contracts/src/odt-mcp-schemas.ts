@@ -23,7 +23,7 @@ import {
   taskPrioritySchema,
   taskStatusSchema,
 } from "./task-schemas";
-import { jsonValueSchema } from "./json-types";
+import { jsonObjectSchema } from "./json-types";
 
 export const ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES = 20 * 1024 * 1024;
 
@@ -52,7 +52,7 @@ export const odtToolErrorSchema = z
   .object({
     code: odtToolErrorCodeSchema,
     message: z.string(),
-    details: z.record(z.string(), jsonValueSchema).optional(),
+    details: jsonObjectSchema.optional(),
     issues: z.array(odtToolErrorIssueSchema).optional(),
   })
   .strict();

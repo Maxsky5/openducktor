@@ -2,7 +2,15 @@ import { defineRule } from "@oxlint/plugins";
 
 import type { ESTree, SourceCode } from "@oxlint/plugins";
 
-import { createTypeEnvironment, typeResolvesToObject } from "../shared/dictionary-types.ts";
+import {
+  classifyWideningTarget,
+  createTypeEnvironment,
+  typeResolvesToObject,
+  type TypeEnvironment,
+} from "../shared/dictionary-types.ts";
+import { createImportedWideningTypeResolver } from "../shared/imported-widening-target.ts";
+import { lexicalTypeParameterNames } from "../shared/lexical-type-parameters.ts";
+import type { WideningTypeResolver } from "../shared/portable-type-resolution.ts";
 
 type Parameter = ESTree.ParamPattern;
 type ParameterOwner =
@@ -33,6 +41,21 @@ function parameterName(parameter: Parameter, sourceCode: SourceCode): string {
     : sourceCode.getText(parameter).replace(/\s*:\s*object\s*$/u, "");
 }
 
+function rootTypeName(type: ESTree.TSTypeReference): string | null {
+  let name = type.typeName;
+  while (name.type === "TSQualifiedName") name = name.left;
+  return name.type === "Identifier" ? name.name : null;
+}
+
+function hasVisibleLocalType(name: string, environment: TypeEnvironment): boolean {
+  return (
+    environment.aliases.has(name) ||
+    environment.classes.has(name) ||
+    environment.interfaces.has(name) ||
+    environment.namespaces.has(name)
+  );
+}
+
 /** Ban the broad object type on function inputs, including local aliases to object. */
 export const noObjectParametersRule = defineRule({
   meta: {
@@ -47,6 +70,19 @@ export const noObjectParametersRule = defineRule({
     },
   },
   createOnce(context) {
+    let resolveImportedType: WideningTypeResolver | null = null;
+
+    const importedTypeResolver = (node: ESTree.Node): WideningTypeResolver => {
+      if (resolveImportedType !== null) return resolveImportedType;
+      let root = node;
+      while (root.parent !== null) root = root.parent;
+      resolveImportedType = createImportedWideningTypeResolver(
+        context.filename,
+        root.type === "Program" ? root.body : [],
+      );
+      return resolveImportedType;
+    };
+
     const checkParameters = (node: ParameterOwner) => {
       for (const parameter of node.params) {
         const annotation = parameterAnnotation(parameter);
@@ -55,7 +91,26 @@ export const noObjectParametersRule = defineRule({
           annotation.typeAnnotation,
           context.sourceCode.visitorKeys,
         );
-        if (!typeResolvesToObject(annotation.typeAnnotation, environment)) continue;
+        const resolvesImportedObject = (
+          type: ESTree.TSTypeReference,
+          typeEnvironment: TypeEnvironment,
+        ): boolean => {
+          const name = rootTypeName(type);
+          if (
+            name === null ||
+            hasVisibleLocalType(name, typeEnvironment) ||
+            lexicalTypeParameterNames(type, context.sourceCode.visitorKeys).has(name)
+          ) {
+            return false;
+          }
+          return (
+            classifyWideningTarget(type, typeEnvironment, importedTypeResolver(type))?.kind ===
+            "object"
+          );
+        };
+        if (!typeResolvesToObject(annotation.typeAnnotation, environment, resolvesImportedObject)) {
+          continue;
+        }
         context.report({
           node: annotation.typeAnnotation,
           messageId: "objectParameter",

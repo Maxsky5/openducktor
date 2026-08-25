@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { jsonValueSchema } from "./json-types";
+import { jsonObjectSchema, jsonValueSchema } from "./json-types";
 
 export const codexAppServerReasoningEffortSchema = z.string().min(1);
 
@@ -10,7 +10,6 @@ export type CodexAppServerRequestReasoningEffort = z.output<
 const nullableString = z.string().nullable().optional();
 const nullableBoolean = z.boolean().nullable().optional();
 const nullableNumber = z.number().finite().nullable().optional();
-const jsonObjectSchema = z.record(z.string(), jsonValueSchema);
 const approvalsReviewerSchema = z.enum(["auto_review", "guardian_subagent", "user"]);
 const personalitySchema = z.enum(["friendly", "none", "pragmatic"]);
 const sortDirectionSchema = z.enum(["asc", "desc"]);

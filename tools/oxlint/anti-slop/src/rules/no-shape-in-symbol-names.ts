@@ -34,6 +34,8 @@ function isDeclaredMemberName(node: ESTree.Node): boolean {
     case "TSMethodSignature":
     case "TSPropertySignature":
       return parent.key === node;
+    case "TSEnumMember":
+      return parent.id === node;
     default:
       return false;
   }
@@ -45,6 +47,11 @@ function declaredMemberName(node: ESTree.Node): string | null {
     return "computed" in node.parent && node.parent.computed ? null : node.name;
   }
   return node.type === "Literal" && typeof node.value === "string" ? node.value : null;
+}
+
+function exportedSymbolName(node: ESTree.ExportSpecifier["exported"]): string | null {
+  if (node.type === "Identifier") return node.name;
+  return typeof node.value === "string" ? node.value : null;
 }
 
 /** Ban the case-insensitive substring "shape" in repository-owned symbol declarations. */
@@ -71,6 +78,10 @@ export const noForbiddenTermInSymbolNamesRule = defineRule({
     };
 
     return {
+      ExportSpecifier(node) {
+        const name = exportedSymbolName(node.exported);
+        if (name !== null) reportForbiddenSymbolName(node.exported, name);
+      },
       Identifier(node) {
         if (isDeclaredBinding(context.sourceCode, node)) {
           reportForbiddenSymbolName(node, node.name);

@@ -22,6 +22,11 @@ type ScopedType = {
 
 type TypeAliasEnvironment = ReadonlyMap<string, ScopedType>;
 
+export type ImportedObjectTypeResolver = (
+  type: ESTree.TSTypeReference,
+  environment: TypeEnvironment,
+) => boolean;
+
 type ResolvedType = ScopedType & {
   readonly substitutions: TypeAliasEnvironment;
 };
@@ -56,9 +61,15 @@ function unwrapTransparentType(type: ESTree.TSType): ESTree.TSType {
 export function typeResolvesToObject(
   type: ESTree.TSType,
   environment: TypeEnvironment,
-  resolving: ReadonlySet<string> = new Set(),
+  resolveImportedObject?: ImportedObjectTypeResolver,
 ): boolean {
-  return typeResolvesToObjectWithSubstitutions(type, environment, new Map(), resolving);
+  return typeResolvesToObjectWithSubstitutions(
+    type,
+    environment,
+    new Map(),
+    new Set(),
+    resolveImportedObject,
+  );
 }
 
 function typeResolvesToObjectWithSubstitutions(
@@ -66,12 +77,19 @@ function typeResolvesToObjectWithSubstitutions(
   environment: TypeEnvironment,
   substitutions: TypeAliasEnvironment,
   resolving: ReadonlySet<string>,
+  resolveImportedObject?: ImportedObjectTypeResolver,
 ): boolean {
   const unwrapped = unwrapTransparentType(type);
   if (unwrapped.type === "TSObjectKeyword") return true;
   if (unwrapped.type === "TSUnionType") {
     return unwrapped.types.some((member) =>
-      typeResolvesToObjectWithSubstitutions(member, environment, substitutions, resolving),
+      typeResolvesToObjectWithSubstitutions(
+        member,
+        environment,
+        substitutions,
+        resolving,
+        resolveImportedObject,
+      ),
     );
   }
   if (unwrapped.type !== "TSTypeReference") return false;
@@ -84,7 +102,13 @@ function typeResolvesToObjectWithSubstitutions(
     const wrapped = unwrapped.typeArguments?.params[0];
     return (
       wrapped !== undefined &&
-      typeResolvesToObjectWithSubstitutions(wrapped, environment, substitutions, resolving)
+      typeResolvesToObjectWithSubstitutions(
+        wrapped,
+        environment,
+        substitutions,
+        resolving,
+        resolveImportedObject,
+      )
     );
   }
   const referenceKey = typeNameParts(unwrapped.typeName).join(".");
@@ -97,10 +121,11 @@ function typeResolvesToObjectWithSubstitutions(
         substitution.environment,
         substitutions,
         resolving,
+        resolveImportedObject,
       );
     }
   }
-  return referencedTypeScopes(unwrapped.typeName, environment).some((scope) => {
+  const resolvesLocally = referencedTypeScopes(unwrapped.typeName, environment).some((scope) => {
     const alias = scope.environment.aliases.get(scope.name);
     if (alias === undefined) return false;
     const nextSubstitutions = aliasSubstitution(alias, unwrapped, environment, substitutions);
@@ -112,8 +137,10 @@ function typeResolvesToObjectWithSubstitutions(
       createTypeEnvironment(alias.typeAnnotation, scope.environment.visitorKeys),
       nextSubstitutions,
       nextResolving,
+      resolveImportedObject,
     );
   });
+  return resolvesLocally || resolveImportedObject?.(unwrapped, environment) === true;
 }
 
 function isNeverType(type: ESTree.TSType): boolean {

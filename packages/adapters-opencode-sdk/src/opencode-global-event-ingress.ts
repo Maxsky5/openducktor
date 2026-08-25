@@ -1,5 +1,5 @@
 import type { GlobalEvent } from "@opencode-ai/sdk/v2/client";
-import { jsonValueSchema } from "@openducktor/contracts";
+import { jsonObjectSchema } from "@openducktor/contracts";
 import { z } from "zod";
 import {
   opencodeMessageErrorSchema,
@@ -9,7 +9,6 @@ import {
 } from "./opencode-ingress";
 
 const unknownRecordSchema = z.record(z.string(), z.unknown());
-const jsonRecordSchema = z.record(z.string(), jsonValueSchema);
 
 const eventSchema = <Type extends string, Properties extends z.ZodType>(
   type: Type,
@@ -82,7 +81,7 @@ export const opencodePermissionV2AskedEventSchema = eventSchema(
     action: z.string(),
     resources: z.array(z.string()),
     save: z.array(z.string()).optional(),
-    metadata: jsonRecordSchema.optional(),
+    metadata: jsonObjectSchema.optional(),
     source: permissionV2SourceSchema.optional(),
   }),
 );
@@ -93,7 +92,7 @@ export const opencodePermissionAskedEventSchema = eventSchema(
     sessionID: z.string(),
     permission: z.string(),
     patterns: z.array(z.string()),
-    metadata: jsonRecordSchema,
+    metadata: jsonObjectSchema,
     always: z.array(z.string()),
     tool: z.object({ messageID: z.string(), callID: z.string() }).optional(),
   }),

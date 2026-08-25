@@ -1,4 +1,4 @@
-import { jsonValueSchema } from "@openducktor/contracts";
+import { jsonObjectSchema } from "@openducktor/contracts";
 import type {
   AgentPendingApprovalRequest,
   AgentPendingQuestionRequest,
@@ -30,7 +30,7 @@ const opencodePendingApprovalInputSchema = z.object({
   sessionID: requiredStringSchema,
   permission: requiredStringSchema,
   patterns: z.array(z.string()),
-  metadata: z.record(z.string(), jsonValueSchema),
+  metadata: jsonObjectSchema,
   always: z.array(z.string()),
   tool: z
     .object({

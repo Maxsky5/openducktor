@@ -9,9 +9,7 @@ import {
   codexAppServerThreadStatusSchema,
   codexAppServerTurnSchema,
 } from "./codex-app-server-protocol-schemas";
-import { jsonValueSchema, type JsonValue } from "./json-types";
-
-const jsonObjectSchema = z.record(z.string(), jsonValueSchema);
+import { jsonObjectSchema, jsonValueSchema, type JsonValue } from "./json-types";
 const nonBlankStringSchema = z
   .string()
   .refine((value) => value.trim().length > 0, { error: "String must not be blank" });

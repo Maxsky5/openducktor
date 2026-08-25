@@ -11,7 +11,9 @@ export function isGlobalReflectMethodCall(
   return isCallableMemberReference(
     sourceCode,
     callee,
-    (object, propertyName) =>
-      propertyName === methodName && isGlobalObjectReference(sourceCode, object, "Reflect"),
+    (object, objectPath, propertyName) =>
+      objectPath.length === 0 &&
+      propertyName === methodName &&
+      isGlobalObjectReference(sourceCode, object, "Reflect"),
   );
 }

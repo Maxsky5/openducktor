@@ -81,7 +81,20 @@ function isBunMockObject(sourceCode: SourceCode, expression: ESTree.Expression):
   );
 }
 
-function isTestFrameworkObject(sourceCode: SourceCode, expression: ESTree.Expression): boolean {
+function isTestFrameworkObject(
+  sourceCode: SourceCode,
+  expression: ESTree.Expression,
+  path: readonly string[],
+): boolean {
+  if (expression.type === "Identifier" && path.length === 1) {
+    const member = path[0];
+    return (
+      (member === "vi" && hasFrameworkNamespaceImport(sourceCode, expression, "vitest")) ||
+      (member === "jest" && hasFrameworkNamespaceImport(sourceCode, expression, "@jest/globals")) ||
+      (member === "mock" && hasFrameworkNamespaceImport(sourceCode, expression, "bun:test"))
+    );
+  }
+  if (path.length > 0) return false;
   if (isBunMockObject(sourceCode, expression)) return true;
   if (
     isGlobalObjectReference(sourceCode, expression, "vi") ||
@@ -114,8 +127,8 @@ function moduleMockCall(sourceCode: SourceCode, callee: ESTree.Expression): bool
   return isCallableMemberReference(
     sourceCode,
     callee,
-    (object, propertyName) =>
-      moduleMockMethods.has(propertyName) && isTestFrameworkObject(sourceCode, object),
+    (object, objectPath, propertyName) =>
+      moduleMockMethods.has(propertyName) && isTestFrameworkObject(sourceCode, object, objectPath),
   );
 }
 

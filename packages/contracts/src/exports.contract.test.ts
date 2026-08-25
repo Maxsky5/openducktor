@@ -437,6 +437,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "codexAppServerMcpServerElicitationRequestParamsSchema",
   "codexAppServerPermissionsRequestApprovalParamsSchema",
   "codexAppServerRequestPermissionProfileSchema",
+  "jsonObjectSchema",
   "jsonValueSchema",
   "isCodexAppServerFileMutationRequestMethod",
   "isCodexAppServerPermissionRequestMethod",

@@ -33,5 +33,10 @@ tester.run("anti-slop/no-shape-in-symbol-names", noForbiddenTermInSymbolNamesRul
     { code: 'const model = { "responseShape": input };', errors: [error] },
     { code: 'interface Model { "responseShape": string }', errors: [error] },
     { code: 'class Model { ["responseShape"] = input; }', errors: [error] },
+    { code: 'enum Mode { "ResponseShape" = "response" }', errors: [error] },
+    { code: 'enum Mode { ["ResponseShape"] = "response" }', errors: [error] },
+    { code: "const value = 1; export { value as responseShape };", errors: [error] },
+    { code: 'const value = 1; export { value as "responseShape" };', errors: [error] },
+    { code: "export { value as responseShape } from './owner';", errors: [error] },
   ],
 });

@@ -3,7 +3,7 @@ import {
   exactOptionalSchema,
   type ExactOptional,
   type JsonObject,
-  jsonValueSchema,
+  jsonObjectSchema,
 } from "@openducktor/contracts";
 import type { UUID } from "node:crypto";
 import { HostValidationError } from "../../effect/host-errors";
@@ -13,11 +13,10 @@ const claudeUnknownValueSchema = z.unknown();
 
 const claudeUnknownRecordSchema = z.object({}).catchall(claudeUnknownValueSchema);
 const claudePlainUnknownRecordSchema = z.record(z.string(), claudeUnknownValueSchema);
-const claudeCanonicalJsonObjectSchema = z.record(z.string(), jsonValueSchema);
 
 const claudeToolHookSchema = z.object({
   agent_id: z.string().min(1).optional(),
-  tool_input: claudeCanonicalJsonObjectSchema,
+  tool_input: jsonObjectSchema,
   tool_name: z.string().min(1),
   tool_use_id: z.string().min(1),
 });
@@ -315,7 +314,7 @@ export const parseClaudeFileEditToolResponse = (
   parseClaudeIngress(claudePlainUnknownRecordSchema.safeParse(value), "claudeFileEditToolResponse");
 
 export const parseClaudeCanonicalJsonObject = (value: unknown, field: string): JsonObject =>
-  parseClaudeIngress(claudeCanonicalJsonObjectSchema.safeParse(value), field);
+  parseClaudeIngress(jsonObjectSchema.safeParse(value), field);
 
 export const parseClaudeUserToolResultIngress = (value: unknown): ClaudeUserToolResultIngress => {
   const message = parseClaudeIngress(

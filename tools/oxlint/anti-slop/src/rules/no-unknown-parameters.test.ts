@@ -1,9 +1,13 @@
 import { RuleTester } from "oxlint/plugins-dev";
+import { fileURLToPath } from "node:url";
 
 import { noUnknownParametersRule } from "./no-unknown-parameters.ts";
 
 const tester = new RuleTester({ languageOptions: { parserOptions: { lang: "ts" } } });
 const error = { messageId: "unknownParameter" };
+const importedTypeFixtureFilename = fileURLToPath(
+  new URL("./__fixtures__/no-known-value-widening-input.ts", import.meta.url),
+);
 
 tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
   valid: [
@@ -27,6 +31,9 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     "function safe({ input }: { input: unknown }) { return userSchema.parse(input); }",
     "function safe({ input }: { input: unknown }) { { const input = 1; return input; } }",
     "type First = Second; type Second = First; function safe({ input }: First) { return 1; }",
+    "interface Base { input: string } interface Payload extends Base {} function safe({ input }: Payload) { return input; }",
+    "function safe({ input }: { input: unknown } & { input: string }) { return input; }",
+    "type First = Second; type Second = First; function safe({ input }: First) { return input; }",
   ],
   invalid: [
     { code: "function load(input: unknown) { return input; }", errors: [error] },
@@ -121,6 +128,22 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
       errors: [error],
     },
     {
+      code: "function unsafe([input]: Array<unknown>) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "function unsafe([input]: ReadonlyArray<unknown>) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "type Inputs = Array<unknown>; function unsafe([input]: Inputs) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "function unsafe([, input]: [string, ...unknown[]]) { return input; }",
+      errors: [error],
+    },
+    {
       code: "type Payload = { input: unknown }; function unsafe({ input }: Payload) { return input; }",
       errors: [error],
     },
@@ -130,6 +153,61 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     },
     {
       code: "type Payload<T> = { input: T }; function unsafe({ input }: Payload<unknown>) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "interface Base { input: unknown } interface Payload extends Base {} function unsafe({ input }: Payload) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "interface Base<T> { input: T } interface Payload extends Base<unknown> {} function unsafe({ input }: Payload) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "function unsafe({ input }: Record<string, unknown>) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "function unsafe({ input }: { [key: string]: unknown }) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "function unsafe({ input }: Pick<{ input: unknown; other: string }, 'input'>) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "type Selected = Pick<{ input: unknown; other: string }, 'input'>; function unsafe({ input }: Selected) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "function unsafe({ input }: { input: unknown } | { input: string }) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "function unsafe({ input }: { [Key in 'input']: unknown }) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "interface Payload { input: unknown } interface Payload { other: string } function unsafe({ input }: Payload) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "namespace Types { export interface Payload { input: unknown } } function unsafe({ input }: Types.Payload) { return input; }",
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: "import type { InheritedUnknownPayload } from './no-known-value-widening-types'; function unsafe({ input }: InheritedUnknownPayload) { return input; }",
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: "import type { UnknownArray } from './no-known-value-widening-types'; function unsafe([input]: UnknownArray) { return input; }",
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: "import type { PickedUnknownPayload } from './no-known-value-widening-types'; function unsafe({ input }: PickedUnknownPayload) { return input; }",
       errors: [error],
     },
     {

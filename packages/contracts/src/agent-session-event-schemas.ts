@@ -19,7 +19,7 @@ import { fileContentSchema, fileDiffSchema } from "./git-schemas";
 import { exactOptionalSchema, type ExactOptional } from "./exact-optional";
 
 type ZodSchemaFields = Parameters<typeof z.object>[0];
-import { jsonValueSchema } from "./json-types";
+import { jsonObjectSchema } from "./json-types";
 import type { JsonValue } from "./json-types";
 import { skillDescriptorSchema } from "./skill-schemas";
 import { slashCommandCatalogSchema } from "./slash-command-schemas";
@@ -27,7 +27,7 @@ import { subagentDescriptorSchema } from "./subagent-schemas";
 
 const isoTimestampSchema = z.string().datetime({ offset: true });
 const finiteNonNegativeNumberSchema = z.number().finite().nonnegative();
-const metadataSchema = z.record(z.string(), jsonValueSchema);
+const metadataSchema = jsonObjectSchema;
 
 export const agentFileReferenceSchema = z
   .object({
@@ -163,7 +163,7 @@ const inferredAgentStreamPartSchema = z.discriminatedUnion("kind", [
       preview: z.string().optional(),
       title: z.string().optional(),
       displayLabel: z.string().optional(),
-      input: z.record(z.string(), jsonValueSchema).optional(),
+      input: jsonObjectSchema.optional(),
       output: z.string().optional(),
       error: z.string().optional(),
       fileDiffs: z.array(fileDiffSchema.strict()).optional(),
@@ -270,7 +270,7 @@ const inferredTranscriptPendingApprovalRequestSchema = z
       .object({
         name: z.string(),
         title: z.string().optional(),
-        input: z.record(z.string(), jsonValueSchema).optional(),
+        input: jsonObjectSchema.optional(),
       })
       .strict()
       .optional(),

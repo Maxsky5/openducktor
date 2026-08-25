@@ -11,6 +11,22 @@ export interface OpenCommandsInterfaceByKey<Key extends PropertyKey> extends Rec
 export type OpenCommandName = string;
 export type ImportedKeyCommands = Record<OpenCommandName, () => void>;
 export interface ImportedKeyCommandsInterface extends Record<OpenCommandName, () => void> {}
+export interface UnknownPayload {
+  readonly input: unknown;
+}
+export interface InheritedUnknownPayload extends UnknownPayload {}
+export type UnknownArray = ReadonlyArray<unknown>;
+export type PickedUnknownPayload = Pick<UnknownPayload, "input">;
+export type BroadObject = object;
+export interface KnownOwner {
+  readonly id: string;
+}
+export namespace OwnerTypes {
+  export type BroadObject = object;
+  export interface KnownOwner {
+    readonly id: string;
+  }
+}
 
 interface DefaultOpenCommands extends Record<string, () => void> {}
 

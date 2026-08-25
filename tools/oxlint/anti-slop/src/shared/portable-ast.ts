@@ -19,3 +19,4 @@ export type PortableTSType = PortableAst<ESTree.TSType>;
 export type PortableTSTypeAliasDeclaration = PortableAst<ESTree.TSTypeAliasDeclaration>;
 export type PortableTSTypeName = PortableAst<ESTree.TSTypeName>;
 export type PortableTSTypeReference = PortableAst<ESTree.TSTypeReference>;
+export type PortableTSTupleElement = PortableAst<ESTree.TSTupleElement>;
