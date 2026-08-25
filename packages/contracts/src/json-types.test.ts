@@ -2,8 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { isJsonObject, jsonObjectSchema } from "./json-types";
 
 describe("JSON type guards", () => {
-  test("accepts records and rejects every other JSON value", () => {
+  test("accepts JSON records and rejects other unknown values", () => {
     expect(isJsonObject({ answer: 42 })).toBe(true);
+    expect(isJsonObject({ value: undefined })).toBe(false);
+    expect(isJsonObject({ value: () => undefined })).toBe(false);
     expect(isJsonObject([])).toBe(false);
     expect(isJsonObject(null)).toBe(false);
     expect(isJsonObject("value")).toBe(false);

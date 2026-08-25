@@ -1,20 +1,12 @@
 import { defineRule } from "@oxlint/plugins";
 import type { ESTree } from "@oxlint/plugins";
+import { isConstAssertion } from "../shared/type-assertion.ts";
 import { unwrapTransparentExpression } from "../shared/transparent-expression.ts";
 
 type TypeAssertionExpression = ESTree.TSAsExpression | ESTree.TSTypeAssertion;
 
 function isTypeAssertionExpression(node: ESTree.Node): node is TypeAssertionExpression {
   return node.type === "TSAsExpression" || node.type === "TSTypeAssertion";
-}
-
-function isConstAssertion(node: TypeAssertionExpression): boolean {
-  const { typeAnnotation } = node;
-  return (
-    typeAnnotation.type === "TSTypeReference" &&
-    typeAnnotation.typeName.type === "Identifier" &&
-    typeAnnotation.typeName.name === "const"
-  );
 }
 
 function isOutermostAssertionInChain(node: TypeAssertionExpression): boolean {

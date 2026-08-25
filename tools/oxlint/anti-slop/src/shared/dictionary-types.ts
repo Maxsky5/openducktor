@@ -2,11 +2,14 @@ import type { ESTree } from "@oxlint/plugins";
 
 import type { PortableAst, PortableClass, PortableTSType } from "./portable-ast.ts";
 import {
-  propertyKeyDomainIncludes,
   propertyKeyDomainIsBroad,
   resolveOpenDictionaryKeyDomain,
   resolvePropertyKeyDomain,
 } from "./property-key-domain.ts";
+import { emptyPropertyKeyDomain } from "./property-key-domain-model.ts";
+import { resolveTypePropertyKeyDomain } from "./qualified-property-key-domain.ts";
+import type { TypePropertyLeaf } from "./qualified-property-key-model.ts";
+import { typePropertyKeyDomainResolvesToUnknownWithState } from "./type-property-path.ts";
 
 import {
   aliasSubstitution,
@@ -36,10 +39,9 @@ type ResolvedAliasState = {
   readonly substitutions: TypeSubstitutions;
 };
 
-export type UnsafeDictionary = {
-  readonly kind: "unsafe-dictionary";
-  readonly unsafeValue: "any" | "empty-object" | "object" | "union" | "unknown";
-};
+export type UnsafeDictionaryValue = "any" | "empty-object" | "object" | "union";
+
+const MAPPED_TYPE_WRAPPERS: ReadonlySet<string> = new Set(["Partial", "Readonly", "Required"]);
 
 function resolvedAliasState(
   resolved: Extract<ResolvedPortableType, { kind: "alias" }>,
@@ -106,6 +108,37 @@ function typeResolvesToObjectWithState(
         resolving,
         resolveImportedType,
       ),
+    );
+  }
+  if (unwrapped.type === "TSIntersectionType") {
+    const effectiveMembers = unwrapped.types.filter((member) => {
+      if (
+        typeResolvesToUnknownWithState(
+          member,
+          environment,
+          substitutions,
+          resolving,
+          resolveImportedType,
+        )
+      ) {
+        return false;
+      }
+      return (
+        unsafeDirectValue(member, environment, substitutions, resolving, resolveImportedType) !==
+        "empty-object"
+      );
+    });
+    return (
+      effectiveMembers.length > 0 &&
+      effectiveMembers.every((member) =>
+        typeResolvesToObjectWithState(
+          member,
+          environment,
+          substitutions,
+          resolving,
+          resolveImportedType,
+        ),
+      )
     );
   }
   if (unwrapped.type !== "TSTypeReference") return false;
@@ -238,7 +271,7 @@ function unsafeDirectValue(
   substitutions: TypeSubstitutions,
   resolving: ReadonlySet<string>,
   resolveImportedType?: PortableTypeResolver,
-): UnsafeDictionary["unsafeValue"] | null {
+): UnsafeDictionaryValue | null {
   const unwrapped = unwrapTransparentType(type);
   if (unwrapped.type === "TSUnknownKeyword") return null;
   if (unwrapped.type === "TSAnyKeyword") return "any";
@@ -256,7 +289,17 @@ function unsafeDirectValue(
       : null;
   }
   if (unwrapped.type === "TSIntersectionType") {
-    const unsafeMembers = unwrapped.types.map((member) =>
+    const effectiveMembers = unwrapped.types.filter(
+      (member) =>
+        !typeResolvesToUnknownWithState(
+          member,
+          environment,
+          substitutions,
+          resolving,
+          resolveImportedType,
+        ),
+    );
+    const unsafeMembers = effectiveMembers.map((member) =>
       unsafeDirectValue(member, environment, substitutions, resolving, resolveImportedType),
     );
     if (unsafeMembers.includes("any")) return "any";
@@ -275,6 +318,49 @@ function unsafeDirectValue(
     );
   }
   const name = typeReferenceName(unwrapped);
+  if (name === "NonNullable" && isBuiltInType(name, environment)) {
+    const wrapped = unwrapped.typeArguments?.params[0];
+    if (wrapped === undefined) return null;
+    if (
+      typeResolvesToAnyWithState(
+        wrapped,
+        environment,
+        substitutions,
+        resolving,
+        resolveImportedType,
+      )
+    ) {
+      return "any";
+    }
+    if (
+      typeResolvesToUnknownWithState(
+        wrapped,
+        environment,
+        substitutions,
+        resolving,
+        resolveImportedType,
+      )
+    ) {
+      return "empty-object";
+    }
+    return unsafeDirectValue(wrapped, environment, substitutions, resolving, resolveImportedType);
+  }
+  if (name !== null && MAPPED_TYPE_WRAPPERS.has(name) && isBuiltInType(name, environment)) {
+    const wrapped = unwrapped.typeArguments?.params[0];
+    if (wrapped === undefined) return null;
+    if (
+      typeResolvesToUnknownWithState(
+        wrapped,
+        environment,
+        substitutions,
+        resolving,
+        resolveImportedType,
+      )
+    ) {
+      return "empty-object";
+    }
+    return unsafeDirectValue(wrapped, environment, substitutions, resolving, resolveImportedType);
+  }
   if (name !== null && TRANSPARENT_TYPE_WRAPPERS.has(name) && isBuiltInType(name, environment)) {
     const wrapped = unwrapped.typeArguments?.params[0];
     return wrapped === undefined
@@ -335,8 +421,8 @@ function dictionaryValueTypes(
     );
   }
   if (unwrapped.type === "TSMappedType") {
-    const keyDomain = resolvePropertyKeyDomain(
-      unwrapped.constraint,
+    const keyDomain = resolveOpenDictionaryKeyDomain(
+      unwrapped,
       environment,
       substitutions,
       resolveImportedType,
@@ -419,22 +505,15 @@ export function classifyUnsafeDictionaryValue(
   valueType: PortableTSType,
   environment: PortableTypeEnvironment,
   resolveImportedType?: PortableTypeResolver,
-): UnsafeDictionary | null {
-  const unsafeValue = unsafeDirectValue(
-    valueType,
-    environment,
-    new Map(),
-    new Set(),
-    resolveImportedType,
-  );
-  return unsafeValue === null ? null : { kind: "unsafe-dictionary", unsafeValue };
+): UnsafeDictionaryValue | null {
+  return unsafeDirectValue(valueType, environment, new Map(), new Set(), resolveImportedType);
 }
 
 export function classifyUnsafeDictionary(
   type: PortableTSType,
   environment: PortableTypeEnvironment,
   resolveImportedType?: PortableTypeResolver,
-): UnsafeDictionary | null {
+): UnsafeDictionaryValue | null {
   for (const valueType of dictionaryValueTypes(
     type,
     environment,
@@ -449,7 +528,7 @@ export function classifyUnsafeDictionary(
       new Set(),
       valueType.resolveImportedType,
     );
-    if (unsafeValue !== null) return { kind: "unsafe-dictionary", unsafeValue };
+    if (unsafeValue !== null) return unsafeValue;
   }
   return null;
 }
@@ -458,7 +537,7 @@ export function classifyUnsafeInterfaceHeritage(
   heritage: PortableAst<ESTree.TSInterfaceHeritage>,
   environment: PortableTypeEnvironment,
   resolveImportedType?: PortableTypeResolver,
-): UnsafeDictionary | null {
+): UnsafeDictionaryValue | null {
   const name = heritage.expression.type === "Identifier" ? heritage.expression.name : null;
   if (name === "Record" && isBuiltInType(name, environment)) {
     const [key, value] = heritage.typeArguments?.params ?? [];
@@ -499,7 +578,7 @@ export function classifyUnsafeInterfaceHeritage(
         new Set(),
         valueType.resolveImportedType,
       );
-      if (unsafeValue !== null) return { kind: "unsafe-dictionary", unsafeValue };
+      if (unsafeValue !== null) return unsafeValue;
     }
   }
   return null;
@@ -513,20 +592,6 @@ function indexedValueResolvesToUnknown(
   resolving: ReadonlySet<string>,
   resolveImportedType?: PortableTypeResolver,
 ): boolean {
-  const object = unwrapTransparentType(objectType);
-  if (object.type !== "TSTypeReference") return false;
-  const substitution = substitutedType(object, substitutions);
-  if (substitution !== null) {
-    return indexedValueResolvesToUnknown(
-      substitution.type,
-      indexType,
-      substitution.environment,
-      substitution.substitutions,
-      resolving,
-      substitution.resolveImportedType,
-    );
-  }
-  const name = typeReferenceName(object);
   const indexDomain = resolvePropertyKeyDomain(
     indexType.type,
     indexType.environment,
@@ -534,67 +599,68 @@ function indexedValueResolvesToUnknown(
     indexType.resolveImportedType,
     resolving,
   );
-  if (
-    (name === "Array" || name === "ReadonlyArray") &&
-    isBuiltInType(name, environment) &&
-    propertyKeyDomainIncludes(
-      {
-        numbers: true,
-        patterns: [],
-        strings: false,
-        symbols: false,
-        values: new Set(),
-      },
-      indexDomain,
-    )
-  ) {
-    const value = object.typeArguments?.params[0];
-    return (
-      value !== undefined &&
-      typeResolvesToUnknownWithState(
-        value,
-        environment,
-        substitutions,
-        resolving,
-        resolveImportedType,
-      )
-    );
-  }
-  if (name === "Record" && isBuiltInType(name, environment)) {
-    const [key, value] = object.typeArguments?.params ?? [];
-    return (
-      key !== undefined &&
-      value !== undefined &&
-      propertyKeyDomainIncludes(
-        resolvePropertyKeyDomain(key, environment, substitutions, resolveImportedType, resolving),
-        indexDomain,
-      ) &&
-      typeResolvesToUnknownWithState(
-        value,
-        environment,
-        substitutions,
-        resolving,
-        resolveImportedType,
-      )
-    );
-  }
-  return resolveTypeReference(object, environment, substitutions, resolveImportedType).some(
-    (resolved) => {
-      if (resolved.kind !== "alias") return false;
-      const state = resolvedAliasState(resolved, resolving, "indexed-unknown");
-      return (
-        state !== null &&
-        indexedValueResolvesToUnknown(
-          resolved.declaration.typeAnnotation,
-          indexType,
-          resolved.environment,
-          state.substitutions,
-          state.resolving,
-          resolved.resolveImportedType,
-        )
-      );
-    },
+  return typePropertyKeyDomainResolvesToUnknownWithState(
+    objectType,
+    indexDomain,
+    environment,
+    substitutions,
+    resolving,
+    resolveImportedType,
   );
+}
+
+function classifyAnyLeaf(
+  type: PortableTSType,
+  environment: PortableTypeEnvironment,
+  substitutions: TypeSubstitutions,
+  resolveImportedType: PortableTypeResolver | undefined,
+  resolving: ReadonlySet<string> = new Set(),
+): TypePropertyLeaf {
+  return {
+    classification: {
+      kind: typeResolvesToAnyWithState(
+        type,
+        environment,
+        substitutions,
+        resolving,
+        resolveImportedType,
+      )
+        ? "any"
+        : isNeverType(type)
+          ? "never"
+          : "other",
+    },
+    domain: emptyPropertyKeyDomain(),
+  };
+}
+
+function indexedValueResolvesToAny(
+  objectType: PortableTSType,
+  indexType: PortableTypeArgument,
+  environment: PortableTypeEnvironment,
+  substitutions: TypeSubstitutions,
+  resolving: ReadonlySet<string>,
+  resolveImportedType?: PortableTypeResolver,
+): boolean {
+  const indexDomain = resolvePropertyKeyDomain(
+    indexType.type,
+    indexType.environment,
+    indexType.substitutions,
+    indexType.resolveImportedType,
+    resolving,
+  );
+  const resolution = resolveTypePropertyKeyDomain(
+    objectType,
+    [indexDomain],
+    environment,
+    substitutions,
+    resolveImportedType,
+    resolving,
+    new Map(),
+    resolvePropertyKeyDomain,
+    classifyAnyLeaf,
+  );
+  return resolution.found && resolution.classification?.kind === "any";
 }
 
 export function typeResolvesToAny(
@@ -614,6 +680,21 @@ function typeResolvesToAnyWithState(
 ): boolean {
   const unwrapped = unwrapTransparentType(type);
   if (unwrapped.type === "TSAnyKeyword") return true;
+  if (unwrapped.type === "TSIndexedAccessType") {
+    return indexedValueResolvesToAny(
+      unwrapped.objectType,
+      {
+        environment,
+        resolveImportedType,
+        substitutions,
+        type: unwrapped.indexType,
+      },
+      environment,
+      substitutions,
+      resolving,
+      resolveImportedType,
+    );
+  }
   if (unwrapped.type === "TSUnionType" || unwrapped.type === "TSIntersectionType") {
     return unwrapped.types.some((member) =>
       typeResolvesToAnyWithState(
@@ -684,7 +765,27 @@ function typeResolvesToUnknownWithState(
   resolveImportedType?: PortableTypeResolver,
 ): boolean {
   const unwrapped = unwrapTransparentType(type);
+  if (
+    typeResolvesToAnyWithState(
+      unwrapped,
+      environment,
+      substitutions,
+      resolving,
+      resolveImportedType,
+    )
+  ) {
+    return false;
+  }
   if (unwrapped.type === "TSUnknownKeyword") return true;
+  if (unwrapped.type === "TSTypeQuery") {
+    return resolvePropertyKeyDomain(
+      unwrapped,
+      environment,
+      substitutions,
+      resolveImportedType,
+      resolving,
+    ).unknown;
+  }
   if (unwrapped.type === "TSIndexedAccessType") {
     return indexedValueResolvesToUnknown(
       unwrapped.objectType,
@@ -763,19 +864,6 @@ function typeResolvesToUnknownWithState(
       );
     },
   );
-}
-
-export function isPopulatedObjectExpression(expression: ESTree.Expression): boolean {
-  let current = expression;
-  while (
-    current.type === "ParenthesizedExpression" ||
-    current.type === "TSAsExpression" ||
-    current.type === "TSTypeAssertion" ||
-    current.type === "TSNonNullExpression"
-  ) {
-    current = current.expression;
-  }
-  return current.type === "ObjectExpression" && current.properties.length > 0;
 }
 
 export function isKnownEvidenceExpression(expression: ESTree.Expression): boolean {

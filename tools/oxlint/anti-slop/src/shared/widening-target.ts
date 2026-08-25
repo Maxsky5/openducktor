@@ -152,52 +152,6 @@ export function classifyWideningTarget(
   );
 }
 
-/** Classify a named interface through its declarations and heritage. */
-export function classifyNamedInterfaceWideningTarget(
-  name: string,
-  environment: PortableTypeEnvironment,
-  arguments_: readonly PortableTypeArgument[] = [],
-  resolveImportedType?: PortableTypeResolver,
-): WideningTarget | null {
-  const declarations = environment.interfaces.get(name);
-  return declarations === undefined
-    ? null
-    : classifyResolvedWideningType(
-        {
-          arguments: arguments_,
-          declarations,
-          environment,
-          key: `named-interface\0${name}`,
-          kind: "interface",
-          name,
-          resolveImportedType,
-        },
-        new Set(),
-      );
-}
-
-/** Classify a named alias without treating a closed object alias as anonymous. */
-export function classifyNamedAliasWideningTarget(
-  name: string,
-  environment: PortableTypeEnvironment,
-  arguments_: readonly PortableTypeArgument[] = [],
-  resolveImportedType?: PortableTypeResolver,
-): WideningTarget | null {
-  const alias = environment.aliases.get(name);
-  if (alias === undefined) return null;
-  const substitutions = aliasSubstitution(alias, arguments_, environment, resolveImportedType);
-  return substitutions === null
-    ? null
-    : classifyWideningTargetWithState(
-        alias.typeAnnotation,
-        environment,
-        substitutions,
-        new Set([name]),
-        "alias",
-        resolveImportedType,
-      );
-}
-
 function classifyWideningTargetWithState(
   type: PortableTSType,
   environment: PortableTypeEnvironment,

@@ -11,6 +11,8 @@ const importedTypeFixtureFilename = fileURLToPath(
 
 tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
   valid: [
+    "function safe(value: Omit<{ 1: unknown }, 1>) { return value; }",
+    'function safe(value: Omit<{ "1": unknown }, "1">) { return value; }',
     "function load(input: User) { return input; }",
     "function parseUser(input: unknown) { return userSchema.parse(input); }",
     "function parseUser(input: unknown): User { return userSchema.parse(input); }",
@@ -47,14 +49,38 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     'function safe({ "+1": input }: Record<`${bigint}`, unknown>) { return input; }',
     'function safe({ "01": input }: Record<`${bigint}`, unknown>) { return input; }',
     'function safe({ "111111111111111111111111x": input }: Record<`${number}${number}${number}${number}${number}${number}${number}${number}${number}${number}${number}${number}`, unknown>) { return input; }',
+    "function safe([head, ...rest]: [unknown, ...string[]]) { return rest[0]; }",
+    "function safe({ known, ...rest }: { known: string; input: unknown; output: string }) { return rest.output; }",
+    'const key = "output"; function safe(value: { input: unknown; output: string }) { return value[key]; }',
+    'function safe(input: unknown): ({ value: any } & { value: never })["value"] { return input; }',
   ],
   invalid: [
     { code: "function load(input: unknown) { return input; }", errors: [error] },
+    {
+      code: "declare const output: unknown; function unsafe(input: unknown): typeof output { return input; }",
+      errors: [error],
+    },
     {
       code: "function unsafe(input: unknown): unknown & unknown { return input; }",
       errors: [error],
     },
     { code: "function load(input: unknown | string) { return input; }", errors: [error] },
+    {
+      code: "function unsafe(input: unknown): ({ value: any } & { value: string })['value'] { return input; }",
+      errors: [error],
+    },
+    {
+      code: "function unsafe(...args: unknown[]) { return args[0]; }",
+      errors: [error],
+    },
+    {
+      code: 'const key = "input"; function unsafe(value: { input: unknown }) { return value[key]; }',
+      errors: [error],
+    },
+    {
+      code: 'const key = "input"; function unsafe({ [key]: input }: { input: unknown }) { return input; }',
+      errors: [error],
+    },
     {
       code: "function load(input: unknown) { const alias = input; return alias; }",
       errors: [error],
@@ -133,6 +159,18 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
       errors: [error],
     },
     {
+      code: "const token = Symbol(); function unsafe({ [token]: input }: { [token]: unknown }) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "function unsafe({ [-1]: input }: { [-1]: unknown }) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "function unsafe({ [`input`]: input }: { input: unknown }) { return input; }",
+      errors: [error],
+    },
+    {
       code: "function unsafe({ nested: { input } }: { nested: { input: unknown } }) { return input; }",
       errors: [error],
     },
@@ -158,6 +196,14 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     },
     {
       code: "function unsafe([, input]: [string, ...unknown[]]) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "function unsafe([head, ...rest]: [string, ...unknown[]]) { return rest[0]; }",
+      errors: [error],
+    },
+    {
+      code: "function unsafe({ known, ...rest }: { known: string; input: unknown }) { return rest.input; }",
       errors: [error],
     },
     {
@@ -358,6 +404,14 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     },
     {
       code: "function unsafe({ input }: Omit<{ input: unknown; other: string }, 'other'>) { return input; }",
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "1": input }: Omit<{ 1: unknown }, "1">) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ 1: input }: Omit<{ "1": unknown }, 1>) { return input; }',
       errors: [error],
     },
     {

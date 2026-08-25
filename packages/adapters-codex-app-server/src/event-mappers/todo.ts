@@ -216,7 +216,6 @@ const todoToolCanonicalEvents = (
 const completedDynamicToolCallEvents = (
   item: CodexDynamicToolCallItem,
   ctx: CodexMappingContext,
-  fallbackId: string,
 ): CodexMappingResult => {
   const error = codexDynamicToolErrorFromItem(item);
   if (item.success === false || error || item.status !== "completed") {
@@ -229,7 +228,7 @@ const completedDynamicToolCallEvents = (
     return emptyCodexMappingResult();
   }
   const displayInput = codexTodoToolInputFromPayload(input) ?? input;
-  const partId = item.id || fallbackId;
+  const partId = item.id;
   const timing = codexToolTimingFields(item);
   return {
     handled: true,
@@ -329,7 +328,7 @@ export const todoMapper: CodexEventMapper<CodexTodoMapperState> & {
 
   fromCompletedItem(item: CodexTimedThreadItem, ctx: CodexMappingContext): CodexMappingResult {
     return codexItemTypeMatches(item, "dynamicToolCall")
-      ? completedDynamicToolCallEvents(item, ctx, item.id)
+      ? completedDynamicToolCallEvents(item, ctx)
       : emptyCodexMappingResult();
   },
 

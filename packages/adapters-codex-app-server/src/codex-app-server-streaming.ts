@@ -410,7 +410,7 @@ const emitCompletedItem = (
     return;
   }
 
-  const parts = toStreamPart(completedItem, itemId, itemId);
+  const parts = toStreamPart(completedItem, itemId);
   for (const part of parts) {
     emitCodexSessionEvent(context, session.threadId, {
       type: "assistant_part",

@@ -25,12 +25,39 @@ tester.run("anti-slop/no-unknown-returns", noUnknownReturnsRule, {
     "type Result = { value: unknown }; function load(): Result { return result; }",
     "function load(): Promise<User> { return promise; }",
     "function load(): Record<string, User>[string] { return user; }",
+    "function load(): Record<string, unknown>[never] { return input; }",
+    'function load(): { [key: string]: unknown; known: string }["known"] { return input; }',
+    "function load(): { [key: string]: unknown; [key: number]: string }[number] { return input; }",
     "type KnownRecord = Record<string, User>; function load(): KnownRecord[string] { return user; }",
     "function owner() { type Promise<T> = { value: T }; const load = (): Promise<unknown> => ({ value }); }",
     "namespace Owner { type Promise<T> = { value: T }; const load = (): Promise<unknown> => ({ value }); }",
   ],
   invalid: [
     { code: "function load(): unknown { return input; }", errors: [error] },
+    {
+      code: "declare const input: unknown; function load(): typeof input { return input; }",
+      errors: [error],
+    },
+    {
+      code: 'function load(): { input: unknown }["input"] { return input; }',
+      errors: [error],
+    },
+    {
+      code: "declare const token: unique symbol; function load(): { [token]: unknown }[typeof token] { return input; }",
+      errors: [error],
+    },
+    {
+      code: "function load(): { [key: string]: unknown; [key: number]: string }[string] { return input; }",
+      errors: [error],
+    },
+    {
+      code: 'function load(): Pick<{ input: unknown }, "input">["input"] { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function load(): Omit<{ input: unknown; other: string }, "other">["input"] { return input; }',
+      errors: [error],
+    },
     { code: "const load = (): unknown => input;", errors: [error] },
     { code: "type Loader = () => unknown;", errors: [error] },
     { code: "interface Loader { load(): unknown }", errors: [error] },
@@ -99,6 +126,11 @@ tester.run("anti-slop/no-unknown-returns", noUnknownReturnsRule, {
     {
       filename: importedTypeFixtureFilename,
       code: "import type { Identity } from './no-known-value-widening-types'; type LocalUnknown = unknown; function unsafe(): Identity<LocalUnknown> { return input; }",
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: "import { token as local, type UniqueSymbolPayload } from './no-known-value-widening-types'; function unsafe(): UniqueSymbolPayload[typeof local] { return input; }",
       errors: [error],
     },
   ],

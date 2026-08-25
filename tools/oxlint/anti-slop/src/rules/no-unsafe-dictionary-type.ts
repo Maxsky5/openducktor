@@ -156,7 +156,7 @@ export const noUnsafeDictionaryTypeRule = defineRule({
       const environment = createTypeEnvironment(node, visitorKeys);
       const unsafe = classifyUnsafeDictionary(node, environment, resolver);
       if (unsafe === null) return;
-      report(node, unsafe.unsafeValue);
+      report(node, unsafe);
     };
 
     return {
@@ -171,7 +171,7 @@ export const noUnsafeDictionaryTypeRule = defineRule({
             environment,
             importedTypeResolver(heritage),
           );
-          if (unsafe !== null) report(heritage, unsafe.unsafeValue);
+          if (unsafe !== null) report(heritage, unsafe);
         }
       },
       TSIndexSignature(node) {
@@ -185,7 +185,7 @@ export const noUnsafeDictionaryTypeRule = defineRule({
           environment,
           importedTypeResolver(node),
         );
-        if (unsafe !== null) report(node, unsafe.unsafeValue);
+        if (unsafe !== null) report(node, unsafe);
       },
     };
   },

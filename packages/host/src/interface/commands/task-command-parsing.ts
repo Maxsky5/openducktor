@@ -34,10 +34,6 @@ type PullRequestContent = {
   body: string;
 };
 
-export const requireRecord = (value: unknown, label: string): Record<string, unknown> => {
-  return requireParsedRecord(unknownRecordSchema.safeParse(value), label);
-};
-
 export const requireString = (value: unknown, label: string): string => {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw invalidInput(`${label} is required.`, label);

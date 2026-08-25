@@ -1,9 +1,5 @@
 import { extractStringField } from "../codex-app-server-shared";
-import {
-  codexItemId,
-  codexItemTypeMatches,
-  extractCodexTokenUsageTotals,
-} from "../codex-app-server-transcript";
+import { codexItemTypeMatches, extractCodexTokenUsageTotals } from "../codex-app-server-transcript";
 import type {
   CodexCanonicalSessionCompactedEvent,
   CodexCanonicalSessionCompactionStartedEvent,
@@ -86,24 +82,14 @@ export const compactionMapper: CodexEventMapper = {
     if (input.kind === "item_started" && codexItemTypeMatches(input.item, "contextCompaction")) {
       return {
         handled: true,
-        events: [
-          toSessionCompactionStartedEvent(
-            ctx,
-            codexItemId(input.item, `${ctx.threadId}-session-compaction`),
-          ),
-        ],
+        events: [toSessionCompactionStartedEvent(ctx, input.item.id)],
       };
     }
 
     if (input.kind === "item_completed" && codexItemTypeMatches(input.item, "contextCompaction")) {
       return {
         handled: true,
-        events: [
-          toSessionCompactedEvent(
-            ctx,
-            codexItemId(input.item, `${ctx.threadId}-session-compaction`),
-          ),
-        ],
+        events: [toSessionCompactedEvent(ctx, input.item.id)],
       };
     }
 
@@ -116,12 +102,7 @@ export const compactionMapper: CodexEventMapper = {
 
     return {
       handled: true,
-      events: [
-        toSessionCompactedEvent(
-          ctx,
-          codexItemId(input.item, `codex-history-${input.index}-session-compacted`),
-        ),
-      ],
+      events: [toSessionCompactedEvent(ctx, input.item.id)],
     };
   },
 };

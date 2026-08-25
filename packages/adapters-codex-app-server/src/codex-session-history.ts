@@ -144,7 +144,6 @@ const projectCodexThreadReadToHistory = ({
         } else {
           const message = toHistoryMessage(
             item,
-            `codex-history-${index}`,
             turnModel,
             timestamp ?? undefined,
             isFinalAgentMessage,

@@ -1,6 +1,7 @@
 import { defineRule } from "@oxlint/plugins";
 
 import type { ESTree, SourceCode } from "@oxlint/plugins";
+import { isConstAssertion } from "../shared/type-assertion.ts";
 
 type TypeAssertion = ESTree.TSAsExpression | ESTree.TSTypeAssertion;
 
@@ -15,14 +16,6 @@ const commentOwnerKinds = new Set([
 const exportedDeclarationKinds = new Set(["ExportDefaultDeclaration", "ExportNamedDeclaration"]);
 const MINIMUM_SAFETY_EXPLANATION_LENGTH = 16;
 const vagueSafetyExplanation = /^(?:fine|ok(?:ay)?|safe|valid|verified|works)\.?$/iu;
-
-function isConstAssertion(node: TypeAssertion): boolean {
-  return (
-    node.typeAnnotation.type === "TSTypeReference" &&
-    node.typeAnnotation.typeName.type === "Identifier" &&
-    node.typeAnnotation.typeName.name === "const"
-  );
-}
 
 function assertionCommentOwner(node: TypeAssertion): ESTree.Node | null {
   let current: ESTree.Node = node;

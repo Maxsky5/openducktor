@@ -6,10 +6,14 @@ import ts from "typescript";
 
 import {
   createPortableModuleTypeEnvironment,
+  extendPortableTypeEnvironment,
+  type ResolvedPortableValueBinding,
   type ResolvedPortableType,
   type PortableTypeArgument,
   type PortableTypeEnvironment,
   type PortableTypeResolver,
+  type UniqueSymbolDeclaration,
+  type UniqueSymbolReference,
 } from "./portable-type-resolution.ts";
 
 import type { PortableModuleItem, PortableNode } from "./portable-ast.ts";
@@ -17,6 +21,13 @@ import type { PortableModuleItem, PortableNode } from "./portable-ast.ts";
 type ParsedModule = {
   readonly environment: PortableTypeEnvironment;
   readonly statements: readonly PortableModuleItem[];
+};
+
+type ExportTarget = {
+  readonly filename: string;
+  readonly key: string;
+  readonly localName: string;
+  readonly module: ParsedModule;
 };
 
 type ImportedBinding =
@@ -146,18 +157,107 @@ function importedTypeResolver(
   module: ParsedModule,
   resolving: ReadonlySet<string>,
 ): PortableTypeResolver {
-  return (typeNameParts, arguments_) => {
-    const imported = importedReference(module, typeNameParts);
-    return imported === null
-      ? null
-      : importedTypeDefinition(
-          containingFile,
-          imported.moduleSpecifier,
-          imported.exportPath,
-          arguments_,
-          resolving,
-        );
+  return {
+    resolveType(typeNameParts, arguments_) {
+      const imported = importedReference(module, typeNameParts);
+      return imported === null
+        ? null
+        : importedTypeDefinition(
+            containingFile,
+            imported.moduleSpecifier,
+            imported.exportPath,
+            arguments_,
+            resolving,
+          );
+    },
+    resolveValue(reference, environment) {
+      if (reference.kind === "name") {
+        const rootName = reference.parts[0];
+        if (rootName === undefined) return null;
+        if (
+          !environment.importedTypeQueryNames.has(rootName) &&
+          !environment.namespaceValueNames.has(rootName)
+        ) {
+          return null;
+        }
+      }
+      const imported =
+        reference.kind === "import"
+          ? {
+              exportPath: reference.exportPath,
+              moduleSpecifier: reference.moduleSpecifier,
+            }
+          : importedReference(module, reference.parts);
+      return imported === null
+        ? null
+        : importedValueBinding(
+            containingFile,
+            imported.moduleSpecifier,
+            imported.exportPath,
+            resolving,
+          );
+    },
+    resolveUniqueSymbol(reference, environment) {
+      if (reference.kind === "name") {
+        const name = reference.parts[0];
+        const declaration =
+          reference.parts.length === 1 && name !== undefined
+            ? environment.uniqueSymbolDeclarations.get(name)
+            : undefined;
+        if (declaration !== undefined) {
+          return uniqueSymbolDeclarationIdentity(containingFile, module, declaration, new Set());
+        }
+        if (name === undefined) return null;
+        if (reference.parts.length === 1 && !environment.importedTypeQueryNames.has(name)) {
+          return null;
+        }
+        if (
+          reference.parts.length > 1 &&
+          !environment.importedTypeQueryNames.has(name) &&
+          !environment.namespaceValueNames.has(name)
+        ) {
+          return null;
+        }
+      }
+      const target = uniqueSymbolReferenceTarget(containingFile, module, reference, new Set());
+      return target === null ? null : uniqueSymbolIdentity(target);
+    },
   };
+}
+
+function localValueBinding(
+  target: ExportTarget,
+  propertyPath: readonly string[],
+): ResolvedPortableValueBinding | null {
+  const binding = target.module.environment.valueBindings.get(target.localName);
+  return binding === undefined
+    ? null
+    : {
+        binding,
+        environment: target.module.environment,
+        propertyPath,
+        resolveImportedType: importedTypeResolver(target.filename, target.module, new Set()),
+      };
+}
+
+function importedValueBinding(
+  containingFile: string,
+  moduleSpecifier: string,
+  exportPath: readonly string[],
+  resolving: ReadonlySet<string>,
+): ResolvedPortableValueBinding | null {
+  for (let exportedLength = exportPath.length; exportedLength > 0; exportedLength -= 1) {
+    const target = importedExportTarget(
+      containingFile,
+      moduleSpecifier,
+      exportPath.slice(0, exportedLength),
+      resolving,
+    );
+    if (target === null) continue;
+    const binding = localValueBinding(target, exportPath.slice(exportedLength));
+    if (binding !== null) return binding;
+  }
+  return null;
 }
 
 function localTypeDefinition(
@@ -165,7 +265,6 @@ function localTypeDefinition(
   module: ParsedModule,
   localName: string,
   arguments_: readonly PortableTypeArgument[],
-  resolving: ReadonlySet<string>,
   key: string,
 ): ResolvedPortableType | null {
   const resolveImportedType = importedTypeResolver(filename, module, new Set());
@@ -192,16 +291,7 @@ function localTypeDefinition(
       resolveImportedType,
     };
   }
-  const imported = importedBinding(module, localName);
-  return imported === null || imported.kind === "namespace"
-    ? null
-    : importedTypeDefinition(
-        filename,
-        imported.moduleSpecifier,
-        [imported.exportedName],
-        arguments_,
-        resolving,
-      );
+  return null;
 }
 
 function namespaceModule(module: ParsedModule, namespaceName: string): ParsedModule | null {
@@ -217,59 +307,105 @@ function namespaceModule(module: ParsedModule, namespaceName: string): ParsedMod
   });
   return statements.length === 0
     ? null
-    : { environment: createPortableModuleTypeEnvironment(statements), statements };
+    : { environment: extendPortableTypeEnvironment(module.environment, statements), statements };
 }
 
-function localPathDefinition(
+function uniqueSymbolIdentity(target: ExportTarget): string | null {
+  return uniqueSymbolTargetIdentity(target, new Set());
+}
+
+function uniqueSymbolReferenceTarget(
+  containingFile: string,
+  module: ParsedModule,
+  reference: UniqueSymbolReference,
+  resolving: ReadonlySet<string>,
+): ExportTarget | null {
+  return reference.kind === "import"
+    ? importedExportTarget(
+        containingFile,
+        reference.moduleSpecifier,
+        reference.exportPath,
+        resolving,
+      )
+    : localExportTarget(
+        containingFile,
+        module,
+        reference.parts,
+        resolving,
+        [containingFile, ...reference.parts].join("\0"),
+      );
+}
+
+function uniqueSymbolDeclarationIdentity(
   filename: string,
   module: ParsedModule,
-  exportPath: readonly string[],
-  arguments_: readonly PortableTypeArgument[],
+  declaration: UniqueSymbolDeclaration,
   resolving: ReadonlySet<string>,
-  key: string,
-): ResolvedPortableType | null {
-  const [localName, ...rest] = exportPath;
-  if (localName === undefined) return null;
-  const imported = importedReference(module, exportPath);
-  if (imported !== null) {
-    return importedTypeDefinition(
-      filename,
-      imported.moduleSpecifier,
-      imported.exportPath,
-      arguments_,
-      resolving,
+): string | null {
+  if (declaration.kind !== "reference") {
+    return [filename, String(declaration.start), String(declaration.end)].join("\0");
+  }
+  const target = uniqueSymbolReferenceTarget(filename, module, declaration.reference, resolving);
+  return target === null ? null : uniqueSymbolTargetIdentity(target, resolving);
+}
+
+function uniqueSymbolTargetIdentity(
+  target: ExportTarget,
+  resolving: ReadonlySet<string>,
+): string | null {
+  if (resolving.has(target.key)) return null;
+  const nextResolving = new Set(resolving);
+  nextResolving.add(target.key);
+  const declaration = target.module.environment.uniqueSymbolDeclarations.get(target.localName);
+  return declaration === undefined
+    ? null
+    : uniqueSymbolDeclarationIdentity(target.filename, target.module, declaration, nextResolving);
+}
+
+function declarationDeclaresName(declaration: PortableNode | null, name: string): boolean {
+  if (declaration?.type === "VariableDeclaration") {
+    return declaration.declarations.some(
+      (variable) => variable.id.type === "Identifier" && variable.id.name === name,
     );
   }
-  if (rest.length === 0) {
-    return localTypeDefinition(filename, module, localName, arguments_, resolving, key);
-  }
-  const nestedModule = namespaceModule(module, localName);
-  return nestedModule === null
-    ? null
-    : exportedPathDefinition(filename, nestedModule, rest, arguments_, resolving, key);
+  return declarationName(declaration) === name;
 }
 
-function exportedPathDefinition(
+function localExportTarget(
+  filename: string,
+  module: ParsedModule,
+  localPath: readonly string[],
+  resolving: ReadonlySet<string>,
+  key: string,
+): ExportTarget | null {
+  const imported = importedReference(module, localPath);
+  if (imported !== null) {
+    return importedExportTarget(filename, imported.moduleSpecifier, imported.exportPath, resolving);
+  }
+  const [localName, ...rest] = localPath;
+  if (localName === undefined) return null;
+  if (rest.length === 0) return { filename, key, localName, module };
+  const nested = namespaceModule(module, localName);
+  return nested === null ? null : exportedExportTarget(filename, nested, rest, resolving, key);
+}
+
+function exportedExportTarget(
   filename: string,
   module: ParsedModule,
   exportPath: readonly string[],
-  arguments_: readonly PortableTypeArgument[],
   resolving: ReadonlySet<string>,
   key: string,
-): ResolvedPortableType | null {
+): ExportTarget | null {
   const [exportedName, ...rest] = exportPath;
   if (exportedName === undefined) return null;
-
   for (const statement of module.statements) {
     if (statement.type === "ExportNamedDeclaration") {
-      if (declarationName(statement.declaration) === exportedName) {
-        if (rest.length === 0) {
-          return localTypeDefinition(filename, module, exportedName, arguments_, resolving, key);
-        }
-        const nestedModule = namespaceModule(module, exportedName);
-        return nestedModule === null
+      if (declarationDeclaresName(statement.declaration, exportedName)) {
+        if (rest.length === 0) return { filename, key, localName: exportedName, module };
+        const nested = namespaceModule(module, exportedName);
+        return nested === null
           ? null
-          : exportedPathDefinition(filename, nestedModule, rest, arguments_, resolving, key);
+          : exportedExportTarget(filename, nested, rest, resolving, key);
       }
       for (const specifier of statement.specifiers) {
         const exported =
@@ -280,14 +416,8 @@ function exportedPathDefinition(
         const local =
           specifier.local.type === "Identifier" ? specifier.local.name : specifier.local.value;
         return statement.source === null
-          ? localPathDefinition(filename, module, [local, ...rest], arguments_, resolving, key)
-          : importedTypeDefinition(
-              filename,
-              statement.source.value,
-              [local, ...rest],
-              arguments_,
-              resolving,
-            );
+          ? localExportTarget(filename, module, [local, ...rest], resolving, key)
+          : importedExportTarget(filename, statement.source.value, [local, ...rest], resolving);
       }
     }
     if (
@@ -299,9 +429,7 @@ function exportedPathDefinition(
         statement.declaration?.type === "Identifier"
           ? statement.declaration.name
           : declarationName(statement.declaration);
-      return localName === null
-        ? null
-        : localTypeDefinition(filename, module, localName, arguments_, resolving, key);
+      return localName === null ? null : { filename, key, localName, module };
     }
     if (statement.type === "ExportAllDeclaration") {
       const namespaceExport = statement.exported;
@@ -312,17 +440,26 @@ function exportedPathDefinition(
         if (namespaceName !== exportedName || rest.length === 0) continue;
         sourcePath = rest;
       }
-      const target = importedTypeDefinition(
-        filename,
-        statement.source.value,
-        sourcePath,
-        arguments_,
-        resolving,
-      );
+      const target = importedExportTarget(filename, statement.source.value, sourcePath, resolving);
       if (target !== null) return target;
     }
   }
   return null;
+}
+
+function importedExportTarget(
+  containingFile: string,
+  moduleSpecifier: string,
+  exportPath: readonly string[],
+  resolving: ReadonlySet<string>,
+): ExportTarget | null {
+  const filename = resolveModule(containingFile, moduleSpecifier);
+  if (filename === null) return null;
+  const key = [filename, ...exportPath].join("\0");
+  if (resolving.has(key)) return null;
+  const nextResolving = new Set(resolving);
+  nextResolving.add(key);
+  return exportedExportTarget(filename, parsedModule(filename), exportPath, nextResolving, key);
 }
 
 function importedTypeDefinition(
@@ -332,14 +469,10 @@ function importedTypeDefinition(
   arguments_: readonly PortableTypeArgument[],
   resolving: ReadonlySet<string>,
 ): ResolvedPortableType | null {
-  const filename = resolveModule(containingFile, moduleSpecifier);
-  if (filename === null) return null;
-  const key = `${filename}\0${exportPath.join("\0")}`;
-  if (resolving.has(key)) return null;
-  const nextResolving = new Set(resolving);
-  nextResolving.add(key);
-  const module = parsedModule(filename);
-  return exportedPathDefinition(filename, module, exportPath, arguments_, nextResolving, key);
+  const target = importedExportTarget(containingFile, moduleSpecifier, exportPath, resolving);
+  return target === null
+    ? null
+    : localTypeDefinition(target.filename, target.module, target.localName, arguments_, target.key);
 }
 
 /** Build import resolution for portable type queries at one program boundary. */

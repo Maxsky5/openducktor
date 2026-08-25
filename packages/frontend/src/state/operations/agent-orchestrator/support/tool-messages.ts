@@ -1,4 +1,4 @@
-import { type JsonObject, type JsonValue, jsonValueSchema } from "@openducktor/contracts";
+import { isJsonObject, type JsonValue, jsonValueSchema } from "@openducktor/contracts";
 import { isRunningToolStatus } from "../agent-tool-messages";
 import {
   findLastToolSessionMessage,
@@ -14,9 +14,6 @@ export const normalizeToolInput = (
   }
   return Object.keys(input).length > 0 ? input : undefined;
 };
-
-const isJsonRecord = (value: JsonValue | undefined): value is JsonObject =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 export const normalizeToolText = (value: string | undefined): string | undefined => {
   const trimmed = value?.trim();
@@ -90,7 +87,7 @@ export const normalizeSessionErrorMessage = (value: string): string => {
 
   try {
     const parsed = jsonValueSchema.parse(JSON.parse(withoutQuotes));
-    if (!isJsonRecord(parsed)) {
+    if (!isJsonObject(parsed)) {
       return withoutQuotes;
     }
     const record = parsed;
@@ -98,7 +95,7 @@ export const normalizeSessionErrorMessage = (value: string): string => {
       return record.message.trim();
     }
     const nestedError = record.error;
-    if (isJsonRecord(nestedError) && typeof nestedError.message === "string") {
+    if (isJsonObject(nestedError) && typeof nestedError.message === "string") {
       return nestedError.message.trim();
     }
     return withoutQuotes;

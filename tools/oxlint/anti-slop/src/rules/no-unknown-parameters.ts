@@ -3,8 +3,10 @@ import type { ESTree, SourceCode, Variable } from "@oxlint/plugins";
 
 import { typeResolvesToAny, typeResolvesToUnknown } from "../shared/dictionary-types.ts";
 import { createLazyImportedTypeResolver } from "../shared/imported-type-resolution.ts";
+import { portablePropertyKeyValue } from "../shared/keyof-property-key-domain.ts";
 import {
   createTypeEnvironment,
+  expressionTypeNameParts,
   type PortableTypeResolver,
 } from "../shared/portable-type-resolution.ts";
 import { unwrapTransparentExpression } from "../shared/transparent-expression.ts";
@@ -31,7 +33,12 @@ type StableAlias =
 type Parameter = ESTree.ParamPattern;
 type ParameterBinding = {
   readonly identifier: ESTree.BindingIdentifier;
+  readonly omittedProperties: ReadonlySet<string>;
   readonly path: readonly TypePropertyPathSegment[];
+};
+type ParameterExposure = {
+  readonly exposesUnknownAtPath: (path: readonly TypePropertyPathSegment[]) => boolean;
+  readonly variable: Variable;
 };
 
 function parameterAnnotation(parameter: Parameter): ESTree.TSTypeAnnotation | null | undefined {
@@ -62,37 +69,64 @@ function parameterName(parameter: Parameter, sourceText: string): string {
     : sourceText.replace(/\s*:\s*unknown\s*$/u, "");
 }
 
-function bindingPropertyName(key: ESTree.Node, computed: boolean): string | null {
+function bindingPropertyPathSegment(
+  key: ESTree.Node,
+  computed: boolean,
+): TypePropertyPathSegment | null {
   if (!computed && key.type === "Identifier") return key.name;
-  if (key.type === "Literal" && (typeof key.value === "string" || typeof key.value === "number")) {
-    return String(key.value);
+  if (key.type !== "Identifier") {
+    const value = portablePropertyKeyValue(key);
+    if (value !== null) return value;
   }
-  return null;
+  const parts = expressionTypeNameParts(key);
+  return computed && parts.length > 0 ? { kind: "name", parts } : null;
 }
 
 function parameterBindings(
   pattern: Parameter | ESTree.BindingPattern,
   path: readonly TypePropertyPathSegment[] = [],
+  omittedProperties: ReadonlySet<string> = new Set(),
 ): readonly ParameterBinding[] {
   if (pattern.type === "TSParameterProperty") {
-    return parameterBindings(pattern.parameter, path);
+    return parameterBindings(pattern.parameter, path, omittedProperties);
   }
   if (pattern.type === "AssignmentPattern") {
-    return parameterBindings(pattern.left, path);
+    return parameterBindings(pattern.left, path, omittedProperties);
   }
-  if (pattern.type === "RestElement") return [];
-  if (pattern.type === "Identifier") return [{ identifier: pattern, path }];
+  if (pattern.type === "RestElement") {
+    return parameterBindings(pattern.argument, path, omittedProperties);
+  }
+  if (pattern.type === "Identifier") return [{ identifier: pattern, omittedProperties, path }];
   if (pattern.type === "ObjectPattern") {
+    const omitted = new Set(
+      pattern.properties.flatMap((property): readonly string[] => {
+        if (property.type === "RestElement") return [];
+        const segment = bindingPropertyPathSegment(property.key, property.computed);
+        return typeof segment === "string" ? [segment] : [];
+      }),
+    );
     return pattern.properties.flatMap((property): readonly ParameterBinding[] => {
-      if (property.type === "RestElement") return [];
-      const name = bindingPropertyName(property.key, property.computed);
-      if (name === null) return [];
-      return parameterBindings(property.value, [...path, name]);
+      if (property.type === "RestElement") {
+        return parameterBindings(
+          property.argument,
+          path,
+          new Set([...omittedProperties, ...omitted]),
+        );
+      }
+      const segment = bindingPropertyPathSegment(property.key, property.computed);
+      if (segment === null) return [];
+      return parameterBindings(property.value, [...path, segment], omittedProperties);
     });
   }
   return pattern.elements.flatMap((element, index): readonly ParameterBinding[] => {
-    if (element === null || element.type === "RestElement") return [];
-    return parameterBindings(element, [...path, index]);
+    if (element === null) return [];
+    return element.type === "RestElement"
+      ? parameterBindings(
+          element.argument,
+          [...path, { kind: "array-rest", offset: index }],
+          omittedProperties,
+        )
+      : parameterBindings(element, [...path, index], omittedProperties);
   });
 }
 
@@ -142,84 +176,141 @@ function stableAliasInitializer(
 
 function directlyExposesParameter(
   expression: ESTree.Expression,
-  parameterVariable: Variable,
+  parameterExposure: ParameterExposure,
   sourceCode: SourceCode,
   resolvingAliases: ReadonlySet<Variable> = new Set(),
+  accessPath: readonly TypePropertyPathSegment[] = [],
 ): boolean {
   const unwrapped = unwrapTransparentExpression(expression, { includeTypeAssertions: true });
   if (unwrapped !== expression) {
-    return directlyExposesParameter(unwrapped, parameterVariable, sourceCode, resolvingAliases);
+    return directlyExposesParameter(
+      unwrapped,
+      parameterExposure,
+      sourceCode,
+      resolvingAliases,
+      accessPath,
+    );
   }
   if (expression.type === "Identifier") {
-    if (resolveVariable(sourceCode, expression) === parameterVariable) return true;
+    if (resolveVariable(sourceCode, expression) === parameterExposure.variable) {
+      return parameterExposure.exposesUnknownAtPath(accessPath);
+    }
     const alias = stableAliasInitializer(sourceCode, expression, resolvingAliases);
     if (alias === null) return false;
     const nextResolving = new Set(resolvingAliases);
     nextResolving.add(alias.variable);
     return alias.kind === "expression"
-      ? directlyExposesParameter(alias.expression, parameterVariable, sourceCode, nextResolving)
+      ? directlyExposesParameter(
+          alias.expression,
+          parameterExposure,
+          sourceCode,
+          nextResolving,
+          accessPath,
+        )
       : alias.body.body.some((statement) =>
-          statementReturnsParameter(statement, parameterVariable, sourceCode, nextResolving),
+          statementReturnsParameter(
+            statement,
+            parameterExposure,
+            sourceCode,
+            nextResolving,
+            accessPath,
+          ),
         );
   }
   if (expression.type === "ChainExpression")
     return directlyExposesParameter(
       expression.expression,
-      parameterVariable,
+      parameterExposure,
       sourceCode,
       resolvingAliases,
+      accessPath,
     );
   if (expression.type === "ArrowFunctionExpression" || expression.type === "FunctionExpression") {
     if (expression.body === null) return false;
     return expression.body.type === "BlockStatement"
       ? expression.body.body.some((statement) =>
-          statementReturnsParameter(statement, parameterVariable, sourceCode, resolvingAliases),
+          statementReturnsParameter(
+            statement,
+            parameterExposure,
+            sourceCode,
+            resolvingAliases,
+            accessPath,
+          ),
         )
-      : directlyExposesParameter(expression.body, parameterVariable, sourceCode, resolvingAliases);
+      : directlyExposesParameter(
+          expression.body,
+          parameterExposure,
+          sourceCode,
+          resolvingAliases,
+          accessPath,
+        );
   }
   if (expression.type === "AwaitExpression") {
     return directlyExposesParameter(
       expression.argument,
-      parameterVariable,
+      parameterExposure,
       sourceCode,
       resolvingAliases,
+      accessPath,
     );
   }
   if (expression.type === "ConditionalExpression") {
     return (
       directlyExposesParameter(
         expression.consequent,
-        parameterVariable,
+        parameterExposure,
         sourceCode,
         resolvingAliases,
+        accessPath,
       ) ||
       directlyExposesParameter(
         expression.alternate,
-        parameterVariable,
+        parameterExposure,
         sourceCode,
         resolvingAliases,
+        accessPath,
       )
     );
   }
   if (expression.type === "LogicalExpression") {
     return (
-      directlyExposesParameter(expression.left, parameterVariable, sourceCode, resolvingAliases) ||
-      directlyExposesParameter(expression.right, parameterVariable, sourceCode, resolvingAliases)
+      directlyExposesParameter(
+        expression.left,
+        parameterExposure,
+        sourceCode,
+        resolvingAliases,
+        accessPath,
+      ) ||
+      directlyExposesParameter(
+        expression.right,
+        parameterExposure,
+        sourceCode,
+        resolvingAliases,
+        accessPath,
+      )
     );
   }
   if (expression.type === "SequenceExpression") {
     const lastExpression = expression.expressions.at(-1);
     return (
       lastExpression !== undefined &&
-      directlyExposesParameter(lastExpression, parameterVariable, sourceCode, resolvingAliases)
+      directlyExposesParameter(
+        lastExpression,
+        parameterExposure,
+        sourceCode,
+        resolvingAliases,
+        accessPath,
+      )
     );
   }
   if (expression.type === "MemberExpression" && expression.object.type !== "Super") {
+    const segment = bindingPropertyPathSegment(expression.property, expression.computed);
     return directlyExposesParameter(
       expression.object,
-      parameterVariable,
+      parameterExposure,
       sourceCode,
       resolvingAliases,
+      segment === null ? accessPath : [segment, ...accessPath],
     );
   }
   if (expression.type === "ArrayExpression") {
@@ -228,9 +319,10 @@ function directlyExposesParameter(
         element !== null &&
         directlyExposesParameter(
           element.type === "SpreadElement" ? element.argument : element,
-          parameterVariable,
+          parameterExposure,
           sourceCode,
           resolvingAliases,
+          accessPath,
         ),
     );
   }
@@ -238,15 +330,16 @@ function directlyExposesParameter(
     return expression.properties.some((property) =>
       directlyExposesParameter(
         property.type === "SpreadElement" ? property.argument : property.value,
-        parameterVariable,
+        parameterExposure,
         sourceCode,
         resolvingAliases,
+        accessPath,
       ),
     );
   }
   if (expression.type === "TemplateLiteral") {
     return expression.expressions.some((part) =>
-      directlyExposesParameter(part, parameterVariable, sourceCode, resolvingAliases),
+      directlyExposesParameter(part, parameterExposure, sourceCode, resolvingAliases, accessPath),
     );
   }
   return false;
@@ -254,61 +347,84 @@ function directlyExposesParameter(
 
 function statementReturnsParameter(
   statement: ESTree.Statement,
-  parameterVariable: Variable,
+  parameterExposure: ParameterExposure,
   sourceCode: SourceCode,
   resolvingAliases: ReadonlySet<Variable> = new Set(),
+  accessPath: readonly TypePropertyPathSegment[] = [],
 ): boolean {
   if (statement.type === "ReturnStatement") {
     return (
       statement.argument !== null &&
-      directlyExposesParameter(statement.argument, parameterVariable, sourceCode, resolvingAliases)
+      directlyExposesParameter(
+        statement.argument,
+        parameterExposure,
+        sourceCode,
+        resolvingAliases,
+        accessPath,
+      )
     );
   }
   if (statement.type === "BlockStatement") {
     return statement.body.some((child) =>
-      statementReturnsParameter(child, parameterVariable, sourceCode, resolvingAliases),
+      statementReturnsParameter(child, parameterExposure, sourceCode, resolvingAliases, accessPath),
     );
   }
   if (statement.type === "IfStatement") {
     return (
       statementReturnsParameter(
         statement.consequent,
-        parameterVariable,
+        parameterExposure,
         sourceCode,
         resolvingAliases,
+        accessPath,
       ) ||
       (statement.alternate !== null &&
         statementReturnsParameter(
           statement.alternate,
-          parameterVariable,
+          parameterExposure,
           sourceCode,
           resolvingAliases,
+          accessPath,
         ))
     );
   }
   if (statement.type === "SwitchStatement") {
     return statement.cases.some((case_) =>
       case_.consequent.some((child) =>
-        statementReturnsParameter(child, parameterVariable, sourceCode, resolvingAliases),
+        statementReturnsParameter(
+          child,
+          parameterExposure,
+          sourceCode,
+          resolvingAliases,
+          accessPath,
+        ),
       ),
     );
   }
   if (statement.type === "TryStatement") {
     return (
-      statementReturnsParameter(statement.block, parameterVariable, sourceCode, resolvingAliases) ||
+      statementReturnsParameter(
+        statement.block,
+        parameterExposure,
+        sourceCode,
+        resolvingAliases,
+        accessPath,
+      ) ||
       (statement.handler !== null &&
         statementReturnsParameter(
           statement.handler.body,
-          parameterVariable,
+          parameterExposure,
           sourceCode,
           resolvingAliases,
+          accessPath,
         )) ||
       (statement.finalizer !== null &&
         statementReturnsParameter(
           statement.finalizer,
-          parameterVariable,
+          parameterExposure,
           sourceCode,
           resolvingAliases,
+          accessPath,
         ))
     );
   }
@@ -359,7 +475,7 @@ export const noUnknownParametersRule = defineRule({
       });
     };
 
-    const resolvedUnknownBindings = (parameter: Parameter): readonly Variable[] => {
+    const parameterExposures = (parameter: Parameter): readonly ParameterExposure[] => {
       const annotation = parameterAnnotation(parameter);
       if (annotation === null || annotation === undefined) return [];
       const environment = createTypeEnvironment(
@@ -367,15 +483,39 @@ export const noUnknownParametersRule = defineRule({
         context.sourceCode.visitorKeys,
       );
       const resolver = importedTypeResolver(annotation);
-      return parameterBindings(parameter).flatMap(({ identifier, path }): readonly Variable[] => {
-        if (
-          !typePropertyPathResolvesToUnknown(annotation.typeAnnotation, path, environment, resolver)
-        ) {
-          return [];
-        }
-        const variable = resolveVariable(context.sourceCode, identifier);
-        return variable === null ? [] : [variable];
-      });
+      return parameterBindings(parameter).flatMap(
+        ({ identifier, omittedProperties, path }): readonly ParameterExposure[] => {
+          const variable = resolveVariable(context.sourceCode, identifier);
+          if (variable === null) return [];
+          const bindingIsUnknown = typePropertyPathResolvesToUnknown(
+            annotation.typeAnnotation,
+            path,
+            environment,
+            resolver,
+          );
+          return [
+            {
+              exposesUnknownAtPath(accessPath) {
+                if (bindingIsUnknown) return true;
+                const firstAccess = accessPath[0];
+                if (typeof firstAccess === "string" && omittedProperties.has(firstAccess)) {
+                  return false;
+                }
+                return (
+                  accessPath.length > 0 &&
+                  typePropertyPathResolvesToUnknown(
+                    annotation.typeAnnotation,
+                    [...path, ...accessPath],
+                    environment,
+                    resolver,
+                  )
+                );
+              },
+              variable,
+            },
+          ];
+        },
+      );
     };
 
     const checkAssertion = (node: ESTree.TSAsExpression | ESTree.TSTypeAssertion): void => {
@@ -383,8 +523,8 @@ export const noUnknownParametersRule = defineRule({
       if (functionNode === null) return;
       for (const parameter of functionNode.params) {
         if (
-          resolvedUnknownBindings(parameter).some((variable) =>
-            directlyExposesParameter(node.expression, variable, context.sourceCode),
+          parameterExposures(parameter).some((exposure) =>
+            directlyExposesParameter(node.expression, exposure, context.sourceCode),
           )
         ) {
           report(parameter);
@@ -403,8 +543,8 @@ export const noUnknownParametersRule = defineRule({
         const body = node.body;
         for (const parameter of node.params) {
           if (
-            resolvedUnknownBindings(parameter).some((variable) =>
-              directlyExposesParameter(body, variable, context.sourceCode),
+            parameterExposures(parameter).some((exposure) =>
+              directlyExposesParameter(body, exposure, context.sourceCode),
             )
           ) {
             report(parameter);
@@ -427,8 +567,8 @@ export const noUnknownParametersRule = defineRule({
         }
         for (const parameter of functionNode.params) {
           if (
-            resolvedUnknownBindings(parameter).some((variable) =>
-              directlyExposesParameter(argument, variable, context.sourceCode),
+            parameterExposures(parameter).some((exposure) =>
+              directlyExposesParameter(argument, exposure, context.sourceCode),
             )
           ) {
             report(parameter);

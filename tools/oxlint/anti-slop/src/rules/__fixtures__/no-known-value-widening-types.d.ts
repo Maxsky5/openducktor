@@ -22,6 +22,15 @@ export type BroadObject = object;
 export type Identity<Value> = Value;
 export type InputKey = "input";
 export type StringKey = string;
+export declare const stringKey: string;
+export declare const keyOwner: { readonly key: string };
+export declare const token: unique symbol;
+export declare const otherToken: unique symbol;
+export type UniqueSymbolPayload = {
+  readonly [token]: unknown;
+  readonly [otherToken]: string;
+  readonly known: string;
+};
 type Value = object;
 export type ModuleObject = Value;
 export interface KnownOwner {

@@ -120,7 +120,6 @@ describe("Codex tool normalization", () => {
         },
       },
       "message-live",
-      "tool-1",
     )[0];
 
     expect(part).toEqual(
@@ -156,7 +155,6 @@ describe("Codex tool normalization", () => {
         ],
       },
       "message-live",
-      "tool-1",
     )[0];
 
     expect(part).toEqual(
@@ -186,7 +184,6 @@ describe("Codex tool normalization", () => {
         ],
       },
       "message-live",
-      "change-1",
     )[0];
 
     expect(part).toEqual(
@@ -225,7 +222,6 @@ describe("Codex tool normalization", () => {
         ],
       },
       "message-live",
-      "change-1",
     )[0];
 
     expect(part).toEqual(
@@ -257,7 +253,6 @@ describe("Codex tool normalization", () => {
         ],
       },
       "message-live",
-      "change-1",
     )[0];
 
     expect(part).toEqual(
@@ -300,7 +295,6 @@ describe("Codex tool normalization", () => {
         status: "completed",
       },
       "message-live",
-      "patch-1",
     )[0];
 
     expect(part).toEqual(
@@ -339,7 +333,6 @@ describe("Codex tool normalization", () => {
         status: "completed",
       },
       "message-live",
-      "patch-1",
     )[0];
 
     expect(part).toEqual(
@@ -379,7 +372,6 @@ function AuthConsumer() {}
         status: "completed",
       },
       "message-live",
-      "patch-1",
     )[0];
 
     expect(part).toEqual(
@@ -418,7 +410,6 @@ function AuthConsumer() {}
         status: "completed",
       },
       "message-live",
-      "question-1",
     )[0];
 
     expect(part).toEqual(
@@ -449,7 +440,6 @@ function AuthConsumer() {}
         durationMs: 0,
       },
       "message-live",
-      "cmd-1",
     )[0];
 
     expect(part).toEqual(
@@ -473,10 +463,10 @@ function AuthConsumer() {}
       startedAtMs: 1000,
     };
 
-    expect(toStreamPart(item, "message-history", "cmd-1")[0]).not.toEqual(
+    expect(toStreamPart(item, "message-history")[0]).not.toEqual(
       expect.objectContaining({ startedAtMs: expect.any(Number) }),
     );
-    expect(toStreamPart(item, "message-live", "cmd-1", { allowStartedAtOnly: true })[0]).toEqual(
+    expect(toStreamPart(item, "message-live", { allowStartedAtOnly: true })[0]).toEqual(
       expect.objectContaining({ startedAtMs: 1000 }),
     );
   });
@@ -495,7 +485,6 @@ function AuthConsumer() {}
           durationMs: "0",
         },
         "message-live",
-        "cmd-1",
       ),
     ).toThrow("Codex tool durationMs must be a finite number when present.");
   });
@@ -508,7 +497,6 @@ function AuthConsumer() {}
         action: { type: "search", query: null, queries: ["actual query"] },
       },
       "message-live",
-      "web-1",
     )[0];
 
     expect(part).toEqual(
@@ -526,7 +514,6 @@ function AuthConsumer() {}
     const part = toStreamPart(
       { type: "webSearch", id: "web-1", action: { type: "other" } },
       "message-live",
-      "web-1",
     )[0];
 
     expect(part).toEqual(
@@ -544,7 +531,6 @@ function AuthConsumer() {}
     const part = toStreamPart(
       { type: "plan", id: "plan-1", text: "1. Inspect\n2. Fix" },
       "message-live",
-      "plan-1",
     )[0];
 
     expect(part).toEqual(

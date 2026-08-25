@@ -1,9 +1,5 @@
 import { isCodexContextualUserMessage } from "../codex-app-server-shared";
-import {
-  codexItemId,
-  codexItemTypeMatches,
-  terminalHistoryPart,
-} from "../codex-app-server-transcript";
+import { codexItemTypeMatches, terminalHistoryPart } from "../codex-app-server-transcript";
 import type { CodexMappingResult } from "../codex-canonical-events";
 import { emptyCodexMappingResult } from "../codex-canonical-events";
 import type { CodexEventMapper } from "../codex-event-mapper";
@@ -35,7 +31,7 @@ export const userMessageMapper: CodexEventMapper = {
     if (message.trim().length === 0) {
       return emptyCodexMappingResult();
     }
-    const messageId = codexItemId(input.item, `${ctx.threadId}-user-${input.index}`);
+    const messageId = input.item.id;
     const timestamp = ctx.timestamp ?? input.timestamp;
     return {
       handled: true,
@@ -73,7 +69,7 @@ export const assistantMessageMapper: CodexEventMapper = {
     if (message.trim().length === 0) {
       return emptyCodexMappingResult();
     }
-    const messageId = codexItemId(input.item, `${ctx.threadId}-assistant-${input.index}`);
+    const messageId = input.item.id;
     const timestamp = ctx.timestamp ?? input.timestamp;
     return {
       handled: true,

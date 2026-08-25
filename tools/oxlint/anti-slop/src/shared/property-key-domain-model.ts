@@ -1,21 +1,31 @@
+type NonEmptyPropertyKeyPatterns = readonly [PropertyKeyPattern, ...PropertyKeyPattern[]];
+
 export type PropertyKeyPattern =
+  | { readonly kind: "any-string-interpolation" }
   | { readonly kind: "bigint-interpolation" }
-  | { readonly kind: "intersection"; readonly patterns: readonly PropertyKeyPattern[] }
+  | { readonly kind: "intersection"; readonly patterns: NonEmptyPropertyKeyPatterns }
+  | { readonly kind: "literal-interpolation"; readonly value: string }
   | { readonly kind: "number-interpolation" }
-  | { readonly kind: "regular-expression"; readonly source: string }
   | {
       readonly interpolations: readonly PropertyKeyPattern[];
       readonly kind: "template";
       readonly quasis: readonly string[];
     }
-  | { readonly kind: "union"; readonly patterns: readonly PropertyKeyPattern[] };
+  | { readonly kind: "union"; readonly patterns: NonEmptyPropertyKeyPatterns };
 
 export type PropertyKeyDomain = {
   readonly numbers: boolean;
   readonly patterns: readonly PropertyKeyPattern[];
   readonly strings: boolean;
   readonly symbols: boolean;
+  readonly unknown: boolean;
+  readonly uniqueSymbols: ReadonlySet<string>;
   readonly values: ReadonlySet<string>;
+};
+
+export type PropertyKeyResolutionContext = {
+  readonly keyDomainSubstitutions: ReadonlyMap<string, PropertyKeyDomain>;
+  readonly resolving: ReadonlySet<string>;
 };
 
 export const emptyPropertyKeyDomain = (): PropertyKeyDomain => ({
@@ -23,7 +33,14 @@ export const emptyPropertyKeyDomain = (): PropertyKeyDomain => ({
   patterns: [],
   strings: false,
   symbols: false,
+  unknown: false,
+  uniqueSymbols: new Set(),
   values: new Set(),
+});
+
+export const unknownPropertyKeyDomain = (): PropertyKeyDomain => ({
+  ...emptyPropertyKeyDomain(),
+  unknown: true,
 });
 
 export const propertyKeyDomainValueId = (value: number | string): string =>
@@ -37,9 +54,29 @@ export function propertyKeyDomainValueText(id: string): string {
   return id.slice(id.indexOf("\0") + 1);
 }
 
-export const regularExpressionPropertyKeyPattern = (source: string): PropertyKeyPattern => ({
-  kind: "regular-expression",
-  source,
+export function propertyKeyDomainConcreteValues(
+  domain: PropertyKeyDomain,
+): readonly (number | string)[] {
+  return [...domain.values].map((id) => {
+    const text = propertyKeyDomainValueText(id);
+    return valueKind(id) === "number" ? Number(text) : text;
+  });
+}
+
+export function propertyKeyDomainFromValue(value: number | string): PropertyKeyDomain {
+  return {
+    ...emptyPropertyKeyDomain(),
+    values: new Set([propertyKeyDomainValueId(value)]),
+  };
+}
+
+export const anyStringInterpolationPropertyKeyPattern = (): PropertyKeyPattern => ({
+  kind: "any-string-interpolation",
+});
+
+export const literalInterpolationPropertyKeyPattern = (value: string): PropertyKeyPattern => ({
+  kind: "literal-interpolation",
+  value,
 });
 
 export const numberInterpolationPropertyKeyPattern = (): PropertyKeyPattern => ({
@@ -64,9 +101,15 @@ function unorderedPatternsEqual(
 
 function patternsEqual(left: PropertyKeyPattern, right: PropertyKeyPattern): boolean {
   if (left.kind !== right.kind) return false;
-  if (left.kind === "number-interpolation" || left.kind === "bigint-interpolation") return true;
-  if (left.kind === "regular-expression" && right.kind === "regular-expression") {
-    return left.source === right.source;
+  if (
+    left.kind === "any-string-interpolation" ||
+    left.kind === "number-interpolation" ||
+    left.kind === "bigint-interpolation"
+  ) {
+    return true;
+  }
+  if (left.kind === "literal-interpolation" && right.kind === "literal-interpolation") {
+    return left.value === right.value;
   }
   if (left.kind === "template" && right.kind === "template") {
     return (
@@ -96,13 +139,16 @@ function uniquePatterns(patterns: readonly PropertyKeyPattern[]): readonly Prope
 
 export function unionPropertyKeyPatterns(
   patterns: readonly PropertyKeyPattern[],
-): PropertyKeyPattern {
+): PropertyKeyPattern | null {
   const unique = uniquePatterns(
     patterns.flatMap((pattern) => (pattern.kind === "union" ? pattern.patterns : [pattern])),
   );
-  return unique.length === 1
-    ? (unique[0] ?? regularExpressionPropertyKeyPattern("(?!)"))
-    : { kind: "union", patterns: unique };
+  if (unique.some((pattern) => pattern.kind === "any-string-interpolation")) {
+    return anyStringInterpolationPropertyKeyPattern();
+  }
+  const [first, ...rest] = unique;
+  if (first === undefined) return null;
+  return rest.length === 0 ? first : { kind: "union", patterns: [first, ...rest] };
 }
 
 export function templatePropertyKeyPattern(
@@ -159,7 +205,8 @@ function patternMatches(pattern: PropertyKeyPattern, value: string): boolean {
   if (pattern.kind === "bigint-interpolation") {
     return /^-?(?:0|[1-9]\d*|0[xX][\dA-Fa-f]+|0[bB][01]+|0[oO][0-7]+)$/u.test(value);
   }
-  if (pattern.kind === "regular-expression") return new RegExp(pattern.source, "u").test(value);
+  if (pattern.kind === "any-string-interpolation") return true;
+  if (pattern.kind === "literal-interpolation") return value === pattern.value;
   if (pattern.kind === "template") return templatePatternMatches(pattern, value);
   if (pattern.kind === "union") {
     return pattern.patterns.some((member) => patternMatches(member, value));
@@ -200,11 +247,14 @@ function acceptsConcreteValue(domain: PropertyKeyDomain, value: number | string)
 }
 
 export function unionPropertyKeyDomains(domains: readonly PropertyKeyDomain[]): PropertyKeyDomain {
+  if (domains.some((domain) => domain.unknown)) return unknownPropertyKeyDomain();
   return {
     numbers: domains.some((domain) => domain.numbers),
     patterns: uniquePatterns(domains.flatMap((domain) => domain.patterns)),
     strings: domains.some((domain) => domain.strings),
     symbols: domains.some((domain) => domain.symbols),
+    unknown: false,
+    uniqueSymbols: new Set(domains.flatMap((domain) => [...domain.uniqueSymbols])),
     values: new Set(domains.flatMap((domain) => [...domain.values])),
   };
 }
@@ -213,8 +263,82 @@ export function propertyKeyDomainIsBroad(domain: PropertyKeyDomain): boolean {
   return domain.numbers || domain.patterns.length > 0 || domain.strings || domain.symbols;
 }
 
+export function propertyKeyDomainAtomicDomains(
+  domain: PropertyKeyDomain,
+): readonly PropertyKeyDomain[] {
+  const atoms: PropertyKeyDomain[] = [];
+  const atom = (fields: Partial<PropertyKeyDomain>): void => {
+    atoms.push({ ...emptyPropertyKeyDomain(), ...fields });
+  };
+  if (domain.numbers) atom({ numbers: true });
+  if (domain.strings) atom({ strings: true });
+  if (domain.symbols) atom({ symbols: true });
+  for (const pattern of domain.patterns) atom({ patterns: [pattern] });
+  for (const identity of domain.uniqueSymbols) atom({ uniqueSymbols: new Set([identity]) });
+  for (const value of domain.values) atom({ values: new Set([value]) });
+  return atoms;
+}
+
+type TemplatePropertyKeyPattern = Extract<PropertyKeyPattern, { kind: "template" }>;
+
+function normalizeTemplatePattern(pattern: TemplatePropertyKeyPattern): TemplatePropertyKeyPattern {
+  const quasis: string[] = [pattern.quasis[0] ?? ""];
+  const interpolations: PropertyKeyPattern[] = [];
+  for (const [index, interpolation] of pattern.interpolations.entries()) {
+    const nextQuasi = pattern.quasis[index + 1] ?? "";
+    if (interpolation.kind === "literal-interpolation") {
+      quasis[quasis.length - 1] = `${quasis.at(-1) ?? ""}${interpolation.value}${nextQuasi}`;
+      continue;
+    }
+    interpolations.push(interpolation);
+    quasis.push(nextQuasi);
+  }
+  return { interpolations, kind: "template", quasis };
+}
+
+function findQuasiFragment(
+  quasis: readonly string[],
+  fragment: string,
+  startQuasi: number,
+  startOffset: number,
+): readonly [quasi: number, offset: number] | null {
+  for (let quasi = startQuasi; quasi < quasis.length; quasi += 1) {
+    const value = quasis[quasi] ?? "";
+    const offset = value.indexOf(fragment, quasi === startQuasi ? startOffset : 0);
+    if (offset >= 0) return [quasi, offset + fragment.length];
+  }
+  return null;
+}
+
+function stringWildcardTemplateIncludes(
+  container: TemplatePropertyKeyPattern,
+  candidate: TemplatePropertyKeyPattern,
+): boolean {
+  if (!container.interpolations.every(({ kind }) => kind === "any-string-interpolation")) {
+    return false;
+  }
+  const firstContainerQuasi = container.quasis[0] ?? "";
+  const firstCandidateQuasi = candidate.quasis[0] ?? "";
+  const lastContainerQuasi = container.quasis.at(-1) ?? "";
+  const lastCandidateQuasi = candidate.quasis.at(-1) ?? "";
+  if (!firstCandidateQuasi.startsWith(firstContainerQuasi)) return false;
+  if (!lastCandidateQuasi.endsWith(lastContainerQuasi)) return false;
+
+  let quasi = 0;
+  let offset = firstContainerQuasi.length;
+  for (const fragment of container.quasis.slice(1, -1)) {
+    const match = findQuasiFragment(candidate.quasis, fragment, quasi, offset);
+    if (match === null) return false;
+    [quasi, offset] = match;
+  }
+  const lastQuasi = candidate.quasis.length - 1;
+  const suffixStart = lastCandidateQuasi.length - lastContainerQuasi.length;
+  return quasi < lastQuasi || (quasi === lastQuasi && offset <= suffixStart);
+}
+
 function patternIncludes(container: PropertyKeyPattern, candidate: PropertyKeyPattern): boolean {
   if (patternsEqual(container, candidate)) return true;
+  if (container.kind === "any-string-interpolation") return true;
   if (candidate.kind === "union") {
     return candidate.patterns.every((pattern) => patternIncludes(container, pattern));
   }
@@ -227,6 +351,30 @@ function patternIncludes(container: PropertyKeyPattern, candidate: PropertyKeyPa
   if (container.kind === "intersection") {
     return container.patterns.every((pattern) => patternIncludes(pattern, candidate));
   }
+  if (
+    (container.kind === "number-interpolation" || container.kind === "bigint-interpolation") &&
+    candidate.kind === "literal-interpolation"
+  ) {
+    return patternMatches(container, candidate.value);
+  }
+  if (container.kind === "template" && candidate.kind === "template") {
+    const normalizedContainer = normalizeTemplatePattern(container);
+    const normalizedCandidate = normalizeTemplatePattern(candidate);
+    const aligned =
+      normalizedContainer.quasis.length === normalizedCandidate.quasis.length &&
+      normalizedContainer.quasis.every(
+        (quasi, index) => quasi === normalizedCandidate.quasis[index],
+      ) &&
+      normalizedContainer.interpolations.length === normalizedCandidate.interpolations.length &&
+      normalizedContainer.interpolations.every((interpolation, index) => {
+        const candidateInterpolation = normalizedCandidate.interpolations[index];
+        return (
+          candidateInterpolation !== undefined &&
+          patternIncludes(interpolation, candidateInterpolation)
+        );
+      });
+    return aligned || stringWildcardTemplateIncludes(normalizedContainer, normalizedCandidate);
+  }
   return false;
 }
 
@@ -234,9 +382,16 @@ export function propertyKeyDomainIncludes(
   domain: PropertyKeyDomain,
   candidate: PropertyKeyDomain,
 ): boolean {
+  if (domain.unknown || candidate.unknown) return false;
   if (candidate.numbers && !domain.numbers && !domain.strings) return false;
   if (candidate.strings && !domain.strings) return false;
   if (candidate.symbols && !domain.symbols) return false;
+  if (
+    !domain.symbols &&
+    [...candidate.uniqueSymbols].some((identity) => !domain.uniqueSymbols.has(identity))
+  ) {
+    return false;
+  }
   if (
     candidate.patterns.some(
       (candidatePattern) =>
@@ -263,24 +418,42 @@ export function propertyKeyDomainMatches(
   return acceptsConcreteValue(domain, value);
 }
 
+export function propertyKeyDomainIsExact(domain: PropertyKeyDomain): boolean {
+  return (
+    !domain.numbers &&
+    !domain.strings &&
+    !domain.symbols &&
+    !domain.unknown &&
+    domain.patterns.length === 0 &&
+    domain.uniqueSymbols.size + domain.values.size === 1
+  );
+}
+
+export function propertyKeyDomainIsEmpty(domain: PropertyKeyDomain): boolean {
+  return (
+    !domain.numbers &&
+    !domain.strings &&
+    !domain.symbols &&
+    !domain.unknown &&
+    domain.patterns.length === 0 &&
+    domain.uniqueSymbols.size === 0 &&
+    domain.values.size === 0
+  );
+}
+
 function intersectionPattern(
   left: PropertyKeyPattern,
   right: PropertyKeyPattern,
 ): PropertyKeyPattern {
-  const patterns = uniquePatterns(
-    [left, right].flatMap((pattern) =>
-      pattern.kind === "intersection" ? pattern.patterns : [pattern],
-    ),
-  );
-  return patterns.length === 1
-    ? (patterns[0] ?? regularExpressionPropertyKeyPattern("(?!)"))
-    : { kind: "intersection", patterns };
+  return patternsEqual(left, right) ? left : { kind: "intersection", patterns: [left, right] };
 }
 
 export function intersectPropertyKeyDomains(
   left: PropertyKeyDomain,
   right: PropertyKeyDomain,
 ): PropertyKeyDomain {
+  if (left.unknown) return right;
+  if (right.unknown) return left;
   const values = new Set<string>();
   for (const value of left.values) {
     if (acceptsDomainValue(right, value)) values.add(value);
@@ -296,11 +469,20 @@ export function intersectPropertyKeyDomains(
       patterns.push(intersectionPattern(leftPattern, rightPattern));
     }
   }
+  const uniqueSymbols = new Set<string>();
+  for (const identity of left.uniqueSymbols) {
+    if (right.symbols || right.uniqueSymbols.has(identity)) uniqueSymbols.add(identity);
+  }
+  for (const identity of right.uniqueSymbols) {
+    if (left.symbols || left.uniqueSymbols.has(identity)) uniqueSymbols.add(identity);
+  }
   return {
     numbers: left.numbers && right.numbers,
     patterns: uniquePatterns(patterns),
     strings: left.strings && right.strings,
     symbols: left.symbols && right.symbols,
+    unknown: false,
+    uniqueSymbols,
     values,
   };
 }
@@ -309,6 +491,8 @@ export function subtractPropertyKeyDomains(
   source: PropertyKeyDomain,
   excluded: PropertyKeyDomain,
 ): PropertyKeyDomain {
+  if (excluded.unknown) return emptyPropertyKeyDomain();
+  if (source.unknown) return source;
   return {
     numbers: source.numbers && !excluded.numbers,
     patterns: excluded.strings
@@ -321,21 +505,12 @@ export function subtractPropertyKeyDomains(
         ),
     strings: source.strings && !excluded.strings,
     symbols: source.symbols && !excluded.symbols,
+    unknown: false,
+    uniqueSymbols: new Set(
+      [...source.uniqueSymbols].filter(
+        (identity) => !excluded.symbols && !excluded.uniqueSymbols.has(identity),
+      ),
+    ),
     values: new Set([...source.values].filter((value) => !acceptsDomainValue(excluded, value))),
   };
-}
-
-/** Decide whether a concrete property remains visible after Pick or Omit. */
-export function propertyKeySurvivesTransform(
-  transform: "Omit" | "Pick",
-  sourceOpenDomain: PropertyKeyDomain,
-  selectedDomain: PropertyKeyDomain,
-  value: number | string,
-): boolean {
-  if (transform === "Pick") return propertyKeyDomainMatches(selectedDomain, value);
-  if (!propertyKeyDomainMatches(selectedDomain, value)) return true;
-  return propertyKeyDomainMatches(
-    subtractPropertyKeyDomains(sourceOpenDomain, selectedDomain),
-    value,
-  );
 }

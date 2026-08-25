@@ -1,4 +1,4 @@
-import { jsonValueSchema } from "@openducktor/contracts";
+import { isJsonObject, jsonValueSchema } from "@openducktor/contracts";
 import { z } from "zod";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { extractAllFileEditData } from "./file-edit-tool";
@@ -85,9 +85,6 @@ const summarizeSearchToolInput = (
   return null;
 };
 
-const isJsonRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
 const parseStructuredOutputSummary = (output: string): string | null => {
   const trimmed = output.trim();
   if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
@@ -97,7 +94,7 @@ const parseStructuredOutputSummary = (output: string): string | null => {
   try {
     // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue` at this boundary.
     const parsed = jsonValueSchema.parse(JSON.parse(trimmed));
-    if (!isJsonRecord(parsed)) {
+    if (!isJsonObject(parsed)) {
       return null;
     }
     const record = parsed;

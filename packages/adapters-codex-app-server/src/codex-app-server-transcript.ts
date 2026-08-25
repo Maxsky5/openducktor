@@ -126,8 +126,6 @@ export const timestampFromCodexTurn = (
   key: "completedAt" | "startedAt",
 ): string | null => codexTimestampFromSeconds(turn[key]) ?? null;
 
-export const codexItemId = (item: CodexTimedThreadItem, _fallbackId: string): string => item.id;
-
 export const codexItemTypeMatches = <Type extends CodexAppServerThreadItem["type"]>(
   item: CodexTimedThreadItem,
   expected: Type,
@@ -227,7 +225,6 @@ export const codexTurnItemsFromThreadRead = (
 
 export const toHistoryMessage = (
   item: CodexTimedThreadItem | undefined,
-  fallbackId: string,
   model?: AgentModelSelection,
   timestamp?: string,
   isFinalAgentMessage?: boolean,
@@ -237,7 +234,7 @@ export const toHistoryMessage = (
   if (!item) {
     return null;
   }
-  const messageId = codexItemId(item, fallbackId);
+  const messageId = item.id;
   const messageTimestamp = timestamp ?? new Date().toISOString();
   if (item.type === "userMessage") {
     const input = codexUserInputsFromItem(item);
@@ -276,7 +273,7 @@ export const toHistoryMessage = (
       ...(model ? { model } : undefined),
     };
   }
-  const parts = toStreamPart(item, messageId, messageId);
+  const parts = toStreamPart(item, messageId);
   if (parts.length > 0) {
     return {
       messageId,
@@ -311,7 +308,7 @@ const toHistoryParts = (
 ): import("@openducktor/core").AgentStreamPart[] => {
   const isFinalAgentMessage = options.isFinalAgentMessage === true;
   const includeTextFallback = options.includeTextFallback !== false;
-  const parts = toStreamPart(item, messageId, item.id);
+  const parts = toStreamPart(item, messageId);
   if (parts.length > 0) {
     return isFinalAgentMessage
       ? [...parts, terminalHistoryPart(messageId, options.tokenUsage)]
@@ -715,10 +712,9 @@ const codexWebSearchStreamParts = (
 export const toStreamPart = (
   value: CodexTimedThreadItem,
   messageId: string,
-  fallbackPartId: string,
   timingOptions?: CodexToolTimingOptions,
 ): AgentStreamPart[] => {
-  const partId = codexItemId(value, fallbackPartId);
+  const partId = value.id;
   if (codexItemTypeMatches(value, "reasoning")) {
     return codexReasoningStreamParts(value, messageId, partId);
   }

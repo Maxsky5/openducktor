@@ -54,21 +54,3 @@ export function lexicalStructuralTypeParameterNames(
   }
   return names;
 }
-
-/** Collect every type binder that is in scope at a node and can shadow module aliases. */
-export function lexicalTypeParameterNames(
-  node: ESTree.Node,
-  visitorKeys: VisitorKeys,
-): ReadonlySet<string> {
-  const names = new Set(lexicalStructuralTypeParameterNames(node, visitorKeys));
-  let current: ESTree.Node | null = node;
-  while (current !== null && current.type !== "Program") {
-    if ("typeParameters" in current) {
-      for (const parameter of current.typeParameters?.params ?? []) {
-        names.add(parameter.name.name);
-      }
-    }
-    current = current.parent;
-  }
-  return names;
-}
