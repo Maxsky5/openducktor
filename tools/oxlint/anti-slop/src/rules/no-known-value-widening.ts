@@ -45,8 +45,9 @@ function hasKnownEvidence(
   if (declarator === null || declarator.init === null || !isStableBinding(variable, declarator)) {
     return false;
   }
-  visitedVariables.add(variable);
-  return hasKnownEvidence(sourceCode, declarator.init, visitedVariables);
+  const nextVisitedVariables = new Set(visitedVariables);
+  nextVisitedVariables.add(variable);
+  return hasKnownEvidence(sourceCode, declarator.init, nextVisitedVariables);
 }
 
 function typeTarget(

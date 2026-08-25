@@ -166,7 +166,19 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
       errors: [error],
     },
     {
+      code: "const source = { id: 1 }; const value: unknown = condition ? source : source;",
+      errors: [error],
+    },
+    {
+      code: "const source = { id: 1 }; const left = source; const right = source; const value: unknown = condition ? left : right;",
+      errors: [error],
+    },
+    {
       code: "const left = { id: 1 }; const value: unknown = left || { id: 2 };",
+      errors: [error],
+    },
+    {
+      code: "const source = { id: 1 }; const value: unknown = source || source;",
       errors: [error],
     },
     { code: "const value: unknown = (prepare(), { id: 2 });", errors: [error] },
