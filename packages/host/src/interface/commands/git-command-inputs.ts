@@ -3,7 +3,6 @@ import {
   gitConflictOperationSchema,
   gitDiffScopeSchema,
   gitResetWorktreeSelectionRequestSchema,
-  runtimeTypeName,
 } from "@openducktor/contracts";
 import type {
   GitAbortConflictInput,
@@ -161,7 +160,7 @@ export const parseGitWorktreeStatusInput = (input: unknown): GitWorktreeStatusIn
       message: `diffScope must be either 'target' or 'uncommitted', got: ${String(diffScopeValue)}`,
       field: "diffScope",
       cause: diffScope.error,
-      details: { receivedType: runtimeTypeName(diffScopeValue) },
+      details: { receivedValueTag: Object.prototype.toString.call(diffScopeValue) },
     });
   }
   const workingDir = optionalString(record.workingDir, "workingDir");

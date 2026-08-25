@@ -1,4 +1,3 @@
-import { runtimeTypeName } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import type {
   AgentSessionTodoItem,
@@ -19,15 +18,15 @@ type TodoNormalizerTypeContract = {
 
 describe("core exports contract", () => {
   test("re-exports todo normalizers from the barrel", () => {
-    expect(runtimeTypeName(core.normalizeAgentSessionTodoItem)).toBe("function");
-    expect(runtimeTypeName(core.normalizeAgentSessionTodoList)).toBe("function");
-    expect(runtimeTypeName(core.normalizeAgentSessionTodoPriority)).toBe("function");
-    expect(runtimeTypeName(core.normalizeAgentSessionTodoStatus)).toBe("function");
+    expect(core.normalizeAgentSessionTodoItem).toBeInstanceOf(Function);
+    expect(core.normalizeAgentSessionTodoList).toBeInstanceOf(Function);
+    expect(core.normalizeAgentSessionTodoPriority).toBeInstanceOf(Function);
+    expect(core.normalizeAgentSessionTodoStatus).toBeInstanceOf(Function);
   });
 
   test("re-exports shared record guards from the barrel", () => {
-    expect(runtimeTypeName(core.isRecord)).toBe("function");
-    expect(runtimeTypeName(core.isUnknownRecord)).toBe("function");
+    expect(core.isRecord).toBeInstanceOf(Function);
+    expect(core.isUnknownRecord).toBeInstanceOf(Function);
   });
 
   test("keeps todo normalizer type exports importable from the barrel", () => {

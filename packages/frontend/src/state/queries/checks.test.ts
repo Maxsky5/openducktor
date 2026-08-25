@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR, runtimeTypeName } from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import {
   classifyDiagnosticsQueryError,
@@ -217,7 +217,7 @@ describe("repoRuntimeHealthQueryOptions", () => {
       },
     );
 
-    expect(runtimeTypeName(queryOptions.refetchInterval)).toBe("function");
+    expect(queryOptions.refetchInterval).toBeInstanceOf(Function);
     expect(repoRuntimeHealthRefetchInterval(undefined)).toBe(false);
     expect(repoRuntimeHealthRefetchInterval({ opencode: readyRuntimeHealth })).toBe(false);
     expect(repoRuntimeHealthRefetchInterval({ opencode: errorRuntimeHealth })).toBe(false);

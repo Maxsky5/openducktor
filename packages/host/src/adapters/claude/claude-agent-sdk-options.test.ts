@@ -3,7 +3,7 @@ import * as fsPromises from "node:fs/promises";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ODT_MCP_TOOL_NAMES, runtimeTypeName } from "@openducktor/contracts";
+import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { normalizePathForComparison } from "@openducktor/path-support";
 import { Effect } from "effect";
@@ -260,7 +260,7 @@ describe("buildClaudeAgentSdkOptions", () => {
     expect(systemPrompt.append).toContain(
       "OpenDucktor starts this Claude Code session with cwd set to",
     );
-    expect(runtimeTypeName(options.onUserDialog)).toBe("function");
+    expect(options.onUserDialog).toBeInstanceOf(Function);
     expect(options.supportedDialogKinds).toContain("ask_user_question");
     expect(options.toolConfig).toEqual({
       askUserQuestion: { previewFormat: "markdown" },

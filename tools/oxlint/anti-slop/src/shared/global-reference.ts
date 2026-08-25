@@ -2,7 +2,7 @@ import type { ESTree, Scope, SourceCode, Variable } from "@oxlint/plugins";
 
 export function resolveVariable(
   sourceCode: SourceCode,
-  identifier: ESTree.IdentifierReference,
+  identifier: ESTree.BindingIdentifier | ESTree.IdentifierReference,
 ): Variable | null {
   let scope: Scope | null = sourceCode.getScope(identifier);
   while (scope !== null) {

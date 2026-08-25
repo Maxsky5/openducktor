@@ -174,7 +174,13 @@ function referencedTypeScopes(
   typeName: PortableTSTypeName,
   environment: WideningTypeEnvironment,
 ): readonly { readonly environment: WideningTypeEnvironment; readonly name: string }[] {
-  const parts = typeNameParts(typeName);
+  return referencedTypePartScopes(typeNameParts(typeName), environment);
+}
+
+function referencedTypePartScopes(
+  parts: readonly string[],
+  environment: WideningTypeEnvironment,
+): readonly { readonly environment: WideningTypeEnvironment; readonly name: string }[] {
   let environments: readonly WideningTypeEnvironment[] = [environment];
   for (const namespaceName of parts.slice(0, -1)) {
     environments = environments.flatMap((candidate) =>
@@ -313,6 +319,7 @@ function interfaceWideningTarget(
     for (const heritage of interface_.extends) {
       const heritageParts = expressionTypeNameParts(heritage.expression);
       const heritageName = heritageParts.length === 1 ? heritageParts[0] : undefined;
+      const heritageKey = heritageParts.join(".");
       const heritageArguments = (heritage.typeArguments?.params ?? []).map((argument) =>
         resolvedSubstitutionArgument({ environment, type: argument }, substitutions),
       );
@@ -345,33 +352,33 @@ function interfaceWideningTarget(
               );
         if (target !== null) return target;
       }
-      if (heritageName !== undefined) {
-        const inheritedInterfaces = environment.interfaces.get(heritageName);
+      for (const scope of referencedTypePartScopes(heritageParts, environment)) {
+        const inheritedInterfaces = scope.environment.interfaces.get(scope.name);
         if (inheritedInterfaces !== undefined) {
           const target = interfaceWideningTarget(
-            heritageName,
+            heritageKey,
             inheritedInterfaces,
-            environment,
+            scope.environment,
             heritageArguments,
             resolveImportedType,
             nextResolving,
           );
           if (target !== null) return target;
         }
-        const heritageAlias = environment.aliases.get(heritageName);
+        const heritageAlias = scope.environment.aliases.get(scope.name);
         if (heritageAlias !== undefined) {
           const aliasSubstitutions = aliasSubstitution(
             heritageAlias,
             heritageArguments,
-            environment,
+            scope.environment,
             substitutions,
           );
           if (aliasSubstitutions === null) continue;
           const target = classifyWideningTargetWithState(
             heritageAlias.typeAnnotation,
-            environment,
+            scope.environment,
             aliasSubstitutions,
-            new Set([heritageName]),
+            new Set([...nextResolving, heritageKey]),
             "alias",
             resolveImportedType,
           );

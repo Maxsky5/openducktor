@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { resolveCodexEffectivePolicy, runtimeTypeName } from "@openducktor/contracts";
+import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY, type AgentRole } from "@openducktor/core";
 import {
   codexSessionRef,
@@ -675,7 +675,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       () => {},
     );
 
-    expect(runtimeTypeName(unsubscribe)).toBe("function");
+    expect(unsubscribe).toBeInstanceOf(Function);
   });
 
   test("rejects event subscription for an existing session in another working directory", async () => {

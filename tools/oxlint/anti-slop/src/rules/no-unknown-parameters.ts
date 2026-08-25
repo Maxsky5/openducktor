@@ -46,6 +46,13 @@ function parameterName(parameter: Parameter, sourceText: string): string {
     : sourceText.replace(/\s*:\s*unknown\s*$/u, "");
 }
 
+function parameterIdentifier(parameter: Parameter): ESTree.BindingIdentifier | null {
+  if (parameter.type === "TSParameterProperty") return parameterIdentifier(parameter.parameter);
+  if (parameter.type === "AssignmentPattern") return parameterIdentifier(parameter.left);
+  if (parameter.type === "RestElement") return parameterIdentifier(parameter.argument);
+  return parameter.type === "Identifier" ? parameter : null;
+}
+
 function enclosingRuntimeFunction(node: ESTree.Node): RuntimeFunction | null {
   let current = node.parent;
   while (current !== null && current.type !== "Program") {
@@ -84,46 +91,41 @@ function stableAliasInitializer(
 
 function directlyExposesParameter(
   expression: ESTree.Expression,
-  parameterName: string,
+  parameterVariable: Variable,
   sourceCode: SourceCode,
   resolvingAliases: ReadonlySet<Variable> = new Set(),
 ): boolean {
   const unwrapped = unwrapTransparentExpression(expression, { includeTypeAssertions: true });
   if (unwrapped !== expression) {
-    return directlyExposesParameter(unwrapped, parameterName, sourceCode, resolvingAliases);
+    return directlyExposesParameter(unwrapped, parameterVariable, sourceCode, resolvingAliases);
   }
   if (expression.type === "Identifier") {
-    if (expression.name === parameterName) return true;
+    if (resolveVariable(sourceCode, expression) === parameterVariable) return true;
     const alias = stableAliasInitializer(sourceCode, expression, resolvingAliases);
     if (alias === null) return false;
     const nextResolving = new Set(resolvingAliases);
     nextResolving.add(alias.variable);
-    return directlyExposesParameter(alias.expression, parameterName, sourceCode, nextResolving);
+    return directlyExposesParameter(alias.expression, parameterVariable, sourceCode, nextResolving);
   }
   if (expression.type === "ChainExpression")
     return directlyExposesParameter(
       expression.expression,
-      parameterName,
+      parameterVariable,
       sourceCode,
       resolvingAliases,
     );
   if (expression.type === "ArrowFunctionExpression" || expression.type === "FunctionExpression") {
-    if (
-      expression.params.some((parameter) => parameterNameOfBinding(parameter) === parameterName)
-    ) {
-      return false;
-    }
     if (expression.body === null) return false;
     return expression.body.type === "BlockStatement"
       ? expression.body.body.some((statement) =>
-          statementReturnsParameter(statement, parameterName, sourceCode),
+          statementReturnsParameter(statement, parameterVariable, sourceCode),
         )
-      : directlyExposesParameter(expression.body, parameterName, sourceCode, resolvingAliases);
+      : directlyExposesParameter(expression.body, parameterVariable, sourceCode, resolvingAliases);
   }
   if (expression.type === "AwaitExpression") {
     return directlyExposesParameter(
       expression.argument,
-      parameterName,
+      parameterVariable,
       sourceCode,
       resolvingAliases,
     );
@@ -132,28 +134,38 @@ function directlyExposesParameter(
     return (
       directlyExposesParameter(
         expression.consequent,
-        parameterName,
+        parameterVariable,
         sourceCode,
         resolvingAliases,
       ) ||
-      directlyExposesParameter(expression.alternate, parameterName, sourceCode, resolvingAliases)
+      directlyExposesParameter(
+        expression.alternate,
+        parameterVariable,
+        sourceCode,
+        resolvingAliases,
+      )
     );
   }
   if (expression.type === "LogicalExpression") {
     return (
-      directlyExposesParameter(expression.left, parameterName, sourceCode, resolvingAliases) ||
-      directlyExposesParameter(expression.right, parameterName, sourceCode, resolvingAliases)
+      directlyExposesParameter(expression.left, parameterVariable, sourceCode, resolvingAliases) ||
+      directlyExposesParameter(expression.right, parameterVariable, sourceCode, resolvingAliases)
     );
   }
   if (expression.type === "SequenceExpression") {
     const lastExpression = expression.expressions.at(-1);
     return (
       lastExpression !== undefined &&
-      directlyExposesParameter(lastExpression, parameterName, sourceCode, resolvingAliases)
+      directlyExposesParameter(lastExpression, parameterVariable, sourceCode, resolvingAliases)
     );
   }
   if (expression.type === "MemberExpression" && expression.object.type !== "Super") {
-    return directlyExposesParameter(expression.object, parameterName, sourceCode, resolvingAliases);
+    return directlyExposesParameter(
+      expression.object,
+      parameterVariable,
+      sourceCode,
+      resolvingAliases,
+    );
   }
   if (expression.type === "ArrayExpression") {
     return expression.elements.some(
@@ -161,7 +173,7 @@ function directlyExposesParameter(
         element !== null &&
         directlyExposesParameter(
           element.type === "SpreadElement" ? element.argument : element,
-          parameterName,
+          parameterVariable,
           sourceCode,
           resolvingAliases,
         ),
@@ -171,7 +183,7 @@ function directlyExposesParameter(
     return expression.properties.some((property) =>
       directlyExposesParameter(
         property.type === "SpreadElement" ? property.argument : property.value,
-        parameterName,
+        parameterVariable,
         sourceCode,
         resolvingAliases,
       ),
@@ -179,54 +191,49 @@ function directlyExposesParameter(
   }
   if (expression.type === "TemplateLiteral") {
     return expression.expressions.some((part) =>
-      directlyExposesParameter(part, parameterName, sourceCode, resolvingAliases),
+      directlyExposesParameter(part, parameterVariable, sourceCode, resolvingAliases),
     );
   }
   return false;
 }
 
-function parameterNameOfBinding(parameter: Parameter): string | null {
-  if (parameter.type === "TSParameterProperty") return parameterNameOfBinding(parameter.parameter);
-  if (parameter.type === "AssignmentPattern") return parameterNameOfBinding(parameter.left);
-  if (parameter.type === "RestElement") return parameterNameOfBinding(parameter.argument);
-  return parameter.type === "Identifier" ? parameter.name : null;
-}
-
 function statementReturnsParameter(
   statement: ESTree.Statement,
-  parameterName: string,
+  parameterVariable: Variable,
   sourceCode: SourceCode,
 ): boolean {
   if (statement.type === "ReturnStatement") {
     return (
       statement.argument !== null &&
-      directlyExposesParameter(statement.argument, parameterName, sourceCode)
+      directlyExposesParameter(statement.argument, parameterVariable, sourceCode)
     );
   }
   if (statement.type === "BlockStatement") {
     return statement.body.some((child) =>
-      statementReturnsParameter(child, parameterName, sourceCode),
+      statementReturnsParameter(child, parameterVariable, sourceCode),
     );
   }
   if (statement.type === "IfStatement") {
     return (
-      statementReturnsParameter(statement.consequent, parameterName, sourceCode) ||
+      statementReturnsParameter(statement.consequent, parameterVariable, sourceCode) ||
       (statement.alternate !== null &&
-        statementReturnsParameter(statement.alternate, parameterName, sourceCode))
+        statementReturnsParameter(statement.alternate, parameterVariable, sourceCode))
     );
   }
   if (statement.type === "SwitchStatement") {
     return statement.cases.some((case_) =>
-      case_.consequent.some((child) => statementReturnsParameter(child, parameterName, sourceCode)),
+      case_.consequent.some((child) =>
+        statementReturnsParameter(child, parameterVariable, sourceCode),
+      ),
     );
   }
   if (statement.type === "TryStatement") {
     return (
-      statementReturnsParameter(statement.block, parameterName, sourceCode) ||
+      statementReturnsParameter(statement.block, parameterVariable, sourceCode) ||
       (statement.handler !== null &&
-        statementReturnsParameter(statement.handler.body, parameterName, sourceCode)) ||
+        statementReturnsParameter(statement.handler.body, parameterVariable, sourceCode)) ||
       (statement.finalizer !== null &&
-        statementReturnsParameter(statement.finalizer, parameterName, sourceCode))
+        statementReturnsParameter(statement.finalizer, parameterVariable, sourceCode))
     );
   }
   return false;
@@ -269,16 +276,8 @@ export const noUnknownParametersRule = defineRule({
   createOnce(context) {
     const reportedParameters = new WeakSet<ESTree.TSTypeAnnotation>();
 
-    const report = (functionNode: RuntimeFunction, name: string): void => {
-      const parameter =
-        functionNode.params.find((candidate) => {
-          const annotation = parameterAnnotation(candidate);
-          return (
-            parameterTypeResolvesToUnknown(annotation, context.sourceCode.visitorKeys) &&
-            parameterName(candidate, context.sourceCode.getText(candidate)) === name
-          );
-        }) ?? null;
-      const annotation = parameter === null ? null : parameterAnnotation(parameter);
+    const report = (parameter: Parameter): void => {
+      const annotation = parameterAnnotation(parameter);
       if (annotation === null || annotation === undefined || reportedParameters.has(annotation)) {
         return;
       }
@@ -286,8 +285,13 @@ export const noUnknownParametersRule = defineRule({
       context.report({
         node: annotation.typeAnnotation,
         messageId: "unknownParameter",
-        data: { parameter: name },
+        data: { parameter: parameterName(parameter, context.sourceCode.getText(parameter)) },
       });
+    };
+
+    const resolvedParameter = (parameter: Parameter): Variable | null => {
+      const identifier = parameterIdentifier(parameter);
+      return identifier === null ? null : resolveVariable(context.sourceCode, identifier);
     };
 
     const checkAssertion = (node: ESTree.TSAsExpression | ESTree.TSTypeAssertion): void => {
@@ -296,9 +300,12 @@ export const noUnknownParametersRule = defineRule({
       for (const parameter of functionNode.params) {
         const annotation = parameterAnnotation(parameter);
         if (!parameterTypeResolvesToUnknown(annotation, context.sourceCode.visitorKeys)) continue;
-        const name = parameterName(parameter, context.sourceCode.getText(parameter));
-        if (directlyExposesParameter(node.expression, name, context.sourceCode)) {
-          report(functionNode, name);
+        const variable = resolvedParameter(parameter);
+        if (
+          variable !== null &&
+          directlyExposesParameter(node.expression, variable, context.sourceCode)
+        ) {
+          report(parameter);
         }
       }
     };
@@ -314,8 +321,13 @@ export const noUnknownParametersRule = defineRule({
         for (const parameter of node.params) {
           const annotation = parameterAnnotation(parameter);
           if (!parameterTypeResolvesToUnknown(annotation, context.sourceCode.visitorKeys)) continue;
-          const name = parameterName(parameter, context.sourceCode.getText(parameter));
-          if (directlyExposesParameter(node.body, name, context.sourceCode)) report(node, name);
+          const variable = resolvedParameter(parameter);
+          if (
+            variable !== null &&
+            directlyExposesParameter(node.body, variable, context.sourceCode)
+          ) {
+            report(parameter);
+          }
         }
       },
       ReturnStatement(node) {
@@ -330,9 +342,12 @@ export const noUnknownParametersRule = defineRule({
         for (const parameter of functionNode.params) {
           const annotation = parameterAnnotation(parameter);
           if (!parameterTypeResolvesToUnknown(annotation, context.sourceCode.visitorKeys)) continue;
-          const name = parameterName(parameter, context.sourceCode.getText(parameter));
-          if (directlyExposesParameter(node.argument, name, context.sourceCode)) {
-            report(functionNode, name);
+          const variable = resolvedParameter(parameter);
+          if (
+            variable !== null &&
+            directlyExposesParameter(node.argument, variable, context.sourceCode)
+          ) {
+            report(parameter);
           }
         }
       },

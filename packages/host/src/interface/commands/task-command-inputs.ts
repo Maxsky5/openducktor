@@ -1,4 +1,4 @@
-import { agentRoleSchema, runtimeTypeName } from "@openducktor/contracts";
+import { agentRoleSchema } from "@openducktor/contracts";
 import type {
   AgentSessionDeleteInput,
   AgentSessionUpsertInput,
@@ -76,7 +76,7 @@ export const parseListAgentSessionsForTasksInput = (
     throw new HostValidationError({
       message: "taskIds must be an array of strings.",
       field: "taskIds",
-      details: { receivedType: runtimeTypeName(record.taskIds) },
+      details: { receivedValueTag: Object.prototype.toString.call(record.taskIds) },
     });
   }
   const taskIds = record.taskIds.map((taskId, index) => {
@@ -85,7 +85,7 @@ export const parseListAgentSessionsForTasksInput = (
       throw new HostValidationError({
         message: `${field} must be a string.`,
         field,
-        details: { receivedType: runtimeTypeName(taskId) },
+        details: { receivedValueTag: Object.prototype.toString.call(taskId) },
       });
     }
     return requireString(taskId, field);

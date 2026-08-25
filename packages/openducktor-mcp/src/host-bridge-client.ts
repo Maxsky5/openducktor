@@ -9,7 +9,6 @@ import {
   jsonValueSchema,
   type JsonValue,
   type WorkspaceScopedOdtToolName,
-  runtimeTypeName,
 } from "@openducktor/contracts";
 import type { z } from "zod";
 import { normalizeBaseUrl } from "./path-utils";
@@ -119,7 +118,7 @@ const createBridgeTransportError = (action: string, cause: unknown): OdtToolErro
     message: `${action} failed: ${toCauseMessage(cause)}`,
     details: {
       action,
-      causeName: cause instanceof Error ? cause.name : runtimeTypeName(cause),
+      causeName: cause instanceof Error ? cause.name : Object.prototype.toString.call(cause),
     },
   });
 };
@@ -130,7 +129,7 @@ const createBridgeJsonError = (action: string, cause: unknown): OdtToolError => 
     message: `Invalid JSON response from ${action}: ${toCauseMessage(cause)}`,
     details: {
       action,
-      causeName: cause instanceof Error ? cause.name : runtimeTypeName(cause),
+      causeName: cause instanceof Error ? cause.name : Object.prototype.toString.call(cause),
     },
   });
 };

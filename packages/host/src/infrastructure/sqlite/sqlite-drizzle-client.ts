@@ -1,4 +1,3 @@
-import { runtimeTypeName } from "@openducktor/contracts";
 import type { ExtractTablesWithRelations } from "drizzle-orm/relations";
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import {
@@ -57,16 +56,16 @@ export type OpenSqliteDrizzleConnectionInput<TSchema extends Record<string, AnyS
   readonly runtime?: SqliteDriverRuntime;
 };
 
-const unsupportedParameterValue = (value: SqliteValue): HostOperationError =>
+const unsupportedParameterValue = (value: unknown): HostOperationError =>
   new HostOperationError({
     operation: "sqlite.drizzleParameter",
     message: "Unsupported SQLite parameter value.",
     details: {
-      valueType: value instanceof Uint8Array ? "Uint8Array" : runtimeTypeName(value),
+      valueTag: Object.prototype.toString.call(value),
     },
   });
 
-const toSqliteValue = (value: SqliteValue): Effect.Effect<SqliteValue, HostOperationError> => {
+const toSqliteValue = (value: unknown): Effect.Effect<SqliteValue, HostOperationError> => {
   if (
     value === null ||
     typeof value === "bigint" ||
@@ -81,14 +80,14 @@ const toSqliteValue = (value: SqliteValue): Effect.Effect<SqliteValue, HostOpera
 };
 
 const toSqliteValues = (
-  params: ReadonlyArray<SqliteValue>,
+  params: readonly unknown[],
 ): Effect.Effect<SqliteValue[], HostOperationError> =>
   Effect.all(params.map((param) => toSqliteValue(param)));
 
 const executeRemoteQuery = (
   database: SqliteDatabase,
   query: string,
-  params: ReadonlyArray<SqliteValue>,
+  params: readonly unknown[],
   method: SqliteRemoteMethod,
 ): Effect.Effect<SqliteRemoteRows, HostOperationError> =>
   Effect.gen(function* () {
@@ -113,10 +112,7 @@ const executeRemoteQuery = (
 const makeRemoteCallback =
   (database: SqliteDatabase): AsyncRemoteCallback =>
   (query, params, method) => {
-    // SAFETY: Drizzle supplies SQLite-native bind values; toSqliteValue preserves runtime validation.
-    return Effect.runPromise(
-      executeRemoteQuery(database, query, params as ReadonlyArray<SqliteValue>, method),
-    );
+    return Effect.runPromise(executeRemoteQuery(database, query, params, method));
   };
 
 const configureDatabase = (

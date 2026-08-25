@@ -722,7 +722,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "runtimeSupportedScopesSchema",
   "runtimeSupportedSubagentExecutionModesSchema",
   "runtimeTransportSchema",
-  "runtimeTypeName",
   "runtimeWorkingDirectoryRefSchema",
   "runtimeWorkflowCapabilitiesSchema",
   "searchTasksResultSchema",

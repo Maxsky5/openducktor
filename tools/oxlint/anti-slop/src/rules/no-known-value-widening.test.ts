@@ -30,6 +30,7 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
     `${prelude} interface Commands { readonly start: Command } const commands: Commands = { start: startCommand };`,
     `${prelude} interface Commands extends Record<'start', Command> {} const commands: Commands = { start: startCommand };`,
     `${prelude} interface Commands<Key extends PropertyKey> extends Record<Key, Command> {} const commands: Commands<'start'> = { start: startCommand };`,
+    `${prelude} namespace Owner { export interface Commands<Key extends PropertyKey> extends Record<Key, Command> {} } interface Derived extends Owner.Commands<'start'> {} const commands: Derived = { start: startCommand };`,
     `${prelude} type Commands = { readonly start: Command }; const commands: Commands = { start: startCommand };`,
     `${prelude} type PermissionLevels = { readonly [Level in Permission]: number }; const levels: PermissionLevels = { admin: 1 };`,
     `${prelude} const commands: Record<'start', Command> = { start: startCommand };`,
@@ -195,6 +196,18 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
     },
     {
       code: "type Command = () => void; const start = () => {}; namespace Owner { export type Open = Record<string, Command>; } const commands: Owner.Open = { start };",
+      errors: [error],
+    },
+    {
+      code: "type Command = () => void; const start = () => {}; namespace Owner { export interface Open extends Record<string, Command> {} } interface Derived extends Owner.Open {} const commands: Derived = { start };",
+      errors: [error],
+    },
+    {
+      code: "type Command = () => void; const start = () => {}; namespace Owner { export type Open<Key extends PropertyKey> = Record<Key, Command>; } interface Derived extends Owner.Open<string> {} const commands: Derived = { start };",
+      errors: [error],
+    },
+    {
+      code: "type Command = () => void; const start = () => {}; namespace Owner { export interface Open<Key extends PropertyKey> extends Record<Key, Command> {} } interface Derived extends Owner.Open<string> {} const commands: Derived = { start };",
       errors: [error],
     },
     {

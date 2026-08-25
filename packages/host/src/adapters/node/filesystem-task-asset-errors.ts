@@ -38,8 +38,8 @@ export const validateTaskAssetTaskContext = (
   taskId: string,
   operation: TaskAssetFileOperation,
 ): Effect.Effect<void, TaskAssetError> => {
-  const workspace = taskAssetRenderContextSchema["shape"].workspaceId.safeParse(workspaceId);
-  const task = taskAssetRenderContextSchema["shape"].taskId.safeParse(taskId);
+  const workspace = taskAssetRenderContextSchema.shape.workspaceId.safeParse(workspaceId);
+  const task = taskAssetRenderContextSchema.shape.taskId.safeParse(taskId);
   if (!workspace.success || !task.success) {
     return Effect.fail(
       createFileError({

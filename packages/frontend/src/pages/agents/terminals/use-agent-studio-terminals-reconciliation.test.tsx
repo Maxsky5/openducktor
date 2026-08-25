@@ -1,4 +1,3 @@
-import { runtimeTypeName } from "@openducktor/contracts";
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { TerminalSummary } from "@openducktor/contracts";
@@ -133,7 +132,7 @@ describe("useAgentStudioTerminals", () => {
         summary: { label: "/repo/worktrees/task-a" },
         requestState: "ready",
       });
-      expect(runtimeTypeName(getLatest().tabs[0]?.tabId)).toBe("string");
+      expect(getLatest().tabs[0]?.tabId).toEqual(expect.any(String));
       expect(getLatest().activeTabId).toBe(getLatest().tabs[0]?.tabId ?? null);
     } finally {
       releaseRefresh();

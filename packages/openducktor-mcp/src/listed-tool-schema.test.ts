@@ -13,7 +13,7 @@ const requiredOf = (jsonSchema: Record<string, unknown>): string[] => {
 
 describe("listed MCP tool input schema", () => {
   test("uses the full contract schema for tool execution", () => {
-    expect(ODT_TOOL_SCHEMAS.odt_read_task["shape"]).toHaveProperty("workspaceId");
+    expect(ODT_TOOL_SCHEMAS.odt_read_task.shape).toHaveProperty("workspaceId");
   });
 
   test("hides workspaceId from listed tools when the MCP server is already workspace-scoped", () => {

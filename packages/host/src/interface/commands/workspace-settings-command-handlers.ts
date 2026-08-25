@@ -9,7 +9,6 @@ import {
   workspaceRepoSettingsInputSchema,
   type WorkspaceRepoConfigInput,
   type WorkspaceRepoSettingsInput,
-  runtimeTypeName,
 } from "@openducktor/contracts";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { HostValidationError } from "../../effect/host-errors";
@@ -47,7 +46,7 @@ const requireStringArray = (value: unknown, label: string): string[] => {
     throw new HostValidationError({
       message: `${label} must be an array of strings.`,
       field: label,
-      details: { receivedType: runtimeTypeName(value) },
+      details: { receivedValueTag: Object.prototype.toString.call(value) },
     });
   }
   return value.map((entry, index) => requireString(entry, `${label}[${index}]`));
@@ -60,7 +59,9 @@ const optionalRuntimeKind = (record: Record<string, unknown>) => {
     throw new HostValidationError({
       message: "defaultRuntimeKind must be a supported runtime kind.",
       field: "defaultRuntimeKind",
-      details: { receivedType: runtimeTypeName(record.defaultRuntimeKind) },
+      details: {
+        receivedValueTag: Object.prototype.toString.call(record.defaultRuntimeKind),
+      },
     });
   }
   return parsed.data;

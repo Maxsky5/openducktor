@@ -19,7 +19,7 @@ const agentSessionControlWorkingDirectoryFields = {
   workingDirectory: nonEmptyStringSchema,
 };
 
-const agentSessionControlRefFields = agentSessionLiveRefSchema["shape"];
+const agentSessionControlRefFields = agentSessionLiveRefSchema.shape;
 
 const fileReferenceSchema = z
   .object({

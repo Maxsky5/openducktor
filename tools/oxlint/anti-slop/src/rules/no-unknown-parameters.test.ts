@@ -19,6 +19,9 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     "function consumeUnknown(value: unknown) { report(value); }",
     "promise.catch((error: unknown) => toDomainError(error));",
     "function errorMessage(value: unknown): string { return String(value); }",
+    "function read(value: unknown) { { const value = 1; return value; } }",
+    "function read(value: unknown) { return ((value: number) => value)(1); }",
+    "function read(value: unknown) { try { throw 1; } catch (value) { return value; } }",
   ],
   invalid: [
     { code: "function load(input: unknown) { return input; }", errors: [error] },

@@ -368,7 +368,7 @@ const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
   }),
   transcriptEventSchema({
     type: z.literal("approval_required"),
-    ...inferredTranscriptPendingApprovalRequestSchema["shape"],
+    ...inferredTranscriptPendingApprovalRequestSchema.shape,
     parentExternalSessionId: z.string().optional(),
     childExternalSessionId: z.string().optional(),
     subagentCorrelationKey: z.string().optional(),
@@ -383,7 +383,7 @@ const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
   }),
   transcriptEventSchema({
     type: z.literal("question_required"),
-    ...inferredTranscriptPendingQuestionRequestSchema["shape"],
+    ...inferredTranscriptPendingQuestionRequestSchema.shape,
     parentExternalSessionId: z.string().optional(),
     childExternalSessionId: z.string().optional(),
     subagentCorrelationKey: z.string().optional(),

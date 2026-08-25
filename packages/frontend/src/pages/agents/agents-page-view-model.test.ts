@@ -1,4 +1,3 @@
-import { runtimeTypeName } from "@openducktor/contracts";
 import { describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { Sparkles } from "lucide-react";
@@ -201,7 +200,7 @@ describe("agents-page-view-model", () => {
     });
 
     expect(model.workflowSteps).toHaveLength(2);
-    expect(runtimeTypeName(model.onOpenTaskDetails)).toBe("function");
+    expect(model.onOpenTaskDetails).toBeInstanceOf(Function);
     expect(model.sessionSelector.disabled).toBe(true);
     expect(
       model.sessionSelector.shouldAutofocusComposerForValue(activeSession.externalSessionId),

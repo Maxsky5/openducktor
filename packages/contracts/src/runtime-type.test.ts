@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { runtimeTypeName } from "./runtime-type";
 
 describe("runtime type guards", () => {
   test("narrows primitive unions without losing the selected member", () => {
@@ -23,27 +22,5 @@ describe("runtime type guards", () => {
     };
 
     expect(invokeIfFunction((input) => input.length)).toBe(4);
-  });
-
-  test("reports every JavaScript runtime type, including null as object", () => {
-    expect([
-      runtimeTypeName(1n),
-      runtimeTypeName(true),
-      runtimeTypeName(() => {}),
-      runtimeTypeName(1),
-      runtimeTypeName(null),
-      runtimeTypeName("value"),
-      runtimeTypeName(Symbol("value")),
-      runtimeTypeName(undefined),
-    ]).toEqual([
-      "bigint",
-      "boolean",
-      "function",
-      "number",
-      "object",
-      "string",
-      "symbol",
-      "undefined",
-    ]);
   });
 });

@@ -1,4 +1,3 @@
-import { runtimeTypeName } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import {
@@ -12,9 +11,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
   test("returns action handlers", () => {
     const actions = createSessionActions({ updateSession: () => null });
 
-    expect(runtimeTypeName(actions.sendAgentMessage)).toBe("function");
-    expect(runtimeTypeName(actions.startAgentSession)).toBe("function");
-    expect(runtimeTypeName(actions.stopAgentSession)).toBe("function");
+    expect(actions.sendAgentMessage).toBeInstanceOf(Function);
+    expect(actions.startAgentSession).toBeInstanceOf(Function);
+    expect(actions.stopAgentSession).toBeInstanceOf(Function);
   });
 
   test("uses live workspace refs for session start stale checks", async () => {

@@ -1,4 +1,3 @@
-import { runtimeTypeName } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
@@ -337,7 +336,7 @@ describe("use-agent-chat-layout helpers", () => {
     expect(initialState.messagesContainerRef.current).toBeNull();
     expect(initialState.composerFormRef.current).toBeNull();
     expect(initialState.composerTextareaRef.current).toBeNull();
-    expect(runtimeTypeName(initialState.resizeComposerTextarea)).toBe("function");
+    expect(initialState.resizeComposerTextarea).toBeInstanceOf(Function);
 
     await harness.update({ displayedSessionKey: "session-2", input: "draft" });
 

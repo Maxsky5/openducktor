@@ -1,4 +1,3 @@
-import { runtimeTypeName } from "@openducktor/contracts";
 import type {} from "./bun-test";
 import type { SetPlanInput, SetSpecInput } from "./task-client";
 import * as taskClientModule from "./task-client";
@@ -27,6 +26,6 @@ describe("task-client exports contract", () => {
       subtasks: [{ title: "Subtask" }],
     });
 
-    expect(runtimeTypeName(HostTaskClient)).toBe("function");
+    expect(HostTaskClient).toBeInstanceOf(Function);
   });
 });

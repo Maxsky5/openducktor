@@ -1,4 +1,3 @@
-import { runtimeTypeName } from "@openducktor/contracts";
 import { describe, expect, mock, test } from "bun:test";
 import { useState } from "react";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
@@ -120,7 +119,7 @@ describe("useTaskTabActions", () => {
       const latest = harness.getLatest();
       expect(latest.openTaskTabs).toEqual(["task-1", "task-3"]);
       expect(latest.persistedActiveTaskId).toBe("task-3");
-      expect(runtimeTypeName(latest.handleReorderTab)).toBe("function");
+      expect(latest.handleReorderTab).toBeInstanceOf(Function);
       expect(clearTaskSelection).toHaveBeenCalledTimes(0);
       expect(selectTask).toHaveBeenCalledWith("task-3");
       expect(globalThis.document.activeElement).toBe(nextTrigger);
@@ -153,7 +152,7 @@ describe("useTaskTabActions", () => {
     const latest = harness.getLatest();
     expect(latest.openTaskTabs).toEqual([]);
     expect(latest.persistedActiveTaskId).toBeNull();
-    expect(runtimeTypeName(latest.handleReorderTab)).toBe("function");
+    expect(latest.handleReorderTab).toBeInstanceOf(Function);
     expect(clearTaskSelection).toHaveBeenCalledTimes(1);
     expect(selectTask).toHaveBeenCalledTimes(0);
 

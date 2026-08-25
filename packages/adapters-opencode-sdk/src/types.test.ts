@@ -1,4 +1,3 @@
-import { runtimeTypeName } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type {
@@ -74,7 +73,7 @@ describe("types", () => {
     };
 
     expect(sessionRecord.summary.externalSessionId).toBe("external-session-1");
-    expect(runtimeTypeName(options.createClient)).toBe("function");
-    expect(runtimeTypeName(options.logEvent)).toBe("function");
+    expect(options.createClient).toBeInstanceOf(Function);
+    expect(options.logEvent).toBeInstanceOf(Function);
   });
 });

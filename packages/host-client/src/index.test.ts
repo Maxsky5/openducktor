@@ -1,4 +1,4 @@
-import { OPENCODE_RUNTIME_DESCRIPTOR, runtimeTypeName } from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type {} from "./bun-test";
 import type { HostClient as HostClientType } from "./index";
 import { createHostClient } from "./index";
@@ -350,7 +350,7 @@ describe("HostClient", () => {
     ] as const;
 
     for (const methodName of expectedMethods) {
-      expect(runtimeTypeName(client[methodName])).toBe("function");
+      expect(client[methodName]).toBeInstanceOf(Function);
     }
   });
 

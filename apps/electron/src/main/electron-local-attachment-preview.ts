@@ -1,4 +1,3 @@
-import { runtimeTypeName } from "@openducktor/contracts";
 import { pathToFileURL } from "node:url";
 import { Cause, Chunk, Effect, Exit, Option } from "effect";
 import {
@@ -35,7 +34,7 @@ export const readLocalAttachmentPreviewPath = (filePath: string): string => {
       operation: "electron.preview.read-path",
       message: "Local attachment preview path must be a non-empty string.",
       field: "path",
-      details: { valueType: runtimeTypeName(filePath) },
+      details: { valueTag: Object.prototype.toString.call(filePath) },
     });
   }
 

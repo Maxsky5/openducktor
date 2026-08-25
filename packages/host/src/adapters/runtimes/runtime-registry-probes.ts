@@ -1,8 +1,4 @@
-import {
-  ODT_WORKFLOW_AGENT_TOOL_NAMES,
-  type RuntimeRoute,
-  runtimeTypeName,
-} from "@openducktor/contracts";
+import { ODT_WORKFLOW_AGENT_TOOL_NAMES, type RuntimeRoute } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   type HostErrorDetails,
@@ -129,7 +125,7 @@ const parseToolIds = (payload: unknown) => {
     return Effect.fail(
       new HostValidationError({
         message: "OpenCode tool id payload must be an array",
-        details: { payloadType: runtimeTypeName(payload) },
+        details: { payloadValueTag: Object.prototype.toString.call(payload) },
       }),
     );
   }

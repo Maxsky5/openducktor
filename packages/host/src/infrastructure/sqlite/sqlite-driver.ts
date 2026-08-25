@@ -1,4 +1,3 @@
-import { runtimeTypeName } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   type HostErrorDetails,
@@ -32,11 +31,11 @@ export type SqliteDatabase = {
 };
 
 type BunSqliteStatement = {
-  all(...params: SqliteValue[]): SqliteRow[];
+  all(...params: SqliteValue[]): UnvalidatedSqliteRow[];
   finalize(): void;
-  get(...params: SqliteValue[]): SqliteRow | null;
-  run(...params: SqliteValue[]): SqliteRunResult;
-  values(...params: SqliteValue[]): SqliteValueRow[];
+  get(...params: SqliteValue[]): UnvalidatedSqliteRow | null;
+  run(...params: SqliteValue[]): UnvalidatedSqliteRunResult;
+  values(...params: SqliteValue[]): UnvalidatedSqliteValueRow[];
 };
 
 type BunSqliteDatabase = {
@@ -50,9 +49,9 @@ type BunSqliteModule = {
 };
 
 type NodeSqliteStatement = {
-  all(...params: SqliteValue[]): SqliteRow[];
-  get(...params: SqliteValue[]): SqliteRow | undefined;
-  run(...params: SqliteValue[]): SqliteRunResult;
+  all(...params: SqliteValue[]): Array<UnvalidatedSqliteRow | UnvalidatedSqliteValueRow>;
+  get(...params: SqliteValue[]): UnvalidatedSqliteRow | undefined;
+  run(...params: SqliteValue[]): UnvalidatedSqliteRunResult;
   setReturnArrays(enabled: boolean): void;
 };
 
@@ -66,7 +65,13 @@ type NodeSqliteModule = {
   DatabaseSync: new (path: string) => NodeSqliteDatabase;
 };
 
-type SqliteRuntimeModule = BunSqliteModule | NodeSqliteModule;
+type UnvalidatedSqliteRow = Record<string, unknown>;
+type UnvalidatedSqliteRunResult = {
+  changes: unknown;
+  lastInsertRowid: unknown;
+};
+type UnvalidatedSqliteValueRow = Record<number, unknown>;
+type SqliteRuntimeImport = { module: unknown };
 
 const bunSqliteModuleSpecifier = "bun:sqlite";
 const nodeSqliteModuleSpecifier = "node:sqlite";
@@ -74,21 +79,24 @@ const nodeSqliteModuleSpecifier = "node:sqlite";
 export const currentSqliteDriverRuntime = (): SqliteDriverRuntime =>
   "Bun" in globalThis ? "bun" : "node";
 
-const isBunSqliteModule = (value: SqliteRuntimeModule): value is BunSqliteModule =>
+const isBunSqliteModule = (value: unknown): value is BunSqliteModule =>
   typeof value === "object" &&
   value !== null &&
   "Database" in value &&
   typeof value.Database === "function";
 
-const isNodeSqliteModule = (value: SqliteRuntimeModule): value is NodeSqliteModule =>
+const isNodeSqliteModule = (value: unknown): value is NodeSqliteModule =>
   typeof value === "object" &&
   value !== null &&
   "DatabaseSync" in value &&
   typeof value.DatabaseSync === "function";
 
-const importRuntimeModule = (specifier: string): Promise<SqliteRuntimeModule> => import(specifier);
+const importRuntimeModule = async (specifier: string): Promise<SqliteRuntimeImport> => {
+  const module: unknown = await import(specifier);
+  return { module };
+};
 
-const isSqliteValue = (value: SqliteValue): boolean =>
+const isSqliteValue = (value: unknown): value is SqliteValue =>
   value === null ||
   typeof value === "bigint" ||
   typeof value === "number" ||
@@ -106,32 +114,75 @@ const unsupportedSqliteDriver = (
     details,
   });
 
-const rowValues = (row: SqliteRow): Effect.Effect<SqliteValueRow, HostOperationError> => {
-  const values: SqliteValue[] = Object.values(row);
-  if (values.every(isSqliteValue)) {
-    return Effect.succeed(values);
-  }
+const unsupportedSqliteResult = (operation: string, value: unknown): HostOperationError =>
+  unsupportedSqliteDriver(operation, "SQLite returned an unsupported result.", {
+    valueTag: Object.prototype.toString.call(value),
+  });
 
-  return Effect.fail(
-    unsupportedSqliteDriver(
-      "sqlite.readValues",
-      "node:sqlite returned a row value that is not supported by OpenDucktor.",
-      {
-        valueTypes: values.map((value) =>
-          value === null
-            ? "null"
-            : value instanceof Uint8Array
-              ? "Uint8Array"
-              : runtimeTypeName(value),
-        ),
-      },
-    ),
+const isSqliteRow = (value: unknown): value is SqliteRow =>
+  typeof value === "object" &&
+  value !== null &&
+  !Array.isArray(value) &&
+  Object.values(value).every(isSqliteValue);
+
+const parseSqliteRow = (
+  operation: string,
+  value: unknown,
+): Effect.Effect<SqliteRow, HostOperationError> =>
+  isSqliteRow(value)
+    ? Effect.succeed(value)
+    : Effect.fail(unsupportedSqliteResult(operation, value));
+
+const parseOptionalSqliteRow = (
+  operation: string,
+  value: unknown,
+): Effect.Effect<SqliteRow | null, HostOperationError> =>
+  value === null || value === undefined ? Effect.succeed(null) : parseSqliteRow(operation, value);
+
+const parseSqliteRows = (
+  operation: string,
+  value: unknown,
+): Effect.Effect<SqliteRow[], HostOperationError> =>
+  Array.isArray(value)
+    ? Effect.all(value.map((row) => parseSqliteRow(operation, row)))
+    : Effect.fail(unsupportedSqliteResult(operation, value));
+
+const parseSqliteValueRow = (
+  operation: string,
+  value: unknown,
+): Effect.Effect<SqliteValueRow, HostOperationError> =>
+  Array.isArray(value) && value.every(isSqliteValue)
+    ? Effect.succeed(value)
+    : Effect.fail(unsupportedSqliteResult(operation, value));
+
+const parseSqliteValueRows = (
+  operation: string,
+  value: unknown,
+): Effect.Effect<SqliteValueRow[], HostOperationError> =>
+  Array.isArray(value)
+    ? Effect.all(value.map((row) => parseSqliteValueRow(operation, row)))
+    : Effect.fail(unsupportedSqliteResult(operation, value));
+
+const isSqliteRunResult = (value: unknown): value is SqliteRunResult => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  if (!("changes" in value) || !("lastInsertRowid" in value)) return false;
+  return (
+    (typeof value.changes === "bigint" || typeof value.changes === "number") &&
+    (typeof value.lastInsertRowid === "bigint" || typeof value.lastInsertRowid === "number")
   );
 };
 
+const parseSqliteRunResult = (
+  operation: string,
+  value: unknown,
+): Effect.Effect<SqliteRunResult, HostOperationError> =>
+  isSqliteRunResult(value)
+    ? Effect.succeed(value)
+    : Effect.fail(unsupportedSqliteResult(operation, value));
+
 const importSqliteModule = (
   specifier: string,
-): Effect.Effect<SqliteRuntimeModule, HostOperationError> =>
+): Effect.Effect<SqliteRuntimeImport, HostOperationError> =>
   Effect.tryPromise({
     try: () => importRuntimeModule(specifier),
     catch: (cause) =>
@@ -142,7 +193,7 @@ const importSqliteModule = (
 
 const loadBunSqliteModule = (): Effect.Effect<BunSqliteModule, HostOperationError> =>
   Effect.gen(function* () {
-    const sqlite = yield* importSqliteModule(bunSqliteModuleSpecifier);
+    const { module: sqlite } = yield* importSqliteModule(bunSqliteModuleSpecifier);
     if (!isBunSqliteModule(sqlite)) {
       return yield* Effect.fail(
         unsupportedSqliteDriver("sqlite.loadBunModule", "bun:sqlite did not expose Database.", {
@@ -155,7 +206,7 @@ const loadBunSqliteModule = (): Effect.Effect<BunSqliteModule, HostOperationErro
 
 const loadNodeSqliteModule = (): Effect.Effect<NodeSqliteModule, HostOperationError> =>
   Effect.gen(function* () {
-    const sqlite = yield* importSqliteModule(nodeSqliteModuleSpecifier);
+    const { module: sqlite } = yield* importSqliteModule(nodeSqliteModuleSpecifier);
     if (!isNodeSqliteModule(sqlite)) {
       return yield* Effect.fail(
         unsupportedSqliteDriver(
@@ -178,31 +229,48 @@ const runSqliteOperation = <A>(
   });
 
 const adaptBunStatement = (statement: BunSqliteStatement): SqliteStatement => ({
-  all: (...params) => runSqliteOperation("sqlite.bunStatement.all", () => statement.all(...params)),
+  all: (...params) =>
+    runSqliteOperation("sqlite.bunStatement.all", () => statement.all(...params)).pipe(
+      Effect.flatMap((value) => parseSqliteRows("sqlite.bunStatement.all", value)),
+    ),
   close: () => runSqliteOperation("sqlite.bunStatement.finalize", () => statement.finalize()),
-  get: (...params) => runSqliteOperation("sqlite.bunStatement.get", () => statement.get(...params)),
-  run: (...params) => runSqliteOperation("sqlite.bunStatement.run", () => statement.run(...params)),
+  get: (...params) =>
+    runSqliteOperation("sqlite.bunStatement.get", () => statement.get(...params)).pipe(
+      Effect.flatMap((value) => parseOptionalSqliteRow("sqlite.bunStatement.get", value)),
+    ),
+  run: (...params) =>
+    runSqliteOperation("sqlite.bunStatement.run", () => statement.run(...params)).pipe(
+      Effect.flatMap((value) => parseSqliteRunResult("sqlite.bunStatement.run", value)),
+    ),
   values: (...params) =>
-    runSqliteOperation("sqlite.bunStatement.values", () => statement.values(...params)),
+    runSqliteOperation("sqlite.bunStatement.values", () => statement.values(...params)).pipe(
+      Effect.flatMap((value) => parseSqliteValueRows("sqlite.bunStatement.values", value)),
+    ),
 });
 
 const adaptNodeStatement = (statement: NodeSqliteStatement): SqliteStatement => ({
   all: (...params) =>
-    runSqliteOperation("sqlite.nodeStatement.all", () => statement.all(...params)),
+    runSqliteOperation("sqlite.nodeStatement.all", () => statement.all(...params)).pipe(
+      Effect.flatMap((value) => parseSqliteRows("sqlite.nodeStatement.all", value)),
+    ),
   close: () => Effect.void,
   get: (...params) =>
-    runSqliteOperation("sqlite.nodeStatement.get", () => statement.get(...params) ?? null),
+    runSqliteOperation("sqlite.nodeStatement.get", () => statement.get(...params)).pipe(
+      Effect.flatMap((value) => parseOptionalSqliteRow("sqlite.nodeStatement.get", value)),
+    ),
   run: (...params) =>
-    runSqliteOperation("sqlite.nodeStatement.run", () => statement.run(...params)),
+    runSqliteOperation("sqlite.nodeStatement.run", () => statement.run(...params)).pipe(
+      Effect.flatMap((value) => parseSqliteRunResult("sqlite.nodeStatement.run", value)),
+    ),
   values: (...params) =>
     Effect.gen(function* () {
       yield* runSqliteOperation("sqlite.nodeStatement.enableReturnArrays", () =>
         statement.setReturnArrays(true),
       );
-      const rows = yield* runSqliteOperation("sqlite.nodeStatement.values", () =>
+      const value = yield* runSqliteOperation("sqlite.nodeStatement.values", () =>
         statement.all(...params),
       );
-      return yield* Effect.all(rows.map((row) => rowValues(row)));
+      return yield* parseSqliteValueRows("sqlite.nodeStatement.values", value);
     }).pipe(
       Effect.ensuring(
         runSqliteOperation("sqlite.nodeStatement.disableReturnArrays", () =>
