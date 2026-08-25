@@ -1,5 +1,7 @@
 export type PropertyKeyPattern =
+  | { readonly kind: "bigint-interpolation" }
   | { readonly kind: "intersection"; readonly patterns: readonly PropertyKeyPattern[] }
+  | { readonly kind: "number-interpolation" }
   | { readonly kind: "regular-expression"; readonly source: string }
   | {
       readonly interpolations: readonly PropertyKeyPattern[];
@@ -40,6 +42,14 @@ export const regularExpressionPropertyKeyPattern = (source: string): PropertyKey
   source,
 });
 
+export const numberInterpolationPropertyKeyPattern = (): PropertyKeyPattern => ({
+  kind: "number-interpolation",
+});
+
+export const bigintInterpolationPropertyKeyPattern = (): PropertyKeyPattern => ({
+  kind: "bigint-interpolation",
+});
+
 function unorderedPatternsEqual(
   left: readonly PropertyKeyPattern[],
   right: readonly PropertyKeyPattern[],
@@ -54,6 +64,7 @@ function unorderedPatternsEqual(
 
 function patternsEqual(left: PropertyKeyPattern, right: PropertyKeyPattern): boolean {
   if (left.kind !== right.kind) return false;
+  if (left.kind === "number-interpolation" || left.kind === "bigint-interpolation") return true;
   if (left.kind === "regular-expression" && right.kind === "regular-expression") {
     return left.source === right.source;
   }
@@ -125,6 +136,12 @@ function templatePatternMatches(
 }
 
 function patternMatches(pattern: PropertyKeyPattern, value: string): boolean {
+  if (pattern.kind === "number-interpolation") {
+    return value !== "" && Number.isFinite(Number(value));
+  }
+  if (pattern.kind === "bigint-interpolation") {
+    return /^-?(?:0|[1-9]\d*|0[xX][\dA-Fa-f]+|0[bB][01]+|0[oO][0-7]+)$/u.test(value);
+  }
   if (pattern.kind === "regular-expression") return new RegExp(pattern.source, "u").test(value);
   if (pattern.kind === "template") return templatePatternMatches(pattern, value);
   if (pattern.kind === "union") {

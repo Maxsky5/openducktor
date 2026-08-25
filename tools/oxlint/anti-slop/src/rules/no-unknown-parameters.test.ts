@@ -37,6 +37,14 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     "type Omit<T, K> = { input: string }; function safe({ input }: Omit<{ input: unknown }, 'other'>) { return input; }",
     "type Box<T> = { [T in 'input']: T }; function safe({ input }: Box<unknown>) { return input; }",
     'function safe({ only }: Record<string & "only", string>) { return only; }',
+    'function safe({ stop }: Record<Exclude<"start" | "stop", "stop">, unknown>) { return stop; }',
+    'type Exclude<T, U> = "only"; function safe({ input }: Record<Exclude<string, "reserved">, unknown>) { return input; }',
+    "function safe({ NaN: input }: Record<`${number}`, unknown>) { return input; }",
+    "function safe({ Infinity: input }: Record<`${number}`, unknown>) { return input; }",
+    'function safe({ "-Infinity": input }: Record<`${number}`, unknown>) { return input; }',
+    'function safe({ "": input }: Record<`${number}`, unknown>) { return input; }',
+    'function safe({ "+1": input }: Record<`${bigint}`, unknown>) { return input; }',
+    'function safe({ "01": input }: Record<`${bigint}`, unknown>) { return input; }',
   ],
   invalid: [
     { code: "function load(input: unknown) { return input; }", errors: [error] },
@@ -191,6 +199,14 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
       errors: [error],
     },
     {
+      code: "function unsafe({ input }: Record<Exclude<string, 'reserved'>, unknown>) { return input; }",
+      errors: [error],
+    },
+    {
+      code: "function unsafe({ start }: Record<Exclude<'start' | 'stop', 'stop'>, unknown>) { return start; }",
+      errors: [error],
+    },
+    {
       code: 'function unsafe({ "1": input }: Record<number, unknown>) { return input; }',
       errors: [error],
     },
@@ -200,6 +216,70 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     },
     {
       code: 'function unsafe({ "id-1": input }: Record<`id-${bigint}`, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "id-0x10": input }: Record<`id-${bigint}`, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "id-0b10": input }: Record<`id-${bigint}`, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "id-0o10": input }: Record<`id-${bigint}`, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "id-1": input }: Record<`id-${1n}`, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "id-16": input }: Record<`id-${0x10n}`, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "id--1": input }: Record<`id-${-1n}`, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "-1": input }: Record<-1, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "id--1": input }: Record<`id-${-1}`, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "+1": input }: Record<`${number}`, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "01": input }: Record<`${number}`, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "1.": input }: Record<`${number}`, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ ".5": input }: Record<`${number}`, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "0x10": input }: Record<`${number}`, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "0b10": input }: Record<`${number}`, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ "0o10": input }: Record<`${number}`, unknown>) { return input; }',
+      errors: [error],
+    },
+    {
+      code: 'function unsafe({ " ": input }: Record<`${number}`, unknown>) { return input; }',
       errors: [error],
     },
     {

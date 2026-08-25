@@ -15,6 +15,7 @@ import { lexicalStructuralTypeParameterNames } from "./lexical-type-parameters.t
 
 const BUILT_INS = new Set([
   "Array",
+  "Exclude",
   "NonNullable",
   "Omit",
   "Partial",

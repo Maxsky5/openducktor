@@ -1,8 +1,11 @@
 import type { PortableTSType } from "./portable-ast.ts";
 import { resolveObjectPropertyKeyDomain } from "./keyof-property-key-domain.ts";
 import {
+  bigintInterpolationPropertyKeyPattern,
   emptyPropertyKeyDomain,
   intersectPropertyKeyDomains,
+  numberInterpolationPropertyKeyPattern,
+  propertyKeyDomainIncludes,
   propertyKeyDomainValueId,
   propertyKeyDomainValueText,
   regularExpressionPropertyKeyPattern,
@@ -42,10 +45,48 @@ function escapeRegularExpression(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
-const numberInterpolationPattern = regularExpressionPropertyKeyPattern(
-  "^(?:NaN|Infinity|-Infinity|-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)$",
-);
-const bigintInterpolationPattern = regularExpressionPropertyKeyPattern("^-?(?:0|[1-9]\\d*)$");
+const numberInterpolationPattern = numberInterpolationPropertyKeyPattern();
+const bigintInterpolationPattern = bigintInterpolationPropertyKeyPattern();
+
+type DecodedTypeScriptLiteral =
+  | { readonly kind: "bigint"; readonly text: string }
+  | { readonly kind: "boolean"; readonly text: string }
+  | { readonly kind: "number"; readonly propertyKey: number; readonly text: string }
+  | { readonly kind: "string"; readonly propertyKey: string; readonly text: string };
+
+function decodeTypeScriptLiteral(
+  literal: Extract<PortableTSType, { type: "TSLiteralType" }>["literal"],
+): DecodedTypeScriptLiteral | null {
+  if (literal.type === "Literal") {
+    if ("bigint" in literal) return { kind: "bigint", text: literal.bigint };
+    if (typeof literal.value === "string") {
+      return { kind: "string", propertyKey: literal.value, text: literal.value };
+    }
+    if (typeof literal.value === "number") {
+      return { kind: "number", propertyKey: literal.value, text: String(literal.value) };
+    }
+    if (typeof literal.value === "boolean") {
+      return { kind: "boolean", text: String(literal.value) };
+    }
+    return null;
+  }
+  if (
+    literal.type !== "UnaryExpression" ||
+    (literal.operator !== "+" && literal.operator !== "-") ||
+    literal.argument.type !== "Literal"
+  ) {
+    return null;
+  }
+  const argument = literal.argument;
+  if ("bigint" in argument) {
+    const text =
+      literal.operator === "-" && argument.bigint !== "0" ? `-${argument.bigint}` : argument.bigint;
+    return { kind: "bigint", text };
+  }
+  if (typeof argument.value !== "number") return null;
+  const value = literal.operator === "-" ? -argument.value : argument.value;
+  return { kind: "number", propertyKey: value, text: String(value) };
+}
 
 function stringValueDomain(values: readonly string[]): PropertyKeyDomain {
   return {
@@ -66,6 +107,111 @@ function templateInterpolationPattern(domain: PropertyKeyDomain): PropertyKeyPat
     ...domain.patterns,
   ];
   return patterns.length === 0 ? null : unionPropertyKeyPatterns(patterns);
+}
+
+type PropertyKeyDomainResolver = (
+  type: PortableTSType,
+  environment: PortableTypeEnvironment,
+  substitutions: TypeSubstitutions,
+  resolveImportedType: PortableTypeResolver | undefined,
+  resolving: ReadonlySet<string>,
+) => PropertyKeyDomain;
+
+function resolveExcludePropertyKeyDomain(
+  source: PortableTSType,
+  excluded: PortableTSType,
+  environment: PortableTypeEnvironment,
+  substitutions: TypeSubstitutions,
+  resolveImportedType: PortableTypeResolver | undefined,
+  resolving: ReadonlySet<string>,
+  resolveDomain: PropertyKeyDomainResolver,
+  resolutionKind: string,
+): PropertyKeyDomain {
+  const excludedDomain = resolveDomain(
+    excluded,
+    environment,
+    substitutions,
+    resolveImportedType,
+    resolving,
+  );
+
+  const resolveSource = (
+    sourceType: PortableTSType,
+    sourceEnvironment: PortableTypeEnvironment,
+    sourceSubstitutions: TypeSubstitutions,
+    sourceImportedType: PortableTypeResolver | undefined,
+    sourceResolving: ReadonlySet<string>,
+  ): PropertyKeyDomain => {
+    const unwrapped = unwrapTransparentType(sourceType);
+    if (unwrapped.type === "TSUnionType") {
+      return unionPropertyKeyDomains(
+        unwrapped.types.map((member) =>
+          resolveSource(
+            member,
+            sourceEnvironment,
+            sourceSubstitutions,
+            sourceImportedType,
+            sourceResolving,
+          ),
+        ),
+      );
+    }
+    if (unwrapped.type === "TSTypeReference") {
+      const name = typeReferenceName(unwrapped);
+      if (name !== null) {
+        const substitution = sourceSubstitutions.get(name);
+        if (substitution !== undefined && !isUnappliedReferenceTo(substitution.type, name)) {
+          return resolveSource(
+            substitution.type,
+            substitution.environment,
+            substitution.substitutions,
+            substitution.resolveImportedType,
+            sourceResolving,
+          );
+        }
+      }
+      const aliasDomains: PropertyKeyDomain[] = [];
+      for (const resolved of resolveTypeReference(
+        unwrapped,
+        sourceEnvironment,
+        sourceSubstitutions,
+        sourceImportedType,
+      )) {
+        if (resolved.kind !== "alias") continue;
+        const nextResolving = enterTypeResolution(sourceResolving, resolved.key, resolutionKind);
+        if (nextResolving === null) continue;
+        const aliasSubstitutions = aliasSubstitution(
+          resolved.declaration,
+          resolved.arguments,
+          resolved.environment,
+          resolved.resolveImportedType,
+        );
+        if (aliasSubstitutions === null) continue;
+        aliasDomains.push(
+          resolveSource(
+            resolved.declaration.typeAnnotation,
+            resolved.environment,
+            aliasSubstitutions,
+            resolved.resolveImportedType,
+            nextResolving,
+          ),
+        );
+      }
+      if (aliasDomains.length > 0) return unionPropertyKeyDomains(aliasDomains);
+    }
+    const sourceDomain = resolveDomain(
+      sourceType,
+      sourceEnvironment,
+      sourceSubstitutions,
+      sourceImportedType,
+      sourceResolving,
+    );
+    return propertyKeyDomainIncludes(excludedDomain, sourceDomain)
+      ? emptyPropertyKeyDomain()
+      : sourceDomain;
+  };
+
+  return resolveSource(source, environment, substitutions, resolveImportedType, resolving);
 }
 
 function resolveTemplateInterpolationDomain(
@@ -89,13 +235,8 @@ function resolveTemplateInterpolationDomain(
   if (unwrapped.type === "TSNullKeyword") return stringValueDomain(["null"]);
   if (unwrapped.type === "TSUndefinedKeyword") return stringValueDomain(["undefined"]);
   if (unwrapped.type === "TSLiteralType") {
-    const literal = unwrapped.literal;
-    if (literal.type !== "Literal" || literal.value === null) return emptyPropertyKeyDomain();
-    return typeof literal.value === "string" ||
-      typeof literal.value === "number" ||
-      typeof literal.value === "boolean"
-      ? stringValueDomain([String(literal.value)])
-      : emptyPropertyKeyDomain();
+    const literal = decodeTypeScriptLiteral(unwrapped.literal);
+    return literal === null ? emptyPropertyKeyDomain() : stringValueDomain([literal.text]);
   }
   if (unwrapped.type === "TSTemplateLiteralType") {
     return resolvePropertyKeyDomain(
@@ -155,6 +296,21 @@ function resolveTemplateInterpolationDomain(
         substitution.resolveImportedType,
         resolving,
       );
+    }
+    if (name === "Exclude" && isBuiltInType(name, environment)) {
+      const [source, excluded] = unwrapped.typeArguments?.params ?? [];
+      return source === undefined || excluded === undefined
+        ? emptyPropertyKeyDomain()
+        : resolveExcludePropertyKeyDomain(
+            source,
+            excluded,
+            environment,
+            substitutions,
+            resolveImportedType,
+            resolving,
+            resolveTemplateInterpolationDomain,
+            "template-interpolation-exclude",
+          );
     }
   }
   const domains: PropertyKeyDomain[] = [];
@@ -256,12 +412,11 @@ export function resolvePropertyKeyDomain(
     return { ...emptyPropertyKeyDomain(), symbols: true };
   }
   if (unwrapped.type === "TSLiteralType") {
-    const literal = unwrapped.literal;
-    return literal.type === "Literal" &&
-      (typeof literal.value === "string" || typeof literal.value === "number")
+    const literal = decodeTypeScriptLiteral(unwrapped.literal);
+    return literal !== null && (literal.kind === "string" || literal.kind === "number")
       ? {
           ...emptyPropertyKeyDomain(),
-          values: new Set([propertyKeyDomainValueId(literal.value)]),
+          values: new Set([propertyKeyDomainValueId(literal.propertyKey)]),
         }
       : emptyPropertyKeyDomain();
   }
@@ -335,6 +490,21 @@ export function resolvePropertyKeyDomain(
         strings: true,
         symbols: true,
       };
+    }
+    if (name === "Exclude" && isBuiltInType(name, environment)) {
+      const [source, excluded] = unwrapped.typeArguments?.params ?? [];
+      return source === undefined || excluded === undefined
+        ? emptyPropertyKeyDomain()
+        : resolveExcludePropertyKeyDomain(
+            source,
+            excluded,
+            environment,
+            substitutions,
+            resolveImportedType,
+            resolving,
+            resolvePropertyKeyDomain,
+            "property-key-domain-exclude",
+          );
     }
   }
   const domains: PropertyKeyDomain[] = [];
