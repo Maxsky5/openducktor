@@ -44,10 +44,13 @@ type LauncherShutdownDependencies = {
   closeServer: (server: FrontendServer | null) => Promise<void>;
   stopHost: (hostBackend: TypescriptHostBackend) => Promise<void>;
 };
-type KeepAliveTimer = ReturnType<typeof setInterval>;
 type ProcessKeepAliveDependencies = {
-  clearInterval: (timer: KeepAliveTimer) => void;
-  setInterval: (callback: () => void, durationMs: number) => KeepAliveTimer;
+  scheduleInterval: (callback: () => void, durationMs: number) => () => void;
+};
+
+const scheduleInterval = (callback: () => void, durationMs: number): (() => void) => {
+  const intervalId = setInterval(callback, durationMs);
+  return () => clearInterval(intervalId);
 };
 
 export const LOCALHOST = "127.0.0.1";
@@ -453,21 +456,19 @@ export const stopLauncherServices = (
 export const keepProcessAliveDuringEffect = <T, E>(
   operation: Effect.Effect<T, E>,
   dependencies: ProcessKeepAliveDependencies = {
-    clearInterval,
-    setInterval,
+    scheduleInterval,
   },
 ): Effect.Effect<T, E> =>
   Effect.acquireUseRelease(
-    Effect.sync(() => dependencies.setInterval(() => {}, SHUTDOWN_KEEP_ALIVE_INTERVAL_MS)),
+    Effect.sync(() => dependencies.scheduleInterval(() => {}, SHUTDOWN_KEEP_ALIVE_INTERVAL_MS)),
     () => operation,
-    (timer) => Effect.sync(() => dependencies.clearInterval(timer)),
+    (cancelInterval) => Effect.sync(cancelInterval),
   );
 
 export const keepProcessAliveDuring = <T>(
   operation: Promise<T>,
   dependencies: ProcessKeepAliveDependencies = {
-    clearInterval,
-    setInterval,
+    scheduleInterval,
   },
 ): Promise<T> =>
   runWebBoundary(

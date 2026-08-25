@@ -14,11 +14,6 @@ import type { AgentSessionRuntimeAdapterPort } from "../../ports/agent-session-l
 import { createEffectHostCommandRouter } from "../router/host-command-router";
 import { createAgentSessionLiveCommandHandlers } from "./agent-session-live-command-handlers";
 
-const asCommandPayload = <T>(value: T): Record<string, unknown> =>
-  // SAFETY: command payloads cross the JSON transport boundary in production; tests pass
-  // equivalent structured fixtures, so this cast only re-states the transport contract.
-  value as Record<string, unknown>;
-
 const startInput: AgentSessionControlStartInput = {
   repoPath: "/repo",
   runtimeKind: "opencode",
@@ -159,9 +154,7 @@ const createHarness = async (resolveAttachment?: LocalAttachmentService["resolve
 describe("createAgentSessionLiveCommandHandlers", () => {
   test("routes live session diff reads to the owning adapter", async () => {
     const { diffLoads, router } = await createHarness();
-    await Effect.runPromise(
-      router.invoke("agent_session_control_start", asCommandPayload(startInput)),
-    );
+    await Effect.runPromise(router.invoke("agent_session_control_start", { ...startInput }));
     const input = {
       repoPath: "/repo",
       runtimeKind: "opencode" as const,
@@ -182,7 +175,7 @@ describe("createAgentSessionLiveCommandHandlers", () => {
     const { forks, resumes, router, starts } = await createHarness();
 
     await expect(
-      Effect.runPromise(router.invoke("agent_session_control_start", asCommandPayload(startInput))),
+      Effect.runPromise(router.invoke("agent_session_control_start", { ...startInput })),
     ).resolves.toMatchObject({ externalSessionId: "session-1", runtimeKind: "opencode" });
     expect(starts).toEqual([startInput]);
 
@@ -217,10 +210,10 @@ describe("createAgentSessionLiveCommandHandlers", () => {
 
     await expect(
       Effect.runPromise(
-        router.invoke(
-          "agent_session_control_start",
-          asCommandPayload({ ...startInput, runtimeId: "native-runtime" }),
-        ),
+        router.invoke("agent_session_control_start", {
+          ...startInput,
+          runtimeId: "native-runtime",
+        }),
       ),
     ).rejects.toThrow();
     expect(starts).toEqual([]);
@@ -231,10 +224,10 @@ describe("createAgentSessionLiveCommandHandlers", () => {
 
     await expect(
       Effect.runPromise(
-        router.invoke(
-          "agent_session_control_start",
-          asCommandPayload({ ...startInput, runtimePolicy: { kind: "opencode" } }),
-        ),
+        router.invoke("agent_session_control_start", {
+          ...startInput,
+          runtimePolicy: { kind: "opencode" },
+        }),
       ),
     ).rejects.toThrow();
     expect(starts).toEqual([]);

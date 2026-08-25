@@ -5,7 +5,6 @@ import path from "node:path";
 import { Effect } from "effect";
 import { createBrowserRuntimeConfigState } from "./browser-runtime-config-state";
 import { WebOperationError } from "./effect/web-errors";
-import { createTimerFixture } from "./test-support";
 import {
   logDuplicateWebTerminationNotice,
   preserveLauncherFailureAfterStop,
@@ -277,29 +276,27 @@ describe("launcher internals", () => {
 
   test("keeps the process alive while shutdown work is pending", async () => {
     let intervalCallback: (() => void) | null = null;
-    const timer = createTimerFixture();
-    const clearedTimers: Array<ReturnType<typeof setInterval>> = [];
+    let intervalCancelled = false;
     let finishOperation: () => void = () => {};
     const operation = new Promise<void>((resolve) => {
       finishOperation = resolve;
     });
 
     const keepAlivePromise = keepProcessAliveDuring(operation, {
-      clearInterval: (nextTimer) => {
-        clearedTimers.push(nextTimer);
-      },
-      setInterval: (callback) => {
+      scheduleInterval: (callback) => {
         intervalCallback = callback;
-        return timer;
+        return () => {
+          intervalCancelled = true;
+        };
       },
     });
 
     expect(intervalCallback).not.toBeNull();
-    expect(clearedTimers).toEqual([]);
+    expect(intervalCancelled).toBe(false);
 
     finishOperation();
     await keepAlivePromise;
-    expect(clearedTimers).toEqual([timer]);
+    expect(intervalCancelled).toBe(true);
   });
 
   test("awaits a delayed duplicate-signal persistence failure before exiting", async () => {

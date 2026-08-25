@@ -28,15 +28,16 @@ const TASK_EVENT_SUBSCRIPTIONS_PATH = "task-events/subscriptions";
 const INITIAL_SSE_READY_TIMEOUT_MS = 10_000;
 
 type LocalTaskEventTransportContext = {
-  clearInitialReadinessTimeout?: (timer: ReturnType<typeof setTimeout>) => void;
   ensureSession: () => Effect.Effect<void, WebError>;
   localHostRequestErrorEffect: (
     response: Response,
   ) => Effect.Effect<never, WebDependencyError | WebHostRequestError>;
-  scheduleInitialReadinessTimeout?: (
-    callback: () => void,
-    delayMs: number,
-  ) => ReturnType<typeof setTimeout>;
+  scheduleInitialReadinessTimeout?: (callback: () => void, delayMs: number) => () => void;
+};
+
+const scheduleTimeout = (callback: () => void, delayMs: number): (() => void) => {
+  const timeoutId = setTimeout(callback, delayMs);
+  return () => clearTimeout(timeoutId);
 };
 
 const taskEventSubscriptionSchema = z
@@ -60,10 +61,9 @@ export const subscribeLocalTaskEventStreamEffect = (
   onFrame: (frame: TaskStreamFrame) => void,
   onTerminalFailure: ((cause: unknown) => void) | undefined,
   {
-    clearInitialReadinessTimeout = clearTimeout,
     ensureSession,
     localHostRequestErrorEffect,
-    scheduleInitialReadinessTimeout = setTimeout,
+    scheduleInitialReadinessTimeout = scheduleTimeout,
   }: LocalTaskEventTransportContext,
 ): Effect.Effect<TaskStreamSubscription, WebError> =>
   Effect.gen(function* () {
@@ -257,29 +257,23 @@ export const subscribeLocalTaskEventStreamEffect = (
     const initialReadyExit = yield* Effect.exit(
       Effect.tryPromise({
         try: () => {
-          let timeoutId: ReturnType<typeof setTimeout> | null = null;
-          const timeout = new Promise<never>((_, reject) => {
-            timeoutId = scheduleInitialReadinessTimeout(
-              () =>
-                reject(
-                  new WebDependencyError({
-                    dependency: "event-source",
-                    operation: "task-event-stream.await-ready",
-                    message: "Timed out waiting for task event stream subscription to open.",
-                    details: {
-                      path: streamUrl.pathname,
-                      timeoutMs: INITIAL_SSE_READY_TIMEOUT_MS,
-                    },
-                  }),
-                ),
-              INITIAL_SSE_READY_TIMEOUT_MS,
-            );
-          });
-          return Promise.race([initialReadiness, timeout]).finally(() => {
-            if (timeoutId) {
-              clearInitialReadinessTimeout(timeoutId);
-            }
-          });
+          const { promise: timeout, reject: rejectTimeout } = Promise.withResolvers<never>();
+          const cancelTimeout = scheduleInitialReadinessTimeout(
+            () =>
+              rejectTimeout(
+                new WebDependencyError({
+                  dependency: "event-source",
+                  operation: "task-event-stream.await-ready",
+                  message: "Timed out waiting for task event stream subscription to open.",
+                  details: {
+                    path: streamUrl.pathname,
+                    timeoutMs: INITIAL_SSE_READY_TIMEOUT_MS,
+                  },
+                }),
+              ),
+            INITIAL_SSE_READY_TIMEOUT_MS,
+          );
+          return Promise.race([initialReadiness, timeout]).finally(cancelTimeout);
         },
         catch: (cause) =>
           isWebError(cause)

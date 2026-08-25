@@ -1,25 +1,17 @@
-import { z } from "zod";
+import { isUnknownRecord, type UnknownRecord } from "@openducktor/core";
 
-export type UnknownRecord = Record<string, unknown>;
-
-const unknownRecordSchema = z.record(z.string(), z.unknown());
+export type { UnknownRecord } from "@openducktor/core";
 
 export const asUnknownRecord = (value: unknown): UnknownRecord | undefined => {
-  const parsed = unknownRecordSchema.safeParse(value);
-  return parsed.success ? parsed.data : undefined;
+  return isUnknownRecord(value) ? value : undefined;
 };
 
 const safeProp = <T>(
-  source: unknown,
+  source: UnknownRecord,
   key: string,
   guard: (value: unknown) => value is T,
 ): T | undefined => {
-  const parsed = unknownRecordSchema.safeParse(source);
-  const record = parsed.success ? parsed.data : undefined;
-  if (!record) {
-    return undefined;
-  }
-  const value = record[key];
+  const value = source[key];
   if (value === undefined) {
     return undefined;
   }
@@ -27,24 +19,17 @@ const safeProp = <T>(
 };
 
 export const readRecordProp = (source: unknown, key: string): UnknownRecord | undefined => {
-  const parsed = unknownRecordSchema.safeParse(source);
-  return parsed.success
-    ? safeProp(
-        parsed.data,
-        key,
-        (value): value is UnknownRecord => unknownRecordSchema.safeParse(value).success,
-      )
-    : undefined;
+  const record = asUnknownRecord(source);
+  return record ? safeProp(record, key, isUnknownRecord) : undefined;
 };
 
 export const readArrayProp = (source: unknown, key: string): unknown[] | undefined => {
-  const parsed = unknownRecordSchema.safeParse(source);
-  return parsed.success ? safeProp(parsed.data, key, Array.isArray) : undefined;
+  const record = asUnknownRecord(source);
+  return record ? safeProp(record, key, Array.isArray) : undefined;
 };
 
 export const readStringProp = (source: unknown, keys: readonly string[]): string | undefined => {
-  const parsed = unknownRecordSchema.safeParse(source);
-  const record = parsed.success ? parsed.data : undefined;
+  const record = asUnknownRecord(source);
   if (!record) {
     return undefined;
   }
@@ -59,8 +44,7 @@ export const readStringProp = (source: unknown, keys: readonly string[]): string
 };
 
 export const readNumberProp = (source: unknown, keys: string[]): number | undefined => {
-  const parsed = unknownRecordSchema.safeParse(source);
-  const record = parsed.success ? parsed.data : undefined;
+  const record = asUnknownRecord(source);
   if (!record) {
     return undefined;
   }
@@ -75,8 +59,7 @@ export const readNumberProp = (source: unknown, keys: string[]): number | undefi
 };
 
 export const readBooleanProp = (source: unknown, keys: string[]): boolean | undefined => {
-  const parsed = unknownRecordSchema.safeParse(source);
-  const record = parsed.success ? parsed.data : undefined;
+  const record = asUnknownRecord(source);
   if (!record) {
     return undefined;
   }
@@ -91,8 +74,8 @@ export const readBooleanProp = (source: unknown, keys: string[]): boolean | unde
 };
 
 export const readStringArrayProp = (source: unknown, key: string): string[] | undefined => {
-  const parsed = unknownRecordSchema.safeParse(source);
-  const values = parsed.success ? readArrayProp(parsed.data, key) : undefined;
+  const record = asUnknownRecord(source);
+  const values = record ? safeProp(record, key, Array.isArray) : undefined;
   if (!values) {
     return undefined;
   }

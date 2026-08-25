@@ -3,7 +3,7 @@ import type { AgentSessionLiveEnvelope, JsonValue } from "@openducktor/contracts
 import { Effect } from "effect";
 import { configureBrowserRuntimeConfig } from "./browser-config";
 import { WebDependencyError } from "./effect/web-errors";
-import { createFetchFixture, createTimerFixture } from "./test-support";
+import { createFetchFixture } from "./test-support";
 
 class FakeEventSource {
   static instances: FakeEventSource[] = [];
@@ -911,7 +911,6 @@ describe("local host SSE subscriptions", () => {
       return new Response(null, { status: 204 });
     });
     const scheduledTimers: Array<() => void> = [];
-    const timeoutHandle = createTimerFixture();
     globalThis.fetch = createFetchFixture(fetchMock);
     const setup = Effect.runPromise(
       subscribeLocalTaskEventStreamEffect(
@@ -919,7 +918,6 @@ describe("local host SSE subscriptions", () => {
         mock(() => {}),
         undefined,
         {
-          clearInitialReadinessTimeout: () => {},
           ensureSession: () => Effect.void,
           localHostRequestErrorEffect: (response) =>
             Effect.fail(
@@ -931,7 +929,7 @@ describe("local host SSE subscriptions", () => {
             ),
           scheduleInitialReadinessTimeout: (callback) => {
             scheduledTimers.push(callback);
-            return timeoutHandle;
+            return () => {};
           },
         },
       ),
