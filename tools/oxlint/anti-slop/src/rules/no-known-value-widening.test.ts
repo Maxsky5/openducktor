@@ -30,6 +30,7 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
     `${prelude} interface Commands { readonly start: Command } const commands: Commands = { start: startCommand };`,
     `${prelude} type Commands = { readonly start: Command }; const commands: Commands = { start: startCommand };`,
     `${prelude} type PermissionLevels = { readonly [Level in Permission]: number }; const levels: PermissionLevels = { admin: 1 };`,
+    `${prelude} const commands: Record<'start', Command> = { start: startCommand };`,
     `${prelude} function create() { return { start: startCommand }; }`,
     `${prelude} interface Commands { readonly start: Command } function create(): Commands { return { start: startCommand }; }`,
     `${prelude} declare function make(): Record<string, Command>; const commands: Record<string, Command> = make();`,
@@ -40,6 +41,10 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
     {
       filename: importedTypeFixtureFilename,
       code: `${prelude} import type { OpenCommandsByKey } from './no-known-value-widening-types'; const commands: OpenCommandsByKey<'start'> = { start: startCommand };`,
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type * as CommandTypes from './no-known-value-widening-namespaces'; const commands: CommandTypes.OpenCommands = { start: startCommand }; const otherCommands: CommandTypes.Other.OpenCommands = { start: startCommand };`,
     },
     "function build() { type Record<Key, Value> = { value: Value }; type Command = () => void; const start = () => {}; const commands: Record<string, Command> = { value: start }; }",
     "namespace Owner { type Record<Key, Value> = { value: Value }; type Command = () => void; const start = () => {}; const commands: Record<string, Command> = { value: start }; }",
@@ -119,6 +124,14 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
     },
     {
       code: `${prelude} type Index<T = Command> = Record<string, T>; const commands: Index = { start: startCommand };`,
+      errors: [error],
+    },
+    {
+      code: `${prelude} type CommandName = string; const commands: Record<CommandName, Command> = { start: startCommand };`,
+      errors: [error],
+    },
+    {
+      code: `${prelude} type Wrapper<Readonly> = Readonly; type Open = Wrapper<Record<string, Command>>; const commands: Open = { start: startCommand };`,
       errors: [error],
     },
     {
@@ -230,6 +243,21 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
       filename: importedTypeFixtureFilename,
       code: `${prelude} import type { NamespaceWrappedOpenCommands, NamespaceWrappedOpenCommandsInterface } from './no-known-value-widening-wrappers'; const commands: NamespaceWrappedOpenCommands = { start: startCommand }; const otherCommands: NamespaceWrappedOpenCommandsInterface = { start: startCommand };`,
       errors: [error, error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type * as CommandTypes from './no-known-value-widening-namespaces'; const commands: CommandTypes.Types.Owner.OpenCommands = { start: startCommand };`,
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type { Types } from './no-known-value-widening-namespaces'; const commands: Types.Owner.OpenCommands = { start: startCommand };`,
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type * as Reexports from './no-known-value-widening-namespace-reexports'; const commands: Reexports.Commands.Owner.OpenCommands = { start: startCommand };`,
+      errors: [error],
     },
   ],
 });

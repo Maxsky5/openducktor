@@ -4,15 +4,13 @@ import {
   classifyWideningTarget,
   createTypeEnvironment,
   isKnownEvidenceExpression,
-  type TypeEnvironment,
   type WideningTarget,
 } from "../shared/dictionary-types.ts";
-import { classifyImportedWideningTarget } from "../shared/imported-widening-target.ts";
+import { createImportedWideningTypeResolver } from "../shared/imported-widening-target.ts";
 import { unwrapTransparentExpression } from "../shared/transparent-expression.ts";
 import { isStableBinding } from "../shared/stable-binding.ts";
 
 import type { ESTree, Scope, SourceCode, Variable } from "@oxlint/plugins";
-import type { WideningTypeArgument } from "../shared/widening-target.ts";
 
 type FunctionExpression = ESTree.ArrowFunctionExpression | ESTree.Function;
 
@@ -77,17 +75,11 @@ function typeTarget(
   visitorKeys: Readonly<Record<string, readonly string[]>>,
 ): WideningTarget | null {
   const environment = createTypeEnvironment(type, visitorKeys);
-  const syntacticTarget = classifyWideningTarget(type, environment);
-  if (syntacticTarget !== null) return syntacticTarget;
-  const importedType = importedTypeReference(type, environment);
-  return importedType === null
-    ? null
-    : classifyImportedWideningTarget(
-        filename,
-        importedType.moduleSpecifier,
-        importedType.exportedName,
-        importedType.arguments,
-      );
+  let root: ESTree.Node = type;
+  while (root.parent !== null) root = root.parent;
+  const resolveImportedType =
+    root.type === "Program" ? createImportedWideningTypeResolver(filename, root.body) : undefined;
+  return classifyWideningTarget(type, environment, resolveImportedType);
 }
 
 function annotationTarget(
@@ -98,140 +90,6 @@ function annotationTarget(
   return annotation === null || annotation === undefined
     ? null
     : typeTarget(annotation.typeAnnotation, filename, visitorKeys);
-}
-
-function leftmostTypeName(typeName: ESTree.TSTypeName): string | null {
-  if (typeName.type === "Identifier") return typeName.name;
-  if (typeName.type === "ThisExpression") return null;
-  return leftmostTypeName(typeName.left);
-}
-
-type ImportedTypeReference = {
-  readonly arguments: readonly WideningTypeArgument[];
-  readonly exportedName: string;
-  readonly moduleSpecifier: string;
-};
-
-type ScopedType = {
-  readonly environment: TypeEnvironment;
-  readonly type: ESTree.TSType;
-};
-
-type TypeSubstitutions = ReadonlyMap<string, ScopedType>;
-
-function rightmostTypeName(typeName: ESTree.TSTypeName): string | null {
-  if (typeName.type === "Identifier") return typeName.name;
-  if (typeName.type === "ThisExpression") return null;
-  return typeName.right.name;
-}
-
-function resolveSubstitution(
-  scopedType: ScopedType,
-  substitutions: TypeSubstitutions,
-  resolving = new Set<string>(),
-): ScopedType {
-  if (scopedType.type.type !== "TSTypeReference") return scopedType;
-  const name = leftmostTypeName(scopedType.type.typeName);
-  if (
-    name === null ||
-    scopedType.type.typeName.type !== "Identifier" ||
-    (scopedType.type.typeArguments?.params.length ?? 0) > 0 ||
-    resolving.has(name)
-  ) {
-    return scopedType;
-  }
-  const substitution = substitutions.get(name);
-  if (substitution === undefined) return scopedType;
-  const nextResolving = new Set(resolving);
-  nextResolving.add(name);
-  return resolveSubstitution(substitution, substitutions, nextResolving);
-}
-
-function directImportedTypeReference(
-  type: ESTree.TSTypeReference,
-  environment: TypeEnvironment,
-  substitutions: TypeSubstitutions,
-): ImportedTypeReference | null {
-  if (type.type !== "TSTypeReference") return null;
-  const localName = leftmostTypeName(type.typeName);
-  if (localName === null) return null;
-  let current: ESTree.Node | null = type;
-  while (current.parent !== null) current = current.parent;
-  if (current.type !== "Program") return null;
-  for (const statement of current.body) {
-    if (statement.type !== "ImportDeclaration") continue;
-    for (const specifier of statement.specifiers) {
-      if (specifier.local.name !== localName) continue;
-      const arguments_ = (type.typeArguments?.params ?? []).map((argument) =>
-        resolveSubstitution({ environment, type: argument }, substitutions),
-      );
-      if (specifier.type === "ImportDefaultSpecifier") {
-        return {
-          arguments: arguments_,
-          exportedName: "default",
-          moduleSpecifier: statement.source.value,
-        };
-      }
-      if (specifier.type === "ImportNamespaceSpecifier") {
-        const exportedName = rightmostTypeName(type.typeName);
-        return exportedName === null
-          ? null
-          : { arguments: arguments_, exportedName, moduleSpecifier: statement.source.value };
-      }
-      return {
-        arguments: arguments_,
-        exportedName:
-          specifier.imported.type === "Identifier"
-            ? specifier.imported.name
-            : specifier.imported.value,
-        moduleSpecifier: statement.source.value,
-      };
-    }
-  }
-  return null;
-}
-
-function importedTypeReference(
-  type: ESTree.TSType,
-  environment: TypeEnvironment,
-  substitutions: TypeSubstitutions = new Map(),
-  resolvingAliases = new Set<ESTree.TSTypeAliasDeclaration>(),
-): ImportedTypeReference | null {
-  const resolved = resolveSubstitution({ environment, type }, substitutions);
-  if (resolved.type !== type || resolved.environment !== environment) {
-    return importedTypeReference(resolved.type, resolved.environment, new Map(), resolvingAliases);
-  }
-  if (type.type !== "TSTypeReference") return null;
-  const imported = directImportedTypeReference(type, environment, substitutions);
-  if (imported !== null) return imported;
-  if (type.typeName.type !== "Identifier") return null;
-  const alias = environment.aliases.get(type.typeName.name);
-  if (alias === undefined || resolvingAliases.has(alias)) return null;
-  const suppliedArguments = (type.typeArguments?.params ?? []).map((argument) =>
-    resolveSubstitution({ environment, type: argument }, substitutions),
-  );
-  const aliasEnvironment = createTypeEnvironment(alias.typeAnnotation, environment.visitorKeys);
-  const aliasSubstitutions = new Map<string, ScopedType>();
-  for (const [index, parameter] of (alias.typeParameters?.params ?? []).entries()) {
-    const suppliedArgument = suppliedArguments[index];
-    const defaultType = parameter.default;
-    let argument: ScopedType;
-    if (suppliedArgument !== undefined) {
-      argument = suppliedArgument;
-    } else {
-      if (defaultType === null || defaultType === undefined) return null;
-      argument = { environment: aliasEnvironment, type: defaultType };
-    }
-    aliasSubstitutions.set(parameter.name.name, argument);
-  }
-  const nextResolving = new Set(resolvingAliases);
-  nextResolving.add(alias);
-  return importedTypeReference(
-    alias.typeAnnotation,
-    aliasEnvironment,
-    aliasSubstitutions,
-    nextResolving,
-  );
 }
 
 function enclosingFunction(node: ESTree.Node): FunctionExpression | null {
