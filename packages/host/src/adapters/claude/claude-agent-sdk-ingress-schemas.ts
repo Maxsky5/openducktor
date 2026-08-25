@@ -102,6 +102,69 @@ const claudeMetaQueuedCommandAttachmentSchema = claudeHistoryAttachmentSchema.ex
   type: z.literal("queued_command"),
 });
 
+const claudeTaskUsageSchema = z.object({
+  total_tokens: z.number(),
+  tool_uses: z.number(),
+  duration_ms: z.number(),
+});
+
+const claudeTaskMessageSchema = z.object({
+  type: z.literal("system"),
+  task_id: z.string(),
+  uuid: z.string(),
+  session_id: z.string(),
+});
+
+const claudeTaskStartedMessageSchema = claudeTaskMessageSchema.extend({
+  subtype: z.literal("task_started"),
+  tool_use_id: z.string().optional(),
+  description: z.string(),
+  subagent_type: z.string().optional(),
+  task_type: z.string().optional(),
+  workflow_name: z.string().optional(),
+  prompt: z.string().optional(),
+  skip_transcript: z.boolean().optional(),
+});
+
+const claudeTaskProgressMessageSchema = claudeTaskMessageSchema.extend({
+  subtype: z.literal("task_progress"),
+  tool_use_id: z.string().optional(),
+  description: z.string(),
+  subagent_type: z.string().optional(),
+  usage: claudeTaskUsageSchema,
+  last_tool_name: z.string().optional(),
+  summary: z.string().optional(),
+});
+
+const claudeTaskUpdatedMessageSchema = claudeTaskMessageSchema.extend({
+  subtype: z.literal("task_updated"),
+  patch: z.object({
+    status: z.enum(["pending", "running", "completed", "failed", "killed", "paused"]).optional(),
+    description: z.string().optional(),
+    end_time: z.number().optional(),
+    total_paused_ms: z.number().optional(),
+    error: z.string().optional(),
+    is_backgrounded: z.boolean().optional(),
+  }),
+});
+
+const claudeTaskNotificationMessageSchema = claudeTaskMessageSchema.extend({
+  subtype: z.literal("task_notification"),
+  tool_use_id: z.string().optional(),
+  status: z.enum(["completed", "failed", "stopped"]),
+  output_file: z.string(),
+  summary: z.string(),
+  usage: claudeTaskUsageSchema.optional(),
+  skip_transcript: z.boolean().optional(),
+});
+
+const claudeHistorySubagentSystemMessageSchema = z.discriminatedUnion("subtype", [
+  claudeTaskStartedMessageSchema,
+  claudeTaskProgressMessageSchema,
+  claudeTaskUpdatedMessageSchema,
+  claudeTaskNotificationMessageSchema,
+]);
+
 export const claudeHistoryStoreEntrySchema = claudeUnknownRecordSchema.extend({
   timestamp: z.string().optional(),
   type: z.string().min(1),
@@ -160,6 +223,9 @@ const parseClaudeIngress = <Output>(
 };
 
 export type ClaudePostToolUseIngress = z.output<typeof claudePostToolUseIngressSchema>;
+export type ClaudeHistorySubagentSystemMessageIngress = z.output<
+  typeof claudeHistorySubagentSystemMessageSchema
+>;
 export type ClaudeToolResultIngress = {
   raw: z.output<typeof claudeToolResultBlockSchema>;
   structuredOutput?: z.output<typeof claudeStructuredToolUseResultSchema>;
@@ -175,6 +241,14 @@ export type ClaudeUserToolResultIngress = {
 
 export const parseClaudeHistoryStoreEntry = (value: SessionStoreEntry) =>
   parseClaudeIngress(claudeHistoryStoreEntrySchema.safeParse(value), "claudeSessionHistoryEntry");
+
+export const parseClaudeHistorySubagentSystemMessageIngress = (
+  value: unknown,
+): ClaudeHistorySubagentSystemMessageIngress =>
+  parseClaudeIngress(
+    claudeHistorySubagentSystemMessageSchema.safeParse(value),
+    "claudeHistorySubagentSystemMessage",
+  );
 
 export const parseClaudeHistoryConversationEntry = (
   value: unknown,

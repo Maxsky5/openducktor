@@ -82,5 +82,17 @@ tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
       code: "type Index<T> = Record<string, T>; function owner() { type Escape = {}; type A = Index<Escape>; }",
       errors: [error],
     },
+    {
+      code: "interface Escape {} interface Escape {} type A = Record<string, Escape>;",
+      errors: [error],
+    },
+    {
+      code: "interface Escape {} namespace Escape { export const tag = true; } type A = Record<string, Escape>;",
+      errors: [error],
+    },
+    {
+      code: "interface Parent {} interface Escape extends Parent {} type A = Record<string, Escape>;",
+      errors: [error],
+    },
   ],
 });

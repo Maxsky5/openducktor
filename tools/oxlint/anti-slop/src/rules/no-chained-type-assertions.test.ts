@@ -19,5 +19,9 @@ tester.run("anti-slop/no-chained-type-assertions", noChainedTypeAssertionsRule, 
     { code: "const value = ((input as Foo)) as Bar;", errors: [error] },
     { code: "const value = ((input as unknown)!) as User;", errors: [error] },
     { code: "const value = (<unknown>input)! as User;", errors: [error] },
+    {
+      code: "declare const input: unknown; type User = { id: string }; const value = ((input as unknown) satisfies unknown) as User;",
+      errors: [error],
+    },
   ],
 });

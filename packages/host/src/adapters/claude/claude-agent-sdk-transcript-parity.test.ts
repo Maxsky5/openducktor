@@ -1337,6 +1337,7 @@ describe("Claude live and hydrated transcript parity", () => {
       session_id: "session-1",
       task_id: "task-retracted",
       status: "completed",
+      output_file: "/tmp/task-retracted.output",
       summary: "Late completion",
     });
     const liveEvents: AgentEvent[] = [];

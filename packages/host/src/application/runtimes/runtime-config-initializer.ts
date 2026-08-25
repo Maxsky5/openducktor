@@ -61,6 +61,5 @@ export const createRuntimeConfigInitializer =
           ];
         }),
       );
-      // SAFETY: The schema parser validates every field required by `LoadedGlobalConfig` before returning.
-      return globalConfigSchema.parse({ ...config, agentRuntimes }) as LoadedGlobalConfig;
+      return globalConfigSchema.parse({ ...config, agentRuntimes });
     });

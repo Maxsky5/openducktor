@@ -45,18 +45,23 @@ export class DiagnosticsQueryTimeoutError extends Error {
   }
 }
 
-export const classifyDiagnosticsQueryError = (cause: unknown) => {
+type ClassifiedDiagnosticsQueryError = {
+  message: string;
+  failureKind: Exclude<RepoRuntimeFailureKind, null>;
+};
+
+export const classifyDiagnosticsQueryError = (cause: unknown): ClassifiedDiagnosticsQueryError => {
   if (cause instanceof DiagnosticsQueryTimeoutError) {
     return {
       message: cause.message,
       failureKind: cause.failureKind,
-    } satisfies { message: string; failureKind: Exclude<RepoRuntimeFailureKind, null> };
+    };
   }
 
   return {
     message: errorMessage(cause),
     failureKind: "error",
-  } satisfies { message: string; failureKind: Exclude<RepoRuntimeFailureKind, null> };
+  };
 };
 
 const withDiagnosticsQueryTimeout = async <T>(

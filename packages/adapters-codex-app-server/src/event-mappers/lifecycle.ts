@@ -1,4 +1,4 @@
-import { extractStringField, extractText, isPlainObject } from "../codex-app-server-shared";
+import { extractStringField } from "../codex-app-server-shared";
 import {
   codexItemId,
   codexItemTypeMatches,
@@ -49,11 +49,8 @@ export const lifecycleMapper: CodexEventMapper = {
     if (input.kind !== "notification" || input.notification.method !== "turn/completed") {
       return emptyCodexMappingResult();
     }
-    const turn = isPlainObject(input.notification.params) ? input.notification.params.turn : null;
-    if (!isPlainObject(turn)) {
-      return emptyCodexMappingResult();
-    }
-    const status = extractStringField(turn, ["status"]);
+    const { turn } = input.notification.params;
+    const status = turn.status;
     return {
       handled: true,
       events: [
@@ -65,9 +62,7 @@ export const lifecycleMapper: CodexEventMapper = {
                 mapper: "lifecycle",
                 threadId: ctx.threadId,
                 ...(ctx.timestamp ? { timestamp: ctx.timestamp } : undefined),
-                message:
-                  (isPlainObject(turn.error) ? extractText(turn.error) : null) ??
-                  "Codex turn failed.",
+                message: turn.error?.message ?? "Codex turn failed.",
               },
             ]
           : []),

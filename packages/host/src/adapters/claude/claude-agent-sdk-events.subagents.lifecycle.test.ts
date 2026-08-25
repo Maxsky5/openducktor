@@ -209,7 +209,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
     ]);
   });
 
-  test("maps failed Claude task updates with top-level error reasons", () => {
+  test("maps failed Claude task updates with patch error reasons", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
     session.subagentMessageIdsByTaskId.set("task-1", "assistant-1");
@@ -230,8 +230,10 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         subtype: "task_updated",
         task_id: "task-1",
         description: "Locate callback.mjs absolute path",
-        error: "callback.mjs was not found under the Claude config directory",
-        patch: { status: "failed" },
+        patch: {
+          status: "failed",
+          error: "callback.mjs was not found under the Claude config directory",
+        },
         uuid: "task-updated-1",
         session_id: "session-1",
       }),

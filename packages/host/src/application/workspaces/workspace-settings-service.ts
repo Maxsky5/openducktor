@@ -9,7 +9,6 @@ import {
   themeSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { LoadedGlobalConfig } from "../../config/global-config";
 import { HostValidationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import {
@@ -162,9 +161,8 @@ const createUnserializedWorkspaceSettingsService = (
       }
 
       config.workspaceOrder = workspaceOrder;
-      // SAFETY: The schema parser validates every field required by `LoadedGlobalConfig` before returning.
       const parsed = yield* Effect.try({
-        try: () => globalConfigSchema.parse(config) as LoadedGlobalConfig,
+        try: () => globalConfigSchema.parse(config),
         catch: (cause) =>
           new HostValidationError({
             message: cause instanceof Error ? cause.message : String(cause),
@@ -338,7 +336,6 @@ const createUnserializedWorkspaceSettingsService = (
         config,
         snapshot.workspaces,
       );
-      // SAFETY: The schema parser validates every field required by `LoadedGlobalConfig` before returning.
       const nextConfig = yield* Effect.try({
         try: () =>
           globalConfigSchema.parse({
@@ -354,7 +351,7 @@ const createUnserializedWorkspaceSettingsService = (
             agentModelFavorites: config.agentModelFavorites,
             workspaces,
             globalPromptOverrides: snapshot.globalPromptOverrides,
-          }) as LoadedGlobalConfig,
+          }),
         catch: (cause) =>
           new HostValidationError({
             message: cause instanceof Error ? cause.message : String(cause),
@@ -384,13 +381,12 @@ const createUnserializedWorkspaceSettingsService = (
             cause,
           }),
       });
-      // SAFETY: The schema parser validates every field required by `LoadedGlobalConfig` before returning.
       const nextConfig = yield* Effect.try({
         try: () =>
           globalConfigSchema.parse({
             ...config,
             agentModelFavorites: favorites,
-          }) as LoadedGlobalConfig,
+          }),
         catch: (cause) =>
           new HostValidationError({
             message: cause instanceof Error ? cause.message : String(cause),
@@ -412,13 +408,12 @@ const createUnserializedWorkspaceSettingsService = (
   setTheme(theme) {
     return Effect.gen(function* () {
       const config = yield* loadGlobalConfig(settingsConfig);
-      // SAFETY: The schema parser validates every field required by `LoadedGlobalConfig` before returning.
       const nextConfig = yield* Effect.try({
         try: () =>
           globalConfigSchema.parse({
             ...config,
             theme: themeSchema.parse(theme),
-          }) as LoadedGlobalConfig,
+          }),
         catch: (cause) =>
           new HostValidationError({
             message: cause instanceof Error ? cause.message : String(cause),
@@ -431,13 +426,12 @@ const createUnserializedWorkspaceSettingsService = (
   updateGlobalGitConfig(git) {
     return Effect.gen(function* () {
       const config = yield* loadGlobalConfig(settingsConfig);
-      // SAFETY: The schema parser validates every field required by `LoadedGlobalConfig` before returning.
       const nextConfig = yield* Effect.try({
         try: () =>
           globalConfigSchema.parse({
             ...config,
             git: globalGitConfigSchema.parse(git),
-          }) as LoadedGlobalConfig,
+          }),
         catch: (cause) =>
           new HostValidationError({
             message: cause instanceof Error ? cause.message : String(cause),

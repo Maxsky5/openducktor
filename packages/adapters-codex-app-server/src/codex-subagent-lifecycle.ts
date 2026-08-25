@@ -1,6 +1,5 @@
-import { type CodexAppServerTurn, codexAppServerTurnSchema } from "@openducktor/contracts";
+import type { CodexAppServerTurn } from "@openducktor/contracts";
 import type { AgentSubagentStatus } from "@openducktor/core";
-import { isPlainObject } from "./codex-app-server-shared";
 import type { CodexNotificationRecord } from "./types";
 
 export type CodexSubagentLifecycleUpdate = {
@@ -29,20 +28,11 @@ const lifecycleTimestampMs = (
   return receivedAtMs;
 };
 
-const notificationTurn = (notification: CodexNotificationRecord): CodexAppServerTurn => {
-  const params = isPlainObject(notification.params) ? notification.params : null;
-  const parsed = codexAppServerTurnSchema.safeParse(params?.turn);
-  if (!parsed.success) {
-    throw new Error(`Codex ${notification.method} notification has an invalid turn payload.`);
-  }
-  return parsed.data;
-};
-
 export const codexSubagentLifecycleUpdateFromNotification = (
   notification: CodexNotificationRecord,
 ): CodexSubagentLifecycleUpdate | null => {
   if (notification.method === "turn/started") {
-    const turn = notificationTurn(notification);
+    const { turn } = notification.params;
     const status = turn.status;
     if (status !== "inProgress") {
       throw new Error(
@@ -60,7 +50,7 @@ export const codexSubagentLifecycleUpdateFromNotification = (
     return null;
   }
 
-  const turn = notificationTurn(notification);
+  const { turn } = notification.params;
   const status = turn.status;
   if (status === "interrupted") {
     return null;

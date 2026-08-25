@@ -9,7 +9,11 @@ function isTypeAssertionExpression(node: ESTree.Node): node is TypeAssertionExpr
 
 function unwrapTransparentExpression(expression: ESTree.Expression): ESTree.Expression {
   let current = expression;
-  while (current.type === "ParenthesizedExpression" || current.type === "TSNonNullExpression") {
+  while (
+    current.type === "ParenthesizedExpression" ||
+    current.type === "TSNonNullExpression" ||
+    current.type === "TSSatisfiesExpression"
+  ) {
     current = current.expression;
   }
   return current;
@@ -29,7 +33,9 @@ function isOutermostAssertionInChain(node: TypeAssertionExpression): boolean {
   let parent = node.parent;
 
   while (
-    (parent.type === "ParenthesizedExpression" || parent.type === "TSNonNullExpression") &&
+    (parent.type === "ParenthesizedExpression" ||
+      parent.type === "TSNonNullExpression" ||
+      parent.type === "TSSatisfiesExpression") &&
     parent.expression === current
   ) {
     current = parent;

@@ -14,6 +14,14 @@ function unwrapParentheses(expression: ESTree.Expression): ESTree.Expression {
   return current;
 }
 
+function unwrapTransparentExpression(expression: ESTree.Expression): ESTree.Expression {
+  let current = unwrapParentheses(expression);
+  while (current.type === "TSNonNullExpression" || current.type === "TSSatisfiesExpression") {
+    current = unwrapParentheses(current.expression);
+  }
+  return current;
+}
+
 function resolveVariable(
   sourceCode: SourceCode,
   identifier: ESTree.IdentifierReference,
@@ -49,7 +57,7 @@ function hasKnownEvidence(
   visitedVariables = new Set<Variable>(),
 ): boolean {
   if (isKnownEvidenceExpression(expression)) return true;
-  const unwrapped = unwrapParentheses(expression);
+  const unwrapped = unwrapTransparentExpression(expression);
   if (unwrapped.type !== "Identifier") return false;
   const variable = resolveVariable(sourceCode, unwrapped);
   if (variable === null || visitedVariables.has(variable)) return false;
@@ -116,10 +124,10 @@ function aliasedIdentifier(
   expression: ESTree.Expression,
   visitorKeys: Readonly<Record<string, readonly string[]>>,
 ): ESTree.IdentifierReference | null {
-  let current = unwrapParentheses(expression);
+  let current = unwrapTransparentExpression(expression);
   if (current.type === "TSAsExpression" || current.type === "TSTypeAssertion") {
     if (!isBroadBoundaryType(current.typeAnnotation, visitorKeys)) return null;
-    current = unwrapParentheses(current.expression);
+    current = unwrapTransparentExpression(current.expression);
   }
   return current.type === "Identifier" ? current : null;
 }
@@ -174,7 +182,7 @@ export const noWidenThenAssertRule = defineRule({
     const checkAssertion = (node: ESTree.TSAsExpression | ESTree.TSTypeAssertion): void => {
       const visitorKeys = context.sourceCode.visitorKeys;
       if (isBroadBoundaryType(node.typeAnnotation, visitorKeys)) return;
-      const expression = unwrapParentheses(node.expression);
+      const expression = unwrapTransparentExpression(node.expression);
       if (
         expression.type !== "Identifier" ||
         !aliasesBroadBoundaryInput(context.sourceCode, expression, node, visitorKeys)

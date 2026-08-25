@@ -1,6 +1,6 @@
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { isUnknownRecord, type AgentEvent, type AgentStreamPart } from "@openducktor/core";
+import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
+import type { ClaudeHistorySubagentSystemMessageIngress } from "./claude-agent-sdk-ingress-schemas";
 import { readClaudeBackgroundAgentLaunch } from "./claude-agent-sdk-runtime-messages";
 import {
   claudeAgentResultExecutionMode,
@@ -38,26 +38,25 @@ type ClaudeSubagentSession = {
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
 };
-type ClaudeSdkSubagentSystemMessage = Extract<
-  SDKMessage,
-  {
-    type: "system";
-    subtype: "task_started" | "task_progress" | "task_updated" | "task_notification";
-  }
->;
-type ClaudeSdkTaskNotificationMessage = Extract<
-  ClaudeSdkSubagentSystemMessage,
+type ClaudeTaskNotificationMessage = Extract<
+  ClaudeHistorySubagentSystemMessageIngress,
   { subtype: "task_notification" }
 >;
-export type ClaudeHistoryTaskNotificationMessage = Omit<
-  ClaudeSdkTaskNotificationMessage,
-  "output_file" | "summary"
-> & {
-  output_file?: string;
-  summary?: string;
+export type ClaudeHistoryTaskNotificationMessage = {
+  type: "system";
+  subtype: "task_notification";
+  task_id: string;
+  tool_use_id?: string | undefined;
+  status: "completed" | "failed" | "stopped";
+  output_file?: string | undefined;
+  summary?: string | undefined;
+  usage?: ClaudeTaskNotificationMessage["usage"] | undefined;
+  skip_transcript?: boolean | undefined;
+  uuid: string;
+  session_id: string;
 };
 type ClaudeSubagentSystemMessage =
-  | Exclude<ClaudeSdkSubagentSystemMessage, ClaudeSdkTaskNotificationMessage>
+  | Exclude<ClaudeHistorySubagentSystemMessageIngress, ClaudeTaskNotificationMessage>
   | ClaudeHistoryTaskNotificationMessage;
 const shouldSuppressSubagentTask = (
   session: ClaudeSubagentSession,
@@ -309,9 +308,7 @@ export const handleClaudeSubagentSystemMessage = ({
   session: ClaudeSubagentSession;
   timestamp: string;
 }): void => {
-  const toolUseId = isUnknownRecord(message)
-    ? (readStringProp(message, "tool_use_id") ?? readStringProp(message, "parent_tool_use_id"))
-    : undefined;
+  const toolUseId = "tool_use_id" in message ? message.tool_use_id : undefined;
   const toolMessageId = toolUseId ? session.toolMessageIdsByCallId.get(toolUseId) : undefined;
   const toolName = toolUseId ? session.toolNamesByCallId.get(toolUseId) : undefined;
   const launchAgentId = toolUseId && session.subagentAgentIdsByToolUseId?.get(toolUseId);
@@ -394,21 +391,18 @@ export const handleClaudeSubagentSystemMessage = ({
       return;
     }
     const details: Partial<Extract<AgentStreamPart, { kind: "subagent" }>> = {};
-    const patch = isUnknownRecord(message.patch) ? message.patch : {};
+    const { patch } = message;
     const error =
-      readStringProp(patch, "error") ??
-      readStringProp(message, "error") ??
-      (message.patch.status === "failed"
-        ? (firstClaudeTaskText(
-            readClaudeFailedTaskReason(patch),
-            readClaudeFailedTaskReason(message),
-          ) ?? `Claude subagent ${message.task_id} failed.`)
+      patch.error ??
+      (patch.status === "failed"
+        ? (firstClaudeTaskText(readClaudeFailedTaskReason(patch)) ??
+          `Claude subagent ${message.task_id} failed.`)
         : undefined);
     if (error) {
       details.error = error;
     }
-    if (message.patch.end_time !== undefined) {
-      details.endedAtMs = message.patch.end_time;
+    if (patch.end_time !== undefined) {
+      details.endedAtMs = patch.end_time;
     }
     const resolvedToolUseId = resolveClaudeSubagentToolUseId(
       session.subagentTaskIdsByToolUseId,
@@ -425,7 +419,7 @@ export const handleClaudeSubagentSystemMessage = ({
       session,
       agentId,
       resolvedToolUseId,
-      claudeSubagentStatusFromTaskStatus(message.patch.status),
+      claudeSubagentStatusFromTaskStatus(patch.status),
       timestamp,
       details,
     );

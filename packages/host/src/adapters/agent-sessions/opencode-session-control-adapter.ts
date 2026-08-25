@@ -1,9 +1,11 @@
 import type { OpencodeSessionRuntimeConnection } from "@openducktor/adapters-opencode-sdk";
 import {
   type AgentSessionControlSummary,
+  type AgentSessionUserMessagePart,
   acceptedAgentUserMessageSchema,
   agentSessionTranscriptEventSchema,
 } from "@openducktor/contracts";
+import type { AgentUserMessagePart } from "@openducktor/core";
 import { Effect } from "effect";
 import {
   type HostError,
@@ -38,6 +40,21 @@ type CreateOpenCodeSessionControlAdapterInput = {
   readonly state: OpenCodeLiveSessionState;
   readonly serializeRuntime: SerializeRuntime;
   readonly commit: CommitMutation;
+};
+
+const toOpenCodeUserMessagePart = (part: AgentSessionUserMessagePart): AgentUserMessagePart => {
+  if (part.kind !== "attachment") return part;
+  const { attachment } = part;
+  return {
+    kind: "attachment",
+    attachment: {
+      id: attachment.id,
+      path: attachment.path,
+      name: attachment.name,
+      kind: attachment.kind,
+      ...(attachment.mime === undefined ? undefined : { mime: attachment.mime }),
+    },
+  };
 };
 
 export const createOpenCodeSessionControlAdapter = ({
@@ -129,7 +146,6 @@ export const createOpenCodeSessionControlAdapter = ({
       ),
     sendUserMessage: (input) => {
       const sessionRef = toSessionRef(input);
-      // SAFETY: The schema parser validates every field required by the asserted shape before returning.
       return serializeSessionSend(
         refKey(sessionRef),
         Effect.tryPromise({
@@ -139,9 +155,7 @@ export const createOpenCodeSessionControlAdapter = ({
               runtimeKind: "opencode",
               runtimePolicy: { kind: "opencode" },
               sessionScope: input.sessionScope,
-              parts: input.parts as Parameters<
-                OpencodeSessionRuntimeConnection["sendUserMessage"]
-              >[0]["parts"],
+              parts: input.parts.map(toOpenCodeUserMessagePart),
               ...(input.model ? { model: input.model } : undefined),
               ...(input.systemPrompt ? { systemPrompt: input.systemPrompt } : undefined),
             }),

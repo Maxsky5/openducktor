@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
+import { filterClaudeHistoryMessages } from "./claude-agent-sdk-history-import";
 import { claudeSessionMessageFixture as toSessionMessage } from "./claude-agent-sdk-test-messages";
 
 describe("claude-agent-sdk-history subagents", () => {
@@ -203,6 +204,7 @@ describe("claude-agent-sdk-history subagents", () => {
           timestamp: "2026-06-26T11:04:12.000Z",
           task_id: "task-1",
           status: "completed",
+          output_file: "/tmp/task-1.output",
           summary: "Tests passed",
         },
       ] satisfies Parameters<typeof toClaudeHistoryMessages>[0],
@@ -223,6 +225,19 @@ describe("claude-agent-sdk-history subagents", () => {
         endedAtMs: Date.parse("2026-06-26T11:04:12.000Z"),
       }),
     ]);
+  });
+
+  test("rejects incomplete stored task messages at history ingress", () => {
+    expect(() =>
+      filterClaudeHistoryMessages([
+        {
+          type: "system",
+          subtype: "task_updated",
+          uuid: "task-updated-1",
+          session_id: "session-1",
+        },
+      ]),
+    ).toThrow("Claude SDK sent an invalid claudeHistorySubagentSystemMessage payload.");
   });
 
   test("anchors nested Claude task system entries to the selected subagent transcript", () => {

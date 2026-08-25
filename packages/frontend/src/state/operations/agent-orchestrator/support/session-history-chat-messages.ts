@@ -173,7 +173,6 @@ const historyPartToChatMessage = (
   }
 };
 
-// SAFETY: The schema parser validates every field required by `SessionHistoryPart[]` before returning.
 export const historyToChatMessages = (
   history: AgentSessionHistoryMessage[],
   sessionContext: {
@@ -188,7 +187,7 @@ export const historyToChatMessages = (
     const userDisplayParts = message.role === "user" ? (message.displayParts ?? []) : [];
     const assistantTextMessageIndexes: number[] = [];
 
-    for (const part of message.parts as SessionHistoryPart[]) {
+    for (const part of message.parts) {
       if (
         message.role === "assistant" &&
         part.kind === "text" &&

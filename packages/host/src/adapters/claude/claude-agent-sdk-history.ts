@@ -41,10 +41,7 @@ import {
   successfulClaudeResultText,
 } from "./claude-agent-sdk-result-lifecycle";
 import { readClaudeTaskNotifications } from "./claude-agent-sdk-runtime-messages";
-import {
-  emitClaudeAgentToolResultSubagentPart,
-  type handleClaudeSubagentSystemMessage,
-} from "./claude-agent-sdk-subagents";
+import { emitClaudeAgentToolResultSubagentPart } from "./claude-agent-sdk-subagents";
 import {
   type ClaudeTodoProjectionState,
   type ClaudeTodoState,
@@ -281,10 +278,7 @@ export const toClaudeHistoryMessages = (
     if (isClaudeHistorySubagentSystemMessage(entry)) {
       appendClaudeHistorySubagentSystemMessage({
         entry,
-        message:
-          /* SAFETY: The guard above proves the subagent message shape. */ entry as Parameters<
-            typeof handleClaudeSubagentSystemMessage
-          >[0]["message"],
+        message: entry,
         state: toolResultState,
         timestamp,
       });

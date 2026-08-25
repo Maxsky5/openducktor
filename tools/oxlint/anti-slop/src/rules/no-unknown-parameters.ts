@@ -1,6 +1,12 @@
 import { defineRule } from "@oxlint/plugins";
 import type { ESTree } from "@oxlint/plugins";
 
+import {
+  createTypeEnvironment,
+  typeResolvesToAny,
+  typeResolvesToUnknown,
+} from "../shared/dictionary-types.ts";
+
 type RuntimeFunction = ESTree.ArrowFunctionExpression | ESTree.Function;
 
 type Parameter = ESTree.ParamPattern;
@@ -55,6 +61,7 @@ function directlyExposesParameter(expression: ESTree.Expression, parameterName: 
     expression.type === "TSAsExpression" ||
     expression.type === "TSTypeAssertion" ||
     expression.type === "TSNonNullExpression" ||
+    expression.type === "TSSatisfiesExpression" ||
     expression.type === "ChainExpression"
   ) {
     return directlyExposesParameter(expression.expression, parameterName);
@@ -105,9 +112,16 @@ function directlyExposesParameter(expression: ESTree.Expression, parameterName: 
   return false;
 }
 
-function hasKnownOutputContract(functionNode: RuntimeFunction): boolean {
+function hasKnownOutputContract(
+  functionNode: RuntimeFunction,
+  visitorKeys: Readonly<Record<string, readonly string[]>>,
+): boolean {
   const returnType = functionNode.returnType?.typeAnnotation;
-  return returnType !== undefined && returnType.type !== "TSUnknownKeyword";
+  if (returnType === undefined) return false;
+  const environment = createTypeEnvironment(returnType, visitorKeys);
+  return (
+    !typeResolvesToAny(returnType, environment) && !typeResolvesToUnknown(returnType, environment)
+  );
 }
 
 /** Reject direct exposure and assertion of explicitly unknown runtime inputs. */
@@ -148,14 +162,24 @@ export const noUnknownParametersRule = defineRule({
     };
 
     const checkAssertion = (node: ESTree.TSAsExpression | ESTree.TSTypeAssertion): void => {
-      if (node.expression.type !== "Identifier") return;
       const functionNode = enclosingRuntimeFunction(node);
-      if (functionNode !== null) report(functionNode, node.expression.name);
+      if (functionNode === null) return;
+      for (const parameter of functionNode.params) {
+        const annotation = parameterAnnotation(parameter);
+        if (annotation?.typeAnnotation.type !== "TSUnknownKeyword") continue;
+        const name = parameterName(parameter, context.sourceCode.getText(parameter));
+        if (directlyExposesParameter(node.expression, name)) report(functionNode, name);
+      }
     };
 
     return {
       ArrowFunctionExpression(node) {
-        if (node.body.type === "BlockStatement" || hasKnownOutputContract(node)) return;
+        if (
+          node.body.type === "BlockStatement" ||
+          hasKnownOutputContract(node, context.sourceCode.visitorKeys)
+        ) {
+          return;
+        }
         for (const parameter of node.params) {
           const annotation = parameterAnnotation(parameter);
           if (annotation?.typeAnnotation.type !== "TSUnknownKeyword") continue;
@@ -166,7 +190,12 @@ export const noUnknownParametersRule = defineRule({
       ReturnStatement(node) {
         if (node.argument === null) return;
         const functionNode = enclosingRuntimeFunction(node);
-        if (functionNode === null || hasKnownOutputContract(functionNode)) return;
+        if (
+          functionNode === null ||
+          hasKnownOutputContract(functionNode, context.sourceCode.visitorKeys)
+        ) {
+          return;
+        }
         for (const parameter of functionNode.params) {
           const annotation = parameterAnnotation(parameter);
           if (annotation?.typeAnnotation.type !== "TSUnknownKeyword") continue;

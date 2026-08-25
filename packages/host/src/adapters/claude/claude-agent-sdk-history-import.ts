@@ -13,7 +13,9 @@ import {
   parseClaudeHistoryAttachmentEntry,
   parseClaudeHistoryConversationEntry,
   parseClaudeHistoryStoreEntry,
+  parseClaudeHistorySubagentSystemMessageIngress,
   parseClaudeMetaQueuedCommandAttachment,
+  type ClaudeHistorySubagentSystemMessageIngress,
 } from "./claude-agent-sdk-ingress-schemas";
 import { parseClaudeTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 import { readStringProp } from "./claude-agent-sdk-utils";
@@ -36,10 +38,8 @@ export type ClaudeHistoryRetractionMessage = SessionStoreEntry & {
   retracted_message_uuids?: unknown;
 };
 
-export type ClaudeHistorySubagentSystemMessage = SessionStoreEntry & {
-  type: "system";
-  subtype: "task_started" | "task_progress" | "task_updated" | "task_notification";
-};
+export type ClaudeHistorySubagentSystemMessage = SessionStoreEntry &
+  ClaudeHistorySubagentSystemMessageIngress;
 
 export type ClaudeHistoryCompactBoundaryMessage = SessionStoreEntry & {
   type: "system";
@@ -102,7 +102,8 @@ const isMainClaudeHistoryMessage = (entry: SessionStoreEntry): entry is ClaudeHi
         subtype === "task_updated" ||
         subtype === "task_notification")
     ) {
-      return typeof entry.uuid === "string";
+      parseClaudeHistorySubagentSystemMessageIngress(entry);
+      return true;
     }
     if (
       entry.type === "system" &&
@@ -167,13 +168,18 @@ export const isClaudeHistorySubagentSystemMessage = (
   entry: ClaudeHistoryMessage,
 ): entry is ClaudeHistorySubagentSystemMessage => {
   const value = sessionStoreEntryValue(entry);
-  return (
-    entry.type === "system" &&
-    (readStringProp(value, "subtype") === "task_started" ||
-      readStringProp(value, "subtype") === "task_progress" ||
-      readStringProp(value, "subtype") === "task_updated" ||
-      readStringProp(value, "subtype") === "task_notification")
-  );
+  if (entry.type !== "system") return false;
+  const subtype = readStringProp(value, "subtype");
+  if (
+    subtype !== "task_started" &&
+    subtype !== "task_progress" &&
+    subtype !== "task_updated" &&
+    subtype !== "task_notification"
+  ) {
+    return false;
+  }
+  parseClaudeHistorySubagentSystemMessageIngress(entry);
+  return true;
 };
 
 export const isClaudeHistoryCompactBoundaryMessage = (

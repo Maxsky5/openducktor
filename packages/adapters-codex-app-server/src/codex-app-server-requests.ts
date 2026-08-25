@@ -72,7 +72,7 @@ export const classifyCodexRequestMutation = (
   if (isCodexAppServerFileMutationRequestMethod(method)) {
     return "mutating";
   }
-  if (isCodexAppServerPermissionRequestMethod(method)) {
+  if (request.method === CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_PERMISSIONS_REQUEST_APPROVAL) {
     return classifyCodexPermissionRequestMutation(request);
   }
   if (isCodexCommandApprovalRequest(request)) {

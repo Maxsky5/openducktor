@@ -287,9 +287,8 @@ export const saveAndReturnWorkspaceRecord = (
   workspaceId: string,
 ) =>
   Effect.gen(function* () {
-    // SAFETY: The schema parser validates every field required by `LoadedGlobalConfig` before returning.
     const parsed = yield* Effect.try({
-      try: () => globalConfigSchema.parse(config) as LoadedGlobalConfig,
+      try: () => globalConfigSchema.parse(config),
       catch: (cause) =>
         new HostValidationError({
           message: cause instanceof Error ? cause.message : String(cause),

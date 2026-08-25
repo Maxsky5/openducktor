@@ -74,9 +74,6 @@ function typeDeclarationName(declaration: ESTree.Node): string | null {
   ) {
     return declaration.id?.name ?? null;
   }
-  if (declaration.type === "TSModuleDeclaration" && declaration.id.type === "Identifier") {
-    return declaration.id.name;
-  }
   if (declaration.type === "TSImportEqualsDeclaration") return declaration.id.name;
   return null;
 }
@@ -233,14 +230,38 @@ function isEffectivelyEmptyTypeLiteral(type: ESTree.TSTypeLiteral): boolean {
 }
 
 function isEffectivelyEmptyInterface(
+  name: string,
   declarations: readonly ESTree.TSInterfaceDeclaration[],
+  environment: TypeEnvironment,
+  resolving: ReadonlySet<string> = new Set(),
 ): boolean {
-  if (declarations.length !== 1) return false;
-  const [type] = declarations;
-  return (
-    type !== undefined &&
-    type.extends.length === 0 &&
-    (type.body.body.length === 0 || type.body.body.every(isEffectivelyEmptyMember))
+  if (declarations.length === 0 || resolving.has(name)) return false;
+  if (
+    declarations.some(
+      (declaration) =>
+        declaration.body.body.length > 0 && !declaration.body.body.every(isEffectivelyEmptyMember),
+    )
+  ) {
+    return false;
+  }
+
+  const nextResolving = new Set(resolving);
+  nextResolving.add(name);
+  return declarations.every((declaration) =>
+    declaration.extends.every((heritage) => {
+      if (heritage.expression.type !== "Identifier") return false;
+      const inheritedName = heritage.expression.name;
+      const inheritedDeclarations = environment.interfaces.get(inheritedName);
+      return (
+        inheritedDeclarations !== undefined &&
+        isEffectivelyEmptyInterface(
+          inheritedName,
+          inheritedDeclarations,
+          environment,
+          nextResolving,
+        )
+      );
+    }),
   );
 }
 
@@ -335,7 +356,9 @@ function unsafeDirectValue(
   }
   const interfaceDeclarations = environment.interfaces.get(name);
   if (interfaceDeclarations !== undefined) {
-    return isEffectivelyEmptyInterface(interfaceDeclarations) ? "empty-object" : null;
+    return isEffectivelyEmptyInterface(name, interfaceDeclarations, environment)
+      ? "empty-object"
+      : null;
   }
   const alias = environment.aliases.get(name);
   if (alias === undefined || resolvingAliases.has(name)) return null;
@@ -653,6 +676,52 @@ function indexedStringValueResolvesToUnknown(
   const nextResolving = new Set(resolvingAliases);
   nextResolving.add(name);
   return indexedStringValueResolvesToUnknown(
+    alias.typeAnnotation,
+    createTypeEnvironment(alias.typeAnnotation, environment.visitorKeys),
+    nextSubstitutions,
+    nextResolving,
+  );
+}
+
+/** Resolve whether a visible TypeScript type exposes any to its caller. */
+export function typeResolvesToAny(
+  type: ESTree.TSType,
+  environment: TypeEnvironment,
+  substitutions: TypeAliasEnvironment = new Map(),
+  resolvingAliases: ReadonlySet<string> = new Set(),
+): boolean {
+  const unwrapped = unwrapTransparentType(type);
+  if (unwrapped.type === "TSAnyKeyword") return true;
+  if (unwrapped.type === "TSUnionType" || unwrapped.type === "TSIntersectionType") {
+    return unwrapped.types.some((member) =>
+      typeResolvesToAny(member, environment, substitutions, resolvingAliases),
+    );
+  }
+  if (unwrapped.type !== "TSTypeReference") return false;
+  const name = typeReferenceName(unwrapped);
+  if (name === null) return false;
+  const substitution = substitutions.get(name);
+  if (substitution !== undefined && !isUnappliedReferenceTo(substitution.type, name)) {
+    return typeResolvesToAny(
+      substitution.type,
+      substitution.environment,
+      substitutions,
+      resolvingAliases,
+    );
+  }
+  if ((name === "Promise" || name === "PromiseLike") && isBuiltIn(name, environment)) {
+    const value = unwrapped.typeArguments?.params[0];
+    return (
+      value !== undefined && typeResolvesToAny(value, environment, substitutions, resolvingAliases)
+    );
+  }
+  const alias = environment.aliases.get(name);
+  if (alias === undefined || resolvingAliases.has(name)) return false;
+  const nextSubstitutions = aliasSubstitution(alias, unwrapped, environment, substitutions);
+  if (nextSubstitutions === null) return false;
+  const nextResolving = new Set(resolvingAliases);
+  nextResolving.add(name);
+  return typeResolvesToAny(
     alias.typeAnnotation,
     createTypeEnvironment(alias.typeAnnotation, environment.visitorKeys),
     nextSubstitutions,

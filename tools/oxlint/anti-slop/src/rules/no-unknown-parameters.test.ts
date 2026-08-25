@@ -59,5 +59,21 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
       code: "function unsafe(input: unknown): void { consume(input as User); }",
       errors: [error],
     },
+    {
+      code: "type User = { id: string }; function unsafe(input: unknown): User { return input! as User; }",
+      errors: [error],
+    },
+    {
+      code: "type User = { id: string }; function unsafe(input: unknown): User { return (input satisfies unknown) as User; }",
+      errors: [error],
+    },
+    {
+      code: "function unsafe(input: unknown): any { return input; }",
+      errors: [error],
+    },
+    {
+      code: "type UnsafeOutput = any; function unsafe(input: unknown): UnsafeOutput { return input; }",
+      errors: [error],
+    },
   ],
 });

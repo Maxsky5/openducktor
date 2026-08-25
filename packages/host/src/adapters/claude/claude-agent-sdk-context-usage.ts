@@ -198,8 +198,7 @@ export const shouldRefreshClaudeContextUsageForMessage = (message: SDKMessage): 
     return true;
   }
   if (message.type === "result") {
-    // SAFETY: The preceding runtime guard establishes `{ stop_reason?: unknown }` before this assertion.
-    return (message as { stop_reason?: unknown }).stop_reason !== "tool_use";
+    return message.stop_reason !== "tool_use";
   }
   return readStreamEventType(message) === "message_stop";
 };

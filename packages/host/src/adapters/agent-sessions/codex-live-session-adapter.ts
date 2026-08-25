@@ -145,7 +145,6 @@ export const createCodexLiveSessionAdapterPreparer =
         liveSessionLifecycle,
       });
 
-      // SAFETY: The schema parser validates every field required by `CodexAppServerRespondInput` before returning.
       const controller = yield* Effect.try({
         try: () =>
           createController({

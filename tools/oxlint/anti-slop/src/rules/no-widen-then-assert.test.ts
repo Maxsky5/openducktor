@@ -44,5 +44,13 @@ tester.run("anti-slop/no-widen-then-assert", noWidenThenAssertRule, {
       code: "namespace Owner { type OpenValues = Readonly<Record<string, unknown>>; declare const input: OpenValues; const alias = input; const parsed = alias as User; }",
       errors: [error],
     },
+    {
+      code: "declare const input: unknown; type User = { id: string }; const alias = input!; const value = alias as User;",
+      errors: [error],
+    },
+    {
+      code: "declare const input: unknown; type User = { id: string }; const alias = input satisfies unknown; const value = alias as User;",
+      errors: [error],
+    },
   ],
 });
