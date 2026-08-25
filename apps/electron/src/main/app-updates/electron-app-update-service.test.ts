@@ -253,6 +253,7 @@ describe("electron app update service", () => {
     expect(fakeScheduler.timeouts).toEqual([
       {
         callback: expect.any(Function),
+        cancel: expect.any(Function),
         cleared: false,
         timeoutMs: 1_000,
       },
@@ -269,6 +270,7 @@ describe("electron app update service", () => {
     expect(fakeScheduler.intervals).toEqual([
       {
         callback: expect.any(Function),
+        cancel: expect.any(Function),
         cleared: false,
         intervalMs: DEFAULT_APP_UPDATE_BACKGROUND_CHECK_INTERVAL_MS,
       },
@@ -530,6 +532,26 @@ describe("electron app update service", () => {
     expect(result.state.error.message).not.toContain("at createHttpError");
   });
 
+  test("reads an updater error code without serializing a cyclic error", async () => {
+    const adapter = new FakeUpdaterAdapter();
+    const updateError = Object.assign(new Error("Unable to find latest version on GitHub"), {
+      code: "ERR_UPDATER_LATEST_VERSION_NOT_FOUND",
+    });
+    updateError.cause = updateError;
+    adapter.nextCheckResult = Promise.reject(updateError);
+    const { service } = createService({ adapter });
+
+    const result = await service.check({ initiator: "settings" });
+
+    expect(result.state).toMatchObject({
+      status: "error",
+      error: {
+        message:
+          "OpenDucktor could not read the latest GitHub release. Make sure a published OpenDucktor release exists and the update feed is reachable.",
+      },
+    });
+  });
+
   test("commits a failed check before surfacing its logging failure", async () => {
     const adapter = new FakeUpdaterAdapter();
     const persistenceError = new Error("openducktor.logs.append failed");
@@ -692,6 +714,7 @@ describe("electron app update service", () => {
     expect(fakeScheduler.timeouts).toEqual([
       {
         callback: expect.any(Function),
+        cancel: expect.any(Function),
         cleared: false,
         timeoutMs: 500,
       },

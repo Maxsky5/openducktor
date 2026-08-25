@@ -1,21 +1,9 @@
 import { defineRule } from "@oxlint/plugins";
 
-import type { ESTree, Scope, SourceCode, Variable } from "@oxlint/plugins";
+import type { ESTree, SourceCode } from "@oxlint/plugins";
+import { isGlobalObjectReference, resolveVariable } from "../shared/global-reference.ts";
 
 const moduleMockMethods = new Set(["doMock", "mock", "module", "unstable_mockModule"]);
-
-function resolveVariable(
-  sourceCode: SourceCode,
-  identifier: ESTree.IdentifierReference,
-): Variable | null {
-  let scope: Scope | null = sourceCode.getScope(identifier);
-  while (scope !== null) {
-    const variable = scope.set.get(identifier.name);
-    if (variable !== undefined) return variable;
-    scope = scope.upper;
-  }
-  return null;
-}
 
 function importedName(node: ESTree.Node): string | null {
   if (node.type !== "ImportSpecifier") return null;
@@ -67,13 +55,13 @@ function isBunMockObject(sourceCode: SourceCode, expression: ESTree.Expression):
 
 function isTestFrameworkObject(sourceCode: SourceCode, expression: ESTree.Expression): boolean {
   if (isBunMockObject(sourceCode, expression)) return true;
-  if (expression.type !== "Identifier") return false;
   if (
-    (expression.name === "vi" || expression.name === "jest") &&
-    sourceCode.isGlobalReference(expression)
+    isGlobalObjectReference(sourceCode, expression, "vi") ||
+    isGlobalObjectReference(sourceCode, expression, "jest")
   ) {
     return true;
   }
+  if (expression.type !== "Identifier") return false;
 
   const variable = resolveVariable(sourceCode, expression);
   if (variable === null || variable.defs.length === 0) {

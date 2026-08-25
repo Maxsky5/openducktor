@@ -27,6 +27,11 @@ export type TaskRefreshController = {
   resetManualLoading: () => void;
 };
 
+type InFlightTaskRefresh = {
+  promise: Promise<void>;
+  repoPath: string;
+};
+
 export const createTaskRefreshController = ({
   setIsManualLoading,
   notificationPort,
@@ -34,7 +39,7 @@ export const createTaskRefreshController = ({
   lastTaskLoadErrorToastRef,
 }: CreateTaskRefreshControllerArgs): TaskRefreshController => {
   let manualRefreshToken = 0;
-  let inFlightRefresh: { repoPath: string; promise: Promise<void> } | null = null;
+  let inFlightRefresh: InFlightTaskRefresh | null = null;
 
   const getRefreshPromise = (
     repoPath: string,

@@ -1,6 +1,7 @@
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
 import type { ClaudeHistorySubagentSystemMessageIngress } from "./claude-agent-sdk-ingress-schemas";
+import type { ClaudeSdkSubagentSystemMessageProjection } from "./claude-agent-sdk-message-projection";
 import { readClaudeBackgroundAgentLaunch } from "./claude-agent-sdk-runtime-messages";
 import {
   claudeAgentResultExecutionMode,
@@ -56,7 +57,7 @@ export type ClaudeHistoryTaskNotificationMessage = {
   session_id: string;
 };
 type ClaudeSubagentSystemMessage =
-  | Exclude<ClaudeHistorySubagentSystemMessageIngress, ClaudeTaskNotificationMessage>
+  | ClaudeSdkSubagentSystemMessageProjection
   | ClaudeHistoryTaskNotificationMessage;
 const shouldSuppressSubagentTask = (
   session: ClaudeSubagentSession,

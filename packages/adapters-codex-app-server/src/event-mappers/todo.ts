@@ -26,10 +26,9 @@ type CodexPlanUpdatedPayload = Extract<
   CodexNotificationRecord,
   { method: "turn/plan/updated" }
 >["params"];
+type CodexJsonObject = Record<string, CodexAppServerJsonValue>;
 
-const parseJsonObject = (
-  value: CodexAppServerJsonValue | undefined,
-): Record<string, CodexAppServerJsonValue> | null => {
+const parseJsonObject = (value: CodexAppServerJsonValue | undefined) => {
   if (isPlainObject(value)) return value;
   if (!(typeof value === "string")) return null;
   try {
@@ -105,9 +104,7 @@ type CodexTodoItemSource =
   | { kind: "structured"; items: CodexAppServerJsonValue[] }
   | { kind: "plan_text"; items: CodexPlanTextTodo[] };
 
-const codexTodoItemsFromPayload = (
-  payload: Record<string, CodexAppServerJsonValue>,
-): CodexTodoItemSource => {
+const codexTodoItemsFromPayload = (payload: CodexJsonObject): CodexTodoItemSource => {
   const todo = arrayFromUnknown(payload.todo);
   if (todo.length > 0) {
     return { kind: "structured", items: todo };
@@ -120,9 +117,7 @@ const codexTodoItemsFromPayload = (
   return { kind: "plan_text", items: text ? codexTodoItemsFromPlanText(text) : [] };
 };
 
-const codexTodoToolInputFromPayload = (
-  payload: Record<string, CodexAppServerJsonValue>,
-): Record<string, CodexAppServerJsonValue> | null => {
+const codexTodoToolInputFromPayload = (payload: CodexJsonObject) => {
   const source = codexTodoItemsFromPayload(payload);
   if (source.items.length === 0) {
     return null;
@@ -144,9 +139,7 @@ const codexTodoToolInputFromPayload = (
   };
 };
 
-const codexTodoUpdateFromPayload = (
-  payload: Record<string, CodexAppServerJsonValue>,
-): CodexTodoUpdate | null => {
+const codexTodoUpdateFromPayload = (payload: CodexJsonObject): CodexTodoUpdate | null => {
   const source = codexTodoItemsFromPayload(payload);
   if (source.items.length === 0) {
     return null;

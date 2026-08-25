@@ -36,6 +36,17 @@ export type WorkspaceFilesService = {
   ): Effect.Effect<WorkspaceTextFileWriteResult, WorkspaceTextFileWriteError>;
 };
 
+type WorkspaceGitChange = {
+  originalPath?: string;
+  path: string;
+  status: string;
+};
+
+type ProjectedWorkspaceGitChange = {
+  path: string;
+  status: string;
+};
+
 const PIERRE_GIT_STATUSES: ReadonlySet<string> = new Set([
   "added",
   "deleted",
@@ -102,8 +113,8 @@ const projectGitChangeToWorkspace = (
   filesystem: FilesystemPort,
   repositoryRoot: string,
   workspaceRoot: string,
-  change: { originalPath?: string; path: string; status: string },
-): { path: string; status: string } | null => {
+  change: WorkspaceGitChange,
+): ProjectedWorkspaceGitChange | null => {
   const path = toWorkspaceRelativeGitPath(filesystem, repositoryRoot, workspaceRoot, change.path);
   if (path) {
     return { path, status: change.status };

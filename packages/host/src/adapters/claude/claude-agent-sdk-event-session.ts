@@ -114,10 +114,15 @@ const findClaudeToolOwnerSession = (
   return null;
 };
 
+export type ClaudeSubagentOwner = {
+  session: ClaudeEventSession;
+  toolUseId: string;
+};
+
 export const findClaudeSubagentOwnerByAgentId = (
   session: ClaudeEventSession,
   agentId: string,
-): { session: ClaudeEventSession; toolUseId: string } | null => {
+): ClaudeSubagentOwner | null => {
   for (const [toolUseId, ownedAgentId] of session.subagentAgentIdsByToolUseId ?? []) {
     if (ownedAgentId === agentId) {
       return { session, toolUseId };

@@ -23,6 +23,11 @@ import {
 import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
+type TaskBranchCleanup = {
+  sourceBranch: string;
+  targetBranch: string;
+};
+
 export const createTaskLinkMergedPullRequestUseCase = ({
   devServerService,
   gitPort,
@@ -88,7 +93,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
         );
       }
 
-      let cleanup: { sourceBranch: string; targetBranch: string } | null = null;
+      let cleanup: TaskBranchCleanup | null = null;
       if (metadata.pullRequest === undefined) {
         cleanup = yield* loadTaskBranchCleanup(
           dependencies,

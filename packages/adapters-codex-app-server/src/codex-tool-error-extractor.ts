@@ -14,10 +14,9 @@ import {
 type CodexDynamicToolCallItem = Extract<CodexAppServerThreadItem, { type: "dynamicToolCall" }>;
 type CodexFileChangeItem = Extract<CodexAppServerThreadItem, { type: "fileChange" }>;
 type CodexMcpToolCallItem = Extract<CodexAppServerThreadItem, { type: "mcpToolCall" }>;
+type CodexJsonObject = Record<string, CodexAppServerJsonValue>;
 
-const parseJsonObjectString = (
-  value: CodexAppServerJsonValue | undefined,
-): Record<string, CodexAppServerJsonValue> | null => {
+const parseJsonObjectString = (value: CodexAppServerJsonValue | undefined) => {
   if (!(typeof value === "string")) {
     return null;
   }
@@ -34,9 +33,7 @@ const parseJsonObjectString = (
   }
 };
 
-const asRecord = (
-  value: CodexAppServerJsonValue | undefined,
-): Record<string, CodexAppServerJsonValue> | null =>
+const asRecord = (value: CodexAppServerJsonValue | undefined): CodexJsonObject | null =>
   isPlainObject(value) ? value : parseJsonObjectString(value);
 
 const nonEmptyString = (value: CodexAppServerJsonValue | undefined): string | null => {
@@ -117,10 +114,7 @@ const dynamicContentErrorMessage = (value: CodexAppServerJsonValue | undefined):
   return text ? looseErrorEnvelopeMessage(text) : null;
 };
 
-const objectField = (
-  value: Record<string, CodexAppServerJsonValue>,
-  keys: string[],
-): Record<string, CodexAppServerJsonValue> | null => {
+const objectField = (value: CodexJsonObject, keys: string[]) => {
   for (const key of keys) {
     const candidate = value[key];
     if (isPlainObject(candidate)) {
@@ -131,8 +125,8 @@ const objectField = (
 };
 
 const failureMarkerMessage = (
-  record: Record<string, CodexAppServerJsonValue>,
-  structuredContent: Record<string, CodexAppServerJsonValue> | null,
+  record: CodexJsonObject,
+  structuredContent: CodexJsonObject | null,
 ): string | null => {
   if (record.isError !== true && record.ok !== false && record.success !== false) {
     return null;

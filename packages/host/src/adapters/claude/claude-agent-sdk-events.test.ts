@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { createEventTestSession as createSession } from "./claude-agent-sdk-events.test-support";
-import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
+import {
+  claudeSdkMessageFixture,
+  claudeSdkMessageUuidFixture,
+} from "./claude-agent-sdk-test-messages";
 
 describe("handleClaudeSdkMessage assistant transcript events", () => {
   test("emits transcript retractions for Claude superseded assistant messages", () => {
@@ -20,9 +23,13 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-2",
+        uuid: "f3fd90b6-7503-4f6b-8322-9ebb0cd80fe5",
         session_id: "session-1",
-        supersedes: ["assistant-1", "assistant-1", "assistant-tool-result-1"],
+        supersedes: [
+          "9230f95a-2b26-4793-848d-1911ed890ca5",
+          "9230f95a-2b26-4793-848d-1911ed890ca5",
+          "bb446364-8a85-4d93-8e5c-dd06352c9362",
+        ],
         message: {
           role: "assistant",
           model: "claude-sonnet-4-5",
@@ -36,12 +43,12 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       type: "transcript_retracted",
       externalSessionId: "session-1",
       timestamp: "2026-06-25T20:00:00.000Z",
-      messageIds: ["assistant-1", "assistant-tool-result-1"],
+      messageIds: ["9230f95a-2b26-4793-848d-1911ed890ca5", "bb446364-8a85-4d93-8e5c-dd06352c9362"],
     });
     expect(events[1]).toEqual(
       expect.objectContaining({
         type: "assistant_message",
-        messageId: "assistant-2",
+        messageId: "f3fd90b6-7503-4f6b-8322-9ebb0cd80fe5",
         message: "replacement",
       }),
     );
@@ -69,9 +76,13 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         fallback_model: "claude-sonnet-4-5",
         request_id: "req-1",
         content: "Retrying with fallback model.",
-        uuid: "fallback-1",
+        uuid: "42b5bad4-ee24-401b-830c-ec2dce4d10b8",
         session_id: "session-1",
-        retracted_message_uuids: ["assistant-1", "assistant-1", "assistant-2"],
+        retracted_message_uuids: [
+          "9230f95a-2b26-4793-848d-1911ed890ca5",
+          "9230f95a-2b26-4793-848d-1911ed890ca5",
+          "f3fd90b6-7503-4f6b-8322-9ebb0cd80fe5",
+        ],
       }),
     });
 
@@ -79,7 +90,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       type: "transcript_retracted",
       externalSessionId: "session-1",
       timestamp: "2026-06-25T20:00:00.000Z",
-      messageIds: ["assistant-1", "assistant-2"],
+      messageIds: ["9230f95a-2b26-4793-848d-1911ed890ca5", "f3fd90b6-7503-4f6b-8322-9ebb0cd80fe5"],
     });
   });
 
@@ -98,7 +109,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "9230f95a-2b26-4793-848d-1911ed890ca5",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -124,8 +135,8 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         type: "assistant_part",
         part: expect.objectContaining({
           kind: "text",
-          messageId: "assistant-1",
-          partId: "assistant-1:text:0",
+          messageId: "9230f95a-2b26-4793-848d-1911ed890ca5",
+          partId: "9230f95a-2b26-4793-848d-1911ed890ca5:text:0",
           text: "I will inspect the task first.",
           completed: true,
         }),
@@ -142,8 +153,8 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         type: "assistant_part",
         part: expect.objectContaining({
           kind: "text",
-          messageId: "assistant-1",
-          partId: "assistant-1:text:2",
+          messageId: "9230f95a-2b26-4793-848d-1911ed890ca5",
+          partId: "9230f95a-2b26-4793-848d-1911ed890ca5:text:2",
           text: "Then I will inspect the plan.",
           completed: true,
         }),
@@ -167,7 +178,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-draft",
+        uuid: "06f26c0a-9c7b-470c-8746-3e341dda066c",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -184,7 +195,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         type: "assistant_part",
         part: expect.objectContaining({
           kind: "text",
-          messageId: "assistant-draft",
+          messageId: "06f26c0a-9c7b-470c-8746-3e341dda066c",
           text: "I will inspect the task first.",
           completed: true,
         }),
@@ -214,7 +225,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         emit: (event) => events.push(event),
         message: claudeSdkMessageFixture({
           type: "user",
-          uuid: `non-human-user-${index}`,
+          uuid: claudeSdkMessageUuidFixture(`non-human-user-${index}`),
           session_id: "session-1",
           parent_tool_use_id: null,
           message: { role: "user", content: "Runtime-generated input" },
@@ -233,7 +244,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         emit: (event) => events.push(event),
         message: claudeSdkMessageFixture({
           type: "assistant",
-          uuid: `non-human-assistant-${index}`,
+          uuid: claudeSdkMessageUuidFixture(`non-human-assistant-${index}`),
           session_id: "session-1",
           parent_tool_use_id: null,
           message: {
@@ -257,7 +268,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         message: claudeSdkMessageFixture({
           type: "result",
           subtype: "success",
-          uuid: `non-human-result-${index}`,
+          uuid: claudeSdkMessageUuidFixture(`non-human-result-${index}`),
           session_id: "session-1",
           is_error: false,
           duration_ms: 1_000,
@@ -293,7 +304,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           type: "system",
           subtype: "session_state_changed",
           state: "idle",
-          uuid: `peer-idle-${index}`,
+          uuid: claudeSdkMessageUuidFixture(`peer-idle-${index}`),
           session_id: "session-1",
         }),
       });
@@ -331,7 +342,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         subtype: "task_notification",
         task_id: "task-1",
         status: "completed",
-        uuid: "task-notification-1",
+        uuid: "476c3da0-2559-4b52-8699-c061c1ad6226",
         session_id: "session-1",
       }),
     });
@@ -340,7 +351,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       timestamp: "2026-06-25T20:00:01.000Z",
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "task-user-1",
+        uuid: "5a91c77d-22be-4340-8676-aa50b78359cc",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: { role: "user", content: "Task completed" },
@@ -352,7 +363,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       timestamp: "2026-06-25T20:00:02.000Z",
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "task-assistant-1",
+        uuid: "31e408ec-4757-4238-87ab-e998e29e9c12",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -369,7 +380,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
-        uuid: "task-result-1",
+        uuid: "e8e45018-5f3b-46ee-82da-0c358b384386",
         session_id: "session-1",
         is_error: false,
         result: "All background reviews are complete.",
@@ -416,7 +427,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       timestamp: "2026-06-25T20:00:00.000Z",
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "nested-task-user",
+        uuid: "7a44a127-4541-41a2-8608-5ccf96e86ef3",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: { role: "user", content: "Outer agent completed" },
@@ -428,7 +439,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       timestamp: "2026-06-25T20:00:01.000Z",
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "nested-task-assistant",
+        uuid: "d377c478-99f5-48b5-8ad9-8526aa8a2d12",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -445,7 +456,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
-        uuid: "nested-task-result",
+        uuid: "64bb56c2-31df-4cdb-8d84-2cc8a840eed5",
         session_id: "session-1",
         is_error: false,
         result: "The outer agent is complete.",
@@ -481,7 +492,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "9230f95a-2b26-4793-848d-1911ed890ca5",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -520,7 +531,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "9230f95a-2b26-4793-848d-1911ed890ca5",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -536,7 +547,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         type: "assistant_part",
         part: expect.objectContaining({
           kind: "text",
-          messageId: "assistant-1",
+          messageId: "9230f95a-2b26-4793-848d-1911ed890ca5",
           text: "Draft snapshot",
           completed: true,
         }),
@@ -560,7 +571,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "9230f95a-2b26-4793-848d-1911ed890ca5",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -601,7 +612,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "partial-event-1",
+        uuid: "b5d1f9c7-0707-4981-8daf-0a12edfcf6af",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: {
@@ -644,7 +655,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       ...input,
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "partial-event-1",
+        uuid: "b5d1f9c7-0707-4981-8daf-0a12edfcf6af",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: {
@@ -659,7 +670,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       ...input,
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-final",
+        uuid: "e4ae11f2-86db-42bb-8867-2592ddbbcf9f",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -678,7 +689,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       }),
       expect.objectContaining({
         type: "assistant_message",
-        messageId: "assistant-final",
+        messageId: "e4ae11f2-86db-42bb-8867-2592ddbbcf9f",
         message: "Final answer",
       }),
       expect.objectContaining({
@@ -709,7 +720,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         ...input,
         message: claudeSdkMessageFixture({
           type: "stream_event",
-          uuid: `partial-event-${events.length}`,
+          uuid: claudeSdkMessageUuidFixture(`partial-event-${events.length}`),
           session_id: "session-1",
           parent_tool_use_id: null,
           event: {
@@ -749,7 +760,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       ...input,
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "stream-start-1",
+        uuid: "a0c39cdd-689b-4b8d-8cc8-f8ad2086ee65",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: { type: "message_start" },
@@ -759,7 +770,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       ...input,
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "stream-delta-1",
+        uuid: "7bfcd7af-4861-4012-8dcd-4884c598d6cb",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: {
@@ -773,7 +784,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       ...input,
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-tool-use-1",
+        uuid: "301bf08f-23c5-4c36-8057-ba638661910b",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -789,7 +800,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       ...input,
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "stream-start-2",
+        uuid: "08d7e85c-29cf-4d89-813f-bb75bc65caf2",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: { type: "message_start" },
@@ -799,7 +810,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       ...input,
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "stream-delta-2",
+        uuid: "0ccfd682-b274-4d38-803a-21b90e8c45b3",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: {
@@ -813,7 +824,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       ...input,
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-final-2",
+        uuid: "9b5e0484-15a0-4db8-8191-d96800c2791a",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -837,9 +848,9 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
 
     expect(assistantTextMessageIds).toEqual([
       "claude-stream:session-1:1:1:0",
-      "assistant-tool-use-1",
+      "301bf08f-23c5-4c36-8057-ba638661910b",
       "claude-stream:session-1:1:3:0",
-      "assistant-final-2",
+      "9b5e0484-15a0-4db8-8191-d96800c2791a",
     ]);
   });
 
@@ -863,7 +874,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       ...input,
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "stream-delta-1",
+        uuid: "7bfcd7af-4861-4012-8dcd-4884c598d6cb",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: {
@@ -877,7 +888,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       ...input,
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-tool-use-1",
+        uuid: "301bf08f-23c5-4c36-8057-ba638661910b",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -895,7 +906,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       ...input,
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "stream-delta-2",
+        uuid: "0ccfd682-b274-4d38-803a-21b90e8c45b3",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: {
@@ -909,7 +920,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       ...input,
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-final-2",
+        uuid: "9b5e0484-15a0-4db8-8191-d96800c2791a",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -933,9 +944,9 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
 
     expect(assistantTextMessageIds).toEqual([
       "claude-stream:session-1:1:1:0",
-      "assistant-tool-use-1",
+      "301bf08f-23c5-4c36-8057-ba638661910b",
       "claude-stream:session-1:1:2:0",
-      "assistant-final-2",
+      "9b5e0484-15a0-4db8-8191-d96800c2791a",
     ]);
   });
 
@@ -959,7 +970,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       ...input,
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "stream-start-1",
+        uuid: "a0c39cdd-689b-4b8d-8cc8-f8ad2086ee65",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: { type: "message_start" },
@@ -969,7 +980,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       ...input,
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "stream-delta-1",
+        uuid: "7bfcd7af-4861-4012-8dcd-4884c598d6cb",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: {
@@ -983,7 +994,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       ...input,
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "stream-delta-2",
+        uuid: "0ccfd682-b274-4d38-803a-21b90e8c45b3",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: {
@@ -997,7 +1008,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       ...input,
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-final",
+        uuid: "e4ae11f2-86db-42bb-8867-2592ddbbcf9f",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -1025,7 +1036,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       }),
       expect.objectContaining({
         type: "assistant_message",
-        messageId: "assistant-final",
+        messageId: "e4ae11f2-86db-42bb-8867-2592ddbbcf9f",
         message: "First block\nSecond block",
       }),
       expect.objectContaining({
@@ -1053,7 +1064,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       ...baseInput,
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "stream-tool-start",
+        uuid: "275e7ed5-998b-4e33-8ab6-daf07f7b2e6f",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: {
@@ -1073,7 +1084,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       ...baseInput,
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "stream-tool-input",
+        uuid: "12d101f2-8878-4cf7-84c1-3e332e6698a9",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: {
@@ -1091,7 +1102,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       ...baseInput,
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-final",
+        uuid: "e4ae11f2-86db-42bb-8867-2592ddbbcf9f",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {

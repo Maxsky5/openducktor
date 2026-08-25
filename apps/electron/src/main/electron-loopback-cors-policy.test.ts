@@ -4,9 +4,13 @@ import {
   resolveElectronLoopbackCorsOrigin,
 } from "./electron-loopback-cors-policy";
 
+type CorsFilter = Parameters<
+  Parameters<typeof configureElectronLoopbackCorsPolicy>[0]["webRequest"]["onHeadersReceived"]
+>[0];
+
 describe("configureElectronLoopbackCorsPolicy", () => {
   test("authorizes packaged file-origin renderer requests to loopback runtime responses", () => {
-    let registeredFilter: { urls: string[] } | null = null;
+    let registeredFilter: CorsFilter | null = null;
     let listener:
       | Parameters<
           Parameters<
@@ -27,12 +31,12 @@ describe("configureElectronLoopbackCorsPolicy", () => {
     expect(registeredFilter).toEqual({ urls: ["http://127.0.0.1:*/*"] });
     expect(listener).not.toBeNull();
 
-    let responseHeaders: Record<string, string[] | string> | null = null;
+    const responseHeaders: Array<Record<string, string[] | string>> = [];
     listener?.({ responseHeaders: { "content-type": ["application/json"] } }, (response) => {
-      responseHeaders = response.responseHeaders;
+      responseHeaders.push(response.responseHeaders);
     });
 
-    expect(responseHeaders).toEqual({
+    expect(responseHeaders[0]).toEqual({
       "content-type": ["application/json"],
       "Access-Control-Allow-Origin": ["null"],
       "Access-Control-Allow-Credentials": ["true"],

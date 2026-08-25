@@ -148,7 +148,8 @@ export const startRepositoryLoad = <TimerHandle>({
         dismissTaskStorePreparationToast();
       }
 
-      let taskLoadResult: { error: unknown } | null;
+      type TaskLoadFailure = { error: unknown };
+      let taskLoadResult: TaskLoadFailure | null;
       try {
         await loadWorkspaceTasks(repoPath);
         taskLoadResult = null;

@@ -26,7 +26,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       emit,
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "fbce50de-9c81-43c9-8f69-caec240536a1",
         session_id: "session-1",
         message: {
           role: "assistant",
@@ -59,7 +59,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       emit,
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "tool-result-1",
+        uuid: "f5e27738-b7ee-4011-8122-53d7ee7c376a",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -94,7 +94,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
     expect(subagentPart).toEqual(
       expect.objectContaining({
         kind: "subagent",
-        messageId: "assistant-1",
+        messageId: "fbce50de-9c81-43c9-8f69-caec240536a1",
         partId: "claude-subagent:toolu_agent_1",
         correlationKey: "toolu_agent_1",
         status: "completed",
@@ -131,7 +131,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "tool-results-1",
+        uuid: "8e84eb6a-6be3-44a2-8ccb-261d3be40772",
         session_id: "session-1",
         parent_tool_use_id: "toolu_agent_1",
         message: {
@@ -178,7 +178,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
     for (const message of [
       {
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "fbce50de-9c81-43c9-8f69-caec240536a1",
         session_id: "session-1",
         message: {
           role: "assistant",
@@ -201,7 +201,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       {
         type: "system",
         subtype: "task_started",
-        uuid: "task-started-1",
+        uuid: "ca115afa-2e40-4467-8fc7-abcf604653dc",
         session_id: "session-1",
         task_id: "agent-1",
         tool_use_id: "toolu_agent_1",
@@ -211,7 +211,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       {
         type: "system",
         subtype: "task_progress",
-        uuid: "task-progress-1",
+        uuid: "17a2c6a1-b8fe-4674-8cc1-c6bb9ec486ca",
         session_id: "session-1",
         task_id: "agent-1",
         summary: "A progress summary must not replace launch metadata",
@@ -219,7 +219,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       {
         type: "system",
         subtype: "task_notification",
-        uuid: "task-finished-1",
+        uuid: "3fb8f462-b090-477f-874f-b5b383be25cb",
         session_id: "session-1",
         task_id: "agent-1",
         status: "completed",
@@ -227,7 +227,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       },
       {
         type: "user",
-        uuid: "tool-result-1",
+        uuid: "f5e27738-b7ee-4011-8122-53d7ee7c376a",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -294,7 +294,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       emit,
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "fbce50de-9c81-43c9-8f69-caec240536a1",
         session_id: "session-1",
         message: {
           role: "assistant",
@@ -323,7 +323,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       emit,
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "tool-result-1",
+        uuid: "f5e27738-b7ee-4011-8122-53d7ee7c376a",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -371,7 +371,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       emit,
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-2",
+        uuid: "fa405d3c-4843-45ef-8526-ea467ff322d1",
         session_id: "session-1",
         message: {
           role: "assistant",
@@ -399,7 +399,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       emit,
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "tool-result-2",
+        uuid: "77e1c8bd-3ce9-4fe9-8459-a36d0aa6d7b7",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -457,7 +457,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       emit,
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-async",
+        uuid: "b32a89aa-0017-4449-8fff-3d7c95faf011",
         session_id: "session-1",
         message: {
           role: "assistant",
@@ -491,7 +491,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       emit,
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "tool-result-async",
+        uuid: "9fbcef54-d9be-4ef3-8c97-baf64682e599",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -526,7 +526,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
     expect(subagentPart).toEqual(
       expect.objectContaining({
         kind: "subagent",
-        messageId: "assistant-async",
+        messageId: "b32a89aa-0017-4449-8fff-3d7c95faf011",
         partId: "claude-subagent:toolu_agent_async",
         correlationKey: "toolu_agent_async",
         status: "running",
@@ -559,7 +559,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
         task_id: "async-task-1",
         tool_use_id: "toolu_agent_async",
         description: "Run background verification",
-        uuid: "async-task-started",
+        uuid: "d68a02d8-3eac-47ab-8166-1db91cb1b59b",
         session_id: "session-1",
       }),
     });
@@ -573,7 +573,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       emit,
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-async-progress",
+        uuid: "f741fcd5-778d-45f4-8aca-8075da15ddca",
         session_id: "session-1",
         parent_tool_use_id: "toolu_agent_async",
         message: {
@@ -604,7 +604,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
         task_id: "async-task-1",
         status: "completed",
         summary: "Background verification complete",
-        uuid: "async-task-completed",
+        uuid: "5d5cec73-15fd-4a57-8d6b-465811fcc684",
         session_id: "session-1",
       }),
     });
@@ -641,7 +641,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
         task_id: "async-task-start-first",
         tool_use_id: toolUseId,
         description: "Run background verification",
-        uuid: "async-task-started-first",
+        uuid: "e54a8887-7e6e-4e63-8c4a-ce99b5725951",
         session_id: "session-1",
       }),
     });
@@ -653,7 +653,7 @@ describe("handleClaudeSdkMessage Agent tool results", () => {
       emit,
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "tool-result-async-start-first",
+        uuid: "39e90e78-c2be-4491-8bbe-42af2fa2484b",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {

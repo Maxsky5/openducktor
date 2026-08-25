@@ -11,8 +11,6 @@ import { z } from "zod";
 
 const claudeUnknownValueSchema = z.unknown();
 
-type ClaudeSdkUserMessage = Extract<SDKMessage, { type: "user" }>;
-
 const claudeUnknownRecordSchema = z.object({}).catchall(claudeUnknownValueSchema);
 const claudePlainUnknownRecordSchema = z.record(z.string(), claudeUnknownValueSchema);
 const claudeCanonicalJsonObjectSchema = z.record(z.string(), jsonValueSchema);
@@ -319,9 +317,7 @@ export const parseClaudeFileEditToolResponse = (
 export const parseClaudeCanonicalJsonObject = (value: unknown, field: string): JsonObject =>
   parseClaudeIngress(claudeCanonicalJsonObjectSchema.safeParse(value), field);
 
-export const parseClaudeUserToolResultIngress = (
-  value: ClaudeSdkUserMessage,
-): ClaudeUserToolResultIngress => {
+export const parseClaudeUserToolResultIngress = (value: unknown): ClaudeUserToolResultIngress => {
   const message = parseClaudeIngress(
     claudeUserToolResultIngressSchema.safeParse(value),
     "claudeUserToolResult",

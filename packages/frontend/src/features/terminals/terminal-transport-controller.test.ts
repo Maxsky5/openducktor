@@ -589,7 +589,8 @@ describe("createTerminalTransportController", () => {
       releaseAck = resolve;
     });
     let attachCount = 0;
-    let attachment: { acknowledged: number; delivered: number } | null = null;
+    type AttachmentState = { acknowledged: number; delivered: number };
+    let attachment: AttachmentState | null = null;
     const operations: string[] = [];
     const bridge: TerminalBridge = {
       connect: async () => ({

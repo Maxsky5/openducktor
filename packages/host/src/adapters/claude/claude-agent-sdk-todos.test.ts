@@ -14,7 +14,7 @@ const timestamp = "2026-07-20T19:28:50.000Z";
 const taskCreateMessages = () => {
   const toolUse = claudeSdkMessageFixture({
     type: "assistant",
-    uuid: "assistant-create",
+    uuid: "6f57feb4-a10e-4be8-833a-c7df8ff3c3be",
     session_id: "session-1",
     parent_tool_use_id: null,
     message: {
@@ -35,7 +35,7 @@ const taskCreateMessages = () => {
   });
   const toolResult = claudeSdkMessageFixture({
     type: "user",
-    uuid: "result-create",
+    uuid: "f465f795-a90d-4c0b-8e46-2634894c389a",
     session_id: "session-1",
     parent_tool_use_id: null,
     message: {
@@ -87,7 +87,7 @@ describe("Claude task tools", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-update",
+        uuid: "3996ae21-3748-4c66-85f8-91b22c52e2c8",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -115,7 +115,7 @@ describe("Claude task tools", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "result-update",
+        uuid: "b5ea6f5e-9240-4c61-8a48-424f99425ca3",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -240,7 +240,7 @@ describe("Claude task tools", () => {
     const { toolResult, toolUse } = taskCreateMessages();
     const updateUse = claudeSdkMessageFixture({
       type: "assistant",
-      uuid: "assistant-update",
+      uuid: "3996ae21-3748-4c66-85f8-91b22c52e2c8",
       session_id: "session-1",
       parent_tool_use_id: null,
       message: {
@@ -258,7 +258,7 @@ describe("Claude task tools", () => {
     });
     const updateResult = claudeSdkMessageFixture({
       type: "user",
-      uuid: "result-update",
+      uuid: "b5ea6f5e-9240-4c61-8a48-424f99425ca3",
       session_id: "session-1",
       parent_tool_use_id: "tool-update",
       message: {
@@ -299,10 +299,10 @@ describe("Claude task tools", () => {
 
     const replacement = claudeSdkMessageFixture({
       type: "assistant",
-      uuid: "assistant-replacement",
+      uuid: "76f84ca6-613e-49df-8fd4-f879a0442e15",
       session_id: "session-1",
       parent_tool_use_id: null,
-      supersedes: ["assistant-update", "result-update"],
+      supersedes: ["3996ae21-3748-4c66-85f8-91b22c52e2c8", "b5ea6f5e-9240-4c61-8a48-424f99425ca3"],
       message: {
         role: "assistant",
         content: [{ type: "text", text: "Continuing without that update." }],
@@ -356,7 +356,7 @@ describe("Claude task tools", () => {
     const { toolResult, toolUse } = taskCreateMessages();
     const updateUse = claudeSdkMessageFixture({
       type: "assistant",
-      uuid: "assistant-update",
+      uuid: "3996ae21-3748-4c66-85f8-91b22c52e2c8",
       session_id: "session-1",
       parent_tool_use_id: null,
       message: {
@@ -374,7 +374,7 @@ describe("Claude task tools", () => {
     });
     const updateResult = claudeSdkMessageFixture({
       type: "user",
-      uuid: "result-update",
+      uuid: "b5ea6f5e-9240-4c61-8a48-424f99425ca3",
       session_id: "session-1",
       parent_tool_use_id: "tool-update",
       message: {
@@ -438,7 +438,7 @@ describe("Claude task tools", () => {
   test("uses TaskList as the authoritative task snapshot", () => {
     const listUse = claudeSdkMessageFixture({
       type: "assistant",
-      uuid: "assistant-list",
+      uuid: "2c2a11a5-7040-435a-8069-ad8c0e1527c2",
       session_id: "session-1",
       parent_tool_use_id: null,
       message: {
@@ -449,7 +449,7 @@ describe("Claude task tools", () => {
     });
     const listResult = claudeSdkMessageFixture({
       type: "user",
-      uuid: "result-list",
+      uuid: "a5081e5e-308f-4722-898d-d061a45a230c",
       session_id: "session-1",
       parent_tool_use_id: "tool-list",
       message: {

@@ -1,47 +1,34 @@
-import type { SDKMessage, SessionMessage, SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
+import type { SessionMessage, SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
+import { createHash, type UUID } from "node:crypto";
+import { z } from "zod";
 import {
   filterClaudeHistoryMessages,
   type ClaudeHistoryConversationMessage,
   type ClaudeHistoryMessage,
 } from "./claude-agent-sdk-history-import";
+import type { ClaudeSdkMessageFixtureInput } from "./claude-agent-sdk-message-projection";
 
-type ClaudeSdkMessageFixture<MessageType extends SDKMessage["type"]> = {
-  readonly type: MessageType;
-  readonly uuid?: string;
-  readonly session_id?: string;
+const defaultClaudeSdkMessageUuid = "00000000-0000-4000-8000-000000000001" satisfies UUID;
+const claudeSdkMessageUuidSchema = z.custom<UUID>((value) => z.uuid().safeParse(value).success);
+
+export const claudeSdkMessageUuidFixture = (label: string): UUID => {
+  const hash = createHash("sha256").update(label).digest("hex");
+  return claudeSdkMessageUuidSchema.parse(
+    `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`,
+  );
 };
 
-type ClaudeSdkMessageFixtureResult<
-  MessageType extends SDKMessage["type"],
-  ExtraFields extends object,
-> = Extract<SDKMessage, { readonly type: MessageType }> &
-  Required<ClaudeSdkMessageFixture<MessageType>> &
-  ExtraFields;
+export const claudeSdkMessageFixture = <const Message extends ClaudeSdkMessageFixtureInput>(
+  message: Message,
+) => ({
+  ...message,
+  uuid: message.uuid ?? defaultClaudeSdkMessageUuid,
+  session_id: message.session_id ?? "session-1",
+});
 
-/**
- * Keeps intentionally partial SDK event fixtures honest about their public envelope while
- * centralizing the single assertion needed to omit unrelated protocol fields in focused tests.
- */
-// SAFETY: Focused tests provide every SDK field read by the code path under test; this helper supplies the shared envelope fields.
-export const claudeSdkMessageFixture = <
-  MessageType extends SDKMessage["type"],
-  ExtraFields extends object,
->(
-  message: ClaudeSdkMessageFixture<MessageType> & ExtraFields,
-): ClaudeSdkMessageFixtureResult<MessageType, ExtraFields> =>
-  ({
-    uuid: "fixture-message",
-    session_id: "session-1",
-    ...message,
-  }) as ClaudeSdkMessageFixtureResult<MessageType, ExtraFields>;
-
-/** Builds focused history inputs that include every field read by the history projection. */
-// SAFETY: Each caller supplies the SDK discriminator and the complete field set read by the focused history path.
-export const claudeHistoryMessagesFixture = <
-  Messages extends Array<{ readonly type: ClaudeHistoryMessage["type"] }>,
->(
-  messages: Messages,
-): ClaudeHistoryMessage[] => messages as ClaudeHistoryMessage[];
+export const claudeHistoryMessagesFixture = (
+  messages: readonly ClaudeHistoryMessage[],
+): ClaudeHistoryMessage[] => [...messages];
 
 type ClaudeSessionMessageFixture = {
   readonly type: SessionMessage["type"];

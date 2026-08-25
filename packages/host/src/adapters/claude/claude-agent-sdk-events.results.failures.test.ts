@@ -22,7 +22,7 @@ describe("handleClaudeSdkMessage failed results", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "error_during_execution",
-        uuid: "result-error-1",
+        uuid: "679c1167-1413-4191-8740-cc3a6abce872",
         session_id: "session-1",
         is_error: true,
         errors: ["API Error: an image in the conversation could not be processed."],
@@ -34,7 +34,7 @@ describe("handleClaudeSdkMessage failed results", () => {
     expect(events).toEqual([
       expect.objectContaining({
         type: "turn_error",
-        messageId: "result-error-1",
+        messageId: "679c1167-1413-4191-8740-cc3a6abce872",
         message: "API Error: an image in the conversation could not be processed.",
       }),
       expect.objectContaining({
@@ -117,7 +117,7 @@ describe("handleClaudeSdkMessage failed results", () => {
         type: "system",
         subtype: "session_state_changed",
         state: "idle",
-        uuid: "state-1",
+        uuid: "6bc3d005-6962-4a3b-83db-e94f21cb371d",
         session_id: "session-1",
       }),
     });

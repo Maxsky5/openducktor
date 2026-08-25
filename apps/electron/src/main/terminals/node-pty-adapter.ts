@@ -75,7 +75,8 @@ export const createNodePtyPort = ({
         let closed = false;
         const exitWaiters = new Set<() => void>();
         let exitPublished = false;
-        let nativeExit: { exitCode: number; signal: string | null } | null = null;
+        type NativeExit = { exitCode: number; signal: string | null };
+        let nativeExit: NativeExit | null = null;
         let cleanupPromise: Promise<void> | null = null;
         const pty = nodePty.spawn(plan.shell, [...plan.args], {
           cols: plan.grid.columns,

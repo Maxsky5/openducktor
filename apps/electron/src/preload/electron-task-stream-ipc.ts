@@ -53,7 +53,8 @@ export const createElectronTaskStreamApi = (
     onTerminalFailure?: (cause: unknown) => void,
   ) {
     const parsedInput = taskEventStreamSubscribeSchema.parse(input);
-    let established: { subscriptionId: string } | null = null;
+    type EstablishedSubscription = { subscriptionId: string };
+    let established: EstablishedSubscription | null = null;
     let closed = false;
     const bufferedFrames: ElectronTaskStreamFrameEnvelope[] = [];
     const bufferedTerminalFailures: ElectronTaskStreamTerminalFailureEnvelope[] = [];

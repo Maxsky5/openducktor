@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
 import { scheduleClaudeLiveContextUsageRefresh } from "./claude-agent-sdk-context-usage";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
@@ -7,7 +8,6 @@ import {
   createClaudeQueryFixture,
 } from "./claude-agent-sdk-session-io.test-support";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
-import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 
 const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession => ({
@@ -109,13 +109,13 @@ describe("createClaudeAgentSdkSessionStore", () => {
       emit: (_session, event) => events.push(event),
       now: () => "2026-06-25T20:00:00.000Z",
     });
-    const queuedMessage = claudeSdkMessageFixture({
+    const queuedMessage = {
       type: "user",
-      uuid: "queued-1",
+      uuid: "f9fc2054-d124-49cd-8ce4-ce02b316b672",
       message: { role: "user", content: [{ type: "text", text: "continue" }] },
       session_id: "session-1",
       parent_tool_use_id: null,
-    });
+    } satisfies SDKUserMessage;
     const session = createSession({
       pendingUserTurnCount: 1,
       queuedSdkMessages: [queuedMessage],
@@ -136,7 +136,7 @@ describe("createClaudeAgentSdkSessionStore", () => {
         type: "transcript_retracted",
         externalSessionId: "session-1",
         timestamp: "2026-06-25T20:00:00.000Z",
-        messageIds: ["queued-1"],
+        messageIds: ["f9fc2054-d124-49cd-8ce4-ce02b316b672"],
       },
       expect.objectContaining({
         type: "session_finished",
@@ -186,13 +186,13 @@ describe("createClaudeAgentSdkSessionStore", () => {
 
   test("reports Claude sessions with pending live work as active", async () => {
     const store = createClaudeAgentSdkSessionStore();
-    const queuedMessage = claudeSdkMessageFixture({
+    const queuedMessage = {
       type: "user",
-      uuid: "queued-1",
+      uuid: "f9fc2054-d124-49cd-8ce4-ce02b316b672",
       message: { role: "user", content: [{ type: "text", text: "continue" }] },
       session_id: "session-1",
       parent_tool_use_id: null,
-    });
+    } satisfies SDKUserMessage;
     store.set(
       createSession({
         activity: "idle",
@@ -451,10 +451,11 @@ describe("createClaudeAgentSdkSessionStore", () => {
       activity: "running",
       pendingUserTurnCount: 1,
       queuedSdkMessages: [
-        claudeSdkMessageFixture({
+        {
           type: "user",
           message: { role: "user", content: "queued" },
-        }),
+          parent_tool_use_id: null,
+        } satisfies SDKUserMessage,
       ],
     });
     session.abortController.signal.addEventListener(

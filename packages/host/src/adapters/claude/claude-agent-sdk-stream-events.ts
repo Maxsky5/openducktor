@@ -1,4 +1,3 @@
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { isUnknownRecord } from "@openducktor/core";
 import {
   type ClaudeEventSession,
@@ -16,6 +15,7 @@ import {
 import { createClaudeAssistantReasoningPart } from "./claude-agent-sdk-transcript-parts";
 import type { ClaudeAgentSdkEvent } from "./claude-agent-sdk-types";
 import { readStringProp } from "./claude-agent-sdk-utils";
+import type { ClaudeSdkStreamEventMessageProjection } from "./claude-agent-sdk-message-projection";
 
 export const emitClaudePendingToolPart = ({
   emit,
@@ -51,7 +51,7 @@ export const handleClaudeStreamEvent = ({
   timestamp,
 }: {
   emit: (event: ClaudeAgentSdkEvent) => void;
-  message: Extract<SDKMessage, { type: "stream_event" }>;
+  message: ClaudeSdkStreamEventMessageProjection;
   session: ClaudeEventSession;
   timestamp: string;
 }): void => {

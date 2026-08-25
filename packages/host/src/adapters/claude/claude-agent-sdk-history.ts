@@ -58,6 +58,11 @@ const removeClaudeHistoryFinishStep = (message: MutableAssistantHistoryMessage):
   message.parts = message.parts.filter((part) => part.kind !== "step" || part.phase !== "finish");
 };
 
+type PendingManualCompaction = {
+  messageId: string;
+  timestamp: string;
+};
+
 export const toClaudeHistoryMessages = (
   messages: ClaudeHistoryMessage[],
   now: () => string,
@@ -116,7 +121,7 @@ export const toClaudeHistoryMessages = (
   let lastFinalAssistantText: string | undefined;
   let lastAutonomousFinalAssistantMessage: MutableAssistantHistoryMessage | null = null;
   let assistantTurnOriginKind: string | undefined;
-  let pendingManualCompaction: { messageId: string; timestamp: string } | null = null;
+  let pendingManualCompaction: PendingManualCompaction | null = null;
   let manualCompactionBoundaryReceived = false;
   let unclaimedManualCompactionBoundary = false;
   const appendOrMergeAssistantSnapshot = (

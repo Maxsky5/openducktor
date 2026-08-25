@@ -4,11 +4,21 @@ const SSH_GIT_PREFIX = "git@";
 const HTTPS_PREFIX = "https://";
 const SSH_URL_PREFIX = "ssh://git@";
 
+type ParsedGitRemote = {
+  host: string;
+  path: string;
+};
+
+type RepositoryPath = {
+  name: string;
+  owner: string;
+};
+
 const stripGitSuffix = (value: string): string => {
   return value.endsWith(".git") ? value.slice(0, -4) : value;
 };
 
-const parseScpStyleRemote = (value: string): { host: string; path: string } | null => {
+const parseScpStyleRemote = (value: string): ParsedGitRemote | null => {
   const remainder = value.slice(SSH_GIT_PREFIX.length);
   const separatorIndex = remainder.indexOf(":");
   if (separatorIndex <= 0 || separatorIndex === remainder.length - 1) {
@@ -21,10 +31,7 @@ const parseScpStyleRemote = (value: string): { host: string; path: string } | nu
   };
 };
 
-const parseSlashSeparatedRemote = (
-  value: string,
-  prefix: string,
-): { host: string; path: string } | null => {
+const parseSlashSeparatedRemote = (value: string, prefix: string): ParsedGitRemote | null => {
   const remainder = value.slice(prefix.length);
   const separatorIndex = remainder.indexOf("/");
   if (separatorIndex <= 0 || separatorIndex === remainder.length - 1) {
@@ -37,7 +44,7 @@ const parseSlashSeparatedRemote = (
   };
 };
 
-const splitRepositoryPath = (path: string): { owner: string; name: string } | null => {
+const splitRepositoryPath = (path: string): RepositoryPath | null => {
   const [owner, name] = path.split("/", 3);
   if (!owner?.trim() || !name?.trim()) {
     return null;

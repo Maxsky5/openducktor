@@ -1,4 +1,3 @@
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { isUnknownRecord, type AgentEvent } from "@openducktor/core";
 import {
   advanceStreamAssistantMessageIdentity,
@@ -6,6 +5,11 @@ import {
 } from "./claude-agent-sdk-event-session";
 import { retractClaudeTodoToolResults } from "./claude-agent-sdk-todos";
 import { retractClaudeTranscriptCorrelations } from "./claude-agent-sdk-transcript-correlation";
+import type {
+  ClaudeSdkAssistantMessageProjection,
+  ClaudeSdkModelRefusalFallbackMessageProjection,
+  ClaudeSdkResultMessageProjection,
+} from "./claude-agent-sdk-message-projection";
 
 const readStringArrayProp = (value: unknown, key: string): string[] => {
   if (!isUnknownRecord(value)) {
@@ -83,7 +87,7 @@ export const emitSupersededTranscriptMessage = ({
   timestamp,
 }: {
   emit: (event: AgentEvent) => void;
-  message: Extract<SDKMessage, { type: "assistant" }>;
+  message: ClaudeSdkAssistantMessageProjection;
   session: ClaudeEventSession;
   timestamp: string;
 }): void => {
@@ -102,10 +106,7 @@ export const emitRetractedTranscriptMessages = ({
   timestamp,
 }: {
   emit: (event: AgentEvent) => void;
-  message: Extract<
-    SDKMessage,
-    { type: "result" } | { type: "system"; subtype: "model_refusal_fallback" }
-  >;
+  message: ClaudeSdkResultMessageProjection | ClaudeSdkModelRefusalFallbackMessageProjection;
   session: ClaudeEventSession;
   timestamp: string;
 }): void => {

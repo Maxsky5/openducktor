@@ -114,6 +114,11 @@ const deferred = <Value>() => {
   return { promise, resolve };
 };
 
+type MutationBarrier = {
+  entered: ReturnType<typeof deferred<void>>;
+  release: ReturnType<typeof deferred<void>>;
+};
+
 const createHarness = async (
   workingDirectoryDependenciesOverride: ClaudeWorkspaceWorkingDirectoryDependencies = workingDirectoryDependencies,
 ) => {
@@ -139,12 +144,7 @@ const createHarness = async (
   let stopSessionsForRuntimeImpl: ClaudeAgentSdkService["stopSessionsForRuntime"] = () =>
     Effect.void;
   let failNextMutationAfterApply = false;
-  let mutationBarrier:
-    | {
-        entered: ReturnType<typeof deferred<void>>;
-        release: ReturnType<typeof deferred<void>>;
-      }
-    | undefined;
+  let mutationBarrier: MutationBarrier | undefined;
   startSessionImpl = () => {
     eventHub.emit(session, {
       type: "session_started",

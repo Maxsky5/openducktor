@@ -259,6 +259,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
           uuid: "first-task-user",
           session_id: "session-1",
           parent_tool_use_id: null,
+          parent_agent_id: null,
           timestamp: "2026-06-26T11:03:12.100Z",
           message: { role: "user", content: "First task notification" },
           origin: { kind: "task-notification" },
@@ -293,6 +294,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
           uuid: "peer-user",
           session_id: "session-1",
           parent_tool_use_id: null,
+          parent_agent_id: null,
           timestamp: "2026-06-26T11:03:13.000Z",
           message: { role: "user", content: "Peer update" },
           origin: {
@@ -336,6 +338,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
           uuid: "task-user",
           session_id: "session-1",
           parent_tool_use_id: null,
+          parent_agent_id: null,
           timestamp: "2026-06-26T11:03:16.000Z",
           message: { role: "user", content: "Task notification" },
           origin: { kind: "task-notification" },

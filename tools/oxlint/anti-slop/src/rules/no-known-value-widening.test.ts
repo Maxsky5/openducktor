@@ -128,6 +128,7 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
     },
     { code: "const value: unknown = 1;", errors: [error] },
     { code: "const value: object = [];", errors: [error] },
+    { code: "const value: unknown | string = {};", errors: [error] },
     { code: "const value = { answer: 42 } satisfies unknown;", errors: [error] },
     {
       code: "function build() { type Command = () => void; type Open = Record<string, Command>; const start = () => {}; const commands: Open = { start }; }",
@@ -135,6 +136,10 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
     },
     {
       code: "namespace Owner { type Command = () => void; type Open = Record<string, Command>; const start = () => {}; const commands: Open = { start }; }",
+      errors: [error],
+    },
+    {
+      code: "type Command = () => void; const start = () => {}; namespace Owner { export type Open = Record<string, Command>; } const commands: Owner.Open = { start };",
       errors: [error],
     },
     {

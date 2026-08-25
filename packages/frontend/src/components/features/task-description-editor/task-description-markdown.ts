@@ -63,16 +63,20 @@ const canonicalizeBody = (body: string): string => {
   }
 };
 
-// SAFETY: JSON.parse can only produce JSON data, which satisfies `JSONContent` at this boundary.
-const semanticTree = (value: JSONContent): JSONContent =>
-  JSON.parse(
-    JSON.stringify(value, (key, nestedValue) => {
-      if (key === "position" || key === "spread") {
-        return undefined;
-      }
-      return nestedValue;
-    }),
-  ) as JSONContent;
+type MarkdownJsonContent = JSONContent & {
+  position?: unknown;
+  spread?: unknown;
+};
+
+const semanticTree = ({
+  position: _position,
+  spread: _spread,
+  content,
+  ...node
+}: MarkdownJsonContent): JSONContent => ({
+  ...node,
+  ...(content === undefined ? undefined : { content: content.map(semanticTree) }),
+});
 
 const visualEditorMathSemantics = (tree: JSONContent): MarkdownMathSemantic[] => {
   const semantics: MarkdownMathSemantic[] = [];

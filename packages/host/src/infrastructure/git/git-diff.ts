@@ -89,14 +89,12 @@ const parseNumstat = (
   }
   return stats;
 };
-export const parseDiffGitHeaderToken = (
-  input: string,
-):
-  | {
-      token: string;
-      remaining: string;
-    }
-  | undefined => {
+export type DiffGitHeaderToken = {
+  remaining: string;
+  token: string;
+};
+
+export const parseDiffGitHeaderToken = (input: string): DiffGitHeaderToken | undefined => {
   const trimmed = input.trimStart();
   if (!trimmed) {
     return undefined;

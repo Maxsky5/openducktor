@@ -1,4 +1,3 @@
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { agentModelSelectionSchema } from "@openducktor/contracts";
 import { isUnknownRecord, type AgentEvent, type AgentModelSelection } from "@openducktor/core";
 import {
@@ -21,6 +20,7 @@ import {
   readClaudeTurnOriginKind,
   shouldFinalizeClaudeTurn,
 } from "./claude-agent-sdk-user-messages";
+import type { ClaudeSdkResultMessageProjection } from "./claude-agent-sdk-message-projection";
 
 type ClaudeResultEventSession = ClaudeBackgroundWorkSession & {
   acceptedUserMessages?: readonly unknown[];
@@ -44,7 +44,7 @@ type ClaudeResultEventSession = ClaudeBackgroundWorkSession & {
 
 type ClaudeResultEventInput = {
   emit: (event: AgentEvent) => void;
-  message: Extract<SDKMessage, { type: "result" }>;
+  message: ClaudeSdkResultMessageProjection;
   session: ClaudeResultEventSession;
   timestamp: string;
 };

@@ -1,4 +1,3 @@
-import { jsonValueSchema } from "@openducktor/contracts";
 import type { GitCurrentBranch } from "@openducktor/contracts";
 import { errorMessage } from "@/lib/errors";
 
@@ -81,24 +80,20 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
 const extractStructuredErrorHint = (cause: unknown): string | null => {
-  const parsedCause = jsonValueSchema.safeParse(cause);
-  if (!parsedCause.success || !isRecord(parsedCause.data)) {
+  if (!isRecord(cause)) {
     return null;
   }
 
-  const directHint =
-    toOptionalString(parsedCause.data.code) ?? toOptionalString(parsedCause.data.kind);
+  const directHint = toOptionalString(cause.code) ?? toOptionalString(cause.kind);
   if (directHint) {
     return directHint;
   }
 
-  if (!isRecord(parsedCause.data.cause)) {
+  if (!isRecord(cause.cause)) {
     return null;
   }
 
-  return (
-    toOptionalString(parsedCause.data.cause.code) ?? toOptionalString(parsedCause.data.cause.kind)
-  );
+  return toOptionalString(cause.cause.code) ?? toOptionalString(cause.cause.kind);
 };
 
 const classifyBranchProbeErrorCode = (

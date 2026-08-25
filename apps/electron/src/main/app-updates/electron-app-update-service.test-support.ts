@@ -100,12 +100,14 @@ export const fixedNow = "2026-07-08T22:00:00.000Z";
 
 type FakeScheduledInterval = {
   callback: () => void;
+  cancel(): void;
   cleared: boolean;
   intervalMs: number;
 };
 
 type FakeScheduledTimeout = {
   callback: () => void;
+  cancel(): void;
   cleared: boolean;
   timeoutMs: number;
 };
@@ -118,22 +120,30 @@ export const flushAsyncWork = async (): Promise<void> => {
 export const createFakeScheduler = () => {
   const intervals: FakeScheduledInterval[] = [];
   const timeouts: FakeScheduledTimeout[] = [];
-  const scheduler: ElectronAppUpdateScheduler<FakeScheduledInterval, FakeScheduledTimeout> = {
+  const scheduler: ElectronAppUpdateScheduler = {
     setInterval(callback: () => void, intervalMs: number): FakeScheduledInterval {
-      const interval = { callback, cleared: false, intervalMs };
+      const interval: FakeScheduledInterval = {
+        callback,
+        cancel() {
+          this.cleared = true;
+        },
+        cleared: false,
+        intervalMs,
+      };
       intervals.push(interval);
       return interval;
     },
-    clearInterval(handle: FakeScheduledInterval): void {
-      handle.cleared = true;
-    },
     setTimeout(callback: () => void, timeoutMs: number): FakeScheduledTimeout {
-      const timeout = { callback, cleared: false, timeoutMs };
+      const timeout: FakeScheduledTimeout = {
+        callback,
+        cancel() {
+          this.cleared = true;
+        },
+        cleared: false,
+        timeoutMs,
+      };
       timeouts.push(timeout);
       return timeout;
-    },
-    clearTimeout(handle: FakeScheduledTimeout): void {
-      handle.cleared = true;
     },
   };
 

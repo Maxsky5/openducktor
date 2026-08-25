@@ -28,6 +28,11 @@ export {
 
 const ISO_TIMESTAMP_PATTERN = /\d{4}-\d{2}-\d{2}T[0-9:.+-]+(?:Z|[+-]\d{2}:\d{2})/;
 
+export type CompletionTimestamp = {
+  raw: string;
+  timestamp: number;
+};
+
 export const parseTimestamp = (value: string | null | undefined): number | null => {
   if (!value) {
     return null;
@@ -39,7 +44,7 @@ export const parseTimestamp = (value: string | null | undefined): number | null 
 
 export const extractCompletionTimestamp = (
   value: string | undefined,
-): { raw: string; timestamp: number } | null => {
+): CompletionTimestamp | null => {
   if (!value) {
     return null;
   }

@@ -100,6 +100,21 @@ describe("workspace-operations-model", () => {
       "branch_refresh",
     );
     expect(structuredAuthorization.code).toBe("authorization_failed");
+
+    type CyclicBranchProbeError = { code: string; self?: CyclicBranchProbeError };
+    const cyclicCause: CyclicBranchProbeError = {
+      code: "GIT_COMMAND_UNAUTHORIZED",
+    };
+    cyclicCause.self = cyclicCause;
+    expect(classifyBranchProbeError(cyclicCause, "branch_refresh").code).toBe(
+      "authorization_failed",
+    );
+    expect(
+      classifyBranchProbeError(
+        { code: "GIT_COMMAND_FAILED", retry: () => undefined },
+        "branch_refresh",
+      ).code,
+    ).toBe("git_command_failed");
   });
 
   test("reports probe failures when stage/code signature changes or throttle interval elapses", () => {

@@ -26,6 +26,8 @@ tester.run("anti-slop/no-object-parameters", noObjectParametersRule, {
     { code: "function f(value: object) {}", errors: [error] },
     { code: "type Alias = object; function f(value: Alias) {}", errors: [error] },
     { code: "type Alias = (object); function f(value: Alias) {}", errors: [error] },
+    { code: "function f(value: Readonly<object>) {}", errors: [error] },
+    { code: "type Box<T> = T; function f(value: Box<object>) {}", errors: [error] },
     {
       code: "function outer() { type Payload = object; function read(value: Payload): void {} }",
       errors: [error],

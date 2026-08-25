@@ -167,16 +167,16 @@ const bindSinglePendingSubagentInputEvent = (
     : undefined;
 };
 
+type LocalSubagentInputLink = {
+  parentExternalSessionId: string;
+  subagentCorrelationKey?: string;
+};
+
 const resolveLocalSubagentInputLink = (
   runtime: EventStreamRuntime,
   childExternalSessionId: string,
   isEventScopedToRuntimeWorkingDirectory: boolean,
-):
-  | {
-      parentExternalSessionId: string;
-      subagentCorrelationKey?: string;
-    }
-  | undefined => {
+): LocalSubagentInputLink | undefined => {
   if (childExternalSessionId === runtime.externalSessionId) {
     return undefined;
   }

@@ -164,6 +164,12 @@ const tempIconOutputPath = (appLabel: string, extension: string): string => {
     `openducktor-open-in-icon-${sanitizedTempName(appLabel)}-${process.pid}-${randomUUID()}.${extension}`,
   );
 };
+
+type IconsetRepresentation = {
+  path: string;
+  score: number;
+};
+
 const resolveBestIconsetRepresentation = (
   iconsetDirectory: string,
 ): Effect.Effect<string | null, HostOperationError> =>
@@ -172,7 +178,7 @@ const resolveBestIconsetRepresentation = (
       iconsetDirectory,
       "openInTools.icon.resolveBestIconsetRepresentation",
     ).pipe(Effect.catchAll(() => Effect.succeed([])));
-    let bestMatch: { path: string; score: number } | null = null;
+    let bestMatch: IconsetRepresentation | null = null;
 
     for (const entry of entries) {
       const score = iconsetRepresentationScore(entry);

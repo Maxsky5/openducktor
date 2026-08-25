@@ -134,7 +134,8 @@ const findConfirmedLocalAcceptedUserMessage = ({
   }
 
   const currentSlice = getSessionMessagesSlice(currentOwner, 0);
-  let nearestMatch: { message: AgentChatMessage; distanceMs: number } | null = null;
+  type NearestMessageMatch = { message: AgentChatMessage; distanceMs: number };
+  let nearestMatch: NearestMessageMatch | null = null;
   for (let index = currentSlice.length - 1; index >= 0; index -= 1) {
     const candidate = currentSlice[index];
     if (!candidate || absorbedCurrentMessageIds.has(candidate.id)) {

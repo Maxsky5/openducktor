@@ -82,7 +82,7 @@ describe("Claude local slash commands", () => {
         {
           type: "system",
           subtype: "local_command",
-          uuid: "local-command-output",
+          uuid: "02404382-3a12-4a54-836d-fcf0ab975dfc",
           timestamp: outputTimestamp,
           sessionId: "session-1",
           content: "<local-command-stdout>Context usage: 42%</local-command-stdout>",
@@ -126,7 +126,7 @@ describe("Claude local slash commands", () => {
         parts: [],
       },
       {
-        messageId: "local-command-output",
+        messageId: "02404382-3a12-4a54-836d-fcf0ab975dfc",
         role: "assistant",
         timestamp: outputTimestamp,
         text: "Context usage: 42%",
@@ -162,7 +162,7 @@ describe("Claude local slash commands", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "local-command-output",
+        uuid: "02404382-3a12-4a54-836d-fcf0ab975dfc",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -193,7 +193,7 @@ describe("Claude local slash commands", () => {
       message: claudeSdkMessageFixture({
         type: "system",
         subtype: "local_command_output",
-        uuid: "local-command-output",
+        uuid: "02404382-3a12-4a54-836d-fcf0ab975dfc",
         session_id: "session-1",
         content: "Context usage: 42%",
       }),
@@ -211,7 +211,7 @@ describe("Claude local slash commands", () => {
         type: "assistant_message",
         externalSessionId: "session-1",
         timestamp,
-        messageId: "local-command-output",
+        messageId: "02404382-3a12-4a54-836d-fcf0ab975dfc",
         message: "Context usage: 42%",
       },
     ]);
@@ -231,7 +231,7 @@ describe("Claude local slash commands", () => {
       message: claudeSdkMessageFixture({
         type: "system",
         subtype: "local_command_output",
-        uuid: "local-command-output",
+        uuid: "02404382-3a12-4a54-836d-fcf0ab975dfc",
         session_id: "session-1",
         content: "Context usage: 42%",
       }),
@@ -248,7 +248,7 @@ describe("Claude local slash commands", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
-        uuid: "local-command-result",
+        uuid: "58286517-42d4-4871-8a71-5cef439716e0",
         session_id: "session-1",
         duration_ms: 38,
         is_error: false,
@@ -270,7 +270,7 @@ describe("Claude local slash commands", () => {
         type: "system",
         subtype: "session_state_changed",
         state: "idle",
-        uuid: "local-command-idle",
+        uuid: "7c7f4710-b8e9-4f07-8f19-1ee126274b46",
         session_id: "session-1",
       }),
       modelSelection: (model) => ({
@@ -296,14 +296,14 @@ describe("Claude local slash commands", () => {
         type: "assistant_message",
         externalSessionId: "session-1",
         timestamp,
-        messageId: "local-command-output",
+        messageId: "02404382-3a12-4a54-836d-fcf0ab975dfc",
         message: "Context usage: 42%",
       },
       {
         type: "assistant_message",
         externalSessionId: "session-1",
         timestamp,
-        messageId: "local-command-output",
+        messageId: "02404382-3a12-4a54-836d-fcf0ab975dfc",
         message: "Context usage: 42%",
       },
     ]);

@@ -22,6 +22,11 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
   ],
   invalid: [
     { code: "function load(input: unknown) { return input; }", errors: [error] },
+    { code: "function load(input: unknown | string) { return input; }", errors: [error] },
+    {
+      code: "function load(input: unknown) { const alias = input; return alias; }",
+      errors: [error],
+    },
     { code: "const load = (input: unknown = source) => input;", errors: [error] },
     {
       code: "function load(input: unknown) { return { input }; }",

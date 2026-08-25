@@ -1,4 +1,3 @@
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { projectClaudeCompletedToolResult } from "./claude-agent-sdk-completed-tool-result";
 import {
@@ -18,6 +17,7 @@ import {
 import { decodeClaudeToolResultValue, timestampMs } from "./claude-agent-sdk-tool-shapes";
 import { isClaudeToolUseRetracted } from "./claude-agent-sdk-transcript-correlation";
 import { HostValidationError } from "../../effect/host-errors";
+import type { ClaudeSdkUserMessageProjection } from "./claude-agent-sdk-message-projection";
 
 type ClaudeToolResultSession = {
   activeBackgroundSubagentTaskIds?: Set<string>;
@@ -75,7 +75,7 @@ export const handleClaudeUserToolResultMessage = ({
   timestamp,
 }: {
   emit: (event: AgentEvent) => void;
-  message: Extract<SDKMessage, { type: "user" }>;
+  message: ClaudeSdkUserMessageProjection;
   session: ClaudeToolResultSession;
   timestamp: string;
 }): void => {

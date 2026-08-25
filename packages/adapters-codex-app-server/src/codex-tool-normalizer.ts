@@ -248,10 +248,9 @@ const toolPreviewFromInput = (
   return path ?? query ?? command ?? undefined;
 };
 
-const codexExecCommandInput = (
-  input: Record<string, CodexAppServerJsonValue>,
-  tool: string,
-): Record<string, CodexAppServerJsonValue> | undefined => {
+type CodexToolInput = Record<string, CodexAppServerJsonValue>;
+
+const codexExecCommandInput = (input: CodexToolInput, tool: string) => {
   const command = extractStringField(input, ["cmd", "command"]);
   const cwd = extractStringField(input, ["workdir", "cwd"]);
   if (!command) {

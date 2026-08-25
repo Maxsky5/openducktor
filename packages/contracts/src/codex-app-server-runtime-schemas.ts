@@ -12,6 +12,9 @@ import {
 import { jsonValueSchema, type JsonValue } from "./json-types";
 
 const jsonObjectSchema = z.record(z.string(), jsonValueSchema);
+const nonBlankStringSchema = z
+  .string()
+  .refine((value) => value.trim().length > 0, { error: "String must not be blank" });
 const signedIntegerSchema = z.number().int();
 const unsignedIntegerSchema = signedIntegerSchema.nonnegative();
 const requestIdSchema = z.union([z.string(), signedIntegerSchema]);
@@ -189,8 +192,7 @@ const consumedRuntimeNotificationMethods = new Set([
 
 const codexAppServerUnconsumedNotificationMethodSchema = z
   .string()
-  .trim()
-  .min(1)
+  .refine((method) => method.trim().length > 0, { error: "Method must not be blank" })
   .refine((method) => !consumedRuntimeNotificationMethods.has(method), {
     error: "Consumed runtime notifications must match their declared parameter schema",
   });
@@ -266,7 +268,7 @@ export const codexAppServerServerRequestSchema = z.discriminatedUnion("method", 
 export const codexAppServerRuntimeServerRequestSchema = codexAppServerServerRequestSchema;
 
 export const codexAppServerServerNotificationSchema = z.object({
-  method: z.string().trim().min(1),
+  method: nonBlankStringSchema,
   params: jsonValueSchema,
 });
 
@@ -286,7 +288,7 @@ export const codexAppServerRuntimeStreamEventSchema = z.discriminatedUnion("kind
 ]);
 
 export const codexAppServerRuntimeNotificationRecordSchema = z.object({
-  method: z.string().trim().min(1),
+  method: nonBlankStringSchema,
   params: jsonObjectSchema.optional(),
   receivedAt: receivedAtSchema,
 });
@@ -295,7 +297,7 @@ const codexAppServerRuntimeNotificationPayloadSchema =
 
 export const codexAppServerRuntimeServerRequestRecordSchema = z.object({
   id: requestIdSchema.optional(),
-  method: z.string().trim().min(1),
+  method: nonBlankStringSchema,
   params: jsonObjectSchema.optional(),
 });
 

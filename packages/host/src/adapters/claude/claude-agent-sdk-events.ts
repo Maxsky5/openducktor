@@ -1,4 +1,3 @@
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { isUnknownRecord, type AgentModelSelection } from "@openducktor/core";
 import { toClaudeSlashCommandCatalog } from "./claude-agent-sdk-catalog";
 import { handleClaudeCompactionBoundary } from "./claude-agent-sdk-compaction";
@@ -47,10 +46,15 @@ import {
 import type { ClaudeAgentSdkEvent } from "./claude-agent-sdk-types";
 import { shouldFinalizeClaudeTurn } from "./claude-agent-sdk-user-messages";
 import { readStringProp, textFromContentBlocks } from "./claude-agent-sdk-utils";
+import type {
+  ClaudeSdkAssistantMessageProjection,
+  ClaudeSdkMessageProjection,
+  ClaudeSdkToolProgressMessageProjection,
+} from "./claude-agent-sdk-message-projection";
 
 type SdkMessageHandlerInput = {
   emit: (event: ClaudeAgentSdkEvent) => void;
-  message: SDKMessage;
+  message: ClaudeSdkMessageProjection;
   modelSelection: (model: string) => AgentModelSelection;
   session: ClaudeEventSession;
   timestamp: string;
@@ -217,7 +221,10 @@ const handleSessionStateChanged = ({
   session,
   timestamp,
 }: Pick<SdkMessageHandlerInput, "emit" | "session" | "timestamp"> & {
-  message: Extract<SDKMessage, { type: "system"; subtype: "session_state_changed" }>;
+  message: Extract<
+    ClaudeSdkMessageProjection,
+    { type: "system"; subtype: "session_state_changed" }
+  >;
 }): void => {
   applyClaudeLifecycleEvent({
     emit,
@@ -237,7 +244,7 @@ const handleAssistantMessage = ({
   session,
   timestamp,
 }: SdkMessageHandlerInput & {
-  message: Extract<SDKMessage, { type: "assistant" }>;
+  message: ClaudeSdkAssistantMessageProjection;
 }): void => {
   emitSupersededTranscriptMessage({ emit, message, session, timestamp });
   const assistantModel = message.message.model ? modelSelection(message.message.model) : undefined;
@@ -385,7 +392,7 @@ const handleToolProgressMessage = ({
   session,
   timestamp,
 }: Pick<SdkMessageHandlerInput, "emit" | "session" | "timestamp"> & {
-  message: Extract<SDKMessage, { type: "tool_progress" }>;
+  message: ClaudeSdkToolProgressMessageProjection;
 }): void => {
   const elapsedMs = Math.max(0, Math.round(message.elapsed_time_seconds * 1000));
   const eventMs = timestampMs(timestamp);

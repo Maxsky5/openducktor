@@ -39,7 +39,7 @@ describe("consumeClaudeSession lifecycle", () => {
         type: "system",
         subtype: "session_state_changed",
         state: "running",
-        uuid: "state-1",
+        uuid: "99de2643-2919-47bc-8869-40bed873ae40",
         session_id: "session-1",
       }),
     ]);
@@ -128,7 +128,7 @@ describe("consumeClaudeSession lifecycle", () => {
       query: claudeQueryWithMessages([
         claudeSdkMessageFixture({
           type: "assistant",
-          uuid: "assistant-1",
+          uuid: "43b2a0dd-fded-4c7e-86ec-8816daecd43d",
           session_id: "session-1",
           parent_tool_use_id: null,
           message: {
@@ -141,7 +141,7 @@ describe("consumeClaudeSession lifecycle", () => {
         claudeSdkMessageFixture({
           type: "result",
           subtype: "success",
-          uuid: "result-1",
+          uuid: "4dbe1b1f-5e52-438d-8847-4966ee5f13e8",
           session_id: "session-1",
           is_error: false,
           result: "first turn done",
@@ -153,7 +153,7 @@ describe("consumeClaudeSession lifecycle", () => {
           type: "system",
           subtype: "session_state_changed",
           state: "idle",
-          uuid: "state-idle-1",
+          uuid: "9909592c-5710-40d1-8c0b-52bb060916f9",
           session_id: "session-1",
         }),
       ]),
@@ -194,7 +194,7 @@ describe("consumeClaudeSession lifecycle", () => {
     const openQuery = openClaudeQueryWithMessages([
       claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "43b2a0dd-fded-4c7e-86ec-8816daecd43d",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -264,7 +264,7 @@ describe("consumeClaudeSession lifecycle", () => {
     const openQuery = openClaudeQueryWithMessages([
       claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "43b2a0dd-fded-4c7e-86ec-8816daecd43d",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -277,7 +277,7 @@ describe("consumeClaudeSession lifecycle", () => {
       claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
-        uuid: "result-1",
+        uuid: "4dbe1b1f-5e52-438d-8847-4966ee5f13e8",
         session_id: "session-1",
         is_error: false,
         result: "first turn done",
@@ -289,7 +289,7 @@ describe("consumeClaudeSession lifecycle", () => {
         type: "system",
         subtype: "session_state_changed",
         state: "idle",
-        uuid: "state-idle-1",
+        uuid: "9909592c-5710-40d1-8c0b-52bb060916f9",
         session_id: "session-1",
       }),
     ]);
@@ -360,7 +360,7 @@ describe("consumeClaudeSession lifecycle", () => {
         claudeSdkMessageFixture({
           type: "result",
           subtype: "success",
-          uuid: "result-queued",
+          uuid: "76e2c747-c64e-4f25-85cc-9510188f8190",
           session_id: "session-1",
           is_error: false,
           result: "queued turn done",
@@ -372,7 +372,7 @@ describe("consumeClaudeSession lifecycle", () => {
           type: "system",
           subtype: "session_state_changed",
           state: "idle",
-          uuid: "state-idle-queued",
+          uuid: "f99a0487-29cb-4141-80fd-e86d1bedbd0b",
           session_id: "session-1",
         }),
       ]),
@@ -548,7 +548,7 @@ describe("consumeClaudeSession lifecycle", () => {
       throwingClaudeQuery(new Error("transport crashed"), [
         claudeSdkMessageFixture({
           type: "assistant",
-          uuid: "assistant-1",
+          uuid: "43b2a0dd-fded-4c7e-86ec-8816daecd43d",
           session_id: "session-1",
           timestamp: "2026-06-25T20:00:01.000Z",
           message: {

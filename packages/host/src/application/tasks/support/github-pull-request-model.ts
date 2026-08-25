@@ -20,19 +20,25 @@ export const combinedCommandOutput = (stdout: string, stderr: string): string =>
   return `${trimmedStdout}\n${trimmedStderr}`;
 };
 
+const nonBlankStringSchema = z
+  .string()
+  .refine((value) => value.length > 0 && value === value.trim(), {
+    error: "String must not be blank or padded with whitespace",
+  });
+
 const githubPullBranchRefSchema = z.object({
-  ref: z.string().trim().min(1),
+  ref: nonBlankStringSchema,
 });
 
 const githubPullResponseSchema = z.object({
   number: z.number().int().positive(),
-  html_url: z.string().trim().min(1),
-  state: z.string().trim().min(1),
+  html_url: nonBlankStringSchema,
+  state: nonBlankStringSchema,
   draft: z.boolean().optional(),
-  created_at: z.string().trim().min(1),
-  updated_at: z.string().trim().min(1),
-  merged_at: z.string().trim().min(1).nullable().optional(),
-  closed_at: z.string().trim().min(1).nullable().optional(),
+  created_at: nonBlankStringSchema,
+  updated_at: nonBlankStringSchema,
+  merged_at: nonBlankStringSchema.nullable().optional(),
+  closed_at: nonBlankStringSchema.nullable().optional(),
   head: githubPullBranchRefSchema,
   base: githubPullBranchRefSchema,
 });

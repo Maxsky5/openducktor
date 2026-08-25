@@ -53,7 +53,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
         type: "system",
         subtype: "session_state_changed",
         state: "idle",
-        uuid: "state-1",
+        uuid: "1d5aad36-4756-4086-8757-943eeef071df",
         session_id: "session-1",
       }),
     });
@@ -120,7 +120,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
         type: "system",
         subtype: "session_state_changed",
         state: "idle",
-        uuid: "state-1",
+        uuid: "1d5aad36-4756-4086-8757-943eeef071df",
         session_id: "session-1",
       }),
     });
@@ -173,7 +173,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
-        uuid: "result-1",
+        uuid: "fb14f885-bbdb-4906-876f-87ec1c4c86c8",
         session_id: "session-1",
         is_error: false,
         result: "Done.",
@@ -189,7 +189,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
-        uuid: "result-2",
+        uuid: "332ac88a-b771-4d00-843f-817399df578b",
         session_id: "session-1",
         is_error: false,
         result: "Done.",
@@ -204,8 +204,14 @@ describe("handleClaudeSdkMessage result settlement", () => {
         return event.type === "assistant_message";
       }),
     ).toEqual([
-      expect.objectContaining({ messageId: "result-1", message: "Done." }),
-      expect.objectContaining({ messageId: "result-2", message: "Done." }),
+      expect.objectContaining({
+        messageId: "fb14f885-bbdb-4906-876f-87ec1c4c86c8",
+        message: "Done.",
+      }),
+      expect.objectContaining({
+        messageId: "332ac88a-b771-4d00-843f-817399df578b",
+        message: "Done.",
+      }),
     ]);
     expect(session.pendingUserTurnCount).toBe(0);
     expect(session.activity).toBe("idle");
@@ -314,7 +320,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
         type: "system",
         subtype: "session_state_changed",
         state: "idle",
-        uuid: "state-1",
+        uuid: "1d5aad36-4756-4086-8757-943eeef071df",
         session_id: "session-1",
       }),
     });

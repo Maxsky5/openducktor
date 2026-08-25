@@ -4,10 +4,38 @@ import {
   threadIdFromRuntimeStreamEvent,
 } from "./codex-runtime-events";
 import type { CodexAppServerStreamEvent } from "./types";
+import {
+  codexRuntimeStreamFault,
+  parseCodexRuntimeStreamEvent,
+} from "./codex-runtime-event-schema";
 
 const receivedAt = "2026-08-20T12:00:00.000Z";
 
 describe("CodexRuntimeEventSubscriptions", () => {
+  test("does not rewrite padded runtime methods or fault thread ids", () => {
+    expect(
+      parseCodexRuntimeStreamEvent({
+        runtimeId: "runtime-1",
+        kind: "notification",
+        receivedAt,
+        message: { method: " item/started ", params: {} },
+      }),
+    ).toMatchObject({
+      kind: "ignored_notification",
+      message: { method: " item/started " },
+    });
+
+    expect(
+      codexRuntimeStreamFault({
+        cause: new Error("Malformed event"),
+        message: { method: "turn/started", params: { threadId: " thread-1 " } },
+        receivedAt,
+        runtimeId: "runtime-1",
+        sourceKind: "notification",
+      }).threadId,
+    ).toBe(" thread-1 ");
+  });
+
   test("routes malformed known envelopes as faults and ignores future notifications", async () => {
     let listener: ((event: CodexAppServerStreamEvent) => void) | undefined;
     const events: Array<Parameters<typeof threadIdFromRuntimeStreamEvent>[0]> = [];

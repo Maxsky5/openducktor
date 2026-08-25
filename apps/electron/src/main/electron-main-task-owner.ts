@@ -8,11 +8,15 @@ export type ElectronDetachedTaskOwner = {
   ): void;
 };
 
+type DetachedTaskFailure = {
+  readonly cause: unknown;
+};
+
 export const createElectronDetachedTaskOwner = (
   reportFailure: (cause: unknown) => void,
 ): ElectronDetachedTaskOwner => {
   const pendingTasks = new Set<Promise<void>>();
-  let firstFailure: { readonly cause: unknown } | null = null;
+  let firstFailure: DetachedTaskFailure | null = null;
   let drainPromise: Promise<void> | null = null;
 
   const run = (

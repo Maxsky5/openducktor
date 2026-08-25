@@ -1,7 +1,12 @@
 import { Effect } from "effect";
 import { runWebSyncBoundary, WebValidationError } from "./effect/web-errors";
 
-type BrowserEnv = Record<string, string | undefined> | undefined;
+type BrowserEnvValues = {
+  VITE_ODT_BROWSER_AUTH_TOKEN?: string | undefined;
+  VITE_ODT_BROWSER_BACKEND_URL?: string | undefined;
+};
+type BrowserEnv = BrowserEnvValues | undefined;
+type BrowserEnvKey = keyof BrowserEnvValues;
 export type BrowserRuntimeConfig = {
   backendUrl?: string;
   appToken?: string;
@@ -49,7 +54,7 @@ const readBrowserRuntimeConfig = (): BrowserRuntimeConfig | undefined => {
 
 const requireBrowserEnvValueEffect = (
   env: BrowserEnv,
-  key: string,
+  key: BrowserEnvKey,
   description: string,
 ): Effect.Effect<string, WebValidationError> =>
   Effect.gen(function* () {

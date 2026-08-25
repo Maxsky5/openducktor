@@ -74,6 +74,13 @@ describe("GitHub pull request response parsing", () => {
       "GitHub pull request response field head.ref is missing or invalid.",
     );
   });
+
+  test("rejects padded external identifiers instead of rewriting them", () => {
+    const padded = { ...githubPullResponse, head: { ref: "odt/task-42 " } };
+    expect(() => parseGithubPullResponse(JSON.stringify(padded))).toThrow(
+      "GitHub pull request response field head.ref is missing or invalid.",
+    );
+  });
 });
 
 describe("findGithubPullRequestForBranch", () => {

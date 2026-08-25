@@ -21,11 +21,21 @@ type ClaudeVisibleHistoryMessage = Extract<
   { role: "assistant" | "user" }
 >;
 
+type PendingQueuedPrompt = {
+  text: string;
+  timestamp: string;
+};
+
+type ManualCompactionInput = {
+  messageId: string;
+  timestamp: string;
+};
+
 type ClaudeHistoryInputProjection =
   | { handled: false }
   | {
       handled: true;
-      manualCompaction?: { messageId: string; timestamp: string };
+      manualCompaction?: ManualCompactionInput;
       message?: ClaudeVisibleHistoryMessage;
     };
 
@@ -37,7 +47,7 @@ export const createClaudeHistoryInputProjector = (options: {
 }) => {
   const resolveLiveUserMessage = createLiveUserMessageResolver(options.liveUserMessages);
   const compactPromptIds = new Set<string>();
-  let pendingQueuedPrompt: { text: string; timestamp: string } | null = null;
+  let pendingQueuedPrompt: PendingQueuedPrompt | null = null;
 
   const createUserMessage = (input: {
     fallbackMessageId: string;

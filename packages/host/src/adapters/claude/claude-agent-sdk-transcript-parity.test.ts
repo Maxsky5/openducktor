@@ -9,6 +9,7 @@ import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support"
 import {
   claudeHistoryMessageFixtures,
   claudeSdkMessageFixture,
+  claudeSdkMessageUuidFixture,
   claudeSessionMessageFixture,
 } from "./claude-agent-sdk-test-messages";
 import { handleClaudeUserToolResultMessage } from "./claude-agent-sdk-tool-results";
@@ -44,7 +45,7 @@ describe("Claude live and hydrated transcript parity", () => {
     const responseId = "response-tool-use";
     const reasoningMessage = claudeSdkMessageFixture({
       type: "assistant",
-      uuid: "assistant-reasoning",
+      uuid: "f83a194a-6771-410e-8c1c-0ed6db1decc4",
       session_id: "session-1",
       parent_tool_use_id: null,
       timestamp,
@@ -58,7 +59,7 @@ describe("Claude live and hydrated transcript parity", () => {
     });
     const draftMessage = claudeSdkMessageFixture({
       type: "assistant",
-      uuid: "assistant-draft",
+      uuid: "f4cd7533-bbf3-4aab-85a3-bffa0401de15",
       session_id: "session-1",
       parent_tool_use_id: null,
       timestamp,
@@ -72,7 +73,7 @@ describe("Claude live and hydrated transcript parity", () => {
     });
     const toolMessage = claudeSdkMessageFixture({
       type: "assistant",
-      uuid: "assistant-tool",
+      uuid: "517ccd53-f177-4742-8bcc-883c955e3824",
       session_id: "session-1",
       parent_tool_use_id: null,
       timestamp: resultTimestamp,
@@ -103,14 +104,14 @@ describe("Claude live and hydrated transcript parity", () => {
     for (const message of [
       claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "stream-start",
+        uuid: "6ce3843d-c6b6-412e-8f23-b7dc7ec12556",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: { type: "message_start", message: { id: responseId } },
       }),
       claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "stream-reasoning",
+        uuid: "1c15751a-b263-4e6e-833e-69e3a3272c2b",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: {
@@ -121,7 +122,7 @@ describe("Claude live and hydrated transcript parity", () => {
       }),
       claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "stream-reasoning-stop",
+        uuid: "16e17345-9bd0-44a0-8c1f-79b02ce9d5e2",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: { type: "content_block_stop", index: 0 },
@@ -129,7 +130,7 @@ describe("Claude live and hydrated transcript parity", () => {
       reasoningMessage,
       claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "stream-draft",
+        uuid: "167da0e2-353c-4fa3-869d-647d8e00b881",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: {
@@ -207,7 +208,7 @@ describe("Claude live and hydrated transcript parity", () => {
   test("shows parent intermediate assistant snapshots in both live and hydrated transcripts", () => {
     const draftMessage = claudeSdkMessageFixture({
       type: "assistant",
-      uuid: "assistant-draft",
+      uuid: "f4cd7533-bbf3-4aab-85a3-bffa0401de15",
       session_id: "session-1",
       parent_tool_use_id: null,
       timestamp,
@@ -289,14 +290,14 @@ describe("Claude live and hydrated transcript parity", () => {
     for (const message of [
       claudeSdkMessageFixture({
         type: "user",
-        uuid: "subagent-prompt",
+        uuid: "1532e5b7-a06e-4344-8227-17bfbedfbb54",
         session_id: "session-1",
         parent_tool_use_id: "agent-tool",
         message: { role: "user", content: "Inspect the authentication flow." },
       }),
       claudeSdkMessageFixture({
         type: "user",
-        uuid: "subagent-skill-context",
+        uuid: "1a275b20-f4ab-433f-8d94-e42926d03eb1",
         session_id: "session-1",
         parent_tool_use_id: "agent-tool",
         isSynthetic: true,
@@ -333,14 +334,14 @@ describe("Claude live and hydrated transcript parity", () => {
     const userMessages = [
       claudeSdkMessageFixture({
         type: "user",
-        uuid: "subagent-prompt",
+        uuid: "1532e5b7-a06e-4344-8227-17bfbedfbb54",
         session_id: "session-1",
         parent_tool_use_id: parentToolUseId,
         message: { role: "user", content: "Inspect the authentication flow." },
       }),
       claudeSdkMessageFixture({
         type: "user",
-        uuid: "peer-notification",
+        uuid: "5cb178e8-e869-4c2b-8c56-4dd20703b598",
         session_id: "session-1",
         parent_tool_use_id: parentToolUseId,
         origin: { kind: "peer", from: "reviewer" },
@@ -348,7 +349,7 @@ describe("Claude live and hydrated transcript parity", () => {
       }),
       claudeSdkMessageFixture({
         type: "user",
-        uuid: "context-only",
+        uuid: "73533a65-2712-442b-8a37-4eb5209c6095",
         session_id: "session-1",
         parent_tool_use_id: parentToolUseId,
         shouldQuery: false,
@@ -392,7 +393,7 @@ describe("Claude live and hydrated transcript parity", () => {
 
   test("keeps the streamed response identity when the SDK assistant snapshot precedes message stop", () => {
     const responseId = "response-final";
-    const assistantUuid = "assistant-final";
+    const assistantUuid = "fdb2ba12-c9c6-4ba4-8111-f2f6b32c4d68";
     const finalText = "Complete final answer";
     const liveEvents: AgentEvent[] = [];
     const liveSession = createEventTestSession();
@@ -409,7 +410,7 @@ describe("Claude live and hydrated transcript parity", () => {
       emit,
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "assistant-stream-start",
+        uuid: "d8cf5013-a295-46e6-868e-a85373bb2a64",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: {
@@ -439,7 +440,7 @@ describe("Claude live and hydrated transcript parity", () => {
       emit,
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "assistant-stream-delta",
+        uuid: "cd9f5256-a9b7-4856-85e2-f1d32ad0fe55",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: {
@@ -479,7 +480,7 @@ describe("Claude live and hydrated transcript parity", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
-        uuid: "result-final",
+        uuid: "5a9ed4b6-bec0-4fef-8758-4a0bee7322ab",
         session_id: "session-1",
         is_error: false,
         result: finalText,
@@ -525,7 +526,7 @@ describe("Claude live and hydrated transcript parity", () => {
 
   test("keeps one response identity for subagent finals without a stop reason", () => {
     const responseId = "subagent-response-final";
-    const assistantUuid = "subagent-assistant-final";
+    const assistantUuid = "8f432c05-271b-4937-8663-2b01901015ca";
     const parentToolUseId = "agent-tool";
     const finalText = "Complete child response";
     const liveEvents: AgentEvent[] = [];
@@ -555,7 +556,7 @@ describe("Claude live and hydrated transcript parity", () => {
       claudeSdkMessageFixture({
         type: "system",
         subtype: "task_notification",
-        uuid: "subagent-task-completed",
+        uuid: "69b3c7e6-0266-4105-8b6a-e30e8def797d",
         session_id: "session-1",
         task_id: "agent-task",
         tool_use_id: parentToolUseId,
@@ -617,7 +618,7 @@ describe("Claude live and hydrated transcript parity", () => {
     const responseId = "response-final";
     const firstSnapshot = claudeSdkMessageFixture({
       type: "assistant",
-      uuid: "assistant-first",
+      uuid: "fc54d86f-8e3c-4a70-8e38-94e7952656df",
       session_id: "session-1",
       parent_tool_use_id: null,
       timestamp,
@@ -631,7 +632,7 @@ describe("Claude live and hydrated transcript parity", () => {
     });
     const finalSnapshot = claudeSdkMessageFixture({
       type: "assistant",
-      uuid: "assistant-final",
+      uuid: "fdb2ba12-c9c6-4ba4-8111-f2f6b32c4d68",
       session_id: "session-1",
       parent_tool_use_id: null,
       timestamp: resultTimestamp,
@@ -688,7 +689,7 @@ describe("Claude live and hydrated transcript parity", () => {
     const responseId = "response-final";
     const reasoningMessage = claudeSdkMessageFixture({
       type: "assistant",
-      uuid: "assistant-reasoning",
+      uuid: "f83a194a-6771-410e-8c1c-0ed6db1decc4",
       session_id: "session-1",
       parent_tool_use_id: null,
       timestamp,
@@ -702,7 +703,7 @@ describe("Claude live and hydrated transcript parity", () => {
     });
     const finalMessage = claudeSdkMessageFixture({
       type: "assistant",
-      uuid: "assistant-final",
+      uuid: "fdb2ba12-c9c6-4ba4-8111-f2f6b32c4d68",
       session_id: "session-1",
       parent_tool_use_id: null,
       timestamp: resultTimestamp,
@@ -729,7 +730,7 @@ describe("Claude live and hydrated transcript parity", () => {
       emit,
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "assistant-stream-start",
+        uuid: "d8cf5013-a295-46e6-868e-a85373bb2a64",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: {
@@ -759,7 +760,7 @@ describe("Claude live and hydrated transcript parity", () => {
       emit,
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "assistant-thinking-stream",
+        uuid: "1f1b772a-5e50-47fa-87bd-30e1e0f4f8bd",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: {
@@ -776,7 +777,7 @@ describe("Claude live and hydrated transcript parity", () => {
       emit,
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "assistant-thinking-stop",
+        uuid: "be9e7254-60f3-4f79-8201-9555c1ac31cb",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: {
@@ -792,7 +793,7 @@ describe("Claude live and hydrated transcript parity", () => {
       emit,
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "assistant-stream",
+        uuid: "1e27aec1-052b-4343-8394-eda1afd891dc",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: {
@@ -871,7 +872,7 @@ describe("Claude live and hydrated transcript parity", () => {
   test("reconciles streamed assistant text to the hydrated SDK message id", () => {
     const sdkMessage = claudeSdkMessageFixture({
       type: "assistant",
-      uuid: "assistant-final",
+      uuid: "fdb2ba12-c9c6-4ba4-8111-f2f6b32c4d68",
       session_id: "session-1",
       parent_tool_use_id: null,
       timestamp,
@@ -891,7 +892,7 @@ describe("Claude live and hydrated transcript parity", () => {
       emit: (event) => liveEvents.push(event),
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "assistant-stream",
+        uuid: "1e27aec1-052b-4343-8394-eda1afd891dc",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: {
@@ -925,7 +926,7 @@ describe("Claude live and hydrated transcript parity", () => {
       () => timestamp,
     ).map((message) => message.messageId);
     expect(retainedLiveAssistantMessageIds(liveEvents)).toEqual(hydratedIds);
-    expect(hydratedIds).toEqual(["assistant-final"]);
+    expect(hydratedIds).toEqual(["fdb2ba12-c9c6-4ba4-8111-f2f6b32c4d68"]);
   });
 
   test("projects assistant content blocks through the same canonical parts", () => {
@@ -942,7 +943,7 @@ describe("Claude live and hydrated transcript parity", () => {
     ];
     const sdkMessage = claudeSdkMessageFixture({
       type: "assistant",
-      uuid: "assistant-1",
+      uuid: "c5aa776f-2893-4045-8a61-140a5912a032",
       session_id: "session-1",
       parent_tool_use_id: null,
       timestamp,
@@ -987,11 +988,12 @@ describe("Claude live and hydrated transcript parity", () => {
 
     for (const [index, testCase] of cases.entries()) {
       const toolUseId = `tool-${index}`;
+      const assistantMessageId = claudeSdkMessageUuidFixture(`assistant-${index}`);
       const input =
         testCase.tool === "Read" ? { file_path: "/repo/file.ts" } : { command: "exit 1" };
       const assistantMessage = claudeSdkMessageFixture({
         type: "assistant",
-        uuid: `assistant-${index}`,
+        uuid: assistantMessageId,
         session_id: "session-1",
         timestamp,
         message: {
@@ -1010,7 +1012,7 @@ describe("Claude live and hydrated transcript parity", () => {
       });
       const resultMessage = claudeSdkMessageFixture({
         type: "user",
-        uuid: `result-${index}`,
+        uuid: claudeSdkMessageUuidFixture(`result-${index}`),
         session_id: "session-1",
         parent_tool_use_id: toolUseId,
         timestamp: resultTimestamp,
@@ -1037,7 +1039,7 @@ describe("Claude live and hydrated transcript parity", () => {
       const liveEvents: AgentEvent[] = [];
       const liveSession = createEventTestSession();
       liveSession.toolInputsByCallId.set(toolUseId, input);
-      liveSession.toolMessageIdsByCallId.set(toolUseId, `assistant-${index}`);
+      liveSession.toolMessageIdsByCallId.set(toolUseId, assistantMessageId);
       liveSession.toolNamesByCallId.set(toolUseId, testCase.tool);
 
       handleClaudeUserToolResultMessage({
@@ -1068,7 +1070,7 @@ describe("Claude live and hydrated transcript parity", () => {
     ] as const;
     const assistantMessage = claudeSdkMessageFixture({
       type: "assistant",
-      uuid: "assistant-parallel-tools",
+      uuid: "ef52161c-2436-476b-8fa0-f4fc1aa35cfa",
       session_id: "session-1",
       timestamp,
       message: {
@@ -1085,7 +1087,7 @@ describe("Claude live and hydrated transcript parity", () => {
     });
     const resultMessage = claudeSdkMessageFixture({
       type: "user",
-      uuid: "result-parallel-tools",
+      uuid: "424192cd-2d58-4d7f-81c1-160699671642",
       session_id: "session-1",
       parent_tool_use_id: null,
       timestamp: resultTimestamp,
@@ -1111,7 +1113,7 @@ describe("Claude live and hydrated transcript parity", () => {
     const liveSession = createEventTestSession();
     for (const toolUse of toolUses) {
       liveSession.toolInputsByCallId.set(toolUse.id, toolUse.input);
-      liveSession.toolMessageIdsByCallId.set(toolUse.id, "assistant-parallel-tools");
+      liveSession.toolMessageIdsByCallId.set(toolUse.id, "ef52161c-2436-476b-8fa0-f4fc1aa35cfa");
       liveSession.toolNamesByCallId.set(toolUse.id, toolUse.name);
     }
 
@@ -1131,7 +1133,7 @@ describe("Claude live and hydrated transcript parity", () => {
   test("releases completed tool input and timing metadata", () => {
     const resultMessage = claudeSdkMessageFixture({
       type: "user",
-      uuid: "result-read",
+      uuid: "828ec510-6423-4691-80cb-9cdaaa1b82e7",
       session_id: "session-1",
       parent_tool_use_id: "tool-read",
       timestamp: resultTimestamp,
@@ -1223,7 +1225,7 @@ describe("Claude live and hydrated transcript parity", () => {
   test("applies assistant retractions consistently in live and hydrated projections", () => {
     const originalMessage = claudeSdkMessageFixture({
       type: "assistant",
-      uuid: "assistant-refused",
+      uuid: "b2423a99-7e50-4569-845b-e998b89e75c2",
       session_id: "session-1",
       parent_tool_use_id: null,
       message: {
@@ -1235,10 +1237,10 @@ describe("Claude live and hydrated transcript parity", () => {
     });
     const replacementMessage = claudeSdkMessageFixture({
       type: "assistant",
-      uuid: "assistant-canonical",
+      uuid: "f6c5a317-763d-49aa-89d0-ebf255d070e2",
       session_id: "session-1",
       parent_tool_use_id: null,
-      supersedes: ["assistant-refused"],
+      supersedes: ["b2423a99-7e50-4569-845b-e998b89e75c2"],
       message: {
         role: "assistant",
         model: "claude-sonnet-4-6",
@@ -1280,13 +1282,13 @@ describe("Claude live and hydrated transcript parity", () => {
       .map((message) => message.messageId);
 
     expect(retainedLiveAssistantMessageIds(liveEvents)).toEqual(hydratedIds);
-    expect(hydratedIds).toEqual(["assistant-canonical"]);
+    expect(hydratedIds).toEqual(["f6c5a317-763d-49aa-89d0-ebf255d070e2"]);
   });
 
   test("does not resurrect retracted subagents when late task events arrive", () => {
     const toolUseMessage = claudeSdkMessageFixture({
       type: "assistant",
-      uuid: "assistant-retracted-agent",
+      uuid: "6b062bc2-d87a-4e55-8e5e-a4221b4616a1",
       session_id: "session-1",
       parent_tool_use_id: null,
       timestamp,
@@ -1320,10 +1322,10 @@ describe("Claude live and hydrated transcript parity", () => {
     });
     const replacementMessage = claudeSdkMessageFixture({
       type: "assistant",
-      uuid: "assistant-replacement",
+      uuid: "8882642a-fe7a-43ec-81b3-18266b6c7841",
       session_id: "session-1",
       parent_tool_use_id: null,
-      supersedes: ["assistant-retracted-agent"],
+      supersedes: ["6b062bc2-d87a-4e55-8e5e-a4221b4616a1"],
       message: {
         role: "assistant",
         content: [{ type: "text", text: "Continuing without that subagent." }],
@@ -1384,13 +1386,15 @@ describe("Claude live and hydrated transcript parity", () => {
     expect(
       hydrated.flatMap((message) => message.parts).filter((part) => part.kind === "subagent"),
     ).toEqual([]);
-    expect(hydrated.map((message) => message.messageId)).toEqual(["assistant-replacement"]);
+    expect(hydrated.map((message) => message.messageId)).toEqual([
+      "8882642a-fe7a-43ec-81b3-18266b6c7841",
+    ]);
   });
 
   test("does not resurrect retracted tools when late results arrive", () => {
     const toolUseMessage = claudeSdkMessageFixture({
       type: "assistant",
-      uuid: "assistant-retracted-tool",
+      uuid: "329afb68-2fa7-4226-8733-1b9f1e3a2389",
       session_id: "session-1",
       parent_tool_use_id: null,
       timestamp,
@@ -1409,10 +1413,10 @@ describe("Claude live and hydrated transcript parity", () => {
     });
     const replacementMessage = claudeSdkMessageFixture({
       type: "assistant",
-      uuid: "assistant-tool-replacement",
+      uuid: "dadc8578-068b-4907-8c19-a14791e1cfb9",
       session_id: "session-1",
       parent_tool_use_id: null,
-      supersedes: ["assistant-retracted-tool"],
+      supersedes: ["329afb68-2fa7-4226-8733-1b9f1e3a2389"],
       message: {
         role: "assistant",
         content: [{ type: "text", text: "Continuing without that read." }],
@@ -1421,7 +1425,7 @@ describe("Claude live and hydrated transcript parity", () => {
     });
     const lateToolResult = claudeSdkMessageFixture({
       type: "user",
-      uuid: "tool-result-late",
+      uuid: "2560bccc-5f5c-4010-8a00-81bc5ec55ce6",
       session_id: "session-1",
       parent_tool_use_id: "tool-read-retracted",
       timestamp: resultTimestamp,
@@ -1470,13 +1474,15 @@ describe("Claude live and hydrated transcript parity", () => {
       claudeHistoryMessageFixtures([toolUseMessage, replacementMessage, lateToolResult]),
       () => resultTimestamp,
     );
-    expect(hydrated.map((message) => message.messageId)).toEqual(["assistant-tool-replacement"]);
+    expect(hydrated.map((message) => message.messageId)).toEqual([
+      "dadc8578-068b-4907-8c19-a14791e1cfb9",
+    ]);
   });
 
   test("preserves the final response and model without using the SDK query duration", () => {
     const assistantMessage = claudeSdkMessageFixture({
       type: "assistant",
-      uuid: "assistant-final",
+      uuid: "fdb2ba12-c9c6-4ba4-8111-f2f6b32c4d68",
       session_id: "session-1",
       timestamp,
       message: {
@@ -1490,7 +1496,7 @@ describe("Claude live and hydrated transcript parity", () => {
     const resultMessage = claudeSdkMessageFixture({
       type: "result",
       subtype: "success",
-      uuid: "result-1",
+      uuid: "06434a62-9c81-489a-8105-a9280611d43d",
       session_id: "session-1",
       timestamp: resultTimestamp,
       is_error: false,
@@ -1545,7 +1551,7 @@ describe("Claude live and hydrated transcript parity", () => {
   test("projects completed subagents with their initial description in both paths", () => {
     const assistantMessage = claudeSdkMessageFixture({
       type: "assistant",
-      uuid: "assistant-agent",
+      uuid: "1cc065b2-d4e2-40ee-83a8-72c54810b703",
       session_id: "session-1",
       timestamp,
       message: {
@@ -1569,7 +1575,7 @@ describe("Claude live and hydrated transcript parity", () => {
     });
     const resultMessage = claudeSdkMessageFixture({
       type: "user",
-      uuid: "result-agent",
+      uuid: "c3a28741-103b-4201-8b2b-5f736826816c",
       session_id: "session-1",
       parent_tool_use_id: null,
       timestamp: resultTimestamp,

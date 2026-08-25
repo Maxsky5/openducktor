@@ -24,7 +24,10 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PIERRE_HIGHLIGHT_LINE_LIMIT } from "@/lib/diff/pierre-config";
 import { cn } from "@/lib/utils";
-import type { HunkResetAnnotationMetadata, PierreDiffSelection } from "./pierre-diff-viewer-model";
+import {
+  isHunkResetAnnotationMetadata,
+  type PierreDiffSelection,
+} from "./pierre-diff-viewer-model";
 import {
   buildPierreDiffSelection,
   getHunkResetAnnotations,
@@ -492,14 +495,7 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
   const handleRenderAnnotation = useCallback(
     (annotation: DiffLineAnnotation<unknown>) => {
       const metadata = annotation.metadata;
-      if (
-        typeof metadata === "object" &&
-        metadata !== null &&
-        "kind" in metadata &&
-        metadata.kind === "hunk-reset"
-      ) {
-        // SAFETY: The preceding runtime guard establishes `HunkResetAnnotationMetadata` before this assertion.
-        const hunkResetMetadata = metadata as HunkResetAnnotationMetadata;
+      if (isHunkResetAnnotationMetadata(metadata)) {
         return (
           <div className={HUNK_RESET_ANNOTATION_WRAPPER_CLASS_NAME}>
             <div
@@ -514,7 +510,7 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
                 title={`Reset hunk in ${filePath}`}
                 data-testid="agent-studio-git-reset-hunk-button"
                 disabled={isHunkResetDisabled}
-                onClick={() => onResetHunk?.(hunkResetMetadata.hunkIndex)}
+                onClick={() => onResetHunk?.(metadata.hunkIndex)}
               >
                 <Undo2 className="size-3.5" />
                 <span>Reset hunk</span>

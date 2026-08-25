@@ -1,4 +1,3 @@
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
 import { errorMessage, HostOperationError } from "../../effect/host-errors";
 import type {
@@ -9,6 +8,7 @@ import type {
 } from "./claude-agent-sdk-types";
 import { contextUsageFromClaudeControlResponse } from "./claude-agent-sdk-usage";
 import { withTimeout } from "./claude-agent-sdk-utils";
+import type { ClaudeSdkMessageProjection } from "./claude-agent-sdk-message-projection";
 
 export const CLAUDE_CONTEXT_USAGE_TIMEOUT_MS = 30_000;
 const CONTEXT_USAGE_REFRESH_MIN_INTERVAL_MS = process.env.NODE_ENV === "test" ? 0 : 250;
@@ -183,7 +183,7 @@ export const flushClaudeLiveContextUsageRefresh = async (session: ClaudeSession)
   await refreshStates.get(session)?.promise;
 };
 
-const readStreamEventType = (message: SDKMessage): string | undefined =>
+const readStreamEventType = (message: ClaudeSdkMessageProjection): string | undefined =>
   message.type === "stream_event" &&
   "event" in message &&
   message.event &&
@@ -193,7 +193,9 @@ const readStreamEventType = (message: SDKMessage): string | undefined =>
     ? message.event.type
     : undefined;
 
-export const shouldRefreshClaudeContextUsageForMessage = (message: SDKMessage): boolean => {
+export const shouldRefreshClaudeContextUsageForMessage = (
+  message: ClaudeSdkMessageProjection,
+): boolean => {
   if (message.type === "assistant" || message.type === "user") {
     return true;
   }

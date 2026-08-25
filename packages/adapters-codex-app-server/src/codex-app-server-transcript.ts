@@ -431,9 +431,7 @@ const codexToolResultText = (value: CodexAppServerJsonValue | undefined): string
   return text.length > 0 ? text : stringifyJsonValue(value);
 };
 
-const webSearchActionInput = (
-  action: CodexAppServerWebSearchAction | null,
-): Record<string, CodexAppServerJsonValue> | undefined => {
+const webSearchActionInput = (action: CodexAppServerWebSearchAction | null) => {
   if (!action) {
     return undefined;
   }
@@ -460,9 +458,7 @@ const webSearchActionInput = (
   return undefined;
 };
 
-const webSearchInput = (
-  value: CodexWebSearchItem,
-): Record<string, CodexAppServerJsonValue> | undefined => {
+const webSearchInput = (value: CodexWebSearchItem) => {
   if (value.query) {
     return { query: value.query };
   }

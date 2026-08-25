@@ -19,13 +19,15 @@ import type { SessionStartExistingSessionOption } from "./session-start-types";
 
 const EMPTY_EXISTING_SESSION_OPTIONS: SessionStartExistingSessionOption[] = [];
 
+type SourceSelection = {
+  runtimeKind: RuntimeKind;
+  selectedModel: AgentModelSelection | null;
+};
+
 const resolveSourceSelection = (
   options: SessionStartExistingSessionOption[],
   sourceSessionValue: string,
-): {
-  runtimeKind: RuntimeKind;
-  selectedModel: AgentModelSelection | null;
-} | null => {
+): SourceSelection | null => {
   if (!sourceSessionValue) {
     return null;
   }

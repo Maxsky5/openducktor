@@ -21,7 +21,7 @@ type LiveClientHarness = {
   promptCalls: unknown[];
   permissionReplyCalls: unknown[];
   questionReplyCalls: unknown[];
-  setPermissionReplyError: (error: unknown | null) => void;
+  setPermissionReplyError: (error: Error | null) => void;
   setPendingApproval: (pending: boolean) => void;
   emit: (event: OpencodeEventFixtureInput) => void;
   emitAndWait: (event: OpencodeEventFixtureInput) => Promise<void>;
@@ -70,7 +70,7 @@ const createLiveClientHarness = (
   const promptCalls: unknown[] = [];
   const permissionReplyCalls: unknown[] = [];
   const questionReplyCalls: unknown[] = [];
-  let permissionReplyError: unknown | null = null;
+  let permissionReplyError: Error | null = null;
   let pendingApproval = input.pendingQuestion !== true;
   let pendingQuestion = input.pendingQuestion === true;
   let signal: AbortSignal | null = null;

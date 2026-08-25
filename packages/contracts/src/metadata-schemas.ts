@@ -27,8 +27,9 @@ export const taskMetadataQaReportSchema = z.object({
 export type TaskMetadataQaReport = z.infer<typeof taskMetadataQaReportSchema>;
 
 const unknownRecordSchema = z.record(z.string(), z.unknown());
+type UnknownRecord = z.infer<typeof unknownRecordSchema>;
 
-const normalizeLegacyTaskMetadataPayload = (value: unknown): Record<string, unknown> | null => {
+const normalizeLegacyTaskMetadataPayload = (value: unknown): UnknownRecord | null => {
   const payload = unknownRecordSchema.safeParse(value);
   if (!payload.success) {
     return null;

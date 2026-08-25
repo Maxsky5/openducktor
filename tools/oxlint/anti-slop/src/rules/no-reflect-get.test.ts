@@ -21,5 +21,6 @@ tester.run("anti-slop/no-reflect-get", noReflectGetRule, {
       errors: [error],
     },
     { name: "computed access", code: "const value = Reflect['get'](owner, key);", errors: [error] },
+    { name: "globalThis access", code: "globalThis.Reflect.get(owner, key);", errors: [error] },
   ],
 });

@@ -13,6 +13,7 @@ import type { PierreDiffViewerWorkerPool } from "./pierre-diff-viewer-react";
 type WorkerPoolMock = PierreDiffViewerWorkerPool & {
   primeFileHighlightCache?: ReturnType<typeof mock>;
 };
+type CachedHighlight = ReturnType<PierreDiffViewerWorkerPool["getDiffResultCache"]>;
 
 const createDefaultWorkerPoolMock = (): WorkerPoolMock => ({
   cleanUpTasks: mock(() => undefined),
@@ -195,7 +196,7 @@ afterEach(async () => {
 describe("PierreDiffViewer", () => {
   test("keeps a cold diff hidden behind a skeleton until highlighting finishes", async () => {
     const { PierrePreloadedDiffViewer } = pierreViewerModule;
-    let cachedHighlight: object | undefined;
+    let cachedHighlight: CachedHighlight;
     let notifyStatsChanged: (() => void) | undefined;
     const getDiffResultCache = mock(() => cachedHighlight);
     const primeDiffHighlightCache = mock();
@@ -606,7 +607,7 @@ describe("PierreDiffViewer", () => {
 
   test("keeps cold file content hidden behind a skeleton until highlighting finishes", async () => {
     const { PierreFileViewer } = pierreViewerModule;
-    let cachedHighlight: object | undefined;
+    let cachedHighlight: CachedHighlight;
     let notifyStatsChanged: (() => void) | undefined;
     const getFileResultCache = mock(() => cachedHighlight);
     const primeFileHighlightCache = mock();
@@ -970,6 +971,15 @@ describe("getRenderableFileDiff", () => {
         metadata: { kind: "hunk-reset", hunkIndex: 1 },
       },
     ]);
+  });
+
+  test("accepts only complete hunk reset annotation metadata", () => {
+    const { isHunkResetAnnotationMetadata } = pierreViewerModelModule;
+
+    expect(isHunkResetAnnotationMetadata({ kind: "hunk-reset", hunkIndex: 0 })).toBe(true);
+    expect(isHunkResetAnnotationMetadata({ kind: "hunk-reset" })).toBe(false);
+    expect(isHunkResetAnnotationMetadata({ kind: "hunk-reset", hunkIndex: -1 })).toBe(false);
+    expect(isHunkResetAnnotationMetadata({ kind: "hunk-reset", hunkIndex: 1.5 })).toBe(false);
   });
 
   test("falls back to deletion lines for delete-only hunks", async () => {

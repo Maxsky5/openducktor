@@ -85,7 +85,7 @@ describe("Claude SDK ingress", () => {
           message: { role: "user", content: [] },
           parent_tool_use_id: "tool-1",
           tool_use_result: "not a tool result object",
-          uuid: "user-1",
+          uuid: "cd869c91-c9ad-46fd-85f1-4549980685cf",
         }),
         session,
         timestamp: "2026-08-21T12:00:00.000Z",

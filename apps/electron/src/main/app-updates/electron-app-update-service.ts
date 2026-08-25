@@ -7,7 +7,7 @@ import type {
   AppUpdateOperation,
   AppUpdateState,
 } from "@openducktor/contracts";
-import { canDownloadAppUpdate, canInstallAppUpdate, jsonValueSchema } from "@openducktor/contracts";
+import { canDownloadAppUpdate, canInstallAppUpdate } from "@openducktor/contracts";
 import { parse as parseYaml } from "yaml";
 import { ElectronLifecycleError } from "../../effect/electron-errors";
 import { createElectronDetachedTaskOwner } from "../electron-main-task-owner";
@@ -51,14 +51,13 @@ export type ElectronAppUpdateService = {
   subscribe(listener: (state: AppUpdateState) => void): () => void;
 };
 
-export type ElectronAppUpdateScheduler<
-  IntervalHandle extends object = object,
-  TimeoutHandle extends object = object,
-> = {
-  clearInterval(handle: IntervalHandle): void;
-  clearTimeout(handle: TimeoutHandle): void;
-  setInterval(callback: () => void, intervalMs: number): IntervalHandle;
-  setTimeout(callback: () => void, timeoutMs: number): TimeoutHandle;
+export type ElectronAppUpdateScheduledTask = {
+  cancel(): void;
+};
+
+export type ElectronAppUpdateScheduler = {
+  setInterval(callback: () => void, intervalMs: number): ElectronAppUpdateScheduledTask;
+  setTimeout(callback: () => void, timeoutMs: number): ElectronAppUpdateScheduledTask;
 };
 
 export type ElectronAppUpdateServiceOptions = {
@@ -93,16 +92,14 @@ export const deriveElectronUpdateChannel = (version: string): string | null =>
   releaseVersionPattern.exec(version)?.[4] ?? null;
 
 const defaultAppUpdateScheduler: ElectronAppUpdateScheduler = {
-  clearInterval: (handle) => {
-    // SAFETY: This default scheduler receives only handles returned by its setInterval method below; the public scheduler interface erases the implementation-specific Node handle type.
-    clearInterval(handle as ReturnType<typeof setInterval>);
+  setInterval: (callback, intervalMs) => {
+    const handle = setInterval(callback, intervalMs);
+    return { cancel: () => clearInterval(handle) };
   },
-  clearTimeout: (handle) => {
-    // SAFETY: This default scheduler receives only handles returned by its setTimeout method below; the public scheduler interface erases the implementation-specific Node handle type.
-    clearTimeout(handle as ReturnType<typeof setTimeout>);
+  setTimeout: (callback, timeoutMs) => {
+    const handle = setTimeout(callback, timeoutMs);
+    return { cancel: () => clearTimeout(handle) };
   },
-  setInterval: (callback, intervalMs) => setInterval(callback, intervalMs),
-  setTimeout: (callback, timeoutMs) => setTimeout(callback, timeoutMs),
 };
 
 const defaultReadUpdateConfig = async (path: string): Promise<string | null> => {
@@ -135,22 +132,10 @@ const isMacOsUpdateSignatureMismatch = (platform: NodeJS.Platform, cause: unknow
 };
 
 const readErrorCode = (cause: unknown): string | undefined => {
-  if (cause instanceof Error) {
-    const code = "code" in cause ? cause.code : undefined;
-    return typeof code === "string" ? code : undefined;
-  }
-
-  const parsedDetails = jsonValueSchema.safeParse(cause);
-  if (
-    !parsedDetails.success ||
-    !(typeof parsedDetails.data === "object") ||
-    parsedDetails.data === null ||
-    Array.isArray(parsedDetails.data)
-  ) {
+  if (typeof cause !== "object" || cause === null || !("code" in cause)) {
     return undefined;
   }
-
-  const code = parsedDetails.data.code;
+  const { code } = cause;
   return typeof code === "string" ? code : undefined;
 };
 
@@ -255,9 +240,9 @@ export const createElectronAppUpdateService = ({
   const resolvedAppUpdateConfigPath =
     appUpdateConfigPath ?? join(resourcesPath, DEFAULT_APP_UPDATE_CONFIG_FILE);
   let activeOperation: AppUpdateOperation | null = null;
-  let backgroundCheckIntervalHandle: object | null = null;
-  let downloadProgressThrottleHandle: object | null = null;
-  let initialBackgroundCheckHandle: object | null = null;
+  let backgroundCheckIntervalHandle: ElectronAppUpdateScheduledTask | null = null;
+  let downloadProgressThrottleHandle: ElectronAppUpdateScheduledTask | null = null;
+  let initialBackgroundCheckHandle: ElectronAppUpdateScheduledTask | null = null;
   let installHandoffStarted = false;
   let pendingDownloadProgress: number | null = null;
   let disposed = false;
@@ -414,7 +399,7 @@ export const createElectronAppUpdateService = ({
   const clearDownloadProgressThrottle = (): void => {
     pendingDownloadProgress = null;
     if (downloadProgressThrottleHandle !== null) {
-      scheduler.clearTimeout(downloadProgressThrottleHandle);
+      downloadProgressThrottleHandle.cancel();
       downloadProgressThrottleHandle = null;
     }
   };
@@ -723,11 +708,11 @@ export const createElectronAppUpdateService = ({
       }
       disposed = true;
       if (backgroundCheckIntervalHandle !== null) {
-        scheduler.clearInterval(backgroundCheckIntervalHandle);
+        backgroundCheckIntervalHandle.cancel();
         backgroundCheckIntervalHandle = null;
       }
       if (initialBackgroundCheckHandle !== null) {
-        scheduler.clearTimeout(initialBackgroundCheckHandle);
+        initialBackgroundCheckHandle.cancel();
         initialBackgroundCheckHandle = null;
       }
       clearDownloadProgressThrottle();

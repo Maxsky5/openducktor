@@ -32,7 +32,9 @@ const toolStreamStateFor = (session: ClaudeToolInputStreamSession): ToolStreamSt
   return state;
 };
 
-const tryParseJsonRecord = (json: string): Record<string, unknown> | null => {
+type ParsedToolInput = Record<string, unknown>;
+
+const tryParseJsonRecord = (json: string) => {
   try {
     // SAFETY: JSON.parse returns JSON-compatible data for the supplied text.
     const parsed = jsonValueSchema.parse(JSON.parse(json));
@@ -42,7 +44,7 @@ const tryParseJsonRecord = (json: string): Record<string, unknown> | null => {
   }
 };
 
-const toolInputFingerprint = (input: Record<string, unknown>): string => {
+const toolInputFingerprint = (input: ParsedToolInput): string => {
   try {
     return JSON.stringify(input);
   } catch {

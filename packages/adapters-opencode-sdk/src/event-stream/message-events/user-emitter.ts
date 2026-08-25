@@ -51,6 +51,11 @@ const buildUserMessageSignature = (input: {
   });
 };
 
+type KnownUserMessageContent = {
+  displayParts: AgentUserMessageDisplayPart[];
+  visible: string;
+};
+
 const buildKnownUserMessageContent = (
   runtime: EventStreamRuntime,
   input: {
@@ -58,7 +63,7 @@ const buildKnownUserMessageContent = (
     visible?: string;
     displayParts?: AgentUserMessageDisplayPart[];
   },
-): { visible: string; displayParts: AgentUserMessageDisplayPart[] } | null => {
+): KnownUserMessageContent | null => {
   const { session } = runtime;
   const metadata = session.messageMetadataById.get(input.messageId);
   const fallbackText = metadata?.text ?? "";

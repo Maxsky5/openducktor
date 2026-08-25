@@ -1,7 +1,6 @@
 import type {
   PermissionResult,
   Query,
-  SDKMessage,
   SDKUserMessage,
   SlashCommand,
 } from "@anthropic-ai/claude-agent-sdk";
@@ -29,6 +28,7 @@ import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { OpenDucktorMcpBridgeConnection } from "../mcp/openducktor-mcp-environment";
 import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
 import type { AsyncInputQueue } from "./claude-agent-sdk-queue";
+import type { ClaudeSdkMessageProjection } from "./claude-agent-sdk-message-projection";
 
 export type ClaudeMcpBridgeConnectionResolver = (
   repoPath: string,
@@ -85,7 +85,7 @@ export type ClaudeManualCompactionState = {
   messageId: string;
 };
 
-export type ClaudeSessionQuery = AsyncGenerator<SDKMessage, void> &
+export type ClaudeSessionQuery = AsyncGenerator<ClaudeSdkMessageProjection, void> &
   Pick<
     Query,
     | "applyFlagSettings"

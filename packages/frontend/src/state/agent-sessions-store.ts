@@ -58,11 +58,12 @@ export const createAgentSessionsStore = (
   let workspaceRepoPath = initialWorkspaceRepoPath;
   let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
   let activitySnapshot = createEmptyAgentActivitySnapshot(workspaceRepoPath);
-  let visiblePendingInputSnapshot: {
+  type VisiblePendingInputSnapshot = {
     collection: AgentSessionCollection;
     identityKey: string | null;
     snapshot: AgentSessionVisiblePendingInput;
-  } | null = null;
+  };
+  let visiblePendingInputSnapshot: VisiblePendingInputSnapshot | null = null;
   const listeners = new Set<Listener>();
 
   const notifyListeners = (): void => {

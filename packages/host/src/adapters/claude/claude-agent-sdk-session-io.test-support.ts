@@ -9,11 +9,12 @@ import type {
 import { Effect } from "effect";
 import type { HostOperationError } from "../../effect/host-errors";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
+import type { ClaudeSdkMessageProjection } from "./claude-agent-sdk-message-projection";
 import type { ClaudeSession, ClaudeSessionQuery } from "./claude-agent-sdk-types";
 
 export const ignoreClaudeBackgroundFailure = (_failure: HostOperationError) => Effect.void;
 
-export const createClaudeQueryFixture = (query: Partial<ClaudeSessionQuery>): Query => {
+export const createClaudeQueryFixture = (query: Partial<Query>): Query => {
   const overrides = { ...query };
   const stream = isClaudeMessageStream(query) ? query : emptyClaudeMessageStream();
   return Object.assign(stream, defaultQueryControls(), overrides);
@@ -88,9 +89,12 @@ const emptyClaudeMessageStream = async function* (): AsyncGenerator<SDKMessage, 
 };
 
 const isClaudeMessageStream = (
-  query: Partial<ClaudeSessionQuery>,
-): query is Partial<ClaudeSessionQuery> & AsyncGenerator<SDKMessage, void> =>
-  Symbol.asyncIterator in query;
+  query: Partial<Query>,
+): query is Partial<Query> & AsyncGenerator<SDKMessage, void> => Symbol.asyncIterator in query;
+
+const createClaudeProjectionQuery = (
+  stream: AsyncGenerator<ClaudeSdkMessageProjection, void>,
+): ClaudeSessionQuery => Object.assign(stream, defaultQueryControls());
 
 const defaultInitializationResponse = (): SDKControlInitializeResponse => ({
   commands: [],
@@ -167,59 +171,48 @@ const defaultQueryControls = (): ClaudeQueryControlMethods => ({
 });
 
 export const emptyClaudeQuery = (): ClaudeSession["query"] =>
-  createClaudeQueryFixture(
-    Object.assign(
-      (async function* (): AsyncGenerator<SDKMessage> {
-        yield* emptySdkMessages;
-      })(),
-      defaultQueryControls(),
-    ),
+  createClaudeProjectionQuery(
+    (async function* (): AsyncGenerator<ClaudeSdkMessageProjection> {})(),
   );
 
-export const claudeQueryWithMessages = (messages: SDKMessage[]): ClaudeSession["query"] =>
-  createClaudeQueryFixture(
-    Object.assign(
-      (async function* (): AsyncGenerator<SDKMessage> {
-        yield* messages;
-      })(),
-      defaultQueryControls(),
-    ),
+export const claudeQueryWithMessages = (
+  messages: ClaudeSdkMessageProjection[],
+): ClaudeSession["query"] =>
+  createClaudeProjectionQuery(
+    (async function* (): AsyncGenerator<ClaudeSdkMessageProjection> {
+      yield* messages;
+    })(),
   );
 
-export const openClaudeQueryWithMessages = (messages: SDKMessage[]) => {
+export const openClaudeQueryWithMessages = (messages: ClaudeSdkMessageProjection[]) => {
   let release!: () => void;
   const openStream = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const query = createClaudeQueryFixture(
-    Object.assign(
-      (async function* (): AsyncGenerator<SDKMessage> {
-        yield* messages;
-        await openStream;
-      })(),
-      {
-        ...defaultQueryControls(),
-        close: mock(() => {
-          release();
-        }),
-      },
-    ),
+  const query = Object.assign(
+    (async function* (): AsyncGenerator<ClaudeSdkMessageProjection> {
+      yield* messages;
+      await openStream;
+    })(),
+    {
+      ...defaultQueryControls(),
+      close: mock(() => {
+        release();
+      }),
+    },
   );
   return { query, release } satisfies { query: ClaudeSession["query"]; release: () => void };
 };
 
 export const throwingClaudeQuery = (
   error: Error,
-  messages: SDKMessage[] = emptySdkMessages,
+  messages: ClaudeSdkMessageProjection[] = emptySdkMessages,
 ): ClaudeSession["query"] =>
-  createClaudeQueryFixture(
-    Object.assign(
-      (async function* (): AsyncGenerator<SDKMessage> {
-        yield* messages;
-        throw error;
-      })(),
-      defaultQueryControls(),
-    ),
+  createClaudeProjectionQuery(
+    (async function* (): AsyncGenerator<ClaudeSdkMessageProjection> {
+      yield* messages;
+      throw error;
+    })(),
   );
 
 export const waitForTimers = async (): Promise<void> => {

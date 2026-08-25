@@ -15,7 +15,9 @@ import {
 import { z } from "zod";
 import { isPlainObject } from "./codex-app-server-shared";
 
-const nonEmptyStringSchema = z.string().trim().min(1);
+const nonEmptyStringSchema = z
+  .string()
+  .refine((value) => value.trim().length > 0, { error: "String must not be blank" });
 
 export type CodexRuntimeNotification = CodexAppServerConsumedRuntimeNotification;
 export type CodexRuntimeServerRequest = CodexAppServerRuntimeServerRequest;

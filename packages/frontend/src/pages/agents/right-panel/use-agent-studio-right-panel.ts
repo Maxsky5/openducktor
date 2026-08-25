@@ -45,6 +45,7 @@ const openByRoleSchema = z.object({
   qa: z.boolean(),
 });
 const persistedRightPanelPayloadSchema = z.record(z.string(), jsonValueSchema);
+type PersistedRightPanelPayload = z.infer<typeof persistedRightPanelPayloadSchema>;
 
 const RIGHT_PANEL_ROLES: AgentRole[] = ["spec", "planner", "build", "qa"];
 const DEFAULT_ACTIVE_TAB_BY_ROLE = {
@@ -57,7 +58,7 @@ const DEFAULT_ACTIVE_TAB_BY_ROLE = {
 const cloneDefaultOpenByRole = (): Record<AgentRole, boolean> =>
   openByRoleSchema.parse(DEFAULT_OPEN_BY_ROLE);
 
-const readPersistedRightPanelPayload = (): Record<string, unknown> | null => {
+const readPersistedRightPanelPayload = (): PersistedRightPanelPayload | null => {
   if (typeof globalThis.localStorage === "undefined") {
     return null;
   }

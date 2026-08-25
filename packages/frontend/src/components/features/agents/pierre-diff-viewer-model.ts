@@ -29,6 +29,18 @@ export type HunkResetAnnotationMetadata = {
   hunkIndex: number;
 };
 
+export const isHunkResetAnnotationMetadata = (
+  value: unknown,
+): value is HunkResetAnnotationMetadata =>
+  typeof value === "object" &&
+  value !== null &&
+  "kind" in value &&
+  value.kind === "hunk-reset" &&
+  "hunkIndex" in value &&
+  typeof value.hunkIndex === "number" &&
+  Number.isInteger(value.hunkIndex) &&
+  value.hunkIndex >= 0;
+
 type RenderableFileDiff = {
   fileDiff: FileDiffMetadata | null;
   normalizedPatch: string | null;

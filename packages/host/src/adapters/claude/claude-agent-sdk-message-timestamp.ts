@@ -1,9 +1,12 @@
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
+import type { ClaudeSdkMessageProjection } from "./claude-agent-sdk-message-projection";
 
 const sdkMessageTimestampSchema = z.object({ timestamp: z.string().optional() });
 
-export const readClaudeSdkMessageTimestamp = (message: SDKMessage, now: () => string): string => {
+export const readClaudeSdkMessageTimestamp = (
+  message: ClaudeSdkMessageProjection,
+  now: () => string,
+): string => {
   const parsed = sdkMessageTimestampSchema.safeParse(message);
   const timestamp = parsed.success ? parsed.data.timestamp : undefined;
   if (timestamp === undefined) return now();

@@ -88,10 +88,12 @@ const codexLocalImageNameFromPath = (path: string): string => {
 
 export const utf8ByteLength = (text: string): number => new TextEncoder().encode(text).length;
 
-const stringRangeFromUtf8ByteRange = (
-  text: string,
-  byteRange: { start: number; end: number },
-): { start: number; end: number } | null => {
+type StringRange = {
+  start: number;
+  end: number;
+};
+
+const stringRangeFromUtf8ByteRange = (text: string, byteRange: StringRange): StringRange | null => {
   if (byteRange.start < 0 || byteRange.end <= byteRange.start) {
     return null;
   }
@@ -216,14 +218,14 @@ const codexUserInputToDisplayPart = (
 const codexTextElementRange = (
   input: CodexTextInput,
   element: CodexTextElement,
-): { start: number; end: number } | null => {
+): StringRange | null => {
   return stringRangeFromUtf8ByteRange(input.text, element.byteRange);
 };
 
 const codexTextElementMarker = (
   input: CodexTextInput,
   element: CodexTextElement,
-  range: { start: number; end: number },
+  range: StringRange,
 ): string => {
   return element.placeholder ?? input.text.slice(range.start, range.end);
 };
@@ -253,8 +255,8 @@ const codexFileMentionMarkers = (input: CodexMentionInput): string[] => {
 const findCodexFileMentionMarkerRange = (
   text: string,
   mention: CodexMentionInput,
-): { start: number; end: number } | null => {
-  let selected: { start: number; end: number } | null = null;
+): StringRange | null => {
+  let selected: StringRange | null = null;
   for (const marker of codexFileMentionMarkers(mention)) {
     const start = text.indexOf(marker);
     if (start < 0) {
@@ -277,6 +279,16 @@ type CodexTextDisplayParts = {
   renderedSkillIds: Set<string>;
 };
 
+type CodexSkillMentionMatch = {
+  marker: string;
+  part: Extract<AgentUserMessageDisplayPart, { kind: "skill_mention" }>;
+};
+
+type CodexFileMentionMatch = {
+  input: CodexMentionInput;
+  part: Extract<AgentUserMessageDisplayPart, { kind: "file_reference" }>;
+};
+
 const plainTextDisplayParts = (text: string): CodexTextDisplayParts => ({
   parts: [{ kind: "text", text }],
   renderedSkillIds: new Set(),
@@ -285,13 +297,10 @@ const plainTextDisplayParts = (text: string): CodexTextDisplayParts => ({
 const codexSkillMentionFromTextElement = (
   input: CodexTextInput,
   element: CodexTextElement,
-  range: { start: number; end: number },
+  range: StringRange,
   textOffset: number,
   skillsByMarker: Map<string, AgentSkillReference[]>,
-): {
-  marker: string;
-  part: Extract<AgentUserMessageDisplayPart, { kind: "skill_mention" }>;
-} | null => {
+): CodexSkillMentionMatch | null => {
   const marker = codexTextElementMarker(input, element, range);
   if (!marker.startsWith("$")) {
     return null;
@@ -319,7 +328,7 @@ const codexSkillMentionFromTextElement = (
 const codexTextElementMatchesFileMention = (
   input: CodexTextInput,
   element: CodexTextElement,
-  range: { start: number; end: number },
+  range: StringRange,
   mention: CodexMentionInput,
 ): boolean => {
   const rangeText = input.text.slice(range.start, range.end);
@@ -331,14 +340,11 @@ const codexTextElementMatchesFileMention = (
 const codexFileMentionFromTextElement = (
   input: CodexTextInput,
   element: CodexTextElement,
-  range: { start: number; end: number },
+  range: StringRange,
   textOffset: number,
   fileMentions: CodexMentionInput[],
   renderedFileMentions: Set<CodexMentionInput>,
-): {
-  input: CodexMentionInput;
-  part: Extract<AgentUserMessageDisplayPart, { kind: "file_reference" }>;
-} | null => {
+): CodexFileMentionMatch | null => {
   const marker = codexTextElementMarker(input, element, range);
   if (!marker.startsWith("@")) {
     return null;

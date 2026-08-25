@@ -1,5 +1,5 @@
 import { defineRule } from "@oxlint/plugins";
-import type { ESTree } from "@oxlint/plugins";
+import type { ESTree, SourceCode, Variable } from "@oxlint/plugins";
 
 import {
   createTypeEnvironment,
@@ -7,8 +7,13 @@ import {
   typeResolvesToUnknown,
 } from "../shared/dictionary-types.ts";
 import { unwrapTransparentExpression } from "../shared/transparent-expression.ts";
+import { resolveVariable } from "../shared/global-reference.ts";
 
 type RuntimeFunction = ESTree.ArrowFunctionExpression | ESTree.Function;
+type StableAlias = {
+  readonly expression: ESTree.Expression;
+  readonly variable: Variable;
+};
 
 type Parameter = ESTree.ParamPattern;
 
@@ -55,12 +60,54 @@ function enclosingRuntimeFunction(node: ESTree.Node): RuntimeFunction | null {
   return null;
 }
 
-function directlyExposesParameter(expression: ESTree.Expression, parameterName: string): boolean {
+function stableAliasInitializer(
+  sourceCode: SourceCode,
+  identifier: ESTree.IdentifierReference,
+  resolvingAliases: ReadonlySet<Variable>,
+): StableAlias | null {
+  const variable = resolveVariable(sourceCode, identifier);
+  if (variable === null || resolvingAliases.has(variable) || variable.defs.length !== 1)
+    return null;
+  const definition = variable.defs[0];
+  if (
+    definition?.type !== "Variable" ||
+    definition.node.type !== "VariableDeclarator" ||
+    definition.node.id.type !== "Identifier" ||
+    definition.node.init === null ||
+    definition.parent?.type !== "VariableDeclaration" ||
+    definition.parent.kind !== "const" ||
+    variable.references.some((reference) => reference.isWrite() && !reference.init)
+  ) {
+    return null;
+  }
+  return { expression: definition.node.init, variable };
+}
+
+function directlyExposesParameter(
+  expression: ESTree.Expression,
+  parameterName: string,
+  sourceCode: SourceCode,
+  resolvingAliases: ReadonlySet<Variable> = new Set(),
+): boolean {
   const unwrapped = unwrapTransparentExpression(expression, { includeTypeAssertions: true });
-  if (unwrapped !== expression) return directlyExposesParameter(unwrapped, parameterName);
-  if (expression.type === "Identifier") return expression.name === parameterName;
+  if (unwrapped !== expression) {
+    return directlyExposesParameter(unwrapped, parameterName, sourceCode, resolvingAliases);
+  }
+  if (expression.type === "Identifier") {
+    if (expression.name === parameterName) return true;
+    const alias = stableAliasInitializer(sourceCode, expression, resolvingAliases);
+    if (alias === null) return false;
+    const nextResolving = new Set(resolvingAliases);
+    nextResolving.add(alias.variable);
+    return directlyExposesParameter(alias.expression, parameterName, sourceCode, nextResolving);
+  }
   if (expression.type === "ChainExpression")
-    return directlyExposesParameter(expression.expression, parameterName);
+    return directlyExposesParameter(
+      expression.expression,
+      parameterName,
+      sourceCode,
+      resolvingAliases,
+    );
   if (expression.type === "ArrowFunctionExpression" || expression.type === "FunctionExpression") {
     if (
       expression.params.some((parameter) => parameterNameOfBinding(parameter) === parameterName)
@@ -70,31 +117,44 @@ function directlyExposesParameter(expression: ESTree.Expression, parameterName: 
     if (expression.body === null) return false;
     return expression.body.type === "BlockStatement"
       ? expression.body.body.some((statement) =>
-          statementReturnsParameter(statement, parameterName),
+          statementReturnsParameter(statement, parameterName, sourceCode),
         )
-      : directlyExposesParameter(expression.body, parameterName);
+      : directlyExposesParameter(expression.body, parameterName, sourceCode, resolvingAliases);
   }
   if (expression.type === "AwaitExpression") {
-    return directlyExposesParameter(expression.argument, parameterName);
+    return directlyExposesParameter(
+      expression.argument,
+      parameterName,
+      sourceCode,
+      resolvingAliases,
+    );
   }
   if (expression.type === "ConditionalExpression") {
     return (
-      directlyExposesParameter(expression.consequent, parameterName) ||
-      directlyExposesParameter(expression.alternate, parameterName)
+      directlyExposesParameter(
+        expression.consequent,
+        parameterName,
+        sourceCode,
+        resolvingAliases,
+      ) ||
+      directlyExposesParameter(expression.alternate, parameterName, sourceCode, resolvingAliases)
     );
   }
   if (expression.type === "LogicalExpression") {
     return (
-      directlyExposesParameter(expression.left, parameterName) ||
-      directlyExposesParameter(expression.right, parameterName)
+      directlyExposesParameter(expression.left, parameterName, sourceCode, resolvingAliases) ||
+      directlyExposesParameter(expression.right, parameterName, sourceCode, resolvingAliases)
     );
   }
   if (expression.type === "SequenceExpression") {
     const lastExpression = expression.expressions.at(-1);
-    return lastExpression !== undefined && directlyExposesParameter(lastExpression, parameterName);
+    return (
+      lastExpression !== undefined &&
+      directlyExposesParameter(lastExpression, parameterName, sourceCode, resolvingAliases)
+    );
   }
   if (expression.type === "MemberExpression" && expression.object.type !== "Super") {
-    return directlyExposesParameter(expression.object, parameterName);
+    return directlyExposesParameter(expression.object, parameterName, sourceCode, resolvingAliases);
   }
   if (expression.type === "ArrayExpression") {
     return expression.elements.some(
@@ -103,6 +163,8 @@ function directlyExposesParameter(expression: ESTree.Expression, parameterName: 
         directlyExposesParameter(
           element.type === "SpreadElement" ? element.argument : element,
           parameterName,
+          sourceCode,
+          resolvingAliases,
         ),
     );
   }
@@ -111,11 +173,15 @@ function directlyExposesParameter(expression: ESTree.Expression, parameterName: 
       directlyExposesParameter(
         property.type === "SpreadElement" ? property.argument : property.value,
         parameterName,
+        sourceCode,
+        resolvingAliases,
       ),
     );
   }
   if (expression.type === "TemplateLiteral") {
-    return expression.expressions.some((part) => directlyExposesParameter(part, parameterName));
+    return expression.expressions.some((part) =>
+      directlyExposesParameter(part, parameterName, sourceCode, resolvingAliases),
+    );
   }
   return false;
 }
@@ -127,37 +193,53 @@ function parameterNameOfBinding(parameter: Parameter): string | null {
   return parameter.type === "Identifier" ? parameter.name : null;
 }
 
-function statementReturnsParameter(statement: ESTree.Statement, parameterName: string): boolean {
+function statementReturnsParameter(
+  statement: ESTree.Statement,
+  parameterName: string,
+  sourceCode: SourceCode,
+): boolean {
   if (statement.type === "ReturnStatement") {
     return (
-      statement.argument !== null && directlyExposesParameter(statement.argument, parameterName)
+      statement.argument !== null &&
+      directlyExposesParameter(statement.argument, parameterName, sourceCode)
     );
   }
   if (statement.type === "BlockStatement") {
-    return statement.body.some((child) => statementReturnsParameter(child, parameterName));
+    return statement.body.some((child) =>
+      statementReturnsParameter(child, parameterName, sourceCode),
+    );
   }
   if (statement.type === "IfStatement") {
     return (
-      statementReturnsParameter(statement.consequent, parameterName) ||
+      statementReturnsParameter(statement.consequent, parameterName, sourceCode) ||
       (statement.alternate !== null &&
-        statementReturnsParameter(statement.alternate, parameterName))
+        statementReturnsParameter(statement.alternate, parameterName, sourceCode))
     );
   }
   if (statement.type === "SwitchStatement") {
     return statement.cases.some((case_) =>
-      case_.consequent.some((child) => statementReturnsParameter(child, parameterName)),
+      case_.consequent.some((child) => statementReturnsParameter(child, parameterName, sourceCode)),
     );
   }
   if (statement.type === "TryStatement") {
     return (
-      statementReturnsParameter(statement.block, parameterName) ||
+      statementReturnsParameter(statement.block, parameterName, sourceCode) ||
       (statement.handler !== null &&
-        statementReturnsParameter(statement.handler.body, parameterName)) ||
+        statementReturnsParameter(statement.handler.body, parameterName, sourceCode)) ||
       (statement.finalizer !== null &&
-        statementReturnsParameter(statement.finalizer, parameterName))
+        statementReturnsParameter(statement.finalizer, parameterName, sourceCode))
     );
   }
   return false;
+}
+
+function parameterTypeResolvesToUnknown(
+  annotation: ESTree.TSTypeAnnotation | null | undefined,
+  visitorKeys: Readonly<Record<string, readonly string[]>>,
+): boolean {
+  if (annotation === null || annotation === undefined) return false;
+  const environment = createTypeEnvironment(annotation.typeAnnotation, visitorKeys);
+  return typeResolvesToUnknown(annotation.typeAnnotation, environment);
 }
 
 function hasKnownOutputContract(
@@ -193,7 +275,7 @@ export const noUnknownParametersRule = defineRule({
         functionNode.params.find((candidate) => {
           const annotation = parameterAnnotation(candidate);
           return (
-            annotation?.typeAnnotation.type === "TSUnknownKeyword" &&
+            parameterTypeResolvesToUnknown(annotation, context.sourceCode.visitorKeys) &&
             parameterName(candidate, context.sourceCode.getText(candidate)) === name
           );
         }) ?? null;
@@ -214,9 +296,11 @@ export const noUnknownParametersRule = defineRule({
       if (functionNode === null) return;
       for (const parameter of functionNode.params) {
         const annotation = parameterAnnotation(parameter);
-        if (annotation?.typeAnnotation.type !== "TSUnknownKeyword") continue;
+        if (!parameterTypeResolvesToUnknown(annotation, context.sourceCode.visitorKeys)) continue;
         const name = parameterName(parameter, context.sourceCode.getText(parameter));
-        if (directlyExposesParameter(node.expression, name)) report(functionNode, name);
+        if (directlyExposesParameter(node.expression, name, context.sourceCode)) {
+          report(functionNode, name);
+        }
       }
     };
 
@@ -230,9 +314,9 @@ export const noUnknownParametersRule = defineRule({
         }
         for (const parameter of node.params) {
           const annotation = parameterAnnotation(parameter);
-          if (annotation?.typeAnnotation.type !== "TSUnknownKeyword") continue;
+          if (!parameterTypeResolvesToUnknown(annotation, context.sourceCode.visitorKeys)) continue;
           const name = parameterName(parameter, context.sourceCode.getText(parameter));
-          if (directlyExposesParameter(node.body, name)) report(node, name);
+          if (directlyExposesParameter(node.body, name, context.sourceCode)) report(node, name);
         }
       },
       ReturnStatement(node) {
@@ -246,9 +330,11 @@ export const noUnknownParametersRule = defineRule({
         }
         for (const parameter of functionNode.params) {
           const annotation = parameterAnnotation(parameter);
-          if (annotation?.typeAnnotation.type !== "TSUnknownKeyword") continue;
+          if (!parameterTypeResolvesToUnknown(annotation, context.sourceCode.visitorKeys)) continue;
           const name = parameterName(parameter, context.sourceCode.getText(parameter));
-          if (directlyExposesParameter(node.argument, name)) report(functionNode, name);
+          if (directlyExposesParameter(node.argument, name, context.sourceCode)) {
+            report(functionNode, name);
+          }
         }
       },
       TSAsExpression: checkAssertion,

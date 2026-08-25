@@ -1474,7 +1474,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       variant: "high",
       profileId: "Hephaestus",
     };
-    let observedStartInput: { model?: AgentModelSelection } | null = null;
+    let observedStartInput: Parameters<OpencodeSdkAdapter["startSession"]>[0] | null = null;
 
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;

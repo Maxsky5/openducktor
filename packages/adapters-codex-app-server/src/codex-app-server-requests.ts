@@ -33,6 +33,7 @@ const MCP_APPROVAL_PERSIST_ALWAYS = "always";
 const MCP_APPROVAL_PERSIST_SESSION = "session";
 const MCP_APPROVAL_TOOL_DESCRIPTION_KEY = "tool_description";
 const MCP_APPROVAL_TOOL_PARAMS_KEY = "tool_params";
+type CodexJsonObject = Record<string, CodexAppServerJsonValue>;
 const MCP_APPROVAL_TOOL_TITLE_KEY = "tool_title";
 
 type SupportedApprovalOutcomes = NonNullable<AgentPendingApprovalRequest["supportedReplyOutcomes"]>;
@@ -284,9 +285,7 @@ export const toApprovalRequest = (request: CodexServerRequestRecord): PendingApp
   };
 };
 
-const mcpToolApprovalMeta = (
-  request: CodexServerRequestRecord,
-): Record<string, CodexAppServerJsonValue> | null => {
+const mcpToolApprovalMeta = (request: CodexServerRequestRecord) => {
   if (request.method !== CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST) {
     return null;
   }
@@ -298,7 +297,7 @@ const mcpToolApprovalMeta = (
 };
 
 const mcpToolApprovalSupportsPersistMode = (
-  meta: Record<string, CodexAppServerJsonValue>,
+  meta: CodexJsonObject,
   expectedMode: typeof MCP_APPROVAL_PERSIST_SESSION | typeof MCP_APPROVAL_PERSIST_ALWAYS,
 ): boolean => {
   const persist = meta[MCP_APPROVAL_PERSIST_KEY];
