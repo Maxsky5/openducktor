@@ -142,19 +142,21 @@ type ApplyPatchFileEntry = {
   lines: string[];
 };
 
+const isApplyPatchFileType = (value: string | undefined): value is ApplyPatchFileType =>
+  value === "Add" || value === "Delete" || value === "Update";
+
 const applyPatchFileHeader = (
   line: string,
 ): { operation: ApplyPatchFileType; file: string } | null => {
   const match = /^\*\*\* (Add|Delete|Update) File: (.+)$/.exec(line);
   const operation = match?.[1];
   const file = match?.[2];
-  if (!operation || !file) {
+  if (!isApplyPatchFileType(operation) || !file) {
     return null;
   }
 
-  // SAFETY: The runtime adapter builds this value from the contract fields required by `ApplyPatchFileType`.
   return {
-    operation: operation as ApplyPatchFileType,
+    operation,
     file: file.trim(),
   };
 };

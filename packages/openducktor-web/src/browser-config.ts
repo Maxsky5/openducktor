@@ -13,10 +13,20 @@ export const configureBrowserRuntimeConfig = (config: BrowserRuntimeConfig): voi
   browserRuntimeConfig = config;
 };
 
-// SAFETY: The preceding runtime guard establishes `ImportMeta & { env?: Record<string, string | undefined> }` before this assertion.
-const readBrowserEnv = (): BrowserEnv =>
-  (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ??
-  (!(typeof globalThis.process === "undefined") ? process.env : undefined);
+const readStringEnvValue = (value: unknown): string | undefined =>
+  typeof value === "string" ? value : undefined;
+
+const readBrowserEnv = (): BrowserEnv => {
+  const processEnv = typeof globalThis.process === "undefined" ? undefined : process.env;
+  const viteBackendUrl: unknown = import.meta.env.VITE_ODT_BROWSER_BACKEND_URL;
+  const viteAuthToken: unknown = import.meta.env.VITE_ODT_BROWSER_AUTH_TOKEN;
+  return {
+    VITE_ODT_BROWSER_BACKEND_URL:
+      readStringEnvValue(viteBackendUrl) ?? processEnv?.VITE_ODT_BROWSER_BACKEND_URL,
+    VITE_ODT_BROWSER_AUTH_TOKEN:
+      readStringEnvValue(viteAuthToken) ?? processEnv?.VITE_ODT_BROWSER_AUTH_TOKEN,
+  };
+};
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 const OPAQUE_BROWSER_ORIGIN = "null";

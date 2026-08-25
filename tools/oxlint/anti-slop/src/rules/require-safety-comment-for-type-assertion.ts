@@ -13,6 +13,8 @@ const commentOwnerKinds = new Set([
 ]);
 
 const exportedDeclarationKinds = new Set(["ExportDefaultDeclaration", "ExportNamedDeclaration"]);
+const MINIMUM_SAFETY_EXPLANATION_LENGTH = 16;
+const vagueSafetyExplanation = /^(?:fine|ok(?:ay)?|safe|valid|verified|works)\.?$/iu;
 
 function isConstAssertion(node: TypeAssertion): boolean {
   return (
@@ -39,20 +41,31 @@ function assertionCommentOwner(node: TypeAssertion): ESTree.Node | null {
 }
 
 function hasSafetyComment(sourceCode: SourceCode, node: ESTree.Node): boolean {
-  return sourceCode.getCommentsBefore(node).some((comment) => /\bSAFETY\s*:/u.test(comment.value));
+  return sourceCode.getCommentsBefore(node).some((comment) => {
+    const marker = /\bSAFETY\s*:\s*/u.exec(comment.value);
+    if (marker === null) return false;
+    const explanation = comment.value
+      .slice(marker.index + marker[0].length)
+      .replaceAll(/^\s*\*\s?/gmu, "")
+      .trim();
+    return (
+      explanation.length >= MINIMUM_SAFETY_EXPLANATION_LENGTH &&
+      !vagueSafetyExplanation.test(explanation)
+    );
+  });
 }
 
-/** Require every non-const type assertion to state its local invariant. */
+/** Require every non-const type assertion to state a meaningful local invariant. */
 export const requireSafetyCommentForTypeAssertionRule = defineRule({
   meta: {
     type: "problem",
     docs: {
       description:
-        "Require a nearby SAFETY comment for every TypeScript type assertion except const assertions.",
+        "Require a nearby, meaningful SAFETY comment for every TypeScript type assertion except const assertions.",
     },
     messages: {
       missingSafetyComment:
-        "This type assertion has no local `SAFETY:` comment. Check the asserted type at runtime or state the invariant immediately before the assertion.",
+        "This type assertion has no meaningful local `SAFETY:` comment. Check the asserted type at runtime or state the proven invariant immediately before the assertion.",
     },
   },
   createOnce(context) {

@@ -36,30 +36,31 @@ export type WorkspaceFilesService = {
   ): Effect.Effect<WorkspaceTextFileWriteResult, WorkspaceTextFileWriteError>;
 };
 
-const PIERRE_GIT_STATUSES = new Set<WorkspaceFileGitStatus>([
+const PIERRE_GIT_STATUSES: ReadonlySet<string> = new Set([
   "added",
   "deleted",
   "modified",
   "renamed",
   "untracked",
   "ignored",
-]);
+] satisfies readonly WorkspaceFileGitStatus[]);
+
+const isWorkspaceFileGitStatus = (status: string): status is WorkspaceFileGitStatus =>
+  PIERRE_GIT_STATUSES.has(status);
 
 const compareWorkspacePaths = (left: string, right: string): number => {
   const insensitive = left.toLowerCase().localeCompare(right.toLowerCase());
   return insensitive === 0 ? left.localeCompare(right) : insensitive;
 };
 
-// SAFETY: The preceding runtime guard establishes `WorkspaceFileGitStatus` before this assertion.
 const normalizeGitStatus = (
   status: string | null | undefined,
 ): Effect.Effect<WorkspaceFileGitStatus | null, HostValidationError> => {
   if (!status) {
     return Effect.succeed(null);
   }
-  if (PIERRE_GIT_STATUSES.has(status as WorkspaceFileGitStatus)) {
-    // SAFETY: The preceding runtime guard establishes `WorkspaceFileGitStatus` before this assertion.
-    return Effect.succeed(status as WorkspaceFileGitStatus);
+  if (isWorkspaceFileGitStatus(status)) {
+    return Effect.succeed(status);
   }
   if (status === "copied") {
     return Effect.succeed("added");

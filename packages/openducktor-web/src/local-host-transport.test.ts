@@ -73,8 +73,6 @@ class FakeEventSource {
 
 const originalEventSource = globalThis.EventSource;
 const originalFetch = globalThis.fetch;
-const originalSetTimeout = globalThis.setTimeout;
-const originalClearTimeout = globalThis.clearTimeout;
 const originalBackendUrl = process.env.VITE_ODT_BROWSER_BACKEND_URL;
 const originalAuthToken = process.env.VITE_ODT_BROWSER_AUTH_TOKEN;
 let localHostTransportImportId = 0;
@@ -122,8 +120,6 @@ beforeEach(async () => {
 afterEach(() => {
   globalThis.EventSource = originalEventSource;
   globalThis.fetch = originalFetch;
-  globalThis.setTimeout = originalSetTimeout;
-  globalThis.clearTimeout = originalClearTimeout;
   configureBrowserRuntimeConfig({});
   if (originalBackendUrl === undefined) {
     delete process.env.VITE_ODT_BROWSER_BACKEND_URL;

@@ -4,7 +4,6 @@ import {
   classifyWideningTarget,
   createTypeEnvironment,
   isKnownEvidenceExpression,
-  type TypeEnvironment,
   type WideningTarget,
 } from "../shared/dictionary-types.ts";
 
@@ -79,11 +78,14 @@ function hasKnownEvidence(
 
 function annotationTarget(
   annotation: ESTree.TSTypeAnnotation | null | undefined,
-  environment: TypeEnvironment,
+  visitorKeys: Readonly<Record<string, readonly string[]>>,
 ): WideningTarget | null {
   return annotation === null || annotation === undefined
     ? null
-    : classifyWideningTarget(annotation.typeAnnotation, environment);
+    : classifyWideningTarget(
+        annotation.typeAnnotation,
+        createTypeEnvironment(annotation.typeAnnotation, visitorKeys),
+      );
 }
 
 function enclosingFunction(node: ESTree.Node): FunctionExpression | null {
@@ -144,8 +146,6 @@ export const noKnownValueWideningRule = defineRule({
     },
   },
   createOnce(context) {
-    let environment: TypeEnvironment | null = null;
-
     const reportFlow = (
       expression: ESTree.Expression,
       destination: WideningTarget | null,
@@ -164,12 +164,9 @@ export const noKnownValueWideningRule = defineRule({
     };
 
     const targetFromAnnotation = (annotation: ESTree.TSTypeAnnotation | null | undefined) =>
-      environment === null ? null : annotationTarget(annotation, environment);
+      annotationTarget(annotation, context.sourceCode.visitorKeys);
 
     return {
-      Program(node) {
-        environment = createTypeEnvironment(node);
-      },
       VariableDeclarator(node) {
         if (node.init === null || node.id.type !== "Identifier") return;
         reportFlow(
@@ -224,26 +221,35 @@ export const noKnownValueWideningRule = defineRule({
         );
       },
       TSAsExpression(node) {
-        if (environment === null || hasParentAssertion(node)) return;
+        if (hasParentAssertion(node)) return;
         reportFlow(
           node.expression,
-          classifyWideningTarget(node.typeAnnotation, environment),
+          classifyWideningTarget(
+            node.typeAnnotation,
+            createTypeEnvironment(node.typeAnnotation, context.sourceCode.visitorKeys),
+          ),
           "assertion",
         );
       },
       TSTypeAssertion(node) {
-        if (environment === null || hasParentAssertion(node)) return;
+        if (hasParentAssertion(node)) return;
         reportFlow(
           node.expression,
-          classifyWideningTarget(node.typeAnnotation, environment),
+          classifyWideningTarget(
+            node.typeAnnotation,
+            createTypeEnvironment(node.typeAnnotation, context.sourceCode.visitorKeys),
+          ),
           "assertion",
         );
       },
       TSSatisfiesExpression(node) {
-        if (environment === null || node.typeAnnotation.type !== "TSUnknownKeyword") return;
+        if (node.typeAnnotation.type !== "TSUnknownKeyword") return;
         reportFlow(
           node.expression,
-          classifyWideningTarget(node.typeAnnotation, environment),
+          classifyWideningTarget(
+            node.typeAnnotation,
+            createTypeEnvironment(node.typeAnnotation, context.sourceCode.visitorKeys),
+          ),
           "satisfies expression",
         );
       },

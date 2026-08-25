@@ -30,6 +30,8 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
     `${prelude} interface Commands { readonly start: Command } function create(): Commands { return { start: startCommand }; }`,
     `${prelude} declare function make(): Record<string, Command>; const commands: Record<string, Command> = make();`,
     `${prelude} import { Commands } from './types'; const commands: Commands = { start: startCommand };`,
+    "function build() { type Record<Key, Value> = { value: Value }; type Command = () => void; const start = () => {}; const commands: Record<string, Command> = { value: start }; }",
+    "namespace Owner { type Record<Key, Value> = { value: Value }; type Command = () => void; const start = () => {}; const commands: Record<string, Command> = { value: start }; }",
   ],
   invalid: [
     { code: "const value: unknown = {};", errors: [error] },
@@ -119,5 +121,13 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
     { code: "const value: unknown = 1;", errors: [error] },
     { code: "const value: object = [];", errors: [error] },
     { code: "const value = { answer: 42 } satisfies unknown;", errors: [error] },
+    {
+      code: "function build() { type Command = () => void; type Open = Record<string, Command>; const start = () => {}; const commands: Open = { start }; }",
+      errors: [error],
+    },
+    {
+      code: "namespace Owner { type Command = () => void; type Open = Record<string, Command>; const start = () => {}; const commands: Open = { start }; }",
+      errors: [error],
+    },
   ],
 });

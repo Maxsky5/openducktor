@@ -4,12 +4,9 @@ import {
   classifyWideningTarget,
   createTypeEnvironment,
   isKnownEvidenceExpression,
-  type TypeEnvironment,
 } from "../shared/dictionary-types.ts";
 
 import type { ESTree, Scope, SourceCode, Variable } from "@oxlint/plugins";
-
-type FunctionExpression = ESTree.ArrowFunctionExpression | ESTree.Function;
 
 function unwrapParentheses(expression: ESTree.Expression): ESTree.Expression {
   let current = expression;
@@ -46,21 +43,6 @@ function isStableConst(variable: Variable, declarator: ESTree.VariableDeclarator
   );
 }
 
-function enclosingFunction(node: ESTree.Node): FunctionExpression | null {
-  let current: ESTree.Node | null = node.parent;
-  while (current !== null && current.type !== "Program") {
-    if (
-      current.type === "ArrowFunctionExpression" ||
-      current.type === "FunctionDeclaration" ||
-      current.type === "FunctionExpression"
-    ) {
-      return current;
-    }
-    current = current.parent;
-  }
-  return null;
-}
-
 function hasKnownEvidence(
   sourceCode: SourceCode,
   expression: ESTree.Expression,
@@ -79,8 +61,11 @@ function hasKnownEvidence(
   return hasKnownEvidence(sourceCode, declarator.init, visitedVariables);
 }
 
-function isBroadBoundaryType(type: ESTree.TSType, environment: TypeEnvironment): boolean {
-  const wideningTarget = classifyWideningTarget(type, environment);
+function isBroadBoundaryType(
+  type: ESTree.TSType,
+  visitorKeys: Readonly<Record<string, readonly string[]>>,
+): boolean {
+  const wideningTarget = classifyWideningTarget(type, createTypeEnvironment(type, visitorKeys));
   return (
     wideningTarget?.kind === "unknown" ||
     wideningTarget?.kind === "object" ||
@@ -89,23 +74,25 @@ function isBroadBoundaryType(type: ESTree.TSType, environment: TypeEnvironment):
   );
 }
 
-function variableHasBroadAnnotation(variable: Variable, environment: TypeEnvironment): boolean {
+function variableHasBroadAnnotation(
+  variable: Variable,
+  visitorKeys: Readonly<Record<string, readonly string[]>>,
+): boolean {
   return variable.identifiers.some((identifier) => {
     const annotation = identifier.typeAnnotation?.typeAnnotation;
-    return annotation !== undefined && isBroadBoundaryType(annotation, environment);
+    return annotation !== undefined && isBroadBoundaryType(annotation, visitorKeys);
   });
 }
 
 function isBroadBoundaryInput(
   sourceCode: SourceCode,
   variable: Variable,
-  environment: TypeEnvironment,
-  boundary: FunctionExpression | null,
+  visitorKeys: Readonly<Record<string, readonly string[]>>,
 ): boolean {
   const identifier = variable.identifiers[0];
   if (
     identifier === undefined ||
-    !variableHasBroadAnnotation(variable, environment) ||
+    !variableHasBroadAnnotation(variable, visitorKeys) ||
     variable.references.some(
       (reference) =>
         reference.isWrite() &&
@@ -117,7 +104,6 @@ function isBroadBoundaryInput(
     return false;
   }
 
-  if (enclosingFunction(identifier) !== boundary) return false;
   const declarator = variableDeclarator(variable);
   return (
     declarator === null ||
@@ -128,11 +114,11 @@ function isBroadBoundaryInput(
 
 function aliasedIdentifier(
   expression: ESTree.Expression,
-  environment: TypeEnvironment,
+  visitorKeys: Readonly<Record<string, readonly string[]>>,
 ): ESTree.IdentifierReference | null {
   let current = unwrapParentheses(expression);
   if (current.type === "TSAsExpression" || current.type === "TSTypeAssertion") {
-    if (!isBroadBoundaryType(current.typeAnnotation, environment)) return null;
+    if (!isBroadBoundaryType(current.typeAnnotation, visitorKeys)) return null;
     current = unwrapParentheses(current.expression);
   }
   return current.type === "Identifier" ? current : null;
@@ -142,9 +128,8 @@ function aliasesBroadBoundaryInput(
   sourceCode: SourceCode,
   assertedIdentifier: ESTree.IdentifierReference,
   assertion: ESTree.TSAsExpression | ESTree.TSTypeAssertion,
-  environment: TypeEnvironment,
+  visitorKeys: Readonly<Record<string, readonly string[]>>,
 ): boolean {
-  const boundary = enclosingFunction(assertion);
   let variable = resolveVariable(sourceCode, assertedIdentifier);
   const visited = new Set<Variable>();
   let aliasCount = 0;
@@ -156,10 +141,9 @@ function aliasesBroadBoundaryInput(
       declarator !== null &&
       declarator.init !== null &&
       declarator.end < assertion.start &&
-      enclosingFunction(declarator) === boundary &&
       isStableConst(variable, declarator)
     ) {
-      const sourceIdentifier = aliasedIdentifier(declarator.init, environment);
+      const sourceIdentifier = aliasedIdentifier(declarator.init, visitorKeys);
       if (sourceIdentifier !== null) {
         aliasCount += 1;
         variable = resolveVariable(sourceCode, sourceIdentifier);
@@ -167,7 +151,7 @@ function aliasesBroadBoundaryInput(
       }
     }
 
-    return aliasCount > 0 && isBroadBoundaryInput(sourceCode, variable, environment, boundary);
+    return aliasCount > 0 && isBroadBoundaryInput(sourceCode, variable, visitorKeys);
   }
 
   return false;
@@ -187,14 +171,13 @@ export const noWidenThenAssertRule = defineRule({
     },
   },
   createOnce(context) {
-    let environment: TypeEnvironment | null = null;
-
     const checkAssertion = (node: ESTree.TSAsExpression | ESTree.TSTypeAssertion): void => {
-      if (environment === null || isBroadBoundaryType(node.typeAnnotation, environment)) return;
+      const visitorKeys = context.sourceCode.visitorKeys;
+      if (isBroadBoundaryType(node.typeAnnotation, visitorKeys)) return;
       const expression = unwrapParentheses(node.expression);
       if (
         expression.type !== "Identifier" ||
-        !aliasesBroadBoundaryInput(context.sourceCode, expression, node, environment)
+        !aliasesBroadBoundaryInput(context.sourceCode, expression, node, visitorKeys)
       ) {
         return;
       }
@@ -207,9 +190,6 @@ export const noWidenThenAssertRule = defineRule({
     };
 
     return {
-      Program(node) {
-        environment = createTypeEnvironment(node);
-      },
       TSAsExpression: checkAssertion,
       TSTypeAssertion: checkAssertion,
     };

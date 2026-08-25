@@ -22,6 +22,8 @@ tester.run("anti-slop/no-unknown-returns", noUnknownReturnsRule, {
     "function load(): Promise<User> { return promise; }",
     "function load(): Record<string, User>[string] { return user; }",
     "type KnownRecord = Record<string, User>; function load(): KnownRecord[string] { return user; }",
+    "function owner() { type Promise<T> = { value: T }; const load = (): Promise<unknown> => ({ value }); }",
+    "namespace Owner { type Promise<T> = { value: T }; const load = (): Promise<unknown> => ({ value }); }",
   ],
   invalid: [
     { code: "function load(): unknown { return input; }", errors: [error] },
@@ -41,6 +43,18 @@ tester.run("anti-slop/no-unknown-returns", noUnknownReturnsRule, {
     },
     {
       code: "function load(): Record<string, unknown>[string] { return input; }",
+      errors: [error],
+    },
+    {
+      code: "function owner() { type Payload = unknown; const load = (): Payload => value; }",
+      errors: [error],
+    },
+    {
+      code: "namespace Owner { type Payload = unknown; const load = (): Payload => value; }",
+      errors: [error],
+    },
+    {
+      code: "type Box<T> = Promise<T>; function owner() { type Payload = unknown; const load = (): Box<Payload> => value; }",
       errors: [error],
     },
     {

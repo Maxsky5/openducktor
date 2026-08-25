@@ -21,7 +21,6 @@ tester.run(
       "// SAFETY: This test controls the fixture and supplies UserId.\nconst id = value as UserId;",
       "// SAFETY: This test creates the DOM fixture before this lookup.\nconst button = value as HTMLButtonElement;",
       "// SAFETY: This test drives the failure path before this assertion.\nconst failure = value as Error;",
-      "// SAFETY: okay.\nconst id = value as UserId;",
     ],
     invalid: [
       { code: "const id = value as UserId;", errors: [error] },
@@ -29,6 +28,14 @@ tester.run(
       { code: "const id = value as UserId; // SAFETY: Too late.", errors: [error] },
       {
         code: "// This cast seems fine.\nconst id = value as UserId;",
+        errors: [error],
+      },
+      {
+        code: "// SAFETY: okay.\nconst id = value as UserId;",
+        errors: [error],
+      },
+      {
+        code: "// SAFETY:\nconst id = value as UserId;",
         errors: [error],
       },
       {

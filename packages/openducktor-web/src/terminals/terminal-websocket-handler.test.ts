@@ -8,19 +8,31 @@ import {
   createTerminalService,
   type FilesystemPort,
   type TerminalPtyPort,
-  type TerminalService,
   TerminalServiceError,
 } from "@openducktor/host";
 import { Effect } from "effect";
-import { type TerminalWebSocketData, terminalWebSocketHandler } from "./terminal-websocket-handler";
+import {
+  type TerminalWebSocketData,
+  terminalWebSocketHandler,
+  type TerminalWebSocketService,
+} from "./terminal-websocket-handler";
 
-const createTerminalServiceFixture = (service: Partial<TerminalService>): TerminalService => {
-  // SAFETY: focused tests supply each TerminalService member used by the handler path under test.
-  return service as TerminalService;
-};
+const unexpectedTerminalOperation = (operation: string): Effect.Effect<never> =>
+  Effect.dieMessage(`Unexpected terminal service operation: ${operation}`);
+
+const createTerminalServiceFixture = (
+  overrides: Partial<TerminalWebSocketService> = {},
+): TerminalWebSocketService => ({
+  acknowledge: () => unexpectedTerminalOperation("acknowledge"),
+  attach: () => unexpectedTerminalOperation("attach"),
+  detach: () => unexpectedTerminalOperation("detach"),
+  resize: () => unexpectedTerminalOperation("resize"),
+  write: () => unexpectedTerminalOperation("write"),
+  ...overrides,
+});
 
 const makeSocket = (
-  terminalService: TerminalService,
+  terminalService: TerminalWebSocketService,
   sendStatus?: (frame: Uint8Array) => number,
 ) => {
   const sent: Uint8Array[] = [];
@@ -54,7 +66,7 @@ describe("terminalWebSocketHandler", () => {
   test("multiplexes attach, input, resize, ACK, and detach by opaque terminal id", async () => {
     const operations: string[] = [];
     const service = createTerminalServiceFixture({
-      attach: (input: Parameters<TerminalService["attach"]>[0]) =>
+      attach: (input: Parameters<TerminalWebSocketService["attach"]>[0]) =>
         Effect.sync(() => {
           operations.push(`attach:${input.terminalId}:${input.attachmentId}`);
           input.sink(
@@ -220,7 +232,7 @@ describe("terminalWebSocketHandler", () => {
 
   test("does not retain failed terminal attachments", async () => {
     const service = createTerminalServiceFixture({
-      attach: ({ terminalId }: Parameters<TerminalService["attach"]>[0]) =>
+      attach: ({ terminalId }: Parameters<TerminalWebSocketService["attach"]>[0]) =>
         Effect.fail(
           new TerminalServiceError({
             code: "terminal_not_found",
@@ -263,10 +275,27 @@ describe("terminalWebSocketHandler", () => {
   });
 
   test("reports a stale attach from the real terminal service as forgotten", async () => {
-    // SAFETY: A stale attach exits before the terminal service reads the filesystem dependency.
-    const unusedFilesystem = {} as FilesystemPort;
-    // SAFETY: A stale attach exits before the terminal service starts a PTY.
-    const unusedPtyPort = {} as TerminalPtyPort;
+    const unusedDependency = (operation: string): Effect.Effect<never> =>
+      Effect.dieMessage(`Unexpected stale-attach dependency call: ${operation}`);
+    const unusedSyncDependency = (operation: string): never => {
+      throw new Error(`Unexpected stale-attach dependency call: ${operation}`);
+    };
+    const unusedFilesystem = {
+      homeDirectory: () => unusedSyncDependency("homeDirectory"),
+      canonicalize: () => unusedDependency("canonicalize"),
+      readDirectory: () => unusedDependency("readDirectory"),
+      readFileBytes: () => unusedDependency("readFileBytes"),
+      readFileSnapshot: () => unusedDependency("readFileSnapshot"),
+      replaceFileBytes: () => unusedDependency("replaceFileBytes"),
+      stat: () => unusedDependency("stat"),
+      exists: () => unusedDependency("exists"),
+      join: () => unusedSyncDependency("join"),
+      relative: () => unusedSyncDependency("relative"),
+      parent: () => unusedSyncDependency("parent"),
+    } satisfies FilesystemPort;
+    const unusedPtyPort = {
+      start: () => unusedDependency("start"),
+    } satisfies TerminalPtyPort;
     const service = await Effect.runPromise(
       createTerminalService({
         filesystem: unusedFilesystem,
@@ -306,7 +335,7 @@ describe("terminalWebSocketHandler", () => {
   test("closes instead of growing the outbound queue past its byte bound", async () => {
     const payload = new Uint8Array(700 * 1024);
     const service = createTerminalServiceFixture({
-      attach: (input: Parameters<TerminalService["attach"]>[0]) =>
+      attach: (input: Parameters<TerminalWebSocketService["attach"]>[0]) =>
         Effect.sync(() => {
           for (let index = 0; index < 3; index += 1) {
             input.sink(

@@ -37,6 +37,9 @@ tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
     "interface Escape { readonly id: string } interface Escape {} type A = Record<string, Escape>;",
     "interface Owner { readonly id: string } type A = Record<string, object & Owner>;",
     "type Wrap<T> = { readonly wrapped: T }; type Inner<T, U> = { readonly value: T } & Wrap<U>; type Outer<T, U> = Record<string, Inner<T, U>>; declare function f<T, U>(): Outer<T, U>;",
+    "function owner() { type Record<K, V> = { key: K; value: V }; type A = Record<string, object>; }",
+    "namespace Owner { type Record<K, V> = { key: K; value: V }; type A = Record<string, object>; }",
+    "type Box<T> = { [T in string]: T }; type Safe = Box<any>;",
   ],
   invalid: [
     { code: "type A = { [key: string]: any };", errors: [error] },
@@ -60,6 +63,18 @@ tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
     {
       code: "type Marker<T> = { readonly __brand?: never }; type Index<T, U = Marker<T>> = Record<string, U>; type A = Index<Item>;",
       errors: 1,
+    },
+    {
+      code: "function owner() { type Escape = {}; type A = Record<string, Escape>; }",
+      errors: [error],
+    },
+    {
+      code: "namespace Owner { type Escape = {}; type A = Record<string, Escape>; }",
+      errors: [error],
+    },
+    {
+      code: "type Index<T> = Record<string, T>; function owner() { type Escape = {}; type A = Index<Escape>; }",
+      errors: [error],
     },
   ],
 });

@@ -31,8 +31,8 @@ function collectInferTypeParameterNames(
   }
 }
 
-/** Collect type binders that are in scope at a node and can shadow module aliases. */
-export function lexicalTypeParameterNames(
+/** Collect mapped and conditional infer binders that are in scope at one type node. */
+export function lexicalStructuralTypeParameterNames(
   node: ESTree.Node,
   visitorKeys: VisitorKeys,
 ): ReadonlySet<string> {
@@ -40,11 +40,6 @@ export function lexicalTypeParameterNames(
   let descendant: ESTree.Node = node;
   let current: ESTree.Node | null = node;
   while (current !== null && current.type !== "Program") {
-    if ("typeParameters" in current) {
-      for (const parameter of current.typeParameters?.params ?? []) {
-        names.add(parameter.name.name);
-      }
-    }
     if (
       current.type === "TSMappedType" &&
       (descendant === current.nameType || descendant === current.typeAnnotation)
@@ -55,6 +50,24 @@ export function lexicalTypeParameterNames(
       collectInferTypeParameterNames(current.extendsType, visitorKeys, names);
     }
     descendant = current;
+    current = current.parent;
+  }
+  return names;
+}
+
+/** Collect every type binder that is in scope at a node and can shadow module aliases. */
+export function lexicalTypeParameterNames(
+  node: ESTree.Node,
+  visitorKeys: VisitorKeys,
+): ReadonlySet<string> {
+  const names = new Set(lexicalStructuralTypeParameterNames(node, visitorKeys));
+  let current: ESTree.Node | null = node;
+  while (current !== null && current.type !== "Program") {
+    if ("typeParameters" in current) {
+      for (const parameter of current.typeParameters?.params ?? []) {
+        names.add(parameter.name.name);
+      }
+    }
     current = current.parent;
   }
   return names;
