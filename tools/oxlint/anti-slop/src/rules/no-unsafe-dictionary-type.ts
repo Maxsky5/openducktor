@@ -4,10 +4,13 @@ import {
   classifyUnsafeDictionary,
   classifyUnsafeInterfaceHeritage,
   classifyUnsafeDictionaryValue,
-  createTypeEnvironment,
 } from "../shared/dictionary-types.ts";
-import { createImportedTypeResolver } from "../shared/imported-type-resolution.ts";
-import type { PortableTypeResolver } from "../shared/portable-type-resolution.ts";
+import { createLazyImportedTypeResolver } from "../shared/imported-type-resolution.ts";
+import {
+  createTypeEnvironment,
+  isBuiltInType,
+  type PortableTypeResolver,
+} from "../shared/portable-type-resolution.ts";
 
 import type { ESTree } from "@oxlint/plugins";
 
@@ -77,6 +80,33 @@ function isPlainAliasConsumerUse(
   return name !== null && environment.aliases.has(name) && !isInsideTypeAliasDeclaration(node);
 }
 
+function isDictionaryTransformSource(
+  node: ESTree.TSType,
+  visitorKeys: Readonly<Record<string, readonly string[]>>,
+): boolean {
+  let current: ESTree.Node = node;
+  while (current.parent !== null && current.parent.type !== "Program") {
+    const parent: ESTree.Node = current.parent;
+    if (parent.type === "TSTypeReference") {
+      const name = typeReferenceName(parent);
+      const source: ESTree.TSType | undefined = parent.typeArguments?.params[0];
+      if (
+        source !== undefined &&
+        (name === "Pick" || name === "Omit") &&
+        isBuiltInType(name, createTypeEnvironment(parent, visitorKeys))
+      ) {
+        let sourceAncestor: ESTree.Node | null = node;
+        while (sourceAncestor !== null && sourceAncestor !== parent) {
+          if (sourceAncestor === source) return true;
+          sourceAncestor = sourceAncestor.parent;
+        }
+      }
+    }
+    current = parent;
+  }
+  return false;
+}
+
 function shouldReportType(
   node: ESTree.TSType,
   visitorKeys: Readonly<Record<string, readonly string[]>>,
@@ -84,6 +114,7 @@ function shouldReportType(
 ): boolean {
   const environment = createTypeEnvironment(node, visitorKeys);
   if (isPlainAliasConsumerUse(node, environment)) return false;
+  if (isDictionaryTransformSource(node, visitorKeys)) return false;
   if (classifyUnsafeDictionary(node, environment, resolveImportedType) === null) return false;
   let current: ESTree.Node | null = node.parent;
   while (current !== null && current.type !== "Program") {
@@ -116,17 +147,7 @@ export const noUnsafeDictionaryTypeRule = defineRule({
     },
   },
   createOnce(context) {
-    let resolveImportedType: PortableTypeResolver | null = null;
-    const importedTypeResolver = (node: ESTree.Node): PortableTypeResolver => {
-      if (resolveImportedType !== null) return resolveImportedType;
-      let root = node;
-      while (root.parent !== null) root = root.parent;
-      resolveImportedType = createImportedTypeResolver(
-        context.filename,
-        root.type === "Program" ? root.body : [],
-      );
-      return resolveImportedType;
-    };
+    const importedTypeResolver = createLazyImportedTypeResolver(() => context.filename);
 
     const report = (node: ESTree.Node, value: string) => {
       context.report({ node, messageId: "unsafeDictionary", data: { value } });

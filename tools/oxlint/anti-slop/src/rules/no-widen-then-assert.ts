@@ -1,17 +1,17 @@
 import { defineRule } from "@oxlint/plugins";
 
-import {
-  classifyWideningTarget,
-  createTypeEnvironment,
-  isKnownEvidenceExpression,
-} from "../shared/dictionary-types.ts";
+import { isKnownEvidenceExpression } from "../shared/dictionary-types.ts";
 import { resolveVariable, singleVariableDeclarator } from "../shared/global-reference.ts";
-import { createImportedTypeResolver } from "../shared/imported-type-resolution.ts";
+import { createLazyImportedTypeResolver } from "../shared/imported-type-resolution.ts";
+import {
+  createTypeEnvironment,
+  type PortableTypeResolver,
+} from "../shared/portable-type-resolution.ts";
 import { unwrapTransparentExpression } from "../shared/transparent-expression.ts";
 import { isStableBinding } from "../shared/stable-binding.ts";
+import { classifyWideningTarget } from "../shared/widening-target.ts";
 
 import type { ESTree, SourceCode, Variable } from "@oxlint/plugins";
-import type { PortableTypeResolver } from "../shared/widening-target.ts";
 
 function hasKnownEvidence(
   sourceCode: SourceCode,
@@ -153,17 +153,7 @@ export const noWidenThenAssertRule = defineRule({
     },
   },
   createOnce(context) {
-    let resolveImportedType: PortableTypeResolver | null = null;
-    const importedTypeResolver = (node: ESTree.Node): PortableTypeResolver => {
-      if (resolveImportedType !== null) return resolveImportedType;
-      let root = node;
-      while (root.parent !== null) root = root.parent;
-      resolveImportedType = createImportedTypeResolver(
-        context.filename,
-        root.type === "Program" ? root.body : [],
-      );
-      return resolveImportedType;
-    };
+    const importedTypeResolver = createLazyImportedTypeResolver(() => context.filename);
     const checkAssertion = (node: ESTree.TSAsExpression | ESTree.TSTypeAssertion): void => {
       const visitorKeys = context.sourceCode.visitorKeys;
       const resolver = importedTypeResolver(node);

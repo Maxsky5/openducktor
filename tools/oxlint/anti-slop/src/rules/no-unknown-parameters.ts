@@ -1,12 +1,12 @@
 import { defineRule } from "@oxlint/plugins";
 import type { ESTree, SourceCode, Variable } from "@oxlint/plugins";
 
+import { typeResolvesToAny, typeResolvesToUnknown } from "../shared/dictionary-types.ts";
+import { createLazyImportedTypeResolver } from "../shared/imported-type-resolution.ts";
 import {
   createTypeEnvironment,
-  typeResolvesToAny,
-  typeResolvesToUnknown,
-} from "../shared/dictionary-types.ts";
-import { createImportedTypeResolver } from "../shared/imported-type-resolution.ts";
+  type PortableTypeResolver,
+} from "../shared/portable-type-resolution.ts";
 import { unwrapTransparentExpression } from "../shared/transparent-expression.ts";
 import { resolveVariable } from "../shared/global-reference.ts";
 import { isStableBinding } from "../shared/stable-binding.ts";
@@ -14,7 +14,6 @@ import {
   typePropertyPathResolvesToUnknown,
   type TypePropertyPathSegment,
 } from "../shared/type-property-path.ts";
-import type { PortableTypeResolver } from "../shared/portable-type-resolution.ts";
 
 type RuntimeFunction = ESTree.ArrowFunctionExpression | ESTree.Function;
 type StableAlias =
@@ -345,18 +344,7 @@ export const noUnknownParametersRule = defineRule({
   },
   createOnce(context) {
     const reportedParameters = new WeakSet<ESTree.TSTypeAnnotation>();
-    let resolveImportedType: PortableTypeResolver | null = null;
-
-    const importedTypeResolver = (node: ESTree.Node): PortableTypeResolver => {
-      if (resolveImportedType !== null) return resolveImportedType;
-      let root = node;
-      while (root.parent !== null) root = root.parent;
-      resolveImportedType = createImportedTypeResolver(
-        context.filename,
-        root.type === "Program" ? root.body : [],
-      );
-      return resolveImportedType;
-    };
+    const importedTypeResolver = createLazyImportedTypeResolver(() => context.filename);
 
     const report = (parameter: Parameter): void => {
       const annotation = parameterAnnotation(parameter);

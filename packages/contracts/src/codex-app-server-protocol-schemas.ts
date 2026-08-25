@@ -6,6 +6,11 @@ import {
 } from "./codex-app-server-request-schemas";
 import { jsonValueSchema } from "./json-types";
 
+const signedInt32Schema = z.number().int().min(-2_147_483_648).max(2_147_483_647);
+const signedInt64Schema = z.number().int();
+const unsignedInt16Schema = z.number().int().nonnegative().max(65_535);
+const unsignedInt32Schema = z.number().int().nonnegative().max(4_294_967_295);
+
 export const codexAppServerCommandActionSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("read"),
@@ -361,7 +366,7 @@ const codexAppServerSubAgentSourceSchema = z.union([
   z.object({
     thread_spawn: z.object({
       parent_thread_id: z.string(),
-      depth: z.number(),
+      depth: signedInt32Schema,
       agent_path: z.string().nullable(),
       agent_nickname: z.string().nullable(),
       agent_role: z.string().nullable(),
@@ -396,8 +401,8 @@ const codexAppServerMemoryCitationSchema = z.object({
   entries: z.array(
     z.object({
       path: z.string(),
-      lineStart: z.number(),
-      lineEnd: z.number(),
+      lineStart: unsignedInt32Schema,
+      lineEnd: unsignedInt32Schema,
       note: z.string(),
     }),
   ),
@@ -486,8 +491,8 @@ export const codexAppServerThreadItemSchema = z.discriminatedUnion("type", [
     status: z.enum(["inProgress", "completed", "failed", "declined"]),
     commandActions: z.array(codexAppServerCommandActionSchema),
     aggregatedOutput: z.string().nullable(),
-    exitCode: z.number().nullable(),
-    durationMs: z.number().nullable(),
+    exitCode: signedInt32Schema.nullable(),
+    durationMs: signedInt64Schema.nullable(),
   }),
   z.object({
     type: z.literal("fileChange"),
@@ -522,7 +527,7 @@ export const codexAppServerThreadItemSchema = z.discriminatedUnion("type", [
       })
       .nullable(),
     error: z.object({ message: z.string() }).nullable(),
-    durationMs: z.number().nullable(),
+    durationMs: signedInt64Schema.nullable(),
   }),
   z.object({
     type: z.literal("dynamicToolCall"),
@@ -533,7 +538,7 @@ export const codexAppServerThreadItemSchema = z.discriminatedUnion("type", [
     status: z.enum(["inProgress", "completed", "failed"]),
     contentItems: z.array(codexAppServerDynamicToolCallOutputContentItemSchema).nullable(),
     success: z.boolean().nullable(),
-    durationMs: z.number().nullable(),
+    durationMs: signedInt64Schema.nullable(),
   }),
   z.object({
     type: z.literal("collabAgentToolCall"),
@@ -578,7 +583,7 @@ export const codexAppServerThreadItemSchema = z.discriminatedUnion("type", [
       .object({
         type: z.literal("usageLimitExceeded"),
         limitId: z.string(),
-        resetsAt: z.number().nullable(),
+        resetsAt: signedInt64Schema.nullable(),
       })
       .nullable(),
     savedPath: z.string().optional(),
@@ -605,10 +610,18 @@ const codexAppServerCodexErrorInfoSchema = z.union([
     "sandboxError",
     "other",
   ]),
-  z.object({ httpConnectionFailed: z.object({ httpStatusCode: z.number().nullable() }) }),
-  z.object({ responseStreamConnectionFailed: z.object({ httpStatusCode: z.number().nullable() }) }),
-  z.object({ responseStreamDisconnected: z.object({ httpStatusCode: z.number().nullable() }) }),
-  z.object({ responseTooManyFailedAttempts: z.object({ httpStatusCode: z.number().nullable() }) }),
+  z.object({
+    httpConnectionFailed: z.object({ httpStatusCode: unsignedInt16Schema.nullable() }),
+  }),
+  z.object({
+    responseStreamConnectionFailed: z.object({ httpStatusCode: unsignedInt16Schema.nullable() }),
+  }),
+  z.object({
+    responseStreamDisconnected: z.object({ httpStatusCode: unsignedInt16Schema.nullable() }),
+  }),
+  z.object({
+    responseTooManyFailedAttempts: z.object({ httpStatusCode: unsignedInt16Schema.nullable() }),
+  }),
   z.object({ activeTurnNotSteerable: z.object({ turnKind: z.enum(["review", "compact"]) }) }),
 ]);
 
@@ -623,13 +636,13 @@ const codexAppServerTurnErrorSchema = z.object({
 export type CodexAppServerTurnError = z.output<typeof codexAppServerTurnErrorSchema>;
 
 export const codexAppServerTurnSchema = z.object({
-  completedAt: z.number().nullable(),
-  durationMs: z.number().nullable(),
+  completedAt: signedInt64Schema.nullable(),
+  durationMs: signedInt64Schema.nullable(),
   error: codexAppServerTurnErrorSchema.nullable(),
   id: z.string(),
   items: z.array(codexAppServerThreadItemSchema),
   itemsView: z.enum(["full", "notLoaded", "summary"]),
-  startedAt: z.number().nullable(),
+  startedAt: signedInt64Schema.nullable(),
   status: z.enum(["completed", "interrupted", "failed", "inProgress"]),
 });
 
@@ -644,13 +657,13 @@ const codexAppServerThreadSchema = z.object({
   preview: z.string(),
   ephemeral: z.boolean(),
   section: codexAppServerThreadSectionSchema.nullable(),
-  sectionEnteredAt: z.number().nullable(),
+  sectionEnteredAt: signedInt64Schema.nullable(),
   projectId: z.string().nullable(),
   historyMode: z.enum(["legacy", "paginated"]),
   modelProvider: z.string(),
-  createdAt: z.number(),
-  updatedAt: z.number(),
-  recencyAt: z.number().nullable(),
+  createdAt: signedInt64Schema,
+  updatedAt: signedInt64Schema,
+  recencyAt: signedInt64Schema.nullable(),
   status: codexAppServerThreadStatusSchema,
   path: z.string().nullable(),
   cwd: z.string(),
@@ -733,7 +746,7 @@ const codexAppServerModelSchema = z.object({
       upgradeCopy: z.string().nullable(),
       modelLink: z.string().nullable(),
       migrationMarkdown: z.string().nullable(),
-      retirementAt: z.number().nullable(),
+      retirementAt: signedInt64Schema.nullable(),
     })
     .nullable(),
 });
@@ -844,8 +857,8 @@ const codexAppServerRequestResultSchemas = {
         path: z.string(),
         match_type: z.enum(["file", "directory"]),
         file_name: z.string(),
-        score: z.number(),
-        indices: z.array(z.number()).nullable(),
+        score: unsignedInt32Schema,
+        indices: z.array(unsignedInt32Schema).nullable(),
       }),
     ),
   }),

@@ -50,6 +50,18 @@ tester.run("anti-slop/no-unknown-returns", noUnknownReturnsRule, {
       errors: [error],
     },
     {
+      code: 'function load(): Record<string, unknown>["key"] { return input; }',
+      errors: [error],
+    },
+    {
+      code: "function load(): ReadonlyArray<unknown>[0] { return input; }",
+      errors: [error],
+    },
+    {
+      code: 'type Key = "key"; function load(): Record<string, unknown>[Key] { return input; }',
+      errors: [error],
+    },
+    {
       code: "function owner() { type Payload = unknown; const load = (): Payload => value; }",
       errors: [error],
     },
@@ -77,6 +89,16 @@ tester.run("anti-slop/no-unknown-returns", noUnknownReturnsRule, {
     {
       filename: importedTypeFixtureFilename,
       code: "import type { UnknownArray } from './no-known-value-widening-types'; function unsafe(): Promise<UnknownArray[number]> { return input; }",
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: "import type { InputKey } from './no-known-value-widening-types'; function unsafe(): Promise<Record<string, unknown>[InputKey]> { return input; }",
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: "import type { Identity } from './no-known-value-widening-types'; type LocalUnknown = unknown; function unsafe(): Identity<LocalUnknown> { return input; }",
       errors: [error],
     },
   ],

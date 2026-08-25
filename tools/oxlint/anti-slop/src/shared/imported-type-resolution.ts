@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import type { ESTree } from "@oxlint/plugins";
 import { parseSync } from "oxc-parser";
 import ts from "typescript";
 
@@ -351,4 +352,21 @@ export function createImportedTypeResolver(
     statements,
   };
   return importedTypeResolver(containingFile, module, new Set());
+}
+
+/** Create import resolution once, when a rule first inspects a node. */
+export function createLazyImportedTypeResolver(
+  getContainingFile: () => string,
+): (node: ESTree.Node) => PortableTypeResolver {
+  let resolver: PortableTypeResolver | null = null;
+  return (node) => {
+    if (resolver !== null) return resolver;
+    let root = node;
+    while (root.parent !== null) root = root.parent;
+    resolver = createImportedTypeResolver(
+      getContainingFile(),
+      root.type === "Program" ? root.body : [],
+    );
+    return resolver;
+  };
 }

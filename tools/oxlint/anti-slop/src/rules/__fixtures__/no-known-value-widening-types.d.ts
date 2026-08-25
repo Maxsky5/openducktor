@@ -19,6 +19,11 @@ export type UnknownArray = ReadonlyArray<unknown>;
 export type AnyAlias = any;
 export type PickedUnknownPayload = Pick<UnknownPayload, "input">;
 export type BroadObject = object;
+export type Identity<Value> = Value;
+export type InputKey = "input";
+export type StringKey = string;
+type Value = object;
+export type ModuleObject = Value;
 export interface KnownOwner {
   readonly id: string;
 }

@@ -34,6 +34,8 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
     `${prelude} type Commands = { readonly start: Command }; const commands: Commands = { start: startCommand };`,
     `${prelude} type PermissionLevels = { readonly [Level in Permission]: number }; const levels: PermissionLevels = { admin: 1 };`,
     `${prelude} const commands: Record<'start', Command> = { start: startCommand };`,
+    `${prelude} const commands: Pick<Record<string, Command>, 'start'> = { start: startCommand };`,
+    `${prelude} const commands: Omit<Record<string, Command>, string> = {};`,
     `${prelude} function create() { return { start: startCommand }; }`,
     `${prelude} interface Commands { readonly start: Command } function create(): Commands { return { start: startCommand }; }`,
     `${prelude} declare function make(): Record<string, Command>; const commands: Record<string, Command> = make();`,
@@ -44,6 +46,10 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
     {
       filename: importedTypeFixtureFilename,
       code: `${prelude} import type { OpenCommandsByKey } from './no-known-value-widening-types'; const commands: OpenCommandsByKey<'start'> = { start: startCommand };`,
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type { InputKey } from './no-known-value-widening-types'; const commands: Pick<Record<string, Command>, InputKey> = { start: startCommand };`,
     },
     {
       filename: importedTypeFixtureFilename,
@@ -72,6 +78,14 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
     },
     {
       code: `${prelude} const commands: { [K in string]: Command } = { start: startCommand };`,
+      errors: [error],
+    },
+    {
+      code: `${prelude} const commands: Pick<Record<string, Command>, string> = { start: startCommand };`,
+      errors: [error],
+    },
+    {
+      code: `${prelude} const commands: Omit<Record<string, Command>, 'reserved'> = { start: startCommand };`,
       errors: [error],
     },
     {
@@ -223,6 +237,11 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
     {
       filename: importedTypeFixtureFilename,
       code: `${prelude} import type { OpenCommandsByKey } from './no-known-value-widening-types'; const commands: OpenCommandsByKey<string> = { start: startCommand };`,
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type { StringKey } from './no-known-value-widening-types'; const commands: Pick<Record<string, Command>, StringKey> = { start: startCommand };`,
       errors: [error],
     },
     {

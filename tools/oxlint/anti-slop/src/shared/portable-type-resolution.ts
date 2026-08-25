@@ -48,6 +48,8 @@ export type PortableTypeEnvironment = {
 
 export type PortableTypeArgument = {
   readonly environment: PortableTypeEnvironment;
+  readonly resolveImportedType: PortableTypeResolver | undefined;
+  readonly substitutions: TypeSubstitutions;
   readonly type: PortableTSType;
 };
 
@@ -385,27 +387,26 @@ export function isUnappliedReferenceTo(type: PortableTSType, name: string): bool
 
 export function resolvedSubstitutionArgument(
   scopedType: PortableTypeArgument,
-  base: TypeSubstitutions,
   resolving: ReadonlySet<string> = new Set(),
 ): PortableTypeArgument {
   const unwrapped = unwrapTransparentType(scopedType.type);
   if (unwrapped.type !== "TSTypeReference") return scopedType;
   const name = typeReferenceName(unwrapped);
   if (name === null || resolving.has(name)) return scopedType;
-  const substitution = base.get(name);
+  const substitution = scopedType.substitutions.get(name);
   if (substitution === undefined) return scopedType;
   const nextResolving = new Set(resolving);
   nextResolving.add(name);
-  return resolvedSubstitutionArgument(substitution, base, nextResolving);
+  return resolvedSubstitutionArgument(substitution, nextResolving);
 }
 
 export function typeParameterSubstitution(
   parameters: NonNullable<PortableTSTypeAliasDeclaration["typeParameters"]>["params"],
   arguments_: readonly PortableTypeArgument[],
   defaultEnvironment: PortableTypeEnvironment,
-  base: TypeSubstitutions,
+  resolveImportedType?: PortableTypeResolver,
 ): TypeSubstitutions | null {
-  const next = new Map(base);
+  const next = new Map<string, PortableTypeArgument>();
   for (const [index, parameter] of parameters.entries()) {
     const suppliedArgument = arguments_[index];
     const defaultArgument = parameter.default;
@@ -414,9 +415,14 @@ export function typeParameterSubstitution(
       argument = suppliedArgument;
     } else {
       if (defaultArgument === null || defaultArgument === undefined) return null;
-      argument = { type: defaultArgument, environment: defaultEnvironment };
+      argument = {
+        environment: defaultEnvironment,
+        resolveImportedType,
+        substitutions: new Map(next),
+        type: defaultArgument,
+      };
     }
-    next.set(parameter.name.name, resolvedSubstitutionArgument(argument, next));
+    next.set(parameter.name.name, resolvedSubstitutionArgument(argument));
   }
   return next;
 }
@@ -425,13 +431,13 @@ export function aliasSubstitution(
   alias: PortableTSTypeAliasDeclaration,
   arguments_: readonly PortableTypeArgument[],
   defaultEnvironment: PortableTypeEnvironment,
-  base: TypeSubstitutions,
+  resolveImportedType?: PortableTypeResolver,
 ): TypeSubstitutions | null {
   return typeParameterSubstitution(
     alias.typeParameters?.params ?? [],
     arguments_,
     defaultEnvironment,
-    base,
+    resolveImportedType,
   );
 }
 
@@ -439,9 +445,15 @@ export function scopedTypeArguments(
   type: PortableTSTypeReference,
   environment: PortableTypeEnvironment,
   substitutions: TypeSubstitutions = new Map(),
+  resolveImportedType?: PortableTypeResolver,
 ): readonly PortableTypeArgument[] {
   return (type.typeArguments?.params ?? []).map((argument) =>
-    resolvedSubstitutionArgument({ environment, type: argument }, substitutions),
+    resolvedSubstitutionArgument({
+      environment,
+      resolveImportedType,
+      substitutions,
+      type: argument,
+    }),
   );
 }
 
@@ -522,7 +534,7 @@ export function resolveTypeReference(
 ): readonly ResolvedPortableType[] {
   return resolveNamedTypes(
     typeNameParts(type.typeName),
-    scopedTypeArguments(type, environment, substitutions),
+    scopedTypeArguments(type, environment, substitutions, resolveImportedType),
     environment,
     resolveImportedType,
   );
@@ -536,76 +548,14 @@ export function resolveInterfaceHeritage(
 ): readonly ResolvedPortableType[] {
   const parts = expressionTypeNameParts(heritage.expression);
   const arguments_ = (heritage.typeArguments?.params ?? []).map((argument) =>
-    resolvedSubstitutionArgument({ environment, type: argument }, substitutions),
+    resolvedSubstitutionArgument({
+      environment,
+      resolveImportedType,
+      substitutions,
+      type: argument,
+    }),
   );
   return resolveNamedTypes(parts, arguments_, environment, resolveImportedType);
-}
-
-/** Return whether a mapped/index key accepts an arbitrary property key. */
-export function isBroadPropertyKey(
-  type: PortableTSType,
-  environment: PortableTypeEnvironment,
-  substitutions: TypeSubstitutions,
-  resolveImportedType?: PortableTypeResolver,
-  resolving: ReadonlySet<string> = new Set(),
-): boolean {
-  const unwrapped = unwrapTransparentType(type);
-  if (
-    unwrapped.type === "TSStringKeyword" ||
-    unwrapped.type === "TSNumberKeyword" ||
-    unwrapped.type === "TSSymbolKeyword"
-  ) {
-    return true;
-  }
-  if (unwrapped.type === "TSUnionType") {
-    return unwrapped.types.some((member) =>
-      isBroadPropertyKey(member, environment, substitutions, resolveImportedType, resolving),
-    );
-  }
-  if (unwrapped.type !== "TSTypeReference") return false;
-  const name = typeReferenceName(unwrapped);
-  if (name !== null) {
-    const substitution = substitutions.get(name);
-    if (substitution !== undefined && !isUnappliedReferenceTo(substitution.type, name)) {
-      return isBroadPropertyKey(
-        substitution.type,
-        substitution.environment,
-        substitutions,
-        resolveImportedType,
-        resolving,
-      );
-    }
-    if (name === "PropertyKey" && isBuiltInType(name, environment)) return true;
-  }
-  for (const resolved of resolveTypeReference(
-    unwrapped,
-    environment,
-    substitutions,
-    resolveImportedType,
-  )) {
-    if (resolved.kind !== "alias") continue;
-    const nextResolving = enterTypeResolution(resolving, resolved.key, "property-key");
-    if (nextResolving === null) continue;
-    const aliasSubstitutions = aliasSubstitution(
-      resolved.declaration,
-      resolved.arguments,
-      resolved.environment,
-      substitutions,
-    );
-    if (
-      aliasSubstitutions !== null &&
-      isBroadPropertyKey(
-        resolved.declaration.typeAnnotation,
-        resolved.environment,
-        aliasSubstitutions,
-        resolved.resolveImportedType,
-        nextResolving,
-      )
-    ) {
-      return true;
-    }
-  }
-  return false;
 }
 
 /** Add a stable declaration and query key to a cycle trail. */

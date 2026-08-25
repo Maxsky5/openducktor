@@ -46,6 +46,12 @@ tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
     "type Box<T> = { [T in string]: T }; type Safe = Box<any>;",
     "type T = object; type Box = { [T in string]: T };",
     'class Escape { id = "x" } interface Escape {} type Safe = Record<string, Escape>;',
+    'type Safe = Pick<Record<string, object>, "only">;',
+    "type Safe = Omit<Record<string, object>, string>;",
+    {
+      filename: importedTypeFixtureFilename,
+      code: "import type { InputKey } from './no-known-value-widening-types'; type Safe = Pick<Record<string, object>, InputKey>;",
+    },
   ],
   invalid: [
     { code: "type A = { [key: string]: any };", errors: [error] },
@@ -117,6 +123,24 @@ tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
     {
       filename: importedTypeFixtureFilename,
       code: "import type { BroadObject } from './no-known-value-widening-types'; type Unsafe = Record<string, BroadObject>;",
+      errors: [error],
+    },
+    {
+      code: "type Unsafe = Pick<Record<string, object>, string>;",
+      errors: [error],
+    },
+    {
+      code: 'type Unsafe = Omit<Record<string, object>, "reserved">;',
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: "import type { Identity } from './no-known-value-widening-types'; type Unsafe = Identity<Record<string, object>>;",
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: "import type { StringKey } from './no-known-value-widening-types'; type Unsafe = Pick<Record<string, object>, StringKey>;",
       errors: [error],
     },
   ],

@@ -1,6 +1,12 @@
 import type { ESTree } from "@oxlint/plugins";
 
 import type { PortableAst, PortableClass, PortableTSType } from "./portable-ast.ts";
+import {
+  propertyKeyDomainIncludes,
+  propertyKeyDomainIsBroad,
+  resolveOpenDictionaryKeyDomain,
+  resolvePropertyKeyDomain,
+} from "./property-key-domain.ts";
 
 import {
   aliasSubstitution,
@@ -23,14 +29,7 @@ import {
   type TypeSubstitutions,
 } from "./portable-type-resolution.ts";
 
-export { createTypeEnvironment } from "./portable-type-resolution.ts";
-export type { PortableTypeEnvironment as TypeEnvironment } from "./portable-type-resolution.ts";
-export { classifyWideningTarget } from "./widening-target.ts";
-export type { WideningTarget } from "./widening-target.ts";
-
-type ResolvedType = PortableTypeArgument & {
-  readonly substitutions: TypeSubstitutions;
-};
+type ResolvedType = PortableTypeArgument;
 
 type ResolvedAliasState = {
   readonly resolving: ReadonlySet<string>;
@@ -44,7 +43,6 @@ export type UnsafeDictionary = {
 
 function resolvedAliasState(
   resolved: Extract<ResolvedPortableType, { kind: "alias" }>,
-  substitutions: TypeSubstitutions,
   resolving: ReadonlySet<string>,
   query: string,
 ): ResolvedAliasState | null {
@@ -54,7 +52,7 @@ function resolvedAliasState(
     resolved.declaration,
     resolved.arguments,
     resolved.environment,
-    substitutions,
+    resolved.resolveImportedType,
   );
   return nextSubstitutions === null
     ? null
@@ -116,9 +114,9 @@ function typeResolvesToObjectWithState(
     return typeResolvesToObjectWithState(
       substitution.type,
       substitution.environment,
-      substitutions,
+      substitution.substitutions,
       resolving,
-      resolveImportedType,
+      substitution.resolveImportedType,
     );
   }
   const name = typeReferenceName(unwrapped);
@@ -138,7 +136,7 @@ function typeResolvesToObjectWithState(
   return resolveTypeReference(unwrapped, environment, substitutions, resolveImportedType).some(
     (resolved) => {
       if (resolved.kind !== "alias") return false;
-      const state = resolvedAliasState(resolved, substitutions, resolving, "object");
+      const state = resolvedAliasState(resolved, resolving, "object");
       return (
         state !== null &&
         typeResolvesToObjectWithState(
@@ -183,7 +181,7 @@ function isEffectivelyEmptyInterface(
       declaration.typeParameters?.params ?? [],
       resolved.arguments,
       resolved.environment,
-      new Map(),
+      resolved.resolveImportedType,
     );
     if (substitutions === null) return false;
     return declaration.extends.every((heritage) => {
@@ -271,9 +269,9 @@ function unsafeDirectValue(
     return unsafeDirectValue(
       substitution.type,
       substitution.environment,
-      substitutions,
+      substitution.substitutions,
       resolving,
-      resolveImportedType,
+      substitution.resolveImportedType,
     );
   }
   const name = typeReferenceName(unwrapped);
@@ -300,7 +298,7 @@ function unsafeDirectValue(
     if (resolved.kind === "interface") {
       return isEffectivelyEmptyInterface(resolved, resolving) ? "empty-object" : null;
     }
-    const state = resolvedAliasState(resolved, substitutions, resolving, "unsafe-value");
+    const state = resolvedAliasState(resolved, resolving, "unsafe-value");
     if (state === null) continue;
     const unsafe = unsafeDirectValue(
       resolved.declaration.typeAnnotation,
@@ -325,11 +323,26 @@ function dictionaryValueTypes(
   if (unwrapped.type === "TSTypeLiteral") {
     return unwrapped.members.flatMap((member): readonly ResolvedType[] =>
       member.type === "TSIndexSignature" && member.typeAnnotation !== null
-        ? [{ type: member.typeAnnotation.typeAnnotation, environment, substitutions }]
+        ? [
+            {
+              type: member.typeAnnotation.typeAnnotation,
+              environment,
+              resolveImportedType,
+              substitutions,
+            },
+          ]
         : [],
     );
   }
   if (unwrapped.type === "TSMappedType") {
+    const keyDomain = resolvePropertyKeyDomain(
+      unwrapped.constraint,
+      environment,
+      substitutions,
+      resolveImportedType,
+      resolving,
+    );
+    if (!propertyKeyDomainIsBroad(keyDomain)) return [];
     const valueSubstitutions = new Map(substitutions);
     valueSubstitutions.delete(unwrapped.key.name);
     const valueEnvironment = withoutVisibleTypeName(environment, unwrapped.key.name);
@@ -339,6 +352,7 @@ function dictionaryValueTypes(
           {
             type: unwrapped.typeAnnotation,
             environment: valueEnvironment,
+            resolveImportedType,
             substitutions: valueSubstitutions,
           },
         ];
@@ -349,9 +363,9 @@ function dictionaryValueTypes(
     return dictionaryValueTypes(
       substitution.type,
       substitution.environment,
-      substitutions,
+      substitution.substitutions,
       resolving,
-      resolveImportedType,
+      substitution.resolveImportedType,
     );
   }
   const name = typeReferenceName(unwrapped);
@@ -362,19 +376,32 @@ function dictionaryValueTypes(
       : dictionaryValueTypes(wrapped, environment, substitutions, resolving, resolveImportedType);
   }
   if (name === "Record" && isBuiltInType(name, environment)) {
-    const value = unwrapped.typeArguments?.params[1];
-    return value === undefined ? [] : [{ type: value, environment, substitutions }];
+    const [key, value] = unwrapped.typeArguments?.params ?? [];
+    const keyDomain =
+      key === undefined
+        ? null
+        : resolvePropertyKeyDomain(key, environment, substitutions, resolveImportedType, resolving);
+    return value === undefined || keyDomain === null || !propertyKeyDomainIsBroad(keyDomain)
+      ? []
+      : [{ type: value, environment, resolveImportedType, substitutions }];
   }
   if ((name === "Pick" || name === "Omit") && isBuiltInType(name, environment)) {
     const source = unwrapped.typeArguments?.params[0];
-    return source === undefined
+    const remainingKeys = resolveOpenDictionaryKeyDomain(
+      unwrapped,
+      environment,
+      substitutions,
+      resolveImportedType,
+      resolving,
+    );
+    return source === undefined || !propertyKeyDomainIsBroad(remainingKeys)
       ? []
       : dictionaryValueTypes(source, environment, substitutions, resolving, resolveImportedType);
   }
   return resolveTypeReference(unwrapped, environment, substitutions, resolveImportedType).flatMap(
     (resolved): readonly ResolvedType[] => {
       if (resolved.kind !== "alias") return [];
-      const state = resolvedAliasState(resolved, substitutions, resolving, "dictionary-values");
+      const state = resolvedAliasState(resolved, resolving, "dictionary-values");
       return state === null
         ? []
         : dictionaryValueTypes(
@@ -420,7 +447,7 @@ export function classifyUnsafeDictionary(
       valueType.environment,
       valueType.substitutions,
       new Set(),
-      resolveImportedType,
+      valueType.resolveImportedType,
     );
     if (unsafeValue !== null) return { kind: "unsafe-dictionary", unsafeValue };
   }
@@ -452,7 +479,7 @@ export function classifyUnsafeInterfaceHeritage(
     resolveImportedType,
   )) {
     if (resolved.kind !== "alias") continue;
-    const state = resolvedAliasState(resolved, new Map(), new Set(), "dictionary-heritage");
+    const state = resolvedAliasState(resolved, new Set(), "dictionary-heritage");
     if (state === null) continue;
     for (const valueType of dictionaryValueTypes(
       resolved.declaration.typeAnnotation,
@@ -466,7 +493,7 @@ export function classifyUnsafeInterfaceHeritage(
         valueType.environment,
         valueType.substitutions,
         new Set(),
-        resolved.resolveImportedType,
+        valueType.resolveImportedType,
       );
       if (unsafeValue !== null) return { kind: "unsafe-dictionary", unsafeValue };
     }
@@ -476,7 +503,7 @@ export function classifyUnsafeInterfaceHeritage(
 
 function indexedValueResolvesToUnknown(
   objectType: PortableTSType,
-  indexType: PortableTSType,
+  indexType: PortableTypeArgument,
   environment: PortableTypeEnvironment,
   substitutions: TypeSubstitutions,
   resolving: ReadonlySet<string>,
@@ -490,17 +517,26 @@ function indexedValueResolvesToUnknown(
       substitution.type,
       indexType,
       substitution.environment,
-      substitutions,
+      substitution.substitutions,
       resolving,
-      resolveImportedType,
+      substitution.resolveImportedType,
     );
   }
   const name = typeReferenceName(object);
-  const index = unwrapTransparentType(indexType);
+  const indexDomain = resolvePropertyKeyDomain(
+    indexType.type,
+    indexType.environment,
+    indexType.substitutions,
+    indexType.resolveImportedType,
+    resolving,
+  );
   if (
     (name === "Array" || name === "ReadonlyArray") &&
     isBuiltInType(name, environment) &&
-    index.type === "TSNumberKeyword"
+    propertyKeyDomainIncludes(
+      { numbers: true, strings: false, symbols: false, values: new Set() },
+      indexDomain,
+    )
   ) {
     const value = object.typeArguments?.params[0];
     return (
@@ -514,11 +550,15 @@ function indexedValueResolvesToUnknown(
       )
     );
   }
-  if (name === "Record" && isBuiltInType(name, environment) && index.type === "TSStringKeyword") {
+  if (name === "Record" && isBuiltInType(name, environment)) {
     const [key, value] = object.typeArguments?.params ?? [];
     return (
-      key?.type === "TSStringKeyword" &&
+      key !== undefined &&
       value !== undefined &&
+      propertyKeyDomainIncludes(
+        resolvePropertyKeyDomain(key, environment, substitutions, resolveImportedType, resolving),
+        indexDomain,
+      ) &&
       typeResolvesToUnknownWithState(
         value,
         environment,
@@ -531,7 +571,7 @@ function indexedValueResolvesToUnknown(
   return resolveTypeReference(object, environment, substitutions, resolveImportedType).some(
     (resolved) => {
       if (resolved.kind !== "alias") return false;
-      const state = resolvedAliasState(resolved, substitutions, resolving, "indexed-unknown");
+      const state = resolvedAliasState(resolved, resolving, "indexed-unknown");
       return (
         state !== null &&
         indexedValueResolvesToUnknown(
@@ -581,9 +621,9 @@ function typeResolvesToAnyWithState(
     return typeResolvesToAnyWithState(
       substitution.type,
       substitution.environment,
-      substitutions,
+      substitution.substitutions,
       resolving,
-      resolveImportedType,
+      substitution.resolveImportedType,
     );
   }
   const name = typeReferenceName(unwrapped);
@@ -597,7 +637,7 @@ function typeResolvesToAnyWithState(
   return resolveTypeReference(unwrapped, environment, substitutions, resolveImportedType).some(
     (resolved) => {
       if (resolved.kind !== "alias") return false;
-      const state = resolvedAliasState(resolved, substitutions, resolving, "any");
+      const state = resolvedAliasState(resolved, resolving, "any");
       return (
         state !== null &&
         typeResolvesToAnyWithState(
@@ -638,7 +678,12 @@ function typeResolvesToUnknownWithState(
   if (unwrapped.type === "TSIndexedAccessType") {
     return indexedValueResolvesToUnknown(
       unwrapped.objectType,
-      unwrapped.indexType,
+      {
+        environment,
+        resolveImportedType,
+        substitutions,
+        type: unwrapped.indexType,
+      },
       environment,
       substitutions,
       resolving,
@@ -662,9 +707,9 @@ function typeResolvesToUnknownWithState(
     return typeResolvesToUnknownWithState(
       substitution.type,
       substitution.environment,
-      substitutions,
+      substitution.substitutions,
       resolving,
-      resolveImportedType,
+      substitution.resolveImportedType,
     );
   }
   const name = typeReferenceName(unwrapped);
@@ -684,7 +729,7 @@ function typeResolvesToUnknownWithState(
   return resolveTypeReference(unwrapped, environment, substitutions, resolveImportedType).some(
     (resolved) => {
       if (resolved.kind !== "alias") return false;
-      const state = resolvedAliasState(resolved, substitutions, resolving, "unknown");
+      const state = resolvedAliasState(resolved, resolving, "unknown");
       return (
         state !== null &&
         typeResolvesToUnknownWithState(

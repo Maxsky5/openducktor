@@ -190,6 +190,10 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
       errors: [error],
     },
     {
+      code: "type InputKey = 'input'; function unsafe({ input }: Pick<{ input: unknown; other: string }, InputKey>) { return input; }",
+      errors: [error],
+    },
+    {
       code: "function unsafe({ input }: { input: unknown } | { input: string }) { return input; }",
       errors: [error],
     },
@@ -226,6 +230,11 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     },
     {
       filename: importedTypeFixtureFilename,
+      code: "import type { InputKey, UnknownPayload } from './no-known-value-widening-types'; function unsafe({ input }: Pick<UnknownPayload, InputKey>) { return input; }",
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
       code: "import type { UnknownArray } from './no-known-value-widening-types'; function unsafe(input: unknown): UnknownArray[number] { return input; }",
       errors: [error],
     },
@@ -236,6 +245,11 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     {
       filename: importedTypeFixtureFilename,
       code: "import type { AnyAlias } from './no-known-value-widening-types'; function unsafe(input: unknown): AnyAlias { return input; }",
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: "import type { Identity } from './no-known-value-widening-types'; type LocalAny = any; function unsafe(input: unknown): Identity<LocalAny> { return input; }",
       errors: [error],
     },
   ],

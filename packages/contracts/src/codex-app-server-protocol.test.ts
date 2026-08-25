@@ -24,6 +24,8 @@ import {
   codexAppServerMcpServerElicitationRequestParamsSchema,
   codexAppServerPermissionsRequestApprovalParamsSchema,
   codexAppServerRequestPermissionProfileSchema,
+  codexAppServerThreadItemSchema,
+  codexAppServerTurnSchema,
 } from "./codex-app-server-protocol-schemas";
 import {
   codexAppServerRuntimeNotificationSchema,
@@ -58,7 +60,7 @@ describe("Codex app-server protocol", () => {
           path: "src/main.ts",
           match_type: "file",
           file_name: "main.ts",
-          score: 9.75,
+          score: 9,
           indices: [0, 1, 2],
         },
       ],
@@ -84,6 +86,18 @@ describe("Codex app-server protocol", () => {
 
     expect(jsonValueSchema.safeParse(invalidResponse).success).toBe(true);
     expect(() => parseCodexAppServerRequestResult("fuzzyFileSearch", invalidResponse)).toThrow();
+    for (const score of [-1, 1.5, 4_294_967_296]) {
+      expect(() =>
+        parseCodexAppServerRequestResult("fuzzyFileSearch", {
+          files: [{ ...invalidResponse.files[0], score, indices: [0] }],
+        }),
+      ).toThrow();
+    }
+    expect(() =>
+      parseCodexAppServerRequestResult("fuzzyFileSearch", {
+        files: [{ ...invalidResponse.files[0], score: 1, indices: [-1] }],
+      }),
+    ).toThrow();
   });
 
   test("parses every experimental thread/start field", () => {
@@ -426,6 +440,88 @@ describe("Codex app-server protocol", () => {
         },
       }).success,
     ).toBe(false);
+    const commandExecutionItem = {
+      type: "commandExecution",
+      id: "command-1",
+      pluginId: null,
+      scriptPath: null,
+      command: "git status",
+      cwd: "/repo",
+      processId: null,
+      source: "agent",
+      status: "completed",
+      commandActions: [],
+      aggregatedOutput: "",
+      exitCode: 0,
+      durationMs: 1,
+    } as const;
+    expect(codexAppServerThreadItemSchema.safeParse(commandExecutionItem).success).toBe(true);
+    expect(
+      codexAppServerThreadItemSchema.safeParse({ ...commandExecutionItem, exitCode: 0.5 }).success,
+    ).toBe(false);
+    expect(
+      codexAppServerThreadItemSchema.safeParse({
+        ...commandExecutionItem,
+        exitCode: 2_147_483_648,
+      }).success,
+    ).toBe(false);
+    expect(
+      codexAppServerThreadItemSchema.safeParse({ ...commandExecutionItem, durationMs: 1.5 })
+        .success,
+    ).toBe(false);
+    const agentMessageItem = {
+      type: "agentMessage",
+      id: "message-1",
+      text: "Done",
+      phase: "final_answer",
+      memoryCitation: {
+        entries: [{ path: "src/index.ts", lineStart: 1, lineEnd: 2, note: "source" }],
+        threadIds: [],
+      },
+    } as const;
+    expect(codexAppServerThreadItemSchema.safeParse(agentMessageItem).success).toBe(true);
+    expect(
+      codexAppServerThreadItemSchema.safeParse({
+        ...agentMessageItem,
+        memoryCitation: {
+          ...agentMessageItem.memoryCitation,
+          entries: [{ ...agentMessageItem.memoryCitation.entries[0], lineStart: -1 }],
+        },
+      }).success,
+    ).toBe(false);
+    const turn = {
+      completedAt: null,
+      durationMs: null,
+      error: {
+        message: "Unavailable",
+        codexErrorInfo: { httpConnectionFailed: { httpStatusCode: 503 } },
+        additionalDetails: null,
+      },
+      id: "turn-1",
+      items: [],
+      itemsView: "full",
+      startedAt: 1,
+      status: "failed",
+    } as const;
+    expect(codexAppServerTurnSchema.safeParse(turn).success).toBe(true);
+    expect(
+      codexAppServerTurnSchema.safeParse({
+        ...turn,
+        error: {
+          ...turn.error,
+          codexErrorInfo: { httpConnectionFailed: { httpStatusCode: -1 } },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      codexAppServerTurnSchema.safeParse({
+        ...turn,
+        error: {
+          ...turn.error,
+          codexErrorInfo: { httpConnectionFailed: { httpStatusCode: 65_536 } },
+        },
+      }).success,
+    ).toBe(false);
   });
 
   test("parses the supported turn diff notification payload", () => {
@@ -624,6 +720,23 @@ describe("Codex app-server protocol", () => {
     const { historyMode: _, ...withoutHistoryMode } = thread;
 
     expect(parseCodexAppServerRequestResult("thread/read", { thread })).toEqual({ thread });
+    expect(() =>
+      parseCodexAppServerRequestResult("thread/read", {
+        thread: {
+          ...thread,
+          source: {
+            subAgent: {
+              thread_spawn: { ...thread.source.subAgent.thread_spawn, depth: 1.5 },
+            },
+          },
+        },
+      }),
+    ).toThrow();
+    expect(() =>
+      parseCodexAppServerRequestResult("thread/read", {
+        thread: { ...thread, createdAt: 1.5 },
+      }),
+    ).toThrow();
     expect(() =>
       parseCodexAppServerRequestResult("thread/read", { thread: withoutHistoryMode }),
     ).toThrow();

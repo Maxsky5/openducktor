@@ -1,15 +1,15 @@
 import { defineRule } from "@oxlint/plugins";
 
-import {
-  classifyWideningTarget,
-  createTypeEnvironment,
-  isKnownEvidenceExpression,
-  type WideningTarget,
-} from "../shared/dictionary-types.ts";
+import { isKnownEvidenceExpression } from "../shared/dictionary-types.ts";
 import { resolveVariable, singleVariableDeclarator } from "../shared/global-reference.ts";
-import { createImportedTypeResolver } from "../shared/imported-type-resolution.ts";
+import { createLazyImportedTypeResolver } from "../shared/imported-type-resolution.ts";
+import {
+  createTypeEnvironment,
+  type PortableTypeResolver,
+} from "../shared/portable-type-resolution.ts";
 import { unwrapTransparentExpression } from "../shared/transparent-expression.ts";
 import { isStableBinding } from "../shared/stable-binding.ts";
+import { classifyWideningTarget, type WideningTarget } from "../shared/widening-target.ts";
 
 import type { ESTree, SourceCode, Variable } from "@oxlint/plugins";
 
@@ -52,25 +52,19 @@ function hasKnownEvidence(
 
 function typeTarget(
   type: ESTree.TSType,
-  filename: string,
   visitorKeys: Readonly<Record<string, readonly string[]>>,
+  resolveImportedType: PortableTypeResolver,
 ): WideningTarget | null {
   const environment = createTypeEnvironment(type, visitorKeys);
-  let root: ESTree.Node = type;
-  while (root.parent !== null) root = root.parent;
-  const resolveImportedType =
-    root.type === "Program" ? createImportedTypeResolver(filename, root.body) : undefined;
   return classifyWideningTarget(type, environment, resolveImportedType);
 }
 
 function annotationTarget(
-  annotation: ESTree.TSTypeAnnotation | null | undefined,
-  filename: string,
+  annotation: ESTree.TSTypeAnnotation,
   visitorKeys: Readonly<Record<string, readonly string[]>>,
+  resolveImportedType: PortableTypeResolver,
 ): WideningTarget | null {
-  return annotation === null || annotation === undefined
-    ? null
-    : typeTarget(annotation.typeAnnotation, filename, visitorKeys);
+  return typeTarget(annotation.typeAnnotation, visitorKeys, resolveImportedType);
 }
 
 function enclosingFunction(node: ESTree.Node): FunctionExpression | null {
@@ -131,6 +125,7 @@ export const noKnownValueWideningRule = defineRule({
     },
   },
   createOnce(context) {
+    const importedTypeResolver = createLazyImportedTypeResolver(() => context.filename);
     const reportFlow = (
       expression: ESTree.Expression,
       destination: () => WideningTarget | null,
@@ -153,7 +148,13 @@ export const noKnownValueWideningRule = defineRule({
     };
 
     const targetFromAnnotation = (annotation: ESTree.TSTypeAnnotation | null | undefined) => () =>
-      annotationTarget(annotation, context.filename, context.sourceCode.visitorKeys);
+      annotation === null || annotation === undefined
+        ? null
+        : annotationTarget(
+            annotation,
+            context.sourceCode.visitorKeys,
+            importedTypeResolver(annotation),
+          );
 
     return {
       VariableDeclarator(node) {
@@ -211,7 +212,12 @@ export const noKnownValueWideningRule = defineRule({
         if (hasParentAssertion(node)) return;
         reportFlow(
           node.expression,
-          () => typeTarget(node.typeAnnotation, context.filename, context.sourceCode.visitorKeys),
+          () =>
+            typeTarget(
+              node.typeAnnotation,
+              context.sourceCode.visitorKeys,
+              importedTypeResolver(node),
+            ),
           "assertion",
         );
       },
@@ -219,7 +225,12 @@ export const noKnownValueWideningRule = defineRule({
         if (hasParentAssertion(node)) return;
         reportFlow(
           node.expression,
-          () => typeTarget(node.typeAnnotation, context.filename, context.sourceCode.visitorKeys),
+          () =>
+            typeTarget(
+              node.typeAnnotation,
+              context.sourceCode.visitorKeys,
+              importedTypeResolver(node),
+            ),
           "assertion",
         );
       },

@@ -79,5 +79,15 @@ tester.run("anti-slop/no-object-parameters", noObjectParametersRule, {
       code: "import type * as Types from './no-known-value-widening-types'; function f(value: Types.OwnerTypes.BroadObject) {}",
       errors: [error],
     },
+    {
+      filename: importedTypeFixtureFilename,
+      code: "import type { Identity } from './no-known-value-widening-types'; type LocalObject = object; function f(value: Identity<LocalObject>) {}",
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: "import type { ModuleObject } from './no-known-value-widening-types'; type Caller<Value> = ModuleObject; function f(value: Caller<string>) {}",
+      errors: [error],
+    },
   ],
 });

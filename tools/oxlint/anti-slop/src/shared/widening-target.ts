@@ -1,9 +1,13 @@
 import type { PortableTSInterfaceDeclaration, PortableTSType } from "./portable-ast.ts";
 import {
+  propertyKeyDomainIsBroad,
+  resolveOpenDictionaryKeyDomain,
+  resolvePropertyKeyDomain,
+} from "./property-key-domain.ts";
+import {
   aliasSubstitution,
   enterTypeResolution,
   expressionTypeNameParts,
-  isBroadPropertyKey,
   isBuiltInType,
   isUnappliedReferenceTo,
   resolveInterfaceHeritage,
@@ -14,14 +18,6 @@ import {
   unwrapTransparentType,
   type ResolvedPortableType,
   type TypeSubstitutions,
-  type PortableTypeArgument,
-  type PortableTypeEnvironment,
-  type PortableTypeResolver,
-} from "./portable-type-resolution.ts";
-
-export {
-  createPortableModuleTypeEnvironment,
-  type ResolvedPortableType,
   type PortableTypeArgument,
   type PortableTypeEnvironment,
   type PortableTypeResolver,
@@ -47,7 +43,7 @@ function interfaceWideningTarget(
       interface_.typeParameters?.params ?? [],
       arguments_,
       environment,
-      new Map(),
+      resolveImportedType,
     );
     if (substitutions === null) continue;
     if (interface_.body.body.some((member) => member.type === "TSIndexSignature")) {
@@ -60,7 +56,15 @@ function interfaceWideningTarget(
         const key = heritage.typeArguments?.params[0];
         if (
           key !== undefined &&
-          isBroadPropertyKey(key, environment, substitutions, resolveImportedType, resolving)
+          propertyKeyDomainIsBroad(
+            resolvePropertyKeyDomain(
+              key,
+              environment,
+              substitutions,
+              resolveImportedType,
+              resolving,
+            ),
+          )
         ) {
           return { kind: "open dictionary" };
         }
@@ -118,7 +122,7 @@ function classifyResolvedWideningType(
     resolved.declaration,
     resolved.arguments,
     resolved.environment,
-    new Map(),
+    resolved.resolveImportedType,
   );
   return substitutions === null
     ? null
@@ -181,7 +185,7 @@ export function classifyNamedAliasWideningTarget(
 ): WideningTarget | null {
   const alias = environment.aliases.get(name);
   if (alias === undefined) return null;
-  const substitutions = aliasSubstitution(alias, arguments_, environment, new Map());
+  const substitutions = aliasSubstitution(alias, arguments_, environment, resolveImportedType);
   return substitutions === null
     ? null
     : classifyWideningTargetWithState(
@@ -228,12 +232,14 @@ function classifyWideningTargetWithState(
   }
   if (unwrapped.type === "TSMappedType") {
     return mode === "annotation" ||
-      isBroadPropertyKey(
-        unwrapped.constraint,
-        environment,
-        substitutions,
-        resolveImportedType,
-        resolvingAliases,
+      propertyKeyDomainIsBroad(
+        resolvePropertyKeyDomain(
+          unwrapped.constraint,
+          environment,
+          substitutions,
+          resolveImportedType,
+          resolvingAliases,
+        ),
       )
       ? { kind: "open dictionary" }
       : null;
@@ -248,10 +254,10 @@ function classifyWideningTargetWithState(
         : classifyWideningTargetWithState(
             substitution.type,
             substitution.environment,
-            substitutions,
+            substitution.substitutions,
             resolvingAliases,
             mode,
-            resolveImportedType,
+            substitution.resolveImportedType,
           );
     }
   }
@@ -275,7 +281,28 @@ function classifyWideningTargetWithState(
   if (simpleName === "Record" && isBuiltInType(simpleName, environment)) {
     const key = unwrapped.typeArguments?.params[0];
     return key !== undefined &&
-      isBroadPropertyKey(key, environment, substitutions, resolveImportedType, resolvingAliases)
+      propertyKeyDomainIsBroad(
+        resolvePropertyKeyDomain(
+          key,
+          environment,
+          substitutions,
+          resolveImportedType,
+          resolvingAliases,
+        ),
+      )
+      ? { kind: "open dictionary" }
+      : null;
+  }
+  if ((simpleName === "Pick" || simpleName === "Omit") && isBuiltInType(simpleName, environment)) {
+    return propertyKeyDomainIsBroad(
+      resolveOpenDictionaryKeyDomain(
+        unwrapped,
+        environment,
+        substitutions,
+        resolveImportedType,
+        resolvingAliases,
+      ),
+    )
       ? { kind: "open dictionary" }
       : null;
   }

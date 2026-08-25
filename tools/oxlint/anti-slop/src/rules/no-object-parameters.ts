@@ -2,9 +2,9 @@ import { defineRule } from "@oxlint/plugins";
 
 import type { ESTree, SourceCode } from "@oxlint/plugins";
 
-import { createTypeEnvironment, typeResolvesToObject } from "../shared/dictionary-types.ts";
-import { createImportedTypeResolver } from "../shared/imported-type-resolution.ts";
-import type { PortableTypeResolver } from "../shared/portable-type-resolution.ts";
+import { typeResolvesToObject } from "../shared/dictionary-types.ts";
+import { createLazyImportedTypeResolver } from "../shared/imported-type-resolution.ts";
+import { createTypeEnvironment } from "../shared/portable-type-resolution.ts";
 
 type Parameter = ESTree.ParamPattern;
 type ParameterOwner =
@@ -49,18 +49,7 @@ export const noObjectParametersRule = defineRule({
     },
   },
   createOnce(context) {
-    let resolveImportedType: PortableTypeResolver | null = null;
-
-    const importedTypeResolver = (node: ESTree.Node): PortableTypeResolver => {
-      if (resolveImportedType !== null) return resolveImportedType;
-      let root = node;
-      while (root.parent !== null) root = root.parent;
-      resolveImportedType = createImportedTypeResolver(
-        context.filename,
-        root.type === "Program" ? root.body : [],
-      );
-      return resolveImportedType;
-    };
+    const importedTypeResolver = createLazyImportedTypeResolver(() => context.filename);
 
     const checkParameters = (node: ParameterOwner) => {
       for (const parameter of node.params) {

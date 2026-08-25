@@ -4,11 +4,11 @@ import type {
   PortableTSType,
   PortableTSTupleElement,
 } from "./portable-ast.ts";
+import { propertyKeyDomainMatches, resolvePropertyKeyDomain } from "./property-key-domain.ts";
 import {
   aliasSubstitution,
   enterTypeResolution,
   expressionTypeNameParts,
-  isBroadPropertyKey,
   isBuiltInType,
   isUnappliedReferenceTo,
   resolveInterfaceHeritage,
@@ -68,20 +68,6 @@ function tupleTypeAtIndex(
   return null;
 }
 
-function literalKeyMatches(type: PortableTSType, segment: TypePropertyPathSegment): boolean {
-  const unwrapped = unwrapTransparentType(type);
-  if (unwrapped.type === "TSUnionType") {
-    return unwrapped.types.some((member) => literalKeyMatches(member, segment));
-  }
-  if (unwrapped.type !== "TSLiteralType") return false;
-  const literal = unwrapped.literal;
-  return (
-    literal.type === "Literal" &&
-    (typeof literal.value === "string" || typeof literal.value === "number") &&
-    String(literal.value) === String(segment)
-  );
-}
-
 function propertyKeyMatches(
   type: PortableTSType,
   segment: TypePropertyPathSegment,
@@ -90,9 +76,9 @@ function propertyKeyMatches(
   resolving: ReadonlySet<string>,
   resolveImportedType?: PortableTypeResolver,
 ): boolean {
-  return (
-    isBroadPropertyKey(type, environment, substitutions, resolveImportedType, resolving) ||
-    literalKeyMatches(type, segment)
+  return propertyKeyDomainMatches(
+    resolvePropertyKeyDomain(type, environment, substitutions, resolveImportedType, resolving),
+    segment,
   );
 }
 
@@ -160,7 +146,6 @@ function resolvedTypePathResolution(
   resolved: ResolvedPortableType,
   path: readonly TypePropertyPathSegment[],
   resolving: ReadonlySet<string>,
-  baseSubstitutions: TypeSubstitutions,
 ): TypePathResolution {
   const nextResolving = enterTypeResolution(resolving, resolved.key, `path\0${path.join("\0")}`);
   if (nextResolving === null) return "absent";
@@ -178,7 +163,7 @@ function resolvedTypePathResolution(
     resolved.declaration,
     resolved.arguments,
     resolved.environment,
-    baseSubstitutions,
+    resolved.resolveImportedType,
   );
   return substitutions === null
     ? "absent"
@@ -206,7 +191,7 @@ function interfaceTypePathResolution(
       declaration.typeParameters?.params ?? [],
       arguments_,
       environment,
-      new Map(),
+      resolveImportedType,
     );
     if (substitutions === null) continue;
     const direct = typeMembersPathResolution(
@@ -243,7 +228,7 @@ function interfaceTypePathResolution(
         substitutions,
         resolveImportedType,
       )) {
-        results.push(resolvedTypePathResolution(resolved, path, resolving, substitutions));
+        results.push(resolvedTypePathResolution(resolved, path, resolving));
       }
     }
   }
@@ -405,9 +390,9 @@ function typePathResolution(
           substitution.type,
           path,
           substitution.environment,
-          substitutions,
+          substitution.substitutions,
           resolving,
-          resolveImportedType,
+          substitution.resolveImportedType,
         );
       }
     }
@@ -425,7 +410,7 @@ function typePathResolution(
       environment,
       substitutions,
       resolveImportedType,
-    ).map((resolved) => resolvedTypePathResolution(resolved, path, resolving, substitutions));
+    ).map((resolved) => resolvedTypePathResolution(resolved, path, resolving));
     return intersectionPathResolution(results);
   }
   if (path.length === 0) return unwrapped.type === "TSUnknownKeyword" ? "unknown" : "known";
