@@ -15,10 +15,17 @@ import { TaskAssetError } from "../../effect/task-asset-error";
 import type { TaskAssetFilePort } from "../../ports/task-asset-file-port";
 import type { TaskAssetRecord, TaskAssetRegistryPort } from "../../ports/task-asset-registry-port";
 
+export type TaskAssetResponseHeaders = {
+  readonly "Cache-Control": string;
+  readonly "Content-Disposition": string;
+  readonly "Content-Type": TaskAssetMediaType;
+  readonly "X-Content-Type-Options": string;
+};
+
 export type TaskAssetReadResult = {
   bytes: Uint8Array;
   mediaType: TaskAssetMediaType;
-  headers: Readonly<Record<string, string>>;
+  headers: TaskAssetResponseHeaders;
 };
 
 export type TaskAssetBatchReadResult =
@@ -95,14 +102,7 @@ const contentDisposition = (originalName: string): string => {
   return `inline; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(wellFormedName)}`;
 };
 
-interface TaskAssetResponseHeaders {
-  readonly [name: string]: string;
-}
-
-const responseHeaders = (
-  record: TaskAssetRecord,
-  mediaType: TaskAssetMediaType,
-): TaskAssetResponseHeaders => ({
+const responseHeaders = (record: TaskAssetRecord, mediaType: TaskAssetMediaType) => ({
   "Cache-Control": "private, no-store",
   "Content-Disposition": contentDisposition(record.originalName),
   "Content-Type": mediaType,

@@ -72,6 +72,10 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
       errors: [error],
     },
     {
+      code: "function unsafe(input: unknown) { return () => input; }",
+      errors: [error],
+    },
+    {
       code: "type UnsafeOutput = any; function unsafe(input: unknown): UnsafeOutput { return input; }",
       errors: [error],
     },

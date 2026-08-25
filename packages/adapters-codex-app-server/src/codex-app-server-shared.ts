@@ -207,9 +207,11 @@ export const isCodexContextualUserMessage = (payload: CodexUserMessageItem): boo
 const stripShellQuotes = (value: string): string =>
   value.replace(/^[']|^["]/, "").replace(/[']$|["]$/, "");
 
-interface SearchCommandInput {
-  [key: string]: CodexAppServerJsonValue;
-}
+type SearchCommandInput = {
+  command: string;
+  query?: string;
+  path?: string;
+};
 
 export const readPathFromCommand = (command: string): string | null => {
   const sedMatch = command.match(/\bsed\s+(?:-n\s+)?['"]?[^'"\s]+['"]?\s+(.+)$/);
@@ -218,11 +220,11 @@ export const readPathFromCommand = (command: string): string | null => {
   return rawPath ? stripShellQuotes(rawPath.trim()) : null;
 };
 
-export const searchInputFromCommand = (command: string) => {
+export const searchInputFromCommand = (command: string): SearchCommandInput => {
   const input: SearchCommandInput = { command };
   const rgMatch = command.match(/\brg\s+(?:-[^\s]+\s+)*(?:['"]([^'"]+)['"]|(\S+))(?:\s+(.+))?$/);
   if (!rgMatch) {
-    return input satisfies Record<string, CodexAppServerJsonValue>;
+    return input;
   }
   const query = rgMatch[1] ?? rgMatch[2];
   const path = rgMatch[3]?.trim();
@@ -232,7 +234,7 @@ export const searchInputFromCommand = (command: string) => {
   if (path) {
     input.path = stripShellQuotes(path);
   }
-  return input satisfies Record<string, CodexAppServerJsonValue>;
+  return input;
 };
 
 export const codexNamespacedToolName = (namespace: string | null, tool: string): string => {

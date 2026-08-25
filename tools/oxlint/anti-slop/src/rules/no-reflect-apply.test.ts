@@ -14,6 +14,7 @@ tester.run("anti-slop/no-reflect-apply", noReflectApplyRule, {
   ],
   invalid: [
     { code: "const value = Reflect.apply(operation, owner, args);", errors: [error] },
+    { code: "const value = (Reflect).apply(operation, owner, args);", errors: [error] },
     { code: "const value = Reflect['apply'](operation, owner, args);", errors: [error] },
   ],
 });

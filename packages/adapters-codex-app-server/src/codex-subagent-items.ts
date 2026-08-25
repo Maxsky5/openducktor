@@ -2,7 +2,6 @@ import type {
   CodexAppServerCollabAgentState,
   CodexAppServerCollabAgentTool,
   CodexAppServerCollabAgentToolCallStatus,
-  CodexAppServerJsonValue,
 } from "@openducktor/contracts";
 import type { AgentStreamPart, AgentSubagentStatus } from "@openducktor/core";
 import type { CodexMappingContext } from "./codex-canonical-events";
@@ -19,9 +18,12 @@ type StatusMapping = {
   error?: string;
 };
 
-interface CodexSubagentMetadata {
-  [key: string]: CodexAppServerJsonValue;
-}
+type CodexSubagentItemErrorContext = {
+  aggregateStatus?: CodexAppServerCollabAgentToolCallStatus;
+  childThreadId?: string;
+  parentThreadId?: string;
+  tool?: CodexAppServerCollabAgentTool;
+};
 
 class CodexSubagentItemError extends Error {
   constructor(message: string) {
@@ -33,7 +35,7 @@ class CodexSubagentItemError extends Error {
 const itemError = (
   item: CodexSubagentItem,
   message: string,
-  context: Record<string, CodexAppServerJsonValue | undefined> = {},
+  context: CodexSubagentItemErrorContext = {},
 ): CodexSubagentItemError =>
   new CodexSubagentItemError(
     `Malformed Codex subagent item '${item.id}' of type '${item.type}': ${message}. Context: ${JSON.stringify(
@@ -123,11 +125,7 @@ const creationDescriptionForPrompt = (
   return `${text.slice(0, SUBAGENT_DESCRIPTION_MAX_LENGTH - 3).trimEnd()}...`;
 };
 
-const collabMetadata = (
-  item: CodexCollabItem,
-  parentThreadId: string,
-  childThreadId?: string,
-): CodexSubagentMetadata => ({
+const collabMetadata = (item: CodexCollabItem, parentThreadId: string, childThreadId?: string) => ({
   codexSubagent: {
     source: item.type,
     itemId: item.id,
@@ -137,10 +135,7 @@ const collabMetadata = (
   },
 });
 
-const activityMetadata = (
-  item: CodexSubagentActivityItem,
-  parentThreadId: string,
-): CodexSubagentMetadata => ({
+const activityMetadata = (item: CodexSubagentActivityItem, parentThreadId: string) => ({
   codexSubagent: {
     source: item.type,
     itemId: item.id,

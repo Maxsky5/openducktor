@@ -50,7 +50,7 @@ import {
   type CodexAppServerWebSearchAction,
   type CodexAppServerJsonValue,
 } from "@openducktor/contracts";
-import type { CodexThreadHistoryReadResponse } from "./types";
+import type { CodexNotificationRecord, CodexThreadHistoryReadResponse } from "./types";
 import type { CodexTimedThreadItem } from "./codex-event-mapper";
 
 type CodexAgentMessageItem = Extract<CodexTimedThreadItem, { type: "agentMessage" }>;
@@ -67,6 +67,11 @@ export type CodexTokenUsageTotals = {
   totalTokens: number;
   contextWindow?: number;
 };
+
+type CodexTokenUsageUpdatedParams = Extract<
+  CodexNotificationRecord,
+  { method: "thread/tokenUsage/updated" }
+>["params"];
 
 export type CodexTurnTiming = {
   durationMs: number;
@@ -341,12 +346,6 @@ export const terminalHistoryPart = (
   ...(tokenUsage ? codexTokenUsageHistoryFields(tokenUsage) : undefined),
 });
 
-const firstPlainObject = (
-  value: CodexAppServerJsonValue | undefined,
-): Record<string, CodexAppServerJsonValue> | null => {
-  return arrayFromUnknown(value).find(isPlainObject) ?? null;
-};
-
 const commandActionToolName = (action: CodexAppServerCommandAction | undefined): string => {
   if (!action) {
     return "bash";
@@ -471,48 +470,20 @@ const webSearchInput = (
 };
 
 export const extractCodexTokenUsageTotals = (
-  params: CodexAppServerJsonValue | undefined,
+  params: CodexTokenUsageUpdatedParams,
 ): CodexTokenUsageTotals | null => {
-  if (!isPlainObject(params)) {
+  const { totalTokens } = params.tokenUsage.last;
+  if (!Number.isFinite(totalTokens) || totalTokens < 0) {
     return null;
   }
-
-  const usage = codexTokenUsagePayload(params);
-  if (!usage) {
+  const contextWindow = params.tokenUsage.modelContextWindow;
+  if (contextWindow != null && (!Number.isFinite(contextWindow) || contextWindow <= 0)) {
     return null;
   }
-  const last = firstPlainObject(
-    [usage.last, usage.lastTokenUsage, usage.last_token_usage].filter(
-      (value): value is CodexAppServerJsonValue => value !== undefined,
-    ),
-  );
-  const totalTokens =
-    extractNumberField(last, ["totalTokens", "total_tokens"]) ??
-    extractNumberField(usage, ["totalTokens", "total_tokens"]);
-  if (!(typeof totalTokens === "number") || totalTokens <= 0) {
-    return null;
-  }
-  const contextWindow = extractNumberField(usage, [
-    "modelContextWindow",
-    "model_context_window",
-    "contextWindow",
-    "context_window",
-  ]);
   return {
     totalTokens,
-    ...(typeof contextWindow === "number" && contextWindow > 0 ? { contextWindow } : undefined),
+    ...(contextWindow == null ? undefined : { contextWindow }),
   };
-};
-
-const codexTokenUsagePayload = (
-  params: Record<string, CodexAppServerJsonValue>,
-): Record<string, CodexAppServerJsonValue> | null => {
-  const directUsage = params.tokenUsage ?? params.token_usage;
-  if (isPlainObject(directUsage)) {
-    return directUsage;
-  }
-
-  return null;
 };
 
 const syntheticToolPart = ({

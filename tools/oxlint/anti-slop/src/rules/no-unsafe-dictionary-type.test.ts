@@ -94,5 +94,9 @@ tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
       code: "interface Parent {} interface Escape extends Parent {} type A = Record<string, Escape>;",
       errors: [error],
     },
+    {
+      code: "class Escape {} type A = Record<string, Escape>;",
+      errors: [error],
+    },
   ],
 });

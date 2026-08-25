@@ -5,8 +5,7 @@ import type {
   AgentModelSelection,
   AgentUserMessagePart,
 } from "@openducktor/core";
-import { isTerminalTurnStatus } from "./codex-app-server-requests";
-import { type ActiveCodexTurn, isPlainObject } from "./codex-app-server-shared";
+import type { ActiveCodexTurn } from "./codex-app-server-shared";
 import {
   type CodexThreadStatusSnapshot,
   codexThreadStatusSnapshot,
@@ -259,12 +258,13 @@ export const startCodexTurnForSession = async (
         return result;
       }
       const turnStartedAtMs = Date.now();
-      const turnId = result.turn.id;
-      if (turnId) {
-        context.bindActiveTurnId(activeTurnState, turnId, turnStartedAtMs);
-      }
+      context.bindActiveTurnId(activeTurnState, result.turn.id, turnStartedAtMs);
       flushQueuedUserMessagesLater(context, activeTurnState);
-      if (isPlainObject(result.turn) && isTerminalTurnStatus(result.turn)) {
+      if (
+        result.turn.status === "completed" ||
+        result.turn.status === "failed" ||
+        result.turn.status === "interrupted"
+      ) {
         const currentActiveTurn = context.activeTurnsBySessionId.get(session.threadId);
         if (!currentActiveTurn || currentActiveTurn === activeTurnState) {
           context.setSessionLiveStatus(session, codexThreadStatusSnapshot("idle"));

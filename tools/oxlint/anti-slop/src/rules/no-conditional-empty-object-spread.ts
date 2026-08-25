@@ -1,20 +1,13 @@
 import { defineRule } from "@oxlint/plugins";
 import type { ESTree } from "@oxlint/plugins";
-
-function unwrapParentheses(node: ESTree.Expression): ESTree.Expression {
-  let current = node;
-  while (current.type === "ParenthesizedExpression") {
-    current = current.expression;
-  }
-  return current;
-}
+import { unwrapTransparentExpression } from "../shared/transparent-expression.ts";
 
 function isEmptyObjectExpression(node: ESTree.Expression): boolean {
   return node.type === "ObjectExpression" && node.properties.length === 0;
 }
 
 function isConditionalEmptyObjectSpread(node: ESTree.Expression): boolean {
-  const conditional = unwrapParentheses(node);
+  const conditional = unwrapTransparentExpression(node, { includeTypeAssertions: true });
   return (
     conditional.type === "ConditionalExpression" &&
     (isEmptyObjectExpression(conditional.consequent) ||
@@ -24,7 +17,12 @@ function isConditionalEmptyObjectSpread(node: ESTree.Expression): boolean {
 
 function isEmptyObjectReturn(node: ESTree.Statement): boolean {
   if (node.type === "ReturnStatement") {
-    return node.argument !== null && isEmptyObjectExpression(unwrapParentheses(node.argument));
+    return (
+      node.argument !== null &&
+      isEmptyObjectExpression(
+        unwrapTransparentExpression(node.argument, { includeTypeAssertions: true }),
+      )
+    );
   }
   if (node.type === "BlockStatement") {
     return node.body.some(isEmptyObjectReturn);
@@ -39,9 +37,9 @@ function isEmptyObjectReturn(node: ESTree.Statement): boolean {
 }
 
 function isEmptyObjectSpreadIife(node: ESTree.Expression): boolean {
-  const call = unwrapParentheses(node);
+  const call = unwrapTransparentExpression(node, { includeTypeAssertions: true });
   if (call.type !== "CallExpression" || call.arguments.length !== 0) return false;
-  const callee = unwrapParentheses(call.callee);
+  const callee = unwrapTransparentExpression(call.callee, { includeTypeAssertions: true });
   return (
     callee.type === "ArrowFunctionExpression" &&
     callee.body.type === "BlockStatement" &&

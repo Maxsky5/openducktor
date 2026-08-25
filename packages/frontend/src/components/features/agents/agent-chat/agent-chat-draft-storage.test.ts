@@ -139,6 +139,46 @@ describe("agent chat draft storage", () => {
     expect(readResult.value.draft.attachments?.[0]?.previewUrl).toBeUndefined();
   });
 
+  test("preserves valid spaces in stored attachment paths and names", () => {
+    const storage = createMemoryStorage();
+    const key = toAgentChatDraftStorageKey(identity);
+    storage.setItem(
+      key,
+      JSON.stringify({
+        version: 2,
+        workspaceId: identity.workspaceId,
+        externalSessionId: identity.externalSessionId,
+        runtimeKind: identity.runtimeKind,
+        workingDirectory: identity.workingDirectory,
+        taskId: "task-1",
+        updatedAt: "2026-07-01T10:00:00.000Z",
+        draft: {
+          segments: [{ id: "text-1", kind: "text", text: "Inspect the attachment" }],
+          attachments: [
+            {
+              id: "attachment-1",
+              path: "/repo/image.png ",
+              name: "image.png ",
+              kind: "image",
+            },
+          ],
+        },
+      }),
+    );
+
+    const result = readAgentChatDraftFromStorage({
+      storage,
+      identity,
+      now: new Date("2026-07-02T10:00:00.000Z"),
+    });
+
+    expect(result.status).toBe("restored");
+    if (result.status !== "restored") throw new Error("Expected restored draft");
+    expect(result.value.draft.attachments?.[0]).toEqual(
+      expect.objectContaining({ path: "/repo/image.png ", name: "image.png " }),
+    );
+  });
+
   test("removes invalid stored payloads for only the affected key", () => {
     const storage = createMemoryStorage();
     const key = toAgentChatDraftStorageKey(identity);

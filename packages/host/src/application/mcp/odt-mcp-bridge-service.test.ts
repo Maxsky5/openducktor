@@ -145,7 +145,12 @@ describe("createOdtMcpBridgeService", () => {
               asset: {
                 bytes: Uint8Array.from([1, 2, 3]),
                 mediaType: "image/png" as const,
-                headers: {},
+                headers: {
+                  "Cache-Control": "private, no-store",
+                  "Content-Disposition": 'inline; filename="first.png"',
+                  "Content-Type": "image/png",
+                  "X-Content-Type-Options": "nosniff",
+                },
               },
             },
             {
@@ -153,7 +158,12 @@ describe("createOdtMcpBridgeService", () => {
               asset: {
                 bytes: Uint8Array.from([4, 5]),
                 mediaType: "image/webp" as const,
-                headers: {},
+                headers: {
+                  "Cache-Control": "private, no-store",
+                  "Content-Disposition": 'inline; filename="second.webp"',
+                  "Content-Type": "image/webp",
+                  "X-Content-Type-Options": "nosniff",
+                },
               },
             },
           ],

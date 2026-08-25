@@ -75,7 +75,9 @@ const encoder = new TextEncoder();
 const ATTACHMENT_KINDS = ["image", "audio", "video", "pdf"] as const;
 const FILE_REFERENCE_KINDS = ["directory", "css", "code", "image", "video", "default"] as const;
 
-const nonEmptyStringSchema = z.string().trim().min(1);
+const nonEmptyStringSchema = z
+  .string()
+  .refine((value) => value.trim().length > 0, { message: "String must contain non-whitespace." });
 const attachmentKindSchema = z.enum(ATTACHMENT_KINDS);
 const fileReferenceKindSchema = z.enum(FILE_REFERENCE_KINDS);
 const attachmentSchema = z.object({

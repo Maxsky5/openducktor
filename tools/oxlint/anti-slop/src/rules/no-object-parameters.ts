@@ -2,7 +2,7 @@ import { defineRule } from "@oxlint/plugins";
 
 import type { ESTree, SourceCode } from "@oxlint/plugins";
 
-import { createTypeEnvironment, type TypeEnvironment } from "../shared/dictionary-types.ts";
+import { createTypeEnvironment, typeResolvesToObject } from "../shared/dictionary-types.ts";
 
 type Parameter = ESTree.ParamPattern;
 type ParameterOwner =
@@ -47,43 +47,6 @@ export const noObjectParametersRule = defineRule({
     },
   },
   createOnce(context) {
-    const resolvesToObject = (
-      type: ESTree.TSType,
-      environment: TypeEnvironment,
-      visited = new Set<string>(),
-    ): boolean => {
-      if (type.type === "TSObjectKeyword") return true;
-      if (type.type === "TSParenthesizedType")
-        return resolvesToObject(type.typeAnnotation, environment, visited);
-      if (type.type === "TSUnionType") {
-        return type.types.some((member) => resolvesToObject(member, environment, visited));
-      }
-      if (
-        type.type !== "TSTypeReference" ||
-        type.typeName.type !== "Identifier" ||
-        (type.typeArguments !== null &&
-          type.typeArguments !== undefined &&
-          type.typeArguments.params.length > 0) ||
-        visited.has(type.typeName.name)
-      ) {
-        return false;
-      }
-      const alias = environment.aliases.get(type.typeName.name);
-      if (
-        alias === undefined ||
-        (alias.typeParameters !== null && alias.typeParameters !== undefined)
-      ) {
-        return false;
-      }
-      const nextVisited = new Set(visited);
-      nextVisited.add(type.typeName.name);
-      return resolvesToObject(
-        alias.typeAnnotation,
-        createTypeEnvironment(alias.typeAnnotation, environment.visitorKeys),
-        nextVisited,
-      );
-    };
-
     const checkParameters = (node: ParameterOwner) => {
       for (const parameter of node.params) {
         const annotation = parameterAnnotation(parameter);
@@ -92,7 +55,7 @@ export const noObjectParametersRule = defineRule({
           annotation.typeAnnotation,
           context.sourceCode.visitorKeys,
         );
-        if (!resolvesToObject(annotation.typeAnnotation, environment)) continue;
+        if (!typeResolvesToObject(annotation.typeAnnotation, environment)) continue;
         context.report({
           node: annotation.typeAnnotation,
           messageId: "objectParameter",

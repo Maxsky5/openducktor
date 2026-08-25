@@ -6,24 +6,11 @@ import {
   isKnownEvidenceExpression,
   type WideningTarget,
 } from "../shared/dictionary-types.ts";
+import { unwrapTransparentExpression } from "../shared/transparent-expression.ts";
 
 import type { ESTree, Scope, SourceCode, Variable } from "@oxlint/plugins";
 
 type FunctionExpression = ESTree.ArrowFunctionExpression | ESTree.Function;
-
-function unwrapExpression(expression: ESTree.Expression): ESTree.Expression {
-  let current = expression;
-  while (
-    current.type === "ParenthesizedExpression" ||
-    current.type === "TSAsExpression" ||
-    current.type === "TSSatisfiesExpression" ||
-    current.type === "TSTypeAssertion" ||
-    current.type === "TSNonNullExpression"
-  ) {
-    current = current.expression;
-  }
-  return current;
-}
 
 function resolveVariable(
   sourceCode: SourceCode,
@@ -60,7 +47,7 @@ function hasKnownEvidence(
   visitedVariables = new Set<Variable>(),
 ): boolean {
   if (isKnownEvidenceExpression(expression)) return true;
-  const unwrapped = unwrapExpression(expression);
+  const unwrapped = unwrapTransparentExpression(expression, { includeTypeAssertions: true });
   if (unwrapped.type !== "Identifier") return false;
   const variable = resolveVariable(sourceCode, unwrapped);
   if (variable === null || visitedVariables.has(variable)) return false;
@@ -120,7 +107,7 @@ function functionName(sourceCode: SourceCode, owner: FunctionExpression | null):
 }
 
 function isEmptyObjectExpression(expression: ESTree.Expression): boolean {
-  const unwrapped = unwrapExpression(expression);
+  const unwrapped = unwrapTransparentExpression(expression, { includeTypeAssertions: true });
   return unwrapped.type === "ObjectExpression" && unwrapped.properties.length === 0;
 }
 

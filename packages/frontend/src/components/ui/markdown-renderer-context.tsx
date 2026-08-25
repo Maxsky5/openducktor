@@ -3,20 +3,8 @@ import {
   TASK_ASSET_URI_PREFIX,
   type TaskAssetRenderContext,
 } from "@openducktor/contracts";
-import {
-  type ComponentProps,
-  type ComponentType,
-  createElement,
-  isValidElement,
-  useEffect,
-  useState,
-} from "react";
-import {
-  type Components,
-  defaultUrlTransform,
-  type ExtraProps,
-  type UrlTransform,
-} from "react-markdown";
+import { createElement, isValidElement, useEffect, useState } from "react";
+import { type Components, defaultUrlTransform, type UrlTransform } from "react-markdown";
 import { splitTaskDescriptionFrontMatter } from "@/components/features/task-description-editor/task-description-front-matter";
 import { errorMessage } from "@/lib/errors";
 import type { ShellBridge } from "@/lib/shell-bridge";
@@ -181,16 +169,8 @@ export const createTaskDescriptionComponents = ({
     ) {
       return <MarkdownMermaid source={String(child.props.children).replace(/\n$/, "")} />;
     }
-    // SAFETY: The preceding runtime guard establishes `| ComponentType<ComponentProps<"pre"> & ExtraProps> | undefined` before this assertion.
-    const PreComponent = components.pre as
-      | ComponentType<ComponentProps<"pre"> & ExtraProps>
-      | undefined;
-    if (PreComponent) {
-      return (
-        <PreComponent {...props} className={className}>
-          {children}
-        </PreComponent>
-      );
+    if (components.pre) {
+      return createElement(components.pre, { ...props, className }, children);
     }
     const { node: _node, ...preProps } = props;
     return (

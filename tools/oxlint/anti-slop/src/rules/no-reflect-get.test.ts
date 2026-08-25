@@ -15,6 +15,11 @@ tester.run("anti-slop/no-reflect-get", noReflectGetRule, {
   ],
   invalid: [
     { name: "static access", code: "const value = Reflect.get(owner, key);", errors: [error] },
+    {
+      name: "parenthesized object",
+      code: "const value = (Reflect).get(owner, key);",
+      errors: [error],
+    },
     { name: "computed access", code: "const value = Reflect['get'](owner, key);", errors: [error] },
   ],
 });

@@ -5,10 +5,8 @@ import {
   type CodexAppServerGrantedPermissionProfile,
   type CodexAppServerMcpServerElicitationRequestResponse,
   type CodexAppServerPermissionsApprovalResponse,
-  codexAppServerRequestPermissionProfileSchema,
   type RuntimeApprovalReplyOutcome,
 } from "@openducktor/contracts";
-import { isPlainObject } from "./codex-app-server-shared";
 import type { CodexServerRequestRecord } from "./types";
 
 export type CodexApprovalOutcome = RuntimeApprovalReplyOutcome;
@@ -20,18 +18,16 @@ export type CodexApprovalResponse =
   | CodexAppServerPermissionsApprovalResponse;
 
 const permissionsResponse = (
-  request: CodexServerRequestRecord,
+  request: Extract<
+    CodexServerRequestRecord,
+    { method: typeof CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_PERMISSIONS_REQUEST_APPROVAL }
+  >,
   outcome: CodexApprovalOutcome,
 ): CodexAppServerPermissionsApprovalResponse => {
-  const approved = outcome !== "reject";
-  const params = isPlainObject(request.params) ? request.params : {};
-  const parsed = approved
-    ? codexAppServerRequestPermissionProfileSchema.safeParse(params.permissions)
-    : { success: false as const };
-  if (!parsed.success) {
+  if (outcome === "reject") {
     return { permissions: {}, scope: "turn" };
   }
-  const profile = parsed.data;
+  const profile = request.params.permissions;
 
   const permissions: CodexAppServerGrantedPermissionProfile = {};
   if (profile.network) {

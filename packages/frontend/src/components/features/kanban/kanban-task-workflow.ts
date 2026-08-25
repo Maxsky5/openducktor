@@ -38,7 +38,7 @@ const SESSION_VIEW_ACTION_BY_ROLE = {
   qa: "open_qa",
 } satisfies Record<AgentRole, SessionRoleViewAction>;
 
-const SESSION_VIEW_ACTIONS = new Set<SessionRoleViewAction>(
+const SESSION_VIEW_ACTIONS: ReadonlySet<TaskWorkflowAction> = new Set(
   Object.values(SESSION_VIEW_ACTION_BY_ROLE),
 );
 const DETAIL_ONLY_WORKFLOW_ACTIONS = new Set<TaskWorkflowAction>(["close_task"]);
@@ -254,9 +254,8 @@ const resolvePriorityForTask = (
 
   if (options.hasActiveSession && options.activeSessionRole) {
     const activeSessionViewAction = toRoleSessionViewAction(options.activeSessionRole);
-    // SAFETY: The preceding runtime guard establishes `SessionRoleViewAction` before this assertion.
     const sessionViewActionsByOrder = basePriority.filter((action) =>
-      SESSION_VIEW_ACTIONS.has(action as SessionRoleViewAction),
+      SESSION_VIEW_ACTIONS.has(action),
     );
     return prioritize(basePriority, [activeSessionViewAction, ...sessionViewActionsByOrder]);
   }

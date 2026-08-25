@@ -6,6 +6,7 @@ import {
   typeResolvesToAny,
   typeResolvesToUnknown,
 } from "../shared/dictionary-types.ts";
+import { unwrapTransparentExpression } from "../shared/transparent-expression.ts";
 
 type RuntimeFunction = ESTree.ArrowFunctionExpression | ESTree.Function;
 
@@ -55,16 +56,23 @@ function enclosingRuntimeFunction(node: ESTree.Node): RuntimeFunction | null {
 }
 
 function directlyExposesParameter(expression: ESTree.Expression, parameterName: string): boolean {
+  const unwrapped = unwrapTransparentExpression(expression, { includeTypeAssertions: true });
+  if (unwrapped !== expression) return directlyExposesParameter(unwrapped, parameterName);
   if (expression.type === "Identifier") return expression.name === parameterName;
-  if (
-    expression.type === "ParenthesizedExpression" ||
-    expression.type === "TSAsExpression" ||
-    expression.type === "TSTypeAssertion" ||
-    expression.type === "TSNonNullExpression" ||
-    expression.type === "TSSatisfiesExpression" ||
-    expression.type === "ChainExpression"
-  ) {
+  if (expression.type === "ChainExpression")
     return directlyExposesParameter(expression.expression, parameterName);
+  if (expression.type === "ArrowFunctionExpression" || expression.type === "FunctionExpression") {
+    if (
+      expression.params.some((parameter) => parameterNameOfBinding(parameter) === parameterName)
+    ) {
+      return false;
+    }
+    if (expression.body === null) return false;
+    return expression.body.type === "BlockStatement"
+      ? expression.body.body.some((statement) =>
+          statementReturnsParameter(statement, parameterName),
+        )
+      : directlyExposesParameter(expression.body, parameterName);
   }
   if (expression.type === "AwaitExpression") {
     return directlyExposesParameter(expression.argument, parameterName);
@@ -108,6 +116,46 @@ function directlyExposesParameter(expression: ESTree.Expression, parameterName: 
   }
   if (expression.type === "TemplateLiteral") {
     return expression.expressions.some((part) => directlyExposesParameter(part, parameterName));
+  }
+  return false;
+}
+
+function parameterNameOfBinding(parameter: Parameter): string | null {
+  if (parameter.type === "TSParameterProperty") return parameterNameOfBinding(parameter.parameter);
+  if (parameter.type === "AssignmentPattern") return parameterNameOfBinding(parameter.left);
+  if (parameter.type === "RestElement") return parameterNameOfBinding(parameter.argument);
+  return parameter.type === "Identifier" ? parameter.name : null;
+}
+
+function statementReturnsParameter(statement: ESTree.Statement, parameterName: string): boolean {
+  if (statement.type === "ReturnStatement") {
+    return (
+      statement.argument !== null && directlyExposesParameter(statement.argument, parameterName)
+    );
+  }
+  if (statement.type === "BlockStatement") {
+    return statement.body.some((child) => statementReturnsParameter(child, parameterName));
+  }
+  if (statement.type === "IfStatement") {
+    return (
+      statementReturnsParameter(statement.consequent, parameterName) ||
+      (statement.alternate !== null &&
+        statementReturnsParameter(statement.alternate, parameterName))
+    );
+  }
+  if (statement.type === "SwitchStatement") {
+    return statement.cases.some((case_) =>
+      case_.consequent.some((child) => statementReturnsParameter(child, parameterName)),
+    );
+  }
+  if (statement.type === "TryStatement") {
+    return (
+      statementReturnsParameter(statement.block, parameterName) ||
+      (statement.handler !== null &&
+        statementReturnsParameter(statement.handler.body, parameterName)) ||
+      (statement.finalizer !== null &&
+        statementReturnsParameter(statement.finalizer, parameterName))
+    );
   }
   return false;
 }

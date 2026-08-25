@@ -10,11 +10,13 @@ export const hostCommandEmptyResponseSchema = z
   .union([z.null(), z.undefined()])
   .transform(() => null);
 
-export const hostCommandNonEmptyStringResponseSchema = z.string().trim().min(1);
+const nonBlankStringSchema = z
+  .string()
+  .refine((value) => value.trim().length > 0, { message: "String must contain non-whitespace." });
 
-export const localAttachmentPathResponseSchema = z
-  .object({ path: z.string().trim().min(1) })
-  .strict();
+export const hostCommandNonEmptyStringResponseSchema = nonBlankStringSchema;
+
+export const localAttachmentPathResponseSchema = z.object({ path: nonBlankStringSchema }).strict();
 
 export const hostErrorResponseSchema = z
   .object({

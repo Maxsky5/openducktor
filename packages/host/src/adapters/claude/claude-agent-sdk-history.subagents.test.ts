@@ -188,7 +188,7 @@ describe("claude-agent-sdk-history subagents", () => {
         {
           type: "system",
           subtype: "task_started",
-          uuid: "task-started-1",
+          uuid: "00000000-0000-4000-8000-000000000001",
           session_id: "session-1",
           timestamp: "2026-06-26T11:04:11.000Z",
           task_id: "task-1",
@@ -199,7 +199,7 @@ describe("claude-agent-sdk-history subagents", () => {
         {
           type: "system",
           subtype: "task_notification",
-          uuid: "task-finished-1",
+          uuid: "00000000-0000-4000-8000-000000000002",
           session_id: "session-1",
           timestamp: "2026-06-26T11:04:12.000Z",
           task_id: "task-1",
@@ -233,7 +233,7 @@ describe("claude-agent-sdk-history subagents", () => {
         {
           type: "system",
           subtype: "task_updated",
-          uuid: "task-updated-1",
+          uuid: "00000000-0000-4000-8000-000000000003",
           session_id: "session-1",
         },
       ]),
@@ -265,7 +265,7 @@ describe("claude-agent-sdk-history subagents", () => {
         {
           type: "system",
           subtype: "task_started",
-          uuid: "task-started-1",
+          uuid: "00000000-0000-4000-8000-000000000004",
           session_id: "session-1",
           timestamp: "2026-06-26T11:04:11.000Z",
           task_id: "child-agent",
@@ -276,7 +276,7 @@ describe("claude-agent-sdk-history subagents", () => {
         {
           type: "system",
           subtype: "task_notification",
-          uuid: "task-finished-1",
+          uuid: "00000000-0000-4000-8000-000000000005",
           session_id: "session-1",
           timestamp: "2026-06-26T11:04:12.000Z",
           task_id: "child-agent",

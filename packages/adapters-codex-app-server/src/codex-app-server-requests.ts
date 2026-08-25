@@ -249,10 +249,8 @@ const approvalContentFields = (
       summary: reason ?? "Codex wants to run a shell command.",
     };
   }
-  if (isCodexAppServerPermissionRequestMethod(request.method)) {
-    const reason = isPlainObject(request.params)
-      ? extractStringField(request.params, ["reason"])
-      : null;
+  if (request.method === CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_PERMISSIONS_REQUEST_APPROVAL) {
+    const { reason } = request.params;
     return {
       title: "Permission approval requested",
       summary: reason ?? "Codex requests additional permissions.",

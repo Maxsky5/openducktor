@@ -115,6 +115,14 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
       errors: [error],
     },
     {
+      code: `${prelude} interface CommandsContract { [key: string]: Command } const commands: CommandsContract = { start: startCommand };`,
+      errors: [error],
+    },
+    {
+      code: `${prelude} interface CommandsContract {} interface CommandsContract extends Record<string, Command> {} const commands: CommandsContract = { start: startCommand };`,
+      errors: [error],
+    },
+    {
       code: `${prelude} type Open = Record<string, Command>; interface CommandsContract extends Open {} const commands: CommandsContract = { start: startCommand };`,
       errors: [error],
     },

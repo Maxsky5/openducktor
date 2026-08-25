@@ -5,22 +5,9 @@ import {
   createTypeEnvironment,
   isKnownEvidenceExpression,
 } from "../shared/dictionary-types.ts";
+import { unwrapTransparentExpression } from "../shared/transparent-expression.ts";
 
 import type { ESTree, Scope, SourceCode, Variable } from "@oxlint/plugins";
-
-function unwrapParentheses(expression: ESTree.Expression): ESTree.Expression {
-  let current = expression;
-  while (current.type === "ParenthesizedExpression") current = current.expression;
-  return current;
-}
-
-function unwrapTransparentExpression(expression: ESTree.Expression): ESTree.Expression {
-  let current = unwrapParentheses(expression);
-  while (current.type === "TSNonNullExpression" || current.type === "TSSatisfiesExpression") {
-    current = unwrapParentheses(current.expression);
-  }
-  return current;
-}
 
 function resolveVariable(
   sourceCode: SourceCode,

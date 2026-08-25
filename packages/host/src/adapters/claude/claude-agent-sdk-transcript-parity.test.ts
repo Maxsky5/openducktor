@@ -1310,7 +1310,7 @@ describe("Claude live and hydrated transcript parity", () => {
     const taskStarted = claudeSdkMessageFixture({
       type: "system",
       subtype: "task_started",
-      uuid: "task-started-retracted",
+      uuid: "00000000-0000-4000-8000-000000000006",
       session_id: "session-1",
       task_id: "task-retracted",
       tool_use_id: "tool-agent-retracted",
@@ -1333,7 +1333,7 @@ describe("Claude live and hydrated transcript parity", () => {
     const lateTaskNotification = claudeSdkMessageFixture({
       type: "system",
       subtype: "task_notification",
-      uuid: "task-notification-late",
+      uuid: "00000000-0000-4000-8000-000000000007",
       session_id: "session-1",
       task_id: "task-retracted",
       status: "completed",

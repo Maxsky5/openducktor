@@ -1,4 +1,8 @@
 import type { AgentStreamPart, AgentSubagentStatus } from "@openducktor/core";
+import type {
+  CodexAppServerCollabAgentTool,
+  CodexAppServerSubAgentActivityKind,
+} from "@openducktor/contracts";
 import type { CodexSubAgentSourceMetadata, CodexThreadSnapshot } from "./codex-app-server-threads";
 
 type CodexSubagentPart = Extract<AgentStreamPart, { kind: "subagent" }>;
@@ -45,6 +49,22 @@ type CodexSubagentLinkMetadata = {
     agentRole?: string;
     subAgentSource?: CodexSubAgentSourceMetadata;
   };
+  codexSubagent?:
+    | {
+        source: "collabAgentToolCall";
+        itemId: string;
+        tool: CodexAppServerCollabAgentTool;
+        parentThreadId: string;
+        childThreadId?: string;
+      }
+    | {
+        source: "subAgentActivity";
+        itemId: string;
+        kind: CodexAppServerSubAgentActivityKind;
+        parentThreadId: string;
+        childThreadId: string;
+        agentPath: string;
+      };
 };
 
 type CodexStoredSubagentLink = {

@@ -37,6 +37,15 @@ describe("HOST_COMMAND_NAMES", () => {
     ).toThrow("Host command 'workspace_list' returned an invalid response.");
   });
 
+  test("preserves valid spaces in opaque path responses", () => {
+    expect(parseHostCommandResponse("git_canonicalize_path", "/tmp/repo ")).toBe("/tmp/repo ");
+    expect(
+      parseHostCommandResponse("workspace_stage_local_attachment", {
+        path: "/tmp/image.png ",
+      }),
+    ).toEqual({ path: "/tmp/image.png " });
+  });
+
   test("rejects non-JSON output from response schema transforms", () => {
     const command = "workspace_list";
     const originalSchema = HOST_COMMAND_RESPONSE_SCHEMAS[command];
