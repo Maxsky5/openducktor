@@ -11,10 +11,17 @@ import { resolveVariable } from "../shared/global-reference.ts";
 import { isStableBinding } from "../shared/stable-binding.ts";
 
 type RuntimeFunction = ESTree.ArrowFunctionExpression | ESTree.Function;
-type StableAlias = {
-  readonly expression: ESTree.Expression;
-  readonly variable: Variable;
-};
+type StableAlias =
+  | {
+      readonly expression: ESTree.Expression;
+      readonly kind: "expression";
+      readonly variable: Variable;
+    }
+  | {
+      readonly body: ESTree.BlockStatement;
+      readonly kind: "function";
+      readonly variable: Variable;
+    };
 
 type Parameter = ESTree.ParamPattern;
 
@@ -78,6 +85,14 @@ function stableAliasInitializer(
     return null;
   const definition = variable.defs[0];
   if (
+    definition?.type === "FunctionName" &&
+    definition.node.type === "FunctionDeclaration" &&
+    definition.node.body !== null &&
+    variable.references.every((reference) => !reference.isWrite())
+  ) {
+    return { body: definition.node.body, kind: "function", variable };
+  }
+  if (
     definition?.type !== "Variable" ||
     definition.node.type !== "VariableDeclarator" ||
     definition.node.id.type !== "Identifier" ||
@@ -86,7 +101,7 @@ function stableAliasInitializer(
   ) {
     return null;
   }
-  return { expression: definition.node.init, variable };
+  return { expression: definition.node.init, kind: "expression", variable };
 }
 
 function directlyExposesParameter(
@@ -105,7 +120,11 @@ function directlyExposesParameter(
     if (alias === null) return false;
     const nextResolving = new Set(resolvingAliases);
     nextResolving.add(alias.variable);
-    return directlyExposesParameter(alias.expression, parameterVariable, sourceCode, nextResolving);
+    return alias.kind === "expression"
+      ? directlyExposesParameter(alias.expression, parameterVariable, sourceCode, nextResolving)
+      : alias.body.body.some((statement) =>
+          statementReturnsParameter(statement, parameterVariable, sourceCode, nextResolving),
+        );
   }
   if (expression.type === "ChainExpression")
     return directlyExposesParameter(
@@ -201,39 +220,60 @@ function statementReturnsParameter(
   statement: ESTree.Statement,
   parameterVariable: Variable,
   sourceCode: SourceCode,
+  resolvingAliases: ReadonlySet<Variable> = new Set(),
 ): boolean {
   if (statement.type === "ReturnStatement") {
     return (
       statement.argument !== null &&
-      directlyExposesParameter(statement.argument, parameterVariable, sourceCode)
+      directlyExposesParameter(statement.argument, parameterVariable, sourceCode, resolvingAliases)
     );
   }
   if (statement.type === "BlockStatement") {
     return statement.body.some((child) =>
-      statementReturnsParameter(child, parameterVariable, sourceCode),
+      statementReturnsParameter(child, parameterVariable, sourceCode, resolvingAliases),
     );
   }
   if (statement.type === "IfStatement") {
     return (
-      statementReturnsParameter(statement.consequent, parameterVariable, sourceCode) ||
+      statementReturnsParameter(
+        statement.consequent,
+        parameterVariable,
+        sourceCode,
+        resolvingAliases,
+      ) ||
       (statement.alternate !== null &&
-        statementReturnsParameter(statement.alternate, parameterVariable, sourceCode))
+        statementReturnsParameter(
+          statement.alternate,
+          parameterVariable,
+          sourceCode,
+          resolvingAliases,
+        ))
     );
   }
   if (statement.type === "SwitchStatement") {
     return statement.cases.some((case_) =>
       case_.consequent.some((child) =>
-        statementReturnsParameter(child, parameterVariable, sourceCode),
+        statementReturnsParameter(child, parameterVariable, sourceCode, resolvingAliases),
       ),
     );
   }
   if (statement.type === "TryStatement") {
     return (
-      statementReturnsParameter(statement.block, parameterVariable, sourceCode) ||
+      statementReturnsParameter(statement.block, parameterVariable, sourceCode, resolvingAliases) ||
       (statement.handler !== null &&
-        statementReturnsParameter(statement.handler.body, parameterVariable, sourceCode)) ||
+        statementReturnsParameter(
+          statement.handler.body,
+          parameterVariable,
+          sourceCode,
+          resolvingAliases,
+        )) ||
       (statement.finalizer !== null &&
-        statementReturnsParameter(statement.finalizer, parameterVariable, sourceCode))
+        statementReturnsParameter(
+          statement.finalizer,
+          parameterVariable,
+          sourceCode,
+          resolvingAliases,
+        ))
     );
   }
   return false;

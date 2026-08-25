@@ -157,12 +157,10 @@ export const noKnownValueWideningRule = defineRule({
 
     return {
       VariableDeclarator(node) {
-        if (node.init === null || node.id.type !== "Identifier") return;
-        reportFlow(
-          node.init,
-          targetFromAnnotation(node.id.typeAnnotation),
-          `binding \`${node.id.name}\``,
-        );
+        if (node.init === null) return;
+        const subject =
+          node.id.type === "Identifier" ? `binding \`${node.id.name}\`` : "destructuring binding";
+        reportFlow(node.init, targetFromAnnotation(node.id.typeAnnotation), subject);
       },
       PropertyDefinition(node) {
         if (node.value === null) return;

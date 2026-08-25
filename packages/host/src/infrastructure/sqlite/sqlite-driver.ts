@@ -4,15 +4,22 @@ import {
   HostOperationError,
   toHostOperationError,
 } from "../../effect/host-errors";
+import {
+  isSqliteRow,
+  isSqliteRunResult,
+  isSqliteValue,
+  type SqliteRow,
+  type SqliteRunResult,
+  type SqliteValue,
+  type SqliteValueRow,
+} from "./sqlite-driver-values";
 
-export type SqliteValue = bigint | number | string | null | Uint8Array;
-export type SqliteRow = Record<string, SqliteValue>;
-export type SqliteValueRow = SqliteValue[];
-
-export type SqliteRunResult = {
-  changes: bigint | number;
-  lastInsertRowid: bigint | number;
-};
+export type {
+  SqliteRow,
+  SqliteRunResult,
+  SqliteValue,
+  SqliteValueRow,
+} from "./sqlite-driver-values";
 
 export type SqliteDriverRuntime = "bun" | "node";
 
@@ -70,8 +77,7 @@ type UnvalidatedSqliteRunResult = {
   changes: unknown;
   lastInsertRowid: unknown;
 };
-type UnvalidatedSqliteValueRow = Record<number, unknown>;
-type SqliteRuntimeImport = { module: unknown };
+type UnvalidatedSqliteValueRow = readonly unknown[];
 
 const bunSqliteModuleSpecifier = "bun:sqlite";
 const nodeSqliteModuleSpecifier = "node:sqlite";
@@ -91,18 +97,6 @@ const isNodeSqliteModule = (value: unknown): value is NodeSqliteModule =>
   "DatabaseSync" in value &&
   typeof value.DatabaseSync === "function";
 
-const importRuntimeModule = async (specifier: string): Promise<SqliteRuntimeImport> => {
-  const module: unknown = await import(specifier);
-  return { module };
-};
-
-const isSqliteValue = (value: unknown): value is SqliteValue =>
-  value === null ||
-  typeof value === "bigint" ||
-  typeof value === "number" ||
-  typeof value === "string" ||
-  value instanceof Uint8Array;
-
 const unsupportedSqliteDriver = (
   operation: string,
   message: string,
@@ -118,12 +112,6 @@ const unsupportedSqliteResult = (operation: string, value: unknown): HostOperati
   unsupportedSqliteDriver(operation, "SQLite returned an unsupported result.", {
     valueTag: Object.prototype.toString.call(value),
   });
-
-const isSqliteRow = (value: unknown): value is SqliteRow =>
-  typeof value === "object" &&
-  value !== null &&
-  !Array.isArray(value) &&
-  Object.values(value).every(isSqliteValue);
 
 const parseSqliteRow = (
   operation: string,
@@ -152,7 +140,7 @@ const parseSqliteValueRow = (
   value: unknown,
 ): Effect.Effect<SqliteValueRow, HostOperationError> =>
   Array.isArray(value) && value.every(isSqliteValue)
-    ? Effect.succeed(value)
+    ? Effect.succeed(Array.from(value))
     : Effect.fail(unsupportedSqliteResult(operation, value));
 
 const parseSqliteValueRows = (
@@ -163,15 +151,6 @@ const parseSqliteValueRows = (
     ? Effect.all(value.map((row) => parseSqliteValueRow(operation, row)))
     : Effect.fail(unsupportedSqliteResult(operation, value));
 
-const isSqliteRunResult = (value: unknown): value is SqliteRunResult => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  if (!("changes" in value) || !("lastInsertRowid" in value)) return false;
-  return (
-    (typeof value.changes === "bigint" || typeof value.changes === "number") &&
-    (typeof value.lastInsertRowid === "bigint" || typeof value.lastInsertRowid === "number")
-  );
-};
-
 const parseSqliteRunResult = (
   operation: string,
   value: unknown,
@@ -180,44 +159,41 @@ const parseSqliteRunResult = (
     ? Effect.succeed(value)
     : Effect.fail(unsupportedSqliteResult(operation, value));
 
-const importSqliteModule = (
+const importSqliteModule = <Module>(
   specifier: string,
-): Effect.Effect<SqliteRuntimeImport, HostOperationError> =>
+  operation: string,
+  invalidMessage: string,
+  isModule: (value: unknown) => value is Module,
+): Effect.Effect<Module, HostOperationError> =>
   Effect.tryPromise({
-    try: () => importRuntimeModule(specifier),
+    try: async () => {
+      const module: unknown = await import(specifier);
+      if (!isModule(module)) {
+        throw unsupportedSqliteDriver(operation, invalidMessage, { specifier });
+      }
+      return module;
+    },
     catch: (cause) =>
-      toHostOperationError(cause, "sqlite.importRuntimeModule", {
-        specifier,
-      }),
+      cause instanceof HostOperationError
+        ? cause
+        : toHostOperationError(cause, "sqlite.importRuntimeModule", { specifier }),
   });
 
 const loadBunSqliteModule = (): Effect.Effect<BunSqliteModule, HostOperationError> =>
-  Effect.gen(function* () {
-    const { module: sqlite } = yield* importSqliteModule(bunSqliteModuleSpecifier);
-    if (!isBunSqliteModule(sqlite)) {
-      return yield* Effect.fail(
-        unsupportedSqliteDriver("sqlite.loadBunModule", "bun:sqlite did not expose Database.", {
-          specifier: bunSqliteModuleSpecifier,
-        }),
-      );
-    }
-    return sqlite;
-  });
+  importSqliteModule(
+    bunSqliteModuleSpecifier,
+    "sqlite.loadBunModule",
+    "bun:sqlite did not expose Database.",
+    isBunSqliteModule,
+  );
 
 const loadNodeSqliteModule = (): Effect.Effect<NodeSqliteModule, HostOperationError> =>
-  Effect.gen(function* () {
-    const { module: sqlite } = yield* importSqliteModule(nodeSqliteModuleSpecifier);
-    if (!isNodeSqliteModule(sqlite)) {
-      return yield* Effect.fail(
-        unsupportedSqliteDriver(
-          "sqlite.loadNodeModule",
-          "node:sqlite did not expose DatabaseSync.",
-          { specifier: nodeSqliteModuleSpecifier },
-        ),
-      );
-    }
-    return sqlite;
-  });
+  importSqliteModule(
+    nodeSqliteModuleSpecifier,
+    "sqlite.loadNodeModule",
+    "node:sqlite did not expose DatabaseSync.",
+    isNodeSqliteModule,
+  );
 
 const runSqliteOperation = <A>(
   operation: string,

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { hasOwnKey } from "./runtime-type";
+import { hasOwnKey } from "./object-key";
 
 export const agentPromptTemplateIdValues = [
   "system.shared.workflow_guards",

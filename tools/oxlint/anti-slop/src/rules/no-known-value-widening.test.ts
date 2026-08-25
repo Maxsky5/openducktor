@@ -58,6 +58,7 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
   ],
   invalid: [
     { code: "const value: unknown = {};", errors: [error] },
+    { code: "const { value }: Record<string, unknown> = { value: 1 };", errors: [error] },
     { code: "const value: object = {};", errors: [error] },
     { code: "let value: unknown; value = {};", errors: [error] },
     { code: "function create(): unknown { return {}; }", errors: [error] },
