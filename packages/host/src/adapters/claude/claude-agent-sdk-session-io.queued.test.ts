@@ -9,6 +9,9 @@ import {
 } from "./claude-agent-sdk-session-io.test-support";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
 
+const MESSAGE_ID = "00000000-0000-4000-8000-000000000001";
+const SKILL_MESSAGE_ID = "00000000-0000-4000-8000-000000000002";
+
 describe("Claude session I/O queued messages", () => {
   test("returns a skill chip for live Claude skill commands", async () => {
     const pushed: SDKUserMessage[] = [];
@@ -21,7 +24,7 @@ describe("Claude session I/O queued messages", () => {
     const accepted = await sendClaudeUserMessage({
       session,
       now: () => "2026-06-25T20:00:00.000Z",
-      randomId: () => "message-skill-command",
+      randomId: () => SKILL_MESSAGE_ID,
       emit: () => {},
       messageInput: {
         externalSessionId: "session-1",
@@ -90,7 +93,7 @@ describe("Claude session I/O queued messages", () => {
     const accepted = await sendClaudeUserMessage({
       session,
       now: () => "2026-06-25T20:00:00.000Z",
-      randomId: () => "message-1",
+      randomId: () => MESSAGE_ID,
       emit: (_session, event) => events.push(event),
       messageInput: {
         externalSessionId: "session-1",
@@ -110,7 +113,7 @@ describe("Claude session I/O queued messages", () => {
     expect(session.queuedSdkMessages).toEqual([
       expect.objectContaining({
         type: "user",
-        uuid: "message-1",
+        uuid: MESSAGE_ID,
         session_id: "session-1",
       }),
     ]);
@@ -126,7 +129,7 @@ describe("Claude session I/O queued messages", () => {
   test("marks the local user turn pending before sending it to the SDK queue", async () => {
     const events: AgentEvent[] = [];
     const queue = new AsyncInputQueue<SDKUserMessage>();
-    const messageId = "00000000-0000-4000-8000-000000000001";
+    const messageId = MESSAGE_ID;
     const session = createClaudeSession({
       activity: "idle",
       model: {
@@ -196,7 +199,7 @@ describe("Claude session I/O queued messages", () => {
     const session = createClaudeSession({
       acceptedUserMessages: [
         {
-          messageId: "00000000-0000-4000-8000-000000000002",
+          messageId: SKILL_MESSAGE_ID,
           parts: [{ kind: "text", text: "queued" }],
           text: "queued",
           timestamp: "2026-06-25T20:00:01.000Z",
@@ -209,7 +212,7 @@ describe("Claude session I/O queued messages", () => {
       queuedSdkMessages: [
         {
           type: "user",
-          uuid: "00000000-0000-4000-8000-000000000002",
+          uuid: SKILL_MESSAGE_ID,
           session_id: "session-1",
           timestamp: "2026-06-25T20:00:01.000Z",
           parent_tool_use_id: null,
@@ -231,7 +234,7 @@ describe("Claude session I/O queued messages", () => {
     expect(pushed).toEqual([
       expect.objectContaining({
         type: "user",
-        uuid: "00000000-0000-4000-8000-000000000002",
+        uuid: SKILL_MESSAGE_ID,
         session_id: "session-1",
       }),
     ]);
@@ -242,7 +245,7 @@ describe("Claude session I/O queued messages", () => {
       expect.objectContaining({
         type: "user_message",
         externalSessionId: "session-1",
-        messageId: "00000000-0000-4000-8000-000000000002",
+        messageId: SKILL_MESSAGE_ID,
         state: "read",
       }),
       expect.objectContaining({
@@ -414,7 +417,7 @@ describe("Claude session I/O queued messages", () => {
       queuedSdkMessages: [
         {
           type: "user",
-          uuid: "00000000-0000-4000-8000-000000000002",
+          uuid: SKILL_MESSAGE_ID,
           session_id: "session-1",
           timestamp: "2026-06-25T20:00:01.000Z",
           parent_tool_use_id: null,
@@ -445,7 +448,7 @@ describe("Claude session I/O queued messages", () => {
 
     expect(pushed).toEqual([]);
     expect(session.queuedSdkMessages.map((message) => message.uuid)).toEqual([
-      "00000000-0000-4000-8000-000000000002",
+      SKILL_MESSAGE_ID,
       "00000000-0000-4000-8000-000000000003",
     ]);
   });
@@ -462,7 +465,7 @@ describe("Claude session I/O queued messages", () => {
     };
     const firstMessage: SDKUserMessage = {
       type: "user",
-      uuid: "00000000-0000-4000-8000-000000000002",
+      uuid: SKILL_MESSAGE_ID,
       session_id: "session-1",
       timestamp: "2026-06-25T20:00:01.000Z",
       parent_tool_use_id: null,
@@ -474,7 +477,7 @@ describe("Claude session I/O queued messages", () => {
     const session = createClaudeSession({
       acceptedUserMessages: [
         {
-          messageId: "00000000-0000-4000-8000-000000000002",
+          messageId: SKILL_MESSAGE_ID,
           model: {
             providerId: "claude",
             modelId: "claude-opus-4-6",
@@ -520,7 +523,7 @@ describe("Claude session I/O queued messages", () => {
 
     expect(pushed).toEqual([]);
     expect(session.queuedSdkMessages.map((message) => message.uuid)).toEqual([
-      "00000000-0000-4000-8000-000000000002",
+      SKILL_MESSAGE_ID,
       "00000000-0000-4000-8000-000000000003",
     ]);
 
@@ -535,7 +538,7 @@ describe("Claude session I/O queued messages", () => {
     });
 
     expect(pushed.map((message) => message.uuid)).toEqual([
-      "00000000-0000-4000-8000-000000000002",
+      SKILL_MESSAGE_ID,
       "00000000-0000-4000-8000-000000000003",
     ]);
   });
@@ -551,7 +554,7 @@ describe("Claude session I/O queued messages", () => {
     });
     const queuedMessage: SDKUserMessage = {
       type: "user",
-      uuid: "00000000-0000-4000-8000-000000000002",
+      uuid: SKILL_MESSAGE_ID,
       session_id: "session-1",
       timestamp: "2026-06-25T20:00:01.000Z",
       parent_tool_use_id: null,
@@ -563,7 +566,7 @@ describe("Claude session I/O queued messages", () => {
     const session = createClaudeSession({
       acceptedUserMessages: [
         {
-          messageId: "00000000-0000-4000-8000-000000000002",
+          messageId: SKILL_MESSAGE_ID,
           model: {
             providerId: "claude",
             modelId: "claude-opus-4-6",
@@ -627,7 +630,7 @@ describe("Claude session I/O queued messages", () => {
       sendClaudeUserMessage({
         session,
         now: () => "2026-06-25T20:00:00.000Z",
-        randomId: () => "message-1",
+        randomId: () => MESSAGE_ID,
         emit: (_session, event) => events.push(event),
         messageInput: {
           externalSessionId: "session-1",
@@ -651,7 +654,7 @@ describe("Claude session I/O queued messages", () => {
     const queue = new AsyncInputQueue<SDKUserMessage>();
     const queuedMessage: SDKUserMessage = {
       type: "user",
-      uuid: "00000000-0000-4000-8000-000000000002",
+      uuid: SKILL_MESSAGE_ID,
       session_id: "session-1",
       timestamp: "2026-06-25T20:00:01.000Z",
       parent_tool_use_id: null,
@@ -663,7 +666,7 @@ describe("Claude session I/O queued messages", () => {
     const session = createClaudeSession({
       acceptedUserMessages: [
         {
-          messageId: "00000000-0000-4000-8000-000000000002",
+          messageId: SKILL_MESSAGE_ID,
           parts: [{ kind: "text", text: "queued" }],
           text: "queued",
           timestamp: "2026-06-25T20:00:01.000Z",
@@ -722,7 +725,7 @@ describe("Claude session I/O queued messages", () => {
       sendClaudeUserMessage({
         session,
         now: () => "2026-06-25T20:00:00.000Z",
-        randomId: () => "message-1",
+        randomId: () => MESSAGE_ID,
         emit: (_session, event) => events.push(event),
         messageInput: {
           externalSessionId: "session-1",

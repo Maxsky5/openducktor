@@ -22,6 +22,9 @@ import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-sto
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 import type { ClaudeAgentSdkEventEmitter } from "./claude-agent-sdk-types";
 
+const MESSAGE_ID = "00000000-0000-4000-8000-000000000001";
+const QUEUED_MESSAGE_ID = "00000000-0000-4000-8000-000000000004";
+
 describe("consumeClaudeSession lifecycle", () => {
   test("sends the first resumed user message after an unattributed running replay", async () => {
     const events: AgentEvent[] = [];
@@ -59,7 +62,7 @@ describe("consumeClaudeSession lifecycle", () => {
     const accepted = await sendClaudeUserMessage({
       session,
       now: () => "2026-06-25T20:00:01.000Z",
-      randomId: () => "message-1",
+      randomId: () => MESSAGE_ID,
       emit: (_session, event) => events.push(event),
       messageInput: {
         externalSessionId: "session-1",
@@ -76,7 +79,7 @@ describe("consumeClaudeSession lifecycle", () => {
     expect(pushed).toEqual([
       expect.objectContaining({
         type: "user",
-        uuid: "message-1",
+        uuid: MESSAGE_ID,
       }),
     ]);
 
@@ -107,7 +110,7 @@ describe("consumeClaudeSession lifecycle", () => {
     const session = createClaudeSession({
       acceptedUserMessages: [
         {
-          messageId: "00000000-0000-4000-8000-000000000001",
+          messageId: MESSAGE_ID,
           parts: [{ kind: "text", text: "first turn" }],
           text: "first turn",
           timestamp: "2026-06-25T20:00:00.000Z",
@@ -205,7 +208,7 @@ describe("consumeClaudeSession lifecycle", () => {
     const session = createClaudeSession({
       acceptedUserMessages: [
         {
-          messageId: "00000000-0000-4000-8000-000000000001",
+          messageId: MESSAGE_ID,
           parts: [{ kind: "text", text: "write the spec" }],
           text: "write the spec",
           timestamp: "2026-06-25T20:00:00.000Z",
@@ -293,7 +296,7 @@ describe("consumeClaudeSession lifecycle", () => {
     const session = createClaudeSession({
       acceptedUserMessages: [
         {
-          messageId: "00000000-0000-4000-8000-000000000001",
+          messageId: MESSAGE_ID,
           parts: [{ kind: "text", text: "first turn" }],
           text: "first turn",
           timestamp: "2026-06-25T20:00:00.000Z",
@@ -397,7 +400,7 @@ describe("consumeClaudeSession lifecycle", () => {
     await sendClaudeUserMessage({
       session,
       now: () => "2026-06-25T20:00:00.000Z",
-      randomId: () => "message-queued",
+      randomId: () => QUEUED_MESSAGE_ID,
       emit: () => {},
       messageInput: {
         externalSessionId: "session-1",
@@ -440,7 +443,7 @@ describe("consumeClaudeSession lifecycle", () => {
       onBackgroundFailure: ignoreClaudeBackgroundFailure,
     });
 
-    expect(pushed).toEqual([expect.objectContaining({ uuid: "message-queued" })]);
+    expect(pushed).toEqual([expect.objectContaining({ uuid: QUEUED_MESSAGE_ID })]);
     expect(setModelCalls).toEqual(["claude-haiku-4-5", "claude-opus-4-6", "claude-haiku-4-5"]);
     expect(session.model).toEqual({
       providerId: "claude",
@@ -517,7 +520,7 @@ describe("consumeClaudeSession lifecycle", () => {
       sendClaudeUserMessage({
         session,
         now: () => "2026-06-25T20:00:01.000Z",
-        randomId: () => "message-1",
+        randomId: () => MESSAGE_ID,
         emit: () => {},
         messageInput: {
           externalSessionId: "session-1",

@@ -1,4 +1,4 @@
-import type { AgentSessionHistoryMessage } from "@openducktor/core";
+import { isUnknownRecord, type AgentSessionHistoryMessage } from "@openducktor/core";
 import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
 import {
   type ClaudeLiveUserMessage,
@@ -14,7 +14,7 @@ import {
 } from "./claude-agent-sdk-local-commands";
 import { createClaudeFinishStepPart } from "./claude-agent-sdk-transcript-parts";
 import { isClaudeHumanUserMessage } from "./claude-agent-sdk-user-messages";
-import { historyMessageText, isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import { historyMessageText, readStringProp } from "./claude-agent-sdk-utils";
 
 type ClaudeVisibleHistoryMessage = Extract<
   AgentSessionHistoryMessage,
@@ -136,8 +136,7 @@ export const createClaudeHistoryInputProjector = (options: {
     }
 
     const promptId = readStringProp(entryValue, "promptId");
-    // SAFETY: The runtime adapter builds this value from the contract fields required by `{ isCompactSummary?: unknown }`.
-    const isCompactSummary = (entry as { isCompactSummary?: unknown }).isCompactSummary === true;
+    const isCompactSummary = isUnknownRecord(entry) && entry.isCompactSummary === true;
     if (isCompactSummary) {
       if (promptId) {
         compactPromptIds.add(promptId);
@@ -148,7 +147,7 @@ export const createClaudeHistoryInputProjector = (options: {
       compactPromptIds.add(promptId);
     }
 
-    const entryMessage = isRecord(entryValue) ? entryValue.message : undefined;
+    const entryMessage = isUnknownRecord(entryValue) ? entryValue.message : undefined;
     const rawText = historyMessageText(entryMessage);
     const command = readClaudeCommandEnvelope(rawText);
     if (promptId && compactPromptIds.has(promptId) && !command) {

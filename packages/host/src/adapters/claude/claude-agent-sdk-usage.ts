@@ -1,4 +1,4 @@
-import { claudeUnknownRecordSchema } from "./claude-agent-sdk-utils";
+import { isUnknownRecord } from "@openducktor/core";
 
 type ClaudeContextUsageFields = {
   usedTokens?: number;
@@ -15,12 +15,11 @@ const positiveNumber = (value: unknown): number | undefined => {
 export const contextUsageFromClaudeControlResponse = (
   response: unknown,
 ): ClaudeContextUsageFields => {
-  const parsed = claudeUnknownRecordSchema.safeParse(response);
-  if (!parsed.success) {
+  if (!isUnknownRecord(response)) {
     return {};
   }
-  const usedTokens = positiveNumber(parsed.data.totalTokens);
-  const maxTokens = positiveNumber(parsed.data.maxTokens);
+  const usedTokens = positiveNumber(response.totalTokens);
+  const maxTokens = positiveNumber(response.maxTokens);
   return {
     ...(usedTokens !== undefined ? { usedTokens } : undefined),
     ...(maxTokens !== undefined ? { maxTokens } : undefined),

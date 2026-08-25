@@ -1,8 +1,6 @@
-import type {
-  ClaudeHistoryEntryMetadata,
-  ClaudeHistoryMessage,
-} from "./claude-agent-sdk-history-import";
-import { claudeUnknownRecordSchema, isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
+import { isUnknownRecord } from "@openducktor/core";
+import { readStringProp } from "./claude-agent-sdk-utils";
 
 const CLAUDE_SYNTHETIC_MODEL = "<synthetic>";
 const COMMAND_NAME_PATTERN = /<command-name>([\s\S]*?)<\/command-name>/;
@@ -10,8 +8,9 @@ const COMMAND_ARGS_PATTERN = /<command-args>([\s\S]*?)<\/command-args>/;
 const LOCAL_COMMAND_STDOUT_PATTERN = /^<local-command-stdout>([\s\S]*)<\/local-command-stdout>$/;
 
 export const isClaudeSyntheticAssistantMessage = (message: unknown): boolean => {
-  const parsed = claudeUnknownRecordSchema.safeParse(message);
-  return parsed.success && readStringProp(parsed.data.message, "model") === CLAUDE_SYNTHETIC_MODEL;
+  return (
+    isUnknownRecord(message) && readStringProp(message.message, "model") === CLAUDE_SYNTHETIC_MODEL
+  );
 };
 
 export const readClaudeCommandEnvelope = (text: string): string | null => {
@@ -45,10 +44,8 @@ export const readClaudeQueuedPrompt = (entry: ClaudeHistoryMessage): string | nu
 
 export const isClaudeMetaHistoryMessage = (entry: ClaudeHistoryMessage): boolean => {
   const value = entry;
-  if (!isRecord(value)) {
+  if (!isUnknownRecord(value)) {
     return false;
   }
-  // SAFETY: The runtime adapter builds this value from the contract fields required by `ClaudeHistoryEntryMetadata`.
-  const metadata = entry as ClaudeHistoryEntryMetadata;
-  return metadata.isMeta === true || metadata.interruptedByShutdown === true;
+  return value.isMeta === true || value.interruptedByShutdown === true;
 };

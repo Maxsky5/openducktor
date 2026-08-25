@@ -1,4 +1,8 @@
-import type { AgentSessionTodoItem, LoadAgentSessionTodosInput } from "@openducktor/core";
+import {
+  isUnknownRecord,
+  type AgentSessionTodoItem,
+  type LoadAgentSessionTodosInput,
+} from "@openducktor/core";
 import { z } from "zod";
 import { isNestedHistoryEntry } from "./claude-agent-sdk-history-entry";
 import {
@@ -15,7 +19,7 @@ import {
   isClaudeToolUseRetracted,
   retractClaudeTranscriptCorrelations,
 } from "./claude-agent-sdk-transcript-correlation";
-import { claudeUnknownRecordSchema, isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import { readStringProp } from "./claude-agent-sdk-utils";
 
 export type ClaudeTodoState = Map<string, AgentSessionTodoItem>;
 
@@ -51,10 +55,10 @@ type ClaudeTaskToolResultInput = {
 };
 
 const readTaskOutput = (raw: Record<string, unknown>): Record<string, unknown> => {
-  if (isRecord(raw.toolUseResult)) {
+  if (isUnknownRecord(raw.toolUseResult)) {
     return raw.toolUseResult;
   }
-  return isRecord(raw.structuredContent) ? raw.structuredContent : raw;
+  return isUnknownRecord(raw.structuredContent) ? raw.structuredContent : raw;
 };
 
 const claudeTaskStatusSchema = z.enum(["pending", "in_progress", "completed"]);
@@ -65,13 +69,12 @@ const readTaskStatus = (value: unknown): AgentSessionTodoItem["status"] | null =
 };
 
 const readTaskItem = (value: unknown): AgentSessionTodoItem | null => {
-  const parsed = claudeUnknownRecordSchema.safeParse(value);
-  if (!parsed.success) {
+  if (!isUnknownRecord(value)) {
     return null;
   }
-  const id = readStringProp(parsed.data, "id");
-  const content = readStringProp(parsed.data, "subject");
-  const status = readTaskStatus(parsed.data.status);
+  const id = readStringProp(value, "id");
+  const content = readStringProp(value, "subject");
+  const status = readTaskStatus(value.status);
   if (!id || !content || !status) {
     return null;
   }
@@ -79,7 +82,7 @@ const readTaskItem = (value: unknown): AgentSessionTodoItem | null => {
 };
 
 const applyTaskCreate = (state: ClaudeTodoState, output: Record<string, unknown>): boolean => {
-  if (!isRecord(output.task)) {
+  if (!isUnknownRecord(output.task)) {
     return false;
   }
   const id = readStringProp(output.task, "id");
@@ -259,12 +262,14 @@ export const toClaudeTodos = (
     }
     if (entry.type === "assistant") {
       const content =
-        isRecord(value) && isRecord(value.message) ? value.message.content : undefined;
+        isUnknownRecord(value) && isUnknownRecord(value.message)
+          ? value.message.content
+          : undefined;
       if (!Array.isArray(content)) {
         continue;
       }
       for (const [index, block] of content.entries()) {
-        if (!isRecord(block)) {
+        if (!isUnknownRecord(block)) {
           continue;
         }
         const toolUse = decodeClaudeToolUseBlock({

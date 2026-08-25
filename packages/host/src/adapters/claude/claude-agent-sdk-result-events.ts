@@ -1,5 +1,6 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentEvent, AgentModelSelection } from "@openducktor/core";
+import { agentModelSelectionSchema } from "@openducktor/contracts";
+import { isUnknownRecord, type AgentEvent, type AgentModelSelection } from "@openducktor/core";
 import {
   clearClaudeManualCompaction,
   settleClaudeManualCompactionResult,
@@ -143,11 +144,12 @@ const resultModelForCompletedTurn = (
   completedUserTurnIndex: number,
   duplicatesAssistantTextFromSameTurn: boolean,
 ): AgentModelSelection | undefined => {
-  // SAFETY: The runtime adapter builds this value from the contract fields required by `| { model?: AgentModelSelection } | undefined`.
-  const acceptedMessage = session.acceptedUserMessages?.[completedUserTurnIndex - 1] as
-    | { model?: AgentModelSelection }
-    | undefined;
-  const acceptedModel = acceptedMessage?.model;
+  const acceptedMessage = session.acceptedUserMessages?.[completedUserTurnIndex - 1];
+  const acceptedModelCandidate = isUnknownRecord(acceptedMessage)
+    ? acceptedMessage.model
+    : undefined;
+  const parsedAcceptedModel = agentModelSelectionSchema.safeParse(acceptedModelCandidate);
+  const acceptedModel = parsedAcceptedModel.success ? parsedAcceptedModel.data : undefined;
   const completedAssistantModel = duplicatesAssistantTextFromSameTurn
     ? session.lastAssistantTextModel
     : undefined;
@@ -224,11 +226,8 @@ const emitSuccessfulResultText = ({
     completedUserTurnIndex,
     duplicatesAssistantTextFromSameTurn,
   );
-  // SAFETY: The preceding runtime guard establishes `| { model?: unknown } | undefined` before this assertion.
-  const acceptedTurn = session.acceptedUserMessages?.[completedUserTurnIndex - 1] as
-    | { model?: unknown }
-    | undefined;
-  const acceptedTurnHasModel = acceptedTurn?.model !== undefined;
+  const acceptedTurn = session.acceptedUserMessages?.[completedUserTurnIndex - 1];
+  const acceptedTurnHasModel = isUnknownRecord(acceptedTurn) && acceptedTurn.model !== undefined;
   if (
     duplicatesAssistantTextFromSameTurn &&
     session.lastAssistantTextFinal &&

@@ -1,5 +1,5 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentModelSelection } from "@openducktor/core";
+import { isUnknownRecord, type AgentModelSelection } from "@openducktor/core";
 import { toClaudeSlashCommandCatalog } from "./claude-agent-sdk-catalog";
 import { handleClaudeCompactionBoundary } from "./claude-agent-sdk-compaction";
 import {
@@ -46,7 +46,7 @@ import {
 } from "./claude-agent-sdk-transcript-retractions";
 import type { ClaudeAgentSdkEvent } from "./claude-agent-sdk-types";
 import { shouldFinalizeClaudeTurn } from "./claude-agent-sdk-user-messages";
-import { isRecord, readStringProp, textFromContentBlocks } from "./claude-agent-sdk-utils";
+import { readStringProp, textFromContentBlocks } from "./claude-agent-sdk-utils";
 
 type SdkMessageHandlerInput = {
   emit: (event: ClaudeAgentSdkEvent) => void;
@@ -242,12 +242,12 @@ const handleAssistantMessage = ({
   emitSupersededTranscriptMessage({ emit, message, session, timestamp });
   const assistantModel = message.message.model ? modelSelection(message.message.model) : undefined;
   const assistantMessage = message.message;
-  const content = isRecord(assistantMessage) ? assistantMessage.content : undefined;
+  const content = isUnknownRecord(assistantMessage) ? assistantMessage.content : undefined;
   const text = textFromContentBlocks(content);
   const hasToolUse =
     Array.isArray(content) &&
     content.some(
-      (block) => isRecord(block) && isClaudeToolUseBlockType(readStringProp(block, "type")),
+      (block) => isUnknownRecord(block) && isClaudeToolUseBlockType(readStringProp(block, "type")),
     );
   const stopReason = readStringProp(assistantMessage, "stop_reason");
   const isForwardedSubagentText = isClaudeSubagentTranscriptTarget(session.externalSessionId);
@@ -277,7 +277,7 @@ const handleAssistantMessage = ({
   }
   if (Array.isArray(content)) {
     for (const [index, block] of content.entries()) {
-      if (!isRecord(block)) {
+      if (!isUnknownRecord(block)) {
         continue;
       }
       const type = readStringProp(block, "type");

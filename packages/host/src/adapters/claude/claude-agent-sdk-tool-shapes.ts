@@ -1,14 +1,8 @@
 import { jsonValueSchema } from "@openducktor/contracts";
 import type { JsonValue } from "@openducktor/contracts";
-import type { AgentStreamPart } from "@openducktor/core";
+import { isUnknownRecord, type AgentStreamPart } from "@openducktor/core";
 import { parseClaudeCanonicalJsonObject } from "./claude-agent-sdk-ingress-schemas";
-import {
-  claudeUnknownRecordSchema,
-  isRecord,
-  previewInput,
-  readStringProp,
-  toolPartPresentation,
-} from "./claude-agent-sdk-utils";
+import { previewInput, readStringProp, toolPartPresentation } from "./claude-agent-sdk-utils";
 
 type ClaudeToolUseMetadata =
   | {
@@ -68,7 +62,7 @@ export const decodeClaudeToolUseBlock = ({
     readStringProp(block, "tool") ??
     "tool";
   const rawInput = block.input ?? block.tool_input ?? block.arguments;
-  const input = isRecord(rawInput) ? rawInput : undefined;
+  const input = isUnknownRecord(rawInput) ? rawInput : undefined;
   const serverName = readStringProp(block, "server_name");
   const metadata =
     blockType === "mcp_tool_use" || blockType === "server_tool_use"
@@ -160,7 +154,7 @@ const toolResultBlockText = (block: unknown): string => {
   if (typeof parsed === "string") {
     return parsed;
   }
-  if (!isRecord(parsed)) {
+  if (!isUnknownRecord(parsed)) {
     return stringifyToolResultContent(parsed);
   }
   return (
@@ -197,11 +191,10 @@ export const decodeClaudeToolResultValue = (
   fallbackToolUseId: string | null,
   options: { allowNonToolResultType?: boolean } = {},
 ): ClaudeDecodedToolResult | null => {
-  const parsed = claudeUnknownRecordSchema.safeParse(value);
-  if (!parsed.success) {
+  if (!isUnknownRecord(value)) {
     return null;
   }
-  const record = parsed.data;
+  const record = value;
   const type = readStringProp(record, "type");
   if (
     type &&

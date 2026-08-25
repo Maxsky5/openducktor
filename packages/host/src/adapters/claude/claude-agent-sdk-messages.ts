@@ -9,18 +9,23 @@ type ClaudeMessageContent = Exclude<SDKUserMessage["message"]["content"], string
 type ClaudeMessageContentBlock = ClaudeMessageContent[number];
 type ClaudeDocumentBlock = Extract<ClaudeMessageContentBlock, { type: "document" }>;
 type ClaudeImageBlock = Extract<ClaudeMessageContentBlock, { type: "image" }>;
+type ClaudeMessageUuid = NonNullable<SDKUserMessage["uuid"]>;
+
+const CLAUDE_MESSAGE_UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
+export const isClaudeMessageUuid = (value: string): value is ClaudeMessageUuid =>
+  CLAUDE_MESSAGE_UUID_PATTERN.test(value);
 
 // Claude expands slash commands from streaming content blocks. A bare string is
 // accepted by the type but reaches the model as ordinary prompt text.
-// SAFETY: The runtime adapter builds this value from the contract fields required by `SDKUserMessage["message"]`.
-const toClaudeMessage = (text: string): SDKUserMessage => ({
-  type: "user",
-  message: {
+const toClaudeMessage = (text: string): SDKUserMessage => {
+  const message: SDKUserMessage["message"] = {
     role: "user",
     content: [{ type: "text", text }],
-  } as SDKUserMessage["message"],
-  parent_tool_use_id: null,
-});
+  };
+  return { type: "user", message, parent_tool_use_id: null };
+};
 
 const SUPPORTED_CLAUDE_IMAGE_MIMES = new Set<string>([
   "image/jpeg",
@@ -142,13 +147,19 @@ const toClaudeAttachmentBlock = async (
   });
 
   if (attachment.kind === "image") {
-    // SAFETY: The runtime adapter builds this value from the contract fields required by `ClaudeSupportedImageMime`.
+    if (!isClaudeSupportedImageMime(mime)) {
+      throw new HostValidationError({
+        field: "parts",
+        message: `Claude image attachment '${attachment.name}' resolved to non-image MIME type '${mime}'.`,
+        details: { attachmentId: attachment.id, mime },
+      });
+    }
     return {
       block: {
         type: "image",
         source: {
           type: "base64",
-          media_type: mime as ClaudeSupportedImageMime,
+          media_type: mime,
           data,
         },
       },
@@ -363,13 +374,10 @@ export const toClaudeMessageFromParts = async (
 
   flushText();
 
-  // SAFETY: The runtime adapter builds this value from the contract fields required by `SDKUserMessage["message"]`.
+  const message: SDKUserMessage["message"] = { role: "user", content };
   return {
     type: "user",
-    message: {
-      role: "user",
-      content,
-    } as SDKUserMessage["message"],
+    message,
     parent_tool_use_id: null,
   };
 };

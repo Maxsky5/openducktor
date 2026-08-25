@@ -1,22 +1,19 @@
 import { hasOwnKey } from "@openducktor/contracts";
 import { basename } from "node:path";
-import type {
-  AgentFileReference,
-  AgentModelSelection,
-  AgentSessionHistoryMessage,
-  AgentUserMessageDisplayPart,
+import {
+  detectAgentFileReferenceKind,
+  isUnknownRecord,
+  type AgentFileReference,
+  type AgentModelSelection,
+  type AgentSessionHistoryMessage,
+  type AgentUserMessageDisplayPart,
 } from "@openducktor/core";
 import type {
   ClaudeHistoryConversationMessage,
   ClaudeHistoryMessage,
 } from "./claude-agent-sdk-history-import";
 import { decodeClaudeToolResultValue } from "./claude-agent-sdk-tool-shapes";
-import {
-  claudeUnknownRecordSchema,
-  detectFileKind,
-  isRecord,
-  readStringProp,
-} from "./claude-agent-sdk-utils";
+import { readStringProp } from "./claude-agent-sdk-utils";
 
 export type ClaudeLiveUserMessage = {
   isManualCompaction?: true;
@@ -84,12 +81,11 @@ const CLAUDE_QUOTED_FILE_ESCAPE_PATTERN = /\\(.)/gu;
 const hasClaudeReferenceBoundary = (text: string, start: number): boolean =>
   start === 0 || CLAUDE_REFERENCE_BOUNDARY_PATTERN.test(text[start - 1] ?? "");
 
-// SAFETY: The runtime adapter builds this value from the contract fields required by `AgentFileReference["kind"]`.
 const claudeFileReference = (path: string): AgentFileReference => ({
   id: path,
   path,
   name: basename(path.replaceAll("\\", "/")),
-  kind: detectFileKind(path, false) as AgentFileReference["kind"],
+  kind: detectAgentFileReferenceKind({ filePath: path }),
 });
 
 const readClaudeHistoryReferenceRanges = (text: string): ClaudeHistoryReferenceRange[] => {
@@ -153,11 +149,10 @@ export const readClaudeHistoryDisplayParts = (
   messageId: string,
   message: unknown,
 ): AgentUserMessageDisplayPart[] => {
-  const parsed = claudeUnknownRecordSchema.safeParse(message);
-  if (!parsed.success) {
+  if (!isUnknownRecord(message)) {
     return [];
   }
-  const content = parsed.data.content;
+  const content = message.content;
   if (typeof content === "string" && content.length > 0) {
     return readClaudeHistoryTextDisplayParts(content);
   }
@@ -168,7 +163,7 @@ export const readClaudeHistoryDisplayParts = (
   const parts: AgentUserMessageDisplayPart[] = [];
   let flattenedTextLength = 0;
   for (const [index, block] of content.entries()) {
-    if (!isRecord(block)) {
+    if (!isUnknownRecord(block)) {
       continue;
     }
     const type = readStringProp(block, "type");
@@ -196,7 +191,7 @@ export const readClaudeHistoryDisplayParts = (
       continue;
     }
     if (type === "image") {
-      const source = isRecord(block.source) ? block.source : {};
+      const source = isUnknownRecord(block.source) ? block.source : {};
       const mime = readStringProp(source, "media_type");
       parts.push({
         kind: "attachment",
@@ -212,7 +207,7 @@ export const readClaudeHistoryDisplayParts = (
       continue;
     }
     if (type === "document") {
-      const source = isRecord(block.source) ? block.source : {};
+      const source = isUnknownRecord(block.source) ? block.source : {};
       const mime = readStringProp(source, "media_type") ?? "application/pdf";
       const title = readStringProp(block, "title");
       parts.push({
@@ -269,17 +264,17 @@ export const createLiveUserMessageResolver = (
 
 export const readHistoryToolResults = (message: ClaudeHistoryConversationMessage) => {
   const messageRecord = message;
-  if (!isRecord(messageRecord)) {
+  if (!isUnknownRecord(messageRecord)) {
     return [];
   }
   type ClaudeDecodedToolResult = NonNullable<ReturnType<typeof decodeClaudeToolResultValue>>;
   const readTopLevelToolUseResult = (): Record<string, unknown> | null => {
     const camelCaseToolUseResult = messageRecord.toolUseResult;
-    if (isRecord(camelCaseToolUseResult)) {
+    if (isUnknownRecord(camelCaseToolUseResult)) {
       return camelCaseToolUseResult;
     }
     const snakeCaseToolUseResult = messageRecord.tool_use_result;
-    return isRecord(snakeCaseToolUseResult) ? snakeCaseToolUseResult : null;
+    return isUnknownRecord(snakeCaseToolUseResult) ? snakeCaseToolUseResult : null;
   };
   const mergeTopLevelToolUseResult = (result: ClaudeDecodedToolResult): ClaudeDecodedToolResult => {
     const toolUseResult = readTopLevelToolUseResult();
@@ -303,7 +298,9 @@ export const readHistoryToolResults = (message: ClaudeHistoryConversationMessage
   if (direct) {
     return [mergeTopLevelToolUseResult(direct)];
   }
-  const content = isRecord(messageRecord.message) ? messageRecord.message.content : undefined;
+  const content = isUnknownRecord(messageRecord.message)
+    ? messageRecord.message.content
+    : undefined;
   if (Array.isArray(content)) {
     const results: ClaudeDecodedToolResult[] = [];
     for (const block of content) {
@@ -325,11 +322,10 @@ export const readHistoryToolResults = (message: ClaudeHistoryConversationMessage
 };
 
 const readStringArrayProp = (value: unknown, key: string): string[] => {
-  const parsed = claudeUnknownRecordSchema.safeParse(value);
-  if (!parsed.success) {
+  if (!isUnknownRecord(value)) {
     return [];
   }
-  const candidate = parsed.data[key];
+  const candidate = value[key];
   if (!Array.isArray(candidate)) {
     return [];
   }

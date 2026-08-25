@@ -7,9 +7,9 @@ function isTypeAssertionExpression(node: ESTree.Node): node is TypeAssertionExpr
   return node.type === "TSAsExpression" || node.type === "TSTypeAssertion";
 }
 
-function unwrapParenthesizedExpression(expression: ESTree.Expression): ESTree.Expression {
+function unwrapTransparentExpression(expression: ESTree.Expression): ESTree.Expression {
   let current = expression;
-  while (current.type === "ParenthesizedExpression") {
+  while (current.type === "ParenthesizedExpression" || current.type === "TSNonNullExpression") {
     current = current.expression;
   }
   return current;
@@ -28,7 +28,10 @@ function isOutermostAssertionInChain(node: TypeAssertionExpression): boolean {
   let current: ESTree.Expression = node;
   let parent = node.parent;
 
-  while (parent.type === "ParenthesizedExpression" && parent.expression === current) {
+  while (
+    (parent.type === "ParenthesizedExpression" || parent.type === "TSNonNullExpression") &&
+    parent.expression === current
+  ) {
     current = parent;
     parent = parent.parent;
   }
@@ -44,7 +47,7 @@ function isForbiddenAssertionChain(node: TypeAssertionExpression): boolean {
   while (isTypeAssertionExpression(current)) {
     assertionCount += 1;
     hasNonConstAssertion ||= !isConstAssertion(current);
-    current = unwrapParenthesizedExpression(current.expression);
+    current = unwrapTransparentExpression(current.expression);
   }
 
   return assertionCount > 1 && hasNonConstAssertion;

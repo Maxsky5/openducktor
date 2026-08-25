@@ -514,7 +514,7 @@ describe("claude-agent-sdk-history", () => {
           id: "docs/My File.md",
           path: "docs/My File.md",
           name: "My File.md",
-          kind: "code",
+          kind: "default",
         },
       },
     ]);
@@ -542,7 +542,7 @@ describe("claude-agent-sdk-history", () => {
           id: "docs/My File.md",
           path: "docs/My File.md",
           name: "My File.md",
-          kind: "code",
+          kind: "default",
         },
         sourceText: {
           value: '@"docs/My File.md"',

@@ -60,17 +60,17 @@ function declaredStatement(statement: ESTree.Statement): ESTree.Node | null {
 type DeclarationLayer = {
   readonly aliases: Map<string, ESTree.TSTypeAliasDeclaration>;
   readonly interfaces: Map<string, ESTree.TSInterfaceDeclaration[]>;
-  readonly names: Set<string>;
+  readonly nonInterfaceTypeNames: Set<string>;
+  readonly typeNames: Set<string>;
 };
 
-function declarationName(declaration: ESTree.Node): string | null {
+function typeDeclarationName(declaration: ESTree.Node): string | null {
   if (declaration.type === "ImportDeclaration") return null;
   if (
     declaration.type === "TSTypeAliasDeclaration" ||
     declaration.type === "TSInterfaceDeclaration" ||
     declaration.type === "TSEnumDeclaration" ||
-    declaration.type === "ClassDeclaration" ||
-    declaration.type === "FunctionDeclaration"
+    declaration.type === "ClassDeclaration"
   ) {
     return declaration.id?.name ?? null;
   }
@@ -84,30 +84,37 @@ function declarationName(declaration: ESTree.Node): string | null {
 function collectDeclarationLayer(statements: readonly ESTree.Statement[]): DeclarationLayer {
   const aliases = new Map<string, ESTree.TSTypeAliasDeclaration>();
   const interfaces = new Map<string, ESTree.TSInterfaceDeclaration[]>();
-  const names = new Set<string>();
+  const nonInterfaceTypeNames = new Set<string>();
+  const typeNames = new Set<string>();
 
   for (const statement of statements) {
     const declaration = declaredStatement(statement);
     if (declaration?.type === "ImportDeclaration") {
-      for (const specifier of declaration.specifiers) names.add(specifier.local.name);
+      for (const specifier of declaration.specifiers) {
+        typeNames.add(specifier.local.name);
+        nonInterfaceTypeNames.add(specifier.local.name);
+      }
       continue;
     }
     if (declaration === null) continue;
-    const name = declarationName(declaration);
+    const name = typeDeclarationName(declaration);
     if (name === null) continue;
-    names.add(name);
+    typeNames.add(name);
     if (declaration.type === "TSTypeAliasDeclaration") {
       aliases.set(name, declaration);
+      nonInterfaceTypeNames.add(name);
       continue;
     }
     if (declaration.type === "TSInterfaceDeclaration") {
       const declarations = interfaces.get(name) ?? [];
       declarations.push(declaration);
       interfaces.set(name, declarations);
+      continue;
     }
+    nonInterfaceTypeNames.add(name);
   }
 
-  return { aliases, interfaces, names };
+  return { aliases, interfaces, nonInterfaceTypeNames, typeNames };
 }
 
 function scopeStatements(node: ESTree.Node): readonly ESTree.Statement[] | null {
@@ -155,9 +162,13 @@ export function createTypeEnvironment(
     const statements = scopeStatements(ancestor);
     if (statements !== null) {
       const layer = collectDeclarationLayer(statements);
-      for (const name of layer.names) applyNameShadow(name, aliases, interfaces, shadowedBuiltIns);
+      for (const name of layer.typeNames) {
+        applyNameShadow(name, aliases, interfaces, shadowedBuiltIns);
+      }
       for (const [name, alias] of layer.aliases) aliases.set(name, alias);
-      for (const [name, declarations] of layer.interfaces) interfaces.set(name, declarations);
+      for (const [name, declarations] of layer.interfaces) {
+        if (!layer.nonInterfaceTypeNames.has(name)) interfaces.set(name, declarations);
+      }
     }
     if ("typeParameters" in ancestor) {
       for (const parameter of ancestor.typeParameters?.params ?? []) {
@@ -361,7 +372,13 @@ function dictionaryValueTypes(
     valueSubstitutions.delete(unwrapped.key.name);
     return unwrapped.typeAnnotation === null
       ? []
-      : [{ type: unwrapped.typeAnnotation, environment, substitutions: valueSubstitutions }];
+      : [
+          {
+            type: unwrapped.typeAnnotation,
+            environment: createTypeEnvironment(unwrapped.typeAnnotation, environment.visitorKeys),
+            substitutions: valueSubstitutions,
+          },
+        ];
   }
 
   if (unwrapped.type !== "TSTypeReference") return [];

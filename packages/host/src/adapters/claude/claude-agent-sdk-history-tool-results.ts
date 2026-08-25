@@ -227,10 +227,10 @@ export const projectClaudeHistoryToolResults = ({
       continue;
     }
     const existingMessage = state.assistantMessagesByToolCallId.get(result.toolUseId);
-    // SAFETY: The runtime adapter builds this value from the contract fields required by `Extract<AgentStreamPart, { kind: "tool" }> | undefined`.
     const existingPart = existingMessage?.parts.find(
-      (part) => part.kind === "tool" && part.callId === result.toolUseId,
-    ) as Extract<AgentStreamPart, { kind: "tool" }> | undefined;
+      (part): part is Extract<AgentStreamPart, { kind: "tool" }> =>
+        part.kind === "tool" && part.callId === result.toolUseId,
+    );
     const tool =
       state.toolNamesByCallId.get(result.toolUseId) ?? existingPart?.tool ?? result.toolName;
     if (!tool) {

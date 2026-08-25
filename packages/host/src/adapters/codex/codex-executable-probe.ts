@@ -132,9 +132,8 @@ export const createCodexExecutableProbe = ({
           catch: (cause) =>
             toHostOperationError(cause, "codexExecutableProbe.buildCommand", { executablePath }),
         });
-        // SAFETY: The runtime adapter builds this value from the contract fields required by `CodexChildProcess`.
         const child = yield* Effect.try({
-          try: () =>
+          try: (): CodexChildProcess =>
             spawn(command.command, command.args, {
               cwd: process.cwd(),
               detached: shouldStartDetachedProcessGroup(platform),
@@ -142,7 +141,7 @@ export const createCodexExecutableProbe = ({
               stdio: ["pipe", "pipe", "pipe"],
               windowsHide: command.windowsHide,
               windowsVerbatimArguments: command.windowsVerbatimArguments,
-            }) as CodexChildProcess,
+            }),
           catch: (cause) =>
             toHostOperationError(cause, "codexExecutableProbe.spawn", { executablePath }),
         });

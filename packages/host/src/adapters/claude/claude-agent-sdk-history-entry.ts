@@ -1,7 +1,7 @@
-import type { AgentModelSelection } from "@openducktor/core";
+import { isUnknownRecord, type AgentModelSelection } from "@openducktor/core";
 import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
 import { isClaudeSyntheticAssistantMessage } from "./claude-agent-sdk-local-commands";
-import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import { readStringProp } from "./claude-agent-sdk-utils";
 
 export const readHistoryTimestamp = (entry: ClaudeHistoryMessage, now: () => string): string => {
   const timestamp = entry.timestamp;
@@ -20,7 +20,7 @@ export const readHistoryAssistantModel = (
   if (isClaudeSyntheticAssistantMessage(entry)) {
     return undefined;
   }
-  const model = isRecord(entry.message) ? readStringProp(entry.message, "model") : undefined;
+  const model = isUnknownRecord(entry.message) ? readStringProp(entry.message, "model") : undefined;
   return model
     ? {
         providerId: "claude",

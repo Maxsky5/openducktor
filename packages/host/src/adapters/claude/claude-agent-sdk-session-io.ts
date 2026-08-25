@@ -14,7 +14,7 @@ import {
 } from "./claude-agent-sdk-context-usage";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { readClaudeSdkMessageTimestamp } from "./claude-agent-sdk-message-timestamp";
-import { toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
+import { isClaudeMessageUuid, toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
 import {
   assertClaudeSessionModelUpdateSupported,
   assertSupportedClaudeLiveEffort,
@@ -271,12 +271,18 @@ export const sendClaudeUserMessage = async (input: {
   assertClaudeSessionAcceptingMessages(session);
   const timestamp = now();
   const messageId = randomId();
+  if (!isClaudeMessageUuid(messageId)) {
+    throw new HostValidationError({
+      field: "randomId",
+      message: "Claude user-message IDs must be UUIDs.",
+      details: { messageId },
+    });
+  }
   const sdkMessage = await toClaudeMessageFromParts(messageInput.parts);
   const message = textFromContentBlocks(sdkMessage.message.content);
   assertClaudeSessionAcceptingMessages(session);
   const displayParts = toClaudeDisplayParts(messageInput.parts);
-  // SAFETY: The runtime adapter builds this value from the contract fields required by `NonNullable<SDKUserMessage["uuid"]>`.
-  sdkMessage.uuid = messageId as NonNullable<SDKUserMessage["uuid"]>;
+  sdkMessage.uuid = messageId;
   sdkMessage.session_id = session.externalSessionId;
   sdkMessage.timestamp = timestamp;
   const canSendImmediately = canPushSdkUserMessageNow(session);

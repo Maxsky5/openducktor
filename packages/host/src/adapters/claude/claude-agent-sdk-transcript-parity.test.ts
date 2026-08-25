@@ -15,6 +15,7 @@ import { handleClaudeUserToolResultMessage } from "./claude-agent-sdk-tool-resul
 
 const timestamp = "2026-06-25T20:00:00.000Z";
 const resultTimestamp = "2026-06-25T20:00:02.000Z";
+const STRUCTURED_USER_MESSAGE_ID = "00000000-0000-4000-8000-000000000006";
 
 const assistantParts = (events: AgentEvent[]) =>
   events.flatMap((event) => (event.type === "assistant_part" ? [event.part] : []));
@@ -1179,7 +1180,7 @@ describe("Claude live and hydrated transcript parity", () => {
           id: "docs/My File.md",
           path: "docs/My File.md",
           name: "My File.md",
-          kind: "code",
+          kind: "default",
         },
       },
     ];
@@ -1196,7 +1197,7 @@ describe("Claude live and hydrated transcript parity", () => {
         parts,
       },
       now: () => timestamp,
-      randomId: () => "user-structured-1",
+      randomId: () => STRUCTURED_USER_MESSAGE_ID,
       session,
     });
     const sdkMessage = await toClaudeMessageFromParts(parts);

@@ -1,5 +1,5 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
+import { isUnknownRecord, type AgentEvent, type AgentStreamPart } from "@openducktor/core";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
 import { readClaudeBackgroundAgentLaunch } from "./claude-agent-sdk-runtime-messages";
 import {
@@ -22,7 +22,7 @@ import {
   retireClaudeSubagentTask,
 } from "./claude-agent-sdk-transcript-correlation";
 import { settleClaudeStreamedAssistantText } from "./claude-agent-sdk-transcript-retractions";
-import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import { readStringProp } from "./claude-agent-sdk-utils";
 
 type ClaudeSubagentSession = {
   activeBackgroundSubagentTaskIds?: Set<string>;
@@ -309,7 +309,7 @@ export const handleClaudeSubagentSystemMessage = ({
   session: ClaudeSubagentSession;
   timestamp: string;
 }): void => {
-  const toolUseId = isRecord(message)
+  const toolUseId = isUnknownRecord(message)
     ? (readStringProp(message, "tool_use_id") ?? readStringProp(message, "parent_tool_use_id"))
     : undefined;
   const toolMessageId = toolUseId ? session.toolMessageIdsByCallId.get(toolUseId) : undefined;
@@ -394,8 +394,7 @@ export const handleClaudeSubagentSystemMessage = ({
       return;
     }
     const details: Partial<Extract<AgentStreamPart, { kind: "subagent" }>> = {};
-    // SAFETY: The runtime adapter builds this value from the contract fields required by `Record<string, unknown>`.
-    const patch = message.patch as Record<string, unknown>;
+    const patch = isUnknownRecord(message.patch) ? message.patch : {};
     const error =
       readStringProp(patch, "error") ??
       readStringProp(message, "error") ??

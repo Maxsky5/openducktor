@@ -1,4 +1,5 @@
-import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import { isUnknownRecord } from "@openducktor/core";
+import { readStringProp } from "./claude-agent-sdk-utils";
 import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
 
 export type ClaudeTaskNotification = {
@@ -58,7 +59,11 @@ const readXmlElements = (xml: string, name: string): string[] => {
 export const readClaudeTaskNotifications = (
   entry: ClaudeHistoryMessage,
 ): ClaudeTaskNotification[] => {
-  if (!isRecord(entry) || readStringProp(entry, "type") !== "user" || !isRecord(entry.message)) {
+  if (
+    !isUnknownRecord(entry) ||
+    readStringProp(entry, "type") !== "user" ||
+    !isUnknownRecord(entry.message)
+  ) {
     return [];
   }
   const content = readStringProp(entry.message, "content")?.trim();

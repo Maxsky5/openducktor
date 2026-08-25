@@ -1,5 +1,5 @@
-import type { AgentStreamPart } from "@openducktor/core";
-import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import { isUnknownRecord, type AgentStreamPart } from "@openducktor/core";
+import { readStringProp } from "./claude-agent-sdk-utils";
 import { jsonValueSchema } from "@openducktor/contracts";
 
 type SubagentStreamPart = Extract<AgentStreamPart, { kind: "subagent" }>;
@@ -33,10 +33,10 @@ export const isTerminalClaudeTaskStatus = (status: ClaudeTaskStatus): boolean =>
 export const readStructuredClaudeAgentResult = (
   raw: Record<string, unknown>,
 ): Record<string, unknown> => {
-  if (isRecord(raw.toolUseResult)) {
+  if (isUnknownRecord(raw.toolUseResult)) {
     return raw.toolUseResult;
   }
-  if (isRecord(raw.structuredContent)) {
+  if (isUnknownRecord(raw.structuredContent)) {
     return raw.structuredContent;
   }
   return raw;
@@ -119,7 +119,7 @@ export const readClaudeTaskStopTaskId = (
   }
   try {
     const parsed = jsonValueSchema.parse(JSON.parse(resultText));
-    return isRecord(parsed) ? readStringProp(parsed, "task_id") : undefined;
+    return isUnknownRecord(parsed) ? readStringProp(parsed, "task_id") : undefined;
   } catch {
     return undefined;
   }

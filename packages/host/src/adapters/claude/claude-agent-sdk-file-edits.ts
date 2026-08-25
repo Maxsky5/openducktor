@@ -1,7 +1,11 @@
 import type { FileDiff } from "@openducktor/contracts";
-import { countRenderableFileDiffLines, selectRenderableFileDiff } from "@openducktor/core";
+import {
+  countRenderableFileDiffLines,
+  isUnknownRecord,
+  selectRenderableFileDiff,
+} from "@openducktor/core";
 import { createTwoFilesPatch } from "diff";
-import { claudeUnknownRecordSchema, isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import { readStringProp } from "./claude-agent-sdk-utils";
 
 type ClaudeFileEditPayload = {
   fileDiffs?: FileDiff[];
@@ -17,7 +21,7 @@ const readRecordProp = (
   key: string,
 ): Record<string, unknown> | null => {
   const value = record[key];
-  return isRecord(value) ? value : null;
+  return isUnknownRecord(value) ? value : null;
 };
 
 const readNumberProp = (record: Record<string, unknown>, key: string): number | undefined => {
@@ -36,11 +40,10 @@ const diffHeaderPath = (file: string): string =>
 const structuredPatchRange = (start: number, lines: number): string => `${start},${lines}`;
 
 const readStructuredPatchHunk = (value: unknown): string | null => {
-  const parsed = claudeUnknownRecordSchema.safeParse(value);
-  if (!parsed.success) {
+  if (!isUnknownRecord(value)) {
     return null;
   }
-  const record = parsed.data;
+  const record = value;
   const oldStart = readNumberProp(record, "oldStart");
   const oldLines = readNumberProp(record, "oldLines");
   const newStart = readNumberProp(record, "newStart");
@@ -130,7 +133,7 @@ const readPatchFromRecord = (
     if (structuredPatch) {
       return structuredPatch;
     }
-    if (isRecord(nested)) {
+    if (isUnknownRecord(nested)) {
       const nestedPatch = readStringProp(nested, "patch") ?? readStringProp(nested, "diff");
       if (nestedPatch) {
         return nestedPatch;
@@ -157,20 +160,20 @@ const readResultRecords = (raw: Record<string, unknown>): Record<string, unknown
   const records = [raw];
   for (const key of ["structuredContent", "result", "output", "toolUseResult", "file"] as const) {
     const value = raw[key];
-    if (isRecord(value)) {
+    if (isUnknownRecord(value)) {
       records.push(value);
     }
   }
   const content = raw.content;
-  if (isRecord(content)) {
+  if (isUnknownRecord(content)) {
     records.push(content);
   }
   if (Array.isArray(content)) {
     for (const entry of content) {
-      if (isRecord(entry)) {
+      if (isUnknownRecord(entry)) {
         records.push(entry);
         const structuredContent = entry.structuredContent;
-        if (isRecord(structuredContent)) {
+        if (isUnknownRecord(structuredContent)) {
           records.push(structuredContent);
         }
       }
@@ -189,7 +192,7 @@ const fileRecordsFromResult = (raw: Record<string, unknown>): Record<string, unk
       if (!Array.isArray(files)) {
         continue;
       }
-      result.push(...files.filter(isRecord));
+      result.push(...files.filter(isUnknownRecord));
     }
     const gitDiff = readRecordProp(record, "gitDiff");
     const structuredPatch = readRecordProp(record, "structuredPatch");
@@ -197,7 +200,7 @@ const fileRecordsFromResult = (raw: Record<string, unknown>): Record<string, unk
       result.push(gitDiff);
       const files = gitDiff.files;
       if (Array.isArray(files)) {
-        result.push(...files.filter(isRecord));
+        result.push(...files.filter(isUnknownRecord));
       }
     }
     if (structuredPatch) {

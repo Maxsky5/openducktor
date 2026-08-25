@@ -44,7 +44,7 @@ describe("searchClaudeWorkspaceFiles", () => {
         id: "README.md",
         path: "README.md",
         name: "README.md",
-        kind: "code",
+        kind: "default",
       },
     ]);
   });

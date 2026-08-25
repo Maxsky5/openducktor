@@ -40,9 +40,15 @@ tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
     "function owner() { type Record<K, V> = { key: K; value: V }; type A = Record<string, object>; }",
     "namespace Owner { type Record<K, V> = { key: K; value: V }; type A = Record<string, object>; }",
     "type Box<T> = { [T in string]: T }; type Safe = Box<any>;",
+    "type T = object; type Box = { [T in string]: T };",
+    'class Escape { id = "x" } interface Escape {} type Safe = Record<string, Escape>;',
   ],
   invalid: [
     { code: "type A = { [key: string]: any };", errors: [error] },
+    {
+      code: "function owner() { function Record() {} type A = Record<string, object>; }",
+      errors: [error],
+    },
     { code: "type A = { [K in PropertyKey]: object };", errors: [error] },
     { code: "type A = Record<string, {}>;", errors: [error] },
     { code: "interface Escape {} type A = Record<string, Escape>;", errors: [error] },

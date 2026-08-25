@@ -1,4 +1,5 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { isUnknownRecord } from "@openducktor/core";
 import {
   type ClaudeEventSession,
   streamAssistantMessageId,
@@ -14,7 +15,7 @@ import {
 } from "./claude-agent-sdk-tool-shapes";
 import { createClaudeAssistantReasoningPart } from "./claude-agent-sdk-transcript-parts";
 import type { ClaudeAgentSdkEvent } from "./claude-agent-sdk-types";
-import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import { readStringProp } from "./claude-agent-sdk-utils";
 
 export const emitClaudePendingToolPart = ({
   emit,
@@ -55,7 +56,7 @@ export const handleClaudeStreamEvent = ({
   timestamp: string;
 }): void => {
   const event = message.event;
-  if (!isRecord(event)) {
+  if (!isUnknownRecord(event)) {
     return;
   }
 
@@ -64,7 +65,9 @@ export const handleClaudeStreamEvent = ({
     session.streamAssistantMessageIdsByBlockIndex.clear();
     session.streamAssistantMessageOrdinal += 1;
     session.streamReasoningByBlockIndex?.clear();
-    const responseId = isRecord(event.message) ? readStringProp(event.message, "id") : undefined;
+    const responseId = isUnknownRecord(event.message)
+      ? readStringProp(event.message, "id")
+      : undefined;
     if (responseId) {
       session.streamAssistantResponseId = responseId;
     } else {
@@ -97,7 +100,7 @@ export const handleClaudeStreamEvent = ({
   }
   if (eventType === "content_block_start") {
     const index = typeof event.index === "number" ? event.index : null;
-    const block = isRecord(event.content_block) ? event.content_block : null;
+    const block = isUnknownRecord(event.content_block) ? event.content_block : null;
     if (index === null || !block) {
       return;
     }
@@ -125,7 +128,7 @@ export const handleClaudeStreamEvent = ({
   }
 
   const index = typeof event.index === "number" ? event.index : null;
-  const delta = isRecord(event.delta) ? event.delta : null;
+  const delta = isUnknownRecord(event.delta) ? event.delta : null;
   if (index === null || !delta) {
     return;
   }

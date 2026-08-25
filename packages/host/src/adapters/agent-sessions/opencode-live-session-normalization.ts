@@ -89,8 +89,7 @@ export const requireRuntime = (
       }),
     );
   }
-  // SAFETY: The runtime adapter builds this value from the contract fields required by `OpenCodeRuntimeInstance`.
-  return Effect.succeed(runtime as OpenCodeRuntimeInstance);
+  return Effect.succeed({ ...runtime, kind: "opencode", runtimeRoute: runtime.runtimeRoute });
 };
 
 export const toControlSummary = (

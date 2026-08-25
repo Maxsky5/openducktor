@@ -7,9 +7,8 @@ import type {
   AgentStreamPart,
   SessionRef,
 } from "@openducktor/core";
-import { isOdtMutationToolName, normalizeOdtToolName } from "@openducktor/core";
+import { isOdtMutationToolName, isUnknownRecord, normalizeOdtToolName } from "@openducktor/core";
 import { Effect } from "effect";
-import { z } from "zod";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type {
   ClaudeAgentSdkServiceError,
@@ -75,14 +74,8 @@ export const withTimeout = async <A>(
 export const readText = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim().length > 0 ? value : undefined;
 
-export const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-export const claudeUnknownRecordSchema = z.record(z.string(), z.unknown());
-
 export const readStringProp = (value: unknown, key: string): string | undefined => {
-  const parsed = claudeUnknownRecordSchema.safeParse(value);
-  return parsed.success ? readText(parsed.data[key]) : undefined;
+  return isUnknownRecord(value) ? readText(value[key]) : undefined;
 };
 
 export const claudeSessionScope = (input: ClaudeSessionInput) => input.sessionScope;
@@ -159,33 +152,6 @@ export const previewInput = (input: Record<string, unknown>): string | undefined
   return JSON.stringify(input).slice(0, 500);
 };
 
-export const detectFileKind = (
-  path: string,
-  isDirectory: boolean,
-): AgentStreamPart["kind"] | "code" | "css" | "default" | "directory" | "image" | "video" => {
-  if (isDirectory) {
-    return "directory";
-  }
-  const lower = path.toLowerCase();
-  if (/\.(css|scss|sass|less)$/u.test(lower)) {
-    return "css";
-  }
-  if (/\.(png|jpg|jpeg|gif|webp|avif|svg)$/u.test(lower)) {
-    return "image";
-  }
-  if (/\.(mp4|mov|webm|m4v)$/u.test(lower)) {
-    return "video";
-  }
-  if (
-    /\.(ts|tsx|js|jsx|json|md|go|rs|py|java|kt|swift|c|cc|cpp|h|hpp|cs|rb|php|sql|sh|yml|yaml|toml)$/u.test(
-      lower,
-    )
-  ) {
-    return "code";
-  }
-  return "default";
-};
-
 export const toolPartType = (
   toolName: string,
 ): Extract<AgentStreamPart, { kind: "tool" }>["toolType"] => {
@@ -240,7 +206,7 @@ export const textFromContentBlocks = (content: unknown): string => {
   }
   return content
     .map((block) => {
-      if (!isRecord(block)) {
+      if (!isUnknownRecord(block)) {
         return "";
       }
       const type = readStringProp(block, "type");
@@ -254,11 +220,10 @@ export const textFromContentBlocks = (content: unknown): string => {
 };
 
 export const historyMessageText = (message: unknown): string => {
-  const parsed = claudeUnknownRecordSchema.safeParse(message);
-  if (!parsed.success) {
+  if (!isUnknownRecord(message)) {
     return "";
   }
-  return textFromContentBlocks(parsed.data.content);
+  return textFromContentBlocks(message.content);
 };
 
 export const modelSelection = (model: string): AgentModelSelection => ({

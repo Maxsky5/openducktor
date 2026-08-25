@@ -174,6 +174,9 @@ const waitFor = async (predicate: () => boolean, timeoutMs = 1_000): Promise<voi
   throw new Error("Timed out waiting for condition.");
 };
 
+const PROCESS_CLEANUP_TIMEOUT_MS = 3_000;
+const PROCESS_START_TIMEOUT_MS = 3_000;
+
 const waitForProcessExit = async (pid: number, timeoutMs: number): Promise<boolean> => {
   try {
     await waitFor(() => !processIsAlive(pid), timeoutMs);
@@ -639,7 +642,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
           descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
         }),
       );
-      await waitFor(() => releasedRuntimeIds.length === 1);
+      await waitFor(() => releasedRuntimeIds.length === 1, PROCESS_CLEANUP_TIMEOUT_MS);
       expect(releasedRuntimeIds).toEqual(["runtime-unexpected-close"]);
       await Effect.runPromise(handle.stop());
       expect(releasedRuntimeIds).toEqual(["runtime-unexpected-close"]);
@@ -806,13 +809,13 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
           descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
         }),
       );
-      await waitFor(() => existsSync(childPidPath));
+      await waitFor(() => existsSync(childPidPath), PROCESS_START_TIMEOUT_MS);
       childPid = Number(await readFile(childPidPath, "utf8"));
       expect(processIsAlive(childPid)).toBe(true);
 
       await Effect.runPromise(handle.stop());
       const stoppedPid = childPid;
-      await waitFor(() => !processIsAlive(stoppedPid));
+      await waitFor(() => !processIsAlive(stoppedPid), PROCESS_CLEANUP_TIMEOUT_MS);
     } finally {
       if (childPid !== null && processIsAlive(childPid)) {
         process.kill(childPid, "SIGKILL");
@@ -842,7 +845,9 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         retryDelayMs: 5,
         portAllocator: () => Effect.succeed(43123),
         readinessProbe: () =>
-          Effect.promise(() => waitFor(() => existsSync(childPidPath))).pipe(Effect.as(false)),
+          Effect.promise(() =>
+            waitFor(() => existsSync(childPidPath), PROCESS_START_TIMEOUT_MS),
+          ).pipe(Effect.as(false)),
       });
 
       await expect(
@@ -857,7 +862,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
       ).rejects.toThrow("Timed out waiting for OpenCode runtime on 127.0.0.1:43123.");
       childPid = Number(await readFile(childPidPath, "utf8"));
       const stoppedPid = childPid;
-      await waitFor(() => !processIsAlive(stoppedPid));
+      await waitFor(() => !processIsAlive(stoppedPid), PROCESS_CLEANUP_TIMEOUT_MS);
     } finally {
       if (childPid !== null && processIsAlive(childPid)) {
         process.kill(childPid, "SIGKILL");

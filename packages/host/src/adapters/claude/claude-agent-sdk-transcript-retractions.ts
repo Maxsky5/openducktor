@@ -1,19 +1,17 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentEvent } from "@openducktor/core";
+import { isUnknownRecord, type AgentEvent } from "@openducktor/core";
 import {
   advanceStreamAssistantMessageIdentity,
   type ClaudeEventSession,
 } from "./claude-agent-sdk-event-session";
 import { retractClaudeTodoToolResults } from "./claude-agent-sdk-todos";
 import { retractClaudeTranscriptCorrelations } from "./claude-agent-sdk-transcript-correlation";
-import { claudeUnknownRecordSchema } from "./claude-agent-sdk-utils";
 
 const readStringArrayProp = (value: unknown, key: string): string[] => {
-  const parsed = claudeUnknownRecordSchema.safeParse(value);
-  if (!parsed.success) {
+  if (!isUnknownRecord(value)) {
     return [];
   }
-  const candidate = parsed.data[key];
+  const candidate = value[key];
   if (!Array.isArray(candidate)) {
     return [];
   }

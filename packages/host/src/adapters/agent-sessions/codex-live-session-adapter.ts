@@ -122,8 +122,7 @@ const requireRuntime = (
       }),
     );
   }
-  // SAFETY: The runtime adapter builds this value from the contract fields required by `CodexRuntimeInstance`.
-  return Effect.succeed(runtime as CodexRuntimeInstance);
+  return Effect.succeed({ ...runtime, kind: "codex", runtimeRoute: runtime.runtimeRoute });
 };
 
 const defaultCreateController = (options: CodexAppServerAdapterOptions): CodexSessionController =>
@@ -285,7 +284,6 @@ export const createCodexLiveSessionAdapterPreparer =
             externalSessionId,
           });
 
-      // SAFETY: The runtime adapter builds this value from the contract fields required by the asserted shape.
       const adapter: AgentSessionRuntimeAdapterPort = {
         binding: {
           runtimeId: runtime.runtimeId,

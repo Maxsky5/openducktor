@@ -1,11 +1,11 @@
-import { claudeUnknownRecordSchema, isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import { isUnknownRecord } from "@openducktor/core";
+import { readStringProp } from "./claude-agent-sdk-utils";
 
 export const readClaudeTurnOriginKind = (message: unknown): string | undefined => {
-  const parsed = claudeUnknownRecordSchema.safeParse(message);
-  if (!parsed.success || parsed.data.shouldQuery === false) {
+  if (!isUnknownRecord(message) || message.shouldQuery === false) {
     return undefined;
   }
-  return isRecord(parsed.data.origin) ? readStringProp(parsed.data.origin, "kind") : undefined;
+  return isUnknownRecord(message.origin) ? readStringProp(message.origin, "kind") : undefined;
 };
 
 export const shouldFinalizeClaudeTurn = (
@@ -17,10 +17,9 @@ export const shouldFinalizeClaudeTurn = (
   (originKind === "task-notification" && activeBackgroundSubagentTaskCount === 0);
 
 export const isClaudeHumanUserMessage = (message: unknown): boolean => {
-  const parsed = claudeUnknownRecordSchema.safeParse(message);
-  if (!parsed.success || parsed.data.isSynthetic === true || parsed.data.shouldQuery === false) {
+  if (!isUnknownRecord(message) || message.isSynthetic === true || message.shouldQuery === false) {
     return false;
   }
-  const originKind = readClaudeTurnOriginKind(parsed.data);
+  const originKind = readClaudeTurnOriginKind(message);
   return originKind === undefined || originKind === "human";
 };

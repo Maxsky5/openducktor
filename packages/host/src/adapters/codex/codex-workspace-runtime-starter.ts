@@ -243,9 +243,8 @@ export const createCodexWorkspaceRuntimeStarter = ({
           return yield* Effect.fail(failure);
         });
       yield* Scope.addFinalizer(runtimeScope, awaitLiveAdapterCleanup.pipe(Effect.ignore));
-      // SAFETY: The runtime adapter builds this value from the contract fields required by `CodexChildProcess`.
       const child = yield* Effect.try({
-        try: () =>
+        try: (): CodexChildProcess =>
           spawn(command.command, command.args, {
             cwd: input.workingDirectory,
             detached: shouldStartDetachedProcessGroup(platform),
@@ -253,7 +252,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
             stdio: ["pipe", "pipe", "pipe"],
             windowsHide: command.windowsHide,
             windowsVerbatimArguments: command.windowsVerbatimArguments,
-          }) as CodexChildProcess,
+          }),
         catch: (cause) =>
           toHostOperationError(cause, "codexWorkspaceRuntime.spawn", {
             binary,

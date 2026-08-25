@@ -1,5 +1,5 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentEvent } from "@openducktor/core";
+import { isUnknownRecord, type AgentEvent } from "@openducktor/core";
 import {
   type ClaudeEventSession,
   claudeSubagentEventSession,
@@ -8,7 +8,7 @@ import { readClaudeHistoryDisplayParts } from "./claude-agent-sdk-history-suppor
 import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 import { decodeClaudeToolResultValue } from "./claude-agent-sdk-tool-shapes";
 import { isClaudeHumanUserMessage } from "./claude-agent-sdk-user-messages";
-import { historyMessageText, isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import { historyMessageText, readStringProp } from "./claude-agent-sdk-utils";
 
 type ForwardedClaudeSubagentMessage = {
   message: SDKMessage;
@@ -41,7 +41,7 @@ const isClaudeToolResultUserMessage = (message: Extract<SDKMessage, { type: "use
     content.some((block) => {
       const contentBlock = block;
       return (
-        isRecord(contentBlock) &&
+        isUnknownRecord(contentBlock) &&
         (readStringProp(contentBlock, "type") === "tool_result" ||
           readStringProp(contentBlock, "type") === "mcp_tool_result")
       );
@@ -49,7 +49,7 @@ const isClaudeToolResultUserMessage = (message: Extract<SDKMessage, { type: "use
   ) {
     return true;
   }
-  return isRecord(message.tool_use_result);
+  return isUnknownRecord(message.tool_use_result);
 };
 
 export const emitClaudeSubagentUserMessage = ({
@@ -115,9 +115,10 @@ export const resolveForwardedClaudeSubagentMessage = (
   if (!childSession) {
     return null;
   }
-  // SAFETY: The runtime adapter builds this value from the contract fields required by `SDKMessage`.
+  const forwardedMessage: SDKMessage =
+    "parent_tool_use_id" in message ? { ...message, parent_tool_use_id: null } : message;
   return {
-    message: { ...message, parent_tool_use_id: null } as SDKMessage,
+    message: forwardedMessage,
     session: childSession,
   };
 };

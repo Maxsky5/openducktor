@@ -1,6 +1,10 @@
 import { getSubagentMessages, type SessionMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentSessionHistoryMessage, LoadAgentSessionHistoryInput } from "@openducktor/core";
-import { AGENT_SESSION_SYSTEM_PROMPT_PREFIX } from "@openducktor/core";
+import {
+  AGENT_SESSION_SYSTEM_PROMPT_PREFIX,
+  isUnknownRecord,
+  type AgentSessionHistoryMessage,
+  type LoadAgentSessionHistoryInput,
+} from "@openducktor/core";
 import { errorMessage, HostOperationError } from "../../effect/host-errors";
 import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import { isLiveFinalAssistantStopReason } from "./claude-agent-sdk-history-assistant";
@@ -14,7 +18,7 @@ import {
   isClaudeSubagentTranscriptTarget,
   parseClaudeTranscriptTarget,
 } from "./claude-agent-sdk-subagent-transcripts";
-import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import { readStringProp } from "./claude-agent-sdk-utils";
 
 export type ClaudeLiveHistoryContext = {
   source: "fresh" | "persisted";
@@ -28,7 +32,7 @@ export const isClaudeSubagentTranscriptComplete = (
   const lastMessageValue = lastMessage ? lastMessage.message : undefined;
   return (
     lastMessage?.type === "assistant" &&
-    isRecord(lastMessageValue) &&
+    isUnknownRecord(lastMessageValue) &&
     isLiveFinalAssistantStopReason(readStringProp(lastMessageValue, "stop_reason"))
   );
 };
@@ -36,7 +40,7 @@ export const isClaudeSubagentTranscriptComplete = (
 const hasClaudeSubagentFinalText = (messages: readonly SessionMessage[]): boolean => {
   const lastMessage = messages.at(-1);
   const lastMessageValue = lastMessage ? lastMessage.message : undefined;
-  if (lastMessage?.type !== "assistant" || !isRecord(lastMessageValue)) {
+  if (lastMessage?.type !== "assistant" || !isUnknownRecord(lastMessageValue)) {
     return false;
   }
   const content = lastMessageValue.content;
@@ -44,7 +48,7 @@ const hasClaudeSubagentFinalText = (messages: readonly SessionMessage[]): boolea
     Array.isArray(content) &&
     content.some(
       (block) =>
-        isRecord(block) &&
+        isUnknownRecord(block) &&
         readStringProp(block, "type") === "text" &&
         Boolean(readStringProp(block, "text")?.trim()),
     )
@@ -87,7 +91,7 @@ const reconcileClaudeSubagentStatuses = async (
         continue;
       }
       const previous = latestStatusBySessionId.get(part.externalSessionId);
-      const agentId = isRecord(part.metadata)
+      const agentId = isUnknownRecord(part.metadata)
         ? readStringProp(part.metadata, "agentId")
         : undefined;
       const resolvedAgentId = agentId ?? previous?.agentId;
@@ -146,7 +150,11 @@ const reconcileClaudeSubagentStatuses = async (
   }
   for (const message of history) {
     message.parts = message.parts.map((part) => {
-      if (part.kind !== "subagent" || part.status !== "running" || !isRecord(part.metadata)) {
+      if (
+        part.kind !== "subagent" ||
+        part.status !== "running" ||
+        !isUnknownRecord(part.metadata)
+      ) {
         return part;
       }
       const agentId = readStringProp(part.metadata, "agentId");

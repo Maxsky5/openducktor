@@ -1,6 +1,6 @@
 import type { ClaudeDecodedToolUse } from "./claude-agent-sdk-tool-shapes";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
-import { isRecord } from "./claude-agent-sdk-utils";
+import { isUnknownRecord } from "@openducktor/core";
 import { jsonValueSchema } from "@openducktor/contracts";
 
 type ToolStreamEntry = {
@@ -36,7 +36,7 @@ const tryParseJsonRecord = (json: string): Record<string, unknown> | null => {
   try {
     // SAFETY: JSON.parse returns JSON-compatible data for the supplied text.
     const parsed = jsonValueSchema.parse(JSON.parse(json));
-    return isRecord(parsed) ? parsed : null;
+    return isUnknownRecord(parsed) ? parsed : null;
   } catch {
     return null;
   }

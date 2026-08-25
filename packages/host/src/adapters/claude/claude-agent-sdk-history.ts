@@ -1,4 +1,8 @@
-import type { AgentEvent, AgentSessionHistoryMessage } from "@openducktor/core";
+import {
+  isUnknownRecord,
+  type AgentEvent,
+  type AgentSessionHistoryMessage,
+} from "@openducktor/core";
 import { CLAUDE_COMPACTED_MESSAGE } from "./claude-agent-sdk-compaction";
 import {
   addClaudeHistoryFinishStep,
@@ -51,7 +55,7 @@ import {
   readClaudeTurnOriginKind,
   shouldFinalizeClaudeTurn,
 } from "./claude-agent-sdk-user-messages";
-import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import { readStringProp } from "./claude-agent-sdk-utils";
 
 const removeClaudeHistoryFinishStep = (message: MutableAssistantHistoryMessage): void => {
   message.parts = message.parts.filter((part) => part.kind !== "step" || part.phase !== "finish");
@@ -266,8 +270,8 @@ export const toClaudeHistoryMessages = (
       if (pendingManualCompaction) {
         manualCompactionBoundaryReceived = true;
       } else if (
-        isRecord(entryValue) &&
-        isRecord(entryValue.compact_metadata) &&
+        isUnknownRecord(entryValue) &&
+        isUnknownRecord(entryValue.compact_metadata) &&
         readStringProp(entryValue.compact_metadata, "trigger") === "manual"
       ) {
         unclaimedManualCompactionBoundary = true;

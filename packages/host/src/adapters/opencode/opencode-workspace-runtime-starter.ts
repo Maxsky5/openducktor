@@ -215,9 +215,8 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
       const nextRuntimeId = runtimeId();
       const runtimeScope = yield* Scope.make();
       scope = runtimeScope;
-      // SAFETY: The runtime adapter builds this value from the contract fields required by `OpenCodeChildProcess`.
       const child = yield* Effect.try({
-        try: () =>
+        try: (): OpenCodeChildProcess =>
           spawn(command.command, command.args, {
             cwd: input.workingDirectory,
             detached: shouldStartDetachedProcessGroup(platform),
@@ -225,7 +224,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
             stdio: ["ignore", "pipe", "pipe"],
             windowsHide: command.windowsHide,
             windowsVerbatimArguments: command.windowsVerbatimArguments,
-          }) as OpenCodeChildProcess,
+          }),
         catch: (cause) =>
           toHostOperationError(cause, "opencodeWorkspaceRuntime.spawn", {
             binary,

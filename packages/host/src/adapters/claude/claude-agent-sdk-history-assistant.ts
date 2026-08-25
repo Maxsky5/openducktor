@@ -1,4 +1,8 @@
-import type { AgentSessionHistoryMessage, AgentStreamPart } from "@openducktor/core";
+import {
+  isUnknownRecord,
+  type AgentSessionHistoryMessage,
+  type AgentStreamPart,
+} from "@openducktor/core";
 import { readHistoryAssistantModel } from "./claude-agent-sdk-history-entry";
 import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
 import { isClaudeSyntheticAssistantMessage } from "./claude-agent-sdk-local-commands";
@@ -13,7 +17,7 @@ import {
   createClaudeAssistantTextPart,
   createClaudeFinishStepPart,
 } from "./claude-agent-sdk-transcript-parts";
-import { historyMessageText, isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import { historyMessageText, readStringProp } from "./claude-agent-sdk-utils";
 
 export type MutableAssistantHistoryMessage = Extract<
   AgentSessionHistoryMessage,
@@ -71,13 +75,13 @@ type ClaudeHistoryAssistantProjection = {
 };
 
 const claudeAssistantResponseId = (entry: ClaudeHistoryMessage): string | undefined => {
-  return entry.type === "assistant" && isRecord(entry.message)
+  return entry.type === "assistant" && isUnknownRecord(entry.message)
     ? readStringProp(entry.message, "id")
     : undefined;
 };
 
 const claudeAssistantContent = (entry: ClaudeHistoryMessage): unknown[] => {
-  return entry.type === "assistant" && isRecord(entry.message)
+  return entry.type === "assistant" && isUnknownRecord(entry.message)
     ? Array.isArray(entry.message.content)
       ? entry.message.content
       : []
@@ -101,17 +105,17 @@ export const projectClaudeHistoryAssistantMessage = ({
   const content = claudeAssistantContent(entry);
   const text = historyMessageText(entry.message);
   const parts: AgentStreamPart[] = [];
-  const stopReason = isRecord(entry.message)
+  const stopReason = isUnknownRecord(entry.message)
     ? readStringProp(entry.message, "stop_reason")
     : undefined;
   const messageId = responseId ?? entry.uuid;
   const preservesBlockOrder =
     stopReason === "tool_use" &&
     Array.isArray(content) &&
-    content.some((block) => isRecord(block) && readStringProp(block, "type") !== "text");
+    content.some((block) => isUnknownRecord(block) && readStringProp(block, "type") !== "text");
   if (Array.isArray(content)) {
     for (const [index, block] of content.entries()) {
-      if (!isRecord(block)) {
+      if (!isUnknownRecord(block)) {
         continue;
       }
       const type = readStringProp(block, "type");

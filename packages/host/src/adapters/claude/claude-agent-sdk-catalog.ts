@@ -15,24 +15,24 @@ import {
   slashCommandCatalogSchema,
   subagentCatalogSchema,
 } from "@openducktor/contracts";
-import type {
-  AgentEvent,
-  AgentFileSearchResult,
-  AgentModelCatalog,
-  AgentModelDescriptor,
-  AgentSkillCatalog,
-  AgentSlashCommandCatalog,
-  AgentSubagentCatalog,
-  ListAgentModelsInput,
-  ListAgentSkillsInput,
-  ListAgentSlashCommandsInput,
-  ListAgentSubagentsInput,
-  SearchAgentFilesInput,
+import {
+  detectAgentFileReferenceKind,
+  type AgentEvent,
+  type AgentFileSearchResult,
+  type AgentModelCatalog,
+  type AgentModelDescriptor,
+  type AgentSkillCatalog,
+  type AgentSlashCommandCatalog,
+  type AgentSubagentCatalog,
+  type ListAgentModelsInput,
+  type ListAgentSkillsInput,
+  type ListAgentSlashCommandsInput,
+  type ListAgentSubagentsInput,
+  type SearchAgentFilesInput,
 } from "@openducktor/core";
 import { buildClaudeAgentSdkBaseOptions } from "./claude-agent-sdk-options";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import {
-  detectFileKind,
   FILE_SEARCH_LIMIT,
   FILE_SEARCH_MAX_VISITED,
   IGNORED_DIRECTORIES,
@@ -433,12 +433,14 @@ export const searchClaudeWorkspaceFiles = async (
       visited += 1;
       const haystack = `${entry.name}\n${relativePath}`.toLowerCase();
       if (haystack.includes(queryText)) {
-        // SAFETY: The preceding runtime guard establishes `AgentFileSearchResult["kind"]` before this assertion.
         results.push({
           id: relativePath,
           path: relativePath,
           name: basename(relativePath),
-          kind: detectFileKind(relativePath, entry.isDirectory()) as AgentFileSearchResult["kind"],
+          kind: detectAgentFileReferenceKind({
+            filePath: relativePath,
+            isDirectory: entry.isDirectory(),
+          }),
         });
       }
       if (entry.isDirectory()) {

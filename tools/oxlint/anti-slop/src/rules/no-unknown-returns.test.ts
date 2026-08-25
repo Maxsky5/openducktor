@@ -54,6 +54,10 @@ tester.run("anti-slop/no-unknown-returns", noUnknownReturnsRule, {
       errors: [error],
     },
     {
+      code: "function owner() { function Promise() {} const load = (): Promise<unknown> => value; }",
+      errors: [error],
+    },
+    {
       code: "type Box<T> = Promise<T>; function owner() { type Payload = unknown; const load = (): Box<Payload> => value; }",
       errors: [error],
     },

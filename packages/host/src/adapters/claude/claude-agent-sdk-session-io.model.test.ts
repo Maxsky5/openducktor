@@ -7,6 +7,8 @@ import {
   createClaudeSession,
 } from "./claude-agent-sdk-session-io.test-support";
 
+const MESSAGE_ID = "00000000-0000-4000-8000-000000000001";
+
 describe("Claude session I/O model changes", () => {
   test("does not change the query creation system prompt on later sends", async () => {
     const queue = new AsyncInputQueue<SDKUserMessage>();
@@ -16,7 +18,7 @@ describe("Claude session I/O model changes", () => {
     await sendClaudeUserMessage({
       session,
       now: () => "2026-06-25T20:00:00.000Z",
-      randomId: () => "message-1",
+      randomId: () => MESSAGE_ID,
       emit: () => {},
       messageInput: {
         externalSessionId: "session-1",
@@ -50,7 +52,7 @@ describe("Claude session I/O model changes", () => {
     await sendClaudeUserMessage({
       session,
       now: () => "2026-06-25T20:00:00.000Z",
-      randomId: () => "message-1",
+      randomId: () => MESSAGE_ID,
       emit: () => {},
       messageInput: {
         externalSessionId: "session-1",
@@ -74,7 +76,7 @@ describe("Claude session I/O model changes", () => {
     expect(session.activeSdkUserTurnCount).toBe(1);
     expect(session.acceptedUserMessages).toEqual([
       {
-        messageId: "message-1",
+        messageId: MESSAGE_ID,
         model: {
           providerId: "claude",
           modelId: "claude-opus-4-6",
@@ -113,7 +115,7 @@ describe("Claude session I/O model changes", () => {
     await sendClaudeUserMessage({
       session,
       now: () => "2026-06-25T20:00:00.000Z",
-      randomId: () => "message-1",
+      randomId: () => MESSAGE_ID,
       emit: () => {},
       messageInput: {
         externalSessionId: "session-1",
@@ -159,7 +161,7 @@ describe("Claude session I/O model changes", () => {
       sendClaudeUserMessage({
         session,
         now: () => "2026-06-25T20:00:00.000Z",
-        randomId: () => "message-1",
+        randomId: () => MESSAGE_ID,
         emit: () => {},
         messageInput: {
           externalSessionId: "session-1",

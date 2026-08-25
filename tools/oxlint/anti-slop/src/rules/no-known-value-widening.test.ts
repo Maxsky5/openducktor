@@ -129,5 +129,9 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
       code: "namespace Owner { type Command = () => void; type Open = Record<string, Command>; const start = () => {}; const commands: Open = { start }; }",
       errors: [error],
     },
+    {
+      code: "function owner() { function Record() {} type Command = () => void; type Open = Record<string, Command>; const start = () => {}; const commands: Open = { start }; }",
+      errors: [error],
+    },
   ],
 });
