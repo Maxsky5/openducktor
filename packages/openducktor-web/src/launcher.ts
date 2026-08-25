@@ -344,7 +344,7 @@ const startViteServerEffect = (
         if (
           !httpServer ||
           !("closeAllConnections" in httpServer) ||
-          !(typeof httpServer.closeAllConnections === "function")
+          typeof httpServer.closeAllConnections !== "function"
         ) {
           return yield* Effect.fail(
             new WebDependencyError({

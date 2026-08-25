@@ -140,7 +140,7 @@ const parseDiscoveryFile = (payload: string, discoveryPath: string): DiscoveredH
     );
   }
   const pid = parsed.pid;
-  if (!(typeof pid === "number") || !Number.isInteger(pid) || pid <= 0) {
+  if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) {
     throw new Error(
       `Invalid OpenDucktor MCP discovery file at ${discoveryPath}: pid must be a positive integer.`,
     );

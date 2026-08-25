@@ -218,7 +218,7 @@ export const handleCodexServerRequest = async (
     }
   };
 
-  if (!(typeof rawRequest.method === "string") || rawRequest.method.trim().length === 0) {
+  if (typeof rawRequest.method !== "string" || rawRequest.method.trim().length === 0) {
     throw new Error("Codex app-server server request is missing method.");
   }
 

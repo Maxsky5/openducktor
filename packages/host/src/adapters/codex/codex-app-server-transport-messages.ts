@@ -92,7 +92,7 @@ export function parseStreamMessage(
   message: Record<string, unknown>,
   kind: "notification" | "server_request",
 ): CodexAppServerProtocolMessage {
-  if (!(typeof message.method === "string") || message.method.trim().length === 0) {
+  if (typeof message.method !== "string" || message.method.trim().length === 0) {
     throw new HostValidationError({
       message: `Codex app-server ${kind} for ${runtimeId} is missing a method`,
       field: "method",
@@ -107,7 +107,7 @@ export function parseStreamMessage(
     });
   }
   if (kind === "server_request") {
-    if (!(typeof message.id === "number") && !(typeof message.id === "string")) {
+    if (typeof message.id !== "number" && typeof message.id !== "string") {
       throw new HostValidationError({
         message: `Codex app-server server request for ${runtimeId} is missing an id`,
         field: "id",

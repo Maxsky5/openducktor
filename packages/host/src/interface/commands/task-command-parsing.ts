@@ -39,7 +39,7 @@ export const requireRecord = (value: unknown, label: string): Record<string, unk
 };
 
 export const requireString = (value: unknown, label: string): string => {
-  if (!(typeof value === "string") || value.trim().length === 0) {
+  if (typeof value !== "string" || value.trim().length === 0) {
     throw invalidInput(`${label} is required.`, label);
   }
 
@@ -51,7 +51,7 @@ export const optionalNonNegativeInteger = (value: unknown, label: string): numbe
     return undefined;
   }
 
-  if (!Number.isInteger(value) || !(typeof value === "number") || value < 0) {
+  if (!Number.isInteger(value) || typeof value !== "number" || value < 0) {
     throw invalidInput(`${label} must be greater than or equal to 0.`, label);
   }
 
@@ -105,7 +105,7 @@ export const optionalBoolean = (value: unknown, label: string): boolean | undefi
   if (value === undefined || value === null) {
     return undefined;
   }
-  if (!(typeof value === "boolean")) {
+  if (typeof value !== "boolean") {
     throw invalidInput(`${label} must be a boolean when provided.`, label);
   }
 
@@ -113,7 +113,7 @@ export const optionalBoolean = (value: unknown, label: string): boolean | undefi
 };
 
 export const parseRequiredMarkdown = (value: unknown, label: string): string => {
-  if (!(typeof value === "string")) {
+  if (typeof value !== "string") {
     throw invalidInput(`${label} markdown cannot be empty.`, label);
   }
 
@@ -129,7 +129,7 @@ export const parseOptionalNote = (value: unknown, label: string): string | undef
   if (value === undefined || value === null) {
     return undefined;
   }
-  if (!(typeof value === "string")) {
+  if (typeof value !== "string") {
     throw invalidInput(`${label} must be a string when present.`, label);
   }
 
@@ -242,7 +242,7 @@ export const parsePullRequestContent = (value: unknown): PullRequestContent => {
     "task_pull_request_upsert input.input",
   );
   const title = requireString(record.title, "input.title");
-  if (!(typeof record.body === "string")) {
+  if (typeof record.body !== "string") {
     throw invalidInput("input.body is required.", "input.body");
   }
 

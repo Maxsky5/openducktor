@@ -55,7 +55,7 @@ const beginStartupSplashDismissal = (splash: HTMLElement, scheduler: ScheduleTas
 };
 
 // Module evaluation starts a conservative hold before the browser can paint the splash.
-if (!(typeof globalThis.document === "undefined")) {
+if (typeof globalThis.document !== "undefined") {
   getStartupSplash();
 }
 

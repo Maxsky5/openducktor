@@ -198,7 +198,7 @@ const normalizeMetadata = (value: Record<string, unknown> | undefined): JsonObje
 };
 
 const normalizeFileDiffType = (value: unknown): FileDiff["type"] => {
-  if (!(typeof value === "string")) {
+  if (typeof value !== "string") {
     return "modified";
   }
   const normalized = value.trim().toLowerCase();

@@ -162,7 +162,7 @@ export const handleClaudeStreamEvent = ({
     return;
   }
   const partialJson = delta.partial_json;
-  if (!(typeof partialJson === "string") || partialJson.length === 0) {
+  if (typeof partialJson !== "string" || partialJson.length === 0) {
     return;
   }
   const toolUse = appendClaudeStreamToolInputJson(session, index, partialJson);

@@ -12,7 +12,7 @@ const readShellClientValue = (propertyKey: PropertyKey): HostClientValue | undef
     return undefined;
   }
   const value = client[propertyKey];
-  if (!(typeof value === "function")) {
+  if (typeof value !== "function") {
     return value;
   }
 

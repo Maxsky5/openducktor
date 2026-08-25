@@ -304,7 +304,7 @@ const subscribeSseChannelEffect = (
         resolveReady = resolve;
       });
       const handleMessage: EventListener = (event) => {
-        if (!("data" in event) || !(typeof event.data === "string")) {
+        if (!("data" in event) || typeof event.data !== "string") {
           throw new Error("EventSource message events must contain string data.");
         }
         const hostEvent = parseHostEvent(event.data);
@@ -365,7 +365,7 @@ const subscribeSseChannelEffect = (
         hasReportedConnectionError = true;
       };
       const handleStreamWarning: EventListener = (event) => {
-        if (!("data" in event) || !(typeof event.data === "string")) {
+        if (!("data" in event) || typeof event.data !== "string") {
           throw new Error("EventSource stream-warning events must contain string data.");
         }
         const warningPayload = browserLiveControlEvent(

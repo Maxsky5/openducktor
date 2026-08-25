@@ -4,13 +4,11 @@ import { parseSync } from "oxc-parser";
 import ts from "typescript";
 
 import {
-  classifyNamedAliasWideningTarget,
-  classifyNamedInterfaceWideningTarget,
   createWideningModuleEnvironment,
+  type ResolvedWideningType,
   type WideningTypeArgument,
   type WideningTypeEnvironment,
   type WideningTypeResolver,
-  type WideningTarget,
 } from "./widening-target.ts";
 
 import type { PortableModuleItem, PortableNode } from "./portable-ast.ts";
@@ -34,7 +32,6 @@ type ImportedReference = {
 };
 
 const moduleCache = new Map<string, ParsedModule>();
-const targetCache = new Map<string, WideningTarget | null>();
 const optionsCache = new Map<string, ts.CompilerOptions>();
 
 function compilerOptions(filename: string): ts.CompilerOptions {
@@ -152,7 +149,7 @@ function importedTypeResolver(
     const imported = importedReference(module, typeNameParts);
     return imported === null
       ? null
-      : importedTarget(
+      : importedTypeDefinition(
           containingFile,
           imported.moduleSpecifier,
           imported.exportPath,
@@ -162,31 +159,42 @@ function importedTypeResolver(
   };
 }
 
-function localTarget(
+function localTypeDefinition(
   filename: string,
   module: ParsedModule,
   localName: string,
   arguments_: readonly WideningTypeArgument[],
   resolving: ReadonlySet<string>,
-): WideningTarget | null {
-  const resolveImportedType = importedTypeResolver(filename, module, resolving);
-  const aliasTarget = classifyNamedAliasWideningTarget(
-    localName,
-    module.environment,
-    arguments_,
-    resolveImportedType,
-  );
-  if (aliasTarget !== null) return aliasTarget;
-  const interfaceTarget = classifyNamedInterfaceWideningTarget(
-    localName,
-    module.environment,
-    resolveImportedType,
-  );
-  if (interfaceTarget !== null) return interfaceTarget;
+  key: string,
+): ResolvedWideningType | null {
+  const resolveImportedType = importedTypeResolver(filename, module, new Set());
+  const alias = module.environment.aliases.get(localName);
+  if (alias !== undefined) {
+    return {
+      arguments: arguments_,
+      declaration: alias,
+      environment: module.environment,
+      key,
+      kind: "alias",
+      resolveImportedType,
+    };
+  }
+  const declarations = module.environment.interfaces.get(localName);
+  if (declarations !== undefined) {
+    return {
+      arguments: arguments_,
+      declarations,
+      environment: module.environment,
+      key,
+      kind: "interface",
+      name: localName,
+      resolveImportedType,
+    };
+  }
   const imported = importedBinding(module, localName);
   return imported === null || imported.kind === "namespace"
     ? null
-    : importedTarget(
+    : importedTypeDefinition(
         filename,
         imported.moduleSpecifier,
         [imported.exportedName],
@@ -211,18 +219,19 @@ function namespaceModule(module: ParsedModule, namespaceName: string): ParsedMod
     : { environment: createWideningModuleEnvironment(statements), statements };
 }
 
-function localPathTarget(
+function localPathDefinition(
   filename: string,
   module: ParsedModule,
   exportPath: readonly string[],
   arguments_: readonly WideningTypeArgument[],
   resolving: ReadonlySet<string>,
-): WideningTarget | null {
+  key: string,
+): ResolvedWideningType | null {
   const [localName, ...rest] = exportPath;
   if (localName === undefined) return null;
   const imported = importedReference(module, exportPath);
   if (imported !== null) {
-    return importedTarget(
+    return importedTypeDefinition(
       filename,
       imported.moduleSpecifier,
       imported.exportPath,
@@ -230,20 +239,23 @@ function localPathTarget(
       resolving,
     );
   }
-  if (rest.length === 0) return localTarget(filename, module, localName, arguments_, resolving);
+  if (rest.length === 0) {
+    return localTypeDefinition(filename, module, localName, arguments_, resolving, key);
+  }
   const nestedModule = namespaceModule(module, localName);
   return nestedModule === null
     ? null
-    : exportedPathTarget(filename, nestedModule, rest, arguments_, resolving);
+    : exportedPathDefinition(filename, nestedModule, rest, arguments_, resolving, key);
 }
 
-function exportedPathTarget(
+function exportedPathDefinition(
   filename: string,
   module: ParsedModule,
   exportPath: readonly string[],
   arguments_: readonly WideningTypeArgument[],
   resolving: ReadonlySet<string>,
-): WideningTarget | null {
+  key: string,
+): ResolvedWideningType | null {
   const [exportedName, ...rest] = exportPath;
   if (exportedName === undefined) return null;
 
@@ -251,12 +263,12 @@ function exportedPathTarget(
     if (statement.type === "ExportNamedDeclaration") {
       if (declarationName(statement.declaration) === exportedName) {
         if (rest.length === 0) {
-          return localTarget(filename, module, exportedName, arguments_, resolving);
+          return localTypeDefinition(filename, module, exportedName, arguments_, resolving, key);
         }
         const nestedModule = namespaceModule(module, exportedName);
         return nestedModule === null
           ? null
-          : exportedPathTarget(filename, nestedModule, rest, arguments_, resolving);
+          : exportedPathDefinition(filename, nestedModule, rest, arguments_, resolving, key);
       }
       for (const specifier of statement.specifiers) {
         const exported =
@@ -267,8 +279,8 @@ function exportedPathTarget(
         const local =
           specifier.local.type === "Identifier" ? specifier.local.name : specifier.local.value;
         return statement.source === null
-          ? localPathTarget(filename, module, [local, ...rest], arguments_, resolving)
-          : importedTarget(
+          ? localPathDefinition(filename, module, [local, ...rest], arguments_, resolving, key)
+          : importedTypeDefinition(
               filename,
               statement.source.value,
               [local, ...rest],
@@ -288,13 +300,21 @@ function exportedPathTarget(
           : declarationName(statement.declaration);
       return localName === null
         ? null
-        : localTarget(filename, module, localName, arguments_, resolving);
+        : localTypeDefinition(filename, module, localName, arguments_, resolving, key);
     }
     if (statement.type === "ExportAllDeclaration") {
-      const target = importedTarget(
+      const namespaceExport = statement.exported;
+      let sourcePath = exportPath;
+      if (namespaceExport !== null && namespaceExport !== undefined) {
+        const namespaceName =
+          namespaceExport.type === "Identifier" ? namespaceExport.name : namespaceExport.value;
+        if (namespaceName !== exportedName || rest.length === 0) continue;
+        sourcePath = rest;
+      }
+      const target = importedTypeDefinition(
         filename,
         statement.source.value,
-        exportPath,
+        sourcePath,
         arguments_,
         resolving,
       );
@@ -304,25 +324,21 @@ function exportedPathTarget(
   return null;
 }
 
-function importedTarget(
+function importedTypeDefinition(
   containingFile: string,
   moduleSpecifier: string,
   exportPath: readonly string[],
   arguments_: readonly WideningTypeArgument[],
   resolving: ReadonlySet<string>,
-): WideningTarget | null {
+): ResolvedWideningType | null {
   const filename = resolveModule(containingFile, moduleSpecifier);
   if (filename === null) return null;
-  const cacheKey = `${filename}\0${exportPath.join("\0")}`;
-  const cacheable = arguments_.length === 0;
-  if (cacheable && targetCache.has(cacheKey)) return targetCache.get(cacheKey) ?? null;
-  if (resolving.has(cacheKey)) return null;
+  const key = `${filename}\0${exportPath.join("\0")}`;
+  if (resolving.has(key)) return null;
   const nextResolving = new Set(resolving);
-  nextResolving.add(cacheKey);
+  nextResolving.add(key);
   const module = parsedModule(filename);
-  const target = exportedPathTarget(filename, module, exportPath, arguments_, nextResolving);
-  if (cacheable) targetCache.set(cacheKey, target);
-  return target;
+  return exportedPathDefinition(filename, module, exportPath, arguments_, nextResolving, key);
 }
 
 /** Build import resolution for the canonical widening classifier at one program boundary. */

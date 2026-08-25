@@ -280,7 +280,7 @@ const prepareManualSessionCompactionSend = (): PreparedUserSend => ({
         new Error("OpenCode session compaction requires a selected provider and model."),
       );
     }
-    if (!(typeof session.client.session.summarize === "function")) {
+    if (typeof session.client.session.summarize !== "function") {
       throw toOpenCodeRequestError(
         "compact session",
         new Error("OpenCode runtime client does not expose session summarization."),

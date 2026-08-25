@@ -203,7 +203,7 @@ const hasUpdateProviderConfig = (rawConfig: string | null): boolean => {
   }
 
   const parsedConfig: unknown = parseYaml(rawConfig);
-  if (!(typeof parsedConfig === "object") || parsedConfig === null || Array.isArray(parsedConfig)) {
+  if (typeof parsedConfig !== "object" || parsedConfig === null || Array.isArray(parsedConfig)) {
     return false;
   }
 

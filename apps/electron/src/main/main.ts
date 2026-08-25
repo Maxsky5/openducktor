@@ -569,10 +569,10 @@ const resolveLocalAttachmentPathForPreviewEffect = (
         }),
       );
     if (
-      !(typeof resolved === "object") ||
+      typeof resolved !== "object" ||
       resolved === null ||
       !("path" in resolved) ||
-      !(typeof resolved.path === "string")
+      typeof resolved.path !== "string"
     ) {
       return yield* Effect.fail(
         new ElectronValidationError({

@@ -34,12 +34,12 @@ export type ResolvedLocalAttachment = {
 };
 
 const parseStagedLocalAttachment = (payload: unknown): StagedLocalAttachment => {
-  if (!payload || !(typeof payload === "object") || !("path" in payload)) {
+  if (!payload || typeof payload !== "object" || !("path" in payload)) {
     throw new Error("Expected staged local attachment payload from host command");
   }
 
   const path = payload.path;
-  if (!(typeof path === "string") || path.trim().length === 0) {
+  if (typeof path !== "string" || path.trim().length === 0) {
     throw new Error("Expected non-empty 'path' in staged local attachment payload");
   }
 

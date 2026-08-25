@@ -389,7 +389,7 @@ const codexObjectInput = (
   if (isPlainObject(value)) {
     return value;
   }
-  if (!(typeof value === "string")) {
+  if (typeof value !== "string") {
     return undefined;
   }
   try {

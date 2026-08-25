@@ -35,7 +35,7 @@ export function browserLiveControlEvent(
 }
 
 export const isBrowserLiveControlEvent = (payload: unknown): payload is BrowserLiveControlEvent => {
-  if (!(typeof payload === "object") || payload === null) {
+  if (typeof payload !== "object" || payload === null) {
     return false;
   }
 

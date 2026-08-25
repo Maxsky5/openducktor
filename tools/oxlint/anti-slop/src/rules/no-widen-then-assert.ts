@@ -5,31 +5,13 @@ import {
   createTypeEnvironment,
   isKnownEvidenceExpression,
 } from "../shared/dictionary-types.ts";
+import { resolveVariable, singleVariableDeclarator } from "../shared/global-reference.ts";
+import { createImportedWideningTypeResolver } from "../shared/imported-widening-target.ts";
 import { unwrapTransparentExpression } from "../shared/transparent-expression.ts";
 import { isStableBinding } from "../shared/stable-binding.ts";
 
-import type { ESTree, Scope, SourceCode, Variable } from "@oxlint/plugins";
-
-function resolveVariable(
-  sourceCode: SourceCode,
-  identifier: ESTree.IdentifierReference,
-): Variable | null {
-  let scope: Scope | null = sourceCode.getScope(identifier);
-  while (scope !== null) {
-    const variable = scope.set.get(identifier.name);
-    if (variable !== undefined) return variable;
-    scope = scope.upper;
-  }
-  return null;
-}
-
-function variableDeclarator(variable: Variable): ESTree.VariableDeclarator | null {
-  if (variable.defs.length !== 1) return null;
-  const [definition] = variable.defs;
-  return definition?.type === "Variable" && definition.node.type === "VariableDeclarator"
-    ? definition.node
-    : null;
-}
+import type { ESTree, SourceCode, Variable } from "@oxlint/plugins";
+import type { WideningTypeResolver } from "../shared/widening-target.ts";
 
 function hasKnownEvidence(
   sourceCode: SourceCode,
@@ -41,7 +23,7 @@ function hasKnownEvidence(
   if (unwrapped.type !== "Identifier") return false;
   const variable = resolveVariable(sourceCode, unwrapped);
   if (variable === null || visitedVariables.has(variable)) return false;
-  const declarator = variableDeclarator(variable);
+  const declarator = singleVariableDeclarator(variable);
   if (declarator === null || declarator.init === null || !isStableBinding(variable, declarator)) {
     return false;
   }
@@ -52,8 +34,13 @@ function hasKnownEvidence(
 function isBroadBoundaryType(
   type: ESTree.TSType,
   visitorKeys: Readonly<Record<string, readonly string[]>>,
+  resolveImportedType: WideningTypeResolver,
 ): boolean {
-  const wideningTarget = classifyWideningTarget(type, createTypeEnvironment(type, visitorKeys));
+  const wideningTarget = classifyWideningTarget(
+    type,
+    createTypeEnvironment(type, visitorKeys),
+    resolveImportedType,
+  );
   return (
     wideningTarget?.kind === "unknown" ||
     wideningTarget?.kind === "object" ||
@@ -64,10 +51,13 @@ function isBroadBoundaryType(
 function variableHasBroadAnnotation(
   variable: Variable,
   visitorKeys: Readonly<Record<string, readonly string[]>>,
+  resolveImportedType: WideningTypeResolver,
 ): boolean {
   return variable.identifiers.some((identifier) => {
     const annotation = identifier.typeAnnotation?.typeAnnotation;
-    return annotation !== undefined && isBroadBoundaryType(annotation, visitorKeys);
+    return (
+      annotation !== undefined && isBroadBoundaryType(annotation, visitorKeys, resolveImportedType)
+    );
   });
 }
 
@@ -75,11 +65,12 @@ function isBroadBoundaryInput(
   sourceCode: SourceCode,
   variable: Variable,
   visitorKeys: Readonly<Record<string, readonly string[]>>,
+  resolveImportedType: WideningTypeResolver,
 ): boolean {
   const identifier = variable.identifiers[0];
   if (
     identifier === undefined ||
-    !variableHasBroadAnnotation(variable, visitorKeys) ||
+    !variableHasBroadAnnotation(variable, visitorKeys, resolveImportedType) ||
     variable.references.some(
       (reference) =>
         reference.isWrite() &&
@@ -91,7 +82,7 @@ function isBroadBoundaryInput(
     return false;
   }
 
-  const declarator = variableDeclarator(variable);
+  const declarator = singleVariableDeclarator(variable);
   return (
     declarator === null ||
     declarator.init === null ||
@@ -102,10 +93,11 @@ function isBroadBoundaryInput(
 function aliasedIdentifier(
   expression: ESTree.Expression,
   visitorKeys: Readonly<Record<string, readonly string[]>>,
+  resolveImportedType: WideningTypeResolver,
 ): ESTree.IdentifierReference | null {
   let current = unwrapTransparentExpression(expression);
   if (current.type === "TSAsExpression" || current.type === "TSTypeAssertion") {
-    if (!isBroadBoundaryType(current.typeAnnotation, visitorKeys)) return null;
+    if (!isBroadBoundaryType(current.typeAnnotation, visitorKeys, resolveImportedType)) return null;
     current = unwrapTransparentExpression(current.expression);
   }
   return current.type === "Identifier" ? current : null;
@@ -116,6 +108,7 @@ function aliasesBroadBoundaryInput(
   assertedIdentifier: ESTree.IdentifierReference,
   assertion: ESTree.TSAsExpression | ESTree.TSTypeAssertion,
   visitorKeys: Readonly<Record<string, readonly string[]>>,
+  resolveImportedType: WideningTypeResolver,
 ): boolean {
   let variable = resolveVariable(sourceCode, assertedIdentifier);
   const visited = new Set<Variable>();
@@ -123,14 +116,14 @@ function aliasesBroadBoundaryInput(
 
   while (variable !== null && !visited.has(variable)) {
     visited.add(variable);
-    const declarator = variableDeclarator(variable);
+    const declarator = singleVariableDeclarator(variable);
     if (
       declarator !== null &&
       declarator.init !== null &&
       declarator.end < assertion.start &&
       isStableBinding(variable, declarator)
     ) {
-      const sourceIdentifier = aliasedIdentifier(declarator.init, visitorKeys);
+      const sourceIdentifier = aliasedIdentifier(declarator.init, visitorKeys, resolveImportedType);
       if (sourceIdentifier !== null) {
         aliasCount += 1;
         variable = resolveVariable(sourceCode, sourceIdentifier);
@@ -138,7 +131,9 @@ function aliasesBroadBoundaryInput(
       }
     }
 
-    return aliasCount > 0 && isBroadBoundaryInput(sourceCode, variable, visitorKeys);
+    return (
+      aliasCount > 0 && isBroadBoundaryInput(sourceCode, variable, visitorKeys, resolveImportedType)
+    );
   }
 
   return false;
@@ -158,13 +153,25 @@ export const noWidenThenAssertRule = defineRule({
     },
   },
   createOnce(context) {
+    let resolveImportedType: WideningTypeResolver | null = null;
+    const importedTypeResolver = (node: ESTree.Node): WideningTypeResolver => {
+      if (resolveImportedType !== null) return resolveImportedType;
+      let root = node;
+      while (root.parent !== null) root = root.parent;
+      resolveImportedType = createImportedWideningTypeResolver(
+        context.filename,
+        root.type === "Program" ? root.body : [],
+      );
+      return resolveImportedType;
+    };
     const checkAssertion = (node: ESTree.TSAsExpression | ESTree.TSTypeAssertion): void => {
       const visitorKeys = context.sourceCode.visitorKeys;
-      if (isBroadBoundaryType(node.typeAnnotation, visitorKeys)) return;
+      const resolver = importedTypeResolver(node);
+      if (isBroadBoundaryType(node.typeAnnotation, visitorKeys, resolver)) return;
       const expression = unwrapTransparentExpression(node.expression);
       if (
         expression.type !== "Identifier" ||
-        !aliasesBroadBoundaryInput(context.sourceCode, expression, node, visitorKeys)
+        !aliasesBroadBoundaryInput(context.sourceCode, expression, node, visitorKeys, resolver)
       ) {
         return;
       }

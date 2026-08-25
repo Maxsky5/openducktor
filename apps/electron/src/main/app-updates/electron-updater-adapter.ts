@@ -204,7 +204,7 @@ export const createElectronUpdaterAdapter = ({
       const nativeVersion = nativeResult?.updateInfo.version;
       if (
         !nativeResult?.isUpdateAvailable ||
-        !(typeof nativeVersion === "string") ||
+        typeof nativeVersion !== "string" ||
         nativeVersion !== resolvedRelease.version
       ) {
         throw new ElectronOperationError({

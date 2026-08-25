@@ -5,7 +5,7 @@ describe("runtime type guards", () => {
   test("narrows primitive unions without losing the selected member", () => {
     const value: number | string = "ready";
 
-    if (!(typeof value === "string")) {
+    if (typeof value !== "string") {
       throw new Error("Expected a string value.");
     }
 
@@ -15,7 +15,7 @@ describe("runtime type guards", () => {
 
   test("preserves an existing function signature", () => {
     const invokeIfFunction = (value: string | ((input: string) => number)): number => {
-      if (!(typeof value === "function")) {
+      if (typeof value !== "function") {
         throw new Error("Expected a function value.");
       }
 

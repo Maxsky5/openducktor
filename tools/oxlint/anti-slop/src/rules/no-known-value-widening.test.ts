@@ -28,6 +28,8 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
     `${prelude} const commands = { start: startCommand } satisfies Record<string, Command>;`,
     `${prelude} type Commands = Record<string, Command>; const commands = { start: startCommand } as const satisfies Commands;`,
     `${prelude} interface Commands { readonly start: Command } const commands: Commands = { start: startCommand };`,
+    `${prelude} interface Commands extends Record<'start', Command> {} const commands: Commands = { start: startCommand };`,
+    `${prelude} interface Commands<Key extends PropertyKey> extends Record<Key, Command> {} const commands: Commands<'start'> = { start: startCommand };`,
     `${prelude} type Commands = { readonly start: Command }; const commands: Commands = { start: startCommand };`,
     `${prelude} type PermissionLevels = { readonly [Level in Permission]: number }; const levels: PermissionLevels = { admin: 1 };`,
     `${prelude} const commands: Record<'start', Command> = { start: startCommand };`,
@@ -41,6 +43,10 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
     {
       filename: importedTypeFixtureFilename,
       code: `${prelude} import type { OpenCommandsByKey } from './no-known-value-widening-types'; const commands: OpenCommandsByKey<'start'> = { start: startCommand };`,
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type { OpenCommandsInterfaceByKey } from './no-known-value-widening-types'; const commands: OpenCommandsInterfaceByKey<'start'> = { start: startCommand };`,
     },
     {
       filename: importedTypeFixtureFilename,
@@ -139,6 +145,10 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
       errors: [error],
     },
     {
+      code: `${prelude} interface Commands<Key extends PropertyKey> extends Record<Key, Command> {} const commands: Commands<string> = { start: startCommand };`,
+      errors: [error],
+    },
+    {
       code: `${prelude} interface CommandsContract { [key: string]: Command } const commands: CommandsContract = { start: startCommand };`,
       errors: [error],
     },
@@ -188,6 +198,16 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
       filename: importedTypeFixtureFilename,
       code: `${prelude} import type { OpenCommandsByKey } from './no-known-value-widening-types'; const commands: OpenCommandsByKey<string> = { start: startCommand };`,
       errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type { OpenCommandsInterfaceByKey } from './no-known-value-widening-types'; const commands: OpenCommandsInterfaceByKey<string> = { start: startCommand };`,
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type { ImportedKeyCommands, ImportedKeyCommandsInterface } from './no-known-value-widening-types'; const commands: ImportedKeyCommands = { start: startCommand }; const otherCommands: ImportedKeyCommandsInterface = { start: startCommand };`,
+      errors: [error, error],
     },
     {
       filename: importedTypeFixtureFilename,
@@ -257,6 +277,11 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
     {
       filename: importedTypeFixtureFilename,
       code: `${prelude} import type * as Reexports from './no-known-value-widening-namespace-reexports'; const commands: Reexports.Commands.Owner.OpenCommands = { start: startCommand };`,
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type * as Reexports from './no-known-value-widening-namespace-reexports'; const commands: Reexports.NamespaceCommands.Types.Owner.OpenCommands = { start: startCommand };`,
       errors: [error],
     },
   ],

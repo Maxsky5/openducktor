@@ -71,7 +71,7 @@ describe("SettingsReusablePromptsSection", () => {
 
       expect(onUpdateReusablePrompts).toHaveBeenCalledTimes(1);
       const updater = onUpdateReusablePrompts.mock.calls[0]?.[0];
-      if (!(typeof updater === "function")) {
+      if (typeof updater !== "function") {
         throw new Error("Expected reusable prompt updater.");
       }
       expect(updater([])).toMatchObject([{ name: "", description: "", content: "" }]);
@@ -103,7 +103,7 @@ describe("SettingsReusablePromptsSection", () => {
       expect(onUpdateReusablePrompts).toHaveBeenCalledTimes(2);
       const updateName = onUpdateReusablePrompts.mock.calls[0]?.[0];
       const deletePrompt = onUpdateReusablePrompts.mock.calls[1]?.[0];
-      if (!(typeof updateName === "function") || !(typeof deletePrompt === "function")) {
+      if (typeof updateName !== "function" || typeof deletePrompt !== "function") {
         throw new Error("Expected reusable prompt updater callbacks.");
       }
 

@@ -44,10 +44,29 @@ type ScopedType = {
 
 export type WideningTypeArgument = ScopedType;
 
+export type ResolvedWideningType =
+  | {
+      readonly arguments: readonly WideningTypeArgument[];
+      readonly declaration: PortableTSTypeAliasDeclaration;
+      readonly environment: WideningTypeEnvironment;
+      readonly key: string;
+      readonly kind: "alias";
+      readonly resolveImportedType: WideningTypeResolver;
+    }
+  | {
+      readonly arguments: readonly WideningTypeArgument[];
+      readonly declarations: readonly PortableTSInterfaceDeclaration[];
+      readonly environment: WideningTypeEnvironment;
+      readonly key: string;
+      readonly kind: "interface";
+      readonly name: string;
+      readonly resolveImportedType: WideningTypeResolver;
+    };
+
 export type WideningTypeResolver = (
   typeNameParts: readonly string[],
   arguments_: readonly WideningTypeArgument[],
-) => WideningTarget | null;
+) => ResolvedWideningType | null;
 
 type TypeAliasEnvironment = ReadonlyMap<string, ScopedType>;
 
@@ -210,13 +229,12 @@ function resolvedSubstitutionArgument(
   return resolvedSubstitutionArgument(substitution, base, nextResolving);
 }
 
-function aliasSubstitution(
-  alias: PortableTSTypeAliasDeclaration,
+function typeParameterSubstitution(
+  parameters: NonNullable<PortableTSTypeAliasDeclaration["typeParameters"]>["params"],
   arguments_: readonly WideningTypeArgument[],
   defaultEnvironment: WideningTypeEnvironment,
   base: TypeAliasEnvironment,
 ): TypeAliasEnvironment | null {
-  const parameters = alias.typeParameters?.params ?? [];
   const next = new Map(base);
   for (const [index, parameter] of parameters.entries()) {
     const suppliedArgument = arguments_[index];
@@ -231,6 +249,20 @@ function aliasSubstitution(
     next.set(parameter.name.name, resolvedSubstitutionArgument(argument, next));
   }
   return next;
+}
+
+function aliasSubstitution(
+  alias: PortableTSTypeAliasDeclaration,
+  arguments_: readonly WideningTypeArgument[],
+  defaultEnvironment: WideningTypeEnvironment,
+  base: TypeAliasEnvironment,
+): TypeAliasEnvironment | null {
+  return typeParameterSubstitution(
+    alias.typeParameters?.params ?? [],
+    arguments_,
+    defaultEnvironment,
+    base,
+  );
 }
 
 function scopedTypeArguments(
@@ -260,25 +292,39 @@ function interfaceWideningTarget(
   name: string,
   declarations: readonly PortableTSInterfaceDeclaration[],
   environment: WideningTypeEnvironment,
+  arguments_: readonly WideningTypeArgument[] = [],
   resolveImportedType?: WideningTypeResolver,
   resolving: ReadonlySet<string> = new Set(),
 ): WideningTarget | null {
   if (resolving.has(name)) return null;
-  if (
-    declarations.some((interface_) =>
-      interface_.body.body.some((member) => member.type === "TSIndexSignature"),
-    )
-  ) {
-    return { kind: "open dictionary" };
-  }
   const nextResolving = new Set(resolving);
   nextResolving.add(name);
   for (const interface_ of declarations) {
+    const substitutions = typeParameterSubstitution(
+      interface_.typeParameters?.params ?? [],
+      arguments_,
+      environment,
+      new Map(),
+    );
+    if (substitutions === null) continue;
+    if (interface_.body.body.some((member) => member.type === "TSIndexSignature")) {
+      return { kind: "open dictionary" };
+    }
     for (const heritage of interface_.extends) {
       const heritageParts = expressionTypeNameParts(heritage.expression);
       const heritageName = heritageParts.length === 1 ? heritageParts[0] : undefined;
+      const heritageArguments = (heritage.typeArguments?.params ?? []).map((argument) =>
+        resolvedSubstitutionArgument({ environment, type: argument }, substitutions),
+      );
       if (heritageName === "Record" && isBuiltIn(heritageName, environment)) {
-        return { kind: "open dictionary" };
+        const key = heritage.typeArguments?.params[0];
+        if (
+          key !== undefined &&
+          isBroadMappedKey(key, environment, substitutions, nextResolving, resolveImportedType)
+        ) {
+          return { kind: "open dictionary" };
+        }
+        continue;
       }
       if (
         heritageName !== undefined &&
@@ -289,7 +335,14 @@ function interfaceWideningTarget(
         const target =
           wrapped === undefined
             ? null
-            : classifyWideningTarget(wrapped, environment, resolveImportedType);
+            : classifyWideningTargetWithState(
+                wrapped,
+                environment,
+                substitutions,
+                nextResolving,
+                "alias",
+                resolveImportedType,
+              );
         if (target !== null) return target;
       }
       if (heritageName !== undefined) {
@@ -299,6 +352,7 @@ function interfaceWideningTarget(
             heritageName,
             inheritedInterfaces,
             environment,
+            heritageArguments,
             resolveImportedType,
             nextResolving,
           );
@@ -306,20 +360,17 @@ function interfaceWideningTarget(
         }
         const heritageAlias = environment.aliases.get(heritageName);
         if (heritageAlias !== undefined) {
-          const substitutions = aliasSubstitution(
+          const aliasSubstitutions = aliasSubstitution(
             heritageAlias,
-            (heritage.typeArguments?.params ?? []).map((argument) => ({
-              environment,
-              type: argument,
-            })),
+            heritageArguments,
             environment,
-            new Map(),
+            substitutions,
           );
-          if (substitutions === null) continue;
+          if (aliasSubstitutions === null) continue;
           const target = classifyWideningTargetWithState(
             heritageAlias.typeAnnotation,
             environment,
-            substitutions,
+            aliasSubstitutions,
             new Set([heritageName]),
             "alias",
             resolveImportedType,
@@ -327,17 +378,49 @@ function interfaceWideningTarget(
           if (target !== null) return target;
         }
       }
-      const importedTarget = resolveImportedType?.(
-        heritageParts,
-        (heritage.typeArguments?.params ?? []).map((argument) => ({
-          environment,
-          type: argument,
-        })),
-      );
-      if (importedTarget !== null && importedTarget !== undefined) return importedTarget;
+      const importedType = resolveImportedType?.(heritageParts, heritageArguments);
+      if (importedType !== null && importedType !== undefined) {
+        const target = classifyResolvedWideningType(importedType, nextResolving);
+        if (target !== null) return target;
+      }
     }
   }
   return null;
+}
+
+function classifyResolvedWideningType(
+  resolved: ResolvedWideningType,
+  resolvingAliases: ReadonlySet<string>,
+): WideningTarget | null {
+  if (resolvingAliases.has(resolved.key)) return null;
+  const nextResolving = new Set(resolvingAliases);
+  nextResolving.add(resolved.key);
+  if (resolved.kind === "interface") {
+    return interfaceWideningTarget(
+      resolved.name,
+      resolved.declarations,
+      resolved.environment,
+      resolved.arguments,
+      resolved.resolveImportedType,
+      nextResolving,
+    );
+  }
+  const substitutions = aliasSubstitution(
+    resolved.declaration,
+    resolved.arguments,
+    resolved.environment,
+    new Map(),
+  );
+  return substitutions === null
+    ? null
+    : classifyWideningTargetWithState(
+        resolved.declaration.typeAnnotation,
+        resolved.environment,
+        substitutions,
+        nextResolving,
+        "alias",
+        resolved.resolveImportedType,
+      );
 }
 
 /** Classify a target type that discards known structural evidence. */
@@ -360,12 +443,13 @@ export function classifyWideningTarget(
 export function classifyNamedInterfaceWideningTarget(
   name: string,
   environment: WideningTypeEnvironment,
+  arguments_: readonly WideningTypeArgument[] = [],
   resolveImportedType?: WideningTypeResolver,
 ): WideningTarget | null {
   const declarations = environment.interfaces.get(name);
   return declarations === undefined
     ? null
-    : interfaceWideningTarget(name, declarations, environment, resolveImportedType);
+    : interfaceWideningTarget(name, declarations, environment, arguments_, resolveImportedType);
 }
 
 /** Classify a named alias without treating a closed object alias as anonymous. */
@@ -424,7 +508,13 @@ function classifyWideningTargetWithState(
   }
   if (unwrapped.type === "TSMappedType") {
     return mode === "annotation" ||
-      isBroadMappedKey(unwrapped.constraint, environment, substitutions)
+      isBroadMappedKey(
+        unwrapped.constraint,
+        environment,
+        substitutions,
+        resolvingAliases,
+        resolveImportedType,
+      )
       ? { kind: "open dictionary" }
       : null;
   }
@@ -464,7 +554,8 @@ function classifyWideningTargetWithState(
   }
   if (simpleName === "Record" && isBuiltIn(simpleName, environment)) {
     const key = unwrapped.typeArguments?.params[0];
-    return key !== undefined && isBroadMappedKey(key, environment, substitutions)
+    return key !== undefined &&
+      isBroadMappedKey(key, environment, substitutions, resolvingAliases, resolveImportedType)
       ? { kind: "open dictionary" }
       : null;
   }
@@ -477,6 +568,7 @@ function classifyWideningTargetWithState(
         scope.name,
         interfaceDeclarations,
         scope.environment,
+        scopedTypeArguments(unwrapped, environment, substitutions),
         resolveImportedType,
       );
       if (target !== null) return target;
@@ -502,12 +594,13 @@ function classifyWideningTargetWithState(
     );
     if (target !== null) return target;
   }
-  return (
-    resolveImportedType?.(
-      typeNameParts(unwrapped.typeName),
-      scopedTypeArguments(unwrapped, environment, substitutions),
-    ) ?? null
+  const importedType = resolveImportedType?.(
+    typeNameParts(unwrapped.typeName),
+    scopedTypeArguments(unwrapped, environment, substitutions),
   );
+  return importedType === null || importedType === undefined
+    ? null
+    : classifyResolvedWideningType(importedType, resolvingAliases);
 }
 
 function isBroadMappedKey(
@@ -515,6 +608,7 @@ function isBroadMappedKey(
   environment: WideningTypeEnvironment,
   substitutions: TypeAliasEnvironment,
   resolvingAliases: ReadonlySet<string> = new Set(),
+  resolveImportedType?: WideningTypeResolver,
 ): boolean {
   const unwrapped = unwrapTransparentType(type);
   if (
@@ -526,7 +620,7 @@ function isBroadMappedKey(
   }
   if (unwrapped.type === "TSUnionType") {
     return unwrapped.types.some((member) =>
-      isBroadMappedKey(member, environment, substitutions, resolvingAliases),
+      isBroadMappedKey(member, environment, substitutions, resolvingAliases, resolveImportedType),
     );
   }
   if (unwrapped.type !== "TSTypeReference") return false;
@@ -539,6 +633,7 @@ function isBroadMappedKey(
         substitution.environment,
         substitutions,
         resolvingAliases,
+        resolveImportedType,
       );
     }
     if (name === "PropertyKey" && isBuiltIn(name, environment)) return true;
@@ -558,10 +653,36 @@ function isBroadMappedKey(
     const nextResolving = new Set(resolvingAliases);
     nextResolving.add(referenceKey);
     if (
-      isBroadMappedKey(alias.typeAnnotation, scope.environment, nextSubstitutions, nextResolving)
+      isBroadMappedKey(
+        alias.typeAnnotation,
+        scope.environment,
+        nextSubstitutions,
+        nextResolving,
+        resolveImportedType,
+      )
     ) {
       return true;
     }
   }
-  return false;
+  const importedType = resolveImportedType?.(
+    typeNameParts(unwrapped.typeName),
+    scopedTypeArguments(unwrapped, environment, substitutions),
+  );
+  if (importedType?.kind !== "alias" || resolvingAliases.has(importedType.key)) return false;
+  const importedSubstitutions = aliasSubstitution(
+    importedType.declaration,
+    importedType.arguments,
+    importedType.environment,
+    new Map(),
+  );
+  if (importedSubstitutions === null) return false;
+  const nextResolving = new Set(resolvingAliases);
+  nextResolving.add(importedType.key);
+  return isBroadMappedKey(
+    importedType.declaration.typeAnnotation,
+    importedType.environment,
+    importedSubstitutions,
+    nextResolving,
+    importedType.resolveImportedType,
+  );
 }

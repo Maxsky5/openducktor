@@ -137,12 +137,12 @@ const isExplicitRunningRestart = (
     input.status !== "running" ||
     !existing ||
     !isTerminalStatus(existing.status) ||
-    !(typeof input.startedAtMs === "number")
+    typeof input.startedAtMs !== "number"
   ) {
     return false;
   }
   let lifecycleBoundaryMs = existing.endedAtMs;
-  if (!(typeof lifecycleBoundaryMs === "number") && existing.status === "completed") {
+  if (typeof lifecycleBoundaryMs !== "number" && existing.status === "completed") {
     lifecycleBoundaryMs = existing.startedAtMs;
   }
   return typeof lifecycleBoundaryMs === "number" && input.startedAtMs > lifecycleBoundaryMs;

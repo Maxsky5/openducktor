@@ -23,7 +23,7 @@ const requireMarkdownHook = <Hook>(
   hookName: string,
   hook: Hook | undefined,
 ): NonNullable<Hook> => {
-  if (!(typeof hook === "function")) {
+  if (typeof hook !== "function") {
     throw new Error(
       `TipTap 3.30.0 ${extensionName}.${hookName} is required by the task-description Markdown dialect. Align all TipTap packages before starting the editor.`,
     );

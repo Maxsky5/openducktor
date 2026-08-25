@@ -63,7 +63,7 @@ type GlobalEventApi = {
 
 const getGlobalEventApi = (client: GlobalEventClient): GlobalEventApi => {
   const globalApi = client.global;
-  if (!(typeof globalApi.event === "function")) {
+  if (typeof globalApi.event !== "function") {
     throw new Error(
       "OpenCode SDK does not expose global event streaming via client.global.event(). Update @opencode-ai/sdk before using the adapter.",
     );

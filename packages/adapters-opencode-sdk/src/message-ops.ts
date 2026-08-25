@@ -69,11 +69,11 @@ const buildPartScopedSubagentCorrelationKey = (
 const readChildSessionCreatedAt = (session: Session): number | undefined => session.time?.created;
 
 const toChildSessionLink = (session: Session): ChildSessionLink | null => {
-  if (!(typeof session.id === "string") || session.id.trim().length === 0) {
+  if (typeof session.id !== "string" || session.id.trim().length === 0) {
     return null;
   }
   const createdAtMs = readChildSessionCreatedAt(session);
-  if (!(typeof createdAtMs === "number")) {
+  if (typeof createdAtMs !== "number") {
     return null;
   }
 
@@ -105,7 +105,7 @@ const takeChildSessionLinkForSubagentPart = (
   part: MappedSubagentPart,
 ): ChildSessionLink | undefined => {
   const startedAtMs = part.startedAtMs;
-  if (part.externalSessionId || !(typeof startedAtMs === "number")) {
+  if (part.externalSessionId || typeof startedAtMs !== "number") {
     return undefined;
   }
 

@@ -21,7 +21,7 @@ export const toSessionContextUsage = (
   totalTokens: number | undefined,
   model?: AgentSessionState["selectedModel"],
 ): AgentSessionContextUsage | null => {
-  if (!(typeof totalTokens === "number") || totalTokens <= 0) {
+  if (typeof totalTokens !== "number" || totalTokens <= 0) {
     return null;
   }
 

@@ -109,7 +109,7 @@ export function useAgentChatWindow({
       cancelScheduledIdleBottomPin();
 
       const requestAnimationFrameFn = globalThis.requestAnimationFrame;
-      if (!(typeof requestAnimationFrameFn === "function")) {
+      if (typeof requestAnimationFrameFn !== "function") {
         if (userScrollIntentVersionRef.current === scheduledUserScrollIntentVersion) {
           forceScrollToBottom();
         }
@@ -204,7 +204,7 @@ export function useAgentChatWindow({
 
       cancelScheduledComposerLayoutSync();
       const requestAnimationFrameFn = globalThis.requestAnimationFrame;
-      if (!(typeof requestAnimationFrameFn === "function")) {
+      if (typeof requestAnimationFrameFn !== "function") {
         forceScrollToBottom();
         return;
       }

@@ -30,7 +30,7 @@ type CodexJsonObject = Record<string, CodexAppServerJsonValue>;
 
 const parseJsonObject = (value: CodexAppServerJsonValue | undefined) => {
   if (isPlainObject(value)) return value;
-  if (!(typeof value === "string")) return null;
+  if (typeof value !== "string") return null;
   try {
     const parsed = jsonValueSchema.safeParse(JSON.parse(value));
     return parsed.success && isPlainObject(parsed.data) ? parsed.data : null;

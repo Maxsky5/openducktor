@@ -105,7 +105,7 @@ const normalizeToolInputForSession = (
 
   for (const key of SESSION_PATH_INPUT_KEYS) {
     const value = nextInput[key];
-    if (!(typeof value === "string")) {
+    if (typeof value !== "string") {
       continue;
     }
     const rewritten = rewriteSessionPath(session, value);

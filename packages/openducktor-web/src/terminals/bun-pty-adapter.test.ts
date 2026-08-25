@@ -25,7 +25,7 @@ const injectedCleanupFailure = () =>
 
 describe("createBunPtyPort", () => {
   test("satisfies the shared contract with a real Bun terminal process", async () => {
-    if (process.platform === "win32" || !(typeof Bun.Terminal === "function")) return;
+    if (process.platform === "win32" || typeof Bun.Terminal !== "function") return;
     const observation = await observeLiveTerminalPtyConformance(createBunPtyPort());
     expect(observation.transcript).toContain("INPUT:terminal-conformance");
     expect(observation.transcript).toMatch(/40\s+120/);
@@ -33,17 +33,17 @@ describe("createBunPtyPort", () => {
     expect(observation.exit.exitCode).toBe(0);
   }, 7_000);
   test("terminates a real Bun PTY descendant process tree", async () => {
-    if (process.platform === "win32" || !(typeof Bun.Terminal === "function")) return;
+    if (process.platform === "win32" || typeof Bun.Terminal !== "function") return;
     const childPid = await verifyLiveTerminalPtyProcessTreeTermination(createBunPtyPort());
     expect(childPid).toBeGreaterThan(0);
   }, 7_000);
   test("cleans a real Bun PTY descendant after natural shell exit", async () => {
-    if (process.platform === "win32" || !(typeof Bun.Terminal === "function")) return;
+    if (process.platform === "win32" || typeof Bun.Terminal !== "function") return;
     const childPid = await verifyLiveTerminalPtyNaturalExitCleanup(createBunPtyPort());
     expect(childPid).toBeGreaterThan(0);
   }, 7_000);
   test("interrupts a real Bun PTY foreground process with Ctrl+C input", async () => {
-    if (process.platform === "win32" || !(typeof Bun.Terminal === "function")) return;
+    if (process.platform === "win32" || typeof Bun.Terminal !== "function") return;
     const exit = await verifyLiveTerminalPtyInterrupt(createBunPtyPort());
     expect(exit.exitCode).toBe(130);
   }, 7_000);

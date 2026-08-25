@@ -30,7 +30,7 @@ const firstFailure = async <A, E>(effect: Effect.Effect<A, E>): Promise<E> => {
 };
 
 const readTag = <Value>(value: Value | null | undefined): string | undefined => {
-  if (!(typeof value === "object") || value === null || !("_tag" in value)) {
+  if (typeof value !== "object" || value === null || !("_tag" in value)) {
     return undefined;
   }
   const tag = value._tag;

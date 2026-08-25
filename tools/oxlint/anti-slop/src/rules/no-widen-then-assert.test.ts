@@ -1,9 +1,13 @@
 import { RuleTester } from "oxlint/plugins-dev";
+import { fileURLToPath } from "node:url";
 
 import { noWidenThenAssertRule } from "./no-widen-then-assert.ts";
 
 const tester = new RuleTester({ languageOptions: { parserOptions: { lang: "ts" } } });
 const error = { messageId: "widenThenAssert" };
+const fixtureFilename = fileURLToPath(
+  new URL("./__fixtures__/no-known-value-widening-input.ts", import.meta.url),
+);
 
 tester.run("anti-slop/no-widen-then-assert", noWidenThenAssertRule, {
   valid: [
@@ -54,6 +58,26 @@ tester.run("anti-slop/no-widen-then-assert", noWidenThenAssertRule, {
     },
     {
       code: "declare const input: unknown; type User = { id: string }; const alias = input satisfies unknown; const value = alias as User;",
+      errors: [error],
+    },
+    {
+      filename: fixtureFilename,
+      code: "import type { OpenCommands } from './no-known-value-widening-types'; declare const input: OpenCommands; const alias = input; const value = alias as User;",
+      errors: [error],
+    },
+    {
+      filename: fixtureFilename,
+      code: "import type DefaultOpenCommands from './no-known-value-widening-types'; declare const input: DefaultOpenCommands; const alias = input; const value = alias as User;",
+      errors: [error],
+    },
+    {
+      filename: fixtureFilename,
+      code: "import type * as CommandTypes from './no-known-value-widening-types'; declare const input: CommandTypes.OpenCommands; const alias = input; const value = alias as User;",
+      errors: [error],
+    },
+    {
+      filename: fixtureFilename,
+      code: "import type { OpenCommandsByKey } from './no-known-value-widening-reexports'; declare const input: OpenCommandsByKey<string>; const alias = input; const value = alias as User;",
       errors: [error],
     },
   ],

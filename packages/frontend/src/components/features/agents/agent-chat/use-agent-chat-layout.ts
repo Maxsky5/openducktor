@@ -164,7 +164,7 @@ export const useAgentChatLayout = ({
 
   const resizeComposerEditor = useCallback((): void => {
     const requestAnimationFrameFn = globalThis.requestAnimationFrame;
-    if (!(typeof requestAnimationFrameFn === "function")) {
+    if (typeof requestAnimationFrameFn !== "function") {
       flushComposerEditorResize();
       return;
     }
@@ -202,7 +202,7 @@ export const useAgentChatLayout = ({
 
   const resizeComposerTextarea = useCallback((): void => {
     const requestAnimationFrameFn = globalThis.requestAnimationFrame;
-    if (!(typeof requestAnimationFrameFn === "function")) {
+    if (typeof requestAnimationFrameFn !== "function") {
       flushComposerTextareaResize();
       return;
     }

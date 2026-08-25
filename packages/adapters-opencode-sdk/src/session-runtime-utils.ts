@@ -5,7 +5,7 @@ import type { SessionInput } from "./types";
 type SessionInputSource = StartAgentSessionInput | PolicyBoundSessionRef;
 
 export const toIsoFromEpoch = (value: unknown, fallback: () => string): string => {
-  if (!(typeof value === "number") || Number.isNaN(value)) {
+  if (typeof value !== "number" || Number.isNaN(value)) {
     return fallback();
   }
   const iso = new Date(value).toISOString();

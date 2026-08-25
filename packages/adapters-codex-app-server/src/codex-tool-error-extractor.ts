@@ -17,7 +17,7 @@ type CodexMcpToolCallItem = Extract<CodexAppServerThreadItem, { type: "mcpToolCa
 type CodexJsonObject = Record<string, CodexAppServerJsonValue>;
 
 const parseJsonObjectString = (value: CodexAppServerJsonValue | undefined) => {
-  if (!(typeof value === "string")) {
+  if (typeof value !== "string") {
     return null;
   }
   const trimmed = value.trim();
@@ -37,7 +37,7 @@ const asRecord = (value: CodexAppServerJsonValue | undefined): CodexJsonObject |
   isPlainObject(value) ? value : parseJsonObjectString(value);
 
 const nonEmptyString = (value: CodexAppServerJsonValue | undefined): string | null => {
-  if (!(typeof value === "string")) {
+  if (typeof value !== "string") {
     return null;
   }
   const trimmed = value.trim();

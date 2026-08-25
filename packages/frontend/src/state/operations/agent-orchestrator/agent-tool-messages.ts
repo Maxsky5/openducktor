@@ -54,7 +54,7 @@ export const settleDanglingTodoToolMessages = (
     const updatedMeta = {
       ...meta,
       status: updatedStatus,
-      ...(!(typeof meta.endedAtMs === "number") && typeof endedAtMs === "number"
+      ...(typeof meta.endedAtMs !== "number" && typeof endedAtMs === "number"
         ? { endedAtMs }
         : undefined),
       ...(updatedStatus === "error" ? { error: errorText } : undefined),

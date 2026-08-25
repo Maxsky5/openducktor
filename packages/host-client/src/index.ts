@@ -230,7 +230,7 @@ const bindDelegates = <
 ): void => {
   for (const methodName of methods) {
     const candidate = client[methodName];
-    if (!(typeof candidate === "function")) {
+    if (typeof candidate !== "function") {
       throw new Error(`Cannot delegate non-function member: ${String(methodName)}`);
     }
 

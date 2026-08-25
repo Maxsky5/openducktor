@@ -107,7 +107,7 @@ const subagentStartedAt = (
   },
   fallback: string,
 ): string => {
-  if (!(typeof part.startedAtMs === "number")) {
+  if (typeof part.startedAtMs !== "number") {
     return fallback;
   }
   const startedAt = new Date(part.startedAtMs);

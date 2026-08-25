@@ -32,7 +32,7 @@ const touchTranscriptModelCacheEntry = (
 
   while (cache.size > TRANSCRIPT_MODEL_CACHE_LIMIT) {
     const oldestKey = cache.keys().next().value;
-    if (!(typeof oldestKey === "string")) {
+    if (typeof oldestKey !== "string") {
       break;
     }
     cache.delete(oldestKey);

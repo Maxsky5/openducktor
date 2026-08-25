@@ -147,7 +147,7 @@ export const createTaskAssetFileOwnership = (
       await link(publication, marker);
     } catch (cause) {
       if (
-        !(typeof cause === "object") ||
+        typeof cause !== "object" ||
         cause === null ||
         !("code" in cause) ||
         cause.code !== "EEXIST"

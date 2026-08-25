@@ -33,7 +33,7 @@ type RepoScriptDraftInput = {
 export const parseHookLines = (value: string): string[] => value.split("\n");
 
 export const createReusablePromptDraft = (): ReusablePrompt => {
-  if (typeof globalThis.crypto === "undefined" || !(typeof crypto.randomUUID === "function")) {
+  if (typeof globalThis.crypto === "undefined" || typeof crypto.randomUUID !== "function") {
     throw new Error(
       "Cannot create a reusable prompt because random UUID generation is unavailable.",
     );

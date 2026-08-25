@@ -233,7 +233,7 @@ const normalizePartDeltaField = (field: string): string => {
 export const applyDeltaToPart = (part: Part, field: string, delta: string): Part | null => {
   const normalizedField = normalizePartDeltaField(field);
   const existing = Object.getOwnPropertyDescriptor(part, normalizedField)?.value;
-  if (existing !== undefined && !(typeof existing === "string")) {
+  if (existing !== undefined && typeof existing !== "string") {
     return null;
   }
 

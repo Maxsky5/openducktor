@@ -13,6 +13,15 @@ export function resolveVariable(
   return null;
 }
 
+/** Return the sole variable declaration that owns a resolved binding. */
+export function singleVariableDeclarator(variable: Variable): ESTree.VariableDeclarator | null {
+  if (variable.defs.length !== 1) return null;
+  const definition = variable.defs[0];
+  return definition?.type === "Variable" && definition.node.type === "VariableDeclarator"
+    ? definition.node
+    : null;
+}
+
 function isUnshadowedGlobalIdentifier(
   sourceCode: SourceCode,
   expression: ESTree.Expression,

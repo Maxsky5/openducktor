@@ -119,7 +119,7 @@ const toOpencodeSessionStatusMap = (
 };
 
 const normalizeSessionDirectory = (directory: unknown): string | undefined => {
-  if (!(typeof directory === "string")) {
+  if (typeof directory !== "string") {
     return undefined;
   }
   let normalized = directory.trim();

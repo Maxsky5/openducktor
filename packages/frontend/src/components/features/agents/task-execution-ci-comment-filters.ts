@@ -13,13 +13,13 @@ const parseFilters = (raw: string | null): TaskExecutionCiCommentFilters => {
   }
 
   const parsed: unknown = JSON.parse(raw);
-  if (!parsed || !(typeof parsed === "object")) {
+  if (!parsed || typeof parsed !== "object") {
     throw new Error("Persisted CI comment filters are invalid.");
   }
 
   // SAFETY: The preceding runtime guard establishes `{ hideResolved?: unknown }` before this assertion.
   const hideResolved = (parsed as { hideResolved?: unknown }).hideResolved;
-  if (!(typeof hideResolved === "boolean")) {
+  if (typeof hideResolved !== "boolean") {
     throw new Error("Persisted CI comment filters are invalid.");
   }
   return { hideResolved };

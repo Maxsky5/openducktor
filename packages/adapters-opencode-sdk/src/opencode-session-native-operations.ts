@@ -49,7 +49,7 @@ export const readLatestOpencodeContextUsage = async (
     return null;
   }
   const totalTokens = extractMessageTotalTokens(latestAssistant.info, latestAssistant.parts);
-  if (!(typeof totalTokens === "number")) {
+  if (typeof totalTokens !== "number") {
     return null;
   }
   const model = readMessageModelSelection(latestAssistant.info);

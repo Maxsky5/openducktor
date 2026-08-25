@@ -5,7 +5,7 @@ import { readStringProp } from "./claude-agent-sdk-utils";
 
 export const readHistoryTimestamp = (entry: ClaudeHistoryMessage, now: () => string): string => {
   const timestamp = entry.timestamp;
-  if (!(typeof timestamp === "string")) {
+  if (typeof timestamp !== "string") {
     return now();
   }
   return Number.isNaN(Date.parse(timestamp)) ? now() : timestamp;

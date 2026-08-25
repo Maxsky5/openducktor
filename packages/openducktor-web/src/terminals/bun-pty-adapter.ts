@@ -352,7 +352,7 @@ export const createBunPtyPort = ({
   start: (plan: TerminalPtyLaunchPlan, handlers: TerminalPtyHandlers) =>
     Effect.try({
       try: (): TerminalPtyHandle => {
-        if (!(typeof Bun.Terminal === "function")) throw unsupported();
+        if (typeof Bun.Terminal !== "function") throw unsupported();
         const session = new BunPtySession(
           handlers,
           platform,

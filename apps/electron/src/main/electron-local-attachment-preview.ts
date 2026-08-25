@@ -30,7 +30,7 @@ type RegisterElectronLocalAttachmentPreviewProtocolInput = {
 };
 
 export const readLocalAttachmentPreviewPath = (filePath: string): string => {
-  if (!(typeof filePath === "string") || filePath.trim().length === 0) {
+  if (typeof filePath !== "string" || filePath.trim().length === 0) {
     throw new ElectronValidationError({
       operation: "electron.preview.read-path",
       message: "Local attachment preview path must be a non-empty string.",

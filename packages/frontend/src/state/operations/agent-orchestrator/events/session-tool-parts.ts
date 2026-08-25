@@ -170,10 +170,10 @@ const composeToolPartSessionUpdate = ({
     ...(part.fileChanges === undefined && existingToolMeta?.fileChanges !== undefined
       ? { fileChanges: existingToolMeta.fileChanges }
       : undefined),
-    ...(!(typeof part.startedAtMs === "number") && typeof existingToolMeta?.startedAtMs === "number"
+    ...(typeof part.startedAtMs !== "number" && typeof existingToolMeta?.startedAtMs === "number"
       ? { startedAtMs: existingToolMeta.startedAtMs }
       : undefined),
-    ...(!(typeof part.endedAtMs === "number") && typeof existingToolMeta?.endedAtMs === "number"
+    ...(typeof part.endedAtMs !== "number" && typeof existingToolMeta?.endedAtMs === "number"
       ? { endedAtMs: existingToolMeta.endedAtMs }
       : undefined),
   };

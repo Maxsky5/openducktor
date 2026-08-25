@@ -590,12 +590,12 @@ describe("CodexRuntimeSessionEvents", () => {
 
     const subagentParts = emittedEvents.flatMap((event) => {
       if (
-        !(typeof event === "object") ||
+        typeof event !== "object" ||
         event === null ||
         !("type" in event) ||
         event.type !== "assistant_part" ||
         !("part" in event) ||
-        !(typeof event.part === "object") ||
+        typeof event.part !== "object" ||
         event.part === null ||
         !("kind" in event.part) ||
         event.part.kind !== "subagent"
@@ -701,12 +701,12 @@ describe("CodexRuntimeSessionEvents", () => {
 
     const statuses = emittedEvents.flatMap((event) => {
       if (
-        !(typeof event === "object") ||
+        typeof event !== "object" ||
         event === null ||
         !("type" in event) ||
         event.type !== "assistant_part" ||
         !("part" in event) ||
-        !(typeof event.part === "object") ||
+        typeof event.part !== "object" ||
         event.part === null ||
         !("kind" in event.part) ||
         event.part.kind !== "subagent" ||

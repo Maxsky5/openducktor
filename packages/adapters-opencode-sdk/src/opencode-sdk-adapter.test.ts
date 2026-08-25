@@ -1845,7 +1845,7 @@ describe("opencode-sdk-adapter", () => {
             typeof input === "object" && input !== null && !Array.isArray(input)
               ? input.messageID
               : undefined;
-          if (!(typeof messageID === "string")) {
+          if (typeof messageID !== "string") {
             throw new Error("Expected slash command input to include messageID.");
           }
           commandStarted.resolve({ messageID });

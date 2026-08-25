@@ -38,10 +38,10 @@ const loadNodePty = (): NodePtyModule => {
   const require = createRequire(import.meta.url);
   const candidate: unknown = require("node-pty");
   if (
-    !(typeof candidate === "object") ||
+    typeof candidate !== "object" ||
     candidate === null ||
     !("spawn" in candidate) ||
-    !(typeof candidate.spawn === "function")
+    typeof candidate.spawn !== "function"
   ) {
     throw new Error("The installed node-pty module does not export spawn().");
   }

@@ -71,7 +71,7 @@ type GitDiffCommentAnnotationMetadata =
 const isGitDiffCommentAnnotationMetadata = (
   value: unknown,
 ): value is GitDiffCommentAnnotationMetadata => {
-  if (!(typeof value === "object") || value === null || !("kind" in value)) {
+  if (typeof value !== "object" || value === null || !("kind" in value)) {
     return false;
   }
   if (value.kind === "new-comment-form") {

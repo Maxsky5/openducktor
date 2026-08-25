@@ -31,7 +31,7 @@ export function readPreferredOpenInTool(): SystemOpenInToolId | null {
     }
 
     const toolId = parsed.data.openInToolId;
-    if (!(typeof toolId === "string") || !isSystemOpenInToolId(toolId)) {
+    if (typeof toolId !== "string" || !isSystemOpenInToolId(toolId)) {
       return null;
     }
 

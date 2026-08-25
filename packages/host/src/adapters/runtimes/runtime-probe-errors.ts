@@ -26,8 +26,7 @@ const readStringField = (cause: unknown, field: "code" | "name"): string | null 
 const readFailureKind = (cause: unknown): string | null => {
   if (!isRuntimeFailure(cause)) return null;
   const { details } = cause;
-  if (!(typeof details === "object") || details === null || !("failureKind" in details))
-    return null;
+  if (typeof details !== "object" || details === null || !("failureKind" in details)) return null;
   return typeof details.failureKind === "string" ? details.failureKind : null;
 };
 

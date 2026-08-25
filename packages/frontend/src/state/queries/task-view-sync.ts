@@ -48,7 +48,7 @@ const cachedDocumentEntries = (queryClient: QueryClient, repoPath: string) =>
       if (
         scope !== documentQueryKeys.all[0] ||
         cachedRepoPath !== repoPath ||
-        !(typeof taskId === "string")
+        typeof taskId !== "string"
       ) {
         return [];
       }

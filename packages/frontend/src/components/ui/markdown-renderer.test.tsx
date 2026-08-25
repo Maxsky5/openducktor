@@ -16,7 +16,7 @@ import { MARKDOWN_COMPONENTS } from "./markdown-renderer-components";
 
 const renderMarkdownLink = (href: string, label: string) => {
   const MarkdownLink = MARKDOWN_COMPONENTS.document.a;
-  if (!(typeof MarkdownLink === "function")) {
+  if (typeof MarkdownLink !== "function") {
     throw new Error("Expected the shared Markdown anchor to be a React component.");
   }
   return render(createElement(MarkdownLink, { href }, label));

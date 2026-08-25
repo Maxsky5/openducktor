@@ -12,7 +12,7 @@ const hasMeaningfulInputValue = (value: unknown): boolean => {
   if (Array.isArray(value)) {
     return value.some((entry) => hasMeaningfulInputValue(entry));
   }
-  if (!value || !(typeof value === "object")) {
+  if (!value || typeof value !== "object") {
     return false;
   }
   return Object.values(value).some((entry) => hasMeaningfulInputValue(entry));

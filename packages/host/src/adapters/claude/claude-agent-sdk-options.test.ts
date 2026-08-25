@@ -230,7 +230,7 @@ describe("buildClaudeAgentSdkOptions", () => {
       ODT_FORBID_WORKSPACE_ID_INPUT: "true",
       ODT_ALLOWED_TOOLS: expect.stringContaining("odt_read_task"),
     });
-    if (!(typeof workflowAllowedTools === "string")) {
+    if (typeof workflowAllowedTools !== "string") {
       throw new Error("Expected workflow ODT tool policy in the Claude MCP environment.");
     }
     expect(workflowAllowedTools.split(",")).not.toEqual(
@@ -238,7 +238,7 @@ describe("buildClaudeAgentSdkOptions", () => {
     );
     expect(openducktorEnv).not.toHaveProperty("ODT_HOST_TOKEN");
     const hostTokenFile = openducktorEnv?.ODT_HOST_TOKEN_FILE;
-    if (!(typeof hostTokenFile === "string")) {
+    if (typeof hostTokenFile !== "string") {
       throw new Error("Expected Claude MCP setup to create a host token file.");
     }
     expect(await readFile(hostTokenFile, "utf8")).toBe("bridge-secret-value");
@@ -252,7 +252,7 @@ describe("buildClaudeAgentSdkOptions", () => {
     expect(options).not.toHaveProperty("allowedTools");
     expect(options.skills).toBe("all");
     const systemPrompt = options.systemPrompt;
-    if (!systemPrompt || !(typeof systemPrompt === "object") || Array.isArray(systemPrompt)) {
+    if (!systemPrompt || typeof systemPrompt !== "object" || Array.isArray(systemPrompt)) {
       throw new Error("Expected Claude Code's system prompt preset.");
     }
     expect(systemPrompt.preset).toBe("claude_code");

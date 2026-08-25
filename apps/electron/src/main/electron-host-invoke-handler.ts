@@ -46,7 +46,7 @@ const readElectronHostInvokeRequest = (
       field: "request",
     });
   }
-  if (!(typeof parsedRequest.data.command === "string")) {
+  if (typeof parsedRequest.data.command !== "string") {
     throw new ElectronValidationError({
       operation: "electron.ipc.host-invoke.validate",
       message: "Electron host invoke command must be a string.",

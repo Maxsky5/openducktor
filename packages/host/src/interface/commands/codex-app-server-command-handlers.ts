@@ -232,7 +232,7 @@ const optionalNullablePositiveInteger = (
   if (value === undefined || value === null) {
     return value;
   }
-  if (!(typeof value === "number") || !Number.isInteger(value) || value <= 0) {
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
     throw new HostValidationError({
       message: `${field} must be a positive integer.`,
       field,

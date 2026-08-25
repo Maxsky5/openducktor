@@ -6,7 +6,7 @@ type ClaudeContextUsageFields = {
 };
 
 const positiveNumber = (value: unknown): number | undefined => {
-  if (!(typeof value === "number") || !Number.isFinite(value) || value <= 0) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     return undefined;
   }
   return value;

@@ -130,7 +130,7 @@ export const removeCachedTaskDocumentQueries = (
     if (
       scope !== documentQueryKeys.all[0] ||
       cachedRepoPath !== repoPath ||
-      !(typeof cachedTaskId === "string") ||
+      typeof cachedTaskId !== "string" ||
       !taskIdSet.has(cachedTaskId)
     ) {
       continue;

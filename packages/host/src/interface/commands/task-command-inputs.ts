@@ -81,7 +81,7 @@ export const parseListAgentSessionsForTasksInput = (
   }
   const taskIds = record.taskIds.map((taskId, index) => {
     const field = `taskIds[${index}]`;
-    if (!(typeof taskId === "string")) {
+    if (typeof taskId !== "string") {
       throw new HostValidationError({
         message: `${field} must be a string.`,
         field,

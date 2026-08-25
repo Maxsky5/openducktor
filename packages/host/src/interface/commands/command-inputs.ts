@@ -30,7 +30,7 @@ export const requireParsedRecord = (
 };
 
 export const requireString = (value: unknown, label: string): string => {
-  if (!(typeof value === "string") || value.trim().length === 0) {
+  if (typeof value !== "string" || value.trim().length === 0) {
     throw invalidInput(`${label} is required.`, label);
   }
 
@@ -38,7 +38,7 @@ export const requireString = (value: unknown, label: string): string => {
 };
 
 export const requireStringPreservingWhitespace = (value: unknown, label: string): string => {
-  if (!(typeof value === "string") || value.trim().length === 0) {
+  if (typeof value !== "string" || value.trim().length === 0) {
     throw invalidInput(`${label} is required.`, label);
   }
 
@@ -49,7 +49,7 @@ export const optionalString = (value: unknown, label: string): string | undefine
   if (value === undefined || value === null) {
     return undefined;
   }
-  if (!(typeof value === "string")) {
+  if (typeof value !== "string") {
     throw invalidInput(`${label} must be a string when provided.`, label);
   }
 
@@ -61,7 +61,7 @@ export const optionalBoolean = (value: unknown, label: string): boolean | undefi
   if (value === undefined || value === null) {
     return undefined;
   }
-  if (!(typeof value === "boolean")) {
+  if (typeof value !== "boolean") {
     throw invalidInput(`${label} must be a boolean when provided.`, label);
   }
 

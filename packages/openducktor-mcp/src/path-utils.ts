@@ -15,7 +15,7 @@ const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
 const DEFAULT_OPENDUCKTOR_CONFIG_DIR_NAME = ".openducktor";
 
 export const normalizeOptionalInput = (value: string | undefined): string | undefined => {
-  if (!(typeof value === "string")) {
+  if (typeof value !== "string") {
     return undefined;
   }
   const trimmed = value.trim();

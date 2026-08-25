@@ -39,7 +39,7 @@ const nextDocumentRevision = (
     if (revision === null) {
       return 1;
     }
-    if (!(typeof revision === "number")) {
+    if (typeof revision !== "number") {
       return yield* new SqliteTaskStoreDataError({
         message: "SQLite task document revision must be a number.",
         field: "revision",

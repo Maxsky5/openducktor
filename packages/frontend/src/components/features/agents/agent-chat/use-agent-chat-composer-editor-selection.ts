@@ -297,7 +297,7 @@ const usePendingFocus = (editorRef: RefObject<HTMLDivElement | null>) => {
     }
 
     const requestAnimationFrameFn = globalThis.requestAnimationFrame;
-    if (!(typeof requestAnimationFrameFn === "function")) {
+    if (typeof requestAnimationFrameFn !== "function") {
       return;
     }
 

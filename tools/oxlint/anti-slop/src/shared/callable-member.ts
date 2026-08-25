@@ -1,5 +1,5 @@
 import type { ESTree, SourceCode, Variable } from "@oxlint/plugins";
-import { resolveVariable } from "./global-reference.ts";
+import { resolveVariable, singleVariableDeclarator } from "./global-reference.ts";
 import { isStableBinding } from "./stable-binding.ts";
 import { unwrapTransparentExpression } from "./transparent-expression.ts";
 
@@ -12,14 +12,6 @@ function staticPropertyName(
   if (!computed && property.type === "Identifier") return property.name;
   return computed && property.type === "Literal" && typeof property.value === "string"
     ? property.value
-    : null;
-}
-
-function variableDeclarator(variable: Variable): ESTree.VariableDeclarator | null {
-  if (variable.defs.length !== 1) return null;
-  const definition = variable.defs[0];
-  return definition?.type === "Variable" && definition.node.type === "VariableDeclarator"
-    ? definition.node
     : null;
 }
 
@@ -53,7 +45,7 @@ export function isCallableMemberReference(
 
   const variable = resolveVariable(sourceCode, unwrapped);
   if (variable === null || resolvingVariables.has(variable)) return false;
-  const declarator = variableDeclarator(variable);
+  const declarator = singleVariableDeclarator(variable);
   if (declarator === null || declarator.init === null || !isStableBinding(variable, declarator)) {
     return false;
   }

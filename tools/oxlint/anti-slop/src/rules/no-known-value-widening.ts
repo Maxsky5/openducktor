@@ -6,34 +6,14 @@ import {
   isKnownEvidenceExpression,
   type WideningTarget,
 } from "../shared/dictionary-types.ts";
+import { resolveVariable, singleVariableDeclarator } from "../shared/global-reference.ts";
 import { createImportedWideningTypeResolver } from "../shared/imported-widening-target.ts";
 import { unwrapTransparentExpression } from "../shared/transparent-expression.ts";
 import { isStableBinding } from "../shared/stable-binding.ts";
 
-import type { ESTree, Scope, SourceCode, Variable } from "@oxlint/plugins";
+import type { ESTree, SourceCode, Variable } from "@oxlint/plugins";
 
 type FunctionExpression = ESTree.ArrowFunctionExpression | ESTree.Function;
-
-function resolveVariable(
-  sourceCode: SourceCode,
-  identifier: ESTree.IdentifierReference,
-): Variable | null {
-  let scope: Scope | null = sourceCode.getScope(identifier);
-  while (scope !== null) {
-    const variable = scope.set.get(identifier.name);
-    if (variable !== undefined) return variable;
-    scope = scope.upper;
-  }
-  return null;
-}
-
-function variableDeclarator(variable: Variable): ESTree.VariableDeclarator | null {
-  if (variable.defs.length !== 1) return null;
-  const [definition] = variable.defs;
-  return definition?.type === "Variable" && definition.node.type === "VariableDeclarator"
-    ? definition.node
-    : null;
-}
 
 function hasKnownEvidence(
   sourceCode: SourceCode,
@@ -61,7 +41,7 @@ function hasKnownEvidence(
   if (unwrapped.type !== "Identifier") return false;
   const variable = resolveVariable(sourceCode, unwrapped);
   if (variable === null || visitedVariables.has(variable)) return false;
-  const declarator = variableDeclarator(variable);
+  const declarator = singleVariableDeclarator(variable);
   if (declarator === null || declarator.init === null || !isStableBinding(variable, declarator)) {
     return false;
   }
@@ -203,7 +183,7 @@ export const noKnownValueWideningRule = defineRule({
         if (node.operator !== "=" || node.left.type !== "Identifier") return;
         const variable = resolveVariable(context.sourceCode, node.left);
         if (variable === null) return;
-        const declarator = variableDeclarator(variable);
+        const declarator = singleVariableDeclarator(variable);
         if (declarator === null || declarator.id.type !== "Identifier") return;
         reportFlow(
           node.right,

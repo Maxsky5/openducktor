@@ -384,7 +384,7 @@ export function useKanbanVirtualization({
     observer.observe(containerElement);
     return () => {
       observer.disconnect();
-      if (frameHandle !== null && !(typeof globalThis.window === "undefined")) {
+      if (frameHandle !== null && typeof globalThis.window !== "undefined") {
         window.cancelAnimationFrame(frameHandle);
       }
     };
