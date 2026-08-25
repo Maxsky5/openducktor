@@ -9,6 +9,7 @@ import {
   createWideningModuleEnvironment,
   type WideningTypeArgument,
   type WideningTypeEnvironment,
+  type WideningTypeResolver,
   type WideningTarget,
 } from "./widening-target.ts";
 
@@ -19,7 +20,15 @@ type ParsedModule = {
   readonly statements: readonly PortableModuleItem[];
 };
 
-type ImportedBinding = {
+type ImportedBinding =
+  | {
+      readonly kind: "direct";
+      readonly exportedName: string;
+      readonly moduleSpecifier: string;
+    }
+  | { readonly kind: "namespace"; readonly moduleSpecifier: string };
+
+type ImportedReference = {
   readonly exportedName: string;
   readonly moduleSpecifier: string;
 };
@@ -91,10 +100,17 @@ function importedBinding(module: ParsedModule, localName: string): ImportedBindi
     for (const specifier of statement.specifiers) {
       if (specifier.local.name !== localName) continue;
       if (specifier.type === "ImportDefaultSpecifier") {
-        return { exportedName: "default", moduleSpecifier: statement.source.value };
+        return {
+          kind: "direct",
+          exportedName: "default",
+          moduleSpecifier: statement.source.value,
+        };
       }
-      if (specifier.type === "ImportNamespaceSpecifier") return null;
+      if (specifier.type === "ImportNamespaceSpecifier") {
+        return { kind: "namespace", moduleSpecifier: statement.source.value };
+      }
       return {
+        kind: "direct",
         exportedName:
           specifier.imported.type === "Identifier"
             ? specifier.imported.name
@@ -106,6 +122,23 @@ function importedBinding(module: ParsedModule, localName: string): ImportedBindi
   return null;
 }
 
+function importedReference(
+  module: ParsedModule,
+  parts: readonly string[],
+): ImportedReference | null {
+  const localName = parts[0];
+  if (localName === undefined) return null;
+  const binding = importedBinding(module, localName);
+  if (binding === null) return null;
+  if (binding.kind === "direct") {
+    return parts.length === 1 ? binding : null;
+  }
+  const exportedName = parts.at(-1);
+  return exportedName === undefined || parts.length < 2
+    ? null
+    : { exportedName, moduleSpecifier: binding.moduleSpecifier };
+}
+
 function localTarget(
   filename: string,
   module: ParsedModule,
@@ -113,12 +146,33 @@ function localTarget(
   arguments_: readonly WideningTypeArgument[],
   resolving: ReadonlySet<string>,
 ): WideningTarget | null {
-  const aliasTarget = classifyNamedAliasWideningTarget(localName, module.environment, arguments_);
+  const resolveImportedType: WideningTypeResolver = (typeNameParts, importedArguments) => {
+    const imported = importedReference(module, typeNameParts);
+    return imported === null
+      ? null
+      : importedTarget(
+          filename,
+          imported.moduleSpecifier,
+          imported.exportedName,
+          importedArguments,
+          resolving,
+        );
+  };
+  const aliasTarget = classifyNamedAliasWideningTarget(
+    localName,
+    module.environment,
+    arguments_,
+    resolveImportedType,
+  );
   if (aliasTarget !== null) return aliasTarget;
-  const interfaceTarget = classifyNamedInterfaceWideningTarget(localName, module.environment);
+  const interfaceTarget = classifyNamedInterfaceWideningTarget(
+    localName,
+    module.environment,
+    resolveImportedType,
+  );
   if (interfaceTarget !== null) return interfaceTarget;
   const imported = importedBinding(module, localName);
-  return imported === null
+  return imported === null || imported.kind === "namespace"
     ? null
     : importedTarget(
         filename,

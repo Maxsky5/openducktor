@@ -77,7 +77,7 @@ export type CodexAppServerThreadActiveFlag = Extract<
   CodexAppServerThreadStatus,
   { type: "active" }
 >["activeFlags"][number];
-export type CodexAppServerThreadSource = CodexAppServerThread["source"];
+export type CodexAppServerThreadSource = NonNullable<CodexAppServerThread["threadSource"]>;
 export type CodexAppServerThreadStartSource = "clear" | "startup";
 export type CodexAppServerSessionSource = CodexAppServerThread["source"];
 export type CodexAppServerSubAgentSource = Extract<

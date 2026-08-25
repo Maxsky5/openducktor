@@ -9,6 +9,8 @@ import {
   type CodexAppServerCollabAgentToolCallThreadItem,
   type CodexAppServerSubAgentActivityThreadItem,
   type CodexAppServerThread,
+  type CodexAppServerSessionSource,
+  type CodexAppServerThreadSource,
   type CodexAppServerThreadStartParams,
   isCodexAppServerCommandRequestMethod,
   isCodexAppServerFileMutationRequestMethod,
@@ -31,6 +33,14 @@ import {
 import { jsonValueSchema } from "./json-types";
 
 describe("Codex app-server protocol", () => {
+  test("keeps free-form thread sources distinct from structured session sources", () => {
+    const threadSource: CodexAppServerThreadSource = "user-created-thread";
+    const sessionSource: CodexAppServerSessionSource = { custom: "external-runtime" };
+
+    expect(threadSource).toBe("user-created-thread");
+    expect(sessionSource).toEqual({ custom: "external-runtime" });
+  });
+
   test("parses fuzzy file search results using the matching response schema", () => {
     const request = {
       method: "fuzzyFileSearch",

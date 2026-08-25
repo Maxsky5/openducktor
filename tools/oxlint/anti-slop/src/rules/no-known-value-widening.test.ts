@@ -211,5 +211,25 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
       code: `${prelude} import type { OpenCommandsByKey } from './no-known-value-widening-reexports'; const commands = { start: startCommand } as OpenCommandsByKey<string>;`,
       errors: [error],
     },
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type { WrappedCommandsByKey } from './no-known-value-widening-wrappers'; const commands: WrappedCommandsByKey<string> = { start: startCommand };`,
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type { WrappedOpenCommands } from './no-known-value-widening-wrappers'; const commands: WrappedOpenCommands = { start: startCommand };`,
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type { WrappedDefaultOpenCommands } from './no-known-value-widening-wrappers'; const commands: WrappedDefaultOpenCommands = { start: startCommand };`,
+      errors: [error],
+    },
+    {
+      filename: importedTypeFixtureFilename,
+      code: `${prelude} import type { NamespaceWrappedOpenCommands, NamespaceWrappedOpenCommandsInterface } from './no-known-value-widening-wrappers'; const commands: NamespaceWrappedOpenCommands = { start: startCommand }; const otherCommands: NamespaceWrappedOpenCommandsInterface = { start: startCommand };`,
+      errors: [error, error],
+    },
   ],
 });
