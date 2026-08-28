@@ -1,8 +1,16 @@
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import type { HostClient } from "@openducktor/host-client";
+import { host } from "../operations/shared/host";
 import type { AgentRuntimeAdapter } from "./agent-runtime-adapter";
-import { hostRepoRuntimeResolver } from "./host-repo-runtime-resolver";
+import { createHostRepoRuntimeResolver } from "./host-repo-runtime-resolver";
 
-export const createOpenCodeRuntimeAdapter = (): AgentRuntimeAdapter =>
+type OpenCodeRuntimeAdapterDependencies = {
+  hostClient?: Pick<HostClient, "runtimeRequire">;
+};
+
+export const createOpenCodeRuntimeAdapter = ({
+  hostClient = host,
+}: OpenCodeRuntimeAdapterDependencies = {}): AgentRuntimeAdapter =>
   new OpencodeSdkAdapter({
-    repoRuntimeResolver: hostRepoRuntimeResolver,
+    repoRuntimeResolver: createHostRepoRuntimeResolver(hostClient),
   });

@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { z } from "zod";
-import { HostValidationError } from "../../effect/host-errors";
+import { jsonValueSchema, taskCardSchema } from "@openducktor/contracts";
 import {
   HOST_COMMAND_NAMES,
   HOST_COMMAND_RESPONSE_SCHEMAS,
@@ -46,26 +45,22 @@ describe("HOST_COMMAND_NAMES", () => {
     ).toEqual({ path: "/tmp/image.png " });
   });
 
-  test("rejects non-JSON output from response schema transforms", () => {
-    const command = "workspace_list";
-    const originalSchema = HOST_COMMAND_RESPONSE_SCHEMAS[command];
-
-    Object.defineProperty(HOST_COMMAND_RESPONSE_SCHEMAS, command, {
-      configurable: true,
-      enumerable: true,
-      value: z.string().transform(() => BigInt(1)),
-      writable: true,
+  test("accepts optional task fields that JSON transport omits", () => {
+    const task = taskCardSchema.parse({
+      createdAt: "2026-08-28T00:00:00.000Z",
+      id: "task-1",
+      issueType: "feature",
+      parentId: undefined,
+      pullRequest: undefined,
+      status: "open",
+      targetBranch: undefined,
+      title: "Add GitHub login",
+      updatedAt: "2026-08-28T00:00:00.000Z",
     });
 
-    try {
-      expect(() => parseHostCommandResponse(command, "response")).toThrow(HostValidationError);
-    } finally {
-      Object.defineProperty(HOST_COMMAND_RESPONSE_SCHEMAS, command, {
-        configurable: true,
-        enumerable: true,
-        value: originalSchema,
-        writable: true,
-      });
-    }
+    const response = parseHostCommandResponse("tasks_list", [task]);
+
+    const expectedTransportValue = jsonValueSchema.parse(JSON.parse(JSON.stringify([task])));
+    expect(response).toEqual(expectedTransportValue);
   });
 });

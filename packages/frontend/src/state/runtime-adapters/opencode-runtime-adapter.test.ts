@@ -1,14 +1,16 @@
 import { describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import { host } from "../operations/shared/host";
+import type { HostClient } from "@openducktor/host-client";
+import { createHostClientFixture } from "@/test-utils/focused-fixture";
 import { createOpenCodeRuntimeAdapter } from "./opencode-runtime-adapter";
 
 describe("createOpenCodeRuntimeAdapter", () => {
   test("requires live repo runtimes through the host runtimeRequire boundary", async () => {
-    const originalRuntimeRequire = host.runtimeRequire;
     const runtimeRequireCalls: unknown[] = [];
-    host.runtimeRequire = mock(
-      async (...args: unknown[]): ReturnType<typeof host.runtimeRequire> => {
+    const runtimeRequire = mock(
+      async (
+        ...args: Parameters<HostClient["runtimeRequire"]>
+      ): ReturnType<HostClient["runtimeRequire"]> => {
         runtimeRequireCalls.push(args);
         return {
           kind: "opencode",
@@ -23,20 +25,17 @@ describe("createOpenCodeRuntimeAdapter", () => {
         };
       },
     );
+    const hostClient = createHostClientFixture({ runtimeRequire });
 
-    try {
-      await expect(
-        createOpenCodeRuntimeAdapter().listAvailableModels({
-          runtimeKind: "opencode",
-          repoPath: "/repo",
-        }),
-      ).rejects.toThrow(
-        "OpenCode runtime 'runtime-1' is missing required route contract 'local_http' for repo '/repo' while attempting to list available models; received route 'stdio'.",
-      );
+    await expect(
+      createOpenCodeRuntimeAdapter({ hostClient }).listAvailableModels({
+        runtimeKind: "opencode",
+        repoPath: "/repo",
+      }),
+    ).rejects.toThrow(
+      "OpenCode runtime 'runtime-1' is missing required route contract 'local_http' for repo '/repo' while attempting to list available models; received route 'stdio'.",
+    );
 
-      expect(runtimeRequireCalls).toEqual([["/repo", "opencode"]]);
-    } finally {
-      host.runtimeRequire = originalRuntimeRequire;
-    }
+    expect(runtimeRequireCalls).toEqual([["/repo", "opencode"]]);
   });
 });

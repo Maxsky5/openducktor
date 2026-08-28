@@ -4,7 +4,12 @@
   "type": "module",
   "scripts": {
     "build": "bun run typecheck",
-    "test": "node --test src/rules/*.test.ts",
+    "test": "node --experimental-strip-types --test src/rules/*.test.ts",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@oxlint/plugins": "1.78.0",
+    "oxc-parser": "^0.143.0",
+    "typescript": "^5.7.3"
   }
 }

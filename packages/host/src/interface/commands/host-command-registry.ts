@@ -65,11 +65,11 @@ import {
   workspaceRecordSchema,
   workspaceTextFileReadResultSchema,
   workspaceTextFileWriteResultSchema,
-  jsonValueSchema,
   type JsonValue,
 } from "@openducktor/contracts";
 import { z } from "zod";
 import { HostValidationError } from "../../effect/host-errors";
+import { parseJson } from "../../effect/json";
 
 export const HOST_COMMAND_NAMES = [
   "agent_session_control_fork",
@@ -360,10 +360,14 @@ export const parseHostCommandName = (value: string): HostCommandName => {
 };
 
 export const parseHostCommandResponse = (command: string, value: unknown): JsonValue => {
-  const jsonValue = jsonValueSchema.parse(value);
   const hostCommand = parseHostCommandName(command);
   try {
-    return jsonValueSchema.parse(HOST_COMMAND_RESPONSE_SCHEMAS[hostCommand].parse(jsonValue));
+    const response = HOST_COMMAND_RESPONSE_SCHEMAS[hostCommand].parse(value);
+    const serializedResponse = JSON.stringify(response);
+    if (serializedResponse === undefined) {
+      throw new TypeError("Host command response cannot be represented as JSON.");
+    }
+    return parseJson(serializedResponse);
   } catch (cause) {
     throw new HostValidationError({
       message: `Host command '${hostCommand}' returned an invalid response.`,

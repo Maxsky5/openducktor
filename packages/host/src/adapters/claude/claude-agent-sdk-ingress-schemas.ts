@@ -215,7 +215,7 @@ export const claudeUserToolResultIngressSchema = claudeUnknownRecordSchema.exten
   origin: claudeUserTurnOriginSchema.optional(),
   parent_tool_use_id: z.string().min(1).nullable().optional(),
   shouldQuery: z.boolean().optional(),
-  tool_use_result: claudeTopLevelToolUseResultSchema.optional(),
+  tool_use_result: claudeUnknownValueSchema.optional(),
   type: z.literal("user"),
   uuid: z.string().optional(),
 });
@@ -335,7 +335,12 @@ export const parseClaudeUserToolResultIngress = (value: unknown): ClaudeUserTool
       : { turnOriginKind: message.origin.kind }),
     ...(message.uuid === undefined ? undefined : { uuid: message.uuid }),
   };
-  const topLevelToolUseResult = message.tool_use_result;
+  const parsedTopLevelToolUseResult = claudeTopLevelToolUseResultSchema.safeParse(
+    message.tool_use_result,
+  );
+  const topLevelToolUseResult = parsedTopLevelToolUseResult.success
+    ? parsedTopLevelToolUseResult.data
+    : undefined;
   if (topLevelToolUseResult?.kind === "tool_result") {
     return {
       ...normalizedMessage,

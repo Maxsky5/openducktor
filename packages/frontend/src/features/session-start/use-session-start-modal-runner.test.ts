@@ -231,7 +231,63 @@ describe("buildSessionStartModalDecision", () => {
 });
 
 describe("useSessionStartModalRunner", () => {
-  test("clears start state and closes the modal before the caller resumes", async () => {
+  test("settles cancellation without waiting for another React commit", async () => {
+    const harness = createHookHarness(
+      useSessionStartModalRunner,
+      {
+        favoriteState: {
+          favorites: [],
+          isLoading: false,
+          readError: null,
+          isMutationPending: false,
+          mutationError: null,
+          canMutate: false,
+          toggleFavorite: () => {},
+          retryRead: () => {},
+          retryMutation: () => {},
+        },
+        repoSettings: null,
+        workspaceRepoPath: "/repo",
+      },
+      {
+        runtimeDefinitionsContext: createRuntimeDefinitionsContextValue({
+          runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+          availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+          loadRepoRuntimeCatalog: async () => CATALOG,
+        }),
+      },
+    );
+    const request = {
+      source: "agent_studio",
+      taskId: "TASK-1",
+      role: "build",
+      launchActionId: "build_implementation_start",
+      postStartAction: "kickoff",
+      selectedModel: SELECTED_MODEL,
+    } as const;
+    let callerPromise!: Promise<string | undefined>;
+
+    await harness.mount();
+    await harness.run((runner) => {
+      callerPromise = runner.runSessionStartRequest(request, async () => "started");
+    });
+    await harness.waitFor((runner) => runner.sessionStartModal != null);
+
+    let settled = false;
+    void callerPromise.then(() => {
+      settled = true;
+    });
+    await harness.run(async (runner) => {
+      runner.sessionStartModal?.onOpenChange(false);
+      await Promise.resolve();
+      expect(settled).toBe(true);
+    });
+
+    expect(await callerPromise).toBeUndefined();
+    await harness.unmount();
+  });
+
+  test("runs the confirmed request and then closes the modal", async () => {
     const harness = createHookHarness(
       useSessionStartModalRunner,
       {
@@ -273,7 +329,6 @@ describe("useSessionStartModalRunner", () => {
     });
     await harness.waitFor((runner) => runner.sessionStartModal?.selectedModelSelection != null);
 
-    const stateWhenCallerResumed = callerPromise.then(() => harness.getLatest());
     await harness.run(async (runner) => {
       const modal = runner.sessionStartModal;
       if (!modal) {
@@ -287,7 +342,7 @@ describe("useSessionStartModalRunner", () => {
     });
 
     expect(await callerPromise).toBe("started");
-    expect((await stateWhenCallerResumed).sessionStartModal).toBeNull();
+    await harness.waitFor((runner) => runner.sessionStartModal == null);
     await harness.unmount();
   });
 });

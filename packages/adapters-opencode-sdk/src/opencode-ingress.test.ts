@@ -71,6 +71,36 @@ describe("OpenCode ingress schemas", () => {
     expect(agents[0]?.options.loadedAt).toBe(loadedAt);
   });
 
+  test("treats null OpenCode agent optionals as absent", () => {
+    expect(
+      opencodeAgentListPayloadSchema.parse([
+        {
+          color: null,
+          description: null,
+          hidden: null,
+          mode: "subagent",
+          model: null,
+          name: "explore",
+          native: null,
+          options: {},
+          permission: [],
+          prompt: null,
+          steps: null,
+          temperature: null,
+          topP: null,
+          variant: null,
+        },
+      ]),
+    ).toEqual([
+      {
+        mode: "subagent",
+        name: "explore",
+        options: {},
+        permission: [],
+      },
+    ]);
+  });
+
   test("preserves producer-declared unknown history and tool-part data", () => {
     const receivedAt = new Date();
     const part = createOpencodePartFixture({

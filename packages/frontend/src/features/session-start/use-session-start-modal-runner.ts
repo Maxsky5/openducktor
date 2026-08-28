@@ -5,7 +5,7 @@ import type {
   RuntimeKind,
 } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentSessionStartMode } from "@openducktor/core";
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import { findRuntimeDefinition, runtimeSupportsStartMode } from "@/lib/agent-runtime";
@@ -208,7 +208,6 @@ export function useSessionStartModalRunner({
 }) {
   const selectionRef = useRef<AgentModelSelection | null>(null);
   const pendingRunRef = useRef<PendingModalRun | null>(null);
-  const pendingSettlementRef = useRef<(() => void) | null>(null);
   const [isStarting, setIsStarting] = useState(false);
 
   const {
@@ -271,16 +270,6 @@ export function useSessionStartModalRunner({
     });
   }, [retryRuntimeSettings]);
 
-  useLayoutEffect(() => {
-    const settle = pendingSettlementRef.current;
-    if (!settle) {
-      return;
-    }
-
-    pendingSettlementRef.current = null;
-    settle();
-  });
-
   const resolvePendingRun = useCallback(
     (settle?: () => void): void => {
       const pendingRun = pendingRunRef.current;
@@ -289,9 +278,8 @@ export function useSessionStartModalRunner({
       }
 
       pendingRunRef.current = null;
-      pendingSettlementRef.current = settle ?? pendingRun.cancel;
-      setIsStarting(false);
       closeStartModal();
+      (settle ?? pendingRun.cancel)();
     },
     [closeStartModal],
   );
@@ -391,6 +379,7 @@ export function useSessionStartModalRunner({
         toast.error("Failed to start the session.", {
           description: errorMessage(error),
         });
+      } finally {
         setIsStarting(false);
       }
     },

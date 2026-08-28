@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { CODEX_RUNTIME_DESCRIPTOR, type FileDiff } from "@openducktor/contracts";
-import { host } from "../operations/shared/host";
+import type { HostClient } from "@openducktor/host-client";
+import { createHostClientFixture } from "@/test-utils/focused-fixture";
 import { createCodexAppServerRuntimeAdapter } from "./codex-app-server-runtime-adapter";
 
 const createCodexRuntime = (runtimeId: string) => ({
@@ -17,7 +18,7 @@ const createCodexRuntime = (runtimeId: string) => ({
 
 describe("createCodexAppServerRuntimeAdapter", () => {
   test("keeps pure catalog reads on the renderer adapter without raw live-event plumbing", async () => {
-    const requestImplementation: typeof host.codexAppServerRequest = async (
+    const requestImplementation: HostClient["codexAppServerRequest"] = async (
       _runtimeId,
       request,
     ) => {
@@ -53,33 +54,25 @@ describe("createCodexAppServerRuntimeAdapter", () => {
       };
     };
     const codexRequest = mock(requestImplementation);
-    const originalRuntimeRequire = host.runtimeRequire;
-    const originalCodexAppServerRequest = host.codexAppServerRequest;
+    const hostClient = createHostClientFixture({
+      runtimeRequire: async () => createCodexRuntime("runtime-codex-live"),
+      codexAppServerRequest: codexRequest,
+    });
+    const adapter = createCodexAppServerRuntimeAdapter({ hostClient });
 
-    host.runtimeRequire = async () => createCodexRuntime("runtime-codex-live");
-    host.codexAppServerRequest = codexRequest;
-
-    try {
-      const adapter = createCodexAppServerRuntimeAdapter();
-
-      await expect(
-        adapter.listAvailableModels({ repoPath: "/repo", runtimeKind: "codex" }),
-      ).resolves.toMatchObject({
-        runtime: { kind: "codex" },
-        models: [expect.objectContaining({ modelId: "gpt-5" })],
-      });
-      expect(codexRequest).toHaveBeenCalledWith(
-        "runtime-codex-live",
-        expect.objectContaining({ method: "model/list" }),
-      );
-    } finally {
-      host.runtimeRequire = originalRuntimeRequire;
-      host.codexAppServerRequest = originalCodexAppServerRequest;
-    }
+    await expect(
+      adapter.listAvailableModels({ repoPath: "/repo", runtimeKind: "codex" }),
+    ).resolves.toMatchObject({
+      runtime: { kind: "codex" },
+      models: [expect.objectContaining({ modelId: "gpt-5" })],
+    });
+    expect(codexRequest).toHaveBeenCalledWith(
+      "runtime-codex-live",
+      expect.objectContaining({ method: "model/list" }),
+    );
   });
 
   test("loads Codex session diffs through host-owned live stream state", async () => {
-    const originalLoadDiff = host.agentSessionLiveLoadDiff;
     const fileDiffs: FileDiff[] = [
       {
         file: "src/app.ts",
@@ -90,22 +83,17 @@ describe("createCodexAppServerRuntimeAdapter", () => {
       },
     ];
     const loadDiff = mock(async () => fileDiffs);
-    host.agentSessionLiveLoadDiff = loadDiff;
+    const hostClient = createHostClientFixture({ agentSessionLiveLoadDiff: loadDiff });
+    const adapter = createCodexAppServerRuntimeAdapter({ hostClient });
+    const input = {
+      repoPath: "/repo",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo",
+      externalSessionId: "thread-1",
+      runtimeHistoryAnchor: "turn-1",
+    };
 
-    try {
-      const adapter = createCodexAppServerRuntimeAdapter();
-      const input = {
-        repoPath: "/repo",
-        runtimeKind: "codex" as const,
-        workingDirectory: "/repo",
-        externalSessionId: "thread-1",
-        runtimeHistoryAnchor: "turn-1",
-      };
-
-      await expect(adapter.loadSessionDiff(input)).resolves.toEqual(fileDiffs);
-      expect(loadDiff).toHaveBeenCalledWith(input);
-    } finally {
-      host.agentSessionLiveLoadDiff = originalLoadDiff;
-    }
+    await expect(adapter.loadSessionDiff(input)).resolves.toEqual(fileDiffs);
+    expect(loadDiff).toHaveBeenCalledWith(input);
   });
 });

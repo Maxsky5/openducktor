@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import type { HostClient } from "@openducktor/host-client";
 import { clearAppQueryClient } from "@/lib/query-client";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { host } from "../shared/host";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { useDelegationOperations } from "./use-delegation-operations";
 
 const activeWorkspace = {
@@ -10,35 +12,12 @@ const activeWorkspace = {
   repoPath: "/repo",
 };
 
-const original = {
-  buildStart: host.buildStart,
-  workspaceGetRepoConfig: host.workspaceGetRepoConfig,
-};
-
 describe("useDelegationOperations", () => {
   beforeEach(async () => {
     await clearAppQueryClient();
-    host.workspaceGetRepoConfig = mock(
-      async (): ReturnType<typeof host.workspaceGetRepoConfig> => ({
-        workspaceId: "repo",
-        workspaceName: "Repo",
-        repoPath: "/repo",
-        defaultRuntimeKind: "opencode",
-        branchPrefix: "obp",
-        defaultTargetBranch: { remote: "origin", branch: "main" },
-        git: { providers: {} },
-        hooks: { preStart: [], postComplete: [] },
-        devServers: [],
-        worktreeCopyPaths: [],
-        promptOverrides: {},
-        agentDefaults: {},
-      }),
-    );
   });
 
   afterEach(async () => {
-    host.buildStart = original.buildStart;
-    host.workspaceGetRepoConfig = original.workspaceGetRepoConfig;
     await clearAppQueryClient();
   });
 
@@ -48,7 +27,24 @@ describe("useDelegationOperations", () => {
       workingDirectory: "/repo",
     }));
     const refreshTaskData = mock(async () => undefined);
-    host.buildStart = buildStart;
+    const repoConfig: Awaited<ReturnType<HostClient["workspaceGetRepoConfig"]>> = {
+      workspaceId: "repo",
+      workspaceName: "Repo",
+      repoPath: "/repo",
+      defaultRuntimeKind: "opencode",
+      branchPrefix: "obp",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      git: { providers: {} },
+      hooks: { preStart: [], postComplete: [] },
+      devServers: [],
+      worktreeCopyPaths: [],
+      promptOverrides: {},
+      agentDefaults: {},
+    };
+    const workspaceGetRepoConfig = mock(async () => repoConfig);
+    configureShellBridge(
+      createShellBridgeFixture({ client: { buildStart, workspaceGetRepoConfig } }),
+    );
     const harness = createHookHarness(
       () => useDelegationOperations({ activeWorkspace, refreshTaskData }),
       undefined,
@@ -64,6 +60,7 @@ describe("useDelegationOperations", () => {
       expect(refreshTaskData).toHaveBeenCalledWith("/repo", "task-1");
     } finally {
       await harness.unmount();
+      configureShellBridge(createUnavailableShellBridge());
     }
   });
 });

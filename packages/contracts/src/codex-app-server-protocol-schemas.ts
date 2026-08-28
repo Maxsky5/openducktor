@@ -781,24 +781,46 @@ export type CodexAppServerModelListResponse = z.output<
   typeof codexAppServerModelListResponseSchema
 >;
 
+const codexAppServerSkillInterfaceSchema = z
+  .object({
+    displayName: z.string().nullish(),
+    shortDescription: z.string().nullish(),
+    iconSmall: z.string().nullish(),
+    iconLarge: z.string().nullish(),
+    iconSmallUrl: z.string().nullable(),
+    iconLargeUrl: z.string().nullable(),
+    brandColor: z.string().nullish(),
+    defaultPrompt: z.string().nullish(),
+  })
+  .transform(
+    ({
+      displayName,
+      shortDescription,
+      iconSmall,
+      iconLarge,
+      iconSmallUrl,
+      iconLargeUrl,
+      brandColor,
+      defaultPrompt,
+    }) => ({
+      ...(displayName != null ? { displayName } : undefined),
+      ...(shortDescription != null ? { shortDescription } : undefined),
+      ...(iconSmall != null ? { iconSmall } : undefined),
+      ...(iconLarge != null ? { iconLarge } : undefined),
+      iconSmallUrl,
+      iconLargeUrl,
+      ...(brandColor != null ? { brandColor } : undefined),
+      ...(defaultPrompt != null ? { defaultPrompt } : undefined),
+    }),
+  );
+
 const codexAppServerSkillRecordSchema = z.object({
   name: z.string(),
   path: z.string(),
   scope: z.enum(["user", "repo", "system", "admin"]),
   description: z.string(),
   shortDescription: z.string().optional(),
-  interface: z
-    .object({
-      displayName: z.string().optional(),
-      shortDescription: z.string().optional(),
-      iconSmall: z.string().optional(),
-      iconLarge: z.string().optional(),
-      iconSmallUrl: z.string().nullable(),
-      iconLargeUrl: z.string().nullable(),
-      brandColor: z.string().optional(),
-      defaultPrompt: z.string().optional(),
-    })
-    .optional(),
+  interface: codexAppServerSkillInterfaceSchema.optional(),
   dependencies: z
     .object({
       tools: z.array(

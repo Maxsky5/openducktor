@@ -1,12 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
-import { createEventTestSession } from "./claude-agent-sdk-events.test-support";
 import { filterClaudeHistoryMessages } from "./claude-agent-sdk-history-import";
 import { parseClaudeUserToolResultIngress } from "./claude-agent-sdk-ingress-schemas";
 import { createClaudePostToolUseHook } from "./claude-agent-sdk-post-tool-use-hook";
 import { createClaudePreToolUseHook } from "./claude-agent-sdk-pre-tool-use-hook";
 import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support";
-import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 
 describe("Claude SDK ingress", () => {
   test("rejects malformed history entries before history projection", () => {
@@ -69,35 +66,34 @@ describe("Claude SDK ingress", () => {
     });
   });
 
-  test("rejects malformed tool results before transcript projection", () => {
-    const session = createEventTestSession();
-    let error: unknown;
-    try {
-      handleClaudeSdkMessage({
-        emit: () => {},
-        modelSelection: (model) => ({
-          providerId: "claude",
-          modelId: model,
-          runtimeKind: "claude",
-        }),
-        message: claudeSdkMessageFixture({
-          type: "user",
-          message: { role: "user", content: [] },
-          parent_tool_use_id: "tool-1",
-          tool_use_result: "not a tool result object",
-          uuid: "cd869c91-c9ad-46fd-85f1-4549980685cf",
-        }),
-        session,
-        timestamp: "2026-08-21T12:00:00.000Z",
-      });
-    } catch (cause) {
-      error = cause;
-    }
-
-    expect(error).toMatchObject({
-      _tag: "HostValidationError",
-      field: "claudeUserToolResult",
+  test("ignores scalar structured output and keeps the nested tool result", () => {
+    const result = parseClaudeUserToolResultIngress({
+      type: "user",
+      parent_tool_use_id: null,
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "tool-search",
+            content: "Repository not found",
+            is_error: true,
+          },
+        ],
+      },
+      tool_use_result: "Error: Repository not found",
     });
+
+    expect(result.toolResults).toEqual([
+      {
+        raw: {
+          type: "tool_result",
+          tool_use_id: "tool-search",
+          content: "Repository not found",
+          is_error: true,
+        },
+      },
+    ]);
   });
 
   test("correlates structured tool output with the nested result ID", () => {

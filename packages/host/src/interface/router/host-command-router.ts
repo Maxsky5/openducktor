@@ -14,10 +14,9 @@ import { TaskAssetError } from "../../effect/task-asset-error";
 import type { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
 import type { DevServerProcessStartExitError } from "../../ports/dev-server-process-port";
 import { type HostCommandName, parseHostCommandName } from "../commands/host-command-registry";
-import { jsonValueSchema, type JsonValue } from "@openducktor/contracts";
 
-export type HostCommandResult = JsonValue;
-export type UnvalidatedHostCommandResult = object | string | number | boolean | null | void;
+export type HostCommandResult = object | string | number | boolean | null | void;
+export type UnvalidatedHostCommandResult = HostCommandResult;
 export type HostCommandArgs = Record<string, unknown> | undefined;
 export type HostCommandContext = {
   command: HostCommandName;
@@ -36,7 +35,7 @@ export type HostCommandHandlerError =
 export type HostCommandHandler = (
   args: HostCommandArgs,
   context: HostCommandContext,
-) => Effect.Effect<UnvalidatedHostCommandResult, HostCommandHandlerError>;
+) => Effect.Effect<HostCommandResult, HostCommandHandlerError>;
 export type HostCommandHandlers = Partial<Record<HostCommandName, HostCommandHandler>>;
 
 /** Preserve a handler map's exact command keys while applying the shared handler signature. */
@@ -132,11 +131,7 @@ export const createEffectHostCommandRouter = ({
         try: () => handler(args, { command: hostCommand, args }),
         catch: (cause) => toHostCommandHandlerError(cause, hostCommand),
       });
-      const result = yield* handlerEffect;
-      return yield* Effect.try({
-        try: () => jsonValueSchema.parse(result === undefined ? null : result),
-        catch: (cause) => toHostCommandHandlerError(cause, hostCommand),
-      });
+      return yield* handlerEffect;
     });
   },
 });

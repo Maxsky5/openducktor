@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { taskCardSchema } from "@openducktor/contracts";
 import {
   type CreateHostCommandRouterInput,
   createEffectHostCommandRouter,
@@ -41,6 +42,26 @@ describe("createHostCommandRouter", () => {
       args: { repoPath: "/repo" },
       command: "workspace_list",
     });
+  });
+  test("preserves valid optional fields in typed handler output", async () => {
+    const task = taskCardSchema.parse({
+      createdAt: "2026-08-28T00:00:00.000Z",
+      id: "task-1",
+      issueType: "feature",
+      parentId: undefined,
+      pullRequest: undefined,
+      status: "open",
+      targetBranch: undefined,
+      title: "Add GitHub login",
+      updatedAt: "2026-08-28T00:00:00.000Z",
+    });
+    const router = createHostCommandRouter({
+      handlers: {
+        tasks_list: () => Effect.succeed([task]),
+      },
+    });
+
+    await expect(router.invoke("tasks_list")).resolves.toEqual([task]);
   });
   test("rejects unknown commands at the transport boundary", async () => {
     const router = createHostCommandRouter({ handlers: {} });

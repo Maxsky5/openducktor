@@ -101,6 +101,59 @@ describe("Codex app-server protocol", () => {
     ).toThrow();
   });
 
+  test("normalizes nullable Codex skill interface fields", () => {
+    expect(
+      parseCodexAppServerRequestResult("skills/list", {
+        data: [
+          {
+            cwd: "/repo",
+            errors: [],
+            skills: [
+              {
+                name: "review",
+                path: "/skills/review/SKILL.md",
+                scope: "repo",
+                description: "Review changes",
+                enabled: true,
+                interface: {
+                  displayName: "Review",
+                  shortDescription: null,
+                  iconSmall: null,
+                  iconLarge: null,
+                  iconSmallUrl: null,
+                  iconLargeUrl: null,
+                  brandColor: null,
+                  defaultPrompt: null,
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    ).toEqual({
+      data: [
+        {
+          cwd: "/repo",
+          errors: [],
+          skills: [
+            {
+              name: "review",
+              path: "/skills/review/SKILL.md",
+              scope: "repo",
+              description: "Review changes",
+              enabled: true,
+              interface: {
+                displayName: "Review",
+                iconSmallUrl: null,
+                iconLargeUrl: null,
+              },
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   test("parses every experimental thread/start field", () => {
     const params = {
       model: "gpt-5",

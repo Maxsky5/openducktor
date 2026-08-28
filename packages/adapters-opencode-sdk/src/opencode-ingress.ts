@@ -22,27 +22,50 @@ const permissionRuleSchema = z.object({
   permission: z.string(),
 });
 
-const opencodeAgentSchema = z.object({
-  color: z.string().optional(),
-  description: z.string().optional(),
-  hidden: z.boolean().optional(),
+const opencodeAgentWireSchema = z.object({
+  color: z.string().nullish(),
+  description: z.string().nullish(),
+  hidden: z.boolean().nullish(),
   mode: z.enum(["subagent", "primary", "all"]),
   model: z
     .object({
       modelID: z.string(),
       providerID: z.string(),
     })
-    .optional(),
+    .nullish(),
   name: z.string(),
-  native: z.boolean().optional(),
+  native: z.boolean().nullish(),
   options: unknownRecordSchema,
   permission: z.array(permissionRuleSchema),
-  prompt: z.string().optional(),
-  steps: z.number().optional(),
-  temperature: z.number().optional(),
-  topP: z.number().optional(),
-  variant: z.string().optional(),
+  prompt: z.string().nullish(),
+  steps: z.number().nullish(),
+  temperature: z.number().nullish(),
+  topP: z.number().nullish(),
+  variant: z.string().nullish(),
 });
+
+const opencodeAgentSchema = opencodeAgentWireSchema.transform((agent): Agent => ({
+  mode: agent.mode,
+  name: agent.name,
+  options: agent.options,
+  permission: agent.permission,
+  ...(agent.color !== null && agent.color !== undefined ? { color: agent.color } : undefined),
+  ...(agent.description !== null && agent.description !== undefined
+    ? { description: agent.description }
+    : undefined),
+  ...(agent.hidden !== null && agent.hidden !== undefined ? { hidden: agent.hidden } : undefined),
+  ...(agent.model !== null && agent.model !== undefined ? { model: agent.model } : undefined),
+  ...(agent.native !== null && agent.native !== undefined ? { native: agent.native } : undefined),
+  ...(agent.prompt !== null && agent.prompt !== undefined ? { prompt: agent.prompt } : undefined),
+  ...(agent.steps !== null && agent.steps !== undefined ? { steps: agent.steps } : undefined),
+  ...(agent.temperature !== null && agent.temperature !== undefined
+    ? { temperature: agent.temperature }
+    : undefined),
+  ...(agent.topP !== null && agent.topP !== undefined ? { topP: agent.topP } : undefined),
+  ...(agent.variant !== null && agent.variant !== undefined
+    ? { variant: agent.variant }
+    : undefined),
+}));
 export type ParsedOpencodeAgent = z.infer<typeof opencodeAgentSchema>;
 
 export const opencodeAgentListPayloadSchema = exactOptionalSchema(
