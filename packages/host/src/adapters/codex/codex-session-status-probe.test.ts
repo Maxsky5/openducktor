@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   parseCodexAppServerRequestResult,
+  type CodexAppServerThread,
   type CodexAppServerThreadStatus,
-  type JsonValue,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
@@ -37,7 +37,7 @@ const codexThread = (status: CodexAppServerThreadStatus, cwd = "/repo/worktree")
     gitInfo: null,
     name: null,
     turns: [],
-  }) satisfies JsonValue;
+  }) satisfies CodexAppServerThread;
 
 const probeThreadStatus = (input: { status: CodexAppServerThreadStatus; cwd?: string }) =>
   Effect.runPromise(

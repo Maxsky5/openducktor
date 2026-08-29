@@ -14,7 +14,6 @@ tester.run("anti-slop/no-conditional-empty-object-spread", noConditionalEmptyObj
     "const result = { value };",
     "const result = { ...values };",
     "const result = condition ? { value } : {};",
-    "const result = { ...(condition ? { value } : undefined) };",
   ],
   invalid: [
     {
@@ -23,26 +22,6 @@ tester.run("anti-slop/no-conditional-empty-object-spread", noConditionalEmptyObj
     },
     {
       code: "const result = { ...(condition ? {} : { value }) };",
-      errors: [error],
-    },
-    {
-      code: "const result = { ...((condition ? { value } : {}) satisfies object) };",
-      errors: [error],
-    },
-    {
-      code: "const result = { ...(() => { if (condition) return { value }; return {}; })() };",
-      errors: [error],
-    },
-    {
-      code: "const result = { ...(() => condition ? { value } : {})() };",
-      errors: [error],
-    },
-    {
-      code: "const result = { ...(() => { return condition ? { value } : {}; })() };",
-      errors: [error],
-    },
-    {
-      code: "const result = { ...(function () { return condition ? { value } : {}; })() };",
       errors: [error],
     },
   ],

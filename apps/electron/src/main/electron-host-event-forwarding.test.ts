@@ -1,12 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
-import { HOST_EVENT_CHANNELS } from "@openducktor/contracts";
 import { forwardElectronHostEvent } from "./electron-host-event-forwarding";
 
 describe("forwardElectronHostEvent", () => {
-  test("does not expose task stream frames through the generic host event channels", () => {
-    expect(HOST_EVENT_CHANNELS).not.toContain("openducktor://task-event");
-  });
-
   test("reports one failed window send and continues forwarding to later windows", () => {
     const failure = new Error("renderer destroyed during send");
     const report = mock(() => {});

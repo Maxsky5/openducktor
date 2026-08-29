@@ -25,6 +25,7 @@ export type MarkdownSyntaxThemeLoadResult<Theme> =
   | { status: "failed"; error: Error };
 
 type CreateMarkdownSyntaxBlockArgs<Theme> = {
+  getCachedDarkTheme: () => Theme | null;
   languageRegistry: MarkdownSyntaxLanguageRegistry;
   lightTheme: Theme;
   loadDarkTheme: () => Promise<MarkdownSyntaxThemeLoadResult<Theme>>;
@@ -76,6 +77,7 @@ const markdownSyntaxBlockReducer = <Theme,>(
 };
 
 export const createMarkdownSyntaxBlock = <Theme,>({
+  getCachedDarkTheme,
   languageRegistry,
   lightTheme,
   loadDarkTheme,
@@ -92,7 +94,7 @@ export const createMarkdownSyntaxBlock = <Theme,>({
       markdownSyntaxBlockReducer<Theme>,
       {
         languageRegistrationVersion: 0,
-        darkTheme: null,
+        darkTheme: getCachedDarkTheme(),
         themeLoadFailure: null,
         grammarLoadFailure: null,
       },
@@ -109,6 +111,21 @@ export const createMarkdownSyntaxBlock = <Theme,>({
     } else if (grammarLoadFailure) {
       loadFailureKind = "language";
     }
+    const plainCodeBlock = (
+      <div
+        className={cn("overflow-x-auto rounded-xl border border-border bg-muted/30", className)}
+        data-syntax-load-failure={loadFailureKind}
+      >
+        <pre className="p-3.5 font-mono text-xs leading-relaxed text-foreground">
+          <code>{code}</code>
+        </pre>
+        {loadFailure ? (
+          <p className="border-t border-border px-3.5 py-2 text-[11px] text-muted-foreground">
+            Syntax highlighting unavailable: {loadFailure.message}
+          </p>
+        ) : null}
+      </div>
+    );
 
     useEffect(() => {
       if (!isDark || darkTheme) {
@@ -168,34 +185,12 @@ export const createMarkdownSyntaxBlock = <Theme,>({
     }, [normalizedLanguage]);
 
     if (!isSupportedLanguage || !isLanguageRegistered) {
-      return (
-        <div
-          className={cn("overflow-x-auto rounded-xl border border-border bg-muted/30", className)}
-          data-syntax-load-failure={loadFailureKind}
-        >
-          <pre className="p-3.5 font-mono text-xs leading-relaxed text-foreground">
-            <code>{code}</code>
-          </pre>
-          {loadFailure ? (
-            <p className="border-t border-border px-3.5 py-2 text-[11px] text-muted-foreground">
-              Syntax highlighting unavailable: {loadFailure.message}
-            </p>
-          ) : null}
-        </div>
-      );
+      return plainCodeBlock;
     }
 
     const syntaxTheme = isDark ? darkTheme : lightTheme;
     if (!syntaxTheme) {
-      return (
-        <div
-          className={cn("overflow-x-auto rounded-xl border border-border bg-muted/30", className)}
-        >
-          <pre className="p-3.5 font-mono text-xs leading-relaxed text-foreground">
-            <code>{code}</code>
-          </pre>
-        </div>
-      );
+      return plainCodeBlock;
     }
 
     return (

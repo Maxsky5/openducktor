@@ -4,8 +4,7 @@ import {
   type HostInvokeFailure,
   type JsonObject,
 } from "@openducktor/contracts";
-import type { HostCommandName } from "@openducktor/host";
-import type { JsonValue } from "@openducktor/contracts";
+import type { HostCommandName, HostCommandResult } from "@openducktor/host";
 import { z } from "zod";
 
 export class HostInvokeError extends Error {
@@ -22,7 +21,7 @@ export class HostInvokeError extends Error {
   }
 }
 
-export type InvokeFn = (command: HostCommandName, args?: JsonObject) => Promise<JsonValue>;
+export type InvokeFn = (command: HostCommandName, args?: JsonObject) => Promise<HostCommandResult>;
 
 export const toCommandArgs = (parsed: unknown): JsonObject => {
   const value = jsonValueSchema.safeParse(parsed);
@@ -44,7 +43,7 @@ const updatedAtResultSchema = z.object({
  * Parse an array payload returned by a host command and validate each entry.
  */
 export const parseArray = <T>(
-  schema: { parse: (value: JsonValue) => T },
+  schema: { parse: (value: unknown) => T },
   payload: unknown,
   command: string,
 ): T[] => {

@@ -1,6 +1,9 @@
-import type { Part, Session } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
-import { opencodePartPayloadSchema } from "../opencode-ingress";
+import {
+  opencodePartPayloadSchema,
+  type ParsedOpencodePart,
+  type ParsedOpencodeSession,
+} from "../opencode-ingress";
 import { type ParsedOpencodeEvent as Event } from "../opencode-global-event-ingress";
 import {
   isAwaitingRuntimeTurnStart,
@@ -15,7 +18,7 @@ export type PendingPartDelta = {
 };
 
 export type PendingSubagentPartEmission = {
-  part: Part;
+  part: ParsedOpencodePart;
   roleHint?: string;
 };
 
@@ -36,7 +39,7 @@ export type PendingSubagentSessionBinding = {
 
 type SessionLifecycleEvent = {
   type: "session.created" | "session.updated" | "session.deleted";
-  info: Session;
+  info: ParsedOpencodeSession;
   externalSessionId: string;
   parentExternalSessionId: string | undefined;
 };
@@ -75,7 +78,7 @@ const removePartIdFromMessage = (
   }
 };
 
-export const setMessagePart = (state: MessagePartState, part: Part): void => {
+export const setMessagePart = (state: MessagePartState, part: ParsedOpencodePart): void => {
   const partId = part.id;
   const previous = state.partsById.get(partId);
   if (previous && previous.messageID !== part.messageID) {
@@ -87,7 +90,10 @@ export const setMessagePart = (state: MessagePartState, part: Part): void => {
   state.partIdsByMessageId.set(part.messageID, partIds);
 };
 
-export const deleteMessagePart = (state: MessagePartState, partId: string): Part | undefined => {
+export const deleteMessagePart = (
+  state: MessagePartState,
+  partId: string,
+): ParsedOpencodePart | undefined => {
   const part = state.partsById.get(partId);
   if (!part) {
     return undefined;
@@ -97,12 +103,15 @@ export const deleteMessagePart = (state: MessagePartState, partId: string): Part
   return part;
 };
 
-export const getMessageParts = (state: MessagePartState, messageId: string): Part[] => {
+export const getMessageParts = (
+  state: MessagePartState,
+  messageId: string,
+): ParsedOpencodePart[] => {
   const partIds = state.partIdsByMessageId.get(messageId);
   if (!partIds) {
     return [];
   }
-  const parts: Part[] = [];
+  const parts: ParsedOpencodePart[] = [];
   for (const partId of partIds) {
     const part = state.partsById.get(partId);
     if (part) {
@@ -230,7 +239,11 @@ const normalizePartDeltaField = (field: string): string => {
   return isReasoningDeltaField(field) ? "text" : field;
 };
 
-export const applyDeltaToPart = (part: Part, field: string, delta: string): Part | null => {
+export const applyDeltaToPart = (
+  part: ParsedOpencodePart,
+  field: string,
+  delta: string,
+): ParsedOpencodePart | null => {
   const normalizedField = normalizePartDeltaField(field);
   const existing = Object.getOwnPropertyDescriptor(part, normalizedField)?.value;
   if (existing !== undefined && typeof existing !== "string") {

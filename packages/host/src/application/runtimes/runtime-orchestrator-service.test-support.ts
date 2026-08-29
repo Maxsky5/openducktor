@@ -1,4 +1,3 @@
-import { createFocusedTestService } from "../../test-support/focused-service";
 import {
   type AgentSessionRecord,
   RUNTIME_DESCRIPTORS_BY_KIND,
@@ -9,9 +8,7 @@ import {
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
 import { HostOperationError } from "../../effect/host-errors";
-import type { GitPort } from "../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
-import type { TaskStorePort } from "../../ports/task-repository-ports";
 import { createRuntimeOrchestratorService as createEffectRuntimeOrchestratorService } from "./runtime-orchestrator-service";
 
 export const createRuntimeOrchestratorService = (
@@ -23,7 +20,7 @@ export const createGitPort = (
     path === "/repo" ? "/canonical/repo" : path,
   isGitRepository: (path: string) => boolean = (path) => path === "/canonical/repo",
 ): Parameters<typeof createEffectRuntimeOrchestratorService>[0]["gitPort"] =>
-  createFocusedTestService<GitPort>()({
+  ({
     canonicalizePath(path: string) {
       return Effect.tryPromise({
         try: async () => {
@@ -50,7 +47,7 @@ export const createGitPort = (
           }),
       });
     },
-  });
+  }) satisfies Parameters<typeof createEffectRuntimeOrchestratorService>[0]["gitPort"];
 
 export const createRuntimeDefinitionsService = () => ({
   listRuntimeDefinitions(): RuntimeDescriptor[] {
@@ -69,7 +66,7 @@ export const createTaskStore = (
   }> = {},
   extraAgentSessions: AgentSessionRecord[] = [],
 ): Parameters<typeof createEffectRuntimeOrchestratorService>[0]["taskReader"] =>
-  createFocusedTestService<TaskStorePort>()({
+  ({
     getTaskMetadata() {
       return Effect.tryPromise({
         try: async () => {
@@ -96,7 +93,7 @@ export const createTaskStore = (
           }),
       });
     },
-  });
+  }) satisfies Parameters<typeof createEffectRuntimeOrchestratorService>[0]["taskReader"];
 
 export const createRuntime = (
   overrides: Partial<RuntimeInstanceSummary> = {},

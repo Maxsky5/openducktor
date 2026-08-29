@@ -1,5 +1,5 @@
 import { jsonValueSchema } from "@openducktor/contracts";
-import type { Session } from "@opencode-ai/sdk/v2/client";
+import type { GlobalEvent, Session } from "@opencode-ai/sdk/v2/client";
 import {
   opencodeMessageInfoPayloadSchema,
   opencodePartPayloadSchema,
@@ -9,10 +9,10 @@ import {
 import {
   parseOpencodeDirectEvent,
   parseOpencodeGlobalEventPayload,
-  type IgnoredOpencodeEventType,
   type ParsedOpencodeEvent,
   type ParsedOpencodeGlobalEventPayload,
 } from "./opencode-global-event-ingress";
+import type { ConsumedOpencodeEventType } from "./opencode-event-policy";
 
 const DEFAULT_TOKENS = {
   cache: { read: 0, write: 0 },
@@ -248,9 +248,15 @@ export type MalformedOpencodeControlEventFixture = {
   properties: Record<string, unknown>;
 };
 
-type IgnoredEventFixtureInput = {
+type OptionalFixtureId<Event> = Event extends { id: string }
+  ? Omit<Event, "id"> & { id?: string }
+  : Event;
+type IgnoredEventFixtureInput = OptionalFixtureId<
+  Exclude<GlobalEvent["payload"], { type: ConsumedOpencodeEventType | "sync" }>
+>;
+type HeartbeatEventFixtureInput = {
   id?: string;
-  type: IgnoredOpencodeEventType | "server.heartbeat";
+  type: "server.heartbeat";
   properties: Record<string, unknown>;
 };
 
@@ -269,6 +275,7 @@ export const createOpencodeMessageEventGroupFixture = (
 export type OpencodeEventFixtureInput =
   | DirectEventFixtureInput
   | IgnoredEventFixtureInput
+  | HeartbeatEventFixtureInput
   | MalformedOpencodeControlEventFixture
   | OpencodeMessageEventGroupFixture
   | SyncEventFixtureInput;
@@ -277,7 +284,10 @@ export const createOpencodeEventFixtures = (
   event: OpencodeEventFixtureInput,
   index: number,
 ): Array<
-  IgnoredEventFixtureInput | MalformedOpencodeControlEventFixture | ParsedOpencodeGlobalEventPayload
+  | HeartbeatEventFixtureInput
+  | IgnoredEventFixtureInput
+  | MalformedOpencodeControlEventFixture
+  | ParsedOpencodeGlobalEventPayload
 > => {
   if ("fixture" in event) {
     const messageInfo = createOpencodeMessageInfoFixture(event.info);

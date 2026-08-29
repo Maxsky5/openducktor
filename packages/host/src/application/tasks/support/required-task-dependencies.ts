@@ -236,7 +236,7 @@ export const requireMergedTaskCleanupDependencies = (
     taskWorktreeService,
     terminalService,
   };
-  if (worktreeFiles) Object.assign(dependencies, { worktreeFiles });
+  if (worktreeFiles) dependencies.worktreeFiles = worktreeFiles;
   return dependencies;
 };
 export const requireDirectMergeDependencies = ({
@@ -337,7 +337,7 @@ export const requireLinkMergedPullRequestDependencies = (
     terminalService,
     workspaceSettingsService,
   };
-  if (worktreeFiles) Object.assign(dependencies, { worktreeFiles });
+  if (worktreeFiles) dependencies.worktreeFiles = worktreeFiles;
   return dependencies;
 };
 export const requireApprovalContextDependencies = ({

@@ -1,26 +1,19 @@
 import { z } from "zod";
 import {
-  type RuntimeApprovalReplyOutcome,
-  type RuntimeApprovalRequestType,
   runtimeApprovalReplyOutcomeSchema,
   runtimeApprovalRequestTypeSchema,
   runtimeSubagentExecutionModeSchema,
 } from "./agent-runtime-schemas";
-import {
-  type AgentTranscriptQuestionItem,
-  agentSessionQuestionItemSchema,
-} from "./agent-session-pending-schemas";
+import { agentSessionQuestionItemSchema } from "./agent-session-pending-schemas";
 import {
   type AgentSessionLiveRef,
   agentModelSelectionSchema,
   agentSessionLiveRefSchema,
 } from "./agent-session-schemas";
 import { fileContentSchema, fileDiffSchema } from "./git-schemas";
-import { exactOptionalSchema, type ExactOptional } from "./exact-optional";
 
 type ZodSchemaFields = Parameters<typeof z.object>[0];
 import { jsonObjectSchema } from "./json-types";
-import type { JsonValue } from "./json-types";
 import { skillDescriptorSchema } from "./skill-schemas";
 import { slashCommandCatalogSchema } from "./slash-command-schemas";
 import { subagentDescriptorSchema } from "./subagent-schemas";
@@ -93,9 +86,7 @@ const inferredAgentUserMessageDisplayPartSchema = z.discriminatedUnion("kind", [
     })
     .strict(),
 ]);
-export const agentUserMessageDisplayPartSchema = exactOptionalSchema(
-  inferredAgentUserMessageDisplayPartSchema,
-);
+export const agentUserMessageDisplayPartSchema = inferredAgentUserMessageDisplayPartSchema;
 export type AgentTranscriptUserMessageDisplayPart = z.infer<
   typeof agentUserMessageDisplayPartSchema
 >;
@@ -205,7 +196,7 @@ const inferredAgentStreamPartSchema = z.discriminatedUnion("kind", [
     })
     .strict(),
 ]);
-export const agentStreamPartSchema = exactOptionalSchema(inferredAgentStreamPartSchema);
+export const agentStreamPartSchema = inferredAgentStreamPartSchema;
 export type AgentTranscriptStreamPart = z.infer<typeof agentStreamPartSchema>;
 
 const agentSessionStatusSchema = z.discriminatedUnion("type", [
@@ -225,23 +216,7 @@ const agentSessionStatusSchema = z.discriminatedUnion("type", [
     })
     .strict(),
 ]);
-export type AgentTranscriptSessionStatus = ExactOptional<z.infer<typeof agentSessionStatusSchema>>;
-
-export type AgentTranscriptPendingApprovalRequest = {
-  requestId: string;
-  requestInstanceId?: string;
-  requestType: RuntimeApprovalRequestType;
-  title: string;
-  summary?: string;
-  details?: string;
-  affectedPaths?: string[];
-  command?: { command: string; workingDirectory?: string };
-  action?: { name: string; description?: string };
-  tool?: { name: string; title?: string; input?: Record<string, JsonValue> };
-  mutation?: "mutating" | "read_only" | "unknown";
-  supportedReplyOutcomes?: RuntimeApprovalReplyOutcome[];
-  metadata?: Record<string, JsonValue>;
-};
+export type AgentTranscriptSessionStatus = z.infer<typeof agentSessionStatusSchema>;
 
 const inferredTranscriptPendingApprovalRequestSchema = z
   .object({
@@ -279,11 +254,9 @@ const inferredTranscriptPendingApprovalRequestSchema = z
     metadata: metadataSchema.optional(),
   })
   .strict();
-export type AgentTranscriptPendingQuestionRequest = {
-  requestId: string;
-  requestInstanceId?: string;
-  questions: AgentTranscriptQuestionItem[];
-};
+export type AgentTranscriptPendingApprovalRequest = z.infer<
+  typeof inferredTranscriptPendingApprovalRequestSchema
+>;
 
 const inferredTranscriptPendingQuestionRequestSchema = z
   .object({
@@ -292,6 +265,9 @@ const inferredTranscriptPendingQuestionRequestSchema = z
     questions: z.array(agentSessionQuestionItemSchema),
   })
   .strict();
+export type AgentTranscriptPendingQuestionRequest = z.infer<
+  typeof inferredTranscriptPendingQuestionRequestSchema
+>;
 const eventBaseFields = {
   externalSessionId: z.string(),
   timestamp: isoTimestampSchema,
@@ -424,7 +400,7 @@ const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
     message: z.string(),
   }),
 ]);
-export const agentRuntimeEventSchema = exactOptionalSchema(inferredAgentRuntimeEventSchema);
+export const agentRuntimeEventSchema = inferredAgentRuntimeEventSchema;
 export type AgentRuntimeEvent = z.infer<typeof agentRuntimeEventSchema>;
 
 export type AgentSessionTranscriptEventType =

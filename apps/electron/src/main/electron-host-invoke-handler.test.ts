@@ -145,7 +145,7 @@ describe("Electron host invoke IPC handler", () => {
     await expect(registered.handler(ipcMainInvokeEvent, request)).rejects.toBe(failure);
   });
 
-  test("returns a typed failure when a successful command result is malformed", async () => {
+  test("preserves successful command results without command-specific validation", async () => {
     const registered = createRegisteredHandler();
 
     registerElectronHostInvokeHandler(registered.ipcMain, {
@@ -155,10 +155,7 @@ describe("Electron host invoke IPC handler", () => {
 
     await expect(registered.handler(ipcMainInvokeEvent, request)).resolves.toEqual({
       status: "success",
-      payload: {
-        ok: false,
-        error: { message: "Host command 'workspace_list' returned an invalid response." },
-      },
+      payload: { ok: true, value: { runtimeId: "runtime-1" } },
     });
   });
 

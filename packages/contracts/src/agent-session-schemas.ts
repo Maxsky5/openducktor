@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { repoRuntimeRefSchema, runtimeKindSchema } from "./agent-runtime-schemas";
 import { agentRoleSchema } from "./agent-workflow-schemas";
-import { exactOptionalSchema } from "./exact-optional";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 
@@ -55,16 +54,14 @@ export const agentSessionAssociationSchema = z.discriminatedUnion("kind", [
 ]);
 export type AgentSessionAssociation = z.infer<typeof agentSessionAssociationSchema>;
 
-export const agentModelSelectionSchema = exactOptionalSchema(
-  z
-    .object({
-      runtimeKind: runtimeKindSchema.optional(),
-      providerId: z.string(),
-      modelId: z.string(),
-      variant: z.string().optional(),
-      profileId: z.string().optional(),
-    })
-    .strict(),
-);
+export const agentModelSelectionSchema = z
+  .object({
+    runtimeKind: runtimeKindSchema.optional(),
+    providerId: z.string(),
+    modelId: z.string(),
+    variant: z.string().optional(),
+    profileId: z.string().optional(),
+  })
+  .strict();
 
 export type AgentTranscriptModelSelection = z.infer<typeof agentModelSelectionSchema>;

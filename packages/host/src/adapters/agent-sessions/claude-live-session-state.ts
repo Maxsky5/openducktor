@@ -68,16 +68,16 @@ const toApprovalRequest = (
     requestType: event.requestType,
     title: event.title,
   };
-  if (event.summary !== undefined) Object.assign(request, { summary: event.summary });
-  if (event.details !== undefined) Object.assign(request, { details: event.details });
-  if (event.affectedPaths !== undefined)
-    Object.assign(request, { affectedPaths: event.affectedPaths });
-  if (event.command !== undefined) Object.assign(request, { command: event.command });
-  if (event.action !== undefined) Object.assign(request, { action: event.action });
-  if (event.tool !== undefined) Object.assign(request, { tool: event.tool });
-  if (event.mutation !== undefined) Object.assign(request, { mutation: event.mutation });
-  if (event.supportedReplyOutcomes !== undefined)
-    Object.assign(request, { supportedReplyOutcomes: event.supportedReplyOutcomes });
+  if (event.summary !== undefined) request.summary = event.summary;
+  if (event.details !== undefined) request.details = event.details;
+  if (event.affectedPaths !== undefined) request.affectedPaths = event.affectedPaths;
+  if (event.command !== undefined) request.command = event.command;
+  if (event.action !== undefined) request.action = event.action;
+  if (event.tool !== undefined) request.tool = event.tool;
+  if (event.mutation !== undefined) request.mutation = event.mutation;
+  if (event.supportedReplyOutcomes !== undefined) {
+    request.supportedReplyOutcomes = event.supportedReplyOutcomes;
+  }
   return request;
 };
 
@@ -103,7 +103,7 @@ const rootRef = (session: ClaudeSessionContext): AgentSessionLiveRef =>
 
 const subagentStartedAt = (
   part: {
-    readonly startedAtMs?: number;
+    readonly startedAtMs?: number | undefined;
   },
   fallback: string,
 ): string => {
@@ -161,7 +161,7 @@ export const createClaudeLiveSessionState = ({
       contextUsage: null,
     };
     if (!isRoot) {
-      Object.assign(snapshot, { parentExternalSessionId: session.externalSessionId });
+      snapshot.parentExternalSessionId = session.externalSessionId;
     }
     return snapshot;
   };
@@ -324,7 +324,7 @@ export const createClaudeLiveSessionState = ({
         totalTokens: event.totalTokens,
       };
       if (event.contextWindow !== undefined) {
-        Object.assign(contextUsage, { contextWindow: event.contextWindow });
+        contextUsage.contextWindow = event.contextWindow;
       }
       return commitSnapshot({
         ...snapshot,
@@ -489,7 +489,7 @@ export const createClaudeLiveSessionState = ({
         contextUsage: current?.contextUsage ?? null,
       };
       if (options.parentExternalSessionId) {
-        Object.assign(nextSnapshot, { parentExternalSessionId: options.parentExternalSessionId });
+        nextSnapshot.parentExternalSessionId = options.parentExternalSessionId;
       }
       return commitSnapshot(nextSnapshot);
     },

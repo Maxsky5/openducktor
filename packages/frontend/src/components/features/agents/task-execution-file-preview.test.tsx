@@ -4,7 +4,7 @@ import type {
   WorkspaceTextFileWriteResult,
 } from "@openducktor/contracts";
 import { HostInvokeError, type HostClient } from "@openducktor/host-client";
-import { File, type CodeViewFileItem, getFiletypeFromFileName } from "@pierre/diffs";
+import { File, type CodeViewFileItem } from "@pierre/diffs";
 import type { Editor, EditorOptions } from "@pierre/diffs/edit";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -67,20 +67,7 @@ const attachEditor = (
 };
 let secondFileReadMode: "pending" | "resolve" = "pending";
 let previewTheme: "light" | "dark" = "light";
-let highlightCompletionMode: "auto" | "manual" = "auto";
-let primeFileHighlightCacheMock: ReturnType<typeof mock>;
 let latestQueryClient: QueryClient | null = null;
-const highlightedFileCacheKeys = new Set<string>();
-const highlightCacheSubscribers = new Set<() => void>();
-
-const completeFileHighlight = (file: { cacheKey?: string }): void => {
-  if (file.cacheKey) {
-    highlightedFileCacheKeys.add(file.cacheKey);
-  }
-  for (const subscriber of highlightCacheSubscribers) {
-    subscriber();
-  }
-};
 
 const runAsyncUiAction = async (action: () => void): Promise<void> => {
   await act(async () => {
@@ -108,26 +95,6 @@ const dispatchPreviewSaveShortcut = async (modifier: "ctrlKey" | "metaKey" = "ct
   });
   await runAsyncUiAction(() => screen.getByLabelText("Selected file preview").dispatchEvent(event));
   return event;
-};
-
-const previewWorkerPool = {
-  isWorkingPool: () => false,
-  getFileResultCache: (file: { cacheKey?: string }) =>
-    file.cacheKey && highlightedFileCacheKeys.has(file.cacheKey) ? {} : undefined,
-  primeFileHighlightCache: (file: { cacheKey?: string; name?: string }) => {
-    primeFileHighlightCacheMock(file);
-    if (getFiletypeFromFileName(file.name ?? "") === "text") {
-      return;
-    }
-    if (highlightCompletionMode === "auto") {
-      queueMicrotask(() => completeFileHighlight(file));
-    }
-  },
-  subscribeToStatChanges: (subscriber: () => void) => {
-    highlightCacheSubscribers.add(subscriber);
-    subscriber();
-    return () => highlightCacheSubscribers.delete(subscriber);
-  },
 };
 
 const actualThemeProvider = await import("@/components/layout/theme-provider");
@@ -219,10 +186,6 @@ beforeEach(async () => {
   editProviderFactories.length = 0;
   secondFileReadMode = "pending";
   previewTheme = "light";
-  highlightCompletionMode = "auto";
-  highlightedFileCacheKeys.clear();
-  highlightCacheSubscribers.clear();
-  primeFileHighlightCacheMock = mock();
   latestQueryClient = null;
 
   readTextFileMock = mock<HostClient["filesystemReadTextFile"]>((input) => {
@@ -261,7 +224,6 @@ beforeEach(async () => {
       theme: previewTheme,
       setTheme: () => {},
     })),
-    spyOn(actualPreviewPierre, "useWorkerPool").mockImplementation(() => previewWorkerPool),
     spyOn(actualPreviewPierre, "EditProvider").mockImplementation(({ children, createEditor }) => {
       editProviderFactories.push(createEditor);
       return <>{children}</>;
@@ -295,56 +257,6 @@ afterEach(() => {
 });
 
 describe("TaskExecutionSelectedFilePreview", () => {
-  test("displays files that Pierre treats as plain text without waiting for a worker cache entry", async () => {
-    const onClose = mock(() => {});
-
-    render(renderPreview({ selectedFile: editorConfigFile, onClose }));
-
-    await screen.findByText("root = true");
-  });
-
-  test("waits for the worker highlight result before displaying a newly opened file", async () => {
-    highlightCompletionMode = "manual";
-    const onClose = mock(() => {});
-
-    render(renderPreview({ selectedFile: firstFile, onClose }));
-
-    await waitFor(() => expect(primeFileHighlightCacheMock).toHaveBeenCalledTimes(1));
-    expect(screen.getByText("Loading file...")).toBeTruthy();
-    expect(screen.queryByTestId("mock-code-view")).toBeNull();
-
-    const [file] = primeFileHighlightCacheMock.mock.calls[0] ?? [];
-    expect(file?.name).toBe(firstFile.relativePath);
-    act(() => completeFileHighlight(file));
-
-    await screen.findByText("const first = true;");
-  });
-
-  test("keeps the previous file visible while the next file is being highlighted", async () => {
-    secondFileReadMode = "resolve";
-    const onClose = mock(() => {});
-    const view = render(
-      renderPreview({ selectedFile: firstFile, preservePreviousSnapshot: true, onClose }),
-    );
-
-    await screen.findByText("const first = true;");
-    highlightCompletionMode = "manual";
-
-    view.rerender(
-      renderPreview({ selectedFile: secondFile, preservePreviousSnapshot: true, onClose }),
-    );
-
-    await waitFor(() => expect(primeFileHighlightCacheMock).toHaveBeenCalledTimes(2));
-    expect(screen.getByText("const first = true;")).toBeTruthy();
-    expect(screen.getByText("Loading...")).toBeTruthy();
-
-    const [file] = primeFileHighlightCacheMock.mock.calls[1] ?? [];
-    act(() => completeFileHighlight(file));
-
-    await screen.findByText("const second = true;");
-    expect(screen.queryByText("const first = true;")).toBeNull();
-  });
-
   test("keeps the previous file visible while the next selected file is loading", async () => {
     const onClose = mock(() => {});
     const view = render(renderPreview({ selectedFile: firstFile, onClose }));
@@ -693,8 +605,6 @@ describe("TaskExecutionSelectedFilePreview", () => {
     attachEditor(editorOptions, attachedEditor);
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
-    highlightCompletionMode = "manual";
-
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(firstItem, {
         ...firstItem?.file,
@@ -716,7 +626,6 @@ describe("TaskExecutionSelectedFilePreview", () => {
     });
     await waitForCleanFile();
     expect(screen.queryByRole("status")).toBeNull();
-    await waitFor(() => expect(primeFileHighlightCacheMock).toHaveBeenCalledTimes(2));
     expect(firstCodeViewItem()).toMatchObject({
       edit: true,
       version: firstItem?.version,

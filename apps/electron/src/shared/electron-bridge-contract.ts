@@ -15,11 +15,10 @@ import type {
 import {
   hostInvokeFailureSchema,
   jsonObjectSchema,
-  jsonValueSchema,
   taskEventStreamAcknowledgeSchema,
   taskEventStreamFrameSchema,
 } from "@openducktor/contracts";
-import type { HostCommandName } from "@openducktor/host";
+import type { HostCommandName, HostCommandResult } from "@openducktor/host";
 import { z } from "zod";
 
 export const ELECTRON_HOST_INVOKE_CHANNEL = "openducktor:host-invoke";
@@ -56,8 +55,18 @@ export const electronHostInvokeRequestSchema = jsonObjectSchema.and(
 );
 export type ElectronHostInvokeRequest = z.output<typeof electronHostInvokeRequestSchema>;
 
+const hostCommandResultSchema = z.custom<HostCommandResult>(
+  (value) =>
+    value === undefined ||
+    value === null ||
+    typeof value === "object" ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean",
+);
+
 const electronHostInvokeResultWireSchema = z.discriminatedUnion("ok", [
-  z.strictObject({ ok: z.literal(true), value: jsonValueSchema }),
+  z.strictObject({ ok: z.literal(true), value: hostCommandResultSchema }),
   z.strictObject({
     ok: z.literal(false),
     error: z.strictObject({

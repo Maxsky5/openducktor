@@ -6,7 +6,7 @@ import {
 import {
   classifyCodexRequestMutation,
   codexApprovalResponseForRequest,
-  extractThreadIdFromParams,
+  codexServerRequestThreadId,
   parseNotificationRecord,
   parseQuestionRequest,
   parseServerRequestRecord,
@@ -95,7 +95,19 @@ describe("Codex App Server request parsing", () => {
   });
 
   test("extracts legacy conversation ids as thread identifiers", () => {
-    expect(extractThreadIdFromParams({ conversationId: "thread-legacy" })).toBe("thread-legacy");
+    const request = parseServerRequestRecord({
+      id: 54,
+      method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.APPLY_PATCH_APPROVAL,
+      params: {
+        callId: "call-1",
+        conversationId: "thread-legacy",
+        fileChanges: {},
+        grantRoot: null,
+        reason: null,
+      },
+    });
+
+    expect(codexServerRequestThreadId(request)).toBe("thread-legacy");
   });
 });
 

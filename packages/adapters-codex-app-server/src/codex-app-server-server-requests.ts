@@ -8,8 +8,8 @@ import { codexServerRequestKey } from "./codex-app-server-approvals";
 import {
   classifyCodexRequestMutation,
   codexApprovalResponseForRequest,
-  extractThreadIdFromParams,
-  extractTurnId,
+  codexServerRequestThreadId,
+  codexServerRequestTurnId,
   parseQuestionRequest,
   toApprovalRequest,
   toMcpElicitationApprovalRequest,
@@ -112,7 +112,7 @@ const resolveRequestRouteContext = (
   session: CodexSessionState,
   rawRequest: CodexServerRequestRecord,
 ): RequestRouteContext => {
-  const ownerThreadId = extractThreadIdFromParams(rawRequest.params) ?? session.threadId;
+  const ownerThreadId = codexServerRequestThreadId(rawRequest) ?? session.threadId;
   const ownerSession =
     context.sessionForThreadId(ownerThreadId) ??
     (ownerThreadId === session.threadId ? session : undefined);
@@ -228,7 +228,7 @@ export const handleCodexServerRequest = async (
       `Cannot handle Codex server request '${rawRequest.method}' for thread '${routeContext.ownerThreadId}' from session '${session.threadId}' because there is no known session or subagent route for the request owner.`,
     );
   }
-  const requestTurnId = extractTurnId(rawRequest.params);
+  const requestTurnId = codexServerRequestTurnId(rawRequest);
   const activeTurn =
     context.activeTurnsBySessionId.get(routeContext.ownerThreadId) ??
     (routeContext.ownerThreadId === routeContext.policySession.threadId

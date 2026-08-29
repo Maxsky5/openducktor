@@ -1,8 +1,7 @@
-import { jsonValueSchema } from "@openducktor/contracts";
+import { mcpBridgeDiscoveryFileSchema } from "@openducktor/contracts";
 import { readFile } from "node:fs/promises";
 import { OdtHostBridgeClient } from "./host-bridge-client";
 import { normalizeOptionalInput, resolveMcpBridgeDiscoveryPath } from "./path-utils";
-import type { JsonValue } from "@openducktor/contracts";
 
 const FORBID_WORKSPACE_ID_INPUT_ENV = "ODT_FORBID_WORKSPACE_ID_INPUT";
 const HOST_TOKEN_ENV = "ODT_HOST_TOKEN";
@@ -104,14 +103,10 @@ const validateHostConnection = async (
   }
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
-
 const parseDiscoveryFile = (payload: string, discoveryPath: string): DiscoveredHostConnection => {
-  let parsed: JsonValue;
+  let parsed: unknown;
   try {
-    // SAFETY: JSON.parse returns only JSON-compatible values for valid JSON input.
-    parsed = jsonValueSchema.parse(JSON.parse(payload));
+    parsed = JSON.parse(payload);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     throw new Error(
@@ -119,36 +114,32 @@ const parseDiscoveryFile = (payload: string, discoveryPath: string): DiscoveredH
     );
   }
 
-  if (!isRecord(parsed)) {
+  const result = mcpBridgeDiscoveryFileSchema.safeParse(parsed);
+  if (!result.success) {
+    const field = result.error.issues[0]?.path[0];
+    if (field === "hostUrl") {
+      throw new Error(
+        `Invalid OpenDucktor MCP discovery file at ${discoveryPath}: hostUrl must be a non-empty string.`,
+      );
+    }
+    if (field === "hostToken") {
+      throw new Error(
+        `Invalid OpenDucktor MCP discovery file at ${discoveryPath}: hostToken must be a non-empty string.`,
+      );
+    }
+    if (field === "pid") {
+      throw new Error(
+        `Invalid OpenDucktor MCP discovery file at ${discoveryPath}: pid must be a positive integer.`,
+      );
+    }
     throw new Error(
       `Invalid OpenDucktor MCP discovery file at ${discoveryPath}: expected a JSON object.`,
     );
   }
-  const hostUrl =
-    typeof parsed.hostUrl === "string" ? normalizeOptionalInput(parsed.hostUrl) : undefined;
-  const hostToken =
-    typeof parsed.hostToken === "string" ? normalizeOptionalInput(parsed.hostToken) : undefined;
-
-  if (hostUrl === undefined) {
-    throw new Error(
-      `Invalid OpenDucktor MCP discovery file at ${discoveryPath}: hostUrl must be a non-empty string.`,
-    );
-  }
-  if (hostToken === undefined) {
-    throw new Error(
-      `Invalid OpenDucktor MCP discovery file at ${discoveryPath}: hostToken must be a non-empty string.`,
-    );
-  }
-  const pid = parsed.pid;
-  if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) {
-    throw new Error(
-      `Invalid OpenDucktor MCP discovery file at ${discoveryPath}: pid must be a positive integer.`,
-    );
-  }
 
   return {
-    hostToken,
-    hostUrl,
+    hostToken: result.data.hostToken.trim(),
+    hostUrl: result.data.hostUrl.trim(),
   };
 };
 

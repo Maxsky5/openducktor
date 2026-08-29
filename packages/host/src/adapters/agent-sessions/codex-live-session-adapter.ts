@@ -12,8 +12,6 @@ import {
   agentSessionControlSummarySchema,
   agentSessionLiveLoadContextResultSchema,
   type CodexEffectivePolicy,
-  jsonValueSchema,
-  parseCodexAppServerClientRequest,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -152,25 +150,14 @@ export const createCodexLiveSessionAdapterPreparer =
               requireRepoRuntime: async () => runtime,
             },
             transportFactory: (runtimeId) => ({
-              request: async (request: CodexJsonRpcRequest) => {
-                const parsedRequest = parseCodexAppServerClientRequest(
-                  jsonValueSchema.parse(request),
-                );
-                return jsonValueSchema.parse(
-                  await Effect.runPromise(
-                    codexAppServer.request({
-                      runtimeId,
-                      ...parsedRequest,
-                    }),
-                  ),
-                );
-              },
+              request: (request: CodexJsonRpcRequest) =>
+                Effect.runPromise(codexAppServer.request({ runtimeId, ...request })),
             }),
             subscribeEvents: (runtimeId, listener) => eventHub.subscribe(runtimeId, listener),
             respondServerRequest: (runtimeId, requestId, result, error) => {
               const response: CodexAppServerRespondInput = { runtimeId, requestId };
-              if (result !== undefined) Object.assign(response, { result });
-              if (error !== undefined) Object.assign(response, { error });
+              if (result !== undefined) response.result = result;
+              if (error !== undefined) response.error = error;
               return Effect.runPromise(codexAppServer.respond(response));
             },
             onRuntimeEventQueueFailure: ({ runtimeId, error }) => {

@@ -6,8 +6,6 @@ import {
   type OdtToolName,
   odtHostBridgeReadySchema,
   odtToolErrorPayloadSchema,
-  jsonValueSchema,
-  type JsonValue,
   type WorkspaceScopedOdtToolName,
 } from "@openducktor/contracts";
 import type { z } from "zod";
@@ -75,7 +73,7 @@ const parseHostResponse = <Schema extends z.ZodType>(
   schema: Schema,
   payload: unknown,
   command: string,
-): z.infer<Schema> => {
+): z.output<Schema> => {
   const parsed = schema.safeParse(payload);
   if (parsed.success) {
     return parsed.data;
@@ -159,19 +157,13 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
   }
 
   async ready(): Promise<OdtHostBridgeReady> {
-    const payload = await this.invokeJson(READY_TOOL_NAME, {});
-    const ready = parseHostResponse(odtHostBridgeReadySchema, payload, READY_TOOL_NAME);
+    const ready = await this.invokeJson(READY_TOOL_NAME, {});
     assertToolCoverage(ready);
     return ready;
   }
 
   async getWorkspaces(): Promise<GetWorkspacesResult> {
-    const payload = await this.invokeJson("odt_get_workspaces", {});
-    return parseHostResponse(
-      ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_get_workspaces,
-      payload,
-      "odt_get_workspaces",
-    );
+    return this.invokeJson("odt_get_workspaces", {});
   }
 
   async call<Name extends WorkspaceScopedToolName>(
@@ -179,19 +171,24 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
     workspaceId: string,
     input: ToolInput<Name>,
   ): Promise<ToolOutput<Name>> {
-    const payload = await this.invokeJson(toolName, {
+    return this.invokeJson(toolName, {
       ...input,
       workspaceId,
     });
-    // SAFETY: ODT_HOST_BRIDGE_RESPONSE_SCHEMAS maps each Name to the schema whose inferred output is ToolOutput<Name>; generic indexed access erases that correlation.
-    return parseHostResponse(
-      ODT_HOST_BRIDGE_RESPONSE_SCHEMAS[toolName],
-      payload,
-      toolName,
-    ) as ToolOutput<Name>;
   }
 
-  private async invokeJson(command: string, input: Record<string, unknown>): Promise<JsonValue> {
+  private async invokeJson(
+    command: typeof READY_TOOL_NAME,
+    input: Record<string, unknown>,
+  ): Promise<OdtHostBridgeReady>;
+  private async invokeJson<Name extends OdtToolName>(
+    command: Name,
+    input: Record<string, unknown>,
+  ): Promise<ToolOutput<Name>>;
+  private async invokeJson(
+    command: typeof READY_TOOL_NAME | OdtToolName,
+    input: Record<string, unknown>,
+  ): Promise<OdtHostBridgeReady | ToolOutput<OdtToolName>> {
     const url = new URL(`/invoke/${command}`, this.baseUrl);
     const action = `host ${command}`;
     const response = await this.fetchBridge(
@@ -213,7 +210,7 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
       throw await createBridgeHttpError(response, action);
     }
 
-    return this.readJsonResponse(response, action);
+    return this.readJsonResponse(response, action, command);
   }
 
   private async fetchBridge(input: string, init: RequestInit, action: string): Promise<Response> {
@@ -224,11 +221,20 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
     }
   }
 
-  private async readJsonResponse(response: Response, action: string): Promise<JsonValue> {
+  private async readJsonResponse(
+    response: Response,
+    action: string,
+    command: typeof READY_TOOL_NAME | OdtToolName,
+  ): Promise<OdtHostBridgeReady | ToolOutput<OdtToolName>> {
+    let payload: unknown;
     try {
-      return jsonValueSchema.parse(await response.json());
+      payload = await response.json();
     } catch (error) {
       throw createBridgeJsonError(action, error);
     }
+    if (command === READY_TOOL_NAME) {
+      return parseHostResponse(odtHostBridgeReadySchema, payload, command);
+    }
+    return parseHostResponse(ODT_HOST_BRIDGE_RESPONSE_SCHEMAS[command], payload, command);
   }
 }

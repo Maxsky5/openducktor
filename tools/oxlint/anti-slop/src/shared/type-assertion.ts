@@ -1,6 +1,6 @@
-import type { PortableNode } from "./portable-ast.ts";
+import type { ESTree } from "@oxlint/plugins";
 
-type TypeAssertion = Extract<PortableNode, { type: "TSAsExpression" | "TSTypeAssertion" }>;
+type TypeAssertion = ESTree.TSAsExpression | ESTree.TSTypeAssertion;
 
 export function isConstAssertion(node: TypeAssertion): boolean {
   return (

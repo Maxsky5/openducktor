@@ -58,6 +58,7 @@ export type ClaudeHistoryTaskNotificationMessage = {
 };
 type ClaudeSubagentSystemMessage =
   | ClaudeSdkSubagentSystemMessageProjection
+  | ClaudeHistorySubagentSystemMessageIngress
   | ClaudeHistoryTaskNotificationMessage;
 const shouldSuppressSubagentTask = (
   session: ClaudeSubagentSession,
@@ -135,7 +136,7 @@ const emitCompletedSubagentAssistantMessage = (
     messageId: pending.messageId,
     message: pending.text,
   };
-  if (pending.model) Object.assign(message, { model: pending.model });
+  if (pending.model) message.model = pending.model;
   emit(message);
   settleClaudeStreamedAssistantText({
     emit,
@@ -446,9 +447,8 @@ export const handleClaudeSubagentSystemMessage = ({
   const details: Partial<Extract<AgentStreamPart, { kind: "subagent" }>> = {
     endedAtMs: timestampMs(timestamp),
   };
-  if (notificationError) Object.assign(details, { error: notificationError });
-  if (message.output_file)
-    Object.assign(details, { metadata: { outputFile: message.output_file } });
+  if (notificationError) details.error = notificationError;
+  if (message.output_file) details.metadata = { outputFile: message.output_file };
   const status =
     message.status === "failed"
       ? "error"

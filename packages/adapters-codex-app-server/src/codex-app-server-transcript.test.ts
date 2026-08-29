@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
   codexTurnItemsFromThreadRead,
-  timestampFromCodexParams,
   timestampFromCodexTurn,
   toHistoryMessage,
 } from "./codex-app-server-transcript";
@@ -16,18 +15,6 @@ import {
 import { codexTurnFixture } from "./test-fixtures/codex-protocol";
 
 describe("Codex App Server transcript parsing", () => {
-  test("preserves zero millisecond notification timestamps", () => {
-    expect(timestampFromCodexParams({ timestampMs: 0 })).toBe("1970-01-01T00:00:00.000Z");
-  });
-
-  test("ignores malformed notification timestamps instead of throwing", () => {
-    expect(timestampFromCodexParams({ timestampMs: Number.MAX_VALUE })).toBeNull();
-  });
-
-  test("does not invent timestamps when notification params omit runtime timestamps", () => {
-    expect(timestampFromCodexParams({})).toBeNull();
-  });
-
   test("ignores malformed turn timestamps instead of throwing", () => {
     expect(
       timestampFromCodexTurn({ completedAt: Number.NaN, startedAt: null }, "completedAt"),

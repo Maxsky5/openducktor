@@ -2,14 +2,16 @@ import { expect, mock } from "bun:test";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
   type CodexAppServerProtocolMessage,
+  type CodexAppServerRequestResult,
   type CodexAppServerThread,
+  type CodexAppServerThreadStatus,
   type CodexAppServerTurn,
+  type CodexAppServerTurnStartResult,
   type CodexEffectivePolicy,
   type CodexRuntimeConfig,
   DEFAULT_CODEX_RUNTIME_POLICY,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
-import type { CodexAppServerJsonValue } from "@openducktor/contracts";
 import type {
   PolicyBoundSessionRef,
   SendAgentUserMessageInput,
@@ -373,16 +375,11 @@ export const codexThreadStartResultFixture = (
     : undefined),
 });
 
-export const requestThreadId = (params: CodexAppServerJsonValue | undefined): string => {
-  if (!isPlainObject(params) || typeof params.threadId !== "string") {
-    throw new Error("Expected request params.threadId.");
-  }
-  return params.threadId;
-};
+export const requestThreadId = (params: { threadId: string }): string => params.threadId;
 
 export class RecordingTransport implements CodexJsonRpcTransport {
   readonly calls: CodexJsonRpcRequest[] = [];
-  readonly turnStartDeferred = createDeferred<unknown>();
+  readonly turnStartDeferred = createDeferred<CodexAppServerTurnStartResult | null>();
   private turnStartCount = 0;
 
   constructor(
@@ -390,11 +387,11 @@ export class RecordingTransport implements CodexJsonRpcTransport {
     deferTurnStart: boolean,
   ) {
     if (!deferTurnStart) {
-      this.turnStartDeferred.resolve({});
+      this.turnStartDeferred.resolve(null);
     }
   }
 
-  async request({ method, params }: CodexJsonRpcRequest): Promise<CodexAppServerJsonValue> {
+  async request({ method, params }: CodexJsonRpcRequest): Promise<CodexAppServerRequestResult> {
     this.calls.push({ method, params });
     switch (method) {
       case "initialize":
@@ -457,7 +454,7 @@ export class RecordingTransport implements CodexJsonRpcTransport {
           }
         }
         const deferred = await this.turnStartDeferred.promise;
-        if (isPlainObject(deferred) && "turn" in deferred) {
+        if (deferred !== null) {
           return deferred;
         }
         this.turnStartCount += 1;
@@ -640,7 +637,7 @@ export const codexRuntimeTeardownCountsForTest = (
   // SAFETY: CodexThreadInventoryReader declares this private field as Map<string, Map<string, CodexAppServerThreadStatus>>; the test reads only map sizes.
   const statusOverridesByRuntimeId = (
     threadInventory as {
-      statusOverridesByRuntimeId: Map<string, Map<string, unknown>>;
+      statusOverridesByRuntimeId: Map<string, Map<string, CodexAppServerThreadStatus>>;
     }
   ).statusOverridesByRuntimeId;
   const runtimeEventProcessingByRuntimeId =

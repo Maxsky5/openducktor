@@ -17,7 +17,7 @@ import {
 } from "./codex-app-server-shared";
 import { classifyCodexCommandRequestMutation } from "./codex-command-approvals";
 import { classifyCodexPermissionRequestMutation } from "./codex-permission-approvals";
-import type { CodexServerRequestRecord } from "./types";
+import type { CodexNotificationRecord, CodexServerRequestRecord } from "./types";
 import type { CodexAppServerJsonValue } from "@openducktor/contracts";
 
 export { codexApprovalResponseForRequest } from "./codex-approval-responses";
@@ -363,33 +363,51 @@ export const toMcpElicitationApprovalRequest = (
   };
 };
 
-export const extractTurnId = (value: CodexAppServerJsonValue | undefined): string | null => {
-  if (!isPlainObject(value)) {
-    return null;
+export const codexNotificationTurnId = (notification: CodexNotificationRecord): string | null => {
+  switch (notification.method) {
+    case "skills/changed":
+    case "serverRequest/resolved":
+    case "thread/status/changed":
+      return null;
+    case "turn/started":
+    case "turn/completed":
+      return notification.params.turn.id;
+    default:
+      return notification.params.turnId;
   }
-  const direct = extractStringField(value, ["turnId", "expectedTurnId"]);
-  if (direct) {
-    return direct;
-  }
-  const turn = value.turn;
-  return extractStringField(turn, ["id", "turnId"]);
 };
 
-export const extractThreadIdFromParams = (
-  value: CodexAppServerJsonValue | undefined,
-): string | null => {
-  return extractStringField(value, ["threadId", "thread_id", "conversationId"]);
+export const codexNotificationThreadId = (notification: CodexNotificationRecord): string | null =>
+  notification.method === "skills/changed" ? null : notification.params.threadId;
+
+export const codexServerRequestTurnId = (request: CodexServerRequestRecord): string | null => {
+  switch (request.method) {
+    case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ACCOUNT_CHATGPT_AUTH_TOKENS_REFRESH:
+    case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.APPLY_PATCH_APPROVAL:
+    case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ATTESTATION_GENERATE:
+    case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.CURRENT_TIME_READ:
+    case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.EXEC_COMMAND_APPROVAL:
+      return null;
+    default:
+      return request.params.turnId;
+  }
+};
+
+export const codexServerRequestThreadId = (request: CodexServerRequestRecord): string | null => {
+  switch (request.method) {
+    case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.APPLY_PATCH_APPROVAL:
+    case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.EXEC_COMMAND_APPROVAL:
+      return request.params.conversationId;
+    case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ACCOUNT_CHATGPT_AUTH_TOKENS_REFRESH:
+    case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ATTESTATION_GENERATE:
+    case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.CURRENT_TIME_READ:
+      return null;
+    default:
+      return request.params.threadId;
+  }
 };
 
 export const codexTurnKey = (threadId: string, turnId: string): string => `${threadId}:${turnId}`;
-
-export const isTerminalTurnStatus = (value: CodexAppServerJsonValue | undefined): boolean => {
-  if (!isPlainObject(value)) {
-    return false;
-  }
-  const status = extractStringField(value, ["status"]);
-  return status === "completed" || status === "failed" || status === "interrupted";
-};
 
 type CodexQuestionRequest = Extract<
   CodexServerRequestRecord,

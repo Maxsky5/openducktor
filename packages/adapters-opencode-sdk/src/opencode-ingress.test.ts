@@ -8,6 +8,7 @@ import {
   opencodeSessionMessagesPayloadSchema,
   parseOpencodeSessionListPayload,
 } from "./opencode-ingress";
+import { normalizeOpencodeGlobalEventPayload } from "./opencode-agent-session-projection";
 import { parseOpencodeGlobalEventPayload } from "./opencode-global-event-ingress";
 import {
   createOpencodeMessageInfoFixture,
@@ -16,7 +17,7 @@ import {
 import { mapPartToAgentStreamPart } from "./stream-part-mapper";
 
 describe("OpenCode ingress schemas", () => {
-  test("reduces ignored global events to their routing decision", () => {
+  test("reduces explicitly ignored global events to their routing decision", () => {
     expect(
       parseOpencodeGlobalEventPayload({
         id: "event-1",
@@ -24,6 +25,28 @@ describe("OpenCode ingress schemas", () => {
         properties: {},
       }),
     ).toEqual({ kind: "ignored", id: "event-1", type: "server.connected" });
+
+    expect(() =>
+      parseOpencodeGlobalEventPayload({
+        id: "event-2",
+        type: "future.additive.event",
+        properties: { addedByRuntime: true },
+      }),
+    ).toThrow("Invalid OpenCode global event payload (future.additive.event)");
+
+    expect(() =>
+      normalizeOpencodeGlobalEventPayload({
+        id: "event-3",
+        type: "sync",
+        syncEvent: {
+          aggregateID: "session-1",
+          data: {},
+          id: "sync-event-1",
+          seq: 1,
+          type: "future.additive.event.1",
+        },
+      }),
+    ).toThrow("has no normalization decision");
   });
 
   test("preserves producer-declared unknown provider and agent options", () => {

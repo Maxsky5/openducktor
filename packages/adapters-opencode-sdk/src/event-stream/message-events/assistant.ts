@@ -1,4 +1,3 @@
-import type { Part } from "@opencode-ai/sdk/v2/client";
 import { jsonValueSchema } from "@openducktor/contracts";
 import {
   extractMessageTotalTokens,
@@ -6,6 +5,7 @@ import {
   readTextFromParts,
   sanitizeAssistantMessage,
 } from "../../message-normalizers";
+import type { ParsedOpencodePart } from "../../opencode-ingress";
 import {
   isAwaitingRuntimeTurnStart,
   isStreamTurnIdle,
@@ -45,7 +45,7 @@ export const shouldSuppressAssistantStreamingAfterIdle = (
 
 export const emitAssistantPart = (
   runtime: EventStreamRuntime,
-  part: Part,
+  part: ParsedOpencodePart,
   roleHint?: string,
   markActive = true,
   options: EmitAssistantPartOptions = {},
@@ -125,7 +125,7 @@ const flushPendingSubagentPartEmissionsForSession = (
 const readLinkedSubagentPart = (
   runtime: EventStreamRuntime,
   externalSessionId: string,
-): Part | null => {
+): ParsedOpencodePart | null => {
   const linkedPartId = runtime.session.subagentPartIdByExternalSessionId.get(externalSessionId);
   if (!linkedPartId) {
     return null;

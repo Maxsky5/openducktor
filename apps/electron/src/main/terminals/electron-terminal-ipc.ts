@@ -24,12 +24,10 @@ const MAX_CLIENT_ID_LENGTH = 128;
 
 const electronTerminalClientIdSchema = z.string().min(1).max(MAX_CLIENT_ID_LENGTH);
 const electronTerminalFrameSchema = z.instanceof(Uint8Array);
-const electronTerminalSendRequestSchema = z
-  .object({
-    clientId: electronTerminalClientIdSchema,
-    frame: electronTerminalFrameSchema,
-  })
-  .strict();
+const electronTerminalSendRequestSchema = z.strictObject({
+  clientId: electronTerminalClientIdSchema,
+  frame: electronTerminalFrameSchema,
+});
 type ElectronTerminalSendRequest = z.infer<typeof electronTerminalSendRequestSchema>;
 
 type ElectronTerminalNavigationDetails = {

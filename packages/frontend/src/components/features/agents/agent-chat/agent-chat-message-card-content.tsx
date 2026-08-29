@@ -1,4 +1,9 @@
-import type { AgentModelCatalog, AgentRole, AgentUserMessageDisplayPart } from "@openducktor/core";
+import type {
+  AgentAttachmentReference,
+  AgentModelCatalog,
+  AgentRole,
+  AgentUserMessageDisplayPart,
+} from "@openducktor/core";
 import { Brain, Cpu, Hammer, LoaderCircle } from "lucide-react";
 import {
   Fragment,
@@ -37,6 +42,19 @@ import { SubagentTranscriptButton } from "./subagent-transcript-button";
 
 const TEXT_RENDER_PACE_MS = 24;
 const TEXT_RENDER_SNAP = /[\s.,!?;:)\]]/;
+
+const toTranscriptAttachment = (
+  attachment: Extract<AgentUserMessageDisplayPart, { kind: "attachment" }>["attachment"],
+): AgentAttachmentReference => ({
+  id: attachment.id,
+  path: attachment.path,
+  name: attachment.name,
+  kind: attachment.kind,
+  ...(attachment.mime === undefined ? undefined : { mime: attachment.mime }),
+  ...(attachment.localPreviewAvailable === undefined
+    ? undefined
+    : { localPreviewAvailable: attachment.localPreviewAvailable }),
+});
 
 const pacedStep = (size: number): number => {
   if (size <= 12) {
@@ -805,7 +823,7 @@ export const MessageBody = ({
                   <AgentChatAttachmentChip
                     key={part.attachment.id}
                     variant="transcript"
-                    attachment={part.attachment}
+                    attachment={toTranscriptAttachment(part.attachment)}
                     className="w-32"
                   />
                 ))}

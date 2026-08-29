@@ -1,4 +1,3 @@
-import { type JsonValue, jsonValueSchema } from "@openducktor/contracts";
 import { compare, prerelease, valid } from "semver";
 import { z } from "zod";
 
@@ -30,7 +29,7 @@ const githubReleasePayloadSchema = z.object({
   tag_name: z.string().min(1),
 });
 
-const readRelease = (value: JsonValue): Omit<GitHubRelease, "version"> => {
+const readRelease = (value: unknown): Omit<GitHubRelease, "version"> => {
   const parsed = githubReleasePayloadSchema.safeParse(value);
   if (!parsed.success) {
     throw new Error(`GitHub release is invalid: ${parsed.error.message}`);
@@ -41,7 +40,7 @@ const readRelease = (value: JsonValue): Omit<GitHubRelease, "version"> => {
   };
 };
 
-const parseRelease = (value: JsonValue): GitHubRelease => {
+const parseRelease = (value: unknown): GitHubRelease => {
   const release = readRelease(value);
   const { tagName } = release;
   const version = valid(tagName);
@@ -54,14 +53,7 @@ const parseRelease = (value: JsonValue): GitHubRelease => {
   };
 };
 
-const readJson = async (response: Response, description: string): Promise<JsonValue> => {
-  if (!response.ok) {
-    throw new Error(`${description} returned HTTP ${response.status}.`);
-  }
-  return jsonValueSchema.parse(await response.json());
-};
-
-const parseReleasePage = (value: JsonValue): GitHubRelease[] => {
+const parseReleasePage = (value: unknown): GitHubRelease[] => {
   if (!Array.isArray(value)) {
     throw new Error("GitHub releases response is not an array.");
   }
@@ -72,21 +64,27 @@ const parseReleasePage = (value: JsonValue): GitHubRelease[] => {
   });
 };
 
-const fetchReleaseJson = async (
+const fetchReleaseJson = async <Result>(
   fetch: typeof globalThis.fetch,
   url: string,
   description: string,
-): Promise<{ response: Response; value: JsonValue }> => {
+  parse: (value: unknown) => Result,
+): Promise<{ response: Response; value: Result }> => {
   const controller = new AbortController();
   const timeout = setTimeout(() => {
     controller.abort();
   }, GITHUB_RELEASE_REQUEST_TIMEOUT_MS);
+  let response: Response;
+  let value: unknown;
   try {
-    const response = await fetch(url, {
+    response = await fetch(url, {
       headers: apiHeaders,
       signal: controller.signal,
     });
-    return { response, value: await readJson(response, description) };
+    if (!response.ok) {
+      throw new Error(`${description} returned HTTP ${response.status}.`);
+    }
+    value = await response.json();
   } catch (cause) {
     if (controller.signal.aborted) {
       throw new Error(`${description} timed out.`, { cause });
@@ -95,6 +93,7 @@ const fetchReleaseJson = async (
   } finally {
     clearTimeout(timeout);
   }
+  return { response, value: parse(value) };
 };
 
 const hasNextPage = (response: Response): boolean =>
@@ -120,12 +119,12 @@ const resolvePrerelease = async (
   let selected: GitHubRelease | undefined;
 
   while (true) {
-    const { response, value } = await fetchReleaseJson(
+    const { response, value: releases } = await fetchReleaseJson(
       fetch,
       `${releasesUrl}?per_page=100&page=${page}`,
       "GitHub releases request",
+      parseReleasePage,
     );
-    const releases = parseReleasePage(value);
     for (const release of releases) {
       if (
         matchesChannel(release, channel) &&
@@ -164,12 +163,12 @@ export const createGitHubReleaseSource = ({
       if (channel !== null) {
         return resolvePrerelease(fetch, releasesUrl, channel);
       }
-      const { value } = await fetchReleaseJson(
+      const { value: release } = await fetchReleaseJson(
         fetch,
         `${releasesUrl}/latest`,
         "Latest GitHub release request",
+        parseRelease,
       );
-      const release = parseRelease(value);
       if (release.prerelease) {
         throw new Error(`GitHub latest release ${release.tagName} is unexpectedly a prerelease.`);
       }

@@ -249,6 +249,25 @@ const malformedSyncLifecycleDataEvent = () =>
     },
   }) as const;
 
+const malformedSyncChildSessionCreatedEvent = () =>
+  ({
+    type: "sync",
+    id: "sync-malformed-child-session-created",
+    syncEvent: {
+      type: "session.created.1",
+      id: "sync-event-malformed-child-session-created",
+      seq: 1,
+      aggregateID: "external-child-session",
+      data: {
+        sessionID: "external-child-session",
+        info: {
+          id: "external-child-session",
+          parentID: "external-session-1",
+        },
+      },
+    },
+  }) as const;
+
 const childSessionDeletedEvent = (childSessionId: string): EventSessionDeleted =>
   ({
     id: `event-deleted-${childSessionId}`,
@@ -453,6 +472,19 @@ describe("session registry runtime event transport", () => {
     ).rejects.toThrow();
     expect(terminalFailures).toHaveLength(1);
     expect(terminalFailures[0]?.message).toContain("session.created");
+  });
+
+  test("routes malformed sync child lifecycle events to their parent session", async () => {
+    const emitted = await runRuntimeEventTransport([malformedSyncChildSessionCreatedEvent()], {
+      externalSessionIds: ["external-session-1", "external-session-2"],
+    });
+
+    expect(emitted.filter((event) => event.type === "session_error")).toEqual([
+      expect.objectContaining({
+        externalSessionId: "external-session-1",
+        message: expect.stringContaining("Invalid OpenCode event (session.created)"),
+      }),
+    ]);
   });
 
   test("routes direct child session creation to the single pending subagent card", async () => {

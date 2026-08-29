@@ -9,7 +9,6 @@ import {
   type TerminalPreparePathInputRequest,
   type TerminalPreparePathInputResponse,
   type JsonObject,
-  type JsonValue,
   terminalCloseRequestSchema,
   terminalCloseResponseSchema,
   terminalCreateRequestSchema,
@@ -41,7 +40,7 @@ export class HostTerminalClient {
   private async invoke<TResponse>(
     command: "terminal_create" | "terminal_list" | "terminal_prepare_path_input" | "terminal_close",
     request: JsonObject,
-    parse: (value: JsonValue) => TResponse,
+    parse: (value: unknown) => TResponse,
   ): Promise<TResponse> {
     try {
       return parse(await this.invokeFn(command, request));

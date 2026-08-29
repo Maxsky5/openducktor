@@ -16,7 +16,6 @@ import type { DevServerProcessStartExitError } from "../../ports/dev-server-proc
 import { type HostCommandName, parseHostCommandName } from "../commands/host-command-registry";
 
 export type HostCommandResult = object | string | number | boolean | null | void;
-export type UnvalidatedHostCommandResult = HostCommandResult;
 export type HostCommandArgs = Record<string, unknown> | undefined;
 export type HostCommandContext = {
   command: HostCommandName;

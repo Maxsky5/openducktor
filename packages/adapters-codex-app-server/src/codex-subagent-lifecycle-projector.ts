@@ -1,5 +1,5 @@
 import type { AgentEvent } from "@openducktor/core";
-import { extractThreadIdFromParams } from "./codex-app-server-requests";
+import { codexNotificationThreadId } from "./codex-app-server-requests";
 import {
   extractStringField,
   isPlainObject,
@@ -87,7 +87,7 @@ export class CodexSubagentLifecycleProjector {
     if (notification.method !== "turn/started" && notification.method !== "turn/completed") {
       return;
     }
-    const childThreadId = extractThreadIdFromParams(notification.params);
+    const childThreadId = codexNotificationThreadId(notification);
     if (!childThreadId) {
       throw new Error(`Codex ${notification.method} notification is missing threadId.`);
     }

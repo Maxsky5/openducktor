@@ -1,4 +1,3 @@
-import { createFocusedTestService } from "../../test-support/focused-service";
 import { describe, expect, mock, test } from "bun:test";
 import type { RuntimeCheck, SystemCheck, TaskStoreCheck } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -48,11 +47,11 @@ const createDiagnosticsService = () => {
   const runtimeCheck = mock((_forceRefresh?: boolean) => Effect.succeed(runtimeCheckResult));
   const taskStoreCheck = mock((_repoPath: string) => Effect.succeed(taskStoreCheckResult));
   const systemCheck = mock((_repoPath: string) => Effect.succeed(systemCheckResult));
-  const service = createFocusedTestService<SystemDiagnosticsService>()({
+  const service = {
     runtimeCheck,
     taskStoreCheck,
     systemCheck,
-  });
+  } satisfies SystemDiagnosticsService;
   return { runtimeCheck, service, systemCheck, taskStoreCheck };
 };
 describe("createSystemDiagnosticsCommandHandlers", () => {

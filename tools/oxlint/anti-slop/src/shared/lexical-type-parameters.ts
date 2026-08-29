@@ -1,10 +1,8 @@
 import type { ESTree } from "@oxlint/plugins";
 
 type VisitorKeys = Readonly<Record<string, readonly string[]>>;
-type ChildNodeValue = ESTree.Node | readonly ESTree.Node[] | null | undefined;
-type TraversableNode = ESTree.Node & Readonly<Record<string, ChildNodeValue>>;
 
-function isNode(value: ChildNodeValue): value is ESTree.Node {
+function isNode(value: unknown): value is ESTree.Node {
   return (
     typeof value === "object" && value !== null && "type" in value && typeof value.type === "string"
   );
@@ -16,10 +14,9 @@ function collectInferTypeParameterNames(
   names: Set<string>,
 ): void {
   if (node.type === "TSInferType") names.add(node.typeParameter.name.name);
-  // SAFETY: Oxlint visitor keys name only child-node or child-node-array properties on ESTree nodes.
-  const record = node as TraversableNode;
-  for (const key of visitorKeys[node.type] ?? []) {
-    const value = record[key];
+  const childKeys = new Set(visitorKeys[node.type] ?? []);
+  for (const [key, value] of Object.entries(node)) {
+    if (!childKeys.has(key)) continue;
     if (isNode(value)) {
       collectInferTypeParameterNames(value, visitorKeys, names);
       continue;
@@ -31,8 +28,8 @@ function collectInferTypeParameterNames(
   }
 }
 
-/** Collect mapped and conditional infer binders that are in scope at one type node. */
-export function lexicalStructuralTypeParameterNames(
+/** Collect type binders that are in scope at a node and can shadow module aliases. */
+export function lexicalTypeParameterNames(
   node: ESTree.Node,
   visitorKeys: VisitorKeys,
 ): ReadonlySet<string> {
@@ -40,6 +37,11 @@ export function lexicalStructuralTypeParameterNames(
   let descendant: ESTree.Node = node;
   let current: ESTree.Node | null = node;
   while (current !== null && current.type !== "Program") {
+    if ("typeParameters" in current) {
+      for (const parameter of current.typeParameters?.params ?? []) {
+        names.add(parameter.name.name);
+      }
+    }
     if (
       current.type === "TSMappedType" &&
       (descendant === current.nameType || descendant === current.typeAnnotation)

@@ -1,25 +1,27 @@
-import { errorMessage, ElectronValidationError, jsonIssues } from "../effect/electron-errors";
+import { ElectronValidationError, jsonIssues } from "../effect/electron-errors";
 import {
   ELECTRON_HOST_INVOKE_CHANNEL,
   electronHostInvokeRequestSchema,
   type ElectronHostInvokeRequest,
-  type ElectronHostInvokeResponse,
+  type ElectronHostInvokeResult,
+  type ElectronHostInvokeWireResponse,
 } from "../shared/electron-bridge-contract";
 import type { JsonObject } from "@openducktor/contracts";
-import { hostInvokeFailureFromError, parseHostCommandResponse } from "@openducktor/host";
 import type { IpcMainInvokeEvent } from "electron";
-import type { UnvalidatedElectronHostInvokeResult } from "./electron-host-invoke";
 
 type ElectronIpcMainLike = {
   handle(
     channel: string,
-    listener: (event: IpcMainInvokeEvent, request: unknown) => Promise<ElectronHostInvokeResponse>,
+    listener: (
+      event: IpcMainInvokeEvent,
+      request: unknown,
+    ) => Promise<ElectronHostInvokeWireResponse>,
   ): void;
 };
 
 type ElectronHostInvokeHandlerOptions = {
   isHostShutdownStarted(): boolean;
-  invoke(command: string, args?: JsonObject): Promise<UnvalidatedElectronHostInvokeResult>;
+  invoke(command: string, args?: JsonObject): Promise<ElectronHostInvokeResult>;
 };
 
 const readElectronHostInvokeRequest = (request: unknown): ElectronHostInvokeRequest => {
@@ -46,34 +48,6 @@ const readElectronHostInvokeRequest = (request: unknown): ElectronHostInvokeRequ
   });
 };
 
-const validateElectronHostInvokeResult = (
-  command: string,
-  result: UnvalidatedElectronHostInvokeResult,
-): ElectronHostInvokeResponse => {
-  if (!result.ok) {
-    return { status: "success", payload: result };
-  }
-
-  try {
-    return {
-      status: "success",
-      payload: { ok: true, value: parseHostCommandResponse(command, result.value) },
-    };
-  } catch (cause) {
-    const failure = hostInvokeFailureFromError(cause);
-    return {
-      status: "success",
-      payload: {
-        ok: false,
-        error: {
-          message: errorMessage(cause),
-          ...(failure ? { failure } : undefined),
-        },
-      },
-    };
-  }
-};
-
 export const registerElectronHostInvokeHandler = (
   ipcMain: ElectronIpcMainLike,
   options: ElectronHostInvokeHandlerOptions,
@@ -84,9 +58,9 @@ export const registerElectronHostInvokeHandler = (
     }
 
     const parsedRequest = readElectronHostInvokeRequest(request);
-    return validateElectronHostInvokeResult(
-      parsedRequest.command,
-      await options.invoke(parsedRequest.command, parsedRequest.args),
-    );
+    return {
+      status: "success",
+      payload: await options.invoke(parsedRequest.command, parsedRequest.args),
+    };
   });
 };

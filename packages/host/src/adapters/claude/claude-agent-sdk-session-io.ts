@@ -306,8 +306,8 @@ export const sendClaudeUserMessage = async (input: {
     text: message,
     timestamp,
   };
-  if (isManualCompaction) Object.assign(acceptedMessage, { isManualCompaction: true });
-  if (messageInput.model) Object.assign(acceptedMessage, { model: messageInput.model });
+  if (isManualCompaction) acceptedMessage.isManualCompaction = true;
+  if (messageInput.model) acceptedMessage.model = messageInput.model;
   session.acceptedUserMessages.push(acceptedMessage);
   session.pendingUserTurnCount = previousPendingUserTurnCount + 1;
   session.activity = "running";
@@ -364,7 +364,7 @@ export const sendClaudeUserMessage = async (input: {
     parts: displayParts,
     state: canSendImmediately ? "read" : "queued",
   };
-  if (messageInput.model) Object.assign(acceptedEvent, { model: messageInput.model });
+  if (messageInput.model) acceptedEvent.model = messageInput.model;
   return acceptedEvent;
 };
 
@@ -439,7 +439,7 @@ export const flushQueuedClaudeUserMessage = (input: {
           parts: acceptedMessage.parts,
           state: "read",
         };
-        if (acceptedMessage.model) Object.assign(acceptedEvent, { model: acceptedMessage.model });
+        if (acceptedMessage.model) acceptedEvent.model = acceptedMessage.model;
         emit(session, acceptedEvent);
       }
       emit(session, {

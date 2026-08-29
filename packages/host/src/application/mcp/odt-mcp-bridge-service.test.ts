@@ -1,4 +1,3 @@
-import { createFocusedTestService } from "../../test-support/focused-service";
 import {
   createTaskServiceTestDouble,
   createTaskServiceWithMutationProgressTestDouble,
@@ -11,7 +10,6 @@ import type { TaskAssetReadService } from "../task-assets/task-asset-read-servic
 import type { CreateTaskUseCaseInput } from "../tasks/task-inputs";
 import { createEventPublishingTaskService } from "../tasks/event-publishing-task-service";
 import type { TaskSyncService } from "../tasks/sync/task-sync-service";
-import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-service";
 import { createOdtMcpBridgeService } from "./odt-mcp-bridge-service";
 
 const repoConfig: RepoConfig = {
@@ -60,7 +58,7 @@ type OdtWorkspaceSettingsService = Parameters<
 type OdtTaskService = Parameters<typeof createOdtMcpBridgeService>[0]["taskService"];
 
 const createWorkspaceSettingsService = (): OdtWorkspaceSettingsService =>
-  createFocusedTestService<WorkspaceSettingsService>()({
+  ({
     listWorkspaces() {
       return Effect.tryPromise({
         try: async () => {
@@ -98,7 +96,7 @@ const createWorkspaceSettingsService = (): OdtWorkspaceSettingsService =>
           }),
       });
     },
-  });
+  }) satisfies OdtWorkspaceSettingsService;
 const createTaskService = <Overrides extends Partial<OdtTaskService>>(overrides: Overrides) =>
   createTaskServiceTestDouble(overrides);
 type TestOdtMcpBridgeServiceInput = Omit<

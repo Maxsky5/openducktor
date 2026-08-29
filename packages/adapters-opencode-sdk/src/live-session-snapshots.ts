@@ -1,5 +1,3 @@
-import { exactOptionalSchema, type ExactOptional } from "@openducktor/contracts";
-import type { Session, SessionStatus } from "@opencode-ai/sdk/v2/client";
 import type {
   AgentPendingApprovalRequest,
   AgentPendingQuestionRequest,
@@ -9,7 +7,7 @@ import type {
 } from "@openducktor/core";
 import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
-import { parseOpencodeSessionListPayload } from "./opencode-ingress";
+import { parseOpencodeSessionListPayload, type ParsedOpencodeSession } from "./opencode-ingress";
 import { listOpencodeLiveSessionPendingInput } from "./pending-input-ops";
 import {
   clearAwaitingRuntimeTurnStart,
@@ -64,28 +62,26 @@ type OpencodeLiveSessionPendingInputBySessionId = Record<
   }
 >;
 
-const opencodeSessionStatusSchema = exactOptionalSchema(
-  z.discriminatedUnion("type", [
-    z.object({ type: z.literal("idle") }),
-    z.object({
-      type: z.literal("retry"),
-      attempt: z.number().int().nonnegative(),
-      message: z.string(),
-      action: z
-        .object({
-          reason: z.string(),
-          provider: z.string(),
-          title: z.string(),
-          message: z.string(),
-          label: z.string(),
-          link: z.string().optional(),
-        })
-        .optional(),
-      next: z.number().int().nonnegative(),
-    }),
-    z.object({ type: z.literal("busy") }),
-  ]),
-) satisfies z.ZodType<ExactOptional<SessionStatus>>;
+const opencodeSessionStatusSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("idle") }),
+  z.object({
+    type: z.literal("retry"),
+    attempt: z.number().int().nonnegative(),
+    message: z.string(),
+    action: z
+      .object({
+        reason: z.string(),
+        provider: z.string(),
+        title: z.string(),
+        message: z.string(),
+        label: z.string(),
+        link: z.string().optional(),
+      })
+      .optional(),
+    next: z.number().int().nonnegative(),
+  }),
+  z.object({ type: z.literal("busy") }),
+]);
 
 const opencodeSessionStatusMapSchema = z.record(z.string(), opencodeSessionStatusSchema);
 type OpencodeSessionStatus = z.output<typeof opencodeSessionStatusSchema>;
@@ -252,7 +248,10 @@ export const findOpencodeLocalRuntimeSnapshot = ({
   };
 };
 
-const requireSessionDirectory = (directory: Session["directory"], sessionId: string): string => {
+const requireSessionDirectory = (
+  directory: ParsedOpencodeSession["directory"],
+  sessionId: string,
+): string => {
   const normalized = normalizeSessionDirectory(directory);
   if (normalized !== undefined) {
     return normalized;
@@ -260,7 +259,7 @@ const requireSessionDirectory = (directory: Session["directory"], sessionId: str
   throw new Error(`Malformed Opencode session payload for '${sessionId}': missing directory.`);
 };
 
-const readParentExternalSessionId = (session: Session): string | undefined => {
+const readParentExternalSessionId = (session: ParsedOpencodeSession): string | undefined => {
   const parentId = session.parentID?.trim();
   return parentId || undefined;
 };

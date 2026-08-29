@@ -2,6 +2,8 @@ import { link, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   MCP_BRIDGE_PRODUCTION_DISCOVERY_PATH_SEGMENTS,
+  type McpBridgeDiscoveryFile,
+  mcpBridgeDiscoveryFileSchema,
   mcpBridgeDevelopmentDiscoveryPathSegments,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -12,11 +14,7 @@ import { parseJson } from "../../effect/json";
 
 export type McpBridgeDiscoveryMode = "development" | "production";
 
-export type McpBridgeDiscoveryFile = {
-  hostToken: string;
-  hostUrl: string;
-  pid: number;
-};
+export type { McpBridgeDiscoveryFile } from "@openducktor/contracts";
 
 const isFsErrorCode = (cause: unknown, code: string): boolean =>
   typeof cause === "object" && cause !== null && "code" in cause && cause.code === code;
@@ -38,32 +36,27 @@ export const resolveMcpBridgeDiscoveryPath = (
 
 const parseDiscoveryFile = (payload: string, discoveryPath: string): McpBridgeDiscoveryFile => {
   const parsed = parseJson(payload);
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new HostValidationError({
-      message: `Invalid MCP bridge discovery file at ${discoveryPath}: expected object.`,
-      field: "discoveryFile",
-      details: { discoveryPath },
-    });
+  const result = mcpBridgeDiscoveryFileSchema.safeParse(parsed);
+  if (result.success) {
+    return result.data;
   }
 
-  // SAFETY: The preceding runtime guard establishes `Record<string, unknown>` before this assertion.
-  const record = parsed as Record<string, unknown>;
-  if (typeof record.hostUrl !== "string" || record.hostUrl.trim().length === 0) {
+  const field = result.error.issues[0]?.path[0];
+  if (field === "hostUrl") {
     throw new HostValidationError({
       message: `Invalid MCP bridge discovery file at ${discoveryPath}: hostUrl must be a non-empty string.`,
       field: "hostUrl",
       details: { discoveryPath },
     });
   }
-  if (typeof record.hostToken !== "string" || record.hostToken.trim().length === 0) {
+  if (field === "hostToken") {
     throw new HostValidationError({
       message: `Invalid MCP bridge discovery file at ${discoveryPath}: hostToken must be a non-empty string.`,
       field: "hostToken",
       details: { discoveryPath },
     });
   }
-  const pid = record.pid;
-  if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) {
+  if (field === "pid") {
     throw new HostValidationError({
       message: `Invalid MCP bridge discovery file at ${discoveryPath}: pid must be a positive integer.`,
       field: "pid",
@@ -71,11 +64,11 @@ const parseDiscoveryFile = (payload: string, discoveryPath: string): McpBridgeDi
     });
   }
 
-  return {
-    hostToken: record.hostToken,
-    hostUrl: record.hostUrl,
-    pid,
-  };
+  throw new HostValidationError({
+    message: `Invalid MCP bridge discovery file at ${discoveryPath}: expected object.`,
+    field: "discoveryFile",
+    details: { discoveryPath },
+  });
 };
 
 const discoveryClaimPath = (discoveryPath: string): string =>

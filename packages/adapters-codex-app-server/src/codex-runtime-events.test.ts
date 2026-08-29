@@ -36,6 +36,21 @@ describe("CodexRuntimeEventSubscriptions", () => {
     ).toBe(" thread-1 ");
   });
 
+  test("uses threadId for non-legacy server request faults", () => {
+    expect(
+      codexRuntimeStreamFault({
+        cause: new Error("Malformed event"),
+        message: {
+          method: "item/commandExecution/requestApproval",
+          params: { threadId: "thread-1", conversationId: "legacy-thread" },
+        },
+        receivedAt,
+        runtimeId: "runtime-1",
+        sourceKind: "server_request",
+      }).threadId,
+    ).toBe("thread-1");
+  });
+
   test("routes malformed known envelopes as faults and ignores future notifications", async () => {
     let listener: ((event: CodexAppServerStreamEvent) => void) | undefined;
     const events: Array<Parameters<typeof threadIdFromRuntimeStreamEvent>[0]> = [];

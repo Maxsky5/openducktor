@@ -1,4 +1,3 @@
-import { createFocusedTestService } from "../../../test-support/focused-service";
 import {
   createGitPortTestDouble,
   createSettingsConfigTestDouble,
@@ -717,7 +716,7 @@ const createDirectMergeGitPort = ({
     },
   });
 const createDirectMergeDevServerService = (calls: unknown[]): DevServerService =>
-  createFocusedTestService<DevServerService>()({
+  ({
     getState() {
       return Effect.dieMessage("unexpected dev server get state");
     },
@@ -739,7 +738,7 @@ const createDirectMergeDevServerService = (calls: unknown[]): DevServerService =
         };
       });
     },
-  } satisfies DevServerService);
+  }) satisfies DevServerService;
 const createDirectMergeTaskWorktreeService = (
   workingDirectory: string | null,
 ): TaskWorktreeService => ({

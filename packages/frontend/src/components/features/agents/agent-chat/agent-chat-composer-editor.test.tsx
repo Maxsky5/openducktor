@@ -1672,24 +1672,27 @@ describe("AgentChatComposerEditor", () => {
 
   test("preserves staged attachments when clearing a full composer selection", async () => {
     resetSelectionMocks();
+    const observedDrafts: AgentChatComposerDraft[] = [];
+    const initialDraft: AgentChatComposerDraft = {
+      segments: createComposerDraft("hello").segments,
+      attachments: [
+        createComposerAttachment(
+          {
+            name: "screenshot.png",
+            kind: "image",
+            mime: "image/png",
+            path: "/tmp/screenshot.png",
+          },
+          "attachment-1",
+        ),
+      ],
+    };
     const rendered = render(
       <EditorHarness
         slashCommands={COMMANDS}
         slashCommandsError={null}
-        initialDraft={{
-          segments: createComposerDraft("hello").segments,
-          attachments: [
-            createComposerAttachment(
-              {
-                name: "screenshot.png",
-                kind: "image",
-                mime: "image/png",
-                path: "/tmp/screenshot.png",
-              },
-              "attachment-1",
-            ),
-          ],
-        }}
+        draft={initialDraft}
+        onDraftChange={(draft) => observedDrafts.push(draft)}
       />,
     );
 
@@ -1698,13 +1701,14 @@ describe("AgentChatComposerEditor", () => {
     fireEvent.keyDown(editorRoot, { key: "Backspace" });
 
     await waitFor(() => {
-      const draftState = screen.getByTestId("draft-state").textContent;
-      if (!draftState) {
-        throw new Error("Expected draft state output");
+      const updatedDraft = observedDrafts.at(-1);
+      if (!updatedDraft) {
+        throw new Error("Expected the editor to emit an updated draft.");
       }
-      expect(draftState).toContain('"attachments":[{"id":"attachment-1"');
-      expect(draftState).toContain('"name":"screenshot.png"');
-      expect(draftState).toMatch(/"segments":\[\{"id":"[^"]+","kind":"text","text":""\}\]/);
+      expect(updatedDraft.attachments).toEqual([
+        expect.objectContaining({ id: "attachment-1", name: "screenshot.png" }),
+      ]);
+      expect(updatedDraft.segments).toEqual([expect.objectContaining({ kind: "text", text: "" })]);
     });
   });
 

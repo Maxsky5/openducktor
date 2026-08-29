@@ -7,6 +7,7 @@ import {
   opencodePartPayloadSchema,
   opencodeSessionDetailPayloadSchema,
 } from "./opencode-ingress";
+import { isConsumedOpencodeEventType, isKnownOpencodeEventType } from "./opencode-event-policy";
 
 const unknownRecordSchema = z.record(z.string(), z.unknown());
 
@@ -192,85 +193,17 @@ const todoUpdatedEventSchema = eventSchema(
   }),
 );
 
-const ignoredDirectEventTypes = [
-  "models-dev.refreshed",
-  "integration.updated",
-  "integration.connection.updated",
-  "catalog.updated",
-  "session.next.agent.switched",
-  "session.next.model.switched",
-  "session.next.moved",
-  "session.next.prompted",
-  "session.next.prompt.admitted",
-  "session.next.context.updated",
-  "session.next.synthetic",
-  "session.next.shell.started",
-  "session.next.shell.ended",
-  "session.next.step.started",
-  "session.next.step.ended",
-  "session.next.step.failed",
-  "session.next.text.started",
-  "session.next.text.delta",
-  "session.next.text.ended",
-  "session.next.reasoning.started",
-  "session.next.reasoning.delta",
-  "session.next.reasoning.ended",
-  "session.next.tool.input.started",
-  "session.next.tool.input.delta",
-  "session.next.tool.input.ended",
-  "session.next.tool.called",
-  "session.next.tool.progress",
-  "session.next.tool.success",
-  "session.next.tool.failed",
-  "session.next.retried",
-  "session.next.compaction.started",
-  "session.next.compaction.delta",
-  "session.next.compaction.ended",
-  "session.next.revert.staged",
-  "session.next.revert.cleared",
-  "session.next.revert.committed",
-  "session.diff",
-  "installation.updated",
-  "installation.update-available",
-  "file.edited",
-  "reference.updated",
-  "plugin.added",
-  "project.directories.updated",
-  "file.watcher.updated",
-  "pty.created",
-  "pty.updated",
-  "pty.exited",
-  "pty.deleted",
-  "lsp.updated",
-  "tui.prompt.append",
-  "tui.command.execute",
-  "tui.toast.show",
-  "tui.session.select",
-  "mcp.tools.changed",
-  "mcp.browser.open.failed",
-  "command.executed",
-  "project.updated",
-  "vcs.branch.updated",
-  "workspace.ready",
-  "workspace.failed",
-  "workspace.status",
-  "worktree.ready",
-  "worktree.failed",
-  "server.connected",
-  "global.disposed",
-  "server.instance.disposed",
-] as const;
-export type IgnoredOpencodeEventType = (typeof ignoredDirectEventTypes)[number];
 const ignoredDirectEventSchema = z
   .object({
     id: z.string(),
-    type: z.enum(ignoredDirectEventTypes),
+    type: z.string(),
     properties: z.unknown(),
   })
+  .refine(({ type }) => isKnownOpencodeEventType(type) && !isConsumedOpencodeEventType(type), {
+    message: "OpenCode events must have an explicit ingress policy.",
+    path: ["type"],
+  })
   .transform(({ id, type }) => ({ kind: "ignored" as const, id, type }));
-
-export const isIgnoredOpencodeEventType = (type: string): type is IgnoredOpencodeEventType =>
-  ignoredDirectEventTypes.some((candidate) => candidate === type);
 
 export const opencodeDirectEventSchema = z.union([
   sessionCreatedEventSchema,
@@ -298,6 +231,8 @@ export const opencodeDirectEventSchema = z.union([
   sessionCompactedEventSchema,
 ]);
 
+const opencodeIngressEventSchema = z.union([opencodeDirectEventSchema, ignoredDirectEventSchema]);
+
 const syncEventSchema = z.object({
   aggregateID: z.string(),
   data: unknownRecordSchema,
@@ -317,8 +252,7 @@ const ingressEventDescriptorSchema = z.object({
 });
 
 export const opencodeGlobalEventPayloadSchema = z.union([
-  opencodeDirectEventSchema,
-  ignoredDirectEventSchema,
+  opencodeIngressEventSchema,
   syncEnvelopeSchema,
   serverHeartbeatSchema,
 ]);
@@ -327,6 +261,7 @@ export type OpencodeGlobalEventPayload =
   | GlobalEvent["payload"]
   | z.output<typeof serverHeartbeatSchema>;
 export type ParsedOpencodeEvent = z.output<typeof opencodeDirectEventSchema>;
+export type ParsedOpencodeIngressEvent = z.output<typeof opencodeIngressEventSchema>;
 export type ParsedOpencodeGlobalEventPayload = z.output<typeof opencodeGlobalEventPayloadSchema>;
 
 const formatIngressIssues = (issues: readonly z.core.$ZodIssue[]): string =>
@@ -362,6 +297,17 @@ export const parseOpencodeGlobalEventPayload = (
 export const parseOpencodeDirectEvent = (value: unknown): ParsedOpencodeEvent => {
   const descriptor = ingressEventDescriptorSchema.safeParse(value);
   const parsed = opencodeDirectEventSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(
+      `Invalid OpenCode event (${describeIngressEvent(descriptor.success ? descriptor.data : null)}): ${formatIngressIssues(parsed.error.issues)}`,
+    );
+  }
+  return parsed.data;
+};
+
+export const parseOpencodeIngressEvent = (value: unknown): ParsedOpencodeIngressEvent => {
+  const descriptor = ingressEventDescriptorSchema.safeParse(value);
+  const parsed = opencodeIngressEventSchema.safeParse(value);
   if (!parsed.success) {
     throw new Error(
       `Invalid OpenCode event (${describeIngressEvent(descriptor.success ? descriptor.data : null)}): ${formatIngressIssues(parsed.error.issues)}`,

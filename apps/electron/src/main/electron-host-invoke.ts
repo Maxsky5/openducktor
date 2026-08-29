@@ -1,23 +1,13 @@
-import { hostInvokeFailureFromError } from "@openducktor/host";
-import type { HostInvokeFailure } from "@openducktor/contracts";
+import { hostInvokeFailureFromError, type HostCommandResult } from "@openducktor/host";
 import type { Effect } from "effect";
 import { runElectronEffect } from "../effect/electron-boundary";
 import { errorMessage } from "../effect/electron-errors";
+import type { ElectronHostInvokeResult } from "../shared/electron-bridge-contract";
 
-export type UnvalidatedElectronHostInvokeResult =
-  | { ok: true; value: unknown }
-  | {
-      ok: false;
-      error: {
-        message: string;
-        failure?: HostInvokeFailure;
-      };
-    };
-
-export const runElectronHostInvoke = async <A, E extends Error>(
+export const runElectronHostInvoke = async <A extends HostCommandResult, E extends Error>(
   effect: Effect.Effect<A, E>,
   execute: (effect: Effect.Effect<A, E>) => Promise<A> = runElectronEffect,
-): Promise<UnvalidatedElectronHostInvokeResult> => {
+): Promise<ElectronHostInvokeResult> => {
   try {
     return { ok: true, value: await execute(effect) };
   } catch (cause) {

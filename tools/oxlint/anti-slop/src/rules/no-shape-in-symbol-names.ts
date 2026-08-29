@@ -46,7 +46,8 @@ function declaredMemberName(node: ESTree.Node): string | null {
   if (node.type === "Identifier" || node.type === "PrivateIdentifier") {
     return "computed" in node.parent && node.parent.computed ? null : node.name;
   }
-  return node.type === "Literal" && typeof node.value === "string" ? node.value : null;
+  if (node.type !== "Literal" || typeof node.value !== "string") return null;
+  return /^[$A-Z_a-z][$\w]*$/u.test(node.value) ? node.value : null;
 }
 
 function exportedSymbolName(node: ESTree.ExportSpecifier["exported"]): string | null {

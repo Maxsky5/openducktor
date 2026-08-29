@@ -1,4 +1,3 @@
-import { createFocusedTestService } from "../../test-support/focused-service";
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -6,7 +5,6 @@ import path from "node:path";
 import { Effect } from "effect";
 import { createFilesystemAdapter } from "../../adapters/filesystem/filesystem-adapter";
 import { FilesystemFileOperationError } from "../../ports/filesystem-port";
-import type { GitPort } from "../../ports/git-port";
 import { WorkspaceFileAccessError } from "./workspace-file-access";
 import {
   createWorkspaceTextFileService,
@@ -22,10 +20,10 @@ const createRoot = async (): Promise<string> => {
 };
 
 const createGitPort = (files: string[]): Parameters<typeof createWorkspaceTextFileService>[1] =>
-  createFocusedTestService<GitPort>()({
+  ({
     isGitRepository: () => Effect.succeed(true),
     listFiles: () => Effect.succeed(files),
-  });
+  }) satisfies Parameters<typeof createWorkspaceTextFileService>[1];
 
 const writeError = async (
   effect: ReturnType<ReturnType<typeof createWorkspaceTextFileService>["writeTextFile"]>,

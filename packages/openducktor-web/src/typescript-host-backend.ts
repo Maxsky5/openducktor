@@ -19,7 +19,6 @@ import {
   type EffectNodeHostCommandRouter,
   type HostRuntimeDistribution,
   hostInvokeFailureFromError,
-  parseHostCommandResponse,
   type McpBridgeDiscoveryMode,
   resolveDevelopmentInstanceIdFromEnvironment,
   type TaskAssetReadService,
@@ -181,13 +180,13 @@ const tryUpgradeTerminalWebSocket = ({
   };
 };
 
-const jsonResponseBody = (payload: JsonValue): string => {
+const jsonResponseBody = <const Payload>(payload: Payload): string => {
   const serialized = JSON.stringify(payload);
   return serialized === undefined ? "null" : serialized;
 };
 
-const jsonResponse = (
-  payload: JsonValue,
+const jsonResponse = <const Payload>(
+  payload: Payload,
   init: ResponseInit = {},
   corsHeaders?: HeadersInit,
 ): Response =>
@@ -771,11 +770,7 @@ const routeCorsRequest = ({
               : hostCommandFailureToWebError(decodedCommand, error),
           ),
         );
-      const response = yield* Effect.try({
-        try: () => parseHostCommandResponse(decodedCommand, result),
-        catch: (cause) => hostCommandFailureToWebError(decodedCommand, cause),
-      });
-      return jsonResponse(response, undefined, corsHeaders);
+      return jsonResponse(result, undefined, corsHeaders);
     }
 
     return yield* rejectWebHostRequest("Not found", 404);

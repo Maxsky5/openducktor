@@ -4,8 +4,8 @@ import {
   RUNTIME_DESCRIPTORS_BY_KIND,
   codexAppServerClientRequestSchema,
   parseCodexAppServerRequestResult,
+  type CodexAppServerClientRequestMap,
   type CodexAppServerRequestMethod,
-  type JsonValue,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -43,8 +43,10 @@ const createRuntimeRegistry = ({
     sessionOperations: sessionOperations ?? createRuntimeSessionOperations(sessionOperationInput),
   });
 };
-const codexResult = (method: CodexAppServerRequestMethod, value: JsonValue) =>
-  Effect.succeed(parseCodexAppServerRequestResult(method, value));
+const codexResult = <Method extends CodexAppServerRequestMethod>(
+  method: Method,
+  value: CodexAppServerClientRequestMap[Method]["result"],
+) => Effect.succeed(parseCodexAppServerRequestResult(method, value));
 const codexThreadReadResult = (
   threadId: string,
   cwd: string,
@@ -1143,7 +1145,7 @@ describe("createRuntimeRegistry", () => {
       runtimes: [createCodexRuntime()],
       codexAppServer: {
         request() {
-          return codexResult("thread/read", {});
+          return Effect.succeed(parseCodexAppServerRequestResult("thread/read", {}));
         },
       },
     });
@@ -1308,7 +1310,7 @@ describe("createRuntimeRegistry", () => {
               activeFlags: [],
             });
           }
-          return codexResult("thread/turns/list", {});
+          return Effect.succeed(parseCodexAppServerRequestResult("thread/turns/list", {}));
         },
       },
     });

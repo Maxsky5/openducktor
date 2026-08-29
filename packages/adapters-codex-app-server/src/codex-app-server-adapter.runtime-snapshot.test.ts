@@ -1,5 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { CodexAppServerThreadStatus, CodexAppServerJsonValue } from "@openducktor/contracts";
+import type {
+  CodexAppServerProtocolMessage,
+  CodexAppServerThreadLoadedListResponse,
+  CodexAppServerThreadListResponse,
+  CodexAppServerThreadStatus,
+} from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY, type AgentEvent } from "@openducktor/core";
 import {
   codexSessionRef,
@@ -18,16 +23,16 @@ import {
   waitForEvent,
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexPendingInputState } from "./codex-pending-input-state";
-import type { CodexAppServerAdapter, CodexJsonRpcRequest } from "./index";
+import type {
+  CodexAppServerAdapter,
+  CodexAppServerStreamEvent,
+  CodexJsonRpcRequest,
+} from "./index";
 import { codexTokenUsageFixture } from "./test-fixtures/codex-protocol";
 
 const runtimeEventReceivedAt = "2026-07-06T12:00:00.000Z";
 
-type RuntimeEventInput = {
-  runtimeId: string;
-  kind: "notification" | "server_request";
-  message: unknown;
-};
+type RuntimeEventInput = Omit<CodexAppServerStreamEvent, "receivedAt">;
 
 type RuntimeListener = (event: RuntimeEventInput) => void;
 
@@ -49,8 +54,8 @@ class ThreadIdOnlyResumeTransport extends RecordingTransport {
 }
 
 class DeferredInventoryTransport extends RecordingTransport {
-  readonly loadedList = createDeferred<CodexAppServerJsonValue>();
-  readonly threadList = createDeferred<CodexAppServerJsonValue>();
+  readonly loadedList = createDeferred<CodexAppServerThreadLoadedListResponse>();
+  readonly threadList = createDeferred<CodexAppServerThreadListResponse>();
 
   async request(request: CodexJsonRpcRequest) {
     if (request.method === "thread/loaded/list") {
@@ -218,7 +223,7 @@ class StoredIdleHistoryTransport extends RecordingTransport {
 }
 
 class RestoredUsageStreamTransport extends StoredIdleHistoryTransport {
-  emitRestoredUsage: ((message: CodexAppServerJsonValue | undefined) => void) | null = null;
+  emitRestoredUsage: ((message: CodexAppServerProtocolMessage | undefined) => void) | null = null;
 
   async request(request: CodexJsonRpcRequest) {
     if (request.method === "thread/resume") {
@@ -913,7 +918,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         subagentCorrelationKey: "codex-subagent:parent-thread:spawn-other",
       },
     });
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
 
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("parent-thread"),

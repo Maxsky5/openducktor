@@ -4,9 +4,9 @@ import { handleMessageEvent } from "./event-stream/message-events";
 import { emitAdmittedUserMessage } from "./event-stream/message-events/user-emitter";
 import { handleSessionEvent } from "./event-stream/session-events";
 import type { EventStreamRuntime, SubagentSessionLink } from "./event-stream/shared";
+import { OPENCODE_EVENT_POLICY_BY_TYPE, type OpencodeEventPolicy } from "./opencode-event-policy";
 import {
-  isIgnoredOpencodeEventType,
-  parseOpencodeDirectEvent,
+  parseOpencodeIngressEvent,
   parseOpencodeGlobalEventPayload,
   type OpencodeGlobalEventPayload,
   type ParsedOpencodeEvent as Event,
@@ -84,82 +84,20 @@ const NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE = {
   "session.next.revert.committed.1": "session.next.revert.committed",
 } as const satisfies Record<SyncEventType, SdkEvent["type"]>;
 
-type OpencodeEventProjectionRoute = "message" | "session" | "ignore";
-type OpencodeEventPolicy = {
-  route: OpencodeEventProjectionRoute;
-  invalidatesSessions: boolean;
-  usesParentSessionRouting: boolean;
-};
-
-const MESSAGE_EVENT = {
-  route: "message",
-  invalidatesSessions: false,
-  usesParentSessionRouting: false,
-} as const satisfies OpencodeEventPolicy;
-const SESSION_EVENT = {
-  route: "session",
-  invalidatesSessions: false,
-  usesParentSessionRouting: false,
-} as const satisfies OpencodeEventPolicy;
-const INVALIDATING_SESSION_EVENT = {
-  route: "session",
-  invalidatesSessions: true,
-  usesParentSessionRouting: false,
-} as const satisfies OpencodeEventPolicy;
-const INVALIDATING_PARENT_ROUTED_EVENT = {
-  route: "session",
-  invalidatesSessions: true,
-  usesParentSessionRouting: true,
-} as const satisfies OpencodeEventPolicy;
-const INVALIDATION_ONLY_EVENT = {
-  route: "ignore",
-  invalidatesSessions: true,
-  usesParentSessionRouting: false,
-} as const satisfies OpencodeEventPolicy;
-
-const OPENCODE_EVENT_POLICY_BY_TYPE = {
-  "session.created": INVALIDATING_SESSION_EVENT,
-  "session.updated": INVALIDATING_SESSION_EVENT,
-  "session.deleted": INVALIDATION_ONLY_EVENT,
-  "message.updated": MESSAGE_EVENT,
-  "message.removed": MESSAGE_EVENT,
-  "message.part.updated": MESSAGE_EVENT,
-  "message.part.removed": MESSAGE_EVENT,
-  "message.part.delta": MESSAGE_EVENT,
-  "session.error": SESSION_EVENT,
-  "permission.v2.asked": INVALIDATING_PARENT_ROUTED_EVENT,
-  "permission.v2.replied": INVALIDATING_PARENT_ROUTED_EVENT,
-  "question.v2.asked": INVALIDATING_PARENT_ROUTED_EVENT,
-  "question.v2.replied": INVALIDATING_PARENT_ROUTED_EVENT,
-  "question.v2.rejected": INVALIDATING_PARENT_ROUTED_EVENT,
-  "todo.updated": SESSION_EVENT,
-  "permission.asked": INVALIDATING_PARENT_ROUTED_EVENT,
-  "permission.replied": INVALIDATING_PARENT_ROUTED_EVENT,
-  "session.status": SESSION_EVENT,
-  "session.idle": SESSION_EVENT,
-  "question.asked": INVALIDATING_PARENT_ROUTED_EVENT,
-  "question.replied": INVALIDATING_PARENT_ROUTED_EVENT,
-  "question.rejected": INVALIDATING_PARENT_ROUTED_EVENT,
-  "session.compacted": SESSION_EVENT,
-} as const satisfies Record<Event["type"], OpencodeEventPolicy>;
-
 const isKnownSyncEventType = (
   value: string,
 ): value is keyof typeof NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE =>
   Object.hasOwn(NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE, value);
 
-const isKnownEventType = (value: string): value is keyof typeof OPENCODE_EVENT_POLICY_BY_TYPE =>
-  Object.hasOwn(OPENCODE_EVENT_POLICY_BY_TYPE, value);
-
 export const normalizeOpencodeGlobalEventPayload = (
-  payload: OpencodeGlobalEventPayload,
+  payload: unknown,
 ): OpencodeGlobalEventPayloadDecision => {
   const parsed = parseOpencodeGlobalEventPayload(payload);
+  if ("kind" in parsed) {
+    return { kind: parsed.type === "server.heartbeat" ? "heartbeat" : "ignored" };
+  }
   if (parsed.type === "server.heartbeat") {
     return { kind: "heartbeat" };
-  }
-  if ("kind" in parsed) {
-    return { kind: "ignored" };
   }
   if (!("syncEvent" in parsed)) {
     return { kind: "event", event: parsed };
@@ -174,28 +112,19 @@ export const normalizeOpencodeGlobalEventPayload = (
   }
 
   const eventType = NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE[syncEventType];
-  if (isIgnoredOpencodeEventType(eventType)) {
+  const normalized = parseOpencodeIngressEvent({
+    id: syncEvent.id,
+    type: eventType,
+    properties: syncEvent.data,
+  });
+  if ("kind" in normalized) {
     return { kind: "ignored" };
   }
-  return {
-    kind: "event",
-    event: parseOpencodeDirectEvent({
-      id: syncEvent.id,
-      type: eventType,
-      properties: syncEvent.data,
-    }),
-  };
+  return { kind: "event", event: normalized };
 };
 
-const readOpencodeEventPolicy = (event: Event): OpencodeEventPolicy => {
-  const eventType = event.type;
-  if (!isKnownEventType(eventType)) {
-    throw new Error(
-      `OpenCode event '${eventType}' has no projection decision; update the adapter for this SDK event.`,
-    );
-  }
-  return OPENCODE_EVENT_POLICY_BY_TYPE[eventType];
-};
+const readOpencodeEventPolicy = (event: Event): OpencodeEventPolicy =>
+  OPENCODE_EVENT_POLICY_BY_TYPE[event.type];
 
 export const opencodeEventInvalidatesSessions = (event: Event): boolean =>
   readOpencodeEventPolicy(event).invalidatesSessions;

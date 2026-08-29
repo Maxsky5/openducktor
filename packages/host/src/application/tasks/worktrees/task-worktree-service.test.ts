@@ -1,4 +1,3 @@
-import { createFocusedTestService } from "../../../test-support/focused-service";
 import { createWorkspaceSettingsServiceTestDouble } from "../../../test-support/service-test-doubles";
 import type { RepoConfig } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -46,7 +45,7 @@ const createSettingsConfig = ({
   existingPaths?: Set<string>;
   canonicalPaths?: Record<string, string>;
 } = {}): SettingsConfigPort =>
-  createFocusedTestService<SettingsConfigPort>()({
+  ({
     defaultWorktreeBasePath(workspaceId) {
       return `/home/dev/.openducktor/worktrees/${workspaceId}`;
     },
@@ -71,7 +70,7 @@ const createSettingsConfig = ({
     join(...paths) {
       return paths.join("/").replaceAll(/\/+/g, "/");
     },
-  });
+  }) satisfies SettingsConfigPort;
 describe("createTaskWorktreeService", () => {
   test("returns a deterministic task worktree when the directory exists", async () => {
     const service = createTaskWorktreeService({

@@ -6,6 +6,7 @@ import type {
 } from "@openducktor/contracts";
 import {
   countRenderableFileDiffLines,
+  normalizeRenderableFileDiffCandidate,
   selectRenderableFileDiff,
   splitFileDiffCandidates,
 } from "@openducktor/core";
@@ -107,7 +108,7 @@ export const fileDiffsFromUnifiedDiff = (unifiedDiff: string): FileDiff[] =>
       );
     }
     const type = previousPath === null ? "added" : nextPath === null ? "deleted" : "modified";
-    const diff = selectRenderableFileDiff(candidate, file, { changeType: type });
+    const diff = normalizeRenderableFileDiffCandidate(candidate, file);
     if (!diff) {
       throw new CodexFileDiffParseError(
         `unified diff entry ${index} for '${file}' is not renderable.`,

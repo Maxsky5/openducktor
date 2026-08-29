@@ -1,135 +1,58 @@
 import { defineRule } from "@oxlint/plugins";
 
 import type { ESTree, SourceCode } from "@oxlint/plugins";
-import { isCallableMemberReference } from "../shared/callable-member.ts";
-import { isGlobalObjectReference, resolveVariable } from "../shared/global-reference.ts";
+import { resolveVariable } from "../shared/global-reference.ts";
 
-const moduleMockMethods = new Set(["doMock", "mock", "module", "unstable_mockModule"]);
+const moduleMockMethods = new Set(["doMock", "mock", "unstable_mockModule"]);
 
 function importedName(node: ESTree.Node): string | null {
   if (node.type !== "ImportSpecifier") return null;
   return node.imported.type === "Identifier" ? node.imported.name : node.imported.value;
 }
 
-function hasFrameworkImport(
-  sourceCode: SourceCode,
-  identifier: ESTree.IdentifierReference,
-  sourceName: string,
-  importedBinding: string,
-): boolean {
-  const variable = resolveVariable(sourceCode, identifier);
-  if (variable === null || variable.defs.length === 0) return false;
-  return variable.defs.some((definition) => {
-    if (definition.type !== "ImportBinding" || definition.parent?.type !== "ImportDeclaration") {
-      return false;
-    }
-    return (
-      definition.parent.source.value === sourceName &&
-      importedName(definition.node) === importedBinding
-    );
-  });
-}
-
-function hasFrameworkNamespaceImport(
-  sourceCode: SourceCode,
-  identifier: ESTree.IdentifierReference,
-  sourceName: string,
-): boolean {
-  const variable = resolveVariable(sourceCode, identifier);
-  if (variable === null || variable.defs.length === 0) return false;
-  return variable.defs.some(
-    (definition) =>
-      definition.type === "ImportBinding" &&
-      definition.node.type === "ImportNamespaceSpecifier" &&
-      definition.parent?.type === "ImportDeclaration" &&
-      definition.parent.source.value === sourceName,
-  );
-}
-
-function staticPropertyName(expression: ESTree.MemberExpression): string | null {
-  if (!expression.computed && expression.property.type === "Identifier") {
-    return expression.property.name;
-  }
-  return expression.computed &&
-    expression.property.type === "Literal" &&
-    typeof expression.property.value === "string"
-    ? expression.property.value
-    : null;
-}
-
-function isBunMockObject(sourceCode: SourceCode, expression: ESTree.Expression): boolean {
-  if (expression.type === "Identifier") {
-    return hasFrameworkImport(sourceCode, expression, "bun:test", "mock");
-  }
-  if (
-    expression.type !== "MemberExpression" ||
-    expression.computed ||
-    expression.object.type !== "Identifier" ||
-    expression.property.type !== "Identifier" ||
-    expression.property.name !== "mock"
-  ) {
-    return false;
-  }
-  const variable = resolveVariable(sourceCode, expression.object);
-  if (variable === null || variable.defs.length === 0) return false;
-  return variable.defs.some(
-    (definition) =>
-      definition.type === "ImportBinding" &&
-      definition.node.type === "ImportNamespaceSpecifier" &&
-      definition.parent?.type === "ImportDeclaration" &&
-      definition.parent.source.value === "bun:test",
-  );
-}
-
 function isTestFrameworkObject(
   sourceCode: SourceCode,
   expression: ESTree.Expression,
-  path: readonly string[],
-): boolean {
-  if (expression.type === "Identifier" && path.length === 1) {
-    const member = path[0];
-    return (
-      (member === "vi" && hasFrameworkNamespaceImport(sourceCode, expression, "vitest")) ||
-      (member === "jest" && hasFrameworkNamespaceImport(sourceCode, expression, "@jest/globals")) ||
-      (member === "mock" && hasFrameworkNamespaceImport(sourceCode, expression, "bun:test"))
-    );
-  }
-  if (path.length > 0) return false;
-  if (isBunMockObject(sourceCode, expression)) return true;
+): expression is ESTree.IdentifierReference {
+  if (expression.type !== "Identifier") return false;
   if (
-    isGlobalObjectReference(sourceCode, expression, "vi") ||
-    isGlobalObjectReference(sourceCode, expression, "jest")
+    (expression.name === "vi" || expression.name === "jest") &&
+    sourceCode.isGlobalReference(expression)
   ) {
     return true;
   }
-  if (expression.type === "MemberExpression" && expression.object.type === "Identifier") {
-    const propertyName = staticPropertyName(expression);
-    return (
-      (propertyName === "vi" &&
-        hasFrameworkNamespaceImport(sourceCode, expression.object, "vitest")) ||
-      (propertyName === "jest" &&
-        hasFrameworkNamespaceImport(sourceCode, expression.object, "@jest/globals"))
-    );
-  }
-  if (expression.type !== "Identifier") return false;
 
   const variable = resolveVariable(sourceCode, expression);
   if (variable === null || variable.defs.length === 0) {
     return expression.name === "vi" || expression.name === "jest";
   }
-  return (
-    hasFrameworkImport(sourceCode, expression, "vitest", "vi") ||
-    hasFrameworkImport(sourceCode, expression, "@jest/globals", "jest")
-  );
+  return variable.defs.some((definition) => {
+    if (definition.type !== "ImportBinding" || definition.parent?.type !== "ImportDeclaration") {
+      return false;
+    }
+    const source = definition.parent.source.value;
+    const name = importedName(definition.node);
+    return (
+      (source === "vitest" && name === "vi") || (source === "@jest/globals" && name === "jest")
+    );
+  });
 }
 
 function moduleMockCall(sourceCode: SourceCode, callee: ESTree.Expression): boolean {
-  return isCallableMemberReference(
-    sourceCode,
-    callee,
-    (object, objectPath, propertyName) =>
-      moduleMockMethods.has(propertyName) && isTestFrameworkObject(sourceCode, object, objectPath),
-  );
+  if (!("property" in callee) || !("object" in callee) || !("computed" in callee)) return false;
+  if (!isTestFrameworkObject(sourceCode, callee.object)) return false;
+  const property = callee.property;
+  const method = callee.computed
+    ? property.type === "Literal" &&
+      (property.value === "doMock" ||
+        property.value === "mock" ||
+        property.value === "unstable_mockModule")
+      ? property.value
+      : null
+    : property.type === "Identifier"
+      ? property.name
+      : null;
+  return method !== null && moduleMockMethods.has(method);
 }
 
 /** Ban test framework module mocking in favor of real dependency seams. */
@@ -138,7 +61,7 @@ export const noModuleMockingRule = defineRule({
     type: "problem",
     docs: {
       description:
-        "Disallow Bun, Vitest, and Jest module mocking; tests must replace dependencies through real interfaces.",
+        "Disallow Vitest and Jest module mocking; tests must replace dependencies through real interfaces.",
     },
     messages: {
       moduleMock:

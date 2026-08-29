@@ -218,7 +218,10 @@ export const createCodexAppServerTransport = (
     }
     request.resolve(parsedResult.right);
   };
-  const emitEvent = (event: Omit<CodexAppServerStreamEvent, "receivedAt">) => {
+  type StreamEventInput =
+    | Omit<Extract<CodexAppServerStreamEvent, { kind: "notification" }>, "receivedAt">
+    | Omit<Extract<CodexAppServerStreamEvent, { kind: "server_request" }>, "receivedAt">;
+  const emitEvent = (event: StreamEventInput) => {
     const receivedEvent: CodexAppServerStreamEvent = {
       ...event,
       receivedAt: new Date().toISOString(),
@@ -459,8 +462,8 @@ export const createCodexAppServerTransport = (
           jsonrpc: "2.0",
           id: requestId,
         };
-        if (result !== undefined) Object.assign(response, { result });
-        if (error !== undefined) Object.assign(response, { error });
+        if (result !== undefined) response.result = result;
+        if (error !== undefined) response.error = error;
         yield* sendMessage(response);
       });
     },

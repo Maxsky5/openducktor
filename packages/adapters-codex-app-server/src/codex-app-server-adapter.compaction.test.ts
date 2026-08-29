@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
+import type { AgentEvent } from "@openducktor/core";
 import {
   codexSessionRuntimeRef,
   codexThreadFixture,
@@ -243,7 +244,7 @@ describe("CodexAppServerAdapter manual compaction", () => {
       },
       { subscribeEvents: runtimeStream.subscribeEvents },
     );
-    const events: Array<{ type: string; [key: string]: CodexAppServerJsonValue }> = [];
+    const events: AgentEvent[] = [];
     await adapter.sendUserMessage(
       codexUserMessageInput({ externalSessionId: "thread-1", parts: [compactPart()] }),
     );
@@ -305,7 +306,7 @@ describe("CodexAppServerAdapter manual compaction", () => {
 
   test("does not synthesize a user message before synchronous compaction lifecycle events", async () => {
     const runtimeStream = createRuntimeStreamSubscription();
-    const events: Array<{ type: string; [key: string]: CodexAppServerJsonValue }> = [];
+    const events: AgentEvent[] = [];
     const adapter = createAdapterWithTransport(
       {
         async request(request) {

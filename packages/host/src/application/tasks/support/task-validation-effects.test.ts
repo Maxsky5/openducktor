@@ -1,4 +1,3 @@
-import { createFocusedTestService } from "../../../test-support/focused-service";
 import { describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -47,11 +46,11 @@ describe("task validation effects", () => {
 
   test("blockBuildCompletionTask preserves transition policy errors", async () => {
     const current = task({ issueType: "bug", status: "human_review" });
-    const taskStore = createFocusedTestService<TaskStorePort>()({
+    const taskStore = {
       transitionTask() {
         return Effect.die("transition should not run");
       },
-    });
+    } satisfies Pick<TaskStorePort, "transitionTask">;
 
     const error = await Effect.runPromise(
       Effect.flip(blockBuildCompletionTask(taskStore, "/repo", current.id, current, [current])),

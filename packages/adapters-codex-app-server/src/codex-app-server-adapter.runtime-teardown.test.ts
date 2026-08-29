@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { CodexAppServerJsonValue } from "@openducktor/contracts";
+import type {
+  CodexAppServerTurnStartResult,
+  CodexAppServerTurnSteerResult,
+} from "@openducktor/contracts";
+import type { AgentEvent } from "@openducktor/core";
 import {
   codexRuntimeTeardownCountsForTest,
   codexSessionRuntimeRef,
@@ -16,7 +20,7 @@ import {
 } from "./codex-app-server-adapter.test-harness";
 import { codexThreadStatusSnapshot } from "./codex-app-server-threads";
 import { releaseCodexRuntimeState } from "./codex-runtime-cleanup";
-import type { CodexAppServerClient } from "./types";
+import type { CodexAppServerClient, CodexLiveSessionMutation } from "./types";
 
 class RejectableTurnTransport extends RecordingTransport {
   private readonly turnStartFailure = createDeferred<never>();
@@ -41,8 +45,8 @@ class RejectableTurnTransport extends RecordingTransport {
 class DeferredSteerTransport extends RecordingTransport {
   readonly turnStartRequested = createDeferred<void>();
   readonly steerRequested = createDeferred<void>();
-  private readonly turnStartResponse = createDeferred<CodexAppServerJsonValue>();
-  private readonly steerResponse = createDeferred<CodexAppServerJsonValue>();
+  private readonly turnStartResponse = createDeferred<CodexAppServerTurnStartResult>();
+  private readonly steerResponse = createDeferred<CodexAppServerTurnSteerResult>();
 
   constructor() {
     super("runtime-live", false);
@@ -354,7 +358,7 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     adapter.releaseRuntime("runtime-live");
     await adapter.startSession(codexStartSessionInput());
 
-    const replacementEvents: unknown[] = [];
+    const replacementEvents: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => replacementEvents.push(event),
@@ -373,7 +377,7 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     const responseStarted = createDeferred<void>();
     const responseCompleted = createDeferred<void>();
     const { subscribeEvents, emitServerRequest } = createRuntimeStreamSubscription();
-    const liveMutations: unknown[] = [];
+    const liveMutations: CodexLiveSessionMutation[] = [];
     const { adapter } = createHarness({
       subscribeEvents,
       respondServerRequest: async () => {
@@ -402,7 +406,7 @@ describe("CodexAppServerAdapter runtime teardown", () => {
 
     adapter.releaseRuntime("runtime-live");
     await adapter.startSession(codexStartSessionInput());
-    const replacementEvents: unknown[] = [];
+    const replacementEvents: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => replacementEvents.push(event),
@@ -422,7 +426,7 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     const responseStarted = createDeferred<void>();
     const responseCompleted = createDeferred<void>();
     const { subscribeEvents, emitServerRequest } = createRuntimeStreamSubscription();
-    const liveMutations: unknown[] = [];
+    const liveMutations: CodexLiveSessionMutation[] = [];
     const { adapter } = createHarness({
       subscribeEvents,
       respondServerRequest: async () => {
@@ -451,7 +455,7 @@ describe("CodexAppServerAdapter runtime teardown", () => {
 
     adapter.releaseRuntime("runtime-live");
     await adapter.startSession(codexStartSessionInput());
-    const replacementEvents: unknown[] = [];
+    const replacementEvents: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => replacementEvents.push(event),
@@ -478,7 +482,7 @@ describe("CodexAppServerAdapter runtime teardown", () => {
       }),
     );
 
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
@@ -522,7 +526,7 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     adapter.releaseRuntime("runtime-live");
     await adapter.startSession(codexStartSessionInput());
 
-    const replacementEvents: unknown[] = [];
+    const replacementEvents: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => replacementEvents.push(event),
@@ -561,7 +565,7 @@ describe("CodexAppServerAdapter runtime teardown", () => {
 
     adapter.releaseRuntime("runtime-live");
     await adapter.startSession(codexStartSessionInput());
-    const replacementEvents: unknown[] = [];
+    const replacementEvents: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => replacementEvents.push(event),

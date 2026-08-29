@@ -1,12 +1,16 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { CodexAppServerJsonValue, RuntimeInstanceSummary } from "@openducktor/contracts";
+import type {
+  CodexAppServerFuzzyFileSearchResponse,
+  CodexAppServerRequestResult,
+  RuntimeInstanceSummary,
+} from "@openducktor/contracts";
 import {
   createAdapterWithTransport,
   makeRuntimeSummary,
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexJsonRpcRequest, CodexJsonRpcTransport } from "./types";
 
-const createTransport = (response: CodexAppServerJsonValue) => {
+const createTransport = (response: CodexAppServerFuzzyFileSearchResponse) => {
   const calls: CodexJsonRpcRequest[] = [];
   const transport: CodexJsonRpcTransport = {
     async request(request) {
@@ -21,6 +25,19 @@ const createTransport = (response: CodexAppServerJsonValue) => {
     calls: CodexJsonRpcRequest[];
     transport: CodexJsonRpcTransport;
   };
+};
+
+const createMalformedTransport = (response: unknown) => {
+  const transport: CodexJsonRpcTransport = {
+    async request(request): Promise<CodexAppServerRequestResult> {
+      if (request.method !== "fuzzyFileSearch") {
+        throw new Error(`Unexpected method '${request.method}'.`);
+      }
+      // SAFETY: This test-only seam deliberately violates the transport result type so the adapter's runtime parser receives an invalid raw wire payload.
+      return response as CodexAppServerRequestResult;
+    },
+  };
+  return transport;
 };
 
 const createSearchAdapter = (
@@ -108,7 +125,7 @@ describe("CodexAppServerAdapter file search", () => {
   });
 
   test("rejects malformed fuzzy file search payloads", async () => {
-    const { transport } = createTransport({
+    const transport = createMalformedTransport({
       files: [
         {
           root: "/repo/worktree",

@@ -88,14 +88,13 @@ export {
 } from "./infrastructure/process/process-tree";
 export {
   HOST_COMMAND_NAMES,
-  HOST_COMMAND_RESPONSE_SCHEMAS,
   type HostCommandName,
   isHostCommandName,
   parseHostCommandName,
-  parseHostCommandResponse,
 } from "./interface/commands/host-command-registry";
 export type {
   EffectHostCommandRouter,
+  HostCommandResult,
   HostCommandRouter,
 } from "./interface/router/host-command-router";
 export { hostInvokeFailureFromError } from "./interface/router/host-invoke-failure";

@@ -1,6 +1,5 @@
 import {
   runtimeKindSchema,
-  jsonValueSchema,
   skillDescriptorSchema,
   slashCommandDescriptorSchema,
   subagentDescriptorSchema,
@@ -242,10 +241,9 @@ export const parseAgentChatDraftPayload = ({
     return { status: "oversized", byteLength };
   }
 
-  let parsedJson: ReturnType<typeof jsonValueSchema.parse>;
+  let parsedJson: unknown;
   try {
-    // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue` at this boundary.
-    parsedJson = jsonValueSchema.parse(JSON.parse(raw));
+    parsedJson = JSON.parse(raw);
   } catch {
     return { status: "invalid", reason: "Stored chat draft is not valid JSON." };
   }

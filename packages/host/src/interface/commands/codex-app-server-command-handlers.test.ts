@@ -5,8 +5,8 @@ import { HostOperationError } from "../../effect/host-errors";
 import {
   jsonValueSchema,
   parseCodexAppServerRequestResult,
+  type CodexAppServerClientRequestMap,
   type CodexAppServerRequestMethod,
-  type JsonValue,
 } from "@openducktor/contracts";
 import {
   type CreateHostCommandRouterInput,
@@ -19,8 +19,10 @@ import { createCodexAppServerCommandHandlers } from "./codex-app-server-command-
 const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
-const codexResult = (method: CodexAppServerRequestMethod, value: JsonValue) =>
-  parseCodexAppServerRequestResult(method, value);
+const codexResult = <Method extends CodexAppServerRequestMethod>(
+  method: Method,
+  value: CodexAppServerClientRequestMap[Method]["result"],
+) => parseCodexAppServerRequestResult(method, value);
 
 const threadStartResult = (threadId = "thread-1") =>
   codexResult("thread/start", {

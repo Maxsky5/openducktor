@@ -1,4 +1,4 @@
-import type { Part } from "@opencode-ai/sdk/v2/client";
+import type { ParsedOpencodePart } from "../../opencode-ingress";
 import type { EventStreamRuntime } from "../shared";
 import {
   bindSubagentExternalSession,
@@ -69,7 +69,7 @@ const peekPendingSubagentCorrelationKeys = (
 const queuePendingSubagentPartEmission = (
   runtime: EventStreamRuntime,
   externalSessionId: string,
-  part: Part,
+  part: ParsedOpencodePart,
   roleHint?: string,
 ): void => {
   runtime.session.subagentPartIdByExternalSessionId.set(externalSessionId, part.id);
@@ -123,7 +123,7 @@ const shouldTrackPendingSubagentPart = (
 
 export const normalizeLiveSubagentCorrelation = (
   runtime: EventStreamRuntime,
-  rawPart: Part,
+  rawPart: ParsedOpencodePart,
   part: MappedSubagentPart,
   roleHint?: string,
   linkedSubagentExternalSessionId?: string,

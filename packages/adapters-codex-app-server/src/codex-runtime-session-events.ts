@@ -14,7 +14,7 @@ import type {
 } from "@openducktor/core";
 import { agentSessionStatusFromActivity, withAgentSessionRef } from "@openducktor/core";
 import { codexServerRequestKey } from "./codex-app-server-approvals";
-import { codexTurnKey, extractThreadIdFromParams } from "./codex-app-server-requests";
+import { codexServerRequestThreadId, codexTurnKey } from "./codex-app-server-requests";
 import {
   type CodexServerRequestHandlerContext,
   handleCodexServerRequest,
@@ -591,6 +591,13 @@ export class CodexRuntimeSessionEvents {
         notification.params.turnId,
         notification.params.diff,
       );
+    } else if (notification?.method === "turn/started") {
+      this.rememberSessionDiff(
+        event.runtimeId,
+        notification.params.threadId,
+        notification.params.turn.id,
+        "",
+      );
     }
     return owner;
   }
@@ -813,7 +820,7 @@ export class CodexRuntimeSessionEvents {
     let hasPendingInput = false;
     const requestsByOwnerThreadId = new Map<string, CodexServerRequestEnvelope[]>();
     for (const request of requests) {
-      const ownerThreadId = extractThreadIdFromParams(request.request.params) ?? session.threadId;
+      const ownerThreadId = codexServerRequestThreadId(request.request) ?? session.threadId;
       const ownerRequests = requestsByOwnerThreadId.get(ownerThreadId) ?? [];
       ownerRequests.push(request);
       requestsByOwnerThreadId.set(ownerThreadId, ownerRequests);

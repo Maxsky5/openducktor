@@ -1,5 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
-import { CODEX_RUNTIME_DESCRIPTOR, type FileDiff } from "@openducktor/contracts";
+import {
+  CODEX_RUNTIME_DESCRIPTOR,
+  type CodexAppServerRequestMethod,
+  type FileDiff,
+  parseCodexAppServerRequestResult,
+} from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import { createHostClientFixture } from "@/test-utils/focused-fixture";
 import { createCodexAppServerRuntimeAdapter } from "./codex-app-server-runtime-adapter";
@@ -18,14 +23,16 @@ const createCodexRuntime = (runtimeId: string) => ({
 
 describe("createCodexAppServerRuntimeAdapter", () => {
   test("keeps pure catalog reads on the renderer adapter without raw live-event plumbing", async () => {
+    const requestCalls: Array<{ runtimeId: string; method: CodexAppServerRequestMethod }> = [];
     const requestImplementation: HostClient["codexAppServerRequest"] = async (
-      _runtimeId,
+      runtimeId,
       request,
     ) => {
+      requestCalls.push({ runtimeId, method: request.method });
       if (request.method !== "model/list") {
         throw new Error(`Unexpected Codex app-server request method: ${request.method}`);
       }
-      return {
+      return parseCodexAppServerRequestResult(request.method, {
         data: [
           {
             additionalSpeedTiers: [],
@@ -51,12 +58,11 @@ describe("createCodexAppServerRuntimeAdapter", () => {
           },
         ],
         nextCursor: null,
-      };
+      });
     };
-    const codexRequest = mock(requestImplementation);
     const hostClient = createHostClientFixture({
       runtimeRequire: async () => createCodexRuntime("runtime-codex-live"),
-      codexAppServerRequest: codexRequest,
+      codexAppServerRequest: requestImplementation,
     });
     const adapter = createCodexAppServerRuntimeAdapter({ hostClient });
 
@@ -66,10 +72,7 @@ describe("createCodexAppServerRuntimeAdapter", () => {
       runtime: { kind: "codex" },
       models: [expect.objectContaining({ modelId: "gpt-5" })],
     });
-    expect(codexRequest).toHaveBeenCalledWith(
-      "runtime-codex-live",
-      expect.objectContaining({ method: "model/list" }),
-    );
+    expect(requestCalls).toEqual([{ runtimeId: "runtime-codex-live", method: "model/list" }]);
   });
 
   test("loads Codex session diffs through host-owned live stream state", async () => {

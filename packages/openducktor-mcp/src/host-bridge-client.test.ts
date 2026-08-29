@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { ODT_TOOL_SCHEMAS, type JsonValue } from "@openducktor/contracts";
+import { ODT_TOOL_SCHEMAS } from "@openducktor/contracts";
 import { OdtHostBridgeClient } from "./host-bridge-client";
 import { OdtToolError } from "./tool-results";
 
-const jsonResponse = (payload: JsonValue, init: ResponseInit = {}): Response =>
+const jsonResponse = (payload: unknown, init: ResponseInit = {}): Response =>
   new Response(JSON.stringify(payload), {
     headers: { "Content-Type": "application/json" },
     status: 200,

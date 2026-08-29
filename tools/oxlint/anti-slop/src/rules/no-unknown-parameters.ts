@@ -1,50 +1,14 @@
 import { defineRule } from "@oxlint/plugins";
 import type { ESTree, SourceCode, Variable } from "@oxlint/plugins";
 
-import { typeResolvesToAny, typeResolvesToUnknown } from "../shared/dictionary-types.ts";
-import { createLazyImportedTypeResolver } from "../shared/imported-type-resolution.ts";
-import { portablePropertyKeyValue } from "../shared/keyof-property-key-domain.ts";
-import {
-  createTypeEnvironment,
-  expressionTypeNameParts,
-  type PortableTypeResolver,
-} from "../shared/portable-type-resolution.ts";
+import { resolveVariable, singleVariableDeclarator } from "../shared/global-reference.ts";
 import { unwrapTransparentExpression } from "../shared/transparent-expression.ts";
-import { resolveVariable } from "../shared/global-reference.ts";
-import { isStableBinding } from "../shared/stable-binding.ts";
-import {
-  typePropertyPathResolvesToUnknown,
-  type TypePropertyPathSegment,
-} from "../shared/type-property-path.ts";
 
 type RuntimeFunction = ESTree.ArrowFunctionExpression | ESTree.Function;
-type StableAlias =
-  | {
-      readonly expression: ESTree.Expression;
-      readonly kind: "expression";
-      readonly variable: Variable;
-    }
-  | {
-      readonly body: ESTree.BlockStatement;
-      readonly kind: "function";
-      readonly variable: Variable;
-    };
-
 type Parameter = ESTree.ParamPattern;
-type ParameterBinding = {
-  readonly identifier: ESTree.BindingIdentifier;
-  readonly omittedProperties: ReadonlySet<string>;
-  readonly path: readonly TypePropertyPathSegment[];
-};
-type ParameterExposure = {
-  readonly exposesUnknownAtPath: (path: readonly TypePropertyPathSegment[]) => boolean;
-  readonly variable: Variable;
-};
 
 function parameterAnnotation(parameter: Parameter): ESTree.TSTypeAnnotation | null | undefined {
-  if (parameter.type === "TSParameterProperty") {
-    return parameterAnnotation(parameter.parameter);
-  }
+  if (parameter.type === "TSParameterProperty") return parameterAnnotation(parameter.parameter);
   if (parameter.type === "RestElement") {
     return parameter.typeAnnotation ?? parameterAnnotation(parameter.argument);
   }
@@ -55,78 +19,63 @@ function parameterAnnotation(parameter: Parameter): ESTree.TSTypeAnnotation | nu
 }
 
 function parameterName(parameter: Parameter, sourceText: string): string {
-  if (parameter.type === "TSParameterProperty") {
+  if (parameter.type === "TSParameterProperty")
     return parameterName(parameter.parameter, sourceText);
-  }
-  if (parameter.type === "AssignmentPattern") {
-    return parameterName(parameter.left, sourceText);
-  }
-  if (parameter.type === "RestElement") {
-    return parameterName(parameter.argument, sourceText);
-  }
+  if (parameter.type === "AssignmentPattern") return parameterName(parameter.left, sourceText);
+  if (parameter.type === "RestElement") return parameterName(parameter.argument, sourceText);
   return parameter.type === "Identifier"
     ? parameter.name
-    : sourceText.replace(/\s*:\s*unknown\s*$/u, "");
+    : (sourceText.split(":", 1)[0]?.trim() ?? sourceText);
 }
 
-function bindingPropertyPathSegment(
-  key: ESTree.Node,
-  computed: boolean,
-): TypePropertyPathSegment | null {
-  if (!computed && key.type === "Identifier") return key.name;
-  if (key.type !== "Identifier") {
-    const value = portablePropertyKeyValue(key);
-    if (value !== null) return value;
+function unwrapType(type: ESTree.TSType): ESTree.TSType {
+  let current = type;
+  while (current.type === "TSParenthesizedType") current = current.typeAnnotation;
+  return current;
+}
+
+function directlyContainsUnknown(type: ESTree.TSType): boolean {
+  const unwrapped = unwrapType(type);
+  if (unwrapped.type === "TSUnknownKeyword") return true;
+  if (unwrapped.type === "TSUnionType" || unwrapped.type === "TSIntersectionType") {
+    return unwrapped.types.some(directlyContainsUnknown);
   }
-  const parts = expressionTypeNameParts(key);
-  return computed && parts.length > 0 ? { kind: "name", parts } : null;
+  if (unwrapped.type === "TSArrayType") return directlyContainsUnknown(unwrapped.elementType);
+  return false;
 }
 
-function parameterBindings(
+function bindingIdentifiers(
   pattern: Parameter | ESTree.BindingPattern,
-  path: readonly TypePropertyPathSegment[] = [],
-  omittedProperties: ReadonlySet<string> = new Set(),
-): readonly ParameterBinding[] {
-  if (pattern.type === "TSParameterProperty") {
-    return parameterBindings(pattern.parameter, path, omittedProperties);
-  }
-  if (pattern.type === "AssignmentPattern") {
-    return parameterBindings(pattern.left, path, omittedProperties);
-  }
-  if (pattern.type === "RestElement") {
-    return parameterBindings(pattern.argument, path, omittedProperties);
-  }
-  if (pattern.type === "Identifier") return [{ identifier: pattern, omittedProperties, path }];
+): readonly ESTree.BindingIdentifier[] {
+  if (pattern.type === "TSParameterProperty") return bindingIdentifiers(pattern.parameter);
+  if (pattern.type === "AssignmentPattern") return bindingIdentifiers(pattern.left);
+  if (pattern.type === "RestElement") return bindingIdentifiers(pattern.argument);
+  if (pattern.type === "Identifier") return [pattern];
   if (pattern.type === "ObjectPattern") {
-    const omitted = new Set(
-      pattern.properties.flatMap((property): readonly string[] => {
-        if (property.type === "RestElement") return [];
-        const segment = bindingPropertyPathSegment(property.key, property.computed);
-        return typeof segment === "string" ? [segment] : [];
-      }),
+    return pattern.properties.flatMap((property) =>
+      bindingIdentifiers(property.type === "RestElement" ? property.argument : property.value),
     );
-    return pattern.properties.flatMap((property): readonly ParameterBinding[] => {
-      if (property.type === "RestElement") {
-        return parameterBindings(
-          property.argument,
-          path,
-          new Set([...omittedProperties, ...omitted]),
-        );
-      }
-      const segment = bindingPropertyPathSegment(property.key, property.computed);
-      if (segment === null) return [];
-      return parameterBindings(property.value, [...path, segment], omittedProperties);
-    });
   }
-  return pattern.elements.flatMap((element, index): readonly ParameterBinding[] => {
-    if (element === null) return [];
-    return element.type === "RestElement"
-      ? parameterBindings(
-          element.argument,
-          [...path, { kind: "array-rest", offset: index }],
-          omittedProperties,
-        )
-      : parameterBindings(element, [...path, index], omittedProperties);
+  return pattern.elements.flatMap((element) =>
+    element === null ? [] : bindingIdentifiers(element),
+  );
+}
+
+function unknownParameterVariables(
+  sourceCode: SourceCode,
+  parameter: Parameter,
+): readonly Variable[] {
+  const annotation = parameterAnnotation(parameter);
+  if (
+    annotation === null ||
+    annotation === undefined ||
+    !directlyContainsUnknown(annotation.typeAnnotation)
+  ) {
+    return [];
+  }
+  return bindingIdentifiers(parameter).flatMap((identifier) => {
+    const variable = resolveVariable(sourceCode, identifier);
+    return variable === null ? [] : [variable];
   });
 }
 
@@ -145,313 +94,98 @@ function enclosingRuntimeFunction(node: ESTree.Node): RuntimeFunction | null {
   return null;
 }
 
-function stableAliasInitializer(
-  sourceCode: SourceCode,
-  identifier: ESTree.IdentifierReference,
-  resolvingAliases: ReadonlySet<Variable>,
-): StableAlias | null {
-  const variable = resolveVariable(sourceCode, identifier);
-  if (variable === null || resolvingAliases.has(variable) || variable.defs.length !== 1)
-    return null;
-  const definition = variable.defs[0];
-  if (
-    definition?.type === "FunctionName" &&
-    definition.node.type === "FunctionDeclaration" &&
-    definition.node.body !== null &&
-    variable.references.every((reference) => !reference.isWrite())
-  ) {
-    return { body: definition.node.body, kind: "function", variable };
-  }
-  if (
-    definition?.type !== "Variable" ||
-    definition.node.type !== "VariableDeclarator" ||
-    definition.node.id.type !== "Identifier" ||
-    definition.node.init === null ||
-    !isStableBinding(variable, definition.node)
-  ) {
-    return null;
-  }
-  return { expression: definition.node.init, kind: "expression", variable };
-}
-
-function directlyExposesParameter(
-  expression: ESTree.Expression,
-  parameterExposure: ParameterExposure,
-  sourceCode: SourceCode,
-  resolvingAliases: ReadonlySet<Variable> = new Set(),
-  accessPath: readonly TypePropertyPathSegment[] = [],
-): boolean {
-  const unwrapped = unwrapTransparentExpression(expression, { includeTypeAssertions: true });
-  if (unwrapped !== expression) {
-    return directlyExposesParameter(
-      unwrapped,
-      parameterExposure,
-      sourceCode,
-      resolvingAliases,
-      accessPath,
-    );
-  }
-  if (expression.type === "Identifier") {
-    if (resolveVariable(sourceCode, expression) === parameterExposure.variable) {
-      return parameterExposure.exposesUnknownAtPath(accessPath);
-    }
-    const alias = stableAliasInitializer(sourceCode, expression, resolvingAliases);
-    if (alias === null) return false;
-    const nextResolving = new Set(resolvingAliases);
-    nextResolving.add(alias.variable);
-    return alias.kind === "expression"
-      ? directlyExposesParameter(
-          alias.expression,
-          parameterExposure,
-          sourceCode,
-          nextResolving,
-          accessPath,
-        )
-      : alias.body.body.some((statement) =>
-          statementReturnsParameter(
-            statement,
-            parameterExposure,
-            sourceCode,
-            nextResolving,
-            accessPath,
-          ),
-        );
-  }
-  if (expression.type === "ChainExpression")
-    return directlyExposesParameter(
-      expression.expression,
-      parameterExposure,
-      sourceCode,
-      resolvingAliases,
-      accessPath,
-    );
-  if (expression.type === "ArrowFunctionExpression" || expression.type === "FunctionExpression") {
-    if (expression.body === null) return false;
-    return expression.body.type === "BlockStatement"
-      ? expression.body.body.some((statement) =>
-          statementReturnsParameter(
-            statement,
-            parameterExposure,
-            sourceCode,
-            resolvingAliases,
-            accessPath,
-          ),
-        )
-      : directlyExposesParameter(
-          expression.body,
-          parameterExposure,
-          sourceCode,
-          resolvingAliases,
-          accessPath,
-        );
-  }
-  if (expression.type === "AwaitExpression") {
-    return directlyExposesParameter(
-      expression.argument,
-      parameterExposure,
-      sourceCode,
-      resolvingAliases,
-      accessPath,
-    );
-  }
-  if (expression.type === "ConditionalExpression") {
-    return (
-      directlyExposesParameter(
-        expression.consequent,
-        parameterExposure,
-        sourceCode,
-        resolvingAliases,
-        accessPath,
-      ) ||
-      directlyExposesParameter(
-        expression.alternate,
-        parameterExposure,
-        sourceCode,
-        resolvingAliases,
-        accessPath,
-      )
-    );
-  }
-  if (expression.type === "LogicalExpression") {
-    return (
-      directlyExposesParameter(
-        expression.left,
-        parameterExposure,
-        sourceCode,
-        resolvingAliases,
-        accessPath,
-      ) ||
-      directlyExposesParameter(
-        expression.right,
-        parameterExposure,
-        sourceCode,
-        resolvingAliases,
-        accessPath,
-      )
-    );
-  }
-  if (expression.type === "SequenceExpression") {
-    const lastExpression = expression.expressions.at(-1);
-    return (
-      lastExpression !== undefined &&
-      directlyExposesParameter(
-        lastExpression,
-        parameterExposure,
-        sourceCode,
-        resolvingAliases,
-        accessPath,
-      )
-    );
-  }
-  if (expression.type === "MemberExpression" && expression.object.type !== "Super") {
-    const segment = bindingPropertyPathSegment(expression.property, expression.computed);
-    return directlyExposesParameter(
-      expression.object,
-      parameterExposure,
-      sourceCode,
-      resolvingAliases,
-      segment === null ? accessPath : [segment, ...accessPath],
-    );
-  }
-  if (expression.type === "ArrayExpression") {
-    return expression.elements.some(
-      (element) =>
-        element !== null &&
-        directlyExposesParameter(
-          element.type === "SpreadElement" ? element.argument : element,
-          parameterExposure,
-          sourceCode,
-          resolvingAliases,
-          accessPath,
-        ),
-    );
-  }
-  if (expression.type === "ObjectExpression") {
-    return expression.properties.some((property) =>
-      directlyExposesParameter(
-        property.type === "SpreadElement" ? property.argument : property.value,
-        parameterExposure,
-        sourceCode,
-        resolvingAliases,
-        accessPath,
-      ),
-    );
-  }
-  if (expression.type === "TemplateLiteral") {
-    return expression.expressions.some((part) =>
-      directlyExposesParameter(part, parameterExposure, sourceCode, resolvingAliases, accessPath),
-    );
-  }
-  return false;
-}
-
-function statementReturnsParameter(
-  statement: ESTree.Statement,
-  parameterExposure: ParameterExposure,
-  sourceCode: SourceCode,
-  resolvingAliases: ReadonlySet<Variable> = new Set(),
-  accessPath: readonly TypePropertyPathSegment[] = [],
-): boolean {
-  if (statement.type === "ReturnStatement") {
-    return (
-      statement.argument !== null &&
-      directlyExposesParameter(
-        statement.argument,
-        parameterExposure,
-        sourceCode,
-        resolvingAliases,
-        accessPath,
-      )
-    );
-  }
-  if (statement.type === "BlockStatement") {
-    return statement.body.some((child) =>
-      statementReturnsParameter(child, parameterExposure, sourceCode, resolvingAliases, accessPath),
-    );
-  }
-  if (statement.type === "IfStatement") {
-    return (
-      statementReturnsParameter(
-        statement.consequent,
-        parameterExposure,
-        sourceCode,
-        resolvingAliases,
-        accessPath,
-      ) ||
-      (statement.alternate !== null &&
-        statementReturnsParameter(
-          statement.alternate,
-          parameterExposure,
-          sourceCode,
-          resolvingAliases,
-          accessPath,
-        ))
-    );
-  }
-  if (statement.type === "SwitchStatement") {
-    return statement.cases.some((case_) =>
-      case_.consequent.some((child) =>
-        statementReturnsParameter(
-          child,
-          parameterExposure,
-          sourceCode,
-          resolvingAliases,
-          accessPath,
-        ),
-      ),
-    );
-  }
-  if (statement.type === "TryStatement") {
-    return (
-      statementReturnsParameter(
-        statement.block,
-        parameterExposure,
-        sourceCode,
-        resolvingAliases,
-        accessPath,
-      ) ||
-      (statement.handler !== null &&
-        statementReturnsParameter(
-          statement.handler.body,
-          parameterExposure,
-          sourceCode,
-          resolvingAliases,
-          accessPath,
-        )) ||
-      (statement.finalizer !== null &&
-        statementReturnsParameter(
-          statement.finalizer,
-          parameterExposure,
-          sourceCode,
-          resolvingAliases,
-          accessPath,
-        ))
-    );
-  }
-  return false;
-}
-
-function hasKnownOutputContract(
-  functionNode: RuntimeFunction,
-  visitorKeys: Readonly<Record<string, readonly string[]>>,
-  resolveImportedType: PortableTypeResolver,
-): boolean {
-  const returnType = functionNode.returnType?.typeAnnotation;
-  if (returnType === undefined) return false;
-  const environment = createTypeEnvironment(returnType, visitorKeys);
+function hasKnownReturnType(node: RuntimeFunction): boolean {
+  const returnType = node.returnType?.typeAnnotation;
+  if (returnType === undefined || returnType.type === "TSAnyKeyword") return false;
+  const unwrapped = unwrapType(returnType);
   return (
-    !typeResolvesToAny(returnType, environment, resolveImportedType) &&
-    !typeResolvesToUnknown(returnType, environment, resolveImportedType)
+    unwrapped.type !== "TSUnknownKeyword" &&
+    (unwrapped.type !== "TSUnionType" ||
+      !unwrapped.types.some(
+        (member) =>
+          unwrapType(member).type === "TSUnknownKeyword" ||
+          unwrapType(member).type === "TSAnyKeyword",
+      ))
   );
 }
 
-/** Reject direct exposure and assertion of explicitly unknown runtime inputs. */
+function exposesVariable(
+  expression: ESTree.Expression,
+  variables: ReadonlySet<Variable>,
+  sourceCode: SourceCode,
+  visited: ReadonlySet<Variable> = new Set(),
+): boolean {
+  const unwrapped = unwrapTransparentExpression(expression, { includeTypeAssertions: true });
+  if (unwrapped.type === "Identifier") {
+    const variable = resolveVariable(sourceCode, unwrapped);
+    if (variable === null) return false;
+    if (variables.has(variable)) return true;
+    if (visited.has(variable)) return false;
+    const declaration = singleVariableDeclarator(variable);
+    if (declaration?.init === null || declaration?.init === undefined) return false;
+    const nextVisited = new Set(visited);
+    nextVisited.add(variable);
+    return exposesVariable(declaration.init, variables, sourceCode, nextVisited);
+  }
+  if (unwrapped.type === "MemberExpression" && unwrapped.object.type !== "Super") {
+    return exposesVariable(unwrapped.object, variables, sourceCode, visited);
+  }
+  if (unwrapped.type === "AwaitExpression") {
+    return exposesVariable(unwrapped.argument, variables, sourceCode, visited);
+  }
+  if (unwrapped.type === "ConditionalExpression") {
+    return (
+      exposesVariable(unwrapped.consequent, variables, sourceCode, visited) ||
+      exposesVariable(unwrapped.alternate, variables, sourceCode, visited)
+    );
+  }
+  if (unwrapped.type === "LogicalExpression") {
+    return (
+      exposesVariable(unwrapped.left, variables, sourceCode, visited) ||
+      exposesVariable(unwrapped.right, variables, sourceCode, visited)
+    );
+  }
+  if (unwrapped.type === "SequenceExpression") {
+    const result = unwrapped.expressions.at(-1);
+    return result !== undefined && exposesVariable(result, variables, sourceCode, visited);
+  }
+  if (unwrapped.type === "ArrayExpression") {
+    return unwrapped.elements.some(
+      (element) =>
+        element !== null &&
+        exposesVariable(
+          element.type === "SpreadElement" ? element.argument : element,
+          variables,
+          sourceCode,
+          visited,
+        ),
+    );
+  }
+  if (unwrapped.type === "ObjectExpression") {
+    return unwrapped.properties.some((property) =>
+      exposesVariable(
+        property.type === "SpreadElement" ? property.argument : property.value,
+        variables,
+        sourceCode,
+        visited,
+      ),
+    );
+  }
+  if (unwrapped.type === "TemplateLiteral") {
+    return unwrapped.expressions.some((part) =>
+      exposesVariable(part, variables, sourceCode, visited),
+    );
+  }
+  return false;
+}
+
+/** Reject explicitly unknown parameters only when a function leaks them as unchecked output. */
 export const noUnknownParametersRule = defineRule({
   meta: {
     type: "problem",
     docs: {
       description:
-        "Disallow inferred returns and type assertions that directly expose an explicitly unknown parameter.",
+        "Disallow returning or asserting explicitly unknown function inputs without a checked output contract.",
     },
     messages: {
       unknownParameter:
@@ -459,120 +193,56 @@ export const noUnknownParametersRule = defineRule({
     },
   },
   createOnce(context) {
-    const reportedParameters = new WeakSet<ESTree.TSTypeAnnotation>();
-    const importedTypeResolver = createLazyImportedTypeResolver(() => context.filename);
+    const reported = new WeakSet<ESTree.TSTypeAnnotation>();
 
-    const report = (parameter: Parameter): void => {
-      const annotation = parameterAnnotation(parameter);
-      if (annotation === null || annotation === undefined || reportedParameters.has(annotation)) {
-        return;
-      }
-      reportedParameters.add(annotation);
-      context.report({
-        node: annotation.typeAnnotation,
-        messageId: "unknownParameter",
-        data: { parameter: parameterName(parameter, context.sourceCode.getText(parameter)) },
+    const reportIfExposed = (node: RuntimeFunction, expression: ESTree.Expression): void => {
+      const entries = node.params.flatMap((parameter) => {
+        const annotation = parameterAnnotation(parameter);
+        if (annotation === null || annotation === undefined) return [];
+        return [
+          {
+            annotation,
+            parameter,
+            variables: unknownParameterVariables(context.sourceCode, parameter),
+          },
+        ];
       });
-    };
 
-    const parameterExposures = (parameter: Parameter): readonly ParameterExposure[] => {
-      const annotation = parameterAnnotation(parameter);
-      if (annotation === null || annotation === undefined) return [];
-      const environment = createTypeEnvironment(
-        annotation.typeAnnotation,
-        context.sourceCode.visitorKeys,
-      );
-      const resolver = importedTypeResolver(annotation);
-      return parameterBindings(parameter).flatMap(
-        ({ identifier, omittedProperties, path }): readonly ParameterExposure[] => {
-          const variable = resolveVariable(context.sourceCode, identifier);
-          if (variable === null) return [];
-          const bindingIsUnknown = typePropertyPathResolvesToUnknown(
-            annotation.typeAnnotation,
-            path,
-            environment,
-            resolver,
-          );
-          return [
-            {
-              exposesUnknownAtPath(accessPath) {
-                if (bindingIsUnknown) return true;
-                const firstAccess = accessPath[0];
-                if (typeof firstAccess === "string" && omittedProperties.has(firstAccess)) {
-                  return false;
-                }
-                return (
-                  accessPath.length > 0 &&
-                  typePropertyPathResolvesToUnknown(
-                    annotation.typeAnnotation,
-                    [...path, ...accessPath],
-                    environment,
-                    resolver,
-                  )
-                );
-              },
-              variable,
-            },
-          ];
-        },
-      );
+      for (const entry of entries) {
+        if (
+          entry.variables.length === 0 ||
+          reported.has(entry.annotation) ||
+          !exposesVariable(expression, new Set(entry.variables), context.sourceCode)
+        ) {
+          continue;
+        }
+        reported.add(entry.annotation);
+        context.report({
+          node: entry.annotation.typeAnnotation,
+          messageId: "unknownParameter",
+          data: {
+            parameter: parameterName(entry.parameter, context.sourceCode.getText(entry.parameter)),
+          },
+        });
+      }
     };
 
     const checkAssertion = (node: ESTree.TSAsExpression | ESTree.TSTypeAssertion): void => {
-      const functionNode = enclosingRuntimeFunction(node);
-      if (functionNode === null) return;
-      for (const parameter of functionNode.params) {
-        if (
-          parameterExposures(parameter).some((exposure) =>
-            directlyExposesParameter(node.expression, exposure, context.sourceCode),
-          )
-        ) {
-          report(parameter);
-        }
-      }
+      const owner = enclosingRuntimeFunction(node);
+      if (owner !== null) reportIfExposed(owner, node.expression);
     };
 
     return {
       ArrowFunctionExpression(node) {
-        if (
-          node.body.type === "BlockStatement" ||
-          hasKnownOutputContract(node, context.sourceCode.visitorKeys, importedTypeResolver(node))
-        ) {
-          return;
-        }
-        const body = node.body;
-        for (const parameter of node.params) {
-          if (
-            parameterExposures(parameter).some((exposure) =>
-              directlyExposesParameter(body, exposure, context.sourceCode),
-            )
-          ) {
-            report(parameter);
-          }
+        if (node.body.type !== "BlockStatement" && !hasKnownReturnType(node)) {
+          reportIfExposed(node, node.body);
         }
       },
       ReturnStatement(node) {
         if (node.argument === null) return;
-        const argument = node.argument;
-        const functionNode = enclosingRuntimeFunction(node);
-        if (
-          functionNode === null ||
-          hasKnownOutputContract(
-            functionNode,
-            context.sourceCode.visitorKeys,
-            importedTypeResolver(functionNode),
-          )
-        ) {
-          return;
-        }
-        for (const parameter of functionNode.params) {
-          if (
-            parameterExposures(parameter).some((exposure) =>
-              directlyExposesParameter(argument, exposure, context.sourceCode),
-            )
-          ) {
-            report(parameter);
-          }
+        const owner = enclosingRuntimeFunction(node);
+        if (owner !== null && !hasKnownReturnType(owner)) {
+          reportIfExposed(owner, node.argument);
         }
       },
       TSAsExpression: checkAssertion,

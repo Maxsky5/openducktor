@@ -1,5 +1,5 @@
-import type { GitProviderRepository, JsonValue, PullRequest } from "@openducktor/contracts";
-import { pullRequestSchema, jsonValueSchema } from "@openducktor/contracts";
+import type { GitProviderRepository, PullRequest } from "@openducktor/contracts";
+import { pullRequestSchema } from "@openducktor/contracts";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import { z } from "zod";
 
@@ -64,7 +64,7 @@ export type GithubPullRequestSyncPolicy = {
   repository?: GitProviderRepository;
 };
 
-const parseGithubPullPayload = (value: JsonValue): GithubPullResponse => {
+const parseGithubPullPayload = (value: unknown): GithubPullResponse => {
   const parsed = githubPullResponseSchema.safeParse(value);
   if (parsed.success) {
     return parsed.data;
@@ -107,9 +107,9 @@ const normalizeGithubPullRequest = (response: GithubPullResponse): ResolvedPullR
 };
 
 export const parseGithubPullListResponse = (payload: string): ResolvedPullRequest[] => {
-  let parsed: JsonValue;
+  let parsed: unknown;
   try {
-    parsed = jsonValueSchema.parse(JSON.parse(payload));
+    parsed = JSON.parse(payload);
   } catch (cause) {
     throw new HostValidationError({
       field: "payload",
@@ -131,9 +131,9 @@ export const parseGithubPullListResponse = (payload: string): ResolvedPullReques
 };
 
 export const parseGithubPullResponse = (payload: string): ResolvedPullRequest => {
-  let parsed: JsonValue;
+  let parsed: unknown;
   try {
-    parsed = jsonValueSchema.parse(JSON.parse(payload));
+    parsed = JSON.parse(payload);
   } catch (cause) {
     throw new HostValidationError({
       field: "payload",

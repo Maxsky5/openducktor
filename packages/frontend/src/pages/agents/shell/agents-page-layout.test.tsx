@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { act, fireEvent, render as testingLibraryRender } from "@testing-library/react";
 import { type ChangeEvent, createElement, type ReactElement, useState } from "react";
 import { QueryProvider } from "@/lib/query-provider";
-import { createFocusedFixture } from "@/test-utils/focused-fixture";
 import type { AgentStudioTerminalPanelModel } from "../terminals/use-agent-studio-terminals";
 import { AgentsPageWorkspace, AgentsPageWorkspacePanes } from "./agents-page-layout";
 
@@ -64,7 +63,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
   test("keeps the selected file draft mounted across responsive layout changes", () => {
     let isNarrow = false;
     const listeners = new Set<EventListenerOrEventListenerObject>();
-    const mediaQueryList = createFocusedFixture<MediaQueryList>()({
+    const mediaQueryList = {
       get matches() {
         return isNarrow;
       },
@@ -79,7 +78,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
         listeners.delete(listener);
       },
       dispatchEvent: () => true,
-    });
+    } satisfies MediaQueryList;
     window.matchMedia = () => mediaQueryList;
     const terminalPanel: AgentStudioTerminalPanelModel = {
       scopeKey: "repo:task-1",

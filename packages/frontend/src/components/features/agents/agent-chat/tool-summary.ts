@@ -1,4 +1,4 @@
-import { isJsonObject, jsonValueSchema } from "@openducktor/contracts";
+import { isJsonObject } from "@openducktor/contracts";
 import { z } from "zod";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { extractAllFileEditData } from "./file-edit-tool";
@@ -92,8 +92,7 @@ const parseStructuredOutputSummary = (output: string): string | null => {
   }
 
   try {
-    // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue` at this boundary.
-    const parsed = jsonValueSchema.parse(JSON.parse(trimmed));
+    const parsed: unknown = JSON.parse(trimmed);
     if (!isJsonObject(parsed)) {
       return null;
     }
@@ -142,8 +141,7 @@ const countTodosFromOutput = (output: string | undefined): number | null => {
     return null;
   }
   try {
-    // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue` at this boundary.
-    const parsed = jsonValueSchema.parse(JSON.parse(output));
+    const parsed: unknown = JSON.parse(output);
     return countTodosFromUnknown(parsed);
   } catch {
     return null;

@@ -207,7 +207,7 @@ describe("TypeScript web host backend", () => {
     });
   });
 
-  test("rejects malformed successful command results before JSON serialization", async () => {
+  test("serializes successful host command results without changing their shape", async () => {
     const response = await handleTestRequest(
       new Request("http://127.0.0.1/invoke/runtime_ensure", {
         method: "POST",
@@ -224,11 +224,8 @@ describe("TypeScript web host backend", () => {
       },
     );
 
-    expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({
-      error: "Host command 'runtime_ensure' returned an invalid response.",
-      message: "Host command 'runtime_ensure' returned an invalid response.",
-    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ runtimeId: "runtime-1" });
   });
 
   test("preserves structured terminal failures in invoke error responses", async () => {

@@ -109,7 +109,12 @@ const readGlobalEventFailureScope = (
   const externalSessionId =
     (properties ? readStringProp(properties, ["sessionID"]) : undefined) ??
     (typeof syncEvent?.aggregateID === "string" ? syncEvent.aggregateID : undefined);
-  const payloadType = typeof payload?.type === "string" ? payload.type : undefined;
+  const payloadType =
+    typeof syncEvent?.type === "string"
+      ? syncEvent.type.replace(/\.1$/u, "")
+      : typeof payload?.type === "string"
+        ? payload.type
+        : undefined;
   const info = properties ? asUnknownRecord(properties.info) : undefined;
   const parentExternalSessionId =
     payloadType === "session.created" ||

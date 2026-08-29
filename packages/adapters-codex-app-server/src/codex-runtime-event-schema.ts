@@ -1,4 +1,5 @@
 import {
+  CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
   codexAppServerConsumedRuntimeNotificationSchema,
   codexAppServerUnconsumedRuntimeNotificationSchema,
   parseCodexAppServerRuntimeNotificationRecord,
@@ -80,9 +81,13 @@ const threadIdFromFaultMessage = (
   if (!isPlainObject(message) || !isPlainObject(message.params)) {
     return null;
   }
-  const threadId =
-    message.params.threadId ??
-    (sourceKind === "server_request" ? message.params.conversationId : undefined);
+  const usesLegacyConversationId =
+    sourceKind === "server_request" &&
+    (message.method === CODEX_APP_SERVER_SERVER_REQUEST_METHOD.APPLY_PATCH_APPROVAL ||
+      message.method === CODEX_APP_SERVER_SERVER_REQUEST_METHOD.EXEC_COMMAND_APPROVAL);
+  const threadId = usesLegacyConversationId
+    ? message.params.conversationId
+    : message.params.threadId;
   const parsed = nonEmptyStringSchema.safeParse(threadId);
   return parsed.success ? parsed.data : null;
 };

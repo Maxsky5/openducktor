@@ -10,9 +10,9 @@ export const isRunningToolStatus = (status: ToolStatus): boolean =>
 export const formatToolContent = (part: {
   tool: string;
   status: ToolStatus;
-  title?: string;
-  output?: string;
-  error?: string;
+  title?: string | undefined;
+  output?: string | undefined;
+  error?: string | undefined;
 }): string => {
   const title = part.title ? ` (${part.title})` : "";
   if (part.status === "completed") {

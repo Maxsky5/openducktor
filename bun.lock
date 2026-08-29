@@ -255,8 +255,6 @@
       "name": "@openducktor/anti-slop-oxlint",
       "dependencies": {
         "@oxlint/plugins": "1.78.0",
-        "oxc-parser": "^0.143.0",
-        "typescript": "^5.7.3",
       },
     },
   },

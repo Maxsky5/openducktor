@@ -1,7 +1,27 @@
 import { describe, expect, test } from "bun:test";
-import { CodexFileDiffParseError, codexApplyPatchFileDiffs, toFileDiffs } from "./codex-file-diffs";
+import {
+  CodexFileDiffParseError,
+  codexApplyPatchFileDiffs,
+  fileDiffsFromUnifiedDiff,
+  toFileDiffs,
+} from "./codex-file-diffs";
 
 describe("Codex file diffs", () => {
+  test("parses streamed unified diffs for file paths with spaces", () => {
+    const diff =
+      "diff --git a/src/my file.ts b/src/my file.ts\n--- a/src/my file.ts\n+++ b/src/my file.ts\n@@ -1 +1 @@\n-old\n+new";
+
+    expect(fileDiffsFromUnifiedDiff(diff)).toEqual([
+      {
+        file: "src/my file.ts",
+        type: "modified",
+        additions: 1,
+        deletions: 1,
+        diff: `${diff}\n`,
+      },
+    ]);
+  });
+
   test("parses Codex file change entries and derives missing counts", () => {
     expect(
       toFileDiffs([

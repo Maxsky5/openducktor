@@ -71,6 +71,7 @@ const loadOneDarkTheme = async (): Promise<MarkdownSyntaxThemeLoadResult<PrismTh
 };
 
 const MarkdownSyntaxBlock = createMarkdownSyntaxBlock({
+  getCachedDarkTheme: () => cachedOneDarkTheme,
   languageRegistry: markdownSyntaxLanguageRegistry,
   lightTheme: oneLight,
   loadDarkTheme: loadOneDarkTheme,

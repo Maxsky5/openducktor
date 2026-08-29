@@ -1,19 +1,39 @@
 import { defineRule } from "@oxlint/plugins";
 
-import { isKnownEvidenceExpression } from "../shared/dictionary-types.ts";
-import { resolveVariable, singleVariableDeclarator } from "../shared/global-reference.ts";
-import { createLazyImportedTypeResolver } from "../shared/imported-type-resolution.ts";
 import {
+  classifyWideningTarget,
   createTypeEnvironment,
-  type PortableTypeResolver,
-} from "../shared/portable-type-resolution.ts";
-import { unwrapTransparentExpression } from "../shared/transparent-expression.ts";
-import { isStableBinding } from "../shared/stable-binding.ts";
-import { classifyWideningTarget, type WideningTarget } from "../shared/widening-target.ts";
+  isKnownEvidenceExpression,
+  type TypeEnvironment,
+  type WideningTarget,
+} from "../shared/dictionary-types.ts";
+import { resolveVariable, singleVariableDeclarator } from "../shared/global-reference.ts";
 
 import type { ESTree, SourceCode, Variable } from "@oxlint/plugins";
 
 type FunctionExpression = ESTree.ArrowFunctionExpression | ESTree.Function;
+
+function unwrapExpression(expression: ESTree.Expression): ESTree.Expression {
+  let current = expression;
+  while (
+    current.type === "ParenthesizedExpression" ||
+    current.type === "TSAsExpression" ||
+    current.type === "TSSatisfiesExpression" ||
+    current.type === "TSTypeAssertion" ||
+    current.type === "TSNonNullExpression"
+  ) {
+    current = current.expression;
+  }
+  return current;
+}
+
+function isStableConstVariable(variable: Variable, declarator: ESTree.VariableDeclarator): boolean {
+  return (
+    declarator.parent.type === "VariableDeclaration" &&
+    declarator.parent.kind === "const" &&
+    variable.references.every((reference) => reference.init || !reference.isWrite())
+  );
+}
 
 function hasKnownEvidence(
   sourceCode: SourceCode,
@@ -21,50 +41,29 @@ function hasKnownEvidence(
   visitedVariables = new Set<Variable>(),
 ): boolean {
   if (isKnownEvidenceExpression(expression)) return true;
-  const unwrapped = unwrapTransparentExpression(expression, { includeTypeAssertions: true });
-  if (unwrapped.type === "ConditionalExpression") {
-    return (
-      hasKnownEvidence(sourceCode, unwrapped.consequent, visitedVariables) &&
-      hasKnownEvidence(sourceCode, unwrapped.alternate, visitedVariables)
-    );
-  }
-  if (unwrapped.type === "LogicalExpression") {
-    return (
-      hasKnownEvidence(sourceCode, unwrapped.left, visitedVariables) &&
-      hasKnownEvidence(sourceCode, unwrapped.right, visitedVariables)
-    );
-  }
-  if (unwrapped.type === "SequenceExpression") {
-    const result = unwrapped.expressions.at(-1);
-    return result !== undefined && hasKnownEvidence(sourceCode, result, visitedVariables);
-  }
+  const unwrapped = unwrapExpression(expression);
   if (unwrapped.type !== "Identifier") return false;
   const variable = resolveVariable(sourceCode, unwrapped);
   if (variable === null || visitedVariables.has(variable)) return false;
   const declarator = singleVariableDeclarator(variable);
-  if (declarator === null || declarator.init === null || !isStableBinding(variable, declarator)) {
+  if (
+    declarator === null ||
+    declarator.init === null ||
+    !isStableConstVariable(variable, declarator)
+  ) {
     return false;
   }
-  const nextVisitedVariables = new Set(visitedVariables);
-  nextVisitedVariables.add(variable);
-  return hasKnownEvidence(sourceCode, declarator.init, nextVisitedVariables);
-}
-
-function typeTarget(
-  type: ESTree.TSType,
-  visitorKeys: Readonly<Record<string, readonly string[]>>,
-  resolveImportedType: PortableTypeResolver,
-): WideningTarget | null {
-  const environment = createTypeEnvironment(type, visitorKeys);
-  return classifyWideningTarget(type, environment, resolveImportedType);
+  visitedVariables.add(variable);
+  return hasKnownEvidence(sourceCode, declarator.init, visitedVariables);
 }
 
 function annotationTarget(
-  annotation: ESTree.TSTypeAnnotation,
-  visitorKeys: Readonly<Record<string, readonly string[]>>,
-  resolveImportedType: PortableTypeResolver,
+  annotation: ESTree.TSTypeAnnotation | null | undefined,
+  environment: TypeEnvironment,
 ): WideningTarget | null {
-  return typeTarget(annotation.typeAnnotation, visitorKeys, resolveImportedType);
+  return annotation === null || annotation === undefined
+    ? null
+    : classifyWideningTarget(annotation.typeAnnotation, environment);
 }
 
 function enclosingFunction(node: ESTree.Node): FunctionExpression | null {
@@ -99,12 +98,12 @@ function functionName(sourceCode: SourceCode, owner: FunctionExpression | null):
 }
 
 function isEmptyObjectExpression(expression: ESTree.Expression): boolean {
-  const unwrapped = unwrapTransparentExpression(expression, { includeTypeAssertions: true });
+  const unwrapped = unwrapExpression(expression);
   return unwrapped.type === "ObjectExpression" && unwrapped.properties.length === 0;
 }
 
 function isDictionaryAccumulatorTarget(destination: WideningTarget): boolean {
-  return destination.kind === "open dictionary";
+  return destination.kind === "open dictionary" || destination.kind === "generic container";
 }
 
 function hasParentAssertion(node: ESTree.Node): boolean {
@@ -125,43 +124,39 @@ export const noKnownValueWideningRule = defineRule({
     },
   },
   createOnce(context) {
-    const importedTypeResolver = createLazyImportedTypeResolver(() => context.filename);
+    let environment: TypeEnvironment | null = null;
+
     const reportFlow = (
       expression: ESTree.Expression,
-      destination: () => WideningTarget | null,
+      destination: WideningTarget | null,
       subject: string,
     ) => {
-      if (!hasKnownEvidence(context.sourceCode, expression)) return;
-      const resolvedDestination = destination();
-      if (resolvedDestination === null) return;
-      if (
-        isDictionaryAccumulatorTarget(resolvedDestination) &&
-        isEmptyObjectExpression(expression)
-      ) {
+      if (destination === null) return;
+      if (isDictionaryAccumulatorTarget(destination) && isEmptyObjectExpression(expression)) {
         return;
       }
+      if (!hasKnownEvidence(context.sourceCode, expression)) return;
       context.report({
         node: expression,
         messageId: "widening",
-        data: { subject, target: resolvedDestination.kind },
+        data: { subject, target: destination.kind },
       });
     };
 
-    const targetFromAnnotation = (annotation: ESTree.TSTypeAnnotation | null | undefined) => () =>
-      annotation === null || annotation === undefined
-        ? null
-        : annotationTarget(
-            annotation,
-            context.sourceCode.visitorKeys,
-            importedTypeResolver(annotation),
-          );
+    const targetFromAnnotation = (annotation: ESTree.TSTypeAnnotation | null | undefined) =>
+      environment === null ? null : annotationTarget(annotation, environment);
 
     return {
+      Program(node) {
+        environment = createTypeEnvironment(node);
+      },
       VariableDeclarator(node) {
-        if (node.init === null) return;
-        const subject =
-          node.id.type === "Identifier" ? `binding \`${node.id.name}\`` : "destructuring binding";
-        reportFlow(node.init, targetFromAnnotation(node.id.typeAnnotation), subject);
+        if (node.init === null || node.id.type !== "Identifier") return;
+        reportFlow(
+          node.init,
+          targetFromAnnotation(node.id.typeAnnotation),
+          `binding \`${node.id.name}\``,
+        );
       },
       PropertyDefinition(node) {
         if (node.value === null) return;
@@ -209,41 +204,19 @@ export const noKnownValueWideningRule = defineRule({
         );
       },
       TSAsExpression(node) {
-        if (hasParentAssertion(node)) return;
+        if (environment === null || hasParentAssertion(node)) return;
         reportFlow(
           node.expression,
-          () =>
-            typeTarget(
-              node.typeAnnotation,
-              context.sourceCode.visitorKeys,
-              importedTypeResolver(node),
-            ),
+          classifyWideningTarget(node.typeAnnotation, environment),
           "assertion",
         );
       },
       TSTypeAssertion(node) {
-        if (hasParentAssertion(node)) return;
+        if (environment === null || hasParentAssertion(node)) return;
         reportFlow(
           node.expression,
-          () =>
-            typeTarget(
-              node.typeAnnotation,
-              context.sourceCode.visitorKeys,
-              importedTypeResolver(node),
-            ),
+          classifyWideningTarget(node.typeAnnotation, environment),
           "assertion",
-        );
-      },
-      TSSatisfiesExpression(node) {
-        if (node.typeAnnotation.type !== "TSUnknownKeyword") return;
-        reportFlow(
-          node.expression,
-          () =>
-            classifyWideningTarget(
-              node.typeAnnotation,
-              createTypeEnvironment(node.typeAnnotation, context.sourceCode.visitorKeys),
-            ),
-          "satisfies expression",
         );
       },
     };

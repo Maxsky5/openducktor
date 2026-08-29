@@ -23,21 +23,19 @@ import {
 import { skillCatalogSchema } from "./skill-schemas";
 import { slashCommandCatalogSchema } from "./slash-command-schemas";
 import { subagentCatalogSchema } from "./subagent-schemas";
-import { exactOptionalSchema } from "./exact-optional";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 const claudeRuntimeKindSchema = z.literal("claude");
-export const claudeAgentModelSelectionSchema = exactOptionalSchema(
-  z
-    .object({
-      runtimeKind: claudeRuntimeKindSchema.optional(),
-      providerId: nonEmptyStringSchema,
-      modelId: nonEmptyStringSchema,
-      variant: nonEmptyStringSchema.optional(),
-      profileId: nonEmptyStringSchema.optional(),
-    })
-    .strict(),
-);
+const optionalFromNullable = <Schema extends z.ZodType>(schema: Schema) =>
+  z.preprocess((value) => (value === null ? undefined : value), schema.optional());
+
+export const claudeAgentModelSelectionSchema = z.object({
+  runtimeKind: claudeRuntimeKindSchema.optional(),
+  providerId: nonEmptyStringSchema,
+  modelId: nonEmptyStringSchema,
+  variant: optionalFromNullable(nonEmptyStringSchema),
+  profileId: optionalFromNullable(nonEmptyStringSchema),
+});
 export type ClaudeAgentModelSelection = z.infer<typeof claudeAgentModelSelectionSchema>;
 
 export const claudeRepoRuntimeRefSchema = repoRuntimeRefSchema.extend({
@@ -95,24 +93,20 @@ export const claudeSearchAgentFilesInputSchema = claudeRuntimeWorkingDirectoryRe
 });
 export type ClaudeSearchAgentFilesInput = z.infer<typeof claudeSearchAgentFilesInputSchema>;
 
-export const claudeLoadAgentSessionHistoryInputSchema = exactOptionalSchema(
-  claudePolicyBoundSessionRefSchema.extend({
-    systemPromptContext: z
-      .object({
-        systemPrompt: z.string(),
-        startedAt: nonEmptyStringSchema,
-      })
-      .optional(),
-    limit: z.number().int().positive().optional(),
-  }),
-);
+export const claudeLoadAgentSessionHistoryInputSchema = claudePolicyBoundSessionRefSchema.extend({
+  systemPromptContext: z
+    .object({
+      systemPrompt: z.string(),
+      startedAt: nonEmptyStringSchema,
+    })
+    .optional(),
+  limit: z.number().int().positive().optional(),
+});
 export type ClaudeLoadAgentSessionHistoryInput = z.infer<
   typeof claudeLoadAgentSessionHistoryInputSchema
 >;
 
-export const claudeLoadAgentSessionTodosInputSchema = exactOptionalSchema(
-  claudePolicyBoundSessionRefSchema,
-);
+export const claudeLoadAgentSessionTodosInputSchema = claudePolicyBoundSessionRefSchema;
 export type ClaudeLoadAgentSessionTodosInput = z.infer<
   typeof claudeLoadAgentSessionTodosInputSchema
 >;

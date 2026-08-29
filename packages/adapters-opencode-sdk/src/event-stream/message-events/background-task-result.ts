@@ -1,5 +1,5 @@
-import type { Part } from "@opencode-ai/sdk/v2/client";
 import { mapOpenCodeBackgroundTaskResultPart } from "../../opencode-background-task-result";
+import type { ParsedOpencodePart } from "../../opencode-ingress";
 import type { EventStreamRuntime } from "../shared";
 import { bindSubagentExternalSession } from "../shared";
 
@@ -78,7 +78,7 @@ export const flushPendingBackgroundTaskResultSubagentParts = (
 export const emitBackgroundTaskResultSubagentParts = (
   runtime: EventStreamRuntime,
   input: {
-    parts: Part[];
+    parts: ParsedOpencodePart[];
     timestamp: string;
   },
 ): boolean => {

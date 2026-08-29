@@ -1,12 +1,4 @@
-import type {
-  Agent,
-  Command,
-  ConfigProvidersResponse,
-  Message,
-  Part,
-  Session,
-} from "@opencode-ai/sdk/v2/client";
-import { exactOptionalSchema, type ExactOptional } from "@openducktor/contracts";
+import type { Agent } from "@opencode-ai/sdk/v2/client";
 import { z } from "zod";
 
 const unknownRecordSchema = z.record(z.string(), z.unknown());
@@ -68,9 +60,7 @@ const opencodeAgentSchema = opencodeAgentWireSchema.transform((agent): Agent => 
 }));
 export type ParsedOpencodeAgent = z.infer<typeof opencodeAgentSchema>;
 
-export const opencodeAgentListPayloadSchema = exactOptionalSchema(
-  z.array(opencodeAgentSchema),
-) satisfies z.ZodType<ExactOptional<Agent[]>>;
+export const opencodeAgentListPayloadSchema = z.array(opencodeAgentSchema);
 
 const opencodeSlashCommandSchema = z.object({
   agent: z.string().optional(),
@@ -83,9 +73,7 @@ const opencodeSlashCommandSchema = z.object({
   template: z.string(),
 });
 
-export const opencodeSlashCommandListPayloadSchema = exactOptionalSchema(
-  z.array(opencodeSlashCommandSchema),
-) satisfies z.ZodType<ExactOptional<Command[]>>;
+export const opencodeSlashCommandListPayloadSchema = z.array(opencodeSlashCommandSchema);
 
 export const opencodeFileSearchPayloadSchema = z.array(z.string());
 
@@ -151,16 +139,14 @@ const providerSchema = z.object({
   source: z.enum(["env", "config", "custom", "api"]),
 });
 
-export const opencodeProviderCatalogPayloadSchema = exactOptionalSchema(
-  z.object({
-    default: z.record(z.string(), z.string()),
-    providers: z.array(providerSchema),
-  }),
-) satisfies z.ZodType<ExactOptional<ConfigProvidersResponse>>;
+export const opencodeProviderCatalogPayloadSchema = z.object({
+  default: z.record(z.string(), z.string()),
+  providers: z.array(providerSchema),
+});
 
 export type ParsedOpencodeProviderCatalog = z.infer<typeof opencodeProviderCatalogPayloadSchema>;
 
-const sessionSnapshotFileDiffSchema = z.object({
+const snapshotFileDiffSummarySchema = z.object({
   additions: z.number(),
   deletions: z.number(),
   file: z.string().optional(),
@@ -168,65 +154,64 @@ const sessionSnapshotFileDiffSchema = z.object({
   status: z.enum(["added", "deleted", "modified"]).optional(),
 });
 
-export const opencodeSessionDetailPayloadSchema = exactOptionalSchema(
-  z.object({
-    agent: z.string().optional(),
-    cost: z.number().optional(),
-    directory: z.string(),
-    id: z.string(),
-    metadata: unknownRecordSchema.optional(),
-    model: z
-      .object({
-        id: z.string(),
-        providerID: z.string(),
-        variant: z.string().optional(),
-      })
-      .optional(),
-    parentID: z.string().optional(),
-    path: z.string().optional(),
-    permission: z.array(permissionRuleSchema).optional(),
-    projectID: z.string(),
-    revert: z
-      .object({
-        diff: z.string().optional(),
-        messageID: z.string(),
-        partID: z.string().optional(),
-        snapshot: z.string().optional(),
-      })
-      .optional(),
-    share: z.object({ url: z.string() }).optional(),
-    slug: z.string(),
-    summary: z
-      .object({
-        additions: z.number(),
-        deletions: z.number(),
-        diffs: z.array(sessionSnapshotFileDiffSchema).optional(),
-        files: z.number(),
-      })
-      .optional(),
-    time: z.object({
-      archived: z.number().optional(),
-      compacting: z.number().optional(),
-      created: z.number(),
-      updated: z.number(),
-    }),
-    title: z.string(),
-    tokens: z
-      .object({
-        cache: z.object({ read: z.number(), write: z.number() }),
-        input: z.number(),
-        output: z.number(),
-        reasoning: z.number(),
-      })
-      .optional(),
-    version: z.string(),
-    workspaceID: z.string().optional(),
+export const opencodeSessionDetailPayloadSchema = z.object({
+  agent: z.string().optional(),
+  cost: z.number().optional(),
+  directory: z.string(),
+  id: z.string(),
+  metadata: unknownRecordSchema.optional(),
+  model: z
+    .object({
+      id: z.string(),
+      providerID: z.string(),
+      variant: z.string().optional(),
+    })
+    .optional(),
+  parentID: z.string().optional(),
+  path: z.string().optional(),
+  permission: z.array(permissionRuleSchema).optional(),
+  projectID: z.string(),
+  revert: z
+    .object({
+      diff: z.string().optional(),
+      messageID: z.string(),
+      partID: z.string().optional(),
+      snapshot: z.string().optional(),
+    })
+    .optional(),
+  share: z.object({ url: z.string() }).optional(),
+  slug: z.string(),
+  summary: z
+    .object({
+      additions: z.number(),
+      deletions: z.number(),
+      diffs: z.array(snapshotFileDiffSummarySchema).optional(),
+      files: z.number(),
+    })
+    .optional(),
+  time: z.object({
+    archived: z.number().optional(),
+    compacting: z.number().optional(),
+    created: z.number(),
+    updated: z.number(),
   }),
-) satisfies z.ZodType<ExactOptional<Session>>;
+  title: z.string(),
+  tokens: z
+    .object({
+      cache: z.object({ read: z.number(), write: z.number() }),
+      input: z.number(),
+      output: z.number(),
+      reasoning: z.number(),
+    })
+    .optional(),
+  version: z.string(),
+  workspaceID: z.string().optional(),
+});
 
+export type ParsedOpencodeSession = z.output<typeof opencodeSessionDetailPayloadSchema>;
 export const opencodeSessionListPayloadSchema = z.array(opencodeSessionDetailPayloadSchema);
 
-export const parseOpencodeSessionListPayload = (value: unknown): Session[] => {
+export const parseOpencodeSessionListPayload = (value: unknown): ParsedOpencodeSession[] => {
   const parsed = opencodeSessionListPayloadSchema.safeParse(value);
   if (!parsed.success) {
     throw new Error(
@@ -432,32 +417,22 @@ const compactionPartSchema = z.object({
   type: z.literal("compaction"),
 });
 
-export const opencodePartPayloadSchema = exactOptionalSchema(
-  z.discriminatedUnion("type", [
-    textPartSchema,
-    subtaskPartSchema,
-    reasoningPartSchema,
-    filePartSchema,
-    toolPartSchema,
-    stepStartPartSchema,
-    stepFinishPartSchema,
-    snapshotPartSchema,
-    patchPartSchema,
-    agentPartSchema,
-    retryPartSchema,
-    compactionPartSchema,
-  ]),
-) satisfies z.ZodType<ExactOptional<Part>>;
+export const opencodePartPayloadSchema = z.discriminatedUnion("type", [
+  textPartSchema,
+  subtaskPartSchema,
+  reasoningPartSchema,
+  filePartSchema,
+  toolPartSchema,
+  stepStartPartSchema,
+  stepFinishPartSchema,
+  snapshotPartSchema,
+  patchPartSchema,
+  agentPartSchema,
+  retryPartSchema,
+  compactionPartSchema,
+]);
 
 export type ParsedOpencodePart = z.infer<typeof opencodePartPayloadSchema>;
-
-const snapshotFileDiffSchema = z.object({
-  additions: z.number(),
-  deletions: z.number(),
-  file: z.string().optional(),
-  patch: z.string().optional(),
-  status: z.enum(["added", "deleted", "modified"]).optional(),
-});
 
 export const opencodeMessageErrorSchema = z.discriminatedUnion("name", [
   z.object({
@@ -511,7 +486,7 @@ const userMessageInfoSchema = z.object({
   summary: z
     .object({
       body: z.string().optional(),
-      diffs: z.array(snapshotFileDiffSchema),
+      diffs: z.array(snapshotFileDiffSummarySchema),
       title: z.string().optional(),
     })
     .optional(),
@@ -540,9 +515,10 @@ const assistantMessageInfoSchema = z.object({
   variant: z.string().optional(),
 });
 
-export const opencodeMessageInfoPayloadSchema = exactOptionalSchema(
-  z.discriminatedUnion("role", [userMessageInfoSchema, assistantMessageInfoSchema]),
-) satisfies z.ZodType<ExactOptional<Message>>;
+export const opencodeMessageInfoPayloadSchema = z.discriminatedUnion("role", [
+  userMessageInfoSchema,
+  assistantMessageInfoSchema,
+]);
 
 const sessionMessageSchema = z.object({
   info: opencodeMessageInfoPayloadSchema,

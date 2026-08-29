@@ -135,32 +135,7 @@ export type CodexAppServerDynamicToolCallOutputContentItem = NonNullable<
 export type CodexAppServerWebSearchAction = NonNullable<
   Extract<CodexAppServerThreadItem, { type: "webSearch" }>["action"]
 >;
-export type CodexAppServerAskForApproval =
-  | "never"
-  | "on-request"
-  | "untrusted"
-  | {
-      granular: {
-        mcp_elicitations: boolean;
-        request_permissions: boolean;
-        rules: boolean;
-        sandbox_approval: boolean;
-        skill_approval: boolean;
-      };
-    };
-export type CodexAppServerApprovalsReviewer = "auto_review" | "guardian_subagent" | "user";
 export type CodexAppServerSandboxMode = "danger-full-access" | "read-only" | "workspace-write";
-export type CodexAppServerSandboxPolicy =
-  | { type: "dangerFullAccess" }
-  | { type: "externalSandbox"; networkAccess: "enabled" | "restricted" }
-  | { type: "readOnly"; networkAccess: boolean }
-  | {
-      type: "workspaceWrite";
-      excludeSlashTmp: boolean;
-      excludeTmpdirEnvVar: boolean;
-      networkAccess: boolean;
-      writableRoots: CodexAppServerAbsolutePath[];
-    };
 
 export type CodexAppServerInitializeParams = CodexAppServerRequestParamsMap["initialize"];
 export type CodexAppServerClientInfo = CodexAppServerInitializeParams["clientInfo"];
@@ -171,22 +146,22 @@ export type CodexAppServerInitializeResponse = CodexAppServerRequestResultMap["i
 export type CodexAppServerClientNotification = { method: "initialized" };
 
 export type CodexAppServerThreadExtra = Record<string, never>;
-export type CodexAppServerThreadSectionAppearance = {
-  icon: string | null;
-  color: string | null;
-};
-export type CodexAppServerThreadSection = {
-  id: string;
-  name: string;
-  appearance: CodexAppServerThreadSectionAppearance | null;
-};
-export type CodexAppServerGitInfo = {
-  sha: string | null;
-  branch: string | null;
-  originUrl: string | null;
-};
+export type CodexAppServerThreadSection = NonNullable<CodexAppServerThread["section"]>;
+export type CodexAppServerThreadSectionAppearance = NonNullable<
+  CodexAppServerThreadSection["appearance"]
+>;
+export type CodexAppServerGitInfo = NonNullable<CodexAppServerThread["gitInfo"]>;
 export type CodexAppServerThreadHistoryMode = "legacy" | "paginated";
 export type CodexAppServerThreadStartParams = CodexAppServerRequestParamsMap["thread/start"];
+export type CodexAppServerAskForApproval = NonNullable<
+  CodexAppServerThreadStartParams["approvalPolicy"]
+>;
+export type CodexAppServerApprovalsReviewer = NonNullable<
+  CodexAppServerThreadStartParams["approvalsReviewer"]
+>;
+export type CodexAppServerSandboxPolicy = NonNullable<
+  CodexAppServerRequestParamsMap["turn/start"]["sandboxPolicy"]
+>;
 export type CodexAppServerMultiAgentMode = NonNullable<
   CodexAppServerThreadStartParams["multiAgentMode"]
 >;
@@ -250,18 +225,13 @@ export type CodexAppServerGitDiffToRemoteParams = CodexAppServerRequestParamsMap
 export type CodexAppServerGitDiffToRemoteResponse =
   CodexAppServerRequestResultMap["gitDiffToRemote"];
 
-export type CodexAppServerFuzzyFileSearchMatchType = "file" | "directory";
 export type CodexAppServerFuzzyFileSearchParams = CodexAppServerRequestParamsMap["fuzzyFileSearch"];
-export type CodexAppServerFuzzyFileSearchResult = {
-  root: string;
-  path: string;
-  match_type: CodexAppServerFuzzyFileSearchMatchType;
-  file_name: string;
-  score: number;
-  indices: number[] | null;
-};
 export type CodexAppServerFuzzyFileSearchResponse =
   CodexAppServerRequestResultMap["fuzzyFileSearch"];
+export type CodexAppServerFuzzyFileSearchResult =
+  CodexAppServerFuzzyFileSearchResponse["files"][number];
+export type CodexAppServerFuzzyFileSearchMatchType =
+  CodexAppServerFuzzyFileSearchResult["match_type"];
 
 export type CodexAppServerThreadTokenUsageUpdatedNotification = {
   threadId: string;

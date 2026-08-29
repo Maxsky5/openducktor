@@ -11,10 +11,7 @@ import {
 } from "../../application/runtimes/claude-workspace-runtime";
 import { type HostError, HostValidationError } from "../../effect/host-errors";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
-import type {
-  HostCommandHandler,
-  UnvalidatedHostCommandResult,
-} from "../router/host-command-router";
+import type { HostCommandHandler, HostCommandResult } from "../router/host-command-router";
 import { defineHostCommandHandlers } from "../router/host-command-router";
 import { requireRecord } from "./command-inputs";
 import { jsonValueSchema } from "@openducktor/contracts";
@@ -53,7 +50,7 @@ type ClaudeRuntimeCommandService = Pick<
   | "searchFiles"
 >;
 
-const createClaudeCommandHandler = <Input, Response extends UnvalidatedHostCommandResult>(
+const createClaudeCommandHandler = <Input, Response extends HostCommandResult>(
   service: ClaudeRuntimeCommandService,
   contract: ClaudeRuntimeCommandContract<Input, Response>,
   invoke: (service: ClaudeRuntimeCommandService, input: Input) => Effect.Effect<unknown, HostError>,

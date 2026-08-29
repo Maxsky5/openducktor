@@ -153,7 +153,7 @@ export const createNodeEffectHostCommandRouter = (
     processEnv,
     workspaceSettingsService,
   };
-  if (configuredTaskStore) Object.assign(taskAssetServiceInput, { configuredTaskStore });
+  if (configuredTaskStore) taskAssetServiceInput.configuredTaskStore = configuredTaskStore;
   const assets = createNodeTaskAssetServices(taskAssetServiceInput);
   const { startupSweep, taskAssetReadService, taskAssetStagingService, taskStore } = assets;
   const systemDiagnosticsService = createSystemDiagnosticsService({
@@ -270,7 +270,7 @@ export const createNodeEffectHostCommandRouter = (
     taskWorktreeService,
     workspaceSettingsService,
   };
-  if (eventBus) Object.assign(devServerServiceInput, { eventBus });
+  if (eventBus) devServerServiceInput.eventBus = eventBus;
   const devServerService = createDevServerService(devServerServiceInput);
   const taskActivityGuard = createRuntimeTaskActivityGuard({
     runtimeRegistry: effectiveRuntimeRegistry,

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ODT_TOOL_SCHEMAS, type JsonValue, jsonValueSchema } from "@openducktor/contracts";
+import { ODT_TOOL_SCHEMAS } from "@openducktor/contracts";
 import { resolveStoreContext } from "./store-context";
 
 const originalFetch = globalThis.fetch;
@@ -29,7 +29,7 @@ type StoreContextEnvSnapshot = {
 };
 let previousStoreContextEnv: StoreContextEnvSnapshot;
 
-const jsonResponse = (payload: JsonValue, init: ResponseInit = {}): Response =>
+const jsonResponse = (payload: unknown, init: ResponseInit = {}): Response =>
   new Response(JSON.stringify(payload), {
     headers: { "Content-Type": "application/json" },
     status: 200,
@@ -114,7 +114,7 @@ afterEach(async () => {
 
 describe("resolveStoreContext", () => {
   test("validates readiness and the configured workspace concurrently", async () => {
-    const requests: Array<{ url: string; body: JsonValue }> = [];
+    const requests: Array<{ url: string; body: unknown }> = [];
     let releaseResponses = (): void => {
       throw new Error("Response barrier was not initialized.");
     };
@@ -125,8 +125,7 @@ describe("resolveStoreContext", () => {
       const url = String(input);
       requests.push({
         url,
-        // SAFETY: request bodies are JSON serialized by the bridge client.
-        body: jsonValueSchema.parse(JSON.parse(String(init?.body ?? "{}"))),
+        body: JSON.parse(String(init?.body ?? "{}")),
       });
       await responseBarrier;
       if (url.endsWith("/invoke/odt_mcp_ready")) {
@@ -179,13 +178,12 @@ describe("resolveStoreContext", () => {
   });
 
   test("starts without a workspace default after one authenticated readiness request", async () => {
-    const requests: Array<{ url: string; body: JsonValue }> = [];
+    const requests: Array<{ url: string; body: unknown }> = [];
     setFetchImplementation(async (input, init) => {
       const url = String(input);
       requests.push({
         url,
-        // SAFETY: request bodies are JSON serialized by the bridge client.
-        body: jsonValueSchema.parse(JSON.parse(String(init?.body ?? "{}"))),
+        body: JSON.parse(String(init?.body ?? "{}")),
       });
       if (url.endsWith("/invoke/odt_mcp_ready")) {
         return jsonResponse({

@@ -1,7 +1,6 @@
 export * from "./agent-engine-schemas";
 export * from "./agent-runtime-schemas";
 export * from "./agent-session-control-schemas";
-export * from "./exact-optional";
 export * from "./agent-session-event-schemas";
 export * from "./agent-session-live-schemas";
 export * from "./agent-session-schemas";
@@ -21,7 +20,6 @@ export * from "./git-provider-repository";
 export * from "./git-schemas";
 export * from "./host-event-schemas";
 export * from "./host-invoke-failure-schemas";
-export * from "./host-command-response-schemas";
 export * from "./json-types";
 export * from "./mcp-bridge-discovery";
 export * from "./metadata-schemas";

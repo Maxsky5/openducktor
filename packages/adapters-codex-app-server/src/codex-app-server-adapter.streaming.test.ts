@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { CodexAppServerJsonValue } from "@openducktor/contracts";
+import type { CodexAppServerTurnStartResult } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
 import {
   codexSessionRuntimeRef,
@@ -16,6 +16,7 @@ import {
 import type { CodexSubagentLinkState } from "./codex-subagent-link-state";
 import type {
   CodexAppServerAdapter,
+  CodexAppServerStreamEvent,
   CodexJsonRpcRequest,
   CodexJsonRpcTransport,
   CodexLiveSessionMutation,
@@ -273,8 +274,8 @@ describe("CodexAppServerAdapter streaming", () => {
 
   test("late old turn completion does not clear a newer active turn", async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
-    const firstTurnStart = createDeferred<CodexAppServerJsonValue>();
-    const secondTurnStart = createDeferred<CodexAppServerJsonValue>();
+    const firstTurnStart = createDeferred<CodexAppServerTurnStartResult>();
+    const secondTurnStart = createDeferred<CodexAppServerTurnStartResult>();
     const pendingTurnStarts = [firstTurnStart, secondTurnStart];
     const calls: CodexJsonRpcRequest[] = [];
     const transport: CodexJsonRpcTransport = {
@@ -488,9 +489,7 @@ describe("CodexAppServerAdapter streaming", () => {
   });
 
   test("emits accepted queued Codex user messages into the runtime transcript stream", async () => {
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
-    > = [];
+    const streamListeners: Array<(event: CodexAppServerStreamEvent) => void> = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
       streamListeners.push(listener);
       return () => {};
@@ -570,9 +569,7 @@ describe("CodexAppServerAdapter streaming", () => {
   });
 
   test("does not duplicate streamed user message completions after synthetic echo", async () => {
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
-    > = [];
+    const streamListeners: Array<(event: CodexAppServerStreamEvent) => void> = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
       streamListeners.push(listener);
       return () => {};
@@ -624,9 +621,7 @@ describe("CodexAppServerAdapter streaming", () => {
   });
 
   test("does not duplicate structured streamed user message completions after synthetic echo", async () => {
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
-    > = [];
+    const streamListeners: Array<(event: CodexAppServerStreamEvent) => void> = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
       streamListeners.push(listener);
       return () => {};
@@ -696,9 +691,7 @@ describe("CodexAppServerAdapter streaming", () => {
   });
 
   test("does not duplicate streamed skill reference user message completions after synthetic echo", async () => {
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
-    > = [];
+    const streamListeners: Array<(event: CodexAppServerStreamEvent) => void> = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
       streamListeners.push(listener);
       return () => {};
@@ -1023,9 +1016,7 @@ describe("CodexAppServerAdapter streaming", () => {
   });
 
   test("does not retain streamed events for a late renderer subscription", async () => {
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
-    > = [];
+    const streamListeners: Array<(event: CodexAppServerStreamEvent) => void> = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
       streamListeners.push(listener);
       return () => {};
@@ -1096,9 +1087,7 @@ describe("CodexAppServerAdapter streaming", () => {
   });
 
   test("routes live context compaction lifecycle items", async () => {
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
-    > = [];
+    const streamListeners: Array<(event: CodexAppServerStreamEvent) => void> = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
       streamListeners.push(listener);
       return () => {};
@@ -1170,9 +1159,7 @@ describe("CodexAppServerAdapter streaming", () => {
   });
 
   test("terminalizes orphaned spawns only at turn lifecycle boundaries", async () => {
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
-    > = [];
+    const streamListeners: Array<(event: CodexAppServerStreamEvent) => void> = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
       streamListeners.push(listener);
       return () => {};

@@ -1,8 +1,8 @@
-import type { Part } from "@opencode-ai/sdk/v2/client";
 import type { readMessageModelSelection } from "../../message-normalizers";
 import type { mapPartToAgentStreamPart } from "../../stream-part-mapper";
 import type { SessionMessageMetadata } from "../../types";
 import type { ParsedOpencodeEvent as Event } from "../../opencode-global-event-ingress";
+import type { ParsedOpencodePart } from "../../opencode-ingress";
 import type { EventStreamRuntime } from "../shared";
 import { applyDeltaToPart, getMessageParts } from "../shared";
 import { removeMessageProjectionState } from "./message-state";
@@ -26,8 +26,8 @@ export const isAssistantMessage = (
 export const applyPendingDeltas = (
   runtime: EventStreamRuntime,
   partId: string,
-  basePart: Part,
-): Part => {
+  basePart: ParsedOpencodePart,
+): ParsedOpencodePart => {
   const pendingDeltas = runtime.session.pendingDeltasByPartId.get(partId);
   if (!pendingDeltas || pendingDeltas.length === 0) {
     return basePart;
@@ -44,7 +44,10 @@ export const applyPendingDeltas = (
   return nextPart;
 };
 
-export const getKnownMessageParts = (runtime: EventStreamRuntime, messageId: string): Part[] => {
+export const getKnownMessageParts = (
+  runtime: EventStreamRuntime,
+  messageId: string,
+): ParsedOpencodePart[] => {
   return getMessageParts(runtime.session, messageId);
 };
 
@@ -54,7 +57,7 @@ const isTerminalAssistantFinish = (value: string | undefined): boolean =>
 const isTerminalStepFinishReason = (value: string | undefined): boolean => value === "stop";
 
 export const hasTerminalStopSignalInParts = (
-  parts: Part[],
+  parts: ParsedOpencodePart[],
   finish: string | undefined,
 ): boolean => {
   if (isTerminalAssistantFinish(finish)) {
@@ -71,7 +74,7 @@ export const hasTerminalStopSignalInParts = (
 
 export const hasMessageStopSignal = (input: {
   finish: string | undefined;
-  parts: Part[];
+  parts: ParsedOpencodePart[];
 }): boolean => {
   return hasTerminalStopSignalInParts(input.parts, input.finish);
 };

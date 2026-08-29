@@ -93,7 +93,10 @@ import {
   codexSubagentRouteEventFields,
 } from "./codex-subagent-link-state";
 import { CodexThreadInventoryReader } from "./codex-thread-inventory";
-import { requireNormalizedCodexToolInvocation } from "./codex-tool-normalizer";
+import {
+  requireNormalizedCodexToolInvocation,
+  toCodexToolQuestions,
+} from "./codex-tool-normalizer";
 import {
   type CodexTurnLifecycleContext,
   flushQueuedUserMessagesLater as flushQueuedUserMessagesLaterImpl,
@@ -170,16 +173,7 @@ const toLivePendingQuestion = (
   request: AgentPendingQuestionRequest,
 ): AgentSessionLivePendingQuestionRequest => ({
   requestId: request.requestId,
-  questions: request.questions.map((question) => ({
-    header: question.header,
-    question: question.question,
-    options: question.options.map((option) => ({
-      label: option.label,
-      description: option.description,
-    })),
-    ...(question.multiple !== undefined ? { multiple: question.multiple } : undefined),
-    ...(question.custom !== undefined ? { custom: question.custom } : undefined),
-  })),
+  questions: toCodexToolQuestions(request.questions),
 });
 
 export class CodexAppServerAdapter
@@ -874,6 +868,7 @@ export class CodexAppServerAdapter
         }),
       );
       const output = JSON.stringify({ answers });
+      const questions = toCodexToolQuestions(pending.request.questions);
       completedQuestionEvent = {
         type: "assistant_part",
         externalSessionId: input.externalSessionId,
@@ -884,12 +879,12 @@ export class CodexAppServerAdapter
           callId: questionToolCallId,
           rawToolName: "request_user_input",
           status: "completed",
-          input: pending.input,
+          input: { questions },
           output,
           metadata: {
             codexServerRequest: true,
             requestId: input.requestId,
-            questions: pending.request.questions,
+            questions,
             answers,
           },
         }),

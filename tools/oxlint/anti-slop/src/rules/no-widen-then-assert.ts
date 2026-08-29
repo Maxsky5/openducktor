@@ -1,179 +1,150 @@
 import { defineRule } from "@oxlint/plugins";
 
-import { isKnownEvidenceExpression } from "../shared/dictionary-types.ts";
-import { resolveVariable, singleVariableDeclarator } from "../shared/global-reference.ts";
-import { createLazyImportedTypeResolver } from "../shared/imported-type-resolution.ts";
 import {
+  classifyWideningTarget,
   createTypeEnvironment,
-  type PortableTypeResolver,
-} from "../shared/portable-type-resolution.ts";
-import { unwrapTransparentExpression } from "../shared/transparent-expression.ts";
-import { isStableBinding } from "../shared/stable-binding.ts";
-import { classifyWideningTarget } from "../shared/widening-target.ts";
+  type TypeEnvironment,
+} from "../shared/dictionary-types.ts";
+import { resolveVariable, singleVariableDeclarator } from "../shared/global-reference.ts";
 
-import type { ESTree, SourceCode, Variable } from "@oxlint/plugins";
+import type { ESTree, SourceCode } from "@oxlint/plugins";
 
-function hasKnownEvidence(
+type BroadTypeKind = "dictionary" | "object" | "top";
+
+const functionBoundaryTypes = new Set([
+  "ArrowFunctionExpression",
+  "FunctionDeclaration",
+  "FunctionExpression",
+  "TSDeclareFunction",
+  "TSEmptyBodyFunctionExpression",
+]);
+
+const unwrapExpression = (expression: ESTree.Expression): ESTree.Expression => {
+  let current = expression;
+  while (current.type === "ParenthesizedExpression") current = current.expression;
+  return current;
+};
+
+const unwrapType = (type: ESTree.TSType): ESTree.TSType => {
+  let current = type;
+  while (current.type === "TSParenthesizedType") current = current.typeAnnotation;
+  return current;
+};
+
+const broadTypeKind = (type: ESTree.TSType, environment: TypeEnvironment): BroadTypeKind | null => {
+  if (unwrapType(type).type === "TSAnyKeyword") return "top";
+  const target = classifyWideningTarget(type, environment);
+  if (target?.kind === "unknown") return "top";
+  if (target?.kind === "object") return "object";
+  return target?.kind === "open dictionary" || target?.kind === "generic container"
+    ? "dictionary"
+    : null;
+};
+
+const functionBoundary = (node: ESTree.Node): ESTree.Node | null => {
+  let current = node.parent;
+  while (current !== null && current.type !== "Program") {
+    if (functionBoundaryTypes.has(current.type)) return current;
+    current = current.parent;
+  }
+  return null;
+};
+
+const preciseSourceType = (
   sourceCode: SourceCode,
   expression: ESTree.Expression,
-  visitedVariables = new Set<Variable>(),
-): boolean {
-  if (isKnownEvidenceExpression(expression)) return true;
-  const unwrapped = unwrapTransparentExpression(expression);
-  if (unwrapped.type !== "Identifier") return false;
+  environment: TypeEnvironment,
+): ESTree.TSType | null => {
+  const unwrapped = unwrapExpression(expression);
+  if (unwrapped.type !== "Identifier") return null;
   const variable = resolveVariable(sourceCode, unwrapped);
-  if (variable === null || visitedVariables.has(variable)) return false;
-  const declarator = singleVariableDeclarator(variable);
-  if (declarator === null || declarator.init === null || !isStableBinding(variable, declarator)) {
-    return false;
-  }
-  visitedVariables.add(variable);
-  return hasKnownEvidence(sourceCode, declarator.init, visitedVariables);
-}
+  const annotation = variable?.identifiers.find(
+    (identifier) => identifier.typeAnnotation?.typeAnnotation !== undefined,
+  )?.typeAnnotation?.typeAnnotation;
+  return annotation !== undefined && broadTypeKind(annotation, environment) === null
+    ? annotation
+    : null;
+};
 
-function isBroadBoundaryType(
-  type: ESTree.TSType,
-  visitorKeys: Readonly<Record<string, readonly string[]>>,
-  resolveImportedType: PortableTypeResolver,
-): boolean {
-  const wideningTarget = classifyWideningTarget(
-    type,
-    createTypeEnvironment(type, visitorKeys),
-    resolveImportedType,
-  );
-  return (
-    wideningTarget?.kind === "unknown" ||
-    wideningTarget?.kind === "object" ||
-    wideningTarget?.kind === "open dictionary"
-  );
-}
-
-function variableHasBroadAnnotation(
-  variable: Variable,
-  visitorKeys: Readonly<Record<string, readonly string[]>>,
-  resolveImportedType: PortableTypeResolver,
-): boolean {
-  return variable.identifiers.some((identifier) => {
-    const annotation = identifier.typeAnnotation?.typeAnnotation;
-    return (
-      annotation !== undefined && isBroadBoundaryType(annotation, visitorKeys, resolveImportedType)
-    );
-  });
-}
-
-function isBroadBoundaryInput(
-  sourceCode: SourceCode,
-  variable: Variable,
-  visitorKeys: Readonly<Record<string, readonly string[]>>,
-  resolveImportedType: PortableTypeResolver,
-): boolean {
-  const identifier = variable.identifiers[0];
-  if (
-    identifier === undefined ||
-    !variableHasBroadAnnotation(variable, visitorKeys, resolveImportedType) ||
-    variable.references.some(
-      (reference) =>
-        reference.isWrite() &&
-        !reference.init &&
-        (reference.identifier.start !== identifier.start ||
-          reference.identifier.end !== identifier.end),
-    )
-  ) {
-    return false;
-  }
-
-  const declarator = singleVariableDeclarator(variable);
-  return (
-    declarator === null ||
-    declarator.init === null ||
-    !hasKnownEvidence(sourceCode, declarator.init)
-  );
-}
-
-function aliasedIdentifier(
+const assertionFromExpression = (
   expression: ESTree.Expression,
-  visitorKeys: Readonly<Record<string, readonly string[]>>,
-  resolveImportedType: PortableTypeResolver,
-): ESTree.IdentifierReference | null {
-  let current = unwrapTransparentExpression(expression);
-  if (current.type === "TSAsExpression" || current.type === "TSTypeAssertion") {
-    if (!isBroadBoundaryType(current.typeAnnotation, visitorKeys, resolveImportedType)) return null;
-    current = unwrapTransparentExpression(current.expression);
-  }
-  return current.type === "Identifier" ? current : null;
-}
+): ESTree.TSAsExpression | ESTree.TSTypeAssertion | null => {
+  const unwrapped = unwrapExpression(expression);
+  return unwrapped.type === "TSAsExpression" || unwrapped.type === "TSTypeAssertion"
+    ? unwrapped
+    : null;
+};
 
-function aliasesBroadBoundaryInput(
-  sourceCode: SourceCode,
-  assertedIdentifier: ESTree.IdentifierReference,
-  assertion: ESTree.TSAsExpression | ESTree.TSTypeAssertion,
-  visitorKeys: Readonly<Record<string, readonly string[]>>,
-  resolveImportedType: PortableTypeResolver,
-): boolean {
-  let variable = resolveVariable(sourceCode, assertedIdentifier);
-  const visited = new Set<Variable>();
-  let aliasCount = 0;
+const isObjectLikeType = (type: ESTree.TSType): boolean => {
+  const unwrapped = unwrapType(type);
+  return (
+    unwrapped.type === "TSArrayType" ||
+    unwrapped.type === "TSConstructorType" ||
+    unwrapped.type === "TSFunctionType" ||
+    unwrapped.type === "TSIntersectionType" ||
+    unwrapped.type === "TSMappedType" ||
+    unwrapped.type === "TSObjectKeyword" ||
+    unwrapped.type === "TSTupleType" ||
+    unwrapped.type === "TSTypeLiteral" ||
+    unwrapped.type === "TSTypeReference"
+  );
+};
 
-  while (variable !== null && !visited.has(variable)) {
-    visited.add(variable);
-    const declarator = singleVariableDeclarator(variable);
-    if (
-      declarator !== null &&
-      declarator.init !== null &&
-      declarator.end < assertion.start &&
-      isStableBinding(variable, declarator)
-    ) {
-      const sourceIdentifier = aliasedIdentifier(declarator.init, visitorKeys, resolveImportedType);
-      if (sourceIdentifier !== null) {
-        aliasCount += 1;
-        variable = resolveVariable(sourceCode, sourceIdentifier);
-        continue;
-      }
-    }
-
-    return (
-      aliasCount > 0 && isBroadBoundaryInput(sourceCode, variable, visitorKeys, resolveImportedType)
-    );
-  }
-
-  return false;
-}
-
-/** Detect local aliases that conceal a broad boundary input before a narrow assertion. */
+/** Detect annotated values that are erased through a broad local const and later asserted back. */
 export const noWidenThenAssertRule = defineRule({
   meta: {
     type: "problem",
     docs: {
       description:
-        "Disallow laundering an accepted broad boundary input through local aliases before asserting it to a narrower type.",
+        "Disallow local const flows that erase an annotated value before asserting the widened binding to a narrower type.",
     },
     messages: {
       widenThenAssert:
-        'Binding "{{name}}" aliases a broad boundary input before asserting a narrower type. Parse or assert the boundary input directly, then keep the parsed owner type.',
+        'Binding "{{name}}" discards type evidence and later recreates it with an assertion. Keep the precise type from initialization through use; parse boundary input once.',
     },
   },
   createOnce(context) {
-    const importedTypeResolver = createLazyImportedTypeResolver(() => context.filename);
-    const checkAssertion = (node: ESTree.TSAsExpression | ESTree.TSTypeAssertion): void => {
-      const visitorKeys = context.sourceCode.visitorKeys;
-      const resolver = importedTypeResolver(node);
-      if (isBroadBoundaryType(node.typeAnnotation, visitorKeys, resolver)) return;
-      const expression = unwrapTransparentExpression(node.expression);
+    let environment: TypeEnvironment | null = null;
+
+    const checkAssertion = (node: ESTree.TSAsExpression | ESTree.TSTypeAssertion) => {
+      if (environment === null) return;
+      const expression = unwrapExpression(node.expression);
+      if (expression.type !== "Identifier") return;
+      const variable = resolveVariable(context.sourceCode, expression);
+      if (variable === null) return;
+      const declarator = singleVariableDeclarator(variable);
       if (
-        expression.type !== "Identifier" ||
-        !aliasesBroadBoundaryInput(context.sourceCode, expression, node, visitorKeys, resolver)
+        declarator === null ||
+        declarator.parent.type !== "VariableDeclaration" ||
+        declarator.parent.kind !== "const" ||
+        declarator.id.type !== "Identifier" ||
+        declarator.init === null ||
+        variable.references.some((reference) => reference.isWrite() && !reference.init) ||
+        node.start <= declarator.end ||
+        functionBoundary(node) !== functionBoundary(declarator)
       ) {
         return;
       }
 
-      context.report({
-        node,
-        messageId: "widenThenAssert",
-        data: { name: expression.name },
-      });
+      const initializerAssertion = assertionFromExpression(declarator.init);
+      const broadKind = declarator.id.typeAnnotation
+        ? broadTypeKind(declarator.id.typeAnnotation.typeAnnotation, environment)
+        : initializerAssertion
+          ? broadTypeKind(initializerAssertion.typeAnnotation, environment)
+          : null;
+      if (broadKind === null || broadTypeKind(node.typeAnnotation, environment) !== null) return;
+
+      const source = initializerAssertion?.expression ?? declarator.init;
+      if (preciseSourceType(context.sourceCode, source, environment) === null) return;
+      if (broadKind !== "top" && !isObjectLikeType(node.typeAnnotation)) return;
+
+      context.report({ node, messageId: "widenThenAssert", data: { name: expression.name } });
     };
 
     return {
+      Program(node) {
+        environment = createTypeEnvironment(node);
+      },
       TSAsExpression: checkAssertion,
       TSTypeAssertion: checkAssertion,
     };

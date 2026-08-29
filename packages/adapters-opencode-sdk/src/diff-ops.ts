@@ -1,23 +1,17 @@
-import {
-  type ExactOptional,
-  type FileDiff,
-  type FileStatus,
-  exactOptionalSchema,
-} from "@openducktor/contracts";
+import { type FileDiff, type FileStatus } from "@openducktor/contracts";
 import { selectRenderableFileDiff } from "@openducktor/core";
-import type { File as OpenCodeFileStatus, SnapshotFileDiff } from "@opencode-ai/sdk/v2/client";
+import type { File as OpenCodeFileStatus } from "@opencode-ai/sdk/v2/client";
 import { toOpenCodeRequestError } from "./request-errors";
 import { z } from "zod";
 
-const openCodeSnapshotFileDiffSchema = exactOptionalSchema(
-  z.object({
-    file: z.string().optional(),
-    patch: z.string().optional(),
-    additions: z.number().finite(),
-    deletions: z.number().finite(),
-    status: z.enum(["added", "deleted", "modified"]).optional(),
-  }),
-) satisfies z.ZodType<ExactOptional<SnapshotFileDiff>>;
+const openCodeSnapshotFileDiffSchema = z.object({
+  file: z.string().optional(),
+  patch: z.string().optional(),
+  additions: z.number().finite(),
+  deletions: z.number().finite(),
+  status: z.enum(["added", "deleted", "modified"]).optional(),
+});
+type OpenCodeSnapshotFileDiff = z.output<typeof openCodeSnapshotFileDiffSchema>;
 
 const openCodeFileStatusSchema = z.object({
   path: z.string(),
@@ -100,7 +94,7 @@ const fetchJson = async <Payload>(
   return schema.parse(await response.json());
 };
 
-function parseFileDiffArray(body: ExactOptional<SnapshotFileDiff>[]): FileDiff[] {
+function parseFileDiffArray(body: OpenCodeSnapshotFileDiff[]): FileDiff[] {
   return body.map((entry, index) => parseSnapshotFileDiff(entry, index));
 }
 
@@ -112,7 +106,7 @@ function parseFileStatusArray(body: OpenCodeFileStatus[]): FileStatus[] {
   }));
 }
 
-function parseSnapshotFileDiff(entry: ExactOptional<SnapshotFileDiff>, index: number): FileDiff {
+function parseSnapshotFileDiff(entry: OpenCodeSnapshotFileDiff, index: number): FileDiff {
   const file = entry.file;
   const patch = entry.patch;
   const status = entry.status;

@@ -34,23 +34,13 @@ describe("Electron preload host invoke", () => {
     );
   });
 
-  test("returns JSON success values without repeating command-specific validation", async () => {
-    const result = { ok: true as const, value: {} };
+  test("preserves void success values for command-specific clients", async () => {
+    const result = { ok: true as const, value: undefined };
     const hostInvoke = createElectronHostInvoke({
       invoke: async () => ({ status: "success", payload: result }),
     });
 
     await expect(hostInvoke("workspace_list")).resolves.toEqual(result);
-  });
-
-  test("rejects successful values outside the shared JSON wire contract", async () => {
-    const response = JSON.parse('{"status":"success","payload":{"ok":true,"value":null}}');
-    response.payload.value = new Uint8Array([1]);
-    const hostInvoke = createElectronHostInvoke({ invoke: async () => response });
-
-    await expect(hostInvoke("workspace_list")).rejects.toThrow(
-      "Received an invalid host invoke response from the Electron main process.",
-    );
   });
 
   test("returns validated host failures unchanged", async () => {

@@ -1978,12 +1978,26 @@ describe("HostClient", () => {
     const modelListResponse = {
       data: [
         {
+          additionalSpeedTiers: [],
+          availabilityNux: null,
+          defaultServiceTier: null,
+          defaultReasoningEffort: "medium",
+          description: "GPT-5 model",
+          hidden: false,
           id: "gpt-5",
           model: "gpt-5",
           displayName: "GPT-5",
-          supportedReasoningEfforts: [{ reasoningEffort: "medium" }],
+          modelSpecialty: null,
+          multiAgentVersion: null,
+          serviceTiers: [],
+          supportedReasoningEfforts: [
+            { reasoningEffort: "medium", description: "Balanced reasoning" },
+          ],
+          supportsPersonality: true,
           inputModalities: ["text", "image"],
           isDefault: true,
+          upgrade: null,
+          upgradeInfo: null,
         },
       ],
       nextCursor: null,

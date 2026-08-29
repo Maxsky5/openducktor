@@ -1,10 +1,5 @@
-import type { HookInput, SDKMessage, SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
-import {
-  exactOptionalSchema,
-  type ExactOptional,
-  type JsonObject,
-  jsonObjectSchema,
-} from "@openducktor/contracts";
+import type { HookInput, SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
+import { type JsonObject, jsonObjectSchema } from "@openducktor/contracts";
 import type { UUID } from "node:crypto";
 import { HostValidationError } from "../../effect/host-errors";
 import { z } from "zod";
@@ -111,14 +106,6 @@ const claudeTaskUsageSchema = z.object({
   duration_ms: z.number(),
 });
 
-type ClaudeHistorySubagentSystemMessage = Extract<
-  SDKMessage,
-  {
-    type: "system";
-    subtype: "task_started" | "task_progress" | "task_updated" | "task_notification";
-  }
->;
-
 const uuidStringSchema = z.uuid();
 const claudeMessageUuidSchema = z.custom<UUID>(
   (value) => uuidStringSchema.safeParse(value).success,
@@ -174,14 +161,12 @@ const claudeTaskNotificationMessageSchema = claudeTaskMessageSchema.extend({
   skip_transcript: z.boolean().optional(),
 });
 
-const claudeHistorySubagentSystemMessageSchema = exactOptionalSchema(
-  z.discriminatedUnion("subtype", [
-    claudeTaskStartedMessageSchema,
-    claudeTaskProgressMessageSchema,
-    claudeTaskUpdatedMessageSchema,
-    claudeTaskNotificationMessageSchema,
-  ]),
-) satisfies z.ZodType<ExactOptional<ClaudeHistorySubagentSystemMessage>>;
+const claudeHistorySubagentSystemMessageSchema = z.discriminatedUnion("subtype", [
+  claudeTaskStartedMessageSchema,
+  claudeTaskProgressMessageSchema,
+  claudeTaskUpdatedMessageSchema,
+  claudeTaskNotificationMessageSchema,
+]);
 
 export const claudeHistoryStoreEntrySchema = claudeUnknownRecordSchema.extend({
   timestamp: z.string().optional(),

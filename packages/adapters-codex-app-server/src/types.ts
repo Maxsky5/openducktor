@@ -18,11 +18,12 @@ import type {
   CodexAppServerThreadStartResult,
   CodexAppServerThreadTurnsListResponse,
   CodexAppServerThreadTurnsListParams,
-  CodexAppServerJsonValue,
   CodexAppServerClientRequest,
   CodexAppServerFuzzyFileSearchParams,
   CodexAppServerFuzzyFileSearchResponse,
   CodexAppServerRequestId,
+  CodexAppServerRequestResult,
+  CodexAppServerRuntimeStreamEvent,
   CodexAppServerRespondError,
   CodexAppServerRespondResult,
   CodexAppServerSkillsListParams,
@@ -71,7 +72,7 @@ import type {
 export type CodexJsonRpcRequest = CodexAppServerClientRequest;
 
 export type CodexJsonRpcTransport = {
-  request(request: CodexJsonRpcRequest): Promise<CodexAppServerJsonValue>;
+  request(request: CodexJsonRpcRequest): Promise<CodexAppServerRequestResult>;
 };
 
 export type CodexJsonRpcTransportFactory = (runtimeId: string) => CodexJsonRpcTransport;
@@ -115,12 +116,7 @@ export type CodexServerRequestResponder = (
   error?: CodexAppServerRespondError,
 ) => Promise<void>;
 
-export type CodexAppServerStreamEvent = {
-  runtimeId: string;
-  kind: "notification" | "server_request";
-  receivedAt: string;
-  message: CodexAppServerJsonValue;
-};
+export type CodexAppServerStreamEvent = CodexAppServerRuntimeStreamEvent;
 
 export type CodexRepoRuntimeResolverPort = {
   requireRepoRuntime(ref: RepoRuntimeRef): Promise<RepoRuntimeRouteResolution>;

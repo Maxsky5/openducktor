@@ -1,4 +1,4 @@
-import { isJsonObject, type JsonValue, jsonValueSchema } from "@openducktor/contracts";
+import { isJsonObject, type JsonValue } from "@openducktor/contracts";
 import { isRunningToolStatus } from "../agent-tool-messages";
 import {
   findLastToolSessionMessage,
@@ -86,7 +86,7 @@ export const normalizeSessionErrorMessage = (value: string): string => {
   }
 
   try {
-    const parsed = jsonValueSchema.parse(JSON.parse(withoutQuotes));
+    const parsed: unknown = JSON.parse(withoutQuotes);
     if (!isJsonObject(parsed)) {
       return withoutQuotes;
     }

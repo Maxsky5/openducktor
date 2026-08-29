@@ -1,7 +1,7 @@
 import { jsonValueSchema } from "@openducktor/contracts";
-import type { Part } from "@opencode-ai/sdk/v2/client";
 import { readNumberProp } from "../../guards";
 import { type ParsedOpencodeEvent as Event } from "../../opencode-global-event-ingress";
+import type { ParsedOpencodePart } from "../../opencode-ingress";
 import type { EventStreamRuntime } from "../shared";
 import { applyDeltaToPart, deleteMessagePart, setMessagePart } from "../shared";
 import { emitAssistantPart, maybeEmitCompletedAssistantMessage } from "./assistant";
@@ -28,7 +28,10 @@ const readIsoTimestampFromTime = (time: unknown): string | undefined => {
   return toIsoTimestamp(readNumberProp(parsed.data, ["end", "completed", "updated", "created"]));
 };
 
-const readPartUpdatedTimestamp = (eventTime: number, part: Part): string | undefined => {
+const readPartUpdatedTimestamp = (
+  eventTime: number,
+  part: ParsedOpencodePart,
+): string | undefined => {
   const eventTimestamp = readIsoTimestampFromTime(eventTime);
   if (eventTimestamp) {
     return eventTimestamp;

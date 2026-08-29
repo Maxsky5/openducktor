@@ -3,7 +3,6 @@ import {
   type FileDiff,
   isJsonObject,
   type JsonObject,
-  type JsonValue,
   jsonValueSchema,
   odtToolErrorPayloadSchema,
 } from "@openducktor/contracts";
@@ -88,7 +87,7 @@ const readToolOutputText = (value: string | undefined): string | undefined => to
 
 const MCP_TRANSPORT_ERROR_PREFIX = /^MCP error\s+-?\d+:/i;
 
-const readErrorValueMessage = (value: JsonValue | undefined): string | undefined => {
+const readErrorValueMessage = (value: unknown): string | undefined => {
   if (typeof value === "string") {
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : undefined;
@@ -254,7 +253,7 @@ const normalizeToolMetadataFileDiff = (input: {
   };
 };
 
-const fileDiffFromToolFileMetadata = (value: JsonValue): FileDiff | null => {
+const fileDiffFromToolFileMetadata = (value: unknown): FileDiff | null => {
   const record = asUnknownRecord(value);
   if (!record) {
     return null;
@@ -271,7 +270,7 @@ const fileDiffFromToolFileMetadata = (value: JsonValue): FileDiff | null => {
 };
 
 const fileDiffFromToolFileDiffMetadata = (
-  value: JsonValue | undefined,
+  value: unknown,
   input: Record<string, unknown>,
 ): FileDiff | null => {
   const record = asUnknownRecord(value);

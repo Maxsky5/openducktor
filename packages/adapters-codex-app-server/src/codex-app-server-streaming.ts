@@ -9,9 +9,9 @@ import type {
 } from "@openducktor/core";
 import { serializeAgentUserMessagePartsToText } from "@openducktor/core";
 import {
+  codexNotificationThreadId,
+  codexNotificationTurnId,
   codexTurnKey,
-  extractThreadIdFromParams,
-  extractTurnId,
 } from "./codex-app-server-requests";
 import {
   type ActiveCodexTurn,
@@ -26,10 +26,10 @@ import {
   codexItemTypeMatches,
   extractCodexTokenUsageTotals,
   shouldReplaceCodexBufferedFinalAgentMessage,
-  timestampFromCodexParams,
   timestampFromCodexTurn,
   toStreamPart,
 } from "./codex-app-server-transcript";
+import { safeCodexTimestampFromMilliseconds } from "./codex-tool-timing";
 import type { CodexCanonicalEvent } from "./codex-canonical-events";
 import {
   latestTodosFromCanonicalEvents,
@@ -421,9 +421,6 @@ const emitCompletedItem = (
   }
 };
 
-const requiresRuntimeLifecycleTimestamp = (method: string): boolean =>
-  method === "item/started" || method === "item/completed";
-
 const isThreadScopedCodexNotificationMethod = (method: string): boolean =>
   method.startsWith("thread/") || method.startsWith("turn/") || method.startsWith("item/");
 
@@ -438,20 +435,29 @@ const timestampFromCompletedTurnNotification = (
 };
 
 const timestampFromCodexNotification = (notification: CodexNotificationRecord): string => {
-  const paramsTimestamp = timestampFromCodexParams(notification.params);
-  if (paramsTimestamp) {
-    return paramsTimestamp;
+  if (notification.method === "item/started") {
+    const timestamp = safeCodexTimestampFromMilliseconds(notification.params.startedAtMs);
+    if (timestamp) {
+      return timestamp;
+    }
+    throw new Error(
+      `Codex notification '${notification.method}' is missing its runtime lifecycle timestamp.`,
+    );
+  }
+
+  if (notification.method === "item/completed") {
+    const timestamp = safeCodexTimestampFromMilliseconds(notification.params.completedAtMs);
+    if (timestamp) {
+      return timestamp;
+    }
+    throw new Error(
+      `Codex notification '${notification.method}' is missing its runtime lifecycle timestamp.`,
+    );
   }
 
   const completedTurnTimestamp = timestampFromCompletedTurnNotification(notification);
   if (completedTurnTimestamp) {
     return completedTurnTimestamp;
-  }
-
-  if (requiresRuntimeLifecycleTimestamp(notification.method)) {
-    throw new Error(
-      `Codex notification '${notification.method}' is missing its runtime lifecycle timestamp.`,
-    );
   }
 
   return notification.receivedAt;
@@ -545,7 +551,7 @@ export const handleCodexPendingNotifications = async (
   notifications: CodexNotificationRecord[],
 ): Promise<void> => {
   for (const notification of notifications) {
-    const notificationThreadId = extractThreadIdFromParams(notification.params);
+    const notificationThreadId = codexNotificationThreadId(notification);
     if (!notificationThreadId) {
       if (!isThreadScopedCodexNotificationMethod(notification.method)) {
         continue;
@@ -560,7 +566,7 @@ export const handleCodexPendingNotifications = async (
       );
     }
     const timestamp = timestampFromCodexNotification(notification);
-    const notificationTurnId = extractTurnId(notification.params);
+    const notificationTurnId = codexNotificationTurnId(notification);
     const activeTurn = context.activeTurnsBySessionId.get(session.threadId);
     if (
       notificationTurnId &&

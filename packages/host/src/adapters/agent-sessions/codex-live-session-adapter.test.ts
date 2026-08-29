@@ -7,12 +7,13 @@ import type {
 } from "@openducktor/adapters-codex-app-server";
 import {
   type AgentSessionLiveSnapshot,
+  type AgentSessionLiveEnvelope,
   type AgentSessionScope,
   type CodexEffectivePolicy,
   parseCodexAppServerRequestResult,
   RUNTIME_DESCRIPTORS_BY_KIND,
+  type CodexAppServerClientRequestMap,
   type CodexAppServerRequestMethod,
-  type JsonValue,
   type RuntimeInstanceSummary,
   type FileDiff,
 } from "@openducktor/contracts";
@@ -46,8 +47,10 @@ const runtime: RuntimeInstanceSummary = {
   descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
 };
 
-const codexResult = (method: CodexAppServerRequestMethod, value: JsonValue) =>
-  parseCodexAppServerRequestResult(method, value);
+const codexResult = <Method extends CodexAppServerRequestMethod>(
+  method: Method,
+  value: CodexAppServerClientRequestMap[Method]["result"],
+) => parseCodexAppServerRequestResult(method, value);
 
 const threadReadResult = (threadId: string, cwd: string) =>
   codexResult("thread/read", {
@@ -512,7 +515,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
   });
 
   test("releases through the host lifecycle without re-entering its coordinator", async () => {
-    const events: unknown[] = [];
+    const events: AgentSessionLiveEnvelope[] = [];
     const service = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () => Effect.void,
@@ -623,7 +626,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
         })),
       } satisfies AgentSessionLiveSnapshot;
     });
-    const events: unknown[] = [];
+    const events: AgentSessionLiveEnvelope[] = [];
     const service = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () => Effect.void,

@@ -1,4 +1,3 @@
-import { createFocusedTestService } from "../../test-support/focused-service";
 import { describe, expect, test } from "bun:test";
 import type {
   AgentSessionRecord,
@@ -649,7 +648,7 @@ describe("TaskService.closeTask", () => {
       releaseMetadataRead = resolve;
     });
     const baseTaskStore = createTaskStore([task()]);
-    const taskStore = createFocusedTestService<TaskStorePort>()({
+    const taskStore = {
       ...baseTaskStore,
       getTaskMetadata: () =>
         Effect.promise(async () => {
@@ -657,7 +656,7 @@ describe("TaskService.closeTask", () => {
           await metadataReadReleased;
           return createMetadata();
         }),
-    });
+    } satisfies TaskStorePort;
     const taskSessionBootstrapCoordinator = createTaskSessionBootstrapCoordinator();
     const service = createTaskService({
       taskStore,

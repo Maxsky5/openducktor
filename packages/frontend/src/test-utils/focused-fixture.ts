@@ -1,11 +1,6 @@
 import { createHostClient, type HostClient } from "@openducktor/host-client";
 import { createUnavailableShellBridge, type ShellBridge } from "@/lib/shell-bridge";
 
-export const createFocusedFixture =
-  <Value extends object>() =>
-  <Fixture extends Partial<Value>>(fixture: Fixture): Fixture =>
-    fixture;
-
 export const createHostClientFixture = <Overrides extends Partial<HostClient>>(
   overrides: Overrides,
 ): HostClient =>

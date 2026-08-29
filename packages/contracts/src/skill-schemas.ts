@@ -1,21 +1,16 @@
 import { z } from "zod";
-import { exactOptionalSchema } from "./exact-optional";
 
 const skillTextSchema = z.string().trim().min(1);
 
-export const skillDescriptorSchema = exactOptionalSchema(
-  z
-    .object({
-      id: skillTextSchema,
-      name: skillTextSchema,
-      path: skillTextSchema,
-      title: skillTextSchema.optional(),
-      displayName: skillTextSchema.optional(),
-      description: skillTextSchema.optional(),
-      color: skillTextSchema.optional(),
-    })
-    .strict(),
-);
+export const skillDescriptorSchema = z.object({
+  id: skillTextSchema,
+  name: skillTextSchema,
+  path: skillTextSchema,
+  title: skillTextSchema.optional(),
+  displayName: skillTextSchema.optional(),
+  description: skillTextSchema.optional(),
+  color: skillTextSchema.optional(),
+});
 export type SkillDescriptor = z.infer<typeof skillDescriptorSchema>;
 
 export const skillCatalogSchema = z

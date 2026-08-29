@@ -1,4 +1,4 @@
-import { isJsonObject, type JsonValue, jsonValueSchema } from "@openducktor/contracts";
+import { isJsonObject, jsonValueSchema } from "@openducktor/contracts";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 
 export type QuestionToolDetail = {
@@ -6,7 +6,9 @@ export type QuestionToolDetail = {
   answers: string[];
 };
 
-const parseJsonIfPossible = (value: string | undefined): JsonValue | undefined => {
+type ParsedQuestionToolPayload = ReturnType<typeof jsonValueSchema.parse>;
+
+const parseJsonIfPossible = (value: string | undefined): ParsedQuestionToolPayload | undefined => {
   if (!value || value.trim().length === 0) {
     return undefined;
   }
@@ -21,7 +23,7 @@ const parseJsonIfPossible = (value: string | undefined): JsonValue | undefined =
   }
 };
 
-const readQuestionPrompt = (value: JsonValue | undefined): string | null => {
+const readQuestionPrompt = (value: unknown): string | null => {
   if (value === undefined || !isJsonObject(value)) {
     return null;
   }
@@ -41,7 +43,7 @@ const readQuestionPrompt = (value: JsonValue | undefined): string | null => {
   return null;
 };
 
-const normalizeAnswerValues = (value: JsonValue | undefined): string[] => {
+const normalizeAnswerValues = (value: unknown): string[] => {
   if (typeof value === "string") {
     const trimmed = value.trim();
     return trimmed.length > 0 ? [trimmed] : [];
@@ -57,7 +59,7 @@ const normalizeAnswerValues = (value: JsonValue | undefined): string[] => {
   );
 };
 
-const collectQuestionDetails = (value: JsonValue | undefined): QuestionToolDetail[] => {
+const collectQuestionDetails = (value: unknown): QuestionToolDetail[] => {
   if (!Array.isArray(value)) {
     return [];
   }
@@ -80,7 +82,7 @@ const collectQuestionDetails = (value: JsonValue | undefined): QuestionToolDetai
   }, []);
 };
 
-const normalizeAnswerGroups = (value: JsonValue | undefined): string[][] => {
+const normalizeAnswerGroups = (value: unknown): string[][] => {
   if (Array.isArray(value)) {
     return value.map((entry) => normalizeAnswerValues(entry));
   }
@@ -106,7 +108,7 @@ const normalizeAnswerGroups = (value: JsonValue | undefined): string[][] => {
   return normalizeAnswerGroups(nested);
 };
 
-const firstNonEmptyAnswerGroups = (candidates: Array<JsonValue | undefined>): string[][] => {
+const firstNonEmptyAnswerGroups = (candidates: unknown[]): string[][] => {
   for (const candidate of candidates) {
     const groups = normalizeAnswerGroups(candidate).reduce<string[][]>((nextGroups, entry) => {
       const answers = entry.filter((value) => value.trim().length > 0);

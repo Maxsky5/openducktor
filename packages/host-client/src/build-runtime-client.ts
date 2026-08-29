@@ -6,6 +6,8 @@ import {
   buildSessionBootstrapSchema,
   type DevServerGroupState,
   type CodexAppServerClientRequest,
+  type CodexAppServerClientRequestMap,
+  type CodexAppServerRequestMethod,
   devServerGroupStateSchema,
   type FailureKind,
   type PullRequest,
@@ -17,6 +19,7 @@ import {
   type RuntimeExecutableCheckInput,
   type RuntimeInstanceSummary,
   type RuntimeKind,
+  parseCodexAppServerRequestResult,
   runtimeEnsureFailureSourceSchema,
   type RuntimeEnsureFailureSource,
   repoRuntimeHealthCheckSchema,
@@ -47,7 +50,11 @@ import type { InvokeFn } from "./invoke-utils";
 import { parseArray, parseOkResult } from "./invoke-utils";
 import { toCommandArgs } from "./invoke-utils";
 import type { TaskMetadataCache } from "./task-metadata-cache";
-import type { JsonValue } from "@openducktor/contracts";
+
+type CodexAppServerClientRequestFor<Method extends CodexAppServerRequestMethod> = Extract<
+  CodexAppServerClientRequest,
+  { method: Method }
+>;
 
 type RuntimeEnsureFailureKind = FailureKind;
 
@@ -252,12 +259,12 @@ const repoRuntimeHealthStatus = async (
   return repoRuntimeHealthCheckSchema.parse(payload);
 };
 
-const codexAppServerRequest = async (
+const codexAppServerRequest = async <Method extends CodexAppServerRequestMethod>(
   invokeFn: InvokeFn,
   runtimeId: string,
-  request: CodexAppServerClientRequest,
-): Promise<JsonValue> => {
-  return invokeFn(
+  request: CodexAppServerClientRequestFor<Method>,
+): Promise<CodexAppServerClientRequestMap[Method]["result"]> => {
+  const response = await invokeFn(
     "codex_app_server_request",
     toCommandArgs({
       runtimeId,
@@ -265,6 +272,7 @@ const codexAppServerRequest = async (
       params: request.params,
     }),
   );
+  return parseCodexAppServerRequestResult(request.method, response);
 };
 
 const buildStart = async (
@@ -610,10 +618,10 @@ export class HostAgentClient {
     return repoRuntimeHealthStatus(this.invokeFn, repoPath, runtimeKind);
   }
 
-  async codexAppServerRequest(
+  async codexAppServerRequest<Method extends CodexAppServerRequestMethod>(
     runtimeId: string,
-    request: CodexAppServerClientRequest,
-  ): Promise<JsonValue> {
+    request: CodexAppServerClientRequestFor<Method>,
+  ): Promise<CodexAppServerClientRequestMap[Method]["result"]> {
     return codexAppServerRequest(this.invokeFn, runtimeId, request);
   }
 

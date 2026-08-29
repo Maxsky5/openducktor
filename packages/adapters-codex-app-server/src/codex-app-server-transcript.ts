@@ -1,7 +1,6 @@
 import type { AgentModelSelection, AgentStreamPart } from "@openducktor/core";
 import {
   arrayFromUnknown,
-  extractNumberField,
   extractStringField,
   isCodexApplyPatchTool,
   isCodexContextualUserMessage,
@@ -34,7 +33,6 @@ import {
   type CodexToolTimingOptions,
   codexItemTimestamp,
   codexToolTimingFields,
-  safeCodexTimestampFromMilliseconds,
 } from "./codex-tool-timing";
 import {
   codexUserInputListToText,
@@ -95,22 +93,6 @@ export type CodexHistoryTokenUsageFields = {
 
 export type { AgentToolStatus } from "./codex-tool-normalizer";
 export { type CodexTodoUpdate, codexTodosFromThreadRead };
-
-export const timestampFromCodexParams = (
-  params: CodexAppServerJsonValue | undefined,
-): string | null => {
-  const millis = extractNumberField(params, [
-    "occurredAtMs",
-    "occurred_at_ms",
-    "timestampMs",
-    "timestamp_ms",
-    "completedAtMs",
-    "completed_at_ms",
-    "startedAtMs",
-    "started_at_ms",
-  ]);
-  return safeCodexTimestampFromMilliseconds(millis);
-};
 
 const codexTimestampFromSeconds = (seconds: number | null): string | undefined => {
   if (seconds === null || !Number.isFinite(seconds)) {

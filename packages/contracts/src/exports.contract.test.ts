@@ -131,6 +131,7 @@ import type {
   JsonValue,
   KanbanEmptyColumnDisplay,
   KanbanSettings,
+  McpBridgeDiscoveryFile,
   PersistedGlobalConfigV2,
   PlanSubtaskInput,
   PlanSubtaskIssueType,
@@ -309,6 +310,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentToolNameValues",
   "buildSessionBootstrapSchema",
   "mcpBridgeDevelopmentDiscoveryPathSegments",
+  "mcpBridgeDiscoveryFileSchema",
   "isDevelopmentInstanceId",
   "taskSessionBootstrapSchema",
   "LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT",
@@ -564,7 +566,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "gitPushBranchResultSchema",
   "gitTargetBranchSchema",
   "defaultSpecTemplateMarkdown",
-  "exactOptionalSchema",
   "extractPromptTemplatePlaceholders",
   "fileContentSchema",
   "fileDiffSchema",
@@ -813,12 +814,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "parseHostEventChannel",
   "parseHostEventEnvelope",
   "hostInvokeFailureSchema",
-  "hostCommandAcknowledgementResponseSchema",
-  "hostCommandBooleanResponseSchema",
-  "hostCommandEmptyResponseSchema",
-  "hostCommandNonEmptyStringResponseSchema",
   "hostErrorResponseSchema",
-  "localAttachmentPathResponseSchema",
   "terminalClientMessageSchema",
   "terminalCloseRequestSchema",
   "terminalCloseResponseSchema",
@@ -1004,6 +1000,7 @@ type ExportedTypeContract = {
   IssueType: IssueType;
   JsonObject: JsonObject;
   JsonValue: JsonValue;
+  McpBridgeDiscoveryFile: McpBridgeDiscoveryFile;
   PlanSubtaskInput: PlanSubtaskInput;
   PlanSubtaskIssueType: PlanSubtaskIssueType;
   PlanSubtaskPriority: PlanSubtaskPriority;

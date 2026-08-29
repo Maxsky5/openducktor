@@ -35,10 +35,32 @@ export type CodexToolInvocationMetadata = {
   codexServerRequest?: boolean;
   codexTodoUpdate?: boolean;
   requestId?: string;
-  questions?: AgentPendingQuestionRequest["questions"];
+  questions?: CodexToolQuestion[];
   answers?: Record<string, { answers: string[] }>;
   server?: string;
 };
+
+export type CodexToolQuestion = {
+  header: string;
+  question: string;
+  options: Array<{ label: string; description: string }>;
+  multiple?: boolean;
+  custom?: boolean;
+};
+
+export const toCodexToolQuestions = (
+  questions: AgentPendingQuestionRequest["questions"],
+): CodexToolQuestion[] =>
+  questions.map((question) => ({
+    header: question.header,
+    question: question.question,
+    options: question.options.map((option) => ({
+      label: option.label,
+      description: option.description,
+    })),
+    ...(question.multiple === undefined ? undefined : { multiple: question.multiple }),
+    ...(question.custom === undefined ? undefined : { custom: question.custom }),
+  }));
 
 export type NormalizedCodexToolInvocation = {
   messageId: string;
@@ -55,8 +77,8 @@ export type NormalizedCodexToolInvocation = {
   error?: string | null;
   fileDiffs?: FileDiff[];
   metadata?: CodexToolInvocationMetadata;
-  startedAtMs?: number;
-  endedAtMs?: number;
+  startedAtMs?: number | undefined;
+  endedAtMs?: number | undefined;
 };
 
 export const statusFromCodexStatus = (status: string | undefined): AgentToolStatus => {

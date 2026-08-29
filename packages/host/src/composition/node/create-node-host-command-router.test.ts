@@ -1,4 +1,3 @@
-import { createFocusedTestService } from "../../test-support/focused-service";
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -46,7 +45,7 @@ const createRuntimeRegistry = (
 });
 
 const createMcpHostBridge = (): McpHostBridgeServer =>
-  createFocusedTestService<McpHostBridgeServer>()({
+  ({
     ensureConnection: () =>
       Effect.succeed({
         workspaceId: "workspace-1",
@@ -60,7 +59,7 @@ const createMcpHostBridge = (): McpHostBridgeServer =>
         hostToken: "test-token",
       }),
     close: () => Effect.succeed({ baseUrl: null, closed: false }),
-  });
+  }) satisfies McpHostBridgeServer;
 
 const createEventBus = (): HostEventBusPort => ({
   publish() {},

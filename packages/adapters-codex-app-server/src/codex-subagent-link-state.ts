@@ -37,8 +37,8 @@ export type CodexSubagentLinkInput = {
   executionMode?: "background";
   preferItemCorrelationKey?: boolean;
   allowStatusRestart?: boolean;
-  startedAtMs?: number;
-  endedAtMs?: number;
+  startedAtMs?: number | undefined;
+  endedAtMs?: number | undefined;
 };
 
 type CodexSubagentLinkMetadata = {

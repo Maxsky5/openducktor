@@ -15,12 +15,6 @@ tester.run(
       "// SAFETY: The parser established the UserId invariant.\nconst id = value as UserId;",
       "function parse(): UserId {\n// SAFETY: Validation above established the UserId invariant.\nreturn value as UserId;\n}",
       "const id = /* SAFETY: Validation established the invariant. */ value as UserId;",
-      "// SAFETY: The parser established the UserId invariant.\nexport const id = value as UserId;",
-      "expect(error).toBeInstanceOf(Error);\n// SAFETY: The preceding assertion proves that error is an Error.\nconst failure = error as Error;",
-      "if (!(value instanceof UserId)) throw new Error('invalid');\n// SAFETY: The preceding guard proves that value is a UserId.\nconst id = value as UserId;",
-      "// SAFETY: This test controls the fixture and supplies UserId.\nconst id = value as UserId;",
-      "// SAFETY: This test creates the DOM fixture before this lookup.\nconst button = value as HTMLButtonElement;",
-      "// SAFETY: This test drives the failure path before this assertion.\nconst failure = value as Error;",
     ],
     invalid: [
       { code: "const id = value as UserId;", errors: [error] },
@@ -28,30 +22,6 @@ tester.run(
       { code: "const id = value as UserId; // SAFETY: Too late.", errors: [error] },
       {
         code: "// This cast seems fine.\nconst id = value as UserId;",
-        errors: [error],
-      },
-      {
-        code: "// SAFETY: okay.\nconst id = value as UserId;",
-        errors: [error],
-      },
-      {
-        code: "// SAFETY:\nconst id = value as UserId;",
-        errors: [error],
-      },
-      {
-        code: "// SAFETY: Both values were validated.\nconst pair = { left: first as UserId, right: second as RoleId };",
-        errors: [error, error],
-      },
-      {
-        code: "// SAFETY: Both values were validated.\nconst pair = { left: first as UserId, right: second as UserId };",
-        errors: [error, error],
-      },
-      {
-        code: "expect(value).not.toBeNull();\nconst id = value as UserId;",
-        errors: [error],
-      },
-      {
-        code: "const text = 'expect(value).toBeInstanceOf(UserId)';\nconst id = value as UserId;",
         errors: [error],
       },
     ],

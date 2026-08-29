@@ -2,15 +2,10 @@ import { defineRule } from "@oxlint/plugins";
 
 import {
   classifyUnsafeDictionary,
-  classifyUnsafeInterfaceHeritage,
   classifyUnsafeDictionaryValue,
-} from "../shared/dictionary-types.ts";
-import { createLazyImportedTypeResolver } from "../shared/imported-type-resolution.ts";
-import {
   createTypeEnvironment,
-  isBuiltInType,
-  type PortableTypeResolver,
-} from "../shared/portable-type-resolution.ts";
+  type TypeEnvironment,
+} from "../shared/dictionary-types.ts";
 
 import type { ESTree } from "@oxlint/plugins";
 
@@ -71,121 +66,68 @@ function isInsideTypeAliasDeclaration(node: ESTree.Node): boolean {
   return false;
 }
 
-function isPlainAliasConsumerUse(
-  node: ESTree.TSType,
-  environment: ReturnType<typeof createTypeEnvironment>,
-): boolean {
+function isPlainAliasConsumerUse(node: ESTree.TSType, environment: TypeEnvironment): boolean {
   if (node.type !== "TSTypeReference" || node.typeArguments?.params.length) return false;
   const name = typeReferenceName(node);
   return name !== null && environment.aliases.has(name) && !isInsideTypeAliasDeclaration(node);
 }
 
-function isDictionaryTransformSource(
-  node: ESTree.TSType,
-  visitorKeys: Readonly<Record<string, readonly string[]>>,
-): boolean {
-  let current: ESTree.Node = node;
-  while (current.parent !== null && current.parent.type !== "Program") {
-    const parent: ESTree.Node = current.parent;
-    if (parent.type === "TSTypeReference") {
-      const name = typeReferenceName(parent);
-      const source: ESTree.TSType | undefined = parent.typeArguments?.params[0];
-      if (
-        source !== undefined &&
-        source === node &&
-        (name === "Pick" || name === "Omit") &&
-        isBuiltInType(name, createTypeEnvironment(parent, visitorKeys))
-      ) {
-        return true;
-      }
-    }
-    current = parent;
-  }
-  return false;
-}
-
-function shouldReportType(
-  node: ESTree.TSType,
-  visitorKeys: Readonly<Record<string, readonly string[]>>,
-  resolveImportedType: PortableTypeResolver,
-): boolean {
-  const environment = createTypeEnvironment(node, visitorKeys);
+function shouldReportType(node: ESTree.TSType, environment: TypeEnvironment): boolean {
   if (isPlainAliasConsumerUse(node, environment)) return false;
-  if (isDictionaryTransformSource(node, visitorKeys)) return false;
-  if (classifyUnsafeDictionary(node, environment, resolveImportedType) === null) return false;
+  if (classifyUnsafeDictionary(node, environment) === null) return false;
   let current: ESTree.Node | null = node.parent;
   while (current !== null && current.type !== "Program") {
-    if (
-      isTypeNode(current) &&
-      classifyUnsafeDictionary(
-        current,
-        createTypeEnvironment(current, visitorKeys),
-        resolveImportedType,
-      ) !== null
-    ) {
+    if (isTypeNode(current) && classifyUnsafeDictionary(current, environment) !== null)
       return false;
-    }
     current = current.parent;
   }
   return true;
 }
 
-/** Disallow object-dictionary contracts whose direct value type permits unchecked property use. */
+/** Disallow object-dictionary contracts whose direct value type is an unsafe escape hatch. */
 export const noUnsafeDictionaryTypeRule = defineRule({
   meta: {
     type: "problem",
     docs: {
       description:
-        "Disallow object-dictionary contracts whose direct value type is any, object, {}, or a union/alias containing one of those escape hatches. Unknown remains safe because callers must narrow every read.",
+        "Disallow object-dictionary contracts whose direct value type is any, object, {}, or a union/alias containing one of those escape hatches.",
     },
     messages: {
       unsafeDictionary:
-        "This dictionary's {{value}} value type permits unchecked property use. Use unknown for untrusted values or an owner/schema-derived value type for known values.",
+        "This dictionary's {{value}} value type gives callers no concrete value contract. Use an owner/schema-derived value type; parse external payloads before insertion.",
     },
   },
   createOnce(context) {
-    const importedTypeResolver = createLazyImportedTypeResolver(() => context.filename);
-
+    let environment: TypeEnvironment | null = null;
     const report = (node: ESTree.Node, value: string) => {
       context.report({ node, messageId: "unsafeDictionary", data: { value } });
     };
     const reportIfUnsafe = (node: ESTree.TSType) => {
-      const visitorKeys = context.sourceCode.visitorKeys;
-      const resolver = importedTypeResolver(node);
-      if (!shouldReportType(node, visitorKeys, resolver)) return;
-      const environment = createTypeEnvironment(node, visitorKeys);
-      const unsafe = classifyUnsafeDictionary(node, environment, resolver);
+      if (environment === null || !shouldReportType(node, environment)) return;
+      const unsafe = classifyUnsafeDictionary(node, environment);
       if (unsafe === null) return;
-      report(node, unsafe);
+      report(node, unsafe.unsafeValue);
     };
 
     return {
+      Program(node) {
+        environment = createTypeEnvironment(node);
+      },
       TSTypeReference: reportIfUnsafe,
       TSTypeLiteral: reportIfUnsafe,
       TSMappedType: reportIfUnsafe,
-      TSInterfaceDeclaration(node) {
-        const environment = createTypeEnvironment(node, context.sourceCode.visitorKeys);
-        for (const heritage of node.extends) {
-          const unsafe = classifyUnsafeInterfaceHeritage(
-            heritage,
-            environment,
-            importedTypeResolver(heritage),
-          );
-          if (unsafe !== null) report(heritage, unsafe);
-        }
-      },
       TSIndexSignature(node) {
-        if (node.typeAnnotation === null || node.parent.type === "TSTypeLiteral") return;
-        const environment = createTypeEnvironment(
-          node.typeAnnotation.typeAnnotation,
-          context.sourceCode.visitorKeys,
-        );
+        if (
+          environment === null ||
+          node.typeAnnotation === null ||
+          node.parent.type === "TSTypeLiteral"
+        )
+          return;
         const unsafe = classifyUnsafeDictionaryValue(
           node.typeAnnotation.typeAnnotation,
           environment,
-          importedTypeResolver(node),
         );
-        if (unsafe !== null) report(node, unsafe);
+        if (unsafe !== null) report(node, unsafe.unsafeValue);
       },
     };
   },

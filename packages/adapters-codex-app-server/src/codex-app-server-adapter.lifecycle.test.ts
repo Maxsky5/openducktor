@@ -4,6 +4,7 @@ import { AGENT_ROLE_TOOL_POLICY, type AgentRole } from "@openducktor/core";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
+  codexTurnFixture,
   codexLocalSessionsForTest,
   codexUserMessageInput,
   createHarness,
@@ -655,6 +656,25 @@ describe("CodexAppServerAdapter lifecycle", () => {
     expect(transports.get("runtime-live")?.calls.some(({ method }) => method === "turn/diff")).toBe(
       false,
     );
+
+    runtimeStream.emitNotification({
+      method: "turn/started",
+      params: {
+        threadId: "thread/start-runtime-live",
+        turn: codexTurnFixture({ id: "turn-2", items: [], status: "inProgress" }),
+      },
+    });
+    await flushCodexAdapterWork();
+
+    await expect(
+      adapter.loadSessionDiff({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread/start-runtime-live",
+        runtimeHistoryAnchor: "turn-2",
+      }),
+    ).resolves.toEqual([]);
   });
 
   test("allows event subscription for a known session", async () => {

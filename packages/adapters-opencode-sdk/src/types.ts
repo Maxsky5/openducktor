@@ -17,6 +17,7 @@ import type {
   PendingSubagentSessionBinding,
 } from "./event-stream/shared";
 import type { ParsedOpencodeEvent as Event } from "./opencode-global-event-ingress";
+import type { ParsedOpencodePart } from "./opencode-ingress";
 
 /**
  * Cache TTL for workflow tool selection (5 minutes).
@@ -70,7 +71,7 @@ export type SessionRecord = {
     { admit: () => void; reject: (cause?: unknown) => void }
   >;
   pendingQueuedUserMessages: QueuedUserMessageSend[];
-  partsById: Map<string, import("@opencode-ai/sdk/v2/client").Part>;
+  partsById: Map<string, ParsedOpencodePart>;
   partIdsByMessageId: Map<string, Set<string>>;
   messageRoleById: Map<string, string>;
   messageMetadataById: Map<string, SessionMessageMetadata>;
