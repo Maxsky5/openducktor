@@ -6,7 +6,6 @@ import type {
   HostEventChannel,
   HostEventEnvelope,
   HostEventPayload,
-  JsonObject,
   TaskEventCursor,
   TaskEventStreamAcknowledge,
   TaskEventStreamFrame,
@@ -14,7 +13,6 @@ import type {
 } from "@openducktor/contracts";
 import {
   hostInvokeFailureSchema,
-  jsonObjectSchema,
   taskEventStreamAcknowledgeSchema,
   taskEventStreamFrameSchema,
 } from "@openducktor/contracts";
@@ -47,10 +45,16 @@ export const ELECTRON_TASK_STREAM_ACKNOWLEDGE_CHANNEL = "openducktor:task-stream
 export const ELECTRON_TASK_STREAM_UNSUBSCRIBE_CHANNEL = "openducktor:task-stream:unsubscribe";
 export const ELECTRON_WINDOW_TITLE_BAR_HEIGHT = 40;
 
-export const electronHostInvokeRequestSchema = jsonObjectSchema.and(
+const ipcRecordSchema = z.custom<Record<string, unknown>>((value) => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+});
+
+export const electronHostInvokeRequestSchema = ipcRecordSchema.and(
   z.strictObject({
     command: z.string(),
-    args: jsonObjectSchema.optional(),
+    args: ipcRecordSchema.optional(),
   }),
 );
 export type ElectronHostInvokeRequest = z.output<typeof electronHostInvokeRequestSchema>;
@@ -154,7 +158,10 @@ export type OpenDucktorElectronTaskStreamApi = {
 
 export type OpenDucktorElectronApi = {
   platform: AppPlatform;
-  invoke(command: HostCommandName, args?: JsonObject): Promise<ElectronHostInvokeResult>;
+  invoke(
+    command: HostCommandName,
+    args?: Record<string, unknown>,
+  ): Promise<ElectronHostInvokeResult>;
   subscribe<Channel extends HostEventChannel>(
     channel: Channel,
     listener: (payload: HostEventPayload<Channel>) => void,

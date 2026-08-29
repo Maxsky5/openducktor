@@ -48,7 +48,6 @@ import {
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 import { parseArray, parseOkResult } from "./invoke-utils";
-import { toCommandArgs } from "./invoke-utils";
 import type { TaskMetadataCache } from "./task-metadata-cache";
 
 type CodexAppServerClientRequestFor<Method extends CodexAppServerRequestMethod> = Extract<
@@ -170,7 +169,7 @@ const runtimeList = async (
   repoPath: string | undefined,
   runtimeKind: RuntimeKind,
 ): Promise<RuntimeInstanceSummary[]> => {
-  const payload = await invokeFn("runtime_list", toCommandArgs({ repoPath, runtimeKind }));
+  const payload = await invokeFn("runtime_list", { repoPath, runtimeKind });
   return parseArray(runtimeInstanceSummarySchema, payload, "runtime_list");
 };
 
@@ -264,14 +263,11 @@ const codexAppServerRequest = async <Method extends CodexAppServerRequestMethod>
   runtimeId: string,
   request: CodexAppServerClientRequestFor<Method>,
 ): Promise<CodexAppServerClientRequestMap[Method]["result"]> => {
-  const response = await invokeFn(
-    "codex_app_server_request",
-    toCommandArgs({
-      runtimeId,
-      method: request.method,
-      params: request.params,
-    }),
-  );
+  const response = await invokeFn("codex_app_server_request", {
+    runtimeId,
+    method: request.method,
+    params: request.params,
+  });
   return parseCodexAppServerRequestResult(request.method, response);
 };
 
@@ -404,14 +400,11 @@ const buildCompleted = async (
   taskId: string,
   summary?: string,
 ): Promise<TaskCard> => {
-  const payload = await invokeFn(
-    "build_completed",
-    toCommandArgs({
-      repoPath,
-      taskId,
-      input: { summary },
-    }),
-  );
+  const payload = await invokeFn("build_completed", {
+    repoPath,
+    taskId,
+    input: { summary },
+  });
   return taskCardSchema.parse(payload);
 };
 
@@ -421,14 +414,11 @@ const humanRequestChanges = async (
   taskId: string,
   note?: string,
 ): Promise<TaskCard> => {
-  const payload = await invokeFn(
-    "human_request_changes",
-    toCommandArgs({
-      repoPath,
-      taskId,
-      note,
-    }),
-  );
+  const payload = await invokeFn("human_request_changes", {
+    repoPath,
+    taskId,
+    note,
+  });
   return taskCardSchema.parse(payload);
 };
 
@@ -463,14 +453,11 @@ const taskDirectMerge = async (
   input: TaskDirectMergeInput,
 ): Promise<TaskDirectMergeResult> => {
   const parsedInput = taskDirectMergeInputSchema.parse(input);
-  const payload = await invokeFn(
-    "task_direct_merge",
-    toCommandArgs({
-      repoPath,
-      taskId,
-      input: parsedInput,
-    }),
-  );
+  const payload = await invokeFn("task_direct_merge", {
+    repoPath,
+    taskId,
+    input: parsedInput,
+  });
   return taskDirectMergeResultSchema.parse(payload);
 };
 
@@ -521,14 +508,11 @@ const taskPullRequestLinkMerged = async (
   taskId: string,
   pullRequest: PullRequest,
 ) => {
-  const payload = await invokeFn(
-    "task_pull_request_link_merged",
-    toCommandArgs({
-      repoPath,
-      taskId,
-      pullRequest,
-    }),
-  );
+  const payload = await invokeFn("task_pull_request_link_merged", {
+    repoPath,
+    taskId,
+    pullRequest,
+  });
   return taskCardSchema.parse(payload);
 };
 

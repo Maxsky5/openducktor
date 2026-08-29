@@ -6,7 +6,6 @@ import {
   type ElectronHostInvokeResult,
   type ElectronHostInvokeWireResponse,
 } from "../shared/electron-bridge-contract";
-import type { JsonObject } from "@openducktor/contracts";
 import type { IpcMainInvokeEvent } from "electron";
 
 type ElectronIpcMainLike = {
@@ -21,7 +20,7 @@ type ElectronIpcMainLike = {
 
 type ElectronHostInvokeHandlerOptions = {
   isHostShutdownStarted(): boolean;
-  invoke(command: string, args?: JsonObject): Promise<ElectronHostInvokeResult>;
+  invoke(command: string, args?: Record<string, unknown>): Promise<ElectronHostInvokeResult>;
 };
 
 const readElectronHostInvokeRequest = (request: unknown): ElectronHostInvokeRequest => {

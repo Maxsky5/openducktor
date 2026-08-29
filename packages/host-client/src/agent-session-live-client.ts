@@ -41,7 +41,7 @@ import {
   agentSessionLiveSnapshotSchema,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
-import { parseArray, toCommandArgs } from "./invoke-utils";
+import { parseArray } from "./invoke-utils";
 
 export class HostAgentSessionLiveClient {
   constructor(private readonly invokeFn: InvokeFn) {}
@@ -51,7 +51,7 @@ export class HostAgentSessionLiveClient {
   ): Promise<AgentSessionControlSummary> {
     const payload = await this.invokeFn(
       "agent_session_control_start",
-      toCommandArgs(agentSessionControlStartInputSchema.parse(input)),
+      agentSessionControlStartInputSchema.parse(input),
     );
     return agentSessionControlSummarySchema.parse(payload);
   }
@@ -61,7 +61,7 @@ export class HostAgentSessionLiveClient {
   ): Promise<AgentSessionControlSummary> {
     const payload = await this.invokeFn(
       "agent_session_control_resume",
-      toCommandArgs(agentSessionControlResumeInputSchema.parse(input)),
+      agentSessionControlResumeInputSchema.parse(input),
     );
     return agentSessionControlSummarySchema.parse(payload);
   }
@@ -71,7 +71,7 @@ export class HostAgentSessionLiveClient {
   ): Promise<AgentSessionControlSummary> {
     const payload = await this.invokeFn(
       "agent_session_control_fork",
-      toCommandArgs(agentSessionControlForkInputSchema.parse(input)),
+      agentSessionControlForkInputSchema.parse(input),
     );
     return agentSessionControlSummarySchema.parse(payload);
   }
@@ -81,7 +81,7 @@ export class HostAgentSessionLiveClient {
   ): Promise<AcceptedAgentUserMessage> {
     const payload = await this.invokeFn(
       "agent_session_control_send",
-      toCommandArgs(agentSessionControlSendInputSchema.parse(input)),
+      agentSessionControlSendInputSchema.parse(input),
     );
     return acceptedAgentUserMessageSchema.parse(payload);
   }
@@ -89,28 +89,28 @@ export class HostAgentSessionLiveClient {
   async agentSessionControlUpdateModel(input: AgentSessionControlUpdateModelInput): Promise<void> {
     await this.invokeFn(
       "agent_session_control_update_model",
-      toCommandArgs(agentSessionControlUpdateModelInputSchema.parse(input)),
+      agentSessionControlUpdateModelInputSchema.parse(input),
     );
   }
 
   async agentSessionControlStop(input: AgentSessionControlStopInput): Promise<void> {
     await this.invokeFn(
       "agent_session_control_stop",
-      toCommandArgs(agentSessionControlStopInputSchema.parse(input)),
+      agentSessionControlStopInputSchema.parse(input),
     );
   }
 
   async agentSessionControlRelease(input: AgentSessionControlReleaseInput): Promise<void> {
     await this.invokeFn(
       "agent_session_control_release",
-      toCommandArgs(agentSessionControlReleaseInputSchema.parse(input)),
+      agentSessionControlReleaseInputSchema.parse(input),
     );
   }
 
   async agentSessionLiveRefresh(input: AgentSessionLiveRefreshInput): Promise<void> {
     await this.invokeFn(
       "agent_session_live_refresh",
-      toCommandArgs(agentSessionLiveRefreshInputSchema.parse(input)),
+      agentSessionLiveRefreshInputSchema.parse(input),
     );
   }
 
@@ -119,7 +119,7 @@ export class HostAgentSessionLiveClient {
   ): Promise<AgentSessionLiveSnapshot[]> {
     const payload = await this.invokeFn(
       "agent_session_live_list",
-      toCommandArgs(agentSessionLiveListInputSchema.parse(input)),
+      agentSessionLiveListInputSchema.parse(input),
     );
     return parseArray(agentSessionLiveSnapshotSchema, payload, "agent_session_live_list");
   }
@@ -129,7 +129,7 @@ export class HostAgentSessionLiveClient {
   ): Promise<AgentSessionLiveReadResult> {
     const payload = await this.invokeFn(
       "agent_session_live_read",
-      toCommandArgs(agentSessionLiveReadInputSchema.parse(input)),
+      agentSessionLiveReadInputSchema.parse(input),
     );
     return agentSessionLiveReadResultSchema.parse(payload);
   }
@@ -139,7 +139,7 @@ export class HostAgentSessionLiveClient {
   ): Promise<AgentSessionContextUsage | null> {
     const payload = await this.invokeFn(
       "agent_session_live_load_context",
-      toCommandArgs(agentSessionLiveLoadContextInputSchema.parse(input)),
+      agentSessionLiveLoadContextInputSchema.parse(input),
     );
     return agentSessionContextUsageSchema.nullable().parse(payload);
   }
@@ -147,7 +147,7 @@ export class HostAgentSessionLiveClient {
   async agentSessionLiveLoadDiff(input: AgentSessionLiveLoadDiffInput): Promise<FileDiff[]> {
     const payload = await this.invokeFn(
       "agent_session_live_load_diff",
-      toCommandArgs(agentSessionLiveLoadDiffInputSchema.parse(input)),
+      agentSessionLiveLoadDiffInputSchema.parse(input),
     );
     return agentSessionLiveLoadDiffResultSchema.parse(payload);
   }
@@ -155,14 +155,14 @@ export class HostAgentSessionLiveClient {
   async agentSessionLiveReplyApproval(input: AgentSessionLiveReplyApprovalInput): Promise<void> {
     await this.invokeFn(
       "agent_session_live_reply_approval",
-      toCommandArgs(agentSessionLiveReplyApprovalInputSchema.parse(input)),
+      agentSessionLiveReplyApprovalInputSchema.parse(input),
     );
   }
 
   async agentSessionLiveReplyQuestion(input: AgentSessionLiveReplyQuestionInput): Promise<void> {
     await this.invokeFn(
       "agent_session_live_reply_question",
-      toCommandArgs(agentSessionLiveReplyQuestionInputSchema.parse(input)),
+      agentSessionLiveReplyQuestionInputSchema.parse(input),
     );
   }
 }

@@ -1,9 +1,4 @@
-import {
-  isJsonObject,
-  jsonValueSchema,
-  type HostInvokeFailure,
-  type JsonObject,
-} from "@openducktor/contracts";
+import type { HostInvokeFailure } from "@openducktor/contracts";
 import type { HostCommandName, HostCommandResult } from "@openducktor/host";
 import { z } from "zod";
 
@@ -21,15 +16,10 @@ export class HostInvokeError extends Error {
   }
 }
 
-export type InvokeFn = (command: HostCommandName, args?: JsonObject) => Promise<HostCommandResult>;
-
-export const toCommandArgs = (parsed: unknown): JsonObject => {
-  const value = jsonValueSchema.safeParse(parsed);
-  if (!value.success || !isJsonObject(value.data)) {
-    throw new Error("Host command arguments must be a JSON object.");
-  }
-  return value.data;
-};
+export type InvokeFn = (
+  command: HostCommandName,
+  args?: Record<string, unknown>,
+) => Promise<HostCommandResult>;
 
 export type OkResult = { ok: boolean };
 export type UpdatedAtResult = { updatedAt: string };

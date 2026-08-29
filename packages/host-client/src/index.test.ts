@@ -739,6 +739,41 @@ describe("HostClient", () => {
     ]);
   });
 
+  test("creates a task when optional fields are undefined", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "task_create") {
+        return makeTaskCardPayload();
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await client.taskCreate("/repo", {
+      title: "Add GitHub login",
+      issueType: "feature",
+      description: undefined,
+      labels: undefined,
+      parentId: undefined,
+      aiReviewEnabled: true,
+      priority: 2,
+    });
+
+    expect(calls.at(-1)).toEqual({
+      command: "task_create",
+      args: {
+        repoPath: "/repo",
+        input: {
+          title: "Add GitHub login",
+          issueType: "feature",
+          description: undefined,
+          labels: undefined,
+          parentId: undefined,
+          aiReviewEnabled: true,
+          priority: 2,
+        },
+      },
+    });
+  });
+
   test("stages and discards task description assets through host-private commands", async () => {
     const assetId = "550e8400-e29b-41d4-a716-446655440000";
     const workspaceId = "9f66372b-e956-47f4-af2f-77e0df2ad4e1";

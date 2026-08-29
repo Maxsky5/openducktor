@@ -76,6 +76,22 @@ describe("Electron host invoke IPC handler", () => {
     expect(invoke).toHaveBeenCalledWith("workspace_list", request.args);
   });
 
+  test("preserves undefined optional fields for command-specific validation", async () => {
+    const args = { input: { provider: undefined } };
+    const invoke = mock(async () => undefined);
+    const registered = createRegisteredHandler();
+
+    registerElectronHostInvokeHandler(registered.ipcMain, {
+      isHostShutdownStarted: () => false,
+      invoke,
+    });
+
+    await expect(
+      registered.handler(ipcMainInvokeEvent, { command: "task_create", args }),
+    ).resolves.toEqual({ status: "success", payload: undefined });
+    expect(invoke).toHaveBeenCalledWith("task_create", args);
+  });
+
   test("checks shutdown when a request arrives and does not invoke the router", async () => {
     const invoke = mock(async () => []);
     let shutdownStarted = false;

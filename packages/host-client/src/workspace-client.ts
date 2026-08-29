@@ -17,7 +17,6 @@ import {
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 import { parseArray } from "./invoke-utils";
-import { toCommandArgs } from "./invoke-utils";
 
 export type {
   WorkspaceRepoConfigInput,
@@ -89,13 +88,10 @@ const workspaceUpdateRepoConfig = async (
   workspaceId: string,
   config: WorkspaceRepoConfigInput,
 ): Promise<WorkspaceRecord> => {
-  const payload = await invokeFn(
-    "workspace_update_repo_config",
-    toCommandArgs({
-      workspaceId,
-      config,
-    }),
-  );
+  const payload = await invokeFn("workspace_update_repo_config", {
+    workspaceId,
+    config,
+  });
   return workspaceRecordSchema.parse(payload);
 };
 
@@ -104,13 +100,10 @@ const workspaceSaveRepoSettings = async (
   workspaceId: string,
   settings: WorkspaceRepoSettingsInput,
 ): Promise<WorkspaceRecord> => {
-  const payload = await invokeFn(
-    "workspace_save_repo_settings",
-    toCommandArgs({
-      workspaceId,
-      settings,
-    }),
-  );
+  const payload = await invokeFn("workspace_save_repo_settings", {
+    workspaceId,
+    settings,
+  });
   return workspaceRecordSchema.parse(payload);
 };
 
@@ -119,10 +112,7 @@ const workspaceUpdateRepoHooks = async (
   workspaceId: string,
   hooks: WorkspaceRepoHooksInput,
 ): Promise<WorkspaceRecord> => {
-  const payload = await invokeFn(
-    "workspace_update_repo_hooks",
-    toCommandArgs({ workspaceId, hooks }),
-  );
+  const payload = await invokeFn("workspace_update_repo_hooks", { workspaceId, hooks });
   return workspaceRecordSchema.parse(payload);
 };
 
@@ -143,7 +133,7 @@ const workspaceSaveSettingsSnapshot = async (
   invokeFn: InvokeFn,
   snapshot: SettingsSnapshotSaveInput,
 ): Promise<WorkspaceRecord[]> => {
-  const payload = await invokeFn("workspace_save_settings_snapshot", toCommandArgs({ snapshot }));
+  const payload = await invokeFn("workspace_save_settings_snapshot", { snapshot });
   return parseArray(workspaceRecordSchema, payload, "workspace_save_settings_snapshot");
 };
 

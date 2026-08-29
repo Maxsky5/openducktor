@@ -10,14 +10,13 @@ import {
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 import { parseArray, parseOkResult } from "./invoke-utils";
-import { toCommandArgs } from "./invoke-utils";
 
 const systemListOpenInTools = async (
   invokeFn: InvokeFn,
   forceRefresh = false,
 ): Promise<SystemOpenInToolInfo[]> => {
   const request = systemListOpenInToolsRequestSchema.parse({ forceRefresh });
-  const payload = await invokeFn("system_list_open_in_tools", toCommandArgs(request));
+  const payload = await invokeFn("system_list_open_in_tools", request);
   return parseArray(systemOpenInToolInfoSchema, payload, "system_list_open_in_tools");
 };
 
