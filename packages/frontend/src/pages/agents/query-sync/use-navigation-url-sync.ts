@@ -11,6 +11,7 @@ import {
 } from "./agent-studio-navigation";
 
 type UseNavigationUrlSyncArgs = {
+  locationKey: string;
   navigationType: "POP" | "PUSH" | "REPLACE";
   searchParams: URLSearchParams;
   setSearchParams: SetURLSearchParams;
@@ -23,6 +24,7 @@ type UseNavigationUrlSyncResult = {
 };
 
 export function useNavigationUrlSync({
+  locationKey,
   navigationType,
   searchParams,
   setSearchParams,
@@ -67,7 +69,7 @@ export function useNavigationUrlSync({
       syncingFromSearchParamsRef.current = true;
       return parsed;
     });
-  }, [navigationType, searchParams]);
+  }, [locationKey, navigationType, searchParams]);
 
   useEffect(() => {
     if (syncingFromSearchParamsRef.current) {
