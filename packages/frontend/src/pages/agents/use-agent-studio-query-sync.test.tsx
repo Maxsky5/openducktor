@@ -171,13 +171,14 @@ describe("useAgentStudioQuerySync", () => {
   test("reapplies a sidebar session when a new location keeps the same URL", async () => {
     const searchParams = new URLSearchParams("task=task-1&session=session-1&agent=build");
     const setSearchParams: SetURLSearchParams = () => {};
-    const harness = createHookHarness({
+    const initialProps: HookArgsWithDefaults = {
       activeWorkspaceId: null,
       locationKey: "sidebar-location-1",
       navigationType: "PUSH",
       searchParams,
       setSearchParams,
-    });
+    };
+    const harness = createHookHarness(initialProps);
 
     await harness.mount();
     await harness.run((state) => {
@@ -186,11 +187,8 @@ describe("useAgentStudioQuerySync", () => {
     expect(harness.getLatest().sessionExternalIdParam).toBe("session-2");
 
     await harness.update({
-      activeWorkspaceId: null,
+      ...initialProps,
       locationKey: "sidebar-location-2",
-      navigationType: "PUSH",
-      searchParams,
-      setSearchParams,
     });
 
     expect(harness.getLatest().sessionExternalIdParam).toBe("session-1");
