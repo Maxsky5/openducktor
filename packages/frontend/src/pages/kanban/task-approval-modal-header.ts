@@ -1,10 +1,12 @@
 import { canonicalTargetBranch } from "@/lib/target-branch";
 import type { TaskApprovalModalModel } from "./kanban-page-model-types";
 
-export function getTaskApprovalModalHeader(model: TaskApprovalModalModel): {
+type TaskApprovalModalHeader = {
   title: string;
   description: string;
-} {
+};
+
+export function getTaskApprovalModalHeader(model: TaskApprovalModalModel): TaskApprovalModalHeader {
   if (model.stage === "missing_builder_worktree") {
     return {
       title: "Builder Worktree Missing",

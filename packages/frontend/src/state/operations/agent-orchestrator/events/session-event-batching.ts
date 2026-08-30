@@ -88,10 +88,10 @@ const queuedSessionEventMinEmitIntervalMs = (event: QueuedSessionEvent): number 
   }
 };
 
-const mergeQueuedSessionEvent = (
-  previous: QueuedSessionEvent,
-  event: QueuedSessionEvent,
-): QueuedSessionEvent => {
+const mergeQueuedSessionEvent = <Event extends QueuedSessionEvent>(
+  previous: Event,
+  event: Event,
+): Event => {
   if (previous.type === "assistant_delta" && event.type === "assistant_delta") {
     return {
       ...event,
@@ -195,7 +195,7 @@ const mergeQueuedSessionEvents = <Item extends QueuedSessionEventBatchItem>(
       item: {
         ...item,
         event: mergeQueuedSessionEvent(previous.event, item.event),
-      } as Item,
+      },
     };
   }
 

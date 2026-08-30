@@ -75,12 +75,13 @@ const createSelectionHarness = (initialArgs: SelectionHarnessArgs) => {
     run: async (
       fn: (value: ReturnType<typeof useWorkspaceSelectionOperations>) => Promise<void> | void,
     ) => {
-      if (!latest) {
+      const hook = latest;
+      if (!hook) {
         throw new Error("Hook not mounted");
       }
 
       await sharedHarness.run(async () => {
-        await fn(latest as ReturnType<typeof useWorkspaceSelectionOperations>);
+        await fn(hook);
       });
     },
     getLatest: () => {

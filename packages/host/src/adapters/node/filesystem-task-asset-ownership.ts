@@ -4,14 +4,28 @@ import { link, lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/pr
 import path from "node:path";
 import { promisify } from "node:util";
 import { taskAssetIdSchema } from "@openducktor/contracts";
+import { z, type JSONType } from "zod";
+import { HostValidationError } from "../../effect/host-errors";
 import { processIsAlive } from "../../infrastructure/process/process-tree";
 
-export type TaskAssetFileOwner = {
-  version: 1;
-  instanceId: string;
-  processId: number;
-  startedAtMs: number;
-};
+const taskAssetFileOwnerSchema = z
+  .object({
+    version: z.literal(1),
+    instanceId: taskAssetIdSchema,
+    processId: z.number().int().positive(),
+    startedAtMs: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export type TaskAssetFileOwner = z.infer<typeof taskAssetFileOwnerSchema>;
+type TaskAssetFileOwnerInput =
+  | JSONType
+  | {
+      version: number;
+      instanceId: string | undefined;
+      processId: number;
+      startedAtMs: number;
+    };
 
 export type TaskAssetFileOwnershipDependencies = {
   owner: TaskAssetFileOwner;
@@ -48,8 +62,12 @@ const readProcessStartedAtMs = async (processId: number): Promise<number> => {
   return startedAtMs;
 };
 
-const isMissing = (cause: unknown): boolean =>
-  typeof cause === "object" && cause !== null && "code" in cause && cause.code === "ENOENT";
+const nodeErrorSchema = z.object({ code: z.string() }).passthrough();
+const hasErrorCode = (cause: unknown, code: string): boolean => {
+  const parsed = nodeErrorSchema.safeParse(cause);
+  return parsed.success && parsed.data.code === code;
+};
+const isMissing = (cause: unknown): boolean => hasErrorCode(cause, "ENOENT");
 
 const existingStat = async (target: string) => {
   try {
@@ -62,22 +80,16 @@ const existingStat = async (target: string) => {
   }
 };
 
-const validateOwner = (value: unknown): TaskAssetFileOwner => {
-  if (typeof value !== "object" || value === null) {
-    throw new Error("Task asset owner record must be an object.");
+const validateOwner = (value: TaskAssetFileOwnerInput): TaskAssetFileOwner => {
+  const result = taskAssetFileOwnerSchema.safeParse(value);
+  if (!result.success) {
+    throw new HostValidationError({
+      field: "taskAssetOwner",
+      message: "Task asset owner record is invalid.",
+      cause: result.error,
+    });
   }
-  const owner = value as Partial<TaskAssetFileOwner>;
-  if (
-    owner.version !== 1 ||
-    !taskAssetIdSchema.safeParse(owner.instanceId).success ||
-    !Number.isSafeInteger(owner.processId) ||
-    (owner.processId ?? 0) <= 0 ||
-    !Number.isSafeInteger(owner.startedAtMs) ||
-    (owner.startedAtMs ?? -1) < 0
-  ) {
-    throw new Error("Task asset owner record is invalid.");
-  }
-  return owner as TaskAssetFileOwner;
+  return result.data;
 };
 
 const defaultOwnership = (): TaskAssetFileOwnershipDependencies => ({
@@ -151,15 +163,10 @@ export const createTaskAssetFileOwnership = (
       });
       await link(publication, marker);
     } catch (cause) {
-      if (
-        typeof cause !== "object" ||
-        cause === null ||
-        !("code" in cause) ||
-        cause.code !== "EEXIST"
-      ) {
+      if (!hasErrorCode(cause, "EEXIST")) {
         throw cause;
       }
-      const existing = validateOwner(JSON.parse(await readFile(marker, "utf8")));
+      const existing = validateOwner(z.json().parse(JSON.parse(await readFile(marker, "utf8"))));
       if (
         existing.instanceId !== dependencies.owner.instanceId ||
         existing.processId !== dependencies.owner.processId ||
@@ -194,7 +201,7 @@ export const createTaskAssetFileOwnership = (
         throw new Error(`Unexpected task asset owner entry '${entry.name}'.`);
       }
       const owner = validateOwner(
-        JSON.parse(await readFile(path.join(ownersRoot, entry.name), "utf8")),
+        z.json().parse(JSON.parse(await readFile(path.join(ownersRoot, entry.name), "utf8"))),
       );
       if (owner.instanceId !== instanceId) {
         throw new Error("Task asset owner record ID does not match its filename.");

@@ -4,38 +4,32 @@ import {
   snapshotForClaudeSession,
   toClaudeDisplayParts,
 } from "./claude-agent-sdk-session-shape";
+import { emptyClaudeQuery } from "./claude-agent-sdk-session-io.test-support";
+import { createClaudePermissionTestSession } from "./claude-agent-sdk-permissions.test-support";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 
-const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession =>
-  ({
-    activeSdkUserTurnCount: 0,
-    activity: "running",
+const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession => ({
+  ...createClaudePermissionTestSession("build"),
+  activity: "running",
+  input: {
+    repoPath: "/repo",
+    runtimeKind: "claude",
+    workingDirectory: "/repo/worktree",
+    runtimePolicy: { kind: "claude" },
+    sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+    systemPrompt: "Build",
+  },
+  query: emptyClaudeQuery(),
+  summary: {
     externalSessionId: "session-1",
-    input: {
-      repoPath: "/repo",
-      runtimeKind: "claude",
-      workingDirectory: "/repo/worktree",
-      runtimePolicy: { kind: "claude" },
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-      systemPrompt: "Build",
-    },
-    pendingApprovals: new Map(),
-    pendingQuestions: new Map(),
-    queuedSdkMessages: [],
-    pendingUserTurnCount: 0,
-    runtimeId: "runtime-1",
-    sdkState: undefined,
+    runtimeKind: "claude",
+    workingDirectory: "/repo/worktree",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
     startedAt: "2026-06-25T20:00:00.000Z",
-    summary: {
-      externalSessionId: "session-1",
-      runtimeKind: "claude",
-      workingDirectory: "/repo/worktree",
-      role: "build",
-      startedAt: "2026-06-25T20:00:00.000Z",
-      status: "idle",
-    },
-    ...overrides,
-  }) as ClaudeSession;
+    status: "idle",
+  },
+  ...overrides,
+});
 
 describe("createClaudeSessionSummary", () => {
   test("preserves repository scope without a fake task or role", () => {

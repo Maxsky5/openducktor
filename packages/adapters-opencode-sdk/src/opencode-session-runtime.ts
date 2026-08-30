@@ -1,4 +1,3 @@
-import type { Event } from "@opencode-ai/sdk/v2/client";
 import type {
   AcceptedAgentUserMessage,
   AgentEvent,
@@ -10,6 +9,7 @@ import type {
   StartAgentSessionInput,
   UpdateAgentSessionModelInput,
 } from "@openducktor/core";
+import type { ParsedOpencodeEvent as Event } from "./opencode-global-event-ingress";
 import { buildDefaultFactory, nowIso } from "./client-factory";
 import {
   listOpencodeRuntimeSnapshotSources,
@@ -105,7 +105,7 @@ const waitForRuntimeInitialization = <Value>(
     signal.addEventListener("abort", abort, { once: true });
     void initialization.then(
       (value) => finish(() => resolve(value)),
-      (error: unknown) => finish(() => reject(error)),
+      (cause: unknown) => finish(() => reject(cause)),
     );
     if (signal.aborted) abort();
   });
@@ -249,7 +249,7 @@ export const createPrepareOpencodeSessionRuntime = (
           runtimePolicy: { kind: "opencode" as const },
           systemPrompt: "",
         };
-        registerSession({
+        const registrationInput: Parameters<typeof registerSession>[0] = {
           sessions: eventSessions,
           runtimeEventTransports,
           createClient,
@@ -273,8 +273,11 @@ export const createPrepareOpencodeSessionRuntime = (
               });
             }
           },
-          ...(options.logEvent ? { logEvent: options.logEvent } : {}),
-        });
+        };
+        if (options.logEvent) {
+          registrationInput.logEvent = options.logEvent;
+        }
+        registerSession(registrationInput);
       }
     };
 
@@ -282,12 +285,15 @@ export const createPrepareOpencodeSessionRuntime = (
     const readSessionSources = (): Promise<OpencodeRuntimeSnapshotSource[]> => {
       const read = readSessionSourcesTail.then(async () => {
         requireActive();
-        const sources = await listOpencodeRuntimeSnapshotSources({
+        const snapshotInput: Parameters<typeof listOpencodeRuntimeSnapshotSources>[0] = {
           createClient,
           runtimeEndpoint: input.runtimeEndpoint,
           now,
-          ...(input.directories ? { directories: input.directories } : {}),
-        });
+        };
+        if (input.directories) {
+          snapshotInput.directories = input.directories;
+        }
+        const sources = await listOpencodeRuntimeSnapshotSources(snapshotInput);
         requireActive();
         await syncEventSessions(sources);
         requireActive();
@@ -310,7 +316,7 @@ export const createPrepareOpencodeSessionRuntime = (
       return read;
     };
 
-    const observation = await observeRuntimeEvents({
+    const observationInput: Parameters<typeof observeRuntimeEvents>[0] = {
       runtimeEventTransports,
       createClient,
       runtimeId: input.runtimeId,
@@ -334,9 +340,14 @@ export const createPrepareOpencodeSessionRuntime = (
       },
       terminalObserver: (error) =>
         emitSignal({ type: "fault", message: toOpencodeObservationFailureMessage(error) }),
-      ...(input.signal ? { signal: input.signal } : {}),
-      ...(options.logEvent ? { logEvent: options.logEvent } : {}),
-    });
+    };
+    if (input.signal) {
+      observationInput.signal = input.signal;
+    }
+    if (options.logEvent) {
+      observationInput.logEvent = options.logEvent;
+    }
+    const observation = await observeRuntimeEvents(observationInput);
 
     const initialize = async (): Promise<OpencodeRuntimeSnapshotSource[]> => {
       let initialSources = await readSessionSources();

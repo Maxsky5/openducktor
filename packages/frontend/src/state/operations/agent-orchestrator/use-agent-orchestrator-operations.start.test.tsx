@@ -278,7 +278,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
   test("reuses an in-memory session after it has been started", async () => {
     let startCalls = 0;
     let persistedListCalls = 0;
-    let persistedSessions = [] as (typeof persistedSessionFixture)[];
+    let persistedSessions: Array<typeof persistedSessionFixture> = [];
 
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
@@ -408,7 +408,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     let startCalls = 0;
     let persistedBatchListCalls = 0;
     let persistedSingleListCalls = 0;
-    let persistedSessions = [] as (typeof persistedSessionFixture)[];
+    let persistedSessions: Array<typeof persistedSessionFixture> = [];
     const startDeferred = createDeferred<{
       runtimeKind: "opencode";
       workingDirectory: string;
@@ -740,15 +740,18 @@ describe("use-agent-orchestrator-operations start and send", () => {
         agentDefaults: {},
       });
 
-      let staleError: unknown = null;
+      let staleError: Error | null = null;
       try {
         await startPromise;
-      } catch (error) {
-        staleError = error;
+      } catch (cause) {
+        if (!(cause instanceof Error)) {
+          throw new Error("Expected stale start to reject with Error.", { cause });
+        }
+        staleError = cause;
       }
 
-      if (!(staleError instanceof Error)) {
-        throw new Error("Expected stale start to reject with Error");
+      if (!staleError) {
+        throw new Error("Expected stale start to reject with Error.");
       }
 
       expect(staleError.message).toContain("Workspace changed while starting session.");

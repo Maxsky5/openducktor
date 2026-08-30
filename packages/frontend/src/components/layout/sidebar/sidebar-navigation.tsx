@@ -21,9 +21,7 @@ type SidebarNavigationState = {
   committedLocationKey: string;
 };
 
-const ROUTE_PRELOADERS: Partial<Record<NavigationRoute, () => void>> = {
-  "/agents": preloadAgentsPage,
-};
+const ROUTE_PRELOADERS = new Map<NavigationRoute, () => void>([["/agents", preloadAgentsPage]]);
 
 type SidebarNavigationProps = {
   hasActiveWorkspace: boolean;
@@ -106,7 +104,7 @@ export function SidebarNavigation({
         const Icon = item.icon;
         const isDisabled = item.requiresRepo && !hasActiveWorkspace;
         const linkTarget: NavigationRoute = isDisabled ? "/kanban" : item.to;
-        const preloadRoute = isDisabled ? undefined : ROUTE_PRELOADERS[item.to];
+        const preloadRoute = isDisabled ? undefined : ROUTE_PRELOADERS.get(item.to);
         const isActivated =
           activatedNavigation?.route === linkTarget &&
           activatedNavigation.sourceLocationKey === currentLocationKey;

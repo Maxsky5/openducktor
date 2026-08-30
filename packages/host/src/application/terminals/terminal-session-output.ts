@@ -39,6 +39,11 @@ export type TerminalOutputEvent =
 
 export type TerminalOutputEvents = TerminalOutputEvent[];
 
+type TerminalDeliveryResult = {
+  delivered: boolean;
+  events: TerminalOutputEvents;
+};
+
 export class TerminalOutputStateError extends Error {
   constructor(
     readonly code: "attachment_not_found" | "invalid_ack" | "invalid_replay_position",
@@ -230,7 +235,7 @@ export class TerminalSessionOutput {
     attachment: TerminalAttachment,
     message: TerminalServerMessage,
     payload: Uint8Array = EMPTY_PAYLOAD,
-  ): { delivered: boolean; events: TerminalOutputEvents } {
+  ): TerminalDeliveryResult {
     try {
       this.publishTo(attachment, message, payload);
       return { delivered: true, events: [] };
@@ -255,7 +260,7 @@ export class TerminalSessionOutput {
     chunk: ReplayChunk,
     replay: boolean,
     handle: TerminalPtyHandle | null,
-  ): { delivered: boolean; events: TerminalOutputEvents } {
+  ): TerminalDeliveryResult {
     if (chunk.sequenceEnd <= attachment.deliveredSequence) {
       return { delivered: true, events: [] };
     }

@@ -99,14 +99,14 @@ const failSessionHistoryLoad = (
 ): AgentSessionState | null =>
   updateSession(identity, (session) => policy.failLoad(session, failure));
 
-const sessionHistoryFailureFromError = (error: unknown): SessionHistoryFailure => {
-  if (error instanceof HostInvokeError && error.failure?.kind === "session_history") {
-    return error.failure.sessionHistoryFailure;
+const sessionHistoryFailureFromError = (cause: unknown): SessionHistoryFailure => {
+  if (cause instanceof HostInvokeError && cause.failure?.kind === "session_history") {
+    return cause.failure.sessionHistoryFailure;
   }
   return {
     code: "request_failed",
     summary: "Conversation history could not be loaded.",
-    detail: error instanceof Error ? error.message : String(error),
+    detail: cause instanceof Error ? cause.message : String(cause),
   };
 };
 
@@ -226,11 +226,14 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
       return finishStaleHistoryLoad();
     }
 
-    const history = await adapter.loadSessionHistory({
+    const historyInput: Parameters<typeof adapter.loadSessionHistory>[0] = {
       ...sessionRef,
-      ...(systemPromptContext ? { systemPromptContext } : {}),
       limit: SESSION_HISTORY_LOAD_LIMIT,
-    });
+    };
+    if (systemPromptContext) {
+      historyInput.systemPromptContext = systemPromptContext;
+    }
+    const history = await adapter.loadSessionHistory(historyInput);
     if (isStaleRepoOperation()) {
       return finishStaleHistoryLoad();
     }
@@ -313,7 +316,7 @@ const createLoadSessionHistoryWithPolicy = ({
       );
     }
 
-    return loadSessionHistoryIntoStoreWithPolicy({
+    const input: Parameters<typeof loadSessionHistoryIntoStoreWithPolicy>[0] = {
       repoPath,
       adapter,
       readSessionSnapshot,
@@ -327,9 +330,12 @@ const createLoadSessionHistoryWithPolicy = ({
           session,
           loadRepoPromptOverrides,
         }),
-      ...(loadSettingsSnapshot ? { loadSettingsSnapshot } : {}),
       isStaleRepoOperation,
-    });
+    };
+    if (loadSettingsSnapshot) {
+      input.loadSettingsSnapshot = loadSettingsSnapshot;
+    }
+    return loadSessionHistoryIntoStoreWithPolicy(input);
   };
 };
 

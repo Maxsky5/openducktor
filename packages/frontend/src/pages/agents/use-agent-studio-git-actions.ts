@@ -98,6 +98,20 @@ export function useAgentStudioGitActions({
     setResetError,
     clearActionErrors,
   } = useAgentStudioGitActionErrors();
+  const conflictControllerInput: Parameters<typeof useAgentStudioGitConflictController>[0] = {
+    repoPath,
+    workingDir,
+    branch,
+    detectedConflict,
+    detectedConflictedFiles,
+    worktreeStatusSnapshotKey,
+    refreshDiffData,
+    clearActionErrors,
+    setRebaseError,
+  };
+  if (onResolveGitConflict) {
+    conflictControllerInput.onResolveGitConflict = onResolveGitConflict;
+  }
 
   const {
     activeGitConflict,
@@ -111,18 +125,7 @@ export function useAgentStudioGitActions({
     captureFreshConflict,
     abortGitConflict,
     askBuilderToResolveGitConflict,
-  } = useAgentStudioGitConflictController({
-    repoPath,
-    workingDir,
-    branch,
-    detectedConflict,
-    detectedConflictedFiles,
-    worktreeStatusSnapshotKey,
-    refreshDiffData,
-    clearActionErrors,
-    setRebaseError,
-    ...(onResolveGitConflict ? { onResolveGitConflict } : {}),
-  });
+  } = useAgentStudioGitConflictController(conflictControllerInput);
 
   const ensureGitActionsUnlocked = useCallback(
     (kind: GitActionKind): boolean => {

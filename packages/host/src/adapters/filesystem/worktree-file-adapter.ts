@@ -1,6 +1,7 @@
 import { cp, lstat, mkdir, readdir, readlink, realpath, rm, symlink } from "node:fs/promises";
 import path from "node:path";
 import { Effect } from "effect";
+import { z } from "zod";
 import {
   HostOperationError,
   HostValidationError,
@@ -10,8 +11,11 @@ import type { WorktreeFileError, WorktreeFilePort } from "../../ports/worktree-f
 
 const metadataDirectoryName = ".git";
 const normalizeMissingPath = (inputPath: string): string => path.resolve(inputPath);
-const hasErrorCode = (error: unknown, code: string): boolean =>
-  typeof error === "object" && error !== null && "code" in error && error.code === code;
+const nodeErrorSchema = z.object({ code: z.string() }).passthrough();
+const hasErrorCode = (cause: unknown, code: string): boolean => {
+  const parsed = nodeErrorSchema.safeParse(cause);
+  return parsed.success && parsed.data.code === code;
+};
 const resolvePathThroughExistingAncestor = (
   inputPath: string,
   missingSegments: string[] = [],

@@ -26,7 +26,7 @@ const taskStreamEvent = (sequence: number): ExternalTaskSyncEvent => ({
 
 const deferred = <Value>() => {
   let resolve!: (value: Value) => void;
-  let reject!: (error: unknown) => void;
+  let reject!: (cause: unknown) => void;
   const promise = new Promise<Value>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
     reject = rejectPromise;
@@ -48,19 +48,17 @@ const setElectronApi = (electronApi: OpenDucktorElectronApi | undefined): void =
   });
 };
 
-const createElectronApi = (): {
-  electronApi: OpenDucktorElectronApi;
-  unsubscribeAppUpdates: ReturnType<typeof mock>;
-  unsubscribe: ReturnType<typeof mock>;
-  unsubscribeTaskStream: ReturnType<typeof mock>;
-} => {
+const createElectronApi = () => {
   const unsubscribe = mock(() => {});
   const unsubscribeAppUpdates = mock(() => {});
   const unsubscribeTaskStream = mock(() => {});
+  let appUpdateListener:
+    | Parameters<OpenDucktorElectronApi["appUpdates"]["subscribe"]>[0]
+    | undefined;
   return {
     electronApi: {
       platform: "darwin",
-      invoke: mock(async () => ({ ok: true as const, value: {} })),
+      invoke: mock(async () => ({ ok: true as const, value: undefined })),
       subscribe: mock(() => unsubscribe),
       appUpdates: {
         getState: mock(async () => ({ status: "idle", currentVersion: "0.4.2" })),
@@ -90,7 +88,10 @@ const createElectronApi = (): {
             progressPercent: 100,
           },
         })),
-        subscribe: mock(() => unsubscribeAppUpdates),
+        subscribe: mock((listener) => {
+          appUpdateListener = listener;
+          return unsubscribeAppUpdates;
+        }),
       },
       openExternalUrl: mock(async () => {}),
       resolveLocalAttachmentPreviewSrc: mock(async () => "file:///tmp/brief.md"),
@@ -110,9 +111,21 @@ const createElectronApi = (): {
         subscribe: mock(() => unsubscribe),
       },
     },
+    emitAppUpdate(state: Parameters<NonNullable<typeof appUpdateListener>>[0]) {
+      if (!appUpdateListener) {
+        throw new Error("Expected an app-update subscription before emitting state.");
+      }
+      appUpdateListener(state);
+    },
     unsubscribeAppUpdates,
     unsubscribe,
     unsubscribeTaskStream,
+  } satisfies {
+    electronApi: OpenDucktorElectronApi;
+    emitAppUpdate(state: Parameters<OpenDucktorElectronApi["appUpdates"]["subscribe"]>[0]): void;
+    unsubscribeAppUpdates: ReturnType<typeof mock>;
+    unsubscribe: ReturnType<typeof mock>;
+    unsubscribeTaskStream: ReturnType<typeof mock>;
   };
 };
 
@@ -137,9 +150,10 @@ describe("electron shell bridge", () => {
     })();
 
     expect(error).toBeInstanceOf(ElectronPreloadBridgeUnavailableError);
-    expect((error as Error).message).toContain(
-      "OpenDucktor Electron preload bridge is unavailable.",
-    );
+    if (!(error instanceof Error)) {
+      throw new TypeError("Expected an Error instance.");
+    }
+    expect(error.message).toContain("OpenDucktor Electron preload bridge is unavailable.");
   });
 
   test("uses the preload bridge for event subscriptions and shell capabilities", async () => {
@@ -148,7 +162,9 @@ describe("electron shell bridge", () => {
 
     const bridge = createElectronShellBridge();
     const listener = mock(() => {});
-    const onTerminalFailure = mock((_error: unknown) => {});
+    const onTerminalFailure = mock((cause: unknown) => {
+      void cause;
+    });
     const unsubscribeRunEvents = await bridge.subscribeRunEvents(listener);
     const devServerSubscription = await bridge.subscribeDevServerEvents(listener);
     const stopObservingLiveSessions = await bridge.observeAgentSessionLive(
@@ -290,9 +306,9 @@ describe("electron shell bridge", () => {
     const listener = mock(() => {});
 
     await bridge.observeAgentSessionLive({ repoPath: "/repo" }, listener);
-    const subscription = (electronApi.subscribe as ReturnType<typeof mock>).mock.calls.find(
+    const subscription = electronApi.subscribe.mock.calls.find(
       ([channel]) => channel === "openducktor://agent-session-live-event",
-    )?.[1] as ((payload: unknown) => void) | undefined;
+    )?.[1];
     if (!subscription) {
       throw new Error("Expected live-session subscription.");
     }
@@ -322,7 +338,7 @@ describe("electron shell bridge", () => {
   });
 
   test("uses the preload bridge for app update state and actions", async () => {
-    const { electronApi, unsubscribeAppUpdates } = createElectronApi();
+    const { electronApi, emitAppUpdate, unsubscribeAppUpdates } = createElectronApi();
     setElectronApi(electronApi);
 
     const bridge = createElectronShellBridge();
@@ -336,9 +352,7 @@ describe("electron shell bridge", () => {
     await bridge.appUpdates.check({ initiator: "settings" });
     await bridge.appUpdates.download();
     await bridge.appUpdates.install();
-    const appUpdateListener = (electronApi.appUpdates.subscribe as ReturnType<typeof mock>).mock
-      .calls[0]?.[0];
-    appUpdateListener?.({
+    emitAppUpdate({
       status: "available",
       currentVersion: "0.4.2",
       availableVersion: "0.4.3",
@@ -391,15 +405,15 @@ describe("electron shell bridge", () => {
     setElectronApi(electronApi);
 
     const bridge = createElectronShellBridge();
-    const result = await bridge.client.terminalCreate({ workingDir: "/repo", context: {} }).then(
-      () => ({ ok: true as const }),
-      (error: unknown) => ({ ok: false as const, error }),
-    );
+    let error: unknown;
+    try {
+      await bridge.client.terminalCreate({ workingDir: "/repo", context: {} });
+    } catch (cause) {
+      error = cause;
+    }
 
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("Expected terminalCreate to reject.");
-    expect(result.error).toBeInstanceOf(HostTerminalClientError);
-    expect(result.error).toMatchObject({
+    expect(error).toBeInstanceOf(HostTerminalClientError);
+    expect(error).toMatchObject({
       code: "unsupported_runtime",
       message: "Interactive terminals are unavailable in this runtime.",
     });
@@ -424,22 +438,20 @@ describe("electron shell bridge", () => {
     }));
     setElectronApi(electronApi);
 
-    const result = await createElectronShellBridge()
-      .client.filesystemWriteTextFile({
+    let error: unknown;
+    try {
+      await createElectronShellBridge().client.filesystemWriteTextFile({
         rootPath: "/repo",
         relativePath: "src/file.ts",
         contents: "draft",
         revision: "sha256:old",
-      })
-      .then(
-        () => ({ ok: true as const }),
-        (error: unknown) => ({ ok: false as const, error }),
-      );
+      });
+    } catch (cause) {
+      error = cause;
+    }
 
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("Expected filesystemWriteTextFile to reject.");
-    expect(result.error).toBeInstanceOf(HostInvokeError);
-    expect(result.error).toMatchObject({
+    expect(error).toBeInstanceOf(HostInvokeError);
+    expect(error).toMatchObject({
       failure: {
         kind: "workspace_text_file_write",
         workspaceTextFileWriteFailure: { code: "stale_revision" },

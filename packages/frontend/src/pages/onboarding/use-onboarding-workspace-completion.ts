@@ -24,10 +24,11 @@ export const useOnboardingWorkspaceCompletion = ({
       const defaultRuntimeKind = knownRuntimeKindValues.find(
         (kind) => settingsSnapshot.agentRuntimes[kind].enabled,
       );
-      await addWorkspace({
-        ...input,
-        ...(defaultRuntimeKind ? { defaultRuntimeKind } : {}),
-      });
+      const workspaceInput: Parameters<typeof addWorkspace>[0] = { ...input };
+      if (defaultRuntimeKind) {
+        workspaceInput.defaultRuntimeKind = defaultRuntimeKind;
+      }
+      await addWorkspace(workspaceInput);
       setCompletionRepoPath(input.repoPath);
 
       const destinationQueries: Promise<unknown>[] = [

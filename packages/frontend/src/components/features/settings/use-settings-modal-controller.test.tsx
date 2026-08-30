@@ -205,20 +205,20 @@ const createHookHarness = (
   );
 
   const harness = createSharedHookHarness(
-    ({ isOpen, shouldLoad }: { isOpen: boolean; shouldLoad: boolean }) =>
-      useSettingsModalController({
+    ({ isOpen, shouldLoad }: { isOpen: boolean; shouldLoad: boolean }) => {
+      const hookInput: Parameters<typeof useSettingsModalController>[0] = {
         open: isOpen,
         shouldLoadCatalog: shouldLoad,
         onRuntimeAvailabilityError: () => {},
-        ...(options && "requiredRepoPath" in options
-          ? {
-              workspaceSelectionPolicy: {
-                kind: "required" as const,
-                repoPath: options.requiredRepoPath ?? null,
-              },
-            }
-          : {}),
-      }),
+      };
+      if (options && "requiredRepoPath" in options) {
+        hookInput.workspaceSelectionPolicy = {
+          kind: "required",
+          repoPath: options.requiredRepoPath ?? null,
+        };
+      }
+      return useSettingsModalController(hookInput);
+    },
     {
       isOpen: open,
       shouldLoad: shouldLoadCatalog,
@@ -363,7 +363,7 @@ describe("useSettingsModalController", () => {
       if (input.mode === "discover") {
         return { runtimes: [] };
       }
-      const kinds = Object.keys(input.paths) as RuntimeKind[];
+      const kinds = knownRuntimeKindValues.filter((kind) => kind in input.paths);
       requests.push(kinds);
       return {
         runtimes: kinds.map((kind) => ({
@@ -517,27 +517,21 @@ describe("useSettingsModalController", () => {
   test("fails closed when runtime executable validation cannot load", async () => {
     const originalCheck = host.runtimeExecutablesCheck;
     const requestedKinds: RuntimeKind[] = [];
-    const attemptCountByKind: Record<RuntimeKind, number> = {
+    const attemptCountByKind = {
       opencode: 0,
       codex: 0,
       claude: 0,
-    };
-    const initialValidationByKind: Record<
-      RuntimeKind,
-      ReturnType<typeof createDeferred<RuntimeExecutableCheck>>
-    > = {
+    } satisfies Record<RuntimeKind, number>;
+    const initialValidationByKind = {
       opencode: createDeferred<RuntimeExecutableCheck>(),
       codex: createDeferred<RuntimeExecutableCheck>(),
       claude: createDeferred<RuntimeExecutableCheck>(),
-    };
-    const repeatedValidationByKind: Record<
-      RuntimeKind,
-      ReturnType<typeof createDeferred<RuntimeExecutableCheck>>
-    > = {
+    } satisfies Record<RuntimeKind, ReturnType<typeof createDeferred<RuntimeExecutableCheck>>>;
+    const repeatedValidationByKind = {
       opencode: createDeferred<RuntimeExecutableCheck>(),
       codex: createDeferred<RuntimeExecutableCheck>(),
       claude: createDeferred<RuntimeExecutableCheck>(),
-    };
+    } satisfies Record<RuntimeKind, ReturnType<typeof createDeferred<RuntimeExecutableCheck>>>;
     host.runtimeExecutablesCheck = mock(async (input) => {
       if (input.mode !== "validate") throw new Error("Expected runtime validation");
       const kind = knownRuntimeKindValues.find((candidate) =>
@@ -561,7 +555,7 @@ describe("useSettingsModalController", () => {
           initialValidationByKind[kind].reject(new Error("Executable validation failed"));
         }
       });
-      await harness.waitFor((state) => typeof state.runtimeExecutablesError === "string");
+      await harness.waitFor((state) => state.runtimeExecutablesError !== null);
       await harness.run(async () => {
         await Promise.resolve();
         await Promise.resolve();
@@ -1096,12 +1090,13 @@ describe("useSettingsModalController", () => {
           ...repoConfig,
           agentDefaults: {
             ...repoConfig.agentDefaults,
+            // @ts-expect-error This negative test verifies that configured defaults require a runtime kind.
             spec: {
               providerId: "openai",
               modelId: "gpt-5",
               variant: "",
               profileId: "",
-            } as unknown as NonNullable<typeof repoConfig.agentDefaults.spec>,
+            },
           },
         }));
       });

@@ -32,11 +32,15 @@ export const pullRequestReviewContextQueryOptions = (
 ) =>
   queryOptions({
     queryKey: pullRequestReviewQueryKeys.context(input),
-    queryFn: (): Promise<PullRequestReviewContext> =>
-      hostClient.pullRequestReviewContextGet({
+    queryFn: (): Promise<PullRequestReviewContext> => {
+      const request: Parameters<PullRequestReviewQueryHost["pullRequestReviewContextGet"]>[0] = {
         repoPath: input.repoPath,
-        ...(input.taskId ? { taskId: input.taskId } : {}),
-      }),
+      };
+      if (input.taskId) {
+        request.taskId = input.taskId;
+      }
+      return hostClient.pullRequestReviewContextGet(request);
+    },
     staleTime: PULL_REQUEST_REVIEW_STALE_TIME_MS,
   });
 

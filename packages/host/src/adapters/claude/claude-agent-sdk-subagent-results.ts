@@ -1,5 +1,15 @@
 import type { AgentStreamPart } from "@openducktor/core";
-import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import {
+  claudeProtocolObjectSchema,
+  type ClaudeProtocolObject,
+} from "./claude-agent-sdk-ingress-schemas";
+import type { ClaudeHistoryTaskUpdatedPatch } from "./claude-agent-sdk-ingress-schemas";
+import {
+  type ClaudeFailureDetails,
+  type ClaudeTaskUpdatedPatch,
+  readStringProp,
+} from "./claude-agent-sdk-utils";
+import type { ClaudeDecodedToolResult, ClaudeDecodedToolUse } from "./claude-agent-sdk-tool-shapes";
 
 type SubagentStreamPart = Extract<AgentStreamPart, { kind: "subagent" }>;
 type ClaudeTaskStatus =
@@ -10,6 +20,8 @@ type ClaudeTaskStatus =
   | "killed"
   | "paused"
   | undefined;
+
+export type ClaudeAgentResult = ClaudeProtocolObject;
 
 export const claudeSubagentStatusFromTaskStatus = (
   status: ClaudeTaskStatus,
@@ -30,19 +42,21 @@ export const isTerminalClaudeTaskStatus = (status: ClaudeTaskStatus): boolean =>
   status === "completed" || status === "failed" || status === "killed";
 
 export const readStructuredClaudeAgentResult = (
-  raw: Record<string, unknown>,
-): Record<string, unknown> => {
-  if (isRecord(raw.toolUseResult)) {
-    return raw.toolUseResult;
+  raw: ClaudeDecodedToolResult["raw"],
+): ClaudeAgentResult => {
+  const toolUseResult = claudeProtocolObjectSchema.safeParse(raw.toolUseResult);
+  if (toolUseResult.success) {
+    return toolUseResult.data;
   }
-  if (isRecord(raw.structuredContent)) {
-    return raw.structuredContent;
+  const structuredContent = claudeProtocolObjectSchema.safeParse(raw.structuredContent);
+  if (structuredContent.success) {
+    return structuredContent.data;
   }
   return raw;
 };
 
 export const claudeAgentResultStatus = (
-  result: Record<string, unknown>,
+  result: ClaudeAgentResult,
   isError: boolean,
 ): SubagentStreamPart["status"] => {
   if (isError) {
@@ -70,8 +84,8 @@ export const claudeAgentResultStatus = (
 };
 
 export const claudeAgentResultExecutionMode = (
-  result: Record<string, unknown>,
-  input: Record<string, unknown> | undefined,
+  result: ClaudeAgentResult,
+  input: ClaudeDecodedToolUse["input"],
 ): NonNullable<SubagentStreamPart["executionMode"]> => {
   const status = readStringProp(result, "status");
   if (status === "async_launched" || status === "remote_launched") {
@@ -92,7 +106,9 @@ export const firstClaudeTaskText = (
   return undefined;
 };
 
-export const readClaudeFailedTaskMessage = (value: Record<string, unknown>): string | undefined =>
+export const readClaudeFailedTaskMessage = (
+  value: ClaudeAgentResult | ClaudeFailureDetails,
+): string | undefined =>
   firstClaudeTaskText(
     readStringProp(value, "error"),
     readStringProp(value, "message"),
@@ -101,7 +117,13 @@ export const readClaudeFailedTaskMessage = (value: Record<string, unknown>): str
     readStringProp(value, "summary"),
   );
 
-export const readClaudeFailedTaskReason = (value: Record<string, unknown>): string | undefined =>
+export const readClaudeFailedTaskReason = (
+  value:
+    | ClaudeAgentResult
+    | ClaudeFailureDetails
+    | ClaudeHistoryTaskUpdatedPatch
+    | ClaudeTaskUpdatedPatch,
+): string | undefined =>
   firstClaudeTaskText(
     readStringProp(value, "error"),
     readStringProp(value, "message"),
@@ -109,7 +131,7 @@ export const readClaudeFailedTaskReason = (value: Record<string, unknown>): stri
   );
 
 export const readClaudeTaskStopTaskId = (
-  resultRaw: Record<string, unknown>,
+  resultRaw: ClaudeDecodedToolResult["raw"],
   resultText: string,
 ): string | undefined => {
   const structuredTaskId = readStringProp(readStructuredClaudeAgentResult(resultRaw), "task_id");
@@ -117,8 +139,8 @@ export const readClaudeTaskStopTaskId = (
     return structuredTaskId;
   }
   try {
-    const parsed = JSON.parse(resultText) as unknown;
-    return isRecord(parsed) ? readStringProp(parsed, "task_id") : undefined;
+    const parsed = claudeProtocolObjectSchema.safeParse(JSON.parse(resultText));
+    return parsed.success ? readStringProp(parsed.data, "task_id") : undefined;
   } catch {
     return undefined;
   }

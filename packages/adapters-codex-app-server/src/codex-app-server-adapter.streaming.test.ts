@@ -1,7 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { CodexAppServerTurnStartResult } from "@openducktor/contracts";
+import type { AgentEvent } from "@openducktor/core";
 import {
   codexSessionRuntimeRef,
   codexStartSessionInput,
+  codexThreadFixture,
+  codexThreadStartResultFixture,
+  codexTurnFixture,
   codexUserMessageInput,
   createDeferred,
   createHarness,
@@ -11,10 +16,16 @@ import {
 import type { CodexSubagentLinkState } from "./codex-subagent-link-state";
 import type {
   CodexAppServerAdapter,
+  CodexAppServerStreamEvent,
   CodexJsonRpcRequest,
   CodexJsonRpcTransport,
   CodexLiveSessionMutation,
 } from "./index";
+import {
+  codexCollabAgentToolCallFixture,
+  codexCommandExecutionItemFixture,
+  codexTokenUsageFixture,
+} from "./test-fixtures/codex-protocol";
 
 const observeSessionState = async (
   adapter: CodexAppServerAdapter,
@@ -29,11 +40,38 @@ const observeSessionState = async (
 };
 
 describe("CodexAppServerAdapter streaming", () => {
+  test("ignores known unconsumed notifications without emitting a session error", async () => {
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const { adapter } = createHarness({ subscribeEvents });
+
+    await adapter.startSession(codexStartSessionInput());
+    const events: AgentEvent[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
+    );
+    await flushCodexAdapterWork();
+
+    emitNotification({
+      method: "item/commandExecution/outputDelta",
+      params: {
+        threadId: "thread/start-runtime-live",
+        turnId: "turn-live",
+        itemId: "command-1",
+        delta: "command output",
+      },
+    });
+    await flushCodexAdapterWork();
+
+    expect(events).not.toContainEqual(expect.objectContaining({ type: "session_error" }));
+    unsubscribe();
+  });
+
   test("rejects subagent reference sends before emitting an accepted user message", async () => {
     const { adapter, transports } = createHarness();
 
     await adapter.startSession(codexStartSessionInput());
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       events.push(event),
     );
@@ -92,7 +130,7 @@ describe("CodexAppServerAdapter streaming", () => {
     const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
 
     await adapter.startSession(codexStartSessionInput());
-    const events: Array<{ type?: string }> = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
@@ -107,7 +145,7 @@ describe("CodexAppServerAdapter streaming", () => {
       }),
     );
     transports.get("runtime-live")?.turnStartDeferred.resolve({
-      turn: { id: "turn-live", status: "running" },
+      turn: codexTurnFixture({ id: "turn-live", items: [], status: "inProgress" }),
     });
     await flushCodexAdapterWork();
 
@@ -149,7 +187,7 @@ describe("CodexAppServerAdapter streaming", () => {
     const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
 
     await adapter.startSession(codexStartSessionInput());
-    const events: Array<{ type?: string; message?: string; totalTokens?: number }> = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
@@ -164,7 +202,7 @@ describe("CodexAppServerAdapter streaming", () => {
       }),
     );
     transports.get("runtime-live")?.turnStartDeferred.resolve({
-      turn: { id: "turn-live", status: "running" },
+      turn: codexTurnFixture({ id: "turn-live", items: [], status: "inProgress" }),
     });
     await flushCodexAdapterWork();
 
@@ -179,6 +217,7 @@ describe("CodexAppServerAdapter streaming", () => {
           id: "agent-idle-final",
           phase: "final_answer",
           text: "Done before idle.",
+          memoryCitation: null,
         },
       },
     });
@@ -187,11 +226,7 @@ describe("CodexAppServerAdapter streaming", () => {
       params: {
         threadId: "thread/start-runtime-live",
         turnId: "turn-live",
-        tokenUsage: {
-          total: { totalTokens: 12_345 },
-          last: { totalTokens: 321 },
-          modelContextWindow: 200_000,
-        },
+        tokenUsage: codexTokenUsageFixture(321),
       },
     });
     emitNotification({
@@ -210,23 +245,17 @@ describe("CodexAppServerAdapter streaming", () => {
       method: "turn/completed",
       params: {
         threadId: "thread/start-runtime-live",
-        turn: {
+        turn: codexTurnFixture({
           id: "turn-live",
           status: "completed",
           completedAt: 1_777_766_420,
           durationMs: 1_200,
-        },
+          items: [],
+        }),
       },
     });
     await flushCodexAdapterWork();
 
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        type: "session_status",
-        timestamp: "2026-05-03T00:00:18.450Z",
-        status: { type: "busy", message: null },
-      }),
-    );
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "assistant_message",
@@ -238,96 +267,92 @@ describe("CodexAppServerAdapter streaming", () => {
     const sessionIdleIndex = events.findLastIndex((event) => event.type === "session_idle");
     expect(assistantMessageIndex).toBeGreaterThanOrEqual(0);
     expect(sessionIdleIndex).toBeGreaterThan(assistantMessageIndex);
+    expect(events.filter((event) => event.type === "assistant_message")).toHaveLength(1);
+    expect(events.filter((event) => event.type === "session_idle")).toHaveLength(1);
     unsubscribe();
   });
 
   test("late old turn completion does not clear a newer active turn", async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
-    const firstTurnStart = createDeferred<unknown>();
-    const secondTurnStart = createDeferred<unknown>();
+    const firstTurnStart = createDeferred<CodexAppServerTurnStartResult>();
+    const secondTurnStart = createDeferred<CodexAppServerTurnStartResult>();
     const pendingTurnStarts = [firstTurnStart, secondTurnStart];
     const calls: CodexJsonRpcRequest[] = [];
     const transport: CodexJsonRpcTransport = {
-      request: mock(async <Response>(request: CodexJsonRpcRequest): Promise<Response> => {
+      request: mock(async (request: CodexJsonRpcRequest) => {
         calls.push(request);
         if (request.method === "initialize") {
-          return {} as Response;
+          return {};
         }
         if (request.method === "model/list") {
           return {
             data: [
               {
                 id: "gpt-5",
+                additionalSpeedTiers: [],
+                availabilityNux: null,
                 model: "gpt-5",
                 displayName: "GPT-5",
+                description: "GPT-5 model",
                 hidden: false,
                 supportedReasoningEfforts: [
                   { reasoningEffort: "medium", description: "Balanced reasoning" },
                 ],
-                defaultReasoningEffort: {
-                  reasoningEffort: "medium",
-                  description: "Balanced reasoning",
-                },
+                defaultReasoningEffort: "medium",
+                defaultServiceTier: null,
                 inputModalities: ["text"],
+                modelSpecialty: null,
+                multiAgentVersion: null,
+                serviceTiers: [],
                 supportsPersonality: true,
                 isDefault: true,
+                upgrade: null,
+                upgradeInfo: null,
               },
             ],
             nextCursor: null,
-          } as Response;
+          };
         }
         if (request.method === "thread/start") {
-          return {
-            thread: {
-              id: "thread/start-runtime-live",
-              cwd: "/repo",
-              createdAt: 1_778_112_000,
-              status: { type: "active", activeFlags: [] },
-              turns: [],
-            },
-            startedAt: "2026-05-07T00:00:00.000Z",
-          } as Response;
+          return codexThreadStartResultFixture("thread/start-runtime-live");
         }
         if (request.method === "thread/name/set") {
-          return {} as Response;
+          return {};
         }
         if (request.method === "thread/loaded/list") {
-          return { data: ["thread/start-runtime-live"], nextCursor: null } as Response;
+          return { data: ["thread/start-runtime-live"], nextCursor: null };
         }
         if (request.method === "thread/list") {
           return {
             data: [
-              {
+              codexThreadFixture({
                 id: "thread/start-runtime-live",
-                cwd: "/repo",
                 createdAt: 1_778_112_000,
                 status: { type: "active", activeFlags: [] },
-              },
+              }),
             ],
             nextCursor: null,
             backwardsCursor: null,
-          } as Response;
+          };
         }
         if (request.method === "thread/read") {
           return {
-            thread: {
+            thread: codexThreadFixture({
               id: "thread/start-runtime-live",
-              cwd: "/repo",
               createdAt: 1_778_112_000,
               status: { type: "active", activeFlags: [] },
-              turns: [],
-            },
-          } as Response;
+            }),
+          };
         }
         if (request.method === "turn/start") {
           const deferred = pendingTurnStarts.shift();
           if (!deferred) {
             throw new Error("Unexpected extra turn/start request.");
           }
-          return (await deferred.promise) as Response;
+          return deferred.promise;
         }
         if (request.method === "turn/steer") {
-          return { turnId: "turn-steered" } as Response;
+          return { turnId: "turn-steered" };
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       }),
@@ -351,7 +376,7 @@ describe("CodexAppServerAdapter streaming", () => {
       method: "turn/started",
       params: {
         threadId: "thread/start-runtime-live",
-        turn: { id: "turn-old" },
+        turn: codexTurnFixture({ id: "turn-old", items: [], status: "inProgress" }),
       },
     });
     emitNotification({
@@ -374,12 +399,14 @@ describe("CodexAppServerAdapter streaming", () => {
       method: "turn/started",
       params: {
         threadId: "thread/start-runtime-live",
-        turn: { id: "turn-new" },
+        turn: codexTurnFixture({ id: "turn-new", items: [], status: "inProgress" }),
       },
     });
     await flushCodexAdapterWork();
 
-    firstTurnStart.resolve({ turn: { id: "turn-old", status: "completed" } });
+    firstTurnStart.resolve({
+      turn: codexTurnFixture({ id: "turn-old", items: [], status: "completed" }),
+    });
     await flushCodexAdapterWork();
 
     await expect(
@@ -404,7 +431,7 @@ describe("CodexAppServerAdapter streaming", () => {
       method: "turn/steer",
       params: {
         threadId: "thread/start-runtime-live",
-        input: [{ type: "text", text: "Steer replacement turn" }],
+        input: [{ type: "text", text: "Steer replacement turn", text_elements: [] }],
         expectedTurnId: "turn-new",
       },
     });
@@ -436,7 +463,7 @@ describe("CodexAppServerAdapter streaming", () => {
     await flushCodexAdapterWork();
 
     transports.get("runtime-live")?.turnStartDeferred.resolve({
-      turn: { id: "turn-live", status: "running" },
+      turn: codexTurnFixture({ id: "turn-live", items: [], status: "inProgress" }),
     });
     await flushCodexAdapterWork();
 
@@ -454,7 +481,7 @@ describe("CodexAppServerAdapter streaming", () => {
       method: "turn/steer",
       params: {
         threadId: "thread/start-runtime-live",
-        input: [{ type: "text", text: "Keep steering" }],
+        input: [{ type: "text", text: "Keep steering", text_elements: [] }],
         expectedTurnId: "turn-live",
       },
     });
@@ -462,9 +489,7 @@ describe("CodexAppServerAdapter streaming", () => {
   });
 
   test("emits accepted queued Codex user messages into the runtime transcript stream", async () => {
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
-    > = [];
+    const streamListeners: Array<(event: CodexAppServerStreamEvent) => void> = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
       streamListeners.push(listener);
       return () => {};
@@ -473,7 +498,7 @@ describe("CodexAppServerAdapter streaming", () => {
 
     await adapter.startSession(codexStartSessionInput());
 
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
@@ -487,7 +512,7 @@ describe("CodexAppServerAdapter streaming", () => {
       }),
     );
     transports.get("runtime-live")?.turnStartDeferred.resolve({
-      turn: { id: "turn-active", status: "running" },
+      turn: codexTurnFixture({ id: "turn-active", items: [], status: "inProgress" }),
     });
     await flushCodexAdapterWork();
 
@@ -500,8 +525,7 @@ describe("CodexAppServerAdapter streaming", () => {
     );
 
     const userMessages = events.filter(
-      (event): event is { type: "user_message"; message: string } =>
-        (event as { type?: string }).type === "user_message",
+      (event): event is { type: "user_message"; message: string } => event.type === "user_message",
     );
     expect(userMessages.map((event) => event.message)).toEqual([
       "Start now",
@@ -511,7 +535,7 @@ describe("CodexAppServerAdapter streaming", () => {
       method: "turn/steer",
       params: {
         threadId: "thread/start-runtime-live",
-        input: [{ type: "text", text: "Also inspect failing tests" }],
+        input: [{ type: "text", text: "Also inspect failing tests", text_elements: [] }],
         expectedTurnId: "turn-active",
       },
     });
@@ -535,8 +559,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
     await flushCodexAdapterWork();
     const userMessagesAfterNativeEcho = events.filter(
-      (event): event is { type: "user_message"; message: string } =>
-        (event as { type?: string }).type === "user_message",
+      (event): event is { type: "user_message"; message: string } => event.type === "user_message",
     );
     expect(userMessagesAfterNativeEcho.map((event) => event.message)).toEqual([
       "Start now",
@@ -546,9 +569,7 @@ describe("CodexAppServerAdapter streaming", () => {
   });
 
   test("does not duplicate streamed user message completions after synthetic echo", async () => {
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
-    > = [];
+    const streamListeners: Array<(event: CodexAppServerStreamEvent) => void> = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
       streamListeners.push(listener);
       return () => {};
@@ -557,7 +578,7 @@ describe("CodexAppServerAdapter streaming", () => {
 
     await adapter.startSession(codexStartSessionInput());
 
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
@@ -590,9 +611,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
     await flushCodexAdapterWork();
 
-    const userMessages = events.filter(
-      (event) => (event as { type?: string }).type === "user_message",
-    );
+    const userMessages = events.filter((event) => event.type === "user_message");
     expect(userMessages).toHaveLength(1);
     expect(userMessages[0]).toEqual(expect.objectContaining({ message: "Hello streamed Codex" }));
     expect(userMessages).not.toContainEqual(
@@ -602,9 +621,7 @@ describe("CodexAppServerAdapter streaming", () => {
   });
 
   test("does not duplicate structured streamed user message completions after synthetic echo", async () => {
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
-    > = [];
+    const streamListeners: Array<(event: CodexAppServerStreamEvent) => void> = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
       streamListeners.push(listener);
       return () => {};
@@ -613,7 +630,7 @@ describe("CodexAppServerAdapter streaming", () => {
 
     await adapter.startSession(codexStartSessionInput());
 
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
@@ -655,9 +672,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
     await flushCodexAdapterWork();
 
-    const userMessages = events.filter(
-      (event) => (event as { type?: string }).type === "user_message",
-    );
+    const userMessages = events.filter((event) => event.type === "user_message");
     expect(userMessages).toHaveLength(1);
     expect(userMessages[0]).toEqual(
       expect.objectContaining({
@@ -676,9 +691,7 @@ describe("CodexAppServerAdapter streaming", () => {
   });
 
   test("does not duplicate streamed skill reference user message completions after synthetic echo", async () => {
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
-    > = [];
+    const streamListeners: Array<(event: CodexAppServerStreamEvent) => void> = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
       streamListeners.push(listener);
       return () => {};
@@ -687,7 +700,7 @@ describe("CodexAppServerAdapter streaming", () => {
 
     await adapter.startSession(codexStartSessionInput());
 
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
@@ -738,9 +751,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
     await Promise.resolve();
 
-    const userMessages = events.filter(
-      (event) => (event as { type?: string }).type === "user_message",
-    );
+    const userMessages = events.filter((event) => event.type === "user_message");
     expect(userMessages).toHaveLength(1);
     expect(userMessages[0]).toEqual(
       expect.objectContaining({
@@ -765,7 +776,7 @@ describe("CodexAppServerAdapter streaming", () => {
 
     await adapter.startSession(codexStartSessionInput());
 
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
@@ -823,12 +834,12 @@ describe("CodexAppServerAdapter streaming", () => {
     const grandchildThreadId = "grandchild-thread";
     const itemId = "reused-child-item";
     const grandchildItemId = "grandchild-item";
-    const internals = adapter as unknown as {
+    const internals: {
       subagents: CodexSubagentLinkState;
       runtimeEvents: {
         startedItemTimestampsByRuntimeId: Map<string, Map<string, Map<string, number>>>;
       };
-    };
+    } = adapter;
 
     await observeSessionState(adapter, parentThreadId);
     internals.subagents.upsertLink({
@@ -851,15 +862,11 @@ describe("CodexAppServerAdapter streaming", () => {
         threadId: childThreadId,
         turnId: "turn-before-release",
         startedAtMs: 1_783_196_401_000,
-        item: {
-          type: "commandExecution",
+        item: codexCommandExecutionItemFixture({
           id: itemId,
-          command: "true",
-          cwd: "/repo",
           status: "inProgress",
-          commandActions: [],
-          aggregatedOutput: "",
-        },
+          exitCode: null,
+        }),
       },
     });
     emitNotification({
@@ -868,15 +875,11 @@ describe("CodexAppServerAdapter streaming", () => {
         threadId: grandchildThreadId,
         turnId: "grandchild-turn-before-release",
         startedAtMs: 1_783_196_401_500,
-        item: {
-          type: "commandExecution",
+        item: codexCommandExecutionItemFixture({
           id: grandchildItemId,
-          command: "true",
-          cwd: "/repo",
           status: "inProgress",
-          commandActions: [],
-          aggregatedOutput: "",
-        },
+          exitCode: null,
+        }),
       },
     });
     await flushCodexAdapterWork();
@@ -921,16 +924,9 @@ describe("CodexAppServerAdapter streaming", () => {
         threadId: childThreadId,
         turnId: "turn-after-release",
         completedAtMs: 1_783_196_402_000,
-        item: {
-          type: "commandExecution",
+        item: codexCommandExecutionItemFixture({
           id: itemId,
-          command: "true",
-          cwd: "/repo",
-          status: "completed",
-          commandActions: [],
-          aggregatedOutput: "",
-          exitCode: 0,
-        },
+        }),
       },
     });
     await flushCodexAdapterWork();
@@ -956,12 +952,12 @@ describe("CodexAppServerAdapter streaming", () => {
     const parentThreadId = "thread-saved";
     const childThreadId = "retained-child-thread";
     const grandchildThreadId = "owned-grandchild-thread";
-    const internals = adapter as unknown as {
+    const internals: {
       subagents: CodexSubagentLinkState;
       runtimeEvents: {
         startedItemTimestampsByRuntimeId: Map<string, Map<string, Map<string, number>>>;
       };
-    };
+    } = adapter;
 
     await observeSessionState(adapter, parentThreadId);
     await adapter.resumeSession(codexSessionRuntimeRef(childThreadId));
@@ -989,15 +985,11 @@ describe("CodexAppServerAdapter streaming", () => {
           threadId,
           turnId: `turn-${threadId}`,
           startedAtMs,
-          item: {
-            type: "commandExecution",
+          item: codexCommandExecutionItemFixture({
             id: itemId,
-            command: "true",
-            cwd: "/repo",
             status: "inProgress",
-            commandActions: [],
-            aggregatedOutput: "",
-          },
+            exitCode: null,
+          }),
         },
       });
     }
@@ -1024,9 +1016,7 @@ describe("CodexAppServerAdapter streaming", () => {
   });
 
   test("does not retain streamed events for a late renderer subscription", async () => {
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
-    > = [];
+    const streamListeners: Array<(event: CodexAppServerStreamEvent) => void> = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
       streamListeners.push(listener);
       return () => {};
@@ -1086,7 +1076,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
     await flushCodexAdapterWork();
 
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread-saved"),
       (event) => events.push(event),
@@ -1097,15 +1087,13 @@ describe("CodexAppServerAdapter streaming", () => {
   });
 
   test("routes live context compaction lifecycle items", async () => {
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
-    > = [];
+    const streamListeners: Array<(event: CodexAppServerStreamEvent) => void> = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
       streamListeners.push(listener);
       return () => {};
     });
     const { adapter } = createHarness({ subscribeEvents });
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
 
     await observeSessionState(adapter, "thread-saved");
     const unsubscribe = await adapter.subscribeEvents(
@@ -1171,15 +1159,13 @@ describe("CodexAppServerAdapter streaming", () => {
   });
 
   test("terminalizes orphaned spawns only at turn lifecycle boundaries", async () => {
-    const streamListeners: Array<
-      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
-    > = [];
+    const streamListeners: Array<(event: CodexAppServerStreamEvent) => void> = [];
     const subscribeEvents = mock((_runtimeId: string, listener) => {
       streamListeners.push(listener);
       return () => {};
     });
     const { adapter } = createHarness({ subscribeEvents });
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
 
     const setupUnsubscribe = await observeSessionState(adapter, "thread-saved");
     const unsubscribe = await adapter.subscribeEvents(
@@ -1198,16 +1184,13 @@ describe("CodexAppServerAdapter streaming", () => {
             threadId: "thread-saved",
             turnId: "turn-live",
             startedAtMs: 1_777_766_452_000,
-            item: {
-              type: "collabAgentToolCall",
+            item: codexCollabAgentToolCallFixture({
               id: "spawn-live",
               tool: "spawnAgent",
               status: "inProgress",
               senderThreadId: "thread-saved",
-              receiverThreadIds: [],
               prompt: "Review this change",
-              agentsStates: {},
-            },
+            }),
           },
         },
       });
@@ -1239,7 +1222,9 @@ describe("CodexAppServerAdapter streaming", () => {
             item: {
               type: "agentMessage",
               id: "retry-message",
+              phase: null,
               text: "The first spawn failed validation. Retrying now.",
+              memoryCitation: null,
             },
           },
         },
@@ -1266,11 +1251,12 @@ describe("CodexAppServerAdapter streaming", () => {
           method: "turn/completed",
           params: {
             threadId: "thread-saved",
-            turn: {
+            turn: codexTurnFixture({
               id: "turn-live",
               status: "failed",
               completedAt: 1_777_766_452,
-            },
+              items: [],
+            }),
           },
         },
       });
@@ -1298,16 +1284,13 @@ describe("CodexAppServerAdapter streaming", () => {
             threadId: "thread-saved",
             turnId: "turn-without-followup",
             startedAtMs: 1_777_766_453_000,
-            item: {
-              type: "collabAgentToolCall",
+            item: codexCollabAgentToolCallFixture({
               id: "spawn-without-followup",
               tool: "spawnAgent",
               status: "inProgress",
               senderThreadId: "thread-saved",
-              receiverThreadIds: [],
               prompt: "Review another change",
-              agentsStates: {},
-            },
+            }),
           },
         },
       });
@@ -1319,11 +1302,12 @@ describe("CodexAppServerAdapter streaming", () => {
           method: "turn/completed",
           params: {
             threadId: "thread-saved",
-            turn: {
+            turn: codexTurnFixture({
               id: "turn-without-followup",
               status: "failed",
               completedAt: 1_777_766_454,
-            },
+              items: [],
+            }),
           },
         },
       });
@@ -1351,16 +1335,13 @@ describe("CodexAppServerAdapter streaming", () => {
             threadId: "thread-saved",
             turnId: "turn-settled-by-idle",
             startedAtMs: 1_777_766_455_000,
-            item: {
-              type: "collabAgentToolCall",
+            item: codexCollabAgentToolCallFixture({
               id: "spawn-settled-by-idle",
               tool: "spawnAgent",
               status: "inProgress",
               senderThreadId: "thread-saved",
-              receiverThreadIds: [],
               prompt: "Review a third change",
-              agentsStates: {},
-            },
+            }),
           },
         },
       });

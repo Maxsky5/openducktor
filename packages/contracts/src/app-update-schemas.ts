@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+const appUpdateErrorDetailsSchema = z.record(z.string(), z.json());
+
 export const appUpdateStatusValues = [
   "disabled",
   "idle",
@@ -50,7 +52,7 @@ export const appUpdateErrorSchema = z
     message: z.string().trim().min(1),
     operation: appUpdateOperationSchema,
     causeName: z.string().trim().min(1).optional(),
-    details: z.record(z.string(), z.unknown()).optional(),
+    details: appUpdateErrorDetailsSchema.optional(),
   })
   .strict();
 export type AppUpdateError = z.infer<typeof appUpdateErrorSchema>;

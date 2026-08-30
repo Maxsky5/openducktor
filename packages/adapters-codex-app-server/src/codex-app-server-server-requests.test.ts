@@ -1,12 +1,16 @@
 import { describe, expect, mock, test } from "bun:test";
 import { type AgentRole, CODEX_APP_SERVER_SERVER_REQUEST_METHOD } from "@openducktor/contracts";
+import type { AgentEvent } from "@openducktor/core";
 import {
   type CodexServerRequestHandlerContext,
   handleCodexServerRequest,
 } from "./codex-app-server-server-requests";
+import type { ActiveCodexTurn } from "./codex-app-server-shared";
 import { CodexPendingInputState } from "./codex-pending-input-state";
 import { CodexSubagentLinkState } from "./codex-subagent-link-state";
 import type { CodexServerRequestRecord, CodexSessionState } from "./types";
+
+type EmittedAgentEvent = AgentEvent & { emittedExternalSessionId: string };
 
 const createSession = (
   role: AgentRole | null,
@@ -37,7 +41,7 @@ const createRequestContext = ({
   bindActiveTurnId = () => false,
   flushQueuedUserMessagesLater = () => {},
 }: {
-  events: unknown[];
+  events: EmittedAgentEvent[];
   pendingInput?: CodexPendingInputState;
   respondServerRequest?: CodexServerRequestHandlerContext["respondServerRequest"];
   subagents?: CodexSubagentLinkState;
@@ -53,11 +57,8 @@ const createRequestContext = ({
   sessionForThreadId: (threadId) => sessions.get(threadId),
   bindActiveTurnId,
   flushQueuedUserMessagesLater,
-  emitSessionEvent: (externalSessionId: string, event: unknown) =>
-    events.push({
-      ...(event as Record<string, unknown>),
-      emittedExternalSessionId: externalSessionId,
-    }),
+  emitSessionEvent: (externalSessionId: string, event: AgentEvent) =>
+    events.push({ ...event, emittedExternalSessionId: externalSessionId }),
   emitRetainedSessionEvent: (session, event) =>
     events.push({
       ...event,
@@ -77,29 +78,36 @@ const mcpToolApprovalRequest = ({
   toolName: string;
   threadId?: string;
   includeToolTitle?: boolean;
-}): CodexServerRequestRecord => ({
-  id,
-  method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST,
-  params: {
-    threadId,
-    turnId: "turn-spec",
-    serverName,
-    mode: "form",
-    message: `Allow the ${serverName} MCP server to run tool "${toolName}"?`,
-    requestedSchema: { type: "object", properties: {} },
-    _meta: {
-      codex_approval_kind: "mcp_tool_call",
-      ...(includeToolTitle ? { tool_title: toolName } : {}),
-      persist: ["session"],
+}): CodexServerRequestRecord => {
+  const meta = {
+    codex_approval_kind: "mcp_tool_call" as const,
+    persist: ["session"] as const,
+  };
+
+  if (includeToolTitle) {
+    meta.tool_title = toolName;
+  }
+
+  return {
+    id,
+    method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST,
+    params: {
+      threadId,
+      turnId: "turn-spec",
+      serverName,
+      mode: "form",
+      message: `Allow the ${serverName} MCP server to run tool "${toolName}"?`,
+      requestedSchema: { type: "object", properties: {} },
+      _meta: meta,
     },
-  },
-});
+  };
+};
 
 describe("handleCodexServerRequest", () => {
   test("allows Codex to replay a request after live delivery fails", async () => {
     const session = createSession("build");
     const pendingInput = new CodexPendingInputState();
-    const events: unknown[] = [];
+    const events: EmittedAgentEvent[] = [];
     const handledRequestKeys = new Set<string>();
     const context = createRequestContext({
       events,
@@ -140,7 +148,7 @@ describe("handleCodexServerRequest", () => {
 
   test("does not replay a request after Codex already received its response", async () => {
     const session = createSession("spec");
-    const events: unknown[] = [];
+    const events: EmittedAgentEvent[] = [];
     const respondServerRequest = mock(async () => {});
     const handledRequestKeys = new Set<string>();
     const context = createRequestContext({
@@ -171,7 +179,7 @@ describe("handleCodexServerRequest", () => {
   test("surfaces command approvals when the session role is unknown", async () => {
     const respondServerRequest = mock(async () => {});
     const pendingInput = new CodexPendingInputState();
-    const events: unknown[] = [];
+    const events: EmittedAgentEvent[] = [];
 
     await expect(
       handleCodexServerRequest(
@@ -222,7 +230,7 @@ describe("handleCodexServerRequest", () => {
   test("surfaces unknown approval-like requests when the session role is unknown", async () => {
     const respondServerRequest = mock(async () => {});
     const pendingInput = new CodexPendingInputState();
-    const events: unknown[] = [];
+    const events: EmittedAgentEvent[] = [];
 
     await handleCodexServerRequest(
       createRequestContext({ events, pendingInput, respondServerRequest }),
@@ -256,7 +264,7 @@ describe("handleCodexServerRequest", () => {
   test("keeps external MCP approvals user-mediated for read-only roles", async () => {
     const respondServerRequest = mock(async () => {});
     const pendingInput = new CodexPendingInputState();
-    const events: unknown[] = [];
+    const events: EmittedAgentEvent[] = [];
 
     await expect(
       handleCodexServerRequest(
@@ -281,7 +289,7 @@ describe("handleCodexServerRequest", () => {
   test("surfaces managed network command approvals for read-only roles", async () => {
     const respondServerRequest = mock(async () => {});
     const pendingInput = new CodexPendingInputState();
-    const events: unknown[] = [];
+    const events: EmittedAgentEvent[] = [];
 
     await expect(
       handleCodexServerRequest(
@@ -334,7 +342,7 @@ describe("handleCodexServerRequest", () => {
   test("does not apply OpenDucktor workflow policy to other MCP servers", async () => {
     const respondServerRequest = mock(async () => {});
     const pendingInput = new CodexPendingInputState();
-    const events: unknown[] = [];
+    const events: EmittedAgentEvent[] = [];
 
     await expect(
       handleCodexServerRequest(
@@ -354,7 +362,7 @@ describe("handleCodexServerRequest", () => {
   test("rejects request owners that are neither the current session nor a known child route", async () => {
     const parentSession = createSession("build", "parent-thread");
     const pendingInput = new CodexPendingInputState();
-    const events: unknown[] = [];
+    const events: EmittedAgentEvent[] = [];
 
     await expect(
       handleCodexServerRequest(
@@ -377,7 +385,7 @@ describe("handleCodexServerRequest", () => {
   test("rejects disallowed OpenDucktor workflow MCP approvals by role", async () => {
     const respondServerRequest = mock(async () => {});
     const pendingInput = new CodexPendingInputState();
-    const events: unknown[] = [];
+    const events: EmittedAgentEvent[] = [];
 
     await expect(
       handleCodexServerRequest(
@@ -406,7 +414,7 @@ describe("handleCodexServerRequest", () => {
   test("automatically approves OpenDucktor workflow MCP tools allowed for the bound role", async () => {
     const respondServerRequest = mock(async () => {});
     const pendingInput = new CodexPendingInputState();
-    const events: unknown[] = [];
+    const events: EmittedAgentEvent[] = [];
 
     await expect(
       handleCodexServerRequest(
@@ -435,7 +443,7 @@ describe("handleCodexServerRequest", () => {
   test("routes known OpenDucktor MCP tools through user approval for repository sessions", async () => {
     const respondServerRequest = mock(async () => {});
     const pendingInput = new CodexPendingInputState();
-    const events: unknown[] = [];
+    const events: EmittedAgentEvent[] = [];
     const repositorySession = createSession(null, "thread-repository");
     repositorySession.summary.sessionAssociation = { kind: "repository" };
 
@@ -472,7 +480,7 @@ describe("handleCodexServerRequest", () => {
   test("rejects unknown trusted OpenDucktor tool identities for repository sessions", async () => {
     const respondServerRequest = mock(async () => {});
     const pendingInput = new CodexPendingInputState();
-    const events: unknown[] = [];
+    const events: EmittedAgentEvent[] = [];
     const repositorySession = createSession(null, "thread-repository");
     repositorySession.summary.sessionAssociation = { kind: "repository" };
 
@@ -502,7 +510,7 @@ describe("handleCodexServerRequest", () => {
   test("rejects producer-shaped OpenDucktor MCP approvals without titles for retained repository sessions", async () => {
     const respondServerRequest = mock(async () => {});
     const pendingInput = new CodexPendingInputState();
-    const events: unknown[] = [];
+    const events: EmittedAgentEvent[] = [];
     const repositorySession = createSession(null, "thread-repository");
     repositorySession.summary.sessionAssociation = { kind: "repository" };
 
@@ -533,7 +541,7 @@ describe("handleCodexServerRequest", () => {
   test("rejects producer-shaped OpenDucktor MCP approvals without titles for workflow sessions", async () => {
     const respondServerRequest = mock(async () => {});
     const pendingInput = new CodexPendingInputState();
-    const events: unknown[] = [];
+    const events: EmittedAgentEvent[] = [];
     const session = createSession("build");
 
     await expect(
@@ -575,7 +583,7 @@ describe("handleCodexServerRequest", () => {
       status: "running",
     });
     const pendingInput = new CodexPendingInputState();
-    const events: unknown[] = [];
+    const events: EmittedAgentEvent[] = [];
 
     await expect(
       handleCodexServerRequest(
@@ -632,8 +640,18 @@ describe("handleCodexServerRequest", () => {
       status: "running",
     });
     const pendingInput = new CodexPendingInputState();
-    const events: unknown[] = [];
-    const parentActiveTurn = { session: parentSession };
+    const events: EmittedAgentEvent[] = [];
+    const parentActiveTurn: ActiveCodexTurn = {
+      session: parentSession,
+      startedAtMs: Date.parse("2026-05-07T00:00:00.000Z"),
+      turnStartRequestSentAtMs: null,
+      turnStartPromise: null,
+      isTurnSettled: () => false,
+      markTurnSettled: () => {},
+      handledRequestKeys: new Set(),
+      queuedUserMessages: [],
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    };
     const bindActiveTurnId = mock(() => true);
     const flushQueuedUserMessagesLater = mock(() => undefined);
 
@@ -644,7 +662,7 @@ describe("handleCodexServerRequest", () => {
           pendingInput,
           sessions,
           subagents,
-          activeTurnsBySessionId: new Map([[parentSession.threadId, parentActiveTurn as never]]),
+          activeTurnsBySessionId: new Map([[parentSession.threadId, parentActiveTurn]]),
           bindActiveTurnId,
           flushQueuedUserMessagesLater,
         }),
@@ -721,8 +739,8 @@ describe("handleCodexServerRequest", () => {
     firstSession.runtimeId = "runtime-one";
     const secondSession = createSession("build");
     secondSession.runtimeId = "runtime-two";
-    const firstEvents: unknown[] = [];
-    const secondEvents: unknown[] = [];
+    const firstEvents: EmittedAgentEvent[] = [];
+    const secondEvents: EmittedAgentEvent[] = [];
 
     await handleCodexServerRequest(
       createRequestContext({
@@ -743,12 +761,11 @@ describe("handleCodexServerRequest", () => {
       new Set(),
     );
 
-    const firstPart = firstEvents.find(
-      (event) => (event as { type?: string }).type === "assistant_part",
-    ) as { part: { messageId: string; partId: string; callId: string; metadata: unknown } };
-    const secondPart = secondEvents.find(
-      (event) => (event as { type?: string }).type === "assistant_part",
-    ) as { part: { messageId: string; partId: string; callId: string; metadata: unknown } };
+    const firstPart = firstEvents.find((event) => event.type === "assistant_part");
+    const secondPart = secondEvents.find((event) => event.type === "assistant_part");
+    if (firstPart === undefined || secondPart === undefined) {
+      throw new Error("Expected both sessions to emit an assistant part.");
+    }
     expect(firstPart.part.callId).not.toBe(secondPart.part.callId);
     expect(firstPart.part.callId).not.toContain("runtime-one");
     expect(firstPart.part.callId).not.toBe("41");

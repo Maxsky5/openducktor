@@ -1,7 +1,8 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { RepoConfig, SettingsSnapshot } from "@openducktor/contracts";
 import { clearAppQueryClient } from "@/lib/query-client";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 
 const createRepoConfig = (): RepoConfig => ({
@@ -62,18 +63,6 @@ const workspaceGetSettingsSnapshotMock = mock(async (): Promise<SettingsSnapshot
   createSettingsSnapshot(),
 );
 
-mock.module("../host", () => ({
-  host: {
-    workspaceGetRepoConfig: workspaceGetRepoConfigMock,
-    workspaceList: workspaceListMock,
-    workspaceGetSettingsSnapshot: workspaceGetSettingsSnapshotMock,
-  },
-}));
-
-afterAll(async () => {
-  await restoreMockedModules([["../host", () => import("../host")]]);
-});
-
 let loadEffectivePromptOverrides: (typeof import("./prompt-overrides"))["loadEffectivePromptOverrides"];
 
 beforeAll(async () => {
@@ -81,10 +70,23 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        workspaceGetRepoConfig: workspaceGetRepoConfigMock,
+        workspaceList: workspaceListMock,
+        workspaceGetSettingsSnapshot: workspaceGetSettingsSnapshotMock,
+      },
+    }),
+  );
   workspaceGetRepoConfigMock.mockClear();
   workspaceListMock.mockClear();
   workspaceGetSettingsSnapshotMock.mockClear();
   await clearAppQueryClient();
+});
+
+afterEach(() => {
+  configureShellBridge(createUnavailableShellBridge());
 });
 
 describe("loadEffectivePromptOverrides", () => {

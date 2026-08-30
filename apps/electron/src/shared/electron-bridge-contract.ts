@@ -3,17 +3,20 @@ import type {
   AppUpdateCheckInput,
   AppUpdateCommandResult,
   AppUpdateState,
-  HostInvokeFailure,
+  HostEventChannel,
+  HostEventEnvelope,
+  HostEventPayload,
   TaskEventCursor,
   TaskEventStreamAcknowledge,
   TaskEventStreamFrame,
   TaskEventStreamSubscribe,
 } from "@openducktor/contracts";
 import {
+  hostInvokeFailureSchema,
   taskEventStreamAcknowledgeSchema,
   taskEventStreamFrameSchema,
 } from "@openducktor/contracts";
-import type { HostCommandName } from "@openducktor/host";
+import type { HostCommandName, HostCommandResult } from "@openducktor/host";
 import { z } from "zod";
 
 export const ELECTRON_HOST_INVOKE_CHANNEL = "openducktor:host-invoke";
@@ -42,39 +45,55 @@ export const ELECTRON_TASK_STREAM_ACKNOWLEDGE_CHANNEL = "openducktor:task-stream
 export const ELECTRON_TASK_STREAM_UNSUBSCRIBE_CHANNEL = "openducktor:task-stream:unsubscribe";
 export const ELECTRON_WINDOW_TITLE_BAR_HEIGHT = 40;
 
-export type ElectronHostInvokeRequest = {
-  command: string;
-  args?: Record<string, unknown>;
-};
+const ipcRecordSchema = z.record(z.string(), z.unknown()).refine((value) => {
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+});
 
-export type ElectronHostInvokeResult =
-  | { ok: true; value: unknown }
-  | {
-      ok: false;
-      error: {
-        message: string;
-        failure?: HostInvokeFailure;
-      };
-    };
+export const electronHostInvokeRequestSchema = ipcRecordSchema.and(
+  z.strictObject({
+    command: z.string(),
+    args: ipcRecordSchema.optional(),
+  }),
+);
+export type ElectronHostInvokeRequest = z.output<typeof electronHostInvokeRequestSchema>;
 
-export type ElectronHostInvokeResponse =
-  | {
-      status: "success";
-      payload: unknown;
-    }
-  | {
-      status: "shutdown";
-    };
+const electronHostInvokeResultWireSchema = z.discriminatedUnion("ok", [
+  z.strictObject({ ok: z.literal(true), value: z.unknown() }),
+  z.strictObject({
+    ok: z.literal(false),
+    error: z.strictObject({
+      message: z.string(),
+      failure: hostInvokeFailureSchema.optional(),
+    }),
+  }),
+]);
+type ElectronHostInvokeFailureResult = Extract<
+  z.output<typeof electronHostInvokeResultWireSchema>,
+  { ok: false }
+>;
+export type ElectronHostInvokeWireResult = z.output<typeof electronHostInvokeResultWireSchema>;
+export type ElectronHostInvokeResult<Command extends HostCommandName = HostCommandName> =
+  | { ok: true; value: HostCommandResult<Command> }
+  | ElectronHostInvokeFailureResult;
 
-export type ElectronHostEventEnvelope = {
-  channel: string;
-  payload: unknown;
-};
+export const electronHostInvokeResponseSchema = z.discriminatedUnion("status", [
+  z.strictObject({ status: z.literal("success"), payload: electronHostInvokeResultWireSchema }),
+  z.strictObject({ status: z.literal("shutdown") }),
+]);
+export type ElectronHostInvokeResponseEnvelope = z.output<typeof electronHostInvokeResponseSchema>;
+
+export type ElectronHostEventEnvelope = HostEventEnvelope;
 
 export type ElectronTerminalEventEnvelope = {
   clientId: string;
   frame: Uint8Array;
 };
+export const electronTerminalEventEnvelopeSchema: z.ZodType<ElectronTerminalEventEnvelope> =
+  z.strictObject({
+    clientId: z.string(),
+    frame: z.instanceof(Uint8Array),
+  });
 
 export const electronTaskStreamSubscriptionSchema = taskEventStreamAcknowledgeSchema.pick({
   subscriptionId: true,
@@ -124,7 +143,7 @@ export type OpenDucktorElectronTaskStreamApi = {
   subscribe(
     input: TaskEventStreamSubscribe,
     listener: (frame: TaskEventStreamFrame) => void,
-    onTerminalFailure?: (error: unknown) => void,
+    onTerminalFailure?: (cause: unknown) => void,
   ): Promise<{
     subscriptionId: string;
     acknowledge(cursor: TaskEventCursor): Promise<void>;
@@ -136,9 +155,12 @@ export type OpenDucktorElectronApi = {
   platform: AppPlatform;
   invoke(
     command: HostCommandName,
-    args?: Record<string, unknown>,
-  ): Promise<ElectronHostInvokeResult>;
-  subscribe(channel: string, listener: (payload: unknown) => void): () => void;
+    args?: ElectronHostInvokeRequest["args"],
+  ): Promise<ElectronHostInvokeWireResult>;
+  subscribe<Channel extends HostEventChannel>(
+    channel: Channel,
+    listener: (payload: HostEventPayload<Channel>) => void,
+  ): () => void;
   appUpdates: OpenDucktorElectronAppUpdateApi;
   openExternalUrl(url: string): Promise<void>;
   resolveLocalAttachmentPreviewSrc(path: string): Promise<string>;

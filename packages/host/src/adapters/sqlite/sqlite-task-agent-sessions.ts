@@ -1,6 +1,7 @@
-import type { AgentSessionRecord, TaskAgentSessions } from "@openducktor/contracts";
+import { type AgentSessionRecord, type TaskAgentSessions } from "@openducktor/contracts";
 import { eq, inArray } from "drizzle-orm";
 import { Effect } from "effect";
+import { z } from "zod";
 import { hasSameAgentSessionIdentity } from "../../domain/agent-session-identity";
 import { compactAgentSessionRecord } from "../../domain/agent-session-records";
 import { HostResourceError } from "../../effect/host-errors";
@@ -85,7 +86,7 @@ export const clearAgentSessionsByRoles = (
         database
           .update(tasks)
           .set({
-            agentSessionsJson: encodeJson(remaining),
+            agentSessionsJson: encodeJson(z.json().parse(remaining)),
             updatedAt,
           })
           .where(eq(tasks.id, input.taskId)),
@@ -119,7 +120,7 @@ export const upsertAgentSession = (
         database
           .update(tasks)
           .set({
-            agentSessionsJson: encodeJson(nextSessions),
+            agentSessionsJson: encodeJson(z.json().parse(nextSessions)),
             updatedAt,
           })
           .where(eq(tasks.id, input.taskId)),
@@ -147,7 +148,7 @@ export const deleteAgentSession = (
         database
           .update(tasks)
           .set({
-            agentSessionsJson: encodeJson(remaining),
+            agentSessionsJson: encodeJson(z.json().parse(remaining)),
             updatedAt,
           })
           .where(eq(tasks.id, input.taskId)),

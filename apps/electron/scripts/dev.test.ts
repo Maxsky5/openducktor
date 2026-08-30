@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import path from "node:path";
 import { Cause, Chunk, Effect, Exit, Fiber } from "effect";
-import type { ElectronRendererDevServer } from "../src/development/electron-renderer-dev-server";
+import type {
+  ElectronDevRendererWatcher,
+  ElectronRendererDevServer,
+} from "../src/development/electron-renderer-dev-server";
 import { runElectronEffect } from "../src/effect/electron-boundary";
 import { ElectronOperationError } from "../src/effect/electron-errors";
 import {
@@ -18,6 +21,9 @@ import {
   shouldRestartElectronForChange,
   stopElectronEffect,
 } from "./dev";
+
+const isPathList = (paths: string | readonly string[]): paths is readonly string[] =>
+  Array.isArray(paths);
 
 const createFakeProcessHandlers = () => {
   const registered: Array<{ event: string; listener: () => void }> = [];
@@ -38,9 +44,18 @@ const createFakeProcessHandlers = () => {
   };
 };
 
+const defaultWatcher: ElectronDevRendererWatcher = {
+  add() {
+    return defaultWatcher;
+  },
+  on() {
+    return defaultWatcher;
+  },
+};
+
 const createFakeRenderer = ({
   close = () => Effect.void,
-  watcher = { add() {}, on() {} },
+  watcher = defaultWatcher,
 }: Partial<
   Pick<ElectronRendererDevServer, "close" | "watcher">
 > = {}): ElectronRendererDevServer => ({
@@ -296,14 +311,19 @@ describe("electron dev script", () => {
 
     const error = await runElectronEffect(
       stopElectronEffect(electron, async () => undefined),
-    ).catch((caught: unknown) => caught);
+    ).catch((cause: unknown): Error =>
+      cause instanceof Error ? cause : new Error(String(cause), { cause }),
+    );
 
     expect(signals).toEqual([electronGracefulShutdownSignal(process.platform), 9]);
     expect(error).toMatchObject({
       _tag: "ElectronOperationError",
       operation: "electron.dev.stop-electron",
     });
-    expect((error as Error).message).toContain("Electron did not exit after forced shutdown");
+    if (!(error instanceof Error)) {
+      throw new TypeError("Expected an Error instance.");
+    }
+    expect(error.message).toContain("Electron did not exit after forced shutdown");
   });
 
   test("runs the dev watcher and Electron process lifecycle as an Effect", async () => {
@@ -313,19 +333,26 @@ describe("electron dev script", () => {
     const fakeProcessHandlers = createFakeProcessHandlers();
     let buildCalls = 0;
     let closeCalls = 0;
+    const watcher: ElectronDevRendererWatcher = {
+      add(roots) {
+        if (isPathList(roots)) {
+          watchedRoots.push([...roots]);
+        } else {
+          watchedRoots.push([roots]);
+        }
+        return watcher;
+      },
+      on(event) {
+        watchedEvents.push(event);
+        return watcher;
+      },
+    };
     const renderer = createFakeRenderer({
       close: () =>
         Effect.sync(() => {
           closeCalls += 1;
         }),
-      watcher: {
-        add(roots: string[]) {
-          watchedRoots.push(roots);
-        },
-        on(event: string) {
-          watchedEvents.push(event);
-        },
-      },
+      watcher,
     });
 
     const exitCode = await runElectronEffect(

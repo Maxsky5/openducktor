@@ -28,6 +28,7 @@ import type {
 import type { RuntimeInfo } from "../runtime/runtime";
 import { createSessionMessagesState } from "../support/messages";
 import { createTaskCardFixture } from "../test-utils";
+import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
 import { createStartAgentSession, type StartSessionDependencies } from "./start-session";
 
 type AgentSessionState = BaseAgentSessionState & { runId?: string | null };
@@ -60,14 +61,11 @@ export const createSessionsRef = (sessions: TestAgentSessionState[] = []) => ({
 });
 
 export const persistedSessionRecord = (
-  input: {
-    externalSessionId: string;
-    role: AgentSessionRecord["role"];
-    startedAt: string;
-    workingDirectory: string;
-    runtimeKind: AgentSessionRecord["runtimeKind"];
-    selectedModel?: AgentSessionRecord["selectedModel"];
-  } & Record<string, unknown>,
+  input: Pick<
+    AgentSessionRecord,
+    "externalSessionId" | "role" | "startedAt" | "workingDirectory" | "runtimeKind"
+  > &
+    Partial<Pick<AgentSessionRecord, "selectedModel">>,
 ): AgentSessionRecord => ({
   runtimeKind: input.runtimeKind,
   externalSessionId: input.externalSessionId,
@@ -311,37 +309,42 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
       onSessionCollectionChange?.(sessionsRef.current);
     });
 
-  const start = createStartAgentSession(
-    toStartSessionDependencies({
-      activeRepo,
-      workspaceId,
-      adapter: adapter as AgentEnginePort,
-      sessionsRef,
-      replaceSession,
-      removeSession,
-      taskRef,
-      repoEpochRef,
-      currentWorkspaceRepoPathRef,
-      clearSessionObservationState,
-      loadSourceSession,
-      loadAgentSessionHistory,
-      persistSessionRecord,
-      deleteSessionRecord,
-      resolveTaskWorktree,
-      canonicalizePath,
-      prepareTaskSessionStartupLease,
-      completeTaskSessionStartupLease,
-      abortTaskSessionStartupLease,
-      ensureRuntime,
-      loadTaskDocuments,
-      refreshTaskData,
-      sendAgentMessage,
-      loadRepoPromptOverrides,
-      loadSettingsSnapshot,
-      ...(sessionStartGateRef ? { sessionStartGateRef } : {}),
-      ...(readSessionSnapshot ? { readSessionSnapshot } : {}),
-    }),
-  );
+  const agentEngine =
+    adapter instanceof OpencodeSdkAdapter ? createOpenCodeAgentEngineTestAdapter(adapter) : adapter;
+  const dependenciesInput: Parameters<typeof toStartSessionDependencies>[0] = {
+    activeRepo,
+    workspaceId,
+    adapter: agentEngine,
+    sessionsRef,
+    replaceSession,
+    removeSession,
+    taskRef,
+    repoEpochRef,
+    currentWorkspaceRepoPathRef,
+    clearSessionObservationState,
+    loadSourceSession,
+    loadAgentSessionHistory,
+    persistSessionRecord,
+    deleteSessionRecord,
+    resolveTaskWorktree,
+    canonicalizePath,
+    prepareTaskSessionStartupLease,
+    completeTaskSessionStartupLease,
+    abortTaskSessionStartupLease,
+    ensureRuntime,
+    loadTaskDocuments,
+    refreshTaskData,
+    sendAgentMessage,
+    loadRepoPromptOverrides,
+    loadSettingsSnapshot,
+  };
+  if (sessionStartGateRef) {
+    dependenciesInput.sessionStartGateRef = sessionStartGateRef;
+  }
+  if (readSessionSnapshot) {
+    dependenciesInput.readSessionSnapshot = readSessionSnapshot;
+  }
+  const start = createStartAgentSession(toStartSessionDependencies(dependenciesInput));
 
   return {
     adapter,

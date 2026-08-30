@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
-import { claudeSessionMessageFixture as toSessionMessage } from "./claude-agent-sdk-test-messages";
+import {
+  claudeHistoryMessagesFixture,
+  claudeSessionMessageFixture as toSessionMessage,
+} from "./claude-agent-sdk-test-messages";
 
 describe("claude-agent-sdk-history assistant turns", () => {
   test("hydrates one Claude response from split reasoning, text, and tool snapshots", () => {
@@ -176,7 +179,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
 
   test("does not duplicate normalized final assistant text repeated by a successful result", () => {
     const history = toClaudeHistoryMessages(
-      [
+      claudeHistoryMessagesFixture([
         toSessionMessage({
           type: "assistant",
           uuid: "assistant-final",
@@ -201,7 +204,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
           terminal_reason: "completed",
           usage: { input_tokens: 2, output_tokens: 3 },
         },
-      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      ]),
       () => "2026-06-26T12:00:00.000Z",
     );
 
@@ -216,7 +219,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
 
   test("hydrates peer responses as intermediate and the closing task response as final", () => {
     const history = toClaudeHistoryMessages(
-      [
+      claudeHistoryMessagesFixture([
         toSessionMessage({
           type: "user",
           uuid: "human-user",
@@ -256,6 +259,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
           uuid: "first-task-user",
           session_id: "session-1",
           parent_tool_use_id: null,
+          parent_agent_id: null,
           timestamp: "2026-06-26T11:03:12.100Z",
           message: { role: "user", content: "First task notification" },
           origin: { kind: "task-notification" },
@@ -290,6 +294,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
           uuid: "peer-user",
           session_id: "session-1",
           parent_tool_use_id: null,
+          parent_agent_id: null,
           timestamp: "2026-06-26T11:03:13.000Z",
           message: { role: "user", content: "Peer update" },
           origin: {
@@ -333,6 +338,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
           uuid: "task-user",
           session_id: "session-1",
           parent_tool_use_id: null,
+          parent_agent_id: null,
           timestamp: "2026-06-26T11:03:16.000Z",
           message: { role: "user", content: "Task notification" },
           origin: { kind: "task-notification" },
@@ -363,7 +369,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
           usage: { input_tokens: 1, output_tokens: 1 },
           origin: { kind: "task-notification" },
         },
-      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      ]),
       () => "2026-06-26T12:00:00.000Z",
     );
 
@@ -448,7 +454,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
 
   test("finalizes result text repeated by an intermediate assistant response", () => {
     const history = toClaudeHistoryMessages(
-      [
+      claudeHistoryMessagesFixture([
         toSessionMessage({
           type: "assistant",
           uuid: "assistant-draft",
@@ -472,7 +478,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
           terminal_reason: "completed",
           usage: { input_tokens: 2, output_tokens: 3 },
         },
-      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      ]),
       () => "2026-06-26T12:00:00.000Z",
     );
 
@@ -494,7 +500,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
 
   test("removes Claude history messages retracted by supersedes and refusal fallback notices", () => {
     const history = toClaudeHistoryMessages(
-      [
+      claudeHistoryMessagesFixture([
         toSessionMessage({
           type: "assistant",
           uuid: "assistant-refused",
@@ -553,7 +559,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
           timestamp: "2026-06-26T11:03:19.000Z",
           retracted_message_uuids: ["assistant-refused", "tool-result-refused"],
         },
-      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      ]),
       () => "2026-06-26T12:00:00.000Z",
     );
 
@@ -573,7 +579,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
 
   test("hydrates repeated same-text result-only replies across separate user turns", () => {
     const history = toClaudeHistoryMessages(
-      [
+      claudeHistoryMessagesFixture([
         toSessionMessage({
           type: "user",
           uuid: "user-1",
@@ -620,7 +626,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
           terminal_reason: "completed",
           usage: { input_tokens: 2, output_tokens: 2 },
         },
-      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      ]),
       () => "2026-06-26T12:00:00.000Z",
     );
 

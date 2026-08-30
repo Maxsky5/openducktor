@@ -12,7 +12,7 @@ const flushHookEffects = async (): Promise<void> => {
   await act(async () => {
     await Promise.resolve();
     await new Promise<void>((resolve) => {
-      if (typeof MessageChannel === "undefined") {
+      if (MessageChannel === undefined) {
         setTimeout(resolve, 0);
         return;
       }
@@ -38,10 +38,13 @@ export const createHookHarness = <Props, State>(
 
   const mount = async (): Promise<void> => {
     await act(async () => {
-      rendered = renderHook(useHook, {
+      const renderOptions: Parameters<typeof renderHook<State, Props>>[1] = {
         initialProps: currentProps,
-        ...(options?.wrapper ? { wrapper: options.wrapper } : {}),
-      });
+      };
+      if (options?.wrapper) {
+        renderOptions.wrapper = options.wrapper;
+      }
+      rendered = renderHook(useHook, renderOptions);
     });
     await flushHookEffects();
   };

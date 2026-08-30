@@ -28,12 +28,7 @@ export const useChatComposerSkills = ({
   promptInputRuntime,
   supportsSkillReferences,
   loadSkillsForRepo,
-}: UseChatComposerSkillsArgs): {
-  skillCatalog: AgentSkillCatalog;
-  skills: AgentSkillCatalog["skills"];
-  skillsError: string | null;
-  isSkillsLoading: boolean;
-} => {
+}: UseChatComposerSkillsArgs) => {
   const runtimeRef =
     promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null;
   const skillsQuery = useQuery(
@@ -58,5 +53,10 @@ export const useChatComposerSkills = ({
     skills: supportsSkillReferences ? catalog.skills : [],
     skillsError: error,
     isSkillsLoading: isLoading,
+  } satisfies {
+    skillCatalog: AgentSkillCatalog;
+    skills: AgentSkillCatalog["skills"];
+    skillsError: string | null;
+    isSkillsLoading: boolean;
   };
 };

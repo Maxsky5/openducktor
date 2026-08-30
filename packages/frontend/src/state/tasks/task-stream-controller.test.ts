@@ -17,7 +17,7 @@ const event = (taskId: string): ExternalTaskSyncEvent => ({
 
 const deferred = <Value>() => {
   let resolve!: (value: Value) => void;
-  let reject!: (error: unknown) => void;
+  let reject!: (cause: unknown) => void;
   const promise = new Promise<Value>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
     reject = rejectPromise;
@@ -36,7 +36,7 @@ type SubscriptionRecord = {
   acknowledge: ReturnType<typeof mock<(cursor: TaskEventCursor) => Promise<void>>>;
   input: { cursor: TaskEventCursor | null };
   listener: (frame: TaskStreamFrame) => void;
-  onTerminalFailure: (error: unknown) => void;
+  onTerminalFailure: (cause: unknown) => void;
   unsubscribe: ReturnType<typeof mock<() => Promise<void>>>;
 };
 
@@ -80,7 +80,9 @@ const createHarness = ({
       };
     }),
   };
-  const onDegraded = mock((_error: unknown) => {});
+  const onDegraded = mock((cause: unknown) => {
+    void cause;
+  });
   const controller = createTaskStreamController({
     transport,
     metadata,
@@ -97,7 +99,9 @@ const createHarness = ({
     taskViewSync,
     transport,
     emit: (index: number, frame: TaskStreamFrame) => records[index]?.listener(frame),
-    failTerminally: (index: number, error: unknown) => records[index]?.onTerminalFailure(error),
+    failTerminally: (index: number, cause: unknown): void => {
+      records[index]?.onTerminalFailure(cause);
+    },
   };
 };
 

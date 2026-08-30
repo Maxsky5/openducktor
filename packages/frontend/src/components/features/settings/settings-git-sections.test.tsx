@@ -20,7 +20,7 @@ const authenticatedRuntimeCheck: RuntimeCheck = {
 
 const createDeferred = <T,>() => {
   let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
+  let reject!: (cause?: unknown) => void;
   const promise = new Promise<T>((res, rej) => {
     resolve = res;
     reject = rej;
@@ -381,7 +381,8 @@ describe("settings git sections", () => {
       });
       const detectButton = screen.getByRole("button", { name: /detect from origin/i });
       expect(detectButton).toBeInstanceOf(HTMLButtonElement);
-      expect((detectButton as HTMLButtonElement).disabled).toBe(false);
+      if (!(detectButton instanceof HTMLButtonElement)) throw new TypeError("Expected a button");
+      expect(detectButton.disabled).toBe(false);
     } finally {
       rendered?.unmount();
     }

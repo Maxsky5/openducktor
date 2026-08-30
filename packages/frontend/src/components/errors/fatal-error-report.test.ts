@@ -4,6 +4,8 @@ import { buildFatalErrorReport, logFatalError } from "./fatal-error-report";
 
 ensurePromiseRejectionEventPolyfill();
 
+type CircularReference = { self?: unknown };
+
 describe("buildFatalErrorReport", () => {
   describe("Error instances", () => {
     test("extracts name, message, and stack from an Error", () => {
@@ -142,7 +144,7 @@ describe("buildFatalErrorReport", () => {
     });
 
     test("handles circular references gracefully", () => {
-      const circular: Record<string, unknown> = {};
+      const circular: CircularReference = {};
       circular.self = circular;
 
       const report = buildFatalErrorReport(circular, "error");
@@ -159,7 +161,7 @@ describe("logFatalError", () => {
 
   beforeEach(() => {
     consoleErrorMock = mock(() => {});
-    console.error = consoleErrorMock as unknown as typeof console.error;
+    console.error = consoleErrorMock;
   });
 
   afterEach(() => {
@@ -173,15 +175,18 @@ describe("logFatalError", () => {
     logFatalError(report, rawError);
 
     expect(consoleErrorMock).toHaveBeenCalledTimes(1);
-    const args = consoleErrorMock.mock.calls[0] as unknown[];
-    expect(args[0]).toContain("[AppCrashShell]");
-    expect(args[0]).toContain("boundary");
-
-    const context = args[args.length - 1] as Record<string, unknown>;
-    expect(context.source).toBe("boundary");
-    expect(context.rawValue).toBe(rawError);
-    expect(context.timestamp).toBeDefined();
-    expect(context.componentStack).toBeUndefined();
+    expect(consoleErrorMock).toHaveBeenCalledWith(
+      expect.stringContaining("[AppCrashShell] Fatal error (boundary)"),
+      "TypeError",
+      "-",
+      "test",
+      expect.objectContaining({
+        source: "boundary",
+        rawValue: rawError,
+        timestamp: expect.any(String),
+      }),
+    );
+    expect(consoleErrorMock.mock.calls[0]?.at(-1)).not.toHaveProperty("componentStack");
   });
 
   test("includes component stack when provided", () => {
@@ -191,8 +196,8 @@ describe("logFatalError", () => {
 
     logFatalError(report, rawError, componentStack);
 
-    const args = consoleErrorMock.mock.calls[0] as unknown[];
-    const context = args[args.length - 1] as Record<string, unknown>;
-    expect(context.componentStack).toBe(componentStack);
+    expect(consoleErrorMock.mock.calls[0]?.at(-1)).toEqual(
+      expect.objectContaining({ componentStack }),
+    );
   });
 });

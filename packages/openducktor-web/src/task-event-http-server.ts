@@ -1,8 +1,15 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { taskEventCursorSchema, taskEventStreamSubscribeSchema } from "@openducktor/contracts";
+import {
+  taskEventCursorSchema,
+  taskEventStreamSubscribeSchema,
+  type TaskEventStreamFrame,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
+import type { JSONType } from "zod";
 import { errorMessage, WebHostRequestError } from "./effect/web-errors";
 import type { TaskEventLeaseManager } from "./task-event-leases";
+
+export type WebRequestBody = Record<string, JSONType>;
 
 export const TASK_EVENT_STREAM_TOKEN_HEADER = "x-openducktor-task-stream-token";
 const TASK_EVENT_SUBSCRIPTIONS_PATH = "/task-events/subscriptions";
@@ -15,9 +22,7 @@ type TaskEventHttpServerContext = {
   appToken: string;
   controlToken: string;
   corsHeaders: HeadersInit;
-  parseJsonObjectBody: (
-    request: Request,
-  ) => Effect.Effect<Record<string, unknown>, WebHostRequestError>;
+  parseJsonObjectBody: (request: Request) => Effect.Effect<WebRequestBody, WebHostRequestError>;
   request: Request;
   requestTimeouts?: RequestTimeoutController | undefined;
   shutdownStarted: boolean;
@@ -32,10 +37,19 @@ type TaskEventHttpServerContext = {
   ) => Effect.Effect<void, WebHostRequestError>;
 };
 
+type TaskEventSubscriptionResponse = {
+  streamToken: string;
+  subscriptionId: string;
+};
+
 const reject = (message: string, status: number): Effect.Effect<never, WebHostRequestError> =>
   Effect.fail(new WebHostRequestError({ message, status }));
 
-const jsonResponse = (payload: unknown, init: ResponseInit, corsHeaders: HeadersInit): Response =>
+const jsonResponse = (
+  payload: TaskEventSubscriptionResponse,
+  init: ResponseInit,
+  corsHeaders: HeadersInit,
+): Response =>
   new Response(JSON.stringify(payload), {
     ...init,
     headers: {
@@ -65,8 +79,8 @@ const isValidTaskEventStreamCapability = (
 const isPublicSubscriptionId = (subscriptionId: string): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(subscriptionId);
 
-export const writeTaskFrameSseEvent = (frame: unknown): Uint8Array => {
-  const cursor = (frame as { cursor: { epoch: string; sequence: number } }).cursor;
+export const writeTaskFrameSseEvent = (frame: TaskEventStreamFrame): Uint8Array => {
+  const { cursor } = frame;
   return new TextEncoder().encode(
     [
       `id: ${cursor.epoch}:${cursor.sequence}`,
@@ -109,7 +123,7 @@ const createTaskEventSseResponse = (
 };
 
 const parseTaskEventAckCursor = (
-  body: Record<string, unknown>,
+  body: WebRequestBody,
 ): Effect.Effect<ReturnType<typeof taskEventCursorSchema.parse>, WebHostRequestError> =>
   Effect.gen(function* () {
     if (Object.keys(body).length !== 1 || !("cursor" in body)) {

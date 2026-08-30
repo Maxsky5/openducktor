@@ -1,10 +1,8 @@
-import type {
-  CommitsAheadBehind,
-  GitWorktreeStatus,
-  GitWorktreeStatusSummary,
-} from "@openducktor/contracts";
+import type { GitWorktreeStatus, GitWorktreeStatusSummary } from "@openducktor/contracts";
 import type { GitConflict } from "../contracts";
 import type { ScopeSnapshot, ScopeSummaryFields } from "./diff-data-model";
+
+type UpstreamState = Pick<ScopeSummaryFields, "upstreamAheadBehind" | "upstreamStatus" | "error">;
 
 const toGitConflict = (
   conflict: GitWorktreeStatus["gitConflict"] | GitWorktreeStatusSummary["gitConflict"],
@@ -25,11 +23,7 @@ const toGitConflict = (
 
 const toUpstreamState = (
   upstreamAheadBehind: GitWorktreeStatus["upstreamAheadBehind"],
-): {
-  upstreamAheadBehind: CommitsAheadBehind | null;
-  upstreamStatus: "tracking" | "untracked" | "error";
-  error: string | null;
-} => {
+): UpstreamState => {
   if (upstreamAheadBehind.outcome === "tracking") {
     return {
       upstreamAheadBehind: {

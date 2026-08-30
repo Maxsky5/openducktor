@@ -1,6 +1,7 @@
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import remarkParse from "remark-parse";
+import type { Root, RootContent } from "mdast";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
 import { normalizeTaskListBlockMath } from "@/components/ui/markdown-task-list-math";
@@ -34,24 +35,23 @@ const SUPPORTED_MDAST_NODE_TYPES = new Set([
   "break",
 ]);
 
-const UNSUPPORTED_NODE_REASONS: Record<string, string> = {
-  html: "Raw HTML is available only in Markdown mode because Visual mode would remove it.",
-  definition:
+const UNSUPPORTED_NODE_REASONS = new Map<string, string>([
+  ["html", "Raw HTML is available only in Markdown mode because Visual mode would remove it."],
+  [
+    "definition",
     "Reference-style links and images are available only in Markdown mode. Change them to inline links to use Visual mode.",
-  linkReference:
+  ],
+  [
+    "linkReference",
     "Reference-style links are available only in Markdown mode. Change them to inline links to use Visual mode.",
-  imageReference:
+  ],
+  [
+    "imageReference",
     "Reference-style images are available only in Markdown mode. Change them to inline images to use Visual mode.",
-};
+  ],
+]);
 
-const sourceForNode = (
-  body: string,
-  node: {
-    position?:
-      | { start: { offset?: number | undefined }; end: { offset?: number | undefined } }
-      | undefined;
-  },
-): string => {
+const sourceForNode = (body: string, node: Root | RootContent): string => {
   const start = node.position?.start.offset;
   const end = node.position?.end.offset;
   return start === undefined || end === undefined ? "" : body.slice(start, end);
@@ -64,8 +64,10 @@ const parseCanonicalRendererMarkdown = (body: string) => {
   return tree;
 };
 
-const canonicalRendererSemanticTree = (body: string): unknown =>
-  JSON.parse(
+const canonicalRendererSemanticTree = (
+  body: string,
+): ReturnType<typeof parseCanonicalRendererMarkdown> => {
+  return JSON.parse(
     JSON.stringify(parseCanonicalRendererMarkdown(body), (key, nestedValue) => {
       if (key === "position" || key === "spread") {
         return undefined;
@@ -73,6 +75,7 @@ const canonicalRendererSemanticTree = (body: string): unknown =>
       return nestedValue;
     }),
   );
+};
 
 export type MarkdownMathSemantic = {
   kind: "block" | "inline";
@@ -84,14 +87,7 @@ export type MarkdownOrderedListSemantic = {
   items: Array<{ lists: MarkdownOrderedListSemantic[] }>;
 };
 
-type MarkdownTreeNode = {
-  type?: string;
-  ordered?: boolean;
-  start?: number | null;
-  children?: MarkdownTreeNode[];
-};
-
-const orderedListsInMarkdownTree = (node: MarkdownTreeNode): MarkdownOrderedListSemantic[] => {
+const orderedListsInMarkdownTree = (node: Root | RootContent): MarkdownOrderedListSemantic[] => {
   if (node.type === "list" && node.ordered) {
     return [
       {
@@ -102,13 +98,13 @@ const orderedListsInMarkdownTree = (node: MarkdownTreeNode): MarkdownOrderedList
       },
     ];
   }
-  return (node.children ?? []).flatMap(orderedListsInMarkdownTree);
+  return "children" in node ? node.children.flatMap(orderedListsInMarkdownTree) : [];
 };
 
 export const canonicalRendererOrderedListSemantics = (
   body: string,
 ): MarkdownOrderedListSemantic[] =>
-  orderedListsInMarkdownTree(parseCanonicalRendererMarkdown(body) as MarkdownTreeNode);
+  orderedListsInMarkdownTree(parseCanonicalRendererMarkdown(body));
 
 export const canonicalRendererMathSemantics = (body: string): MarkdownMathSemantic[] => {
   const semantics: MarkdownMathSemantic[] = [];
@@ -140,7 +136,7 @@ const findUnsupportedSyntax = (body: string): string | undefined => {
       return;
     }
 
-    reason = UNSUPPORTED_NODE_REASONS[node.type];
+    reason = UNSUPPORTED_NODE_REASONS.get(node.type);
     if (reason !== undefined) {
       return;
     }

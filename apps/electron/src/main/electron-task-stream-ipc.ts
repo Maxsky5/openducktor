@@ -1,19 +1,25 @@
 import {
   type TaskEventStreamAcknowledge,
   type TaskEventStreamFrame,
+  type TaskEventStreamSubscribe,
   taskEventStreamAcknowledgeSchema,
   taskEventStreamFrameSchema,
   taskEventStreamSubscribeSchema,
 } from "@openducktor/contracts";
 import type { EffectNodeHostCommandRouter } from "@openducktor/host";
-import type { WebContentsDidStartNavigationEventParams } from "electron";
-import { ElectronValidationError } from "../effect/electron-errors";
+import type { IpcMain, WebContentsDidStartNavigationEventParams } from "electron";
+import { z } from "zod";
+import { ElectronValidationError, jsonIssues } from "../effect/electron-errors";
 import {
   ELECTRON_TASK_STREAM_ACKNOWLEDGE_CHANNEL,
   ELECTRON_TASK_STREAM_FRAME_CHANNEL,
   ELECTRON_TASK_STREAM_SUBSCRIBE_CHANNEL,
   ELECTRON_TASK_STREAM_TERMINAL_FAILURE_CHANNEL,
   ELECTRON_TASK_STREAM_UNSUBSCRIBE_CHANNEL,
+  type ElectronTaskStreamFrameEnvelope,
+  type ElectronTaskStreamSubscription,
+  type ElectronTaskStreamTerminalFailureEnvelope,
+  type ElectronTaskStreamUnsubscribe,
   electronTaskStreamFrameEnvelopeSchema,
   electronTaskStreamSubscriptionSchema,
   electronTaskStreamTerminalFailureEnvelopeSchema,
@@ -39,23 +45,34 @@ type ElectronTaskStreamFrame = {
   readonly processId: number;
   readonly routingId: number;
   isDestroyed(): boolean;
-  send(channel: string, frame: unknown): void;
+  send(
+    channel: string,
+    frame: ElectronTaskStreamFrameEnvelope | ElectronTaskStreamTerminalFailureEnvelope,
+  ): void;
 };
 
 type ElectronTaskStreamNavigationDetails = Electron.Event<WebContentsDidStartNavigationEventParams>;
 
-type ElectronTaskStreamEvent = {
+export type ElectronTaskStreamEvent = {
   readonly frameId: number;
   readonly processId: number;
   readonly sender: ElectronTaskStreamSender;
   readonly senderFrame: ElectronTaskStreamFrame | null;
 };
 
+export type ElectronTaskStreamIpcRequest =
+  | TaskEventStreamSubscribe
+  | TaskEventStreamAcknowledge
+  | ElectronTaskStreamUnsubscribe;
+export type ElectronTaskStreamIpcResult = ElectronTaskStreamSubscription | void;
+export type ElectronTaskStreamIpcHandler = Parameters<IpcMain["handle"]>[1];
+
+type ElectronTaskStreamValidationErrorDetails =
+  | { readonly issues: ReturnType<typeof jsonIssues> | z.ZodError }
+  | { readonly subscriptionId: string };
+
 type ElectronIpcMainLike = {
-  handle(
-    channel: string,
-    listener: (event: ElectronTaskStreamEvent, value: unknown) => unknown,
-  ): void;
+  handle(channel: string, listener: ElectronTaskStreamIpcHandler): void;
 };
 
 type OwnedSubscription = {
@@ -82,13 +99,24 @@ const validationError = (
   operation: string,
   field: string,
   message: string,
-  details?: Readonly<Record<string, unknown>>,
-) => new ElectronValidationError({ operation, field, message, details });
+  details?: ElectronTaskStreamValidationErrorDetails,
+) => {
+  if (details === undefined) {
+    return new ElectronValidationError<ElectronTaskStreamValidationErrorDetails>({
+      operation,
+      field,
+      message,
+    });
+  }
+  return new ElectronValidationError<ElectronTaskStreamValidationErrorDetails>({
+    operation,
+    field,
+    message,
+    details,
+  });
+};
 
-const readTrustedSender = (
-  event: ElectronTaskStreamEvent,
-  operation: string,
-): { sender: ElectronTaskStreamSender; senderFrame: ElectronTaskStreamFrame } => {
+const readTrustedSender = (event: ElectronTaskStreamEvent, operation: string) => {
   const { sender, senderFrame } = event;
   const mainFrame = sender.mainFrame;
   if (
@@ -106,23 +134,20 @@ const readTrustedSender = (
       "Electron task stream messages must come from the sender's active main frame.",
     );
   }
-  return { sender, senderFrame };
+  return { sender, senderFrame } satisfies {
+    sender: ElectronTaskStreamSender;
+    senderFrame: ElectronTaskStreamFrame;
+  };
 };
 
 const parseOrThrow = <Value>(
-  schema: {
-    safeParse(
-      value: unknown,
-    ): { success: true; data: Value } | { success: false; error: { issues: unknown } };
-  },
-  value: unknown,
+  result: z.ZodSafeParseResult<Value>,
   operation: string,
   field: string,
 ): Value => {
-  const parsed = schema.safeParse(value);
-  if (parsed.success) return parsed.data;
+  if (result.success) return result.data;
   throw validationError(operation, field, "Electron task stream IPC payload is invalid.", {
-    issues: parsed.error,
+    issues: result.error,
   });
 };
 
@@ -196,8 +221,7 @@ export const registerElectronTaskStreamIpc = ({
 
   ipcMain.handle(ELECTRON_TASK_STREAM_SUBSCRIBE_CHANNEL, (event, value) => {
     const input = parseOrThrow(
-      taskEventStreamSubscribeSchema,
-      value,
+      taskEventStreamSubscribeSchema.safeParse(value),
       "electron.task-stream.subscribe.validate",
       "input",
     );
@@ -252,7 +276,7 @@ export const registerElectronTaskStreamIpc = ({
             "electron.task-stream.delivery.validate",
             "frame",
             "Task stream produced an invalid frame.",
-            { issues: parsedFrame.error.issues },
+            { issues: jsonIssues(parsedFrame.error.issues) },
           ),
           subscriptionId,
         });
@@ -297,8 +321,9 @@ export const registerElectronTaskStreamIpc = ({
     if (cleanedUp) {
       unsubscribeHost();
       return parseOrThrow(
-        electronTaskStreamSubscriptionSchema,
-        { subscriptionId: createdSubscriptionId },
+        electronTaskStreamSubscriptionSchema.safeParse({
+          subscriptionId: createdSubscriptionId,
+        }),
         "electron.task-stream.subscribe.result",
         "result",
       );
@@ -317,8 +342,7 @@ export const registerElectronTaskStreamIpc = ({
       deliverFrame(frame);
     }
     return parseOrThrow(
-      electronTaskStreamSubscriptionSchema,
-      { subscriptionId: createdSubscriptionId },
+      electronTaskStreamSubscriptionSchema.safeParse({ subscriptionId: createdSubscriptionId }),
       "electron.task-stream.subscribe.result",
       "result",
     );
@@ -326,8 +350,7 @@ export const registerElectronTaskStreamIpc = ({
 
   ipcMain.handle(ELECTRON_TASK_STREAM_ACKNOWLEDGE_CHANNEL, (event, value) => {
     const acknowledgement = parseOrThrow<TaskEventStreamAcknowledge>(
-      taskEventStreamAcknowledgeSchema,
-      value,
+      taskEventStreamAcknowledgeSchema.safeParse(value),
       "electron.task-stream.acknowledge.validate",
       "input",
     );
@@ -341,8 +364,7 @@ export const registerElectronTaskStreamIpc = ({
 
   ipcMain.handle(ELECTRON_TASK_STREAM_UNSUBSCRIBE_CHANNEL, (event, value) => {
     const request = parseOrThrow<{ subscriptionId: string }>(
-      electronTaskStreamUnsubscribeSchema,
-      value,
+      electronTaskStreamUnsubscribeSchema.safeParse(value),
       "electron.task-stream.unsubscribe.validate",
       "input",
     );

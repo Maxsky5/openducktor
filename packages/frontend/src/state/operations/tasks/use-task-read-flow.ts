@@ -91,13 +91,10 @@ export function useTaskReadFlow({ activeRepoPath }: UseTaskReadFlowArgs): UseTas
 }
 
 const toTaskIds = (taskIdOrIds?: string | string[]): string[] | null => {
-  if (typeof taskIdOrIds === "string") {
-    return [taskIdOrIds];
-  }
   if (Array.isArray(taskIdOrIds)) {
     return taskIdOrIds;
   }
-  return null;
+  return taskIdOrIds === undefined ? null : [taskIdOrIds];
 };
 
 const useTaskReadFlowRepoSwitchCleanup = ({

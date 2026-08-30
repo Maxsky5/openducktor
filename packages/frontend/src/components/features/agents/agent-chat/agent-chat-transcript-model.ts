@@ -96,9 +96,7 @@ const appendMessageRows = (
   const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
   const turnDurationMs = assistantMeta?.durationMs;
   const shouldShowTurnDuration =
-    isFinalAssistantChatMessage(message) &&
-    typeof turnDurationMs === "number" &&
-    turnDurationMs > 0;
+    isFinalAssistantChatMessage(message) && turnDurationMs !== undefined && turnDurationMs > 0;
   const rowKey = `${sessionKey}:${messageIndex}:${message.id}`;
   const forkBoundaryMeta =
     message.meta?.kind === "session_notice" && message.meta.reason === "session_forked"

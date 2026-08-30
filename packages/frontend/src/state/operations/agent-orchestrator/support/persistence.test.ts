@@ -125,24 +125,25 @@ describe("agent-orchestrator/support/persistence", () => {
   });
 
   test("rejects persisted session records without a top-level runtime kind", () => {
-    const invalidRecord = { ...recordFixture } as Record<string, unknown>;
-    delete invalidRecord.runtimeKind;
+    const { runtimeKind: _runtimeKind, ...invalidRecord } = recordFixture;
 
     expect(() =>
       fromPersistedSessionRecord({
         taskId: "task-1",
-        record: invalidRecord as unknown as AgentSessionRecord,
+        // @ts-expect-error -- This case verifies runtime rejection of a record without runtimeKind.
+        record: invalidRecord,
       }),
     ).toThrow("Persisted session 'external-1' is missing runtime kind.");
   });
 
   test("rejects persisted selected models without a runtime kind", () => {
-    const invalidRecord = {
+    const invalidRecord: AgentSessionRecord = {
       ...recordFixture,
+      // @ts-expect-error -- This case verifies runtime rejection of a selected model without runtimeKind.
       selectedModel: {
         providerId: "openai",
         modelId: "gpt-5",
-      } as unknown as NonNullable<AgentSessionRecord["selectedModel"]>,
+      },
     };
 
     expect(() => fromPersistedSessionRecord({ taskId: "task-1", record: invalidRecord })).toThrow(
@@ -151,14 +152,15 @@ describe("agent-orchestrator/support/persistence", () => {
   });
 
   test("rejects persisted selected models whose runtime kind disagrees with the session", () => {
-    const invalidRecord = {
+    const invalidRecord: AgentSessionRecord = {
       ...recordFixture,
       selectedModel: {
+        // @ts-expect-error -- This case verifies runtime rejection of an unsupported runtime kind.
         runtimeKind: "claude-code",
         providerId: "openai",
         modelId: "gpt-5",
       },
-    } as unknown as AgentSessionRecord;
+    };
 
     expect(() => fromPersistedSessionRecord({ taskId: "task-1", record: invalidRecord })).toThrow(
       "Unsupported runtime kind 'claude-code'.",
@@ -171,7 +173,7 @@ describe("agent-orchestrator/support/persistence", () => {
       selectedModel: {
         providerId: "openai",
         modelId: "gpt-5",
-      } as unknown as NonNullable<AgentSessionState["selectedModel"]>,
+      },
     };
 
     expect(() => toPersistedSessionRecord(session)).toThrow(
@@ -180,14 +182,15 @@ describe("agent-orchestrator/support/persistence", () => {
   });
 
   test("rejects persisting selected models whose runtime kind disagrees with the session", () => {
-    const session = {
+    const session: AgentSessionState = {
       ...loadRecordFixture(),
       selectedModel: {
+        // @ts-expect-error -- This case verifies runtime rejection of an unsupported runtime kind.
         runtimeKind: "claude-code",
         providerId: "openai",
         modelId: "gpt-5",
       },
-    } as unknown as AgentSessionState;
+    };
 
     expect(() => toPersistedSessionRecord(session)).toThrow(
       "Unsupported runtime kind 'claude-code'.",

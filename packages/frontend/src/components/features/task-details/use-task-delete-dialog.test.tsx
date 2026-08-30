@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { act } from "react";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { useTaskDeleteDialog } from "./use-task-delete-dialog";
 
 type HarnessProps = {
@@ -10,10 +11,6 @@ type HarnessProps = {
   hasSubtasks: boolean;
   onOpenChange: (open: boolean) => void;
   onDelete: ((taskId: string, options: { deleteSubtasks: boolean }) => Promise<void>) | undefined;
-};
-
-const reactActEnvironment = globalThis as {
-  IS_REACT_ACT_ENVIRONMENT?: boolean;
 };
 
 const makeTask = (id: string): TaskCard => ({
@@ -81,7 +78,7 @@ describe("use-task-delete-dialog", () => {
   };
 
   beforeEach(() => {
-    reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+    enableReactActEnvironment();
     latest = null;
     harness = null;
   });

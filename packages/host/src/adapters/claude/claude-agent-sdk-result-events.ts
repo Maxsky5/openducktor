@@ -1,11 +1,11 @@
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentEvent, AgentModelSelection } from "@openducktor/core";
+import { type AgentEvent, type AgentModelSelection, type AgentStreamPart } from "@openducktor/core";
 import {
   clearClaudeManualCompaction,
   settleClaudeManualCompactionResult,
 } from "./claude-agent-sdk-compaction";
 import {
   type ClaudeBackgroundWorkSession,
+  type ClaudeEventSession,
   hasActiveClaudeBackgroundWork,
 } from "./claude-agent-sdk-event-session";
 import { applyClaudeLifecycleEvent } from "./claude-agent-sdk-lifecycle";
@@ -15,14 +15,19 @@ import {
 } from "./claude-agent-sdk-result-lifecycle";
 import { timestampMs } from "./claude-agent-sdk-tool-shapes";
 import { createClaudeCompletedToolPart } from "./claude-agent-sdk-transcript-parts";
-import type { ClaudeManualCompactionState, ClaudeSessionActivity } from "./claude-agent-sdk-types";
+import type {
+  ClaudeManualCompactionState,
+  ClaudeSessionActivity,
+  ClaudeToolInput,
+} from "./claude-agent-sdk-types";
 import {
   readClaudeTurnOriginKind,
   shouldFinalizeClaudeTurn,
 } from "./claude-agent-sdk-user-messages";
+import type { ClaudeSdkResultMessageProjection } from "./claude-agent-sdk-message-projection";
 
 type ClaudeResultEventSession = ClaudeBackgroundWorkSession & {
-  acceptedUserMessages?: readonly unknown[];
+  acceptedUserMessages?: ClaudeEventSession["acceptedUserMessages"];
   activeManualCompaction?: ClaudeManualCompactionState;
   activity: ClaudeSessionActivity;
   assistantTurnOriginKind?: string;
@@ -35,7 +40,7 @@ type ClaudeResultEventSession = ClaudeBackgroundWorkSession & {
   lastAssistantTextTurnIndex?: number;
   model?: AgentModelSelection | undefined;
   streamAssistantMessageIdsByBlockIndex?: Map<number, string>;
-  toolInputsByCallId: Map<string, Record<string, unknown>>;
+  toolInputsByCallId: Map<string, ClaudeToolInput>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
   toolStartedAtMsByCallId: Map<string, number>;
@@ -43,7 +48,7 @@ type ClaudeResultEventSession = ClaudeBackgroundWorkSession & {
 
 type ClaudeResultEventInput = {
   emit: (event: AgentEvent) => void;
-  message: Extract<SDKMessage, { type: "result" }>;
+  message: ClaudeSdkResultMessageProjection;
   session: ClaudeResultEventSession;
   timestamp: string;
 };
@@ -53,9 +58,9 @@ type PermissionDeniedToolPartInput = {
   permission: {
     toolName: string;
     toolUseId: string;
-    input?: Record<string, unknown>;
+    input?: ClaudeToolInput;
     message: string;
-    metadata?: Record<string, unknown>;
+    metadata?: Extract<AgentStreamPart, { kind: "tool" }>["metadata"];
   };
   session: ClaudeResultEventSession;
   timestamp: string;
@@ -73,8 +78,7 @@ export const handleClaudeResultMessage = ({
   const shouldFinalize = shouldFinalizeClaudeTurn(originKind, hasActiveBackgroundWork ? 1 : 0);
   delete session.assistantTurnOriginKind;
   const failed = isFailedClaudeResult(message);
-  const resultText =
-    "result" in message && typeof message.result === "string" ? message.result.trim() : "";
+  const resultText = message.subtype === "success" ? message.result.trim() : "";
   const handledManualCompaction =
     !failed && settleClaudeManualCompactionResult({ emit, result: resultText, session, timestamp });
   if (!handledManualCompaction && shouldFinalize) {
@@ -82,13 +86,9 @@ export const handleClaudeResultMessage = ({
   }
   if (failed) {
     clearClaudeManualCompaction(session);
-    const errors = "errors" in message && Array.isArray(message.errors) ? message.errors : [];
-    const resultMessage =
-      "result" in message && typeof message.result === "string" ? message.result.trim() : "";
-    const terminalReason =
-      "terminal_reason" in message && typeof message.terminal_reason === "string"
-        ? message.terminal_reason
-        : undefined;
+    const errors = message.subtype === "success" ? [] : message.errors;
+    const resultMessage = message.subtype === "success" ? message.result.trim() : "";
+    const terminalReason = message.subtype === "success" ? undefined : message.terminal_reason;
     emit({
       type: "turn_error",
       externalSessionId: session.externalSessionId,
@@ -119,11 +119,11 @@ export const handleClaudeResultMessage = ({
 };
 
 const pendingUserTurnCount = (session: ClaudeResultEventSession): number => {
-  return typeof session.pendingUserTurnCount === "number" ? session.pendingUserTurnCount : 0;
+  return session.pendingUserTurnCount ?? 0;
 };
 
 const acceptedUserTurnCount = (session: ClaudeResultEventSession): number => {
-  return Array.isArray(session.acceptedUserMessages) ? session.acceptedUserMessages.length : 0;
+  return session.acceptedUserMessages?.length ?? 0;
 };
 
 const nextCompletedUserTurnIndex = (session: ClaudeResultEventSession): number => {
@@ -142,9 +142,7 @@ const resultModelForCompletedTurn = (
   completedUserTurnIndex: number,
   duplicatesAssistantTextFromSameTurn: boolean,
 ): AgentModelSelection | undefined => {
-  const acceptedMessage = session.acceptedUserMessages?.[completedUserTurnIndex - 1] as
-    | { model?: AgentModelSelection }
-    | undefined;
+  const acceptedMessage = session.acceptedUserMessages?.[completedUserTurnIndex - 1];
   const acceptedModel = acceptedMessage?.model;
   const completedAssistantModel = duplicatesAssistantTextFromSameTurn
     ? session.lastAssistantTextModel
@@ -179,21 +177,28 @@ export const emitClaudePermissionDeniedToolPart = ({
     session.toolInputsByCallId.set(permission.toolUseId, input);
   }
   const startedAtMs = session.toolStartedAtMsByCallId.get(permission.toolUseId);
+  const completedToolInput: Parameters<typeof createClaudeCompletedToolPart>[0] = {
+    callId: permission.toolUseId,
+    endedAtMs: timestampMs(timestamp),
+    isError: true,
+    messageId,
+    text: permission.message,
+    tool: toolName,
+  };
+  if (input) {
+    completedToolInput.input = input;
+  }
+  if (permission.metadata) {
+    completedToolInput.metadata = permission.metadata;
+  }
+  if (startedAtMs !== undefined) {
+    completedToolInput.startedAtMs = startedAtMs;
+  }
   emit({
     type: "assistant_part",
     externalSessionId: session.externalSessionId,
     timestamp,
-    part: createClaudeCompletedToolPart({
-      callId: permission.toolUseId,
-      endedAtMs: timestampMs(timestamp),
-      isError: true,
-      messageId,
-      text: permission.message,
-      tool: toolName,
-      ...(input ? { input } : {}),
-      ...(permission.metadata ? { metadata: permission.metadata } : {}),
-      ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
-    }),
+    part: createClaudeCompletedToolPart(completedToolInput),
   });
 };
 
@@ -210,7 +215,7 @@ const emitSuccessfulResultText = ({
   if (isFailedClaudeResult(message)) {
     return;
   }
-  const text = typeof message.result === "string" ? message.result.trim() : "";
+  const text = message.result.trim();
   const duplicatesAssistantTextFromSameTurn =
     text === session.lastAssistantText &&
     session.lastAssistantTextTurnIndex === completedUserTurnIndex;
@@ -222,9 +227,7 @@ const emitSuccessfulResultText = ({
     completedUserTurnIndex,
     duplicatesAssistantTextFromSameTurn,
   );
-  const acceptedTurn = session.acceptedUserMessages?.[completedUserTurnIndex - 1] as
-    | { model?: unknown }
-    | undefined;
+  const acceptedTurn = session.acceptedUserMessages?.[completedUserTurnIndex - 1];
   const acceptedTurnHasModel = acceptedTurn?.model !== undefined;
   if (
     duplicatesAssistantTextFromSameTurn &&
@@ -253,12 +256,15 @@ const emitSuccessfulResultText = ({
       messageIds: streamedMessageIds.slice(1),
     });
   }
-  emit({
+  const assistantMessage: Extract<AgentEvent, { type: "assistant_message" }> = {
     type: "assistant_message",
     externalSessionId: session.externalSessionId,
     timestamp,
     messageId,
     message: text,
-    ...(resultModel ? { model: resultModel } : {}),
-  });
+  };
+  if (resultModel) {
+    assistantMessage.model = resultModel;
+  }
+  emit(assistantMessage);
 };

@@ -1,12 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import type { AgentModelSelection } from "@openducktor/core";
+import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
+import {
+  createHookHarness,
+  createRuntimeDefinitionsContextValue,
+  enableReactActEnvironment,
+} from "@/pages/agents/agent-studio-test-utils";
 import {
   assertRuntimeSupportsSelectedStartMode,
   buildSessionStartModalDecision,
   requireSourceSessionRuntimeKind,
+  useSessionStartModalRunner,
 } from "./use-session-start-modal-runner";
+
+enableReactActEnvironment();
 
 const REQUEST_CONTEXT = {
   launchActionId: "build_pull_request_generation",
@@ -20,6 +28,22 @@ const SELECTED_MODEL: AgentModelSelection = {
   modelId: "claude-sonnet",
   variant: "high",
   profileId: "build-agent",
+};
+
+const CATALOG: AgentModelCatalog = {
+  runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+  models: [
+    {
+      id: "anthropic/claude-sonnet",
+      providerId: "anthropic",
+      providerName: "Anthropic",
+      modelId: "claude-sonnet",
+      modelName: "Claude Sonnet",
+      variants: ["high"],
+    },
+  ],
+  defaultModelsByProvider: { anthropic: "claude-sonnet" },
+  profiles: [{ name: "build-agent", mode: "primary", hidden: false }],
 };
 
 const sourceSession = (externalSessionId: string, runtimeKind: RuntimeKind = "opencode") => ({
@@ -37,7 +61,7 @@ const sourceOption = (externalSessionId: string, runtimeKind: RuntimeKind = "ope
   selectedModel: null,
 });
 
-const FORKLESS_RUNTIME = {
+const FORKLESS_RUNTIME: RuntimeDescriptor = {
   ...OPENCODE_RUNTIME_DESCRIPTOR,
   label: "Reuse Runtime",
   capabilities: {
@@ -49,7 +73,7 @@ const FORKLESS_RUNTIME = {
       forkTargets: [],
     },
   },
-} as RuntimeDescriptor;
+};
 
 describe("buildSessionStartModalDecision", () => {
   test("builds a fresh decision with the selected model and no source session", () => {
@@ -206,6 +230,123 @@ describe("buildSessionStartModalDecision", () => {
   });
 });
 
+describe("useSessionStartModalRunner", () => {
+  test("settles cancellation without waiting for another React commit", async () => {
+    const harness = createHookHarness(
+      useSessionStartModalRunner,
+      {
+        favoriteState: {
+          favorites: [],
+          isLoading: false,
+          readError: null,
+          isMutationPending: false,
+          mutationError: null,
+          canMutate: false,
+          toggleFavorite: () => {},
+          retryRead: () => {},
+          retryMutation: () => {},
+        },
+        repoSettings: null,
+        workspaceRepoPath: "/repo",
+      },
+      {
+        runtimeDefinitionsContext: createRuntimeDefinitionsContextValue({
+          runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+          availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+          loadRepoRuntimeCatalog: async () => CATALOG,
+        }),
+      },
+    );
+    const request = {
+      source: "agent_studio",
+      taskId: "TASK-1",
+      role: "build",
+      launchActionId: "build_implementation_start",
+      postStartAction: "kickoff",
+      selectedModel: SELECTED_MODEL,
+    } as const;
+    let callerPromise!: Promise<string | undefined>;
+
+    await harness.mount();
+    await harness.run((runner) => {
+      callerPromise = runner.runSessionStartRequest(request, async () => "started");
+    });
+    await harness.waitFor((runner) => runner.sessionStartModal != null);
+
+    let settled = false;
+    void callerPromise.then(() => {
+      settled = true;
+    });
+    await harness.run(async (runner) => {
+      runner.sessionStartModal?.onOpenChange(false);
+      await Promise.resolve();
+      expect(settled).toBe(true);
+    });
+
+    expect(await callerPromise).toBeUndefined();
+    await harness.unmount();
+  });
+
+  test("runs the confirmed request and then closes the modal", async () => {
+    const harness = createHookHarness(
+      useSessionStartModalRunner,
+      {
+        favoriteState: {
+          favorites: [],
+          isLoading: false,
+          readError: null,
+          isMutationPending: false,
+          mutationError: null,
+          canMutate: false,
+          toggleFavorite: () => {},
+          retryRead: () => {},
+          retryMutation: () => {},
+        },
+        repoSettings: null,
+        workspaceRepoPath: "/repo",
+      },
+      {
+        runtimeDefinitionsContext: createRuntimeDefinitionsContextValue({
+          runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+          availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+          loadRepoRuntimeCatalog: async () => CATALOG,
+        }),
+      },
+    );
+    const request = {
+      source: "agent_studio",
+      taskId: "TASK-1",
+      role: "build",
+      launchActionId: "build_implementation_start",
+      postStartAction: "kickoff",
+      selectedModel: SELECTED_MODEL,
+    } as const;
+    let callerPromise!: Promise<string | undefined>;
+
+    await harness.mount();
+    await harness.run((runner) => {
+      callerPromise = runner.runSessionStartRequest(request, async () => "started");
+    });
+    await harness.waitFor((runner) => runner.sessionStartModal?.selectedModelSelection != null);
+
+    await harness.run(async (runner) => {
+      const modal = runner.sessionStartModal;
+      if (!modal) {
+        throw new Error("Expected the session start modal to be open.");
+      }
+      await modal.onConfirm({
+        startMode: "fresh",
+        sourceSessionOptionValue: null,
+        runInBackground: false,
+      });
+    });
+
+    expect(await callerPromise).toBe("started");
+    await harness.waitFor((runner) => runner.sessionStartModal == null);
+    await harness.unmount();
+  });
+});
+
 describe("assertRuntimeSupportsSelectedStartMode", () => {
   test("accepts a runtime that supports the concrete selected start mode", () => {
     expect(() =>
@@ -241,7 +382,7 @@ describe("assertRuntimeSupportsSelectedStartMode", () => {
         launchActionId: "build_implementation_start",
         role: "build",
         runtimeDescriptor: null,
-        runtimeKind: "missing-runtime" as unknown as RuntimeKind,
+        runtimeKind: "opencode",
         startMode: "fresh",
         taskId: "TASK-2",
       }),
@@ -263,10 +404,12 @@ describe("assertRuntimeSupportsSelectedStartMode", () => {
   test("fails fast when a reusable session has no runtime kind", () => {
     expect(() =>
       requireSourceSessionRuntimeKind({
-        ...sourceOption("session-2", null as unknown as RuntimeKind),
+        ...sourceOption("session-2"),
+        runtimeKind: null,
         sourceSession: {
           externalSessionId: "session-2",
-          runtimeKind: null as unknown as RuntimeKind,
+          // @ts-expect-error This negative test verifies fail-fast handling of malformed persisted data.
+          runtimeKind: null,
           workingDirectory: "/repo/worktree",
         },
         label: "Missing runtime session",

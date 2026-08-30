@@ -18,15 +18,15 @@ const blockResume = (transport: RecordingTransport) => {
   const started = createDeferred<void>();
   const resume = createDeferred<void>();
   const completed = createDeferred<void>();
-  transport.request = async <Response>(input): Promise<Response> => {
+  transport.request = async (input) => {
     if (input.method === "thread/resume") {
       started.resolve(undefined);
       await resume.promise;
-      const response = await request<Response>(input);
+      const response = await request(input);
       completed.resolve(undefined);
       return response;
     }
-    return request<Response>(input);
+    return request(input);
   };
   return { started, resume, completed };
 };
@@ -46,29 +46,6 @@ describe("CodexContextUsageLoader", () => {
     expect(transports.get("runtime-live")?.calls).not.toContainEqual(
       expect.objectContaining({ method: "thread/resume" }),
     );
-  });
-
-  test("rejects cached context usage for a retained unbound session", async () => {
-    const { adapter } = createHarness();
-    const started = await adapter.startSession(codexStartSessionInput());
-    const session = (
-      adapter as unknown as {
-        localSessions: {
-          get(id: string): { summary: { sessionAssociation: { kind: string } } } | undefined;
-        };
-      }
-    ).localSessions.get(started.externalSessionId);
-    if (!session) {
-      throw new Error("Expected the retained Codex session.");
-    }
-    session.summary.sessionAssociation = { kind: "unbound" };
-
-    await expect(
-      adapter.loadLiveSessionContextUsage({
-        runtimeId: "runtime-live",
-        externalSessionId: started.externalSessionId,
-      }),
-    ).rejects.toThrow("has no session context");
   });
 
   test("cancels cold loads for released sessions and runtimes without late retention", async () => {
@@ -163,7 +140,7 @@ describe("CodexContextUsageLoader", () => {
     expect(adapter.listLiveSessionSnapshots("runtime-live")).toEqual([]);
 
     await adapter.startSession(codexStartSessionInput());
-    const state = adapter as unknown as { subagents: CodexSubagentLinkState };
+    const state: { subagents: CodexSubagentLinkState } = adapter;
     state.subagents.upsertLink({
       runtimeId: "runtime-live",
       parentThreadId: "thread/start-runtime-live",
@@ -200,7 +177,7 @@ describe("CodexContextUsageLoader", () => {
       if (!transport) {
         throw new Error("Expected Codex transport.");
       }
-      const state = adapter as unknown as { subagents: CodexSubagentLinkState };
+      const state: { subagents: CodexSubagentLinkState } = adapter;
       state.subagents.upsertLink({
         runtimeId: "runtime-live",
         parentThreadId: "thread/start-runtime-live",
@@ -235,7 +212,7 @@ describe("CodexContextUsageLoader", () => {
   test("loads uncached grandchild context through retained root ownership", async () => {
     const { adapter, transports } = createHarness();
     await adapter.startSession(codexStartSessionInput());
-    const state = adapter as unknown as { subagents: CodexSubagentLinkState };
+    const state: { subagents: CodexSubagentLinkState } = adapter;
     state.subagents.upsertLink({
       runtimeId: "runtime-live",
       parentThreadId: "thread/start-runtime-live",
@@ -277,7 +254,7 @@ describe("CodexContextUsageLoader", () => {
   test("rejects cross-runtime and cyclic live context routes before resuming", async () => {
     for (const kind of ["cross-runtime", "cycle"] as const) {
       const { adapter, transports } = createHarness();
-      const state = adapter as unknown as { subagents: CodexSubagentLinkState };
+      const state: { subagents: CodexSubagentLinkState } = adapter;
       if (kind === "cross-runtime") {
         state.subagents.upsertLink({
           runtimeId: "runtime-other",

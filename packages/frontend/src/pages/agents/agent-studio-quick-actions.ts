@@ -41,10 +41,7 @@ type WorkflowQuickActionDefinition = {
   requiresHumanFeedback?: true;
 };
 
-const WORKFLOW_QUICK_ACTIONS: Record<
-  AgentStudioWorkflowQuickAction,
-  WorkflowQuickActionDefinition
-> = {
+const WORKFLOW_QUICK_ACTIONS = {
   set_spec: {
     role: "spec",
     resolveLaunchActionId: () => "spec_initial",
@@ -72,7 +69,7 @@ const WORKFLOW_QUICK_ACTIONS: Record<
     description: "Collect human feedback, then open the Builder rework flow.",
     requiresHumanFeedback: true,
   },
-};
+} satisfies Record<AgentStudioWorkflowQuickAction, WorkflowQuickActionDefinition>;
 
 const WORKFLOW_QUICK_ACTION_KEYS = new Set<string>(Object.keys(WORKFLOW_QUICK_ACTIONS));
 
@@ -171,7 +168,7 @@ export const buildAgentStudioQuickActions = (params: {
     if (!params.roleEnabledByTask[role]) {
       return null;
     }
-    return {
+    const option: AgentStudioQuickActionOption = {
       id: `quick:${launchActionId}`,
       role,
       launchActionId,
@@ -179,25 +176,35 @@ export const buildAgentStudioQuickActions = (params: {
       description: definition.description,
       postStartAction: "kickoff",
       disabled: disabledReason !== null,
-      ...(disabledReason ? { disabledReason } : {}),
-      ...(definition.requiresHumanFeedback ? { requiresHumanFeedback: true } : {}),
     };
+    if (disabledReason) {
+      option.disabledReason = disabledReason;
+    }
+    if ("requiresHumanFeedback" in definition && definition.requiresHumanFeedback) {
+      option.requiresHumanFeedback = true;
+    }
+    return option;
   };
   const createSpecialOption = (
     id: string,
     role: AgentRole,
     launchActionId: SessionLaunchActionId,
     description: string,
-  ): AgentStudioQuickActionOption => ({
-    id,
-    role,
-    launchActionId,
-    label: LAUNCH_ACTION_LABELS[launchActionId],
-    description,
-    postStartAction: "kickoff",
-    disabled: disabledReason !== null,
-    ...(disabledReason ? { disabledReason } : {}),
-  });
+  ): AgentStudioQuickActionOption => {
+    const option: AgentStudioQuickActionOption = {
+      id,
+      role,
+      launchActionId,
+      label: LAUNCH_ACTION_LABELS[launchActionId],
+      description,
+      postStartAction: "kickoff",
+      disabled: disabledReason !== null,
+    };
+    if (disabledReason) {
+      option.disabledReason = disabledReason;
+    }
+    return option;
+  };
 
   const options = workflowActionOrder.reduce<AgentStudioQuickActionOption[]>(
     (nextOptions, action) => {
@@ -230,7 +237,7 @@ export const buildAgentStudioQuickActions = (params: {
     const hasBuilderSource = builderSessionOptions.length > 0;
     const pullRequestDisabledReason =
       disabledReason ?? (hasBuilderSource ? null : "Requires an existing Builder session.");
-    options.push({
+    const option: AgentStudioQuickActionOption = {
       id: "quick:build_pull_request_generation",
       role: "build",
       launchActionId: "build_pull_request_generation",
@@ -238,16 +245,18 @@ export const buildAgentStudioQuickActions = (params: {
       description: "Reuse or fork a Builder session to create or update a pull request.",
       postStartAction: "kickoff",
       disabled: pullRequestDisabledReason !== null,
-      ...(pullRequestDisabledReason ? { disabledReason: pullRequestDisabledReason } : {}),
-      ...(hasBuilderSource
-        ? {
-            initialStartMode: getSessionLaunchAction("build_pull_request_generation")
-              .defaultStartMode,
-            existingSessionOptions: builderSessionOptions,
-            initialSourceSession: builderSessionOptions[0]?.sourceSession ?? null,
-          }
-        : {}),
-    });
+    };
+    if (pullRequestDisabledReason) {
+      option.disabledReason = pullRequestDisabledReason;
+    }
+    if (hasBuilderSource) {
+      option.initialStartMode = getSessionLaunchAction(
+        "build_pull_request_generation",
+      ).defaultStartMode;
+      option.existingSessionOptions = builderSessionOptions;
+      option.initialSourceSession = builderSessionOptions[0]?.sourceSession ?? null;
+    }
+    options.push(option);
   }
 
   return orderQuickActions(task, options, workflowActionOrder);

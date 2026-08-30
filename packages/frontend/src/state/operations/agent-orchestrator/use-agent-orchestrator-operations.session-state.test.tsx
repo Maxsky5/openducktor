@@ -23,6 +23,14 @@ import {
   taskFixtureWithPersistedBuildSession,
 } from "./use-agent-orchestrator-operations.test-helpers";
 
+interface ReceivedHistoryInputRefContract {
+  current: Parameters<InstanceType<typeof CodexAppServerAdapter>["loadSessionHistory"]>[0] | null;
+}
+
+interface ReceivedContextInputRefContract {
+  current: Parameters<typeof host.agentSessionLiveLoadContext>[0] | null;
+}
+
 describe("use-agent-orchestrator-operations session state", () => {
   let restoreEnvironment: (() => void) | null = null;
 
@@ -802,11 +810,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       ...persistedSessionFixture,
       runtimeKind: "codex" as const,
     };
-    const receivedHistoryInputRef: {
-      current:
-        | Parameters<InstanceType<typeof CodexAppServerAdapter>["loadSessionHistory"]>[0]
-        | null;
-    } = { current: null };
+    const receivedHistoryInputRef: ReceivedHistoryInputRefContract = { current: null };
 
     host.agentSessionsList = async () => [codexRecord];
     CodexAppServerAdapter.prototype.loadSessionHistory = async (input) => {
@@ -977,7 +981,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       providerId: "openai",
       modelId: "gpt-5",
     };
-    let receivedContextInput: unknown = null;
+    const receivedContextInput: ReceivedContextInputRefContract = { current: null };
     let contextReadCount = 0;
     let releaseContextRead: (() => void) | undefined;
     const contextReadGate = new Promise<void>((resolve) => {
@@ -997,7 +1001,7 @@ describe("use-agent-orchestrator-operations session state", () => {
         ...liveStream.portOverrides,
         agentSessionLiveLoadContext: async (input) => {
           contextReadCount += 1;
-          receivedContextInput = input;
+          receivedContextInput.current = input;
           await contextReadGate;
           return contextUsage;
         },
@@ -1038,7 +1042,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       });
 
       expect(contextReadCount).toBe(1);
-      expect(receivedContextInput).toEqual({
+      expect(receivedContextInput.current).toEqual({
         repoPath: "/tmp/repo",
         externalSessionId: persistedSession.externalSessionId,
         runtimeKind: persistedSession.runtimeKind,

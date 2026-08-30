@@ -85,12 +85,13 @@ describe("encodeClaudePromptText", () => {
       encodeClaudePromptText([
         {
           kind: "slash_command",
+          // @ts-expect-error This malformed command verifies the missing-trigger error path.
           command: {
             id: "review",
             title: "Review",
             source: "command",
             hints: [],
-          } as never,
+          },
         },
       ]),
     ).toThrow("cannot encode a slash command without a trigger");

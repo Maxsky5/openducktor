@@ -4,6 +4,16 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 export const COMPOSER_EDITOR_MIN_HEIGHT_PX = 44;
 export const COMPOSER_EDITOR_MAX_HEIGHT_PX = 220;
 
+type ComposerEditorLayout = {
+  heightPx: number;
+  overflowY: "auto" | "hidden";
+};
+
+type ComposerEditorResizeResult = {
+  didHeightChange: boolean;
+  overflowY: "auto" | "hidden";
+};
+
 const readInlineHeightPx = (styleHeight: string): number | null => {
   const inlineHeight = Number.parseFloat(styleHeight);
   if (Number.isFinite(inlineHeight) && inlineHeight > 0) {
@@ -12,12 +22,7 @@ const readInlineHeightPx = (styleHeight: string): number | null => {
   return null;
 };
 
-export const computeComposerEditorLayout = (
-  scrollHeight: number,
-): {
-  heightPx: number;
-  overflowY: "auto" | "hidden";
-} => {
+export const computeComposerEditorLayout = (scrollHeight: number): ComposerEditorLayout => {
   const heightPx = Math.min(
     COMPOSER_EDITOR_MAX_HEIGHT_PX,
     Math.max(COMPOSER_EDITOR_MIN_HEIGHT_PX, scrollHeight),
@@ -28,29 +33,32 @@ export const computeComposerEditorLayout = (
   };
 };
 
-const readComposerEditorHeight = (editor: HTMLDivElement, previousHeightPx?: number): number => {
+type ComposerResizableElement = {
+  readonly scrollHeight: number;
+  readonly style: Pick<CSSStyleDeclaration, "height" | "overflowY">;
+  readonly textContent: string | null;
+  getBoundingClientRect(): Pick<DOMRect, "height">;
+};
+
+const readComposerEditorHeight = (
+  editor: ComposerResizableElement,
+  previousHeightPx?: number,
+): number => {
   const inlineHeight = readInlineHeightPx(editor.style.height);
   if (inlineHeight !== null) {
     return inlineHeight;
   }
-  if (
-    typeof previousHeightPx === "number" &&
-    Number.isFinite(previousHeightPx) &&
-    previousHeightPx > 0
-  ) {
+  if (previousHeightPx !== undefined && Number.isFinite(previousHeightPx) && previousHeightPx > 0) {
     return previousHeightPx;
   }
   return editor.getBoundingClientRect().height;
 };
 
 export const resizeComposerEditorElement = (
-  editor: HTMLDivElement,
+  editor: ComposerResizableElement,
   serializedDraftText?: string,
   previousHeightPx?: number,
-): {
-  didHeightChange: boolean;
-  overflowY: "auto" | "hidden";
-} => {
+): ComposerEditorResizeResult => {
   const resolvedSerializedDraftText = serializedDraftText ?? editor.textContent ?? "";
   const currentHeight = readComposerEditorHeight(editor, previousHeightPx);
   if (resolvedSerializedDraftText.length === 0) {
@@ -87,19 +95,13 @@ export const resizeComposerEditorElement = (
 };
 
 export const resizeComposerTextareaElement = (
-  editor: HTMLDivElement | HTMLTextAreaElement,
+  editor: ComposerResizableElement & { value?: string },
   serializedDraftText?: string,
   previousHeightPx?: number,
-): {
-  didHeightChange: boolean;
-  overflowY: "auto" | "hidden";
-} =>
+): ComposerEditorResizeResult =>
   resizeComposerEditorElement(
-    editor as HTMLDivElement,
-    serializedDraftText ??
-      (editor as unknown as { value?: string }).value ??
-      editor.textContent ??
-      "",
+    editor,
+    serializedDraftText ?? editor.value ?? editor.textContent ?? "",
     previousHeightPx,
   );
 
@@ -156,7 +158,7 @@ export const useAgentChatLayout = ({
 
   const resizeComposerEditor = useCallback((): void => {
     const requestAnimationFrameFn = globalThis.requestAnimationFrame;
-    if (typeof requestAnimationFrameFn !== "function") {
+    if (requestAnimationFrameFn === undefined) {
       flushComposerEditorResize();
       return;
     }
@@ -194,7 +196,7 @@ export const useAgentChatLayout = ({
 
   const resizeComposerTextarea = useCallback((): void => {
     const requestAnimationFrameFn = globalThis.requestAnimationFrame;
-    if (typeof requestAnimationFrameFn !== "function") {
+    if (requestAnimationFrameFn === undefined) {
       flushComposerTextareaResize();
       return;
     }
@@ -211,11 +213,11 @@ export const useAgentChatLayout = ({
 
   const cancelPendingResizeFrames = useCallback((): void => {
     const cancelAnimationFrameFn = globalThis.cancelAnimationFrame;
-    if (resizeFrameIdRef.current !== null && typeof cancelAnimationFrameFn === "function") {
+    if (resizeFrameIdRef.current !== null && cancelAnimationFrameFn !== undefined) {
       cancelAnimationFrameFn(resizeFrameIdRef.current);
       resizeFrameIdRef.current = null;
     }
-    if (resizeTextareaFrameIdRef.current !== null && typeof cancelAnimationFrameFn === "function") {
+    if (resizeTextareaFrameIdRef.current !== null && cancelAnimationFrameFn !== undefined) {
       cancelAnimationFrameFn(resizeTextareaFrameIdRef.current);
       resizeTextareaFrameIdRef.current = null;
     }
@@ -228,7 +230,7 @@ export const useAgentChatLayout = ({
     const hasDisplayedSession = displayedSessionKey !== null;
     if (hasDisplayedSession && resizeFrameIdRef.current !== null) {
       const cancelAnimationFrameFn = globalThis.cancelAnimationFrame;
-      if (typeof cancelAnimationFrameFn === "function") {
+      if (cancelAnimationFrameFn !== undefined) {
         cancelAnimationFrameFn(resizeFrameIdRef.current);
       }
       resizeFrameIdRef.current = null;

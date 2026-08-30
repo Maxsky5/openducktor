@@ -1,4 +1,8 @@
-import type { GlobalGitConfig, RuntimeCheck } from "@openducktor/contracts";
+import {
+  gitMergeMethodSchema,
+  type GlobalGitConfig,
+  type RuntimeCheck,
+} from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -64,7 +68,7 @@ export function SettingsGitSection({
           value={git.defaultMergeMethod}
           onValueChange={(value) =>
             onUpdateGit(() => ({
-              defaultMergeMethod: value as GlobalGitConfig["defaultMergeMethod"],
+              defaultMergeMethod: gitMergeMethodSchema.parse(value),
             }))
           }
         >

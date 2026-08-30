@@ -1,5 +1,4 @@
 import type { DevServerEvent, DevServerGroupState } from "@openducktor/contracts";
-import { devServerEventSchema } from "@openducktor/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import {
@@ -351,7 +350,7 @@ export function useAgentStudioDevServerPanel({
         syncMutationSuccessState(data, context.transportEpoch);
       },
       onError: (
-        error: unknown,
+        cause: unknown,
         scope: DevServerTaskScope,
         context: DevServerMutationContext | undefined,
       ) => {
@@ -363,17 +362,17 @@ export function useAgentStudioDevServerPanel({
           if (options.restoreCachedStateOnError) {
             restoreCachedState(context.transportEpoch);
           }
-          dispatchLocalState({ type: "actionFailed", error: errorMessage(error) });
+          dispatchLocalState({ type: "actionFailed", error: errorMessage(cause) });
         }
       },
       onSettled: (
         _data: DevServerGroupState | undefined,
-        error: unknown,
+        cause: unknown,
         scope: DevServerTaskScope,
         context: DevServerMutationContext | undefined,
       ) => {
         if (
-          error &&
+          cause &&
           context?.transportEpoch &&
           context.transportEpoch === transportEpochRef.current
         ) {
@@ -454,23 +453,7 @@ export function useAgentStudioDevServerPanel({
         return;
       }
 
-      const parsed = devServerEventSchema.safeParse(payload);
-      if (!parsed.success) {
-        console.error(
-          "[agent-studio-dev-server-panel] Received invalid dev server event payload.",
-          {
-            payload,
-            error: parsed.error,
-          },
-        );
-        dispatchLocalState({
-          type: "subscriptionFailed",
-          error: `Received invalid dev server event payload: ${errorMessage(parsed.error)}`,
-        });
-        return;
-      }
-
-      const event = parsed.data;
+      const event = payload;
       if (event.type !== "snapshot" && (event.repoPath !== repoPath || event.taskId !== taskId)) {
         return;
       }
@@ -499,9 +482,9 @@ export function useAgentStudioDevServerPanel({
           transportEpoch: subscription.transportEpoch,
         });
       })
-      .catch((error: unknown) => {
+      .catch((cause: unknown) => {
         if (!cancelled) {
-          dispatchLocalState({ type: "subscriptionFailed", error: errorMessage(error) });
+          dispatchLocalState({ type: "subscriptionFailed", error: errorMessage(cause) });
         }
       });
 

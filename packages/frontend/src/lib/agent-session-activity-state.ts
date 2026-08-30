@@ -9,21 +9,20 @@ import { isAgentSessionWaitingInput } from "./agent-session-waiting-input";
 
 type AgentSessionStatus = AgentSessionState["status"];
 
-const AGENT_SESSION_ACTIVITY_LABELS: Record<AgentSessionActivityState, string> = {
+const AGENT_SESSION_ACTIVITY_LABELS = {
   waiting_input: "waiting input",
   starting: "starting",
   running: "running",
   idle: "idle",
   stopped: "stopped",
   error: "error",
-};
+} satisfies Record<AgentSessionActivityState, string>;
 
-const ACTIVE_AGENT_SESSION_ACTIVITY_PRIMARY_RANK: Record<ActiveAgentSessionActivityState, number> =
-  {
-    waiting_input: 0,
-    running: 1,
-    starting: 2,
-  };
+const ACTIVE_AGENT_SESSION_ACTIVITY_PRIMARY_RANK = {
+  waiting_input: 0,
+  running: 1,
+  starting: 2,
+} satisfies Record<ActiveAgentSessionActivityState, number>;
 
 export const formatAgentSessionActivityStateLabel = (
   activityState: AgentSessionActivityState,

@@ -8,17 +8,17 @@ import {
   agentSessionLiveSnapshotSchema,
   agentSessionTranscriptEventSchema,
   isAgentSessionTranscriptEventType,
-  type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
-import type { AgentEvent } from "@openducktor/core";
-import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
+import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
+import type {
+  AgentSessionLiveAdapterChange,
+  AgentSessionLiveAdapterMutation,
+} from "../../ports/agent-session-live-adapter-port";
 import { isClaudeSubagentTranscriptTarget } from "../claude/claude-agent-sdk-subagent-transcripts";
 import type { ClaudeAgentSdkEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
+import type { ClaudeRuntimeInstance } from "./claude-live-session-adapter-contract";
 
-type ClaudeRuntimeInstance = RuntimeInstanceSummary & {
-  readonly kind: "claude";
-  readonly runtimeRoute: { readonly type: "host_service"; readonly identity: string };
-};
+type LoadedContextResult = AgentSessionLiveAdapterMutation<AgentSessionContextUsage | null>;
 
 const refKey = (ref: AgentSessionLiveRef): string =>
   [ref.repoPath, ref.runtimeKind, ref.workingDirectory, ref.externalSessionId].join("\u0000");
@@ -62,21 +62,38 @@ const activityForStatus = (
 
 const toApprovalRequest = (
   event: Extract<AgentEvent, { type: "approval_required" }>,
-): AgentSessionLivePendingApprovalRequest => ({
-  requestId: event.requestId,
-  requestType: event.requestType,
-  title: event.title,
-  ...(event.summary !== undefined ? { summary: event.summary } : {}),
-  ...(event.details !== undefined ? { details: event.details } : {}),
-  ...(event.affectedPaths !== undefined ? { affectedPaths: event.affectedPaths } : {}),
-  ...(event.command !== undefined ? { command: event.command } : {}),
-  ...(event.action !== undefined ? { action: event.action } : {}),
-  ...(event.tool !== undefined ? { tool: event.tool } : {}),
-  ...(event.mutation !== undefined ? { mutation: event.mutation } : {}),
-  ...(event.supportedReplyOutcomes !== undefined
-    ? { supportedReplyOutcomes: event.supportedReplyOutcomes }
-    : {}),
-});
+): AgentSessionLivePendingApprovalRequest => {
+  const request: AgentSessionLivePendingApprovalRequest = {
+    requestId: event.requestId,
+    requestType: event.requestType,
+    title: event.title,
+  };
+  if (event.summary !== undefined) {
+    request.summary = event.summary;
+  }
+  if (event.details !== undefined) {
+    request.details = event.details;
+  }
+  if (event.affectedPaths !== undefined) {
+    request.affectedPaths = event.affectedPaths;
+  }
+  if (event.command !== undefined) {
+    request.command = event.command;
+  }
+  if (event.action !== undefined) {
+    request.action = event.action;
+  }
+  if (event.tool !== undefined) {
+    request.tool = event.tool;
+  }
+  if (event.mutation !== undefined) {
+    request.mutation = event.mutation;
+  }
+  if (event.supportedReplyOutcomes !== undefined) {
+    request.supportedReplyOutcomes = event.supportedReplyOutcomes;
+  }
+  return request;
+};
 
 const toQuestionRequest = (
   event: Extract<AgentEvent, { type: "question_required" }>,
@@ -99,12 +116,10 @@ const rootRef = (session: ClaudeSessionContext): AgentSessionLiveRef =>
   eventRef(session, { externalSessionId: session.externalSessionId });
 
 const subagentStartedAt = (
-  part: {
-    readonly startedAtMs?: number;
-  },
+  part: Pick<Extract<AgentStreamPart, { kind: "subagent" }>, "startedAtMs">,
   fallback: string,
 ): string => {
-  if (typeof part.startedAtMs !== "number") {
+  if (part.startedAtMs === undefined) {
     return fallback;
   }
   const startedAt = new Date(part.startedAtMs);
@@ -147,17 +162,20 @@ export const createClaudeLiveSessionState = ({
       return retained;
     }
     const isRoot = ref.externalSessionId === session.externalSessionId;
-    return {
+    const snapshot: AgentSessionLiveSnapshot = {
       ref,
       sessionAssociation: session.summary.sessionAssociation,
       activity: session.activity === "idle" ? "idle" : "running",
       title: isRoot ? (session.summary.title ?? "Claude session") : "Claude subagent",
       startedAt: isRoot ? session.startedAt : timestamp,
-      ...(!isRoot ? { parentExternalSessionId: session.externalSessionId } : {}),
       pendingApprovals: [],
       pendingQuestions: [],
       contextUsage: null,
     };
+    if (!isRoot) {
+      snapshot.parentExternalSessionId = session.externalSessionId;
+    }
+    return snapshot;
   };
 
   const removeSnapshot = (ref: AgentSessionLiveRef): AgentSessionLiveAdapterChange[] => {
@@ -314,12 +332,15 @@ export const createClaudeLiveSessionState = ({
     const changes: AgentSessionLiveAdapterChange[] = [];
     if (event.type === "session_context_updated") {
       contextRevisionsByRef.set(key, (contextRevisionsByRef.get(key) ?? 0) + 1);
+      const contextUsage: NonNullable<AgentSessionLiveSnapshot["contextUsage"]> = {
+        totalTokens: event.totalTokens,
+      };
+      if (event.contextWindow !== undefined) {
+        contextUsage.contextWindow = event.contextWindow;
+      }
       return commitSnapshot({
         ...snapshot,
-        contextUsage: {
-          totalTokens: event.totalTokens,
-          ...(event.contextWindow !== undefined ? { contextWindow: event.contextWindow } : {}),
-        },
+        contextUsage,
       });
     }
     if (event.type === "session_status") {
@@ -369,10 +390,7 @@ export const createClaudeLiveSessionState = ({
     applyPendingResolution: (
       session: ClaudeSessionContext,
       event: Extract<AgentEvent, { type: "approval_resolved" | "question_resolved" }>,
-    ): {
-      changes: AgentSessionLiveAdapterChange[];
-      rollback: () => void;
-    } => {
+    ) => {
       const ref = eventRef(session, event);
       const key = refKey(ref);
       const previous = readSnapshot(ref);
@@ -386,16 +404,16 @@ export const createClaudeLiveSessionState = ({
             snapshotsByRef.delete(key);
           }
         },
+      } satisfies {
+        changes: AgentSessionLiveAdapterChange[];
+        rollback: () => void;
       };
     },
     applyLoadedContext: (
       ref: AgentSessionLiveRef,
       contextUsage: AgentSessionContextUsage | null,
       expectedRevision: number,
-    ): {
-      value: AgentSessionContextUsage | null;
-      changes: AgentSessionLiveAdapterChange[];
-    } => {
+    ): LoadedContextResult => {
       const snapshot = readSnapshot(ref);
       if ((contextRevisionsByRef.get(refKey(ref)) ?? 0) !== expectedRevision) {
         return { value: snapshot?.contextUsage ?? contextUsage, changes: [] };
@@ -457,19 +475,20 @@ export const createClaudeLiveSessionState = ({
       if (options.preserveRetainedActivity && current) {
         activity = current.activity;
       }
-      return commitSnapshot({
+      const nextSnapshot: AgentSessionLiveSnapshot = {
         ref,
         sessionAssociation: summary.sessionAssociation,
         activity,
         title: summary.title ?? current?.title ?? "Claude session",
         startedAt: summary.startedAt,
-        ...(options.parentExternalSessionId
-          ? { parentExternalSessionId: options.parentExternalSessionId }
-          : {}),
         pendingApprovals: current?.pendingApprovals ?? [],
         pendingQuestions: current?.pendingQuestions ?? [],
         contextUsage: current?.contextUsage ?? null,
-      });
+      };
+      if (options.parentExternalSessionId) {
+        nextSnapshot.parentExternalSessionId = options.parentExternalSessionId;
+      }
+      return commitSnapshot(nextSnapshot);
     },
   };
 };

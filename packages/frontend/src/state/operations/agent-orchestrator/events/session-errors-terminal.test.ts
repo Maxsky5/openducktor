@@ -17,12 +17,10 @@ import {
 
 describe("agent-orchestrator session errors and terminal state", () => {
   test("shows a recoverable turn error and accepts the following idle event", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -74,12 +72,10 @@ describe("agent-orchestrator session errors and terminal state", () => {
   });
 
   test("starts queued turn timing after a recoverable turn error", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -129,8 +125,9 @@ describe("agent-orchestrator session errors and terminal state", () => {
       externalSessionId: "session-1",
       messageId: "queued-user",
       message: "Continue without it.",
+      parts: [{ kind: "text", text: "Continue without it." }],
       timestamp: "2026-02-22T08:00:11.000Z",
-      state: "sent",
+      state: "queued",
     });
     handleEvent({
       type: "assistant_message",
@@ -151,12 +148,10 @@ describe("agent-orchestrator session errors and terminal state", () => {
   });
 
   test("removes a running compaction notice when the compact turn fails", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -219,12 +214,10 @@ describe("agent-orchestrator session errors and terminal state", () => {
   });
 
   test("records session_error as an error notice and clears pending requests", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -304,12 +297,10 @@ describe("agent-orchestrator session errors and terminal state", () => {
   });
 
   test("keeps a terminal session error after the following finished event", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -342,6 +333,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       type: "session_finished",
       externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:11.000Z",
+      message: "Session finished.",
     });
 
     expect(findSession(sessionsRef, "session-1")?.status).toBe("error");
@@ -357,12 +349,10 @@ describe("agent-orchestrator session errors and terminal state", () => {
   });
 
   test("normalizes JSON-wrapped session_error payloads before rendering the error notice", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -411,12 +401,10 @@ describe("agent-orchestrator session errors and terminal state", () => {
   });
 
   test("renders a cancelled session notice when a user-requested stop aborts", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -531,13 +519,11 @@ describe("agent-orchestrator session errors and terminal state", () => {
   });
 
   test("handles todo updates and terminal finish", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const todosRecorder = createRecordingSessionTodosUpdater();
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -580,6 +566,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       type: "session_finished",
       externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:04.000Z",
+      message: "Session finished.",
     });
 
     expect(todosRecorder.getTodos()).toHaveLength(1);
@@ -589,13 +576,11 @@ describe("agent-orchestrator session errors and terminal state", () => {
   });
 
   test("does not update runtime todos when the observed session is gone", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const todosRecorder = createRecordingSessionTodosUpdater();
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -635,12 +620,10 @@ describe("agent-orchestrator session errors and terminal state", () => {
   });
 
   test("renders a cancelled session notice when a user-requested stop finishes normally", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -747,12 +730,10 @@ describe("agent-orchestrator session errors and terminal state", () => {
   });
 
   test("keeps real failures on the error path even when stop intent was set", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},

@@ -1,8 +1,11 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { Effect } from "effect";
-import type { HostOperationError, HostValidationError } from "../effect/host-errors";
+import type {
+  HostOperationErrorAggregate,
+  HostValidationErrorAggregate,
+} from "../effect/host-errors";
 
-export type TaskActivityGuardError = HostOperationError | HostValidationError;
+export type TaskActivityGuardError = HostOperationErrorAggregate | HostValidationErrorAggregate;
 
 export type TaskActivityGuardPort = {
   ensureNoActiveTaskDeleteRuns(input: {

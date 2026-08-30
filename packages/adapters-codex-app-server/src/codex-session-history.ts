@@ -4,8 +4,10 @@ import {
   type LoadAgentSessionHistoryInput,
 } from "@openducktor/core";
 import { applyFinalAssistantTurnMetadata } from "./codex-app-server-history";
+import type { CodexMappingContext } from "./codex-canonical-events";
 import { isCodexThreadNotLoadedError } from "./codex-app-server-shared";
 import { codexTurnItemsFromThreadRead, toHistoryMessage } from "./codex-app-server-transcript";
+import { type CodexThreadItemInput } from "./codex-event-mapper";
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import {
   type CodexForkBoundary,
@@ -16,7 +18,11 @@ import {
 } from "./codex-fork-boundary";
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
 import type { CodexThreadInventoryReader } from "./codex-thread-inventory";
-import type { CodexAppServerClient, CodexSessionState } from "./types";
+import type {
+  CodexAppServerClient,
+  CodexSessionState,
+  CodexThreadHistoryReadResponse,
+} from "./types";
 
 type CodexSessionHistoryRuntime = {
   client: CodexAppServerClient;
@@ -84,7 +90,7 @@ const projectCodexThreadReadToHistory = ({
 }: {
   input: LoadAgentSessionHistoryInput;
   session: CodexSessionState | undefined;
-  response: unknown;
+  response: CodexThreadHistoryReadResponse | undefined;
   eventMapperPipeline: ReturnType<typeof createCodexEventMapperPipeline>;
   runtimeId: string;
   forkBoundary: CodexForkBoundary | null;
@@ -115,20 +121,25 @@ const projectCodexThreadReadToHistory = ({
             ? forkBoundaryProjection.parentThreadId
             : input.externalSessionId;
         const turnModel = model;
-        const canonicalEvents = eventMapperPipeline.runThreadItem(
-          {
-            item,
-            index,
-            ...(timestamp ? { timestamp } : {}),
-            ...(isFinalAgentMessage ? { isFinalAgentMessage } : {}),
-          },
-          {
-            source: "thread_read",
-            runtimeId,
-            threadId: itemOwnerThreadId,
-            ...(timestamp ? { timestamp } : {}),
-          },
-        );
+        const threadItemInput: CodexThreadItemInput = {
+          item,
+          index,
+        };
+        if (timestamp) {
+          threadItemInput.timestamp = timestamp;
+        }
+        if (isFinalAgentMessage) {
+          threadItemInput.isFinalAgentMessage = true;
+        }
+        const mappingContext: CodexMappingContext = {
+          source: "thread_read",
+          runtimeId,
+          threadId: itemOwnerThreadId,
+        };
+        if (timestamp) {
+          mappingContext.timestamp = timestamp;
+        }
+        const canonicalEvents = eventMapperPipeline.runThreadItem(threadItemInput, mappingContext);
         let history: AgentSessionHistoryMessage[];
         if (canonicalEvents.length > 0) {
           history = projectCodexCanonicalEventsToHistory(canonicalEvents, turnModel);
@@ -140,7 +151,6 @@ const projectCodexThreadReadToHistory = ({
         } else {
           const message = toHistoryMessage(
             item,
-            `codex-history-${index}`,
             turnModel,
             timestamp ?? undefined,
             isFinalAgentMessage,
@@ -189,11 +199,11 @@ export const loadCodexSessionHistory = async ({
   }
   const forkedFromThreadId = codexForkedFromThreadId(response);
   const parentTurnIdsPromise: Promise<ReadonlySet<string> | null> = forkedFromThreadId
-    ? threadInventory.readThreadTurnIds(client, forkedFromThreadId).catch((error: unknown) => {
-        if (isCodexThreadNotLoadedError(error) && codexForkHistoryIsChildOwned(response)) {
+    ? threadInventory.readThreadTurnIds(client, forkedFromThreadId).catch((cause: unknown) => {
+        if (isCodexThreadNotLoadedError(cause) && codexForkHistoryIsChildOwned(response)) {
           return null;
         }
-        throw error;
+        throw cause;
       })
     : Promise.resolve(null);
   const parentTurnIds = await parentTurnIdsPromise;

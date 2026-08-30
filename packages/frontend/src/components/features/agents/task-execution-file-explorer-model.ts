@@ -43,7 +43,7 @@ export const buildTaskExecutionFileTreeGitStatusEntries = (
     }
     gitStatusEntries.push({
       path: entry.kind === "directory" ? `${entry.path}/` : entry.path,
-      status: entry.gitStatus as GitStatusEntry["status"],
+      status: entry.gitStatus,
     });
   }
 

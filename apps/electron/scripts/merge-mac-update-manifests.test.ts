@@ -129,13 +129,30 @@ describe("merge mac update manifests", () => {
         ),
       ]);
 
-      const error = await mergeMacUpdateManifests(assetsDirectory).catch(
-        (caught: unknown) => caught,
+      const error = await mergeMacUpdateManifests(assetsDirectory).catch((cause: unknown): Error =>
+        cause instanceof Error ? cause : new Error(String(cause), { cause }),
       );
 
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toBe(
+      if (!(error instanceof Error)) throw error;
+      expect(error.message).toBe(
         "Canonical latest-mac.yml must include both arm64 and x64 update files.",
+      );
+    } finally {
+      await rm(assetsDirectory, { force: true, recursive: true });
+    }
+  });
+
+  test("fails actionably when an update-file entry lacks its url", async () => {
+    const assetsDirectory = await mkdtemp(join(tmpdir(), "openducktor-mac-manifests-"));
+    try {
+      await writeFile(
+        join(assetsDirectory, "latest-mac-arm64.yml"),
+        ["version: 0.4.3", "files:", "  - sha512: arm64"].join("\n"),
+      );
+
+      await expect(mergeMacUpdateManifests(assetsDirectory)).rejects.toThrow(
+        "latest-mac-arm64.yml contains an update file without a url.",
       );
     } finally {
       await rm(assetsDirectory, { force: true, recursive: true });

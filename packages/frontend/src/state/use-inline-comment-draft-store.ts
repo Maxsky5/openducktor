@@ -29,6 +29,8 @@ export type InlineCommentDraft = {
 
 export type InlineCommentDraftSnapshot = Pick<InlineCommentDraft, "id" | "revision">;
 
+type InlineCommentLineRange = Pick<InlineCommentDraft, "startLine" | "endLine">;
+
 export type AddInlineCommentDraftInput = {
   filePath: string;
   diffScope: DiffScope;
@@ -68,10 +70,7 @@ const generateId = (): string => `draft-${Date.now()}-${++nextId}`;
 const generateRevision = (): number => ++nextRevision;
 const generateSubmissionId = (): string => `submission-${Date.now()}-${++nextSubmissionId}`;
 
-const normalizeLineRange = (
-  startLine: number,
-  endLine: number,
-): { startLine: number; endLine: number } => {
+const normalizeLineRange = (startLine: number, endLine: number): InlineCommentLineRange => {
   return startLine <= endLine ? { startLine, endLine } : { startLine: endLine, endLine: startLine };
 };
 
@@ -113,7 +112,7 @@ const formatSelectedContextBlock = (
   codeContext: InlineCommentContextLine[],
   language: string | null,
 ): string => {
-  const fence = typeof language === "string" && language.length > 0 ? language : "text";
+  const fence = language && language.length > 0 ? language : "text";
   return ["Context:", `\`\`\`${fence}`, ...formatSelectedCodeLines(codeContext), "```"].join("\n");
 };
 
@@ -121,10 +120,10 @@ const mapCommentSideToChange = (side: InlineCommentSide): "added" | "removed" =>
   return side === "old" ? "removed" : "added";
 };
 
-const DIFF_SCOPE_LABELS: Record<DiffScope, string> = {
+const DIFF_SCOPE_LABELS = {
   uncommitted: "uncommitted changes",
   target: "branch changes",
-};
+} satisfies Record<DiffScope, string>;
 
 export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, get) => ({
   drafts: [],

@@ -21,13 +21,12 @@ describe("task cleanup support", () => {
     });
 
     expect(error).toBeInstanceOf(HostOperationError);
-    expect((error as HostOperationError).operation).toBe("task_reset_implementation.cleanup");
-    expect((error as Error).message).toContain(
+    if (!(error instanceof HostOperationError)) throw error;
+    expect(error.operation).toBe("task_reset_implementation.cleanup");
+    expect(error.message).toContain(
       "Reset implementation cleanup already removed worktrees: /worktrees/repo/task-1.",
     );
-    expect((error as Error).message).toContain(
-      "Retry reset implementation to finish cleanup safely.",
-    );
+    expect(error.message).toContain("Retry reset implementation to finish cleanup safely.");
   });
 
   test("keeps legacy implementation worktrees as reset cleanup targets without a canonical worktree", async () => {

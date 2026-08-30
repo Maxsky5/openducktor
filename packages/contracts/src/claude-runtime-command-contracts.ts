@@ -15,7 +15,6 @@ import {
   agentUserMessageDisplayPartSchema,
 } from "./agent-session-event-schemas";
 import {
-  type AgentTranscriptModelSelection,
   agentSessionLiveRefSchema,
   agentSessionScopeSchema,
   agentSessionWorkflowScopeSchema,
@@ -27,22 +26,17 @@ import { subagentCatalogSchema } from "./subagent-schemas";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 const claudeRuntimeKindSchema = z.literal("claude");
-const optionalFromNullable = <T extends z.ZodTypeAny>(schema: T) =>
+const optionalFromNullable = <Schema extends z.ZodType>(schema: Schema) =>
   z.preprocess((value) => (value === null ? undefined : value), schema.optional());
 
-export type ClaudeAgentModelSelection = Omit<AgentTranscriptModelSelection, "runtimeKind"> & {
-  runtimeKind?: "claude";
-};
-
-const inferredClaudeAgentModelSelectionSchema = z.object({
+export const claudeAgentModelSelectionSchema = z.object({
   runtimeKind: claudeRuntimeKindSchema.optional(),
   providerId: nonEmptyStringSchema,
   modelId: nonEmptyStringSchema,
   variant: optionalFromNullable(nonEmptyStringSchema),
   profileId: optionalFromNullable(nonEmptyStringSchema),
 });
-export const claudeAgentModelSelectionSchema =
-  inferredClaudeAgentModelSelectionSchema as unknown as z.ZodType<ClaudeAgentModelSelection>;
+export type ClaudeAgentModelSelection = z.infer<typeof claudeAgentModelSelectionSchema>;
 
 export const claudeRepoRuntimeRefSchema = repoRuntimeRefSchema.extend({
   runtimeKind: claudeRuntimeKindSchema,
@@ -147,8 +141,8 @@ export const claudeFileStatusesSchema = agentFileStatusesSchema;
 
 export type ClaudeRuntimeCommandContract<Input = unknown, Response = unknown> = {
   command: string;
-  inputSchema: { parse(value: unknown): Input };
-  responseSchema: { parse(value: unknown): Response };
+  inputSchema: z.ZodType<Input>;
+  responseSchema: z.ZodType<Response>;
 };
 
 export const CLAUDE_RUNTIME_COMMAND_CONTRACTS = {
@@ -215,9 +209,17 @@ export type ClaudeRuntimeCommandOutput<Command extends ClaudeRuntimeCommandName>
   ClaudeRuntimeCommandContractFor<Command>["responseSchema"]
 >;
 
-export const CLAUDE_RUNTIME_HOST_COMMAND_NAMES = Object.values(CLAUDE_RUNTIME_COMMAND_CONTRACTS)
-  .map((contract) => contract.command)
-  .sort();
+export const CLAUDE_RUNTIME_HOST_COMMAND_NAMES = [
+  CLAUDE_RUNTIME_COMMAND_CONTRACTS.fileStatus.command,
+  CLAUDE_RUNTIME_COMMAND_CONTRACTS.listModels.command,
+  CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSkills.command,
+  CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSlashCommands.command,
+  CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSubagents.command,
+  CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionDiff.command,
+  CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionHistory.command,
+  CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionTodos.command,
+  CLAUDE_RUNTIME_COMMAND_CONTRACTS.searchFiles.command,
+] as const;
 
 export const CLAUDE_RUNTIME_COMMAND_CONTRACTS_BY_COMMAND = {
   [CLAUDE_RUNTIME_COMMAND_CONTRACTS.listModels.command]:

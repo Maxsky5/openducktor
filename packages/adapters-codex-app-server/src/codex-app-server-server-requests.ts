@@ -8,8 +8,8 @@ import { codexServerRequestKey } from "./codex-app-server-approvals";
 import {
   classifyCodexRequestMutation,
   codexApprovalResponseForRequest,
-  extractThreadIdFromParams,
-  extractTurnId,
+  codexServerRequestThreadId,
+  codexServerRequestTurnId,
   parseQuestionRequest,
   toApprovalRequest,
   toMcpElicitationApprovalRequest,
@@ -22,7 +22,10 @@ import {
   type CodexSubagentRoute,
   codexSubagentRouteEventFields,
 } from "./codex-subagent-link-state";
-import { requireNormalizedCodexToolInvocation } from "./codex-tool-normalizer";
+import {
+  requireNormalizedCodexToolInvocation,
+  toCodexToolQuestions,
+} from "./codex-tool-normalizer";
 import type {
   CodexServerRequestRecord,
   CodexServerRequestResponder,
@@ -38,7 +41,7 @@ const ODT_MCP_TOOL_NAME_SET = new Set<string>(ODT_MCP_TOOL_NAMES);
 
 const decideTrustedOdtTool = (
   session: CodexSessionState,
-  serverName: unknown,
+  serverName: string,
   toolName: string | undefined,
 ): TrustedOdtToolDecision => {
   if (serverName !== "openducktor") {
@@ -70,7 +73,9 @@ const decideTrustedOdtTool = (
     };
   }
 
-  if (AGENT_ROLE_TOOL_POLICY[sessionAssociation.role].includes(workflowTool)) {
+  if (
+    AGENT_ROLE_TOOL_POLICY[sessionAssociation.role].some((candidate) => candidate === workflowTool)
+  ) {
     return { kind: "allow" };
   }
   return {
@@ -100,12 +105,17 @@ type RequestRouteContext = {
   route: CodexSubagentRoute | null;
 };
 
+type PendingRequestEvent = Extract<
+  AgentEvent,
+  { type: "approval_required" | "question_required" | "assistant_part" }
+>;
+
 const resolveRequestRouteContext = (
   context: CodexServerRequestHandlerContext,
   session: CodexSessionState,
   rawRequest: CodexServerRequestRecord,
 ): RequestRouteContext => {
-  const ownerThreadId = extractThreadIdFromParams(rawRequest.params) ?? session.threadId;
+  const ownerThreadId = codexServerRequestThreadId(rawRequest) ?? session.threadId;
   const ownerSession =
     context.sessionForThreadId(ownerThreadId) ??
     (ownerThreadId === session.threadId ? session : undefined);
@@ -130,34 +140,42 @@ const resolveRequestRouteContext = (
     );
   }
   const policySession = parentSession ?? ownerSession ?? session;
-  return {
+  const routeContext: RequestRouteContext = {
     ownerThreadId,
-    ...(ownerSession ? { ownerSession } : {}),
     policySession,
     runtimeId: ownerSession?.runtimeId ?? policySession.runtimeId,
     route,
   };
+  if (ownerSession) {
+    routeContext.ownerSession = ownerSession;
+  }
+  return routeContext;
 };
 
 const emitPendingEvent = (
   context: CodexServerRequestHandlerContext,
   routeContext: RequestRouteContext,
-  event: AgentEvent,
+  event: PendingRequestEvent,
   targetSession?: CodexSessionState,
 ): void => {
+  const routedEvent =
+    event.type === "assistant_part"
+      ? event
+      : {
+          ...event,
+          ...codexSubagentRouteEventFields(routeContext.route),
+        };
   if (targetSession && context.emitRoutedRequestEvent) {
     context.emitRoutedRequestEvent(targetSession, {
-      ...event,
+      ...routedEvent,
       externalSessionId: routeContext.ownerThreadId,
-      ...codexSubagentRouteEventFields(routeContext.route),
     });
     return;
   }
   if (routeContext.ownerSession) {
     context.emitSessionEvent(routeContext.ownerThreadId, {
-      ...event,
+      ...routedEvent,
       externalSessionId: routeContext.ownerThreadId,
-      ...codexSubagentRouteEventFields(routeContext.route),
     });
   }
   if (
@@ -165,9 +183,8 @@ const emitPendingEvent = (
     context.sessionForThreadId(routeContext.route.parentExternalSessionId)
   ) {
     context.emitSessionEvent(routeContext.route.parentExternalSessionId, {
-      ...event,
+      ...routedEvent,
       externalSessionId: routeContext.route.parentExternalSessionId,
-      ...codexSubagentRouteEventFields(routeContext.route),
     });
   }
 };
@@ -207,7 +224,7 @@ export const handleCodexServerRequest = async (
     }
   };
 
-  if (typeof rawRequest.method !== "string" || rawRequest.method.trim().length === 0) {
+  if (rawRequest.method.trim().length === 0) {
     throw new Error("Codex app-server server request is missing method.");
   }
 
@@ -217,7 +234,7 @@ export const handleCodexServerRequest = async (
       `Cannot handle Codex server request '${rawRequest.method}' for thread '${routeContext.ownerThreadId}' from session '${session.threadId}' because there is no known session or subagent route for the request owner.`,
     );
   }
-  const requestTurnId = extractTurnId(rawRequest.params);
+  const requestTurnId = codexServerRequestTurnId(rawRequest);
   const activeTurn =
     context.activeTurnsBySessionId.get(routeContext.ownerThreadId) ??
     (routeContext.ownerThreadId === routeContext.policySession.threadId
@@ -239,7 +256,7 @@ export const handleCodexServerRequest = async (
 
     const workflowToolDecision = decideTrustedOdtTool(
       routeContext.policySession,
-      mcpElicitationApproval.metadata?.serverName,
+      mcpElicitationApproval.metadata.serverName,
       mcpElicitationApproval.tool?.name,
     );
     if (workflowToolDecision.kind === "reject") {
@@ -286,17 +303,16 @@ export const handleCodexServerRequest = async (
     let registeredRequestId: string | null = null;
     runWhileHandled(
       () => {
-        const registration = context.pendingInput.addApproval({
+        const approvalInput: Parameters<typeof context.pendingInput.addApproval>[0] = {
           runtimeId: routeContext.runtimeId,
           threadId: routeContext.ownerThreadId,
-          nativeRequest: {
-            id: requestId,
-            method: rawRequest.method,
-            ...(rawRequest.params !== undefined ? { params: rawRequest.params } : {}),
-          },
+          nativeRequest: rawRequest,
           request: mcpElicitationApproval,
-          ...(routeContext.route ? { route: routeContext.route } : {}),
-        });
+        };
+        if (routeContext.route) {
+          approvalInput.route = routeContext.route;
+        }
+        const registration = context.pendingInput.addApproval(approvalInput);
         if (!registration.isNew) {
           return;
         }
@@ -332,25 +348,23 @@ export const handleCodexServerRequest = async (
     if (activeTurn && context.bindActiveTurnId(activeTurn, parsed.turnId, requestReceivedAtMs)) {
       context.flushQueuedUserMessagesLater(activeTurn);
     }
-    const questionInput = {
-      questions: parsed.request.questions,
-    };
+    const questions = toCodexToolQuestions(parsed.request.questions);
+    const questionInput = { questions };
     let registeredRequestId: string | null = null;
     runWhileHandled(
       () => {
-        const registration = context.pendingInput.addQuestion({
+        const questionEntry: Parameters<typeof context.pendingInput.addQuestion>[0] = {
           runtimeId: routeContext.runtimeId,
           threadId: routeContext.ownerThreadId,
-          nativeRequest: {
-            id: parsed.serverRequestId,
-            method: rawRequest.method,
-            ...(rawRequest.params !== undefined ? { params: rawRequest.params } : {}),
-          },
+          nativeRequest: rawRequest,
           request: parsed.request,
           questionIds: parsed.questionIds,
           input: questionInput,
-          ...(routeContext.route ? { route: routeContext.route } : {}),
-        });
+        };
+        if (routeContext.route) {
+          questionEntry.route = routeContext.route;
+        }
+        const registration = context.pendingInput.addQuestion(questionEntry);
         if (!registration.isNew) {
           return;
         }
@@ -384,7 +398,7 @@ export const handleCodexServerRequest = async (
               input: questionInput,
               metadata: {
                 codexServerRequest: true,
-                questions: parsed.request.questions,
+                questions,
               },
             }),
           },
@@ -430,17 +444,16 @@ export const handleCodexServerRequest = async (
     let registeredRequestId: string | null = null;
     runWhileHandled(
       () => {
-        const registration = context.pendingInput.addApproval({
+        const approvalInput: Parameters<typeof context.pendingInput.addApproval>[0] = {
           runtimeId: routeContext.runtimeId,
           threadId: routeContext.ownerThreadId,
-          nativeRequest: {
-            id: requestId,
-            method: rawRequest.method,
-            ...(rawRequest.params !== undefined ? { params: rawRequest.params } : {}),
-          },
+          nativeRequest: rawRequest,
           request: parsedApproval,
-          ...(routeContext.route ? { route: routeContext.route } : {}),
-        });
+        };
+        if (routeContext.route) {
+          approvalInput.route = routeContext.route;
+        }
+        const registration = context.pendingInput.addApproval(approvalInput);
         if (!registration.isNew) {
           return;
         }

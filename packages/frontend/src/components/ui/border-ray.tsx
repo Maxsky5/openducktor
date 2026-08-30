@@ -30,6 +30,14 @@ type BorderRayProps = {
   rayLengthMax?: number;
 };
 
+type BorderRayCssVariables = {
+  "--odt-border-ray-color"?: string;
+  "--odt-border-ray-length": string;
+  "--odt-border-ray-perimeter": string;
+  "--odt-border-ray-stroke-width": string;
+  "--odt-border-ray-turn-duration": string;
+};
+
 function parseCssLength(
   rawValue: string,
   host: HTMLElement,
@@ -124,7 +132,7 @@ export function BorderRay({
       updateFromHost(host);
     };
 
-    if (typeof ResizeObserver === "undefined") {
+    if (globalThis.ResizeObserver === undefined) {
       window.addEventListener("resize", syncRect);
       return () => {
         window.removeEventListener("resize", syncRect);
@@ -195,19 +203,21 @@ export function BorderRay({
     rayLengthRatio,
   ]);
 
-  const rayStyle: CSSProperties = {
+  const rayStyle: CSSProperties & BorderRayCssVariables = {
     position: "absolute",
     inset: 0,
     width: "100%",
     height: "100%",
     pointerEvents: "none",
     zIndex: 2,
-    ["--odt-border-ray-turn-duration" as string]: `${Math.max(turnDurationMs, 1)}ms`,
-    ["--odt-border-ray-perimeter" as string]: `${rayGeometry.perimeter}px`,
-    ["--odt-border-ray-length" as string]: `${rayGeometry.rayLength}px`,
-    ["--odt-border-ray-stroke-width" as string]: `${Math.max(strokeWidth, 0.5)}`,
-    ...(color ? { ["--odt-border-ray-color" as string]: color } : {}),
+    "--odt-border-ray-turn-duration": `${Math.max(turnDurationMs, 1)}ms`,
+    "--odt-border-ray-perimeter": `${rayGeometry.perimeter}px`,
+    "--odt-border-ray-length": `${rayGeometry.rayLength}px`,
+    "--odt-border-ray-stroke-width": `${Math.max(strokeWidth, 0.5)}`,
   };
+  if (color) {
+    rayStyle["--odt-border-ray-color"] = color;
+  }
 
   return (
     <svg

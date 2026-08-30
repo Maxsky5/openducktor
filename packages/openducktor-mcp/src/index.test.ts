@@ -2,18 +2,22 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import type { CallToolResult, ListToolsResult } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
 import type { RegisteredToolName } from "./listed-tool-schema";
+import { ODT_TOOL_SCHEMAS } from "./lib";
 import { createMcpServer } from "./mcp-server";
+import { type OdtToolErrorPayload, odtToolErrorPayloadSchema } from "@openducktor/contracts";
+import { mcpToolPayloadSchema, type McpToolPayload } from "./tool-results";
+
+type McpToolObject = Record<string, McpToolPayload>;
+const mcpToolObjectSchema = z.record(z.string(), mcpToolPayloadSchema);
+const isMcpToolObject = (value: McpToolPayload): value is McpToolObject =>
+  mcpToolObjectSchema.safeParse(value).success;
 
 type RecordedRequest = {
   url: string;
-  body: unknown;
-};
-
-type ContentToolResult = {
-  content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
-  structuredContent?: Record<string, unknown>;
-  isError?: boolean;
+  body: McpToolPayload;
 };
 
 const activeServers = new Set<ReturnType<typeof createServer>>();
@@ -39,7 +43,7 @@ const closeServer = async (server: ReturnType<typeof createServer>): Promise<voi
   });
 };
 
-const readJsonBody = async (request: IncomingMessage): Promise<unknown> => {
+const readJsonBody = async (request: IncomingMessage): Promise<McpToolPayload> => {
   const chunks: Buffer[] = [];
   for await (const chunk of request) {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -50,10 +54,10 @@ const readJsonBody = async (request: IncomingMessage): Promise<unknown> => {
     return {};
   }
 
-  return JSON.parse(body);
+  return mcpToolPayloadSchema.parse(JSON.parse(body));
 };
 
-const writeJson = (response: ServerResponse, payload: unknown, statusCode = 200): void => {
+const writeJson = (response: ServerResponse, payload: McpToolPayload, statusCode = 200): void => {
   response.statusCode = statusCode;
   response.setHeader("Access-Control-Allow-Origin", "*");
   response.setHeader("Content-Type", "application/json");
@@ -148,11 +152,7 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
     if (url === "/invoke/odt_read_task") {
       const body = await readJsonBody(request);
       requests.push({ url, body });
-      if (
-        typeof body === "object" &&
-        body !== null &&
-        (body as { taskId?: unknown }).taskId === "missing-task"
-      ) {
+      if (isMcpToolObject(body) && body.taskId === "missing-task") {
         writeJson(
           response,
           {
@@ -166,11 +166,7 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
         );
         return;
       }
-      if (
-        typeof body === "object" &&
-        body !== null &&
-        (body as { taskId?: unknown }).taskId === "bad-response"
-      ) {
+      if (isMcpToolObject(body) && body.taskId === "bad-response") {
         writeJson(response, { task: { id: "bad-response" } });
         return;
       }
@@ -235,13 +231,13 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
     server.on("error", reject);
   });
 
-  const address = server.address();
-  if (!address || typeof address === "string") {
+  const address = z.object({ port: z.number() }).safeParse(server.address());
+  if (!address.success) {
     throw new Error("Mock bridge failed to bind to a TCP port.");
   }
 
   return {
-    url: `http://127.0.0.1:${address.port}`,
+    url: `http://127.0.0.1:${address.data.port}`,
     requests,
   };
 };
@@ -250,7 +246,10 @@ const parseAllowedToolNames = (allowedTools?: string): RegisteredToolName[] | un
   return allowedTools
     ?.split(",")
     .map((toolName) => toolName.trim())
-    .filter((toolName) => toolName.length > 0) as RegisteredToolName[] | undefined;
+    .filter(
+      (toolName): toolName is RegisteredToolName =>
+        toolName.length > 0 && Object.hasOwn(ODT_TOOL_SCHEMAS, toolName),
+    );
 };
 
 const createTransport = async (
@@ -258,54 +257,42 @@ const createTransport = async (
   options: { workspaceId?: string; forbidWorkspaceIdInput?: boolean; allowedTools?: string } = {},
 ) => {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const server = await createMcpServer(
-    {
-      hostUrl,
-      ...(options.workspaceId ? { workspaceId: options.workspaceId } : {}),
-      ...(options.forbidWorkspaceIdInput ? { forbidWorkspaceIdInput: true } : {}),
-    },
-    {
-      allowedToolNames: parseAllowedToolNames(options.allowedTools),
-    },
-  );
+  const context: Parameters<typeof createMcpServer>[0] = { hostUrl };
+  if (options.workspaceId) {
+    context.workspaceId = options.workspaceId;
+  }
+  if (options.forbidWorkspaceIdInput) {
+    context.forbidWorkspaceIdInput = true;
+  }
+  const server = await createMcpServer(context, {
+    allowedToolNames: parseAllowedToolNames(options.allowedTools),
+  });
   activeMcpServers.add(server);
   await server.connect(serverTransport);
   return clientTransport;
 };
 
-const requireContentToolResult = (result: unknown): ContentToolResult => {
-  expect("content" in (result as object)).toBe(true);
-  if (!("content" in (result as object))) {
-    throw new Error("Expected callTool() to return a content-based tool result.");
-  }
-
-  return result as ContentToolResult;
-};
-
-const expectToolError = (
-  result: ContentToolResult,
-): { code?: unknown; message?: unknown; details?: unknown; issues?: unknown } => {
+const expectToolError = (result: CallToolResult): OdtToolErrorPayload["error"] => {
   expect(result.isError).toBe(true);
   expect(result.structuredContent).toBeUndefined();
-  const textPayload = JSON.parse(result.content[0]?.text ?? "null");
-  expect(textPayload).toMatchObject({ ok: false });
-  const error = (textPayload as { error?: unknown }).error;
-  expect(error).toBeTruthy();
-  return error as { code?: unknown; message?: unknown; details?: unknown; issues?: unknown };
+  const textBlock = result.content.find((block) => block.type === "text");
+  if (!textBlock || textBlock.type !== "text") {
+    throw new Error("Expected an MCP text error result.");
+  }
+  const payload = odtToolErrorPayloadSchema.parse(JSON.parse(textBlock.text));
+  expect(payload).toMatchObject({ ok: false });
+  return payload.error;
 };
 
-const readToolInputProperties = (
-  toolsResult: unknown,
-  toolName: string,
-): Record<string, unknown> => {
-  const tools = (toolsResult as { tools?: Array<{ name?: string; inputSchema?: unknown }> }).tools;
-  const tool = tools?.find((entry) => entry.name === toolName);
-  const properties = (tool?.inputSchema as { properties?: Record<string, unknown> } | undefined)
-    ?.properties;
-  if (!properties) {
+const readToolInputProperties = (toolsResult: ListToolsResult, toolName: string): McpToolObject => {
+  const tool = toolsResult.tools.find((entry) => entry.name === toolName);
+  const parsed = z
+    .object({ properties: z.record(z.string(), mcpToolPayloadSchema) })
+    .safeParse(tool?.inputSchema);
+  if (!parsed.success) {
     throw new Error(`Expected ${toolName} to expose input schema properties.`);
   }
-  return properties;
+  return parsed.data.properties;
 };
 
 beforeEach(() => {
@@ -373,7 +360,7 @@ describe("MCP server tool results", () => {
           taskId: "task-1",
         },
       });
-      const contentResult = requireContentToolResult(result);
+      const contentResult = result;
       const error = expectToolError(contentResult);
 
       expect(error.code).toBe("ODT_WORKSPACE_SCOPE_VIOLATION");
@@ -407,12 +394,10 @@ describe("MCP server tool results", () => {
 
     try {
       await client.connect(transport);
-      const result = requireContentToolResult(
-        await client.callTool({
-          name: "odt_read_task",
-          arguments: { taskId: "task-1" },
-        }),
-      );
+      const result = await client.callTool({
+        name: "odt_read_task",
+        arguments: { taskId: " task-1 " },
+      });
 
       expect(result.isError).not.toBe(true);
       expect(result.structuredContent).toEqual(taskSummaryPayload);
@@ -439,7 +424,7 @@ describe("MCP server tool results", () => {
           markdown: "# Plan",
         },
       });
-      const contentResult = requireContentToolResult(result);
+      const contentResult = result;
       const error = expectToolError(contentResult);
 
       expect(error.code).toBe("ODT_HOST_BRIDGE_ERROR");
@@ -463,7 +448,7 @@ describe("MCP server tool results", () => {
           reason: "needs a product decision",
         },
       });
-      const contentResult = requireContentToolResult(result);
+      const contentResult = result;
       const error = expectToolError(contentResult);
 
       expect(error.code).toBe("TASK_TRANSITION_NOT_ALLOWED");
@@ -489,7 +474,7 @@ describe("MCP server tool results", () => {
           taskId: "missing-task",
         },
       });
-      const contentResult = requireContentToolResult(result);
+      const contentResult = result;
       const error = expectToolError(contentResult);
 
       expect(error.code).toBe("ODT_HOST_BRIDGE_ERROR");
@@ -512,7 +497,7 @@ describe("MCP server tool results", () => {
           taskId: "bad-response",
         },
       });
-      const contentResult = requireContentToolResult(result);
+      const contentResult = result;
       const error = expectToolError(contentResult);
 
       expect(error.code).toBe("ODT_HOST_RESPONSE_INVALID");
@@ -607,7 +592,7 @@ describe("MCP server tool results", () => {
     try {
       await client.connect(transport);
       const result = await client.callTool({ name: "odt_get_workspaces", arguments: {} });
-      const contentResult = requireContentToolResult(result);
+      const contentResult = result;
 
       expect(contentResult.structuredContent).toEqual({
         workspaces: [
@@ -660,7 +645,7 @@ describe("MCP server tool results", () => {
           taskId: "task-1",
         },
       });
-      const contentResult = requireContentToolResult(result);
+      const contentResult = result;
 
       expect(contentResult.structuredContent).toEqual(taskSummaryPayload);
       expect(JSON.parse(contentResult.content[0]?.text ?? "null")).toEqual(taskSummaryPayload);
@@ -699,7 +684,7 @@ describe("MCP server tool results", () => {
         name: "odt_read_task_assets",
         arguments: { taskId: "task-1", assetIds },
       });
-      const contentResult = requireContentToolResult(result);
+      const contentResult = result;
 
       expect(contentResult.structuredContent).toBeUndefined();
       expect(contentResult.content).toEqual([
@@ -741,7 +726,7 @@ describe("MCP server tool results", () => {
           taskId: "task-1",
         },
       });
-      const contentResult = requireContentToolResult(result);
+      const contentResult = result;
 
       expect(contentResult.structuredContent).toEqual(taskSummaryPayload);
       expect(bridge.requests).toEqual([
@@ -769,9 +754,7 @@ describe("MCP server tool results", () => {
       await client.connect(transport);
       const tools = await client.listTools();
 
-      const setPlanTool = (
-        tools as { tools?: Array<{ name?: string; description?: string; inputSchema?: unknown }> }
-      ).tools?.find((entry) => entry.name === "odt_set_plan");
+      const setPlanTool = tools.tools.find((entry) => entry.name === "odt_set_plan");
       expect(setPlanTool).toBeTruthy();
 
       expect(setPlanTool?.description).not.toContain("subtask");

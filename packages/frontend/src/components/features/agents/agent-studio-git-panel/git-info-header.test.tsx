@@ -1,3 +1,4 @@
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { afterEach, describe, expect, test } from "bun:test";
 import type { PullRequest } from "@openducktor/contracts";
 import { fireEvent, render, screen } from "@testing-library/react";
@@ -6,9 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryProvider } from "@/lib/query-provider";
 import { GitInfoHeader } from "./git-info-header";
 
-(
-  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 const pullRequest: PullRequest = {
   providerId: "github",

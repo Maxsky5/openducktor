@@ -7,9 +7,9 @@ import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support"
 describe("createClaudePostToolUseHook", () => {
   test("records authoritative execution timing for ordinary tools", async () => {
     const session = createClaudeSession();
-    const timedSession = session as typeof session & {
+    const timedSession: typeof session & {
       toolEndedAtMsByCallId: Map<string, number>;
-    };
+    } = session;
     timedSession.toolEndedAtMsByCallId = new Map();
     const hook = createClaudePostToolUseHook({
       session: timedSession,
@@ -43,9 +43,7 @@ describe("createClaudePostToolUseHook", () => {
 
   test("records authoritative execution timing for failed tools", async () => {
     const session = createClaudeSession();
-    const timedSession = session as typeof session & {
-      toolEndedAtMsByCallId: Map<string, number>;
-    };
+    const timedSession = session;
     timedSession.toolEndedAtMsByCallId = new Map();
     const hook = createClaudePostToolUseHook({
       session: timedSession,

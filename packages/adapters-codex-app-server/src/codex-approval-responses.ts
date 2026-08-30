@@ -5,43 +5,47 @@ import {
   type CodexAppServerGrantedPermissionProfile,
   type CodexAppServerMcpServerElicitationRequestResponse,
   type CodexAppServerPermissionsApprovalResponse,
-  isCodexAppServerRequestPermissionProfile,
   type RuntimeApprovalReplyOutcome,
 } from "@openducktor/contracts";
-import { isPlainObject } from "./codex-app-server-shared";
 import type { CodexServerRequestRecord } from "./types";
 
 export type CodexApprovalOutcome = RuntimeApprovalReplyOutcome;
-
-type GenericCodexApprovalResponse = {
-  approved: boolean;
-  outcome: CodexApprovalOutcome;
-  message: string;
-};
 
 export type CodexApprovalResponse =
   | CodexAppServerCommandExecutionApprovalResponse
   | CodexAppServerExecCommandApprovalResponse
   | CodexAppServerMcpServerElicitationRequestResponse
-  | CodexAppServerPermissionsApprovalResponse
-  | GenericCodexApprovalResponse;
+  | CodexAppServerPermissionsApprovalResponse;
 
 const permissionsResponse = (
-  request: CodexServerRequestRecord,
+  request: Extract<
+    CodexServerRequestRecord,
+    { method: typeof CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_PERMISSIONS_REQUEST_APPROVAL }
+  >,
   outcome: CodexApprovalOutcome,
 ): CodexAppServerPermissionsApprovalResponse => {
-  const approved = outcome !== "reject";
-  const params = isPlainObject(request.params) ? request.params : {};
-  if (!approved || !isCodexAppServerRequestPermissionProfile(params.permissions)) {
+  if (outcome === "reject") {
     return { permissions: {}, scope: "turn" };
   }
+  const profile = request.params.permissions;
 
   const permissions: CodexAppServerGrantedPermissionProfile = {};
-  if (params.permissions.network) {
-    permissions.network = params.permissions.network;
+  if (profile.network) {
+    permissions.network = profile.network;
   }
-  if (params.permissions.fileSystem) {
-    permissions.fileSystem = params.permissions.fileSystem;
+  if (profile.fileSystem) {
+    const fileSystemPermissions: NonNullable<CodexAppServerGrantedPermissionProfile["fileSystem"]> =
+      {
+        read: profile.fileSystem.read,
+        write: profile.fileSystem.write,
+      };
+    if (profile.fileSystem.globScanMaxDepth !== undefined) {
+      fileSystemPermissions.globScanMaxDepth = profile.fileSystem.globScanMaxDepth;
+    }
+    if (profile.fileSystem.entries !== undefined) {
+      fileSystemPermissions.entries = profile.fileSystem.entries;
+    }
+    permissions.fileSystem = fileSystemPermissions;
   }
   return { permissions, scope: outcome === "approve_session" ? "session" : "turn" };
 };
@@ -82,7 +86,11 @@ export const codexApprovalResponseForRequest = ({
   switch (request.method) {
     case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.EXEC_COMMAND_APPROVAL:
       if (!approved) {
-        return { decision: "denied" };
+        return {
+          decision: {
+            denied: { rejection: message ?? "Rejected by user." },
+          },
+        };
       }
       return {
         decision:
@@ -115,10 +123,6 @@ export const codexApprovalResponseForRequest = ({
     case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_PERMISSIONS_REQUEST_APPROVAL:
       return permissionsResponse(request, outcome);
     default:
-      return {
-        approved,
-        outcome,
-        message: message ?? (approved ? "Approved once." : "Rejected."),
-      };
+      throw new Error(`Unsupported Codex approval request method '${request.method}'.`);
   }
 };

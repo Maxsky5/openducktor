@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import type { AgentToolData } from "@openducktor/contracts";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
@@ -75,23 +75,23 @@ const setTaskDocumentsState = (overrides: Partial<TaskDocumentsState> = {}): voi
   };
 };
 
-mock.module("@/components/features/task-details/use-task-documents", () => ({
-  useTaskDocuments: (
-    taskId: string | null,
-    open: boolean,
-    cacheScope = "",
-  ): UseTaskDocumentsReturn => {
-    taskDocumentsHookCalls.push({ taskId, open, cacheScope });
-    return {
-      specDoc: taskDocumentsState.specDoc,
-      planDoc: taskDocumentsState.planDoc,
-      qaDoc: taskDocumentsState.qaDoc,
-      ensureDocumentLoaded: ensureDocumentLoadedMock,
-      reloadDocument: reloadDocumentMock,
-      applyDocumentUpdate: applyDocumentUpdateMock,
-    };
-  },
-}));
+const taskDocumentsModule = await import("@/components/features/task-details/use-task-documents");
+let useTaskDocumentsSpy: { mockRestore(): void };
+const useTaskDocumentsMock = (
+  taskId: string | null,
+  open: boolean,
+  cacheScope = "",
+): UseTaskDocumentsReturn => {
+  taskDocumentsHookCalls.push({ taskId, open, cacheScope });
+  return {
+    specDoc: taskDocumentsState.specDoc,
+    planDoc: taskDocumentsState.planDoc,
+    qaDoc: taskDocumentsState.qaDoc,
+    ensureDocumentLoaded: ensureDocumentLoadedMock,
+    reloadDocument: reloadDocumentMock,
+    applyDocumentUpdate: applyDocumentUpdateMock,
+  };
+};
 
 type UseAgentStudioDocumentsHook =
   (typeof import("./use-agent-studio-documents"))["useAgentStudioDocuments"];
@@ -146,44 +146,49 @@ const createCompletedToolMessage = ({
   id?: string;
   tool?: string;
   toolType?: import("@openducktor/core").AgentToolType;
-  input?: Record<string, unknown>;
+  input?: AgentToolData;
   output?: string;
   content?: string;
-} = {}): AgentMessage => ({
-  id,
-  role: "tool",
-  content,
-  timestamp: "2026-02-22T08:10:00.000Z",
-  meta: {
+} = {}): AgentMessage => {
+  const meta: Extract<NonNullable<AgentMessage["meta"]>, { kind: "tool" }> = {
     kind: "tool",
     partId: `part-${id}`,
     callId: `call-${id}`,
     tool,
     toolType,
     status: "completed",
-    ...(input !== undefined ? { input } : {}),
-    ...(output !== undefined ? { output } : {}),
-  },
-});
+  };
+  if (input !== undefined) {
+    meta.input = input;
+  }
+  if (output !== undefined) {
+    meta.output = output;
+  }
+  return {
+    id,
+    role: "tool",
+    content,
+    timestamp: "2026-02-22T08:10:00.000Z",
+    meta,
+  };
+};
 
 beforeAll(async () => {
   ({ useAgentStudioDocuments } = await import("./use-agent-studio-documents"));
 });
 
-afterAll(async () => {
-  await restoreMockedModules([
-    [
-      "@/components/features/task-details/use-task-documents",
-      () => import("@/components/features/task-details/use-task-documents"),
-    ],
-  ]);
-});
-
 beforeEach(() => {
+  useTaskDocumentsSpy = spyOn(taskDocumentsModule, "useTaskDocuments").mockImplementation(
+    useTaskDocumentsMock,
+  );
   setTaskDocumentsState();
   taskDocumentsHookCalls.length = 0;
   reloadDocumentMock.mockClear();
   applyDocumentUpdateMock.mockClear();
+});
+
+afterEach(() => {
+  useTaskDocumentsSpy.mockRestore();
 });
 
 describe("useAgentStudioDocuments", () => {

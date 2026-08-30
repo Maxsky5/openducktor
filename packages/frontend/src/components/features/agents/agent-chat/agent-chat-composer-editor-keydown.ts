@@ -4,7 +4,6 @@ import type {
   AgentSlashCommand,
   AgentSubagentReference,
 } from "@openducktor/core";
-import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   type AgentChatComposerDraft,
   applyComposerDraftEdit,
@@ -32,8 +31,16 @@ type KeyDownSelection = Pick<
   | "focusTextSegmentWithMemory"
 >;
 
+type ComposerKeyboardEvent = {
+  ctrlKey: boolean;
+  key: string;
+  metaKey: boolean;
+  shiftKey: boolean;
+  preventDefault(): void;
+};
+
 type HandleComposerEditorKeyDownArgs = {
-  event: ReactKeyboardEvent<HTMLDivElement>;
+  event: ComposerKeyboardEvent;
   root: HTMLDivElement;
   sourceDraft: AgentChatComposerDraft;
   activeSelection: ActiveTextSelection | null;
@@ -66,7 +73,7 @@ type HandleComposerEditorKeyDownArgs = {
   applyEditResult: (result: ReturnType<typeof applyComposerDraftEdit>) => boolean;
 };
 
-const isSelectAllShortcut = (event: ReactKeyboardEvent<HTMLDivElement>): boolean => {
+const isSelectAllShortcut = (event: ComposerKeyboardEvent): boolean => {
   return (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a";
 };
 
@@ -79,7 +86,7 @@ const handleReferenceMenuKeyDown = ({
   referenceMenuItems,
   selectSubagentReference,
 }: {
-  event: ReactKeyboardEvent<HTMLDivElement>;
+  event: ComposerKeyboardEvent;
   referenceMenuState: ReferenceMenuState | null;
   activeReferenceIndex: number;
   moveActiveReferenceIndex: (direction: 1 | -1) => boolean;
@@ -131,7 +138,7 @@ const handleSlashMenuKeyDown = ({
   moveActiveSlashIndex,
   selectSlashCommand,
 }: {
-  event: ReactKeyboardEvent<HTMLDivElement>;
+  event: ComposerKeyboardEvent;
   slashMenuState: SlashMenuState | null;
   filteredSlashCommands: AgentSlashCommand[];
   activeSlashIndex: number;
@@ -172,7 +179,7 @@ const handleSkillMenuKeyDown = ({
   moveActiveSkillIndex,
   selectSkillReference,
 }: {
-  event: ReactKeyboardEvent<HTMLDivElement>;
+  event: ComposerKeyboardEvent;
   skillMenuState: SkillMenuState | null;
   filteredSkills: AgentSkillReference[];
   activeSkillIndex: number;
@@ -233,7 +240,7 @@ const removeAdjacentChip = ({
   closeReferenceMenu,
   closeSkillMenu,
 }: {
-  event: ReactKeyboardEvent<HTMLDivElement>;
+  event: ComposerKeyboardEvent;
   sourceDraft: AgentChatComposerDraft;
   repairedSelection: ActiveTextSelection;
   applyEditResult: (result: ReturnType<typeof applyComposerDraftEdit>) => boolean;
@@ -280,7 +287,7 @@ const removeTrailingLineBreak = ({
   closeReferenceMenu,
   closeSkillMenu,
 }: {
-  event: ReactKeyboardEvent<HTMLDivElement>;
+  event: ComposerKeyboardEvent;
   sourceDraft: AgentChatComposerDraft;
   repairedSelection: ActiveTextSelection;
   applyEditResult: (result: ReturnType<typeof applyComposerDraftEdit>) => boolean;
@@ -366,7 +373,7 @@ const removeCurrentLineText = ({
   closeReferenceMenu,
   closeSkillMenu,
 }: {
-  event: ReactKeyboardEvent<HTMLDivElement>;
+  event: ComposerKeyboardEvent;
   sourceDraft: AgentChatComposerDraft;
   repairedSelection: ActiveTextSelection;
   applyEditResult: (result: ReturnType<typeof applyComposerDraftEdit>) => boolean;
@@ -415,7 +422,7 @@ const removeSelectedTextRange = ({
   closeReferenceMenu,
   closeSkillMenu,
 }: {
-  event: ReactKeyboardEvent<HTMLDivElement>;
+  event: ComposerKeyboardEvent;
   sourceDraft: AgentChatComposerDraft;
   selectedRange: ActiveTextSelectionRange | null;
   applyEditResult: (result: ReturnType<typeof applyComposerDraftEdit>) => boolean;

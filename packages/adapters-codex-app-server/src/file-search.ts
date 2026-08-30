@@ -1,4 +1,7 @@
-import type { CodexAppServerFuzzyFileSearchResult } from "@openducktor/contracts";
+import type {
+  CodexAppServerFuzzyFileSearchResponse,
+  CodexAppServerFuzzyFileSearchResult,
+} from "@openducktor/contracts";
 import { type AgentFileSearchResult, detectAgentFileReferenceKind } from "@openducktor/core";
 import { basenameForPath, toProjectRelativePath } from "@openducktor/path-support";
 import type { CodexAppServerClient } from "./types";
@@ -16,80 +19,59 @@ const normalizeReferencePath = (rawPath: string, root: string, index: number): s
   return toProjectRelativePath(trimmedPath, root);
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> => {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-};
-
-const requireStringField = (
-  record: Record<string, unknown>,
-  field: keyof CodexAppServerFuzzyFileSearchResult,
-  index: number,
-): string => {
-  const value = record[field];
-  if (typeof value !== "string") {
-    throw new Error(`Codex fuzzyFileSearch result ${index} must include string field '${field}'.`);
-  }
-  return value;
-};
-
 const requireNonEmptyStringField = (
-  record: Record<string, unknown>,
+  value: string,
   field: keyof CodexAppServerFuzzyFileSearchResult,
   index: number,
 ): string => {
-  const value = requireStringField(record, field, index);
   if (value.trim().length === 0) {
     throw new Error(`Codex fuzzyFileSearch result ${index} has an empty ${field}.`);
   }
   return value;
 };
 
-const requireFiniteNumberField = (
-  record: Record<string, unknown>,
-  field: keyof CodexAppServerFuzzyFileSearchResult,
-  index: number,
-): number => {
-  const value = record[field];
-  if (typeof value !== "number" || !Number.isFinite(value)) {
+const requireFiniteNumberField = (value: number, field: string, index: number): number => {
+  if (!Number.isFinite(value)) {
     throw new Error(`Codex fuzzyFileSearch result ${index} has invalid ${field}.`);
   }
   return value;
 };
 
-const requireIndices = (value: unknown, index: number): number[] | null => {
+const requireIndices = (
+  value: CodexAppServerFuzzyFileSearchResult["indices"],
+  index: number,
+): number[] | null => {
   if (value === null) {
     return null;
   }
-  if (
-    !Array.isArray(value) ||
-    value.some((entry) => typeof entry !== "number" || !Number.isFinite(entry))
-  ) {
+  if (value.some((entry) => !Number.isFinite(entry))) {
     throw new Error(`Codex fuzzyFileSearch result ${index} has invalid indices.`);
   }
   return value;
 };
 
-const requireCodexFileSearchResult = (
-  entry: unknown,
+const requireMatchType = (
+  value: CodexAppServerFuzzyFileSearchResult["match_type"],
   index: number,
-): CodexAppServerFuzzyFileSearchResult => {
-  if (!isRecord(entry)) {
-    throw new Error(`Codex fuzzyFileSearch result ${index} must be an object.`);
-  }
-  const root = requireNonEmptyStringField(entry, "root", index);
-  const path = requireNonEmptyStringField(entry, "path", index);
-  const matchType = requireStringField(entry, "match_type", index);
-  if (matchType !== "file" && matchType !== "directory") {
+): CodexAppServerFuzzyFileSearchResult["match_type"] => {
+  if (value !== "file" && value !== "directory") {
     throw new Error(
-      `Codex fuzzyFileSearch result ${index} has unsupported match_type '${matchType}'.`,
+      `Codex fuzzyFileSearch result ${index} has unsupported match_type '${String(value)}'.`,
     );
   }
+  return value;
+};
+
+const requireCodexFileSearchResult = (
+  entry: CodexAppServerFuzzyFileSearchResult,
+  index: number,
+): CodexAppServerFuzzyFileSearchResult => {
   return {
-    root,
-    path,
-    match_type: matchType,
-    file_name: requireStringField(entry, "file_name", index),
-    score: requireFiniteNumberField(entry, "score", index),
+    root: requireNonEmptyStringField(entry.root, "root", index),
+    path: requireNonEmptyStringField(entry.path, "path", index),
+    match_type: requireMatchType(entry.match_type, index),
+    file_name: entry.file_name,
+    score: requireFiniteNumberField(entry.score, "score", index),
     indices: requireIndices(entry.indices, index),
   };
 };
@@ -112,14 +94,12 @@ const mapCodexFileSearchResult = (
   };
 };
 
-const toCodexFileSearchResults = (response: unknown): AgentFileSearchResult[] => {
-  if (!isRecord(response) || !Array.isArray(response.files)) {
-    throw new Error("Codex fuzzyFileSearch response must include a files array.");
-  }
-  return response.files.map((entry, index) =>
+const toCodexFileSearchResults = (
+  response: CodexAppServerFuzzyFileSearchResponse,
+): AgentFileSearchResult[] =>
+  response.files.map((entry, index) =>
     mapCodexFileSearchResult(requireCodexFileSearchResult(entry, index), index),
   );
-};
 
 export const searchCodexFiles = async (
   client: CodexAppServerClient,

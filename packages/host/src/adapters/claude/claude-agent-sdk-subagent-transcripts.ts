@@ -20,12 +20,13 @@ export const parseClaudeTranscriptTarget = (externalSessionId: string): ClaudeTr
   if (taskIds.length === 0) {
     return { sessionId: externalSessionId };
   }
-  if (!sessionId || taskIds.some((taskId) => !taskId)) {
+  const lastTaskId = taskIds.at(-1);
+  if (!sessionId || !lastTaskId || taskIds.some((taskId) => !taskId)) {
     return { sessionId: externalSessionId };
   }
   return {
     sessionId,
-    subpath: claudeSubagentSubpath(taskIds.at(-1) as string),
+    subpath: claudeSubagentSubpath(lastTaskId),
   };
 };
 

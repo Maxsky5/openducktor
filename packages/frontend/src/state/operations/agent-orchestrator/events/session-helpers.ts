@@ -1,3 +1,5 @@
+import { agentToolDataSchema, type AgentToolData } from "@openducktor/contracts";
+import { z } from "zod";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import type { SessionLifecycleEventContext, SessionPart } from "./session-event-types";
@@ -7,25 +9,28 @@ export const eventTimestampMs = (timestamp: string): number => {
   return Number.isNaN(parsed) ? Date.now() : parsed;
 };
 
-const hasMeaningfulToolInputValue = (value: unknown): boolean => {
-  if (typeof value === "string") {
-    return value.trim().length > 0;
+const stringValueSchema = z.string();
+const numberOrBooleanValueSchema = z.union([z.number(), z.boolean()]);
+
+const hasMeaningfulToolInputValue = (value: AgentToolData[string]): boolean => {
+  const stringResult = stringValueSchema.safeParse(value);
+  if (stringResult.success) {
+    return stringResult.data.trim().length > 0;
   }
-  if (typeof value === "number" || typeof value === "boolean") {
+  if (numberOrBooleanValueSchema.safeParse(value).success) {
     return true;
   }
   if (Array.isArray(value)) {
     return value.some((entry) => hasMeaningfulToolInputValue(entry));
   }
-  if (!value || typeof value !== "object") {
+  const objectValue = agentToolDataSchema.safeParse(value);
+  if (!objectValue.success) {
     return false;
   }
-  return Object.values(value as Record<string, unknown>).some((entry) =>
-    hasMeaningfulToolInputValue(entry),
-  );
+  return Object.values(objectValue.data).some((entry) => hasMeaningfulToolInputValue(entry));
 };
 
-export const hasMeaningfulToolInput = (input: Record<string, unknown> | undefined): boolean => {
+export const hasMeaningfulToolInput = (input: AgentToolData | undefined): boolean => {
   return input ? Object.values(input).some((value) => hasMeaningfulToolInputValue(value)) : false;
 };
 

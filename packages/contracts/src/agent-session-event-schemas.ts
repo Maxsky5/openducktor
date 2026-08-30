@@ -1,43 +1,26 @@
 import { z } from "zod";
 import {
-  type RuntimeApprovalReplyOutcome,
-  type RuntimeApprovalRequestType,
-  type RuntimeSubagentExecutionMode,
   runtimeApprovalReplyOutcomeSchema,
   runtimeApprovalRequestTypeSchema,
   runtimeSubagentExecutionModeSchema,
 } from "./agent-runtime-schemas";
-import {
-  type AgentTranscriptQuestionItem,
-  agentSessionQuestionItemSchema,
-} from "./agent-session-pending-schemas";
+import { agentSessionQuestionItemSchema } from "./agent-session-pending-schemas";
 import {
   type AgentSessionLiveRef,
   agentModelSelectionSchema,
   agentSessionLiveRefSchema,
 } from "./agent-session-schemas";
-import { type FileContent, type FileDiff, fileContentSchema, fileDiffSchema } from "./git-schemas";
-import { type SkillDescriptor, skillDescriptorSchema } from "./skill-schemas";
+import { fileContentSchema, fileDiffSchema } from "./git-schemas";
+
+type ZodSchemaFields = Parameters<typeof z.object>[0];
+import { skillDescriptorSchema } from "./skill-schemas";
 import { slashCommandCatalogSchema } from "./slash-command-schemas";
-import { type SubagentDescriptor, subagentDescriptorSchema } from "./subagent-schemas";
+import { subagentDescriptorSchema } from "./subagent-schemas";
 
 const isoTimestampSchema = z.string().datetime({ offset: true });
 const finiteNonNegativeNumberSchema = z.number().finite().nonnegative();
-const metadataSchema = z.record(z.string(), z.unknown());
-
-type ExactOptional<T> = T extends SkillDescriptor | SubagentDescriptor
-  ? T
-  : T extends readonly (infer Item)[]
-    ? ExactOptional<Item>[]
-    : T extends object
-      ? {
-          [Key in keyof T as undefined extends T[Key] ? never : Key]: ExactOptional<T[Key]>;
-        } & {
-          [Key in keyof T as undefined extends T[Key] ? Key : never]?: ExactOptional<
-            Exclude<T[Key], undefined>
-          >;
-        }
-      : T;
+export const agentToolDataSchema = z.record(z.string(), z.json());
+export type AgentToolData = z.output<typeof agentToolDataSchema>;
 
 export const agentFileReferenceSchema = z
   .object({
@@ -67,47 +50,6 @@ const agentUserMessageSourceTextSchema = z
   })
   .strict();
 
-type AgentTranscriptFileReference = {
-  id: string;
-  path: string;
-  name: string;
-  kind: "directory" | "css" | "code" | "image" | "video" | "default";
-};
-
-type AgentTranscriptAttachmentReference = {
-  id: string;
-  path: string;
-  name: string;
-  kind: "image" | "audio" | "video" | "pdf";
-  mime?: string;
-  localPreviewAvailable?: boolean;
-};
-
-type AgentTranscriptUserMessageSourceText = {
-  value: string;
-  start: number;
-  end: number;
-};
-
-export type AgentTranscriptUserMessageDisplayPart =
-  | { kind: "text"; text: string; synthetic?: boolean }
-  | {
-      kind: "file_reference";
-      file: AgentTranscriptFileReference;
-      sourceText?: AgentTranscriptUserMessageSourceText;
-    }
-  | {
-      kind: "skill_mention";
-      skill: SkillDescriptor;
-      sourceText?: AgentTranscriptUserMessageSourceText;
-    }
-  | {
-      kind: "subagent_reference";
-      subagent: SubagentDescriptor;
-      sourceText?: AgentTranscriptUserMessageSourceText;
-    }
-  | { kind: "attachment"; attachment: AgentTranscriptAttachmentReference };
-
 const inferredAgentUserMessageDisplayPartSchema = z.discriminatedUnion("kind", [
   z
     .object({
@@ -126,14 +68,14 @@ const inferredAgentUserMessageDisplayPartSchema = z.discriminatedUnion("kind", [
   z
     .object({
       kind: z.literal("skill_mention"),
-      skill: skillDescriptorSchema.strict(),
+      skill: skillDescriptorSchema,
       sourceText: agentUserMessageSourceTextSchema.optional(),
     })
     .strict(),
   z
     .object({
       kind: z.literal("subagent_reference"),
-      subagent: subagentDescriptorSchema.strict(),
+      subagent: subagentDescriptorSchema,
       sourceText: agentUserMessageSourceTextSchema.optional(),
     })
     .strict(),
@@ -144,20 +86,28 @@ const inferredAgentUserMessageDisplayPartSchema = z.discriminatedUnion("kind", [
     })
     .strict(),
 ]);
-export const agentUserMessageDisplayPartSchema =
-  inferredAgentUserMessageDisplayPartSchema as unknown as z.ZodType<AgentTranscriptUserMessageDisplayPart>;
+export const agentUserMessageDisplayPartSchema = inferredAgentUserMessageDisplayPartSchema;
+export type AgentTranscriptUserMessageDisplayPart = z.infer<
+  typeof agentUserMessageDisplayPartSchema
+>;
+
+export const agentSessionTodoStatusSchema = z.enum([
+  "pending",
+  "in_progress",
+  "completed",
+  "cancelled",
+]);
+export const agentSessionTodoPrioritySchema = z.enum(["high", "medium", "low"]);
 
 export const agentSessionTodoItemSchema = z
   .object({
     id: z.string(),
     content: z.string(),
-    status: z.enum(["pending", "in_progress", "completed", "cancelled"]),
-    priority: z.enum(["high", "medium", "low"]),
+    status: agentSessionTodoStatusSchema,
+    priority: agentSessionTodoPrioritySchema,
   })
   .strict();
-export type AgentTranscriptSessionTodoItem = ExactOptional<
-  z.infer<typeof agentSessionTodoItemSchema>
->;
+export type AgentTranscriptSessionTodoItem = z.infer<typeof agentSessionTodoItemSchema>;
 
 const agentToolTypeSchema = z.enum([
   "bash",
@@ -171,70 +121,6 @@ const agentToolTypeSchema = z.enum([
   "question",
   "generic",
 ]);
-
-export type AgentTranscriptStreamPart =
-  | {
-      kind: "text";
-      messageId: string;
-      partId: string;
-      text: string;
-      synthetic?: boolean;
-      completed: boolean;
-    }
-  | {
-      kind: "reasoning";
-      messageId: string;
-      partId: string;
-      text: string;
-      completed: boolean;
-    }
-  | {
-      kind: "tool";
-      messageId: string;
-      partId: string;
-      callId: string;
-      tool: string;
-      toolType: z.infer<typeof agentToolTypeSchema>;
-      status: "pending" | "running" | "completed" | "error";
-      preview?: string;
-      title?: string;
-      displayLabel?: string;
-      input?: Record<string, unknown>;
-      output?: string;
-      error?: string;
-      fileDiffs?: FileDiff[];
-      fileContent?: FileContent[];
-      fileChanges?: FileDiff[];
-      metadata?: Record<string, unknown>;
-      startedAtMs?: number;
-      endedAtMs?: number;
-    }
-  | {
-      kind: "step";
-      messageId: string;
-      partId: string;
-      phase: "start" | "finish";
-      reason?: string;
-      cost?: number;
-      totalTokens?: number;
-      contextWindow?: number;
-    }
-  | {
-      kind: "subagent";
-      messageId: string;
-      partId: string;
-      correlationKey: string;
-      status: "pending" | "running" | "completed" | "cancelled" | "error";
-      agent?: string;
-      prompt?: string;
-      description?: string;
-      error?: string;
-      externalSessionId?: string;
-      executionMode?: RuntimeSubagentExecutionMode;
-      metadata?: Record<string, unknown>;
-      startedAtMs?: number;
-      endedAtMs?: number;
-    };
 
 const inferredAgentStreamPartSchema = z.discriminatedUnion("kind", [
   z
@@ -268,13 +154,13 @@ const inferredAgentStreamPartSchema = z.discriminatedUnion("kind", [
       preview: z.string().optional(),
       title: z.string().optional(),
       displayLabel: z.string().optional(),
-      input: z.record(z.string(), z.unknown()).optional(),
+      input: agentToolDataSchema.optional(),
       output: z.string().optional(),
       error: z.string().optional(),
       fileDiffs: z.array(fileDiffSchema.strict()).optional(),
       fileContent: z.array(fileContentSchema.strict()).optional(),
       fileChanges: z.array(fileDiffSchema.strict()).optional(),
-      metadata: metadataSchema.optional(),
+      metadata: agentToolDataSchema.optional(),
       startedAtMs: finiteNonNegativeNumberSchema.optional(),
       endedAtMs: finiteNonNegativeNumberSchema.optional(),
     })
@@ -304,14 +190,14 @@ const inferredAgentStreamPartSchema = z.discriminatedUnion("kind", [
       error: z.string().optional(),
       externalSessionId: z.string().optional(),
       executionMode: runtimeSubagentExecutionModeSchema.optional(),
-      metadata: metadataSchema.optional(),
+      metadata: agentToolDataSchema.optional(),
       startedAtMs: finiteNonNegativeNumberSchema.optional(),
       endedAtMs: finiteNonNegativeNumberSchema.optional(),
     })
     .strict(),
 ]);
-export const agentStreamPartSchema: z.ZodType<AgentTranscriptStreamPart> =
-  inferredAgentStreamPartSchema as unknown as z.ZodType<AgentTranscriptStreamPart>;
+export const agentStreamPartSchema = inferredAgentStreamPartSchema;
+export type AgentTranscriptStreamPart = z.infer<typeof agentStreamPartSchema>;
 
 const agentSessionStatusSchema = z.discriminatedUnion("type", [
   z
@@ -330,83 +216,79 @@ const agentSessionStatusSchema = z.discriminatedUnion("type", [
     })
     .strict(),
 ]);
-export type AgentTranscriptSessionStatus = ExactOptional<z.infer<typeof agentSessionStatusSchema>>;
+export type AgentTranscriptSessionStatus = z.infer<typeof agentSessionStatusSchema>;
 
-export type AgentTranscriptPendingApprovalRequest = {
-  requestId: string;
-  requestInstanceId?: string;
-  requestType: RuntimeApprovalRequestType;
-  title: string;
-  summary?: string;
-  details?: string;
-  affectedPaths?: string[];
-  command?: { command: string; workingDirectory?: string };
-  action?: { name: string; description?: string };
-  tool?: { name: string; title?: string; input?: Record<string, unknown> };
-  mutation?: "mutating" | "read_only" | "unknown";
-  supportedReplyOutcomes?: RuntimeApprovalReplyOutcome[];
-  metadata?: Record<string, unknown>;
-};
-
+const transcriptPendingApprovalRequestFields = {
+  requestId: z.string(),
+  requestInstanceId: z.string().optional(),
+  requestType: runtimeApprovalRequestTypeSchema,
+  title: z.string(),
+  summary: z.string().optional(),
+  details: z.string().optional(),
+  affectedPaths: z.array(z.string()).optional(),
+  command: z
+    .object({
+      command: z.string(),
+      workingDirectory: z.string().optional(),
+    })
+    .strict()
+    .optional(),
+  action: z
+    .object({
+      name: z.string(),
+      description: z.string().optional(),
+    })
+    .strict()
+    .optional(),
+  tool: z
+    .object({
+      name: z.string(),
+      title: z.string().optional(),
+      input: agentToolDataSchema.optional(),
+    })
+    .strict()
+    .optional(),
+  mutation: z.enum(["mutating", "read_only", "unknown"]).optional(),
+  supportedReplyOutcomes: z.array(runtimeApprovalReplyOutcomeSchema).optional(),
+  metadata: agentToolDataSchema.optional(),
+} satisfies ZodSchemaFields;
 const inferredTranscriptPendingApprovalRequestSchema = z
-  .object({
-    requestId: z.string(),
-    requestInstanceId: z.string().optional(),
-    requestType: runtimeApprovalRequestTypeSchema,
-    title: z.string(),
-    summary: z.string().optional(),
-    details: z.string().optional(),
-    affectedPaths: z.array(z.string()).optional(),
-    command: z
-      .object({
-        command: z.string(),
-        workingDirectory: z.string().optional(),
-      })
-      .strict()
-      .optional(),
-    action: z
-      .object({
-        name: z.string(),
-        description: z.string().optional(),
-      })
-      .strict()
-      .optional(),
-    tool: z
-      .object({
-        name: z.string(),
-        title: z.string().optional(),
-        input: z.record(z.string(), z.unknown()).optional(),
-      })
-      .strict()
-      .optional(),
-    mutation: z.enum(["mutating", "read_only", "unknown"]).optional(),
-    supportedReplyOutcomes: z.array(runtimeApprovalReplyOutcomeSchema).optional(),
-    metadata: metadataSchema.optional(),
-  })
+  .object(transcriptPendingApprovalRequestFields)
   .strict();
-export type AgentTranscriptPendingQuestionRequest = {
-  requestId: string;
-  requestInstanceId?: string;
-  questions: AgentTranscriptQuestionItem[];
-};
+export type AgentTranscriptPendingApprovalRequest = z.infer<
+  typeof inferredTranscriptPendingApprovalRequestSchema
+>;
 
+const transcriptPendingQuestionRequestFields = {
+  requestId: z.string(),
+  requestInstanceId: z.string().optional(),
+  questions: z.array(agentSessionQuestionItemSchema),
+} satisfies ZodSchemaFields;
 const inferredTranscriptPendingQuestionRequestSchema = z
-  .object({
-    requestId: z.string(),
-    requestInstanceId: z.string().optional(),
-    questions: z.array(agentSessionQuestionItemSchema),
-  })
+  .object(transcriptPendingQuestionRequestFields)
   .strict();
-const eventBaseShape = {
+export type AgentTranscriptPendingQuestionRequest = z.infer<
+  typeof inferredTranscriptPendingQuestionRequestSchema
+>;
+const eventBaseFields = {
   externalSessionId: z.string(),
   timestamp: isoTimestampSchema,
   sessionRef: agentSessionLiveRefSchema.optional(),
 };
 
-const transcriptEventSchema = <Shape extends z.ZodRawShape>(shape: Shape) =>
-  z.object({ ...eventBaseShape, ...shape }).strict();
+const transcriptEventSchema = <Fields extends ZodSchemaFields>(fields: Fields) =>
+  z.object({ ...eventBaseFields, ...fields }).strict();
 
-export const agentRuntimeEventSchema = z.discriminatedUnion("type", [
+export const agentUserMessageEventSchema = transcriptEventSchema({
+  type: z.literal("user_message"),
+  messageId: z.string(),
+  message: z.string(),
+  parts: z.array(agentUserMessageDisplayPartSchema),
+  state: z.enum(["queued", "read"]),
+  model: agentModelSelectionSchema.optional(),
+});
+
+const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
   transcriptEventSchema({
     type: z.literal("session_started"),
     message: z.string(),
@@ -439,14 +321,7 @@ export const agentRuntimeEventSchema = z.discriminatedUnion("type", [
     type: z.literal("session_context_error"),
     message: z.string(),
   }),
-  transcriptEventSchema({
-    type: z.literal("user_message"),
-    messageId: z.string(),
-    message: z.string(),
-    parts: z.array(agentUserMessageDisplayPartSchema),
-    state: z.enum(["queued", "read"]),
-    model: agentModelSelectionSchema.optional(),
-  }),
+  agentUserMessageEventSchema,
   transcriptEventSchema({
     type: z.literal("assistant_part"),
     part: agentStreamPartSchema,
@@ -471,7 +346,7 @@ export const agentRuntimeEventSchema = z.discriminatedUnion("type", [
   }),
   transcriptEventSchema({
     type: z.literal("approval_required"),
-    ...inferredTranscriptPendingApprovalRequestSchema.shape,
+    ...transcriptPendingApprovalRequestFields,
     parentExternalSessionId: z.string().optional(),
     childExternalSessionId: z.string().optional(),
     subagentCorrelationKey: z.string().optional(),
@@ -486,7 +361,7 @@ export const agentRuntimeEventSchema = z.discriminatedUnion("type", [
   }),
   transcriptEventSchema({
     type: z.literal("question_required"),
-    ...inferredTranscriptPendingQuestionRequestSchema.shape,
+    ...transcriptPendingQuestionRequestFields,
     parentExternalSessionId: z.string().optional(),
     childExternalSessionId: z.string().optional(),
     subagentCorrelationKey: z.string().optional(),
@@ -527,7 +402,8 @@ export const agentRuntimeEventSchema = z.discriminatedUnion("type", [
     message: z.string(),
   }),
 ]);
-export type AgentRuntimeEvent = ExactOptional<z.infer<typeof agentRuntimeEventSchema>>;
+export const agentRuntimeEventSchema = inferredAgentRuntimeEventSchema;
+export type AgentRuntimeEvent = z.infer<typeof agentRuntimeEventSchema>;
 
 export type AgentSessionTranscriptEventType =
   | "session_started"
@@ -546,7 +422,7 @@ export type AgentSessionTranscriptEventType =
   | "session_idle"
   | "session_finished";
 
-const agentSessionTranscriptEventTypes: ReadonlySet<AgentSessionTranscriptEventType> = new Set([
+const agentSessionTranscriptEventTypes: ReadonlySet<string> = new Set([
   "session_started",
   "assistant_delta",
   "assistant_message",
@@ -566,8 +442,7 @@ const agentSessionTranscriptEventTypes: ReadonlySet<AgentSessionTranscriptEventT
 
 export const isAgentSessionTranscriptEventType = (
   type: AgentRuntimeEvent["type"] | string,
-): type is AgentSessionTranscriptEventType =>
-  agentSessionTranscriptEventTypes.has(type as AgentSessionTranscriptEventType);
+): type is AgentSessionTranscriptEventType => agentSessionTranscriptEventTypes.has(type);
 
 export type AgentSessionTranscriptEvent = Extract<
   AgentRuntimeEvent,
@@ -576,11 +451,11 @@ export type AgentSessionTranscriptEvent = Extract<
   sessionRef: AgentSessionLiveRef;
 };
 
-export const agentSessionTranscriptEventSchema: z.ZodType<AgentSessionTranscriptEvent> =
-  agentRuntimeEventSchema.refine(
-    (event) => isAgentSessionTranscriptEventType(event.type) && event.sessionRef !== undefined,
-    {
-      message:
-        "A transcript event must contain a session ref and belong to the ordered session stream.",
-    },
-  ) as unknown as z.ZodType<AgentSessionTranscriptEvent>;
+export const agentSessionTranscriptEventSchema = agentRuntimeEventSchema.refine(
+  (event): event is AgentSessionTranscriptEvent =>
+    isAgentSessionTranscriptEventType(event.type) && event.sessionRef !== undefined,
+  {
+    message:
+      "A transcript event must contain a session ref and belong to the ordered session stream.",
+  },
+);

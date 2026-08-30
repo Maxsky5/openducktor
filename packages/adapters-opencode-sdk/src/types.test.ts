@@ -8,7 +8,7 @@ import type {
 } from "./types";
 
 const createClient: ClientFactory = () => {
-  return {} as OpencodeClient;
+  return {} satisfies OpencodeClient;
 };
 
 describe("types", () => {
@@ -73,7 +73,7 @@ describe("types", () => {
     };
 
     expect(sessionRecord.summary.externalSessionId).toBe("external-session-1");
-    expect(typeof options.createClient).toBe("function");
-    expect(typeof options.logEvent).toBe("function");
+    expect(options.createClient).toBeInstanceOf(Function);
+    expect(options.logEvent).toBeInstanceOf(Function);
   });
 });

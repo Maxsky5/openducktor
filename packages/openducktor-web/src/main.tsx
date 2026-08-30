@@ -6,7 +6,7 @@ import { loadBrowserRuntimeConfig } from "./runtime-config";
 bootstrapOpenDucktorShell({
   prepare: loadBrowserRuntimeConfig,
   createShellBridge: createBrowserShellBridge,
-}).catch((error: unknown) => {
+}).catch((cause: unknown) => {
   showOpenDucktorStartupFailure();
-  console.error("Critical browser bootstrap failure", error);
+  console.error("Critical browser bootstrap failure", cause);
 });

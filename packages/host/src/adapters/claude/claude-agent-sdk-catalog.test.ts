@@ -44,7 +44,7 @@ describe("searchClaudeWorkspaceFiles", () => {
         id: "README.md",
         path: "README.md",
         name: "README.md",
-        kind: "code",
+        kind: "default",
       },
     ]);
   });
@@ -161,8 +161,10 @@ describe("toClaudeSlashCommandCatalog", () => {
         },
         {
           name: "review",
+          description: "",
+          argumentHint: "",
         },
-      ] as never),
+      ]),
     ).toEqual({
       commands: [
         {

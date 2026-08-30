@@ -14,15 +14,7 @@ export function useTaskCloseDialog({
   task,
   onOpenChange,
   onCloseTask,
-}: UseTaskCloseDialogOptions): {
-  isCloseDialogOpen: boolean;
-  isClosePending: boolean;
-  closeError: string | null;
-  openCloseDialog: () => void;
-  closeCloseDialog: () => void;
-  handleCloseDialogOpenChange: (nextOpen: boolean) => void;
-  confirmClose: () => void;
-} {
+}: UseTaskCloseDialogOptions) {
   const canClose = task !== null && onCloseTask !== undefined;
   const runClose = useCallback((): Promise<void> => {
     if (task === null || onCloseTask === undefined) {
@@ -45,5 +37,13 @@ export function useTaskCloseDialog({
     closeCloseDialog: dialog.closeDialog,
     handleCloseDialogOpenChange: dialog.handleDialogOpenChange,
     confirmClose: dialog.confirm,
+  } satisfies {
+    isCloseDialogOpen: boolean;
+    isClosePending: boolean;
+    closeError: string | null;
+    openCloseDialog: () => void;
+    closeCloseDialog: () => void;
+    handleCloseDialogOpenChange: (nextOpen: boolean) => void;
+    confirmClose: () => void;
   };
 }

@@ -10,15 +10,12 @@ type ReviewOutcomePresentation = {
   variant: "success" | "danger" | "secondary" | "outline";
 };
 
-export const REVIEW_OUTCOME_PRESENTATION: Record<
-  PullRequestReviewOutcome,
-  ReviewOutcomePresentation
-> = {
+export const REVIEW_OUTCOME_PRESENTATION = {
   approved: { label: "Approved", variant: "success" },
   changes_requested: { label: "Changes requested", variant: "danger" },
   commented: { label: "Commented", variant: "secondary" },
   dismissed: { label: "Review dismissed", variant: "outline" },
-};
+} satisfies Record<PullRequestReviewOutcome, ReviewOutcomePresentation>;
 
 export const aggregateLabel = (status: PullRequestReviewAggregateStatus): string => {
   if (status === "success") {

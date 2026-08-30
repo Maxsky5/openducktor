@@ -9,15 +9,23 @@ import {
   taskAssetRenderContextSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import type { z } from "zod";
 import { HostValidationError } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
 import type { TaskAssetFilePort } from "../../ports/task-asset-file-port";
 import type { TaskAssetRecord, TaskAssetRegistryPort } from "../../ports/task-asset-registry-port";
 
+export type TaskAssetResponseHeaders = {
+  readonly "Cache-Control": string;
+  readonly "Content-Disposition": string;
+  readonly "Content-Type": TaskAssetMediaType;
+  readonly "X-Content-Type-Options": string;
+};
+
 export type TaskAssetReadResult = {
   bytes: Uint8Array;
   mediaType: TaskAssetMediaType;
-  headers: Readonly<Record<string, string>>;
+  headers: TaskAssetResponseHeaders;
 };
 
 export type TaskAssetBatchReadResult =
@@ -36,8 +44,10 @@ export type TaskAssetBatchReadResult =
     };
 
 export type TaskAssetReadService = {
-  read(input: unknown): Effect.Effect<TaskAssetReadResult | null, TaskAssetError>;
-  readBatch(input: unknown): Effect.Effect<TaskAssetBatchReadResult, TaskAssetError>;
+  read(input: TaskAssetRenderContext): Effect.Effect<TaskAssetReadResult | null, TaskAssetError>;
+  readBatch(
+    input: TaskAssetBatchReadInput,
+  ): Effect.Effect<TaskAssetBatchReadResult, TaskAssetError>;
 };
 
 const taskAssetReadBatchContextSchema = taskAssetRenderContextSchema
@@ -53,6 +63,7 @@ const taskAssetReadBatchContextSchema = taskAssetRenderContextSchema
       ),
   })
   .strict();
+type TaskAssetBatchReadInput = z.input<typeof taskAssetReadBatchContextSchema>;
 
 const serveError = (
   phase: string,
@@ -91,10 +102,7 @@ const contentDisposition = (originalName: string): string => {
   return `inline; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(wellFormedName)}`;
 };
 
-const responseHeaders = (
-  record: TaskAssetRecord,
-  mediaType: TaskAssetMediaType,
-): Readonly<Record<string, string>> => ({
+const responseHeaders = (record: TaskAssetRecord, mediaType: TaskAssetMediaType) => ({
   "Cache-Control": "private, no-store",
   "Content-Disposition": contentDisposition(record.originalName),
   "Content-Type": mediaType,
@@ -136,9 +144,9 @@ export const createTaskAssetReadService = (input: {
     cause: unknown,
     context: Omit<TaskAssetRenderContext, "assetId">,
     assetIds: string[],
-  ) => {
+  ): TaskAssetError => {
     const missingWorkspace = cause instanceof HostValidationError && cause.field === "workspaceId";
-    return new TaskAssetError({
+    const fields = {
       operation: "serve",
       code: missingWorkspace ? "validation" : "filesystem",
       taskId: context.taskId,
@@ -149,8 +157,8 @@ export const createTaskAssetReadService = (input: {
       message: missingWorkspace
         ? "Task assets were not found."
         : "Task asset workspace could not be read.",
-      ...(missingWorkspace ? {} : { cause }),
-    });
+    } satisfies Omit<ConstructorParameters<typeof TaskAssetError>[0], "cause">;
+    return missingWorkspace ? new TaskAssetError(fields) : new TaskAssetError({ ...fields, cause });
   };
 
   const getRegisteredAsset = (repoPath: string, context: TaskAssetRenderContext) =>

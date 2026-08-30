@@ -5,8 +5,8 @@ type RejectMatchers = {
 };
 
 type Matchers<_T> = {
-  toBe(expected: unknown): void;
-  toEqual(expected: unknown): void;
+  toBe<T>(expected: T): void;
+  toEqual<T>(expected: T): void;
   toHaveLength(expected: number): void;
   toThrow(message?: string | RegExp): void;
   rejects: RejectMatchers;

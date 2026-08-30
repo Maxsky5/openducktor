@@ -1,4 +1,3 @@
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { projectClaudeCompletedToolResult } from "./claude-agent-sdk-completed-tool-result";
 import {
@@ -10,9 +9,20 @@ import {
   type ClaudeTodoState,
   rememberClaudeTodoToolResult,
 } from "./claude-agent-sdk-todos";
-import { decodeClaudeToolResultValue, timestampMs } from "./claude-agent-sdk-tool-shapes";
+import {
+  type ClaudeToolResultIngress,
+  type ClaudeUserToolResultIngress,
+  parseClaudeUserToolResultIngress,
+} from "./claude-agent-sdk-ingress-schemas";
+import {
+  type ClaudeDecodedToolResult,
+  type ClaudeDecodedToolUse,
+  decodeClaudeToolResultValue,
+  timestampMs,
+} from "./claude-agent-sdk-tool-shapes";
 import { isClaudeToolUseRetracted } from "./claude-agent-sdk-transcript-correlation";
-import { isRecord } from "./claude-agent-sdk-utils";
+import { HostValidationError } from "../../effect/host-errors";
+import type { ClaudeSdkUserMessageProjection } from "./claude-agent-sdk-message-projection";
 
 type ClaudeToolResultSession = {
   activeBackgroundSubagentTaskIds?: Set<string>;
@@ -22,7 +32,7 @@ type ClaudeToolResultSession = {
   subagentAgentIdsByToolUseId?: Map<string, string>;
   subagentMessageIdsByTaskId: Map<string, string>;
   subagentTaskIdsByToolUseId: Map<string, string>;
-  toolInputsByCallId: Map<string, Record<string, unknown>>;
+  toolInputsByCallId: Map<string, NonNullable<ClaudeDecodedToolUse["input"]>>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
   toolEndedAtMsByCallId?: Map<string, number>;
@@ -31,15 +41,11 @@ type ClaudeToolResultSession = {
   todosById: ClaudeTodoState;
 };
 
-type ClaudeDecodedToolResult = NonNullable<ReturnType<typeof decodeClaudeToolResultValue>>;
-
 const mergeTopLevelToolUseResult = (
   result: ClaudeDecodedToolResult,
-  message: Extract<SDKMessage, { type: "user" }>,
+  toolUseResult: ClaudeToolResultIngress["structuredOutput"],
 ): ClaudeDecodedToolResult => {
-  const rawMessage = message as unknown as Record<string, unknown>;
-  const toolUseResult = rawMessage.tool_use_result;
-  if (!isRecord(toolUseResult)) {
+  if (!toolUseResult) {
     return result;
   }
   return {
@@ -52,28 +58,17 @@ const mergeTopLevelToolUseResult = (
   };
 };
 
-const readToolUseResults = (
-  message: Extract<SDKMessage, { type: "user" }>,
-): ClaudeDecodedToolResult[] => {
-  const direct = decodeClaudeToolResultValue(message.tool_use_result, message.parent_tool_use_id, {
-    allowNonToolResultType: true,
-  });
-  if (direct) {
-    return [mergeTopLevelToolUseResult(direct, message)];
-  }
-
-  const content = (message.message as { content?: unknown }).content;
-  if (Array.isArray(content)) {
-    const results: ClaudeDecodedToolResult[] = [];
-    for (const block of content) {
-      const result = decodeClaudeToolResultValue(block, message.parent_tool_use_id);
-      if (result) {
-        results.push(mergeTopLevelToolUseResult(result, message));
-      }
+const readToolUseResults = (message: ClaudeUserToolResultIngress): ClaudeDecodedToolResult[] => {
+  return message.toolResults.map(({ raw, structuredOutput }) => {
+    const result = decodeClaudeToolResultValue(raw, null);
+    if (!result) {
+      throw new HostValidationError({
+        field: "claudeToolResult",
+        message: "Claude SDK sent a tool result that could not be decoded.",
+      });
     }
-    return results;
-  }
-  return [];
+    return mergeTopLevelToolUseResult(result, structuredOutput);
+  });
 };
 
 export const handleClaudeUserToolResultMessage = ({
@@ -83,11 +78,12 @@ export const handleClaudeUserToolResultMessage = ({
   timestamp,
 }: {
   emit: (event: AgentEvent) => void;
-  message: Extract<SDKMessage, { type: "user" }>;
+  message: ClaudeSdkUserMessageProjection;
   session: ClaudeToolResultSession;
   timestamp: string;
 }): void => {
-  for (const result of readToolUseResults(message)) {
+  const toolResultMessage = parseClaudeUserToolResultIngress(message);
+  for (const result of readToolUseResults(toolResultMessage)) {
     if (isClaudeToolUseRetracted(session, result.toolUseId)) {
       continue;
     }
@@ -109,18 +105,23 @@ export const handleClaudeUserToolResultMessage = ({
       state: session,
       tool,
     });
-    const { part, todos } = projectClaudeCompletedToolResult({
+    const completedResultInput: Parameters<typeof projectClaudeCompletedToolResult>[0] = {
       callId: result.toolUseId,
       endedAtMs,
-      ...(input ? { input } : {}),
       isError: result.isError,
       messageId,
       raw: result.raw,
       resultText: result.text,
-      ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
       state: session.todosById,
       tool,
-    });
+    };
+    if (input) {
+      completedResultInput.input = input;
+    }
+    if (startedAtMs !== undefined) {
+      completedResultInput.startedAtMs = startedAtMs;
+    }
+    const { part, todos } = projectClaudeCompletedToolResult(completedResultInput);
     emit({
       type: "assistant_part",
       externalSessionId: session.externalSessionId,
@@ -136,7 +137,7 @@ export const handleClaudeUserToolResultMessage = ({
       });
     }
     if (tool === "Agent") {
-      emitClaudeAgentToolResultSubagentPart({
+      const subagentResultInput: Parameters<typeof emitClaudeAgentToolResultSubagentPart>[0] = {
         emit,
         isError: result.isError,
         resultRaw: result.raw,
@@ -144,8 +145,11 @@ export const handleClaudeUserToolResultMessage = ({
         session,
         timestamp,
         toolUseId: result.toolUseId,
-        ...(input ? { input } : {}),
-      });
+      };
+      if (input) {
+        subagentResultInput.input = input;
+      }
+      emitClaudeAgentToolResultSubagentPart(subagentResultInput);
     } else if (tool === "TaskStop") {
       emitClaudeTaskStopSubagentPart({
         emit,

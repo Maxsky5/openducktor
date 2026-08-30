@@ -37,7 +37,7 @@ let textMeasureElements: TextMeasureElements | null | undefined;
 const measuredTextWidthCache = new Map<string, number>();
 
 const getTextMeasureElements = (): TextMeasureElements | null => {
-  if (typeof document === "undefined") {
+  if (globalThis.document === undefined) {
     return null;
   }
 
@@ -70,7 +70,7 @@ const measureTextWidth = ({
 }): number | null => {
   const cacheKey = `${kind}:${text}`;
   const cachedWidth = measuredTextWidthCache.get(cacheKey);
-  if (typeof cachedWidth === "number") {
+  if (cachedWidth !== undefined) {
     return cachedWidth;
   }
 
@@ -109,7 +109,7 @@ export const resolveTaskLabelOverflow = (
   const hasCustomMeasurement =
     options.measureLabelWidth !== undefined || options.measureOverflowWidth !== undefined;
 
-  if (typeof document === "undefined" && !hasCustomMeasurement) {
+  if (globalThis.document === undefined && !hasCustomMeasurement) {
     return {
       visibleLabels: labels,
       hiddenLabels: [],

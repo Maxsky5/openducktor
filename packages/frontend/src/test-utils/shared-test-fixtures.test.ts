@@ -25,12 +25,14 @@ describe("shared test fixtures", () => {
   });
 
   test("rejects legacy session association sentinel fields at runtime", () => {
-    expect(() => createAgentSessionFixture({ taskId: "" } as never)).toThrow(
-      "Agent session fixture overrides must declare sessionAssociation instead of taskId.",
-    );
-    expect(() => createAgentSessionFixture({ role: null } as never)).toThrow(
-      "Agent session fixture overrides must declare sessionAssociation instead of role.",
-    );
+    expect(() =>
+      // @ts-expect-error This negative test verifies rejection of the removed taskId field.
+      createAgentSessionFixture({ taskId: "" }),
+    ).toThrow("Agent session fixture overrides must declare sessionAssociation instead of taskId.");
+    expect(() =>
+      // @ts-expect-error This negative test verifies rejection of the removed role field.
+      createAgentSessionFixture({ role: null }),
+    ).toThrow("Agent session fixture overrides must declare sessionAssociation instead of role.");
   });
 
   test("createTaskCardFixture returns isolated nested objects", () => {

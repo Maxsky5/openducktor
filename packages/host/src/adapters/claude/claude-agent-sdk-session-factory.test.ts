@@ -1,10 +1,11 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import * as realClaudeSdk from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { Effect } from "effect";
 import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { claudeSubagentEventSession } from "./claude-agent-sdk-event-session";
+import { createClaudeQueryFixture } from "./claude-agent-sdk-session-io.test-support";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
 import type { CreateClaudeAgentSdkServiceInput } from "./claude-agent-sdk-types";
 
@@ -26,7 +27,7 @@ const createToolDiscovery = (): CreateClaudeAgentSdkServiceInput["toolDiscovery"
 describe("createClaudeAgentSdkSession", () => {
   test("fails a repository session when the workspace-bound OpenDucktor MCP is disconnected", async () => {
     const streamFinished = deferred<void>();
-    const fakeQuery = {
+    const fakeQuery = createClaudeQueryFixture({
       close: () => streamFinished.resolve(),
       initializationResult: async () => ({
         account: {},
@@ -43,17 +44,12 @@ describe("createClaudeAgentSdkSession", () => {
         streamFinished.resolve();
         return { done: true, value: undefined } as const;
       },
-      [Symbol.asyncIterator]: () => ({
-        next: async () => {
-          await streamFinished.promise;
-          return { done: true, value: undefined };
-        },
-      }),
-    } as unknown as realClaudeSdk.Query;
-    mock.module("@anthropic-ai/claude-agent-sdk", () => ({
-      ...realClaudeSdk,
-      query: () => fakeQuery,
-    }));
+      async *[Symbol.asyncIterator]() {
+        await streamFinished.promise;
+        yield* [];
+      },
+    });
+    const querySpy = spyOn(realClaudeSdk, "query").mockImplementation(() => fakeQuery);
 
     try {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
@@ -110,13 +106,13 @@ describe("createClaudeAgentSdkSession", () => {
       expect(sessionStore.get("session-repository")).toBeUndefined();
     } finally {
       streamFinished.resolve();
-      mock.module("@anthropic-ai/claude-agent-sdk", () => realClaudeSdk);
+      querySpy.mockRestore();
     }
   });
 
   test("emits idle after starting an initialized session without a message", async () => {
     const streamFinished = deferred<void>();
-    const fakeQuery = {
+    const fakeQuery = createClaudeQueryFixture({
       close: () => streamFinished.resolve(),
       initializationResult: async () => ({
         account: {},
@@ -126,17 +122,12 @@ describe("createClaudeAgentSdkSession", () => {
         models: [],
         output_style: "default",
       }),
-      [Symbol.asyncIterator]: () => ({
-        next: async () => {
-          await streamFinished.promise;
-          return { done: true, value: undefined };
-        },
-      }),
-    } as unknown as realClaudeSdk.Query;
-    mock.module("@anthropic-ai/claude-agent-sdk", () => ({
-      ...realClaudeSdk,
-      query: () => fakeQuery,
-    }));
+      async *[Symbol.asyncIterator]() {
+        await streamFinished.promise;
+        yield* [];
+      },
+    });
+    const querySpy = spyOn(realClaudeSdk, "query").mockImplementation(() => fakeQuery);
 
     try {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
@@ -198,13 +189,13 @@ describe("createClaudeAgentSdkSession", () => {
       sessionStore.close(session);
     } finally {
       streamFinished.resolve();
-      mock.module("@anthropic-ai/claude-agent-sdk", () => realClaudeSdk);
+      querySpy.mockRestore();
     }
   });
 
   test("shares nested transcript state between SDK hooks and session events", async () => {
     const streamFinished = deferred<void>();
-    const fakeQuery = {
+    const fakeQuery = createClaudeQueryFixture({
       close: () => streamFinished.resolve(),
       initializationResult: async () => ({
         account: {},
@@ -214,21 +205,18 @@ describe("createClaudeAgentSdkSession", () => {
         models: [],
         output_style: "default",
       }),
-      [Symbol.asyncIterator]: () => ({
-        next: async () => {
-          await streamFinished.promise;
-          return { done: true, value: undefined };
-        },
-      }),
-    } as unknown as realClaudeSdk.Query;
+      async *[Symbol.asyncIterator]() {
+        await streamFinished.promise;
+        yield* [];
+      },
+    });
     let capturedOptions: realClaudeSdk.Options | undefined;
-    mock.module("@anthropic-ai/claude-agent-sdk", () => ({
-      ...realClaudeSdk,
-      query: (input: Parameters<typeof realClaudeSdk.query>[0]) => {
+    const querySpy = spyOn(realClaudeSdk, "query").mockImplementation(
+      (input: Parameters<typeof realClaudeSdk.query>[0]) => {
         capturedOptions = input.options;
         return fakeQuery;
       },
-    }));
+    );
 
     try {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
@@ -312,22 +300,19 @@ describe("createClaudeAgentSdkSession", () => {
       sessionStore.close(session);
     } finally {
       streamFinished.resolve();
-      mock.module("@anthropic-ai/claude-agent-sdk", () => realClaudeSdk);
+      querySpy.mockRestore();
     }
   });
 
   test("fails creation when the SDK stream ends before startup completes", async () => {
     const initialization =
       deferred<Awaited<ReturnType<realClaudeSdk.Query["initializationResult"]>>>();
-    const fakeQuery = {
+    const fakeQuery = createClaudeQueryFixture({
       close: () => {},
       initializationResult: () => initialization.promise,
       async *[Symbol.asyncIterator]() {},
-    } as unknown as realClaudeSdk.Query;
-    mock.module("@anthropic-ai/claude-agent-sdk", () => ({
-      ...realClaudeSdk,
-      query: () => fakeQuery,
-    }));
+    });
+    const querySpy = spyOn(realClaudeSdk, "query").mockImplementation(() => fakeQuery);
 
     try {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
@@ -393,13 +378,13 @@ describe("createClaudeAgentSdkSession", () => {
       expect(events.some((event) => event.type === "session_started")).toBe(false);
       expect(sessionStore.get("session-1")).toBeUndefined();
     } finally {
-      mock.module("@anthropic-ai/claude-agent-sdk", () => realClaudeSdk);
+      querySpy.mockRestore();
     }
   });
 
   test("starts a titled fresh session without renaming a transcript that does not exist yet", async () => {
     const streamFinished = deferred<void>();
-    const fakeQuery = {
+    const fakeQuery = createClaudeQueryFixture({
       close: () => streamFinished.resolve(),
       initializationResult: async () => ({
         account: {},
@@ -409,22 +394,19 @@ describe("createClaudeAgentSdkSession", () => {
         models: [],
         output_style: "default",
       }),
-      [Symbol.asyncIterator]: () => ({
-        next: async () => {
-          await streamFinished.promise;
-          return { done: true, value: undefined };
-        },
-      }),
-    } as unknown as realClaudeSdk.Query;
+      async *[Symbol.asyncIterator]() {
+        await streamFinished.promise;
+        yield* [];
+      },
+    });
     const renameSession = mock(async () => {
       throw new Error("fresh sessions must not be renamed before their first message");
     });
     const query = mock((_input: Parameters<typeof realClaudeSdk.query>[0]) => fakeQuery);
-    mock.module("@anthropic-ai/claude-agent-sdk", () => ({
-      ...realClaudeSdk,
-      query,
+    const querySpy = spyOn(realClaudeSdk, "query").mockImplementation(query);
+    const renameSessionSpy = spyOn(realClaudeSdk, "renameSession").mockImplementation(
       renameSession,
-    }));
+    );
 
     try {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
@@ -488,7 +470,8 @@ describe("createClaudeAgentSdkSession", () => {
       sessionStore.close(session);
     } finally {
       streamFinished.resolve();
-      mock.module("@anthropic-ai/claude-agent-sdk", () => realClaudeSdk);
+      querySpy.mockRestore();
+      renameSessionSpy.mockRestore();
     }
   });
 
@@ -502,7 +485,7 @@ describe("createClaudeAgentSdkSession", () => {
       await teardownFinished.promise;
       return { done: true, value: undefined } as const;
     });
-    const fakeQuery = {
+    const fakeQuery = createClaudeQueryFixture({
       close: () => streamFinished.resolve(),
       initializationResult: async () => ({
         account: {},
@@ -512,22 +495,17 @@ describe("createClaudeAgentSdkSession", () => {
         models: [],
         output_style: "default",
       }),
-      [Symbol.asyncIterator]: () => ({
-        next: async () => {
-          await streamFinished.promise;
-          return { done: true, value: undefined };
-        },
-      }),
-      return: queryReturn,
-    } as unknown as realClaudeSdk.Query;
-    mock.module("@anthropic-ai/claude-agent-sdk", () => ({
-      ...realClaudeSdk,
-      query: () => fakeQuery,
-      renameSession: async () => {
-        renameStarted.resolve();
-        throw new Error("rename unavailable");
+      async *[Symbol.asyncIterator]() {
+        await streamFinished.promise;
+        yield* [];
       },
-    }));
+      return: queryReturn,
+    });
+    const querySpy = spyOn(realClaudeSdk, "query").mockImplementation(() => fakeQuery);
+    const renameSessionSpy = spyOn(realClaudeSdk, "renameSession").mockImplementation(async () => {
+      renameStarted.resolve();
+      throw new Error("rename unavailable");
+    });
 
     try {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
@@ -602,7 +580,8 @@ describe("createClaudeAgentSdkSession", () => {
     } finally {
       streamFinished.resolve();
       teardownFinished.resolve();
-      mock.module("@anthropic-ai/claude-agent-sdk", () => realClaudeSdk);
+      querySpy.mockRestore();
+      renameSessionSpy.mockRestore();
     }
   });
 });

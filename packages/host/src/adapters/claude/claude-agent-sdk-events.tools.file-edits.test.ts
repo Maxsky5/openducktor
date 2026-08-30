@@ -20,7 +20,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "acafbb7a-5a73-4ae9-8b4c-0eed96f5aa73",
         session_id: "session-1",
         message: {
           role: "assistant",
@@ -51,7 +51,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "user-1",
+        uuid: "51c09244-13a0-4314-8dc7-c7496b91d087",
         session_id: "session-1",
         parent_tool_use_id: "tool-edit-1",
         tool_use_result: {
@@ -106,7 +106,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "acafbb7a-5a73-4ae9-8b4c-0eed96f5aa73",
         session_id: "session-1",
         message: {
           role: "assistant",
@@ -137,7 +137,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "user-1",
+        uuid: "51c09244-13a0-4314-8dc7-c7496b91d087",
         session_id: "session-1",
         parent_tool_use_id: "tool-edit-1",
         tool_use_result: {
@@ -203,7 +203,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "acafbb7a-5a73-4ae9-8b4c-0eed96f5aa73",
         session_id: "session-1",
         message: {
           role: "assistant",
@@ -234,7 +234,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "user-1",
+        uuid: "51c09244-13a0-4314-8dc7-c7496b91d087",
         session_id: "session-1",
         parent_tool_use_id: "tool-edit-input",
         tool_use_result: {
@@ -282,7 +282,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "acafbb7a-5a73-4ae9-8b4c-0eed96f5aa73",
         session_id: "session-1",
         message: {
           role: "assistant",
@@ -313,7 +313,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "user-1",
+        uuid: "51c09244-13a0-4314-8dc7-c7496b91d087",
         session_id: "session-1",
         parent_tool_use_id: "tool-edit-absolute-input",
         tool_use_result: {
@@ -369,7 +369,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "acafbb7a-5a73-4ae9-8b4c-0eed96f5aa73",
         session_id: "session-1",
         message: {
           role: "assistant",
@@ -408,7 +408,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "user-1",
+        uuid: "51c09244-13a0-4314-8dc7-c7496b91d087",
         session_id: "session-1",
         parent_tool_use_id: "tool-multiedit-input",
         tool_use_result: {
@@ -456,7 +456,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "acafbb7a-5a73-4ae9-8b4c-0eed96f5aa73",
         session_id: "session-1",
         message: {
           role: "assistant",
@@ -487,7 +487,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "user-1",
+        uuid: "51c09244-13a0-4314-8dc7-c7496b91d087",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -563,7 +563,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "acafbb7a-5a73-4ae9-8b4c-0eed96f5aa73",
         session_id: "session-1",
         message: {
           role: "assistant",
@@ -593,7 +593,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "user-1",
+        uuid: "51c09244-13a0-4314-8dc7-c7496b91d087",
         session_id: "session-1",
         parent_tool_use_id: null,
         tool_use_result: {
@@ -660,7 +660,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "acafbb7a-5a73-4ae9-8b4c-0eed96f5aa73",
         session_id: "session-1",
         message: {
           role: "assistant",
@@ -690,7 +690,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "user-1",
+        uuid: "51c09244-13a0-4314-8dc7-c7496b91d087",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -763,7 +763,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "acafbb7a-5a73-4ae9-8b4c-0eed96f5aa73",
         session_id: "session-1",
         message: {
           role: "assistant",
@@ -794,7 +794,7 @@ describe("handleClaudeSdkMessage file edit tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "user-1",
+        uuid: "51c09244-13a0-4314-8dc7-c7496b91d087",
         session_id: "session-1",
         parent_tool_use_id: "tool-notebook-1",
         tool_use_result: {

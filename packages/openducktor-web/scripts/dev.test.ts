@@ -40,8 +40,7 @@ describe("web dev script", () => {
   });
 
   test("keeps the supervisor alive while waiting for the child CLI to stop", async () => {
-    const timer = Symbol("timer") as unknown as ReturnType<typeof setInterval>;
-    const clearedTimers: Array<ReturnType<typeof setInterval>> = [];
+    let intervalCancelled = false;
     let capturedCallback: (() => void) | null = null;
     let finishOperation: () => void = () => {};
     const operation = new Promise<void>((resolve) => {
@@ -49,21 +48,20 @@ describe("web dev script", () => {
     });
 
     const keepAlivePromise = keepWebDevProcessAliveDuring(operation, {
-      clearInterval: (nextTimer) => {
-        clearedTimers.push(nextTimer);
-      },
-      setInterval: (callback) => {
+      scheduleInterval: (callback) => {
         capturedCallback = callback;
-        return timer;
+        return () => {
+          intervalCancelled = true;
+        };
       },
     });
 
     expect(capturedCallback).not.toBeNull();
-    expect(clearedTimers).toEqual([]);
+    expect(intervalCancelled).toBe(false);
 
     finishOperation();
     await keepAlivePromise;
-    expect(clearedTimers).toEqual([timer]);
+    expect(intervalCancelled).toBe(true);
   });
 
   test("uses persistent signal handlers so duplicate wrapper signals do not terminate by default", () => {

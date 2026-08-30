@@ -13,15 +13,12 @@ import { createRuntimeOrchestratorCommandHandlers } from "./runtime-orchestrator
 const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
-const createRuntimeOrchestratorServiceFake = (
-  service: RuntimeOrchestratorService,
-): RuntimeOrchestratorService => service as RuntimeOrchestratorService;
 const createRecordingService = () => {
   const calls: Array<{
     method: keyof RuntimeOrchestratorService;
     input: unknown;
   }> = [];
-  const service = createRuntimeOrchestratorServiceFake({
+  const service: RuntimeOrchestratorService = {
     agentSessionStop(input) {
       return Effect.tryPromise({
         try: async () => {
@@ -174,7 +171,7 @@ const createRecordingService = () => {
           }),
       });
     },
-  });
+  };
   return { calls, service };
 };
 describe("createRuntimeOrchestratorCommandHandlers", () => {

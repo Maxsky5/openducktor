@@ -1,6 +1,6 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { TaskApprovalContext, TaskApprovalContextLoadResult } from "@openducktor/contracts";
-import { createHostClient } from "@openducktor/host-client";
+import type { HostClient } from "@openducktor/host-client";
 import { waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { act } from "react";
@@ -16,10 +16,10 @@ import {
   setAgentChatDraftStorageForTests,
 } from "@/components/features/agents/agent-chat/agent-chat-draft-store";
 import { QueryProvider } from "@/lib/query-provider";
+import { hostClient } from "@/lib/host-client";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import {
-  createAgentSessionFixture,
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "../agents/agent-studio-test-utils";
@@ -32,10 +32,14 @@ import { useTaskApprovalFlow } from "./use-task-approval-flow";
 
 enableReactActEnvironment();
 
-const defaultTaskApprovalContextGet = async (_repoPath: string, _taskId: string) => {
+const defaultTaskApprovalContextGet = async (
+  _repoPath: string,
+  _taskId: string,
+): Promise<TaskApprovalContextLoadResult> => {
   throw new Error("not configured");
 };
-const defaultTaskDirectMerge = async () => ({
+type TaskDirectMerge = HostClient["taskDirectMerge"];
+const defaultTaskDirectMerge: TaskDirectMerge = async () => ({
   outcome: "completed" as const,
   task: createTaskCardFixture({ id: "TASK-1", status: "closed" }),
 });
@@ -52,37 +56,37 @@ const defaultTaskPullRequestUpsert = async () => ({
   mergedAt: undefined,
   closedAt: undefined,
 });
-const defaultGitPushBranch = async () => ({
+type GitPushBranch = HostClient["gitPushBranch"];
+const defaultGitPushBranch: GitPushBranch = async () => ({
   outcome: "pushed" as const,
   remote: "origin",
   branch: "main",
   output: "",
 });
-const defaultGitAbortConflict = async () => {};
+const defaultGitAbortConflict: HostClient["gitAbortConflict"] = async () => ({ output: "" });
 const defaultHumanApproveTask = async () => {};
 const defaultOpenResetImplementation = (_taskId: string) => true;
-const createDefaultAgentSessions = () => [
+const createDefaultAgentSessions = (): Awaited<ReturnType<HostClient["agentSessionsList"]>> => [
   {
-    ...createAgentSessionFixture({
-      externalSessionId: "builder-session-old",
-      sessionAssociation: { kind: "workflow", taskId: "TASK-1", role: "build" },
-
-      workingDirectory: "/repo",
-      startedAt: "2026-03-12T11:59:00Z",
-    }),
+    externalSessionId: "builder-session-old",
+    role: "build",
+    runtimeKind: "opencode",
+    workingDirectory: "/repo",
+    startedAt: "2026-03-12T11:59:00Z",
+    selectedModel: null,
   },
   {
-    ...createAgentSessionFixture({
-      externalSessionId: "builder-session",
-      sessionAssociation: { kind: "workflow", taskId: "TASK-1", role: "build" },
-
-      workingDirectory: "/repo",
-      startedAt: "2026-03-12T12:00:00Z",
-    }),
+    externalSessionId: "builder-session",
+    role: "build",
+    runtimeKind: "opencode",
+    workingDirectory: "/repo",
+    startedAt: "2026-03-12T12:00:00Z",
+    selectedModel: null,
   },
 ];
-const defaultAgentSessionsList = async () => createDefaultAgentSessions();
-const defaultAgentSessionsListForTasks = async () => [
+const defaultAgentSessionsList: HostClient["agentSessionsList"] = async () =>
+  createDefaultAgentSessions();
+const defaultAgentSessionsListForTasks: HostClient["agentSessionsListForTasks"] = async () => [
   { taskId: "TASK-1", agentSessions: createDefaultAgentSessions() },
 ];
 
@@ -97,11 +101,8 @@ const openResetImplementationMock = mock(defaultOpenResetImplementation);
 const agentSessionsListMock = mock(defaultAgentSessionsList);
 const agentSessionsListForTasksMock = mock(defaultAgentSessionsListForTasks);
 const toastLoadingMock = mock(() => "toast-id");
-const toastSuccessMock = mock(() => {});
-const toastErrorMock = mock(() => {});
-const originalToastLoading = toast.loading;
-const originalToastSuccess = toast.success;
-const originalToastError = toast.error;
+const toastSuccessMock = mock(() => "success-toast-id");
+const toastErrorMock = mock(() => "error-toast-id");
 
 type TestStorage = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">;
 
@@ -143,81 +144,81 @@ const createDraftIdentity = (externalSessionId: string): AgentChatDraftSessionId
   workingDirectory: "/repo",
 });
 
-const createUnavailableHostClient = () =>
-  createHostClient(async () => {
-    throw new Error("Host runtime not available. Run inside a supported shell.");
+let restoreDependencySpies = new Array<() => void>();
+
+const registerDependencySpies = (): void => {
+  const originalTaskApprovalContextGet = hostClient.taskApprovalContextGet;
+  const originalTaskDirectMerge = hostClient.taskDirectMerge;
+  const originalTaskDirectMergeComplete = hostClient.taskDirectMergeComplete;
+  const originalTaskPullRequestUpsert = hostClient.taskPullRequestUpsert;
+  const originalGitPushBranch = hostClient.gitPushBranch;
+  const originalGitAbortConflict = hostClient.gitAbortConflict;
+  const originalAgentSessionsList = hostClient.agentSessionsList;
+  const originalAgentSessionsListForTasks = hostClient.agentSessionsListForTasks;
+  const originalSpecGet = hostClient.specGet;
+  const originalPlanGet = hostClient.planGet;
+  const originalQaGetReport = hostClient.qaGetReport;
+  const originalWorkspaceGetRepoConfig = hostClient.workspaceGetRepoConfig;
+  const originalWorkspaceGetSettingsSnapshot = hostClient.workspaceGetSettingsSnapshot;
+
+  hostClient.taskApprovalContextGet = taskApprovalContextGetMock;
+  hostClient.taskDirectMerge = taskDirectMergeMock;
+  hostClient.taskDirectMergeComplete = taskDirectMergeCompleteMock;
+  hostClient.taskPullRequestUpsert = taskPullRequestUpsertMock;
+  hostClient.gitPushBranch = gitPushBranchMock;
+  hostClient.gitAbortConflict = gitAbortConflictMock;
+  hostClient.agentSessionsList = agentSessionsListMock;
+  hostClient.agentSessionsListForTasks = agentSessionsListForTasksMock;
+  hostClient.specGet = async () => ({ markdown: "", updatedAt: null });
+  hostClient.planGet = async () => ({ markdown: "", updatedAt: null });
+  hostClient.qaGetReport = async () => ({ markdown: "", updatedAt: null });
+  hostClient.workspaceGetRepoConfig = async () => ({
+    workspaceId: "workspace-repo",
+    workspaceName: "Repo",
+    repoPath: "/repo",
+    defaultRuntimeKind: "opencode",
+    branchPrefix: "odt/",
+    defaultTargetBranch: { remote: "origin", branch: "main" },
+    git: { providers: {} },
+    hooks: { preStart: [], postComplete: [] },
+    devServers: [],
+    promptOverrides: {},
+    worktreeCopyPaths: [],
+    agentDefaults: {},
   });
+  hostClient.workspaceGetSettingsSnapshot = async () => createSettingsSnapshotFixture();
 
-const buildMockedHost = () => ({
-  ...createUnavailableHostClient(),
-  taskApprovalContextGet: taskApprovalContextGetMock,
-  taskDirectMerge: taskDirectMergeMock,
-  taskDirectMergeComplete: taskDirectMergeCompleteMock,
-  taskPullRequestUpsert: taskPullRequestUpsertMock,
-  gitPushBranch: gitPushBranchMock,
-  gitAbortConflict: gitAbortConflictMock,
-  agentSessionsList: agentSessionsListMock,
-  agentSessionsListForTasks: agentSessionsListForTasksMock,
-  specGet: async () => ({ markdown: "", updatedAt: null }),
-  planGet: async () => ({ markdown: "", updatedAt: null }),
-  qaGetReport: async () => ({ markdown: "", updatedAt: null }),
-  workspaceGetRepoConfig: async () => ({ promptOverrides: {} }),
-  workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
-});
+  const toastLoadingSpy = spyOn(toast, "loading").mockImplementation(toastLoadingMock);
+  const toastSuccessSpy = spyOn(toast, "success").mockImplementation(toastSuccessMock);
+  const toastErrorSpy = spyOn(toast, "error").mockImplementation(toastErrorMock);
 
-const HOST_METHOD_NAMES = [
-  "taskApprovalContextGet",
-  "taskDirectMerge",
-  "taskDirectMergeComplete",
-  "taskPullRequestUpsert",
-  "gitPushBranch",
-  "gitAbortConflict",
-  "agentSessionsList",
-  "agentSessionsListForTasks",
-  "specGet",
-  "planGet",
-  "qaGetReport",
-  "workspaceGetRepoConfig",
-  "workspaceGetSettingsSnapshot",
-] as const;
-
-type HostMethodName = (typeof HOST_METHOD_NAMES)[number];
-type HostLike = Record<HostMethodName, unknown>;
-
-let originalHostMethods: Partial<HostLike> | null = null;
-
-const applyHostMocks = async (): Promise<void> => {
-  const [hostModule, hostClientModule] = await Promise.all([
-    import("@/state/operations/host"),
-    import("@/lib/host-client"),
-  ]);
-  const mockedHost = buildMockedHost();
-  if (!originalHostMethods) {
-    originalHostMethods = Object.fromEntries(
-      HOST_METHOD_NAMES.map((name) => [name, hostClientModule.hostClient[name]]),
-    ) as Partial<HostLike>;
-  }
-  Object.assign(hostClientModule.hostClient, mockedHost);
-  Object.assign(hostModule.host, mockedHost);
-};
-
-const restoreHostMocks = async (): Promise<void> => {
-  if (!originalHostMethods) {
-    return;
-  }
-  const [hostModule, hostClientModule] = await Promise.all([
-    import("@/state/operations/host"),
-    import("@/lib/host-client"),
-  ]);
-  Object.assign(hostClientModule.hostClient, originalHostMethods);
-  Object.assign(hostModule.host, originalHostMethods);
+  restoreDependencySpies = [
+    () => {
+      hostClient.taskApprovalContextGet = originalTaskApprovalContextGet;
+      hostClient.taskDirectMerge = originalTaskDirectMerge;
+      hostClient.taskDirectMergeComplete = originalTaskDirectMergeComplete;
+      hostClient.taskPullRequestUpsert = originalTaskPullRequestUpsert;
+      hostClient.gitPushBranch = originalGitPushBranch;
+      hostClient.gitAbortConflict = originalGitAbortConflict;
+      hostClient.agentSessionsList = originalAgentSessionsList;
+      hostClient.agentSessionsListForTasks = originalAgentSessionsListForTasks;
+      hostClient.specGet = originalSpecGet;
+      hostClient.planGet = originalPlanGet;
+      hostClient.qaGetReport = originalQaGetReport;
+      hostClient.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
+      hostClient.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+    },
+    () => toastLoadingSpy.mockRestore(),
+    () => toastSuccessSpy.mockRestore(),
+    () => toastErrorSpy.mockRestore(),
+  ];
 };
 
 let latestHarnessValue: ReturnType<typeof useTaskApprovalFlow> | null = null;
 
 function createDeferred<TValue>() {
   let resolvePromise!: (value: TValue) => void;
-  let rejectPromise!: (reason?: unknown) => void;
+  let rejectPromise!: (cause?: unknown) => void;
   const promise = new Promise<TValue>((resolve, reject) => {
     resolvePromise = resolve;
     rejectPromise = reject;
@@ -292,18 +293,24 @@ const createMissingBuilderWorktreeApprovalContextResult = (
 
 const createConflictDirectMergeResult = (
   overrides: { currentBranch?: string; workingDir?: string } = {},
-) =>
-  ({
-    outcome: "conflicts" as const,
-    conflict: {
-      operation: "direct_merge_merge_commit" as const,
-      currentBranch: overrides.currentBranch,
-      targetBranch: "main",
-      conflictedFiles: ["src/app.ts"],
-      output: "conflict output",
-      workingDir: overrides.workingDir,
-    },
-  }) as unknown as Awaited<ReturnType<typeof defaultTaskDirectMerge>>;
+): Awaited<ReturnType<TaskDirectMerge>> => {
+  const conflict: Extract<
+    Awaited<ReturnType<TaskDirectMerge>>,
+    { outcome: "conflicts" }
+  >["conflict"] = {
+    operation: "direct_merge_merge_commit",
+    targetBranch: "main",
+    conflictedFiles: ["src/app.ts"],
+    output: "conflict output",
+  };
+  if (overrides.currentBranch) {
+    conflict.currentBranch = overrides.currentBranch;
+  }
+  if (overrides.workingDir) {
+    conflict.workingDir = overrides.workingDir;
+  }
+  return { outcome: "conflicts", conflict };
+};
 
 const createUseTaskApprovalFlowArgs = (
   overrides: Partial<Parameters<typeof useTaskApprovalFlow>[0]>,
@@ -349,16 +356,10 @@ const expectMissingBuilderWorktreeModal = (): TaskApprovalMissingBuilderWorktree
 };
 
 describe("useTaskApprovalFlow", () => {
-  beforeEach(async () => {
+  beforeEach(() => {
     resetAgentChatDraftStoreForTests();
-    await applyHostMocks();
+    registerDependencySpies();
     latestHarnessValue = null;
-    (toast as { loading: typeof toast.loading }).loading =
-      toastLoadingMock as unknown as typeof toast.loading;
-    (toast as { success: typeof toast.success }).success =
-      toastSuccessMock as unknown as typeof toast.success;
-    (toast as { error: typeof toast.error }).error =
-      toastErrorMock as unknown as typeof toast.error;
     toastLoadingMock.mockClear();
     toastSuccessMock.mockClear();
     toastErrorMock.mockClear();
@@ -384,18 +385,16 @@ describe("useTaskApprovalFlow", () => {
     agentSessionsListForTasksMock.mockImplementation(defaultAgentSessionsListForTasks);
   });
 
-  afterAll(async () => {
-    await restoreHostMocks();
-    (toast as { loading: typeof toast.loading }).loading = originalToastLoading;
-    (toast as { success: typeof toast.success }).success = originalToastSuccess;
-    (toast as { error: typeof toast.error }).error = originalToastError;
+  afterEach(() => {
+    for (const restoreSpy of restoreDependencySpies) {
+      restoreSpy();
+    }
+    restoreDependencySpies = [];
   });
 
   test("opens immediately in loading state and does not fetch the settings snapshot", async () => {
     const pendingApprovalContext = createDeferred<TaskApprovalContextLoadResult>();
-    taskApprovalContextGetMock.mockImplementationOnce(
-      (async () => pendingApprovalContext.promise) as unknown as never,
-    );
+    taskApprovalContextGetMock.mockImplementationOnce(async () => pendingApprovalContext.promise);
 
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
@@ -457,9 +456,7 @@ describe("useTaskApprovalFlow", () => {
 
   test("defaults to pull_request mode when GitHub provider is available", async () => {
     const pendingApprovalContext = createDeferred<TaskApprovalContextLoadResult>();
-    taskApprovalContextGetMock.mockImplementationOnce(
-      (async () => pendingApprovalContext.promise) as unknown as never,
-    );
+    taskApprovalContextGetMock.mockImplementationOnce(async () => pendingApprovalContext.promise);
 
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
@@ -524,9 +521,7 @@ describe("useTaskApprovalFlow", () => {
 
   test("defaults to direct_merge mode when no git provider is available", async () => {
     const pendingApprovalContext = createDeferred<TaskApprovalContextLoadResult>();
-    taskApprovalContextGetMock.mockImplementationOnce(
-      (async () => pendingApprovalContext.promise) as unknown as never,
-    );
+    taskApprovalContextGetMock.mockImplementationOnce(async () => pendingApprovalContext.promise);
 
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
@@ -591,7 +586,7 @@ describe("useTaskApprovalFlow", () => {
           targetBranch: { remote: "origin", branch: "main" },
           mergedAt: "2026-03-12T12:00:00Z",
         },
-      }) as unknown as never,
+      }),
     );
 
     const Harness = (): ReactElement | null => {
@@ -626,7 +621,7 @@ describe("useTaskApprovalFlow", () => {
 
   test("opens the recovery modal when the builder worktree is missing", async () => {
     taskApprovalContextGetMock.mockResolvedValueOnce(
-      createMissingBuilderWorktreeApprovalContextResult() as unknown as never,
+      createMissingBuilderWorktreeApprovalContextResult(),
     );
 
     const Harness = (): ReactElement | null => {
@@ -707,7 +702,7 @@ describe("useTaskApprovalFlow", () => {
 
   test("completes the task from missing-builder-worktree recovery and closes the modal", async () => {
     taskApprovalContextGetMock.mockResolvedValueOnce(
-      createMissingBuilderWorktreeApprovalContextResult() as unknown as never,
+      createMissingBuilderWorktreeApprovalContextResult(),
     );
 
     const Harness = (): ReactElement | null => {
@@ -750,7 +745,7 @@ describe("useTaskApprovalFlow", () => {
 
   test("keeps the recovery modal open when completion fails from missing-builder-worktree recovery", async () => {
     taskApprovalContextGetMock.mockResolvedValueOnce(
-      createMissingBuilderWorktreeApprovalContextResult() as unknown as never,
+      createMissingBuilderWorktreeApprovalContextResult(),
     );
     humanApproveTaskMock.mockImplementationOnce(async () => {
       throw new Error("Task is no longer reviewable");
@@ -803,7 +798,7 @@ describe("useTaskApprovalFlow", () => {
 
   test("only closes the recovery modal after reset handoff succeeds", async () => {
     taskApprovalContextGetMock.mockResolvedValueOnce(
-      createMissingBuilderWorktreeApprovalContextResult() as unknown as never,
+      createMissingBuilderWorktreeApprovalContextResult(),
     );
     openResetImplementationMock.mockReturnValueOnce(false).mockReturnValueOnce(true);
 
@@ -897,13 +892,13 @@ describe("useTaskApprovalFlow", () => {
       createReadyTaskApprovalContextResult({
         hasUncommittedChanges: true,
         uncommittedFileCount: 2,
-      }) as unknown as never,
+      }),
     );
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createReadyTaskApprovalContextResult({
         hasUncommittedChanges: false,
         uncommittedFileCount: 0,
-      }) as unknown as never,
+      }),
     );
 
     const Harness = (): ReactElement | null => {
@@ -952,16 +947,14 @@ describe("useTaskApprovalFlow", () => {
 
   test("ignores a stale approval-context response from a superseded open cycle", async () => {
     const firstContext = createDeferred<TaskApprovalContextLoadResult>();
-    taskApprovalContextGetMock.mockImplementationOnce(
-      (async () => firstContext.promise) as unknown as never,
-    );
+    taskApprovalContextGetMock.mockImplementationOnce(async () => firstContext.promise);
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createReadyTaskApprovalContextResult({
         taskId: "TASK-2",
         defaultMergeMethod: "rebase",
         hasUncommittedChanges: false,
         providers: [],
-      }) as unknown as never,
+      }),
     );
 
     const Harness = (): ReactElement | null => {
@@ -1031,7 +1024,7 @@ describe("useTaskApprovalFlow", () => {
       createReadyTaskApprovalContextResult({
         targetBranch: { remote: "upstream", branch: "main" },
         publishTarget: { remote: "upstream", branch: "main" },
-      }) as unknown as never,
+      }),
     );
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createReadyTaskApprovalContextResult({
@@ -1043,7 +1036,7 @@ describe("useTaskApprovalFlow", () => {
           targetBranch: { remote: "upstream", branch: "main" },
           mergedAt: "2026-03-12T12:00:00Z",
         },
-      }) as unknown as never,
+      }),
     );
 
     const storage = createMemoryStorage();
@@ -1121,7 +1114,7 @@ describe("useTaskApprovalFlow", () => {
       createReadyTaskApprovalContextResult({
         targetBranch: { branch: "release/2026.03" },
         publishTarget: undefined,
-      }) as unknown as never,
+      }),
     );
 
     const Harness = (): ReactElement | null => {
@@ -1174,7 +1167,7 @@ describe("useTaskApprovalFlow", () => {
       throw new Error("session lookup failed");
     });
     taskApprovalContextGetMock.mockResolvedValueOnce(
-      createReadyTaskApprovalContextResult({ publishTarget: undefined }) as unknown as never,
+      createReadyTaskApprovalContextResult({ publishTarget: undefined }),
     );
 
     const Harness = (): ReactElement | null => {
@@ -1234,7 +1227,7 @@ describe("useTaskApprovalFlow", () => {
           targetBranch: { remote: "origin", branch: "main" },
           mergedAt: "2026-03-12T12:00:00Z",
         },
-      }) as unknown as never,
+      }),
     );
 
     const Harness = (): ReactElement | null => {
@@ -1284,7 +1277,7 @@ describe("useTaskApprovalFlow", () => {
 
   test("opens the git conflict dialog when direct merge returns conflicts", async () => {
     taskApprovalContextGetMock.mockResolvedValueOnce(
-      createReadyTaskApprovalContextResult({ publishTarget: undefined }) as unknown as never,
+      createReadyTaskApprovalContextResult({ publishTarget: undefined }),
     );
     taskDirectMergeMock.mockResolvedValueOnce(createConflictDirectMergeResult());
 
@@ -1335,10 +1328,10 @@ describe("useTaskApprovalFlow", () => {
 
   test("reopens approval in direct_merge mode after aborting a git conflict", async () => {
     taskApprovalContextGetMock.mockResolvedValueOnce(
-      createReadyTaskApprovalContextResult({ publishTarget: undefined }) as unknown as never,
+      createReadyTaskApprovalContextResult({ publishTarget: undefined }),
     );
     taskApprovalContextGetMock.mockResolvedValueOnce(
-      createReadyTaskApprovalContextResult({ publishTarget: undefined }) as unknown as never,
+      createReadyTaskApprovalContextResult({ publishTarget: undefined }),
     );
     taskDirectMergeMock.mockResolvedValueOnce(
       createConflictDirectMergeResult({
@@ -1397,7 +1390,7 @@ describe("useTaskApprovalFlow", () => {
 
   test("keeps the git conflict dialog open when Ask Builder does not start a resolution session", async () => {
     taskApprovalContextGetMock.mockResolvedValueOnce(
-      createReadyTaskApprovalContextResult({ publishTarget: undefined }) as unknown as never,
+      createReadyTaskApprovalContextResult({ publishTarget: undefined }),
     );
     taskDirectMergeMock.mockResolvedValueOnce(
       createConflictDirectMergeResult({
@@ -1457,7 +1450,7 @@ describe("useTaskApprovalFlow", () => {
 
   test("surfaces Ask Builder failures without closing the git conflict dialog", async () => {
     taskApprovalContextGetMock.mockResolvedValueOnce(
-      createReadyTaskApprovalContextResult({ publishTarget: undefined }) as unknown as never,
+      createReadyTaskApprovalContextResult({ publishTarget: undefined }),
     );
     taskDirectMergeMock.mockResolvedValueOnce(
       createConflictDirectMergeResult({
@@ -1529,7 +1522,7 @@ describe("useTaskApprovalFlow", () => {
             reason: undefined,
           },
         ],
-      }) as unknown as never,
+      }),
     );
 
     const Harness = (): ReactElement | null => {
@@ -1610,7 +1603,7 @@ describe("useTaskApprovalFlow", () => {
             reason: undefined,
           },
         ],
-      }) as unknown as never,
+      }),
     );
 
     const Harness = (): ReactElement | null => {
@@ -1677,7 +1670,7 @@ describe("useTaskApprovalFlow", () => {
             reason: undefined,
           },
         ],
-      }) as unknown as never,
+      }),
     );
 
     const { useTaskApprovalFlow } = await import("./use-task-approval-flow");
@@ -1737,7 +1730,7 @@ describe("useTaskApprovalFlow", () => {
     );
     const secondApprovalContext = createDeferred<TaskApprovalContextLoadResult>();
 
-    taskApprovalContextGetMock.mockImplementation((async (_repoPath: string, taskId: string) => {
+    taskApprovalContextGetMock.mockImplementation(async (_repoPath: string, taskId: string) => {
       if (taskId === "TASK-1") {
         return createReadyTaskApprovalContextResult({
           taskId,
@@ -1753,7 +1746,7 @@ describe("useTaskApprovalFlow", () => {
       }
 
       return secondApprovalContext.promise;
-    }) as unknown as never);
+    });
 
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
@@ -1847,7 +1840,7 @@ describe("useTaskApprovalFlow", () => {
             reason: undefined,
           },
         ],
-      }) as unknown as never,
+      }),
     );
     const requestPullRequestGenerationMock = mock(async () => {
       throw new Error("Generation crashed");
@@ -1914,7 +1907,7 @@ describe("useTaskApprovalFlow", () => {
           targetBranch: { branch: "main" },
           mergedAt: "2026-03-12T12:00:00Z",
         },
-      }) as unknown as never,
+      }),
     );
 
     const Harness = (): ReactElement | null => {
@@ -1968,11 +1961,11 @@ describe("useTaskApprovalFlow", () => {
 
   test("uses a fallback message when direct-merge publish fails without output", async () => {
     gitPushBranchMock.mockResolvedValueOnce({
-      outcome: "rejected" as const,
+      outcome: "rejected_non_fast_forward" as const,
       remote: "origin",
       branch: "main",
       output: "",
-    } as unknown as never);
+    });
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createReadyTaskApprovalContextResult({
         directMerge: {
@@ -1981,7 +1974,7 @@ describe("useTaskApprovalFlow", () => {
           targetBranch: { remote: "origin", branch: "main" },
           mergedAt: "2026-03-12T12:00:00Z",
         },
-      }) as unknown as never,
+      }),
     );
 
     const Harness = (): ReactElement | null => {

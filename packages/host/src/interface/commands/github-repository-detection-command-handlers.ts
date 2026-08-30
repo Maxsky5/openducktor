@@ -2,19 +2,29 @@ import type {
   GithubRepositoryDetectionInput,
   GithubRepositoryDetectionService,
 } from "../../application/git/github-repository-detection-service";
-import type { HostCommandHandlers } from "../router/host-command-router";
-import { requireRecord, requireString } from "./command-inputs";
+import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
+import {
+  commandInputRecordSchema,
+  commandInputStringSchema,
+  type HostCommandArgs,
+  requireRecord,
+  requireString,
+} from "./command-inputs";
 
-const parseDetectionInput = (
-  args: Record<string, unknown> | undefined,
-): GithubRepositoryDetectionInput => {
-  const record = requireRecord(args, "workspace_detect_github_repository input");
-  return { repoPath: requireString(record.repoPath, "repoPath") };
+const parseDetectionInput = (args: HostCommandArgs): GithubRepositoryDetectionInput => {
+  const record = requireRecord(
+    commandInputRecordSchema.safeParse(args),
+    "workspace_detect_github_repository input",
+  );
+  return {
+    repoPath: requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath"),
+  };
 };
 
 export const createGithubRepositoryDetectionCommandHandlers = (
   service: GithubRepositoryDetectionService,
-): HostCommandHandlers => ({
-  workspace_detect_github_repository: (args) =>
-    service.detectGithubRepository(parseDetectionInput(args)),
-});
+) =>
+  ({
+    workspace_detect_github_repository: (args) =>
+      service.detectGithubRepository(parseDetectionInput(args)),
+  }) satisfies HostCommandHandlerDefinitions;

@@ -1,20 +1,30 @@
-import type { AgentSessionTodoItem, LoadAgentSessionTodosInput } from "@openducktor/core";
+import { type AgentSessionTodoItem, type LoadAgentSessionTodosInput } from "@openducktor/core";
+import { z } from "zod";
 import { isNestedHistoryEntry } from "./claude-agent-sdk-history-entry";
 import {
   type ClaudeHistoryMessage,
   loadClaudeRawHistoryMessages,
 } from "./claude-agent-sdk-history-import";
+import { parseClaudeHistoryAssistantEntry } from "./claude-agent-sdk-ingress-schemas";
 import {
   readHistoryToolResults,
   retractedHistoryMessageIds,
 } from "./claude-agent-sdk-history-support";
 import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
-import { decodeClaudeToolUseBlock } from "./claude-agent-sdk-tool-shapes";
+import {
+  type ClaudeDecodedToolResult,
+  type ClaudeDecodedToolUse,
+  decodeClaudeToolUseBlock,
+} from "./claude-agent-sdk-tool-shapes";
 import {
   isClaudeToolUseRetracted,
   retractClaudeTranscriptCorrelations,
 } from "./claude-agent-sdk-transcript-correlation";
-import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import { readStringProp } from "./claude-agent-sdk-utils";
+import {
+  type ClaudeAgentResult,
+  readStructuredClaudeAgentResult,
+} from "./claude-agent-sdk-subagent-results";
 
 export type ClaudeTodoState = Map<string, AgentSessionTodoItem>;
 
@@ -30,70 +40,75 @@ export type ClaudeTodoProjectionState = {
   todosById: ClaudeTodoState;
 };
 
-export const claudeTodoToolPresentation = (
-  todos: readonly AgentSessionTodoItem[],
-): { input: Record<string, unknown>; text: "Plan updated" } => ({
-  input: {
-    todos: todos.map((todo) => ({
-      step: todo.content,
-      status: todo.status,
-    })),
-  },
-  text: "Plan updated",
-});
+export const claudeTodoToolPresentation = (todos: readonly AgentSessionTodoItem[]) =>
+  ({
+    input: {
+      todos: todos.map((todo) => ({
+        step: todo.content,
+        status: todo.status,
+      })),
+    },
+    text: "Plan updated",
+  }) satisfies { input: NonNullable<ClaudeDecodedToolUse["input"]>; text: "Plan updated" };
 
 type ClaudeTaskToolResultInput = {
-  input: Record<string, unknown> | undefined;
+  input: ClaudeDecodedToolUse["input"];
   isError: boolean;
-  raw: Record<string, unknown>;
+  raw: ClaudeDecodedToolResult["raw"];
   state: ClaudeTodoState;
   tool: string;
 };
 
-const readTaskOutput = (raw: Record<string, unknown>): Record<string, unknown> => {
-  if (isRecord(raw.toolUseResult)) {
-    return raw.toolUseResult;
-  }
-  return isRecord(raw.structuredContent) ? raw.structuredContent : raw;
+const readTaskOutput = (raw: ClaudeDecodedToolResult["raw"]): ClaudeAgentResult =>
+  readStructuredClaudeAgentResult(raw);
+
+const claudeTaskStatusSchema = z.enum(["pending", "in_progress", "completed"]);
+const claudeTaskItemSchema = z.object({
+  id: z.string().min(1),
+  status: claudeTaskStatusSchema,
+  subject: z.string().min(1),
+});
+
+const readTaskStatus = (
+  value: ClaudeAgentResult[string] | undefined,
+): AgentSessionTodoItem["status"] | null => {
+  const parsed = claudeTaskStatusSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 };
 
-const readTaskStatus = (value: unknown): AgentSessionTodoItem["status"] | null => {
-  if (value === "pending" || value === "in_progress" || value === "completed") {
-    return value;
-  }
-  return null;
-};
-
-const readTaskItem = (value: unknown): AgentSessionTodoItem | null => {
-  if (!isRecord(value)) {
+const readTaskItem = (
+  value: ClaudeAgentResult[string] | undefined,
+): AgentSessionTodoItem | null => {
+  const parsed = claudeTaskItemSchema.safeParse(value);
+  if (!parsed.success) {
     return null;
   }
-  const id = readStringProp(value, "id");
-  const content = readStringProp(value, "subject");
-  const status = readTaskStatus(value.status);
-  if (!id || !content || !status) {
-    return null;
-  }
-  return { id, content, status, priority: "medium" };
+  return {
+    id: parsed.data.id,
+    content: parsed.data.subject,
+    status: parsed.data.status,
+    priority: "medium",
+  };
 };
 
-const applyTaskCreate = (state: ClaudeTodoState, output: Record<string, unknown>): boolean => {
-  if (!isRecord(output.task)) {
+const applyTaskCreate = (state: ClaudeTodoState, output: ClaudeAgentResult): boolean => {
+  const task = claudeTaskItemSchema.pick({ id: true, subject: true }).safeParse(output.task);
+  if (!task.success) {
     return false;
   }
-  const id = readStringProp(output.task, "id");
-  const content = readStringProp(output.task, "subject");
-  if (!id || !content) {
-    return false;
-  }
-  state.set(id, { id, content, status: "pending", priority: "medium" });
+  state.set(task.data.id, {
+    id: task.data.id,
+    content: task.data.subject,
+    status: "pending",
+    priority: "medium",
+  });
   return true;
 };
 
 const applyTaskUpdate = (
   state: ClaudeTodoState,
-  input: Record<string, unknown> | undefined,
-  output: Record<string, unknown>,
+  input: ClaudeDecodedToolUse["input"],
+  output: ClaudeAgentResult,
 ): boolean => {
   if (output.success !== true) {
     return false;
@@ -118,7 +133,7 @@ const applyTaskUpdate = (
   return true;
 };
 
-const applyTaskGet = (state: ClaudeTodoState, output: Record<string, unknown>): boolean => {
+const applyTaskGet = (state: ClaudeTodoState, output: ClaudeAgentResult): boolean => {
   if (output.task === null) {
     return false;
   }
@@ -130,7 +145,7 @@ const applyTaskGet = (state: ClaudeTodoState, output: Record<string, unknown>): 
   return true;
 };
 
-const applyTaskList = (state: ClaudeTodoState, output: Record<string, unknown>): boolean => {
+const applyTaskList = (state: ClaudeTodoState, output: ClaudeAgentResult): boolean => {
   if (!Array.isArray(output.tasks)) {
     return false;
   }
@@ -234,7 +249,7 @@ export const toClaudeTodos = (
   options: { includeNestedEntries?: boolean } = {},
 ): AgentSessionTodoItem[] => {
   const projectionState: ClaudeTodoProjectionState = { todosById: new Map() };
-  const toolInputsByCallId = new Map<string, Record<string, unknown>>();
+  const toolInputsByCallId = new Map<string, NonNullable<ClaudeDecodedToolUse["input"]>>();
   const toolMessageIdsByCallId = new Map<string, string>();
   const toolNamesByCallId = new Map<string, string>();
   const correlationState = {
@@ -256,14 +271,8 @@ export const toClaudeTodos = (
       continue;
     }
     if (entry.type === "assistant") {
-      const content = isRecord(entry.message) ? entry.message.content : undefined;
-      if (!Array.isArray(content)) {
-        continue;
-      }
+      const content = parseClaudeHistoryAssistantEntry(entry).message.content;
       for (const [index, block] of content.entries()) {
-        if (!isRecord(block)) {
-          continue;
-        }
         const toolUse = decodeClaudeToolUseBlock({
           block,
           fallbackMessageId: entry.uuid,

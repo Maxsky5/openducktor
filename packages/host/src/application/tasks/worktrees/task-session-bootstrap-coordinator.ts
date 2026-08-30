@@ -42,12 +42,14 @@ export const createTaskSessionBootstrapCoordinator = () => {
     taskId: string,
     failureMessage?: string,
   ): TaskSessionBootstrapTerminalOutcome => {
-    const terminal = {
+    const terminal: TaskSessionBootstrapTerminalOutcome = {
       outcome,
       repoPath,
       taskId,
-      ...(failureMessage ? { failureMessage } : {}),
     };
+    if (failureMessage) {
+      terminal.failureMessage = failureMessage;
+    }
     terminalOutcomes.set(bootstrapId, terminal);
     if (terminalOutcomes.size > 128) {
       const oldest = terminalOutcomes.keys().next().value;

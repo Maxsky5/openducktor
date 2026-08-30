@@ -517,7 +517,7 @@ const createFakeGitPort = ({
           }),
       });
     },
-  }) as GitPort as unknown as GitPort;
+  }) satisfies GitPort;
 const createFakeSettingsConfig = (
   config: GlobalConfig | null,
   existingPaths?: Set<string>,

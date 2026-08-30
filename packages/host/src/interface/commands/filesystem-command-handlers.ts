@@ -4,11 +4,10 @@ import {
 } from "@openducktor/contracts";
 import type { FilesystemService } from "../../application/filesystem/filesystem-service";
 import { HostValidationError } from "../../effect/host-errors";
-import type { HostCommandHandlers } from "../router/host-command-router";
+import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
+import type { HostCommandArgs } from "./command-inputs";
 
-const parseFilesystemListDirectoryArgs = (
-  args: Record<string, unknown> | undefined,
-): FilesystemListDirectoryInput => {
+const parseFilesystemListDirectoryArgs = (args: HostCommandArgs): FilesystemListDirectoryInput => {
   const parsed = filesystemListDirectoryInputSchema.safeParse(args ?? {});
   if (!parsed.success) {
     throw new HostValidationError({
@@ -19,9 +18,8 @@ const parseFilesystemListDirectoryArgs = (
   return parsed.data;
 };
 
-export const createFilesystemCommandHandlers = (
-  filesystemService: FilesystemService,
-): HostCommandHandlers => ({
-  filesystem_list_directory: (args) =>
-    filesystemService.listDirectory(parseFilesystemListDirectoryArgs(args)),
-});
+export const createFilesystemCommandHandlers = (filesystemService: FilesystemService) =>
+  ({
+    filesystem_list_directory: (args) =>
+      filesystemService.listDirectory(parseFilesystemListDirectoryArgs(args)),
+  }) satisfies HostCommandHandlerDefinitions;

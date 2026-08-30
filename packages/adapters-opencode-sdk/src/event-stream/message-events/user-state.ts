@@ -1,5 +1,4 @@
 import type { AgentUserMessageDisplayPart, AgentUserMessageState } from "@openducktor/core";
-import { readStringProp } from "../../guards";
 import type { readMessageModelSelection } from "../../message-normalizers";
 import type { QueuedUserMessageSend, SessionRecord } from "../../types";
 import {
@@ -7,18 +6,6 @@ import {
   buildQueuedDisplaySignature,
 } from "../../user-message-signatures";
 import type { EventStreamRuntime } from "../shared";
-
-export const readExplicitUserMessageState = (
-  ...sources: Array<unknown>
-): AgentUserMessageState | undefined => {
-  for (const source of sources) {
-    const rawState = readStringProp(source, ["state"]);
-    if (rawState === "queued" || rawState === "read") {
-      return rawState;
-    }
-  }
-  return undefined;
-};
 
 export const takeQueuedUserSendMatch = (
   runtime: EventStreamRuntime,
@@ -31,21 +18,32 @@ export const takeQueuedUserSendMatch = (
     return null;
   }
 
-  const signature = buildQueuedDisplaySignature({
+  const signatureInput: Parameters<typeof buildQueuedDisplaySignature>[0] = {
     visible,
     parts,
-    ...(model ? { model } : {}),
-  });
-  const attachmentIdentitySignature = buildQueuedDisplayAttachmentIdentitySignature({
-    visible,
-    parts,
-    ...(model ? { model } : {}),
-  });
-  const matchIndex = session.pendingQueuedUserMessages.findIndex(
+  };
+  if (model) {
+    signatureInput.model = model;
+  }
+  const signature = buildQueuedDisplaySignature(signatureInput);
+  const attachmentIdentitySignature = buildQueuedDisplayAttachmentIdentitySignature(signatureInput);
+  const modelFreeSignature = model ? buildQueuedDisplaySignature({ visible, parts }) : signature;
+  const modelFreeAttachmentIdentitySignature = model
+    ? buildQueuedDisplayAttachmentIdentitySignature({ visible, parts })
+    : attachmentIdentitySignature;
+  const exactMatchIndex = session.pendingQueuedUserMessages.findIndex(
     (entry) =>
       entry.signature === signature ||
       entry.attachmentIdentitySignature === attachmentIdentitySignature,
   );
+  const matchIndex =
+    exactMatchIndex >= 0
+      ? exactMatchIndex
+      : session.pendingQueuedUserMessages.findIndex(
+          (entry) =>
+            entry.signature === modelFreeSignature ||
+            entry.attachmentIdentitySignature === modelFreeAttachmentIdentitySignature,
+        );
   if (matchIndex < 0) {
     return null;
   }

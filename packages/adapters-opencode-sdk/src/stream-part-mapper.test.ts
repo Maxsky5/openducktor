@@ -1,11 +1,30 @@
 import { describe, expect, test } from "bun:test";
-import type { Part } from "@opencode-ai/sdk/v2/client";
+import { z } from "zod";
+import {
+  type OpenCodeProtocolObject,
+  type OpenCodeProtocolValue,
+  opencodeProtocolValueSchema,
+} from "./guards";
+import type { ParsedOpencodePart } from "./opencode-ingress";
 import { mapOpenCodeBackgroundTaskResultPart } from "./opencode-background-task-result";
 import { mapPartToAgentStreamPart } from "./stream-part-mapper";
 
+type ToolPart = Extract<ParsedOpencodePart, { type: "tool" }>;
+type ToolState = ToolPart["state"];
+
+const serializeToolResult = (value: OpenCodeProtocolValue | undefined): string => {
+  if (value === undefined) {
+    return "";
+  }
+  const parsed = opencodeProtocolValueSchema.parse(value);
+  const text = z.string().safeParse(parsed);
+  return text.success ? text.data : JSON.stringify(parsed);
+};
+
 const createToolPart = ({
   id,
-  status,
+  messageID,
+  status = "completed",
   input = {},
   output,
   error,
@@ -15,47 +34,66 @@ const createToolPart = ({
   tool = "todowrite",
 }: {
   id: string;
-  status?: string;
-  input?: Record<string, unknown>;
-  output?: unknown;
-  error?: unknown;
-  title?: unknown;
-  metadata?: Record<string, unknown>;
+  messageID?: string;
+  status?: ToolState["status"];
+  input?: OpenCodeProtocolObject;
+  output?: OpenCodeProtocolValue;
+  error?: string;
+  title?: string;
+  metadata?: OpenCodeProtocolObject;
   time?: { start?: number; end?: number };
   tool?: string;
-}): Part => {
-  const state: Record<string, unknown> = {
-    input,
-  };
-
-  if (status !== undefined) {
-    state.status = status;
-  }
-  if (output !== undefined) {
-    state.output = output;
-  }
-  if (error !== undefined) {
-    state.error = error;
-  }
-  if (title !== undefined) {
-    state.title = title;
-  }
-  if (metadata !== undefined) {
-    state.metadata = metadata;
-  }
-  if (time !== undefined) {
-    state.time = time;
+}): ToolPart => {
+  let state: ToolState;
+  switch (status) {
+    case "pending":
+      state = { status, input, raw: "" };
+      break;
+    case "running":
+      state = {
+        status,
+        input,
+        time: { start: time?.start ?? 1 },
+      };
+      if (title !== undefined) {
+        state.title = title;
+      }
+      if (metadata !== undefined) {
+        state.metadata = metadata;
+      }
+      break;
+    case "completed":
+      state = {
+        status,
+        input,
+        output: serializeToolResult(output),
+        title: title ?? "",
+        metadata: metadata ?? {},
+        time: { start: time?.start ?? 1, end: time?.end ?? 2 },
+      };
+      break;
+    case "error":
+      state = {
+        status,
+        input,
+        error: serializeToolResult(error),
+        time: { start: time?.start ?? 1, end: time?.end ?? 2 },
+      };
+      if (metadata !== undefined) {
+        state.metadata = metadata;
+      }
+      break;
   }
 
   return {
     id,
     sessionID: "session-1",
-    messageID: `assistant-${id}`,
+    messageID: messageID ?? `assistant-${id}`,
     callID: `call-${id}`,
     type: "tool",
     tool,
     state,
-  } as unknown as Part;
+  };
 };
 
 const createSyntheticTextPart = ({
@@ -66,16 +104,20 @@ const createSyntheticTextPart = ({
   id: string;
   text: string;
   time?: { end?: number };
-}): Part =>
-  ({
+}): Extract<ParsedOpencodePart, { type: "text" }> => {
+  const part: Extract<ParsedOpencodePart, { type: "text" }> = {
     id,
     sessionID: "session-1",
     messageID: `user-${id}`,
     type: "text",
     synthetic: true,
     text,
-    ...(time ? { time } : {}),
-  }) as unknown as Part;
+  };
+  if (time) {
+    part.time = { start: 1, ...time };
+  }
+  return part;
+};
 
 describe("stream-part-mapper", () => {
   test("uses normalized task strategies for subagent mapping", () => {
@@ -94,7 +136,7 @@ describe("stream-part-mapper", () => {
   });
 
   test("maps raw subtask parts to canonical subagent parts", () => {
-    const part = {
+    const part: Extract<ParsedOpencodePart, { type: "subtask" }> = {
       id: "subtask-1",
       sessionID: "session-1",
       messageID: "assistant-subtask-1",
@@ -102,9 +144,9 @@ describe("stream-part-mapper", () => {
       agent: "build",
       prompt: "Implement the plan",
       description: "Implement the plan",
-      model: "gpt-5",
+      model: { providerID: "openai", modelID: "gpt-5" },
       command: "build",
-    } as unknown as Part;
+    };
 
     const mapped = mapPartToAgentStreamPart(part);
 
@@ -118,7 +160,7 @@ describe("stream-part-mapper", () => {
       prompt: "Implement the plan",
       description: "Implement the plan",
       metadata: {
-        model: "gpt-5",
+        model: { providerID: "openai", modelID: "gpt-5" },
         command: "build",
       },
     });
@@ -250,44 +292,6 @@ describe("stream-part-mapper", () => {
       status: "error",
       error: "Task failed",
       externalSessionId: "session-child-background-error-1",
-      executionMode: "background",
-      endedAtMs: 40,
-    });
-  });
-
-  test("preserves cancelled background task tool results as terminal", () => {
-    const part = createToolPart({
-      id: "tool-background-task-cancelled-1",
-      tool: "task",
-      status: "cancelled",
-      input: {
-        subagent_type: "build",
-        prompt: "Inspect the repo",
-      },
-      output: [
-        '<task id="session-child-background-cancelled-1" state="running">',
-        "<summary>Background task started</summary>",
-        "<task_result>",
-        "The task is running in the background.",
-        "</task_result>",
-        "</task>",
-      ].join("\n"),
-      metadata: {
-        background: true,
-        sessionId: "session-child-background-cancelled-1",
-      },
-      time: {
-        start: 10,
-        end: 40,
-      },
-    });
-
-    const mapped = mapPartToAgentStreamPart(part);
-
-    expect(mapped).toMatchObject({
-      kind: "subagent",
-      status: "cancelled",
-      externalSessionId: "session-child-background-cancelled-1",
       executionMode: "background",
       endedAtMs: 40,
     });
@@ -695,42 +699,6 @@ describe("stream-part-mapper", () => {
     });
   });
 
-  test("preserves cancelled subagent tool statuses", () => {
-    const part = createToolPart({
-      id: "tool-subagent-cancelled-1",
-      tool: "delegate",
-      status: "cancelled",
-      input: {
-        agent: "planner",
-        prompt: "Inspect the tests",
-      },
-      output: {
-        result: "Cancelled by user",
-        externalSessionId: "session-child-cancelled-1",
-      },
-      time: {
-        start: 10,
-        end: 25,
-      },
-    });
-
-    const mapped = mapPartToAgentStreamPart(part);
-
-    expect(mapped).toEqual({
-      kind: "subagent",
-      messageId: "assistant-tool-subagent-cancelled-1",
-      partId: "tool-subagent-cancelled-1",
-      correlationKey: "spawn:assistant-tool-subagent-cancelled-1:planner:Inspect the tests",
-      status: "cancelled",
-      agent: "planner",
-      prompt: "Inspect the tests",
-      description: "Cancelled by user",
-      externalSessionId: "session-child-cancelled-1",
-      startedAtMs: 10,
-      endedAtMs: 25,
-    });
-  });
-
   test("preserves structured subagent tool failures as error status", () => {
     const part = createToolPart({
       id: "tool-subagent-error-1",
@@ -778,7 +746,7 @@ describe("stream-part-mapper", () => {
     const part = createToolPart({
       id: "tool-subagent-direct-error-1",
       tool: "task",
-      status: "failed",
+      status: "error",
       input: {
         subagent_type: "explorer",
         prompt: "Read the file at ~/maxsky5.omp.json",
@@ -813,31 +781,6 @@ describe("stream-part-mapper", () => {
       },
       startedAtMs: 10,
       endedAtMs: 300_010,
-    });
-  });
-
-  test("maps completed subagent tool parts with direct runtime errors as error status", () => {
-    const part = createToolPart({
-      id: "tool-subagent-completed-direct-error-1",
-      tool: "task",
-      status: "completed",
-      input: {
-        subagent_type: "explorer",
-        prompt: "Read omp.json file",
-      },
-      error: "Timed out after 5m while waiting for permission.",
-      time: {
-        start: 10,
-        end: 300_010,
-      },
-    });
-
-    const mapped = mapPartToAgentStreamPart(part);
-
-    expect(mapped).toMatchObject({
-      kind: "subagent",
-      status: "error",
-      error: "Timed out after 5m while waiting for permission.",
     });
   });
 
@@ -879,7 +822,7 @@ describe("stream-part-mapper", () => {
   });
 
   test("keeps the same correlation key when tool completion changes the description", () => {
-    const spawnPart = {
+    const spawnPart: Extract<ParsedOpencodePart, { type: "subtask" }> = {
       id: "subtask-identity-1",
       sessionID: "session-1",
       messageID: "assistant-identity-1",
@@ -887,27 +830,22 @@ describe("stream-part-mapper", () => {
       agent: "build",
       prompt: "Inspect the repo",
       description: "Starting work",
-    } as unknown as Part;
+    };
 
-    const completionPart = {
+    const completionPart = createToolPart({
       id: "tool-identity-1",
-      sessionID: "session-1",
       messageID: "assistant-identity-1",
-      callID: "call-identity-1",
-      type: "tool",
       tool: "delegate",
-      state: {
-        status: "completed",
-        input: {
-          agent: "build",
-          prompt: "Inspect the repo",
-        },
-        output: {
-          result: "Finished work",
-          externalSessionId: "session-child-identity-1",
-        },
+      status: "completed",
+      input: {
+        agent: "build",
+        prompt: "Inspect the repo",
       },
-    } as unknown as Part;
+      output: {
+        result: "Finished work",
+        externalSessionId: "session-child-identity-1",
+      },
+    });
 
     const spawned = mapPartToAgentStreamPart(spawnPart);
     const completed = mapPartToAgentStreamPart(completionPart);
@@ -1094,6 +1032,8 @@ describe("stream-part-mapper", () => {
           },
         },
       },
+      startedAtMs: 1,
+      endedAtMs: 2,
     });
   });
 
@@ -1128,6 +1068,8 @@ describe("stream-part-mapper", () => {
       input: { taskId: "task-7" },
       preview: "task-7",
       error: "Only epics can receive subtask proposals during planning.",
+      startedAtMs: 1,
+      endedAtMs: 2,
     });
   });
 
@@ -1196,6 +1138,8 @@ describe("stream-part-mapper", () => {
       input: { taskId: "task-8" },
       preview: "task-8",
       error: "Cannot write spec from current state.",
+      startedAtMs: 1,
+      endedAtMs: 2,
     });
   });
 
@@ -1233,6 +1177,8 @@ describe("stream-part-mapper", () => {
       input: { taskId: "task-8" },
       preview: "task-8",
       error: "Cannot write spec from serialized MCP content.",
+      startedAtMs: 1,
+      endedAtMs: 2,
     });
   });
 
@@ -1257,6 +1203,8 @@ describe("stream-part-mapper", () => {
       input: { taskId: "task-9" },
       preview: "task-9",
       output: "The task title mentions error handling but the call succeeded.",
+      startedAtMs: 1,
+      endedAtMs: 2,
     });
   });
 
@@ -1288,20 +1236,18 @@ describe("stream-part-mapper", () => {
       toolType: "generic",
       status: "completed",
       input: { taskId: "task-10" },
-      output: JSON.stringify(output, null, 2),
+      output: JSON.stringify(output),
+      startedAtMs: 1,
+      endedAtMs: 2,
     });
   });
 
-  test("maps pending tool with end timing as completed", () => {
+  test("maps pending tool state as pending", () => {
     const part = createToolPart({
       id: "tool-2",
       status: "pending",
       input: {
         todos: [{ id: "todo-1", content: "A" }],
-      },
-      time: {
-        start: 1,
-        end: 2,
       },
     });
 
@@ -1313,52 +1259,18 @@ describe("stream-part-mapper", () => {
       callId: "call-tool-2",
       tool: "todowrite",
       toolType: "todo",
-      status: "completed",
+      status: "pending",
       input: {
         todos: [{ id: "todo-1", content: "A" }],
       },
       preview: "1 todo",
-      startedAtMs: 1,
-      endedAtMs: 2,
     });
   });
 
-  test("falls back to state timing when direct timing fields are non-numeric", () => {
-    const part = {
-      ...createToolPart({
-        id: "tool-2b",
-        status: "completed",
-        input: {},
-        time: {
-          start: 111,
-          end: 222,
-        },
-      }),
-      time: {
-        start: "invalid",
-        end: "invalid",
-      },
-    } as unknown as Part;
-
-    const mapped = mapPartToAgentStreamPart(part);
-    expect(mapped).toEqual({
-      kind: "tool",
-      messageId: "assistant-tool-2b",
-      partId: "tool-2b",
-      callId: "call-tool-2b",
-      tool: "todowrite",
-      toolType: "todo",
-      status: "completed",
-      input: {},
-      startedAtMs: 111,
-      endedAtMs: 222,
-    });
-  });
-
-  test("maps started tool without end timing as running and keeps title", () => {
+  test("maps running tool state and keeps title", () => {
     const part = createToolPart({
       id: "tool-3",
-      status: "started",
+      status: "running",
       input: {},
       title: "Working",
       time: {
@@ -1381,10 +1293,10 @@ describe("stream-part-mapper", () => {
     });
   });
 
-  test("maps failed tool status as error without title field", () => {
+  test("maps error tool state without a title field", () => {
     const part = createToolPart({
       id: "tool-4",
-      status: "failed",
+      status: "error",
       input: {},
       title: "Failure title",
       error: "Execution failed",
@@ -1401,6 +1313,8 @@ describe("stream-part-mapper", () => {
       status: "error",
       input: {},
       error: "Execution failed",
+      startedAtMs: 1,
+      endedAtMs: 2,
     });
   });
 
@@ -1441,36 +1355,23 @@ describe("stream-part-mapper", () => {
           },
         },
       },
+      startedAtMs: 1,
+      endedAtMs: 2,
     });
   });
 
-  test("normalizes tool statuses across known and fallback values", () => {
+  test("maps every OpenCode tool status", () => {
     const cases = [
-      { rawStatus: "completed", hasEndedTiming: false, expectedStatus: "completed" },
-      { rawStatus: "completed", hasEndedTiming: true, expectedStatus: "completed" },
-      { rawStatus: "error", hasEndedTiming: false, expectedStatus: "error" },
-      { rawStatus: "failed", hasEndedTiming: false, expectedStatus: "error" },
-      { rawStatus: "pending", hasEndedTiming: false, expectedStatus: "pending" },
-      { rawStatus: "pending", hasEndedTiming: true, expectedStatus: "completed" },
-      { rawStatus: "running", hasEndedTiming: false, expectedStatus: "running" },
-      { rawStatus: "running", hasEndedTiming: true, expectedStatus: "completed" },
-      { rawStatus: "started", hasEndedTiming: false, expectedStatus: "running" },
-      { rawStatus: "started", hasEndedTiming: true, expectedStatus: "completed" },
-      { rawStatus: "unknown", hasEndedTiming: false, expectedStatus: "running" },
-      { rawStatus: "unknown", hasEndedTiming: true, expectedStatus: "completed" },
-      { rawStatus: "", hasEndedTiming: false, expectedStatus: "running" },
-      { rawStatus: "", hasEndedTiming: true, expectedStatus: "completed" },
-      { rawStatus: undefined, hasEndedTiming: false, expectedStatus: "running" },
-      { rawStatus: undefined, hasEndedTiming: true, expectedStatus: "completed" },
-      { rawStatus: "   ", hasEndedTiming: false, expectedStatus: "running" },
-      { rawStatus: "   ", hasEndedTiming: true, expectedStatus: "completed" },
+      { rawStatus: "completed", expectedStatus: "completed" },
+      { rawStatus: "error", expectedStatus: "error" },
+      { rawStatus: "pending", expectedStatus: "pending" },
+      { rawStatus: "running", expectedStatus: "running" },
     ] as const;
 
     for (const [index, testCase] of cases.entries()) {
       const part = createToolPart({
         id: `status-${index}`,
         status: testCase.rawStatus,
-        time: testCase.hasEndedTiming ? { start: 1, end: 2 } : { start: 1 },
       });
       const mapped = mapPartToAgentStreamPart(part);
 
@@ -1480,16 +1381,5 @@ describe("stream-part-mapper", () => {
       }
       expect(mapped.status).toBe(testCase.expectedStatus);
     }
-  });
-
-  test("returns null for unsupported part type", () => {
-    const part = {
-      id: "unknown-1",
-      sessionID: "session-1",
-      messageID: "assistant-1",
-      type: "unknown",
-    } as unknown as Part;
-
-    expect(mapPartToAgentStreamPart(part)).toBeNull();
   });
 });

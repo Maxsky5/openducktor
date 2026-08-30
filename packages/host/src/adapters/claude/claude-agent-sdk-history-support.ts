@@ -1,13 +1,22 @@
+import type { SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
+import { claudeProtocolObjectSchema } from "./claude-agent-sdk-ingress-schemas";
 import { basename } from "node:path";
-import type { SessionMessage } from "@anthropic-ai/claude-agent-sdk";
-import type {
-  AgentFileReference,
-  AgentModelSelection,
-  AgentSessionHistoryMessage,
-  AgentUserMessageDisplayPart,
+import { z } from "zod";
+import {
+  detectAgentFileReferenceKind,
+  type AgentFileReference,
+  type AgentModelSelection,
+  type AgentSessionHistoryMessage,
+  type AgentUserMessageDisplayPart,
 } from "@openducktor/core";
-import { decodeClaudeToolResultValue } from "./claude-agent-sdk-tool-shapes";
-import { detectFileKind, isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import type {
+  ClaudeHistoryConversationMessage,
+  ClaudeHistoryMessage,
+} from "./claude-agent-sdk-history-import";
+import {
+  type ClaudeDecodedToolResult,
+  decodeClaudeToolResultValue,
+} from "./claude-agent-sdk-tool-shapes";
 
 export type ClaudeLiveUserMessage = {
   isManualCompaction?: true;
@@ -19,6 +28,16 @@ export type ClaudeLiveUserMessage = {
   timestamp: string;
 };
 
+const claudeHistoryContentBlockSchema = z.looseObject({
+  source: z.unknown().optional(),
+  text: z.string().optional(),
+  title: z.string().optional(),
+  type: z.string().optional(),
+});
+const claudeHistoryMessageContentSchema = z.looseObject({ content: z.unknown() });
+const claudeHistorySourceSchema = z.looseObject({ media_type: z.string().optional() });
+const claudeHistoryStringArraySchema = z.array(z.string().min(1));
+
 export const appendUnmatchedLiveUserMessages = (
   history: AgentSessionHistoryMessage[],
   liveUserMessages: readonly ClaudeLiveUserMessage[],
@@ -29,7 +48,7 @@ export const appendUnmatchedLiveUserMessages = (
     if (isDeliveredManualCompaction || projectedMessageIds.has(message.messageId)) {
       continue;
     }
-    history.push({
+    const historyMessage: Extract<AgentSessionHistoryMessage, { role: "user" }> = {
       messageId: message.messageId,
       role: "user",
       timestamp: message.timestamp,
@@ -37,9 +56,12 @@ export const appendUnmatchedLiveUserMessages = (
       displayParts:
         message.parts ?? (message.text.length > 0 ? [{ kind: "text", text: message.text }] : []),
       state: message.state ?? "read",
-      ...(message.model ? { model: message.model } : {}),
       parts: [],
-    });
+    };
+    if (message.model) {
+      historyMessage.model = message.model;
+    }
+    history.push(historyMessage);
   }
 };
 
@@ -47,16 +69,16 @@ type MutableAssistantHistoryMessage = Extract<AgentSessionHistoryMessage, { role
 
 const CLAUDE_HISTORY_ATTACHMENT_PATH_PREFIX = "claude-history://attachment/";
 
-const MIME_EXTENSIONS: Record<string, string> = {
-  "application/pdf": ".pdf",
-  "image/gif": ".gif",
-  "image/jpeg": ".jpg",
-  "image/png": ".png",
-  "image/webp": ".webp",
-};
+const MIME_EXTENSIONS = new Map<string, string>([
+  ["application/pdf", ".pdf"],
+  ["image/gif", ".gif"],
+  ["image/jpeg", ".jpg"],
+  ["image/png", ".png"],
+  ["image/webp", ".webp"],
+]);
 
 const extensionForMime = (mime: string | undefined): string =>
-  mime ? (MIME_EXTENSIONS[mime] ?? "") : "";
+  (mime ? MIME_EXTENSIONS.get(mime) : undefined) ?? "";
 
 const claudeHistoryAttachmentPath = (messageId: string, index: number): string =>
   `${CLAUDE_HISTORY_ATTACHMENT_PATH_PREFIX}${encodeURIComponent(messageId)}/${index}`;
@@ -79,7 +101,7 @@ const claudeFileReference = (path: string): AgentFileReference => ({
   id: path,
   path,
   name: basename(path.replaceAll("\\", "/")),
-  kind: detectFileKind(path, false) as AgentFileReference["kind"],
+  kind: detectAgentFileReferenceKind({ filePath: path }),
 });
 
 const readClaudeHistoryReferenceRanges = (text: string): ClaudeHistoryReferenceRange[] => {
@@ -141,14 +163,16 @@ const readClaudeHistoryTextDisplayParts = (text: string): AgentUserMessageDispla
 
 export const readClaudeHistoryDisplayParts = (
   messageId: string,
-  message: unknown,
+  message: SessionStoreEntry[string],
 ): AgentUserMessageDisplayPart[] => {
-  if (!isRecord(message)) {
+  const parsedMessage = claudeHistoryMessageContentSchema.safeParse(message);
+  if (!parsedMessage.success) {
     return [];
   }
-  const content = message.content;
-  if (typeof content === "string" && content.length > 0) {
-    return readClaudeHistoryTextDisplayParts(content);
+  const content = parsedMessage.data.content;
+  const textContent = z.string().min(1).safeParse(content);
+  if (textContent.success) {
+    return readClaudeHistoryTextDisplayParts(textContent.data);
   }
   if (!Array.isArray(content)) {
     return [];
@@ -157,12 +181,14 @@ export const readClaudeHistoryDisplayParts = (
   const parts: AgentUserMessageDisplayPart[] = [];
   let flattenedTextLength = 0;
   for (const [index, block] of content.entries()) {
-    if (!isRecord(block)) {
+    const parsedBlock = claudeHistoryContentBlockSchema.safeParse(block);
+    if (!parsedBlock.success) {
       continue;
     }
-    const type = readStringProp(block, "type");
+    const blockValue = parsedBlock.data;
+    const type = blockValue.type;
     if (type === "text") {
-      const text = readStringProp(block, "text");
+      const text = blockValue.text;
       if (text) {
         const sourceOffset = flattenedTextLength === 0 ? 0 : flattenedTextLength + 1;
         parts.push(
@@ -185,8 +211,8 @@ export const readClaudeHistoryDisplayParts = (
       continue;
     }
     if (type === "image") {
-      const source = isRecord(block.source) ? block.source : {};
-      const mime = readStringProp(source, "media_type");
+      const source = claudeHistorySourceSchema.safeParse(blockValue.source);
+      const mime = source.success ? source.data.media_type : undefined;
       parts.push({
         kind: "attachment",
         attachment: {
@@ -195,15 +221,22 @@ export const readClaudeHistoryDisplayParts = (
           name: `Claude image attachment${extensionForMime(mime)}`,
           kind: "image",
           localPreviewAvailable: false,
-          ...(mime ? { mime } : {}),
         },
       });
+      if (mime) {
+        const attachmentPart = parts.at(-1);
+        if (attachmentPart?.kind === "attachment") {
+          attachmentPart.attachment.mime = mime;
+        }
+      }
       continue;
     }
     if (type === "document") {
-      const source = isRecord(block.source) ? block.source : {};
-      const mime = readStringProp(source, "media_type") ?? "application/pdf";
-      const title = readStringProp(block, "title");
+      const source = claudeHistorySourceSchema.safeParse(blockValue.source);
+      const mime = source.success
+        ? (source.data.media_type ?? "application/pdf")
+        : "application/pdf";
+      const title = blockValue.title;
       parts.push({
         kind: "attachment",
         attachment: {
@@ -256,16 +289,17 @@ export const createLiveUserMessageResolver = (
   };
 };
 
-export const readHistoryToolResults = (message: SessionMessage) => {
-  const messageRecord = message as unknown as Record<string, unknown>;
-  type ClaudeDecodedToolResult = NonNullable<ReturnType<typeof decodeClaudeToolResultValue>>;
-  const readTopLevelToolUseResult = (): Record<string, unknown> | null => {
+export const readHistoryToolResults = (message: ClaudeHistoryConversationMessage) => {
+  const messageRecord = message;
+  const readTopLevelToolUseResult = (): ClaudeDecodedToolResult["raw"] | null => {
     const camelCaseToolUseResult = messageRecord.toolUseResult;
-    if (isRecord(camelCaseToolUseResult)) {
-      return camelCaseToolUseResult;
+    const camelCase = claudeProtocolObjectSchema.safeParse(camelCaseToolUseResult);
+    if (camelCase.success) {
+      return camelCase.data;
     }
     const snakeCaseToolUseResult = messageRecord.tool_use_result;
-    return isRecord(snakeCaseToolUseResult) ? snakeCaseToolUseResult : null;
+    const snakeCase = claudeProtocolObjectSchema.safeParse(snakeCaseToolUseResult);
+    return snakeCase.success ? snakeCase.data : null;
   };
   const mergeTopLevelToolUseResult = (result: ClaudeDecodedToolResult): ClaudeDecodedToolResult => {
     const toolUseResult = readTopLevelToolUseResult();
@@ -289,7 +323,8 @@ export const readHistoryToolResults = (message: SessionMessage) => {
   if (direct) {
     return [mergeTopLevelToolUseResult(direct)];
   }
-  const content = isRecord(message.message) ? message.message.content : undefined;
+  const parsedMessage = claudeHistoryMessageContentSchema.safeParse(messageRecord.message);
+  const content = parsedMessage.success ? parsedMessage.data.content : undefined;
   if (Array.isArray(content)) {
     const results: ClaudeDecodedToolResult[] = [];
     for (const block of content) {
@@ -310,18 +345,15 @@ export const readHistoryToolResults = (message: SessionMessage) => {
   return camelCaseResult ? [camelCaseResult] : [];
 };
 
-const readStringArrayProp = (value: unknown, key: string): string[] => {
-  if (!isRecord(value)) {
-    return [];
-  }
-  const candidate = value[key];
-  if (!Array.isArray(candidate)) {
-    return [];
-  }
-  return candidate.filter((item): item is string => typeof item === "string" && item.length > 0);
+const readStringArrayProp = (
+  value: ClaudeHistoryMessage,
+  key: "retracted_message_uuids" | "supersedes",
+): string[] => {
+  const parsed = claudeHistoryStringArraySchema.safeParse(value[key]);
+  return parsed.success ? parsed.data : [];
 };
 
-export const retractedHistoryMessageIds = (entry: unknown): string[] => [
+export const retractedHistoryMessageIds = (entry: ClaudeHistoryMessage): string[] => [
   ...readStringArrayProp(entry, "supersedes"),
   ...readStringArrayProp(entry, "retracted_message_uuids"),
 ];

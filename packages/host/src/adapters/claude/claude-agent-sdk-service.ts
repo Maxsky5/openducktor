@@ -91,12 +91,13 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   ) {
     this.now = input.now ?? (() => new Date().toISOString());
     this.randomId = input.randomId ?? randomUUID;
-    this.sessionStore =
-      input.sessionStore ??
-      createClaudeAgentSdkSessionStore({
-        now: this.now,
-        ...(input.emit ? { emit: input.emit } : {}),
-      });
+    const sessionStoreInput: Parameters<typeof createClaudeAgentSdkSessionStore>[0] = {
+      now: this.now,
+    };
+    if (input.emit) {
+      sessionStoreInput.emit = input.emit;
+    }
+    this.sessionStore = input.sessionStore ?? createClaudeAgentSdkSessionStore(sessionStoreInput);
   }
 
   startSession(input: StartAgentSessionInput, runtimeId: string) {
@@ -267,13 +268,18 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
         this.input,
         "claudeRuntime.loadSessionContextUsage",
       );
+      const detachedUsageInput: Parameters<
+        ClaudeAgentSdkServiceDependencies["loadDetachedSessionContextUsage"]
+      >[0] = {
+        claudeExecutablePath,
+        externalSessionId: target.sessionId,
+        workingDirectory: input.workingDirectory,
+      };
+      if (this.input.processEnv) {
+        detachedUsageInput.processEnv = this.input.processEnv;
+      }
       return yield* fromPromise("claudeRuntime.loadSessionContextUsage", () =>
-        this.dependencies.loadDetachedSessionContextUsage({
-          claudeExecutablePath,
-          externalSessionId: target.sessionId,
-          ...(this.input.processEnv ? { processEnv: this.input.processEnv } : {}),
-          workingDirectory: input.workingDirectory,
-        }),
+        this.dependencies.loadDetachedSessionContextUsage(detachedUsageInput),
       );
     });
   }

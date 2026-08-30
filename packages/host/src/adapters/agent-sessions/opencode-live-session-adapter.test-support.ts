@@ -75,12 +75,29 @@ export const controlSummary = {
   status: "running" as const,
 };
 
+type ControlCall = {
+  [Operation in "start" | "resume" | "fork" | "send" | "model" | "stop" | "release"]: {
+    operation: Operation;
+    input: Parameters<
+      OpencodeSessionRuntimeConnection[{
+        start: "startSession";
+        resume: "resumeSession";
+        fork: "forkSession";
+        send: "sendUserMessage";
+        model: "updateSessionModel";
+        stop: "stopSession";
+        release: "releaseSession";
+      }[Operation]]
+    >[0];
+  };
+}["start" | "resume" | "fork" | "send" | "model" | "stop" | "release"];
+
 type RuntimeHarness = {
   readonly prepareRuntime: PrepareOpencodeSessionRuntime;
   readonly emit: (signal: OpencodeSessionRuntimeSignal) => Promise<void>;
   readonly approvalReplies: OpencodeNativeApprovalReply[];
   readonly questionReplies: OpencodeNativeQuestionReply[];
-  readonly controlCalls: Array<{ operation: string; input: unknown }>;
+  readonly controlCalls: ControlCall[];
   readonly releaseCalls: string[];
   readonly contextLoadCalls: string[];
   readonly setSources: (sources: OpencodeRuntimeSnapshotSource[]) => void;
@@ -96,7 +113,7 @@ export const createRuntimeHarness = (
   const sources = [nativeSource()];
   const approvalReplies: OpencodeNativeApprovalReply[] = [];
   const questionReplies: OpencodeNativeQuestionReply[] = [];
-  const controlCalls: Array<{ operation: string; input: unknown }> = [];
+  const controlCalls: ControlCall[] = [];
   const releaseCalls: string[] = [];
   const contextLoadCalls: string[] = [];
 

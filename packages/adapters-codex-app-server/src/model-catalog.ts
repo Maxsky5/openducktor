@@ -1,4 +1,7 @@
-import { CODEX_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  CODEX_RUNTIME_DESCRIPTOR,
+  codexAppServerReasoningEffortSchema,
+} from "@openducktor/contracts";
 import type {
   AgentModelAttachmentSupport,
   AgentModelCatalog,
@@ -43,7 +46,7 @@ const validateModelSelection = (
 
 export const toTransportModelSelection = (model: AgentModelSelection) => ({
   model: model.modelId,
-  effort: model.variant as string,
+  effort: codexAppServerReasoningEffortSchema.parse(model.variant),
 });
 
 const toAttachmentSupport = (inputModalities: string[]): AgentModelAttachmentSupport => {
@@ -88,7 +91,7 @@ export class CodexModels {
     const cached = this.modelListByRuntimeId.get(runtimeId);
     if (
       cached?.value &&
-      typeof cached.fetchedAtMs === "number" &&
+      cached.fetchedAtMs !== undefined &&
       now - cached.fetchedAtMs < CODEX_MODEL_CATALOG_TTL_MS
     ) {
       return cached.value;
@@ -106,10 +109,12 @@ export class CodexModels {
         throw error;
       },
     );
-    this.modelListByRuntimeId.set(runtimeId, {
-      ...(cached?.value ? { value: cached.value, fetchedAtMs: cached.fetchedAtMs } : {}),
-      pending,
-    });
+    const nextCached: CachedCodexModelList = { pending };
+    if (cached?.value && cached.fetchedAtMs !== undefined) {
+      nextCached.value = cached.value;
+      nextCached.fetchedAtMs = cached.fetchedAtMs;
+    }
+    this.modelListByRuntimeId.set(runtimeId, nextCached);
     return pending;
   }
 

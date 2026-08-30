@@ -2,20 +2,23 @@ import type { HostClient } from "@openducktor/host-client";
 import { getShellBridge, type HostBridge } from "./shell-bridge";
 
 const hostClientOverrides = new Map<PropertyKey, { value: unknown; restoreValue: unknown }>();
-const shellClientMethodBindings = new WeakMap<object, Map<PropertyKey, unknown>>();
+type HostClientValue = HostClient[keyof HostClient];
+const shellClientMethodBindings = new WeakMap<object, Map<PropertyKey, HostClientValue>>();
 
-const readShellClientValue = (propertyKey: PropertyKey): unknown => {
+const isHostClientKey = (client: HostClient, key: PropertyKey): key is keyof HostClient =>
+  Object.hasOwn(client, key);
+
+const readShellClientValue = (propertyKey: PropertyKey): HostClientValue | undefined => {
   const client = getShellBridge().client;
-  const value = client[propertyKey as keyof HostClient];
-  if (typeof value !== "function") {
-    return value;
+  if (!isHostClientKey(client, propertyKey)) {
+    return undefined;
   }
+  const value = client[propertyKey];
 
-  const clientObject = client as object;
-  let existingBindings = shellClientMethodBindings.get(clientObject);
+  let existingBindings = shellClientMethodBindings.get(client);
   if (!existingBindings) {
     existingBindings = new Map();
-    shellClientMethodBindings.set(clientObject, existingBindings);
+    shellClientMethodBindings.set(client, existingBindings);
   }
   const existingBinding = existingBindings.get(propertyKey);
   if (existingBinding) {
@@ -27,6 +30,7 @@ const readShellClientValue = (propertyKey: PropertyKey): unknown => {
   return boundValue;
 };
 
+// SAFETY: The traps implement the HostClient surface while the empty target preserves the existing virtual proxy behavior.
 const hostClientProxy = new Proxy(
   {},
   {

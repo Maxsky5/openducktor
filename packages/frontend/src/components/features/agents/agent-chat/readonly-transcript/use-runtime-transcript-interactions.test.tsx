@@ -1,3 +1,4 @@
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createDeferred } from "@/test-utils/shared-test-fixtures";
@@ -8,9 +9,7 @@ import type {
 } from "@/types/agent-orchestrator";
 import { useRuntimeTranscriptInteractions } from "./use-runtime-transcript-interactions";
 
-(
-  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useRuntimeTranscriptInteractions>[0];
 

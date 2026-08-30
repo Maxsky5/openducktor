@@ -10,6 +10,11 @@ export type BuildToolsOpenInTarget = {
   disabledReason: string | null;
 };
 
+type QueriedBuildWorktreePathResult = {
+  path: string | null;
+  error: string | null;
+};
+
 export const resolveBuildToolsSelectedTaskId = ({
   viewTaskId,
   viewSelectedTaskId,
@@ -63,7 +68,7 @@ export const resolveQueriedBuildWorktreePath = ({
   repoPath: string;
   taskId: string;
   queriedWorkingDirectory: string | null;
-}): { path: string | null; error: string | null } => {
+}): QueriedBuildWorktreePathResult => {
   if (!queriedWorkingDirectory || queriedWorkingDirectory.trim().length === 0) {
     return {
       path: null,

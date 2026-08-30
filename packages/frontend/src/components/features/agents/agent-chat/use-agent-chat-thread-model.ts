@@ -9,8 +9,8 @@ import type {
   AgentChatTranscriptPresentation,
 } from "./agent-chat.types";
 
-const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS = Object.freeze({}) as Record<string, number>;
-const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS = Object.freeze({}) as Record<string, number>;
+const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS = Object.freeze<Record<string, number>>({});
+const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS = Object.freeze<Record<string, number>>({});
 
 export type AgentChatPendingQuestionActions = {
   canSubmit: boolean;

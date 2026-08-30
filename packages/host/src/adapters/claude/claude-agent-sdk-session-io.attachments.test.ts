@@ -6,7 +6,10 @@ import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { applyClaudeSessionModel, sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
-import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support";
+import {
+  createClaudeQueryFixture,
+  createClaudeSession,
+} from "./claude-agent-sdk-session-io.test-support";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 
 describe("Claude session I/O attachments and invalid updates", () => {
@@ -22,10 +25,10 @@ describe("Claude session I/O attachments and invalid updates", () => {
       };
       const session = createClaudeSession({
         activity: "idle",
-        query: {
-          applyFlagSettings: mock(async (_settings: unknown) => {}),
+        query: createClaudeQueryFixture({
+          applyFlagSettings: mock(async () => {}),
           setModel: mock(async (_model?: string) => {}),
-        } as unknown as ClaudeSession["query"],
+        }),
         queue,
       });
 
@@ -135,10 +138,10 @@ describe("Claude session I/O attachments and invalid updates", () => {
       await writeFile(documentPath, Buffer.from("pdf-bytes"));
       const session = createClaudeSession({
         activity: "idle",
-        query: {
-          applyFlagSettings: mock(async (_settings: unknown) => {}),
+        query: createClaudeQueryFixture({
+          applyFlagSettings: mock(async () => {}),
           setModel: mock(async (_model?: string) => {}),
-        } as unknown as ClaudeSession["query"],
+        }),
       });
 
       const accepted = await sendClaudeUserMessage({
@@ -199,7 +202,7 @@ describe("Claude session I/O attachments and invalid updates", () => {
   });
 
   test("rejects unsupported live Claude effort changes without mutating session model", async () => {
-    const applyFlagSettings = mock(async (_settings: unknown) => {});
+    const applyFlagSettings = mock(async () => {});
     const session = createClaudeSession({
       model: {
         providerId: "claude",
@@ -207,10 +210,10 @@ describe("Claude session I/O attachments and invalid updates", () => {
         runtimeKind: "claude",
         variant: "high",
       },
-      query: {
+      query: createClaudeQueryFixture({
         applyFlagSettings,
         setModel: mock(async (_model?: string) => {}),
-      } as unknown as ClaudeSession["query"],
+      }),
     });
 
     await expect(
@@ -228,11 +231,13 @@ describe("Claude session I/O attachments and invalid updates", () => {
 
   test("rolls back the SDK model when a combined model and effort update fails", async () => {
     const setModel = mock(async (_model?: string) => {});
-    const applyFlagSettings = mock(async (settings: { effortLevel: string | null }) => {
-      if (settings.effortLevel === "xhigh") {
-        throw new Error("effort update failed");
-      }
-    });
+    const applyFlagSettings = mock(
+      async (settings: Parameters<ClaudeSession["query"]["applyFlagSettings"]>[0]) => {
+        if (settings.effortLevel === "xhigh") {
+          throw new Error("effort update failed");
+        }
+      },
+    );
     const session = createClaudeSession({
       model: {
         providerId: "claude",
@@ -240,10 +245,10 @@ describe("Claude session I/O attachments and invalid updates", () => {
         runtimeKind: "claude",
         variant: "high",
       },
-      query: {
+      query: createClaudeQueryFixture({
         applyFlagSettings,
         setModel,
-      } as unknown as ClaudeSession["query"],
+      }),
     });
 
     await expect(

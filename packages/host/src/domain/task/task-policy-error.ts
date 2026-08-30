@@ -6,28 +6,33 @@ export type TaskPolicyErrorCode = Extract<
   "TASK_POLICY_ERROR" | "TASK_TRANSITION_NOT_ALLOWED"
 >;
 
+export type TaskPolicyErrorDetails = {
+  readonly reason: string;
+  readonly taskId: string;
+};
+
 export type TaskPolicyErrorInput = {
   readonly code?: TaskPolicyErrorCode;
   readonly message: string;
-  readonly details?: Readonly<Record<string, unknown>>;
+  readonly details?: Readonly<TaskPolicyErrorDetails>;
 };
 
 export class TaskPolicyError extends Data.TaggedError("TaskPolicyError")<{
   readonly code: TaskPolicyErrorCode;
   readonly message: string;
-  readonly details?: Readonly<Record<string, unknown>> | undefined;
+  readonly details?: Readonly<TaskPolicyErrorDetails>;
 }> {
   constructor({ code = "TASK_POLICY_ERROR", message, details }: TaskPolicyErrorInput) {
     super(details ? { code, message, details } : { code, message });
   }
 
-  static policy(message: string, details?: Readonly<Record<string, unknown>>): TaskPolicyError {
+  static policy(message: string, details?: Readonly<TaskPolicyErrorDetails>): TaskPolicyError {
     return new TaskPolicyError(details ? { message, details } : { message });
   }
 
   static transitionNotAllowed(
     message: string,
-    details?: Readonly<Record<string, unknown>>,
+    details?: Readonly<TaskPolicyErrorDetails>,
   ): TaskPolicyError {
     return new TaskPolicyError(
       details

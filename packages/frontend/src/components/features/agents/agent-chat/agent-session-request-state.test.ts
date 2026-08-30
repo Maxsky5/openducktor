@@ -8,9 +8,9 @@ import {
 
 describe("agent session request state", () => {
   test("sets request values without mutating existing session buckets", () => {
-    const source: AgentSessionRequestState<boolean> = {
+    const source = {
       "opencode:session-1:/repo": { "req-1": true },
-    };
+    } satisfies AgentSessionRequestState<boolean>;
 
     const next = setAgentSessionRequestValue(source, "opencode:session-1:/repo", "req-2", true);
 
@@ -23,10 +23,10 @@ describe("agent session request state", () => {
   });
 
   test("removes empty session buckets", () => {
-    const source: AgentSessionRequestState<boolean> = {
+    const source = {
       "opencode:session-1:/repo": { "req-1": true },
       "codex:session-1:/repo": { "req-1": true },
-    };
+    } satisfies AgentSessionRequestState<boolean>;
 
     const next = removeAgentSessionRequestValue(source, "opencode:session-1:/repo", "req-1");
 
@@ -36,7 +36,7 @@ describe("agent session request state", () => {
   });
 
   test("selects only values for pending requests in the selected session", () => {
-    const source: AgentSessionRequestState<string> = {
+    const source = {
       "opencode:session-1:/repo": {
         "req-1": "pending",
         "req-2": "stale",
@@ -44,7 +44,7 @@ describe("agent session request state", () => {
       "codex:session-1:/repo": {
         "req-1": "different session",
       },
-    };
+    } satisfies AgentSessionRequestState<string>;
 
     expect(
       selectPendingAgentSessionRequestValues(source, "opencode:session-1:/repo", ["req-1"]),

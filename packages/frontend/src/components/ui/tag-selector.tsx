@@ -100,7 +100,10 @@ export function TagSelector({
       className="space-y-2"
       onFocusCapture={() => setIsFocused(true)}
       onBlurCapture={(event) => {
-        if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+        if (
+          event.relatedTarget instanceof Node &&
+          event.currentTarget.contains(event.relatedTarget)
+        ) {
           return;
         }
         setIsFocused(false);

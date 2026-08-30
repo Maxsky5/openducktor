@@ -1,4 +1,4 @@
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { toAssistantMessageMeta } from "../support/assistant-meta";
 import { toReasoningMessageId, toTextMessageId } from "../support/chat-message-ids";
 import { sanitizeStreamingText } from "../support/core";
@@ -55,19 +55,35 @@ const resolvePartModelSelection = (
     if (!existingMessage.meta.providerId || !existingMessage.meta.modelId) {
       return null;
     }
-    return {
+    const selection: NonNullable<AgentSessionState["selectedModel"]> = {
       providerId: existingMessage.meta.providerId,
       modelId: existingMessage.meta.modelId,
-      ...(existingMessage.meta.variant ? { variant: existingMessage.meta.variant } : {}),
-      ...(existingMessage.meta.profileId ? { profileId: existingMessage.meta.profileId } : {}),
-      ...(current.selectedModel?.runtimeKind
-        ? { runtimeKind: current.selectedModel.runtimeKind }
-        : {}),
     };
+    if (existingMessage.meta.variant) {
+      selection.variant = existingMessage.meta.variant;
+    }
+    if (existingMessage.meta.profileId) {
+      selection.profileId = existingMessage.meta.profileId;
+    }
+    if (current.selectedModel?.runtimeKind) {
+      selection.runtimeKind = current.selectedModel.runtimeKind;
+    }
+    return selection;
   }
 
   const turnModel = context.turn.turnMetadata.readModel(context.session.key);
   return turnModel ?? current.selectedModel ?? null;
+};
+
+type UpsertLiveAssistantMessageInput = {
+  current: AgentSessionState;
+  model: AgentSessionState["selectedModel"] | null;
+  messageId: string;
+  partId?: string;
+  replacedMessageId?: string;
+  sourceMessageId?: string;
+  text: string;
+  timestamp: string;
 };
 
 const upsertLiveAssistantMessage = ({
@@ -79,16 +95,7 @@ const upsertLiveAssistantMessage = ({
   sourceMessageId,
   text,
   timestamp,
-}: {
-  current: AgentSessionState;
-  model: AgentSessionState["selectedModel"] | null;
-  messageId: string;
-  partId?: string;
-  replacedMessageId?: string;
-  sourceMessageId?: string;
-  text: string;
-  timestamp: string;
-}): AgentSessionState => {
+}: UpsertLiveAssistantMessageInput): AgentSessionState => {
   const nextContent = sanitizeStreamingText(text);
   if (nextContent.trim().length === 0) {
     return current;
@@ -102,16 +109,21 @@ const upsertLiveAssistantMessage = ({
           ...toAssistantMessageMeta(current, undefined, undefined, model),
           isFinal: false,
         };
-  const nextMessage = {
+  const nextMeta: Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "assistant" }> = {
+    ...assistantMeta,
+  };
+  if (partId) {
+    nextMeta.partId = partId;
+  }
+  if (sourceMessageId) {
+    nextMeta.sourceMessageId = sourceMessageId;
+  }
+  const nextMessage: AgentChatMessage = {
     id: messageId,
-    role: "assistant" as const,
+    role: "assistant",
     content: nextContent,
     timestamp: existingMessage?.timestamp ?? timestamp,
-    meta: {
-      ...assistantMeta,
-      ...(partId ? { partId } : {}),
-      ...(sourceMessageId ? { sourceMessageId } : {}),
-    },
+    meta: nextMeta,
   };
   return {
     ...current,
@@ -171,18 +183,24 @@ const handleTextPart = (
 
     const sourceMessage = findSessionMessageById(prepared, part.messageId);
     const usesPartIdentity = prepared.runtimeKind === "claude";
-    return upsertLiveAssistantMessage({
+    const input: UpsertLiveAssistantMessageInput = {
       current: {
         ...prepared,
         status: "running",
       },
       model: resolvePartModelSelection(context, prepared, part.messageId),
       messageId: usesPartIdentity ? toTextMessageId(part.messageId, part.partId) : part.messageId,
-      ...(usesPartIdentity ? { partId: part.partId, sourceMessageId: part.messageId } : {}),
-      ...(usesPartIdentity && sourceMessage ? { replacedMessageId: part.messageId } : {}),
       text: part.text,
       timestamp: event.timestamp,
-    });
+    };
+    if (usesPartIdentity) {
+      input.partId = part.partId;
+      input.sourceMessageId = part.messageId;
+    }
+    if (usesPartIdentity && sourceMessage) {
+      input.replacedMessageId = part.messageId;
+    }
+    return upsertLiveAssistantMessage(input);
   });
 };
 
@@ -238,18 +256,34 @@ const handleSubagentPart = (
       correlationKey: part.correlationKey,
       sourceMessageId: part.messageId,
       status: part.status,
-      ...(typeof part.agent === "string" ? { agent: part.agent } : {}),
-      ...(typeof part.prompt === "string" ? { prompt: part.prompt } : {}),
-      ...(typeof part.description === "string" ? { description: part.description } : {}),
-      ...(typeof part.error === "string" ? { error: part.error } : {}),
-      ...(typeof part.externalSessionId === "string"
-        ? { externalSessionId: part.externalSessionId }
-        : {}),
-      ...(part.executionMode ? { executionMode: part.executionMode } : {}),
-      ...(part.metadata ? { metadata: part.metadata } : {}),
-      ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
-      ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
     };
+    if (part.agent !== undefined) {
+      incomingMeta.agent = part.agent;
+    }
+    if (part.prompt !== undefined) {
+      incomingMeta.prompt = part.prompt;
+    }
+    if (part.description !== undefined) {
+      incomingMeta.description = part.description;
+    }
+    if (part.error !== undefined) {
+      incomingMeta.error = part.error;
+    }
+    if (part.externalSessionId !== undefined) {
+      incomingMeta.externalSessionId = part.externalSessionId;
+    }
+    if (part.executionMode) {
+      incomingMeta.executionMode = part.executionMode;
+    }
+    if (part.metadata) {
+      incomingMeta.metadata = part.metadata;
+    }
+    if (part.startedAtMs !== undefined) {
+      incomingMeta.startedAtMs = part.startedAtMs;
+    }
+    if (part.endedAtMs !== undefined) {
+      incomingMeta.endedAtMs = part.endedAtMs;
+    }
     return {
       ...prepared,
       messages: upsertSubagentMessage({
@@ -270,7 +304,7 @@ export const handleAssistantPart = (
   const recordsTurnActivity = part.kind !== "step" && shouldRecordPartAsTurnActivity(context, part);
   if (recordsTurnActivity) {
     const activityTimestamp =
-      (part.kind === "tool" || part.kind === "subagent") && typeof part.startedAtMs === "number"
+      (part.kind === "tool" || part.kind === "subagent") && part.startedAtMs !== undefined
         ? part.startedAtMs
         : event.timestamp;
     context.turn.recordTurnActivityTimestamp(context.session.key, activityTimestamp);

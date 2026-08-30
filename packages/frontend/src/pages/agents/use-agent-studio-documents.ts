@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { normalizeOdtWorkflowToolName } from "@openducktor/core";
 import { useEffect, useRef } from "react";
+import { z } from "zod";
 import { useTaskDocuments } from "@/components/features/task-details/use-task-documents";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -86,11 +87,7 @@ export function useAgentStudioDocuments({
   selectedSessionIdentity,
   loadedSession,
   selectedTask,
-}: UseAgentStudioDocumentsArgs): {
-  specDoc: ReturnType<typeof useTaskDocuments>["specDoc"];
-  planDoc: ReturnType<typeof useTaskDocuments>["planDoc"];
-  qaDoc: ReturnType<typeof useTaskDocuments>["qaDoc"];
-} {
+}: UseAgentStudioDocumentsArgs) {
   const { runtimeDefinitions } = useRuntimeDefinitionsContext();
   const { specDoc, planDoc, qaDoc, reloadDocument, applyDocumentUpdate } = useTaskDocuments(
     taskId || null,
@@ -233,12 +230,9 @@ export function useAgentStudioDocuments({
 
       const completionInfo =
         extractCompletionTimestamp(meta.output) ?? extractCompletionTimestamp(message.content);
-      const toolInput =
-        typeof meta.input === "object" && meta.input !== null
-          ? (meta.input as Record<string, unknown>)
-          : null;
-      const inputMarkdown = toolInput?.[target.inputKey];
-      const hasInputMarkdown = typeof inputMarkdown === "string" && inputMarkdown.trim().length > 0;
+      const inputMarkdownResult = z.string().safeParse(meta.input?.[target.inputKey]);
+      const inputMarkdown = inputMarkdownResult.success ? inputMarkdownResult.data : null;
+      const hasInputMarkdown = inputMarkdown !== null && inputMarkdown.trim().length > 0;
 
       let effectiveUpdatedAtTimestamp = target.state.updatedAt
         ? parseTimestamp(target.state.updatedAt)
@@ -283,5 +277,9 @@ export function useAgentStudioDocuments({
     specDoc,
     planDoc,
     qaDoc,
+  } satisfies {
+    specDoc: ReturnType<typeof useTaskDocuments>["specDoc"];
+    planDoc: ReturnType<typeof useTaskDocuments>["planDoc"];
+    qaDoc: ReturnType<typeof useTaskDocuments>["qaDoc"];
   };
 }

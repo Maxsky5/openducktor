@@ -132,6 +132,25 @@ describe("document contracts", () => {
     expect(parsed.directMerge?.method).toBe("rebase");
   });
 
+  test("task metadata payload accepts null legacy delivery fields", () => {
+    const payload = {
+      spec: { markdown: "", updatedAt: null },
+      plan: { markdown: "", updatedAt: null },
+      agentSessions: [],
+    };
+
+    const nullDelivery = taskMetadataPayloadSchema.parse({ ...payload, delivery: null });
+    const nullDeliveryFields = taskMetadataPayloadSchema.parse({
+      ...payload,
+      delivery: { linkedPullRequest: null, directMerge: null },
+    });
+
+    expect(nullDelivery.pullRequest).toBeUndefined();
+    expect(nullDelivery.directMerge).toBeUndefined();
+    expect(nullDeliveryFields.pullRequest).toBeUndefined();
+    expect(nullDeliveryFields.directMerge).toBeUndefined();
+  });
+
   test("mcp document reads accept optional document-level decode errors", () => {
     const parsed = taskDocumentsReadSchema.parse({
       documents: {

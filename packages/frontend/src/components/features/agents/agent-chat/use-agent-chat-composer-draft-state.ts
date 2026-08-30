@@ -94,7 +94,7 @@ export function useAgentChatComposerDraftState({
   }, [nextKey, nextPersistence]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || typeof document === "undefined") {
+    if (globalThis.window === undefined || globalThis.document === undefined) {
       return;
     }
 

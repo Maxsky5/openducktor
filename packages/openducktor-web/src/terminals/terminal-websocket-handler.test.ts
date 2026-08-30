@@ -8,14 +8,31 @@ import {
   createTerminalService,
   type FilesystemPort,
   type TerminalPtyPort,
-  type TerminalService,
   TerminalServiceError,
 } from "@openducktor/host";
 import { Effect } from "effect";
-import { type TerminalWebSocketData, terminalWebSocketHandler } from "./terminal-websocket-handler";
+import {
+  type TerminalWebSocketData,
+  terminalWebSocketHandler,
+  type TerminalWebSocketService,
+} from "./terminal-websocket-handler";
+
+const unexpectedTerminalOperation = (operation: string): Effect.Effect<never> =>
+  Effect.dieMessage(`Unexpected terminal service operation: ${operation}`);
+
+const createTerminalServiceFixture = (
+  overrides: Partial<TerminalWebSocketService> = {},
+): TerminalWebSocketService => ({
+  acknowledge: () => unexpectedTerminalOperation("acknowledge"),
+  attach: () => unexpectedTerminalOperation("attach"),
+  detach: () => unexpectedTerminalOperation("detach"),
+  resize: () => unexpectedTerminalOperation("resize"),
+  write: () => unexpectedTerminalOperation("write"),
+  ...overrides,
+});
 
 const makeSocket = (
-  terminalService: TerminalService,
+  terminalService: TerminalWebSocketService,
   sendStatus?: (frame: Uint8Array) => number,
 ) => {
   const sent: Uint8Array[] = [];
@@ -42,14 +59,14 @@ const makeSocket = (
     },
     close: (code: number, reason: string) => closed.push([code, reason]),
   };
-  return { socket: socket as never, sent, closed, data: socket.data };
+  return { socket, sent, closed, data: socket.data };
 };
 
 describe("terminalWebSocketHandler", () => {
   test("multiplexes attach, input, resize, ACK, and detach by opaque terminal id", async () => {
     const operations: string[] = [];
-    const service = {
-      attach: (input: Parameters<TerminalService["attach"]>[0]) =>
+    const service = createTerminalServiceFixture({
+      attach: (input: Parameters<TerminalWebSocketService["attach"]>[0]) =>
         Effect.sync(() => {
           operations.push(`attach:${input.terminalId}:${input.attachmentId}`);
           input.sink(
@@ -74,7 +91,7 @@ describe("terminalWebSocketHandler", () => {
         Effect.sync(() => operations.push(`ack:${terminalId}:${attachmentId}:${sequenceEnd}`)),
       detach: (terminalId: string, attachmentId: string) =>
         Effect.sync(() => operations.push(`detach:${terminalId}:${attachmentId}`)),
-    } as unknown as TerminalService;
+    });
     const harness = makeSocket(service);
     const send = (
       message: Parameters<typeof encodeTerminalProtocolFrame>[0]["message"],
@@ -136,7 +153,7 @@ describe("terminalWebSocketHandler", () => {
     const acknowledged = new Promise<void>((resolve) => {
       confirmAcknowledged = resolve;
     });
-    const terminalService = {
+    const terminalService = createTerminalServiceFixture({
       attach: () =>
         Effect.promise(async () => {
           await attachBlocked;
@@ -148,7 +165,7 @@ describe("terminalWebSocketHandler", () => {
           operations.push(attached ? "ack" : "ack-before-attach");
           confirmAcknowledged();
         }),
-    } as unknown as TerminalService;
+    });
     const harness = makeSocket(terminalService);
     const send = (message: Parameters<typeof encodeTerminalProtocolFrame>[0]["message"]): void => {
       terminalWebSocketHandler.message(
@@ -176,7 +193,7 @@ describe("terminalWebSocketHandler", () => {
   });
 
   test("reports unknown terminal ids and rejects oversized frames", async () => {
-    const service = {
+    const service = createTerminalServiceFixture({
       write: (terminalId: string) =>
         Effect.fail(
           new TerminalServiceError({
@@ -186,7 +203,7 @@ describe("terminalWebSocketHandler", () => {
             terminalId,
           }),
         ),
-    } as unknown as TerminalService;
+    });
     const unknown = makeSocket(service);
     terminalWebSocketHandler.message(
       unknown.socket,
@@ -214,8 +231,8 @@ describe("terminalWebSocketHandler", () => {
   });
 
   test("does not retain failed terminal attachments", async () => {
-    const service = {
-      attach: ({ terminalId }: Parameters<TerminalService["attach"]>[0]) =>
+    const service = createTerminalServiceFixture({
+      attach: ({ terminalId }: Parameters<TerminalWebSocketService["attach"]>[0]) =>
         Effect.fail(
           new TerminalServiceError({
             code: "terminal_not_found",
@@ -224,7 +241,7 @@ describe("terminalWebSocketHandler", () => {
             terminalId,
           }),
         ),
-    } as unknown as TerminalService;
+    });
     const harness = makeSocket(service);
 
     for (let index = 0; index < 100; index += 1) {
@@ -258,10 +275,31 @@ describe("terminalWebSocketHandler", () => {
   });
 
   test("reports a stale attach from the real terminal service as forgotten", async () => {
+    const unusedDependency = (operation: string): Effect.Effect<never> =>
+      Effect.dieMessage(`Unexpected stale-attach dependency call: ${operation}`);
+    const unusedSyncDependency = (operation: string): never => {
+      throw new Error(`Unexpected stale-attach dependency call: ${operation}`);
+    };
+    const unusedFilesystem = {
+      homeDirectory: () => unusedSyncDependency("homeDirectory"),
+      canonicalize: () => unusedDependency("canonicalize"),
+      readDirectory: () => unusedDependency("readDirectory"),
+      readFileBytes: () => unusedDependency("readFileBytes"),
+      readFileSnapshot: () => unusedDependency("readFileSnapshot"),
+      replaceFileBytes: () => unusedDependency("replaceFileBytes"),
+      stat: () => unusedDependency("stat"),
+      exists: () => unusedDependency("exists"),
+      join: () => unusedSyncDependency("join"),
+      relative: () => unusedSyncDependency("relative"),
+      parent: () => unusedSyncDependency("parent"),
+    } satisfies FilesystemPort;
+    const unusedPtyPort = {
+      start: () => unusedDependency("start"),
+    } satisfies TerminalPtyPort;
     const service = await Effect.runPromise(
       createTerminalService({
-        filesystem: {} as FilesystemPort,
-        ptyPort: {} as TerminalPtyPort,
+        filesystem: unusedFilesystem,
+        ptyPort: unusedPtyPort,
         resolveLaunchEnvironment: () =>
           Effect.succeed({ shell: "/bin/sh", args: [], env: { PATH: "/usr/bin" } }),
         hostInstanceIdFactory: () => "host-1",
@@ -296,8 +334,8 @@ describe("terminalWebSocketHandler", () => {
 
   test("closes instead of growing the outbound queue past its byte bound", async () => {
     const payload = new Uint8Array(700 * 1024);
-    const service = {
-      attach: (input: Parameters<TerminalService["attach"]>[0]) =>
+    const service = createTerminalServiceFixture({
+      attach: (input: Parameters<TerminalWebSocketService["attach"]>[0]) =>
         Effect.sync(() => {
           for (let index = 0; index < 3; index += 1) {
             input.sink(
@@ -313,7 +351,7 @@ describe("terminalWebSocketHandler", () => {
             );
           }
         }),
-    } as unknown as TerminalService;
+    });
     const harness = makeSocket(service, () => -1);
     terminalWebSocketHandler.message(
       harness.socket,
@@ -334,11 +372,11 @@ describe("terminalWebSocketHandler", () => {
     expect(harness.data.pendingBytes).toBeLessThanOrEqual(700 * 1024 + 256);
   });
   test("rejects text and server-directed frames", () => {
-    const harness = makeSocket({} as TerminalService);
+    const harness = makeSocket(createTerminalServiceFixture({}));
     terminalWebSocketHandler.message(harness.socket, "text");
     expect(harness.closed[0]?.[0]).toBe(1003);
 
-    const second = makeSocket({} as TerminalService);
+    const second = makeSocket(createTerminalServiceFixture({}));
     terminalWebSocketHandler.message(
       second.socket,
       Buffer.from(
@@ -357,10 +395,10 @@ describe("terminalWebSocketHandler", () => {
 
   test("detaches every multiplexed terminal when the socket closes", async () => {
     const detached: string[] = [];
-    const service = {
+    const service = createTerminalServiceFixture({
       attach: () => Effect.void,
       detach: (terminalId: string) => Effect.sync(() => detached.push(terminalId)),
-    } as unknown as TerminalService;
+    });
     const harness = makeSocket(service);
     for (const terminalId of ["terminal-1", "terminal-2"]) {
       terminalWebSocketHandler.message(
@@ -379,7 +417,7 @@ describe("terminalWebSocketHandler", () => {
       );
     }
     await Bun.sleep(0);
-    terminalWebSocketHandler.close?.(harness.socket, 1000, "done");
+    terminalWebSocketHandler.close?.(harness.socket);
     await Bun.sleep(0);
     expect(detached.sort()).toEqual(["terminal-1", "terminal-2"]);
     expect(harness.data.clientSession).toBeNull();

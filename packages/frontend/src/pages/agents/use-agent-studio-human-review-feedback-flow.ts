@@ -24,14 +24,16 @@ type UseAgentStudioHumanReviewFeedbackFlowArgs = {
   sessionsForTask: AgentSessionSummary[];
   selectedTask: TaskCard | null;
   startSessionRequest: (
-    request: SessionStartLaunchRequest & {
-      role: "build";
-      launchActionId: SessionLaunchActionId;
-      existingSessionOptions: SessionStartExistingSessionOption[];
-      initialSourceSession?: AgentSessionIdentity | null;
-      postStartAction: SessionStartPostAction;
-    },
+    request: HumanReviewSessionStartRequest,
   ) => Promise<SessionStartWorkflowResult | undefined>;
+};
+
+type HumanReviewSessionStartRequest = SessionStartLaunchRequest & {
+  role: "build";
+  launchActionId: SessionLaunchActionId;
+  existingSessionOptions: SessionStartExistingSessionOption[];
+  initialSourceSession?: AgentSessionIdentity | null;
+  postStartAction: SessionStartPostAction;
 };
 
 type UseAgentStudioHumanReviewFeedbackFlowResult = {
@@ -95,19 +97,21 @@ export function useAgentStudioHumanReviewFeedbackFlow({
         state: humanReviewFeedbackState,
         builderSessions: sessionsForTask,
         startRequestChangesSession: async (request) => {
-          const startRequest = {
+          const startRequest: HumanReviewSessionStartRequest = {
             taskId: request.taskId,
             role: request.role,
             launchActionId: request.launchActionId,
             existingSessionOptions: request.existingSessionOptions,
-            ...(request.initialSourceSession !== undefined
-              ? { initialSourceSession: request.initialSourceSession }
-              : {}),
-            ...(request.initialStartMode ? { initialStartMode: request.initialStartMode } : {}),
             postStartAction: request.postStartAction,
             message: request.message,
             beforeStartAction: request.beforeStartAction,
           };
+          if (request.initialSourceSession !== undefined) {
+            startRequest.initialSourceSession = request.initialSourceSession;
+          }
+          if (request.initialStartMode) {
+            startRequest.initialStartMode = request.initialStartMode;
+          }
 
           return startSessionRequest(startRequest);
         },

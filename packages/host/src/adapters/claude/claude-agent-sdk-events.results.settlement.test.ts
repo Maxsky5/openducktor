@@ -1,8 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
-import { createEventTestSession as createSession } from "./claude-agent-sdk-events.test-support";
+import {
+  claudeAcceptedUserMessageFixture,
+  createEventTestSession as createSession,
+} from "./claude-agent-sdk-events.test-support";
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
+
+const readSdkState = (session: ReturnType<typeof createSession>) => session.sdkState;
 
 describe("handleClaudeSdkMessage result settlement", () => {
   test("marks the parent idle when its completed result arrives", () => {
@@ -40,13 +45,8 @@ describe("handleClaudeSdkMessage result settlement", () => {
     });
 
     expect(session.pendingUserTurnCount).toBe(0);
-    expect(session.activity as "idle" | "running").toBe("idle");
-    const sdkStateAfterCompletedResult = session.sdkState as
-      | "idle"
-      | "requires_action"
-      | "running"
-      | undefined;
-    expect(sdkStateAfterCompletedResult).toBe("idle");
+    expect(session.activity).toBe("idle");
+    expect(readSdkState(session)).toBe("idle");
     expect(events.map((event) => event.type)).toEqual(["session_idle"]);
 
     handleClaudeSdkMessage({
@@ -56,12 +56,12 @@ describe("handleClaudeSdkMessage result settlement", () => {
         type: "system",
         subtype: "session_state_changed",
         state: "idle",
-        uuid: "state-1",
+        uuid: "1d5aad36-4756-4086-8757-943eeef071df",
         session_id: "session-1",
       }),
     });
 
-    expect(session.activity as "idle" | "running").toBe("idle");
+    expect(session.activity).toBe("idle");
     expect(events.map((event) => event.type)).toEqual(["session_idle"]);
     expect(events.at(-1)).toEqual(
       expect.objectContaining({
@@ -98,7 +98,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
 
     expect(session.pendingUserTurnCount).toBe(0);
     expect(session.activity).toBe("idle");
-    expect(session.sdkState as "idle" | "running").toBe("idle");
+    expect(readSdkState(session)).toBe("idle");
     expect(events.map((event) => event.type)).toEqual(["session_idle"]);
   });
 
@@ -123,14 +123,14 @@ describe("handleClaudeSdkMessage result settlement", () => {
         type: "system",
         subtype: "session_state_changed",
         state: "idle",
-        uuid: "state-1",
+        uuid: "1d5aad36-4756-4086-8757-943eeef071df",
         session_id: "session-1",
       }),
     });
 
     expect(session.activity).toBe("running");
     expect(session.pendingUserTurnCount).toBe(1);
-    expect(session.sdkState as "idle" | "running").toBe("idle");
+    expect(session.sdkState).toBe("idle");
     expect(events).toEqual([]);
 
     handleClaudeSdkMessage({
@@ -155,8 +155,16 @@ describe("handleClaudeSdkMessage result settlement", () => {
     const events: AgentEvent[] = [];
     const session = createSession("running");
     session.acceptedUserMessages.push(
-      { messageId: "user-1", text: "First", timestamp: "2026-06-25T19:59:00.000Z" },
-      { messageId: "user-2", text: "Second", timestamp: "2026-06-25T19:59:30.000Z" },
+      claudeAcceptedUserMessageFixture({
+        messageId: "user-1",
+        text: "First",
+        timestamp: "2026-06-25T19:59:00.000Z",
+      }),
+      claudeAcceptedUserMessageFixture({
+        messageId: "user-2",
+        text: "Second",
+        timestamp: "2026-06-25T19:59:30.000Z",
+      }),
     );
     session.pendingUserTurnCount = 2;
 
@@ -176,7 +184,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
-        uuid: "result-1",
+        uuid: "fb14f885-bbdb-4906-876f-87ec1c4c86c8",
         session_id: "session-1",
         is_error: false,
         result: "Done.",
@@ -192,7 +200,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
-        uuid: "result-2",
+        uuid: "332ac88a-b771-4d00-843f-817399df578b",
         session_id: "session-1",
         is_error: false,
         result: "Done.",
@@ -207,8 +215,14 @@ describe("handleClaudeSdkMessage result settlement", () => {
         return event.type === "assistant_message";
       }),
     ).toEqual([
-      expect.objectContaining({ messageId: "result-1", message: "Done." }),
-      expect.objectContaining({ messageId: "result-2", message: "Done." }),
+      expect.objectContaining({
+        messageId: "fb14f885-bbdb-4906-876f-87ec1c4c86c8",
+        message: "Done.",
+      }),
+      expect.objectContaining({
+        messageId: "332ac88a-b771-4d00-843f-817399df578b",
+        message: "Done.",
+      }),
     ]);
     expect(session.pendingUserTurnCount).toBe(0);
     expect(session.activity).toBe("idle");
@@ -274,7 +288,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
     });
 
     expect(session.activity).toBe("idle");
-    expect(session.sdkState as "idle" | "running").toBe("idle");
+    expect(readSdkState(session)).toBe("idle");
     expect(session.pendingUserTurnCount).toBe(0);
     expect(events.map((event) => event.type)).toEqual(["session_idle"]);
   });
@@ -317,7 +331,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
         type: "system",
         subtype: "session_state_changed",
         state: "idle",
-        uuid: "state-1",
+        uuid: "1d5aad36-4756-4086-8757-943eeef071df",
         session_id: "session-1",
       }),
     });

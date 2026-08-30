@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { parseCodexAppServerRequestResult } from "@openducktor/contracts";
 import { toCodexSkillCatalog } from "./skill-catalog";
 
 describe("Codex skill catalog mapping", () => {
@@ -12,24 +13,28 @@ describe("Codex skill catalog mapping", () => {
               {
                 name: "zeta",
                 path: "/skills/zeta/SKILL.md",
-                title: "Zeta",
                 description: "Zeta skill",
                 scope: "repo",
+                enabled: true,
               },
               {
                 name: "disabled",
                 path: "/skills/disabled/SKILL.md",
+                description: "Disabled skill",
+                scope: "repo",
                 enabled: false,
               },
               {
                 name: "alpha",
                 path: "/user-skills/alpha/SKILL.md",
                 description: "Alpha skill",
+                scope: "user",
+                enabled: true,
               },
             ],
+            errors: [],
           },
         ],
-        errors: [],
       }),
     ).toEqual({
       skills: [
@@ -45,7 +50,7 @@ describe("Codex skill catalog mapping", () => {
           id: "/skills/zeta/SKILL.md",
           name: "zeta",
           path: "/skills/zeta/SKILL.md",
-          title: "Zeta",
+          title: undefined,
           displayName: undefined,
           description: "Zeta skill",
         },
@@ -54,17 +59,21 @@ describe("Codex skill catalog mapping", () => {
   });
 
   test("rejects malformed and duplicate skill payloads", () => {
-    expect(() => toCodexSkillCatalog([{ cwd: "/repo", skills: [] }])).toThrow(
-      "Invalid Codex skills/list payload: expected an object with data array.",
-    );
-    expect(() => toCodexSkillCatalog({ data: [{ cwd: "/repo" }] })).toThrow(
-      "Invalid Codex skills/list payload at catalog index 0: missing skills array.",
-    );
     expect(() =>
-      toCodexSkillCatalog({ data: [{ cwd: "/repo", skills: [{ name: "review" }] }] }),
-    ).toThrow("Invalid Codex skill payload: missing path.");
+      parseCodexAppServerRequestResult("skills/list", [{ cwd: "/repo", skills: [] }]),
+    ).toThrow();
     expect(() =>
-      toCodexSkillCatalog({
+      parseCodexAppServerRequestResult("skills/list", {
+        data: [{ cwd: "/repo" }],
+      }),
+    ).toThrow();
+    expect(() =>
+      parseCodexAppServerRequestResult("skills/list", {
+        data: [{ cwd: "/repo", skills: [{ name: "review" }] }],
+      }),
+    ).toThrow();
+    expect(() =>
+      parseCodexAppServerRequestResult("skills/list", {
         data: [
           {
             cwd: "/repo",
@@ -72,16 +81,29 @@ describe("Codex skill catalog mapping", () => {
           },
         ],
       }),
-    ).toThrow("Invalid Codex skill payload: enabled must be a boolean.");
+    ).toThrow();
     expect(() =>
       toCodexSkillCatalog({
         data: [
           {
             cwd: "/repo",
             skills: [
-              { name: "review", path: "/skills/review/SKILL.md" },
-              { name: "duplicate-review", path: "/skills/review/SKILL.md" },
+              {
+                name: "review",
+                path: "/skills/review/SKILL.md",
+                scope: "repo",
+                description: "Review",
+                enabled: true,
+              },
+              {
+                name: "duplicate-review",
+                path: "/skills/review/SKILL.md",
+                scope: "repo",
+                description: "Duplicate review",
+                enabled: true,
+              },
             ],
+            errors: [],
           },
         ],
       }),

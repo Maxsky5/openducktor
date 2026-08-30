@@ -9,8 +9,10 @@ import {
   withAnimationFrameTestDriver,
 } from "@/test-utils/animation-frame-test-driver";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { AGENT_CHAT_ROW_WINDOW_SIZE } from "./agent-chat-row-windows";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
+import type { AgentChatTranscriptNotice } from "./agent-chat.types";
 import {
   type AgentChatThreadModelInput,
   buildApprovalRequest,
@@ -25,16 +27,12 @@ import {
 } from "./agent-chat-test-fixtures";
 import { AgentChatThread as AgentChatThreadComponent } from "./agent-chat-thread";
 
-(
-  globalThis as typeof globalThis & {
-    IS_REACT_ACT_ENVIRONMENT?: boolean;
-  }
-).IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 const DEFAULT_TEST_CHAT_SETTINGS = createChatSettingsFixture();
-const RUNTIME_STARTING_NOTICE = {
-  kind: "runtime_waiting" as const,
-  severity: "loading" as const,
+const RUNTIME_STARTING_NOTICE: AgentChatTranscriptNotice = {
+  kind: "runtime_waiting",
+  severity: "loading",
   title: "Runtime is starting",
   description: "Waiting for runtime and MCP health before loading this session.",
 };
@@ -55,36 +53,22 @@ const flush = async (): Promise<void> => {
   await Promise.resolve();
 };
 
-const getGlobalWindow = (): unknown => {
-  return (globalThis as { window?: unknown }).window;
-};
-
-const setGlobalWindow = (value: unknown): void => {
-  const target = globalThis as { window?: unknown };
-  if (typeof value === "undefined") {
-    delete target.window;
-    return;
-  }
-
-  target.window = value;
+const setGlobalWindow = (value: Window): void => {
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value,
+    writable: true,
+  });
 };
 
 const createContainer = () => {
-  return {
-    addEventListener: mock(() => {}),
-    clientHeight: 320,
-    removeEventListener: mock(() => {}),
-    scrollHeight: 2_000,
-    scrollTop: 1_680,
-  } as unknown as HTMLDivElement;
-};
-
-type ScrollContainerMock = {
-  addEventListener: ReturnType<typeof mock>;
-  clientHeight: number;
-  removeEventListener: ReturnType<typeof mock>;
-  scrollHeight: number;
-  scrollTop: number;
+  const container = document.createElement("div");
+  Object.defineProperties(container, {
+    clientHeight: { configurable: true, value: 320 },
+    scrollHeight: { configurable: true, value: 2_000 },
+  });
+  container.scrollTop = 1_680;
+  return container;
 };
 
 type MockResizeObserverController = {
@@ -125,18 +109,16 @@ const triggerResizeObservers = (heightByElement = new Map<Element, number>()): v
       continue;
     }
 
-    controller.callback(
-      Array.from(controller.observedElements).map((target) => ({
-        borderBoxSize: [] as ResizeObserverSize[],
-        contentBoxSize: [] as ResizeObserverSize[],
-        contentRect: {
-          height: heightByElement.get(target) ?? 0,
-        } as DOMRectReadOnly,
-        devicePixelContentBoxSize: [] as ResizeObserverSize[],
+    const entries: ResizeObserverEntry[] = Array.from(controller.observedElements).map(
+      (target) => ({
+        borderBoxSize: [],
+        contentBoxSize: [],
+        contentRect: new DOMRect(0, 0, 0, heightByElement.get(target) ?? 0),
+        devicePixelContentBoxSize: [],
         target,
-      })),
-      controller.observer,
+      }),
     );
+    controller.callback(entries, controller.observer);
   }
 };
 
@@ -155,7 +137,7 @@ const buildLongSession = (externalSessionId: string, count = 80) => {
 };
 
 describe("AgentChatThread", () => {
-  const originalWindow = getGlobalWindow();
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
   const originalIntersectionObserver = globalThis.IntersectionObserver;
   const originalMatchMedia = globalThis.matchMedia;
   const originalResizeObserver = globalThis.ResizeObserver;
@@ -163,34 +145,41 @@ describe("AgentChatThread", () => {
 
   beforeEach(() => {
     mockResizeObserverControllers.clear();
-    globalThis.matchMedia = ((query: string) =>
-      ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        addListener: () => {},
-        removeListener: () => {},
-        dispatchEvent: () => false,
-      }) as MediaQueryList) as typeof matchMedia;
+    globalThis.matchMedia = (query) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    });
     animationFrameDriver.installAutoFlush();
-    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
-    globalThis.IntersectionObserver = class MockIntersectionObserver {
+    globalThis.ResizeObserver = MockResizeObserver;
+    globalThis.IntersectionObserver = class MockIntersectionObserver implements IntersectionObserver {
+      readonly root = null;
+      readonly rootMargin = "0px";
+      readonly thresholds = [0];
+
       disconnect(): void {}
 
-      observe(): void {}
+      observe(_target: Element): void {}
 
       takeRecords(): IntersectionObserverEntry[] {
         return [];
       }
 
-      unobserve(): void {}
-    } as unknown as typeof IntersectionObserver;
+      unobserve(_target: Element): void {}
+    };
   });
 
   afterEach(() => {
-    setGlobalWindow(originalWindow);
+    if (originalWindowDescriptor) {
+      Object.defineProperty(globalThis, "window", originalWindowDescriptor);
+    } else {
+      Reflect.deleteProperty(globalThis, "window");
+    }
     globalThis.IntersectionObserver = originalIntersectionObserver;
     globalThis.matchMedia = originalMatchMedia;
     animationFrameDriver.restore();
@@ -411,7 +400,7 @@ describe("AgentChatThread", () => {
 
   test("renders failed session loading state instead of a blank transcript", () => {
     const failure = {
-      code: "invalid_runtime_response" as const,
+      code: "invalid_runtime_response",
       summary: "Codex returned invalid conversation history.",
       detail: "Codex thread/turns/list response data[0] must be an object",
       diagnosticId: "diagnostic-1",
@@ -587,17 +576,13 @@ describe("AgentChatThread", () => {
           pendingApprovalRequests: [
             buildApprovalRequest({
               requestId: "perm-1",
-              requestType: "permission_grant" as const,
+              requestType: "permission_grant",
               title: `Approve permission: ${"bash"}`,
               summary: `Approval request for ${"bash"}.`,
               affectedPaths: ["**/*.sh", "/tmp/*"],
               action: { name: "bash" },
-              mutation: "read_only" as const,
-              supportedReplyOutcomes: [
-                "approve_once" as const,
-                "approve_session" as const,
-                "reject" as const,
-              ],
+              mutation: "read_only",
+              supportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
             }),
           ],
         },
@@ -678,11 +663,14 @@ describe("AgentChatThread", () => {
     expect(bottomStack?.textContent).toContain("Todo");
     expect(bottomStack?.textContent).toContain("Analyze current styling");
     expect(bottomStack?.textContent).toContain("Read layout and pages");
-    expect((bottomStack as HTMLDivElement).innerHTML.indexOf("Input needed")).toBeLessThan(
-      (bottomStack as HTMLDivElement).innerHTML.indexOf("Approval required"),
+    if (!(bottomStack instanceof HTMLDivElement)) {
+      throw new TypeError("Expected the agent chat bottom stack to be a div.");
+    }
+    expect(bottomStack.innerHTML.indexOf("Input needed")).toBeLessThan(
+      bottomStack.innerHTML.indexOf("Approval required"),
     );
-    expect((bottomStack as HTMLDivElement).innerHTML.indexOf("Approval required")).toBeLessThan(
-      (bottomStack as HTMLDivElement).innerHTML.indexOf("Todo"),
+    expect(bottomStack.innerHTML.indexOf("Approval required")).toBeLessThan(
+      bottomStack.innerHTML.indexOf("Todo"),
     );
     rendered.unmount();
   });
@@ -1231,7 +1219,7 @@ describe("AgentChatThread", () => {
           partId: "part-1",
           callId: "call-1",
           tool: "read_task",
-          toolType: "generic" as const,
+          toolType: "generic",
           status: "completed",
           input: { taskId: "openducktor-d4li" },
           output: '{"task":{"id":"openducktor-d4li","title":"Fix chat flicker"}}',
@@ -1254,9 +1242,7 @@ describe("AgentChatThread", () => {
     );
     await act(flush);
 
-    const toolDetails = rendered.container.querySelector(
-      "details.group",
-    ) as HTMLDetailsElement | null;
+    const toolDetails = rendered.container.querySelector<HTMLDetailsElement>("details.group");
     if (!toolDetails) {
       throw new Error("Expected expandable tool details");
     }
@@ -1289,7 +1275,7 @@ describe("AgentChatThread", () => {
   });
 
   test("renders native scroll controls for top and bottom navigation", async () => {
-    setGlobalWindow(globalThis);
+    setGlobalWindow(window);
     const rendered = render(
       createElement(AgentChatThread, {
         model: {
@@ -1301,9 +1287,7 @@ describe("AgentChatThread", () => {
     );
     await act(flush);
 
-    const containerNode = rendered.container.querySelector(".hide-scrollbar") as
-      | (HTMLDivElement & ScrollContainerMock)
-      | null;
+    const containerNode = rendered.container.querySelector(".hide-scrollbar");
     if (!containerNode) {
       throw new Error("Expected messages container node");
     }
@@ -1343,9 +1327,7 @@ describe("AgentChatThread", () => {
 
   test("resyncs the transcript when the todo stack first appears", async () => {
     const syncBottomAfterComposerLayout = mock(() => {});
-    const syncBottomAfterComposerLayoutRef = {
-      current: null,
-    } as { current: (() => void) | null };
+    const syncBottomAfterComposerLayoutRef = createRef<() => void>();
     const session = buildSession();
     const model = {
       ...buildBaseModel(),
@@ -1402,9 +1384,7 @@ describe("AgentChatThread", () => {
 
   test("resyncs the transcript when the todo panel expands", async () => {
     const syncBottomAfterComposerLayout = mock(() => {});
-    const syncBottomAfterComposerLayoutRef = {
-      current: null,
-    } as { current: (() => void) | null };
+    const syncBottomAfterComposerLayoutRef = createRef<() => void>();
     const session = buildSession();
     const model = {
       ...buildBaseModel(),

@@ -1,4 +1,4 @@
-import type { Event } from "@opencode-ai/sdk/v2/client";
+import type { ParsedOpencodeEvent as Event } from "../opencode-global-event-ingress";
 import {
   handleMessagePartDeltaEvent,
   handleMessagePartRemovedEvent,

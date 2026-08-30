@@ -8,7 +8,10 @@ import {
 import { TaskCloseConfirmDialog } from "@/components/features/task-details/task-close-confirm-dialog";
 import { TaskDeleteConfirmDialog } from "@/components/features/task-details/task-delete-confirm-dialog";
 import { TaskDetailsSheetBody } from "@/components/features/task-details/task-details-sheet-body";
-import { TaskDetailsSheetFooter } from "@/components/features/task-details/task-details-sheet-footer";
+import {
+  TaskDetailsSheetFooter,
+  type TaskDetailsSheetFooterProps,
+} from "@/components/features/task-details/task-details-sheet-footer";
 import { TaskDetailsSheetHeader } from "@/components/features/task-details/task-details-sheet-header";
 import type { TaskDetailsSheetProps } from "@/components/features/task-details/task-details-sheet-types";
 import { TaskResetConfirmDialog } from "@/components/features/task-details/task-reset-confirm-dialog";
@@ -83,7 +86,7 @@ export function TaskDetailsSheet({
   unlinkingPullRequestTaskId = null,
   onDelete,
 }: TaskDetailsSheetProps): ReactElement {
-  const viewModel = useTaskDetailsSheetViewModel({
+  const viewModelInput: Parameters<typeof useTaskDetailsSheetViewModel>[0] = {
     activeWorkspace,
     task,
     allTasks,
@@ -94,12 +97,6 @@ export function TaskDetailsSheet({
     onQaOpen,
     onBuild,
     onOpenSession,
-    ...(task
-      ? {
-          resolveSessionOptionsByRole: (role: AgentRole) =>
-            resolveSessionTargetOptions(historicalSessions, taskSessions, role),
-        }
-      : {}),
     onDelegate,
     onHumanApprove,
     onHumanRequestChanges,
@@ -107,7 +104,12 @@ export function TaskDetailsSheet({
     onResetTask,
     onCloseTask,
     onDelete,
-  });
+  };
+  if (task) {
+    viewModelInput.resolveSessionOptionsByRole = (role: AgentRole) =>
+      resolveSessionTargetOptions(historicalSessions, taskSessions, role);
+  }
+  const viewModel = useTaskDetailsSheetViewModel(viewModelInput);
 
   const historicalSessionRoles = task ? resolveHistoricalSessionRoles(historicalSessions) : [];
 
@@ -131,6 +133,24 @@ export function TaskDetailsSheet({
 
   const canDetectPullRequestForTask = canDetectTaskPullRequest(task);
   const detailActions = detailActionsForHandlers({ onResetTask, onCloseTask });
+  const footerProps: TaskDetailsSheetFooterProps = { task, onOpenChange };
+  if (workflowActionsEnabled) {
+    footerProps.includeActions = detailActions;
+    footerProps.hasActiveSession = hasActiveSession;
+    footerProps.onWorkflowAction = viewModel.runWorkflowAction;
+    if (activeSessionRole) {
+      footerProps.activeSessionRole = activeSessionRole;
+    }
+    if (historicalSessionRoles.length > 0) {
+      footerProps.historicalSessionRoles = historicalSessionRoles;
+    }
+  }
+  if (onEdit) {
+    footerProps.onEdit = onEdit;
+  }
+  if (onDelete) {
+    footerProps.onDeleteSelect = viewModel.openDeleteDialog;
+  }
 
   return (
     <Sheet modal={false} open={open} onOpenChange={onOpenChange}>
@@ -187,21 +207,7 @@ export function TaskDetailsSheet({
           />
         </div>
 
-        <TaskDetailsSheetFooter
-          task={task}
-          onOpenChange={onOpenChange}
-          {...(workflowActionsEnabled
-            ? {
-                includeActions: detailActions,
-                hasActiveSession,
-                ...(activeSessionRole ? { activeSessionRole } : {}),
-                ...(historicalSessionRoles.length > 0 ? { historicalSessionRoles } : {}),
-                onWorkflowAction: viewModel.runWorkflowAction,
-              }
-            : {})}
-          {...(onEdit ? { onEdit } : {})}
-          {...(onDelete ? { onDeleteSelect: viewModel.openDeleteDialog } : {})}
-        />
+        <TaskDetailsSheetFooter {...footerProps} />
       </SheetContent>
 
       {onDelete && viewModel.taskId ? (

@@ -85,9 +85,7 @@ describe("OpenRepositoryModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /choose repository folder/i }));
     fireEvent.click(screen.getByRole("button", { name: /choose this folder/i }));
-    expect(((await screen.findByLabelText("Repository path")) as HTMLInputElement).value).toBe(
-      "/repo",
-    );
+    expect((await screen.findByLabelText<HTMLInputElement>("Repository path")).value).toBe("/repo");
 
     view.rerender(modal(false));
     view.rerender(modal(true));
@@ -133,17 +131,23 @@ describe("OpenRepositoryModal", () => {
     expect(await screen.findByRole("button", { name: "Opening repository..." })).toBeTruthy();
     const closeButton = screen.getByRole("button", { name: "Close" });
     const recentButton = screen.getByRole("button", { name: /Existing/ });
-    expect((closeButton as HTMLButtonElement).disabled).toBe(true);
-    expect((recentButton as HTMLButtonElement).disabled).toBe(true);
+    if (!(closeButton instanceof HTMLButtonElement)) {
+      throw new TypeError("Expected the close action to be a button.");
+    }
+    if (!(recentButton instanceof HTMLButtonElement)) {
+      throw new TypeError("Expected the recent repository action to be a button.");
+    }
+    expect(closeButton.disabled).toBe(true);
+    expect(recentButton.disabled).toBe(true);
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onOpenChange).not.toHaveBeenCalled();
 
     addWorkspaceResult.reject(new Error("Repository open failed"));
 
     await screen.findByText("Repository open failed");
-    expect((screen.getByLabelText("Repository path") as HTMLInputElement).value).toBe("/repo");
-    expect((closeButton as HTMLButtonElement).disabled).toBe(false);
-    expect((recentButton as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByLabelText<HTMLInputElement>("Repository path").value).toBe("/repo");
+    expect(closeButton.disabled).toBe(false);
+    expect(recentButton.disabled).toBe(false);
     unmount();
   });
 

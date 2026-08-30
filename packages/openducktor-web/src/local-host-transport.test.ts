@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
+import { Effect } from "effect";
+import type { JSONType } from "zod";
 import { configureBrowserRuntimeConfig } from "./browser-config";
-
-type FakeEventSourceListener = (event: MessageEvent<string>) => void;
+import { WebDependencyError } from "./effect/web-errors";
+import { createFetchFixture } from "./test-support";
 
 class FakeEventSource {
   static instances: FakeEventSource[] = [];
@@ -14,7 +16,7 @@ class FakeEventSource {
   readonly options: EventSourceInit | undefined;
   closed = false;
   readyState = FakeEventSource.CONNECTING;
-  private readonly listeners = new Map<string, Set<FakeEventSourceListener>>();
+  private readonly listeners = new Map<string, Set<EventListener>>();
 
   constructor(url: string, options?: EventSourceInit) {
     this.url = url;
@@ -23,9 +25,8 @@ class FakeEventSource {
   }
 
   addEventListener(type: string, listener: EventListener): void {
-    const typedListener = listener as FakeEventSourceListener;
-    const current = this.listeners.get(type) ?? new Set<FakeEventSourceListener>();
-    current.add(typedListener);
+    const current = this.listeners.get(type) ?? new Set<EventListener>();
+    current.add(listener);
     this.listeners.set(type, current);
   }
 
@@ -34,7 +35,7 @@ class FakeEventSource {
     if (!current) {
       return;
     }
-    current.delete(listener as FakeEventSourceListener);
+    current.delete(listener);
     if (current.size === 0) {
       this.listeners.delete(type);
     }
@@ -53,7 +54,10 @@ class FakeEventSource {
     if (!current) {
       return;
     }
-    const event = { data } as MessageEvent<string>;
+    const event =
+      type === "open" || type === "error"
+        ? new Event(type)
+        : new MessageEvent<string>(type, { data });
     for (const listener of current) {
       listener(event);
     }
@@ -70,8 +74,6 @@ class FakeEventSource {
 
 const originalEventSource = globalThis.EventSource;
 const originalFetch = globalThis.fetch;
-const originalSetTimeout = globalThis.setTimeout;
-const originalClearTimeout = globalThis.clearTimeout;
 const originalBackendUrl = process.env.VITE_ODT_BROWSER_BACKEND_URL;
 const originalAuthToken = process.env.VITE_ODT_BROWSER_AUTH_TOKEN;
 let localHostTransportImportId = 0;
@@ -119,8 +121,6 @@ beforeEach(async () => {
 afterEach(() => {
   globalThis.EventSource = originalEventSource;
   globalThis.fetch = originalFetch;
-  globalThis.setTimeout = originalSetTimeout;
-  globalThis.clearTimeout = originalClearTimeout;
   configureBrowserRuntimeConfig({});
   if (originalBackendUrl === undefined) {
     delete process.env.VITE_ODT_BROWSER_BACKEND_URL;
@@ -161,6 +161,19 @@ describe("readLocalHostErrorPayload", () => {
     });
   });
 
+  test("returns the parsed structured payload without reparsing its message", async () => {
+    const { readLocalHostErrorPayload } = await import("./local-host-errors");
+    const response = new Response(JSON.stringify({ error: "  Structured backend error  " }), {
+      status: 500,
+      headers: { "content-type": "application/json" },
+    });
+
+    await expect(readLocalHostErrorPayload(response)).resolves.toEqual({
+      message: "Structured backend error",
+      payload: { error: "Structured backend error" },
+    });
+  });
+
   test("returns the host status message when the body is empty", async () => {
     const { readLocalHostErrorPayload } = await import("./local-host-errors");
     const response = new Response("", {
@@ -178,13 +191,15 @@ describe("readLocalHostErrorPayload", () => {
 describe("createLocalHostClient", () => {
   test("rejects local host session failures with a typed web host request error", async () => {
     const { ensureLocalHostSession } = await loadLocalHostTransport();
-    globalThis.fetch = mock(
-      async () =>
-        new Response(JSON.stringify({ error: "Session rejected" }), {
-          status: 401,
-          headers: { "content-type": "application/json" },
-        }),
-    ) as unknown as typeof globalThis.fetch;
+    globalThis.fetch = createFetchFixture(
+      mock(
+        async () =>
+          new Response(JSON.stringify({ error: "Session rejected" }), {
+            status: 401,
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    );
 
     const session = ensureLocalHostSession();
     await expect(session).rejects.toThrow("Session rejected");
@@ -195,7 +210,7 @@ describe("createLocalHostClient", () => {
 
   test("preserves structured timeout metadata through local web runtimeEnsure", async () => {
     const { createLocalHostClient } = await loadLocalHostTransport();
-    const fetchMock = mock(async (url: string | URL | Request) => {
+    const fetchMock = mock(async (url: string | URL | Request, _init?: RequestInit) => {
       if (url.toString().endsWith("/session")) {
         return new Response(JSON.stringify({ ok: true }), {
           status: 200,
@@ -214,25 +229,22 @@ describe("createLocalHostClient", () => {
         },
       );
     });
-    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+    globalThis.fetch = createFetchFixture(fetchMock);
 
     const client = createLocalHostClient();
-    const result = await client.runtimeEnsure("/repo", "opencode").then(
-      () => ({ ok: true as const }),
-      (error: unknown) => ({ ok: false as const, error }),
-    );
-
-    if (result.ok) {
-      throw new Error("Expected runtimeEnsure to reject");
+    let error: unknown;
+    try {
+      await client.runtimeEnsure("/repo", "opencode");
+    } catch (cause) {
+      error = cause;
     }
 
-    const { error } = result;
     expect(error instanceof Error).toBe(true);
     if (!(error instanceof Error)) {
       throw new Error("Expected runtimeEnsure to reject with an Error");
     }
     expect(error.message).toBe("OpenCode runtime is still starting");
-    expect(Reflect.get(error, "failureKind")).toBe("timeout");
+    expect(error).toMatchObject({ failureKind: "timeout" });
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -262,25 +274,27 @@ describe("createLocalHostClient", () => {
 
   test("preserves structured terminal failures through the local web transport", async () => {
     const { createLocalHostClient } = await loadLocalHostTransport();
-    globalThis.fetch = mock(async (url: string | URL | Request) => {
-      if (url.toString().endsWith("/session")) {
-        return new Response(JSON.stringify({ ok: true }), { status: 200 });
-      }
+    globalThis.fetch = createFetchFixture(
+      mock(async (url: string | URL | Request) => {
+        if (url.toString().endsWith("/session")) {
+          return new Response(JSON.stringify({ ok: true }), { status: 200 });
+        }
 
-      return new Response(
-        JSON.stringify({
-          error: "Interactive terminals are unavailable in this runtime.",
-          failure: {
-            kind: "terminal",
-            terminalFailure: {
-              code: "unsupported_runtime",
-              message: "Interactive terminals are unavailable in this runtime.",
+        return new Response(
+          JSON.stringify({
+            error: "Interactive terminals are unavailable in this runtime.",
+            failure: {
+              kind: "terminal",
+              terminalFailure: {
+                code: "unsupported_runtime",
+                message: "Interactive terminals are unavailable in this runtime.",
+              },
             },
-          },
-        }),
-        { status: 500 },
-      );
-    }) as unknown as typeof globalThis.fetch;
+          }),
+          { status: 500 },
+        );
+      }),
+    );
 
     await expect(
       createLocalHostClient().terminalCreate({ workingDir: "/repo", context: {} }),
@@ -292,27 +306,29 @@ describe("createLocalHostClient", () => {
 
   test("preserves workspace write failures through the local web transport", async () => {
     const { createLocalHostClient } = await loadLocalHostTransport();
-    globalThis.fetch = mock(async (url: string | URL | Request) => {
-      if (url.toString().endsWith("/session")) {
-        return new Response(JSON.stringify({ ok: true }), { status: 200 });
-      }
+    globalThis.fetch = createFetchFixture(
+      mock(async (url: string | URL | Request) => {
+        if (url.toString().endsWith("/session")) {
+          return new Response(JSON.stringify({ ok: true }), { status: 200 });
+        }
 
-      return new Response(
-        JSON.stringify({
-          error: "The file changed after it was loaded.",
-          failure: {
-            kind: "workspace_text_file_write",
-            workspaceTextFileWriteFailure: {
-              code: "stale_revision",
-              message: "The file changed after it was loaded.",
-              rootPath: "/repo",
-              relativePath: "src/file.ts",
+        return new Response(
+          JSON.stringify({
+            error: "The file changed after it was loaded.",
+            failure: {
+              kind: "workspace_text_file_write",
+              workspaceTextFileWriteFailure: {
+                code: "stale_revision",
+                message: "The file changed after it was loaded.",
+                rootPath: "/repo",
+                relativePath: "src/file.ts",
+              },
             },
-          },
-        }),
-        { status: 500 },
-      );
-    }) as unknown as typeof globalThis.fetch;
+          }),
+          { status: 500 },
+        );
+      }),
+    );
 
     await expect(
       createLocalHostClient().filesystemWriteTextFile({
@@ -329,6 +345,31 @@ describe("createLocalHostClient", () => {
       },
     });
   });
+
+  test("keeps invalid invoke failure envelopes as typed dependency errors", async () => {
+    const { createLocalHostClient } = await loadLocalHostTransport();
+    const fetchMock = mock(async (url: string | URL | Request, _init?: RequestInit) => {
+      if (url.toString().endsWith("/session")) {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+
+      return new Response(
+        JSON.stringify({
+          error: "Invalid terminal failure",
+          failure: { kind: "terminal", terminalFailure: { code: "missing_code" } },
+        }),
+        { status: 500 },
+      );
+    });
+    globalThis.fetch = Object.assign(fetchMock, { preconnect: originalFetch.preconnect });
+
+    await expect(
+      createLocalHostClient().terminalCreate({ workingDir: "/repo", context: {} }),
+    ).rejects.toMatchObject({
+      _tag: "WebDependencyError",
+      message: "The local host returned an invalid invoke failure envelope.",
+    });
+  });
 });
 
 describe("local host SSE subscriptions", () => {
@@ -338,8 +379,13 @@ describe("local host SSE subscriptions", () => {
       subscribeLocalHostDevServerEvents,
       subscribeLocalHostRunEvents,
     } = await loadLocalHostTransport();
-    const fetchMock = mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
-    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+    const fetchMock = mock(
+      async (url: string | URL | Request) =>
+        new Response(url.toString().includes("/invoke/") ? "null" : JSON.stringify({ ok: true }), {
+          status: 200,
+        }),
+    );
+    globalThis.fetch = createFetchFixture(fetchMock);
     const runListener = mock(() => {});
     const devServerListener = mock(() => {});
     const liveSessionListener = mock(() => {});
@@ -359,11 +405,20 @@ describe("local host SSE subscriptions", () => {
     const { unsubscribe: unsubscribeDevServer } = await devServerSubscription;
     const stopObservingLiveSessions = await liveSessionObservation;
 
-    const emitHostEvent = (channel: string, payload: unknown): void => {
+    const emitHostEvent = (channel: string, payload: JSONType): void => {
       FakeEventSource.instances[0]?.emit("message", JSON.stringify({ channel, payload }));
     };
     emitHostEvent("openducktor://run-event", { type: "run" });
-    emitHostEvent("openducktor://dev-server-event", { type: "dev-server" });
+    emitHostEvent("openducktor://dev-server-event", {
+      type: "snapshot",
+      state: {
+        repoPath: "/repo",
+        taskId: "task-1",
+        worktreePath: null,
+        scripts: [],
+        updatedAt: "2026-03-19T15:30:00.000Z",
+      },
+    });
     emitHostEvent("openducktor://agent-session-live-event", {
       type: "snapshot",
       repoPath: "/repo",
@@ -371,12 +426,25 @@ describe("local host SSE subscriptions", () => {
     });
 
     expect(runListener).toHaveBeenCalledWith({ type: "run" });
-    expect(devServerListener).toHaveBeenCalledWith({ type: "dev-server" });
+    expect(devServerListener).toHaveBeenCalledWith({
+      type: "snapshot",
+      state: {
+        repoPath: "/repo",
+        taskId: "task-1",
+        worktreePath: null,
+        scripts: [],
+        updatedAt: "2026-03-19T15:30:00.000Z",
+      },
+    });
     expect(liveSessionListener).toHaveBeenCalledWith({
       type: "snapshot",
       repoPath: "/repo",
       sessions: [],
     });
+    expect(() => emitHostEvent("openducktor://dev-server-event", { type: "dev-server" })).toThrow(
+      "Invalid OpenDucktor host event envelope.",
+    );
+    expect(devServerListener).toHaveBeenCalledTimes(1);
 
     unsubscribeRun();
     unsubscribeDevServer();
@@ -388,9 +456,9 @@ describe("local host SSE subscriptions", () => {
 
   test("resolves dev-server subscriptions on initial open and emits reconnect control payloads afterward", async () => {
     const { subscribeLocalHostDevServerEvents } = await loadLocalHostTransport();
-    globalThis.fetch = mock(
-      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
-    ) as unknown as typeof globalThis.fetch;
+    globalThis.fetch = createFetchFixture(
+      mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
+    );
     const listener = mock(() => {});
 
     const subscription = subscribeLocalHostDevServerEvents(listener);
@@ -432,9 +500,9 @@ describe("local host SSE subscriptions", () => {
           resolveSecondRefresh();
         }
       }
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      return new Response("null", { status: 200 });
     });
-    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+    globalThis.fetch = createFetchFixture(fetchMock);
     const listener = mock((_envelope: AgentSessionLiveEnvelope) => {});
 
     const observation = observeLocalHostAgentSessions({ repoPath: "/repo" }, listener);
@@ -549,9 +617,17 @@ describe("local host SSE subscriptions", () => {
 
   test("delivers replay gaps to every live-session observer when one listener fails", async () => {
     const { observeLocalHostAgentSessions } = await loadLocalHostTransport();
-    globalThis.fetch = mock(
-      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
-    ) as unknown as typeof globalThis.fetch;
+    globalThis.fetch = createFetchFixture(
+      mock(
+        async (url: string | URL | Request) =>
+          new Response(
+            url.toString().includes("/invoke/") ? "null" : JSON.stringify({ ok: true }),
+            {
+              status: 200,
+            },
+          ),
+      ),
+    );
     const throwingListener = mock((envelope: AgentSessionLiveEnvelope) => {
       if (envelope.type === "transcript_gap") {
         throw new Error("listener failed");
@@ -581,9 +657,9 @@ describe("local host SSE subscriptions", () => {
 
   test("waits for the native EventSource reconnect when the initial open fails", async () => {
     const { subscribeLocalHostDevServerEvents } = await loadLocalHostTransport();
-    globalThis.fetch = mock(
-      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
-    ) as unknown as typeof globalThis.fetch;
+    globalThis.fetch = createFetchFixture(
+      mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
+    );
     const listener = mock(() => {});
 
     const subscription = subscribeLocalHostDevServerEvents(listener);
@@ -609,9 +685,9 @@ describe("local host SSE subscriptions", () => {
 
   test("emits a stream-warning control payload when dev-server EventSource errors after opening", async () => {
     const { subscribeLocalHostDevServerEvents } = await loadLocalHostTransport();
-    globalThis.fetch = mock(
-      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
-    ) as unknown as typeof globalThis.fetch;
+    globalThis.fetch = createFetchFixture(
+      mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
+    );
     const listener = mock(() => {});
 
     const subscription = subscribeLocalHostDevServerEvents(listener);
@@ -649,9 +725,9 @@ describe("local host SSE subscriptions", () => {
 
   test("isolates post-open dev-server stream-warning listener failures", async () => {
     const { subscribeLocalHostDevServerEvents } = await loadLocalHostTransport();
-    globalThis.fetch = mock(
-      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
-    ) as unknown as typeof globalThis.fetch;
+    globalThis.fetch = createFetchFixture(
+      mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
+    );
     const throwingListener = mock(() => {
       throw new Error("listener failed");
     });
@@ -679,9 +755,9 @@ describe("local host SSE subscriptions", () => {
 
   test("isolates named dev-server stream-warning listener failures", async () => {
     const { subscribeLocalHostDevServerEvents } = await loadLocalHostTransport();
-    globalThis.fetch = mock(
-      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
-    ) as unknown as typeof globalThis.fetch;
+    globalThis.fetch = createFetchFixture(
+      mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
+    );
     const throwingListener = mock(() => {
       throw new Error("listener failed");
     });
@@ -712,7 +788,7 @@ describe("local host SSE subscriptions", () => {
   test("keeps task stream setup pending until its initial EventSource open", async () => {
     const { subscribeLocalHostTaskStream } = await loadLocalHostTransport();
     const subscriptionId = "05e77c20-ebf2-4e7f-a880-9c95c24627ee";
-    const fetchMock = mock(async (url: string | URL | Request) => {
+    const fetchMock = mock(async (url: string | URL | Request, _init?: RequestInit) => {
       if (url.toString().endsWith("/subscriptions")) {
         return new Response(JSON.stringify({ streamToken: "stream-token", subscriptionId }), {
           status: 201,
@@ -720,7 +796,7 @@ describe("local host SSE subscriptions", () => {
       }
       return new Response(null, { status: 204 });
     });
-    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+    globalThis.fetch = createFetchFixture(fetchMock);
     const listener = mock(() => {});
 
     const subscription = subscribeLocalHostTaskStream({ cursor: null }, listener);
@@ -759,7 +835,7 @@ describe("local host SSE subscriptions", () => {
       `http://127.0.0.1:14327/task-events/subscriptions/${subscriptionId}/ack`,
       `http://127.0.0.1:14327/task-events/subscriptions/${subscriptionId}`,
     ]);
-    const ackOptions = (fetchMock.mock.calls[2] as unknown as [unknown, RequestInit])[1];
+    const ackOptions = fetchMock.mock.calls[2]?.[1];
     expect(ackOptions).toMatchObject({
       body: JSON.stringify({ cursor: frame.cursor }),
       headers: {
@@ -774,14 +850,16 @@ describe("local host SSE subscriptions", () => {
   test("accepts a valid task frame as initial readiness and delivers it once", async () => {
     const { subscribeLocalHostTaskStream } = await loadLocalHostTransport();
     const subscriptionId = "05e77c20-ebf2-4e7f-a880-9c95c24627ee";
-    globalThis.fetch = mock(async (url: string | URL | Request) => {
-      if (url.toString().endsWith("/subscriptions")) {
-        return new Response(JSON.stringify({ streamToken: "stream-token", subscriptionId }), {
-          status: 201,
-        });
-      }
-      return new Response(null, { status: 204 });
-    }) as unknown as typeof globalThis.fetch;
+    globalThis.fetch = createFetchFixture(
+      mock(async (url: string | URL | Request) => {
+        if (url.toString().endsWith("/subscriptions")) {
+          return new Response(JSON.stringify({ streamToken: "stream-token", subscriptionId }), {
+            status: 201,
+          });
+        }
+        return new Response(null, { status: 204 });
+      }),
+    );
     const listener = mock(() => {});
     const setup = subscribeLocalHostTaskStream({ cursor: null }, listener);
     const eventSource = await waitForEventSourceInstance();
@@ -811,7 +889,7 @@ describe("local host SSE subscriptions", () => {
       }
       return new Response(null, { status: 204 });
     });
-    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+    globalThis.fetch = createFetchFixture(fetchMock);
 
     const setup = subscribeLocalHostTaskStream(
       { cursor: null },
@@ -832,7 +910,7 @@ describe("local host SSE subscriptions", () => {
   });
 
   test("closes, deletes, and rejects when initial task stream readiness times out", async () => {
-    const { subscribeLocalHostTaskStream } = await loadLocalHostTransport();
+    const { subscribeLocalTaskEventStreamEffect } = await import("./local-task-event-transport");
     const subscriptionId = "05e77c20-ebf2-4e7f-a880-9c95c24627ee";
     const fetchMock = mock(async (url: string | URL | Request) => {
       if (url.toString().endsWith("/subscriptions")) {
@@ -843,16 +921,28 @@ describe("local host SSE subscriptions", () => {
       return new Response(null, { status: 204 });
     });
     const scheduledTimers: Array<() => void> = [];
-    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
-    globalThis.setTimeout = ((callback: TimerHandler) => {
-      scheduledTimers.push(callback as () => void);
-      return 1 as unknown as ReturnType<typeof setTimeout>;
-    }) as unknown as typeof globalThis.setTimeout;
-    globalThis.clearTimeout = mock(() => {}) as unknown as typeof globalThis.clearTimeout;
-
-    const setup = subscribeLocalHostTaskStream(
-      { cursor: null },
-      mock(() => {}),
+    globalThis.fetch = createFetchFixture(fetchMock);
+    const setup = Effect.runPromise(
+      subscribeLocalTaskEventStreamEffect(
+        { cursor: null },
+        mock(() => {}),
+        undefined,
+        {
+          ensureSession: () => Effect.void,
+          localHostRequestErrorEffect: (response) =>
+            Effect.fail(
+              new WebDependencyError({
+                dependency: "local-web-host",
+                operation: "test.request",
+                message: `Unexpected HTTP ${response.status}`,
+              }),
+            ),
+          scheduleInitialReadinessTimeout: (callback) => {
+            scheduledTimers.push(callback);
+            return () => {};
+          },
+        },
+      ),
     );
     const eventSource = await waitForEventSourceInstance();
     await waitForEventSourceListener(eventSource, "open");
@@ -864,7 +954,6 @@ describe("local host SSE subscriptions", () => {
     await expect(setup).rejects.toThrow("Timed out waiting for task event stream subscription");
     expect(eventSource.closed).toBe(true);
     expect(fetchMock.mock.calls.map(([url]) => url.toString())).toEqual([
-      "http://127.0.0.1:14327/session",
       "http://127.0.0.1:14327/task-events/subscriptions",
       `http://127.0.0.1:14327/task-events/subscriptions/${subscriptionId}`,
     ]);
@@ -881,7 +970,7 @@ describe("local host SSE subscriptions", () => {
       }
       return new Response(null, { status: 204 });
     });
-    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+    globalThis.fetch = createFetchFixture(fetchMock);
     const onTerminalFailure = mock(() => {});
 
     const setup = subscribeLocalHostTaskStream(
@@ -919,7 +1008,7 @@ describe("local host SSE subscriptions", () => {
       }
       return new Response(null, { status: 204 });
     });
-    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+    globalThis.fetch = createFetchFixture(fetchMock);
     const onTerminalFailure = mock(() => {});
 
     const setup = subscribeLocalHostTaskStream(
@@ -956,7 +1045,7 @@ describe("local host SSE subscriptions", () => {
       }
       return new Response(null, { status: 204 });
     });
-    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+    globalThis.fetch = createFetchFixture(fetchMock);
     const onTerminalFailure = mock(() => {});
 
     const setup = subscribeLocalHostTaskStream(
@@ -988,7 +1077,7 @@ describe("local host SSE subscriptions", () => {
       }
       return new Response(null, { status: 204 });
     });
-    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+    globalThis.fetch = createFetchFixture(fetchMock);
     const onTerminalFailure = mock(() => {});
 
     const setup = subscribeLocalHostTaskStream(
@@ -1030,7 +1119,7 @@ describe("local host SSE subscriptions", () => {
       }
       return new Response(null, { status: 204 });
     });
-    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+    globalThis.fetch = createFetchFixture(fetchMock);
     const onTerminalFailure = mock(() => {});
 
     const setup = subscribeLocalHostTaskStream(
@@ -1071,7 +1160,7 @@ describe("local host SSE subscriptions", () => {
       }
       return new Response(null, { status: 204 });
     });
-    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+    globalThis.fetch = createFetchFixture(fetchMock);
     class ThrowingEventSource {
       constructor() {
         throw new Error("EventSource construction failed");

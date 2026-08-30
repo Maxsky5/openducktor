@@ -1,4 +1,4 @@
-import type { Event, GlobalEvent, OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import type { GlobalEvent, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import {
   isRelevantEvent,
   readEventDirectory,
@@ -9,20 +9,22 @@ import {
 import {
   normalizeOpencodeGlobalEventPayload,
   opencodeEventUsesParentSessionRouting,
-  type OpencodeGlobalEventPayload,
   type ProjectOpencodeAgentSessionEventInput,
   projectOpencodeAgentSessionEvent,
 } from "./opencode-agent-session-projection";
+import type { ParsedOpencodeEvent as Event } from "./opencode-global-event-ingress";
 import type { EventStreamSubscriber, OpencodeEventLogger } from "./types";
-import { asUnknownRecord } from "./guards";
+import { z } from "zod";
 
 type ProcessOpencodeEventInput = ProjectOpencodeAgentSessionEventInput;
 
+type GlobalEventClient = Pick<OpencodeClient, "global">;
+
 type SubscribeGlobalEventsInput = {
-  client: OpencodeClient;
+  client: GlobalEventClient;
   controller: AbortController;
   onEvent: (event: Event) => void | Promise<void>;
-  onEventError?: (error: unknown, scope: OpencodeGlobalEventFailureScope) => void | Promise<void>;
+  onEventError?: (cause: unknown, scope: OpencodeGlobalEventFailureScope) => void | Promise<void>;
   onReady?: () => void;
 };
 
@@ -43,75 +45,77 @@ type RelevantSubscriberEventOptions = {
   resolveParentExternalSessionId?: (childExternalSessionId: string) => string | undefined;
 };
 
-type GlobalEventStream = {
-  stream: AsyncIterable<OpencodeGlobalEvent>;
-};
-
-type OpencodeGlobalEvent = Omit<GlobalEvent, "payload"> & {
-  payload: OpencodeGlobalEventPayload;
-};
-
-type GlobalEventApi = {
-  event: (options?: { signal?: AbortSignal }) => Promise<GlobalEventStream> | GlobalEventStream;
-};
-
-const getGlobalEventApi = (client: OpencodeClient): GlobalEventApi => {
-  const globalApi = (client as OpencodeClient & { global?: { event?: unknown } }).global;
-  if (!globalApi || typeof globalApi.event !== "function") {
-    throw new Error(
-      "OpenCode SDK does not expose global event streaming via client.global.event(). Update @opencode-ai/sdk before using the adapter.",
-    );
-  }
-  return globalApi as GlobalEventApi;
-};
+type OpencodeGlobalEvent = GlobalEvent;
 
 const resolveGlobalEventStream = async (
-  client: OpencodeClient,
+  client: GlobalEventClient,
   signal: AbortSignal,
 ): Promise<AsyncIterable<OpencodeGlobalEvent>> => {
-  const stream = await getGlobalEventApi(client).event({ signal });
-  if (
-    typeof stream === "object" &&
-    stream !== null &&
-    "stream" in stream &&
-    stream.stream &&
-    typeof stream.stream[Symbol.asyncIterator] === "function"
-  ) {
-    return stream.stream;
-  }
-  throw new Error("OpenCode SDK global event stream must expose a stream async iterator.");
+  const stream = await client.global.event({ signal });
+  return stream.stream;
 };
 
-const toDirectoryScopedEvent = (event: Event, directory: string): Event => {
-  const properties = "properties" in event ? event.properties : undefined;
+const failureScopePayloadSchema = z.union([
+  z.object({
+    type: z.literal("sync"),
+    syncEvent: z.object({
+      aggregateID: z.string().optional(),
+      data: z.object({
+        info: z.object({ parentID: z.string().optional() }).optional(),
+        sessionID: z.string().optional(),
+      }),
+      type: z.string(),
+    }),
+  }),
+  z.object({
+    properties: z.object({
+      info: z.object({ parentID: z.string().optional() }).optional(),
+      sessionID: z.string().optional(),
+    }),
+    type: z.string(),
+  }),
+]);
+
+const toDirectoryScopedEvent = <ScopedEvent extends Event>(
+  event: ScopedEvent,
+  directory: string,
+): ScopedEvent => {
   return {
     ...event,
     properties: {
-      ...properties,
+      ...event.properties,
       directory,
     },
-  } as Event;
+  };
 };
 
 const readGlobalEventFailureScope = (
   event: OpencodeGlobalEvent,
 ): OpencodeGlobalEventFailureScope => {
-  const payload = asUnknownRecord(event.payload);
-  const syncEvent = payload?.type === "sync" ? asUnknownRecord(payload.syncEvent) : undefined;
-  const properties = syncEvent ? asUnknownRecord(syncEvent.data) : payload?.properties;
-  const scopedEvent = {
-    type: String(payload?.type ?? "unknown"),
-    properties,
-  } as Event;
-  const externalSessionId =
-    readEventSessionId(scopedEvent) ??
-    (typeof syncEvent?.aggregateID === "string" ? syncEvent.aggregateID : undefined);
-  const parentExternalSessionId = readEventParentExternalSessionId(properties);
-  return {
-    directory: event.directory,
-    ...(externalSessionId ? { externalSessionId } : {}),
-    ...(parentExternalSessionId ? { parentExternalSessionId } : {}),
-  };
+  const payload = failureScopePayloadSchema.safeParse(event.payload);
+  if (!payload.success) {
+    return { directory: event.directory };
+  }
+  const syncEvent = "syncEvent" in payload.data ? payload.data.syncEvent : undefined;
+  const properties =
+    "properties" in payload.data ? payload.data.properties : payload.data.syncEvent.data;
+  const externalSessionId = properties.sessionID ?? syncEvent?.aggregateID;
+  const payloadType = (syncEvent?.type ?? payload.data.type).replace(/\.1$/u, "");
+  const info = properties.info;
+  const parentExternalSessionId =
+    payloadType === "session.created" ||
+    payloadType === "session.updated" ||
+    payloadType === "session.deleted"
+      ? info?.parentID
+      : undefined;
+  const scope: OpencodeGlobalEventFailureScope = { directory: event.directory };
+  if (externalSessionId) {
+    scope.externalSessionId = externalSessionId;
+  }
+  if (parentExternalSessionId) {
+    scope.parentExternalSessionId = parentExternalSessionId;
+  }
+  return scope;
 };
 
 const normalizeDirectory = (directory: string): string => directory.trim();
@@ -145,10 +149,6 @@ export const logStreamEvent = ({ subscriber, event, relevant, logEvent }: LogEve
   });
 };
 
-export const assertGlobalEventSupport = (client: OpencodeClient): void => {
-  void getGlobalEventApi(client);
-};
-
 export const subscribeGlobalEvents = async (input: SubscribeGlobalEventsInput): Promise<void> => {
   const stream = await resolveGlobalEventStream(input.client, input.controller.signal);
   let ready = false;
@@ -158,10 +158,9 @@ export const subscribeGlobalEvents = async (input: SubscribeGlobalEventsInput): 
     }
     try {
       const payloadDecision = normalizeOpencodeGlobalEventPayload(event.payload);
-      if (payloadDecision.kind === "heartbeat") {
-        continue;
+      if (payloadDecision.kind === "event") {
+        await input.onEvent(toDirectoryScopedEvent(payloadDecision.event, event.directory));
       }
-      await input.onEvent(toDirectoryScopedEvent(payloadDecision.event, event.directory));
     } catch (error) {
       if (!input.onEventError) {
         throw error;
@@ -189,10 +188,9 @@ export const isRelevantSubscriberEvent = (
     ? lifecycleEvent.externalSessionId
     : readEventSessionId(event);
   if (eventExternalSessionId) {
-    const properties = "properties" in event ? event.properties : undefined;
     const parentExternalSessionId = lifecycleEvent
       ? lifecycleEvent.parentExternalSessionId
-      : readEventParentExternalSessionId(properties);
+      : readEventParentExternalSessionId(event);
 
     if (parentExternalSessionId) {
       return parentExternalSessionId === subscriber.externalSessionId;

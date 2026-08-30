@@ -51,16 +51,19 @@ export const startKanbanSessionFlow = async ({
   const effectivePostStartAction =
     startInBackground && request.postStartAction === "none" ? "kickoff" : request.postStartAction;
   const task = tasks.find((entry) => entry.id === request.taskId) ?? null;
-  const workflow = await runSessionStartWorkflow({
+  const workflowInput: Parameters<typeof runSessionStartWorkflow>[0] = {
     request: {
       ...request,
       postStartAction: effectivePostStartAction,
     },
     decision,
     task,
-    ...(setTaskTargetBranch ? { persistTaskTargetBranch: setTaskTargetBranch } : {}),
     humanRequestChangesTask,
-  });
+  };
+  if (setTaskTargetBranch) {
+    workflowInput.persistTaskTargetBranch = setTaskTargetBranch;
+  }
+  const workflow = await runSessionStartWorkflow(workflowInput);
   if (workflow.postStartActionError) {
     showPostStartActionError(effectivePostStartAction, workflow.postStartActionError);
   }

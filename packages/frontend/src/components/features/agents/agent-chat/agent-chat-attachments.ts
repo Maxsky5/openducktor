@@ -6,81 +6,81 @@ import {
   createComposerAttachment,
 } from "./agent-chat-composer-draft";
 
-const ATTACHMENT_EXTENSION_KIND: Record<string, AgentAttachmentKind> = {
-  ".avif": "image",
-  ".png": "image",
-  ".jpg": "image",
-  ".jpeg": "image",
-  ".gif": "image",
-  ".heic": "image",
-  ".heif": "image",
-  ".tif": "image",
-  ".tiff": "image",
-  ".webp": "image",
-  ".svg": "image",
-  ".bmp": "image",
-  ".mp3": "audio",
-  ".wav": "audio",
-  ".m4a": "audio",
-  ".aac": "audio",
-  ".ogg": "audio",
-  ".oga": "audio",
-  ".opus": "audio",
-  ".flac": "audio",
-  ".mp4": "video",
-  ".m4v": "video",
-  ".mov": "video",
-  ".webm": "video",
-  ".ogv": "video",
-  ".mkv": "video",
-  ".avi": "video",
-  ".pdf": "pdf",
-};
+const ATTACHMENT_EXTENSION_KIND = new Map<string, AgentAttachmentKind>([
+  [".avif", "image"],
+  [".png", "image"],
+  [".jpg", "image"],
+  [".jpeg", "image"],
+  [".gif", "image"],
+  [".heic", "image"],
+  [".heif", "image"],
+  [".tif", "image"],
+  [".tiff", "image"],
+  [".webp", "image"],
+  [".svg", "image"],
+  [".bmp", "image"],
+  [".mp3", "audio"],
+  [".wav", "audio"],
+  [".m4a", "audio"],
+  [".aac", "audio"],
+  [".ogg", "audio"],
+  [".oga", "audio"],
+  [".opus", "audio"],
+  [".flac", "audio"],
+  [".mp4", "video"],
+  [".m4v", "video"],
+  [".mov", "video"],
+  [".webm", "video"],
+  [".ogv", "video"],
+  [".mkv", "video"],
+  [".avi", "video"],
+  [".pdf", "pdf"],
+]);
 
-const ATTACHMENT_EXTENSION_MIME: Record<string, string> = {
-  ".avif": "image/avif",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".heic": "image/heic",
-  ".heif": "image/heif",
-  ".tif": "image/tiff",
-  ".tiff": "image/tiff",
-  ".webp": "image/webp",
-  ".svg": "image/svg+xml",
-  ".bmp": "image/bmp",
-  ".mp3": "audio/mpeg",
-  ".wav": "audio/wav",
-  ".m4a": "audio/mp4",
-  ".aac": "audio/aac",
-  ".ogg": "audio/ogg",
-  ".oga": "audio/ogg",
-  ".opus": "audio/ogg",
-  ".flac": "audio/flac",
-  ".mp4": "video/mp4",
-  ".m4v": "video/x-m4v",
-  ".mov": "video/quicktime",
-  ".webm": "video/webm",
-  ".ogv": "video/ogg",
-  ".mkv": "video/x-matroska",
-  ".avi": "video/x-msvideo",
-  ".pdf": "application/pdf",
-};
+const ATTACHMENT_EXTENSION_MIME = new Map<string, string>([
+  [".avif", "image/avif"],
+  [".png", "image/png"],
+  [".jpg", "image/jpeg"],
+  [".jpeg", "image/jpeg"],
+  [".gif", "image/gif"],
+  [".heic", "image/heic"],
+  [".heif", "image/heif"],
+  [".tif", "image/tiff"],
+  [".tiff", "image/tiff"],
+  [".webp", "image/webp"],
+  [".svg", "image/svg+xml"],
+  [".bmp", "image/bmp"],
+  [".mp3", "audio/mpeg"],
+  [".wav", "audio/wav"],
+  [".m4a", "audio/mp4"],
+  [".aac", "audio/aac"],
+  [".ogg", "audio/ogg"],
+  [".oga", "audio/ogg"],
+  [".opus", "audio/ogg"],
+  [".flac", "audio/flac"],
+  [".mp4", "video/mp4"],
+  [".m4v", "video/x-m4v"],
+  [".mov", "video/quicktime"],
+  [".webm", "video/webm"],
+  [".ogv", "video/ogg"],
+  [".mkv", "video/x-matroska"],
+  [".avi", "video/x-msvideo"],
+  [".pdf", "application/pdf"],
+]);
 
-const ATTACHMENT_MIME_EXTENSION = Object.entries(ATTACHMENT_EXTENSION_MIME).reduce<
-  Record<string, string>
->((acc, [extension, mime]) => {
-  acc[mime] ??= extension;
-  return acc;
-}, {});
+const ATTACHMENT_MIME_EXTENSION = new Map<string, string>();
+for (const [extension, mime] of ATTACHMENT_EXTENSION_MIME) {
+  if (!ATTACHMENT_MIME_EXTENSION.has(mime)) {
+    ATTACHMENT_MIME_EXTENSION.set(mime, extension);
+  }
+}
 
-const ATTACHMENT_KIND_DEFAULT_NAME: Record<AgentAttachmentKind, string> = {
+const ATTACHMENT_KIND_DEFAULT_NAME = {
   image: "pasted-image",
   audio: "pasted-audio",
   video: "pasted-video",
   pdf: "pasted-pdf",
-};
+} satisfies Record<AgentAttachmentKind, string>;
 
 const GENERIC_ATTACHMENT_DEFAULT_NAME = "pasted-attachment";
 
@@ -113,7 +113,8 @@ export const classifyAttachment = (input: {
     }
   }
 
-  return ATTACHMENT_EXTENSION_KIND[readFileExtension(input.name)] ?? null;
+  const extension = readFileExtension(input.name);
+  return ATTACHMENT_EXTENSION_KIND.get(extension) ?? null;
 };
 
 const inferAttachmentMime = (name: string, mime?: string): string | undefined => {
@@ -121,12 +122,13 @@ const inferAttachmentMime = (name: string, mime?: string): string | undefined =>
   if (trimmedMime) {
     return trimmedMime;
   }
-  return ATTACHMENT_EXTENSION_MIME[readFileExtension(name)];
+  const extension = readFileExtension(name);
+  return ATTACHMENT_EXTENSION_MIME.get(extension);
 };
 
 const buildGeneratedAttachmentName = (kind: AgentAttachmentKind | null, mime?: string): string => {
   const normalizedMime = mime?.trim().toLowerCase();
-  const extension = normalizedMime ? (ATTACHMENT_MIME_EXTENSION[normalizedMime] ?? "") : "";
+  const extension = normalizedMime ? (ATTACHMENT_MIME_EXTENSION.get(normalizedMime) ?? "") : "";
   const baseName = kind ? ATTACHMENT_KIND_DEFAULT_NAME[kind] : GENERIC_ATTACHMENT_DEFAULT_NAME;
 
   return `${baseName}${extension}`;
@@ -141,12 +143,12 @@ export const readAttachmentFileName = (input: {
     return input.name;
   }
 
+  const classificationInput: Parameters<typeof classifyAttachment>[0] = { name: input.name };
+  if (input.mime) {
+    classificationInput.mime = input.mime;
+  }
   return buildGeneratedAttachmentName(
-    input.kind ??
-      classifyAttachment({
-        name: input.name,
-        ...(input.mime ? { mime: input.mime } : {}),
-      }),
+    input.kind ?? classifyAttachment(classificationInput),
     input.mime,
   );
 };
@@ -175,12 +177,15 @@ export const buildComposerAttachmentFromFile = (file: File): AgentChatComposerAt
   const normalizedFile = normalizeAttachmentFile(file, kind);
   const mime = inferAttachmentMime(normalizedFile.name, normalizedFile.type);
 
-  return createComposerAttachment({
+  const attachment: Parameters<typeof createComposerAttachment>[0] = {
     name: normalizedFile.name,
     kind,
-    ...(mime ? { mime } : {}),
     file: normalizedFile,
-  });
+  };
+  if (mime) {
+    attachment.mime = mime;
+  }
+  return createComposerAttachment(attachment);
 };
 
 export const buildComposerAttachmentFromPath = (
@@ -188,23 +193,25 @@ export const buildComposerAttachmentFromPath = (
   metadata?: Pick<AgentChatComposerAttachment, "kind" | "mime" | "name">,
 ): AgentChatComposerAttachment | null => {
   const name = metadata?.name ?? readAttachmentNameFromPath(path);
-  const kind =
-    metadata?.kind ??
-    classifyAttachment({
-      name,
-      ...(metadata?.mime ? { mime: metadata.mime } : {}),
-    });
+  const classificationInput: Parameters<typeof classifyAttachment>[0] = { name };
+  if (metadata?.mime) {
+    classificationInput.mime = metadata.mime;
+  }
+  const kind = metadata?.kind ?? classifyAttachment(classificationInput);
   if (!kind) {
     return null;
   }
   const mime = inferAttachmentMime(name, metadata?.mime);
 
-  return createComposerAttachment({
+  const attachment: Parameters<typeof createComposerAttachment>[0] = {
     name,
     kind,
     path,
-    ...(mime ? { mime } : {}),
-  });
+  };
+  if (mime) {
+    attachment.mime = mime;
+  }
+  return createComposerAttachment(attachment);
 };
 
 export const isPreviewableAttachmentKind = (kind: AgentAttachmentKind): boolean => {
@@ -233,7 +240,8 @@ const readAttachmentValidationError = (
     return null;
   }
 
-  const inferredMime = ATTACHMENT_EXTENSION_MIME[readFileExtension(attachment.name)];
+  const extension = readFileExtension(attachment.name);
+  const inferredMime = ATTACHMENT_EXTENSION_MIME.get(extension);
   if (inferredMime && supportedMimeTypes.includes(inferredMime)) {
     return null;
   }

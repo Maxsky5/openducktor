@@ -1,17 +1,19 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type {
   WorkspaceTextFileReadResult,
   WorkspaceTextFileWriteResult,
 } from "@openducktor/contracts";
-import { HostInvokeError } from "@openducktor/host-client";
-import { getFiletypeFromFileName } from "@pierre/diffs";
+import { HostInvokeError, type HostClient } from "@openducktor/host-client";
+import { File, type CodeViewFileItem } from "@pierre/diffs";
+import type { Editor, EditorOptions } from "@pierre/diffs/edit";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement, type PropsWithChildren, type ReactElement, useEffect } from "react";
 import { QueryProvider } from "@/lib/query-provider";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import {
   type TaskExecutionSelectedFile,
@@ -29,33 +31,43 @@ let readTextFileMock: ReturnType<typeof mock>;
 let writeTextFileMock: ReturnType<typeof mock>;
 let codeViewMountCount = 0;
 let codeViewUnmountCount = 0;
-let latestCodeViewProps: {
-  editorOptions?: unknown;
-  items: Array<{
-    edit?: boolean;
-    file: { cacheKey?: string; contents: string; name: string };
-    id: string;
-    version?: number;
-  }>;
-  onItemEditChange?: (item: unknown, file: unknown) => void;
-} | null = null;
-const editProviderFactories: unknown[] = [];
+const actualPreviewPierre = await import("./task-execution-file-preview-pierre");
+type PreviewCodeViewProps = Parameters<typeof actualPreviewPierre.CodeView>[0];
+type PreviewEditorFactory = Parameters<typeof actualPreviewPierre.EditProvider>[0]["createEditor"];
+
+let latestCodeViewProps: PreviewCodeViewProps | null = null;
+const editProviderFactories: PreviewEditorFactory[] = [];
+
+const firstCodeViewItem = (): CodeViewFileItem => {
+  const item = latestCodeViewProps?.items[0];
+  if (!item) {
+    throw new Error("Expected the file preview to render one CodeView item.");
+  }
+  return item;
+};
+
+const createAttachedEditor = (options: EditorOptions<undefined> | undefined): Editor<undefined> => {
+  const createEditor = editProviderFactories.at(-1);
+  if (!options || !createEditor) {
+    throw new Error("Expected an editor factory and options.");
+  }
+
+  return createEditor(options);
+};
+
+const attachEditor = (
+  options: EditorOptions<undefined> | undefined,
+  editor: Editor<undefined>,
+): void => {
+  if (!options) {
+    throw new Error("Expected editor options.");
+  }
+
+  options.onAttach?.(editor, new File<undefined>());
+};
 let secondFileReadMode: "pending" | "resolve" = "pending";
 let previewTheme: "light" | "dark" = "light";
-let highlightCompletionMode: "auto" | "manual" = "auto";
-let primeFileHighlightCacheMock: ReturnType<typeof mock>;
 let latestQueryClient: QueryClient | null = null;
-const highlightedFileCacheKeys = new Set<string>();
-const highlightCacheSubscribers = new Set<() => void>();
-
-const completeFileHighlight = (file: { cacheKey?: string }): void => {
-  if (file.cacheKey) {
-    highlightedFileCacheKeys.add(file.cacheKey);
-  }
-  for (const subscriber of highlightCacheSubscribers) {
-    subscriber();
-  }
-};
 
 const runAsyncUiAction = async (action: () => void): Promise<void> => {
   await act(async () => {
@@ -85,29 +97,8 @@ const dispatchPreviewSaveShortcut = async (modifier: "ctrlKey" | "metaKey" = "ct
   return event;
 };
 
-const previewWorkerPool = {
-  isWorkingPool: () => false,
-  getFileResultCache: (file: { cacheKey?: string }) =>
-    file.cacheKey && highlightedFileCacheKeys.has(file.cacheKey) ? {} : undefined,
-  primeFileHighlightCache: (file: { cacheKey?: string; name?: string }) => {
-    primeFileHighlightCacheMock(file);
-    if (getFiletypeFromFileName(file.name ?? "") === "text") {
-      return;
-    }
-    if (highlightCompletionMode === "auto") {
-      queueMicrotask(() => completeFileHighlight(file));
-    }
-  },
-  subscribeToStatChanges: (subscriber: () => void) => {
-    highlightCacheSubscribers.add(subscriber);
-    subscriber();
-    return () => highlightCacheSubscribers.delete(subscriber);
-  },
-};
-
-const actualPreviewPierre = await import("./task-execution-file-preview-pierre");
 const actualThemeProvider = await import("@/components/layout/theme-provider");
-const actualHost = await import("@/state/operations/host");
+let moduleSpies: Array<{ mockRestore: () => void }> = [];
 
 const firstFile: TaskExecutionSelectedFile = {
   rootPath: "/repo",
@@ -195,13 +186,9 @@ beforeEach(async () => {
   editProviderFactories.length = 0;
   secondFileReadMode = "pending";
   previewTheme = "light";
-  highlightCompletionMode = "auto";
-  highlightedFileCacheKeys.clear();
-  highlightCacheSubscribers.clear();
-  primeFileHighlightCacheMock = mock();
   latestQueryClient = null;
 
-  readTextFileMock = mock((input: { rootPath: string; relativePath: string }) => {
+  readTextFileMock = mock<HostClient["filesystemReadTextFile"]>((input) => {
     if (input.relativePath === secondFile.relativePath) {
       if (secondFileReadMode === "resolve") {
         return Promise.resolve(textFileResult(secondFile, "const second = true;"));
@@ -213,45 +200,35 @@ beforeEach(async () => {
     }
     return Promise.resolve(textFileResult(firstFile, "const first = true;"));
   });
-  writeTextFileMock = mock(
-    async (input: {
-      rootPath: string;
-      relativePath: string;
-      contents: string;
-      revision: string;
-    }) => ({
-      kind: "text" as const,
-      rootPath: input.rootPath,
-      relativePath: input.relativePath,
-      contents: input.contents,
-      size: input.contents.length,
-      mtimeMs: 1_760_000_000_001,
-      revision: `${input.revision}:saved`,
+  writeTextFileMock = mock<HostClient["filesystemWriteTextFile"]>(async (input) => ({
+    kind: "text" as const,
+    rootPath: input.rootPath,
+    relativePath: input.relativePath,
+    contents: input.contents,
+    size: input.contents.length,
+    mtimeMs: 1_760_000_000_001,
+    revision: `${input.revision}:saved`,
+  }));
+
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        filesystemReadTextFile: readTextFileMock,
+        filesystemWriteTextFile: writeTextFileMock,
+      },
     }),
   );
 
-  mock.module("@/state/operations/host", () => ({
-    host: {
-      filesystemReadTextFile: readTextFileMock,
-      filesystemWriteTextFile: writeTextFileMock,
-    },
-  }));
-
-  mock.module("@/components/layout/theme-provider", () => ({
-    ...actualThemeProvider,
-    useTheme: () => ({
+  moduleSpies = [
+    spyOn(actualThemeProvider, "useTheme").mockImplementation(() => ({
       theme: previewTheme,
       setTheme: () => {},
-    }),
-  }));
-
-  mock.module("./task-execution-file-preview-pierre", () => ({
-    useWorkerPool: () => previewWorkerPool,
-    EditProvider: ({ children, createEditor }: PropsWithChildren<{ createEditor: unknown }>) => {
+    })),
+    spyOn(actualPreviewPierre, "EditProvider").mockImplementation(({ children, createEditor }) => {
       editProviderFactories.push(createEditor);
-      return children;
-    },
-    CodeView: (props: NonNullable<typeof latestCodeViewProps>): ReactElement => {
+      return <>{children}</>;
+    }),
+    spyOn(actualPreviewPierre, "CodeView").mockImplementation((props): ReactElement => {
       latestCodeViewProps = props;
       useEffect(() => {
         codeViewMountCount += 1;
@@ -264,72 +241,22 @@ beforeEach(async () => {
         { "aria-label": "Code editor", "data-testid": "mock-code-view", tabIndex: -1 },
         props.items[0]?.file.contents ?? "",
       );
-    },
-  }));
+    }),
+  ];
 
   ({ TaskExecutionSelectedFilePreview } = await import("./task-execution-file-preview"));
 });
 
-afterEach(async () => {
+afterEach(() => {
   document.documentElement.classList.remove("dark", "light");
-  await restoreMockedModules([
-    ["./task-execution-file-preview-pierre", async () => actualPreviewPierre],
-    ["@/components/layout/theme-provider", async () => actualThemeProvider],
-    ["@/state/operations/host", async () => actualHost],
-  ]);
+  for (const moduleSpy of moduleSpies) {
+    moduleSpy.mockRestore();
+  }
+  moduleSpies = [];
+  configureShellBridge(createUnavailableShellBridge());
 });
 
 describe("TaskExecutionSelectedFilePreview", () => {
-  test("displays files that Pierre treats as plain text without waiting for a worker cache entry", async () => {
-    const onClose = mock(() => {});
-
-    render(renderPreview({ selectedFile: editorConfigFile, onClose }));
-
-    await screen.findByText("root = true");
-  });
-
-  test("waits for the worker highlight result before displaying a newly opened file", async () => {
-    highlightCompletionMode = "manual";
-    const onClose = mock(() => {});
-
-    render(renderPreview({ selectedFile: firstFile, onClose }));
-
-    await waitFor(() => expect(primeFileHighlightCacheMock).toHaveBeenCalledTimes(1));
-    expect(screen.getByText("Loading file...")).toBeTruthy();
-    expect(screen.queryByTestId("mock-code-view")).toBeNull();
-
-    const [file] = primeFileHighlightCacheMock.mock.calls[0] ?? [];
-    expect(file?.name).toBe(firstFile.relativePath);
-    act(() => completeFileHighlight(file));
-
-    await screen.findByText("const first = true;");
-  });
-
-  test("keeps the previous file visible while the next file is being highlighted", async () => {
-    secondFileReadMode = "resolve";
-    const onClose = mock(() => {});
-    const view = render(
-      renderPreview({ selectedFile: firstFile, preservePreviousSnapshot: true, onClose }),
-    );
-
-    await screen.findByText("const first = true;");
-    highlightCompletionMode = "manual";
-
-    view.rerender(
-      renderPreview({ selectedFile: secondFile, preservePreviousSnapshot: true, onClose }),
-    );
-
-    await waitFor(() => expect(primeFileHighlightCacheMock).toHaveBeenCalledTimes(2));
-    expect(screen.getByText("const first = true;")).toBeTruthy();
-    expect(screen.getByText("Loading...")).toBeTruthy();
-
-    const [file] = primeFileHighlightCacheMock.mock.calls[1] ?? [];
-    act(() => completeFileHighlight(file));
-
-    await screen.findByText("const second = true;");
-    expect(screen.queryByText("const first = true;")).toBeNull();
-  });
-
   test("keeps the previous file visible while the next selected file is loading", async () => {
     const onClose = mock(() => {});
     const view = render(renderPreview({ selectedFile: firstFile, onClose }));
@@ -345,7 +272,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(screen.getByText("const first = true;")).toBeTruthy();
     expect(screen.getByText("Loading...")).toBeTruthy();
     expect(screen.queryByText("Loading file...")).toBeNull();
-    expect(latestCodeViewProps?.items[0]?.edit).toBe(false);
+    expect(firstCodeViewItem()?.edit).toBe(false);
   });
 
   test("does not reuse a closed preview snapshot when reopening another file", async () => {
@@ -499,7 +426,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     const onClose = mock(() => {});
     const view = render(renderPreview({ selectedFile: firstFile, onClose }));
     await screen.findByText("const first = true;");
-    const firstItem = latestCodeViewProps?.items[0];
+    const firstItem = firstCodeViewItem();
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(firstItem, {
         ...firstItem?.file,
@@ -550,7 +477,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     const onClose = mock(() => {});
     const view = render(renderPreview({ selectedFile: firstCollisionFile, onClose }));
     await screen.findByText("first contents");
-    const firstItem = latestCodeViewProps?.items[0];
+    const firstItem = firstCodeViewItem();
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(firstItem, {
         ...firstItem?.file,
@@ -562,14 +489,14 @@ describe("TaskExecutionSelectedFilePreview", () => {
     view.rerender(renderPreview({ selectedFile: secondCollisionFile, onClose }));
 
     await screen.findByText("second contents");
-    expect(latestCodeViewProps?.items[0]?.id).not.toBe(firstItem?.id);
+    expect(firstCodeViewItem()?.id).not.toBe(firstItem?.id);
   });
 
   test("drops a discarded draft before the same file is reopened", async () => {
     const onClose = mock(() => {});
     const view = render(renderPreview({ selectedFile: firstFile, onClose }));
     await screen.findByText("const first = true;");
-    const item = latestCodeViewProps?.items[0];
+    const item = firstCodeViewItem();
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "discard me" });
     });
@@ -587,7 +514,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     const onClose = mock(() => {});
     render(renderPreview({ selectedFile: firstFile, onClose }));
     await screen.findByText("const first = true;");
-    const item = latestCodeViewProps?.items[0];
+    const item = firstCodeViewItem();
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "local draft" });
     });
@@ -661,8 +588,8 @@ describe("TaskExecutionSelectedFilePreview", () => {
     );
 
     await screen.findByText("const first = true;");
-    await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
-    const firstItem = latestCodeViewProps?.items[0];
+    await waitFor(() => expect(firstCodeViewItem()?.edit).toBe(true));
+    const firstItem = firstCodeViewItem();
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save file" }).disabled).toBe(
       true,
     );
@@ -673,16 +600,11 @@ describe("TaskExecutionSelectedFilePreview", () => {
     );
     const providerFactory = editProviderFactories.at(-1);
     const editorOptions = latestCodeViewProps?.editorOptions;
-    const attachedEditor = { focus: mock(() => {}) };
-    (
-      editorOptions as
-        | { onAttach?: (editor: { focus(options: unknown): void }) => void }
-        | undefined
-    )?.onAttach?.(attachedEditor);
+    const attachedEditor = createAttachedEditor(editorOptions);
+    const focus = spyOn(attachedEditor, "focus").mockImplementation(() => {});
+    attachEditor(editorOptions, attachedEditor);
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
-    highlightCompletionMode = "manual";
-
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(firstItem, {
         ...firstItem?.file,
@@ -704,8 +626,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     });
     await waitForCleanFile();
     expect(screen.queryByRole("status")).toBeNull();
-    await waitFor(() => expect(primeFileHighlightCacheMock).toHaveBeenCalledTimes(2));
-    expect(latestCodeViewProps?.items[0]).toMatchObject({
+    expect(firstCodeViewItem()).toMatchObject({
       edit: true,
       version: firstItem?.version,
       file: {
@@ -715,7 +636,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     });
     expect(editProviderFactories.at(-1)).toBe(providerFactory);
     expect(latestCodeViewProps?.editorOptions).toBe(editorOptions);
-    expect(attachedEditor.focus).toHaveBeenCalledTimes(1);
+    expect(focus).toHaveBeenCalledTimes(1);
     expect(codeViewMountCount).toBe(1);
     expect(onLeavePolicyChange).toHaveBeenCalledWith("confirm");
     expect(onLeavePolicyChange).toHaveBeenCalledWith("defer");
@@ -727,13 +648,11 @@ describe("TaskExecutionSelectedFilePreview", () => {
     const onClose = mock(() => {});
     render(renderPreview({ selectedFile: firstFile, onClose }));
     await screen.findByText("const first = true;");
-    const firstItem = latestCodeViewProps?.items[0];
+    const firstItem = firstCodeViewItem();
     const firstCacheKey = firstItem?.file.cacheKey;
-    (
-      latestCodeViewProps?.editorOptions as
-        | { onAttach?: (editor: { focus(options: unknown): void }) => void }
-        | undefined
-    )?.onAttach?.({ focus: mock(() => {}) });
+    const attachedEditor = createAttachedEditor(latestCodeViewProps?.editorOptions);
+    spyOn(attachedEditor, "focus").mockImplementation(() => {});
+    attachEditor(latestCodeViewProps?.editorOptions, attachedEditor);
 
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(firstItem, {
@@ -763,14 +682,14 @@ describe("TaskExecutionSelectedFilePreview", () => {
     });
 
     await screen.findByText("const first = false;");
-    expect(latestCodeViewProps?.items[0]).toMatchObject({
+    expect(firstCodeViewItem()).toMatchObject({
       version: firstItem?.version,
       file: {
         contents: "const first = false;",
       },
     });
-    expect(latestCodeViewProps?.items[0]?.file.cacheKey).not.toBe(firstCacheKey);
-    expect(latestCodeViewProps?.items[0]?.file.cacheKey).toBe(
+    expect(firstCodeViewItem()?.file.cacheKey).not.toBe(firstCacheKey);
+    expect(firstCodeViewItem()?.file.cacheKey).toBe(
       JSON.stringify([
         taskExecutionSelectedFileKey(firstFile),
         "revision:const first = true;:saved",
@@ -783,11 +702,11 @@ describe("TaskExecutionSelectedFilePreview", () => {
     const onClose = mock(() => {});
     render(renderPreview({ selectedFile: firstFile, onClose }));
     await screen.findByText("const first = true;");
-    await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
+    await waitFor(() => expect(firstCodeViewItem()?.edit).toBe(true));
 
     const editAndSave = async (contents: string) => {
       const expectedWriteCount = writeTextFileMock.mock.calls.length + 1;
-      const item = latestCodeViewProps?.items[0];
+      const item = firstCodeViewItem();
       act(() => {
         latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents });
       });
@@ -816,7 +735,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     const onLeavePolicyChange = mock(() => {});
     const view = render(renderPreview({ selectedFile: firstFile, onClose, onLeavePolicyChange }));
     await screen.findByText("const first = true;");
-    const item = latestCodeViewProps?.items[0];
+    const item = firstCodeViewItem();
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "first draft" });
     });
@@ -849,8 +768,8 @@ describe("TaskExecutionSelectedFilePreview", () => {
     const onClose = mock(() => {});
     render(renderPreview({ selectedFile: firstFile, onClose }));
     await screen.findByText("const first = true;");
-    await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
-    const item = latestCodeViewProps?.items[0];
+    await waitFor(() => expect(firstCodeViewItem()?.edit).toBe(true));
+    const item = firstCodeViewItem();
 
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "draft" });
@@ -861,7 +780,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     await screen.findByRole("alert");
     expect(screen.getByRole("alert").textContent).toContain("Permission denied");
     expect(screen.getByRole("status", { name: "Unsaved changes" })).toBeTruthy();
-    expect(latestCodeViewProps?.items[0]).toMatchObject({ edit: true, version: 1 });
+    expect(firstCodeViewItem()).toMatchObject({ edit: true, version: 1 });
 
     await runAsyncUiAction(() =>
       fireEvent.click(screen.getByRole("button", { name: "Save file" })),
@@ -892,7 +811,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     const onClose = mock(() => {});
     render(renderPreview({ selectedFile: firstFile, onClose }));
     await screen.findByText("const first = true;");
-    const item = latestCodeViewProps?.items[0];
+    const item = firstCodeViewItem();
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "local draft" });
     });
@@ -948,7 +867,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     const onClose = mock(() => {});
     render(renderPreview({ selectedFile: firstFile, onClose }));
     await screen.findByText("const first = true;");
-    const firstItem = latestCodeViewProps?.items[0];
+    const firstItem = firstCodeViewItem();
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(firstItem, {
         ...firstItem?.file,
@@ -986,14 +905,14 @@ describe("TaskExecutionSelectedFilePreview", () => {
     });
 
     await screen.findByText("const external = true;");
-    expect(latestCodeViewProps?.items[0]).toMatchObject({
+    expect(firstCodeViewItem()).toMatchObject({
       version: firstItem?.version,
       file: {
         contents: "const external = true;",
       },
     });
-    expect(latestCodeViewProps?.items[0]?.file.cacheKey).not.toBe(firstItem?.file.cacheKey);
-    expect(latestCodeViewProps?.items[0]?.file.cacheKey).toBe(
+    expect(firstCodeViewItem()?.file.cacheKey).not.toBe(firstItem?.file.cacheKey);
+    expect(firstCodeViewItem()?.file.cacheKey).toBe(
       JSON.stringify([taskExecutionSelectedFileKey(firstFile), "revision:const external = true;"]),
     );
     expect(codeViewMountCount).toBe(2);
@@ -1015,7 +934,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     const onClose = mock(() => {});
     const view = render(renderPreview({ selectedFile: firstFile, onClose }));
     await screen.findByText("const first = true;");
-    const item = latestCodeViewProps?.items[0];
+    const item = firstCodeViewItem();
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "local draft" });
     });
@@ -1037,15 +956,15 @@ describe("TaskExecutionSelectedFilePreview", () => {
     });
 
     expect(screen.queryByRole("dialog", { name: "Review latest file" })).toBeNull();
-    expect(latestCodeViewProps?.items[0]?.id).toBe(taskExecutionSelectedFileKey(secondFile));
+    expect(firstCodeViewItem()?.id).toBe(taskExecutionSelectedFileKey(secondFile));
   });
 
   test("clears dirty state when the draft returns to the saved baseline", async () => {
     const onClose = mock(() => {});
     render(renderPreview({ selectedFile: firstFile, onClose }));
     await screen.findByText("const first = true;");
-    await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
-    const item = latestCodeViewProps?.items[0];
+    await waitFor(() => expect(firstCodeViewItem()?.edit).toBe(true));
+    const item = firstCodeViewItem();
 
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "changed" });
@@ -1071,8 +990,8 @@ describe("TaskExecutionSelectedFilePreview", () => {
     const onClose = mock(() => {});
     render(renderPreview({ selectedFile: firstFile, onClose }));
     await screen.findByText("const first = true;");
-    await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
-    const item = latestCodeViewProps?.items[0];
+    await waitFor(() => expect(firstCodeViewItem()?.edit).toBe(true));
+    const item = firstCodeViewItem();
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "draft" });
     });
@@ -1102,8 +1021,8 @@ describe("TaskExecutionSelectedFilePreview", () => {
     const onClose = mock(() => {});
     render(renderPreview({ selectedFile: firstFile, onClose }));
     await screen.findByText("const first = true;");
-    await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
-    const item = latestCodeViewProps?.items[0];
+    await waitFor(() => expect(firstCodeViewItem()?.edit).toBe(true));
+    const item = firstCodeViewItem();
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "draft" });
     });
@@ -1135,7 +1054,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
       await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
     });
     await waitFor(() =>
-      expect(latestCodeViewProps?.items[0]).toMatchObject({
+      expect(firstCodeViewItem()).toMatchObject({
         file: { contents: "const first = true;" },
         version: item?.version,
       }),
@@ -1158,8 +1077,8 @@ describe("TaskExecutionSelectedFilePreview", () => {
     const onClose = mock(() => {});
     render(renderPreview({ selectedFile: firstFile, onClose }));
     await screen.findByText("const first = true;");
-    await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
-    const item = latestCodeViewProps?.items[0];
+    await waitFor(() => expect(firstCodeViewItem()?.edit).toBe(true));
+    const item = firstCodeViewItem();
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "draft" });
     });
@@ -1193,8 +1112,8 @@ describe("TaskExecutionSelectedFilePreview", () => {
     const onClose = mock(() => {});
     render(renderPreview({ selectedFile: firstFile, onClose }));
     await screen.findByText("const first = true;");
-    await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
-    const item = latestCodeViewProps?.items[0];
+    await waitFor(() => expect(firstCodeViewItem()?.edit).toBe(true));
+    const item = firstCodeViewItem();
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "first draft" });
     });
@@ -1225,7 +1144,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     const onClose = mock(() => {});
     const view = render(renderPreview({ selectedFile: firstFile, onClose }, "light"));
     await screen.findByText("const first = true;");
-    await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
+    await waitFor(() => expect(firstCodeViewItem()?.edit).toBe(true));
     const factory = editProviderFactories.at(-1);
     const options = latestCodeViewProps?.editorOptions;
 
@@ -1234,7 +1153,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
 
     expect(editProviderFactories.at(-1)).toBe(factory);
     expect(latestCodeViewProps?.editorOptions).toBe(options);
-    expect(latestCodeViewProps?.items[0]?.edit).toBe(true);
+    expect(firstCodeViewItem()?.edit).toBe(true);
     expect(codeViewMountCount).toBe(1);
   });
 
@@ -1242,14 +1161,13 @@ describe("TaskExecutionSelectedFilePreview", () => {
     const onClose = mock(() => {});
     render(renderPreview({ selectedFile: firstFile, onClose }));
     await screen.findByText("const first = true;");
-    await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
-    const editorOptions = latestCodeViewProps?.editorOptions as
-      | { onAttach?: (editor: { focus(options: unknown): void }) => void }
-      | undefined;
-    const focus = mock(() => {});
+    await waitFor(() => expect(firstCodeViewItem()?.edit).toBe(true));
+    const editorOptions = latestCodeViewProps?.editorOptions;
+    const attachedEditor = createAttachedEditor(editorOptions);
+    const focus = spyOn(attachedEditor, "focus").mockImplementation(() => {});
 
     expect(editorOptions?.onAttach).toBeFunction();
-    editorOptions?.onAttach?.({ focus });
+    attachEditor(editorOptions, attachedEditor);
     expect(focus).toHaveBeenCalledWith({ lineNumber: "first-visible", preventScroll: true });
   });
 
@@ -1270,11 +1188,10 @@ describe("TaskExecutionSelectedFilePreview", () => {
     await screen.findByRole("dialog");
     await screen.findByText("const first = true;");
     const editorSurface = screen.getByLabelText("Code editor");
-    const focus = mock(() => editorSurface.focus());
-    const editorOptions = latestCodeViewProps?.editorOptions as
-      | { onAttach?: (editor: { focus(options?: unknown): void }) => void }
-      | undefined;
-    editorOptions?.onAttach?.({ focus });
+    const editorOptions = latestCodeViewProps?.editorOptions;
+    const attachedEditor = createAttachedEditor(editorOptions);
+    const focus = spyOn(attachedEditor, "focus").mockImplementation(() => editorSurface.focus());
+    attachEditor(editorOptions, attachedEditor);
     fireEvent.keyDown(screen.getByLabelText("Selected file preview"), { key: "Escape" });
     expect(onClose).not.toHaveBeenCalled();
     expect(onKeepEditing).toHaveBeenCalledTimes(1);
@@ -1315,7 +1232,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
       }),
     );
     await screen.findByText("const first = true;");
-    const item = latestCodeViewProps?.items[0];
+    const item = firstCodeViewItem();
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "local draft" });
     });

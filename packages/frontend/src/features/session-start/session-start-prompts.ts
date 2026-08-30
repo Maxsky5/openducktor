@@ -11,7 +11,6 @@ import {
   defaultSessionLaunchActionForRole,
   getSessionLaunchAction,
   getSessionLaunchActionsForRole,
-  isSessionLaunchActionId,
   SESSION_LAUNCH_ACTIONS,
   type SessionLaunchActionId,
 } from "./session-start-launch-options";
@@ -38,14 +37,14 @@ type SessionMessagePromptOptions = SharedPromptOptions & {
   git?: AgentPromptGitContext;
 };
 
-export const LAUNCH_ACTIONS_BY_ROLE: Record<AgentRole, SessionLaunchActionId[]> = {
+export const LAUNCH_ACTIONS_BY_ROLE = {
   spec: getSessionLaunchActionsForRole("spec").map((action) => action.id),
   planner: getSessionLaunchActionsForRole("planner").map((action) => action.id),
   build: getSessionLaunchActionsForRole("build").map((action) => action.id),
   qa: getSessionLaunchActionsForRole("qa").map((action) => action.id),
-};
+} satisfies Record<AgentRole, SessionLaunchActionId[]>;
 
-export const LAUNCH_ACTION_LABELS: Record<SessionLaunchActionId, string> = {
+export const LAUNCH_ACTION_LABELS = {
   spec_initial: SESSION_LAUNCH_ACTIONS.spec_initial.label,
   planner_initial: SESSION_LAUNCH_ACTIONS.planner_initial.label,
   build_implementation_start: SESSION_LAUNCH_ACTIONS.build_implementation_start.label,
@@ -54,9 +53,7 @@ export const LAUNCH_ACTION_LABELS: Record<SessionLaunchActionId, string> = {
   build_pull_request_generation: SESSION_LAUNCH_ACTIONS.build_pull_request_generation.label,
   build_rebase_conflict_resolution: SESSION_LAUNCH_ACTIONS.build_rebase_conflict_resolution.label,
   qa_review: SESSION_LAUNCH_ACTIONS.qa_review.label,
-};
-
-export const isLaunchActionId = isSessionLaunchActionId;
+} satisfies Record<SessionLaunchActionId, string>;
 
 export const firstLaunchAction = (role: AgentRole): SessionLaunchActionId => {
   return defaultSessionLaunchActionForRole(role);
@@ -68,17 +65,25 @@ export const kickoffPromptForTemplate = (
   taskId: string,
   options?: SessionStartKickoffPromptOptions,
 ): string => {
-  return buildAgentKickoffPrompt({
+  const promptInput: Parameters<typeof buildAgentKickoffPrompt>[0] = {
     role,
     templateId,
     task: {
       taskId,
       ...options?.task,
     },
-    ...(options?.extraPlaceholders ? { extraPlaceholders: options.extraPlaceholders } : {}),
-    ...(options?.git ? { git: options.git } : {}),
     overrides: options?.overrides ?? {},
-  });
+  };
+
+  if (options?.extraPlaceholders) {
+    promptInput.extraPlaceholders = options.extraPlaceholders;
+  }
+
+  if (options?.git) {
+    promptInput.git = options.git;
+  }
+
+  return buildAgentKickoffPrompt(promptInput);
 };
 
 export const kickoffPromptForLaunchAction = (
@@ -98,14 +103,19 @@ export const buildGitConflictResolutionPrompt = (
   taskId: string,
   options?: SessionMessagePromptOptions,
 ): string => {
-  return buildAgentMessagePrompt({
+  const promptInput: Parameters<typeof buildAgentMessagePrompt>[0] = {
     role: "build",
     templateId: "message.build_rebase_conflict_resolution",
     task: {
       taskId,
       ...options?.task,
     },
-    ...(options?.git ? { git: options.git } : {}),
     overrides: options?.overrides ?? {},
-  });
+  };
+
+  if (options?.git) {
+    promptInput.git = options.git;
+  }
+
+  return buildAgentMessagePrompt(promptInput);
 };

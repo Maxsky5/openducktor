@@ -13,13 +13,15 @@ import type {
 } from "@/lib/shell-bridge";
 import { createTerminalTransportController } from "./terminal-transport-controller";
 
+interface BridgeCallbacksContract {
+  reportFailure: ((failure: TerminalFailure) => void) | undefined;
+}
+
 const terminalId = "terminal-1";
 
 describe("createTerminalTransportController", () => {
   test("surfaces a bridge transport failure before reconnecting", async () => {
-    const bridgeCallbacks: {
-      reportFailure: ((failure: TerminalFailure) => void) | undefined;
-    } = { reportFailure: undefined };
+    const bridgeCallbacks: BridgeCallbacksContract = { reportFailure: undefined };
     const failures: TerminalFailure[] = [];
     const bridge: TerminalBridge = {
       connect: async (_onFrame, _onStateChange, onFailure?: (failure: TerminalFailure) => void) => {
@@ -587,7 +589,8 @@ describe("createTerminalTransportController", () => {
       releaseAck = resolve;
     });
     let attachCount = 0;
-    let attachment: { acknowledged: number; delivered: number } | null = null;
+    type AttachmentState = { acknowledged: number; delivered: number };
+    let attachment: AttachmentState | null = null;
     const operations: string[] = [];
     const bridge: TerminalBridge = {
       connect: async () => ({

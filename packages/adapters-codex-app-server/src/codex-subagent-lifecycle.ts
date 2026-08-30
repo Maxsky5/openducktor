@@ -1,5 +1,5 @@
+import type { CodexAppServerTurn } from "@openducktor/contracts";
 import type { AgentSubagentStatus } from "@openducktor/core";
-import { extractStringField, extractText, isPlainObject } from "./codex-app-server-shared";
 import type { CodexNotificationRecord } from "./types";
 
 export type CodexSubagentLifecycleUpdate = {
@@ -11,13 +11,12 @@ export type CodexSubagentLifecycleUpdate = {
 
 const lifecycleTimestampMs = (
   notification: CodexNotificationRecord,
-  turn: Record<string, unknown>,
+  turn: CodexAppServerTurn,
   field: "startedAt" | "completedAt",
 ): number => {
-  const snakeCaseField = field === "startedAt" ? "started_at" : "completed_at";
-  const value = turn[field] ?? turn[snakeCaseField];
-  if (value !== null && value !== undefined) {
-    if (typeof value !== "number" || !Number.isFinite(value)) {
+  const value = turn[field];
+  if (value !== null) {
+    if (!Number.isFinite(value)) {
       throw new Error(`Codex ${notification.method} turn has an invalid ${field} timestamp.`);
     }
     return value * 1000;
@@ -29,21 +28,12 @@ const lifecycleTimestampMs = (
   return receivedAtMs;
 };
 
-const notificationTurn = (notification: CodexNotificationRecord): Record<string, unknown> => {
-  const params = isPlainObject(notification.params) ? notification.params : null;
-  const turn = params?.turn;
-  if (!isPlainObject(turn)) {
-    throw new Error(`Codex ${notification.method} notification is missing its turn payload.`);
-  }
-  return turn;
-};
-
 export const codexSubagentLifecycleUpdateFromNotification = (
   notification: CodexNotificationRecord,
 ): CodexSubagentLifecycleUpdate | null => {
   if (notification.method === "turn/started") {
-    const turn = notificationTurn(notification);
-    const status = extractStringField(turn, ["status"]);
+    const { turn } = notification.params;
+    const status = turn.status;
     if (status !== "inProgress") {
       throw new Error(
         `Codex turn/started notification has unexpected turn status '${status ?? "missing"}'.`,
@@ -60,8 +50,8 @@ export const codexSubagentLifecycleUpdateFromNotification = (
     return null;
   }
 
-  const turn = notificationTurn(notification);
-  const status = extractStringField(turn, ["status"]);
+  const { turn } = notification.params;
+  const status = turn.status;
   if (status === "interrupted") {
     return null;
   }
@@ -77,9 +67,7 @@ export const codexSubagentLifecycleUpdateFromNotification = (
       status: "error",
       allowStatusRestart: false,
       timestampMs: lifecycleTimestampMs(notification, turn, "completedAt"),
-      error:
-        (isPlainObject(turn.error) ? extractText(turn.error) : null) ??
-        "Codex subagent turn failed.",
+      error: turn.error?.message ?? "Codex subagent turn failed.",
     };
   }
   throw new Error(

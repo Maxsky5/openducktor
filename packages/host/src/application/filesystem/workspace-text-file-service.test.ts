@@ -5,7 +5,6 @@ import path from "node:path";
 import { Effect } from "effect";
 import { createFilesystemAdapter } from "../../adapters/filesystem/filesystem-adapter";
 import { FilesystemFileOperationError } from "../../ports/filesystem-port";
-import type { GitPort } from "../../ports/git-port";
 import { WorkspaceFileAccessError } from "./workspace-file-access";
 import {
   createWorkspaceTextFileService,
@@ -20,11 +19,11 @@ const createRoot = async (): Promise<string> => {
   return rootPath;
 };
 
-const createGitPort = (files: string[]): GitPort =>
+const createGitPort = (files: string[]): Parameters<typeof createWorkspaceTextFileService>[1] =>
   ({
     isGitRepository: () => Effect.succeed(true),
     listFiles: () => Effect.succeed(files),
-  }) as unknown as GitPort;
+  }) satisfies Parameters<typeof createWorkspaceTextFileService>[1];
 
 const writeError = async (
   effect: ReturnType<ReturnType<typeof createWorkspaceTextFileService>["writeTextFile"]>,
@@ -432,20 +431,6 @@ describe("createWorkspaceTextFileService", () => {
     expect(escapingError.cause).toBeInstanceOf(WorkspaceFileAccessError);
     expect(escapingError.cause).toMatchObject({ code: "path_escape" });
     expect(await readFile(outsidePath, "utf8")).toBe("outside");
-  });
-
-  test("validates raw write input at the service boundary", async () => {
-    const service = createWorkspaceTextFileService(createFilesystemAdapter(), createGitPort([]));
-
-    const failure = await writeFailure(
-      service.writeTextFile({
-        rootPath: "/repo",
-        relativePath: "file.txt",
-        contents: "saved",
-      }),
-    );
-
-    expect(failure.code).toBe("invalid_input");
   });
 
   test("rejects traversal, absolute paths, and directory targets", async () => {

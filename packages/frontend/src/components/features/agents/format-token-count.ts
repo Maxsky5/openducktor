@@ -1,5 +1,11 @@
 export const formatTokenCompact = (value: number | null | undefined): string | null => {
-  if (typeof value !== "number" || Number.isNaN(value) || !Number.isFinite(value) || value <= 0) {
+  if (
+    value === null ||
+    value === undefined ||
+    Number.isNaN(value) ||
+    !Number.isFinite(value) ||
+    value <= 0
+  ) {
     return null;
   }
 
@@ -20,7 +26,13 @@ export const formatTokenCompact = (value: number | null | undefined): string | n
 };
 
 export const formatTokenExact = (value: number | null | undefined): string | null => {
-  if (typeof value !== "number" || Number.isNaN(value) || !Number.isFinite(value) || value < 0) {
+  if (
+    value === null ||
+    value === undefined ||
+    Number.isNaN(value) ||
+    !Number.isFinite(value) ||
+    value < 0
+  ) {
     return null;
   }
   return Math.round(value).toLocaleString("en-US");

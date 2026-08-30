@@ -1,11 +1,19 @@
+import { agentToolDataSchema, type AgentToolData } from "@openducktor/contracts";
+import { z } from "zod";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
+import { hasNonEmptyText } from "./tool-lifecycle";
 
 export type QuestionToolDetail = {
   prompt: string;
   answers: string[];
 };
 
-const parseJsonIfPossible = (value: string | undefined): unknown => {
+type AgentToolValue = AgentToolData[string];
+
+const isAgentToolData = (value: AgentToolValue | undefined): value is AgentToolData =>
+  agentToolDataSchema.safeParse(value).success;
+
+const parseJsonIfPossible = (value: string | undefined): AgentToolValue | undefined => {
   if (!value || value.trim().length === 0) {
     return undefined;
   }
@@ -14,56 +22,49 @@ const parseJsonIfPossible = (value: string | undefined): unknown => {
     return undefined;
   }
   try {
-    return JSON.parse(trimmed) as unknown;
+    return z.json().parse(JSON.parse(trimmed));
   } catch {
     return undefined;
   }
 };
 
-const readQuestionPrompt = (value: unknown): string | null => {
-  if (!value || typeof value !== "object") {
+const readQuestionPrompt = (value: AgentToolValue | undefined): string | null => {
+  if (!isAgentToolData(value)) {
     return null;
   }
-  const record = value as Record<string, unknown>;
   const candidates = [
-    record.question,
-    record.prompt,
-    record.header,
-    record.title,
-    record.label,
-    record.name,
+    value.question,
+    value.prompt,
+    value.header,
+    value.title,
+    value.label,
+    value.name,
   ];
   for (const candidate of candidates) {
-    if (typeof candidate === "string" && candidate.trim().length > 0) {
+    if (hasNonEmptyText(candidate)) {
       return candidate.trim();
     }
   }
   return null;
 };
 
-const normalizeAnswerValues = (value: unknown): string[] => {
-  if (typeof value === "string") {
+const normalizeAnswerValues = (value: AgentToolValue | undefined): string[] => {
+  if (hasNonEmptyText(value)) {
     const trimmed = value.trim();
     return trimmed.length > 0 ? [trimmed] : [];
   }
   if (Array.isArray(value)) {
     return value.flatMap((entry) => normalizeAnswerValues(entry));
   }
-  if (!value || typeof value !== "object") {
+  if (!isAgentToolData(value)) {
     return [];
   }
-  const record = value as Record<string, unknown>;
   return normalizeAnswerValues(
-    record.answers ??
-      record.answer ??
-      record.response ??
-      record.responses ??
-      record.value ??
-      record.text,
+    value.answers ?? value.answer ?? value.response ?? value.responses ?? value.value ?? value.text,
   );
 };
 
-const collectQuestionDetails = (value: unknown): QuestionToolDetail[] => {
+const collectQuestionDetails = (value: AgentToolValue | undefined): QuestionToolDetail[] => {
   if (!Array.isArray(value)) {
     return [];
   }
@@ -72,9 +73,11 @@ const collectQuestionDetails = (value: unknown): QuestionToolDetail[] => {
     if (!prompt) {
       return details;
     }
-    const record = entry as Record<string, unknown>;
+    if (!isAgentToolData(entry)) {
+      return details;
+    }
     const answers = normalizeAnswerValues(
-      record.answers ?? record.answer ?? record.response ?? record.responses,
+      entry.answers ?? entry.answer ?? entry.response ?? entry.responses,
     );
     details.push({
       prompt,
@@ -84,23 +87,22 @@ const collectQuestionDetails = (value: unknown): QuestionToolDetail[] => {
   }, []);
 };
 
-const normalizeAnswerGroups = (value: unknown): string[][] => {
+const normalizeAnswerGroups = (value: AgentToolValue | undefined): string[][] => {
   if (Array.isArray(value)) {
     return value.map((entry) => normalizeAnswerValues(entry));
   }
-  if (!value || typeof value !== "object") {
+  if (!isAgentToolData(value)) {
     return [];
   }
-  const record = value as Record<string, unknown>;
   const nested =
-    record.answers ??
-    record.answer ??
-    record.responses ??
-    record.response ??
-    record.result ??
-    record.value;
+    value.answers ??
+    value.answer ??
+    value.responses ??
+    value.response ??
+    value.result ??
+    value.value;
   if (nested === undefined) {
-    return Object.values(record).reduce<string[][]>((groups, entry) => {
+    return Object.values(value).reduce<string[][]>((groups, entry) => {
       const answers = normalizeAnswerValues(entry);
       if (answers.length > 0) {
         groups.push(answers);
@@ -111,7 +113,7 @@ const normalizeAnswerGroups = (value: unknown): string[][] => {
   return normalizeAnswerGroups(nested);
 };
 
-const firstNonEmptyAnswerGroups = (candidates: unknown[]): string[][] => {
+const firstNonEmptyAnswerGroups = (candidates: Array<AgentToolValue | undefined>): string[][] => {
   for (const candidate of candidates) {
     const groups = normalizeAnswerGroups(candidate).reduce<string[][]>((nextGroups, entry) => {
       const answers = entry.filter((value) => value.trim().length > 0);
@@ -132,13 +134,19 @@ export const questionToolDetails = (meta: ToolMeta): QuestionToolDetail[] => {
     return [];
   }
 
-  const inputQuestions = collectQuestionDetails(meta.input?.questions);
-  const metadataQuestions = collectQuestionDetails(meta.metadata?.questions);
+  const parsedInput = z.json().safeParse(meta.input);
+  const parsedMetadata = z.json().safeParse(meta.metadata);
+  const inputRecord =
+    parsedInput.success && isAgentToolData(parsedInput.data) ? parsedInput.data : undefined;
+  const metadataRecord =
+    parsedMetadata.success && isAgentToolData(parsedMetadata.data)
+      ? parsedMetadata.data
+      : undefined;
+  const inputQuestions = collectQuestionDetails(inputRecord?.questions);
+  const metadataQuestions = collectQuestionDetails(metadataRecord?.questions);
   const parsedOutput = parseJsonIfPossible(meta.output);
   const outputQuestions = collectQuestionDetails(
-    parsedOutput && typeof parsedOutput === "object"
-      ? (parsedOutput as Record<string, unknown>).questions
-      : undefined,
+    parsedOutput && isAgentToolData(parsedOutput) ? parsedOutput.questions : undefined,
   );
   const questions =
     inputQuestions.length > 0
@@ -151,10 +159,7 @@ export const questionToolDetails = (meta: ToolMeta): QuestionToolDetail[] => {
     return [];
   }
 
-  const outputRecord =
-    parsedOutput && typeof parsedOutput === "object"
-      ? (parsedOutput as Record<string, unknown>)
-      : undefined;
+  const outputRecord = parsedOutput && isAgentToolData(parsedOutput) ? parsedOutput : undefined;
   const answerGroups = firstNonEmptyAnswerGroups([
     outputRecord,
     outputRecord?.answers,
@@ -163,16 +168,16 @@ export const questionToolDetails = (meta: ToolMeta): QuestionToolDetail[] => {
     outputRecord?.response,
     outputRecord?.result,
     outputRecord?.value,
-    meta.metadata,
-    meta.metadata?.answers,
-    meta.metadata?.answer,
-    meta.metadata?.responses,
-    meta.metadata?.response,
-    meta.input,
-    meta.input?.answers,
-    meta.input?.answer,
-    meta.input?.responses,
-    meta.input?.response,
+    metadataRecord,
+    metadataRecord?.answers,
+    metadataRecord?.answer,
+    metadataRecord?.responses,
+    metadataRecord?.response,
+    inputRecord,
+    inputRecord?.answers,
+    inputRecord?.answer,
+    inputRecord?.responses,
+    inputRecord?.response,
   ]);
 
   if (answerGroups.length === 0) {

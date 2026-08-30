@@ -599,7 +599,11 @@ describe("createGitCliAdapter", () => {
     const git = createGitCliAdapter({
       runner: (_workingDirectory, args, options) => {
         const command = args.join(" ");
-        calls.push({ command, ...(options?.stdin === undefined ? {} : { stdin: options.stdin }) });
+        const call: (typeof calls)[number] = { command };
+        if (options?.stdin !== undefined) {
+          call.stdin = options.stdin;
+        }
+        calls.push(call);
         return Effect.succeed({
           ok: true,
           stdout:

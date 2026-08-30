@@ -10,7 +10,7 @@ export const waitForUserMessageAdmission = (
   messageId: string,
 ): PendingUserMessageAdmission => {
   let admit!: () => void;
-  let reject!: (reason?: unknown) => void;
+  let reject!: (cause?: unknown) => void;
   const promise = new Promise<void>((resolve, rejectPromise) => {
     admit = resolve;
     reject = rejectPromise;

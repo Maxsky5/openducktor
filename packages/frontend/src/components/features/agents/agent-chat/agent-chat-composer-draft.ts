@@ -171,7 +171,7 @@ export type AgentChatComposerDraftEditResult = {
 };
 
 const createSegmentId = (): string => {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+  if (globalThis.crypto !== undefined && crypto.randomUUID !== undefined) {
     return crypto.randomUUID();
   }
   return `segment-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -561,7 +561,7 @@ export const applyComposerDraftEdit = (
       return {
         draft: updateTextSegmentInDraft(draft, edit.segmentId, edit.text),
         focusTarget:
-          typeof edit.caretOffset === "number"
+          edit.caretOffset !== undefined && edit.caretOffset !== null
             ? {
                 segmentId: edit.segmentId,
                 offset: Math.max(0, Math.min(edit.caretOffset, edit.text.length)),
@@ -649,18 +649,17 @@ const draftToUserMessageParts = (draft: AgentChatComposerDraft): AgentUserMessag
         return [];
       }
 
-      return [
-        {
-          kind: "attachment",
-          attachment: {
-            id: attachment.id,
-            path: attachment.path,
-            name: attachment.name,
-            kind: attachment.kind,
-            ...(attachment.mime ? { mime: attachment.mime } : {}),
-          },
+      const part: AgentUserMessagePart = {
+        kind: "attachment",
+        attachment: {
+          id: attachment.id,
+          path: attachment.path,
+          name: attachment.name,
+          kind: attachment.kind,
         },
-      ];
+      };
+      if (attachment.mime) part.attachment.mime = attachment.mime;
+      return [part];
     }),
   ];
 };
@@ -683,16 +682,17 @@ export const resolveDraftToUserMessageParts = async (
         throw new Error(`Attachment "${attachment.name}" is missing a local file path.`);
       }
 
-      return {
-        kind: "attachment" as const,
+      const part: AgentUserMessagePart = {
+        kind: "attachment",
         attachment: {
           id: attachment.id,
           path,
           name: attachment.name,
           kind: attachment.kind,
-          ...(attachment.mime ? { mime: attachment.mime } : {}),
         },
-      } satisfies AgentUserMessagePart;
+      };
+      if (attachment.mime) part.attachment.mime = attachment.mime;
+      return part;
     }),
   );
 

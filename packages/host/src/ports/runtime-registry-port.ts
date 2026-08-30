@@ -6,19 +6,19 @@ import type {
 } from "@openducktor/contracts";
 import type { Effect } from "effect";
 import type {
-  HostDependencyError,
-  HostOperationError,
-  HostPathAccessError,
-  HostResourceError,
-  HostValidationError,
+  HostDependencyErrorAggregate,
+  HostOperationErrorAggregate,
+  HostPathAccessErrorAggregate,
+  HostResourceErrorAggregate,
+  HostValidationErrorAggregate,
 } from "../effect/host-errors";
 
 export type RuntimeRegistryError =
-  | HostDependencyError
-  | HostOperationError
-  | HostPathAccessError
-  | HostResourceError
-  | HostValidationError;
+  | HostDependencyErrorAggregate
+  | HostOperationErrorAggregate
+  | HostPathAccessErrorAggregate
+  | HostResourceErrorAggregate
+  | HostValidationErrorAggregate;
 
 export type RuntimeEnsureWorkspaceInput = {
   runtimeKind: string;
@@ -30,7 +30,7 @@ export type RuntimeWorkspaceHandle = {
   runtime: RuntimeInstanceSummary;
   configuredExecutablePath: string;
   isAlive(): boolean;
-  stop(): Effect.Effect<void, HostOperationError>;
+  stop(): Effect.Effect<void, HostOperationErrorAggregate>;
 };
 export type RuntimeWorkspaceStarterPort = {
   startWorkspaceRuntime(
@@ -77,10 +77,12 @@ export type RuntimeRegistryPort = {
     repoPath: string;
     runtimeKind?: string;
   }): Effect.Effect<RuntimeInstanceSummary[], never>;
-  stopRuntime(runtimeId: string): Effect.Effect<boolean, HostOperationError | HostResourceError>;
+  stopRuntime(
+    runtimeId: string,
+  ): Effect.Effect<boolean, HostOperationErrorAggregate | HostResourceErrorAggregate>;
   stopAllRuntimes(): Effect.Effect<
     RuntimeInstanceSummary[],
-    HostOperationError | HostResourceError
+    HostOperationErrorAggregate | HostResourceErrorAggregate
   >;
   stopSession(input: RuntimeSessionStopInput): Effect.Effect<void, RuntimeRegistryError>;
   probeSessionStatus(input: RuntimeSessionStatusProbeInput): Effect.Effect<

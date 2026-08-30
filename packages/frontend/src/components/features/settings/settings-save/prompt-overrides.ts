@@ -1,15 +1,12 @@
-import type { AgentPromptTemplateId, RepoPromptOverrides } from "@openducktor/contracts";
+import { agentPromptTemplateIdValues, type RepoPromptOverrides } from "@openducktor/contracts";
 
 const trimPromptTemplate = (template: string): string => template.trim();
 
-export const preparePromptOverridesForSave = (
-  overrides: RepoPromptOverrides,
-): RepoPromptOverrides => {
+export const preparePromptOverridesForSave = (overrides: RepoPromptOverrides) => {
   const next: RepoPromptOverrides = {};
 
-  for (const [templateId, entry] of Object.entries(overrides) as Array<
-    [AgentPromptTemplateId, RepoPromptOverrides[AgentPromptTemplateId]]
-  >) {
+  for (const templateId of agentPromptTemplateIdValues) {
+    const entry = overrides[templateId];
     if (!entry) {
       continue;
     }

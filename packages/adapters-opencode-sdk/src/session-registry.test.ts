@@ -8,6 +8,7 @@ import type {
   SyncEventSessionDeleted,
   SyncEventSessionUpdated,
 } from "@opencode-ai/sdk/v2/client";
+import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
 import {
   childSessionCreatedEvent,
@@ -16,6 +17,8 @@ import {
   makeClientWithEvents,
   makeSessionInput,
   makeSessionRecord,
+  permissionAskedEvent,
+  questionAskedEvent,
   runtimeSourceSyncChildSessionCreatedEvent,
   runtimeSourceSyncChildSessionCreatedEventWithParentAlias,
   syncChildSessionCreatedEvent,
@@ -25,38 +28,55 @@ import { observeRuntimeEvents, registerSession, releaseSessionRuntime } from "./
 import type { OpencodeEventLogger, RuntimeEventTransportRecord, SessionRecord } from "./types";
 import { waitForUserMessageAdmission } from "./user-message-admission";
 
-type GlobalEventPayload = TestGlobalEventPayload;
 type AssistantPartEvent = Extract<AgentEvent, { type: "assistant_part" }>;
 type SubagentPart = Extract<AssistantPartEvent["part"], { kind: "subagent" }>;
+type SubagentPartEvent = AssistantPartEvent & { part: SubagentPart };
+type MessageUpdatedEvent = Extract<Event, { type: "message.updated" }>;
+type MessagePartUpdatedEvent = Extract<Event, { type: "message.part.updated" }>;
 
 const readSubagentParts = (events: AgentEvent[]): SubagentPart[] =>
   events
     .filter(
-      (event): event is AssistantPartEvent =>
+      (event): event is SubagentPartEvent =>
         event.type === "assistant_part" && event.part.kind === "subagent",
     )
-    .map((event) => event.part as SubagentPart);
+    .map((event) => event.part);
 
-const assistantRoleEvent = (messageId: string): Event =>
+const assistantRoleEvent = (messageId: string) =>
   ({
+    id: `event-${messageId}`,
     type: "message.updated",
     properties: {
+      sessionID: "external-session-1",
       info: {
         id: messageId,
         role: "assistant",
         sessionID: "external-session-1",
+        time: { created: Date.parse("2026-02-22T12:00:10.000Z") },
+        parentID: "user-message-1",
+        modelID: "gpt-5",
+        providerID: "openai",
+        mode: "build",
+        agent: "build",
+        path: { cwd: "/repo", root: "/repo" },
+        cost: 0,
+        tokens: {
+          input: 0,
+          output: 0,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
       },
     },
-  }) as unknown as Event;
+  }) satisfies MessageUpdatedEvent;
 
-const assistantSubtaskEvent = (input: {
-  messageId: string;
-  partId: string;
-  description: string;
-}): Event =>
+const assistantSubtaskEvent = (input: { messageId: string; partId: string; description: string }) =>
   ({
+    id: `event-${input.partId}`,
     type: "message.part.updated",
     properties: {
+      sessionID: "external-session-1",
+      time: Date.parse("2026-02-22T12:00:10.000Z"),
       part: {
         id: input.partId,
         sessionID: "external-session-1",
@@ -67,16 +87,19 @@ const assistantSubtaskEvent = (input: {
         description: input.description,
       },
     },
-  }) as unknown as Event;
+  }) satisfies MessagePartUpdatedEvent;
 
 const assistantTaskToolEvent = (input: {
   messageId: string;
   partId: string;
   description: string;
-}): Event =>
+}) =>
   ({
+    id: `event-${input.partId}`,
     type: "message.part.updated",
     properties: {
+      sessionID: "external-session-1",
+      time: Date.parse("2026-02-22T12:00:10.000Z"),
       part: {
         id: input.partId,
         sessionID: "external-session-1",
@@ -97,34 +120,28 @@ const assistantTaskToolEvent = (input: {
         },
       },
     },
-  }) as unknown as Event;
+  }) satisfies MessagePartUpdatedEvent;
 
 const childPermissionEvent = (childSessionId: string): Event =>
-  ({
-    type: "permission.asked",
-    properties: {
-      sessionID: childSessionId,
-      id: "permission-child-1",
-      permission: "read",
-      patterns: ["omp.json"],
-    },
-  }) as unknown as Event;
+  permissionAskedEvent({
+    requestId: "permission-child-1",
+    sessionId: childSessionId,
+    permission: "read",
+    patterns: ["omp.json"],
+  });
 
 const childQuestionEvent = (childSessionId: string): Event =>
-  ({
-    type: "question.asked",
-    properties: {
-      sessionID: childSessionId,
-      id: "question-child-1",
-      questions: [
-        {
-          header: "Scope",
-          question: "Pick target",
-          options: [{ label: "Current file", description: "Inspect only the requested file" }],
-        },
-      ],
-    },
-  }) as unknown as Event;
+  questionAskedEvent({
+    requestId: "question-child-1",
+    sessionId: childSessionId,
+    questions: [
+      {
+        header: "Scope",
+        question: "Pick target",
+        options: [{ label: "Current file", description: "Inspect only the requested file" }],
+      },
+    ],
+  });
 
 const syncAssistantSubtaskEvent = (input: {
   messageId: string;
@@ -155,8 +172,8 @@ const syncAssistantSubtaskEvent = (input: {
     },
   }) satisfies SyncEventMessagePartUpdated;
 
-const syncChildSessionCreatedEventWithoutParent = (childSessionId: string): GlobalEventPayload => {
-  return {
+const syncChildSessionCreatedEventWithoutParent = (childSessionId: string) =>
+  ({
     type: "sync",
     id: `sync-${childSessionId}`,
     syncEvent: {
@@ -181,8 +198,7 @@ const syncChildSessionCreatedEventWithoutParent = (childSessionId: string): Glob
         },
       },
     },
-  } as unknown as GlobalEventPayload;
-};
+  }) as const;
 
 const syncChildSessionUpdatedEvent = (childSessionId: string): SyncEventSessionUpdated =>
   ({
@@ -219,7 +235,7 @@ const syncChildSessionDeletedEvent = (
     },
   }) satisfies SyncEventSessionDeleted;
 
-const malformedSyncLifecycleDataEvent = (): GlobalEventPayload =>
+const malformedSyncLifecycleDataEvent = () =>
   ({
     type: "sync",
     id: "sync-malformed-session-created",
@@ -230,7 +246,26 @@ const malformedSyncLifecycleDataEvent = (): GlobalEventPayload =>
       aggregateID: "external-child-session",
       data: null,
     },
-  }) as unknown as GlobalEventPayload;
+  }) as const;
+
+const malformedSyncChildSessionCreatedEvent = () =>
+  ({
+    type: "sync",
+    id: "sync-malformed-child-session-created",
+    syncEvent: {
+      type: "session.created.1",
+      id: "sync-event-malformed-child-session-created",
+      seq: 1,
+      aggregateID: "external-child-session",
+      data: {
+        sessionID: "external-child-session",
+        info: {
+          id: "external-child-session",
+          parentID: "external-session-1",
+        },
+      },
+    },
+  }) as const;
 
 const childSessionDeletedEvent = (childSessionId: string): EventSessionDeleted =>
   ({
@@ -257,10 +292,13 @@ const makeLiveClient = (): OpencodeClient => {
     id: "event-server-connected",
     type: "server.connected",
     properties: {},
-  } satisfies Extract<GlobalEventPayload, { type: "server.connected" }>;
+  } satisfies Extract<GlobalEvent["payload"], { type: "server.connected" }>;
 
+  const baseClient = createOpencodeClient({ baseUrl: "http://127.0.0.1:12345" });
   return {
+    ...baseClient,
     global: {
+      ...baseClient.global,
       event: async (options?: { signal?: AbortSignal }) => {
         async function* iterator(): AsyncGenerator<GlobalEvent> {
           yield {
@@ -277,11 +315,11 @@ const makeLiveClient = (): OpencodeClient => {
         return { stream: iterator() };
       },
     },
-  } as unknown as OpencodeClient;
+  };
 };
 
 const runRuntimeEventTransport = async (
-  events: GlobalEventPayload[],
+  events: TestGlobalEventPayload[],
   options?: {
     onTransport?: (transport: RuntimeEventTransportRecord) => void;
     externalSessionIds?: string[];
@@ -294,7 +332,7 @@ const runRuntimeEventTransport = async (
   const emitted: AgentEvent[] = [];
 
   for (const externalSessionId of options?.externalSessionIds ?? ["external-session-1"]) {
-    registerSession({
+    const registration: Parameters<typeof registerSession>[0] = {
       sessions,
       runtimeEventTransports,
       createClient: () => client,
@@ -310,8 +348,11 @@ const runRuntimeEventTransport = async (
       emit: (_externalSessionId, event) => {
         emitted.push(event);
       },
-      ...(options?.logEvent ? { logEvent: options.logEvent } : {}),
-    });
+    };
+    if (options?.logEvent) {
+      registration.logEvent = options.logEvent;
+    }
+    registerSession(registration);
   }
 
   const transport = runtimeEventTransports.get("runtime-opencode-1");
@@ -331,7 +372,8 @@ describe("session registry runtime event transport", () => {
     const admission = waitForUserMessageAdmission(session, "message-1");
     const settledAdmission = admission.promise.then(
       () => null,
-      (error: unknown) => error,
+      (cause: unknown): Error =>
+        cause instanceof Error ? cause : new Error(String(cause), { cause }),
     );
 
     await releaseSessionRuntime(session, sessions, runtimeEventTransports);
@@ -345,19 +387,21 @@ describe("session registry runtime event transport", () => {
     const emitted = await runRuntimeEventTransport(
       [
         {
+          id: "event-status-external-session-1",
           type: "session.status",
           properties: {
             sessionID: "external-session-1",
             status: { type: "reconnect" },
           },
-        } as unknown as GlobalEventPayload,
+        },
         {
+          id: "event-status-external-session-2",
           type: "session.status",
           properties: {
             sessionID: "external-session-2",
             status: { type: "busy" },
           },
-        } as unknown as GlobalEventPayload,
+        },
       ],
       { externalSessionIds: ["external-session-1", "external-session-2"] },
     );
@@ -365,7 +409,7 @@ describe("session registry runtime event transport", () => {
     expect(emitted.filter((event) => event.type === "session_error")).toEqual([
       expect.objectContaining({
         externalSessionId: "external-session-1",
-        message: "OpenCode session.status event has unsupported status type 'reconnect'.",
+        message: expect.stringContaining("session.status"),
       }),
     ]);
     expect(emitted).toContainEqual(
@@ -381,12 +425,13 @@ describe("session registry runtime event transport", () => {
     const emitted = await runRuntimeEventTransport(
       [
         {
+          id: "event-status-external-session-1",
           type: "session.status",
           properties: {
             sessionID: "external-session-1",
             status: { type: "busy" },
           },
-        } as unknown as GlobalEventPayload,
+        },
       ],
       {
         externalSessionIds: ["external-session-1", "external-session-2"],
@@ -415,7 +460,7 @@ describe("session registry runtime event transport", () => {
           {
             type: "session.created",
             properties: { info: {} },
-          } as unknown as GlobalEventPayload,
+          },
         ],
         {
           externalSessionIds: ["external-session-1", "external-session-2"],
@@ -429,6 +474,19 @@ describe("session registry runtime event transport", () => {
     ).rejects.toThrow();
     expect(terminalFailures).toHaveLength(1);
     expect(terminalFailures[0]?.message).toContain("session.created");
+  });
+
+  test("routes malformed sync child lifecycle events to their parent session", async () => {
+    const emitted = await runRuntimeEventTransport([malformedSyncChildSessionCreatedEvent()], {
+      externalSessionIds: ["external-session-1", "external-session-2"],
+    });
+
+    expect(emitted.filter((event) => event.type === "session_error")).toEqual([
+      expect.objectContaining({
+        externalSessionId: "external-session-1",
+        message: expect.stringContaining("Invalid OpenCode event (session.created)"),
+      }),
+    ]);
   });
 
   test("routes direct child session creation to the single pending subagent card", async () => {
@@ -585,7 +643,7 @@ describe("session registry runtime event transport", () => {
     ).toBe(false);
   });
 
-  test("rejects direct child lifecycle parentId aliases without recording lineage", async () => {
+  test("ignores direct child lifecycle parentId aliases without recording lineage", async () => {
     let transport: RuntimeEventTransportRecord | undefined;
     const emitted = await runRuntimeEventTransport(
       [
@@ -599,18 +657,13 @@ describe("session registry runtime event transport", () => {
       },
     );
 
-    expect(emitted).toContainEqual(
-      expect.objectContaining({
-        type: "session_error",
-        message: expect.stringContaining("info.parentID"),
-      }),
-    );
+    expect(emitted).toEqual([]);
     expect(
       transport?.parentExternalSessionIdByChildExternalSessionId.has("external-child-session"),
     ).toBe(false);
   });
 
-  test("rejects runtime-source nested parent_id aliases without recording lineage", async () => {
+  test("ignores runtime-source nested parent_id aliases without recording lineage", async () => {
     let transport: RuntimeEventTransportRecord | undefined;
     const emitted = await runRuntimeEventTransport(
       [
@@ -627,18 +680,13 @@ describe("session registry runtime event transport", () => {
       },
     );
 
-    expect(emitted).toContainEqual(
-      expect.objectContaining({
-        type: "session_error",
-        message: expect.stringContaining("info.parentID"),
-      }),
-    );
+    expect(emitted).toEqual([]);
     expect(
       transport?.parentExternalSessionIdByChildExternalSessionId.has("external-child-session"),
     ).toBe(false);
   });
 
-  test("reports sync child lifecycle events that omit info.parentID", async () => {
+  test("does not infer child lineage when sync lifecycle events omit info.parentID", async () => {
     const emitted = await runRuntimeEventTransport([
       assistantRoleEvent("assistant-sync-subagent-session-created"),
       syncAssistantSubtaskEvent({
@@ -649,12 +697,7 @@ describe("session registry runtime event transport", () => {
       syncChildSessionCreatedEventWithoutParent("external-child-session"),
     ]);
 
-    expect(emitted).toContainEqual(
-      expect.objectContaining({
-        type: "session_error",
-        message: expect.stringContaining("info.parentID"),
-      }),
-    );
+    expect(emitted.some((event) => event.type === "session_error")).toBe(false);
   });
 
   test("reports recognized sync lifecycle events with malformed data", async () => {
@@ -663,7 +706,7 @@ describe("session registry runtime event transport", () => {
     expect(emitted).toContainEqual(
       expect.objectContaining({
         type: "session_error",
-        message: expect.stringContaining("syncEvent.data"),
+        message: expect.stringContaining("sync session.created.1"),
       }),
     );
   });

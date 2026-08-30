@@ -6,6 +6,10 @@ import { openExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
 
 export type MarkdownRendererVariant = "compact" | "document";
+type MarkdownComponentRegistry = {
+  compact: Components;
+  document: Components;
+};
 
 const openMarkdownUrl = (url: string): void => {
   void openExternalUrl(url).catch((error) => {
@@ -64,7 +68,7 @@ const DOCUMENT_COMPONENTS: Components = {
   ),
 };
 
-export const MARKDOWN_COMPONENTS: Record<MarkdownRendererVariant, Components> = {
+export const MARKDOWN_COMPONENTS: MarkdownComponentRegistry = {
   compact: COMPACT_COMPONENTS,
   document: DOCUMENT_COMPONENTS,
 };

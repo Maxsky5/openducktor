@@ -14,12 +14,10 @@ import {
 
 describe("agent-orchestrator session transcript events", () => {
   test("preserves explicit history load state when live transcript changes", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -196,12 +194,10 @@ describe("agent-orchestrator session transcript events", () => {
   });
 
   test("ignores observed session events after the mounted identity changes", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_sessionRef, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},

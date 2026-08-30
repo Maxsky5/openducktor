@@ -2,8 +2,6 @@ import type { AgentModelSelection } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 
-const LIVE_CLAUDE_EFFORT_LEVELS = new Set(["low", "medium", "high", "xhigh"]);
-
 export const assertSupportedClaudeLiveEffort = (
   model: AgentModelSelection,
   externalSessionId: string,
@@ -11,8 +9,12 @@ export const assertSupportedClaudeLiveEffort = (
   if (!model.variant) {
     return null;
   }
-  if (LIVE_CLAUDE_EFFORT_LEVELS.has(model.variant)) {
-    return model.variant as "low" | "medium" | "high" | "xhigh";
+  switch (model.variant) {
+    case "low":
+    case "medium":
+    case "high":
+    case "xhigh":
+      return model.variant;
   }
   throw new HostValidationError({
     field: "model.variant",

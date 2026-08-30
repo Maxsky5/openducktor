@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { Event, Part } from "@opencode-ai/sdk/v2";
+import type { Part } from "@opencode-ai/sdk/v2";
+import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
+import type { OpenCodeProtocolObject } from "./guards";
 import type { AgentEvent } from "@openducktor/core";
 import {
   buildQueuedSignature,
@@ -10,12 +12,13 @@ import {
   sessionRuntimeRef,
   startDefaultSession,
 } from "./test-support";
+import { createOpencodeEventFixtures } from "./opencode-protocol-test-fixtures";
 
 const OPENCODE_MESSAGE_ID_PATTERN = /^msg_[0-9a-f]{12}[0-9A-Za-z]{14}$/;
 
 const deferred = <T>() => {
   let resolve!: (value: T) => void;
-  let reject!: (error: unknown) => void;
+  let reject!: (cause: unknown) => void;
   const promise = new Promise<T>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
     reject = rejectPromise;
@@ -27,16 +30,18 @@ const installSlashCommandAdmission = (
   mock: ReturnType<typeof makeMockClient>,
   assistantMessageId?: string,
 ): void => {
-  const runtimeEvents = deferred<Event[]>();
+  const runtimeEvents = deferred<OpenCodeProtocolObject[]>();
   Object.assign(mock.client.global, {
     event: async (options?: { signal?: AbortSignal }) => ({
       stream: (async function* () {
         const events = await runtimeEvents.promise;
-        for (const event of events) {
+        for (const [index, event] of events.entries()) {
           if (options?.signal?.aborted) {
             return;
           }
-          yield { directory: "/repo", payload: event };
+          for (const payload of createOpencodeEventFixtures(event, index)) {
+            yield { directory: "/repo", payload };
+          }
         }
       })(),
     }),
@@ -55,7 +60,7 @@ const installSlashCommandAdmission = (
               time: { created: Date.parse("2026-02-17T12:00:00Z") },
             },
           },
-        } as Event,
+        },
         ...(assistantMessageId
           ? [
               {
@@ -68,7 +73,7 @@ const installSlashCommandAdmission = (
                     time: { created: Date.parse("2026-02-17T12:00:01Z") },
                   },
                 },
-              } as Event,
+              },
             ]
           : []),
       ]);
@@ -88,7 +93,7 @@ describe("OpencodeSdkAdapter user message", () => {
 
     await startDefaultSession(adapter, "build");
     Object.assign(mock.client.session, {
-      summarize: async (input: unknown) => {
+      summarize: async (input: Parameters<OpencodeClient["session"]["summarize"]>[0]) => {
         summarizeCalls.push(input);
         return { data: true, error: undefined };
       },
@@ -141,7 +146,7 @@ describe("OpencodeSdkAdapter user message", () => {
       },
     });
     const session = (
-      adapter as unknown as {
+      adapter satisfies {
         sessions: Map<
           string,
           {
@@ -219,7 +224,7 @@ describe("OpencodeSdkAdapter user message", () => {
 
     await startDefaultSession(adapter, "build");
     Object.assign(mock.client.session, {
-      summarize: async (input: unknown) => {
+      summarize: async (input: Parameters<OpencodeClient["session"]["summarize"]>[0]) => {
         summarizeCalls.push(input);
         return { data: true, error: undefined };
       },
@@ -248,9 +253,9 @@ describe("OpencodeSdkAdapter user message", () => {
 
     await startDefaultSession(adapter, "spec");
 
-    const events: Array<{ type: string }> = [];
+    const events: AgentEvent[] = [];
     await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) =>
-      events.push(event as { type: string }),
+      events.push(event),
     );
 
     await adapter.sendUserMessage({
@@ -352,7 +357,7 @@ describe("OpencodeSdkAdapter user message", () => {
       (event): event is Extract<AgentEvent, { type: "user_message" }> =>
         event.type === "user_message",
     );
-    const promptRequest = mock.session.promptAsyncCalls[0] as { messageID?: string } | undefined;
+    const promptRequest: { messageID?: string } | undefined = mock.session.promptAsyncCalls[0];
     expect(userEvents).toEqual([
       expect.objectContaining({
         messageId: expect.stringMatching(OPENCODE_MESSAGE_ID_PATTERN),
@@ -380,7 +385,7 @@ describe("OpencodeSdkAdapter user message", () => {
           type: "text",
           text: "Already visible",
           time: { start: Date.parse("2026-02-17T12:00:01Z") },
-        } as Part,
+        } satisfies Part,
       ],
     };
     const mock = makeMockClient({
@@ -468,7 +473,7 @@ describe("OpencodeSdkAdapter user message", () => {
 
   test("sendUserMessage accepts a slash command when its user-message event arrives", async () => {
     const mock = makeMockClient({});
-    const runtimeEvent = deferred<Event>();
+    const runtimeEvent = deferred<OpenCodeProtocolObject>();
     const commandStarted = deferred<{ messageID: string }>();
     const commandResponse = deferred<{ data?: unknown; error?: unknown }>();
     Object.assign(mock.client.global, {
@@ -476,7 +481,9 @@ describe("OpencodeSdkAdapter user message", () => {
         stream: (async function* () {
           const event = await runtimeEvent.promise;
           if (!options?.signal?.aborted) {
-            yield { directory: "/repo", payload: event };
+            for (const payload of createOpencodeEventFixtures(event, 0)) {
+              yield { directory: "/repo", payload };
+            }
           }
         })(),
       }),
@@ -533,7 +540,7 @@ describe("OpencodeSdkAdapter user message", () => {
             time: { created: Date.parse("2026-02-17T12:00:00Z") },
           },
         },
-      } as Event);
+      });
       await flushAsync();
 
       expect(accepted).toBe(true);
@@ -687,7 +694,7 @@ describe("OpencodeSdkAdapter user message", () => {
     await startDefaultSession(adapter, "spec");
 
     const sessions = (
-      adapter as unknown as {
+      adapter satisfies {
         sessions: Map<
           string,
           { streamTurnStatus: "active" | "idle"; isSendingUserMessage: boolean }
@@ -720,7 +727,7 @@ describe("OpencodeSdkAdapter user message", () => {
     await startDefaultSession(adapter, "spec");
 
     const sessions = (
-      adapter as unknown as {
+      adapter satisfies {
         sessions: Map<
           string,
           {
@@ -755,7 +762,7 @@ describe("OpencodeSdkAdapter user message", () => {
     await startDefaultSession(adapter, "spec");
 
     const sessions = (
-      adapter as unknown as {
+      adapter satisfies {
         sessions: Map<
           string,
           {
@@ -793,7 +800,7 @@ describe("OpencodeSdkAdapter user message", () => {
     await startDefaultSession(adapter, "build");
 
     const sessions = (
-      adapter as unknown as {
+      adapter satisfies {
         sessions: Map<
           string,
           {
@@ -924,9 +931,8 @@ describe("OpencodeSdkAdapter user message", () => {
 
     expect(mock.tool.listCalls).toEqual([]);
     expect(mock.session.promptCalls).toHaveLength(0);
-    const promptAsyncCall = mock.session.promptAsyncCalls[0] as
-      | { tools?: Record<string, boolean> }
-      | undefined;
+    const promptAsyncCall: { tools?: Record<string, boolean> } | undefined =
+      mock.session.promptAsyncCalls[0];
     expect(promptAsyncCall?.tools).toMatchObject({
       edit: false,
       write: false,

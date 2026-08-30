@@ -32,9 +32,7 @@ const testLogger: WebLogger = {
   success: () => Effect.void,
 };
 
-const createHostProcess = (exited: Promise<number>): Bun.Subprocess => {
-  return { exited } as Bun.Subprocess;
-};
+const createHostProcess = (exited: Promise<number>): Pick<Bun.Subprocess, "exited"> => ({ exited });
 
 describe("launcher internals", () => {
   test("uses development discovery for workspace source launches", () => {
@@ -246,17 +244,15 @@ describe("launcher internals", () => {
       },
     };
 
-    const result = await closeFrontendServer(frontendServer).then(
-      () => ({ ok: true as const }),
-      (error: unknown) => ({ ok: false as const, error }),
-    );
-
-    if (result.ok) {
-      throw new Error("Expected closeFrontendServer to reject");
+    let error: unknown;
+    try {
+      await closeFrontendServer(frontendServer);
+    } catch (cause) {
+      error = cause;
     }
 
-    expect(result.error).toMatchObject({ _tag: "WebDependencyError" });
-    expect(result.error).toEqual(expect.objectContaining({ message: "close failed" }));
+    expect(error).toMatchObject({ _tag: "WebDependencyError" });
+    expect(error).toEqual(expect.objectContaining({ message: "close failed" }));
     expect(closeIdleConnectionsCalls).toBe(0);
     expect(closeAllConnectionsCalls).toBe(0);
   });
@@ -280,29 +276,27 @@ describe("launcher internals", () => {
 
   test("keeps the process alive while shutdown work is pending", async () => {
     let intervalCallback: (() => void) | null = null;
-    const timer = Symbol("timer") as unknown as ReturnType<typeof setInterval>;
-    const clearedTimers: Array<ReturnType<typeof setInterval>> = [];
+    let intervalCancelled = false;
     let finishOperation: () => void = () => {};
     const operation = new Promise<void>((resolve) => {
       finishOperation = resolve;
     });
 
     const keepAlivePromise = keepProcessAliveDuring(operation, {
-      clearInterval: (nextTimer) => {
-        clearedTimers.push(nextTimer);
-      },
-      setInterval: (callback) => {
+      scheduleInterval: (callback) => {
         intervalCallback = callback;
-        return timer;
+        return () => {
+          intervalCancelled = true;
+        };
       },
     });
 
     expect(intervalCallback).not.toBeNull();
-    expect(clearedTimers).toEqual([]);
+    expect(intervalCancelled).toBe(false);
 
     finishOperation();
     await keepAlivePromise;
-    expect(clearedTimers).toEqual([timer]);
+    expect(intervalCancelled).toBe(true);
   });
 
   test("awaits a delayed duplicate-signal persistence failure before exiting", async () => {

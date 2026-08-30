@@ -512,16 +512,14 @@ describe("useSettingsModalSaveOrchestration", () => {
   test("surfaces save-preparation errors before persistence", async () => {
     const saveSettingsSnapshot = mock(async () => {});
     const snapshotDraft = createSnapshot();
-    const repoConfig = snapshotDraft.workspaces.repo;
-    if (!repoConfig) {
-      throw new Error("Expected repo settings fixture");
-    }
-    repoConfig.agentDefaults.spec = {
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "",
-      profileId: "",
-    } as unknown as NonNullable<typeof repoConfig.agentDefaults.spec>;
+    snapshotDraft.reusablePrompts = [
+      {
+        id: "prompt-1",
+        name: "",
+        description: "",
+        content: "",
+      },
+    ];
     const harness = createHookHarness(
       createArgs(
         {
@@ -543,9 +541,7 @@ describe("useSettingsModalSaveOrchestration", () => {
     });
 
     expect(didSave).toBe(false);
-    expect(harness.getLatest().saveError).toBe(
-      "Specification agent default runtime kind is required when provider and model are configured.",
-    );
+    expect(harness.getLatest().saveError).toBe("Reusable prompts contain invalid fields.");
     expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
 
     await harness.unmount();

@@ -6,13 +6,12 @@ import type {
 } from "@openducktor/core";
 import {
   type MutableRefObject,
-  type ClipboardEvent as ReactClipboardEvent,
   type FocusEvent as ReactFocusEvent,
-  type FormEvent as ReactFormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   useCallback,
 } from "react";
+import { z } from "zod";
 import { classifyAttachment } from "./agent-chat-attachments";
 import type { AgentChatComposerDraft, applyComposerDraftEdit } from "./agent-chat-composer-draft";
 import { handleComposerEditorKeyDown } from "./agent-chat-composer-editor-keydown";
@@ -39,6 +38,20 @@ import {
 } from "./use-agent-chat-composer-editor-selection";
 
 type ApplyEditResult = (result: ReturnType<typeof applyComposerDraftEdit>) => boolean;
+
+type ComposerBeforeInputEvent = {
+  currentTarget: HTMLDivElement;
+  target: EventTarget;
+  nativeEvent: Event;
+  preventDefault(): void;
+};
+
+type ComposerPasteEvent = {
+  clipboardData: DataTransfer;
+  currentTarget: HTMLDivElement;
+  target: EventTarget;
+  preventDefault(): void;
+};
 
 const isPastedImageFile = (file: File, mime?: string): boolean => {
   return classifyAttachment({ name: file.name, mime: mime || file.type }) === "image";
@@ -234,7 +247,7 @@ export const useAgentChatComposerEditorEvents = ({
   );
 
   const handleEditorPaste = useCallback(
-    (event: ReactClipboardEvent<HTMLDivElement>) => {
+    (event: ComposerPasteEvent) => {
       if (disabled) {
         return;
       }
@@ -308,16 +321,21 @@ export const useAgentChatComposerEditorEvents = ({
   );
 
   const handleEditorBeforeInput = useCallback(
-    (event: ReactFormEvent<HTMLDivElement>) => {
+    (event: ComposerBeforeInputEvent) => {
       const sourceDraft = latestDraftRef.current;
       const activeSelection = selection.resolveActiveTextSelection(
         event.currentTarget,
         sourceDraft,
         event.target,
       );
-      const nativeEvent = event.nativeEvent as { inputType?: unknown; data?: unknown };
-      const inputType = typeof nativeEvent.inputType === "string" ? nativeEvent.inputType : null;
-      const data = typeof nativeEvent.data === "string" ? nativeEvent.data : null;
+      const inputTypeResult = z
+        .string()
+        .safeParse("inputType" in event.nativeEvent ? event.nativeEvent.inputType : null);
+      const dataResult = z
+        .string()
+        .safeParse("data" in event.nativeEvent ? event.nativeEvent.data : null);
+      const inputType = inputTypeResult.success ? inputTypeResult.data : null;
+      const data = dataResult.success ? dataResult.data : null;
       const selectionTarget = resolveSelectionTargetFromActiveSelection(
         sourceDraft,
         activeSelection,

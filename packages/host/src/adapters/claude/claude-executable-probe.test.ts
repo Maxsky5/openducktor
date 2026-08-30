@@ -6,15 +6,14 @@ import {
   createClaudeExecutableProbe,
 } from "./claude-executable-probe";
 
-const initializationResponse = (): SDKControlInitializeResponse =>
-  ({
-    commands: [],
-    agents: [],
-    output_style: "default",
-    available_output_styles: [],
-    models: [],
-    account: {},
-  }) as SDKControlInitializeResponse;
+const initializationResponse = (): SDKControlInitializeResponse => ({
+  commands: [],
+  agents: [],
+  output_style: "default",
+  available_output_styles: [],
+  models: [],
+  account: {},
+});
 
 describe("createClaudeExecutableProbe", () => {
   test("uses an isolated Agent SDK initialization and awaits cleanup after success", async () => {
@@ -106,7 +105,8 @@ describe("createClaudeExecutableProbe", () => {
     const probe = createClaudeExecutableProbe({
       queryFactory() {
         return {
-          initializationResult: async () => ({}) as SDKControlInitializeResponse,
+          // @ts-expect-error This malformed response verifies protocol validation.
+          initializationResult: async (): Promise<SDKControlInitializeResponse> => ({}),
           async return() {
             return { done: true, value: undefined };
           },

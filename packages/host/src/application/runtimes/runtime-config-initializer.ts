@@ -10,11 +10,18 @@ import {
   upgradePersistedGlobalConfigV2,
 } from "../../config/global-config";
 import { HostOperationError, type HostValidationError } from "../../effect/host-errors";
-import { discoverToolFresh, type ToolDiscoveryPort } from "../../ports/tool-discovery-port";
+import {
+  discoverToolFresh,
+  type ToolDiscoveryDetails,
+  type ToolDiscoveryPort,
+} from "../../ports/tool-discovery-port";
 
 export type RuntimeConfigInitializer = (
   legacyConfig: PersistedGlobalConfigV2 | null,
-) => Effect.Effect<LoadedGlobalConfig, HostOperationError | HostValidationError>;
+) => Effect.Effect<
+  LoadedGlobalConfig,
+  HostOperationError<ToolDiscoveryDetails> | HostValidationError<ToolDiscoveryDetails>
+>;
 
 export const createRuntimeConfigInitializer =
   (toolDiscovery: ToolDiscoveryPort): RuntimeConfigInitializer =>
@@ -61,5 +68,5 @@ export const createRuntimeConfigInitializer =
           ];
         }),
       );
-      return globalConfigSchema.parse({ ...config, agentRuntimes }) as LoadedGlobalConfig;
+      return globalConfigSchema.parse({ ...config, agentRuntimes });
     });

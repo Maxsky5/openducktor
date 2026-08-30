@@ -1,3 +1,5 @@
+import { agentToolDataSchema, type AgentToolData } from "@openducktor/contracts";
+import { z } from "zod";
 import { isRunningToolStatus } from "../agent-tool-messages";
 import {
   findLastToolSessionMessage,
@@ -5,37 +7,18 @@ import {
   type SessionMessageOwner,
 } from "./messages";
 
-export const normalizeToolInput = (
-  input: Record<string, unknown> | undefined,
-): Record<string, unknown> | undefined => {
+export const normalizeToolInput = (input: AgentToolData | undefined): AgentToolData | undefined => {
   if (!input) {
     return undefined;
   }
   return Object.keys(input).length > 0 ? input : undefined;
 };
 
-export const normalizeToolText = (value: unknown): string | undefined => {
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : undefined;
-  }
-  if (value === undefined || value === null) {
-    return undefined;
-  }
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  if (Array.isArray(value) && value.length === 0) {
-    return undefined;
-  }
-  if (typeof value === "object" && Object.keys(value as Record<string, unknown>).length === 0) {
-    return undefined;
-  }
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
+const stringValueSchema = z.string();
+
+export const normalizeToolText = (value: string | undefined): string | undefined => {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : undefined;
 };
 
 export const resolveToolMessageId = (
@@ -104,21 +87,21 @@ export const normalizeSessionErrorMessage = (value: string): string => {
   }
 
   try {
-    const parsed = JSON.parse(withoutQuotes) as unknown;
-    if (!parsed || typeof parsed !== "object") {
+    const parsed = z.json().parse(JSON.parse(withoutQuotes));
+    const record = agentToolDataSchema.safeParse(parsed);
+    if (!record.success) {
       return withoutQuotes;
     }
-    const record = parsed as Record<string, unknown>;
-    if (typeof record.message === "string" && record.message.trim().length > 0) {
-      return record.message.trim();
+    const messageResult = stringValueSchema.safeParse(record.data.message);
+    if (messageResult.success && messageResult.data.trim().length > 0) {
+      return messageResult.data.trim();
     }
-    const nestedError = record.error;
-    if (
-      nestedError &&
-      typeof nestedError === "object" &&
-      typeof (nestedError as Record<string, unknown>).message === "string"
-    ) {
-      return String((nestedError as Record<string, unknown>).message).trim();
+    const nestedError = agentToolDataSchema.safeParse(record.data.error);
+    if (nestedError.success) {
+      const nestedMessageResult = stringValueSchema.safeParse(nestedError.data.message);
+      if (nestedMessageResult.success) {
+        return nestedMessageResult.data.trim();
+      }
     }
     return withoutQuotes;
   } catch {

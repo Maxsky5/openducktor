@@ -1,50 +1,40 @@
 import { describe, expect, mock, test } from "bun:test";
-import {
-  listAvailableModels,
-  listAvailableSlashCommands,
-  listAvailableSubagents,
-  searchFiles,
-} from "./catalog-and-mcp";
+import type { Agent, Command } from "@opencode-ai/sdk/v2/client";
+import { listAvailableSlashCommands, listAvailableSubagents, searchFiles } from "./catalog-and-mcp";
 
-describe("catalog-and-mcp listAvailableModels", () => {
-  test("returns provider models without profile metadata when the runtime agent API is missing", async () => {
-    const catalog = await listAvailableModels(
-      (() => ({
-        config: {
-          providers: async () => ({
-            data: {
-              providers: [],
-              default: {},
-            },
-          }),
-        },
-      })) as never,
-      {
-        runtimeEndpoint: "http://127.0.0.1:1234",
-        workingDirectory: "/repo",
-      },
-    );
+const commandFixture = (overrides: Partial<Command>): Command => ({
+  hints: [],
+  name: "command",
+  template: "",
+  ...overrides,
+});
 
-    expect(catalog.profiles).toEqual([]);
-  });
+const agentFixture = (overrides: Partial<Agent>): Agent => ({
+  mode: "subagent",
+  name: "agent",
+  options: {},
+  permission: [],
+  ...overrides,
 });
 
 describe("catalog-and-mcp listAvailableSlashCommands", () => {
   test("normalizes command payloads into a slash catalog", async () => {
     const list = mock(async () => ({
       data: [
-        { name: "review", description: "Review changes", source: "command", hints: ["$ARG"] },
-        { name: "mcp-prompt", source: "mcp", hints: [] },
-        { name: "skill-run", source: "skill", hints: ["one", "two"] },
-        { name: "unknown-source", source: "other", hints: ["ignored"] },
-        { name: "   " },
-        {},
+        commandFixture({
+          name: "review",
+          description: "Review changes",
+          source: "command",
+          hints: ["$ARG"],
+        }),
+        commandFixture({ name: "mcp-prompt", source: "mcp" }),
+        commandFixture({ name: "skill-run", source: "skill", hints: ["one", "two"] }),
       ],
       error: undefined,
     }));
     const createClient = mock(() => ({ command: { list } }));
 
-    const catalog = await listAvailableSlashCommands(createClient as never, {
+    const catalog = await listAvailableSlashCommands(createClient, {
       runtimeEndpoint: "http://127.0.0.1:1234",
       workingDirectory: "/repo",
     });
@@ -85,53 +75,33 @@ describe("catalog-and-mcp listAvailableSlashCommands", () => {
         source: "skill",
         hints: ["one", "two"],
       },
-      {
-        id: "unknown-source",
-        trigger: "unknown-source",
-        title: "unknown-source",
-        hints: ["ignored"],
-      },
     ]);
   });
 
   test("reserves compact case-insensitively after a successful runtime read", async () => {
     const catalog = await listAvailableSlashCommands(
-      (() => ({
+      () => ({
         command: {
           list: async () => ({
             data: [
-              { name: "Compact", source: "command", hints: [] },
-              { name: "review", source: "command", hints: [] },
+              commandFixture({ name: "Compact", source: "command" }),
+              commandFixture({ name: "review", source: "command" }),
             ],
           }),
         },
-      })) as never,
+      }),
       { runtimeEndpoint: "http://127.0.0.1:1234", workingDirectory: "/repo" },
     );
 
     expect(catalog.commands.map((command) => command.id)).toEqual(["system:compact", "review"]);
   });
 
-  test("fails when the runtime does not expose command listing", async () => {
+  test("fails when the slash command payload is not an array", async () => {
     await expect(
-      listAvailableSlashCommands((() => ({})) as never, {
+      listAvailableSlashCommands(() => ({ command: { list: async () => ({ data: {} }) } }), {
         runtimeEndpoint: "http://127.0.0.1:1234",
         workingDirectory: "/repo",
       }),
-    ).rejects.toThrow(
-      "OpenCode request failed: list slash commands: OpenCode runtime does not expose the command listing API.",
-    );
-  });
-
-  test("fails when the slash command payload is not an array", async () => {
-    await expect(
-      listAvailableSlashCommands(
-        (() => ({ command: { list: async () => ({ data: {} }) } })) as never,
-        {
-          runtimeEndpoint: "http://127.0.0.1:1234",
-          workingDirectory: "/repo",
-        },
-      ),
     ).rejects.toThrow(
       "OpenCode request failed: list slash commands: Invalid slash command payload: expected an array.",
     );
@@ -140,13 +110,13 @@ describe("catalog-and-mcp listAvailableSlashCommands", () => {
   test("wraps command listing failures with context", async () => {
     await expect(
       listAvailableSlashCommands(
-        (() => ({
+        () => ({
           command: {
             list: async () => {
               throw new Error("boom");
             },
           },
-        })) as never,
+        }),
         {
           runtimeEndpoint: "http://127.0.0.1:1234",
           workingDirectory: "/repo",
@@ -158,16 +128,13 @@ describe("catalog-and-mcp listAvailableSlashCommands", () => {
   test("rejects duplicate slash command triggers at runtime", async () => {
     await expect(
       listAvailableSlashCommands(
-        (() => ({
+        () => ({
           command: {
             list: async () => ({
-              data: [
-                { name: "review", hints: [] },
-                { name: "review", hints: [] },
-              ],
+              data: [commandFixture({ name: "review" }), commandFixture({ name: "review" })],
             }),
           },
-        })) as never,
+        }),
         {
           runtimeEndpoint: "http://127.0.0.1:1234",
           workingDirectory: "/repo",
@@ -181,17 +148,20 @@ describe("catalog-and-mcp listAvailableSubagents", () => {
   test("filters visible non-primary agents into a subagent catalog", async () => {
     const agents = mock(async () => ({
       data: [
-        { name: " reviewer ", description: " Review changes ", hidden: false, mode: "subagent" },
-        { name: "planner", hidden: false, mode: "all" },
-        { name: "build", hidden: false, mode: "primary" },
-        { name: "secret", hidden: true, mode: "subagent" },
-        { name: "unknown", hidden: false, mode: "sidebar" },
+        agentFixture({
+          name: " reviewer ",
+          description: " Review changes ",
+          hidden: false,
+        }),
+        agentFixture({ name: "planner", hidden: false, mode: "all" }),
+        agentFixture({ name: "build", hidden: false, mode: "primary" }),
+        agentFixture({ name: "secret", hidden: true }),
       ],
       error: undefined,
     }));
     const createClient = mock(() => ({ app: { agents } }));
 
-    const catalog = await listAvailableSubagents(createClient as never, {
+    const catalog = await listAvailableSubagents(createClient, {
       runtimeEndpoint: "http://127.0.0.1:1234",
       workingDirectory: "/repo",
     });
@@ -216,46 +186,33 @@ describe("catalog-and-mcp listAvailableSubagents", () => {
     ]);
   });
 
-  test("requires the runtime agent listing API", async () => {
-    await expect(
-      listAvailableSubagents((() => ({})) as never, {
-        runtimeEndpoint: "http://127.0.0.1:1234",
-        workingDirectory: "/repo",
-      }),
-    ).rejects.toThrow(
-      "OpenCode request failed: list subagents: OpenCode runtime does not expose the agent listing API.",
-    );
-  });
-
   test("rejects malformed agent payloads", async () => {
     await expect(
       listAvailableSubagents(
-        (() => ({
+        () => ({
           app: { agents: async () => ({ data: [{ description: "missing name" }] }) },
-        })) as never,
+        }),
         {
           runtimeEndpoint: "http://127.0.0.1:1234",
           workingDirectory: "/repo",
         },
       ),
-    ).rejects.toThrow(
-      "OpenCode request failed: list subagents: Invalid agent payload: expected agent 0 to include a name.",
-    );
+    ).rejects.toThrow("OpenCode request failed: list subagents:");
   });
 
   test("rejects duplicate subagent ids after trimming runtime names", async () => {
     await expect(
       listAvailableSubagents(
-        (() => ({
+        () => ({
           app: {
             agents: async () => ({
               data: [
-                { name: " reviewer", mode: "subagent" },
-                { name: "reviewer ", mode: "all" },
+                agentFixture({ name: " reviewer" }),
+                agentFixture({ name: "reviewer ", mode: "all" }),
               ],
             }),
           },
-        })) as never,
+        }),
         {
           runtimeEndpoint: "http://127.0.0.1:1234",
           workingDirectory: "/repo",
@@ -279,7 +236,7 @@ describe("catalog-and-mcp searchFiles", () => {
     }));
     const createClient = mock(() => ({ find: { files } }));
 
-    const results = await searchFiles(createClient as never, {
+    const results = await searchFiles(createClient, {
       runtimeEndpoint: "http://127.0.0.1:1234",
       workingDirectory: "/repo",
       query: "src",
@@ -329,18 +286,6 @@ describe("catalog-and-mcp searchFiles", () => {
     ]);
   });
 
-  test("fails when the runtime does not expose file search", async () => {
-    await expect(
-      searchFiles((() => ({})) as never, {
-        runtimeEndpoint: "http://127.0.0.1:1234",
-        workingDirectory: "/repo",
-        query: "src",
-      }),
-    ).rejects.toThrow(
-      "OpenCode request failed: search files: OpenCode runtime does not expose the file search API.",
-    );
-  });
-
   test("fails when the runtime returns a malformed payload", async () => {
     const files = mock(async (input: { type?: string }) => ({
       data: input.type === "directory" ? [] : { bad: true },
@@ -348,7 +293,7 @@ describe("catalog-and-mcp searchFiles", () => {
     }));
 
     await expect(
-      searchFiles((() => ({ find: { files } })) as never, {
+      searchFiles(() => ({ find: { files } }), {
         runtimeEndpoint: "http://127.0.0.1:1234",
         workingDirectory: "/repo",
         query: "src",

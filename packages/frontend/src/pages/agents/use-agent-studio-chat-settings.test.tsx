@@ -1,13 +1,12 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { DEFAULT_CHAT_SETTINGS, type SettingsSnapshot } from "@openducktor/contracts";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-
-const actualHostOperationsModule = await import("@/state/operations/host");
 
 const hostMock = {
   workspaceGetSettingsSnapshot: mock(async (): Promise<SettingsSnapshot> =>
@@ -18,14 +17,16 @@ const hostMock = {
 let useAgentStudioChatSettings: typeof import("./use-agent-studio-chat-settings").useAgentStudioChatSettings;
 
 beforeEach(async () => {
-  mock.module("@/state/operations/host", () => ({
-    host: hostMock,
-  }));
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: { workspaceGetSettingsSnapshot: hostMock.workspaceGetSettingsSnapshot },
+    }),
+  );
   ({ useAgentStudioChatSettings } = await import("./use-agent-studio-chat-settings"));
 });
 
-afterEach(async () => {
-  await restoreMockedModules([["@/state/operations/host", async () => actualHostOperationsModule]]);
+afterEach(() => {
+  configureShellBridge(createUnavailableShellBridge());
 });
 
 enableReactActEnvironment();
@@ -42,17 +43,13 @@ const useChatSettingsHarness = (props: HookArgs) =>
 const createSettingsSnapshot = ({
   showThinkingMessages = false,
   expandFileDiffsByDefault = true,
-  includeExpandFileDiffsByDefault = true,
-  includeChat = true,
   chatOverrides = {},
 }: {
   showThinkingMessages?: boolean;
   expandFileDiffsByDefault?: boolean;
-  includeExpandFileDiffsByDefault?: boolean;
-  includeChat?: boolean;
-  chatOverrides?: Record<string, unknown>;
-} = {}): SettingsSnapshot => {
-  const snapshot = createSettingsSnapshotFixture({
+  chatOverrides?: Partial<SettingsSnapshot["chat"]>;
+} = {}): SettingsSnapshot =>
+  createSettingsSnapshotFixture({
     reusablePrompts: [
       {
         id: "prompt-1",
@@ -61,20 +58,12 @@ const createSettingsSnapshot = ({
         content: "Review this.",
       },
     ],
-  }) as Omit<SettingsSnapshot, "chat"> & { chat?: unknown };
-
-  if (includeChat) {
-    snapshot.chat = {
+    chat: {
       showThinkingMessages,
-      ...(includeExpandFileDiffsByDefault ? { expandFileDiffsByDefault } : {}),
+      expandFileDiffsByDefault,
       ...chatOverrides,
-    };
-  } else {
-    delete snapshot.chat;
-  }
-
-  return snapshot as SettingsSnapshot;
-};
+    },
+  });
 
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useChatSettingsHarness, initialProps, {
@@ -117,8 +106,13 @@ describe("useAgentStudioChatSettings", () => {
 
   test("defaults file diff expansion for older chat snapshots", async () => {
     hostMock.workspaceGetSettingsSnapshot.mockClear();
-    hostMock.workspaceGetSettingsSnapshot.mockImplementation(async (): Promise<SettingsSnapshot> =>
-      createSettingsSnapshot({ includeExpandFileDiffsByDefault: false }),
+    hostMock.workspaceGetSettingsSnapshot.mockImplementation(
+      async (): Promise<SettingsSnapshot> => {
+        const snapshot = createSettingsSnapshot();
+        // @ts-expect-error This compatibility test models a persisted snapshot from before this field existed.
+        delete snapshot.chat.expandFileDiffsByDefault;
+        return snapshot;
+      },
     );
 
     const harness = createHookHarness({
@@ -191,8 +185,13 @@ describe("useAgentStudioChatSettings", () => {
 
   test("surfaces malformed snapshots that omit chat settings", async () => {
     hostMock.workspaceGetSettingsSnapshot.mockClear();
-    hostMock.workspaceGetSettingsSnapshot.mockImplementation(async (): Promise<SettingsSnapshot> =>
-      createSettingsSnapshot({ includeChat: false }),
+    hostMock.workspaceGetSettingsSnapshot.mockImplementation(
+      async (): Promise<SettingsSnapshot> => {
+        const snapshot = createSettingsSnapshot();
+        // @ts-expect-error This negative test models a malformed host response without required chat settings.
+        delete snapshot.chat;
+        return snapshot;
+      },
     );
 
     const harness = createHookHarness({

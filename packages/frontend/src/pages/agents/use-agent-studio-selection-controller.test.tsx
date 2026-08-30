@@ -52,34 +52,44 @@ import {
 } from "./shell/agent-studio-selection-state";
 import { useAgentStudioSelectionController } from "./use-agent-studio-selection-controller";
 
+interface SessionReadModelLoadStateRefContract {
+  current: AgentSessionReadModelLoadState;
+}
+
+interface LoadSelectedSessionBaselineHistoryRefContract {
+  current: AgentSessionHistoryLoadContextValue["loadSelectedSessionBaselineHistory"];
+}
+
+interface ReadSessionTodosRefContract {
+  current: AgentOperationsContextValue["readSessionTodos"];
+}
+
+interface LoadAgentSessionContextRefContract {
+  current: AgentOperationsContextValue["loadAgentSessionContext"];
+}
+
+interface GetSessionFaultRefContract {
+  current: (session: AgentSessionIdentity | null) => AgentSessionTransientFault | null;
+}
+
 enableReactActEnvironment();
 
 type UseAgentStudioSelectionControllerHook =
   (typeof import("./use-agent-studio-selection-controller"))["useAgentStudioSelectionController"];
 
-const sessionReadModelLoadStateRef: {
-  current: AgentSessionReadModelLoadState;
-} = {
+const sessionReadModelLoadStateRef: SessionReadModelLoadStateRefContract = {
   current: unavailableAgentSessionReadModelLoadState,
 };
-const loadSelectedSessionBaselineHistoryRef: {
-  current: AgentSessionHistoryLoadContextValue["loadSelectedSessionBaselineHistory"];
-} = {
+const loadSelectedSessionBaselineHistoryRef: LoadSelectedSessionBaselineHistoryRefContract = {
   current: async () => null,
 };
-const readSessionTodosRef: {
-  current: AgentOperationsContextValue["readSessionTodos"];
-} = {
+const readSessionTodosRef: ReadSessionTodosRefContract = {
   current: async () => [],
 };
-const loadAgentSessionContextRef: {
-  current: AgentOperationsContextValue["loadAgentSessionContext"];
-} = {
+const loadAgentSessionContextRef: LoadAgentSessionContextRefContract = {
   current: async () => undefined,
 };
-const getSessionFaultRef: {
-  current: (session: AgentSessionIdentity | null) => AgentSessionTransientFault | null;
-} = {
+const getSessionFaultRef: GetSessionFaultRefContract = {
   current: () => null,
 };
 const createdSessionStateByKey = new Map<string, AgentSessionState>();

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { act } from "react";
+import { act, createRef } from "react";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { createTaskRefreshController } from "./task-refresh-controller";
 import { useTaskRefreshFlow } from "./use-task-refresh-flow";
@@ -7,12 +7,12 @@ import { useTaskRefreshFlow } from "./use-task-refresh-flow";
 type Deferred = {
   promise: Promise<void>;
   resolve: () => void;
-  reject: (reason: unknown) => void;
+  reject: (cause: unknown) => void;
 };
 
 const createDeferred = (): Deferred => {
   let resolve: (() => void) | undefined;
-  let reject: ((reason: unknown) => void) | undefined;
+  let reject: ((cause: unknown) => void) | undefined;
   const promise = new Promise<void>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
     reject = rejectPromise;
@@ -27,11 +27,11 @@ const createDeferred = (): Deferred => {
 const createController = () => {
   const loadingStates: boolean[] = [];
   const errors: Array<{ title: string; description: string }> = [];
-  const lastTaskRefreshToastRef = {
-    current: null as { repoPath: string; description: string } | null,
-  };
-  const lastTaskLoadErrorToastRef = {
-    current: null as { repoPath: string; description: string } | null,
+  const lastTaskRefreshToastRef = createRef<{ repoPath: string; description: string }>();
+  const lastTaskLoadErrorToastRef: Parameters<
+    typeof createTaskRefreshController
+  >[0]["lastTaskLoadErrorToastRef"] = {
+    current: null,
   };
   const controller = createTaskRefreshController({
     setIsManualLoading: (value) => loadingStates.push(value),

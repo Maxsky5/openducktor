@@ -10,9 +10,9 @@ import {
   useAgentChatRenderedTranscript,
 } from "./use-agent-chat-rendered-transcript";
 
-const actEnvironment = globalThis as typeof globalThis & {
+const actEnvironment: typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
-};
+} = globalThis;
 const previousActEnvironment = actEnvironment.IS_REACT_ACT_ENVIRONMENT;
 
 beforeEach(() => {
@@ -190,17 +190,16 @@ describe("getTurnActiveStreamingAssistantMessageId", () => {
   test("keeps rendered turns stable across unrelated rerenders of a large running session", async () => {
     const messages = Array.from({ length: 120 }, (_, messageIndex) => {
       const isAssistant = messageIndex % 2 === 1;
-      return buildMessage(isAssistant ? "assistant" : "user", `Message ${messageIndex}`, {
+      const overrides: Parameters<typeof buildMessage>[2] = {
         id: `message-${messageIndex}`,
-        ...(isAssistant
-          ? {
-              meta: {
-                kind: "assistant" as const,
-                isFinal: messageIndex < 119,
-              },
-            }
-          : {}),
-      });
+      };
+      if (isAssistant) {
+        overrides.meta = {
+          kind: "assistant",
+          isFinal: messageIndex < 119,
+        };
+      }
+      return buildMessage(isAssistant ? "assistant" : "user", `Message ${messageIndex}`, overrides);
     });
     const session = buildSession({
       externalSessionId: "session-rendered-large-stability",

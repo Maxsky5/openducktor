@@ -1,27 +1,39 @@
-export type ClaudeResultLike = {
-  duration_ms?: unknown;
-  errors?: unknown;
-  is_error?: unknown;
-  result?: unknown;
-  stop_reason?: unknown;
-  subtype?: unknown;
-  terminal_reason?: unknown;
+import type { SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
+import { z } from "zod";
+import type { ClaudeHistoryResultMessage } from "./claude-agent-sdk-history-import";
+
+export type ClaudeResultLike = SDKResultMessage | ClaudeHistoryResultMessage;
+
+const claudeResultErrorsSchema = z.array(z.unknown()).transform((errors) =>
+  errors.flatMap((error) => {
+    const parsedError = z.string().safeParse(error);
+    return parsedError.success ? [parsedError.data] : [];
+  }),
+);
+const claudeResultStringSchema = z.string();
+
+const readClaudeResultErrors = (message: ClaudeResultLike): string[] => {
+  const errors = "errors" in message ? message.errors : undefined;
+  const parsedErrors = claudeResultErrorsSchema.safeParse(errors);
+  return parsedErrors.success ? parsedErrors.data : [];
+};
+
+const readClaudeResultText = (message: ClaudeResultLike): string => {
+  const result = "result" in message ? message.result : undefined;
+  const parsedResult = claudeResultStringSchema.safeParse(result);
+  return parsedResult.success ? parsedResult.data.trim() : "";
 };
 
 export const failedClaudeResultText = (message: ClaudeResultLike): string => {
-  const errors = Array.isArray(message.errors)
-    ? message.errors.filter((error): error is string => typeof error === "string")
-    : [];
+  const errors = readClaudeResultErrors(message);
   if (errors.length > 0) {
     return errors.join("\n");
   }
-  const result = typeof message.result === "string" ? message.result.trim() : "";
+  const result = readClaudeResultText(message);
   if (result.length > 0) {
     return result;
   }
-  const terminalReason =
-    typeof message.terminal_reason === "string" ? message.terminal_reason : undefined;
-  return `Claude Agent SDK result failed: ${terminalReason ?? String(message.subtype)}`;
+  return `Claude Agent SDK result failed: ${readClaudeResultTerminalReason(message) ?? String(message.subtype)}`;
 };
 
 export type ClaudeResultLifecycleOutcome =
@@ -30,11 +42,14 @@ export type ClaudeResultLifecycleOutcome =
   | "continuing"
   | "awaiting_sdk_idle";
 
-const readClaudeResultTerminalReason = (message: ClaudeResultLike): string | undefined =>
-  typeof message.terminal_reason === "string" ? message.terminal_reason : undefined;
+const readClaudeResultTerminalReason = (message: ClaudeResultLike): string | undefined => {
+  const terminalReason = "terminal_reason" in message ? message.terminal_reason : undefined;
+  const parsedTerminalReason = claudeResultStringSchema.safeParse(terminalReason);
+  return parsedTerminalReason.success ? parsedTerminalReason.data : undefined;
+};
 
 const readClaudeResultStopReason = (message: ClaudeResultLike): string | undefined =>
-  typeof message.stop_reason === "string" ? message.stop_reason : undefined;
+  message.stop_reason ?? undefined;
 
 export const isFailedClaudeResult = (message: ClaudeResultLike): boolean => {
   if (message.subtype !== "success" || message.is_error === true) {
@@ -53,7 +68,7 @@ export const successfulClaudeResultText = (message: ClaudeResultLike): string | 
   if (isFailedClaudeResult(message)) {
     return null;
   }
-  const text = typeof message.result === "string" ? message.result.trim() : "";
+  const text = readClaudeResultText(message);
   return text.length > 0 ? text : null;
 };
 

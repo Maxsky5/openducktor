@@ -165,7 +165,7 @@ describe("OpencodeSdkAdapter catalog and mcp", () => {
     expect(planProfile).not.toHaveProperty("color");
   });
 
-  test("listAvailableModels ignores malformed or blank agent entries", async () => {
+  test("listAvailableModels rejects malformed agent entries", async () => {
     const mock = makeMockClient({
       agentsResponse: [
         null,
@@ -187,18 +187,7 @@ describe("OpencodeSdkAdapter catalog and mcp", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    const catalog = await adapter.listAvailableModels({
-      ...defaultRepoRuntimeInput,
-    });
-
-    expect(catalog.profiles).toEqual([
-      expect.objectContaining({
-        id: "valid",
-        label: "valid",
-        mode: "primary",
-        native: false,
-      }),
-    ]);
+    await expect(adapter.listAvailableModels({ ...defaultRepoRuntimeInput })).rejects.toThrow();
   });
 
   test("listAvailableModels preserves agent names exactly as reported by opencode", async () => {

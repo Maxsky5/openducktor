@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { taskAssetIdSchema, taskAssetRenderContextSchema } from "@openducktor/contracts";
+import { z, type JSONType } from "zod";
+import { parseJson } from "../../effect/json";
 import type { TaskAssetQuarantine } from "../../ports/task-asset-file-port";
 
 export type QuarantineManifest = TaskAssetQuarantine & { version: 1 };
@@ -9,8 +11,8 @@ export type QuarantineManifest = TaskAssetQuarantine & { version: 1 };
 const ACTIVE_PUBLICATIONS = new Set<string>();
 const PUBLICATION_PREFIX = ".publishing-";
 
-const isMissing = (cause: unknown): boolean =>
-  typeof cause === "object" && cause !== null && "code" in cause && cause.code === "ENOENT";
+const missingErrorSchema = z.object({ code: z.literal("ENOENT") }).passthrough();
+const isMissing = (cause: unknown): boolean => missingErrorSchema.safeParse(cause).success;
 
 const existingStat = async (target: string) => {
   try {
@@ -23,25 +25,38 @@ const existingStat = async (target: string) => {
   }
 };
 
-const validateManifest = (value: unknown): QuarantineManifest => {
-  if (typeof value !== "object" || value === null) {
+const quarantineManifestSchema = z
+  .object({
+    version: z.literal(1),
+    id: taskAssetIdSchema,
+    workspaceId: z.string(),
+    taskId: z.string(),
+    operation: z.enum(["create", "update", "delete"]),
+    assetIds: z.array(taskAssetIdSchema),
+    promotedAssetIds: z.array(taskAssetIdSchema),
+  })
+  .passthrough()
+  .superRefine((manifest, context) => {
+    const taskContext = taskAssetRenderContextSchema.safeParse({
+      workspaceId: manifest.workspaceId,
+      taskId: manifest.taskId,
+      scope: "description",
+      assetId: manifest.id,
+    });
+    if (!taskContext.success) {
+      context.addIssue({ code: "custom", message: "Invalid task asset context." });
+    }
+  });
+
+const validateManifest = (value: JSONType): QuarantineManifest => {
+  if (!z.record(z.string(), z.json()).safeParse(value).success) {
     throw new Error("Task asset quarantine manifest must be an object.");
   }
-  const manifest = value as Partial<QuarantineManifest>;
-  if (
-    manifest.version !== 1 ||
-    !taskAssetIdSchema.safeParse(manifest.id).success ||
-    !["create", "update", "delete"].includes(manifest.operation ?? "") ||
-    !Array.isArray(manifest.assetIds) ||
-    !manifest.assetIds.every((id) => taskAssetIdSchema.safeParse(id).success) ||
-    !Array.isArray(manifest.promotedAssetIds) ||
-    !manifest.promotedAssetIds.every((id) => taskAssetIdSchema.safeParse(id).success) ||
-    !taskAssetRenderContextSchema.shape.workspaceId.safeParse(manifest.workspaceId).success ||
-    !taskAssetRenderContextSchema.shape.taskId.safeParse(manifest.taskId).success
-  ) {
+  const parsed = quarantineManifestSchema.safeParse(value);
+  if (!parsed.success) {
     throw new Error("Task asset quarantine manifest is invalid.");
   }
-  return manifest as QuarantineManifest;
+  return parsed.data;
 };
 
 export const createTaskAssetQuarantineFiles = ({
@@ -62,7 +77,7 @@ export const createTaskAssetQuarantineFiles = ({
       throw new Error("Task asset quarantine ID is invalid.");
     }
     const bytes = await readFile(manifestPath(quarantineId), "utf8");
-    const manifest = validateManifest(JSON.parse(bytes));
+    const manifest = validateManifest(parseJson(bytes));
     if (manifest.id !== quarantineId) {
       throw new Error("Task asset quarantine manifest ID does not match its directory.");
     }

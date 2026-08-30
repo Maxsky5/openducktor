@@ -1,5 +1,10 @@
 import type { TaskCard } from "@openducktor/contracts";
 
+type CloseTaskTabResult = {
+  nextTabTaskIds: string[];
+  nextActiveTaskId: string | null;
+};
+
 export const ensureActiveTaskTab = (openTaskTabs: string[], activeTaskId: string): string[] => {
   if (!activeTaskId || openTaskTabs.includes(activeTaskId)) {
     return openTaskTabs;
@@ -51,7 +56,7 @@ export const closeTaskTab = (params: {
   tabTaskIds: string[];
   taskIdToClose: string;
   activeTaskId: string;
-}): { nextTabTaskIds: string[]; nextActiveTaskId: string | null } => {
+}): CloseTaskTabResult => {
   const closeIndex = params.tabTaskIds.indexOf(params.taskIdToClose);
   if (closeIndex < 0) {
     return {

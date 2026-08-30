@@ -25,16 +25,17 @@ export const buildVisibleUserMessage = (input: {
   normalizedDisplayParts: AgentUserMessageDisplayPart[];
   metadata?: SessionMessageMetadata;
   matchedQueuedSend?: QueuedUserMessageSend | null;
-}): {
-  displayParts: AgentUserMessageDisplayPart[];
-  visible: string;
-} => {
+}) => {
+  const preservedAttachmentInput: Parameters<typeof readPreservedAttachmentParts>[0] = {};
+  if (input.metadata) {
+    preservedAttachmentInput.metadata = input.metadata;
+  }
+  if (input.matchedQueuedSend) {
+    preservedAttachmentInput.matchedQueuedSend = input.matchedQueuedSend;
+  }
   const mergedDisplayParts = mergePreservedAttachmentDisplayParts(
     input.normalizedDisplayParts,
-    readPreservedAttachmentParts({
-      ...(input.metadata ? { metadata: input.metadata } : {}),
-      ...(input.matchedQueuedSend ? { matchedQueuedSend: input.matchedQueuedSend } : {}),
-    }),
+    readPreservedAttachmentParts(preservedAttachmentInput),
   );
   const displayParts = ensureVisibleUserTextDisplayParts(
     mergedDisplayParts.length > 0 ? mergedDisplayParts : (input.metadata?.displayParts ?? []),
@@ -44,5 +45,8 @@ export const buildVisibleUserMessage = (input: {
   return {
     displayParts,
     visible: textFromParts.length > 0 ? textFromParts : input.fallbackText,
+  } satisfies {
+    displayParts: AgentUserMessageDisplayPart[];
+    visible: string;
   };
 };

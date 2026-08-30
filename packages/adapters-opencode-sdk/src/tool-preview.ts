@@ -1,6 +1,7 @@
+import type { OpenCodeProtocolObject, OpenCodeProtocolValue } from "./guards";
 import type { AgentToolType } from "@openducktor/core";
 import { basenameForPath } from "@openducktor/path-support";
-import { asUnknownRecord } from "./guards";
+import { z } from "zod";
 import { resolveOpencodeToolStrategy } from "./tool-strategy-catalog";
 
 export const deriveToolType = (toolName: string): AgentToolType => {
@@ -16,22 +17,22 @@ const compactText = (value: string, maxLength = 160): string => {
 };
 
 const readTrimmedString = (
-  source: Record<string, unknown> | undefined,
+  source: OpenCodeProtocolObject | undefined,
   keys: string[],
 ): string | null => {
   if (!source) {
     return null;
   }
   for (const key of keys) {
-    const value = source[key];
-    if (typeof value === "string" && value.trim().length > 0) {
-      return value.trim();
+    const parsed = z.string().safeParse(source[key]);
+    if (parsed.success && parsed.data.trim().length > 0) {
+      return parsed.data.trim();
     }
   }
   return null;
 };
 
-const extractPathFromInput = (input: Record<string, unknown> | undefined): string | null => {
+const extractPathFromInput = (input: OpenCodeProtocolObject | undefined): string | null => {
   return readTrimmedString(input, ["filePath", "file_path", "path", "file", "filename"]);
 };
 
@@ -42,7 +43,7 @@ const extractBaseName = (value: string): string => {
 
 const summarizeSearchInput = (
   tool: string,
-  input: Record<string, unknown> | undefined,
+  input: OpenCodeProtocolObject | undefined,
 ): string | null => {
   if (!input) {
     return null;
@@ -74,14 +75,22 @@ const summarizeSearchInput = (
   return null;
 };
 
-const countCollectionItems = (value: unknown): number | null => {
+const countCollectionItems = (value: OpenCodeProtocolValue | undefined): number | null => {
   if (Array.isArray(value)) {
     return value.length;
   }
-  const record = asUnknownRecord(value);
-  if (!record) {
+  const parsed = z
+    .object({
+      items: z.array(z.json()).optional(),
+      questions: z.array(z.json()).optional(),
+      summary: z.array(z.json()).optional(),
+      todos: z.array(z.json()).optional(),
+    })
+    .safeParse(value);
+  if (!parsed.success) {
     return null;
   }
+  const record = parsed.data;
   if (Array.isArray(record.todos)) {
     return record.todos.length;
   }
@@ -97,11 +106,8 @@ const countCollectionItems = (value: unknown): number | null => {
   return null;
 };
 
-const summarizeTodoTool = (
-  input: Record<string, unknown> | undefined,
-  output: unknown,
-): string | null => {
-  const count = countCollectionItems(output) ?? countCollectionItems(input?.todos ?? input?.items);
+const summarizeTodoTool = (input: OpenCodeProtocolObject | undefined): string | null => {
+  const count = countCollectionItems(input?.todos ?? input?.items);
   if (count === null) {
     return null;
   }
@@ -109,18 +115,21 @@ const summarizeTodoTool = (
 };
 
 const summarizeQuestionTool = (
-  input: Record<string, unknown> | undefined,
-  metadata: Record<string, unknown> | undefined,
-  output: unknown,
+  input: OpenCodeProtocolObject | undefined,
+  metadata: OpenCodeProtocolObject | undefined,
 ): string | null => {
-  const sources = [input, metadata, asUnknownRecord(output)];
+  const sources = [input, metadata];
   for (const source of sources) {
     const questions = source?.questions;
     if (!Array.isArray(questions) || questions.length === 0) {
       continue;
     }
-    const firstQuestion = asUnknownRecord(questions[0]);
-    const prompt = readTrimmedString(firstQuestion, ["question", "prompt", "label"]);
+    const firstQuestion = z.record(z.string(), z.json()).safeParse(questions[0]);
+    const prompt = readTrimmedString(firstQuestion.success ? firstQuestion.data : undefined, [
+      "question",
+      "prompt",
+      "label",
+    ]);
     if (prompt) {
       return prompt;
     }
@@ -130,9 +139,8 @@ const summarizeQuestionTool = (
 };
 
 const summarizeTaskTool = (
-  input: Record<string, unknown> | undefined,
-  metadata: Record<string, unknown> | undefined,
-  output: unknown,
+  input: OpenCodeProtocolObject | undefined,
+  metadata: OpenCodeProtocolObject | undefined,
 ): string | null => {
   const summaryCount = countCollectionItems(metadata?.summary);
   if (summaryCount !== null) {
@@ -144,35 +152,21 @@ const summarizeTaskTool = (
     return `Subagent session ${sessionId.slice(0, 8)}`;
   }
 
-  return (
-    readTrimmedString(input, ["agent", "description", "prompt"]) ??
-    readTrimmedString(asUnknownRecord(output), ["message", "result", "description"])
-  );
+  return readTrimmedString(input, ["agent", "description", "prompt"]);
 };
 
-const summarizeOdtReadTask = (
-  input: Record<string, unknown> | undefined,
-  output: unknown,
-): string | null => {
+const summarizeOdtReadTask = (input: OpenCodeProtocolObject | undefined): string | null => {
   const taskId = readTrimmedString(input, ["taskId"]);
   if (taskId) {
     return taskId;
   }
 
-  const outputRecord = asUnknownRecord(output);
-  const taskRecord =
-    asUnknownRecord(outputRecord?.task) ??
-    asUnknownRecord(asUnknownRecord(outputRecord?.structuredContent)?.task);
-  const title = readTrimmedString(taskRecord, ["title", "name"]);
-  if (title) {
-    return title;
-  }
   return null;
 };
 
 const summarizeOdtMutation = (
   tool: string,
-  input: Record<string, unknown> | undefined,
+  input: OpenCodeProtocolObject | undefined,
 ): string | null => {
   if (tool === "odt_build_blocked") {
     return readTrimmedString(input, ["reason", "taskId"]);
@@ -182,10 +176,8 @@ const summarizeOdtMutation = (
   }
   if (tool === "odt_set_pull_request") {
     const providerId = readTrimmedString(input, ["providerId"]);
-    const number =
-      typeof input?.number === "number" && Number.isFinite(input.number)
-        ? `#${input.number}`
-        : null;
+    const parsedNumber = z.number().finite().safeParse(input?.number);
+    const number = parsedNumber.success ? `#${parsedNumber.data}` : null;
     const taskId = readTrimmedString(input, ["taskId"]);
     return [taskId, providerId, number].filter((value) => value && value.length > 0).join(" · ");
   }
@@ -201,10 +193,10 @@ const summarizeOdtMutation = (
   return readTrimmedString(input, ["taskId"]);
 };
 
-const summarizeSkillTool = (input: Record<string, unknown> | undefined): string | null => {
+const summarizeSkillTool = (input: OpenCodeProtocolObject | undefined): string | null => {
   const direct =
     readTrimmedString(input, ["name", "skillName", "skill", "id"]) ??
-    readTrimmedString(asUnknownRecord(input?.skill), ["name", "id"]);
+    readTrimmedString(z.record(z.string(), z.json()).safeParse(input?.skill).data, ["name", "id"]);
   if (direct) {
     return direct;
   }
@@ -215,7 +207,7 @@ const summarizeSkillTool = (input: Record<string, unknown> | undefined): string 
 
 const summarizeWebTool = (
   tool: string,
-  input: Record<string, unknown> | undefined,
+  input: OpenCodeProtocolObject | undefined,
 ): string | null => {
   if (tool === "webfetch") {
     return readTrimmedString(input, ["url", "href"]);
@@ -225,7 +217,7 @@ const summarizeWebTool = (
 
 const summarizeContextTool = (
   tool: string,
-  input: Record<string, unknown> | undefined,
+  input: OpenCodeProtocolObject | undefined,
 ): string | null => {
   if (tool === "context7_resolve-library-id") {
     return readTrimmedString(input, ["libraryName", "query"]);
@@ -236,7 +228,7 @@ const summarizeContextTool = (
   return null;
 };
 
-const summarizeGithubSearchTool = (input: Record<string, unknown> | undefined): string | null => {
+const summarizeGithubSearchTool = (input: OpenCodeProtocolObject | undefined): string | null => {
   const query = readTrimmedString(input, ["query"]);
   const repo = readTrimmedString(input, ["repo"]);
   if (query && repo) {
@@ -245,7 +237,7 @@ const summarizeGithubSearchTool = (input: Record<string, unknown> | undefined): 
   return query ?? repo;
 };
 
-const summarizeLspTool = (input: Record<string, unknown> | undefined): string | null => {
+const summarizeLspTool = (input: OpenCodeProtocolObject | undefined): string | null => {
   return (
     readTrimmedString(input, ["symbol", "name", "query"]) ??
     extractPathFromInput(input) ??
@@ -253,13 +245,13 @@ const summarizeLspTool = (input: Record<string, unknown> | undefined): string | 
   );
 };
 
-const summarizeSessionTool = (input: Record<string, unknown> | undefined): string | null => {
+const summarizeSessionTool = (input: OpenCodeProtocolObject | undefined): string | null => {
   return (
     readTrimmedString(input, ["sessionId", "query"]) ?? readTrimmedString(input, ["id", "name"])
   );
 };
 
-const summarizeGenericInput = (input: Record<string, unknown> | undefined): string | null => {
+const summarizeGenericInput = (input: OpenCodeProtocolObject | undefined): string | null => {
   return (
     readTrimmedString(input, ["url", "query", "pattern", "symbol", "libraryId", "libraryName"]) ??
     extractPathFromInput(input) ??
@@ -269,13 +261,12 @@ const summarizeGenericInput = (input: Record<string, unknown> | undefined): stri
 
 export const deriveToolPreview = (input: {
   tool: string;
-  rawInput: unknown;
-  rawOutput: unknown;
-  metadata?: Record<string, unknown>;
+  rawInput: OpenCodeProtocolObject;
+  metadata?: OpenCodeProtocolObject;
 }): string | undefined => {
   const strategy = resolveOpencodeToolStrategy(input.tool);
   const tool = strategy.canonicalName;
-  const rawInput = asUnknownRecord(input.rawInput);
+  const rawInput = input.rawInput;
 
   let preview: string | null;
   switch (strategy.previewStrategy) {
@@ -295,18 +286,18 @@ export const deriveToolPreview = (input: {
       preview = summarizeSkillTool(rawInput);
       break;
     case "todo":
-      preview = summarizeTodoTool(rawInput, input.rawOutput);
+      preview = summarizeTodoTool(rawInput);
       break;
     case "question":
-      preview = summarizeQuestionTool(rawInput, input.metadata, input.rawOutput);
+      preview = summarizeQuestionTool(rawInput, input.metadata);
       break;
     case "task":
-      preview = summarizeTaskTool(rawInput, input.metadata, input.rawOutput);
+      preview = summarizeTaskTool(rawInput, input.metadata);
       break;
     case "workflow":
       preview =
         tool === "odt_read_task"
-          ? summarizeOdtReadTask(rawInput, input.rawOutput)
+          ? summarizeOdtReadTask(rawInput)
           : summarizeOdtMutation(tool, rawInput);
       break;
     case "web":

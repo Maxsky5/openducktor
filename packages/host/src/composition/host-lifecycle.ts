@@ -12,6 +12,7 @@ import {
   causeToHostBoundaryError,
   type HostError,
   HostOperationError,
+  type HostOperationErrorAggregate,
 } from "../effect/host-errors";
 import type { RuntimeRegistryPort } from "../ports/runtime-registry-port";
 
@@ -68,7 +69,7 @@ const isHostLifecycleLoggingFailure = (cause: unknown): cause is HostOperationEr
 export const runShutdownSteps = (
   steps: HostShutdownStep[],
   logger: HostLifecycleLogger,
-): Effect.Effect<void, HostOperationError> =>
+): Effect.Effect<void, HostOperationErrorAggregate> =>
   Effect.gen(function* () {
     const errors: string[] = [];
     let loggingFailure: HostOperationError | undefined;

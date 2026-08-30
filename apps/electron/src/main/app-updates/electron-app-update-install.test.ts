@@ -548,9 +548,8 @@ describe("electron app update install handoff", () => {
         isUpdateAvailable: true,
         updateInfo: { version: "0.4.3" },
       };
-      const { service } = createService({
+      const serviceOptions: Parameters<typeof createService>[0] = {
         adapter,
-        ...(platform === "linux" ? { appImagePath: "/opt/OpenDucktor.AppImage" } : {}),
         platform,
         installDownloadedUpdate: async () => {
           throw new ElectronLifecycleError({
@@ -559,7 +558,11 @@ describe("electron app update install handoff", () => {
             reason: "update-install",
           });
         },
-      });
+      };
+      if (platform === "linux") {
+        serviceOptions.appImagePath = "/opt/OpenDucktor.AppImage";
+      }
+      const { service } = createService(serviceOptions);
       await service.check({ initiator: "settings" });
       await service.download();
 

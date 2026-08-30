@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { SettingsSnapshot, WorkspaceRecord } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { render, waitFor } from "@testing-library/react";
@@ -6,15 +6,13 @@ import { act, createElement, type PropsWithChildren, useEffect, useRef, useState
 import { toast } from "sonner";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { settingsSnapshotQueryOptions } from "../../queries/workspace";
 import { useWorkspaceOperations } from "./use-workspace-operations";
 
-const reactActEnvironment = globalThis as typeof globalThis & {
-  IS_REACT_ACT_ENVIRONMENT?: boolean;
-};
-reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 type WorkspaceHostClient = NonNullable<Parameters<typeof useWorkspaceOperations>[0]["hostClient"]>;
 type SettingsSnapshotHostClient = NonNullable<Parameters<typeof settingsSnapshotQueryOptions>[0]>;
@@ -36,16 +34,10 @@ const createWorkspaceHostClient = (): WorkspaceIntegrationHostClient =>
     gitGetBranches: async () => {
       throw new Error("gitGetBranches not configured");
     },
-    gitGetWorktreeStatus: async () => {
-      throw new Error("gitGetWorktreeStatus not configured");
-    },
-    gitGetWorktreeStatusSummary: async () => {
-      throw new Error("gitGetWorktreeStatusSummary not configured");
-    },
     gitSwitchBranch: async () => {
       throw new Error("gitSwitchBranch not configured");
     },
-  }) as WorkspaceIntegrationHostClient;
+  }) satisfies WorkspaceIntegrationHostClient;
 
 let workspaceHost = createWorkspaceHostClient();
 
@@ -60,9 +52,7 @@ const flush = async (): Promise<void> => {
   });
 };
 
-const createBrowserListenerHarness = (
-  visibilityState: DocumentVisibilityState = "visible",
-): {
+interface BrowserListenerHarness {
   addWindowEventListener: ReturnType<typeof mock>;
   removeWindowEventListener: ReturnType<typeof mock>;
   addDocumentEventListener: ReturnType<typeof mock>;
@@ -70,9 +60,24 @@ const createBrowserListenerHarness = (
   triggerFocus: () => Promise<void>;
   triggerVisibilityChange: (nextVisibilityState?: DocumentVisibilityState) => Promise<void>;
   restoreBrowserGlobals: () => void;
-} => {
-  let focusHandler: (() => void) | null = null;
-  let visibilityChangeHandler: (() => void) | null = null;
+}
+
+const dispatchEventListener = (
+  listener: EventListenerOrEventListenerObject,
+  event: Event,
+): void => {
+  if ("handleEvent" in listener) {
+    listener.handleEvent(event);
+    return;
+  }
+  listener(event);
+};
+
+const createBrowserListenerHarness = (
+  visibilityState: DocumentVisibilityState = "visible",
+): BrowserListenerHarness => {
+  let focusHandler: EventListenerOrEventListenerObject | null = null;
+  let visibilityChangeHandler: EventListenerOrEventListenerObject | null = null;
   let currentVisibilityState = visibilityState;
   const originalWindowAddEventListener = window.addEventListener.bind(window);
   const originalWindowRemoveEventListener = window.removeEventListener.bind(window);
@@ -82,25 +87,25 @@ const createBrowserListenerHarness = (
 
   const addWindowEventListener = mock(
     (event: string, handler: EventListenerOrEventListenerObject) => {
-      if (event === "focus" && typeof handler === "function") {
-        focusHandler = handler as () => void;
+      if (event === "focus") {
+        focusHandler = handler;
       }
     },
   );
   const removeWindowEventListener = mock(() => {});
   const addDocumentEventListener = mock(
     (event: string, handler: EventListenerOrEventListenerObject) => {
-      if (event === "visibilitychange" && typeof handler === "function") {
-        visibilityChangeHandler = handler as () => void;
+      if (event === "visibilitychange") {
+        visibilityChangeHandler = handler;
       }
     },
   );
   const removeDocumentEventListener = mock(() => {});
 
-  window.addEventListener = addWindowEventListener as typeof window.addEventListener;
-  window.removeEventListener = removeWindowEventListener as typeof window.removeEventListener;
-  document.addEventListener = addDocumentEventListener as typeof document.addEventListener;
-  document.removeEventListener = removeDocumentEventListener as typeof document.removeEventListener;
+  window.addEventListener = addWindowEventListener;
+  window.removeEventListener = removeWindowEventListener;
+  document.addEventListener = addDocumentEventListener;
+  document.removeEventListener = removeDocumentEventListener;
   Object.defineProperty(document, "visibilityState", {
     configurable: true,
     get() {
@@ -127,21 +132,23 @@ const createBrowserListenerHarness = (
     addDocumentEventListener,
     removeDocumentEventListener,
     triggerFocus: async () => {
-      if (!focusHandler) {
+      const handler = focusHandler;
+      if (!handler) {
         throw new Error("Expected focus handler to be registered");
       }
       await act(async () => {
-        focusHandler?.();
+        dispatchEventListener(handler, new Event("focus"));
       });
       await flush();
     },
     triggerVisibilityChange: async (nextVisibilityState = "visible") => {
       currentVisibilityState = nextVisibilityState;
-      if (!visibilityChangeHandler) {
+      const handler = visibilityChangeHandler;
+      if (!handler) {
         throw new Error("Expected visibilitychange handler to be registered");
       }
       await act(async () => {
-        visibilityChangeHandler?.();
+        dispatchEventListener(handler, new Event("visibilitychange"));
       });
       await flush();
     },
@@ -151,7 +158,7 @@ const createBrowserListenerHarness = (
 
 const createDeferred = <T,>() => {
   let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
-  let reject: ((reason?: unknown) => void) | null = null;
+  let reject: ((cause?: unknown) => void) | null = null;
   const promise = new Promise<T>((res, rej) => {
     resolve = res;
     reject = rej;
@@ -160,7 +167,9 @@ const createDeferred = <T,>() => {
   return {
     promise,
     resolve: (value: T) => resolve?.(value),
-    reject: (reason?: unknown) => reject?.(reason),
+    reject: (cause?: unknown): void => {
+      reject?.(cause);
+    },
   };
 };
 
@@ -197,17 +206,22 @@ const normalizeHookArgs = ({
   activeRepo,
   setActiveRepo,
   ...rest
-}: LegacyHookArgs): HookArgs => ({
-  activeWorkspace: activeWorkspace ?? (activeRepo ? createActiveWorkspace(activeRepo) : null),
-  setActiveWorkspace:
-    setActiveWorkspace ??
-    ((workspace) => {
-      setActiveRepo?.(workspace?.repoPath ?? null);
-    }),
-  clearTaskData: rest.clearTaskData ?? (() => {}),
-  clearActiveTaskStoreCheck: rest.clearActiveTaskStoreCheck ?? (() => {}),
-  ...(rest.hostClient === undefined ? {} : { hostClient: rest.hostClient }),
-});
+}: LegacyHookArgs): HookArgs => {
+  const args: HookArgs = {
+    activeWorkspace: activeWorkspace ?? (activeRepo ? createActiveWorkspace(activeRepo) : null),
+    setActiveWorkspace:
+      setActiveWorkspace ??
+      ((workspace) => {
+        setActiveRepo?.(workspace?.repoPath ?? null);
+      }),
+    clearTaskData: rest.clearTaskData ?? (() => {}),
+    clearActiveTaskStoreCheck: rest.clearActiveTaskStoreCheck ?? (() => {}),
+  };
+  if (rest.hostClient !== undefined) {
+    args.hostClient = rest.hostClient;
+  }
+  return args;
+};
 
 const createHookHarness = (initialArgs: LegacyHookArgs) => {
   let latest: ReturnType<typeof useWorkspaceOperations> | null = null;
@@ -239,8 +253,9 @@ const createHookHarness = (initialArgs: LegacyHookArgs) => {
       if (!latest) {
         throw new Error("Hook not mounted");
       }
+      const hook = latest;
       await sharedHarness.run(async () => {
-        await fn(latest as ReturnType<typeof useWorkspaceOperations>);
+        await fn(hook);
       });
     },
     getLatest: () => {
@@ -278,7 +293,7 @@ const settingsSnapshot = (repoPaths: string[]): SettingsSnapshot =>
           workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-") || "repo",
           workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
           repoPath,
-          defaultRuntimeKind: "opencode" as const,
+          defaultRuntimeKind: "opencode",
           branchPrefix: "odt",
           defaultTargetBranch: { remote: "origin", branch: "main" },
           git: {
@@ -850,9 +865,7 @@ describe("use-workspace-operations", () => {
     workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
     workspaceHost.gitGetBranches = gitGetBranches;
 
-    const originalToastError = toast.error;
-    const toastError = mock((_message: string, _options?: { description?: string }) => "");
-    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    const toastError = spyOn(toast, "error").mockImplementation(() => "");
 
     const harness = createHookHarness({
       activeRepo: "/repo-old",
@@ -874,12 +887,15 @@ describe("use-workspace-operations", () => {
         detached: false,
       });
 
-      let thrown: unknown = null;
+      let thrown: Error | null = null;
       await harness.run(async (value) => {
         try {
           await value.selectWorkspace("repo-a");
-        } catch (error) {
-          thrown = error;
+        } catch (cause) {
+          if (!(cause instanceof Error)) {
+            throw new Error("Expected workspace selection to reject with Error.", { cause });
+          }
+          thrown = cause;
         }
       });
 
@@ -912,7 +928,7 @@ describe("use-workspace-operations", () => {
       workspaceHost.workspaceSelect = originalWorkspaceSelect;
       workspaceHost.gitGetCurrentBranch = originalGitGetCurrentBranch;
       workspaceHost.gitGetBranches = originalGitGetBranches;
-      (toast as { error: typeof toast.error }).error = originalToastError;
+      toastError.mockRestore();
     }
   });
 
@@ -947,9 +963,7 @@ describe("use-workspace-operations", () => {
     workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
     workspaceHost.gitGetBranches = gitGetBranches;
 
-    const originalToastError = toast.error;
-    const toastError = mock((_message: string, _options?: { description?: string }) => "");
-    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    const toastError = spyOn(toast, "error").mockImplementation(() => "");
 
     let latest: ReturnType<typeof useWorkspaceOperations> | null = null;
     let latestActiveRepo: string | null = null;
@@ -1058,7 +1072,7 @@ describe("use-workspace-operations", () => {
       workspaceHost.workspaceList = originalWorkspaceList;
       workspaceHost.gitGetCurrentBranch = originalGitGetCurrentBranch;
       workspaceHost.gitGetBranches = originalGitGetBranches;
-      (toast as { error: typeof toast.error }).error = originalToastError;
+      toastError.mockRestore();
     }
   });
 
@@ -1231,9 +1245,7 @@ describe("use-workspace-operations", () => {
     };
     workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
 
-    const originalToastError = toast.error;
-    const toastError = mock((_message: string, _options?: { description?: string }) => "");
-    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    const toastError = spyOn(toast, "error").mockImplementation(() => "");
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -1259,7 +1271,7 @@ describe("use-workspace-operations", () => {
     } finally {
       await harness.unmount();
       workspaceHost.gitGetCurrentBranch = original.gitGetCurrentBranch;
-      (toast as { error: typeof toast.error }).error = originalToastError;
+      toastError.mockRestore();
       restoreBrowserGlobals();
     }
   });
@@ -1276,9 +1288,7 @@ describe("use-workspace-operations", () => {
     };
     workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
 
-    const originalToastError = toast.error;
-    const toastError = mock((_message: string, _options?: { description?: string }) => "");
-    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    const toastError = spyOn(toast, "error").mockImplementation(() => "");
 
     const baseArgs = {
       setActiveRepo,
@@ -1308,7 +1318,7 @@ describe("use-workspace-operations", () => {
     } finally {
       await harness.unmount();
       workspaceHost.gitGetCurrentBranch = original.gitGetCurrentBranch;
-      (toast as { error: typeof toast.error }).error = originalToastError;
+      toastError.mockRestore();
       restoreBrowserGlobals();
     }
   });
@@ -1407,9 +1417,7 @@ describe("use-workspace-operations", () => {
     workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
     workspaceHost.gitGetBranches = gitGetBranches;
 
-    const originalToastError = toast.error;
-    const toastError = mock((_message: string, _options?: { description?: string }) => "");
-    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    const toastError = spyOn(toast, "error").mockImplementation(() => "");
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -1434,7 +1442,7 @@ describe("use-workspace-operations", () => {
       await harness.unmount();
       workspaceHost.gitGetCurrentBranch = original.gitGetCurrentBranch;
       workspaceHost.gitGetBranches = original.gitGetBranches;
-      (toast as { error: typeof toast.error }).error = originalToastError;
+      toastError.mockRestore();
       restoreBrowserGlobals();
     }
   });

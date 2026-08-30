@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { AgentToolData } from "@openducktor/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   createDefaultTestChatSettings,
@@ -291,7 +292,15 @@ describe("AgentChatMessageCard tool presentation", () => {
     expect(html).toContain("whitespace-pre-wrap break-words text-foreground");
   });
 
-  test.each([
+  type ToolRow = {
+    id: string;
+    tool: string;
+    content: string;
+    timestamp: string;
+    input: AgentToolData;
+    output: string;
+  };
+  const toolRows: ToolRow[] = [
     {
       id: "tool-todowrite",
       tool: "todowrite",
@@ -324,7 +333,9 @@ describe("AgentChatMessageCard tool presentation", () => {
       input: {},
       output: "[]",
     },
-  ])(
+  ];
+
+  test.each(toolRows)(
     "renders ListTodo icon for $tool tool rows",
     ({ id, tool, content, timestamp, input, output }) => {
       const html = renderToStaticMarkup(

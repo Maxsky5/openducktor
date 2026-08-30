@@ -143,7 +143,7 @@ describe("claude-agent-sdk-history", () => {
           result: "Done",
           usage: { input_tokens: 1, output_tokens: 1 },
         },
-      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      ] satisfies Parameters<typeof toClaudeHistoryMessages>[0],
       () => "2026-06-26T12:00:00.000Z",
     );
 
@@ -170,7 +170,7 @@ describe("claude-agent-sdk-history", () => {
           result: "Fallback failure text",
           usage: { input_tokens: 1, output_tokens: 1 },
         },
-      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      ] satisfies Parameters<typeof toClaudeHistoryMessages>[0],
       () => "2026-06-26T12:00:00.000Z",
     );
 
@@ -215,7 +215,7 @@ describe("claude-agent-sdk-history", () => {
             },
           },
         },
-      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      ] satisfies Parameters<typeof toClaudeHistoryMessages>[0],
       () => "2026-06-26T12:00:00.000Z",
     );
 
@@ -514,7 +514,7 @@ describe("claude-agent-sdk-history", () => {
           id: "docs/My File.md",
           path: "docs/My File.md",
           name: "My File.md",
-          kind: "code",
+          kind: "default",
         },
       },
     ]);
@@ -542,7 +542,7 @@ describe("claude-agent-sdk-history", () => {
           id: "docs/My File.md",
           path: "docs/My File.md",
           name: "My File.md",
-          kind: "code",
+          kind: "default",
         },
         sourceText: {
           value: '@"docs/My File.md"',

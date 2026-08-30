@@ -1,4 +1,5 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { z } from "zod";
 import {
   type AssistantTurnTimingState,
   readAssistantActivityStartedAtMsFromMessages,
@@ -24,8 +25,12 @@ export type SessionTurnTiming = {
   clearAll: () => void;
 };
 
+const numericTimestampSchema = z.number();
+const isNumericTimestamp = (timestamp: string | number): timestamp is number =>
+  numericTimestampSchema.safeParse(timestamp).success;
+
 const toTimestampMs = (timestamp: string | number): number | undefined => {
-  if (typeof timestamp === "number") {
+  if (isNumericTimestamp(timestamp)) {
     return Number.isFinite(timestamp) ? timestamp : undefined;
   }
 
@@ -49,8 +54,7 @@ export const createSessionTurnTiming = (): SessionTurnTiming => {
       const current = timingBySession[sessionKey]?.activityStartedAtMs;
       timingBySession[sessionKey] = {
         ...timingBySession[sessionKey],
-        activityStartedAtMs:
-          typeof current === "number" ? Math.min(current, timestampMs) : timestampMs,
+        activityStartedAtMs: current !== undefined ? Math.min(current, timestampMs) : timestampMs,
       };
     },
     recordTurnUserMessageTimestamp: (sessionKey, timestamp) => {
@@ -59,8 +63,7 @@ export const createSessionTurnTiming = (): SessionTurnTiming => {
         return timingBySession[sessionKey]?.userAnchorAtMs;
       }
       const current = timingBySession[sessionKey]?.userAnchorAtMs;
-      const userAnchorAtMs =
-        typeof current === "number" ? Math.min(current, timestampMs) : timestampMs;
+      const userAnchorAtMs = current !== undefined ? Math.min(current, timestampMs) : timestampMs;
       timingBySession[sessionKey] = {
         ...timingBySession[sessionKey],
         userAnchorAtMs,
@@ -85,14 +88,17 @@ export const createSessionTurnTiming = (): SessionTurnTiming => {
           completedAtMs,
         });
       const userAnchorAtMs = currentTiming.userAnchorAtMs;
-      return resolveAssistantTurnDurationMs({
-        completedAtMs,
-        ...(typeof activityStartedAtMs === "number" ? { activityStartedAtMs } : {}),
-        ...(typeof userAnchorAtMs === "number" ? { userAnchorAtMs } : {}),
-        ...(typeof previousAssistantCompletedAtMs === "number"
-          ? { previousAssistantCompletedAtMs }
-          : {}),
-      });
+      const timing: Parameters<typeof resolveAssistantTurnDurationMs>[0] = { completedAtMs };
+      if (activityStartedAtMs !== undefined) {
+        timing.activityStartedAtMs = activityStartedAtMs;
+      }
+      if (userAnchorAtMs !== undefined) {
+        timing.userAnchorAtMs = userAnchorAtMs;
+      }
+      if (previousAssistantCompletedAtMs !== undefined) {
+        timing.previousAssistantCompletedAtMs = previousAssistantCompletedAtMs;
+      }
+      return resolveAssistantTurnDurationMs(timing);
     },
     clearTurnDuration: (sessionKey, completedTimestamp) => {
       const completedAtMs =
@@ -100,7 +106,7 @@ export const createSessionTurnTiming = (): SessionTurnTiming => {
       const nextTiming = { ...timingBySession[sessionKey] };
       delete nextTiming.activityStartedAtMs;
       delete nextTiming.userAnchorAtMs;
-      if (typeof completedAtMs === "number") {
+      if (completedAtMs !== undefined) {
         nextTiming.previousAssistantCompletedAtMs = completedAtMs;
       }
       if (Object.keys(nextTiming).length === 0) {

@@ -36,7 +36,7 @@ type RoleSessionActionConfig = {
   fallback?: (callbacks: TaskWorkflowCallbacks, taskId: string) => void;
 };
 
-const roleSessionActions: Record<OpenSessionWorkflowAction, RoleSessionActionConfig> = {
+const roleSessionActions = {
   open_spec: { role: "spec" },
   open_planner: { role: "planner" },
   open_qa: {
@@ -47,7 +47,7 @@ const roleSessionActions: Record<OpenSessionWorkflowAction, RoleSessionActionCon
     role: "build",
     fallback: (callbacks, taskId) => callbacks.onBuild?.(taskId),
   },
-};
+} satisfies Record<OpenSessionWorkflowAction, RoleSessionActionConfig>;
 
 const openRoleSession = (
   action: OpenSessionWorkflowAction,
@@ -66,7 +66,9 @@ const openRoleSession = (
     return;
   }
 
-  actionConfig.fallback?.(callbacks, taskId);
+  if ("fallback" in actionConfig) {
+    actionConfig.fallback(callbacks, taskId);
+  }
 };
 
 export const toTaskLabels = toDisplayTaskLabels;

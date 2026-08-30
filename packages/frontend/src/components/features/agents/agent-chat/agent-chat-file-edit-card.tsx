@@ -13,14 +13,19 @@ type AgentChatFileEditCardProps = {
   data: FileEditData;
 };
 
-const STATUS_CONFIG: Record<string, { icon: typeof FileText; color: string; badge: string }> = {
+const STATUS_CONFIG = {
   modified: { icon: FileText, color: "text-blue-400", badge: "M" },
   added: { icon: FilePlus, color: "text-green-400", badge: "A" },
   deleted: { icon: FileX, color: "text-red-400", badge: "D" },
 };
 
-function inferStatus(data: FileEditData): string {
-  if (data.kind === "content" && data.changeType in STATUS_CONFIG) {
+type FileEditStatus = keyof typeof STATUS_CONFIG;
+
+function inferStatus(data: FileEditData): FileEditStatus {
+  if (
+    data.kind === "content" &&
+    (data.changeType === "modified" || data.changeType === "added" || data.changeType === "deleted")
+  ) {
     return data.changeType;
   }
   if (data.deletions === 0 && data.additions > 0) {

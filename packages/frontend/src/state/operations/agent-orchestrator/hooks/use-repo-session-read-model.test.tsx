@@ -50,7 +50,7 @@ const createReadOnlyRepoConfig = (): RepoConfig => ({
 
 const createDeferred = <T,>() => {
   let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
+  let reject!: (cause?: unknown) => void;
   const promise = new Promise<T>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
     reject = rejectPromise;
@@ -904,8 +904,7 @@ describe("useRepoSessionReadModel", () => {
       emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
     });
     const invalidateQueries = mock(async () => undefined);
-    state.queryClient.invalidateQueries =
-      invalidateQueries as typeof state.queryClient.invalidateQueries;
+    state.queryClient.invalidateQueries = invalidateQueries;
 
     try {
       await state.harness.mount();
@@ -936,8 +935,7 @@ describe("useRepoSessionReadModel", () => {
       emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
     });
     const invalidateQueries = mock(async () => undefined);
-    state.queryClient.invalidateQueries =
-      invalidateQueries as typeof state.queryClient.invalidateQueries;
+    state.queryClient.invalidateQueries = invalidateQueries;
     const catalog = {
       commands: [
         {
@@ -962,7 +960,7 @@ describe("useRepoSessionReadModel", () => {
             workingDirectory: "/repo/worktree",
           },
           catalog,
-        } as AgentSessionLiveEnvelope);
+        } satisfies AgentSessionLiveEnvelope);
       });
 
       expect(

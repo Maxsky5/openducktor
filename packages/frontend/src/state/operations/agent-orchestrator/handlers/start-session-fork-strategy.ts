@@ -38,12 +38,7 @@ type ForkStrategyInput = {
   deps: StartSessionExecutionDependencies;
 };
 
-const readForkSourceRuntime = (
-  sourceSession: AgentSessionState,
-): {
-  runtimeKind: AgentSessionState["runtimeKind"];
-  workingDirectory: string;
-} => {
+const readForkSourceRuntime = (sourceSession: AgentSessionState) => {
   const sourceWorkingDirectory = normalizeWorkingDirectory(sourceSession.workingDirectory);
   if (!sourceWorkingDirectory) {
     throw new Error(
@@ -51,7 +46,13 @@ const readForkSourceRuntime = (
     );
   }
 
-  return { runtimeKind: sourceSession.runtimeKind, workingDirectory: sourceWorkingDirectory };
+  return {
+    runtimeKind: sourceSession.runtimeKind,
+    workingDirectory: sourceWorkingDirectory,
+  } satisfies {
+    runtimeKind: AgentSessionState["runtimeKind"];
+    workingDirectory: string;
+  };
 };
 
 export const executeForkStart = async ({
@@ -105,15 +106,18 @@ export const executeForkStart = async ({
     const runtimeKind = sourceRuntimeKind;
     const sessionScope = workflowAgentSessionScope(ctx.taskId, ctx.role);
 
-    const summary = await deps.runtime.adapter.forkSession({
+    const forkInput: Parameters<typeof deps.runtime.adapter.forkSession>[0] = {
       repoPath: ctx.repoPath,
       runtimeKind,
       workingDirectory,
       sessionScope,
       systemPrompt,
-      ...(selectedModel ? { model: selectedModel } : {}),
       parentExternalSessionId: sourceSession.externalSessionId,
-    });
+    };
+    if (selectedModel) {
+      forkInput.model = selectedModel;
+    }
+    const summary = await deps.runtime.adapter.forkSession(forkInput);
 
     const startedCtx = {
       ...ctx,

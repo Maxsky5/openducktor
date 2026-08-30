@@ -1,6 +1,11 @@
 import type { GitFetchRemoteResult, GitPushBranchResult } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  type HostOperationErrorAggregate,
+  HostValidationError,
+  type HostValidationErrorAggregate,
+} from "../../effect/host-errors";
 import type { GitPushBranchOptions } from "../../ports/git-port";
 import {
   combineOptionalOutput,
@@ -23,7 +28,7 @@ const gitOperationError = (message: string, operation: string): HostOperationErr
   new HostOperationError({ message, operation });
 const gitValidationError = (message: string, field: string): HostValidationError =>
   new HostValidationError({ message, field });
-type GitRemoteSyncError = HostOperationError | HostValidationError;
+type GitRemoteSyncError = HostOperationErrorAggregate | HostValidationErrorAggregate;
 const remoteNameFromTrackingRef = (targetRef: string): string | undefined => {
   const remainder = targetRef.startsWith("refs/remotes/")
     ? targetRef.slice("refs/remotes/".length)

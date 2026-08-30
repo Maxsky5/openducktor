@@ -2,11 +2,18 @@ import { describe, expect, mock, test } from "bun:test";
 import {
   ODT_WORKFLOW_AGENT_TOOL_NAMES,
   RUNTIME_DESCRIPTORS_BY_KIND,
+  codexAppServerClientRequestSchema,
+  parseCodexAppServerRequestResult,
+  type CodexAppServerClientRequestMap,
+  type CodexAppServerRequestMethod,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
-import type { CodexAppServerRequestResult } from "../../ports/codex-app-server-port";
+import {
+  HostOperationError,
+  type HostOperationErrorAggregate,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import type { RuntimeWorkspaceHandle } from "../../ports/runtime-registry-port";
 import {
   type CreateRuntimeRegistryInput,
@@ -18,6 +25,12 @@ import {
 } from "./runtime-session-operations";
 
 type TestRuntimeRegistryInput = CreateRuntimeRegistryInput & CreateRuntimeSessionOperationsInput;
+type FetchRequest = (
+  ...args: Parameters<typeof globalThis.fetch>
+) => ReturnType<typeof globalThis.fetch>;
+
+const fetchFixture = (request: FetchRequest): typeof globalThis.fetch =>
+  Object.assign(request, { preconnect: () => {} });
 
 const createRuntimeRegistry = ({
   codexAppServer,
@@ -25,16 +38,58 @@ const createRuntimeRegistry = ({
   sessionOperations,
   ...input
 }: TestRuntimeRegistryInput = {}) => {
-  const sessionOperationInput: CreateRuntimeSessionOperationsInput = {
-    ...(codexAppServer ? { codexAppServer } : {}),
-    ...(claudeAgentSdk ? { claudeAgentSdk } : {}),
-  };
+  const sessionOperationInput: CreateRuntimeSessionOperationsInput = {};
+  if (codexAppServer) {
+    sessionOperationInput.codexAppServer = codexAppServer;
+  }
+  if (claudeAgentSdk) {
+    sessionOperationInput.claudeAgentSdk = claudeAgentSdk;
+  }
   return createEffectRuntimeRegistry({
     ...input,
     sessionOperations: sessionOperations ?? createRuntimeSessionOperations(sessionOperationInput),
   });
 };
-const codexResult = (value: unknown) => Effect.succeed(value as CodexAppServerRequestResult);
+const codexResult = <Method extends CodexAppServerRequestMethod>(
+  method: Method,
+  value: CodexAppServerClientRequestMap[Method]["result"],
+) => Effect.succeed(parseCodexAppServerRequestResult(method, value));
+const codexThreadReadResult = (
+  threadId: string,
+  cwd: string,
+  status: { type: "active"; activeFlags: [] } | { type: "idle" | "notLoaded" | "systemError" },
+) =>
+  codexResult("thread/read", {
+    thread: {
+      id: threadId,
+      extra: null,
+      sessionId: threadId,
+      forkedFromId: null,
+      parentThreadId: null,
+      preview: "Test thread",
+      ephemeral: false,
+      section: null,
+      sectionEnteredAt: null,
+      projectId: null,
+      historyMode: "paginated",
+      modelProvider: "openai",
+      createdAt: 1,
+      updatedAt: 1,
+      recencyAt: 1,
+      status,
+      path: null,
+      cwd,
+      cliVersion: "0.149.0-test",
+      source: "appServer",
+      canAcceptDirectInput: true,
+      threadSource: null,
+      agentNickname: null,
+      agentRole: null,
+      gitInfo: null,
+      name: null,
+      turns: [],
+    },
+  });
 const requireMethod = <T>(method: T | undefined, methodName: string): T => {
   if (!method) {
     throw new Error(`Expected registry to support ${methodName}`);
@@ -80,7 +135,7 @@ const createClaudeRuntime = (
   });
 const createRuntimeHandle = (
   runtime: RuntimeInstanceSummary,
-  stop: () => Effect.Effect<void, HostOperationError> = () => Effect.succeed(undefined),
+  stop: () => Effect.Effect<void, HostOperationErrorAggregate> = () => Effect.succeed(undefined),
   isAlive = true,
   executablePath = "/tools/opencode",
 ): RuntimeWorkspaceHandle => ({
@@ -611,9 +666,14 @@ describe("createRuntimeRegistry", () => {
       workingDirectory: "/repo",
       descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
     };
-    const ensure = Effect.runPromise(registry.ensureWorkspaceRuntime(input)).then(
-      (runtime) => ({ type: "started" as const, runtime }),
-      (error: unknown) => ({ type: "cancelled" as const, error }),
+    type EnsureResult =
+      | { type: "started"; runtime: RuntimeInstanceSummary }
+      | { type: "cancelled" };
+    const ensure: Promise<EnsureResult> = Effect.runPromise(
+      registry.ensureWorkspaceRuntime(input),
+    ).then(
+      (runtime): EnsureResult => ({ type: "started", runtime }),
+      (): EnsureResult => ({ type: "cancelled" }),
     );
     await startEntered;
     const stopAllRuntimes = requireMethod(registry.stopAllRuntimes, "stopAllRuntimes");
@@ -708,23 +768,25 @@ describe("createRuntimeRegistry", () => {
       directory: string | null;
     }> = [];
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const request = input instanceof Request ? input : null;
-      const url = new URL(request?.url ?? input.toString());
-      const method = init?.method ?? request?.method ?? "GET";
-      requests.push({
-        method,
-        pathname: url.pathname,
-        directory: url.searchParams.get("directory"),
-      });
-      if (method === "POST" && url.pathname === "/session/session-1/abort") {
-        return new Response("aborted", { status: 200 });
-      }
-      if (method === "GET" && url.pathname === "/session/status") {
-        return Response.json({ "session-1": { type: "busy" } });
-      }
-      return new Response("not found", { status: 404 });
-    }) as unknown as typeof fetch;
+    globalThis.fetch = fetchFixture(
+      mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = input instanceof Request ? input : null;
+        const url = new URL(request?.url ?? input.toString());
+        const method = init?.method ?? request?.method ?? "GET";
+        requests.push({
+          method,
+          pathname: url.pathname,
+          directory: url.searchParams.get("directory"),
+        });
+        if (method === "POST" && url.pathname === "/session/session-1/abort") {
+          return new Response("aborted", { status: 200 });
+        }
+        if (method === "GET" && url.pathname === "/session/status") {
+          return Response.json({ "session-1": { type: "busy" } });
+        }
+        return new Response("not found", { status: 404 });
+      }),
+    );
     try {
       const endpoint = "http://127.0.0.1:4096";
       const registry = createRuntimeRegistry({
@@ -777,7 +839,7 @@ describe("createRuntimeRegistry", () => {
       codexAppServer: {
         request(input) {
           calls.push(input);
-          return codexResult({});
+          return codexResult("turn/interrupt", {});
         },
       },
     });
@@ -831,23 +893,25 @@ describe("createRuntimeRegistry", () => {
       directory: string | null;
     }> = [];
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const request = input instanceof Request ? input : null;
-      const url = new URL(request?.url ?? input.toString());
-      const method = init?.method ?? request?.method ?? "GET";
-      requests.push({
-        method,
-        pathname: url.pathname,
-        directory: url.searchParams.get("directory"),
-      });
-      if (method === "GET" && url.pathname === "/mcp") {
-        return Response.json({ openducktor: { status: "connected" } });
-      }
-      if (method === "GET" && url.pathname === "/experimental/tool/ids") {
-        return Response.json(["odt_read_task", " odt_set_spec ", ""]);
-      }
-      return Response.json({ error: "not found" }, { status: 404 });
-    }) as unknown as typeof fetch;
+    globalThis.fetch = fetchFixture(
+      mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = input instanceof Request ? input : null;
+        const url = new URL(request?.url ?? input.toString());
+        const method = init?.method ?? request?.method ?? "GET";
+        requests.push({
+          method,
+          pathname: url.pathname,
+          directory: url.searchParams.get("directory"),
+        });
+        if (method === "GET" && url.pathname === "/mcp") {
+          return Response.json({ openducktor: { status: "connected" } });
+        }
+        if (method === "GET" && url.pathname === "/experimental/tool/ids") {
+          return Response.json(["odt_read_task", " odt_set_spec ", ""]);
+        }
+        return Response.json({ error: "not found" }, { status: 404 });
+      }),
+    );
     try {
       const registry = createRuntimeRegistry();
       const probeMcpStatus = requireMethod(registry.probeMcpStatus, "probeMcpStatus");
@@ -887,9 +951,11 @@ describe("createRuntimeRegistry", () => {
   });
   test("reports OpenCode MCP fetch timeouts as reconnecting probe results", async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = mock(async () => {
-      throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
-    }) as unknown as typeof fetch;
+    globalThis.fetch = fetchFixture(
+      mock(async () => {
+        throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+      }),
+    );
     try {
       const registry = createRuntimeRegistry();
       const probeMcpStatus = requireMethod(registry.probeMcpStatus, "probeMcpStatus");
@@ -946,23 +1012,37 @@ describe("createRuntimeRegistry", () => {
       codexAppServer: {
         request(input) {
           calls.push(input);
-          const params = input.params as {
-            threadId: "session-1" | "session-2" | "session-3" | "session-4" | "session-5";
-          };
-          const statusByThreadId = {
-            "session-1": { type: "active", activeFlags: [] },
-            "session-2": { type: "idle" },
-            "session-3": { type: "systemError" },
-            "session-4": { type: "notLoaded" },
-            "session-5": { type: "active", activeFlags: [] },
-          } as const;
-          return codexResult({
-            thread: {
-              id: params.threadId,
-              cwd: params.threadId === "session-5" ? "/repo/other-worktree" : "/repo/worktree",
-              status: statusByThreadId[params.threadId],
-            },
+          const request = codexAppServerClientRequestSchema.parse({
+            method: input.method,
+            params: input.params,
           });
+          if (request.method !== "thread/read") {
+            throw new Error(`Expected thread/read, received ${request.method}.`);
+          }
+          const threadId = request.params.threadId;
+          let status: Parameters<typeof codexThreadReadResult>[2];
+          switch (threadId) {
+            case "session-1":
+            case "session-5":
+              status = { type: "active", activeFlags: [] };
+              break;
+            case "session-2":
+              status = { type: "idle" };
+              break;
+            case "session-3":
+              status = { type: "systemError" };
+              break;
+            case "session-4":
+              status = { type: "notLoaded" };
+              break;
+            default:
+              throw new Error(`Unexpected test thread '${threadId}'.`);
+          }
+          return codexThreadReadResult(
+            threadId,
+            threadId === "session-5" ? "/repo/other-worktree" : "/repo/worktree",
+            status,
+          );
         },
       },
     });
@@ -1077,7 +1157,7 @@ describe("createRuntimeRegistry", () => {
       runtimes: [createCodexRuntime()],
       codexAppServer: {
         request() {
-          return codexResult({});
+          return Effect.succeed(parseCodexAppServerRequestResult("thread/read", {}));
         },
       },
     });
@@ -1091,7 +1171,7 @@ describe("createRuntimeRegistry", () => {
           workingDirectory: "/repo/worktree",
         }),
       ),
-    ).rejects.toThrow("Codex thread/read response thread must be an object");
+    ).rejects.toThrow('"thread"');
   });
   test("interrupts an active Codex session through the app-server port", async () => {
     const calls: unknown[] = [];
@@ -1101,16 +1181,13 @@ describe("createRuntimeRegistry", () => {
         request(input) {
           calls.push(input);
           if (input.method === "thread/read") {
-            return codexResult({
-              thread: {
-                id: "session-1",
-                cwd: "/repo/worktree",
-                status: { type: "active", activeFlags: [] },
-              },
+            return codexThreadReadResult("session-1", "/repo/worktree", {
+              type: "active",
+              activeFlags: [],
             });
           }
           if (input.method === "thread/turns/list") {
-            return codexResult({
+            return codexResult("thread/turns/list", {
               data: [
                 {
                   id: "turn-1",
@@ -1120,14 +1197,14 @@ describe("createRuntimeRegistry", () => {
                   error: null,
                   items: [],
                   itemsView: "summary",
-                  status: "running",
+                  status: "inProgress",
                 },
               ],
               nextCursor: null,
               backwardsCursor: null,
             });
           }
-          return codexResult({});
+          return codexResult("turn/interrupt", {});
         },
       },
     });
@@ -1171,13 +1248,7 @@ describe("createRuntimeRegistry", () => {
       codexAppServer: {
         request(input) {
           calls.push(input);
-          return codexResult({
-            thread: {
-              id: "session-1",
-              cwd: "/repo/worktree",
-              status: { type: "idle" },
-            },
-          });
+          return codexThreadReadResult("session-1", "/repo/worktree", { type: "idle" });
         },
       },
     });
@@ -1205,15 +1276,12 @@ describe("createRuntimeRegistry", () => {
       codexAppServer: {
         request(input) {
           if (input.method === "thread/read") {
-            return codexResult({
-              thread: {
-                id: "session-1",
-                cwd: "/repo/worktree",
-                status: { type: "active", activeFlags: [] },
-              },
+            return codexThreadReadResult("session-1", "/repo/worktree", {
+              type: "active",
+              activeFlags: [],
             });
           }
-          return codexResult({
+          return codexResult("thread/turns/list", {
             data: [
               {
                 id: "turn-1",
@@ -1249,15 +1317,12 @@ describe("createRuntimeRegistry", () => {
       codexAppServer: {
         request(input) {
           if (input.method === "thread/read") {
-            return codexResult({
-              thread: {
-                id: "session-1",
-                cwd: "/repo/worktree",
-                status: { type: "active", activeFlags: [] },
-              },
+            return codexThreadReadResult("session-1", "/repo/worktree", {
+              type: "active",
+              activeFlags: [],
             });
           }
-          return codexResult({});
+          return Effect.succeed(parseCodexAppServerRequestResult("thread/turns/list", {}));
         },
       },
     });
@@ -1270,7 +1335,7 @@ describe("createRuntimeRegistry", () => {
           workingDirectory: "/repo/worktree",
         }),
       ),
-    ).rejects.toThrow("Codex thread/turns/list response data must be an array");
+    ).rejects.toThrow('"data"');
   });
   test("fails Codex stop without the app-server port or a Codex runtime route", async () => {
     const registry = createRuntimeRegistry({
@@ -1297,7 +1362,7 @@ describe("createRuntimeRegistry", () => {
       ],
       codexAppServer: {
         request() {
-          return codexResult({});
+          return codexResult("turn/interrupt", {});
         },
       },
     });

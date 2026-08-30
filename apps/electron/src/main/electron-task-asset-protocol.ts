@@ -34,10 +34,7 @@ export const registerElectronTaskAssetProtocol = (input: {
       if (!exit.value) {
         return errorResponse(404);
       }
-      const body = exit.value.bytes.buffer.slice(
-        exit.value.bytes.byteOffset,
-        exit.value.bytes.byteOffset + exit.value.bytes.byteLength,
-      ) as ArrayBuffer;
+      const body = Uint8Array.from(exit.value.bytes);
       return new Response(body, { headers: exit.value.headers });
     }
     const firstFailure = Chunk.head(Cause.failures(exit.cause));

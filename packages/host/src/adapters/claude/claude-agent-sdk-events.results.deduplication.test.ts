@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
-import { createEventTestSession as createSession } from "./claude-agent-sdk-events.test-support";
+import {
+  claudeAcceptedUserMessageFixture,
+  createEventTestSession as createSession,
+} from "./claude-agent-sdk-events.test-support";
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 
 describe("handleClaudeSdkMessage result deduplication", () => {
@@ -23,7 +26,7 @@ describe("handleClaudeSdkMessage result deduplication", () => {
       ...commonInput,
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "c7448f99-fd5e-4080-8ee9-a0821866c71f",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -40,7 +43,7 @@ describe("handleClaudeSdkMessage result deduplication", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
-        uuid: "result-1",
+        uuid: "0e3962b1-c5c6-42b9-840e-47fbc2f792c0",
         session_id: "session-1",
         is_error: false,
         result: "Spec persisted.",
@@ -73,7 +76,7 @@ describe("handleClaudeSdkMessage result deduplication", () => {
       ...commonInput,
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "c7448f99-fd5e-4080-8ee9-a0821866c71f",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -90,7 +93,7 @@ describe("handleClaudeSdkMessage result deduplication", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
-        uuid: "result-1",
+        uuid: "0e3962b1-c5c6-42b9-840e-47fbc2f792c0",
         session_id: "session-1",
         is_error: false,
         result: "Partial answer",
@@ -104,7 +107,7 @@ describe("handleClaudeSdkMessage result deduplication", () => {
     expect(finalMessages).toHaveLength(1);
     expect(finalMessages[0]).toEqual(
       expect.objectContaining({
-        messageId: "assistant-1",
+        messageId: "c7448f99-fd5e-4080-8ee9-a0821866c71f",
         message: "Partial answer",
       }),
     );
@@ -120,8 +123,16 @@ describe("handleClaudeSdkMessage result deduplication", () => {
     const events: AgentEvent[] = [];
     const session = createSession("running");
     session.acceptedUserMessages.push(
-      { messageId: "user-1", text: "First", timestamp: "2026-06-25T19:59:00.000Z" },
-      { messageId: "user-2", text: "Second", timestamp: "2026-06-25T19:59:30.000Z" },
+      claudeAcceptedUserMessageFixture({
+        messageId: "user-1",
+        text: "First",
+        timestamp: "2026-06-25T19:59:00.000Z",
+      }),
+      claudeAcceptedUserMessageFixture({
+        messageId: "user-2",
+        text: "Second",
+        timestamp: "2026-06-25T19:59:30.000Z",
+      }),
     );
     session.pendingUserTurnCount = 2;
     const commonInput = {
@@ -139,7 +150,7 @@ describe("handleClaudeSdkMessage result deduplication", () => {
       ...commonInput,
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "c7448f99-fd5e-4080-8ee9-a0821866c71f",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -156,7 +167,7 @@ describe("handleClaudeSdkMessage result deduplication", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
-        uuid: "result-1",
+        uuid: "0e3962b1-c5c6-42b9-840e-47fbc2f792c0",
         session_id: "session-1",
         is_error: false,
         result: "First queued result",
@@ -170,7 +181,7 @@ describe("handleClaudeSdkMessage result deduplication", () => {
     expect(finalMessages).toHaveLength(1);
     expect(finalMessages[0]).toEqual(
       expect.objectContaining({
-        messageId: "assistant-1",
+        messageId: "c7448f99-fd5e-4080-8ee9-a0821866c71f",
         message: "First queued result",
       }),
     );

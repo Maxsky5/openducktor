@@ -6,14 +6,11 @@ import {
   getFiletypeFromFileName,
   type SelectedLineRange,
 } from "@pierre/diffs";
-import {
-  File as PierreReactFile,
-  FileDiff as PierreReactFileDiff,
-  useWorkerPool,
-} from "@pierre/diffs/react";
+import { File as PierreReactFile, FileDiff as PierreReactFileDiff } from "@pierre/diffs/react";
 import { Undo2 } from "lucide-react";
 import {
   type CSSProperties,
+  type ComponentProps,
   memo,
   type ReactElement,
   useCallback,
@@ -28,12 +25,16 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PIERRE_HIGHLIGHT_LINE_LIMIT } from "@/lib/diff/pierre-config";
 import { cn } from "@/lib/utils";
-import type { HunkResetAnnotationMetadata, PierreDiffSelection } from "./pierre-diff-viewer-model";
+import {
+  hunkResetAnnotationMetadataSchema,
+  type PierreDiffSelection,
+} from "./pierre-diff-viewer-model";
 import {
   buildPierreDiffSelection,
   getHunkResetAnnotations,
   getRenderableFileDiff,
 } from "./pierre-diff-viewer-model";
+import { useWorkerPool } from "./pierre-diff-viewer-react";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -91,11 +92,12 @@ type PierreHighlightTarget =
   | { kind: "diff"; fileDiff: FileDiffMetadata; taskKey: string };
 
 const DIFF_THEME = { dark: "pierre-dark", light: "pierre-light" } as const;
-const DIFF_WRAPPER_STYLE = {
+type DiffCssProperties = CSSProperties & Record<`--diffs-${string}`, string | number>;
+const DIFF_WRAPPER_STYLE: DiffCssProperties = {
   "--diffs-font-size": "12px",
   "--diffs-line-height": "1.5",
   "--diffs-tab-size": 2,
-} as CSSProperties;
+};
 const RAW_DIFF_FALLBACK_BASE_CLASS_NAME =
   "px-3 py-2 font-mono text-[11px] leading-5 text-foreground";
 const HUNK_RESET_ANNOTATION_CLASS_NAME = "pointer-events-none relative h-0";
@@ -238,7 +240,7 @@ const PierreHighlightSkeleton = ({
   </div>
 );
 
-const getContentMetrics = (value: string): { hash: string; lineCount: number } => {
+const getContentMetrics = (value: string) => {
   let hash = 0x811c9dc5;
   let lineCount = 1;
   for (let index = 0; index < value.length; index += 1) {
@@ -249,7 +251,10 @@ const getContentMetrics = (value: string): { hash: string; lineCount: number } =
       lineCount += 1;
     }
   }
-  return { hash: (hash >>> 0).toString(36), lineCount };
+  return { hash: (hash >>> 0).toString(36), lineCount } satisfies {
+    hash: string;
+    lineCount: number;
+  };
 };
 
 export const PierreDiffPreloader = memo(function PierreDiffPreloader({
@@ -445,8 +450,10 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
         : undefined,
     [enableGutterUtility, handleLineSelectionEnd],
   );
-  const options = useMemo(
-    () => ({
+  const options = useMemo<
+    NonNullable<ComponentProps<typeof PierreReactFileDiff>["options"]>
+  >(() => {
+    const nextOptions: NonNullable<ComponentProps<typeof PierreReactFileDiff>["options"]> = {
       theme: DIFF_THEME,
       themeType: theme,
       diffStyle,
@@ -458,30 +465,34 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
       tokenizeMaxLength: PIERRE_HIGHLIGHT_LINE_LIMIT,
       enableLineSelection,
       enableGutterUtility: handleGutterUtilityClick != null,
-      ...(handleLineSelectionChange
-        ? {
-            onLineSelectionStart: handleLineSelectionChange,
-            onLineSelectionChange: handleLineSelectionChange,
-          }
-        : {}),
-      ...(handleLineSelectionEnd ? { onLineSelectionEnd: handleLineSelectionEnd } : {}),
-      ...(handleGutterUtilityClick ? { onGutterUtilityClick: handleGutterUtilityClick } : {}),
-      ...(enableHunkReset ? { unsafeCSS: HUNK_RESET_FLOATING_CSS } : {}),
-    }),
-    [
-      diffStyle,
-      diffIndicators,
-      enableHunkReset,
-      enableLineSelection,
-      handleGutterUtilityClick,
-      handleLineSelectionChange,
-      handleLineSelectionEnd,
-      hunkSeparators,
-      lineOverflow,
-      lineDiffType,
-      theme,
-    ],
-  );
+    };
+    if (handleLineSelectionChange) {
+      nextOptions.onLineSelectionStart = handleLineSelectionChange;
+      nextOptions.onLineSelectionChange = handleLineSelectionChange;
+    }
+    if (handleLineSelectionEnd) {
+      nextOptions.onLineSelectionEnd = handleLineSelectionEnd;
+    }
+    if (handleGutterUtilityClick) {
+      nextOptions.onGutterUtilityClick = handleGutterUtilityClick;
+    }
+    if (enableHunkReset) {
+      nextOptions.unsafeCSS = HUNK_RESET_FLOATING_CSS;
+    }
+    return nextOptions;
+  }, [
+    diffStyle,
+    diffIndicators,
+    enableHunkReset,
+    enableLineSelection,
+    handleGutterUtilityClick,
+    handleLineSelectionChange,
+    handleLineSelectionEnd,
+    hunkSeparators,
+    lineOverflow,
+    lineDiffType,
+    theme,
+  ]);
   const renderedSelectedLines =
     transientSelectedLines !== undefined ? transientSelectedLines : selectedLines;
   const selectedLinesProps =
@@ -489,13 +500,8 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
   const handleRenderAnnotation = useCallback(
     (annotation: DiffLineAnnotation<unknown>) => {
       const metadata = annotation.metadata;
-      if (
-        metadata != null &&
-        typeof metadata === "object" &&
-        "kind" in metadata &&
-        metadata.kind === "hunk-reset"
-      ) {
-        const hunkResetMetadata = metadata as HunkResetAnnotationMetadata;
+      const metadataResult = hunkResetAnnotationMetadataSchema.safeParse(metadata);
+      if (metadataResult.success) {
         return (
           <div className={HUNK_RESET_ANNOTATION_WRAPPER_CLASS_NAME}>
             <div
@@ -510,7 +516,7 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
                 title={`Reset hunk in ${filePath}`}
                 data-testid="agent-studio-git-reset-hunk-button"
                 disabled={isHunkResetDisabled}
-                onClick={() => onResetHunk?.(hunkResetMetadata.hunkIndex)}
+                onClick={() => onResetHunk?.(metadataResult.data.hunkIndex)}
               >
                 <Undo2 className="size-3.5" />
                 <span>Reset hunk</span>

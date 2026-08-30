@@ -15,6 +15,7 @@ import {
 import { Effect } from "effect";
 import {
   type HostError,
+  type HostErrorDetails,
   HostOperationError,
   HostValidationError,
   toHostOperationError,
@@ -31,9 +32,20 @@ import { refKey, requireRuntime, toSessionRef } from "./opencode-live-session-no
 import { createOpenCodeLiveSessionState } from "./opencode-live-session-state";
 import { createOpenCodeSessionControlAdapter } from "./opencode-session-control-adapter";
 
+export type PreparedOpenCodeLiveSessionAdapter = Omit<
+  PreparedRuntimeLiveSessionAdapter,
+  "adapter"
+> & {
+  readonly adapter: AgentSessionRuntimeAdapterPort;
+};
+
 export type OpenCodeLiveSessionAdapterPreparer = (
   runtime: RuntimeInstanceSummary,
 ) => Effect.Effect<PreparedRuntimeLiveSessionAdapter, HostError>;
+
+export type OpenCodeRuntimeSessionAdapterPreparer = (
+  runtime: RuntimeInstanceSummary,
+) => Effect.Effect<PreparedOpenCodeLiveSessionAdapter, HostError>;
 
 export type CreateOpenCodeLiveSessionAdapterPreparerInput = {
   readonly liveSessionLifecycle: Pick<
@@ -43,10 +55,10 @@ export type CreateOpenCodeLiveSessionAdapterPreparerInput = {
   readonly prepareRuntime?: PrepareOpencodeSessionRuntime;
 };
 
-const stateEffect = <Value>(
+const stateEffect = <Value, Details extends object>(
   operation: string,
   run: () => Value,
-  details: Record<string, unknown>,
+  details: HostErrorDetails<Details>,
 ): Effect.Effect<Value, HostError> =>
   Effect.try({
     try: run,
@@ -74,7 +86,7 @@ const runtimeActivityFromTranscriptEvent = (
 export const createOpenCodeLiveSessionAdapterPreparer = ({
   liveSessionLifecycle,
   prepareRuntime = createPrepareOpencodeSessionRuntime(),
-}: CreateOpenCodeLiveSessionAdapterPreparerInput): OpenCodeLiveSessionAdapterPreparer => {
+}: CreateOpenCodeLiveSessionAdapterPreparerInput): OpenCodeRuntimeSessionAdapterPreparer => {
   let nextOccurrence = 1;
 
   return (runtimeInput) =>
@@ -281,6 +293,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
         );
 
       const adapter: AgentSessionRuntimeAdapterPort = {
+        supportsSessionControl: true,
         binding: {
           runtimeId: runtime.runtimeId,
           runtimeKind: runtime.kind,
@@ -343,13 +356,22 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
             ).pipe(
               Effect.flatMap((route) =>
                 Effect.tryPromise({
-                  try: () =>
-                    prepared.connection.replyApproval({
-                      ref: route.ref,
-                      nativeRequestId: route.nativeRequestId,
-                      outcome: input.outcome,
-                      ...(input.message ? { message: input.message } : {}),
-                    }),
+                  try: () => {
+                    const request: Parameters<typeof prepared.connection.replyApproval>[0] =
+                      input.message
+                        ? {
+                            ref: route.ref,
+                            nativeRequestId: route.nativeRequestId,
+                            outcome: input.outcome,
+                            message: input.message,
+                          }
+                        : {
+                            ref: route.ref,
+                            nativeRequestId: route.nativeRequestId,
+                            outcome: input.outcome,
+                          };
+                    return prepared.connection.replyApproval(request);
+                  },
                   catch: (cause) =>
                     toHostOperationError(cause, "opencode-live-session.reply-approval", {
                       runtimeId: runtime.runtimeId,
@@ -419,6 +441,6 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
               }),
           }),
         discard: () => releaseAdapter().pipe(Effect.asVoid),
-      } satisfies PreparedRuntimeLiveSessionAdapter;
+      } satisfies PreparedOpenCodeLiveSessionAdapter;
     });
 };

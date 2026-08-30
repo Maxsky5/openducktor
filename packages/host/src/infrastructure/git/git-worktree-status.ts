@@ -59,14 +59,14 @@ export const buildWorktreeStatusData = (
       effectiveTargetBranch,
       fileStatuses,
     );
-    return {
+    const status = {
       currentBranch,
       fileStatuses,
       fileDiffs,
       targetAheadBehind,
       upstreamAheadBehind,
-      ...(gitConflict ? { gitConflict } : {}),
     };
+    return gitConflict ? { ...status, gitConflict } : status;
   });
 export const buildWorktreeStatusSummaryData = (
   runner: GitCommandRunner,
@@ -102,12 +102,12 @@ export const buildWorktreeStatusSummaryData = (
       effectiveTargetBranch,
       fileStatuses,
     );
-    return {
+    const status = {
       currentBranch,
       fileStatuses,
       fileStatusCounts: fileStatusCounts(fileStatuses),
       targetAheadBehind,
       upstreamAheadBehind,
-      ...(gitConflict ? { gitConflict } : {}),
     };
+    return gitConflict ? { ...status, gitConflict } : status;
   });

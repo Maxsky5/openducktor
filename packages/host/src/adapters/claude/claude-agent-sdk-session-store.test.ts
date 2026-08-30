@@ -1,7 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
 import { scheduleClaudeLiveContextUsageRefresh } from "./claude-agent-sdk-context-usage";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
+import {
+  createClaudeContextUsageResponse,
+  createClaudeQueryFixture,
+} from "./claude-agent-sdk-session-io.test-support";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 
@@ -24,9 +29,9 @@ const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession =>
   pendingQuestions: new Map(),
   queuedSdkMessages: [],
   pendingUserTurnCount: 0,
-  query: {
+  query: createClaudeQueryFixture({
     close: mock(() => {}),
-  } as unknown as ClaudeSession["query"],
+  }),
   queue: new AsyncInputQueue(),
   runtimeId: "runtime-1",
   startedAt: "2026-06-25T20:00:00.000Z",
@@ -106,11 +111,11 @@ describe("createClaudeAgentSdkSessionStore", () => {
     });
     const queuedMessage = {
       type: "user",
-      uuid: "queued-1",
+      uuid: "f9fc2054-d124-49cd-8ce4-ce02b316b672",
       message: { role: "user", content: [{ type: "text", text: "continue" }] },
       session_id: "session-1",
       parent_tool_use_id: null,
-    } as unknown as ClaudeSession["queuedSdkMessages"][number];
+    } satisfies SDKUserMessage;
     const session = createSession({
       pendingUserTurnCount: 1,
       queuedSdkMessages: [queuedMessage],
@@ -131,7 +136,7 @@ describe("createClaudeAgentSdkSessionStore", () => {
         type: "transcript_retracted",
         externalSessionId: "session-1",
         timestamp: "2026-06-25T20:00:00.000Z",
-        messageIds: ["queued-1"],
+        messageIds: ["f9fc2054-d124-49cd-8ce4-ce02b316b672"],
       },
       expect.objectContaining({
         type: "session_finished",
@@ -183,11 +188,11 @@ describe("createClaudeAgentSdkSessionStore", () => {
     const store = createClaudeAgentSdkSessionStore();
     const queuedMessage = {
       type: "user",
-      uuid: "queued-1",
+      uuid: "f9fc2054-d124-49cd-8ce4-ce02b316b672",
       message: { role: "user", content: [{ type: "text", text: "continue" }] },
       session_id: "session-1",
       parent_tool_use_id: null,
-    } as unknown as ClaudeSession["queuedSdkMessages"][number];
+    } satisfies SDKUserMessage;
     store.set(
       createSession({
         activity: "idle",
@@ -352,7 +357,8 @@ describe("createClaudeAgentSdkSessionStore", () => {
   });
 
   test("drains live context refreshes before finishing runtime shutdown", async () => {
-    const contextRead = Promise.withResolvers<{ maxTokens: number; totalTokens: number }>();
+    const contextRead =
+      Promise.withResolvers<ReturnType<typeof createClaudeContextUsageResponse>>();
     const queryClosed = Promise.withResolvers<void>();
     const events: Array<{ type: string }> = [];
     const backgroundFailures: unknown[] = [];
@@ -361,10 +367,10 @@ describe("createClaudeAgentSdkSessionStore", () => {
       now: () => "2026-06-25T20:00:00.000Z",
     });
     const session = createSession({
-      query: {
+      query: createClaudeQueryFixture({
         close: mock(() => queryClosed.resolve()),
         getContextUsage: () => contextRead.promise,
-      } as unknown as ClaudeSession["query"],
+      }),
     });
     store.set(session);
     scheduleClaudeLiveContextUsageRefresh({
@@ -381,7 +387,7 @@ describe("createClaudeAgentSdkSessionStore", () => {
     await queryClosed.promise;
     expect(events).toEqual([]);
 
-    contextRead.resolve({ maxTokens: 200_000, totalTokens: 95_000 });
+    contextRead.resolve(createClaudeContextUsageResponse(95_000, 200_000));
     await stopPromise;
 
     expect(events.map((event) => event.type)).toEqual([
@@ -392,7 +398,8 @@ describe("createClaudeAgentSdkSessionStore", () => {
   });
 
   test("drains live context refreshes before finishing an individual stop", async () => {
-    const contextRead = Promise.withResolvers<{ maxTokens: number; totalTokens: number }>();
+    const contextRead =
+      Promise.withResolvers<ReturnType<typeof createClaudeContextUsageResponse>>();
     const queryClosed = Promise.withResolvers<void>();
     const events: Array<{ type: string }> = [];
     const store = createClaudeAgentSdkSessionStore({
@@ -400,10 +407,10 @@ describe("createClaudeAgentSdkSessionStore", () => {
       now: () => "2026-06-25T20:00:00.000Z",
     });
     const session = createSession({
-      query: {
+      query: createClaudeQueryFixture({
         close: mock(() => queryClosed.resolve()),
         getContextUsage: () => contextRead.promise,
-      } as unknown as ClaudeSession["query"],
+      }),
     });
     store.set(session);
     scheduleClaudeLiveContextUsageRefresh({
@@ -424,7 +431,7 @@ describe("createClaudeAgentSdkSessionStore", () => {
     await queryClosed.promise;
     expect(events).toEqual([]);
 
-    contextRead.resolve({ maxTokens: 200_000, totalTokens: 95_000 });
+    contextRead.resolve(createClaudeContextUsageResponse(95_000, 200_000));
     await stopPromise;
 
     expect(events.map((event) => event.type)).toEqual([
@@ -447,7 +454,8 @@ describe("createClaudeAgentSdkSessionStore", () => {
         {
           type: "user",
           message: { role: "user", content: "queued" },
-        } as never,
+          parent_tool_use_id: null,
+        } satisfies SDKUserMessage,
       ],
     });
     session.abortController.signal.addEventListener(

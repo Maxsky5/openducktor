@@ -4,10 +4,10 @@ import { HostOperationError, HostResourceError } from "../../effect/host-errors"
 
 type WorkspaceRuntimeKind = "codex" | "opencode";
 
-const runtimeLabels: Record<WorkspaceRuntimeKind, string> = {
+const runtimeLabels = {
   codex: "Codex",
   opencode: "OpenCode",
-};
+} satisfies Record<WorkspaceRuntimeKind, string>;
 
 export const resolveWorkspaceRuntimeMcpBridgeConnection = (
   bridge: McpHostBridgeServer | undefined,

@@ -445,11 +445,11 @@ describe("useAgentStudioQuerySync", () => {
         throw new Error("Expected persisted context payload after unmount cleanup");
       }
 
-      const parsed = JSON.parse(stored) as {
+      const parsed: {
         taskId?: string;
         sessionExternalId?: string;
         role?: string;
-      };
+      } = JSON.parse(stored);
 
       expect(parsed.taskId).toBe("task-from-cleanup");
       expect(parsed.sessionExternalId).toBe("session-from-cleanup");

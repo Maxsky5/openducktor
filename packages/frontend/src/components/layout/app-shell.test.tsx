@@ -541,7 +541,7 @@ describe("AppShell", () => {
 
     expect(await screen.findByRole("button", { name: "Opening repository..." })).toBeTruthy();
     expect(
-      (screen.getByRole("button", { name: "Back to coding agents" }) as HTMLButtonElement).disabled,
+      screen.getByRole<HTMLButtonElement>("button", { name: "Back to coding agents" }).disabled,
     ).toBe(true);
     expect(screen.getByTestId("current-route").textContent).toBe("/onboarding");
     expect(screen.queryByText("Kanban")).toBeNull();
@@ -603,14 +603,17 @@ describe("AppShell", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Open repository" }));
 
     const backButton = screen.getByRole("button", { name: "Back to coding agents" });
-    expect((backButton as HTMLButtonElement).disabled).toBe(true);
+    if (!(backButton instanceof HTMLButtonElement)) {
+      throw new TypeError("Expected the back action to be a button.");
+    }
+    expect(backButton.disabled).toBe(true);
 
     workspaceAddResult.reject(new Error("Repository open failed"));
 
     await screen.findByText("Repository open failed");
     expect(screen.getByTestId("current-route").textContent).toBe("/onboarding");
-    expect((screen.getByLabelText("Repository path") as HTMLInputElement).value).toBe("/repo");
-    expect((backButton as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByLabelText<HTMLInputElement>("Repository path").value).toBe("/repo");
+    expect(backButton.disabled).toBe(false);
   });
 
   test("moves from welcome to runtime setup without mounting the workspace shell", () => {

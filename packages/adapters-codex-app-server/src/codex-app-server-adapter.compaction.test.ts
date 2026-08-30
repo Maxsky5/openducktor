@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
+import type { AgentEvent } from "@openducktor/core";
 import {
   codexSessionRuntimeRef,
+  codexThreadFixture,
+  codexThreadStartResultFixture,
+  codexTurnFixture,
   codexUserMessageInput,
   createAdapterWithTransport,
   createRuntimeStreamSubscription,
@@ -18,18 +22,23 @@ const modelListResponse = () => ({
   data: [
     {
       id: "gpt-5",
+      additionalSpeedTiers: [],
+      availabilityNux: null,
       model: "gpt-5",
       displayName: "GPT-5",
       description: "GPT-5 model",
       hidden: false,
       supportedReasoningEfforts: [{ reasoningEffort: "medium", description: "Balanced reasoning" }],
-      defaultReasoningEffort: {
-        reasoningEffort: "medium",
-        description: "Balanced reasoning",
-      },
+      defaultReasoningEffort: "medium",
+      defaultServiceTier: null,
       inputModalities: ["text"],
+      modelSpecialty: null,
+      multiAgentVersion: null,
+      serviceTiers: [],
       supportsPersonality: true,
       isDefault: true,
+      upgrade: null,
+      upgradeInfo: null,
     },
   ],
   nextCursor: null,
@@ -42,18 +51,22 @@ describe("CodexAppServerAdapter manual compaction", () => {
       async request(request) {
         calls.push(request);
         if (request.method === "thread/resume") {
-          throw new Error("Unexpected method 'thread/resume'.");
+          return codexThreadStartResultFixture("thread-1", "thread/resume");
         }
         if (request.method === "thread/compact/start") {
           return {};
         }
         if (request.method === "turn/start") {
-          return { turn: { id: "turn-follow-up" } };
+          return {
+            turn: codexTurnFixture({ id: "turn-follow-up", items: [], status: "inProgress" }),
+          };
         }
         if (request.method === "model/list") {
           return {
             data: [
               {
+                additionalSpeedTiers: [],
+                availabilityNux: null,
                 id: "gpt-5",
                 model: "gpt-5",
                 displayName: "GPT-5",
@@ -62,13 +75,16 @@ describe("CodexAppServerAdapter manual compaction", () => {
                 supportedReasoningEfforts: [
                   { reasoningEffort: "medium", description: "Balanced reasoning" },
                 ],
-                defaultReasoningEffort: {
-                  reasoningEffort: "medium",
-                  description: "Balanced reasoning",
-                },
+                defaultReasoningEffort: "medium",
+                defaultServiceTier: null,
                 inputModalities: ["text"],
+                modelSpecialty: null,
+                multiAgentVersion: null,
+                serviceTiers: [],
                 supportsPersonality: true,
                 isDefault: true,
+                upgrade: null,
+                upgradeInfo: null,
               },
             ],
             nextCursor: null,
@@ -128,7 +144,7 @@ describe("CodexAppServerAdapter manual compaction", () => {
       async request(request) {
         calls.push(request);
         if (request.method === "thread/resume") {
-          throw new Error("Unexpected method 'thread/resume'.");
+          return codexThreadStartResultFixture("thread-1", "thread/resume");
         }
         if (request.method === "thread/compact/start") {
           return {};
@@ -160,7 +176,7 @@ describe("CodexAppServerAdapter manual compaction", () => {
       async request(request) {
         calls.push(request);
         if (request.method === "thread/resume") {
-          throw new Error("Unexpected method 'thread/resume'.");
+          return codexThreadStartResultFixture("thread-1", "thread/resume");
         }
         if (request.method === "thread/compact/start") {
           throw new Error("thread is busy");
@@ -186,6 +202,9 @@ describe("CodexAppServerAdapter manual compaction", () => {
         calls.push(request);
         if (request.method === "thread/compact/start") {
           return {};
+        }
+        if (request.method === "thread/resume") {
+          return codexThreadStartResultFixture("thread-1", "thread/resume");
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -215,7 +234,7 @@ describe("CodexAppServerAdapter manual compaction", () => {
         async request(request) {
           calls.push(request);
           if (request.method === "thread/resume") {
-            throw new Error("Unexpected method 'thread/resume'.");
+            return codexThreadStartResultFixture("thread-1", "thread/resume");
           }
           if (request.method === "thread/compact/start") {
             return {};
@@ -225,7 +244,7 @@ describe("CodexAppServerAdapter manual compaction", () => {
       },
       { subscribeEvents: runtimeStream.subscribeEvents },
     );
-    const events: Array<{ type: string; [key: string]: unknown }> = [];
+    const events: AgentEvent[] = [];
     await adapter.sendUserMessage(
       codexUserMessageInput({ externalSessionId: "thread-1", parts: [compactPart()] }),
     );
@@ -254,11 +273,12 @@ describe("CodexAppServerAdapter manual compaction", () => {
       method: "turn/completed",
       params: {
         threadId: "thread-1",
-        turn: {
+        turn: codexTurnFixture({
           id: "compact-turn-1",
           status: "completed",
           completedAt: 1_778_112_003,
-        },
+          items: [],
+        }),
       },
     });
     runtimeStream.emitNotification({
@@ -286,22 +306,23 @@ describe("CodexAppServerAdapter manual compaction", () => {
 
   test("does not synthesize a user message before synchronous compaction lifecycle events", async () => {
     const runtimeStream = createRuntimeStreamSubscription();
-    const events: Array<{ type: string; [key: string]: unknown }> = [];
+    const events: AgentEvent[] = [];
     const adapter = createAdapterWithTransport(
       {
         async request(request) {
+          if (request.method === "thread/resume") {
+            return codexThreadStartResultFixture("thread-1", "thread/resume");
+          }
           if (request.method === "thread/loaded/list") {
             return { data: ["thread-1"], nextCursor: null };
           }
           if (request.method === "thread/list") {
             return {
               data: [
-                {
+                codexThreadFixture({
                   id: "thread-1",
-                  cwd: "/repo",
-                  createdAt: 1_778_112_000,
                   status: { type: "active", activeFlags: [] },
-                },
+                }),
               ],
               nextCursor: null,
               backwardsCursor: null,

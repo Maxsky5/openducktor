@@ -26,7 +26,7 @@ const PRELOAD_THEMES = ["pierre-light", "pierre-dark"] as const;
  */
 export function DiffWorkerProvider({ children }: { children: ReactNode }): ReactElement {
   const poolSize = useMemo(() => {
-    if (typeof navigator === "undefined") {
+    if (globalThis.navigator === undefined) {
       return 2;
     }
 

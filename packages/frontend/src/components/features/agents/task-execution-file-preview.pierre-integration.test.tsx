@@ -8,6 +8,21 @@ import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-util
 
 enableReactActEnvironment();
 
+const createTextMetrics = (width: number): TextMetrics => ({
+  width,
+  actualBoundingBoxAscent: 0,
+  actualBoundingBoxDescent: 0,
+  actualBoundingBoxLeft: 0,
+  actualBoundingBoxRight: width,
+  fontBoundingBoxAscent: 0,
+  fontBoundingBoxDescent: 0,
+  emHeightAscent: 0,
+  emHeightDescent: 0,
+  hangingBaseline: 0,
+  alphabeticBaseline: 0,
+  ideographicBaseline: 0,
+});
+
 type PierreSaveContinuityHarnessProps = {
   onAttach: (editor: Editor<undefined>) => void;
 };
@@ -61,10 +76,14 @@ function PierreSaveContinuityHarness({ onAttach }: PierreSaveContinuityHarnessPr
 describe("Pierre CodeView editor continuity", () => {
   test("keeps the attached editor document, selection, and undo history across Save state", async () => {
     const originalGetContext = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = (() => ({
+    const textMeasurementContext: Pick<CanvasRenderingContext2D, "font" | "measureText"> = {
       font: "",
-      measureText: (text: string) => ({ width: text.length * 8 }),
-    })) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+      measureText: (text) => createTextMetrics(text.length * 8),
+    };
+    Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+      configurable: true,
+      value: () => textMeasurementContext,
+    });
     const attachedEditors: Editor<undefined>[] = [];
     let view: ReturnType<typeof render> | undefined;
     try {
@@ -106,7 +125,10 @@ describe("Pierre CodeView editor continuity", () => {
       expect(editor.getText()).toBe("one");
     } finally {
       view?.unmount();
-      HTMLCanvasElement.prototype.getContext = originalGetContext;
+      Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+        configurable: true,
+        value: originalGetContext,
+      });
     }
   });
 });

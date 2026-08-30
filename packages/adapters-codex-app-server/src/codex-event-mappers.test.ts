@@ -158,35 +158,13 @@ describe("Codex todo event mapper", () => {
         status: "completed",
         contentItems: [
           {
-            type: "text",
+            type: "inputText",
             text: JSON.stringify({
               ok: false,
               error: { message: "Plan update failed" },
             }),
           },
         ],
-      },
-      { source: "thread_read", threadId: "thread-1" },
-    );
-
-    expect(result.handled).toBe(false);
-    expect(result.events).toEqual([]);
-  });
-
-  test("does not map thread-read todo updates with result errors when content items exist", () => {
-    const result = todoMapper.fromThreadItemObject(
-      {
-        type: "dynamicToolCall",
-        id: "call-1",
-        namespace: "functions",
-        tool: "update_plan",
-        arguments: TODO_PAYLOAD,
-        status: "completed",
-        contentItems: [{ type: "text", text: "Plan update output" }],
-        result: {
-          ok: false,
-          error: { message: "Plan update failed" },
-        },
       },
       { source: "thread_read", threadId: "thread-1" },
     );
@@ -262,46 +240,6 @@ describe("Codex subagent event mapper", () => {
       description: "Review the adapter",
     });
     expect(completedPart?.executionMode).toBeUndefined();
-  });
-
-  test("maps documented collabToolCall spawn fields to a linked subagent row", () => {
-    const pipeline = createCodexEventMapperPipeline();
-    const ctx = {
-      source: "live" as const,
-      threadId: "parent-thread",
-      turnId: "turn-1",
-      timestamp: "2026-05-09T00:00:00.000Z",
-    };
-
-    const started = projectCodexCanonicalEvents(
-      pipeline.runLive(
-        {
-          kind: "item_started",
-          item: {
-            type: "collabToolCall",
-            id: "spawn-1",
-            tool: "spawnAgent",
-            status: "inProgress",
-            senderThreadId: "parent-thread",
-            newThreadId: "child-thread",
-            receiverThreadId: "child-thread",
-            prompt: "Review the adapter",
-            agentStatus: "running",
-          },
-        },
-        ctx,
-      ),
-    );
-
-    const [startedPart] = projectedSubagents(started);
-    expect(startedPart).toMatchObject({
-      kind: "subagent",
-      correlationKey: "codex-subagent:parent-thread:spawn-1",
-      status: "running",
-      externalSessionId: "child-thread",
-      prompt: "Review the adapter",
-      description: "Review the adapter",
-    });
   });
 
   test("keeps subagent description short and tied to the creation prompt", () => {
@@ -474,44 +412,6 @@ describe("Codex subagent event mapper", () => {
             status: "inProgress",
             senderThreadId: "parent-thread",
             receiverThreadIds: [],
-            prompt: null,
-            agentsStates: {},
-          },
-        },
-        {
-          source: "live",
-          threadId: "parent-thread",
-          timestamp: "2026-05-09T00:00:00.000Z",
-        },
-      ),
-    );
-
-    expect(projectedSubagents(events)).toEqual([]);
-    expect(projectedTool(events)).toEqual(
-      expect.objectContaining({
-        type: "assistant_part",
-        part: expect.objectContaining({
-          kind: "tool",
-          tool: "collab.wait",
-          status: "running",
-        }),
-      }),
-    );
-  });
-
-  test("leaves null receiver wait collab items to the generic collab mapper", () => {
-    const pipeline = createCodexEventMapperPipeline();
-    const events = projectCodexCanonicalEvents(
-      pipeline.runLive(
-        {
-          kind: "item_started",
-          item: {
-            type: "collabAgentToolCall",
-            id: "wait-any",
-            tool: "wait",
-            status: "inProgress",
-            senderThreadId: "parent-thread",
-            receiverThreadIds: null,
             prompt: null,
             agentsStates: {},
           },
@@ -860,35 +760,6 @@ describe("Codex subagent event mapper", () => {
         tool: "collab.spawnAgent",
       }),
     ]);
-  });
-
-  test("fails fast on unknown Codex subagent statuses", () => {
-    const pipeline = createCodexEventMapperPipeline();
-
-    expect(() =>
-      pipeline.runLive(
-        {
-          kind: "item_completed",
-          item: {
-            type: "collabAgentToolCall",
-            id: "wait-bad",
-            tool: "wait",
-            status: "completed",
-            senderThreadId: "parent-thread",
-            receiverThreadIds: ["child-thread"],
-            prompt: null,
-            agentsStates: {
-              "child-thread": { status: "mystery", message: "Unknown" },
-            },
-          },
-        },
-        {
-          source: "live",
-          threadId: "parent-thread",
-          timestamp: "2026-05-09T00:00:00.000Z",
-        },
-      ),
-    ).toThrow("unknown collab agent status");
   });
 
   test("does not mark linked children completed from aggregate-only sendInput updates", () => {
@@ -1279,7 +1150,7 @@ describe("Codex compaction event mapper", () => {
         index: 3,
         timestamp: "2026-05-18T21:00:00.000Z",
         item: {
-          type: "context_compaction",
+          type: "contextCompaction",
           id: "compact-1",
         },
       },

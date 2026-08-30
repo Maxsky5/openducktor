@@ -39,7 +39,7 @@ export type AutopilotEventDefinition = {
   availableActionIds: AutopilotActionId[];
 };
 
-export const AUTOPILOT_ACTION_DEFINITIONS: Record<AutopilotActionId, AutopilotActionDefinition> = {
+export const AUTOPILOT_ACTION_DEFINITIONS = {
   startPlanner: {
     id: "startPlanner",
     label: "Start Planner",
@@ -81,7 +81,7 @@ export const AUTOPILOT_ACTION_DEFINITIONS: Record<AutopilotActionId, AutopilotAc
     launchActionId: "build_pull_request_generation",
     startPolicy: { kind: "latestRoleSession", missingSourceOutcome: "skip", startMode: "fork" },
   },
-};
+} satisfies Record<AutopilotActionId, AutopilotActionDefinition>;
 
 export const AUTOPILOT_EVENT_DEFINITIONS: AutopilotEventDefinition[] = [
   {

@@ -102,7 +102,7 @@ export const buildClaudeAgentSdkOptions = async ({
     "systemPrompt" in input && input.systemPrompt ? input.systemPrompt : null,
     buildClaudeOpenDucktorRuntimePrompt(input.workingDirectory),
   ]
-    .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    .filter((entry): entry is string => entry !== null && entry.trim().length > 0)
     .join("\n\n");
   const postToolUseHook = createClaudePostToolUseHook({
     session,
@@ -139,7 +139,6 @@ export const buildClaudeAgentSdkOptions = async ({
     },
     mcpServers,
     permissionMode,
-    ...(permissionMode === "bypassPermissions" ? { allowDangerouslySkipPermissions: true } : {}),
     systemPrompt: {
       type: "preset",
       preset: "claude_code",
@@ -158,11 +157,28 @@ export const buildClaudeAgentSdkOptions = async ({
     },
     agentProgressSummaries: true,
   };
+  if (permissionMode === "bypassPermissions") {
+    options.allowDangerouslySkipPermissions = true;
+  }
   if (model?.modelId) {
     options.model = model.modelId;
   }
   if (model?.variant) {
-    options.effort = model.variant as NonNullable<Options["effort"]>;
+    switch (model.variant) {
+      case "low":
+      case "medium":
+      case "high":
+      case "xhigh":
+      case "max":
+        options.effort = model.variant;
+        break;
+      default:
+        throw new HostValidationError({
+          field: "model.variant",
+          message: `Claude Agent SDK does not support effort '${model.variant}'.`,
+          details: { model },
+        });
+    }
   }
   if (model?.profileId) {
     options.agent = model.profileId;
@@ -195,10 +211,16 @@ const buildClaudeMcpServers = async ({
       message: "OpenDucktor MCP command cannot be empty.",
     });
   }
-  const bridgeEnvironment = {
-    ...buildOpenDucktorMcpBridgeEnvironment(resolvedDependencies.mcpBridgeConnection, "Claude"),
-    ...(workflowRole ? { ODT_ALLOWED_TOOLS: AGENT_ROLE_TOOL_POLICY[workflowRole].join(",") } : {}),
-  };
+  const baseBridgeEnvironment = buildOpenDucktorMcpBridgeEnvironment(
+    resolvedDependencies.mcpBridgeConnection,
+    "Claude",
+  );
+  const bridgeEnvironment = workflowRole
+    ? {
+        ...baseBridgeEnvironment,
+        ODT_ALLOWED_TOOLS: AGENT_ROLE_TOOL_POLICY[workflowRole].join(","),
+      }
+    : baseBridgeEnvironment;
   const { ODT_HOST_TOKEN: hostToken, ...publicBridgeEnvironment } = bridgeEnvironment;
   const hostTokenFile = await createSessionScopedClaudeMcpTokenFile({
     hostToken,

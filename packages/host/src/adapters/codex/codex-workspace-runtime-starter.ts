@@ -5,6 +5,7 @@ import { Cause, Effect, Exit, Scope } from "effect";
 import { resolveSavedRuntimeExecutableConfig } from "../../application/runtimes/saved-runtime-executable";
 import {
   HostOperationError,
+  type HostOperationErrorAggregate,
   HostResourceError,
   HostValidationError,
   toHostOperationError,
@@ -172,12 +173,14 @@ export const createCodexWorkspaceRuntimeStarter = ({
       scope = runtimeScope;
       let liveAdapterRegistered = false;
       let liveAdapterReleaseRequested = false;
-      let liveAdapterReleasePromise: Promise<Exit.Exit<void, HostOperationError>> | null = null;
-      let preparedLiveAdapterDiscardPromise: Promise<Exit.Exit<void, HostOperationError>> | null =
+      let liveAdapterReleasePromise: Promise<Exit.Exit<void, HostOperationErrorAggregate>> | null =
         null;
-      const startLiveAdapterRelease = (): Promise<Exit.Exit<void, HostOperationError>> => {
+      let preparedLiveAdapterDiscardPromise: Promise<
+        Exit.Exit<void, HostOperationErrorAggregate>
+      > | null = null;
+      const startLiveAdapterRelease = (): Promise<Exit.Exit<void, HostOperationErrorAggregate>> => {
         if (!liveAdapterReleasePromise) {
-          liveAdapterReleasePromise = Effect.runPromiseExit(
+          const releasePromise = Effect.runPromiseExit(
             liveSessionLifecycle.releaseRuntime(nextRuntimeId).pipe(
               Effect.asVoid,
               Effect.mapError((cause) =>
@@ -187,6 +190,8 @@ export const createCodexWorkspaceRuntimeStarter = ({
               ),
             ),
           );
+          liveAdapterReleasePromise = releasePromise;
+          return releasePromise;
         }
         return liveAdapterReleasePromise;
       };
@@ -196,9 +201,11 @@ export const createCodexWorkspaceRuntimeStarter = ({
           void startLiveAdapterRelease();
         }
       };
-      const startPreparedLiveAdapterDiscard = (): Promise<Exit.Exit<void, HostOperationError>> => {
+      const startPreparedLiveAdapterDiscard = (): Promise<
+        Exit.Exit<void, HostOperationErrorAggregate>
+      > => {
         if (!preparedLiveAdapterDiscardPromise) {
-          preparedLiveAdapterDiscardPromise = Effect.runPromiseExit(
+          const discardPromise = Effect.runPromiseExit(
             preparedLiveSession.discard().pipe(
               Effect.mapError((cause) =>
                 toHostOperationError(cause, "codexWorkspaceRuntime.discardLiveSessionAdapter", {
@@ -207,6 +214,8 @@ export const createCodexWorkspaceRuntimeStarter = ({
               ),
             ),
           );
+          preparedLiveAdapterDiscardPromise = discardPromise;
+          return discardPromise;
         }
         return preparedLiveAdapterDiscardPromise;
       };
@@ -227,7 +236,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
           ),
         ),
       );
-      const failAfterLiveAdapterCleanup = (failure: HostOperationError) =>
+      const failAfterLiveAdapterCleanup = (failure: HostOperationErrorAggregate) =>
         Effect.gen(function* () {
           const cleanup = yield* Effect.either(awaitLiveAdapterCleanup);
           if (cleanup._tag === "Left") {
@@ -244,7 +253,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
         });
       yield* Scope.addFinalizer(runtimeScope, awaitLiveAdapterCleanup.pipe(Effect.ignore));
       const child = yield* Effect.try({
-        try: () =>
+        try: (): CodexChildProcess =>
           spawn(command.command, command.args, {
             cwd: input.workingDirectory,
             detached: shouldStartDetachedProcessGroup(platform),
@@ -252,7 +261,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
             stdio: ["pipe", "pipe", "pipe"],
             windowsHide: command.windowsHide,
             windowsVerbatimArguments: command.windowsVerbatimArguments,
-          }) as CodexChildProcess,
+          }),
         catch: (cause) =>
           toHostOperationError(cause, "codexWorkspaceRuntime.spawn", {
             binary,

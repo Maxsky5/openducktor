@@ -134,10 +134,11 @@ export const writeWorkspaceListToQuery = (
     },
     { revert: false },
   );
-  queryClient.setQueryData<WorkspaceRecord[]>(
-    workspaceQueryKeys.list(),
-    typeof recordsOrUpdater === "function" ? recordsOrUpdater : recordsOrUpdater,
-  );
+  if (Array.isArray(recordsOrUpdater)) {
+    queryClient.setQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list(), recordsOrUpdater);
+    return;
+  }
+  queryClient.setQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list(), recordsOrUpdater);
 };
 
 export const markWorkspaceCachesChanged = async (queryClient: QueryClient): Promise<void> => {

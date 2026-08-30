@@ -74,7 +74,10 @@ export function PromptOverridesSection({
 
       <div className="grid gap-3">
         {promptIds.map((templateId) => {
-          const builtin = BUILTIN_PROMPTS_BY_ID[templateId];
+          const builtin = BUILTIN_PROMPTS_BY_ID.get(templateId);
+          if (!builtin) {
+            throw new Error(`Missing built-in prompt definition for '${templateId}'.`);
+          }
           const override = overrides[templateId];
           const inheritedPreview = resolveInheritedPreview(templateId, builtin.template, override);
           const canClearOverride = canClearPromptOverride(override);

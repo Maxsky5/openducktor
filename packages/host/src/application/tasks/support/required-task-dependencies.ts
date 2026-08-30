@@ -1,5 +1,9 @@
 import { Effect } from "effect";
-import { errorMessage, HostDependencyError } from "../../../effect/host-errors";
+import {
+  errorMessage,
+  HostDependencyError,
+  type HostDependencyErrorAggregate,
+} from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../../ports/runtime-registry-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
@@ -23,7 +27,9 @@ const missingTaskDependency = (message: string): HostDependencyError =>
     dependency: "task dependency",
     message,
   });
-export const requireDependencies = <A>(resolve: () => A): Effect.Effect<A, HostDependencyError> =>
+export const requireDependencies = <A>(
+  resolve: () => A,
+): Effect.Effect<A, HostDependencyErrorAggregate> =>
   Effect.try({
     try: resolve,
     catch: (cause) =>
@@ -35,12 +41,10 @@ export const requireDependencies = <A>(resolve: () => A): Effect.Effect<A, HostD
             cause,
           }),
   });
-type GithubCommandDependencyInput = {
+type GithubRepositoryDependencyInput = {
+  gitPort?: GitPort;
   systemCommands?: SystemCommandPort;
   toolDiscovery?: ToolDiscoveryPort;
-};
-type GithubRepositoryDependencyInput = GithubCommandDependencyInput & {
-  gitPort?: GitPort;
 };
 export type TaskGithubDependencies = {
   command: GithubCommandDependencies | undefined;
@@ -107,11 +111,7 @@ export const requireAgentSessionDependencies = (
   taskStore: TaskStorePort,
   settingsConfig: SettingsConfigPort | undefined,
   workspaceSettingsService: WorkspaceSettingsService | undefined,
-): {
-  upsertAgentSession: TaskStorePort["upsertAgentSession"];
-  settingsConfig: SettingsConfigPort;
-  workspaceSettingsService: WorkspaceSettingsService;
-} => {
+) => {
   if (!settingsConfig) {
     throw missingTaskDependency("Settings config port is required for agent_session_upsert.");
   }
@@ -122,17 +122,17 @@ export const requireAgentSessionDependencies = (
     upsertAgentSession: taskStore.upsertAgentSession.bind(taskStore),
     settingsConfig,
     workspaceSettingsService,
+  } satisfies {
+    upsertAgentSession: TaskStorePort["upsertAgentSession"];
+    settingsConfig: SettingsConfigPort;
+    workspaceSettingsService: WorkspaceSettingsService;
   };
 };
 export const requireBuildCompletedDependencies = (
   settingsConfig: SettingsConfigPort | undefined,
   systemCommands: SystemCommandPort | undefined,
   workspaceSettingsService: WorkspaceSettingsService | undefined,
-): {
-  settingsConfig: SettingsConfigPort;
-  systemCommands: SystemCommandPort;
-  workspaceSettingsService: WorkspaceSettingsService;
-} => {
+) => {
   if (!settingsConfig) {
     throw missingTaskDependency("Settings config port is required for build_completed.");
   }
@@ -142,7 +142,11 @@ export const requireBuildCompletedDependencies = (
   if (!workspaceSettingsService) {
     throw missingTaskDependency("Workspace settings service is required for build_completed.");
   }
-  return { settingsConfig, systemCommands, workspaceSettingsService };
+  return { settingsConfig, systemCommands, workspaceSettingsService } satisfies {
+    settingsConfig: SettingsConfigPort;
+    systemCommands: SystemCommandPort;
+    workspaceSettingsService: WorkspaceSettingsService;
+  };
 };
 export const requireBuildStartDependencies = (
   gitPort: GitPort | undefined,
@@ -152,21 +156,7 @@ export const requireBuildStartDependencies = (
   systemCommands: SystemCommandPort | undefined,
   worktreeFiles: WorktreeFilePort | undefined,
   workspaceSettingsService: WorkspaceSettingsService | undefined,
-): {
-  gitPort: GitPort & {
-    configureBranchUpstream: GitPort["configureBranchUpstream"];
-    deleteReference: GitPort["deleteReference"];
-    referenceExists: GitPort["referenceExists"];
-  };
-  runtimeDefinitionsService: RuntimeDefinitionsService;
-  runtimeRegistry: RuntimeRegistryPort;
-  settingsConfig: SettingsConfigPort;
-  systemCommands: SystemCommandPort;
-  worktreeFiles: WorktreeFilePort & {
-    ensureDirectory: WorktreeFilePort["ensureDirectory"];
-  };
-  workspaceSettingsService: WorkspaceSettingsService;
-} => {
+) => {
   if (!gitPort) {
     throw missingTaskDependency("Git port is required for build_start.");
   }
@@ -189,19 +179,21 @@ export const requireBuildStartDependencies = (
     throw missingTaskDependency("Workspace settings service is required for build_start.");
   }
   return {
-    gitPort: gitPort as GitPort & {
-      configureBranchUpstream: GitPort["configureBranchUpstream"];
-      deleteReference: GitPort["deleteReference"];
-      referenceExists: GitPort["referenceExists"];
-    },
+    gitPort,
     runtimeDefinitionsService,
     runtimeRegistry,
     settingsConfig,
     systemCommands,
-    worktreeFiles: worktreeFiles as WorktreeFilePort & {
-      ensureDirectory: WorktreeFilePort["ensureDirectory"];
-    },
+    worktreeFiles,
     workspaceSettingsService,
+  } satisfies {
+    gitPort: GitPort;
+    runtimeDefinitionsService: RuntimeDefinitionsService;
+    runtimeRegistry: RuntimeRegistryPort;
+    settingsConfig: SettingsConfigPort;
+    systemCommands: SystemCommandPort;
+    worktreeFiles: WorktreeFilePort;
+    workspaceSettingsService: WorkspaceSettingsService;
   };
 };
 type MergedTaskCleanupDependencies = {
@@ -241,14 +233,17 @@ export const requireMergedTaskCleanupDependencies = (
   if (!terminalService) {
     throw missingTaskDependency(`Terminal service is required for ${operation}.`);
   }
-  return {
+  const dependencies: MergedTaskCleanupDependencies = {
     devServerService,
     gitPort,
     settingsConfig,
     taskWorktreeService,
     terminalService,
-    ...(worktreeFiles ? { worktreeFiles } : {}),
   };
+  if (worktreeFiles) {
+    dependencies.worktreeFiles = worktreeFiles;
+  }
+  return dependencies;
 };
 export const requireDirectMergeDependencies = ({
   devServerService,
@@ -338,15 +333,20 @@ export const requireLinkMergedPullRequestDependencies = (
       "Workspace settings service is required for task_pull_request_link_merged.",
     );
   }
-  return {
+  const dependencies: MergedTaskCleanupDependencies & {
+    workspaceSettingsService: WorkspaceSettingsService;
+  } = {
     devServerService,
     gitPort,
     settingsConfig,
     taskWorktreeService,
     terminalService,
-    ...(worktreeFiles ? { worktreeFiles } : {}),
     workspaceSettingsService,
   };
+  if (worktreeFiles) {
+    dependencies.worktreeFiles = worktreeFiles;
+  }
+  return dependencies;
 };
 export const requireApprovalContextDependencies = ({
   githubDependencies,

@@ -1,8 +1,7 @@
-import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentSessionSummary } from "@openducktor/core";
 import { formatAgentSessionTitle } from "@openducktor/core";
 import {
-  assertGlobalEventSupport,
   isRelevantSubscriberEvent,
   logStreamEvent,
   type OpencodeGlobalEventFailureScope,
@@ -16,6 +15,7 @@ import {
   readSessionLifecycleEvent,
   type SubagentSessionLink,
 } from "./event-stream/shared";
+import type { ParsedOpencodeEvent as Event } from "./opencode-global-event-ingress";
 import type {
   ClientFactory,
   OpencodeEventLogger,
@@ -79,22 +79,14 @@ const processRuntimeSessionLineage = (
 
   const {
     type: eventType,
-    properties,
-    info,
     externalSessionId: childExternalSessionId,
     parentExternalSessionId,
   } = lifecycleEvent;
-  if (!childExternalSessionId || !info) {
-    throw new Error(
-      `OpenCode ${eventType} event is missing its session id or info payload; update the runtime or adapter to a supported event contract.`,
-    );
-  }
 
   if (!parentExternalSessionId) {
-    const hasNonAuthoritativeParent = Boolean(readEventParentExternalSessionId(properties));
     const isConfirmedChild =
       eventTransport.parentExternalSessionIdByChildExternalSessionId.has(childExternalSessionId);
-    if (!hasNonAuthoritativeParent && !isConfirmedChild) {
+    if (!isConfirmedChild) {
       return;
     }
     throw new Error(
@@ -118,8 +110,8 @@ const abortRuntimeEventTransport = (eventTransport: RuntimeEventTransportRecord)
   eventTransport.controller.abort();
 };
 
-const toRuntimeEventFailure = (error: unknown): Error =>
-  error instanceof Error ? error : new Error("OpenCode runtime event projection failed.");
+const toRuntimeEventFailure = (cause: unknown): Error =>
+  cause instanceof Error ? cause : new Error("OpenCode runtime event projection failed.");
 
 const reportRuntimeEventFailure = (input: {
   eventTransport: RuntimeEventTransportRecord;
@@ -189,10 +181,9 @@ const ensureRuntimeEventTransport = (input: {
   const streamClient = input.createClient({
     runtimeEndpoint: input.runtimeEndpoint,
   });
-  assertGlobalEventSupport(streamClient);
   const controller = new AbortController();
   let resolveReady: () => void = () => undefined;
-  let rejectReady: (error: unknown) => void = () => undefined;
+  let rejectReady: (cause: unknown) => void = () => undefined;
   const ready = new Promise<void>((resolve, reject) => {
     resolveReady = resolve;
     rejectReady = reject;
@@ -203,14 +194,17 @@ const ensureRuntimeEventTransport = (input: {
     runtimeEndpoint: input.runtimeEndpoint,
     controller,
     dispatch: async (event) => {
-      const properties = "properties" in event ? event.properties : undefined;
       const externalSessionId = readEventSessionId(event);
-      const parentExternalSessionId = readEventParentExternalSessionId(properties);
+      const parentExternalSessionId = readEventParentExternalSessionId(event);
       const scope: OpencodeGlobalEventFailureScope = {
         directory: readEventDirectory(event) ?? "",
-        ...(externalSessionId ? { externalSessionId } : {}),
-        ...(parentExternalSessionId ? { parentExternalSessionId } : {}),
       };
+      if (externalSessionId) {
+        scope.externalSessionId = externalSessionId;
+      }
+      if (parentExternalSessionId) {
+        scope.parentExternalSessionId = parentExternalSessionId;
+      }
       try {
         processRuntimeSessionLineage(streamRecord, event);
       } catch (error) {
@@ -232,12 +226,15 @@ const ensureRuntimeEventTransport = (input: {
                 childExternalSessionId,
               ),
           });
-          logStreamEvent({
+          const logInput: Parameters<typeof logStreamEvent>[0] = {
             subscriber,
             event,
             relevant,
-            ...(input.logEvent ? { logEvent: input.logEvent } : {}),
-          });
+          };
+          if (input.logEvent) {
+            logInput.logEvent = input.logEvent;
+          }
+          logStreamEvent(logInput);
           if (!relevant) {
             continue;
           }
@@ -299,9 +296,9 @@ const ensureRuntimeEventTransport = (input: {
         throw new Error("OpenCode live event observation ended unexpectedly.");
       }
     })
-    .catch(async (error: unknown) => {
+    .catch(async (cause: unknown) => {
       const failure =
-        error instanceof Error ? error : new Error("OpenCode live event observation failed.");
+        cause instanceof Error ? cause : new Error("OpenCode live event observation failed.");
       rejectReady(failure);
       const message = failure.message;
       for (const subscriber of streamRecord.subscribers.values()) {
@@ -422,7 +419,7 @@ export const subscribeSessionToRuntimeEvents = (input: {
   emit: (externalSessionId: string, event: AgentEvent) => void;
   logEvent?: OpencodeEventLogger;
 }): void => {
-  const eventTransport = ensureRuntimeEventTransport({
+  const transportInput: Parameters<typeof ensureRuntimeEventTransport>[0] = {
     runtimeEventTransports: input.runtimeEventTransports,
     createClient: input.createClient,
     runtimeId: input.runtimeId,
@@ -430,8 +427,11 @@ export const subscribeSessionToRuntimeEvents = (input: {
     sessions: input.sessions,
     now: input.now,
     emit: input.emit,
-    ...(input.logEvent ? { logEvent: input.logEvent } : {}),
-  });
+  };
+  if (input.logEvent) {
+    transportInput.logEvent = input.logEvent;
+  }
+  const eventTransport = ensureRuntimeEventTransport(transportInput);
   eventTransport.subscribers.set(input.externalSessionId, {
     externalSessionId: input.externalSessionId,
     input: input.sessionInput,
@@ -474,11 +474,13 @@ export const registerSession = (
     externalSessionId: input.externalSessionId,
     runtimeKind: input.sessionInput.runtimeKind,
     workingDirectory: input.sessionInput.workingDirectory,
-    ...(title ? { title } : {}),
     sessionAssociation,
     startedAt: input.startedAt,
     status: startsActive ? "running" : "idle",
   };
+  if (title) {
+    summary.title = title;
+  }
 
   input.sessions.set(input.externalSessionId, {
     summary,
@@ -517,7 +519,7 @@ export const registerSession = (
 
   if (input.subscribeToEvents !== false) {
     try {
-      subscribeSessionToRuntimeEvents({
+      const subscriptionInput: Parameters<typeof subscribeSessionToRuntimeEvents>[0] = {
         sessions: input.sessions,
         runtimeEventTransports: input.runtimeEventTransports,
         createClient: input.createClient,
@@ -527,8 +529,11 @@ export const registerSession = (
         sessionInput: input.sessionInput,
         now: input.now,
         emit: input.emit,
-        ...(input.logEvent ? { logEvent: input.logEvent } : {}),
-      });
+      };
+      if (input.logEvent) {
+        subscriptionInput.logEvent = input.logEvent;
+      }
+      subscribeSessionToRuntimeEvents(subscriptionInput);
     } catch (error) {
       input.sessions.delete(input.externalSessionId);
       throw error;

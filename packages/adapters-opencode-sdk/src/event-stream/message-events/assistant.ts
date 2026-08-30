@@ -1,10 +1,10 @@
-import type { Part } from "@opencode-ai/sdk/v2/client";
 import {
   extractMessageTotalTokens,
   readMessageModelSelection,
   readTextFromParts,
   sanitizeAssistantMessage,
 } from "../../message-normalizers";
+import type { ParsedOpencodeMessage, ParsedOpencodePart } from "../../opencode-ingress";
 import {
   isAwaitingRuntimeTurnStart,
   isStreamTurnIdle,
@@ -27,7 +27,7 @@ type EmitAssistantPartOptions = {
   linkedSubagentExternalSessionId?: string;
 };
 
-export const shouldSuppressAssistantStreamingAfterIdle = (
+const shouldSuppressAssistantStreamingAfterIdle = (
   runtime: EventStreamRuntime,
   messageId: string,
   roleHint?: string,
@@ -44,7 +44,7 @@ export const shouldSuppressAssistantStreamingAfterIdle = (
 
 export const emitAssistantPart = (
   runtime: EventStreamRuntime,
-  part: Part,
+  part: ParsedOpencodePart,
   roleHint?: string,
   markActive = true,
   options: EmitAssistantPartOptions = {},
@@ -124,7 +124,7 @@ const flushPendingSubagentPartEmissionsForSession = (
 const readLinkedSubagentPart = (
   runtime: EventStreamRuntime,
   externalSessionId: string,
-): Part | null => {
+): ParsedOpencodePart | null => {
   const linkedPartId = runtime.session.subagentPartIdByExternalSessionId.get(externalSessionId);
   if (!linkedPartId) {
     return null;
@@ -202,7 +202,7 @@ export const maybeEmitCompletedAssistantMessage = (
   input: {
     messageId: string;
     timestamp?: string;
-    info?: unknown;
+    info?: ParsedOpencodeMessage["info"];
     hasStopSignal?: boolean;
   },
 ): boolean => {
@@ -227,12 +227,17 @@ export const maybeEmitCompletedAssistantMessage = (
     hasTerminalStopSignalInParts(assistantParts, undefined);
   const timestamp = input.timestamp ?? existingMetadata?.timestamp ?? runtime.now();
 
-  updateMessageMetadata(runtime, input.messageId, {
+  const metadataUpdates: Parameters<typeof updateMessageMetadata>[2] = {
     timestamp,
-    ...(assistantModel ? { model: assistantModel } : {}),
     hasStopSignal,
-    ...(totalTokens !== undefined ? { totalTokens } : {}),
-  });
+  };
+  if (assistantModel) {
+    metadataUpdates.model = assistantModel;
+  }
+  if (totalTokens !== undefined) {
+    metadataUpdates.totalTokens = totalTokens;
+  }
+  updateMessageMetadata(runtime, input.messageId, metadataUpdates);
 
   if (!hasStopSignal || assistantParts.length === 0 || !isStreamTurnIdle(session)) {
     return false;
@@ -250,15 +255,20 @@ export const maybeEmitCompletedAssistantMessage = (
     return true;
   }
 
-  runtime.emit(runtime.externalSessionId, {
+  const event: Parameters<EventStreamRuntime["emit"]>[1] = {
     type: "assistant_message",
     externalSessionId: runtime.externalSessionId,
     timestamp,
     messageId: input.messageId,
     message: visible,
-    ...(typeof totalTokens === "number" ? { totalTokens } : {}),
-    ...(assistantModel ? { model: assistantModel } : {}),
-  });
+  };
+  if (totalTokens !== undefined) {
+    event.totalTokens = totalTokens;
+  }
+  if (assistantModel) {
+    event.model = assistantModel;
+  }
+  runtime.emit(runtime.externalSessionId, event);
   session.emittedAssistantMessageIds.add(input.messageId);
   session.pendingCompletedAssistantMessageIds.delete(input.messageId);
   return true;

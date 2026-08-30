@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
+import { z } from "zod";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type {
   SystemCommandPort,
@@ -134,7 +135,16 @@ describe("createOpenInToolsAdapter", () => {
     expect(result.left).toBeInstanceOf(HostOperationError);
     expect(result.left).toHaveProperty("operation", "openInTools.runCommand");
     expect(result.left.message).toContain("Command mdfind exited unsuccessfully");
-    expect(result.left.details).toMatchObject({
+    const parsedError = z
+      .object({
+        details: z.object({
+          args: z.array(z.string()),
+          program: z.string(),
+          stderr: z.string(),
+        }),
+      })
+      .parse(result.left);
+    expect(parsedError.details).toMatchObject({
       args: ["-name", expect.stringMatching(/\.app$/)],
       program: "mdfind",
       stderr: "Spotlight unavailable",

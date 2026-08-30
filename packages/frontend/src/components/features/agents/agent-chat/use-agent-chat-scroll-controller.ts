@@ -337,7 +337,7 @@ export function useAgentChatScrollController({
 
   useEffect(() => {
     const content = messagesContentRef.current;
-    if (!content || typeof ResizeObserver === "undefined") {
+    if (!content || globalThis.ResizeObserver === undefined) {
       return;
     }
 

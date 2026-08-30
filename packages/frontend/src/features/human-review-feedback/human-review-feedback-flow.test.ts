@@ -2,6 +2,7 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { toast } from "sonner";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createAgentSessionSummaryFixture } from "@/test-utils/shared-test-fixtures";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
   HUMAN_REVIEW_FEEDBACK_REQUIRED_MESSAGE,
   prepareHumanReviewFeedback,
@@ -26,6 +27,12 @@ const createState = (
   ...overrides,
 });
 
+const STARTED_SESSION = {
+  externalSessionId: "session-new",
+  runtimeKind: "opencode",
+  workingDirectory: "/tmp/repo/worktree",
+} satisfies AgentSessionIdentity;
+
 let toastErrorSpy: ReturnType<typeof spyOn<typeof toast, "error">> | null = null;
 
 afterEach(() => {
@@ -47,7 +54,7 @@ describe("human-review-feedback-flow", () => {
 
   test("submitHumanReviewFeedback rejects blank messages before starting the shared workflow", async () => {
     toastErrorSpy = spyOn(toast, "error").mockImplementation(() => "toast-id");
-    const startRequestChangesSession = mock(async () => "session-new");
+    const startRequestChangesSession = mock(async () => STARTED_SESSION);
 
     const result = await submitHumanReviewFeedback({
       state: createState({ message: "   " }),
@@ -61,7 +68,7 @@ describe("human-review-feedback-flow", () => {
   });
 
   test("submitHumanReviewFeedback builds a kickoff-based shared start-session request", async () => {
-    const startRequestChangesSession = mock(async () => "session-new");
+    const startRequestChangesSession = mock(async () => STARTED_SESSION);
     const latestBuilderSession = createBuilderSession({
       externalSessionId: "builder-session-2",
       startedAt: "2026-03-20T12:00:00.000Z",
@@ -122,7 +129,7 @@ describe("human-review-feedback-flow", () => {
   });
 
   test("submitHumanReviewFeedback defaults the shared start-session flow to fresh when no builder sessions exist", async () => {
-    const startRequestChangesSession = mock(async () => "session-new");
+    const startRequestChangesSession = mock(async () => STARTED_SESSION);
 
     await submitHumanReviewFeedback({
       state: createState({ message: "Start this in a new builder session." }),
@@ -152,7 +159,7 @@ describe("human-review-feedback-flow", () => {
   });
 
   test("submitHumanReviewFeedback preserves the human-request-changes launch action in the handoff request", async () => {
-    const startRequestChangesSession = mock(async () => "session-new");
+    const startRequestChangesSession = mock(async () => STARTED_SESSION);
 
     await submitHumanReviewFeedback({
       state: createState({

@@ -1,4 +1,3 @@
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import {
   type ClaudeEventSession,
   streamAssistantMessageId,
@@ -11,10 +10,11 @@ import {
   type ClaudeDecodedToolUse,
   createClaudePendingToolPart,
   decodeClaudeToolUseBlock,
+  isClaudeToolUseBlockType,
 } from "./claude-agent-sdk-tool-shapes";
 import { createClaudeAssistantReasoningPart } from "./claude-agent-sdk-transcript-parts";
 import type { ClaudeAgentSdkEvent } from "./claude-agent-sdk-types";
-import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import type { ClaudeSdkStreamEventMessageProjection } from "./claude-agent-sdk-message-projection";
 
 export const emitClaudePendingToolPart = ({
   emit,
@@ -50,33 +50,24 @@ export const handleClaudeStreamEvent = ({
   timestamp,
 }: {
   emit: (event: ClaudeAgentSdkEvent) => void;
-  message: Extract<SDKMessage, { type: "stream_event" }>;
+  message: ClaudeSdkStreamEventMessageProjection;
   session: ClaudeEventSession;
   timestamp: string;
 }): void => {
   const event = message.event;
-  if (!isRecord(event)) {
-    return;
-  }
-
-  const eventType = readStringProp(event, "type");
-  if (eventType === "message_start") {
+  if (event.type === "message_start") {
     session.streamAssistantMessageIdsByBlockIndex.clear();
     session.streamAssistantMessageOrdinal += 1;
     session.streamReasoningByBlockIndex?.clear();
-    const responseId = isRecord(event.message) ? readStringProp(event.message, "id") : undefined;
-    if (responseId) {
-      session.streamAssistantResponseId = responseId;
+    if (event.message.id) {
+      session.streamAssistantResponseId = event.message.id;
     } else {
       delete session.streamAssistantResponseId;
     }
     return;
   }
-  if (eventType === "content_block_stop") {
-    const index = typeof event.index === "number" ? event.index : null;
-    if (index === null) {
-      return;
-    }
+  if (event.type === "content_block_stop") {
+    const index = event.index;
     const reasoning = session.streamReasoningByBlockIndex?.get(index);
     if (!reasoning || !session.streamAssistantResponseId) {
       return;
@@ -95,14 +86,13 @@ export const handleClaudeStreamEvent = ({
     session.streamReasoningByBlockIndex?.delete(index);
     return;
   }
-  if (eventType === "content_block_start") {
-    const index = typeof event.index === "number" ? event.index : null;
-    const block = isRecord(event.content_block) ? event.content_block : null;
-    if (index === null || !block) {
+  if (event.type === "content_block_start") {
+    if (!isClaudeToolUseBlockType(event.content_block.type)) {
       return;
     }
+    const index = event.index;
     const toolUse = decodeClaudeToolUseBlock({
-      block,
+      block: event.content_block,
       fallbackMessageId: message.uuid,
       index,
     });
@@ -120,18 +110,14 @@ export const handleClaudeStreamEvent = ({
     });
     return;
   }
-  if (eventType !== "content_block_delta") {
+  if (event.type !== "content_block_delta") {
     return;
   }
 
-  const index = typeof event.index === "number" ? event.index : null;
-  const delta = isRecord(event.delta) ? event.delta : null;
-  if (index === null || !delta) {
-    return;
-  }
-  const deltaType = readStringProp(delta, "type");
-  if (deltaType === "text_delta") {
-    const text = typeof delta.text === "string" ? delta.text : "";
+  const index = event.index;
+  const delta = event.delta;
+  if (delta.type === "text_delta") {
+    const text = delta.text;
     if (text.length === 0) {
       return;
     }
@@ -145,8 +131,8 @@ export const handleClaudeStreamEvent = ({
     });
     return;
   }
-  if (deltaType === "thinking_delta") {
-    const text = typeof delta.thinking === "string" ? delta.thinking : "";
+  if (delta.type === "thinking_delta") {
+    const text = delta.thinking;
     if (text.length === 0 || !session.streamAssistantResponseId) {
       return;
     }
@@ -155,11 +141,11 @@ export const handleClaudeStreamEvent = ({
     session.streamReasoningByBlockIndex.set(index, `${current ?? ""}${text}`);
     return;
   }
-  if (deltaType !== "input_json_delta") {
+  if (delta.type !== "input_json_delta") {
     return;
   }
   const partialJson = delta.partial_json;
-  if (typeof partialJson !== "string" || partialJson.length === 0) {
+  if (partialJson.length === 0) {
     return;
   }
   const toolUse = appendClaudeStreamToolInputJson(session, index, partialJson);

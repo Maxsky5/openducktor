@@ -20,8 +20,6 @@ export const sessionLaunchActionIds = [
 
 export type SessionLaunchActionId = (typeof sessionLaunchActionIds)[number];
 
-const sessionLaunchActionIdSet: ReadonlySet<string> = new Set(sessionLaunchActionIds);
-
 export type SessionLaunchAction = {
   id: SessionLaunchActionId;
   role: AgentRole;
@@ -118,9 +116,6 @@ export const defaultSessionLaunchActionForRole = (role: AgentRole): SessionLaunc
   }
   return action.id;
 };
-
-export const isSessionLaunchActionId = (value: unknown): value is SessionLaunchActionId =>
-  typeof value === "string" && sessionLaunchActionIdSet.has(value);
 
 export const isLaunchStartModeAllowed = (
   actionId: SessionLaunchActionId,

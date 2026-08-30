@@ -5,8 +5,8 @@ import { createLoadSourceSession } from "./session-read-model/source-session-loa
 
 describe("agent-orchestrator/index", () => {
   test("exports orchestrator public internals", () => {
-    expect(typeof createAgentSessionActions).toBe("function");
-    expect(typeof createLoadSourceSession).toBe("function");
-    expect(typeof createEnsureRuntime).toBe("function");
+    expect(createAgentSessionActions).toBeInstanceOf(Function);
+    expect(createLoadSourceSession).toBeInstanceOf(Function);
+    expect(createEnsureRuntime).toBeInstanceOf(Function);
   });
 });

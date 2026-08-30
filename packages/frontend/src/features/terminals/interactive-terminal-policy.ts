@@ -50,7 +50,8 @@ export const createLatestResizeScheduler = (
   send: (columns: number, rows: number) => void,
   schedule: (callback: () => void) => void = queueMicrotask,
 ) => {
-  let pending: { columns: number; rows: number } | null = null;
+  type PendingResize = { columns: number; rows: number };
+  let pending: PendingResize | null = null;
   let scheduled = false;
   const flush = (): void => {
     scheduled = false;

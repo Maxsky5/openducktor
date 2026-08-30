@@ -1,5 +1,12 @@
+import type { AgentToolData } from "@openducktor/contracts";
+import { z } from "zod";
+
+const stringValueSchema = z.string();
+const isStringValue = (value: AgentToolData[string] | undefined): value is string =>
+  stringValueSchema.safeParse(value).success;
+
 export const readInputString = (
-  input: Record<string, unknown> | undefined,
+  input: AgentToolData | undefined,
   keys: string[],
 ): string | null => {
   if (!input) {
@@ -7,17 +14,17 @@ export const readInputString = (
   }
   for (const key of keys) {
     const value = input[key];
-    if (typeof value === "string" && value.trim().length > 0) {
+    if (isStringValue(value) && value.trim().length > 0) {
       return value.trim();
     }
   }
   return null;
 };
 
-export const extractPathFromInput = (input: Record<string, unknown> | undefined): string | null => {
+export const extractPathFromInput = (input: AgentToolData | undefined): string | null => {
   const candidate =
     input?.filePath ?? input?.file_path ?? input?.path ?? input?.file ?? input?.filename;
-  if (typeof candidate === "string") {
+  if (isStringValue(candidate)) {
     const normalized = candidate.trim();
     if (normalized.length > 0 && normalized !== ".") {
       return normalized;

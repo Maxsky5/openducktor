@@ -1,4 +1,3 @@
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import {
   type ClaudeEventSession,
@@ -8,18 +7,23 @@ import { readClaudeHistoryDisplayParts } from "./claude-agent-sdk-history-suppor
 import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 import { decodeClaudeToolResultValue } from "./claude-agent-sdk-tool-shapes";
 import { isClaudeHumanUserMessage } from "./claude-agent-sdk-user-messages";
-import { historyMessageText, isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import { historyMessageText } from "./claude-agent-sdk-utils";
+import { parseClaudeUserToolResultIngress } from "./claude-agent-sdk-ingress-schemas";
+import type {
+  ClaudeSdkMessageProjection,
+  ClaudeSdkUserMessageProjection,
+} from "./claude-agent-sdk-message-projection";
 
 type ForwardedClaudeSubagentMessage = {
-  message: SDKMessage;
+  message: ClaudeSdkMessageProjection;
   session: ClaudeEventSession;
 };
 
 const hasToolResultForParent = (
-  message: Extract<SDKMessage, { type: "user" }>,
+  message: ClaudeSdkUserMessageProjection,
   parentToolUseId: string,
 ): boolean => {
-  const content = (message.message as { content?: unknown }).content;
+  const content = message.message.content;
   if (Array.isArray(content)) {
     for (const block of content) {
       const result = decodeClaudeToolResultValue(block, null);
@@ -28,32 +32,18 @@ const hasToolResultForParent = (
       }
     }
   }
-  const rawMessage = message as unknown as Record<string, unknown>;
-  const directResult =
-    decodeClaudeToolResultValue(rawMessage.tool_use_result, parentToolUseId, {
-      allowNonToolResultType: true,
-    }) ??
-    decodeClaudeToolResultValue(rawMessage.toolUseResult, parentToolUseId, {
-      allowNonToolResultType: true,
-    });
+  const directResult = decodeClaudeToolResultValue(message.tool_use_result, parentToolUseId, {
+    allowNonToolResultType: true,
+  });
   return directResult?.toolUseId === parentToolUseId;
 };
 
-const isClaudeToolResultUserMessage = (message: Extract<SDKMessage, { type: "user" }>): boolean => {
-  const content = (message.message as { content?: unknown }).content;
-  if (
-    Array.isArray(content) &&
-    content.some(
-      (block) =>
-        isRecord(block) &&
-        (readStringProp(block, "type") === "tool_result" ||
-          readStringProp(block, "type") === "mcp_tool_result"),
-    )
-  ) {
+const isClaudeToolResultUserMessage = (message: ClaudeSdkUserMessageProjection): boolean => {
+  const content = message.message.content;
+  if (Array.isArray(content) && content.some((block) => block.type === "tool_result")) {
     return true;
   }
-  const rawMessage = message as unknown as Record<string, unknown>;
-  return isRecord(rawMessage.tool_use_result) || isRecord(rawMessage.toolUseResult);
+  return parseClaudeUserToolResultIngress(message).toolResults.length > 0;
 };
 
 export const emitClaudeSubagentUserMessage = ({
@@ -63,20 +53,22 @@ export const emitClaudeSubagentUserMessage = ({
   timestamp,
 }: {
   emit: (event: AgentEvent) => void;
-  message: Extract<SDKMessage, { type: "user" }>;
+  message: ClaudeSdkUserMessageProjection;
   session: ClaudeEventSession;
   timestamp: string;
 }): void => {
+  const messageValue = message;
+  const content = message.message;
   if (
     !isClaudeSubagentTranscriptTarget(session.externalSessionId) ||
     isClaudeToolResultUserMessage(message) ||
-    !isClaudeHumanUserMessage(message)
+    !isClaudeHumanUserMessage(messageValue)
   ) {
     return;
   }
   const messageId = message.uuid ?? `claude-user:${session.externalSessionId}:${timestamp}`;
-  const text = historyMessageText(message.message);
-  const parts = readClaudeHistoryDisplayParts(messageId, message.message);
+  const text = historyMessageText(content);
+  const parts = readClaudeHistoryDisplayParts(messageId, content);
   if (text.length === 0 && parts.length === 0) {
     return;
   }
@@ -91,7 +83,7 @@ export const emitClaudeSubagentUserMessage = ({
   });
 };
 
-const forwardedSubagentParentToolUseId = (message: SDKMessage): string | null => {
+const forwardedSubagentParentToolUseId = (message: ClaudeSdkMessageProjection): string | null => {
   if (message.type !== "assistant" && message.type !== "user" && message.type !== "tool_progress") {
     return null;
   }
@@ -107,7 +99,7 @@ const forwardedSubagentParentToolUseId = (message: SDKMessage): string | null =>
 
 export const resolveForwardedClaudeSubagentMessage = (
   session: ClaudeEventSession,
-  message: SDKMessage,
+  message: ClaudeSdkMessageProjection,
 ): ForwardedClaudeSubagentMessage | null | undefined => {
   const parentToolUseId = forwardedSubagentParentToolUseId(message);
   if (!parentToolUseId) {
@@ -117,8 +109,10 @@ export const resolveForwardedClaudeSubagentMessage = (
   if (!childSession) {
     return null;
   }
+  const forwardedMessage: ClaudeSdkMessageProjection =
+    "parent_tool_use_id" in message ? { ...message, parent_tool_use_id: null } : message;
   return {
-    message: { ...message, parent_tool_use_id: null } as SDKMessage,
+    message: forwardedMessage,
     session: childSession,
   };
 };

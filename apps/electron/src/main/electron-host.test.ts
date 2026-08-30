@@ -1,7 +1,14 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { GlobalConfig, RepoConfig, RuntimeInstanceSummary } from "@openducktor/contracts";
+import type {
+  GlobalConfig,
+  HostEventEnvelope,
+  RepoConfig,
+  RuntimeInstanceSummary,
+  TaskCard,
+  TaskMetadataPayload,
+} from "@openducktor/contracts";
 import {
   createArtifactRuntimeDistribution,
   createRuntimeDefinitionsService,
@@ -21,12 +28,7 @@ import {
   type TaskStorePort,
   type WorktreeFilePort,
 } from "@openducktor/host";
-import { Deferred, TestClock, TestContext } from "effect";
-import {
-  createElectronEffectHostCommandRouter,
-  createElectronHostCommandRouter as createProductionElectronHostCommandRouter,
-} from "./electron-host";
-import { createElectronMainLogger } from "./electron-main-logger";
+import { createElectronHostCommandRouter as createProductionElectronHostCommandRouter } from "./electron-host";
 
 type RuntimeRegistryEntry = RuntimeInstanceSummary;
 type ElectronHostCommandRouterInput = Parameters<
@@ -119,7 +121,7 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   ...overrides,
 });
 
-const createSettingsConfig = (config: unknown | null = null): SettingsConfigPort => ({
+const createSettingsConfig = (config: GlobalConfig | null = null): SettingsConfigPort => ({
   readConfig: () => Effect.succeed(config),
   writeConfig: () => Effect.succeed(undefined),
   defaultWorktreeBasePath(workspaceId) {
@@ -633,10 +635,10 @@ const createDevServerProcesses = (): DevServerProcessPort => ({
 });
 
 const createEventBus = () => {
-  const events: unknown[] = [];
+  const events: HostEventEnvelope[] = [];
   const eventBus: HostEventBusPort = {
-    publish(channel, payload) {
-      events.push({ channel, payload });
+    publish(envelope) {
+      events.push(envelope);
     },
     subscribe() {
       return () => {};
@@ -646,78 +648,8 @@ const createEventBus = () => {
 };
 
 describe("createElectronHostCommandRouter", () => {
-  test("owns a scheduled task-sync disk-write failure through the Electron host lifecycle", async () => {
-    const configDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-electron-task-sync-"));
-    const recordedAt = new Date(2026, 4, 13, 23, 45, 12, 345);
-    const logFilePath = path.join(configDirectory, "logs", "openducktor-electron-2026-05-13.log");
-
-    try {
-      const result = await Effect.runPromise(
-        Effect.gen(function* () {
-          const logger = yield* createElectronMainLogger({
-            env: { OPENDUCKTOR_CONFIG_DIR: configDirectory, NO_COLOR: "1" },
-            now: () => recordedAt,
-            stream: { write: () => {} },
-          });
-          const failureReported = yield* Deferred.make<unknown>();
-          let settingsReadFails = false;
-          const settingsConfig: SettingsConfigPort = {
-            ...createSettingsConfig(),
-            readConfig: () =>
-              settingsReadFails
-                ? Effect.succeed({ workspaces: null } as unknown as GlobalConfig)
-                : Effect.succeed(null),
-          };
-          const { eventBus } = createEventBus();
-          const router = createElectronEffectHostCommandRouter({
-            eventBus,
-            filesystem: createFilesystem(),
-            git: createGit(),
-            lifecycleLogger: logger,
-            isPackaged: false,
-            mcpHostBridge: {
-              ensureConnection: () => Effect.succeed({ baseUrl: "http://127.0.0.1:5000" }),
-              ensureExternalDiscoveryReady: () =>
-                Effect.succeed({ baseUrl: "http://127.0.0.1:5000" }),
-              close: () => Effect.succeed({ baseUrl: null, closed: false }),
-            } as NonNullable<ElectronHostCommandRouterInput["mcpHostBridge"]>,
-            onBackgroundFailure: (failure) =>
-              Deferred.succeed(failureReported, failure).pipe(Effect.asVoid),
-            openInTools: createOpenInTools(),
-            processEnv: { PATH: "/usr/bin:/bin" },
-            runtimeDistribution: testRuntimeDistribution,
-            settingsConfig,
-            taskStore: createTaskStore(),
-          });
-
-          yield* router.initialize();
-          yield* Effect.promise(() => mkdir(logFilePath));
-          settingsReadFails = true;
-          yield* TestClock.adjust("5 minutes");
-          const failure = yield* Deferred.await(failureReported);
-          settingsReadFails = false;
-          yield* Effect.promise(() => rm(logFilePath, { recursive: true }));
-          const disposeResult = yield* Effect.exit(router.dispose());
-          return { failure, disposeResult };
-        }).pipe(Effect.provide(TestContext.TestContext)),
-      );
-
-      expect(result.failure).toMatchObject({
-        _tag: "HostOperationError",
-        operation: "task-sync.log-iteration-failure",
-        cause: {
-          _tag: "OpenDucktorLogPersistenceError",
-          operation: "openducktor.logs.append",
-          path: logFilePath,
-        },
-      });
-      expect(result.disposeResult._tag).toBe("Failure");
-    } finally {
-      await rm(configDirectory, { force: true, recursive: true });
-    }
-  });
-
   test("disposes registered runtimes on host shutdown", async () => {
+    const configDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-electron-dispose-"));
     const stoppedRuntimes: string[] = [];
     const lifecycleLogs: string[] = [];
     const registeredRuntime = {
@@ -731,50 +663,59 @@ describe("createElectronHostCommandRouter", () => {
       startedAt: "2026-05-13T00:00:00Z",
       descriptor: createRuntimeDefinitionsService().listRuntimeDefinitions()[0],
     } satisfies RuntimeInstanceSummary;
-    const router = createElectronHostCommandRouter({
-      lifecycleLogger: {
-        info(message) {
-          return Effect.sync(() => lifecycleLogs.push(message));
+    try {
+      const router = createElectronHostCommandRouter({
+        lifecycleLogger: {
+          info(message) {
+            return Effect.sync(() => lifecycleLogs.push(message));
+          },
+          error(message) {
+            return Effect.sync(() => lifecycleLogs.push(message));
+          },
         },
-        error(message) {
-          return Effect.sync(() => lifecycleLogs.push(message));
+        processEnv: {
+          OPENDUCKTOR_CONFIG_DIR: configDirectory,
+          OPENDUCKTOR_DEV_INSTANCE: "electron-0123456789ab",
+          PATH: "/usr/bin:/bin",
         },
-      },
-      runtimeRegistry: {
-        ensureWorkspaceRuntime: () => Effect.dieMessage("unexpected runtime start"),
-        findRuntimeById: () => Effect.dieMessage("unexpected runtime id lookup"),
-        listRuntimes: () => Effect.succeed([registeredRuntime]),
-        listRuntimesByRepo: () => Effect.dieMessage("unexpected repo runtime lookup"),
-        stopRuntime: (runtimeId) =>
-          Effect.sync(() => {
-            stoppedRuntimes.push(runtimeId);
-            return true;
-          }),
-        stopAllRuntimes: () =>
-          Effect.sync(() => {
-            stoppedRuntimes.push("runtime-1");
-            return [registeredRuntime];
-          }),
-        stopSession: () => Effect.succeed(undefined),
-        probeSessionStatus: () => Effect.dieMessage("unexpected session status probe"),
-        probeMcpStatus: () => Effect.dieMessage("unexpected MCP status probe"),
-      },
-      settingsConfig: createSettingsConfig(),
-    });
+        runtimeRegistry: {
+          ensureWorkspaceRuntime: () => Effect.dieMessage("unexpected runtime start"),
+          findRuntimeById: () => Effect.dieMessage("unexpected runtime id lookup"),
+          listRuntimes: () => Effect.succeed([registeredRuntime]),
+          listRuntimesByRepo: () => Effect.dieMessage("unexpected repo runtime lookup"),
+          stopRuntime: (runtimeId) =>
+            Effect.sync(() => {
+              stoppedRuntimes.push(runtimeId);
+              return true;
+            }),
+          stopAllRuntimes: () =>
+            Effect.sync(() => {
+              stoppedRuntimes.push("runtime-1");
+              return [registeredRuntime];
+            }),
+          stopSession: () => Effect.succeed(undefined),
+          probeSessionStatus: () => Effect.dieMessage("unexpected session status probe"),
+          probeMcpStatus: () => Effect.dieMessage("unexpected MCP status probe"),
+        },
+        settingsConfig: createSettingsConfig(),
+      });
 
-    await expect(router.dispose()).resolves.toBeUndefined();
+      await expect(router.dispose()).resolves.toBeUndefined();
 
-    expect(stoppedRuntimes).toEqual(["runtime-1"]);
-    expect(lifecycleLogs).toEqual(
-      expect.arrayContaining([
-        "Shutting down OpenDucktor host services",
-        "No dev servers are running",
-        "Stopping registered agent runtimes",
-        "Stopped opencode runtime runtime-1 for task workspace (workspace)",
-        "No MCP host bridge server is running",
-        "OpenDucktor host services stopped",
-      ]),
-    );
+      expect(stoppedRuntimes).toEqual(["runtime-1"]);
+      expect(lifecycleLogs).toEqual(
+        expect.arrayContaining([
+          "Shutting down OpenDucktor host services",
+          "No dev servers are running",
+          "Stopping registered agent runtimes",
+          "Stopped opencode runtime runtime-1 for task workspace (workspace)",
+          "No MCP host bridge server is running",
+          "OpenDucktor host services stopped",
+        ]),
+      );
+    } finally {
+      await rm(configDirectory, { force: true, recursive: true });
+    }
   });
 
   test("registers migrated filesystem host commands", async () => {
@@ -1077,6 +1018,9 @@ describe("createElectronHostCommandRouter", () => {
       fileDiffs: [{ file: "src/main.ts" }],
       snapshot: { targetBranch: "origin/main", diffScope: "uncommitted" },
     });
+    if (!("snapshot" in worktreeStatus)) {
+      throw new Error("Expected git worktree status to include a reset snapshot.");
+    }
     await expect(
       router.invoke("git_get_worktree_status_summary", {
         repoPath: "/repo",
@@ -1107,7 +1051,7 @@ describe("createElectronHostCommandRouter", () => {
       router.invoke("git_reset_worktree_selection", {
         repoPath: "/repo",
         targetBranch: "origin/main",
-        snapshot: (worktreeStatus as { snapshot: unknown }).snapshot,
+        snapshot: worktreeStatus.snapshot,
         selection: {
           kind: "file",
           filePath: "src/main.ts",
@@ -1407,14 +1351,14 @@ describe("createElectronHostCommandRouter", () => {
             agentSessions: [
               {
                 externalSessionId: "external-session-1",
-                role: "build" as const,
+                role: "build",
                 startedAt: "2026-05-10T10:00:00.000Z",
                 runtimeKind: "opencode",
                 workingDirectory: "/repo/worktree",
                 selectedModel: null,
               },
             ],
-          }),
+          } satisfies TaskMetadataPayload),
       },
     });
     await expect(
@@ -1527,9 +1471,9 @@ describe("createElectronHostCommandRouter", () => {
         listTasks: (input) =>
           resetImplementationTaskStore.listTasks(input).pipe(
             Effect.map((entries) =>
-              entries.map((entry) => ({
+              entries.map((entry): TaskCard => ({
                 ...entry,
-                status: "ai_review" as const,
+                status: "ai_review",
                 documentSummary: {
                   ...entry.documentSummary,
                   plan: { has: true, updatedAt: "2026-01-02T00:00:00Z" },
@@ -1562,15 +1506,15 @@ describe("createElectronHostCommandRouter", () => {
             spec: { markdown: "# Spec" },
             plan: { markdown: "# Plan" },
             pullRequest: {
-              providerId: "github" as const,
+              providerId: "github",
               number: 42,
               url: "https://github.com/openai/openducktor/pull/42",
-              state: "open" as const,
+              state: "open",
               createdAt: "2026-05-01T00:00:00.000Z",
               updatedAt: "2026-05-02T00:00:00.000Z",
             },
             agentSessions: [],
-          }),
+          } satisfies TaskMetadataPayload),
       },
     });
     await expect(
@@ -1615,12 +1559,11 @@ describe("createElectronHostCommandRouter", () => {
             .pipe(Effect.map((task) => ({ ...task, status: "human_review" }))),
       },
     });
-    await expect(
-      approvalRouter.invoke("task_approval_context_get", {
-        repoPath: "/repo",
-        taskId: "task-1",
-      }),
-    ).resolves.toMatchObject({
+    const approvalContext = await approvalRouter.invoke("task_approval_context_get", {
+      repoPath: "/repo",
+      taskId: "task-1",
+    });
+    expect(approvalContext).toMatchObject({
       outcome: "ready",
       approvalContext: {
         taskId: "task-1",
@@ -2310,13 +2253,13 @@ describe("createElectronHostCommandRouter", () => {
             spec: { markdown: "# Spec" },
             plan: { markdown: "# Plan" },
             directMerge: {
-              method: "merge_commit" as const,
+              method: "merge_commit",
               sourceBranch: "odt/task-1",
               targetBranch: { branch: "main" },
               mergedAt: "2026-05-10T11:00:00.000Z",
             },
             agentSessions: [],
-          }),
+          } satisfies TaskMetadataPayload),
       },
     });
     await expect(

@@ -1,5 +1,5 @@
-import type { HostInvokeFailure } from "@openducktor/contracts";
-import type { HostCommandName } from "@openducktor/host";
+import type { HostCommandArgs, HostCommandName, HostInvokeFailure } from "@openducktor/contracts";
+import { z } from "zod";
 
 export class HostInvokeError extends Error {
   override readonly cause: unknown;
@@ -15,59 +15,34 @@ export class HostInvokeError extends Error {
   }
 }
 
-export type InvokeFn = (
+export type InvokeFn = <Result>(
   command: HostCommandName,
-  args?: Record<string, unknown>,
-) => Promise<unknown>;
+  args: HostCommandArgs,
+  resultSchema: z.ZodType<Result>,
+) => Promise<Result>;
 
 export type OkResult = { ok: boolean };
 export type UpdatedAtResult = { updatedAt: string };
 
-/**
- * Parse an array payload returned by a host command and validate each entry.
- */
-export const parseArray = <T>(
-  schema: { parse: (value: unknown) => T },
-  payload: unknown,
-  command: string,
-): T[] => {
-  if (!Array.isArray(payload)) {
-    throw new Error(`Expected array payload from host command ${command}`);
-  }
-  return payload.map((entry) => schema.parse(entry));
+export const voidResultSchema = z
+  .union([z.undefined(), z.null()])
+  .transform((): undefined => undefined);
+export const booleanResultSchema = z.boolean();
+
+export const arrayResultSchema = <T>(schema: z.ZodType<T>, command: string) =>
+  z.array(schema, `Expected array payload from host command ${command}`);
+
+export const okResultSchema = (command: string) => {
+  const error = `Expected { ok: boolean } payload from host command ${command}`;
+  return z.object({ ok: z.boolean(error) }, error);
 };
 
-/**
- * Parse the canonical `{ ok: boolean }` ack shape returned by host mutations.
- */
-export const parseOkResult = (payload: unknown, command: string): OkResult => {
-  if (
-    !payload ||
-    typeof payload !== "object" ||
-    typeof (payload as { ok?: unknown }).ok !== "boolean"
-  ) {
-    throw new Error(`Expected { ok: boolean } payload from host command ${command}`);
-  }
-
-  return {
-    ok: (payload as { ok: boolean }).ok,
-  };
-};
-
-/**
- * Parse the canonical `{ updatedAt: string }` document-write result from the host.
- */
-export const parseUpdatedAtResult = (payload: unknown, command: string): UpdatedAtResult => {
-  if (
-    !payload ||
-    typeof payload !== "object" ||
-    typeof (payload as { updatedAt?: unknown }).updatedAt !== "string" ||
-    (payload as { updatedAt: string }).updatedAt.trim().length === 0
-  ) {
-    throw new Error(`Expected { updatedAt: string } payload from host command ${command}`);
-  }
-
-  return {
-    updatedAt: (payload as { updatedAt: string }).updatedAt,
-  };
+export const updatedAtResultSchema = (command: string) => {
+  const error = `Expected { updatedAt: string } payload from host command ${command}`;
+  return z.object(
+    {
+      updatedAt: z.string(error).refine((value) => value.trim().length > 0, error),
+    },
+    error,
+  );
 };

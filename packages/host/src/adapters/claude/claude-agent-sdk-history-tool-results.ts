@@ -17,6 +17,7 @@ import {
 } from "./claude-agent-sdk-todos";
 import { timestampMs } from "./claude-agent-sdk-tool-shapes";
 import { isClaudeToolUseRetracted } from "./claude-agent-sdk-transcript-correlation";
+import type { ClaudeToolInput } from "./claude-agent-sdk-types";
 
 type SubagentPart = Extract<AgentStreamPart, { kind: "subagent" }>;
 
@@ -32,7 +33,7 @@ export type ClaudeHistoryToolResultState = {
   subagentTaskIdsByToolUseId: Map<string, string>;
   todoProjectionState: ClaudeTodoProjectionState;
   todosById: ClaudeTodoState;
-  toolInputsByCallId: Map<string, Record<string, unknown>>;
+  toolInputsByCallId: Map<string, ClaudeToolInput>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
   transcriptExternalSessionId: string | undefined;
@@ -67,14 +68,17 @@ const appendOrMergeClaudeHistorySubagentPart = (
         existingPart.metadata || part.metadata
           ? { ...existingPart.metadata, ...part.metadata }
           : undefined;
-      return {
+      const mergedPart: SubagentPart = {
         ...existingPart,
         ...part,
         messageId: existingPart.messageId,
         partId: existingPart.partId,
         correlationKey: existingPart.correlationKey,
-        ...(metadata ? { metadata } : {}),
       };
+      if (metadata) {
+        mergedPart.metadata = metadata;
+      }
+      return mergedPart;
     });
     return;
   }
@@ -139,13 +143,13 @@ const projectAgentResult = ({
 }: {
   completedMessageId: string;
   entry: SessionMessage;
-  input: Record<string, unknown> | undefined;
+  input: ClaudeToolInput | undefined;
   result: ReturnType<typeof readHistoryToolResults>[number];
   state: ClaudeHistoryToolResultState;
   timestamp: string;
 }): AgentStreamPart[] => {
   const events: AgentEvent[] = [];
-  emitClaudeAgentToolResultSubagentPart({
+  const projectionInput: Parameters<typeof emitClaudeAgentToolResultSubagentPart>[0] = {
     emit: (event) => events.push(event),
     isError: result.isError,
     resultRaw: result.raw,
@@ -163,8 +167,11 @@ const projectAgentResult = ({
     },
     timestamp,
     toolUseId: result.toolUseId,
-    ...(input ? { input } : {}),
-  });
+  };
+  if (input) {
+    projectionInput.input = input;
+  }
+  emitClaudeAgentToolResultSubagentPart(projectionInput);
   return events.flatMap((event) =>
     event.type === "assistant_part" && event.part.kind === "subagent"
       ? [{ ...event.part, messageId: completedMessageId }]
@@ -228,8 +235,9 @@ export const projectClaudeHistoryToolResults = ({
     }
     const existingMessage = state.assistantMessagesByToolCallId.get(result.toolUseId);
     const existingPart = existingMessage?.parts.find(
-      (part) => part.kind === "tool" && part.callId === result.toolUseId,
-    ) as Extract<AgentStreamPart, { kind: "tool" }> | undefined;
+      (part): part is Extract<AgentStreamPart, { kind: "tool" }> =>
+        part.kind === "tool" && part.callId === result.toolUseId,
+    );
     const tool =
       state.toolNamesByCallId.get(result.toolUseId) ?? existingPart?.tool ?? result.toolName;
     if (!tool) {
@@ -244,19 +252,26 @@ export const projectClaudeHistoryToolResults = ({
       state: state.todoProjectionState,
       tool,
     });
-    const { part: completedPart } = projectClaudeCompletedToolResult({
+    const completedToolInput: Parameters<typeof projectClaudeCompletedToolResult>[0] = {
       callId: result.toolUseId,
       endedAtMs: timestampMs(timestamp),
-      ...(input ? { input } : {}),
       isError: result.isError,
       messageId: existingMessage?.messageId ?? entry.uuid ?? result.toolUseId,
-      ...(existingPart?.metadata ? { metadata: existingPart.metadata } : {}),
-      ...(existingPart?.preview ? { preview: existingPart.preview } : {}),
       raw: result.raw,
       resultText: result.text,
       state: state.todosById,
       tool,
-    });
+    };
+    if (input) {
+      completedToolInput.input = input;
+    }
+    if (existingPart?.metadata) {
+      completedToolInput.metadata = existingPart.metadata;
+    }
+    if (existingPart?.preview) {
+      completedToolInput.preview = existingPart.preview;
+    }
+    const { part: completedPart } = projectClaudeCompletedToolResult(completedToolInput);
     const subagentParts =
       tool === "Agent"
         ? projectAgentResult({

@@ -1,6 +1,6 @@
 import {
   type ComponentProps,
-  type ComponentType,
+  createElement,
   lazy,
   type ReactElement,
   type ReactNode,
@@ -35,15 +35,10 @@ export const usePremiumCodeComponents = ({
   const codeOverride = useCallback(
     ({ node: _node, className, children, ...props }: CodeOverrideProps): ReactElement => {
       const languageMatch = LANGUAGE_CLASS_PATTERN.exec(className ?? "");
-      const codeComponent = components.code as ComponentType<CodeOverrideProps> | undefined;
+      const codeComponent = components.code;
       if (!languageMatch?.[1]) {
         if (codeComponent) {
-          const CodeComponent = codeComponent;
-          return (
-            <CodeComponent {...props} className={className}>
-              {children}
-            </CodeComponent>
-          );
+          return createElement(codeComponent, { ...props, className }, children);
         }
         return (
           <code {...props} className={className}>

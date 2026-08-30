@@ -2,6 +2,7 @@ import {
   type AgentSessionLivePendingApprovalRequest,
   type AgentSessionLivePendingQuestionRequest,
   type AgentSessionLiveSnapshot,
+  type CodexAppServerThreadResumeParams,
   agentSessionLiveSnapshotSchema,
   CODEX_RUNTIME_DESCRIPTOR,
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
@@ -55,10 +56,10 @@ import { requireCodexPendingRequestKey } from "./codex-app-server-approvals";
 import { codexApprovalResponseForRequest } from "./codex-app-server-requests";
 import { type ActiveCodexTurn, unsupported } from "./codex-app-server-shared";
 import { createCodexAcceptedUserMessage } from "./codex-app-server-streaming";
-import type { CodexThreadInventory } from "./codex-app-server-threads";
+import type { CodexThreadInventory, CodexThreadStatusSnapshot } from "./codex-app-server-threads";
 import { codexTodosFromThreadRead } from "./codex-app-server-transcript";
 import { CodexContextUsageLoader } from "./codex-context-usage-loader";
-import { toFileDiffs } from "./codex-file-diffs";
+import { fileDiffsFromUnifiedDiff } from "./codex-file-diffs";
 import { CodexLocalSessionState } from "./codex-local-session-state";
 import { CodexPendingInputState } from "./codex-pending-input-state";
 import { releaseCodexRuntimeState } from "./codex-runtime-cleanup";
@@ -93,7 +94,10 @@ import {
   codexSubagentRouteEventFields,
 } from "./codex-subagent-link-state";
 import { CodexThreadInventoryReader } from "./codex-thread-inventory";
-import { requireNormalizedCodexToolInvocation } from "./codex-tool-normalizer";
+import {
+  requireNormalizedCodexToolInvocation,
+  toCodexToolQuestions,
+} from "./codex-tool-normalizer";
 import {
   type CodexTurnLifecycleContext,
   flushQueuedUserMessagesLater as flushQueuedUserMessagesLaterImpl,
@@ -122,62 +126,56 @@ export { createCodexAppServerClient } from "./app-server-client";
 
 const toLivePendingApproval = (
   request: AgentPendingApprovalRequest,
-): AgentSessionLivePendingApprovalRequest => ({
-  requestId: request.requestId,
-  requestType: request.requestType,
-  title: request.title,
-  ...(request.summary !== undefined ? { summary: request.summary } : {}),
-  ...(request.details !== undefined ? { details: request.details } : {}),
-  ...(request.affectedPaths !== undefined ? { affectedPaths: [...request.affectedPaths] } : {}),
-  ...(request.command
-    ? {
-        command: {
-          command: request.command.command,
-          ...(request.command.workingDirectory !== undefined
-            ? { workingDirectory: request.command.workingDirectory }
-            : {}),
-        },
-      }
-    : {}),
-  ...(request.action
-    ? {
-        action: {
-          name: request.action.name,
-          ...(request.action.description !== undefined
-            ? { description: request.action.description }
-            : {}),
-        },
-      }
-    : {}),
-  ...(request.tool
-    ? {
-        tool: {
-          name: request.tool.name,
-          ...(request.tool.title !== undefined ? { title: request.tool.title } : {}),
-          ...(request.tool.input !== undefined ? { input: request.tool.input } : {}),
-        },
-      }
-    : {}),
-  ...(request.mutation !== undefined ? { mutation: request.mutation } : {}),
-  ...(request.supportedReplyOutcomes !== undefined
-    ? { supportedReplyOutcomes: [...request.supportedReplyOutcomes] }
-    : {}),
-});
+): AgentSessionLivePendingApprovalRequest => {
+  const liveRequest: AgentSessionLivePendingApprovalRequest = {
+    requestId: request.requestId,
+    requestType: request.requestType,
+    title: request.title,
+  };
+  if (request.summary !== undefined) {
+    liveRequest.summary = request.summary;
+  }
+  if (request.details !== undefined) {
+    liveRequest.details = request.details;
+  }
+  if (request.affectedPaths !== undefined) {
+    liveRequest.affectedPaths = [...request.affectedPaths];
+  }
+  if (request.command) {
+    liveRequest.command = { command: request.command.command };
+    if (request.command.workingDirectory !== undefined) {
+      liveRequest.command.workingDirectory = request.command.workingDirectory;
+    }
+  }
+  if (request.action) {
+    liveRequest.action = { name: request.action.name };
+    if (request.action.description !== undefined) {
+      liveRequest.action.description = request.action.description;
+    }
+  }
+  if (request.tool) {
+    liveRequest.tool = { name: request.tool.name };
+    if (request.tool.title !== undefined) {
+      liveRequest.tool.title = request.tool.title;
+    }
+    if (request.tool.input !== undefined) {
+      liveRequest.tool.input = request.tool.input;
+    }
+  }
+  if (request.mutation !== undefined) {
+    liveRequest.mutation = request.mutation;
+  }
+  if (request.supportedReplyOutcomes !== undefined) {
+    liveRequest.supportedReplyOutcomes = [...request.supportedReplyOutcomes];
+  }
+  return liveRequest;
+};
 
 const toLivePendingQuestion = (
   request: AgentPendingQuestionRequest,
 ): AgentSessionLivePendingQuestionRequest => ({
   requestId: request.requestId,
-  questions: request.questions.map((question) => ({
-    header: question.header,
-    question: question.question,
-    options: question.options.map((option) => ({
-      label: option.label,
-      description: option.description,
-    })),
-    ...(question.multiple !== undefined ? { multiple: question.multiple } : {}),
-    ...(question.custom !== undefined ? { custom: question.custom } : {}),
-  })),
+  questions: toCodexToolQuestions(request.questions),
 });
 
 export class CodexAppServerAdapter
@@ -196,39 +194,59 @@ export class CodexAppServerAdapter
 
   constructor(private readonly options: CodexAppServerAdapterOptions) {
     this.runtimeClients = new CodexRuntimeClientResolver(options);
-    const runtimeEventSubscription = options.subscribeEvents
-      ? {
-          subscribeEvents: options.subscribeEvents,
-          onRuntimeEventQueueFailure: options.onRuntimeEventQueueFailure,
-        }
-      : {};
-    this.runtimeEvents = new CodexRuntimeSessionEvents({
-      ...runtimeEventSubscription,
+    const onLiveSessionMutation = options.onLiveSessionMutation;
+    const onCatalogInvalidated = options.onCatalogInvalidated;
+    const runtimeEventsDepsBase = {
       respondServerRequest: options.respondServerRequest,
-      ...(options.onLiveSessionMutation
-        ? {
-            onLiveSessionMutation: async (mutation) =>
-              options.onLiveSessionMutation?.({
-                ...mutation,
-                snapshots: this.listLiveSessionSnapshots(mutation.runtimeId),
-              }),
-          }
-        : {}),
-      ...(options.onCatalogInvalidated
-        ? { onCatalogInvalidated: options.onCatalogInvalidated }
-        : {}),
       sessions: {
-        get: (externalSessionId) => this.localSessions.get(externalSessionId),
+        get: (externalSessionId: string) => this.localSessions.get(externalSessionId),
         values: () => this.localSessions.values(),
       },
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       sessionEvents: this.sessionEvents,
       pendingInput: this.pendingInput,
       subagents: this.subagents,
-      updateThreadStatus: (runtimeId, threadId, status) =>
-        this.threadInventory.updateThreadStatus(runtimeId, threadId, status),
-      flushQueuedUserMessagesLater: (activeTurn) => this.flushQueuedUserMessagesLater(activeTurn),
-    });
+      updateThreadStatus: (
+        runtimeId: string,
+        threadId: string,
+        status: CodexThreadStatusSnapshot,
+      ) => this.threadInventory.updateThreadStatus(runtimeId, threadId, status),
+      flushQueuedUserMessagesLater: (activeTurn: ActiveCodexTurn) =>
+        this.flushQueuedUserMessagesLater(activeTurn),
+    };
+    if (options.subscribeEvents) {
+      const runtimeEventsDeps: ConstructorParameters<typeof CodexRuntimeSessionEvents>[0] = {
+        ...runtimeEventsDepsBase,
+        subscribeEvents: options.subscribeEvents,
+        onRuntimeEventQueueFailure: options.onRuntimeEventQueueFailure,
+      };
+      if (onLiveSessionMutation) {
+        runtimeEventsDeps.onLiveSessionMutation = async (mutation) =>
+          onLiveSessionMutation({
+            ...mutation,
+            snapshots: this.listLiveSessionSnapshots(mutation.runtimeId),
+          });
+      }
+      if (onCatalogInvalidated) {
+        runtimeEventsDeps.onCatalogInvalidated = onCatalogInvalidated;
+      }
+      this.runtimeEvents = new CodexRuntimeSessionEvents(runtimeEventsDeps);
+    } else {
+      const runtimeEventsDeps: ConstructorParameters<typeof CodexRuntimeSessionEvents>[0] = {
+        ...runtimeEventsDepsBase,
+      };
+      if (onLiveSessionMutation) {
+        runtimeEventsDeps.onLiveSessionMutation = async (mutation) =>
+          onLiveSessionMutation({
+            ...mutation,
+            snapshots: this.listLiveSessionSnapshots(mutation.runtimeId),
+          });
+      }
+      if (onCatalogInvalidated) {
+        runtimeEventsDeps.onCatalogInvalidated = onCatalogInvalidated;
+      }
+      this.runtimeEvents = new CodexRuntimeSessionEvents(runtimeEventsDeps);
+    }
     this.localSessions = new CodexLocalSessionState({
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       pendingInput: this.pendingInput,
@@ -341,7 +359,6 @@ export class CodexAppServerAdapter
       developerInstructions: input.systemPrompt,
       historyMode: "paginated",
       model: transportModel.model,
-      effort: transportModel.effort,
     });
     this.clearThreadInventory(runtimeId);
     const title = sessionPolicy.title;
@@ -389,16 +406,18 @@ export class CodexAppServerAdapter
         workingDirectory: input.workingDirectory,
       }),
     );
-    const response = await client.threadResume({
+    const threadResumeInput: CodexAppServerThreadResumeParams = {
       ...codexTransportPolicy(policy),
       config: sessionPolicy.threadConfig,
       threadId: input.externalSessionId,
       cwd: input.workingDirectory,
-      ...(input.systemPrompt ? { developerInstructions: input.systemPrompt } : {}),
       excludeTurns: true,
       model: toTransportModelSelection(model).model,
-      effort: toTransportModelSelection(model).effort,
-    });
+    };
+    if (input.systemPrompt) {
+      threadResumeInput.developerInstructions = input.systemPrompt;
+    }
+    const response = await client.threadResume(threadResumeInput);
     this.clearThreadInventory(runtimeId);
     const session = sessionStateFromThreadResume(input, runtimeId, model, response);
     if (sessionPolicy.kind === "repository") {
@@ -446,7 +465,6 @@ export class CodexAppServerAdapter
       developerInstructions: input.systemPrompt,
       excludeTurns: true,
       model: toTransportModelSelection(model).model,
-      effort: toTransportModelSelection(model).effort,
     });
     this.clearThreadInventory(runtimeId);
     const title = sessionPolicy.title;
@@ -526,12 +544,11 @@ export class CodexAppServerAdapter
 
   async listAvailableSkills(input: ListAgentSkillsInput): Promise<AgentSkillCatalog> {
     const { client } = await this.runtimeClients.resolve(input, "list available skills");
-    return toCodexSkillCatalog(
-      await client.skillsList({
-        cwd: input.workingDirectory,
-        forceReload: false,
-      }),
-    );
+    const response = await client.skillsList({
+      cwds: [input.workingDirectory],
+      forceReload: false,
+    });
+    return toCodexSkillCatalog(response);
   }
 
   async listAvailableSubagents(_: ListAgentSubagentsInput) {
@@ -712,18 +729,20 @@ export class CodexAppServerAdapter
       "ensure Codex session state",
     );
     const policy = sessionPolicy.runtimePolicy;
-    const response = await client.threadResume({
+    const threadResumeInput: CodexAppServerThreadResumeParams = {
       ...codexTransportPolicy(policy),
       config: sessionPolicy.threadConfig,
       threadId: input.externalSessionId,
       cwd: input.workingDirectory,
-      ...("systemPrompt" in input && input.systemPrompt
-        ? { developerInstructions: input.systemPrompt }
-        : {}),
       excludeTurns: true,
-      ...(model ? { model: toTransportModelSelection(model).model } : {}),
-      ...(model ? { effort: toTransportModelSelection(model).effort } : {}),
-    });
+    };
+    if ("systemPrompt" in input && input.systemPrompt) {
+      threadResumeInput.developerInstructions = input.systemPrompt;
+    }
+    if (model) {
+      threadResumeInput.model = toTransportModelSelection(model).model;
+    }
+    const response = await client.threadResume(threadResumeInput);
     const session = sessionStateFromExistingThread(input, runtimeId, model, response);
     if (sessionPolicy.kind === "repository") {
       session.summary = { ...session.summary, title: sessionPolicy.title };
@@ -779,14 +798,18 @@ export class CodexAppServerAdapter
       { lookup: "reply to approval for", context: "reply to approval" },
       true,
     );
-    const reply = (boundSession: CodexSessionState) =>
-      this.replyLiveApproval({
+    const reply = (boundSession: CodexSessionState) => {
+      const approvalReply: CodexLiveApprovalReplyInput = {
         runtimeId: boundSession.runtimeId,
         externalSessionId: input.externalSessionId,
         requestId: input.requestId,
         outcome: input.outcome,
-        ...(input.message !== undefined ? { message: input.message } : {}),
-      });
+      };
+      if (input.message !== undefined) {
+        approvalReply.message = input.message;
+      }
+      return this.replyLiveApproval(approvalReply);
+    };
     return session instanceof Promise ? session.then(reply) : reply(session);
   }
 
@@ -868,12 +891,16 @@ export class CodexAppServerAdapter
         );
       }
       const answers = Object.fromEntries(
-        pending.questionIds.map((questionId, index) => [
-          questionId,
-          { answers: input.answers[index] },
-        ]),
+        pending.questionIds.map((questionId, index) => {
+          const answerSet = input.answers[index];
+          if (answerSet === undefined) {
+            throw new Error(`Codex question '${questionId}' is missing its answer set.`);
+          }
+          return [questionId, { answers: answerSet }] as const;
+        }),
       );
       const output = JSON.stringify({ answers });
+      const questions = toCodexToolQuestions(pending.request.questions);
       completedQuestionEvent = {
         type: "assistant_part",
         externalSessionId: input.externalSessionId,
@@ -884,12 +911,12 @@ export class CodexAppServerAdapter
           callId: questionToolCallId,
           rawToolName: "request_user_input",
           status: "completed",
-          input: pending.input,
+          input: { questions },
           output,
           metadata: {
             codexServerRequest: true,
             requestId: input.requestId,
-            questions: pending.request.questions,
+            questions,
             answers,
           },
         }),
@@ -930,7 +957,7 @@ export class CodexAppServerAdapter
         ? "running"
         : "idle");
     const route = this.subagents.routeForChild(session.threadId, session.runtimeId);
-    return agentSessionLiveSnapshotSchema.parse({
+    const snapshot: AgentSessionLiveSnapshot = {
       ref: codexSessionRef(session),
       sessionAssociation: session.summary.sessionAssociation,
       activity: classifyAgentSessionActivity({
@@ -940,11 +967,14 @@ export class CodexAppServerAdapter
       }),
       title: session.summary.title ?? session.threadId,
       startedAt: session.summary.startedAt,
-      ...(route ? { parentExternalSessionId: route.parentExternalSessionId } : {}),
       pendingApprovals,
       pendingQuestions,
       contextUsage: this.runtimeEvents.latestContextUsage(session.runtimeId, session.threadId),
-    });
+    };
+    if (route) {
+      snapshot.parentExternalSessionId = route.parentExternalSessionId;
+    }
+    return agentSessionLiveSnapshotSchema.parse(snapshot);
   }
 
   private toRoutedChildLiveSessionSnapshot(
@@ -1123,7 +1153,7 @@ export class CodexAppServerAdapter
   }
 
   private turnLifecycleContext(): CodexTurnLifecycleContext {
-    return {
+    const context: CodexTurnLifecycleContext = {
       sessions: this.localSessions,
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       clientForRuntime: (runtimeId) => this.runtimeClients.clientForRuntime(runtimeId),
@@ -1142,22 +1172,26 @@ export class CodexAppServerAdapter
         this.emitSessionEvent(externalSessionId, event),
       codexPolicyForSession: (session) =>
         requireCodexRuntimePolicy(session.runtimePolicy, "start Codex turn"),
-      ...(this.options.logSessionPolicy ? { logSessionPolicy: this.options.logSessionPolicy } : {}),
     };
+    if (this.options.logSessionPolicy) {
+      context.logSessionPolicy = this.options.logSessionPolicy;
+    }
+    return context;
   }
 
   async loadSessionDiff(
     input: LoadAgentSessionDiffInput,
   ): Promise<import("@openducktor/contracts").FileDiff[]> {
     const session = this.localSessions.get(input.externalSessionId);
-    const { client } = session
-      ? { client: this.runtimeClients.clientForRuntime(session.runtimeId) }
-      : await this.runtimeClients.resolve(input, "load Codex session diff");
-    const diff = await client.turnDiff({
-      threadId: input.externalSessionId,
-      ...(input.runtimeHistoryAnchor ? { turnId: input.runtimeHistoryAnchor } : {}),
-    });
-    return toFileDiffs(diff);
+    const runtimeId = session
+      ? session.runtimeId
+      : (await this.runtimeClients.resolve(input, "load Codex session diff")).runtimeId;
+    const diff = this.runtimeEvents.sessionDiff(
+      runtimeId,
+      input.externalSessionId,
+      input.runtimeHistoryAnchor,
+    );
+    return fileDiffsFromUnifiedDiff(diff);
   }
 
   async loadFileStatus(

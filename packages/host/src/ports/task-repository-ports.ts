@@ -16,25 +16,25 @@ import type {
 } from "@openducktor/contracts";
 import type { Effect } from "effect";
 import type {
-  HostDependencyError,
-  HostInvariantError,
-  HostOperationError,
-  HostPathAccessError,
-  HostPathNotFoundError,
-  HostResourceError,
-  HostValidationError,
+  HostDependencyErrorAggregate,
+  HostInvariantErrorAggregate,
+  HostOperationErrorAggregate,
+  HostPathAccessErrorAggregate,
+  HostPathNotFoundErrorAggregate,
+  HostResourceErrorAggregate,
+  HostValidationErrorAggregate,
 } from "../effect/host-errors";
 import type { TaskAssetError } from "../effect/task-asset-error";
 
 export type TaskStoreError =
   | TaskAssetError
-  | HostDependencyError
-  | HostInvariantError
-  | HostOperationError
-  | HostPathAccessError
-  | HostPathNotFoundError
-  | HostResourceError
-  | HostValidationError;
+  | HostDependencyErrorAggregate
+  | HostInvariantErrorAggregate
+  | HostOperationErrorAggregate
+  | HostPathAccessErrorAggregate
+  | HostPathNotFoundErrorAggregate
+  | HostResourceErrorAggregate
+  | HostValidationErrorAggregate;
 
 export type TaskStoreListTasksInput = {
   repoPath: string;

@@ -3,6 +3,34 @@ import { createCodexAppServerClient } from "./app-server-client";
 import type { CodexJsonRpcRequest, CodexJsonRpcTransport } from "./types";
 
 describe("createCodexAppServerClient", () => {
+  test("uses the canonical contract response schema", async () => {
+    const transport: CodexJsonRpcTransport = {
+      async request() {
+        return {
+          data: [
+            {
+              id: "gpt-5",
+              model: "gpt-5",
+              displayName: "GPT-5",
+              description: "GPT-5 model",
+              hidden: false,
+              supportedReasoningEfforts: [],
+              defaultReasoningEffort: "medium",
+              inputModalities: ["text"],
+              supportsPersonality: true,
+              isDefault: true,
+            },
+          ],
+          nextCursor: null,
+        };
+      },
+    };
+
+    await expect(createCodexAppServerClient(transport).modelList()).rejects.toThrow(
+      "additionalSpeedTiers",
+    );
+  });
+
   test("sends turn/interrupt requests", async () => {
     const calls: CodexJsonRpcRequest[] = [];
     const transport: CodexJsonRpcTransport = {
@@ -62,19 +90,18 @@ describe("createCodexAppServerClient", () => {
     const transport: CodexJsonRpcTransport = {
       async request(request) {
         calls.push(request);
-        return { data: [{ cwd: "/repo", skills: [] }], errors: [] };
+        return { data: [{ cwd: "/repo", skills: [], errors: [] }] };
       },
     };
     const client = createCodexAppServerClient(transport);
 
-    await expect(client.skillsList({ cwd: "/repo", forceReload: false })).resolves.toEqual({
-      data: [{ cwd: "/repo", skills: [] }],
-      errors: [],
+    await expect(client.skillsList({ cwds: ["/repo"], forceReload: false })).resolves.toEqual({
+      data: [{ cwd: "/repo", skills: [], errors: [] }],
     });
     expect(calls).toEqual([
       {
         method: "skills/list",
-        params: { cwd: "/repo", forceReload: false },
+        params: { cwds: ["/repo"], forceReload: false },
       },
     ]);
   });

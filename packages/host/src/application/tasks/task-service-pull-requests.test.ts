@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { z } from "zod";
 import { TaskPolicyError } from "../../domain/task";
 import { HostOperationError } from "../../effect/host-errors";
 import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
@@ -264,11 +265,11 @@ describe("createTaskService pull requests", () => {
   });
   test("detectPullRequest preserves task policy errors for invalid workflow statuses", async () => {
     const calls: unknown[] = [];
-    const taskStore = {
+    const taskStore: TaskStorePort = {
       getTask() {
         return Effect.succeed(task({ status: "open" }));
       },
-    } as unknown as TaskStorePort;
+    };
     const service = createTaskService({
       gitPort: createDirectMergeGitPort({ calls }),
       systemCommands: createPullRequestDetectSystemCommands({
@@ -289,7 +290,8 @@ describe("createTaskService pull requests", () => {
     );
 
     expect(error).toBeInstanceOf(TaskPolicyError);
-    expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
+    if (!(error instanceof TaskPolicyError)) throw error;
+    expect(error.code).toBe("TASK_POLICY_ERROR");
   });
   test("links a pull request by number after fetching provider metadata", async () => {
     const calls: unknown[] = [];
@@ -1254,13 +1256,10 @@ describe("createTaskService pull requests", () => {
         ]),
       }),
     );
-    const resolvedGhChecks = calls.filter(
-      (call) =>
-        typeof call === "object" &&
-        call !== null &&
-        (call as { type?: unknown }).type === "resolveCommand" &&
-        (call as { command?: unknown }).command === "gh",
-    );
+    const resolvedGhCheckSchema = z
+      .object({ type: z.literal("resolveCommand"), command: z.literal("gh") })
+      .passthrough();
+    const resolvedGhChecks = calls.filter((call) => resolvedGhCheckSchema.safeParse(call).success);
     expect(resolvedGhChecks).toHaveLength(1);
     expect(calls).toContainEqual({
       type: "setPullRequest",
@@ -3516,7 +3515,7 @@ describe("createTaskService pull requests", () => {
   });
   test("linkMergedPullRequest preserves task policy errors for invalid workflow statuses", async () => {
     const calls: unknown[] = [];
-    const taskStore = {
+    const taskStore: TaskStorePort = {
       listTasks(input: { repoPath: string }) {
         calls.push({ type: "list", input });
         return Effect.succeed([task({ status: "open" })]);
@@ -3529,7 +3528,7 @@ describe("createTaskService pull requests", () => {
           agentSessions: [],
         });
       },
-    } as unknown as TaskStorePort;
+    };
     const service = createTaskService({
       devServerService: createDirectMergeDevServerService(calls),
       gitPort: createDirectMergeGitPort({ calls }),
@@ -3554,7 +3553,8 @@ describe("createTaskService pull requests", () => {
     );
 
     expect(error).toBeInstanceOf(TaskPolicyError);
-    expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
+    if (!(error instanceof TaskPolicyError)) throw error;
+    expect(error.code).toBe("TASK_POLICY_ERROR");
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },

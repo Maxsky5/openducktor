@@ -1,3 +1,4 @@
+import { createWorkspaceSettingsServiceTestDouble } from "../../../test-support/service-test-doubles";
 import type { RepoConfig } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../../effect/host-errors";
@@ -23,23 +24,20 @@ const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   ...overrides,
 });
 const createWorkspaceSettingsService = (config: RepoConfig): WorkspaceSettingsService =>
-  ({
-    getRepoConfigByRepoPath(repoPath: unknown) {
+  createWorkspaceSettingsServiceTestDouble({
+    getRepoConfigByRepoPath(repoPath: string) {
       if (repoPath !== "/repo") {
         return Effect.fail(
           new HostOperationError({
             operation: "test.getRepoConfigByRepoPath",
             message: `Workspace is not configured for repository: ${String(repoPath)}`,
-            details: { repoPath },
+            details: { repoPath: String(repoPath) },
           }),
         );
       }
       return Effect.succeed(config);
     },
-  }) as Pick<
-    WorkspaceSettingsService,
-    "getRepoConfigByRepoPath"
-  > as unknown as WorkspaceSettingsService;
+  });
 const createSettingsConfig = ({
   existingPaths = new Set<string>(),
   canonicalPaths = {},
@@ -72,7 +70,7 @@ const createSettingsConfig = ({
     join(...paths) {
       return paths.join("/").replaceAll(/\/+/g, "/");
     },
-  }) as SettingsConfigPort as SettingsConfigPort;
+  }) satisfies SettingsConfigPort;
 describe("createTaskWorktreeService", () => {
   test("returns a deterministic task worktree when the directory exists", async () => {
     const service = createTaskWorktreeService({

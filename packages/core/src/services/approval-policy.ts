@@ -238,7 +238,7 @@ export const classifyAgentApprovalMutation = ({
   }
 
   const namesAndPaths = [actionName, toolName, ...lowerAffectedPaths]
-    .filter((value): value is string => typeof value === "string")
+    .flatMap((value) => (value === undefined ? [] : [value]))
     .map((value) => value.toLowerCase());
   if (namesAndPaths.some(includesShellNameHint)) {
     return "mutating";

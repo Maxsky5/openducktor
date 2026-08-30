@@ -1,8 +1,10 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import type { AgentStreamPart, AgentSubagentStatus } from "@openducktor/core";
+import type { ParsedOpencodePart } from "./opencode-ingress";
 
 type SubagentStreamPart = Extract<AgentStreamPart, { kind: "subagent" }>;
-type TextPart = Extract<Part, { type: "text" }>;
+type OpenCodePart = Part | ParsedOpencodePart;
+type TextPart = Extract<OpenCodePart, { type: "text" }>;
 
 type ParsedTaskResult = {
   externalSessionId: string;
@@ -119,16 +121,21 @@ const parseOpenCodeBackgroundTaskResult = (value: string): ParsedTaskResult | nu
   const summary = readElement(normalizedBodyLines, "summary", "first");
   const resultText = readElement(bodyLines, resultTag, "last");
 
-  return {
+  const result: ParsedTaskResult = {
     externalSessionId,
     status,
-    ...(summary ? { summary } : {}),
-    ...(resultText ? { resultText } : {}),
   };
+  if (summary) {
+    result.summary = summary;
+  }
+  if (resultText) {
+    result.resultText = resultText;
+  }
+  return result;
 };
 
 const readEndedAtMs = (part: TextPart, timestamp: string | undefined): number | undefined => {
-  if (typeof part.time?.end === "number") {
+  if (part.time?.end !== undefined) {
     return part.time.end;
   }
   if (!timestamp) {
@@ -139,7 +146,7 @@ const readEndedAtMs = (part: TextPart, timestamp: string | undefined): number | 
 };
 
 export const mapOpenCodeBackgroundTaskResultPart = (
-  part: Part,
+  part: OpenCodePart,
   options: {
     correlationKey?: string;
     timestamp?: string;
@@ -159,20 +166,27 @@ export const mapOpenCodeBackgroundTaskResultPart = (
   if (parsed.status !== "running") {
     endedAtMs = readEndedAtMs(part, options.timestamp);
   }
-  return {
+  const streamPart: SubagentStreamPart = {
     kind: "subagent",
     messageId: part.messageID,
     partId: part.id,
     correlationKey:
       options.correlationKey ?? ["session", part.messageID, parsed.externalSessionId].join(":"),
     status: parsed.status,
-    ...(description ? { description } : {}),
-    ...(parsed.status === "error" && parsed.resultText ? { error: parsed.resultText } : {}),
     externalSessionId: parsed.externalSessionId,
     executionMode: "background",
     metadata: {
       background: true,
     },
-    ...(typeof endedAtMs === "number" ? { endedAtMs } : {}),
   };
+  if (description) {
+    streamPart.description = description;
+  }
+  if (parsed.status === "error" && parsed.resultText) {
+    streamPart.error = parsed.resultText;
+  }
+  if (endedAtMs !== undefined) {
+    streamPart.endedAtMs = endedAtMs;
+  }
+  return streamPart;
 };

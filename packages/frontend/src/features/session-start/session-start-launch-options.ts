@@ -3,7 +3,6 @@ export {
   getSessionLaunchAction,
   getSessionLaunchActionsForRole,
   isLaunchStartModeAllowed,
-  isSessionLaunchActionId,
   resolveBuildContinuationLaunchAction,
   resolveBuildRequestChangesLaunchAction,
   SESSION_LAUNCH_ACTIONS,

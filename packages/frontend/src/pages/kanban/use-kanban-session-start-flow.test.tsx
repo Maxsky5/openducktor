@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
   DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -366,9 +366,8 @@ describe("useKanbanSessionStartFlow", () => {
   });
 
   test("blocks builder start when the persisted task target branch is invalid", async () => {
-    const originalToastError = toast.error;
     const toastError = mock(() => "toast-id");
-    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    const toastErrorSpy = spyOn(toast, "error").mockImplementation(toastError);
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -395,15 +394,14 @@ describe("useKanbanSessionStartFlow", () => {
           "Invalid openducktor.targetBranch metadata: missing field `branch`. Fix the saved task metadata or choose a valid target branch again.",
       });
     } finally {
-      (toast as { error: typeof toast.error }).error = originalToastError;
+      toastErrorSpy.mockRestore();
       await harness.unmount();
     }
   });
 
   test("does not block QA start when a task has an invalid build target branch", async () => {
-    const originalToastError = toast.error;
     const toastError = mock(() => "toast-id");
-    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    const toastErrorSpy = spyOn(toast, "error").mockImplementation(toastError);
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -427,7 +425,7 @@ describe("useKanbanSessionStartFlow", () => {
       expect(harness.getLatest().sessionStartModal?.title).toBe("Start QA Session");
       expect(toastError).not.toHaveBeenCalled();
     } finally {
-      (toast as { error: typeof toast.error }).error = originalToastError;
+      toastErrorSpy.mockRestore();
       await harness.unmount();
     }
   });
@@ -664,10 +662,8 @@ describe("useKanbanSessionStartFlow", () => {
   });
 
   test("background start adds one Agent Studio task tab when setting is enabled", async () => {
-    const originalToastSuccess = toast.success;
     const toastSuccess = mock(() => "toast-id");
-    (toast as { success: typeof toast.success }).success =
-      toastSuccess as unknown as typeof toast.success;
+    const toastSuccessSpy = spyOn(toast, "success").mockImplementation(toastSuccess);
     const storageKey = toTabsStorageKey("workspace-1");
     globalThis.localStorage.removeItem(storageKey);
     const navigate = mock(() => {});
@@ -720,7 +716,7 @@ describe("useKanbanSessionStartFlow", () => {
       ]);
     } finally {
       globalThis.localStorage.removeItem(storageKey);
-      (toast as { success: typeof toast.success }).success = originalToastSuccess;
+      toastSuccessSpy.mockRestore();
       await harness.unmount();
     }
   });
@@ -860,9 +856,8 @@ describe("useKanbanSessionStartFlow", () => {
         }),
       );
 
-      await harness.run(async () => {
+      await harness.run(() => {
         startSessionDeferred.resolve(sessionIdentity("session-new"));
-        await startPromise;
       });
       await expect(startPromise).resolves.toBe("session-new");
     } finally {

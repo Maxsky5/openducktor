@@ -1,4 +1,3 @@
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import {
   advanceStreamAssistantMessageIdentity,
@@ -6,18 +5,11 @@ import {
 } from "./claude-agent-sdk-event-session";
 import { retractClaudeTodoToolResults } from "./claude-agent-sdk-todos";
 import { retractClaudeTranscriptCorrelations } from "./claude-agent-sdk-transcript-correlation";
-import { isRecord } from "./claude-agent-sdk-utils";
-
-const readStringArrayProp = (value: unknown, key: string): string[] => {
-  if (!isRecord(value)) {
-    return [];
-  }
-  const candidate = value[key];
-  if (!Array.isArray(candidate)) {
-    return [];
-  }
-  return candidate.filter((item): item is string => typeof item === "string" && item.length > 0);
-};
+import type {
+  ClaudeSdkAssistantMessageProjection,
+  ClaudeSdkModelRefusalFallbackMessageProjection,
+  ClaudeSdkResultMessageProjection,
+} from "./claude-agent-sdk-message-projection";
 
 const emitTranscriptRetraction = ({
   emit,
@@ -84,7 +76,7 @@ export const emitSupersededTranscriptMessage = ({
   timestamp,
 }: {
   emit: (event: AgentEvent) => void;
-  message: Extract<SDKMessage, { type: "assistant" }>;
+  message: ClaudeSdkAssistantMessageProjection;
   session: ClaudeEventSession;
   timestamp: string;
 }): void => {
@@ -92,7 +84,7 @@ export const emitSupersededTranscriptMessage = ({
     emit,
     session,
     timestamp,
-    messageIds: readStringArrayProp(message, "supersedes"),
+    messageIds: message.supersedes?.filter((messageId) => messageId.length > 0) ?? [],
   });
 };
 
@@ -103,17 +95,18 @@ export const emitRetractedTranscriptMessages = ({
   timestamp,
 }: {
   emit: (event: AgentEvent) => void;
-  message: Extract<
-    SDKMessage,
-    { type: "result" } | { type: "system"; subtype: "model_refusal_fallback" }
-  >;
+  message: ClaudeSdkResultMessageProjection | ClaudeSdkModelRefusalFallbackMessageProjection;
   session: ClaudeEventSession;
   timestamp: string;
 }): void => {
+  const retractedMessageIds =
+    message.type === "system"
+      ? (message.retracted_message_uuids?.filter((messageId) => messageId.length > 0) ?? [])
+      : [];
   emitTranscriptRetraction({
     emit,
     session,
     timestamp,
-    messageIds: readStringArrayProp(message, "retracted_message_uuids"),
+    messageIds: retractedMessageIds,
   });
 };

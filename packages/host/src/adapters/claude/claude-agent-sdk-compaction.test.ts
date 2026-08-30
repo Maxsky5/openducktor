@@ -14,6 +14,8 @@ import {
   claudeSdkMessageFixture,
 } from "./claude-agent-sdk-test-messages";
 
+const COMPACTION_MESSAGE_ID = "00000000-0000-4000-8000-000000000005";
+
 const compactMessageInput = (): SendAgentUserMessageInput => ({
   externalSessionId: "session-1",
   repoPath: "/repo",
@@ -47,7 +49,7 @@ describe("Claude manual compaction", () => {
       session,
       messageInput: compactMessageInput(),
       now: () => "2026-07-23T10:00:00.000Z",
-      randomId: () => "compact-request-1",
+      randomId: () => COMPACTION_MESSAGE_ID,
       emit: (_session, event) => events.push(event),
     });
 
@@ -58,14 +60,14 @@ describe("Claude manual compaction", () => {
     });
     expect(accepted.message).toBe("/compact");
     expect(session.activeManualCompaction).toEqual({
-      messageId: "compact-request-1",
+      messageId: COMPACTION_MESSAGE_ID,
       boundaryReceived: false,
     });
     expect(events).toContainEqual({
       type: "session_compaction_started",
       externalSessionId: "session-1",
       timestamp: "2026-07-23T10:00:00.000Z",
-      messageId: "compact-request-1",
+      messageId: COMPACTION_MESSAGE_ID,
       message: "Session compaction started.",
     });
   });
@@ -74,7 +76,7 @@ describe("Claude manual compaction", () => {
     const events: AgentEvent[] = [];
     const session: ClaudeEventSession = createEventTestSession();
     session.activeManualCompaction = {
-      messageId: "compact-request-1",
+      messageId: COMPACTION_MESSAGE_ID,
       boundaryReceived: false,
     };
 
@@ -86,7 +88,7 @@ describe("Claude manual compaction", () => {
       message: claudeSdkMessageFixture({
         type: "system",
         subtype: "compact_boundary",
-        uuid: "compact-boundary-1",
+        uuid: "ab735562-906b-44e5-8e96-da22227afe6d",
         session_id: "session-1",
         compact_metadata: {
           trigger: "manual",
@@ -102,7 +104,7 @@ describe("Claude manual compaction", () => {
         type: "session_compacted",
         externalSessionId: "session-1",
         timestamp: "2026-07-23T10:00:02.000Z",
-        messageId: "compact-request-1",
+        messageId: COMPACTION_MESSAGE_ID,
         message: "Session compacted.",
       },
     ]);
@@ -124,7 +126,7 @@ describe("Claude manual compaction", () => {
       session,
       messageInput: compactMessageInput(),
       now: () => "2026-07-23T10:00:00.000Z",
-      randomId: () => "compact-request-1",
+      randomId: () => COMPACTION_MESSAGE_ID,
       emit: (_session, event) => events.push(event),
     });
 
@@ -144,7 +146,7 @@ describe("Claude manual compaction", () => {
       type: "session_compaction_started",
       externalSessionId: "session-1",
       timestamp: "2026-07-23T10:00:03.000Z",
-      messageId: "compact-request-1",
+      messageId: COMPACTION_MESSAGE_ID,
       message: "Session compaction started.",
     });
     expect(events.some((event) => event.type === "user_message")).toBe(false);
@@ -190,7 +192,7 @@ describe("Claude manual compaction", () => {
     session.activeSdkUserTurnCount = 1;
     session.pendingUserTurnCount = 1;
     session.activeManualCompaction = {
-      messageId: "compact-request-1",
+      messageId: COMPACTION_MESSAGE_ID,
       boundaryReceived: false,
     };
 
@@ -202,7 +204,7 @@ describe("Claude manual compaction", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
-        uuid: "compact-result-1",
+        uuid: "070fcb17-4482-4bd2-8652-7da83bba5e5c",
         session_id: "session-1",
         is_error: false,
         result: "Not enough messages to compact.",
@@ -219,7 +221,7 @@ describe("Claude manual compaction", () => {
         type: "system",
         subtype: "session_state_changed",
         state: "idle",
-        uuid: "compact-idle-1",
+        uuid: "737457ac-3d2e-432d-8039-7bad3fe95f44",
         session_id: "session-1",
       }),
     });
@@ -229,7 +231,7 @@ describe("Claude manual compaction", () => {
       type: "session_compacted",
       externalSessionId: "session-1",
       timestamp: "2026-07-23T10:00:02.000Z",
-      messageId: "compact-request-1",
+      messageId: COMPACTION_MESSAGE_ID,
       message: "Not enough messages to compact.",
     });
     expect(events.some((event) => event.type === "assistant_message")).toBe(false);
@@ -242,7 +244,7 @@ describe("Claude manual compaction", () => {
         {
           type: "system",
           subtype: "local_command",
-          uuid: "compact-request-1",
+          uuid: COMPACTION_MESSAGE_ID,
           session_id: "session-1",
           timestamp: "2026-07-23T10:00:00.000Z",
           content:
@@ -251,7 +253,7 @@ describe("Claude manual compaction", () => {
         {
           type: "system",
           subtype: "compact_boundary",
-          uuid: "compact-boundary-1",
+          uuid: "ab735562-906b-44e5-8e96-da22227afe6d",
           session_id: "session-1",
           timestamp: "2026-07-23T10:00:02.000Z",
           compact_metadata: { trigger: "manual", pre_tokens: 12_000, post_tokens: 2_000 },
@@ -259,7 +261,7 @@ describe("Claude manual compaction", () => {
         {
           type: "result",
           subtype: "success",
-          uuid: "compact-result-1",
+          uuid: "070fcb17-4482-4bd2-8652-7da83bba5e5c",
           session_id: "session-1",
           timestamp: "2026-07-23T10:00:02.100Z",
           is_error: false,
@@ -271,7 +273,7 @@ describe("Claude manual compaction", () => {
 
     expect(history).toEqual([
       {
-        messageId: "compact-request-1",
+        messageId: COMPACTION_MESSAGE_ID,
         role: "system",
         timestamp: "2026-07-23T10:00:02.000Z",
         text: "Session compacted.",
@@ -300,7 +302,7 @@ describe("Claude manual compaction", () => {
         {
           type: "system",
           subtype: "compact_boundary",
-          uuid: "compact-boundary-1",
+          uuid: "ab735562-906b-44e5-8e96-da22227afe6d",
           session_id: "session-1",
           timestamp: "2026-07-23T10:00:02.000Z",
           compact_metadata: { trigger: "manual", pre_tokens: 12_000, post_tokens: 2_000 },
@@ -345,7 +347,7 @@ describe("Claude manual compaction", () => {
         {
           type: "system",
           subtype: "compact_boundary",
-          uuid: "compact-boundary-1",
+          uuid: "ab735562-906b-44e5-8e96-da22227afe6d",
           session_id: "session-1",
           timestamp: "2026-07-23T10:00:02.000Z",
           compact_metadata: { trigger: "manual", pre_tokens: 12_000, post_tokens: 2_000 },
@@ -402,7 +404,7 @@ describe("Claude manual compaction", () => {
         {
           type: "result",
           subtype: "success",
-          uuid: "compact-result-1",
+          uuid: "070fcb17-4482-4bd2-8652-7da83bba5e5c",
           session_id: "session-1",
           timestamp: "2026-07-23T10:00:02.200Z",
           is_error: false,
@@ -414,7 +416,7 @@ describe("Claude manual compaction", () => {
 
     expect(history).toEqual([
       {
-        messageId: "compact-boundary-1",
+        messageId: "ab735562-906b-44e5-8e96-da22227afe6d",
         role: "system",
         timestamp: "2026-07-23T10:00:02.000Z",
         text: "Session compacted.",
@@ -434,7 +436,7 @@ describe("Claude manual compaction", () => {
         {
           type: "system",
           subtype: "local_command",
-          uuid: "compact-request-1",
+          uuid: COMPACTION_MESSAGE_ID,
           session_id: "session-1",
           timestamp: "2026-07-23T10:00:00.000Z",
           content:
@@ -443,7 +445,7 @@ describe("Claude manual compaction", () => {
         {
           type: "result",
           subtype: "success",
-          uuid: "compact-result-1",
+          uuid: "070fcb17-4482-4bd2-8652-7da83bba5e5c",
           session_id: "session-1",
           timestamp: "2026-07-23T10:00:02.100Z",
           is_error: false,
@@ -455,7 +457,7 @@ describe("Claude manual compaction", () => {
 
     expect(history).toEqual([
       {
-        messageId: "compact-request-1",
+        messageId: COMPACTION_MESSAGE_ID,
         role: "system",
         timestamp: "2026-07-23T10:00:02.100Z",
         text: "Not enough messages to compact.",
@@ -475,7 +477,7 @@ describe("Claude manual compaction", () => {
         {
           type: "system",
           subtype: "local_command",
-          uuid: "compact-request-1",
+          uuid: COMPACTION_MESSAGE_ID,
           session_id: "session-1",
           timestamp: "2026-07-23T10:00:00.000Z",
           content:
@@ -484,7 +486,7 @@ describe("Claude manual compaction", () => {
         {
           type: "result",
           subtype: "error_during_execution",
-          uuid: "compact-result-1",
+          uuid: "070fcb17-4482-4bd2-8652-7da83bba5e5c",
           session_id: "session-1",
           timestamp: "2026-07-23T10:00:02.100Z",
           is_error: true,
@@ -498,7 +500,7 @@ describe("Claude manual compaction", () => {
 
     expect(history).toEqual([
       {
-        messageId: "compact-result-1",
+        messageId: "070fcb17-4482-4bd2-8652-7da83bba5e5c",
         role: "system",
         timestamp: "2026-07-23T10:00:02.100Z",
         text: "Compaction failed.",
@@ -518,7 +520,7 @@ describe("Claude manual compaction", () => {
     const boundary = claudeSdkMessageFixture({
       type: "system",
       subtype: "compact_boundary",
-      uuid: "compact-boundary-1",
+      uuid: "ab735562-906b-44e5-8e96-da22227afe6d",
       session_id: "session-1",
       timestamp: "2026-07-23T10:00:02.000Z",
       compact_metadata: { trigger: "auto", pre_tokens: 12_000, post_tokens: 2_000 },
@@ -541,13 +543,13 @@ describe("Claude manual compaction", () => {
         type: "session_compacted",
         externalSessionId: "session-1",
         timestamp: "2026-07-23T10:00:02.000Z",
-        messageId: "compact-boundary-1",
+        messageId: "ab735562-906b-44e5-8e96-da22227afe6d",
         message: "Session compacted.",
       },
     ]);
     expect(history).toEqual([
       {
-        messageId: "compact-boundary-1",
+        messageId: "ab735562-906b-44e5-8e96-da22227afe6d",
         role: "system",
         timestamp: "2026-07-23T10:00:02.000Z",
         text: "Session compacted.",

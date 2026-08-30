@@ -31,7 +31,7 @@ type UseKanbanPageModelsArgs = {
   onCloseDetails: () => void;
 };
 
-const EMPTY_KANBAN_TASKS = Object.freeze([]) as unknown as TaskCard[];
+const EMPTY_KANBAN_TASKS: TaskCard[] = [];
 
 export const isKanbanForegroundLoading = (args: {
   hasActiveWorkspace: boolean;

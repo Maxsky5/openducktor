@@ -131,7 +131,7 @@ export const enterRuntimeStage = async (): Promise<void> => {
   });
   await screen.findByRole("heading", { name: "Configure coding agents" });
   await waitFor(() =>
-    expect((screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled).toBe(
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }).disabled).toBe(
       false,
     ),
   );

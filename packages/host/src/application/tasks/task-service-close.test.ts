@@ -13,6 +13,14 @@ import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { TaskActivityGuardPort } from "../../ports/task-activity-guard-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
+import {
+  createDevServerServiceTestDouble,
+  createGitPortTestDouble,
+  createSettingsConfigTestDouble,
+  createWorkspaceSettingsServiceTestDouble,
+  createWorktreeFilePortTestDouble,
+} from "../../test-support/service-test-doubles";
+import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import type { DevServerService } from "../dev-servers/dev-server-service";
 import { TerminalServiceError } from "../terminals/terminal-service";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-service";
@@ -102,7 +110,7 @@ const createTaskStore = (
   calls: string[] = [],
   sessionsByTaskId: Record<string, AgentSessionRecord[]> = {},
 ): TaskStorePort =>
-  ({
+  createTaskStoreTestDouble({
     listTasks: () => Effect.succeed(tasks),
     getTaskMetadata: (input: { taskId: string }) =>
       Effect.succeed(createMetadata(sessionsByTaskId[input.taskId] ?? [])),
@@ -116,29 +124,29 @@ const createTaskStore = (
       const updated = { ...current, status, updatedAt: "2026-05-10T12:00:00.000Z" };
       return Effect.succeed(updated);
     },
-  }) as unknown as TaskStorePort;
+  });
 
 const createSettingsConfig = (existingPaths = new Set<string>()): SettingsConfigPort =>
-  ({
+  createSettingsConfigTestDouble({
     defaultWorktreeBasePath: () => "/worktrees/repo",
     defaultRepoWorktreeBasePath: () => "/worktrees/repo",
     resolveConfiguredPath: (path: string) => path,
     canonicalizePath: (path: string) => Effect.succeed(path),
     pathExists: (path: string) => Effect.succeed(existingPaths.has(path)),
     join: (...paths: string[]) => paths.join("/"),
-  }) as unknown as SettingsConfigPort;
+  });
 
 const createWorkspaceSettingsService = (): WorkspaceSettingsService =>
-  ({
+  createWorkspaceSettingsServiceTestDouble({
     getRepoConfigByRepoPath: () => Effect.succeed(repoConfig),
-  }) as unknown as WorkspaceSettingsService;
+  });
 
 const createTaskWorktreeService = (workingDirectory: string | null): TaskWorktreeService => ({
   getTaskWorktree: () => Effect.succeed(workingDirectory ? { workingDirectory } : null),
 });
 
 const createWorktreeFiles = (calls: string[] = []): WorktreeFilePort =>
-  ({
+  createWorktreeFilePortTestDouble({
     resolveWorktreePath: (_repoPath: string, worktreePath: string) => worktreePath,
     resolvePathWithinRoot: (root: string, candidate: string) =>
       Effect.succeed({
@@ -156,16 +164,22 @@ const createWorktreeFiles = (calls: string[] = []): WorktreeFilePort =>
       calls.push(`remove-path:${path}`);
       return Effect.succeed(undefined);
     },
-  }) as unknown as WorktreeFilePort;
+  });
 
 const createDevServerService = (calls: string[] = []): DevServerService =>
-  ({
-    stop: (input: { taskId: string }) => {
-      const { taskId } = input;
+  createDevServerServiceTestDouble({
+    stop: (input) => {
+      const { repoPath, taskId } = input;
       calls.push(`stop-dev:${taskId}`);
-      return Effect.succeed({ stopped: [] });
+      return Effect.succeed({
+        repoPath,
+        taskId,
+        worktreePath: null,
+        scripts: [],
+        updatedAt: "2026-05-10T11:30:00.000Z",
+      });
     },
-  }) as unknown as DevServerService;
+  });
 
 const createGitPort = (input: {
   calls?: string[];
@@ -174,7 +188,7 @@ const createGitPort = (input: {
   deleteBranchFails?: boolean;
   registered?: boolean;
 }): GitPort =>
-  ({
+  createGitPortTestDouble({
     canonicalizePath: (path: string) => Effect.succeed(path),
     isGitRepository: () => Effect.succeed(true),
     shareGitCommonDirectory: () => Effect.succeed(true),
@@ -182,7 +196,12 @@ const createGitPort = (input: {
     listBranches: () => Effect.succeed(input.branches ?? []),
     getCurrentBranch: () =>
       Effect.succeed({
-        name: Object.hasOwn(input, "currentBranch") ? input.currentBranch : "odt/task-1",
+        detached: false,
+        ...(Object.hasOwn(input, "currentBranch")
+          ? input.currentBranch
+            ? { name: input.currentBranch }
+            : {}
+          : { name: "odt/task-1" }),
       }),
     removeWorktree: (_repoPath: string, worktreePath: string) => {
       input.calls?.push(`remove-worktree:${worktreePath}`);
@@ -200,7 +219,7 @@ const createGitPort = (input: {
       }
       return Effect.succeed(undefined);
     },
-  }) as unknown as GitPort;
+  });
 
 describe("TaskService.closeTask", () => {
   test("closes an open task without local cleanup and preserves returned metadata", async () => {
@@ -637,7 +656,7 @@ describe("TaskService.closeTask", () => {
           await metadataReadReleased;
           return createMetadata();
         }),
-    } as TaskStorePort;
+    } satisfies TaskStorePort;
     const taskSessionBootstrapCoordinator = createTaskSessionBootstrapCoordinator();
     const service = createTaskService({
       taskStore,

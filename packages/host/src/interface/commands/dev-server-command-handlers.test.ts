@@ -12,8 +12,6 @@ import { createDevServerCommandHandlers } from "./dev-server-command-handlers";
 const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
-const createDevServerServiceFake = (service: DevServerService): DevServerService =>
-  service as DevServerService;
 describe("createDevServerCommandHandlers", () => {
   test("routes dev server commands to the service", async () => {
     const calls: Array<{
@@ -27,7 +25,7 @@ describe("createDevServerCommandHandlers", () => {
       scripts: [],
       updatedAt: "2026-05-10T10:00:00.000Z",
     };
-    const service = createDevServerServiceFake({
+    const service: DevServerService = {
       getState(input) {
         return Effect.tryPromise({
           try: async () => {
@@ -84,7 +82,7 @@ describe("createDevServerCommandHandlers", () => {
             }),
         });
       },
-    });
+    };
     const router = createHostCommandRouter({
       handlers: createDevServerCommandHandlers(service),
     });
@@ -109,7 +107,7 @@ describe("createDevServerCommandHandlers", () => {
   });
   test("rejects malformed command inputs before calling the service", async () => {
     const calls: unknown[] = [];
-    const service = createDevServerServiceFake({
+    const service: DevServerService = {
       getState(input) {
         return Effect.tryPromise({
           try: async () => {
@@ -166,7 +164,7 @@ describe("createDevServerCommandHandlers", () => {
             }),
         });
       },
-    });
+    };
     const router = createHostCommandRouter({
       handlers: createDevServerCommandHandlers(service),
     });

@@ -14,7 +14,7 @@ import { QueryProvider } from "@/lib/query-provider";
 import { createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { useAgentStudioTerminals } from "./use-agent-studio-terminals";
 
-if (typeof document === "undefined") {
+if (globalThis.document === undefined) {
   GlobalRegistrator.register();
 }
 
@@ -132,7 +132,7 @@ describe("useAgentStudioTerminals", () => {
         summary: { label: "/repo/worktrees/task-a" },
         requestState: "ready",
       });
-      expect(typeof getLatest().tabs[0]?.tabId).toBe("string");
+      expect(getLatest().tabs[0]?.tabId).toEqual(expect.any(String));
       expect(getLatest().activeTabId).toBe(getLatest().tabs[0]?.tabId ?? null);
     } finally {
       releaseRefresh();

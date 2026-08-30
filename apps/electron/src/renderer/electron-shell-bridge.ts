@@ -1,11 +1,4 @@
-import {
-  type AppUpdateCommandResult,
-  type AppUpdateState,
-  agentSessionLiveEnvelopeSchema,
-  appUpdateCommandResultSchema,
-  appUpdateStateSchema,
-  hostInvokeFailureSchema,
-} from "@openducktor/contracts";
+import { hostInvokeFailureSchema } from "@openducktor/contracts";
 import type { ShellBridge } from "@openducktor/frontend";
 import {
   createAgentSessionLiveAttachment,
@@ -42,20 +35,20 @@ export const getElectronApi = (): OpenDucktorElectronApi => {
 };
 
 const subscribeElectronEvent =
-  (electronApi: OpenDucktorElectronApi, channel: string): ShellBridge["subscribeRunEvents"] =>
+  (
+    electronApi: OpenDucktorElectronApi,
+    channel: typeof RUN_EVENT_CHANNEL,
+  ): ShellBridge["subscribeRunEvents"] =>
   async (listener) =>
     electronApi.subscribe(channel, listener);
 
-const readAppUpdateState = (value: unknown): AppUpdateState => appUpdateStateSchema.parse(value);
-
-const readAppUpdateCommandResult = (value: unknown): AppUpdateCommandResult =>
-  appUpdateCommandResultSchema.parse(value);
-
 export const createElectronShellBridge = (): ShellBridge => {
   const electronApi = getElectronApi();
-  const client = createHostClient(async (command, args) => {
+  const client = createHostClient(async (command, args, resultSchema) => {
     const response = await electronApi.invoke(command, args);
-    if (response.ok) return response.value;
+    if (response.ok) {
+      return resultSchema.parse(response.value);
+    }
     const failure = response.error.failure
       ? hostInvokeFailureSchema.parse(response.error.failure)
       : null;
@@ -78,7 +71,7 @@ export const createElectronShellBridge = (): ShellBridge => {
     observeAgentSessionLive: async (input, listener) => {
       const attachment = createAgentSessionLiveAttachment(input.repoPath, listener);
       const unsubscribe = electronApi.subscribe(AGENT_SESSION_LIVE_EVENT_CHANNEL, (payload) => {
-        attachment.accept(agentSessionLiveEnvelopeSchema.parse(payload));
+        attachment.accept(payload);
       });
       try {
         await client.agentSessionLiveRefresh(input);
@@ -91,13 +84,13 @@ export const createElectronShellBridge = (): ShellBridge => {
     subscribeTaskStream: (input, onFrame, onTerminalFailure) =>
       electronApi.taskStream.subscribe(input, onFrame, onTerminalFailure),
     appUpdates: {
-      getState: async () => readAppUpdateState(await electronApi.appUpdates.getState()),
-      check: async (input) => readAppUpdateCommandResult(await electronApi.appUpdates.check(input)),
-      download: async () => readAppUpdateCommandResult(await electronApi.appUpdates.download()),
-      install: async () => readAppUpdateCommandResult(await electronApi.appUpdates.install()),
+      getState: () => electronApi.appUpdates.getState(),
+      check: (input) => electronApi.appUpdates.check(input),
+      download: () => electronApi.appUpdates.download(),
+      install: () => electronApi.appUpdates.install(),
       subscribeState: async (listener) =>
         electronApi.appUpdates.subscribe((state) => {
-          listener(readAppUpdateState(state));
+          listener(state);
         }),
     },
     openExternalUrl: (url) => electronApi.openExternalUrl(url),

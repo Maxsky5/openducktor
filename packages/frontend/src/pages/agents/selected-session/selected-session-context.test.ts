@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { agentRoleValues } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
@@ -132,17 +133,15 @@ describe("buildAgentStudioSelectedSessionContext", () => {
   });
 
   test("maps active document from selected role semantics", () => {
-    const expectedByRole: Record<AgentRole, string | null> = {
+    const expectedByRole = {
       spec: "Specification",
       planner: "Implementation Plan",
       qa: "QA Report",
       build: null,
-    };
+    } satisfies Record<AgentRole, string | null>;
 
-    for (const [role, expectedTitle] of Object.entries(expectedByRole) as [
-      AgentRole,
-      string | null,
-    ][]) {
+    for (const role of agentRoleValues) {
+      const expectedTitle = expectedByRole[role];
       const session = createSession({
         sessionAssociation: { kind: "workflow", taskId: "task-1", role: role },
       });

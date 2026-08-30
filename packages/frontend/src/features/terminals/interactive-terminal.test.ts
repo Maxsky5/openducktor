@@ -1,4 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import {
+  createDataTransferItemFixture,
+  createDataTransferItemListFixture,
+  createDataTransferFixture,
+  createFileListFixture,
+} from "@/test-utils/focused-fixture";
 import { TERMINAL_PROTOCOL_VERSION } from "@openducktor/contracts";
 import {
   createLatestResizeScheduler,
@@ -19,16 +25,16 @@ import {
   resolveTerminalKeyAction,
 } from "./terminal-keyboard-policy";
 
-const keyEvent = (overrides: Partial<KeyboardEvent>): KeyboardEvent =>
-  ({
-    altKey: false,
-    ctrlKey: false,
-    key: "",
-    metaKey: false,
-    shiftKey: false,
-    type: "keydown",
-    ...overrides,
-  }) as KeyboardEvent;
+interface ClipboardStateContract {
+  resolve: ((text: string) => void) | null;
+}
+
+interface ParsedContract {
+  value: (() => void) | null;
+}
+
+const keyEvent = (overrides: KeyboardEventInit): KeyboardEvent =>
+  new KeyboardEvent("keydown", overrides);
 
 describe("InteractiveTerminal policies", () => {
   test("shows the latest output on first reveal without changing later scroll positions", () => {
@@ -167,10 +173,12 @@ describe("InteractiveTerminal policies", () => {
     });
 
     handlePaste({
-      clipboardData: {
-        files: [],
-        items: [{ kind: "file", type: "image/png" }],
-      } as unknown as DataTransfer,
+      clipboardData: createDataTransferFixture({
+        files: createFileListFixture([]),
+        items: createDataTransferItemListFixture([
+          createDataTransferItemFixture({ kind: "file", type: "image/png" }),
+        ]),
+      }),
       preventDefault: () => preventDefaultCalls.push("prevented"),
       stopPropagation: () => stopPropagationCalls.push("stopped"),
     });
@@ -189,10 +197,12 @@ describe("InteractiveTerminal policies", () => {
     });
 
     handlePaste({
-      clipboardData: {
-        files: [],
-        items: [{ kind: "string", type: "text/plain" }],
-      } as unknown as DataTransfer,
+      clipboardData: createDataTransferFixture({
+        files: createFileListFixture([]),
+        items: createDataTransferItemListFixture([
+          createDataTransferItemFixture({ kind: "string", type: "text/plain" }),
+        ]),
+      }),
       preventDefault: () => calls.push("prevented"),
       stopPropagation: () => calls.push("stopped"),
     });
@@ -206,10 +216,10 @@ describe("InteractiveTerminal policies", () => {
     const first = new File([new Uint8Array([1])], "first image.png", { type: "image/png" });
     const second = new File([new Uint8Array([2])], "second.jpg", { type: "image/jpeg" });
     const text = new File(["notes"], "notes.txt", { type: "text/plain" });
-    const transfer = {
-      files: [first, text, second],
-      items: [],
-    } as unknown as DataTransfer;
+    const transfer = createDataTransferFixture({
+      files: createFileListFixture([first, text, second]),
+      items: createDataTransferItemListFixture([]),
+    });
     const stagedFiles: string[] = [];
     const preparedPaths: string[][] = [];
     const pasted: string[] = [];
@@ -244,11 +254,11 @@ describe("InteractiveTerminal policies", () => {
     const stageFile = async () => {
       throw new Error("Oversized images must not be staged.");
     };
-    const largeImage = {
-      name: "large.png",
-      size: 20 * 1024 * 1024 + 1,
-      type: "image/png",
-    } as File;
+    const largeImage = new File([], "large.png", { type: "image/png" });
+    Object.defineProperty(largeImage, "size", {
+      configurable: true,
+      value: 20 * 1024 * 1024 + 1,
+    });
     await expect(
       pasteDroppedTerminalImages({
         files: [largeImage],
@@ -474,7 +484,7 @@ describe("InteractiveTerminal policies", () => {
 
   test("preserves paste ordering before later typed input", async () => {
     const writes: string[] = [];
-    const clipboardState: { resolve: ((text: string) => void) | null } = { resolve: null };
+    const clipboardState: ClipboardStateContract = { resolve: null };
     const clipboard = new Promise<string>((resolve) => {
       clipboardState.resolve = resolve;
     });
@@ -635,7 +645,7 @@ describe("InteractiveTerminal policies", () => {
   });
 
   test("acknowledges output only after the terminal parser callback", async () => {
-    const parsed: { value: (() => void) | null } = { value: null };
+    const parsed: ParsedContract = { value: null };
     const acknowledgements: number[] = [];
     const sequencer = createTerminalOutputSequencer({
       write: (_payload, callback) => {

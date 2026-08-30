@@ -11,12 +11,20 @@ type RepoAgentDefaultDraft = {
   profileId?: string | null | undefined;
 };
 
-const REPO_AGENT_DEFAULT_LABELS: Record<RepoAgentDefaultRole, string> = {
+export type NormalizedRepoAgentDefault = {
+  modelId: string;
+  profileId?: string;
+  providerId: string;
+  runtimeKind: RuntimeKind;
+  variant?: string;
+};
+
+const REPO_AGENT_DEFAULT_LABELS = {
   spec: "Specification",
   planner: "Planner",
   build: "Builder",
   qa: "QA",
-};
+} satisfies Record<RepoAgentDefaultRole, string>;
 
 const trimNonEmpty = (value: string | null | undefined): string | null => {
   const trimmed = value?.trim();
@@ -36,15 +44,7 @@ export const resolveConfiguredAgentRuntimeKind = (
 export const normalizeRepoAgentDefaultForSave = (
   role: RepoAgentDefaultRole,
   entry: RepoAgentDefaultDraft | null | undefined,
-):
-  | {
-      runtimeKind: RuntimeKind;
-      providerId: string;
-      modelId: string;
-      variant?: string;
-      profileId?: string;
-    }
-  | undefined => {
+): NormalizedRepoAgentDefault | undefined => {
   if (!entry) {
     return undefined;
   }
@@ -62,11 +62,16 @@ export const normalizeRepoAgentDefaultForSave = (
   const variant = trimNonEmpty(entry.variant);
   const profileId = trimNonEmpty(entry.profileId);
 
-  return {
+  const selection: NormalizedRepoAgentDefault = {
     runtimeKind: entry.runtimeKind,
     providerId,
     modelId,
-    ...(variant ? { variant } : {}),
-    ...(profileId ? { profileId } : {}),
   };
+  if (variant) {
+    selection.variant = variant;
+  }
+  if (profileId) {
+    selection.profileId = profileId;
+  }
+  return selection;
 };

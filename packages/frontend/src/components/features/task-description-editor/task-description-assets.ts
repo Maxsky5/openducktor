@@ -36,10 +36,10 @@ export const collectTaskDescriptionAssetIds = (markdown: string): Set<string> =>
 export const collectTaskDescriptionAssetsForSubmit = (
   markdown: string,
   stagedAssetIds: string[],
-): { referencedAssetIds: Set<string>; stagedAssetIds: string[] } => {
+) => {
   const referencedAssetIds = collectTaskDescriptionAssetIds(markdown);
   return {
     referencedAssetIds,
     stagedAssetIds: stagedAssetIds.filter((assetId) => referencedAssetIds.has(assetId)),
-  };
+  } satisfies { referencedAssetIds: Set<string>; stagedAssetIds: string[] };
 };

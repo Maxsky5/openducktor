@@ -57,7 +57,7 @@ const runBuildCommandEffect = (
         operation: label,
         message: errorMessage(cause),
         cause,
-        details: { command, cwd: packageRoot },
+        details: { command: [...command], cwd: packageRoot },
       }),
   });
 
@@ -88,8 +88,8 @@ export const buildWebPackageEffect = (): Effect.Effect<void, WebDependencyError>
 export const buildWebPackage = (): Promise<void> => runWebBoundary(buildWebPackageEffect());
 
 if (import.meta.main) {
-  await buildWebPackage().catch((error: unknown) => {
-    console.error(errorMessage(error));
+  await buildWebPackage().catch((cause: unknown) => {
+    console.error(errorMessage(cause));
     process.exit(1);
   });
 }

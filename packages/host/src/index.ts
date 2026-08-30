@@ -10,6 +10,8 @@ export {
   type CreateOpenCodeLiveSessionAdapterPreparerInput,
   createOpenCodeLiveSessionAdapterPreparer,
   type OpenCodeLiveSessionAdapterPreparer,
+  type OpenCodeRuntimeSessionAdapterPreparer,
+  type PreparedOpenCodeLiveSessionAdapter,
 } from "./adapters/agent-sessions/opencode-live-session-adapter";
 export { createLocalAttachmentAdapter } from "./adapters/attachments/local-attachment-adapter";
 export type { McpBridgeDiscoveryMode } from "./adapters/mcp/mcp-bridge-discovery-file";
@@ -64,13 +66,9 @@ export { resolveOpenDucktorBaseDir } from "./config/openducktor-config-dir";
 export { TaskAssetError, taskAssetErrorToFailure } from "./effect/task-asset-error";
 export {
   createHostEventBus,
-  HOST_EVENT_CHANNELS,
   type HostEventBusPort,
-  type HostEventChannel,
   type HostEventListener,
   type HostEventUnsubscribe,
-  isHostEventChannel,
-  parseHostEventChannel,
 } from "./events/host-event-bus";
 export {
   createOpenDucktorDailyLogWriter,
@@ -96,8 +94,11 @@ export {
 } from "./interface/commands/host-command-registry";
 export type {
   EffectHostCommandRouter,
+  HostCommandArgs,
+  HostCommandResult,
   HostCommandRouter,
 } from "./interface/router/host-command-router";
+export type { HostCommandResultMap } from "./interface/router/host-command-contract-map";
 export { hostInvokeFailureFromError } from "./interface/router/host-invoke-failure";
 export type {
   AgentSessionLiveAdapterBinding,

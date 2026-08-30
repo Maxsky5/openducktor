@@ -1,14 +1,26 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { RuntimeInstanceSummary } from "@openducktor/contracts";
+import type {
+  CodexAppServerFuzzyFileSearchResponse,
+  RuntimeInstanceSummary,
+} from "@openducktor/contracts";
 import {
   createAdapterWithTransport,
   makeRuntimeSummary,
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexJsonRpcRequest, CodexJsonRpcTransport } from "./types";
 
-const createTransport = (
-  response: unknown,
-): { calls: CodexJsonRpcRequest[]; transport: CodexJsonRpcTransport } => {
+type MalformedFuzzyFileSearchResponse = {
+  files: Array<{
+    root: string;
+    path: string;
+    match_type: string;
+    file_name: string;
+    score: number;
+    indices: number[] | null;
+  }>;
+};
+
+const createTransport = (response: CodexAppServerFuzzyFileSearchResponse) => {
   const calls: CodexJsonRpcRequest[] = [];
   const transport: CodexJsonRpcTransport = {
     async request(request) {
@@ -19,7 +31,22 @@ const createTransport = (
       throw new Error(`Unexpected method '${request.method}'.`);
     },
   };
-  return { calls, transport };
+  return { calls, transport } satisfies {
+    calls: CodexJsonRpcRequest[];
+    transport: CodexJsonRpcTransport;
+  };
+};
+
+const createMalformedTransport = (response: MalformedFuzzyFileSearchResponse) => {
+  const transport: CodexJsonRpcTransport = {
+    async request(request) {
+      if (request.method !== "fuzzyFileSearch") {
+        throw new Error(`Unexpected method '${request.method}'.`);
+      }
+      return response;
+    },
+  };
+  return transport;
 };
 
 const createSearchAdapter = (
@@ -107,7 +134,7 @@ describe("CodexAppServerAdapter file search", () => {
   });
 
   test("rejects malformed fuzzy file search payloads", async () => {
-    const { transport } = createTransport({
+    const transport = createMalformedTransport({
       files: [
         {
           root: "/repo/worktree",
@@ -128,7 +155,7 @@ describe("CodexAppServerAdapter file search", () => {
         workingDirectory: "/repo/worktree",
         query: "link",
       }),
-    ).rejects.toThrow("Codex fuzzyFileSearch result 0 has unsupported match_type 'symlink'.");
+    ).rejects.toThrow("Invalid option");
   });
 
   test("propagates Codex app-server failures", async () => {

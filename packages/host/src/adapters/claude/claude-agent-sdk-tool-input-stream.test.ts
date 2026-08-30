@@ -7,7 +7,7 @@ import {
 
 describe("Claude streamed tool input", () => {
   test("releases a streamed tool after its final assistant envelope consumes it", () => {
-    const session = {};
+    const session = { externalSessionId: "session-1" };
     rememberClaudeStreamToolStart(session, 1, {
       blockType: "tool_use",
       callId: "tool-1",

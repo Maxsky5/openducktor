@@ -63,7 +63,7 @@ describe("prepare session send", () => {
   });
 
   test("rejects when the workspace changes during runtime preparation", async () => {
-    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
     const { prepareSend } = createPrepareSend({
       currentWorkspaceRepoPathRef,
       ensureExistingSessionRuntime: async () => {

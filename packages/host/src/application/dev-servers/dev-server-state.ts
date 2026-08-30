@@ -1,8 +1,11 @@
 import {
+  type DevServerEvent,
   type DevServerGroupState,
   type DevServerScriptState,
   type DevServerTerminalChunk,
+  devServerEventSchema,
   devServerGroupStateSchema,
+  type HostEventEnvelope,
   type RepoConfig,
 } from "@openducktor/contracts";
 import type { DevServerProcessHandle } from "../../ports/dev-server-process-port";
@@ -15,11 +18,16 @@ export type DevServerGroupRuntime = {
   terminalRunGeneration: number;
 };
 
-export const DEV_SERVER_EVENT_CHANNEL = "openducktor://dev-server-event";
+const DEV_SERVER_EVENT_CHANNEL = "openducktor://dev-server-event";
 export const DEV_SERVER_COLORTERM = "truecolor";
 export const DEV_SERVER_CLICOLOR_FORCE = "1";
 export const DEV_SERVER_FORCE_COLOR = "1";
 export const DEV_SERVER_TERM = "xterm-256color";
+
+export const createDevServerEventEnvelope = (event: DevServerEvent): HostEventEnvelope => ({
+  channel: DEV_SERVER_EVENT_CHANNEL,
+  payload: devServerEventSchema.parse(event),
+});
 
 const TERMINAL_BUFFER_CHUNK_LIMIT = 2_000;
 const TERMINAL_BUFFER_BYTE_LIMIT = 512 * 1024;

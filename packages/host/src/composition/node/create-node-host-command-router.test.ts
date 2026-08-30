@@ -2,13 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { mcpBridgeDiscoveryFileSchema } from "@openducktor/contracts";
 import { Cause, Effect } from "effect";
 import type { McpHostBridgeServer } from "../../adapters/mcp/mcp-host-bridge-server";
 import { createSourceRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
 import { HostOperationError } from "../../effect/host-errors";
+import { parseJson } from "../../effect/json";
 import type { HostEventBusPort } from "../../events/host-event-bus";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
-import type { TaskStorePort } from "../../ports/task-repository-ports";
+import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import type { TerminalPtyPort } from "../../ports/terminal-pty-port";
 import type { HostLifecycleLogger } from "../host-lifecycle";
 import {
@@ -23,17 +25,43 @@ const runtimeDistribution = createSourceRuntimeDistribution(
 
 const createRuntimeRegistry = (
   stopAllRuntimes: RuntimeRegistryPort["stopAllRuntimes"] = () => Effect.succeed([]),
-): RuntimeRegistryPort =>
-  ({
-    stopAllRuntimes,
-  }) as unknown as RuntimeRegistryPort;
+): RuntimeRegistryPort => ({
+  ensureWorkspaceRuntime: () => Effect.die("unused"),
+  findRuntimeById: () => Effect.succeed(null),
+  findWorkspaceRuntime: () => Effect.succeed(null),
+  listRuntimes: () => Effect.succeed([]),
+  listRuntimesByRepo: () => Effect.succeed([]),
+  stopRuntime: () => Effect.succeed(false),
+  stopAllRuntimes,
+  stopSession: () => Effect.void,
+  probeSessionStatus: () => Effect.succeed({ supported: false, hasLiveSession: false }),
+  probeMcpStatus: () =>
+    Effect.succeed({
+      supported: false,
+      connected: false,
+      serverStatus: null,
+      toolIds: [],
+      detail: null,
+      failureKind: null,
+    }),
+});
 
 const createMcpHostBridge = (): McpHostBridgeServer =>
   ({
-    ensureConnection: () => Effect.succeed({ baseUrl: "http://127.0.0.1:5000" }),
-    ensureExternalDiscoveryReady: () => Effect.succeed({ baseUrl: "http://127.0.0.1:5000" }),
+    ensureConnection: () =>
+      Effect.succeed({
+        workspaceId: "workspace-1",
+        hostUrl: "http://127.0.0.1:5000",
+        hostToken: "test-token",
+      }),
+    ensureExternalDiscoveryReady: () =>
+      Effect.succeed({
+        workspaceId: "workspace-1",
+        hostUrl: "http://127.0.0.1:5000",
+        hostToken: "test-token",
+      }),
     close: () => Effect.succeed({ baseUrl: null, closed: false }),
-  }) as unknown as McpHostBridgeServer;
+  }) satisfies McpHostBridgeServer;
 
 const createEventBus = (): HostEventBusPort => ({
   publish() {},
@@ -61,9 +89,8 @@ const createRouter = (input: {
   logger: HostLifecycleLogger;
   onBackgroundFailure?: CreateNodeHostCommandRouterInput["onBackgroundFailure"];
   runtimeRegistry?: RuntimeRegistryPort;
-}) =>
-  createNodeEffectHostCommandRouter({
-    ...(input.eventBus ? { eventBus: input.eventBus } : {}),
+}) => {
+  const routerInput: Parameters<typeof createNodeEffectHostCommandRouter>[0] = {
     lifecycleLogger: input.logger,
     mcpBridgeDiscoveryMode: "production",
     mcpHostBridge: createMcpHostBridge(),
@@ -71,9 +98,14 @@ const createRouter = (input: {
     taskEventPublicationReporter: { report: () => Effect.void },
     runtimeDistribution,
     runtimeRegistry: input.runtimeRegistry ?? createRuntimeRegistry(),
-    taskStore: {} as TaskStorePort,
+    taskStore: createTaskStoreTestDouble({}),
     terminalPty,
-  });
+  };
+  if (input.eventBus) {
+    routerInput.eventBus = input.eventBus;
+  }
+  return createNodeEffectHostCommandRouter(routerInput);
+};
 
 describe("createNodeEffectHostCommandRouter", () => {
   test("publishes development discovery from composition mode despite ambient channel", async () => {
@@ -91,25 +123,27 @@ describe("createNodeEffectHostCommandRouter", () => {
       runtimeDistribution,
       runtimeRegistry: createRuntimeRegistry(),
       taskEventPublicationReporter: { report: () => Effect.void },
-      taskStore: {} as TaskStorePort,
+      taskStore: createTaskStoreTestDouble({}),
       terminalPty,
     });
 
     try {
       await Effect.runPromise(router.initialize());
 
-      const payload = JSON.parse(
-        await readFile(
-          path.join(
-            configDir,
-            "runtime",
-            "dev-instances",
-            "browser-0123456789ab",
-            "mcp-bridge.json",
+      const payload = mcpBridgeDiscoveryFileSchema.parse(
+        parseJson(
+          await readFile(
+            path.join(
+              configDir,
+              "runtime",
+              "dev-instances",
+              "browser-0123456789ab",
+              "mcp-bridge.json",
+            ),
+            "utf8",
           ),
-          "utf8",
         ),
-      ) as Record<string, unknown>;
+      );
       expect(payload).toEqual({
         hostToken: expect.any(String),
         hostUrl: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/),

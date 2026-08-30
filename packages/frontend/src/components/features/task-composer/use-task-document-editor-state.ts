@@ -96,29 +96,31 @@ type TaskDocumentEditorAction =
       updatedAt: string;
     };
 
-const createInitialDocumentState = (): TaskDocumentEditorState => ({
-  spec: {
-    serverMarkdown: "",
-    draftMarkdown: "",
-    updatedAt: null,
-    isLoading: false,
-    loaded: false,
-    error: null,
-  },
-  plan: {
-    serverMarkdown: "",
-    draftMarkdown: "",
-    updatedAt: null,
-    isLoading: false,
-    loaded: false,
-    error: null,
-  },
-});
+const createInitialDocumentState = () =>
+  ({
+    spec: {
+      serverMarkdown: "",
+      draftMarkdown: "",
+      updatedAt: null,
+      isLoading: false,
+      loaded: false,
+      error: null,
+    },
+    plan: {
+      serverMarkdown: "",
+      draftMarkdown: "",
+      updatedAt: null,
+      isLoading: false,
+      loaded: false,
+      error: null,
+    },
+  }) satisfies TaskDocumentEditorState;
 
-const createInitialViewState = (): TaskDocumentViewState => ({
-  spec: "split",
-  plan: "split",
-});
+const createInitialViewState = () =>
+  ({
+    spec: "split",
+    plan: "split",
+  }) satisfies TaskDocumentViewState;
 
 const createTaskDocumentEditorLocalState = (
   context: TaskDocumentEditorContext,
@@ -138,10 +140,11 @@ const updateDocumentSection = (
   documents: TaskDocumentEditorState,
   section: TaskDocumentSection,
   update: (current: DocumentSectionState) => DocumentSectionState,
-): TaskDocumentEditorState => ({
-  ...documents,
-  [section]: update(documents[section]),
-});
+) =>
+  ({
+    ...documents,
+    [section]: update(documents[section]),
+  }) satisfies TaskDocumentEditorState;
 
 const taskDocumentEditorReducer = (
   state: TaskDocumentEditorLocalState,
@@ -239,8 +242,8 @@ const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T
   }
 };
 
-const toErrorMessage = (reason: unknown): string =>
-  reason instanceof Error ? reason.message : "Unable to load document.";
+const toErrorMessage = (cause: unknown): string =>
+  cause instanceof Error ? cause.message : "Unable to load document.";
 
 export function useTaskDocumentEditorState({
   open,
@@ -276,27 +279,24 @@ export function useTaskDocumentEditorState({
   contextRef.current = editorContext;
   documentsRef.current = currentState.documents;
 
-  const getInFlightSectionsForContext = useCallback(
-    (context: TaskDocumentEditorContext): Record<TaskDocumentSection, boolean> => {
-      const sectionsByContext = inFlightSectionsByContextRef.current;
-      if (sectionsByContext === null) {
-        throw new Error("Expected task document in-flight section map to be initialized.");
-      }
+  const getInFlightSectionsForContext = useCallback((context: TaskDocumentEditorContext) => {
+    const sectionsByContext = inFlightSectionsByContextRef.current;
+    if (sectionsByContext === null) {
+      throw new Error("Expected task document in-flight section map to be initialized.");
+    }
 
-      const currentSections = sectionsByContext.get(context);
-      if (currentSections) {
-        return currentSections;
-      }
+    const currentSections = sectionsByContext.get(context);
+    if (currentSections) {
+      return currentSections satisfies Record<TaskDocumentSection, boolean>;
+    }
 
-      const nextSections = {
-        spec: false,
-        plan: false,
-      };
-      sectionsByContext.set(context, nextSections);
-      return nextSections;
-    },
-    [],
-  );
+    const nextSections = {
+      spec: false,
+      plan: false,
+    };
+    sectionsByContext.set(context, nextSections);
+    return nextSections satisfies Record<TaskDocumentSection, boolean>;
+  }, []);
 
   const loadSection = useCallback(
     (section: TaskDocumentSection, force = false): Promise<void> => {

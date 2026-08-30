@@ -335,23 +335,6 @@ describe("AgentChatMessageCard messages", () => {
     expect(html).toContain("whitespace-pre-wrap break-words leading-6");
   });
 
-  test("wraps long unbroken assistant plain prose", () => {
-    const html = renderToStaticMarkup(
-      createMessageCardElement({
-        message: {
-          id: "assistant-long-token",
-          role: "assistant",
-          content: LONG_TRANSCRIPT_SAMPLE,
-          timestamp: "2026-02-22T10:25:45.000Z",
-        },
-        sessionAgentColors: {},
-      }),
-    );
-
-    expect(html).toContain(LONG_TRANSCRIPT_SAMPLE);
-    expect(html).toContain("whitespace-pre-wrap break-words leading-6");
-  });
-
   test("does not color legacy user messages without send-time metadata", () => {
     const html = renderToStaticMarkup(
       createMessageCardElement({

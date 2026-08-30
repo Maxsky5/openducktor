@@ -1,4 +1,4 @@
-import type { ListItem, Root } from "mdast";
+import type { BlockContent, ListItem, Root } from "mdast";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import remarkParse from "remark-parse";
@@ -57,7 +57,10 @@ export const normalizeTaskListBlockMath = (tree: Root, markdown: string): void =
     if (body.children[0]?.type !== "math") {
       return;
     }
-    node.children = body.children as ListItem["children"];
+    node.children = body.children.filter(
+      (child): child is BlockContent =>
+        child.type !== "definition" && child.type !== "footnoteDefinition",
+    );
   });
 };
 

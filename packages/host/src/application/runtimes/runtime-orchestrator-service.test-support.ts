@@ -3,13 +3,12 @@ import {
   RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeDescriptor,
   type RuntimeInstanceSummary,
+  runtimeKindSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
 import { HostOperationError } from "../../effect/host-errors";
-import type { GitPort } from "../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
-import type { TaskStorePort } from "../../ports/task-repository-ports";
 import { createRuntimeOrchestratorService as createEffectRuntimeOrchestratorService } from "./runtime-orchestrator-service";
 
 export const createRuntimeOrchestratorService = (
@@ -20,7 +19,7 @@ export const createGitPort = (
   canonicalizePath: (path: string) => string = (path) =>
     path === "/repo" ? "/canonical/repo" : path,
   isGitRepository: (path: string) => boolean = (path) => path === "/canonical/repo",
-): GitPort =>
+): Parameters<typeof createEffectRuntimeOrchestratorService>[0]["gitPort"] =>
   ({
     canonicalizePath(path: string) {
       return Effect.tryPromise({
@@ -48,7 +47,7 @@ export const createGitPort = (
           }),
       });
     },
-  }) as Pick<GitPort, "canonicalizePath" | "isGitRepository"> as unknown as GitPort;
+  }) satisfies Parameters<typeof createEffectRuntimeOrchestratorService>[0]["gitPort"];
 
 export const createRuntimeDefinitionsService = () => ({
   listRuntimeDefinitions(): RuntimeDescriptor[] {
@@ -66,7 +65,7 @@ export const createTaskStore = (
     selectedModel: null;
   }> = {},
   extraAgentSessions: AgentSessionRecord[] = [],
-): TaskStorePort =>
+): Parameters<typeof createEffectRuntimeOrchestratorService>[0]["taskReader"] =>
   ({
     getTaskMetadata() {
       return Effect.tryPromise({
@@ -94,7 +93,7 @@ export const createTaskStore = (
           }),
       });
     },
-  }) as Pick<TaskStorePort, "getTaskMetadata"> as unknown as TaskStorePort;
+  }) satisfies Parameters<typeof createEffectRuntimeOrchestratorService>[0]["taskReader"];
 
 export const createRuntime = (
   overrides: Partial<RuntimeInstanceSummary> = {},
@@ -159,7 +158,7 @@ export const createRegistry = (
         }
 
         const runtime = createRuntime({
-          kind: input.runtimeKind as RuntimeInstanceSummary["kind"],
+          kind: runtimeKindSchema.parse(input.runtimeKind),
           runtimeId: `${input.runtimeKind}-runtime-${runtimeStore.length + 1}`,
           repoPath: input.repoPath,
           workingDirectory: input.workingDirectory,

@@ -15,7 +15,9 @@ const staged: TaskAssetStageResult = {
   verifiedMediaType: "image/png",
   byteSize: 3,
 };
-const ignoreDiscardError = (_cause: unknown): void => {};
+const ignoreDiscardError = (cause: unknown): void => {
+  void cause;
+};
 const noReferencedAssets = new Set<string>();
 
 const createDeferred = <T,>() => {

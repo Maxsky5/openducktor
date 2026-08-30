@@ -101,7 +101,7 @@ const createFakeOpenInToolsPort = ({
     },
     launches,
     externalUrls,
-    port: port as OpenInToolsPort,
+    port,
   };
 };
 describe("createOpenInToolsService", () => {

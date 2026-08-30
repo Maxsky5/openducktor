@@ -11,9 +11,9 @@ import { runtimeQueryKeys } from "../../queries/runtime";
 import { host } from "../shared/host";
 import { useRepoSettingsOperations } from "./use-repo-settings-operations";
 
-const reactActEnvironment = globalThis as typeof globalThis & {
+const reactActEnvironment: typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
-};
+} = globalThis;
 reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
 type HookArgs = Parameters<typeof useRepoSettingsOperations>[0];
@@ -48,11 +48,12 @@ const createHookHarness = (initialArgs: HookArgs) => {
       await sharedHarness.mount();
     },
     run: async (fn: (value: HookResult) => Promise<void> | void) => {
-      if (!latest) {
+      const hook = latest;
+      if (!hook) {
         throw new Error("Hook not mounted");
       }
       await sharedHarness.run(async () => {
-        await fn(latest as HookResult);
+        await fn(hook);
       });
     },
     getLatest: () => {
@@ -86,12 +87,11 @@ const createWorkspaceRecord = (path = "/repo-a") => ({
 
 const createSettingsSnapshot = (): SettingsSnapshot => createSettingsSnapshotFixture();
 
-const createRepoConfig = () => ({
+const createRepoConfig = (): Awaited<ReturnType<typeof host.workspaceGetRepoConfig>> => ({
   workspaceId: "repo-a",
   workspaceName: "repo-a",
   repoPath: "/repo-a",
   defaultRuntimeKind: "opencode" as const,
-  worktreeBasePath: undefined,
   branchPrefix: "codex/",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: { providers: {} },
@@ -101,7 +101,6 @@ const createRepoConfig = () => ({
   promptOverrides: {},
   agentDefaults: {
     spec: { runtimeKind: "opencode" as const, providerId: "openai", modelId: "gpt-5" },
-    planner: undefined,
     build: {
       runtimeKind: "opencode" as const,
       providerId: "anthropic",
@@ -299,9 +298,7 @@ describe("use-repo-settings-operations", () => {
   test("loads repo settings into normalized form values", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
-    const workspaceGetRepoConfig = mock(
-      async () => createRepoConfig() as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>,
-    );
+    const workspaceGetRepoConfig = mock(async () => createRepoConfig());
 
     const original = {
       workspaceGetRepoConfig: host.workspaceGetRepoConfig,
@@ -381,7 +378,7 @@ describe("use-repo-settings-operations", () => {
       if (!specDefault) {
         throw new Error("Expected spec default fixture");
       }
-      const input = {
+      const input: RepoSettingsInput = {
         ...inputFixture,
         agentDefaults: {
           ...inputFixture.agentDefaults,
@@ -391,7 +388,7 @@ describe("use-repo-settings-operations", () => {
           },
         },
       };
-      await harness.getLatest().saveRepoSettings(input as RepoSettingsInput);
+      await harness.getLatest().saveRepoSettings(input);
 
       expect(workspaceSaveRepoSettings).toHaveBeenCalledWith("repo-a", {
         defaultRuntimeKind: "opencode" as const,
@@ -621,7 +618,7 @@ describe("use-repo-settings-operations", () => {
               modelId: "gpt-5",
               variant: "",
               profileId: "",
-            } as unknown as NonNullable<RepoSettingsInput["agentDefaults"]["spec"]>,
+            } satisfies NonNullable<RepoSettingsInput["agentDefaults"]["spec"]>,
           },
         }),
       ).rejects.toThrow(
@@ -784,11 +781,9 @@ describe("use-repo-settings-operations", () => {
   test("forwards every prompt override key when saving snapshot", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
-    let forwardedSnapshot: unknown = null;
-    const workspaceSaveSettingsSnapshot = mock(async (snapshotArg: unknown) => {
-      forwardedSnapshot = snapshotArg;
-      return [];
-    });
+    const workspaceSaveSettingsSnapshot = mock(
+      async (_snapshotArg: Parameters<typeof host.workspaceSaveSettingsSnapshot>[0]) => [],
+    );
     const workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshot());
 
     const original = {
@@ -850,18 +845,16 @@ describe("use-repo-settings-operations", () => {
       await harness.mount();
       await harness.getLatest().saveSettingsSnapshot(snapshot);
       expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith(snapshot);
-      expect(forwardedSnapshot).toBeDefined();
-      const parsedForwarded = forwardedSnapshot as {
-        globalPromptOverrides: Record<string, unknown>;
-        agentRuntimes: unknown;
-        workspaces: Record<string, { promptOverrides: Record<string, unknown> }>;
-      };
-      expect(Object.keys(parsedForwarded.globalPromptOverrides).sort()).toEqual(
+      const savedSnapshot = workspaceSaveSettingsSnapshot.mock.calls[0]?.[0];
+      if (savedSnapshot === undefined) {
+        throw new Error("Expected settings snapshot to be forwarded.");
+      }
+      expect(Object.keys(savedSnapshot.globalPromptOverrides).sort()).toEqual(
         agentPromptTemplateIdValues.toSorted(),
       );
-      expect(
-        Object.keys(parsedForwarded.workspaces["repo-a"]?.promptOverrides ?? {}).sort(),
-      ).toEqual(agentPromptTemplateIdValues.toSorted());
+      expect(Object.keys(savedSnapshot.workspaces["repo-a"]?.promptOverrides ?? {}).sort()).toEqual(
+        agentPromptTemplateIdValues.toSorted(),
+      );
     } finally {
       await harness.unmount();
       host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;

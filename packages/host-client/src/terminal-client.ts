@@ -18,6 +18,13 @@ import {
   terminalPreparePathInputResponseSchema,
 } from "@openducktor/contracts";
 import { HostInvokeError, type InvokeFn } from "./invoke-utils";
+import type { z } from "zod";
+
+type TerminalRequest =
+  | TerminalCreateRequest
+  | TerminalListRequest
+  | TerminalPreparePathInputRequest
+  | TerminalCloseRequest;
 
 export class HostTerminalClientError extends Error {
   readonly code: TerminalFailure["code"];
@@ -36,13 +43,16 @@ export class HostTerminalClientError extends Error {
 export class HostTerminalClient {
   constructor(private readonly invokeFn: InvokeFn) {}
 
-  private async invoke<TResponse>(
-    command: "terminal_create" | "terminal_list" | "terminal_prepare_path_input" | "terminal_close",
-    request: Record<string, unknown>,
-    parse: (value: unknown) => TResponse,
-  ): Promise<TResponse> {
+  private async invoke<
+    Response,
+    Command extends
+      | "terminal_create"
+      | "terminal_list"
+      | "terminal_prepare_path_input"
+      | "terminal_close",
+  >(command: Command, request: TerminalRequest, schema: z.ZodType<Response>): Promise<Response> {
     try {
-      return parse(await this.invokeFn(command, request));
+      return await this.invokeFn(command, request, schema);
     } catch (cause) {
       if (cause instanceof HostInvokeError && cause.failure?.kind === "terminal") {
         throw new HostTerminalClientError(cause.failure.terminalFailure, cause);
@@ -53,12 +63,12 @@ export class HostTerminalClient {
 
   async terminalCreate(input: TerminalCreateRequest): Promise<TerminalCreateResponse> {
     const request = terminalCreateRequestSchema.parse(input);
-    return this.invoke("terminal_create", request, terminalCreateResponseSchema.parse);
+    return this.invoke("terminal_create", request, terminalCreateResponseSchema);
   }
 
   async terminalList(input: TerminalListRequest): Promise<TerminalListResponse> {
     const request = terminalListRequestSchema.parse(input);
-    return this.invoke("terminal_list", request, terminalListResponseSchema.parse);
+    return this.invoke("terminal_list", request, terminalListResponseSchema);
   }
 
   async terminalPreparePathInput(
@@ -68,12 +78,12 @@ export class HostTerminalClient {
     return this.invoke(
       "terminal_prepare_path_input",
       request,
-      terminalPreparePathInputResponseSchema.parse,
+      terminalPreparePathInputResponseSchema,
     );
   }
 
   async terminalClose(input: TerminalCloseRequest): Promise<TerminalCloseResponse> {
     const request = terminalCloseRequestSchema.parse(input);
-    return this.invoke("terminal_close", request, terminalCloseResponseSchema.parse);
+    return this.invoke("terminal_close", request, terminalCloseResponseSchema);
   }
 }

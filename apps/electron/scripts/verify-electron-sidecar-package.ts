@@ -18,6 +18,8 @@ type VerifyPackagedElectronSidecarsInput = {
   releaseDirectory: string;
 };
 
+type PackagedSidecarErrorDetails = { readonly sidecarId: ElectronSidecarId };
+
 export type VerifiedPackagedElectronSidecar = {
   id: ElectronSidecarId;
   path: string;
@@ -78,7 +80,7 @@ const assertPackagedSidecarFileEffect = ({
   path: string;
   platform: ElectronReleasePlatform;
   sidecarId: ElectronSidecarId;
-}): Effect.Effect<Stats, ElectronOperationError> =>
+}): Effect.Effect<Stats, ElectronOperationError<PackagedSidecarErrorDetails>> =>
   Effect.tryPromise({
     try: async () => {
       const metadata = await stat(path);
@@ -109,7 +111,7 @@ export const verifyPackagedElectronSidecarsEffect = ({
   releaseDirectory,
 }: VerifyPackagedElectronSidecarsInput): Effect.Effect<
   VerifiedPackagedElectronSidecar[],
-  ElectronOperationError
+  ElectronOperationError<PackagedSidecarErrorDetails>
 > =>
   Effect.gen(function* () {
     const verifiedSidecars: VerifiedPackagedElectronSidecar[] = [];

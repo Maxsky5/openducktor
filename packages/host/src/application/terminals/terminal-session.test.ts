@@ -21,7 +21,15 @@ const summary = (): TerminalSummary => ({
   exit: null,
 });
 
-const handle = {} as TerminalPtyHandle;
+const handle: TerminalPtyHandle = {
+  supportsOutputPause: false,
+  hasChildProcesses: () => Effect.succeed(false),
+  write: () => Effect.void,
+  resize: () => Effect.void,
+  pauseOutput: () => Effect.void,
+  resumeOutput: () => Effect.void,
+  terminate: () => Effect.void,
+};
 
 const makeSession = async () => {
   let disposeCalls = 0;

@@ -12,12 +12,10 @@ import { createTaskWorktreeCommandHandlers } from "./task-worktree-command-handl
 const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
-const createTaskWorktreeServiceFake = (service: TaskWorktreeService): TaskWorktreeService =>
-  service as TaskWorktreeService;
 describe("createTaskWorktreeCommandHandlers", () => {
   test("routes task_worktree_get to the service", async () => {
     const calls: unknown[] = [];
-    const service = createTaskWorktreeServiceFake({
+    const service: TaskWorktreeService = {
       getTaskWorktree(input) {
         return Effect.tryPromise({
           try: async () => {
@@ -32,7 +30,7 @@ describe("createTaskWorktreeCommandHandlers", () => {
             }),
         });
       },
-    });
+    };
     const router = createHostCommandRouter({
       handlers: createTaskWorktreeCommandHandlers(service),
     });
@@ -48,7 +46,7 @@ describe("createTaskWorktreeCommandHandlers", () => {
   });
   test("rejects malformed command inputs before calling the service", async () => {
     const calls: unknown[] = [];
-    const service = createTaskWorktreeServiceFake({
+    const service: TaskWorktreeService = {
       getTaskWorktree(input) {
         return Effect.tryPromise({
           try: async () => {
@@ -63,7 +61,7 @@ describe("createTaskWorktreeCommandHandlers", () => {
             }),
         });
       },
-    });
+    };
     const router = createHostCommandRouter({
       handlers: createTaskWorktreeCommandHandlers(service),
     });

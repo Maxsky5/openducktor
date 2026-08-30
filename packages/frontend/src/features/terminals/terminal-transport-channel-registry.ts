@@ -10,6 +10,11 @@ type TerminalChannel = {
   discardQueuedOperations: boolean;
 };
 
+type RemoveTerminalListenerResult = {
+  lastListenerRemoved: boolean;
+  wasClosing: boolean;
+};
+
 export const createTerminalTransportChannelRegistry = () => {
   const channels = new Map<string, TerminalChannel>();
 
@@ -59,13 +64,17 @@ export const createTerminalTransportChannelRegistry = () => {
     removeListener(
       terminalId: string,
       listener: TerminalFrameListener,
-    ): { lastListenerRemoved: boolean; wasClosing: boolean } {
+    ): RemoveTerminalListenerResult {
       const channel = channels.get(terminalId);
       if (!channel) return { lastListenerRemoved: false, wasClosing: false };
       channel.listeners.delete(listener);
-      if (channel.listeners.size > 0) return { lastListenerRemoved: false, wasClosing: false };
+      if (channel.listeners.size > 0) {
+        return { lastListenerRemoved: false, wasClosing: false };
+      }
       const wasClosing = channel.isClosing;
-      if (!channel.operationQueue) channel.discardQueuedOperations = false;
+      if (!channel.operationQueue) {
+        channel.discardQueuedOperations = false;
+      }
       forgetIfUnused(terminalId, channel);
       return { lastListenerRemoved: true, wasClosing };
     },
@@ -88,7 +97,9 @@ export const createTerminalTransportChannelRegistry = () => {
       const clearCompletedOperation = (): void => {
         if (channel.operationQueue !== pending) return;
         channel.operationQueue = null;
-        if (channel.listeners.size === 0) channel.discardQueuedOperations = false;
+        if (channel.listeners.size === 0) {
+          channel.discardQueuedOperations = false;
+        }
         forgetIfUnused(terminalId, channel);
       };
       void pending.then(clearCompletedOperation, clearCompletedOperation);

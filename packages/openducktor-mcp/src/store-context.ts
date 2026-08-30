@@ -1,10 +1,13 @@
+import { mcpBridgeDiscoveryFileSchema } from "@openducktor/contracts";
 import { readFile } from "node:fs/promises";
 import { OdtHostBridgeClient } from "./host-bridge-client";
 import { normalizeOptionalInput, resolveMcpBridgeDiscoveryPath } from "./path-utils";
+import { z } from "zod";
 
 const FORBID_WORKSPACE_ID_INPUT_ENV = "ODT_FORBID_WORKSPACE_ID_INPUT";
 const HOST_TOKEN_ENV = "ODT_HOST_TOKEN";
 const HOST_TOKEN_FILE_ENV = "ODT_HOST_TOKEN_FILE";
+const missingDiscoveryFileErrorSchema = z.object({ code: z.literal("ENOENT") });
 
 class ConfiguredWorkspaceNotFoundError extends Error {}
 
@@ -102,9 +105,6 @@ const validateHostConnection = async (
   }
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
-
 const parseDiscoveryFile = (payload: string, discoveryPath: string): DiscoveredHostConnection => {
   let parsed: unknown;
   try {
@@ -116,36 +116,32 @@ const parseDiscoveryFile = (payload: string, discoveryPath: string): DiscoveredH
     );
   }
 
-  if (!isRecord(parsed)) {
+  const result = mcpBridgeDiscoveryFileSchema.safeParse(parsed);
+  if (!result.success) {
+    const field = result.error.issues[0]?.path[0];
+    if (field === "hostUrl") {
+      throw new Error(
+        `Invalid OpenDucktor MCP discovery file at ${discoveryPath}: hostUrl must be a non-empty string.`,
+      );
+    }
+    if (field === "hostToken") {
+      throw new Error(
+        `Invalid OpenDucktor MCP discovery file at ${discoveryPath}: hostToken must be a non-empty string.`,
+      );
+    }
+    if (field === "pid") {
+      throw new Error(
+        `Invalid OpenDucktor MCP discovery file at ${discoveryPath}: pid must be a positive integer.`,
+      );
+    }
     throw new Error(
       `Invalid OpenDucktor MCP discovery file at ${discoveryPath}: expected a JSON object.`,
     );
   }
-  const hostUrl =
-    typeof parsed.hostUrl === "string" ? normalizeOptionalInput(parsed.hostUrl) : undefined;
-  const hostToken =
-    typeof parsed.hostToken === "string" ? normalizeOptionalInput(parsed.hostToken) : undefined;
-
-  if (hostUrl === undefined) {
-    throw new Error(
-      `Invalid OpenDucktor MCP discovery file at ${discoveryPath}: hostUrl must be a non-empty string.`,
-    );
-  }
-  if (hostToken === undefined) {
-    throw new Error(
-      `Invalid OpenDucktor MCP discovery file at ${discoveryPath}: hostToken must be a non-empty string.`,
-    );
-  }
-  const pid = parsed.pid;
-  if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) {
-    throw new Error(
-      `Invalid OpenDucktor MCP discovery file at ${discoveryPath}: pid must be a positive integer.`,
-    );
-  }
 
   return {
-    hostToken,
-    hostUrl,
+    hostToken: result.data.hostToken.trim(),
+    hostUrl: result.data.hostUrl.trim(),
   };
 };
 
@@ -159,7 +155,7 @@ const discoverHostConnection = async (
   try {
     discoveryPayload = await readFile(discoveryPath, "utf8");
   } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+    if (missingDiscoveryFileErrorSchema.safeParse(error).success) {
       throw new Error(
         `No running OpenDucktor host was discovered. Checked ${discoveryPath}. Start the OpenDucktor desktop app or provide ODT_HOST_URL to override discovery.`,
       );
@@ -220,17 +216,23 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
     forbidWorkspaceIdInput !== undefined ? { forbidWorkspaceIdInput } : {};
 
   if (!workspaceId) {
-    return {
+    const options: OdtStoreOptions = {
       hostUrl,
-      ...(resolvedHostToken ? { hostToken: resolvedHostToken } : {}),
       ...workspaceIdInputMode,
     };
+    if (resolvedHostToken) {
+      options.hostToken = resolvedHostToken;
+    }
+    return options;
   }
 
-  return {
+  const options: OdtStoreOptions = {
     workspaceId,
     hostUrl,
-    ...(resolvedHostToken ? { hostToken: resolvedHostToken } : {}),
     ...workspaceIdInputMode,
   };
+  if (resolvedHostToken) {
+    options.hostToken = resolvedHostToken;
+  }
+  return options;
 };

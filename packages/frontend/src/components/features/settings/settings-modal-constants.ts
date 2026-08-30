@@ -69,7 +69,7 @@ export const PROMPT_ROLE_TABS: ReadonlyArray<{
   { id: "qa", label: "QA" },
 ];
 
-export const PROMPT_TEMPLATE_LABELS: Record<AgentPromptTemplateId, string> = {
+export const PROMPT_TEMPLATE_LABELS = {
   "system.shared.workflow_guards": "Workflow Guards",
   "system.shared.tool_protocol": "Tool Protocol",
   "system.shared.task_context": "Task Context",
@@ -86,9 +86,9 @@ export const PROMPT_TEMPLATE_LABELS: Record<AgentPromptTemplateId, string> = {
   "kickoff.qa_review": "QA Kickoff",
   "message.build_rebase_conflict_resolution": "Builder Git Conflict Message",
   "permission.read_only.reject": "Read-Only Permission Rejection",
-};
+} satisfies Record<AgentPromptTemplateId, string>;
 
-export const PROMPT_TEMPLATE_DESCRIPTIONS: Record<AgentPromptTemplateId, string> = {
+export const PROMPT_TEMPLATE_DESCRIPTIONS = {
   "system.shared.workflow_guards":
     "Added to every system prompt to enforce lifecycle guardrails, artifact discipline, repo-guidance governance, and fail-fast rules.",
   "system.shared.tool_protocol":
@@ -121,16 +121,12 @@ export const PROMPT_TEMPLATE_DESCRIPTIONS: Record<AgentPromptTemplateId, string>
     "Reusable in-session message sent to Builder when a git operation stops on conflicts and must be resolved safely.",
   "permission.read_only.reject":
     "Template used to reject mutating tool requests from read-only roles (spec, planner, qa).",
-};
+} satisfies Record<AgentPromptTemplateId, string>;
 
-export const BUILTIN_PROMPTS_BY_ID: Record<AgentPromptTemplateId, BuiltinPromptDefinition> =
-  (() => {
-    const map = {} as Record<AgentPromptTemplateId, BuiltinPromptDefinition>;
-    for (const definition of listBuiltinAgentPromptTemplates()) {
-      map[definition.id] = definition;
-    }
-    return map;
-  })();
+export const BUILTIN_PROMPTS_BY_ID: ReadonlyMap<AgentPromptTemplateId, BuiltinPromptDefinition> =
+  new Map(
+    listBuiltinAgentPromptTemplates().map((definition) => [definition.id, definition] as const),
+  );
 
 export const resolvePromptRoleTab = (templateId: AgentPromptTemplateId): PromptRoleTabId => {
   if (templateId.includes(".spec.") || templateId.includes("spec_")) {
@@ -148,13 +144,13 @@ export const resolvePromptRoleTab = (templateId: AgentPromptTemplateId): PromptR
   return "shared";
 };
 
-export const PROMPT_IDS_BY_ROLE: Record<PromptRoleTabId, AgentPromptTemplateId[]> = {
-  shared: [],
-  spec: [],
-  planner: [],
-  build: [],
-  qa: [],
-};
+export const PROMPT_IDS_BY_ROLE = {
+  shared: new Array<AgentPromptTemplateId>(),
+  spec: new Array<AgentPromptTemplateId>(),
+  planner: new Array<AgentPromptTemplateId>(),
+  build: new Array<AgentPromptTemplateId>(),
+  qa: new Array<AgentPromptTemplateId>(),
+} satisfies Record<PromptRoleTabId, AgentPromptTemplateId[]>;
 
 for (const templateId of agentPromptTemplateIdValues) {
   PROMPT_IDS_BY_ROLE[resolvePromptRoleTab(templateId)].push(templateId);
@@ -162,14 +158,14 @@ for (const templateId of agentPromptTemplateIdValues) {
 
 export const countPromptErrorsByRoleTab = (
   errors: Partial<Record<AgentPromptTemplateId, string>>,
-): Record<PromptRoleTabId, number> => {
-  const counts: Record<PromptRoleTabId, number> = {
+) => {
+  const counts = {
     shared: 0,
     spec: 0,
     planner: 0,
     build: 0,
     qa: 0,
-  };
+  } satisfies Record<PromptRoleTabId, number>;
 
   for (const templateId of agentPromptTemplateIdValues) {
     if (!errors[templateId]) {
@@ -178,5 +174,5 @@ export const countPromptErrorsByRoleTab = (
     counts[resolvePromptRoleTab(templateId)] += 1;
   }
 
-  return counts;
+  return counts satisfies Record<PromptRoleTabId, number>;
 };

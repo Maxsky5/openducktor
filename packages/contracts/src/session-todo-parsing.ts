@@ -1,80 +1,100 @@
-export type AgentSessionTodoPayloadRecord = {
-  id: string;
-  content: string;
-  status?: unknown;
-  priority?: unknown;
-  completed?: boolean;
-};
+import { z } from "zod";
 
 export type ParseAgentSessionTodoPayloadOptions = {
   allowStringEntries?: boolean;
 };
 
-const parseTodoId = (record: Record<string, unknown>, fallbackId: string): string => {
-  return (
-    (typeof record.id === "string" ? record.id.trim() : "") ||
-    (typeof record.todoId === "string" ? record.todoId.trim() : "") ||
-    fallbackId
-  );
-};
+const looseTodoRecordEntrySchema = z.object({
+  id: z.string().optional(),
+  todoId: z.string().optional(),
+  content: z.string().optional(),
+  text: z.string().optional(),
+  title: z.string().optional(),
+  status: z.string().optional(),
+  priority: z.string().optional(),
+  completed: z.boolean().optional(),
+});
+type LooseAgentSessionTodoPayloadRecord = z.output<typeof looseTodoRecordEntrySchema>;
 
-const parseTodoContent = (record: Record<string, unknown>): string => {
-  const contentCandidate =
-    typeof record.content === "string"
-      ? record.content
-      : typeof record.text === "string"
-        ? record.text
-        : typeof record.title === "string"
-          ? record.title
-          : "";
-  return contentCandidate.trim();
-};
+const looseTodoEntrySchema = z.union([
+  z.string().transform((value) => ({ kind: "text" as const, value })),
+  looseTodoRecordEntrySchema.transform((value) => ({ kind: "record" as const, value })),
+]);
+const looseTodoEntryListSchema = z.array(z.json()).catch([]);
 
-export const parseAgentSessionTodoPayloadEntry = (
-  value: unknown,
+const normalizeLooseTodoStringEntry = (
+  entry: string,
   fallbackId: string,
-  options: ParseAgentSessionTodoPayloadOptions = {},
+  options: ParseAgentSessionTodoPayloadOptions,
 ): AgentSessionTodoPayloadRecord | null => {
-  if (options.allowStringEntries && typeof value === "string") {
-    const content = value.trim();
-    if (!content) {
-      return null;
-    }
-    return {
-      id: fallbackId,
-      content,
-    };
-  }
-
-  if (!value || typeof value !== "object") {
+  if (!options.allowStringEntries) {
     return null;
   }
+  const content = entry.trim();
+  if (!content) {
+    return null;
+  }
+  return { id: fallbackId, content };
+};
 
-  const record = value as Record<string, unknown>;
-  const id = parseTodoId(record, fallbackId);
-  const content = parseTodoContent(record);
+const normalizeLooseTodoRecordEntry = (
+  entry: LooseAgentSessionTodoPayloadRecord,
+  fallbackId: string,
+): AgentSessionTodoPayloadRecord | null => {
+  const id = entry.id?.trim() || entry.todoId?.trim() || fallbackId;
+  const content = (entry.content ?? entry.text ?? entry.title ?? "").trim();
   if (!id || !content) {
     return null;
   }
 
-  return {
+  const todo: AgentSessionTodoPayloadRecord = {
     id,
     content,
-    status: record.status,
-    priority: record.priority,
-    ...(typeof record.completed === "boolean" ? { completed: record.completed } : {}),
   };
-};
-
-export const parseAgentSessionTodoPayloadList = (
-  payload: unknown,
-  options: ParseAgentSessionTodoPayloadOptions = {},
-): AgentSessionTodoPayloadRecord[] => {
-  if (!Array.isArray(payload)) {
-    return [];
+  if (entry.status !== undefined) {
+    todo.status = entry.status;
   }
-
-  return payload
-    .map((entry, index) => parseAgentSessionTodoPayloadEntry(entry, `todo:${index}`, options))
-    .filter((entry): entry is AgentSessionTodoPayloadRecord => entry !== null);
+  if (entry.priority !== undefined) {
+    todo.priority = entry.priority;
+  }
+  if (entry.completed !== undefined) {
+    todo.completed = entry.completed;
+  }
+  return todo;
 };
+
+const normalizeLooseTodoEntry = (
+  entry: z.output<typeof looseTodoEntrySchema>,
+  fallbackId: string,
+  options: ParseAgentSessionTodoPayloadOptions,
+): AgentSessionTodoPayloadRecord | null => {
+  if (entry.kind === "text") {
+    return normalizeLooseTodoStringEntry(entry.value, fallbackId, options);
+  }
+  return normalizeLooseTodoRecordEntry(entry.value, fallbackId);
+};
+
+export const agentSessionTodoPayloadSchema = z.object({
+  id: z.string(),
+  content: z.string(),
+  status: z.string().optional(),
+  priority: z.string().optional(),
+  completed: z.boolean().optional(),
+});
+export type AgentSessionTodoPayloadRecord = z.output<typeof agentSessionTodoPayloadSchema>;
+
+export const agentSessionTodoPayloadListSchema = (
+  options: ParseAgentSessionTodoPayloadOptions = {},
+) =>
+  looseTodoEntryListSchema
+    .transform((entries) =>
+      entries.flatMap((entry, index) => {
+        const parsed = looseTodoEntrySchema.safeParse(entry);
+        if (!parsed.success) {
+          return [];
+        }
+        const normalized = normalizeLooseTodoEntry(parsed.data, `todo:${index}`, options);
+        return normalized === null ? [] : [normalized];
+      }),
+    )
+    .pipe(z.array(agentSessionTodoPayloadSchema));

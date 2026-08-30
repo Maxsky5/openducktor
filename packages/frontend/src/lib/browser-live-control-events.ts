@@ -2,6 +2,7 @@ import {
   BROWSER_LIVE_RECONNECTED_EVENT_KIND,
   BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
 } from "@/lib/browser-live/constants";
+import type { DevServerEvent } from "@openducktor/contracts";
 import type { BrowserLiveControlEvent, BrowserLiveControlEventKind } from "@/types";
 
 export function browserLiveControlEvent(
@@ -27,29 +28,16 @@ export function browserLiveControlEvent(
     };
   }
 
-  return {
+  const event: BrowserLiveControlEvent = {
     __openducktorBrowserLive: true,
     kind,
-    ...(detail !== undefined ? { message: detail } : {}),
   };
+  if (detail !== undefined) {
+    event.message = detail;
+  }
+  return event;
 }
 
-export const isBrowserLiveControlEvent = (payload: unknown): payload is BrowserLiveControlEvent => {
-  if (!payload || typeof payload !== "object") {
-    return false;
-  }
-
-  const record = payload as Record<string, unknown>;
-  if (record.__openducktorBrowserLive !== true) {
-    return false;
-  }
-
-  if (record.kind === BROWSER_LIVE_RECONNECTED_EVENT_KIND) {
-    return typeof record.transportEpoch === "string" && record.transportEpoch.length > 0;
-  }
-
-  return (
-    record.kind === BROWSER_LIVE_STREAM_WARNING_EVENT_KIND &&
-    (record.message === undefined || typeof record.message === "string")
-  );
-};
+export const isBrowserLiveControlEvent = (
+  payload: DevServerEvent | BrowserLiveControlEvent,
+): payload is BrowserLiveControlEvent => "__openducktorBrowserLive" in payload;

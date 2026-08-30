@@ -59,7 +59,7 @@ const createRecordingService = () => {
       });
     },
   };
-  const service = promiseService as OpenInToolsService;
+  const service: OpenInToolsService = promiseService;
   return { calls, service };
 };
 describe("createOpenInToolsCommandHandlers", () => {

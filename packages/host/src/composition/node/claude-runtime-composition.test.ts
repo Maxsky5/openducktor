@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type RepoConfig, RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
+import { RUNTIME_DESCRIPTORS_BY_KIND, repoConfigSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createArtifactRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
 import { HostDependencyError } from "../../effect/host-errors";
@@ -59,10 +59,12 @@ const workingDirectoryDependencies = {
   },
   workspaceSettingsService: {
     getRepoConfigByRepoPath: () =>
-      Effect.succeed({
-        workspaceId: "repo",
-        worktreeBasePath: "/worktrees/repo",
-      } as RepoConfig),
+      Effect.succeed(
+        repoConfigSchema.parse({
+          workspaceId: "repo",
+          worktreeBasePath: "/worktrees/repo",
+        }),
+      ),
   },
 };
 

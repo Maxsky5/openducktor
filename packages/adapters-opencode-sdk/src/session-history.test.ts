@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { Event, Part } from "@opencode-ai/sdk/v2";
+
 import type { AgentEvent } from "@openducktor/core";
 import {
   defaultRepoRuntimeInput,
+  completeMockEvent,
   defaultRuntimeConnection,
   flushAsync,
   makeMockClient,
@@ -31,7 +32,7 @@ describe("OpencodeSdkAdapter session history", () => {
               messageID: "msg-summary",
               type: "text",
               text: "Internal compaction summary",
-            } as unknown as Part,
+            },
           ],
         },
         {
@@ -47,7 +48,7 @@ describe("OpencodeSdkAdapter session history", () => {
               messageID: "msg-marker",
               type: "compaction",
               auto: false,
-            } as unknown as Part,
+            },
           ],
         },
         {
@@ -63,7 +64,7 @@ describe("OpencodeSdkAdapter session history", () => {
               messageID: "msg-visible",
               type: "text",
               text: "Visible answer",
-            } as unknown as Part,
+            },
           ],
         },
       ],
@@ -110,7 +111,7 @@ describe("OpencodeSdkAdapter session history", () => {
               type: "text",
               text: "Start work",
               time: { start: Date.now(), end: Date.now() },
-            } as unknown as Part,
+            },
           ],
         },
         {
@@ -128,7 +129,7 @@ describe("OpencodeSdkAdapter session history", () => {
               type: "text",
               text: "Continue",
               time: { start: Date.now(), end: Date.now() },
-            } as unknown as Part,
+            },
           ],
         },
       ],
@@ -162,8 +163,8 @@ describe("OpencodeSdkAdapter session history", () => {
             model: {
               providerID: "openai",
               modelID: "gpt-5",
+              variant: "high",
             },
-            variant: "high",
             time: { created: Date.parse("2026-02-17T11:59:00Z") },
           },
           parts: [
@@ -174,7 +175,7 @@ describe("OpencodeSdkAdapter session history", () => {
               type: "text",
               text: "Use the selected agent",
               time: { start: Date.now(), end: Date.now() },
-            } as unknown as Part,
+            },
           ],
         },
         {
@@ -199,7 +200,7 @@ describe("OpencodeSdkAdapter session history", () => {
               type: "reasoning",
               text: "Reasoning block",
               time: { start: Date.now(), end: Date.now() },
-            } as unknown as Part,
+            },
             {
               id: "text-1",
               sessionID: "session-opencode-1",
@@ -207,7 +208,7 @@ describe("OpencodeSdkAdapter session history", () => {
               type: "text",
               text: "Final answer",
               time: { start: Date.now(), end: Date.now() },
-            } as unknown as Part,
+            },
           ],
         },
       ],
@@ -254,385 +255,341 @@ describe("OpencodeSdkAdapter session history", () => {
   });
 
   test("loadSessionHistory attaches OpenCode patch diffs to edit tool parts", async () => {
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async () => {
-      throw new Error("Transcript history must not call the session diff endpoint.");
-    }) as typeof fetch;
-
-    try {
-      const mock = makeMockClient({
-        messagesResponse: [
-          {
-            info: {
-              id: "msg-200",
-              role: "assistant",
-              time: { created: Date.parse("2026-02-17T12:00:00Z") },
-            },
-            parts: [
-              {
-                id: "tool-edit-1",
-                sessionID: "session-opencode-1",
-                messageID: "msg-200",
-                callID: "call-edit-1",
-                type: "tool",
-                tool: "edit",
-                state: {
-                  status: "completed",
-                  input: { filePath: "/repo/src/main.ts" },
-                  output: "Edited src/main.ts",
-                  metadata: {
-                    filediff: {
-                      file: "/repo/src/main.ts",
-                      patch: "@@ -1 +1 @@\n-old\n+new",
-                      additions: 1,
-                      deletions: 1,
-                    },
+    const mock = makeMockClient({
+      messagesResponse: [
+        {
+          info: {
+            id: "msg-200",
+            role: "assistant",
+            time: { created: Date.parse("2026-02-17T12:00:00Z") },
+          },
+          parts: [
+            {
+              id: "tool-edit-1",
+              sessionID: "session-opencode-1",
+              messageID: "msg-200",
+              callID: "call-edit-1",
+              type: "tool",
+              tool: "edit",
+              state: {
+                status: "completed",
+                input: { filePath: "/repo/src/main.ts" },
+                output: "Edited src/main.ts",
+                metadata: {
+                  filediff: {
+                    file: "/repo/src/main.ts",
+                    patch: "@@ -1 +1 @@\n-old\n+new",
+                    additions: 1,
+                    deletions: 1,
                   },
                 },
-              } as unknown as Part,
-              {
-                id: "patch-1",
-                sessionID: "session-opencode-1",
-                messageID: "msg-200",
-                type: "patch",
-                files: ["/repo/src/main.ts"],
-              } as unknown as Part,
-            ],
-          },
-        ],
-      });
-      const adapter = new OpencodeSdkAdapter({
-        createClient: () => mock.client,
-        now: () => "2026-02-17T12:00:00Z",
-      });
+              },
+            },
+            {
+              id: "patch-1",
+              sessionID: "session-opencode-1",
+              messageID: "msg-200",
+              type: "patch",
+              files: ["/repo/src/main.ts"],
+            },
+          ],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
 
-      const history = await adapter.loadSessionHistory({
-        ...defaultRepoRuntimeInput,
-        externalSessionId: "session-opencode-1",
-        limit: 100,
-      });
+    const history = await adapter.loadSessionHistory({
+      ...defaultRepoRuntimeInput,
+      externalSessionId: "session-opencode-1",
+      limit: 100,
+    });
 
-      expect(history).toHaveLength(1);
-      const message = history[0];
-      if (message?.role !== "assistant") {
-        throw new Error("Expected assistant history entry");
-      }
-      const editPart = message.parts.find((part) => part.kind === "tool");
-      expect(editPart).toMatchObject({
-        kind: "tool",
-        tool: "edit",
-        toolType: "file_edit",
-        output: "Edited src/main.ts",
-        fileDiffs: [
-          {
-            file: "/repo/src/main.ts",
-            type: "modified",
-            additions: 1,
-            deletions: 1,
-            diff: "--- a/repo/src/main.ts\n+++ b/repo/src/main.ts\n@@ -1 +1 @@\n-old\n+new\n",
-          },
-        ],
-      });
-    } finally {
-      globalThis.fetch = originalFetch;
+    expect(history).toHaveLength(1);
+    const message = history[0];
+    if (message?.role !== "assistant") {
+      throw new Error("Expected assistant history entry");
     }
+    const editPart = message.parts.find((part) => part.kind === "tool");
+    expect(editPart).toMatchObject({
+      kind: "tool",
+      tool: "edit",
+      toolType: "file_edit",
+      output: "Edited src/main.ts",
+      fileDiffs: [
+        {
+          file: "/repo/src/main.ts",
+          type: "modified",
+          additions: 1,
+          deletions: 1,
+          diff: "--- a/repo/src/main.ts\n+++ b/repo/src/main.ts\n@@ -1 +1 @@\n-old\n+new\n",
+        },
+      ],
+    });
   });
 
-  test("loadSessionHistory ignores malformed patch parts without dropping history", async () => {
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async () => {
-      throw new Error("Diff endpoint should not be called without a patch message id.");
-    }) as typeof fetch;
-
-    try {
-      const mock = makeMockClient({
-        messagesResponse: [
-          {
-            info: {
-              id: "msg-200",
-              role: "assistant",
-              time: { created: Date.parse("2026-02-17T12:00:00Z") },
-            },
-            parts: [
-              {
-                id: "tool-edit-1",
-                sessionID: "session-opencode-1",
-                messageID: "msg-200",
-                callID: "call-edit-1",
-                type: "tool",
-                tool: "edit",
-                state: {
-                  status: "completed",
-                  input: { filePath: "/repo/src/main.ts" },
-                  output: "Edited src/main.ts",
-                },
-              } as unknown as Part,
-              {
-                id: "patch-1",
-                sessionID: "session-opencode-1",
-                type: "patch",
-                files: ["/repo/src/main.ts"],
-              } as unknown as Part,
-            ],
+  test("loadSessionHistory rejects malformed patch parts at ingress", async () => {
+    const mock = makeMockClient({
+      messagesResponse: [
+        {
+          info: {
+            id: "msg-200",
+            role: "assistant",
+            time: { created: Date.parse("2026-02-17T12:00:00Z") },
           },
-        ],
-      });
-      const adapter = new OpencodeSdkAdapter({
-        createClient: () => mock.client,
-        now: () => "2026-02-17T12:00:00Z",
-      });
+          parts: [
+            {
+              id: "tool-edit-1",
+              sessionID: "session-opencode-1",
+              messageID: "msg-200",
+              callID: "call-edit-1",
+              type: "tool",
+              tool: "edit",
+              state: {
+                status: "completed",
+                input: { filePath: "/repo/src/main.ts" },
+                output: "Edited src/main.ts",
+              },
+            },
+            {
+              id: "patch-1",
+              sessionID: "session-opencode-1",
+              type: "patch",
+              files: ["/repo/src/main.ts"],
+            },
+          ],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
 
-      const history = await adapter.loadSessionHistory({
+    await expect(
+      adapter.loadSessionHistory({
         ...defaultRepoRuntimeInput,
         externalSessionId: "session-opencode-1",
         limit: 100,
-      });
-
-      expect(history).toHaveLength(1);
-      const editPart = history[0]?.parts.find((part) => part.kind === "tool");
-      expect(editPart).toMatchObject({
-        kind: "tool",
-        tool: "edit",
-        toolType: "file_edit",
-        output: "Edited src/main.ts",
-      });
-      expect(editPart).not.toEqual(expect.objectContaining({ fileDiffs: expect.any(Array) }));
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+      }),
+    ).rejects.toThrow("messageID");
   });
 
   test("loadSessionHistory uses only tool metadata when patch parts are present", async () => {
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async () => {
-      throw new Error("Transcript history must not call the session diff endpoint.");
-    }) as typeof fetch;
-
-    try {
-      const mock = makeMockClient({
-        messagesResponse: [
-          {
-            info: {
-              id: "msg-200",
-              role: "assistant",
-              time: { created: Date.parse("2026-02-17T12:00:00Z") },
-            },
-            parts: [
-              {
-                id: "tool-edit-1",
-                sessionID: "session-opencode-1",
-                messageID: "msg-200",
-                callID: "call-edit-1",
-                type: "tool",
-                tool: "edit",
-                state: {
-                  status: "completed",
-                  input: { filePath: "/repo/src/fail.ts" },
-                  output: "Edited src/fail.ts",
-                },
-              } as unknown as Part,
-              {
-                id: "patch-1",
-                sessionID: "session-opencode-1",
-                messageID: "msg-200",
-                type: "patch",
-                files: ["/repo/src/fail.ts"],
-              } as unknown as Part,
-            ],
+    const mock = makeMockClient({
+      messagesResponse: [
+        {
+          info: {
+            id: "msg-200",
+            role: "assistant",
+            time: { created: Date.parse("2026-02-17T12:00:00Z") },
           },
-          {
-            info: {
-              id: "msg-201",
-              role: "assistant",
-              time: { created: Date.parse("2026-02-17T12:01:00Z") },
+          parts: [
+            {
+              id: "tool-edit-1",
+              sessionID: "session-opencode-1",
+              messageID: "msg-200",
+              callID: "call-edit-1",
+              type: "tool",
+              tool: "edit",
+              state: {
+                status: "completed",
+                input: { filePath: "/repo/src/fail.ts" },
+                output: "Edited src/fail.ts",
+              },
             },
-            parts: [
-              {
-                id: "tool-edit-2",
-                sessionID: "session-opencode-1",
-                messageID: "msg-201",
-                callID: "call-edit-2",
-                type: "tool",
-                tool: "edit",
-                state: {
-                  status: "completed",
-                  input: { filePath: "/repo/src/ok.ts" },
-                  output: "Edited src/ok.ts",
-                  metadata: {
-                    filediff: {
-                      file: "src/ok.ts",
-                      patch: "@@ -1 +1 @@\n-before\n+after",
-                      additions: 1,
-                      deletions: 1,
-                    },
+            {
+              id: "patch-1",
+              sessionID: "session-opencode-1",
+              messageID: "msg-200",
+              type: "patch",
+              files: ["/repo/src/fail.ts"],
+            },
+          ],
+        },
+        {
+          info: {
+            id: "msg-201",
+            role: "assistant",
+            time: { created: Date.parse("2026-02-17T12:01:00Z") },
+          },
+          parts: [
+            {
+              id: "tool-edit-2",
+              sessionID: "session-opencode-1",
+              messageID: "msg-201",
+              callID: "call-edit-2",
+              type: "tool",
+              tool: "edit",
+              state: {
+                status: "completed",
+                input: { filePath: "/repo/src/ok.ts" },
+                output: "Edited src/ok.ts",
+                metadata: {
+                  filediff: {
+                    file: "src/ok.ts",
+                    patch: "@@ -1 +1 @@\n-before\n+after",
+                    additions: 1,
+                    deletions: 1,
                   },
                 },
-              } as unknown as Part,
-              {
-                id: "patch-2",
-                sessionID: "session-opencode-1",
-                messageID: "msg-201",
-                type: "patch",
-                files: ["/repo/src/ok.ts"],
-              } as unknown as Part,
-            ],
-          },
-        ],
-      });
-      const adapter = new OpencodeSdkAdapter({
-        createClient: () => mock.client,
-        now: () => "2026-02-17T12:00:00Z",
-      });
+              },
+            },
+            {
+              id: "patch-2",
+              sessionID: "session-opencode-1",
+              messageID: "msg-201",
+              type: "patch",
+              files: ["/repo/src/ok.ts"],
+            },
+          ],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
 
-      const history = await adapter.loadSessionHistory({
-        ...defaultRepoRuntimeInput,
-        externalSessionId: "session-opencode-1",
-        limit: 100,
-      });
+    const history = await adapter.loadSessionHistory({
+      ...defaultRepoRuntimeInput,
+      externalSessionId: "session-opencode-1",
+      limit: 100,
+    });
 
-      expect(history).toHaveLength(2);
-      const failedEdit = history[0]?.parts.find((part) => part.kind === "tool");
-      const loadedEdit = history[1]?.parts.find((part) => part.kind === "tool");
-      expect(failedEdit).toMatchObject({
-        kind: "tool",
-        output: "Edited src/fail.ts",
-      });
-      expect(failedEdit).not.toEqual(expect.objectContaining({ fileDiffs: expect.any(Array) }));
-      expect(loadedEdit).toMatchObject({
-        kind: "tool",
-        output: "Edited src/ok.ts",
-        fileDiffs: [
-          {
-            file: "src/ok.ts",
-            diff: "--- a/src/ok.ts\n+++ b/src/ok.ts\n@@ -1 +1 @@\n-before\n+after\n",
-          },
-        ],
-      });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    expect(history).toHaveLength(2);
+    const failedEdit = history[0]?.parts.find((part) => part.kind === "tool");
+    const loadedEdit = history[1]?.parts.find((part) => part.kind === "tool");
+    expect(failedEdit).toMatchObject({
+      kind: "tool",
+      output: "Edited src/fail.ts",
+    });
+    expect(failedEdit).not.toEqual(expect.objectContaining({ fileDiffs: expect.any(Array) }));
+    expect(loadedEdit).toMatchObject({
+      kind: "tool",
+      output: "Edited src/ok.ts",
+      fileDiffs: [
+        {
+          file: "src/ok.ts",
+          diff: "--- a/src/ok.ts\n+++ b/src/ok.ts\n@@ -1 +1 @@\n-before\n+after\n",
+        },
+      ],
+    });
   });
 
   test("loadSessionHistory scopes OpenCode tool diffs to their tool metadata", async () => {
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async () => {
-      throw new Error("Transcript history must not call the session diff endpoint.");
-    }) as typeof fetch;
-
-    try {
-      const mock = makeMockClient({
-        messagesResponse: [
-          {
-            info: {
-              id: "msg-200",
-              role: "assistant",
-              time: { created: Date.parse("2026-02-17T12:00:00Z") },
-            },
-            parts: [
-              {
-                id: "tool-edit-1",
-                sessionID: "session-opencode-1",
-                messageID: "msg-200",
-                callID: "call-edit-1",
-                type: "tool",
-                tool: "edit",
-                state: {
-                  status: "completed",
-                  input: { filePath: "/repo/src/main.ts" },
-                  output: "Edited src/main.ts",
-                  metadata: {
-                    filediff: {
-                      file: "src/main.ts",
-                      patch: "@@ -1 +1 @@\n-first\n+second",
-                      additions: 1,
-                      deletions: 1,
-                    },
+    const mock = makeMockClient({
+      messagesResponse: [
+        {
+          info: {
+            id: "msg-200",
+            role: "assistant",
+            time: { created: Date.parse("2026-02-17T12:00:00Z") },
+          },
+          parts: [
+            {
+              id: "tool-edit-1",
+              sessionID: "session-opencode-1",
+              messageID: "msg-200",
+              callID: "call-edit-1",
+              type: "tool",
+              tool: "edit",
+              state: {
+                status: "completed",
+                input: { filePath: "/repo/src/main.ts" },
+                output: "Edited src/main.ts",
+                metadata: {
+                  filediff: {
+                    file: "src/main.ts",
+                    patch: "@@ -1 +1 @@\n-first\n+second",
+                    additions: 1,
+                    deletions: 1,
                   },
                 },
-              } as unknown as Part,
-              {
-                id: "patch-1",
-                sessionID: "session-opencode-1",
-                messageID: "msg-200",
-                type: "patch",
-                files: ["/repo/src/main.ts"],
-              } as unknown as Part,
-            ],
-          },
-          {
-            info: {
-              id: "msg-201",
-              role: "assistant",
-              time: { created: Date.parse("2026-02-17T12:01:00Z") },
+              },
             },
-            parts: [
-              {
-                id: "tool-edit-2",
-                sessionID: "session-opencode-1",
-                messageID: "msg-201",
-                callID: "call-edit-2",
-                type: "tool",
-                tool: "edit",
-                state: {
-                  status: "completed",
-                  input: { filePath: "/repo/src/main.ts" },
-                  output: "Edited src/main.ts again",
-                  metadata: {
-                    filediff: {
-                      file: "src/main.ts",
-                      patch: "@@ -1 +1 @@\n-second\n+third",
-                      additions: 1,
-                      deletions: 1,
-                    },
+            {
+              id: "patch-1",
+              sessionID: "session-opencode-1",
+              messageID: "msg-200",
+              type: "patch",
+              files: ["/repo/src/main.ts"],
+            },
+          ],
+        },
+        {
+          info: {
+            id: "msg-201",
+            role: "assistant",
+            time: { created: Date.parse("2026-02-17T12:01:00Z") },
+          },
+          parts: [
+            {
+              id: "tool-edit-2",
+              sessionID: "session-opencode-1",
+              messageID: "msg-201",
+              callID: "call-edit-2",
+              type: "tool",
+              tool: "edit",
+              state: {
+                status: "completed",
+                input: { filePath: "/repo/src/main.ts" },
+                output: "Edited src/main.ts again",
+                metadata: {
+                  filediff: {
+                    file: "src/main.ts",
+                    patch: "@@ -1 +1 @@\n-second\n+third",
+                    additions: 1,
+                    deletions: 1,
                   },
                 },
-              } as unknown as Part,
-              {
-                id: "patch-2",
-                sessionID: "session-opencode-1",
-                messageID: "msg-201",
-                type: "patch",
-                files: ["/repo/src/main.ts"],
-              } as unknown as Part,
-            ],
-          },
-        ],
-      });
-      const adapter = new OpencodeSdkAdapter({
-        createClient: () => mock.client,
-        now: () => "2026-02-17T12:00:00Z",
-      });
+              },
+            },
+            {
+              id: "patch-2",
+              sessionID: "session-opencode-1",
+              messageID: "msg-201",
+              type: "patch",
+              files: ["/repo/src/main.ts"],
+            },
+          ],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
 
-      const history = await adapter.loadSessionHistory({
-        ...defaultRepoRuntimeInput,
-        externalSessionId: "session-opencode-1",
-        limit: 100,
-      });
+    const history = await adapter.loadSessionHistory({
+      ...defaultRepoRuntimeInput,
+      externalSessionId: "session-opencode-1",
+      limit: 100,
+    });
 
-      expect(history).toHaveLength(2);
-      const firstEdit = history[0]?.parts.find((part) => part.kind === "tool");
-      const secondEdit = history[1]?.parts.find((part) => part.kind === "tool");
-      expect(firstEdit).toMatchObject({
-        kind: "tool",
-        fileDiffs: [
-          {
-            file: "src/main.ts",
-            diff: "--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1 +1 @@\n-first\n+second\n",
-          },
-        ],
-      });
-      expect(secondEdit).toMatchObject({
-        kind: "tool",
-        fileDiffs: [
-          {
-            file: "src/main.ts",
-            diff: "--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1 +1 @@\n-second\n+third\n",
-          },
-        ],
-      });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    expect(history).toHaveLength(2);
+    const firstEdit = history[0]?.parts.find((part) => part.kind === "tool");
+    const secondEdit = history[1]?.parts.find((part) => part.kind === "tool");
+    expect(firstEdit).toMatchObject({
+      kind: "tool",
+      fileDiffs: [
+        {
+          file: "src/main.ts",
+          diff: "--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1 +1 @@\n-first\n+second\n",
+        },
+      ],
+    });
+    expect(secondEdit).toMatchObject({
+      kind: "tool",
+      fileDiffs: [
+        {
+          file: "src/main.ts",
+          diff: "--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1 +1 @@\n-second\n+third\n",
+        },
+      ],
+    });
   });
 
   test("loadSessionHistory normalizes subagent correlation keys like the live stream", async () => {
@@ -653,7 +610,7 @@ describe("OpencodeSdkAdapter session history", () => {
               agent: "build",
               prompt: "Inspect repo",
               description: "Starting A",
-            } as unknown as Part,
+            },
             {
               id: "tool-a",
               sessionID: "session-opencode-1",
@@ -680,7 +637,7 @@ describe("OpencodeSdkAdapter session history", () => {
                 },
                 title: "Task",
               },
-            } as unknown as Part,
+            },
           ],
         },
       ],
@@ -753,7 +710,7 @@ describe("OpencodeSdkAdapter session history", () => {
                   start: taskStartedAtMs,
                 },
               },
-            } as unknown as Part,
+            },
           ],
         },
       ],
@@ -808,7 +765,7 @@ describe("OpencodeSdkAdapter session history", () => {
               agent: "build",
               prompt: "Run tests",
               description: "Run tests",
-            } as unknown as Part,
+            },
             {
               id: "tool-task-a",
               sessionID: "session-opencode-1",
@@ -841,7 +798,7 @@ describe("OpencodeSdkAdapter session history", () => {
                   end: taskStartedAtMs + 10,
                 },
               },
-            } as unknown as Part,
+            },
           ],
         },
         {
@@ -865,7 +822,7 @@ describe("OpencodeSdkAdapter session history", () => {
                 "</task_result>",
                 "</task>",
               ].join("\n"),
-            } as unknown as Part,
+            },
           ],
         },
       ],
@@ -936,7 +893,7 @@ describe("OpencodeSdkAdapter session history", () => {
                 "</task_result>",
                 "</task>",
               ].join("\n"),
-            } as unknown as Part,
+            },
           ],
         },
         {
@@ -954,7 +911,7 @@ describe("OpencodeSdkAdapter session history", () => {
               agent: "build",
               prompt: "Run tests",
               description: "Run tests",
-            } as unknown as Part,
+            },
             {
               id: "tool-task-a",
               sessionID: "session-opencode-1",
@@ -987,7 +944,7 @@ describe("OpencodeSdkAdapter session history", () => {
                   end: taskStartedAtMs + 10,
                 },
               },
-            } as unknown as Part,
+            },
           ],
         },
       ],
@@ -1046,7 +1003,7 @@ describe("OpencodeSdkAdapter session history", () => {
             },
           },
         },
-      } as unknown as Event,
+      },
       {
         type: "message.part.updated",
         properties: {
@@ -1074,7 +1031,7 @@ describe("OpencodeSdkAdapter session history", () => {
             },
           },
         },
-      } as unknown as Event,
+      },
     ];
     const mock = makeMockClient({
       streamEvents,
@@ -1094,21 +1051,15 @@ describe("OpencodeSdkAdapter session history", () => {
               agent: "build",
               prompt: "Inspect repo",
               description: "Starting A",
-            } as Part,
+            },
           ],
         },
       ],
     });
 
     let releaseStream: (() => void) | null = null;
-    (
-      mock.client.global as unknown as {
-        event: (options?: {
-          signal?: AbortSignal;
-        }) => Promise<{ stream: AsyncIterable<{ directory: string; payload: Event }> }>;
-      }
-    ).event = async (options?: { signal?: AbortSignal }) => {
-      async function* iterator(): AsyncGenerator<{ directory: string; payload: Event }> {
+    mock.client.global.event = async (options?: { signal?: AbortSignal }) => {
+      async function* iterator() {
         await new Promise<void>((resolve) => {
           releaseStream = resolve;
           options?.signal?.addEventListener("abort", () => resolve(), { once: true });
@@ -1116,8 +1067,11 @@ describe("OpencodeSdkAdapter session history", () => {
         if (options?.signal?.aborted) {
           return;
         }
-        for (const event of streamEvents) {
-          yield { directory: defaultRuntimeConnection.workingDirectory, payload: event };
+        for (const [index, event] of streamEvents.entries()) {
+          yield {
+            directory: defaultRuntimeConnection.workingDirectory,
+            payload: completeMockEvent(event, index),
+          };
         }
       }
 
@@ -1142,7 +1096,7 @@ describe("OpencodeSdkAdapter session history", () => {
       ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
       limit: 100,
     });
-    const finishStream = releaseStream as (() => void) | null;
+    const finishStream: (() => void) | null = releaseStream;
     if (finishStream) {
       finishStream();
     }
@@ -1176,7 +1130,7 @@ describe("OpencodeSdkAdapter session history", () => {
             },
           },
         },
-      } as unknown as Event,
+      },
       {
         type: "message.part.updated",
         properties: {
@@ -1208,7 +1162,7 @@ describe("OpencodeSdkAdapter session history", () => {
             },
           },
         },
-      } as unknown as Event,
+      },
     ];
     const mock = makeMockClient({
       streamEvents,
@@ -1228,21 +1182,15 @@ describe("OpencodeSdkAdapter session history", () => {
               agent: "build",
               prompt: "Inspect repo",
               description: "Starting A",
-            } as Part,
+            },
           ],
         },
       ],
     });
 
     let releaseStream: (() => void) | null = null;
-    (
-      mock.client.global as unknown as {
-        event: (options?: {
-          signal?: AbortSignal;
-        }) => Promise<{ stream: AsyncIterable<{ directory: string; payload: Event }> }>;
-      }
-    ).event = async (options?: { signal?: AbortSignal }) => {
-      async function* iterator(): AsyncGenerator<{ directory: string; payload: Event }> {
+    mock.client.global.event = async (options?: { signal?: AbortSignal }) => {
+      async function* iterator() {
         await new Promise<void>((resolve) => {
           releaseStream = resolve;
           options?.signal?.addEventListener("abort", () => resolve(), { once: true });
@@ -1250,8 +1198,11 @@ describe("OpencodeSdkAdapter session history", () => {
         if (options?.signal?.aborted) {
           return;
         }
-        for (const event of streamEvents) {
-          yield { directory: defaultRuntimeConnection.workingDirectory, payload: event };
+        for (const [index, event] of streamEvents.entries()) {
+          yield {
+            directory: defaultRuntimeConnection.workingDirectory,
+            payload: completeMockEvent(event, index),
+          };
         }
       }
 
@@ -1276,7 +1227,7 @@ describe("OpencodeSdkAdapter session history", () => {
       ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
       limit: 100,
     });
-    const finishStream = releaseStream as (() => void) | null;
+    const finishStream: (() => void) | null = releaseStream;
     if (finishStream) {
       finishStream();
     }
@@ -1314,7 +1265,7 @@ describe("OpencodeSdkAdapter session history", () => {
               agent: "build",
               prompt: "Inspect repo",
               description: "Starting A",
-            } as Part,
+            },
           ],
         },
         {
@@ -1350,7 +1301,7 @@ describe("OpencodeSdkAdapter session history", () => {
                 },
                 title: "Task",
               },
-            } as unknown as Part,
+            },
           ],
         },
       ],
@@ -1403,7 +1354,7 @@ describe("OpencodeSdkAdapter session history", () => {
               type: "text",
               text: "Original request",
               time: { start: Date.now(), end: Date.now() },
-            } as Part,
+            },
           ],
         },
         {
@@ -1421,7 +1372,7 @@ describe("OpencodeSdkAdapter session history", () => {
               type: "text",
               text: "Working on it",
               time: { start: Date.now(), end: Date.now() },
-            } as Part,
+            },
           ],
         },
         {
@@ -1438,7 +1389,7 @@ describe("OpencodeSdkAdapter session history", () => {
               type: "text",
               text: "One more change",
               time: { start: Date.now(), end: Date.now() },
-            } as Part,
+            },
           ],
         },
       ],
@@ -1471,10 +1422,16 @@ describe("OpencodeSdkAdapter session history", () => {
           info: {
             id: "msg-user-1",
             role: "user",
-            text: "  @src/alpha.ts @src/beta.ts  ",
             time: { created: Date.parse("2026-02-17T11:59:00Z") },
           },
           parts: [
+            {
+              id: "text-user-1",
+              sessionID: "session-opencode-1",
+              messageID: "msg-user-1",
+              type: "text",
+              text: "  @src/alpha.ts @src/beta.ts  ",
+            },
             {
               id: "file-alpha",
               sessionID: "session-opencode-1",
@@ -1488,7 +1445,7 @@ describe("OpencodeSdkAdapter session history", () => {
                 path: "src/alpha.ts",
                 text: { value: "@src/alpha.ts", start: 2, end: 15 },
               },
-            } as Part,
+            },
             {
               id: "file-beta",
               sessionID: "session-opencode-1",
@@ -1502,7 +1459,7 @@ describe("OpencodeSdkAdapter session history", () => {
                 path: "src/beta.ts",
                 text: { value: "@src/beta.ts", start: 15, end: 27 },
               },
-            } as Part,
+            },
           ],
         },
       ],
@@ -1576,14 +1533,14 @@ describe("OpencodeSdkAdapter session history", () => {
               messageID: "msg-user-slash-1",
               type: "text",
               text: slashEnvelope,
-            } as Part,
+            },
             {
               id: "text-user-echo",
               sessionID: "session-opencode-1",
               messageID: "msg-user-slash-1",
               type: "text",
               text: "I just want to test the slash commands mechanism.\nReturn the arguments of this command: pouet",
-            } as Part,
+            },
           ],
         },
       ],
@@ -1626,7 +1583,7 @@ describe("OpencodeSdkAdapter session history", () => {
               mime: "image/png",
               filename: "Screenshot-2026-03-16-at-23.48.30.png",
               url: "https://files.example.invalid/uploaded-image",
-            } as Part,
+            },
           ],
         },
       ],
@@ -1637,7 +1594,7 @@ describe("OpencodeSdkAdapter session history", () => {
     });
 
     await startDefaultSession(adapter, "spec");
-    const sessions = (adapter as unknown as { sessions: Map<string, SessionRecord> }).sessions;
+    const sessions = (adapter satisfies { sessions: Map<string, SessionRecord> }).sessions;
     const session = sessions.get("session-opencode-1");
     if (!session) {
       throw new Error("Expected started session");
@@ -1699,7 +1656,7 @@ describe("OpencodeSdkAdapter session history", () => {
               mime: "image/png",
               filename: "Screenshot-2026-03-16-at-23.48.30.png",
               url: "https://files.example.invalid/uploaded-image",
-            } as Part,
+            },
           ],
         },
       ],
@@ -1710,7 +1667,7 @@ describe("OpencodeSdkAdapter session history", () => {
     });
 
     await startDefaultSession(adapter, "spec");
-    const sessions = (adapter as unknown as { sessions: Map<string, SessionRecord> }).sessions;
+    const sessions = (adapter satisfies { sessions: Map<string, SessionRecord> }).sessions;
     const matchingSession = sessions.get("session-opencode-1");
     if (!matchingSession) {
       throw new Error("Expected started session");
@@ -1753,7 +1710,7 @@ describe("OpencodeSdkAdapter session history", () => {
           },
         ],
       ]),
-    } as unknown as SessionRecord);
+    } satisfies SessionRecord);
 
     const history = await adapter.loadSessionHistory({
       ...defaultRepoRuntimeInput,

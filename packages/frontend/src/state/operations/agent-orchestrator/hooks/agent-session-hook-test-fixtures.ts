@@ -1,5 +1,4 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentEnginePort } from "@openducktor/core";
 import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
 import {
   type AgentSessionFixtureOverrides,
@@ -61,9 +60,3 @@ export const createSession = (overrides: CreateSessionOverrides = {}): AgentSess
     overrides,
   );
 };
-
-export const createNoopEngine = (overrides: Partial<AgentEnginePort> = {}): AgentEnginePort =>
-  ({
-    listRuntimeDefinitions: () => [],
-    ...overrides,
-  }) as AgentEnginePort;

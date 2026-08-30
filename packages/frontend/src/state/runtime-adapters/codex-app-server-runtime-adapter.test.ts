@@ -1,6 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
-import { CODEX_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import { host } from "../operations/shared/host";
+import {
+  CODEX_RUNTIME_DESCRIPTOR,
+  type CodexAppServerRequestMethod,
+  type FileDiff,
+  parseCodexAppServerRequestResult,
+} from "@openducktor/contracts";
+import type { HostClient } from "@openducktor/host-client";
+import { createHostClientFixture } from "@/test-utils/focused-fixture";
 import { createCodexAppServerRuntimeAdapter } from "./codex-app-server-runtime-adapter";
 
 const createCodexRuntime = (runtimeId: string) => ({
@@ -17,51 +23,80 @@ const createCodexRuntime = (runtimeId: string) => ({
 
 describe("createCodexAppServerRuntimeAdapter", () => {
   test("keeps pure catalog reads on the renderer adapter without raw live-event plumbing", async () => {
-    const originalRuntimeRequire = host.runtimeRequire;
-    const originalCodexAppServerRequest = host.codexAppServerRequest;
-    const codexRequest = mock(async (_runtimeId: string, method: string) => {
-      if (method !== "model/list") {
-        throw new Error(`Unexpected Codex app-server request method: ${method}`);
+    const requestCalls: Array<{ runtimeId: string; method: CodexAppServerRequestMethod }> = [];
+    const requestImplementation: HostClient["codexAppServerRequest"] = async (
+      runtimeId,
+      request,
+    ) => {
+      requestCalls.push({ runtimeId, method: request.method });
+      if (request.method !== "model/list") {
+        throw new Error(`Unexpected Codex app-server request method: ${request.method}`);
       }
-      return {
+      return parseCodexAppServerRequestResult(request.method, {
         data: [
           {
+            additionalSpeedTiers: [],
+            availabilityNux: null,
+            defaultServiceTier: null,
+            defaultReasoningEffort: "medium",
+            description: "GPT-5 model",
+            hidden: false,
             id: "gpt-5",
             model: "gpt-5",
             displayName: "GPT-5",
             inputModalities: ["text", "image"],
+            isDefault: true,
+            modelSpecialty: null,
+            multiAgentVersion: null,
+            serviceTiers: [],
             supportedReasoningEfforts: [
               { reasoningEffort: "medium", description: "Balanced reasoning" },
             ],
-            isDefault: true,
+            supportsPersonality: true,
+            upgrade: null,
+            upgradeInfo: null,
           },
         ],
         nextCursor: null,
-      };
-    });
-
-    host.runtimeRequire = mock(async () =>
-      createCodexRuntime("runtime-codex-live"),
-    ) as typeof host.runtimeRequire;
-    host.codexAppServerRequest = codexRequest as typeof host.codexAppServerRequest;
-
-    try {
-      const adapter = createCodexAppServerRuntimeAdapter();
-
-      await expect(
-        adapter.listAvailableModels({ repoPath: "/repo", runtimeKind: "codex" }),
-      ).resolves.toMatchObject({
-        runtime: { kind: "codex" },
-        models: [expect.objectContaining({ modelId: "gpt-5" })],
       });
-      expect(codexRequest).toHaveBeenCalledWith(
-        "runtime-codex-live",
-        "model/list",
-        expect.any(Object),
-      );
-    } finally {
-      host.runtimeRequire = originalRuntimeRequire;
-      host.codexAppServerRequest = originalCodexAppServerRequest;
-    }
+    };
+    const hostClient = createHostClientFixture({
+      runtimeRequire: async () => createCodexRuntime("runtime-codex-live"),
+      codexAppServerRequest: requestImplementation,
+    });
+    const adapter = createCodexAppServerRuntimeAdapter({ hostClient });
+
+    await expect(
+      adapter.listAvailableModels({ repoPath: "/repo", runtimeKind: "codex" }),
+    ).resolves.toMatchObject({
+      runtime: { kind: "codex" },
+      models: [expect.objectContaining({ modelId: "gpt-5" })],
+    });
+    expect(requestCalls).toEqual([{ runtimeId: "runtime-codex-live", method: "model/list" }]);
+  });
+
+  test("loads Codex session diffs through host-owned live stream state", async () => {
+    const fileDiffs: FileDiff[] = [
+      {
+        file: "src/app.ts",
+        type: "modified",
+        additions: 1,
+        deletions: 1,
+        diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n",
+      },
+    ];
+    const loadDiff = mock(async () => fileDiffs);
+    const hostClient = createHostClientFixture({ agentSessionLiveLoadDiff: loadDiff });
+    const adapter = createCodexAppServerRuntimeAdapter({ hostClient });
+    const input = {
+      repoPath: "/repo",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo",
+      externalSessionId: "thread-1",
+      runtimeHistoryAnchor: "turn-1",
+    };
+
+    await expect(adapter.loadSessionDiff(input)).resolves.toEqual(fileDiffs);
+    expect(loadDiff).toHaveBeenCalledWith(input);
   });
 });

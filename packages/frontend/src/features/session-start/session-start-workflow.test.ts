@@ -8,6 +8,14 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import { startSessionWorkflow } from "./session-start-workflow";
 
+type SendAgentMessage = NonNullable<Parameters<typeof startSessionWorkflow>[0]["sendAgentMessage"]>;
+
+const createSendAgentMessageMock = () =>
+  mock(
+    async (_session: Parameters<SendAgentMessage>[0], _segments: Parameters<SendAgentMessage>[1]) =>
+      undefined,
+  );
+
 const BUILD_SELECTION = {
   runtimeKind: "opencode" as const,
   providerId: "openai",
@@ -97,7 +105,7 @@ describe("session-start-workflow", () => {
   });
 
   test("uses the just-selected target branch for pull request kickoff prompts", async () => {
-    const sendAgentMessage = mock(async () => undefined);
+    const sendAgentMessage = createSendAgentMessageMock();
     const startAgentSession = mock(async () => sessionIdentity("session-pr"));
 
     const result = await startSessionWorkflow({
@@ -145,15 +153,13 @@ describe("session-start-workflow", () => {
         text: expect.stringContaining("Pull request base:\nrelease/2026.04"),
       }),
     ]);
-    const sentCalls = sendAgentMessage.mock.calls as unknown as Array<
-      [ReturnType<typeof sessionIdentity>, Array<{ text?: string }>]
-    >;
-    const sentText = sentCalls[0]?.[1]?.[0]?.text ?? "";
+    const sentText =
+      sendAgentMessage.mock.calls[0]?.[1]?.find((part) => part.kind === "text")?.text ?? "";
     expect(sentText).not.toContain("upstream/release/2026.04");
   });
 
   test("ignores the remote when building the pull request kickoff prompt", async () => {
-    const sendAgentMessage = mock(async () => undefined);
+    const sendAgentMessage = createSendAgentMessageMock();
     const startAgentSession = mock(async () => sessionIdentity("session-pr-origin"));
 
     await startSessionWorkflow({
@@ -180,10 +186,8 @@ describe("session-start-workflow", () => {
       sendAgentMessage,
     });
 
-    const sentCalls = sendAgentMessage.mock.calls as unknown as Array<
-      [ReturnType<typeof sessionIdentity>, Array<{ text?: string }>]
-    >;
-    const sentText = sentCalls[0]?.[1]?.[0]?.text ?? "";
+    const sentText =
+      sendAgentMessage.mock.calls[0]?.[1]?.find((part) => part.kind === "text")?.text ?? "";
     expect(sentText).toContain("Pull request base:\nmain");
     expect(sentText).not.toContain("origin/main");
   });
@@ -216,7 +220,7 @@ describe("session-start-workflow", () => {
         },
       }),
     );
-    const sendAgentMessage = mock(async () => undefined);
+    const sendAgentMessage = createSendAgentMessageMock();
     const startAgentSession = mock(async () => sessionIdentity("session-pr-fork"));
     const sourceSession = sessionIdentity("builder-session-fork");
 
@@ -257,7 +261,7 @@ describe("session-start-workflow", () => {
   });
 
   test("rejects upstream-relative targets before creating a pull request session", async () => {
-    const sendAgentMessage = mock(async () => undefined);
+    const sendAgentMessage = createSendAgentMessageMock();
     const startAgentSession = mock(async () => sessionIdentity("session-pr-upstream"));
 
     await expect(
@@ -292,7 +296,7 @@ describe("session-start-workflow", () => {
   });
 
   test("uses kickoff messaging with embedded human feedback for new builder sessions after review", async () => {
-    const sendAgentMessage = mock(async () => undefined);
+    const sendAgentMessage = createSendAgentMessageMock();
     const startAgentSession = mock(async () => sessionIdentity("session-build-new"));
 
     const result = await startSessionWorkflow({
@@ -327,17 +331,15 @@ describe("session-start-workflow", () => {
       ...sessionIdentity("session-build-new"),
       postStartActionError: null,
     });
-    const sentCalls = sendAgentMessage.mock.calls as unknown as Array<
-      [ReturnType<typeof sessionIdentity>, Array<{ text?: string }>]
-    >;
-    const sentText = sentCalls[0]?.[1]?.[0]?.text ?? "";
+    const sentText =
+      sendAgentMessage.mock.calls[0]?.[1]?.find((part) => part.kind === "text")?.text ?? "";
     expect(sentText).toContain("Requested changes from human review:");
     expect(sentText).toContain("Update the acceptance criteria and rerun the desktop tests.");
     expect(sentText).toContain("Use taskId TASK-3 for every odt_* tool call.");
   });
 
   test("holds fresh kickoff starts until the kickoff message send owns status", async () => {
-    const sendAgentMessage = mock(async () => undefined);
+    const sendAgentMessage = createSendAgentMessageMock();
     const startAgentSession = mock(async () => sessionIdentity("session-build-new"));
 
     await startSessionWorkflow({
@@ -462,7 +464,7 @@ describe("session-start-workflow", () => {
   });
 
   test("aborts before session creation when kickoff message construction fails", async () => {
-    const sendAgentMessage = mock(async () => undefined);
+    const sendAgentMessage = createSendAgentMessageMock();
     const startAgentSession = mock(async () => sessionIdentity("session-build-new"));
 
     await expect(
@@ -494,7 +496,7 @@ describe("session-start-workflow", () => {
   });
 
   test("sends Codex fresh kickoff through the standard post-start message path", async () => {
-    const sendAgentMessage = mock(async () => undefined);
+    const sendAgentMessage = createSendAgentMessageMock();
     const startAgentSession = mock(async () => sessionIdentity("session-codex", "codex"));
 
     const result = await startSessionWorkflow({
@@ -539,7 +541,7 @@ describe("session-start-workflow", () => {
   });
 
   test("sends Codex reuse kickoff through the standard post-start message path", async () => {
-    const sendAgentMessage = mock(async () => undefined);
+    const sendAgentMessage = createSendAgentMessageMock();
     const startAgentSession = mock(async () => sessionIdentity("session-codex-reuse", "codex"));
 
     const result = await startSessionWorkflow({

@@ -2,6 +2,7 @@ import type { RuntimeCheck, RuntimeDescriptor, TaskStoreCheck } from "@openduckt
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { isRepoStoreReady } from "@/lib/repo-store-health";
+import type { ScheduleTask } from "@/lib/scheduling";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
@@ -29,6 +30,7 @@ type UseChecksArgs = {
   refreshRepoRuntimeHealth: () => Promise<RepoRuntimeHealthMap>;
   runtimeCheck?: ChecksQueryDependencies["runtimeCheck"];
   taskStoreCheck?: ChecksQueryDependencies["taskStoreCheck"];
+  scheduleTask?: ScheduleTask;
   toastApi?: DiagnosticsToastApi;
 };
 
@@ -55,14 +57,15 @@ export function useChecks({
   refreshRepoRuntimeHealth,
   runtimeCheck,
   taskStoreCheck,
+  scheduleTask,
   toastApi,
 }: UseChecksArgs): UseChecksResult {
   const activeRepoPath = activeWorkspace?.repoPath ?? null;
   const queryClient = useQueryClient();
   const [isManualLoadingChecks, setIsManualLoadingChecks] = useState(false);
-  const runtimeCheckQuery = useQuery(runtimeCheckQueryOptions(false, runtimeCheck));
+  const runtimeCheckQuery = useQuery(runtimeCheckQueryOptions(false, runtimeCheck, scheduleTask));
   const taskStoreCheckQuery = useQuery({
-    ...taskStoreCheckQueryOptions(activeRepoPath ?? "__disabled__", taskStoreCheck),
+    ...taskStoreCheckQueryOptions(activeRepoPath ?? "__disabled__", taskStoreCheck, scheduleTask),
     enabled: activeRepoPath !== null,
   });
 
@@ -74,12 +77,12 @@ export function useChecks({
           exact: true,
           refetchType: "none",
         });
-        return queryClient.fetchQuery(runtimeCheckQueryOptions(true, runtimeCheck));
+        return queryClient.fetchQuery(runtimeCheckQueryOptions(true, runtimeCheck, scheduleTask));
       }
 
-      return loadRuntimeCheckFromQuery(queryClient, runtimeCheck);
+      return loadRuntimeCheckFromQuery(queryClient, runtimeCheck, scheduleTask);
     },
-    [queryClient, runtimeCheck],
+    [queryClient, runtimeCheck, scheduleTask],
   );
 
   const refreshTaskStoreCheckForRepo = useCallback(
@@ -93,10 +96,10 @@ export function useChecks({
       }
 
       return force
-        ? queryClient.fetchQuery(taskStoreCheckQueryOptions(repoPath, taskStoreCheck))
-        : loadTaskStoreCheckFromQuery(queryClient, repoPath, taskStoreCheck);
+        ? queryClient.fetchQuery(taskStoreCheckQueryOptions(repoPath, taskStoreCheck, scheduleTask))
+        : loadTaskStoreCheckFromQuery(queryClient, repoPath, taskStoreCheck, scheduleTask);
     },
-    [taskStoreCheck, queryClient],
+    [taskStoreCheck, queryClient, scheduleTask],
   );
 
   const refreshChecks = useCallback(async (): Promise<void> => {

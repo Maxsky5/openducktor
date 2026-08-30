@@ -56,13 +56,7 @@ const collapseLeadingWhitespaceAfterSkippedPart = (
   return nextText.replace(/^\s+/u, "");
 };
 
-const buildOpenCodeMessageEncoding = (
-  parts: AgentUserMessagePart[],
-): {
-  text: string;
-  fileReferences: AgentUserMessagePromptFileReference[];
-  subagentReferences: AgentUserMessagePromptSubagentReference[];
-} => {
+const buildOpenCodeMessageEncoding = (parts: AgentUserMessagePart[]) => {
   const normalized = normalizeAgentUserMessageParts(parts);
   let text = "";
   const fileReferences: AgentUserMessagePromptFileReference[] = [];
@@ -125,7 +119,11 @@ const buildOpenCodeMessageEncoding = (
     skippedStructuredPart = false;
   }
 
-  return { text, fileReferences, subagentReferences };
+  return { text, fileReferences, subagentReferences } satisfies {
+    text: string;
+    fileReferences: AgentUserMessagePromptFileReference[];
+    subagentReferences: AgentUserMessagePromptSubagentReference[];
+  };
 };
 
 export const buildOpenCodeVisibleText = (parts: AgentUserMessagePart[]): string => {

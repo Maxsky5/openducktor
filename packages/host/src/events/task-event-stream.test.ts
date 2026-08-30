@@ -234,7 +234,7 @@ describe("createTaskEventStream", () => {
     acknowledge(stream, subscription.subscriptionId, { epoch, sequence: 0 });
 
     let repoPathReads = 0;
-    const published = {
+    const published: ExternalTaskSyncEvent = {
       eventId: "event-1",
       kind: "external_task_created" as const,
       get repoPath() {
@@ -243,7 +243,7 @@ describe("createTaskEventStream", () => {
       },
       taskId: "task-1",
       emittedAt: "2026-04-10T13:00:00.000Z",
-    } as ExternalTaskSyncEvent;
+    };
 
     stream.publish(published);
     await flush();

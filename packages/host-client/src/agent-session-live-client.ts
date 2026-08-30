@@ -11,12 +11,14 @@ import {
   type AgentSessionControlUpdateModelInput,
   type AgentSessionLiveListInput,
   type AgentSessionLiveLoadContextInput,
+  type AgentSessionLiveLoadDiffInput,
   type AgentSessionLiveReadInput,
   type AgentSessionLiveReadResult,
   type AgentSessionLiveRefreshInput,
   type AgentSessionLiveReplyApprovalInput,
   type AgentSessionLiveReplyQuestionInput,
   type AgentSessionLiveSnapshot,
+  type FileDiff,
   acceptedAgentUserMessageSchema,
   agentSessionContextUsageSchema,
   agentSessionControlForkInputSchema,
@@ -29,6 +31,8 @@ import {
   agentSessionControlUpdateModelInputSchema,
   agentSessionLiveListInputSchema,
   agentSessionLiveLoadContextInputSchema,
+  agentSessionLiveLoadDiffInputSchema,
+  agentSessionLiveLoadDiffResultSchema,
   agentSessionLiveReadInputSchema,
   agentSessionLiveReadResultSchema,
   agentSessionLiveRefreshInputSchema,
@@ -37,7 +41,7 @@ import {
   agentSessionLiveSnapshotSchema,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
-import { parseArray } from "./invoke-utils";
+import { arrayResultSchema, voidResultSchema } from "./invoke-utils";
 
 export class HostAgentSessionLiveClient {
   constructor(private readonly invokeFn: InvokeFn) {}
@@ -45,47 +49,48 @@ export class HostAgentSessionLiveClient {
   async agentSessionControlStart(
     input: AgentSessionControlStartInput,
   ): Promise<AgentSessionControlSummary> {
-    const payload = await this.invokeFn(
+    return this.invokeFn(
       "agent_session_control_start",
       agentSessionControlStartInputSchema.parse(input),
+      agentSessionControlSummarySchema,
     );
-    return agentSessionControlSummarySchema.parse(payload);
   }
 
   async agentSessionControlResume(
     input: AgentSessionControlResumeInput,
   ): Promise<AgentSessionControlSummary> {
-    const payload = await this.invokeFn(
+    return this.invokeFn(
       "agent_session_control_resume",
       agentSessionControlResumeInputSchema.parse(input),
+      agentSessionControlSummarySchema,
     );
-    return agentSessionControlSummarySchema.parse(payload);
   }
 
   async agentSessionControlFork(
     input: AgentSessionControlForkInput,
   ): Promise<AgentSessionControlSummary> {
-    const payload = await this.invokeFn(
+    return this.invokeFn(
       "agent_session_control_fork",
       agentSessionControlForkInputSchema.parse(input),
+      agentSessionControlSummarySchema,
     );
-    return agentSessionControlSummarySchema.parse(payload);
   }
 
   async agentSessionControlSend(
     input: AgentSessionControlSendInput,
   ): Promise<AcceptedAgentUserMessage> {
-    const payload = await this.invokeFn(
+    return this.invokeFn(
       "agent_session_control_send",
       agentSessionControlSendInputSchema.parse(input),
+      acceptedAgentUserMessageSchema,
     );
-    return acceptedAgentUserMessageSchema.parse(payload);
   }
 
   async agentSessionControlUpdateModel(input: AgentSessionControlUpdateModelInput): Promise<void> {
     await this.invokeFn(
       "agent_session_control_update_model",
       agentSessionControlUpdateModelInputSchema.parse(input),
+      voidResultSchema,
     );
   }
 
@@ -93,6 +98,7 @@ export class HostAgentSessionLiveClient {
     await this.invokeFn(
       "agent_session_control_stop",
       agentSessionControlStopInputSchema.parse(input),
+      voidResultSchema,
     );
   }
 
@@ -100,6 +106,7 @@ export class HostAgentSessionLiveClient {
     await this.invokeFn(
       "agent_session_control_release",
       agentSessionControlReleaseInputSchema.parse(input),
+      voidResultSchema,
     );
   }
 
@@ -107,43 +114,53 @@ export class HostAgentSessionLiveClient {
     await this.invokeFn(
       "agent_session_live_refresh",
       agentSessionLiveRefreshInputSchema.parse(input),
+      voidResultSchema,
     );
   }
 
   async agentSessionLiveList(
     input: AgentSessionLiveListInput,
   ): Promise<AgentSessionLiveSnapshot[]> {
-    const payload = await this.invokeFn(
+    return this.invokeFn(
       "agent_session_live_list",
       agentSessionLiveListInputSchema.parse(input),
+      arrayResultSchema(agentSessionLiveSnapshotSchema, "agent_session_live_list"),
     );
-    return parseArray(agentSessionLiveSnapshotSchema, payload, "agent_session_live_list");
   }
 
   async agentSessionLiveRead(
     input: AgentSessionLiveReadInput,
   ): Promise<AgentSessionLiveReadResult> {
-    const payload = await this.invokeFn(
+    return this.invokeFn(
       "agent_session_live_read",
       agentSessionLiveReadInputSchema.parse(input),
+      agentSessionLiveReadResultSchema,
     );
-    return agentSessionLiveReadResultSchema.parse(payload);
   }
 
   async agentSessionLiveLoadContext(
     input: AgentSessionLiveLoadContextInput,
   ): Promise<AgentSessionContextUsage | null> {
-    const payload = await this.invokeFn(
+    return this.invokeFn(
       "agent_session_live_load_context",
       agentSessionLiveLoadContextInputSchema.parse(input),
+      agentSessionContextUsageSchema.nullable(),
     );
-    return agentSessionContextUsageSchema.nullable().parse(payload);
+  }
+
+  async agentSessionLiveLoadDiff(input: AgentSessionLiveLoadDiffInput): Promise<FileDiff[]> {
+    return this.invokeFn(
+      "agent_session_live_load_diff",
+      agentSessionLiveLoadDiffInputSchema.parse(input),
+      agentSessionLiveLoadDiffResultSchema,
+    );
   }
 
   async agentSessionLiveReplyApproval(input: AgentSessionLiveReplyApprovalInput): Promise<void> {
     await this.invokeFn(
       "agent_session_live_reply_approval",
       agentSessionLiveReplyApprovalInputSchema.parse(input),
+      voidResultSchema,
     );
   }
 
@@ -151,6 +168,7 @@ export class HostAgentSessionLiveClient {
     await this.invokeFn(
       "agent_session_live_reply_question",
       agentSessionLiveReplyQuestionInputSchema.parse(input),
+      voidResultSchema,
     );
   }
 }

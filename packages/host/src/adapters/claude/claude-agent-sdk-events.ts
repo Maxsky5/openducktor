@@ -1,4 +1,3 @@
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentModelSelection } from "@openducktor/core";
 import { toClaudeSlashCommandCatalog } from "./claude-agent-sdk-catalog";
 import { handleClaudeCompactionBoundary } from "./claude-agent-sdk-compaction";
@@ -27,6 +26,7 @@ import {
 } from "./claude-agent-sdk-stream-events";
 import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 import { handleClaudeSubagentSystemMessage } from "./claude-agent-sdk-subagents";
+import { parseClaudeUserToolResultIngress } from "./claude-agent-sdk-ingress-schemas";
 import { consumeClaudeStreamEmittedToolInput } from "./claude-agent-sdk-tool-input-stream";
 import { handleClaudeUserToolResultMessage } from "./claude-agent-sdk-tool-results";
 import {
@@ -44,15 +44,17 @@ import {
   settleClaudeStreamedAssistantText,
 } from "./claude-agent-sdk-transcript-retractions";
 import type { ClaudeAgentSdkEvent } from "./claude-agent-sdk-types";
-import {
-  readClaudeTurnOriginKind,
-  shouldFinalizeClaudeTurn,
-} from "./claude-agent-sdk-user-messages";
-import { isRecord, readStringProp, textFromContentBlocks } from "./claude-agent-sdk-utils";
+import { shouldFinalizeClaudeTurn } from "./claude-agent-sdk-user-messages";
+import { readStringProp, textFromContentBlocks } from "./claude-agent-sdk-utils";
+import type {
+  ClaudeSdkAssistantMessageProjection,
+  ClaudeSdkMessageProjection,
+  ClaudeSdkToolProgressMessageProjection,
+} from "./claude-agent-sdk-message-projection";
 
 type SdkMessageHandlerInput = {
   emit: (event: ClaudeAgentSdkEvent) => void;
-  message: SDKMessage;
+  message: ClaudeSdkMessageProjection;
   modelSelection: (model: string) => AgentModelSelection;
   session: ClaudeEventSession;
   timestamp: string;
@@ -65,8 +67,12 @@ export const handleClaudeSdkMessage = ({
   session,
   timestamp,
 }: SdkMessageHandlerInput): void => {
+  const messageValue = message;
   if (message.type === "system" && message.subtype === "init") {
     return;
+  }
+  if (message.type === "user") {
+    parseClaudeUserToolResultIngress(message);
   }
   const forwardedSubagentMessage = resolveForwardedClaudeSubagentMessage(session, message);
   if (forwardedSubagentMessage !== undefined) {
@@ -83,7 +89,7 @@ export const handleClaudeSdkMessage = ({
     return;
   }
   if (message.type === "assistant") {
-    if (isClaudeSyntheticAssistantMessage(message)) {
+    if (isClaudeSyntheticAssistantMessage(messageValue)) {
       return;
     }
     handleAssistantMessage({
@@ -96,7 +102,8 @@ export const handleClaudeSdkMessage = ({
     return;
   }
   if (message.type === "user") {
-    const originKind = readClaudeTurnOriginKind(message);
+    const userToolResultMessage = parseClaudeUserToolResultIngress(message);
+    const originKind = userToolResultMessage.turnOriginKind;
     if (originKind === "human") {
       delete session.assistantTurnOriginKind;
     } else if (originKind !== undefined) {
@@ -170,7 +177,7 @@ export const handleClaudeSdkMessage = ({
     const taskSession =
       findClaudeSubagentTaskSession(
         session,
-        readStringProp(message, "tool_use_id"),
+        readStringProp(messageValue, "tool_use_id"),
         message.task_id,
       ) ?? session;
     handleClaudeSubagentSystemMessage({ emit, message, session: taskSession, timestamp });
@@ -186,24 +193,32 @@ export const handleClaudeSdkMessage = ({
       permissionSession = subagentSession;
     }
     const input = permissionSession.toolInputsByCallId.get(message.tool_use_id);
+    const permissionMetadata: NonNullable<
+      Parameters<typeof emitClaudePermissionDeniedToolPart>[0]["permission"]["metadata"]
+    > = { source: "permission_denied" };
+    const permission: Parameters<typeof emitClaudePermissionDeniedToolPart>[0]["permission"] = {
+      toolName: message.tool_name,
+      toolUseId: message.tool_use_id,
+      message: message.message,
+      metadata: permissionMetadata,
+    };
+    if (input) {
+      permission.input = input;
+    }
+    if (message.agent_id) {
+      permissionMetadata.agentId = message.agent_id;
+    }
+    if (message.decision_reason_type) {
+      permissionMetadata.decisionReasonType = message.decision_reason_type;
+    }
+    if (message.decision_reason) {
+      permissionMetadata.decisionReason = message.decision_reason;
+    }
     emitClaudePermissionDeniedToolPart({
       emit,
       session: permissionSession,
       timestamp,
-      permission: {
-        toolName: message.tool_name,
-        toolUseId: message.tool_use_id,
-        message: message.message,
-        ...(input ? { input } : {}),
-        metadata: {
-          source: "permission_denied",
-          ...(message.agent_id ? { agentId: message.agent_id } : {}),
-          ...(message.decision_reason_type
-            ? { decisionReasonType: message.decision_reason_type }
-            : {}),
-          ...(message.decision_reason ? { decisionReason: message.decision_reason } : {}),
-        },
-      },
+      permission,
     });
   }
 };
@@ -214,7 +229,10 @@ const handleSessionStateChanged = ({
   session,
   timestamp,
 }: Pick<SdkMessageHandlerInput, "emit" | "session" | "timestamp"> & {
-  message: Extract<SDKMessage, { type: "system"; subtype: "session_state_changed" }>;
+  message: Extract<
+    ClaudeSdkMessageProjection,
+    { type: "system"; subtype: "session_state_changed" }
+  >;
 }): void => {
   applyClaudeLifecycleEvent({
     emit,
@@ -234,18 +252,17 @@ const handleAssistantMessage = ({
   session,
   timestamp,
 }: SdkMessageHandlerInput & {
-  message: Extract<SDKMessage, { type: "assistant" }>;
+  message: ClaudeSdkAssistantMessageProjection;
 }): void => {
   emitSupersededTranscriptMessage({ emit, message, session, timestamp });
   const assistantModel = message.message.model ? modelSelection(message.message.model) : undefined;
-  const content = (message.message as { content?: unknown }).content;
+  const assistantMessage = message.message;
+  const content = assistantMessage.content;
   const text = textFromContentBlocks(content);
   const hasToolUse =
     Array.isArray(content) &&
-    content.some(
-      (block) => isRecord(block) && isClaudeToolUseBlockType(readStringProp(block, "type")),
-    );
-  const stopReason = readStringProp(message.message, "stop_reason");
+    content.some((block) => isClaudeToolUseBlockType(readStringProp(block, "type")));
+  const stopReason = readStringProp(assistantMessage, "stop_reason");
   const isForwardedSubagentText = isClaudeSubagentTranscriptTarget(session.externalSessionId);
   const hasFinalStopReason = stopReason === "end_turn" || stopReason === "stop_sequence";
   const isPendingSubagentAssistantText =
@@ -258,24 +275,24 @@ const handleAssistantMessage = ({
       session.assistantTurnOriginKind,
       hasActiveClaudeBackgroundWork(session) ? 1 : 0,
     );
-  const responseId = readStringProp(message.message, "id");
+  const responseId = readStringProp(assistantMessage, "id");
   const assistantMessageId = responseId ?? message.uuid;
   if ((text.length > 0 || hasToolUse) && !isFinalAssistantText && !isPendingSubagentAssistantText) {
-    settleClaudeStreamedAssistantText({
+    const settleInput: Parameters<typeof settleClaudeStreamedAssistantText>[0] = {
       emit,
-      ...(responseId ? { preserveMessageId: responseId } : {}),
       session,
       timestamp,
-    });
+    };
+    if (responseId) {
+      settleInput.preserveMessageId = responseId;
+    }
+    settleClaudeStreamedAssistantText(settleInput);
   }
   if (hasToolUse && text.length > 0) {
     rememberAssistantTextForCurrentTurn(session, text, assistantMessageId, assistantModel);
   }
   if (Array.isArray(content)) {
     for (const [index, block] of content.entries()) {
-      if (!isRecord(block)) {
-        continue;
-      }
       const type = readStringProp(block, "type");
       if (type === "text" && hasToolUse) {
         const blockText = readStringProp(block, "text");
@@ -336,25 +353,31 @@ const handleAssistantMessage = ({
     }
     if (isPendingSubagentAssistantText) {
       rememberAssistantTextForCurrentTurn(session, text, assistantMessageId, assistantModel);
-      session.pendingSubagentAssistantMessage = {
+      const pendingMessage: NonNullable<ClaudeEventSession["pendingSubagentAssistantMessage"]> = {
         messageId: assistantMessageId,
         text,
-        ...(assistantModel ? { model: assistantModel } : {}),
       };
+      if (assistantModel) {
+        pendingMessage.model = assistantModel;
+      }
+      session.pendingSubagentAssistantMessage = pendingMessage;
       return;
     }
     if (isFinalAssistantText) {
       const messageId = assistantMessageId;
       delete session.pendingSubagentAssistantMessage;
       rememberAssistantTextForCurrentTurn(session, text, messageId, assistantModel, true);
-      emit({
+      const event: Extract<ClaudeAgentSdkEvent, { type: "assistant_message" }> = {
         type: "assistant_message",
         externalSessionId: session.externalSessionId,
         timestamp,
         messageId,
         message: text,
-        ...(assistantModel ? { model: assistantModel } : {}),
-      });
+      };
+      if (assistantModel) {
+        event.model = assistantModel;
+      }
+      emit(event);
       settleClaudeStreamedAssistantText({
         emit,
         preserveMessageId: messageId,
@@ -381,7 +404,7 @@ const handleToolProgressMessage = ({
   session,
   timestamp,
 }: Pick<SdkMessageHandlerInput, "emit" | "session" | "timestamp"> & {
-  message: Extract<SDKMessage, { type: "tool_progress" }>;
+  message: ClaudeSdkToolProgressMessageProjection;
 }): void => {
   const elapsedMs = Math.max(0, Math.round(message.elapsed_time_seconds * 1000));
   const eventMs = timestampMs(timestamp);

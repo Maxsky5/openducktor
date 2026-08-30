@@ -8,7 +8,12 @@ import {
   taskMetadataPayloadSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { agentSessionsFromRow, decodeWithSchema, optionalJsonFromRow } from "./sqlite-json-codecs";
+import {
+  agentSessionsFromRow,
+  decodeWithSchema,
+  optionalJsonFromRow,
+  validateWithSchema,
+} from "./sqlite-json-codecs";
 import { latestDocumentRow } from "./sqlite-task-document-queries";
 import type { SqliteTaskStoreReadError } from "./sqlite-task-store-errors";
 import type { TaskDocumentRow, TaskRow, TaskStoreSession } from "./sqlite-task-store-schema";
@@ -60,7 +65,7 @@ export const taskMetadata = (
     const targetBranch = yield* optionalJsonFromRow(row, "targetBranchJson", (value) =>
       decodeWithSchema(gitTargetBranchSchema, value, "target_branch_json", { taskId: row.id }),
     );
-    return yield* decodeWithSchema(
+    return yield* validateWithSchema(
       taskMetadataPayloadSchema,
       {
         agentSessions,

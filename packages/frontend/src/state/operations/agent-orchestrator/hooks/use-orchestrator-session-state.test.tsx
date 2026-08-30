@@ -6,7 +6,11 @@ import { createHookHarness as createSharedHookHarness } from "@/test-utils/react
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { useOrchestratorSessionState } from "./use-orchestrator-session-state";
 
-(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
+  configurable: true,
+  value: true,
+  writable: true,
+});
 
 const taskFixture: TaskCard = {
   id: "task-1",
@@ -76,11 +80,12 @@ const createHookHarness = (initialArgs: HookArgs) => {
   };
 
   const run = async (callback: (hook: ReturnType<typeof useOrchestratorSessionState>) => void) => {
-    if (!latest) {
+    const hook = latest;
+    if (!hook) {
       throw new Error("Hook state unavailable");
     }
     await sharedHarness.run(() => {
-      callback(latest as ReturnType<typeof useOrchestratorSessionState>);
+      callback(hook);
     });
   };
 

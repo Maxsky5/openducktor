@@ -1,3 +1,4 @@
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { RefObject } from "react";
 import { createAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
@@ -12,11 +13,7 @@ import {
   useAgentChatComposerEditorSelection,
 } from "./use-agent-chat-composer-editor-selection";
 
-(
-  globalThis as typeof globalThis & {
-    IS_REACT_ACT_ENVIRONMENT?: boolean;
-  }
-).IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 const buildDraft = (text: string, segmentId = "segment-1") => ({
   segments: [createTextSegment(text, segmentId)],
@@ -194,7 +191,7 @@ describe("useAgentChatComposerEditorSelection", () => {
     document.body.append(root);
 
     const textSegment = appendTextSegment(root, "segment-1", "hello");
-    const editorRef = { current: root } as RefObject<HTMLDivElement | null>;
+    const editorRef: RefObject<HTMLDivElement | null> = { current: root };
     const harness = createSelectionHarness(editorRef);
     await harness.mount();
 
@@ -233,7 +230,7 @@ describe("useAgentChatComposerEditorSelection", () => {
     root.contentEditable = "true";
     document.body.append(root);
 
-    const editorRef = { current: root } as RefObject<HTMLDivElement | null>;
+    const editorRef = { current: root };
     const harness = createSelectionHarness(editorRef);
     await harness.mount();
 

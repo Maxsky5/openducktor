@@ -1,12 +1,15 @@
+import {
+  createTaskServiceTestDouble,
+  createTaskServiceWithMutationProgressTestDouble,
+} from "../../test-support/task-service-test-double";
 import { ODT_MCP_TOOL_NAMES, type RepoConfig, type TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
 import type { TaskAssetReadService } from "../task-assets/task-asset-read-service";
+import type { CreateTaskUseCaseInput } from "../tasks/task-inputs";
 import { createEventPublishingTaskService } from "../tasks/event-publishing-task-service";
 import type { TaskSyncService } from "../tasks/sync/task-sync-service";
-import type { TaskService } from "../tasks/task-service";
-import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-service";
 import { createOdtMcpBridgeService } from "./odt-mcp-bridge-service";
 
 const repoConfig: RepoConfig = {
@@ -49,7 +52,12 @@ const taskCard = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   updatedAt: "2026-05-10T10:00:00.000Z",
   ...overrides,
 });
-const createWorkspaceSettingsService = (): WorkspaceSettingsService =>
+type OdtWorkspaceSettingsService = Parameters<
+  typeof createOdtMcpBridgeService
+>[0]["workspaceSettingsService"];
+type OdtTaskService = Parameters<typeof createOdtMcpBridgeService>[0]["taskService"];
+
+const createWorkspaceSettingsService = (): OdtWorkspaceSettingsService =>
   ({
     listWorkspaces() {
       return Effect.tryPromise({
@@ -88,25 +96,9 @@ const createWorkspaceSettingsService = (): WorkspaceSettingsService =>
           }),
       });
     },
-    getRepoConfigByRepoPath() {
-      return Effect.tryPromise({
-        try: async () => {
-          return repoConfig;
-        },
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "test.effect",
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause: cause,
-          }),
-      });
-    },
-  }) as Pick<
-    WorkspaceSettingsService,
-    "getRepoConfig" | "getRepoConfigByRepoPath" | "listWorkspaces"
-  > as unknown as WorkspaceSettingsService;
-const createTaskService = (service: Partial<TaskService>): TaskService =>
-  service as unknown as TaskService;
+  }) satisfies OdtWorkspaceSettingsService;
+const createTaskService = <Overrides extends Partial<OdtTaskService>>(overrides: Overrides) =>
+  createTaskServiceTestDouble(overrides);
 type TestOdtMcpBridgeServiceInput = Omit<
   Parameters<typeof createOdtMcpBridgeService>[0],
   "taskAssetReadService"
@@ -124,7 +116,7 @@ const createOdtMcpBridgeServiceForTest = (input: TestOdtMcpBridgeServiceInput) =
 describe("createOdtMcpBridgeService", () => {
   test("reports MCP tool coverage and workspaces", async () => {
     const service = createOdtMcpBridgeServiceForTest({
-      taskService: {} as TaskService,
+      taskService: createTaskService({}),
       workspaceSettingsService: createWorkspaceSettingsService(),
     });
     await expect(Effect.runPromise(service.ready())).resolves.toEqual({
@@ -151,7 +143,12 @@ describe("createOdtMcpBridgeService", () => {
               asset: {
                 bytes: Uint8Array.from([1, 2, 3]),
                 mediaType: "image/png" as const,
-                headers: {},
+                headers: {
+                  "Cache-Control": "private, no-store",
+                  "Content-Disposition": 'inline; filename="first.png"',
+                  "Content-Type": "image/png",
+                  "X-Content-Type-Options": "nosniff",
+                },
               },
             },
             {
@@ -159,7 +156,12 @@ describe("createOdtMcpBridgeService", () => {
               asset: {
                 bytes: Uint8Array.from([4, 5]),
                 mediaType: "image/webp" as const,
-                headers: {},
+                headers: {
+                  "Cache-Control": "private, no-store",
+                  "Content-Disposition": 'inline; filename="second.webp"',
+                  "Content-Type": "image/webp",
+                  "X-Content-Type-Options": "nosniff",
+                },
               },
             },
           ],
@@ -335,7 +337,7 @@ describe("createOdtMcpBridgeService", () => {
     const calls: unknown[] = [];
     let currentTask = taskCard();
     const taskService = createTaskService({
-      listTasks(input: unknown) {
+      listTasks(input: Parameters<OdtTaskService["listTasks"]>[0]) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "listTasks", input });
@@ -349,7 +351,7 @@ describe("createOdtMcpBridgeService", () => {
             }),
         });
       },
-      setSpec(input: unknown) {
+      setSpec(input: Parameters<OdtTaskService["setSpec"]>[0]) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "setSpec", input });
@@ -416,7 +418,7 @@ describe("createOdtMcpBridgeService", () => {
   });
   test("uses the task facade to publish one event for MCP document and create mutations", async () => {
     const events: Array<{ kind: "created" | "updated"; taskIds: string[] }> = [];
-    const baseTaskService = createTaskService({
+    const baseTaskService = createTaskServiceWithMutationProgressTestDouble({
       createTask: () => Effect.succeed(taskCard({ id: "task-new", title: "New task" })),
       listTasks: () => Effect.succeed([taskCard()]),
       setSpec: () =>
@@ -515,7 +517,7 @@ describe("createOdtMcpBridgeService", () => {
   });
   test("creates through the host-owned task service facade", async () => {
     const taskService = createTaskService({
-      createTask(input: unknown) {
+      createTask(input: CreateTaskUseCaseInput) {
         return Effect.tryPromise({
           try: async () => {
             expect(input).toEqual({
@@ -560,7 +562,7 @@ describe("createOdtMcpBridgeService", () => {
   });
   test("orders task search results by recent activity before applying the result limit", async () => {
     const taskService = createTaskService({
-      listTasks(input: unknown) {
+      listTasks(input: Parameters<OdtTaskService["listTasks"]>[0]) {
         expect(input).toEqual({ repoPath: "/repo" });
         return Effect.succeed([
           taskCard({
@@ -626,7 +628,7 @@ describe("createOdtMcpBridgeService", () => {
             }),
         });
       },
-      linkPullRequest(input: unknown) {
+      linkPullRequest(input: Parameters<OdtTaskService["linkPullRequest"]>[0]) {
         return Effect.tryPromise({
           try: async () => {
             linkPullRequestCalls.push(input);

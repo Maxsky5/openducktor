@@ -34,7 +34,7 @@ import { buildAgentStudioHref } from "../agents/query-sync/agent-studio-navigati
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 import { startKanbanSessionFlow } from "./kanban-session-start-actions";
 
-const ROLE_LABELS = AGENT_ROLE_LABELS as Record<AgentRole, string>;
+const ROLE_LABELS = AGENT_ROLE_LABELS;
 
 type UseKanbanSessionStartFlowArgs = {
   activeWorkspaceId: string | null;
@@ -193,7 +193,7 @@ export function useKanbanSessionStartFlow({
           selectedTask,
         }),
         async ({ decision, runInBackground }) => {
-          const session = await startKanbanSessionFlow({
+          const input: Parameters<typeof startKanbanSessionFlow>[0] = {
             workspaceId: activeWorkspaceId,
             request: intent,
             decision,
@@ -203,9 +203,12 @@ export function useKanbanSessionStartFlow({
             roleLabels: ROLE_LABELS,
             runSessionStartWorkflow,
             humanRequestChangesTask,
-            ...(setTaskTargetBranch ? { setTaskTargetBranch } : {}),
             openSessionInAgentStudio,
-          });
+          };
+          if (setTaskTargetBranch) {
+            input.setTaskTargetBranch = setTaskTargetBranch;
+          }
+          const session = await startKanbanSessionFlow(input);
           return session;
         },
       );
@@ -363,20 +366,24 @@ export function useKanbanSessionStartFlow({
           humanReviewFeedbackState.taskId,
           "build",
         ),
-        startRequestChangesSession: (request) =>
-          startSessionIntent({
+        startRequestChangesSession: (request) => {
+          const input: Parameters<typeof startSessionIntent>[0] = {
             taskId: request.taskId,
             role: request.role,
             launchActionId: request.launchActionId,
-            ...(request.initialStartMode ? { initialStartMode: request.initialStartMode } : {}),
             existingSessionOptions: request.existingSessionOptions,
-            ...(request.initialSourceSession !== undefined
-              ? { initialSourceSession: request.initialSourceSession }
-              : {}),
             postStartAction: request.postStartAction,
             message: request.message,
             beforeStartAction: request.beforeStartAction,
-          }),
+          };
+          if (request.initialStartMode) {
+            input.initialStartMode = request.initialStartMode;
+          }
+          if (request.initialSourceSession !== undefined) {
+            input.initialSourceSession = request.initialSourceSession;
+          }
+          return startSessionIntent(input);
+        },
       });
       if (result.outcome === "started") {
         clearHumanReviewFeedback();

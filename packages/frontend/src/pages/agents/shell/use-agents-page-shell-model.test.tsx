@@ -1,11 +1,19 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents/session-start-modal";
+import type { TaskExecutionSelectedFilePreviewModel } from "@/components/features/agents/task-execution-file-preview";
+import type { AgentStudioTaskTabsModel } from "@/components/features/agents/agent-studio-task-tabs";
+import type { AgentStudioHeaderModel } from "@/components/features/agents/agent-studio-header";
+import type { AgentChatModel } from "@/components/features/agents/agent-chat";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createAgentSessionCollection } from "@/state/agent-session-collection";
-import { createAgentSessionsStore } from "@/state/agent-sessions-store";
+import {
+  type AgentSessionSummary,
+  createAgentSessionsStore,
+  toAgentSessionSummary,
+} from "@/state/agent-sessions-store";
 import {
   AgentOperationsContext,
   AgentSessionsContext,
@@ -14,7 +22,6 @@ import {
   TasksStateContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type {
   AgentOperationsContextValue,
   ChecksStateContextValue,
@@ -32,6 +39,19 @@ import {
 } from "../agent-studio-test-utils";
 import type { AgentsPageModalContentModel } from "./agents-page-modal-content";
 import type { AgentStudioRightPanelBridgeModel } from "./use-agent-studio-right-panel-bridge";
+import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigation";
+import type { useAgentStudioSessionActions } from "../use-agent-studio-session-actions";
+import {
+  createAgentChatModelFixture,
+  createAgentStudioHeaderModelFixture,
+  createAgentStudioTaskTabsModelFixture,
+} from "./use-agents-page-shell-model.test-support";
+
+interface RepoSettingsStateContract {
+  repoSettings: RepoSettingsInput | null;
+  githubIntegrationEnabled: boolean;
+  isLoadingRepoSettings: boolean;
+}
 
 enableReactActEnvironment();
 
@@ -47,7 +67,7 @@ type SessionFixture = ReturnType<typeof createSession>;
 const selectedSessionKey = (): string => agentSessionIdentityKey(createSession());
 
 const retryNavigationPersistence = mock(() => {});
-const updateQuery = mock((_updates?: unknown) => {});
+const updateQuery = mock((_updates?: AgentStudioQueryUpdate) => {});
 const handleSelectTab = mock((_value: string) => {});
 const retryChatSettingsLoad = mock(() => {});
 const handleResolveRebaseConflict = mock(async () => true);
@@ -65,13 +85,20 @@ type QuerySyncState = {
 };
 
 type SelectionState = {
+  routeSessionResolution: { kind: "none" };
+  selectedSessionFromRoute: null;
+  selectedTask: typeof task | null;
+  allSessionSummaries: AgentSessionSummary[];
+  resolvedRouteSession: AgentSessionSummary | null;
+  queryUpdate: AgentStudioQueryUpdate | null;
+  isLoadingTasks: boolean;
   view: {
     taskId: string;
     role: "planner";
     launchActionId: "planner_initial";
     selectedTask: typeof task | null;
-    sessionsForTask: SessionFixture[];
-    selectedSessionSummary: SessionFixture | null;
+    sessionsForTask: AgentSessionSummary[];
+    selectedSessionSummary: AgentSessionSummary | null;
     selectedSession: {
       identity: ReturnType<typeof sessionIdentity> | null;
       activityState: null;
@@ -81,7 +108,10 @@ type SelectionState = {
         modelCatalog: null;
         todos: [];
         isLoadingModelCatalog: false;
-        error: null;
+        catalogError: null;
+        todosError: null;
+        runtimePolicyError: null;
+        contextError: null;
       };
       runtimeReadiness: {
         state: "ready";
@@ -90,6 +120,7 @@ type SelectionState = {
         refreshChecks: () => Promise<void>;
       };
       transcriptState: ReturnType<typeof createSelectedSessionTranscriptStateFixture>;
+      sessionAuxiliaryError: string | null;
     };
     isTaskReady: boolean;
   };
@@ -98,10 +129,15 @@ type SelectionState = {
   tabTaskIds: string[];
   availableTabTasks: (typeof task)[];
   taskId: string;
-  sessionsForTask: SessionFixture[];
+  sessionsForTask: AgentSessionSummary[];
   handleCreateTab: (taskId: string) => void;
   handleCloseTab: (taskId: string) => void;
   handleSelectTab: typeof handleSelectTab;
+  handleReorderTab: (
+    draggedTaskId: string,
+    targetTaskId: string,
+    position: "before" | "after",
+  ) => void;
 };
 
 type OrchestrationState = {
@@ -110,12 +146,12 @@ type OrchestrationState = {
   retryChatSettingsLoad: typeof retryChatSettingsLoad;
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
   sessionStartModal: SessionStartModalModel | null;
-  startSessionRequest: (request: unknown) => Promise<string | undefined>;
+  startSessionRequest: ReturnType<typeof useAgentStudioSessionActions>["startSessionRequest"];
   activeTabValue: string;
-  agentStudioTaskTabsModel: { tabs: [] };
-  agentStudioHeaderModel: { title: string };
+  agentStudioTaskTabsModel: AgentStudioTaskTabsModel;
+  agentStudioHeaderModel: AgentStudioHeaderModel;
   taskExecutionDocumentPanelModel: { activeDocument: null };
-  agentChatModel: { kind: string };
+  agentChatModel: AgentChatModel;
   rightPanel: {
     tabs: [
       { id: "document"; label: "Document" },
@@ -125,18 +161,25 @@ type OrchestrationState = {
     activeTabId: "document";
     onActiveTabChange: (tabId: "document" | "git" | "file_explorer" | "ci_checks") => void;
     isPanelOpen: boolean;
-    rightPanelToggleModel: { label: string };
+    rightPanelToggleModel: {
+      kind: "task_execution";
+      isOpen: boolean;
+      onToggle: () => void;
+    };
   };
-  taskExecutionSelectedFilePreviewModel: {
-    selectedFile: null;
-    onClose: () => void;
-  };
+  taskExecutionSelectedFilePreviewModel: TaskExecutionSelectedFilePreviewModel;
   onSelectTaskExecutionFile: (file: { rootPath: string; relativePath: string }) => void;
 };
 type OrchestrationControllerArgs = {
-  selection: SelectionState & { isLoadingTasks: boolean };
+  selection: ReturnType<
+    (typeof import("../use-agent-studio-selection-controller"))["useAgentStudioSelectionController"]
+  > & { isLoadingTasks: boolean };
   draftStateKey: string;
 };
+
+const agentStudioTaskTabsModel = createAgentStudioTaskTabsModelFixture();
+const agentStudioHeaderModel = createAgentStudioHeaderModelFixture();
+const agentChatModel = createAgentChatModelFixture();
 
 type AgentsPageShellModelState = {
   activeWorkspace: WorkspaceStateContextValue["activeWorkspace"];
@@ -199,11 +242,9 @@ let tasksState: TasksStateContextValue = {
 };
 let agentSessions = [createSession()];
 let sessionStore = createAgentSessionsStore("/repo");
-let repoSettingsState: {
-  repoSettings: RepoSettingsInput | null;
-  isLoadingRepoSettings: boolean;
-} = {
+let repoSettingsState: RepoSettingsStateContract = {
   repoSettings: null,
+  githubIntegrationEnabled: false,
   isLoadingRepoSettings: false,
 };
 const sessionIdentity = (externalSessionId: string) => ({
@@ -236,13 +277,20 @@ let querySyncState: QuerySyncState = {
 };
 const initialSelectionSession = createSession();
 let selectionState: SelectionState = {
+  routeSessionResolution: { kind: "none" },
+  selectedSessionFromRoute: null,
+  selectedTask: task,
+  allSessionSummaries: [toAgentSessionSummary(initialSelectionSession)],
+  resolvedRouteSession: null,
+  queryUpdate: null,
+  isLoadingTasks: false,
   view: {
     taskId: "task-1",
     role: "planner" as const,
     launchActionId: "planner_initial" as const,
     selectedTask: task,
-    sessionsForTask: [initialSelectionSession],
-    selectedSessionSummary: initialSelectionSession,
+    sessionsForTask: [toAgentSessionSummary(initialSelectionSession)],
+    selectedSessionSummary: toAgentSessionSummary(initialSelectionSession),
     selectedSession: {
       identity: null,
       activityState: null,
@@ -252,7 +300,10 @@ let selectionState: SelectionState = {
         modelCatalog: null,
         todos: [],
         isLoadingModelCatalog: false,
-        error: null,
+        catalogError: null,
+        todosError: null,
+        runtimePolicyError: null,
+        contextError: null,
       },
       runtimeReadiness: {
         state: "ready",
@@ -261,6 +312,7 @@ let selectionState: SelectionState = {
         refreshChecks: async () => {},
       },
       transcriptState: createSelectedSessionTranscriptStateFixture(),
+      sessionAuxiliaryError: null,
     },
     isTaskReady: true,
   },
@@ -269,12 +321,17 @@ let selectionState: SelectionState = {
   tabTaskIds: ["task-1"],
   availableTabTasks: [task],
   taskId: "task-1",
-  sessionsForTask: [initialSelectionSession],
+  sessionsForTask: [toAgentSessionSummary(initialSelectionSession)],
   handleCreateTab: mock((_taskId: string) => {}),
   handleCloseTab: mock((_taskId: string) => {}),
   handleSelectTab,
+  handleReorderTab: mock(() => {}),
 };
-const rightPanelToggleModel = { label: "Toggle panel" };
+const rightPanelToggleModel = {
+  kind: "task_execution" as const,
+  isOpen: true,
+  onToggle: () => {},
+};
 const baseHumanReviewFeedbackModal: HumanReviewFeedbackModalModel = {
   open: true,
   taskId: "task-1",
@@ -337,10 +394,10 @@ let orchestrationState: OrchestrationState = {
   sessionStartModal: { ...baseSessionStartModal },
   startSessionRequest: async () => undefined,
   activeTabValue: "task-1",
-  agentStudioTaskTabsModel: { tabs: [] },
-  agentStudioHeaderModel: { title: "Task 1" },
+  agentStudioTaskTabsModel,
+  agentStudioHeaderModel,
   taskExecutionDocumentPanelModel: { activeDocument: null },
-  agentChatModel: { kind: "chat" },
+  agentChatModel,
   rightPanel: {
     tabs: [
       { id: "document", label: "Document" },
@@ -354,14 +411,28 @@ let orchestrationState: OrchestrationState = {
   },
   taskExecutionSelectedFilePreviewModel: {
     selectedFile: null,
+    previewSessionKey: 0,
+    preservePreviousSnapshot: false,
+    hasPendingDiscard: false,
     onClose: mock(() => {}),
+    onLeavePolicyChange: () => {},
+    onKeepEditing: () => {},
+    onDiscard: () => {},
   },
   onSelectTaskExecutionFile: mock(() => {}),
 };
 let orchestrationControllerArgs: OrchestrationControllerArgs[] = [];
-let lastOrchestrationSelectionSource: SelectionState | null = null;
+type OrchestrationShellArgs = Parameters<
+  typeof orchestrationShellModule.useAgentsPageOrchestrationShellModel
+>[0];
+type OrchestrationSelection = OrchestrationShellArgs["routeSession"]["selection"] & {
+  isLoadingTasks: boolean;
+};
+
+let lastOrchestrationSelectionSource: OrchestrationShellArgs["routeSession"]["selection"] | null =
+  null;
 let lastOrchestrationSelectionLoadingTasks: boolean | null = null;
-let lastOrchestrationSelection: OrchestrationControllerArgs["selection"] | null = null;
+let lastOrchestrationSelection: OrchestrationSelection | null = null;
 let useAgentsPageShellModel: () => AgentsPageShellModelState;
 
 const syncAgentSessionsStore = (): void => {
@@ -446,82 +517,81 @@ const AppStateTestWrapper = ({ children }: PropsWithChildren): ReactElement => (
   </WorkspaceStateContext.Provider>
 );
 
-const mockedModuleResets = [
-  ["../use-agent-studio-repo-settings", () => import("../use-agent-studio-repo-settings")],
-  ["./use-agents-page-route-session-model", () => import("./use-agents-page-route-session-model")],
-  [
-    "./use-agents-page-orchestration-shell-model",
-    () => import("./use-agents-page-orchestration-shell-model"),
-  ],
-] as const;
+const repoSettingsModule = await import("../use-agent-studio-repo-settings");
+const routeSessionModule = await import("./use-agents-page-route-session-model");
+const orchestrationShellModule = await import("./use-agents-page-orchestration-shell-model");
+let shellModelSpies: Array<{ mockRestore(): void }> = [];
 
 const registerModuleMocks = (): void => {
-  mock.module("./use-agents-page-route-session-model", () => ({
-    useAgentsPageRouteSessionModel: () => ({
+  shellModelSpies = [
+    spyOn(routeSessionModule, "useAgentsPageRouteSessionModel").mockImplementation(() => ({
       navigationPersistenceError: querySyncState.navigationPersistenceError,
       retryNavigationPersistence: querySyncState.retryNavigationPersistence,
       scheduleQueryUpdate: querySyncState.updateQuery,
       selection: selectionState,
       selectAgentStudioSelection: mock(() => {}),
-    }),
-  }));
+      taskExecutionFilePreview: {
+        model: {
+          selectedFile: null,
+          previewSessionKey: 0,
+          preservePreviousSnapshot: false,
+          hasPendingDiscard: false,
+          onClose: () => {},
+          onLeavePolicyChange: () => {},
+          onKeepEditing: () => {},
+          onDiscard: () => {},
+        },
+        onSelectFile: () => undefined,
+        requestContextTransition: (applyTransition) => applyTransition(),
+      },
+    })),
+    spyOn(repoSettingsModule, "useAgentStudioRepoSettings").mockImplementation(
+      () => repoSettingsState,
+    ),
+    spyOn(orchestrationShellModule, "useAgentsPageOrchestrationShellModel").mockImplementation(
+      ({ activeWorkspaceId, isForegroundLoadingTasks, routeSession }: OrchestrationShellArgs) => {
+        if (
+          lastOrchestrationSelectionSource !== routeSession.selection ||
+          lastOrchestrationSelectionLoadingTasks !== isForegroundLoadingTasks
+        ) {
+          lastOrchestrationSelectionSource = routeSession.selection;
+          lastOrchestrationSelectionLoadingTasks = isForegroundLoadingTasks;
+          lastOrchestrationSelection = {
+            ...routeSession.selection,
+            isLoadingTasks: isForegroundLoadingTasks,
+          };
+        }
 
-  mock.module("../use-agent-studio-repo-settings", () => ({
-    useAgentStudioRepoSettings: () => repoSettingsState,
-  }));
-
-  mock.module("./use-agents-page-orchestration-shell-model", () => ({
-    useAgentsPageOrchestrationShellModel: ({
-      activeWorkspaceId,
-      isForegroundLoadingTasks,
-      routeSession,
-    }: {
-      activeWorkspaceId: string | null;
-      isForegroundLoadingTasks: boolean;
-      routeSession: { selection: SelectionState };
-    }) => {
-      if (
-        lastOrchestrationSelectionSource !== routeSession.selection ||
-        lastOrchestrationSelectionLoadingTasks !== isForegroundLoadingTasks
-      ) {
-        lastOrchestrationSelectionSource = routeSession.selection;
-        lastOrchestrationSelectionLoadingTasks = isForegroundLoadingTasks;
-        lastOrchestrationSelection = {
-          ...routeSession.selection,
-          isLoadingTasks: isForegroundLoadingTasks,
+        const draftScope = {
+          taskId: routeSession.selection.view.taskId,
+          role: routeSession.selection.view.role,
+          session: routeSession.selection.view.selectedSession.identity,
         };
-      }
+        const draftStateKey = agentStudioChatDraftScopeKey(activeWorkspaceId, draftScope);
 
-      const draftScope = {
-        taskId: routeSession.selection.view.taskId,
-        role: routeSession.selection.view.role,
-        session: routeSession.selection.view.selectedSession.identity,
-      };
-      const draftStateKey = agentStudioChatDraftScopeKey(activeWorkspaceId, draftScope);
+        if (!lastOrchestrationSelection) {
+          throw new Error("Missing orchestration selection");
+        }
 
-      if (!lastOrchestrationSelection) {
-        throw new Error("Missing orchestration selection");
-      }
+        orchestrationControllerArgs.push({
+          selection: lastOrchestrationSelection,
+          draftStateKey,
+        });
 
-      orchestrationControllerArgs.push({
-        selection: lastOrchestrationSelection,
-        draftStateKey,
-      });
-
-      return {
-        orchestration: orchestrationState,
-        orchestrationSelection: lastOrchestrationSelection,
-        handleResolveRebaseConflict,
-        agentStudioHeaderModel: orchestrationState.agentStudioHeaderModel,
-      };
-    },
-  }));
+        return {
+          orchestration: orchestrationState,
+          orchestrationSelection: lastOrchestrationSelection,
+          handleResolveRebaseConflict,
+          agentStudioHeaderModel: orchestrationState.agentStudioHeaderModel,
+        };
+      },
+    ),
+  ];
 };
 
 beforeEach(async () => {
   registerModuleMocks();
   ({ useAgentsPageShellModel } = await import("./use-agents-page-shell-model"));
-  await restoreMockedModules(mockedModuleResets);
   workspaceState = {
     activeWorkspace: {
       workspaceId: "workspace-repo",
@@ -571,6 +641,7 @@ beforeEach(async () => {
   syncAgentSessionsStore();
   repoSettingsState = {
     repoSettings: null,
+    githubIntegrationEnabled: false,
     isLoadingRepoSettings: false,
   };
   agentOperations = {
@@ -597,13 +668,20 @@ beforeEach(async () => {
     updateQuery,
   };
   selectionState = {
+    routeSessionResolution: { kind: "none" },
+    selectedSessionFromRoute: null,
+    selectedTask: task,
+    allSessionSummaries: [toAgentSessionSummary(session)],
+    resolvedRouteSession: null,
+    queryUpdate: null,
+    isLoadingTasks: false,
     view: {
       taskId: "task-1",
       role: "planner",
       launchActionId: "planner_initial",
       selectedTask: task,
-      sessionsForTask: [session],
-      selectedSessionSummary: session,
+      sessionsForTask: [toAgentSessionSummary(session)],
+      selectedSessionSummary: toAgentSessionSummary(session),
       selectedSession: {
         identity: null,
         activityState: null,
@@ -613,7 +691,10 @@ beforeEach(async () => {
           modelCatalog: null,
           todos: [],
           isLoadingModelCatalog: false,
-          error: null,
+          catalogError: null,
+          todosError: null,
+          runtimePolicyError: null,
+          contextError: null,
         },
         runtimeReadiness: {
           state: "ready",
@@ -622,6 +703,7 @@ beforeEach(async () => {
           refreshChecks: async () => {},
         },
         transcriptState: createSelectedSessionTranscriptStateFixture(),
+        sessionAuxiliaryError: null,
       },
       isTaskReady: true,
     },
@@ -630,10 +712,11 @@ beforeEach(async () => {
     tabTaskIds: ["task-1"],
     availableTabTasks: [task],
     taskId: "task-1",
-    sessionsForTask: [session],
+    sessionsForTask: [toAgentSessionSummary(session)],
     handleCreateTab: mock((_taskId: string) => {}),
     handleCloseTab: mock((_taskId: string) => {}),
     handleSelectTab,
+    handleReorderTab: mock(() => {}),
   };
   orchestrationState = {
     repoSettings: null,
@@ -647,10 +730,10 @@ beforeEach(async () => {
     },
     startSessionRequest: async () => undefined,
     activeTabValue: "task-1",
-    agentStudioTaskTabsModel: { tabs: [] },
-    agentStudioHeaderModel: { title: "Task 1" },
+    agentStudioTaskTabsModel,
+    agentStudioHeaderModel,
     taskExecutionDocumentPanelModel: { activeDocument: null },
-    agentChatModel: { kind: "chat" },
+    agentChatModel,
     rightPanel: {
       tabs: [
         { id: "document", label: "Document" },
@@ -664,7 +747,13 @@ beforeEach(async () => {
     },
     taskExecutionSelectedFilePreviewModel: {
       selectedFile: null,
+      previewSessionKey: 0,
+      preservePreviousSnapshot: false,
+      hasPendingDiscard: false,
       onClose: mock(() => {}),
+      onLeavePolicyChange: () => {},
+      onKeepEditing: () => {},
+      onDiscard: () => {},
     },
     onSelectTaskExecutionFile: mock(() => {}),
   };
@@ -674,8 +763,9 @@ beforeEach(async () => {
   lastOrchestrationSelection = null;
 });
 
-afterEach(async () => {
-  await restoreMockedModules(mockedModuleResets);
+afterEach(() => {
+  for (const shellModelSpy of shellModelSpies) shellModelSpy.mockRestore();
+  shellModelSpies = [];
 });
 
 const createHookHarness = () =>

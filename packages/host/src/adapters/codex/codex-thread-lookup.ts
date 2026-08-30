@@ -1,18 +1,25 @@
-import type { CodexAppServerThread } from "@openducktor/contracts";
+import {
+  parseCodexAppServerRequestResult,
+  type CodexAppServerThread,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import type { CodexAppServerError, CodexAppServerPort } from "../../ports/codex-app-server-port";
-import { parseThreadReadResponse } from "./codex-app-server-response-parsers";
 
 type CodexThreadReaderPort = Pick<CodexAppServerPort, "request">;
+type CodexThreadParseErrorDetails = {
+  method: "thread/read";
+  runtimeId: string;
+  threadId: string;
+};
 
 const parseCodexThread = (
-  value: unknown,
+  value: Parameters<typeof parseCodexAppServerRequestResult>[1],
   runtimeId: string,
   threadId: string,
-): Effect.Effect<CodexAppServerThread, HostValidationError> =>
+): Effect.Effect<CodexAppServerThread, HostValidationError<CodexThreadParseErrorDetails>> =>
   Effect.try({
-    try: () => parseThreadReadResponse(value),
+    try: () => parseCodexAppServerRequestResult("thread/read", value).thread,
     catch: (cause) =>
       new HostValidationError({
         message: cause instanceof Error ? cause.message : String(cause),

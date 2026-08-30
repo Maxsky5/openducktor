@@ -352,12 +352,15 @@ function TaskActions({
   }
 
   const historicalSessionRoles = resolveHistoricalSessionRoles(historicalSessions);
-  const workflowActions = resolveTaskCardActions(task, {
+  const actionOptions: Parameters<typeof resolveTaskCardActions>[1] = {
     include: TASK_CARD_WORKFLOW_ACTIONS,
     hasActiveSession,
-    ...(activeSessionRole ? { activeSessionRole } : {}),
     historicalSessionRoles,
-  });
+  };
+  if (activeSessionRole) {
+    actionOptions.activeSessionRole = activeSessionRole;
+  }
+  const workflowActions = resolveTaskCardActions(task, actionOptions);
 
   if (workflowActions.allActions.length === 0) {
     return null;

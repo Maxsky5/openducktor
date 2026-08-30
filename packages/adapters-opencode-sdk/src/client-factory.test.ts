@@ -4,7 +4,7 @@ import { buildDefaultFactory, nowIso } from "./client-factory";
 describe("client-factory", () => {
   test("nowIso returns a parseable ISO string", () => {
     const value = nowIso();
-    expect(typeof value).toBe("string");
+    expect(value).toEqual(expect.any(String));
     expect(value.includes("T")).toBe(true);
     expect(Number.isNaN(Date.parse(value))).toBe(false);
   });
@@ -16,7 +16,7 @@ describe("client-factory", () => {
       workingDirectory: "/",
     });
 
-    expect(typeof client.session.create).toBe("function");
-    expect(typeof (client.global as { event?: unknown }).event).toBe("function");
+    expect(client.session.create).toBeInstanceOf(Function);
+    expect(client.global.event).toBeInstanceOf(Function);
   });
 });

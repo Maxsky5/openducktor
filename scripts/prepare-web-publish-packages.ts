@@ -1,11 +1,21 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { z } from "zod";
 
 type PackageManifest = {
   name: string;
   version: string;
   dependencies?: Record<string, string>;
 };
+
+const packageManifestSchema: z.ZodType<PackageManifest> = z.object({
+  name: z.string(),
+  version: z.string(),
+  dependencies: z.record(z.string(), z.string()).optional(),
+});
+
+const readPackageManifest = (manifestPath: string): PackageManifest =>
+  packageManifestSchema.parse(JSON.parse(readFileSync(manifestPath, "utf8")));
 
 const expectedPackageFiles = [
   "dist/cli.js",
@@ -24,17 +34,15 @@ if (
 
 const repoRoot = path.resolve(import.meta.dir, "..");
 const hostManifestPath = path.join(repoRoot, "packages/host/package.json");
-const hostManifest = JSON.parse(readFileSync(hostManifestPath, "utf8")) as PackageManifest;
+const hostManifest = readPackageManifest(hostManifestPath);
 const opencodeAdapterManifestPath = path.join(
   repoRoot,
   "packages/adapters-opencode-sdk/package.json",
 );
-const opencodeAdapterManifest = JSON.parse(
-  readFileSync(opencodeAdapterManifestPath, "utf8"),
-) as PackageManifest;
+const opencodeAdapterManifest = readPackageManifest(opencodeAdapterManifestPath);
 const packageRoot = path.join(repoRoot, "packages/openducktor-web");
 const manifestPath = path.join(packageRoot, "package.json");
-const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as PackageManifest;
+const manifest = readPackageManifest(manifestPath);
 const runtimeDependencySources = [
   {
     name: "@anthropic-ai/claude-agent-sdk",
@@ -47,15 +55,17 @@ const runtimeDependencySources = [
     manifestPath: opencodeAdapterManifestPath,
   },
 ] as const;
-const allowedRuntimeDependencies = Object.fromEntries(
-  runtimeDependencySources.map(({ name, manifest: sourceManifest, manifestPath: sourcePath }) => {
-    const dependencyVersion = sourceManifest.dependencies?.[name];
-    if (!dependencyVersion) {
-      throw new Error(`Expected ${sourcePath} to depend on ${name}.`);
-    }
-    return [name, dependencyVersion];
-  }),
-) as Record<(typeof runtimeDependencySources)[number]["name"], string>;
+const dependencyVersion = (index: number): string => {
+  const source = runtimeDependencySources[index];
+  if (!source) throw new Error(`Missing runtime dependency source at index ${index}.`);
+  const version = source.manifest.dependencies?.[source.name];
+  if (!version) throw new Error(`Expected ${source.manifestPath} to depend on ${source.name}.`);
+  return version;
+};
+const allowedRuntimeDependencies = {
+  "@anthropic-ai/claude-agent-sdk": dependencyVersion(0),
+  undici: dependencyVersion(1),
+};
 
 if (manifest.name !== "@openducktor/web") {
   throw new Error(`Expected ${manifestPath} to describe @openducktor/web.`);

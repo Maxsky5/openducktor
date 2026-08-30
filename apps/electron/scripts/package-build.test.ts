@@ -13,6 +13,9 @@ import {
   resolveElectronReleaseVersionMetadata,
 } from "./package-build";
 
+const caughtError = (cause: unknown): Error =>
+  cause instanceof Error ? cause : new Error(String(cause), { cause });
+
 describe("build Electron release artifact", () => {
   it("builds signed macOS artifacts without disabling notarization", () => {
     expect(
@@ -257,10 +260,11 @@ describe("build Electron release artifact", () => {
         outputDirectory,
         platform: "macos",
         releaseDirectory,
-      }).catch((caught: unknown) => caught);
+      }).catch(caughtError);
 
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).not.toContain("Electron release directory is missing");
+      if (!(error instanceof Error)) throw error;
+      expect(error.message).not.toContain("Electron release directory is missing");
     } finally {
       await rm(baseDirectory, { force: true, recursive: true });
     }
@@ -276,16 +280,17 @@ describe("build Electron release artifact", () => {
         outputDirectory,
         platform: "macos",
         releaseDirectory,
-      }).catch((caught: unknown) => caught);
+      }).catch(caughtError);
 
       expect(error).toMatchObject({
         _tag: "ElectronOperationError",
         operation: "electron.package.read-release-directory",
         path: releaseDirectory,
       });
-      expect((error as Error).message).toBe(
-        `Electron release directory is missing: ${releaseDirectory}`,
-      );
+      if (!(error instanceof Error)) {
+        throw new TypeError("Expected an Error instance.");
+      }
+      expect(error.message).toBe(`Electron release directory is missing: ${releaseDirectory}`);
     } finally {
       await rm(baseDirectory, { force: true, recursive: true });
     }
@@ -303,7 +308,7 @@ describe("build Electron release artifact", () => {
         outputDirectory,
         platform: "macos",
         releaseDirectory,
-      }).catch((caught: unknown) => caught);
+      }).catch(caughtError);
 
       expect(error).toMatchObject({
         _tag: "ElectronOperationError",
@@ -311,7 +316,10 @@ describe("build Electron release artifact", () => {
         path: releaseDirectory,
         platform: "macos",
       });
-      expect((error as Error).message).toBe(
+      if (!(error instanceof Error)) {
+        throw new TypeError("Expected an Error instance.");
+      }
+      expect(error.message).toBe(
         "No Electron installable release artifacts were produced for macos.",
       );
     } finally {
@@ -332,7 +340,7 @@ describe("build Electron release artifact", () => {
         outputDirectory,
         platform: "windows",
         releaseDirectory,
-      }).catch((caught: unknown) => caught);
+      }).catch(caughtError);
 
       expect(error).toMatchObject({
         _tag: "ElectronOperationError",
@@ -340,7 +348,10 @@ describe("build Electron release artifact", () => {
         path: releaseDirectory,
         platform: "windows",
       });
-      expect((error as Error).message).toBe(
+      if (!(error instanceof Error)) {
+        throw new TypeError("Expected an Error instance.");
+      }
+      expect(error.message).toBe(
         "Electron update metadata is missing for windows; expected latest.yml.",
       );
     } finally {

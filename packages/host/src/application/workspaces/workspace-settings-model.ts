@@ -14,14 +14,31 @@ import {
   settingsSnapshotSchema,
   type Theme,
   type WorkspaceRecord,
+  type WorkspaceRepoConfigInput,
+  type WorkspaceRepoHooksInput,
+  type WorkspaceRepoSettingsInput,
   workspaceRecordSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createDefaultGlobalConfig, type LoadedGlobalConfig } from "../../config/global-config";
-import { HostInvariantError, HostValidationError } from "../../effect/host-errors";
+import {
+  HostInvariantError,
+  type HostInvariantErrorAggregate,
+  HostValidationError,
+  type HostValidationErrorAggregate,
+} from "../../effect/host-errors";
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
 
-export type WorkspaceSettingsError = HostInvariantError | HostValidationError | SettingsConfigError;
+type RepoConfigDraft = Pick<
+  RepoConfig,
+  "defaultRuntimeKind" | "repoPath" | "workspaceId" | "workspaceName"
+> &
+  Partial<Omit<RepoConfig, "defaultRuntimeKind" | "repoPath" | "workspaceId" | "workspaceName">>;
+
+export type WorkspaceSettingsError =
+  | HostInvariantErrorAggregate
+  | HostValidationErrorAggregate
+  | SettingsConfigError;
 
 export type WorkspaceSettingsService = {
   listWorkspaces(): Effect.Effect<WorkspaceRecord[], WorkspaceSettingsError>;
@@ -34,11 +51,11 @@ export type WorkspaceSettingsService = {
   getRepoConfigByRepoPath(repoPath: string): Effect.Effect<RepoConfig, WorkspaceSettingsError>;
   updateRepoConfig(
     workspaceId: string,
-    update: Record<string, unknown>,
+    update: WorkspaceRepoConfigInput,
   ): Effect.Effect<WorkspaceRecord, WorkspaceSettingsError>;
   saveRepoSettings(
     workspaceId: string,
-    settings: Record<string, unknown>,
+    settings: WorkspaceRepoSettingsInput,
   ): Effect.Effect<WorkspaceRecord, WorkspaceSettingsError>;
   updateRepoHooks(
     workspaceId: string,
@@ -64,81 +81,37 @@ export const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
   Effect.gen(function* () {
     return (yield* settingsConfig.readConfig()) ?? createDefaultGlobalConfig();
   });
-const requireRecord = (value: unknown, label: string): Record<string, unknown> => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new HostValidationError({ message: `${label} must be an object.` });
-  }
-  return value as Record<string, unknown>;
-};
-const requireString = (value: unknown, label: string): string => {
-  if (typeof value !== "string") {
-    throw new HostValidationError({ message: `${label} must be a string.` });
-  }
-  return value;
-};
-const requireStringArray = (value: unknown, label: string): string[] => {
-  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) {
-    throw new HostValidationError({ message: `${label} must be an array of strings.` });
-  }
-  return value;
-};
-const hasOwn = (record: Record<string, unknown>, key: string): boolean =>
-  Object.hasOwn(record, key);
-const optionalUpdateValue = <T>(
-  record: Record<string, unknown>,
-  key: string,
-  current: T,
-): unknown => {
-  if (!hasOwn(record, key)) {
-    return current;
-  }
-  const value = record[key];
-  return value === null || value === undefined ? current : value;
-};
-const normalizeOptionalNonEmptyString = (value: unknown): string | undefined => {
-  if (value === null || value === undefined) {
+const normalizeOptionalNonEmptyString = (value: string | undefined): string | undefined => {
+  if (value === undefined) {
     return undefined;
   }
-  const text = requireString(value, "Optional string value").trim();
+  const text = value.trim();
   return text.length > 0 ? text : undefined;
 };
-const normalizeHooks = (value: unknown): RepoHooks => {
+const normalizeHooks = (value: WorkspaceRepoHooksInput | RepoHooks): RepoHooks => {
   const hooks = repoHooksSchema.parse(value);
   return {
     preStart: hooks.preStart.map((command) => command.trim()).filter(Boolean),
     postComplete: hooks.postComplete.map((command) => command.trim()).filter(Boolean),
   };
 };
-const normalizeDevServers = (value: unknown): RepoDevServerScript[] => {
-  if (!Array.isArray(value)) {
-    throw new HostValidationError({ message: "devServers must be an array." });
-  }
+const normalizeDevServers = (value: RepoDevServerScript[]): RepoDevServerScript[] => {
   return value
-    .map((entry) => requireRecord(entry, "Dev server"))
     .map((entry) => ({
-      id: requireString(entry.id, "Dev server id").trim(),
-      name: requireString(entry.name, "Dev server name").trim(),
-      command: requireString(entry.command, "Dev server command").trim(),
+      id: entry.id.trim(),
+      name: entry.name.trim(),
+      command: entry.command.trim(),
     }))
     .filter((entry) => entry.command.length > 0);
 };
-const normalizeWorktreeCopyPaths = (value: unknown): string[] =>
-  requireStringArray(value, "worktreeCopyPaths")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-const normalizeRepoConfigInput = (input: Record<string, unknown>): RepoConfig => {
+const normalizeWorktreeCopyPaths = (value: string[]): string[] =>
+  value.map((entry) => entry.trim()).filter(Boolean);
+const normalizeRepoConfigInput = (input: RepoConfigDraft): RepoConfig => {
   const rawWorktreeBasePath = normalizeOptionalNonEmptyString(input.worktreeBasePath);
-  const rawBranchPrefix =
-    typeof input.branchPrefix === "string"
-      ? input.branchPrefix.trim() || DEFAULT_BRANCH_PREFIX
-      : input.branchPrefix;
-  const rawDefaultRuntimeKind =
-    typeof input.defaultRuntimeKind === "string"
-      ? input.defaultRuntimeKind.trim()
-      : input.defaultRuntimeKind;
+  const rawBranchPrefix = input.branchPrefix?.trim() || DEFAULT_BRANCH_PREFIX;
   return repoConfigSchema.parse({
     ...input,
-    defaultRuntimeKind: rawDefaultRuntimeKind,
+    defaultRuntimeKind: input.defaultRuntimeKind.trim(),
     worktreeBasePath: rawWorktreeBasePath,
     branchPrefix: rawBranchPrefix,
     hooks: input.hooks === undefined ? undefined : normalizeHooks(input.hooks),
@@ -261,7 +234,7 @@ const validateGitRepoPath = (settingsConfig: SettingsConfigPort, repoPath: strin
   });
 export const validateAndNormalizeRepoConfig = (
   settingsConfig: SettingsConfigPort,
-  rawRepoConfig: Record<string, unknown>,
+  rawRepoConfig: RepoConfigDraft,
 ) =>
   Effect.gen(function* () {
     const parsed = yield* Effect.try({
@@ -323,7 +296,7 @@ export const saveAndReturnWorkspaceRecord = (
 ) =>
   Effect.gen(function* () {
     const parsed = yield* Effect.try({
-      try: () => globalConfigSchema.parse(config) as LoadedGlobalConfig,
+      try: () => globalConfigSchema.parse(config),
       catch: (cause) =>
         new HostValidationError({
           message: cause instanceof Error ? cause.message : String(cause),
@@ -356,17 +329,9 @@ export const requireConfiguredWorkspace = (
 export const findRepoConfigByRepoPath = (
   settingsConfig: SettingsConfigPort,
   config: LoadedGlobalConfig,
-  rawRepoPath: unknown,
+  repoPath: string,
 ) =>
   Effect.gen(function* () {
-    const repoPath = yield* Effect.try({
-      try: () => requireString(rawRepoPath, "repoPath"),
-      catch: (cause) =>
-        new HostValidationError({
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause,
-        }),
-    });
     const canonicalRepoPath = yield* settingsConfig.canonicalizePath(repoPath);
     const repoConfig = Object.values(config.workspaces).find(
       (workspace) => workspace.repoPath === canonicalRepoPath,
@@ -391,29 +356,21 @@ export const findRepoConfigByRepoPath = (
 export const buildMergedRepoConfig = (
   workspaceId: string,
   existing: RepoConfig,
-  update: Record<string, unknown>,
+  update: WorkspaceRepoSettingsInput,
   includeHooks: boolean,
-): Record<string, unknown> => ({
+): RepoConfigDraft => ({
   ...existing,
   workspaceId,
-  defaultRuntimeKind: optionalUpdateValue(
-    update,
-    "defaultRuntimeKind",
-    existing.defaultRuntimeKind,
-  ),
-  worktreeBasePath: optionalUpdateValue(update, "worktreeBasePath", existing.worktreeBasePath),
-  branchPrefix: optionalUpdateValue(update, "branchPrefix", existing.branchPrefix),
-  defaultTargetBranch: optionalUpdateValue(
-    update,
-    "defaultTargetBranch",
-    existing.defaultTargetBranch,
-  ),
-  git: optionalUpdateValue(update, "git", existing.git),
-  hooks: includeHooks ? optionalUpdateValue(update, "hooks", existing.hooks) : existing.hooks,
-  devServers: optionalUpdateValue(update, "devServers", existing.devServers),
-  worktreeCopyPaths: optionalUpdateValue(update, "worktreeCopyPaths", existing.worktreeCopyPaths),
-  promptOverrides: optionalUpdateValue(update, "promptOverrides", existing.promptOverrides),
-  agentDefaults: optionalUpdateValue(update, "agentDefaults", existing.agentDefaults),
+  defaultRuntimeKind: update.defaultRuntimeKind ?? existing.defaultRuntimeKind,
+  worktreeBasePath: update.worktreeBasePath ?? existing.worktreeBasePath,
+  branchPrefix: update.branchPrefix ?? existing.branchPrefix,
+  defaultTargetBranch: update.defaultTargetBranch ?? existing.defaultTargetBranch,
+  git: update.git ?? existing.git,
+  hooks: includeHooks && update.hooks ? normalizeHooks(update.hooks) : existing.hooks,
+  devServers: update.devServers ?? existing.devServers,
+  worktreeCopyPaths: update.worktreeCopyPaths ?? existing.worktreeCopyPaths,
+  promptOverrides: update.promptOverrides ?? existing.promptOverrides,
+  agentDefaults: update.agentDefaults ?? existing.agentDefaults,
 });
 export const normalizeSnapshotWorkspaces = (
   settingsConfig: SettingsConfigPort,
@@ -421,7 +378,7 @@ export const normalizeSnapshotWorkspaces = (
   snapshotWorkspaces: Record<string, RepoConfig>,
 ) =>
   Effect.gen(function* () {
-    const nextWorkspaces: Record<string, RepoConfig> = { ...config.workspaces };
+    const nextWorkspaces = { ...config.workspaces } satisfies Record<string, RepoConfig>;
     for (const workspaceId of Object.keys(snapshotWorkspaces)) {
       if (!config.workspaces[workspaceId]) {
         return yield* Effect.fail(

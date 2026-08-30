@@ -9,6 +9,14 @@ import {
   askBuilderToResolveTaskApprovalGitConflict,
 } from "./task-approval-flow-git-conflict";
 
+interface TaskApprovalGitConflictState {
+  open: boolean;
+  taskId: string | null;
+  conflict: GitConflict | null;
+  isHandlingConflict: boolean;
+  conflictAction: GitConflictAction;
+}
+
 type OpenTaskApproval = (taskId: string, options?: TaskApprovalOpenOptions) => void;
 
 type UseTaskApprovalGitConflictFlowArgs = {
@@ -18,13 +26,7 @@ type UseTaskApprovalGitConflictFlowArgs = {
   workspaceRepoPath: string | null;
 };
 
-const INITIAL_GIT_CONFLICT_STATE: {
-  open: boolean;
-  taskId: string | null;
-  conflict: GitConflict | null;
-  isHandlingConflict: boolean;
-  conflictAction: GitConflictAction;
-} = {
+const INITIAL_GIT_CONFLICT_STATE: TaskApprovalGitConflictState = {
   open: false,
   taskId: null,
   conflict: null,
@@ -37,10 +39,7 @@ export function useTaskApprovalGitConflictFlow({
   openTaskApproval,
   reset,
   workspaceRepoPath,
-}: UseTaskApprovalGitConflictFlowArgs): {
-  taskGitConflictDialog: KanbanPageModels["taskGitConflictDialog"];
-  openGitConflictDialog: (taskId: string, conflict: GitConflict) => void;
-} {
+}: UseTaskApprovalGitConflictFlowArgs) {
   const [gitConflictState, setGitConflictState] = useState(INITIAL_GIT_CONFLICT_STATE);
 
   const closeGitConflict = useCallback(() => {
@@ -159,5 +158,8 @@ export function useTaskApprovalGitConflictFlow({
   return {
     taskGitConflictDialog,
     openGitConflictDialog,
+  } satisfies {
+    taskGitConflictDialog: KanbanPageModels["taskGitConflictDialog"];
+    openGitConflictDialog: (taskId: string, conflict: GitConflict) => void;
   };
 }

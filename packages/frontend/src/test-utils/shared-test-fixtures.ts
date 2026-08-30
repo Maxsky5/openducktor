@@ -182,7 +182,7 @@ export const createSettingsSnapshotFixture = (
 
 export const createDeferred = <T>() => {
   let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
-  let reject: ((reason?: unknown) => void) | null = null;
+  let reject: ((cause?: unknown) => void) | null = null;
   const promise = new Promise<T>((res, rej) => {
     resolve = res;
     reject = rej;
@@ -191,7 +191,9 @@ export const createDeferred = <T>() => {
   return {
     promise,
     resolve: (value: T) => resolve?.(value),
-    reject: (reason?: unknown) => reject?.(reason),
+    reject: (cause?: unknown): void => {
+      reject?.(cause);
+    },
   };
 };
 

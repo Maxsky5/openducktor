@@ -1,13 +1,10 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { render } from "@testing-library/react";
 import { act, createElement, Fragment } from "react";
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { useAgentChatRowMotion } from "./use-agent-chat-row-motion";
 
-(
-  globalThis as typeof globalThis & {
-    IS_REACT_ACT_ENVIRONMENT?: boolean;
-  }
-).IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 type HarnessProps = {
   rowKeys: string[];
@@ -19,7 +16,7 @@ const flush = async (): Promise<void> => {
 };
 
 describe("useAgentChatRowMotion", () => {
-  const originalWindow = (globalThis as { window?: unknown }).window;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
   const originalAnimate = HTMLElement.prototype.animate;
 
   const Harness = ({ rowKeys }: HarnessProps) => {
@@ -39,17 +36,21 @@ describe("useAgentChatRowMotion", () => {
   };
 
   beforeEach(() => {
-    (globalThis as { window?: unknown }).window = globalThis;
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: globalThis,
+      writable: true,
+    });
     HTMLElement.prototype.animate = mock(() => {
       throw new Error("animate should not be called");
     });
   });
 
   afterEach(() => {
-    if (typeof originalWindow === "undefined") {
-      delete (globalThis as { window?: unknown }).window;
+    if (originalWindowDescriptor === undefined) {
+      Reflect.deleteProperty(globalThis, "window");
     } else {
-      (globalThis as { window?: unknown }).window = originalWindow;
+      Object.defineProperty(globalThis, "window", originalWindowDescriptor);
     }
     HTMLElement.prototype.animate = originalAnimate;
   });

@@ -216,13 +216,7 @@ function getDirectMergeCompletionContextError(
     : null;
 }
 
-function getApprovalSubmitValidation(model: TaskApprovalApprovalModalModel): {
-  hasManualPullRequestValidationError: boolean;
-  hasSquashCommitMessageSubmitError: boolean;
-  showSquashCommitMessageValidationError: boolean;
-  confirmDisabled: boolean;
-  confirmLabel: string;
-} {
+function getApprovalSubmitValidation(model: TaskApprovalApprovalModalModel) {
   const hasManualPullRequestValidationError =
     model.mode === "pull_request" &&
     model.pullRequestAvailable &&
@@ -255,6 +249,12 @@ function getApprovalSubmitValidation(model: TaskApprovalApprovalModalModel): {
       hasManualPullRequestValidationError ||
       hasSquashCommitMessageSubmitError,
     confirmLabel,
+  } satisfies {
+    hasManualPullRequestValidationError: boolean;
+    hasSquashCommitMessageSubmitError: boolean;
+    showSquashCommitMessageValidationError: boolean;
+    confirmDisabled: boolean;
+    confirmLabel: string;
   };
 }
 

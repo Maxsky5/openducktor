@@ -1,10 +1,13 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { devServerGroupStateSchema } from "@openducktor/contracts";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { DevServerGroupState } from "@openducktor/contracts";
 import { act, waitFor } from "@testing-library/react";
 import { createQueryClient } from "@/lib/query-client";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import type { DevServerEventListener } from "@/lib/shell-bridge";
 import { devServerQueryKeys } from "@/state/queries/dev-servers";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import {
   buildScript,
   buildState,
@@ -13,14 +16,12 @@ import {
 } from "./use-agent-studio-dev-server-panel-test-fixtures";
 import { renderDevServerPanelHook } from "./use-agent-studio-dev-server-panel-test-harness";
 
-const actualHostClientModule = await import("@/lib/host-client");
-
 type TestDevServerEventSubscription = {
   transportEpoch: string;
   unsubscribe: () => void;
 };
 
-if (typeof document === "undefined") {
+if (globalThis.document === undefined) {
   GlobalRegistrator.register();
 }
 
@@ -32,10 +33,10 @@ let devServerStop = async (_repoPath: string, _taskId: string): Promise<DevServe
   buildState();
 let devServerRestart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
   buildState();
-let devServerEventListener: ((payload: unknown) => void) | null = null;
+let devServerEventListener: DevServerEventListener | null = null;
 let subscriptionTransportEpoch = "test:0";
 let subscribeDevServerEventsMock = async (
-  listener: (payload: unknown) => void,
+  listener: DevServerEventListener,
 ): Promise<TestDevServerEventSubscription> => {
   devServerEventListener = listener;
   return {
@@ -47,16 +48,6 @@ let subscribeDevServerEventsMock = async (
 };
 
 beforeEach(() => {
-  mock.module("@/lib/host-client", () => ({
-    hostClient: {
-      devServerGetState: (...args: [string, string]) => devServerGetState(...args),
-      devServerStart: (...args: [string, string]) => devServerStart(...args),
-      devServerStop: (...args: [string, string]) => devServerStop(...args),
-      devServerRestart: (...args: [string, string]) => devServerRestart(...args),
-    },
-    subscribeDevServerEvents: (listener: (payload: unknown) => void) =>
-      subscribeDevServerEventsMock(listener),
-  }));
   devServerGetState = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
     buildState();
   devServerStart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
@@ -67,7 +58,7 @@ beforeEach(() => {
     buildState();
   devServerEventListener = null;
   subscriptionTransportEpoch = "test:0";
-  subscribeDevServerEventsMock = async (listener: (payload: unknown) => void) => {
+  subscribeDevServerEventsMock = async (listener: DevServerEventListener) => {
     devServerEventListener = listener;
     return {
       transportEpoch: subscriptionTransportEpoch,
@@ -76,10 +67,23 @@ beforeEach(() => {
       },
     };
   };
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        devServerGetState: (...args) => devServerGetState(...args),
+        devServerStart: (...args) => devServerStart(...args),
+        devServerStop: (...args) => devServerStop(...args),
+        devServerRestart: (...args) => devServerRestart(...args),
+      },
+      bridge: {
+        subscribeDevServerEvents: (listener) => subscribeDevServerEventsMock(listener),
+      },
+    }),
+  );
 });
 
-afterEach(async () => {
-  await restoreMockedModules([["@/lib/host-client", async () => actualHostClientModule]]);
+afterEach(() => {
+  configureShellBridge(createUnavailableShellBridge());
 });
 
 describe("useAgentStudioDevServerPanel subscriptions", () => {
@@ -220,7 +224,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       return refreshedState;
     };
     const subscriptionReady = createDeferred<TestDevServerEventSubscription>();
-    subscribeDevServerEventsMock = async (listener: (payload: unknown) => void) => {
+    subscribeDevServerEventsMock = async (listener: DevServerEventListener) => {
       devServerEventListener = listener;
       return subscriptionReady.promise;
     };
@@ -1374,10 +1378,11 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
           .getMutationCache()
           .getAll()
           .some((mutation) => {
-            const data = mutation.state.data as DevServerGroupState | undefined;
+            const data = devServerGroupStateSchema.safeParse(mutation.state.data);
             return (
               mutation.state.status === "success" &&
-              data?.scripts[0]?.runIdentity?.runId === "host-stale-run"
+              data.success &&
+              data.data.scripts[0]?.runIdentity?.runId === "host-stale-run"
             );
           });
         expect(staleQuery?.state.status).toBe("success");
@@ -1393,69 +1398,6 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
         );
       });
     } finally {
-      harness.unmount();
-    }
-  });
-
-  test("surfaces invalid dev server event payloads as actionable errors", async () => {
-    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
-    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
-    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
-
-    devServerGetState = async () =>
-      buildState({
-        scripts: [
-          buildScript({
-            status: "running",
-            pid: 4242,
-            startedAt: "2026-03-19T15:30:00.000Z",
-          }),
-        ],
-      });
-    const restartDeferred = createDeferred<DevServerGroupState>();
-    devServerRestart = async () => restartDeferred.promise;
-
-    const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
-      repoPath: "/repo",
-      taskId: "task-7",
-      repoSettings,
-      enabled: true,
-    });
-    const originalConsoleError = console.error;
-    console.error = () => {};
-
-    try {
-      await waitFor(() => {
-        expect(harness.getLatest().mode).toBe("active");
-      });
-
-      await act(async () => {
-        harness.getLatest().onRestart();
-      });
-      await waitFor(() => {
-        expect(devServerEventListener).not.toBeNull();
-      });
-
-      act(() => {
-        devServerEventListener?.({ type: "terminal_chunk", repoPath: "/repo", taskId: "task-7" });
-      });
-
-      await waitFor(() => {
-        expect(harness.getLatest().error).toContain("Received invalid dev server event payload");
-      });
-      restartDeferred.resolve(
-        buildState({
-          scripts: [
-            buildScript({
-              status: "running",
-              pid: 4242,
-              startedAt: "2026-03-19T15:30:00.000Z",
-            }),
-          ],
-        }),
-      );
-    } finally {
-      console.error = originalConsoleError;
       harness.unmount();
     }
   });

@@ -1,4 +1,4 @@
-import { HostValidationError } from "../../effect/host-errors";
+import { type HostErrorDetails, HostValidationError } from "../../effect/host-errors";
 import { parseDiffGitHeaderToken } from "./git-diff";
 
 export type HunkSpec = {
@@ -24,13 +24,17 @@ export type ParsedPatch = {
   renamePaths?: RenamePaths;
 };
 
-const invalidPatch = (message: string, details?: Record<string, unknown>): HostValidationError =>
-  new HostValidationError({
-    message,
-    details,
-  });
+const invalidPatch = <Details extends object>(
+  message: string,
+  details?: HostErrorDetails<Details>,
+): HostValidationError<Details> => {
+  if (details !== undefined) {
+    return new HostValidationError({ message, details });
+  }
+  return new HostValidationError({ message });
+};
 
-const parseHunkRange = (input: string): { start: number; count: number } => {
+const parseHunkRange = (input: string) => {
   const trimmed = input.trim();
   const [startRaw, countRaw = "1"] = trimmed.split(",", 2);
   const start = Number.parseInt(startRaw ?? "", 10);
@@ -42,7 +46,7 @@ const parseHunkRange = (input: string): { start: number; count: number } => {
     throw invalidPatch(`Invalid hunk range count: ${trimmed}`, { range: trimmed });
   }
 
-  return { start, count };
+  return { start, count } satisfies { start: number; count: number };
 };
 
 const parseHunkSpec = (line: string): HunkSpec => {
@@ -141,11 +145,8 @@ export const parsePatchHunks = (patch: string): ParsedPatch => {
   }
 
   const renamePaths = parseRenamePaths(header) ?? parseRenamePathsFromDiffHeader(header);
-  return {
-    header,
-    hunks,
-    ...(renamePaths ? { renamePaths } : {}),
-  };
+  const parsedPatch = { header, hunks };
+  return renamePaths ? { ...parsedPatch, renamePaths } : parsedPatch;
 };
 
 export const combinePatchHunk = (header: string, hunk: ParsedHunk): string =>

@@ -3,7 +3,7 @@ import type { McpBridgeDiscoveryMode } from "../../adapters/mcp/mcp-bridge-disco
 import type { McpHostBridgeServer } from "../../adapters/mcp/mcp-host-bridge-server";
 import type { TaskAssetReadService } from "../../application/task-assets/task-asset-read-service";
 import type { TaskEventPublicationReporter } from "../../application/tasks/sync/task-sync-service";
-import type { HostOperationError } from "../../effect/host-errors";
+import type { HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { HostEventBusPort } from "../../events/host-event-bus";
 import type { EffectHostCommandRouter } from "../../interface/router/host-command-router";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
@@ -17,7 +17,7 @@ export type CreateNodeHostCommandRouterInput = CreateNodeHostDefaultPortsInput &
   lifecycleLogger?: HostLifecycleLogger;
   mcpBridgeDiscoveryMode: McpBridgeDiscoveryMode;
   mcpHostBridge?: McpHostBridgeServer;
-  onBackgroundFailure(failure: HostOperationError): Effect.Effect<void, never>;
+  onBackgroundFailure(failure: HostOperationErrorAggregate): Effect.Effect<void, never>;
   taskEventPublicationReporter: TaskEventPublicationReporter;
   runtimeRegistry?: RuntimeRegistryPort;
   taskStore?: TaskStorePort;

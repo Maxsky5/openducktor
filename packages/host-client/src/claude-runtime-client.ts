@@ -10,65 +10,89 @@ import type {
   LoadAgentSessionTodosInput,
   SearchAgentFilesInput,
 } from "@openducktor/core";
-import { claudeRuntimeCommand } from "./claude-runtime-response-parsers";
 import type { InvokeFn } from "./invoke-utils";
 
 export class HostClaudeRuntimeClient {
   constructor(private readonly invokeFn: InvokeFn) {}
 
   claudeRuntimeListModels(input: ListAgentModelsInput) {
-    return claudeRuntimeCommand(this.invokeFn, CLAUDE_RUNTIME_COMMAND_CONTRACTS.listModels, input);
+    const contract = CLAUDE_RUNTIME_COMMAND_CONTRACTS.listModels;
+    return this.invokeFn(
+      contract.command,
+      { input: contract.inputSchema.parse(input) },
+      contract.responseSchema,
+    );
   }
 
   claudeRuntimeListSlashCommands(input: ListAgentSlashCommandsInput) {
-    return claudeRuntimeCommand(
-      this.invokeFn,
-      CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSlashCommands,
-      input,
+    const contract = CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSlashCommands;
+    return this.invokeFn(
+      contract.command,
+      { input: contract.inputSchema.parse(input) },
+      contract.responseSchema,
     );
   }
 
   claudeRuntimeListSkills(input: ListAgentSkillsInput) {
-    return claudeRuntimeCommand(this.invokeFn, CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSkills, input);
+    const contract = CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSkills;
+    return this.invokeFn(
+      contract.command,
+      { input: contract.inputSchema.parse(input) },
+      contract.responseSchema,
+    );
   }
 
   claudeRuntimeListSubagents(input: ListAgentSubagentsInput) {
-    return claudeRuntimeCommand(
-      this.invokeFn,
-      CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSubagents,
-      input,
+    const contract = CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSubagents;
+    return this.invokeFn(
+      contract.command,
+      { input: contract.inputSchema.parse(input) },
+      contract.responseSchema,
     );
   }
 
   claudeRuntimeSearchFiles(input: SearchAgentFilesInput) {
-    return claudeRuntimeCommand(this.invokeFn, CLAUDE_RUNTIME_COMMAND_CONTRACTS.searchFiles, input);
+    const contract = CLAUDE_RUNTIME_COMMAND_CONTRACTS.searchFiles;
+    return this.invokeFn(
+      contract.command,
+      { input: contract.inputSchema.parse(input) },
+      contract.responseSchema,
+    );
   }
 
   claudeRuntimeLoadSessionHistory(input: LoadAgentSessionHistoryInput) {
-    return claudeRuntimeCommand(
-      this.invokeFn,
-      CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionHistory,
-      input,
+    const contract = CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionHistory;
+    return this.invokeFn(
+      contract.command,
+      { input: contract.inputSchema.parse(input) },
+      contract.responseSchema,
     );
   }
 
   claudeRuntimeLoadSessionTodos(input: LoadAgentSessionTodosInput) {
-    return claudeRuntimeCommand(
-      this.invokeFn,
-      CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionTodos,
-      input,
+    const contract = CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionTodos;
+    return this.invokeFn(
+      contract.command,
+      { input: contract.inputSchema.parse(input) },
+      contract.responseSchema,
     );
   }
 
   claudeRuntimeLoadSessionDiff(input: LoadAgentSessionDiffInput) {
-    return claudeRuntimeCommand(
-      this.invokeFn,
-      CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionDiff,
-      input,
+    const contract = CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionDiff;
+    return this.invokeFn(
+      contract.command,
+      { input: contract.inputSchema.parse(input) },
+      contract.responseSchema,
     );
   }
 
   claudeRuntimeFileStatus(input: LoadAgentFileStatusInput) {
-    return claudeRuntimeCommand(this.invokeFn, CLAUDE_RUNTIME_COMMAND_CONTRACTS.fileStatus, input);
+    const contract = CLAUDE_RUNTIME_COMMAND_CONTRACTS.fileStatus;
+    return this.invokeFn(
+      contract.command,
+      { input: contract.inputSchema.parse(input) },
+      contract.responseSchema,
+    );
   }
 }

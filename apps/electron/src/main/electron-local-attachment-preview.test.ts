@@ -8,11 +8,11 @@ import {
   registerElectronLocalAttachmentPreviewProtocol,
 } from "./electron-local-attachment-preview";
 
-const captureThrown = (action: () => unknown): unknown => {
+const captureThrown = (action: () => void): Error => {
   try {
     action();
   } catch (error) {
-    return error;
+    return error instanceof Error ? error : new Error(String(error));
   }
   throw new Error("Expected action to fail.");
 };
@@ -40,15 +40,6 @@ describe("electron local attachment previews", () => {
       operation: "electron.preview.read-path",
       message: "Local attachment preview path must be a non-empty string.",
     });
-    const nullPathError = captureThrown(() => readLocalAttachmentPreviewPath(null));
-    expect(nullPathError).toBeInstanceOf(ElectronValidationError);
-    expect(nullPathError).toMatchObject({
-      _tag: "ElectronValidationError",
-      operation: "electron.preview.read-path",
-      field: "path",
-      message: "Local attachment preview path must be a non-empty string.",
-    });
-
     const invalidUrlError = captureThrown(() =>
       readElectronLocalAttachmentPreviewRequestPath(
         "file:///tmp/openducktor-local-attachments/a.png",

@@ -1,7 +1,6 @@
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
-import type { TaskService } from "./task-service";
 import {
   createAgentSessionRecord,
   createAgentSessionSettingsConfig,
@@ -44,7 +43,7 @@ describe("createTaskService list and session reads", () => {
 
   test("loads agent sessions for task IDs with one task-store call", async () => {
     const session = createAgentSessionRecord();
-    const calls: unknown[] = [];
+    const calls: Array<Parameters<NonNullable<TaskStorePort["listAgentSessionsForTasks"]>>[0]> = [];
     const service = createTaskService({
       taskStore: {
         listAgentSessionsForTasks(input) {
@@ -63,7 +62,7 @@ describe("createTaskService list and session reads", () => {
   });
 
   test("loads tasks and enriches available actions and workflow state", async () => {
-    const calls: unknown[] = [];
+    const calls: Array<Parameters<NonNullable<TaskStorePort["listTasks"]>>[0]> = [];
     const taskStore: TaskStorePort = {
       createTask() {
         return Effect.tryPromise({
@@ -359,13 +358,10 @@ describe("createTaskService list and session reads", () => {
     const { createTaskCommandHandlers } =
       await import("../../interface/commands/task-command-handlers");
     const service = createTaskService({ taskStore });
-    const handlers = createTaskCommandHandlers(service as unknown as TaskService);
-    expect(() =>
-      handlers.tasks_list?.(
-        { repoPath: "/repo", doneVisibleDays: -1 },
-        { command: "tasks_list", args: { repoPath: "/repo", doneVisibleDays: -1 } },
-      ),
-    ).toThrow("doneVisibleDays must be greater than or equal to 0.");
+    const handlers = createTaskCommandHandlers(service);
+    expect(() => handlers.tasks_list?.({ repoPath: "/repo", doneVisibleDays: -1 })).toThrow(
+      "doneVisibleDays must be greater than or equal to 0.",
+    );
   });
   test("loads task metadata through the task store", async () => {
     const calls: unknown[] = [];
@@ -859,15 +855,15 @@ describe("createTaskService list and session reads", () => {
     ]);
   });
   test("deletes one exact durable agent session identity", async () => {
-    const calls: unknown[] = [];
-    const taskStore = {
-      deleteAgentSession(input: unknown) {
+    const calls: Array<Parameters<NonNullable<TaskStorePort["deleteAgentSession"]>>[0]> = [];
+    const taskStore: TaskStorePort = {
+      deleteAgentSession(input: Parameters<NonNullable<TaskStorePort["deleteAgentSession"]>>[0]) {
         return Effect.sync(() => {
           calls.push(input);
           return true;
         });
       },
-    } as TaskStorePort;
+    };
     const service = createTaskService({ taskStore });
     const identity = {
       externalSessionId: "session-1",

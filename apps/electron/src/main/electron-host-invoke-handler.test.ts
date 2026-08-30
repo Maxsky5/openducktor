@@ -1,20 +1,17 @@
 import { describe, expect, mock, test } from "bun:test";
 import { registerElectronHostInvokeHandler } from "./electron-host-invoke-handler";
 
+const ipcMainInvokeEvent = {};
+
 const request = {
-  command: "workspace_get_context",
+  command: "workspace_list",
   args: { repoPath: "/workspace" },
 };
 
-type ElectronHostInvokeHandler = (event: unknown, request: unknown) => Promise<unknown>;
+type ElectronIpcMainLike = Parameters<typeof registerElectronHostInvokeHandler>[0];
+type ElectronHostInvokeHandler = Parameters<ElectronIpcMainLike["handle"]>[1];
 
-const createRegisteredHandler = (): {
-  channel: string | undefined;
-  handler: ElectronHostInvokeHandler;
-  ipcMain: {
-    handle(channel: string, handler: ElectronHostInvokeHandler): void;
-  };
-} => {
+const createRegisteredHandler = () => {
   let channel: string | undefined;
   let handler: ElectronHostInvokeHandler | undefined;
 
@@ -34,27 +31,33 @@ const createRegisteredHandler = (): {
         handler = registeredHandler;
       },
     },
+  } satisfies {
+    channel: string | undefined;
+    handler: ElectronHostInvokeHandler;
+    ipcMain: {
+      handle(channel: string, handler: ElectronHostInvokeHandler): void;
+    };
   };
 };
 
-const createDeferred = <Value>(): {
-  promise: Promise<Value>;
-  reject(reason: unknown): void;
-  resolve(value: Value): void;
-} => {
-  let reject: (reason: unknown) => void = () => {};
+const createDeferred = <Value>() => {
+  let reject: (cause: unknown) => void = () => {};
   let resolve: (value: Value) => void = () => {};
   const promise = new Promise<Value>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
     reject = rejectPromise;
   });
 
-  return { promise, reject, resolve };
+  return { promise, reject, resolve } satisfies {
+    promise: Promise<Value>;
+    reject(cause: unknown): void;
+    resolve(value: Value): void;
+  };
 };
 
 describe("Electron host invoke IPC handler", () => {
   test("registers the host channel and wraps a normal host result", async () => {
-    const result = { repoPath: "/workspace" };
+    const result = [];
     const invoke = mock(async () => result);
     const registered = createRegisteredHandler();
 
@@ -64,15 +67,31 @@ describe("Electron host invoke IPC handler", () => {
     });
 
     expect(registered.channel).toBe("openducktor:host-invoke");
-    await expect(registered.handler({}, request)).resolves.toEqual({
+    await expect(registered.handler(ipcMainInvokeEvent, request)).resolves.toEqual({
       status: "success",
       payload: result,
     });
-    expect(invoke).toHaveBeenCalledWith("workspace_get_context", request.args);
+    expect(invoke).toHaveBeenCalledWith("workspace_list", request.args);
+  });
+
+  test("preserves undefined optional fields for command-specific validation", async () => {
+    const args = { input: { provider: undefined } };
+    const invoke = mock(async () => undefined);
+    const registered = createRegisteredHandler();
+
+    registerElectronHostInvokeHandler(registered.ipcMain, {
+      isHostShutdownStarted: () => false,
+      invoke,
+    });
+
+    await expect(
+      registered.handler(ipcMainInvokeEvent, { command: "task_create", args }),
+    ).resolves.toEqual({ status: "success", payload: undefined });
+    expect(invoke).toHaveBeenCalledWith("task_create", args);
   });
 
   test("checks shutdown when a request arrives and does not invoke the router", async () => {
-    const invoke = mock(async () => ({ repoPath: "/workspace" }));
+    const invoke = mock(async () => []);
     let shutdownStarted = false;
     const registered = createRegisteredHandler();
 
@@ -82,13 +101,16 @@ describe("Electron host invoke IPC handler", () => {
     });
     shutdownStarted = true;
 
-    await expect(registered.handler({}, null)).resolves.toEqual({ status: "shutdown" });
+    await expect(registered.handler(ipcMainInvokeEvent, null)).resolves.toEqual({
+      status: "shutdown",
+    });
     expect(invoke).not.toHaveBeenCalled();
   });
 
   test.each([
     ["null", null, "request", "Electron host invoke request must be an object."],
     ["undefined", undefined, "request", "Electron host invoke request must be an object."],
+    ["a Date", new Date(), "request", "Electron host invoke request must be an object."],
     [
       "a null command",
       { command: null },
@@ -101,10 +123,10 @@ describe("Electron host invoke IPC handler", () => {
       "args",
       "Electron host invoke arguments must be an object when provided.",
     ],
-  ] as const)(
+  ] satisfies readonly (readonly [string, unknown, string, string])[])(
     "rejects %s without invoking the router",
     async (_case, invalidRequest, field, message) => {
-      const invoke = mock(async () => ({ repoPath: "/workspace" }));
+      const invoke = mock(async () => []);
       const registered = createRegisteredHandler();
 
       registerElectronHostInvokeHandler(registered.ipcMain, {
@@ -112,7 +134,7 @@ describe("Electron host invoke IPC handler", () => {
         invoke,
       });
 
-      await expect(registered.handler({}, invalidRequest)).rejects.toMatchObject({
+      await expect(registered.handler(ipcMainInvokeEvent, invalidRequest)).rejects.toMatchObject({
         _tag: "ElectronValidationError",
         operation: "electron.ipc.host-invoke.validate",
         field,
@@ -134,11 +156,25 @@ describe("Electron host invoke IPC handler", () => {
       invoke,
     });
 
-    await expect(registered.handler({}, request)).rejects.toBe(failure);
+    await expect(registered.handler(ipcMainInvokeEvent, request)).rejects.toBe(failure);
+  });
+
+  test("preserves successful command results without command-specific validation", async () => {
+    const registered = createRegisteredHandler();
+
+    registerElectronHostInvokeHandler(registered.ipcMain, {
+      isHostShutdownStarted: () => false,
+      invoke: async () => ({ ok: true, value: { runtimeId: "runtime-1" } }),
+    });
+
+    await expect(registered.handler(ipcMainInvokeEvent, request)).resolves.toEqual({
+      status: "success",
+      payload: { ok: true, value: { runtimeId: "runtime-1" } },
+    });
   });
 
   test("keeps an admitted pending invocation's success outcome after shutdown starts", async () => {
-    const deferred = createDeferred<{ repoPath: string }>();
+    const deferred = createDeferred<[]>();
     const invoke = mock(() => deferred.promise);
     let shutdownStarted = false;
     const registered = createRegisteredHandler();
@@ -148,14 +184,14 @@ describe("Electron host invoke IPC handler", () => {
       invoke,
     });
 
-    const response = registered.handler({}, request);
-    expect(invoke).toHaveBeenCalledWith("workspace_get_context", request.args);
+    const response = registered.handler(ipcMainInvokeEvent, request);
+    expect(invoke).toHaveBeenCalledWith("workspace_list", request.args);
     shutdownStarted = true;
-    deferred.resolve({ repoPath: "/workspace" });
+    deferred.resolve([]);
 
     await expect(response).resolves.toEqual({
       status: "success",
-      payload: { repoPath: "/workspace" },
+      payload: [],
     });
   });
 
@@ -171,8 +207,8 @@ describe("Electron host invoke IPC handler", () => {
       invoke,
     });
 
-    const response = registered.handler({}, request);
-    expect(invoke).toHaveBeenCalledWith("workspace_get_context", request.args);
+    const response = registered.handler(ipcMainInvokeEvent, request);
+    expect(invoke).toHaveBeenCalledWith("workspace_list", request.args);
     shutdownStarted = true;
     deferred.reject(failure);
 

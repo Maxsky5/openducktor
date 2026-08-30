@@ -1,28 +1,22 @@
+import {
+  agentSessionTodoPrioritySchema,
+  agentSessionTodoStatusSchema,
+} from "@openducktor/contracts";
+import type { AgentSessionTodoPayloadRecord } from "@openducktor/contracts";
 import type { AgentSessionTodoItem } from "../types/agent-orchestrator";
 
-const TODO_STATUSES = ["pending", "in_progress", "completed", "cancelled"] as const;
-const TODO_PRIORITIES = ["high", "medium", "low"] as const;
-const TODO_STATUS_SET = new Set<AgentSessionTodoItem["status"]>(TODO_STATUSES);
-const TODO_PRIORITY_SET = new Set<AgentSessionTodoItem["priority"]>(TODO_PRIORITIES);
+const isAgentSessionTodoStatus = (value: string): value is AgentSessionTodoItem["status"] =>
+  agentSessionTodoStatusSchema.safeParse(value).success;
 
-const isAgentSessionTodoStatus = (value: unknown): value is AgentSessionTodoItem["status"] => {
-  return TODO_STATUS_SET.has(value as AgentSessionTodoItem["status"]);
-};
+const isAgentSessionTodoPriority = (value: string): value is AgentSessionTodoItem["priority"] =>
+  agentSessionTodoPrioritySchema.safeParse(value).success;
 
-const isAgentSessionTodoPriority = (value: unknown): value is AgentSessionTodoItem["priority"] => {
-  return TODO_PRIORITY_SET.has(value as AgentSessionTodoItem["priority"]);
-};
+export type NormalizeAgentSessionTodoInput = AgentSessionTodoPayloadRecord;
 
-export type NormalizeAgentSessionTodoInput = {
-  id: string;
-  content: string;
-  status?: unknown;
-  priority?: unknown;
-  completed?: boolean;
-};
-
-export const normalizeAgentSessionTodoStatus = (value: unknown): AgentSessionTodoItem["status"] => {
-  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+export const normalizeAgentSessionTodoStatus = (
+  value: string | undefined,
+): AgentSessionTodoItem["status"] => {
+  const normalized = value?.trim().toLowerCase() ?? "";
   if (!normalized) {
     return "pending";
   }
@@ -47,9 +41,9 @@ export const normalizeAgentSessionTodoStatus = (value: unknown): AgentSessionTod
 };
 
 export const normalizeAgentSessionTodoPriority = (
-  value: unknown,
+  value: string | undefined,
 ): AgentSessionTodoItem["priority"] => {
-  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  const normalized = value?.trim().toLowerCase() ?? "";
   return isAgentSessionTodoPriority(normalized) ? normalized : "medium";
 };
 
@@ -64,7 +58,7 @@ export const normalizeAgentSessionTodoItem = (
 
   const status = normalizeAgentSessionTodoStatus(value.status);
   const statusFromBoolean =
-    typeof value.completed === "boolean" ? (value.completed ? "completed" : "pending") : undefined;
+    value.completed === undefined ? undefined : value.completed ? "completed" : "pending";
 
   return {
     id,

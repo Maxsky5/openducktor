@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { renderHook } from "@testing-library/react";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
@@ -15,13 +15,8 @@ const sessionIdentity = (externalSessionId: string): AgentSessionIdentity => ({
 describe("invokeStopAgentSession", () => {
   test("invokes stop and registers a local rejection handler", () => {
     const stopCalls: AgentSessionIdentity[] = [];
-    const catchState: { rejectionHandler?: (error: Error) => unknown } = {};
-    const stopPromise = {
-      catch(handler: (error: Error) => unknown) {
-        catchState.rejectionHandler = handler;
-        return Promise.resolve();
-      },
-    } as Promise<void>;
+    const stopPromise = new Promise<void>(() => {});
+    const catchSpy = spyOn(stopPromise, "catch");
 
     const result = invokeStopAgentSession(sessionIdentity("session-1"), (session) => {
       stopCalls.push(session);
@@ -30,11 +25,12 @@ describe("invokeStopAgentSession", () => {
 
     expect(result).toBeUndefined();
     expect(stopCalls).toEqual([sessionIdentity("session-1")]);
-    expect(catchState.rejectionHandler).toBeFunction();
-    if (!catchState.rejectionHandler) {
+    const rejectionHandler = catchSpy.mock.calls[0]?.[0];
+    expect(rejectionHandler).toBeFunction();
+    if (!rejectionHandler) {
       throw new Error("Expected stop rejection handler to be registered");
     }
-    expect(catchState.rejectionHandler(new Error("stop failed"))).toBeUndefined();
+    expect(rejectionHandler(new Error("stop failed"))).toBeUndefined();
   });
 
   test("does nothing when no session or stop operation is available", () => {

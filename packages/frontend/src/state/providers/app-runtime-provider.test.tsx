@@ -7,10 +7,11 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { useRuntimeDefinitionsContext } from "../app-state-contexts";
-import { host } from "../operations/host";
 import { settingsSnapshotQueryOptions } from "../queries/workspace";
 import { AppRuntimeProvider } from "./app-runtime-provider";
 
@@ -43,12 +44,15 @@ const createWrapper = ({ children }: PropsWithChildren): ReactElement =>
 
 describe("AppRuntimeProvider", () => {
   test("keeps settings snapshot failures separate from runtime definition errors", async () => {
-    const originalRuntimeDefinitionsList = host.runtimeDefinitionsList;
-    const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
-    host.runtimeDefinitionsList = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]) as never;
-    host.workspaceGetSettingsSnapshot = mock(async () => {
+    const runtimeDefinitionsList = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]);
+    const workspaceGetSettingsSnapshot = mock(async () => {
       throw new Error("settings unavailable");
-    }) as never;
+    });
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: { runtimeDefinitionsList, workspaceGetSettingsSnapshot },
+      }),
+    );
 
     const harness = createHookHarness(() => useRuntimeDefinitionsContext(), undefined, {
       wrapper: createWrapper,
@@ -64,16 +68,18 @@ describe("AppRuntimeProvider", () => {
       expect(state.availableRuntimeDefinitions).toEqual([]);
     } finally {
       await harness.unmount();
-      host.runtimeDefinitionsList = originalRuntimeDefinitionsList;
-      host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+      configureShellBridge(createUnavailableShellBridge());
     }
   });
 
   test("publishes available runtime definitions from runtime settings", async () => {
-    const originalRuntimeDefinitionsList = host.runtimeDefinitionsList;
-    const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
-    host.runtimeDefinitionsList = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]) as never;
-    host.workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshot()) as never;
+    const runtimeDefinitionsList = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]);
+    const workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshot());
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: { runtimeDefinitionsList, workspaceGetSettingsSnapshot },
+      }),
+    );
 
     const harness = createHookHarness(() => useRuntimeDefinitionsContext(), undefined, {
       wrapper: createWrapper,
@@ -89,16 +95,18 @@ describe("AppRuntimeProvider", () => {
       ]);
     } finally {
       await harness.unmount();
-      host.runtimeDefinitionsList = originalRuntimeDefinitionsList;
-      host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+      configureShellBridge(createUnavailableShellBridge());
     }
   });
 
   test("keeps runtime availability stable when only the theme setting changes", async () => {
-    const originalRuntimeDefinitionsList = host.runtimeDefinitionsList;
-    const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
-    host.runtimeDefinitionsList = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]) as never;
-    host.workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshot()) as never;
+    const runtimeDefinitionsList = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]);
+    const workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshot());
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: { runtimeDefinitionsList, workspaceGetSettingsSnapshot },
+      }),
+    );
 
     const harness = createHookHarness(
       () => ({
@@ -139,8 +147,7 @@ describe("AppRuntimeProvider", () => {
       expect(nextContext.availableRuntimeDefinitions).toBe(firstAvailableRuntimeDefinitions);
     } finally {
       await harness.unmount();
-      host.runtimeDefinitionsList = originalRuntimeDefinitionsList;
-      host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+      configureShellBridge(createUnavailableShellBridge());
     }
   });
 });

@@ -11,14 +11,14 @@ describe("agent-orchestrator/handlers/session-actions", () => {
   test("returns action handlers", () => {
     const actions = createSessionActions({ updateSession: () => null });
 
-    expect(typeof actions.sendAgentMessage).toBe("function");
-    expect(typeof actions.startAgentSession).toBe("function");
-    expect(typeof actions.stopAgentSession).toBe("function");
+    expect(actions.sendAgentMessage).toBeInstanceOf(Function);
+    expect(actions.startAgentSession).toBeInstanceOf(Function);
+    expect(actions.stopAgentSession).toBeInstanceOf(Function);
   });
 
   test("uses live workspace refs for session start stale checks", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
     const actions = createSessionActions({
       adapter,
       currentWorkspaceRepoPathRef,

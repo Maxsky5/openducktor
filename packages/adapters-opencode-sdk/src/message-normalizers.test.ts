@@ -1,60 +1,57 @@
 import { describe, expect, test } from "bun:test";
-import type { Part } from "@opencode-ai/sdk/v2/client";
+import type { OpenCodeProtocolObject } from "./guards";
+import { createOpencodePartFixture } from "./opencode-protocol-test-fixtures";
+import type { ParsedOpencodePart } from "./opencode-ingress";
 import {
   extractMessageTotalTokens,
   normalizeUserMessageDisplayParts,
   readMessageModelSelection,
-  readTextFromMessageInfo,
   readTextFromParts,
   readVisibleUserTextFromDisplayParts,
   sanitizeAssistantMessage,
 } from "./message-normalizers";
 
+const parseOpencodeParts = (parts: OpenCodeProtocolObject[]): ParsedOpencodePart[] =>
+  parts.map(createOpencodePartFixture);
+
 describe("message-normalizers", () => {
   test("readTextFromParts joins only text parts", () => {
-    const parts: Part[] = [
+    const parts: OpenCodeProtocolObject[] = [
       {
         id: "text-1",
         sessionID: "session-1",
         messageID: "message-1",
         type: "text",
         text: "First line",
-      } as Part,
+      },
       {
         id: "reason-1",
         sessionID: "session-1",
         messageID: "message-1",
         type: "reasoning",
         text: "Should be ignored",
-      } as Part,
+      },
       {
         id: "text-2",
         sessionID: "session-1",
         messageID: "message-1",
         type: "text",
         text: "Second line",
-      } as Part,
+      },
     ];
 
-    expect(readTextFromParts(parts)).toBe("First line\nSecond line");
-  });
-
-  test("readTextFromMessageInfo resolves nested message text", () => {
-    expect(readTextFromMessageInfo({ message: { text: "  From nested info  " } })).toBe(
-      "  From nested info  ",
-    );
-    expect(readTextFromMessageInfo(null)).toBe("");
+    expect(readTextFromParts(parseOpencodeParts(parts))).toBe("First line\nSecond line");
   });
 
   test("normalizes user display parts by filtering synthetic text and preserving file refs", () => {
-    const parts: Part[] = [
+    const parts: OpenCodeProtocolObject[] = [
       {
         id: "text-1",
         sessionID: "session-1",
         messageID: "message-1",
         type: "text",
         text: "check @src/main.ts please",
-      } as Part,
+      },
       {
         id: "text-2",
         sessionID: "session-1",
@@ -62,7 +59,7 @@ describe("message-normalizers", () => {
         type: "text",
         text: 'Called the Read tool with the following input: {"filePath":"src/main.ts"}',
         synthetic: true,
-      } as Part,
+      },
       {
         id: "file-1",
         sessionID: "session-1",
@@ -80,10 +77,10 @@ describe("message-normalizers", () => {
             end: 19,
           },
         },
-      } as Part,
+      },
     ];
 
-    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+    expect(normalizeUserMessageDisplayParts(parseOpencodeParts(parts))).toEqual([
       {
         kind: "text",
         text: "check @src/main.ts please",
@@ -105,8 +102,8 @@ describe("message-normalizers", () => {
     ]);
   });
 
-  test("ignores malformed source text payloads when normalizing file references", () => {
-    const parts: Part[] = [
+  test("rejects malformed source text payloads before normalizing file references", () => {
+    const parts: OpenCodeProtocolObject[] = [
       {
         id: "file-1",
         sessionID: "session-1",
@@ -124,31 +121,21 @@ describe("message-normalizers", () => {
             end: 19,
           },
         },
-      } as Part,
+      },
     ];
 
-    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
-      {
-        kind: "file_reference",
-        file: {
-          id: "file-1",
-          path: "src/main.ts",
-          name: "main.ts",
-          kind: "code",
-        },
-      },
-    ]);
+    expect(() => parseOpencodeParts(parts)).toThrow();
   });
 
   test("normalizes OpenCode agent parts into subagent display parts", () => {
-    const parts: Part[] = [
+    const parts: OpenCodeProtocolObject[] = [
       {
         id: "text-1",
         sessionID: "session-1",
         messageID: "message-1",
         type: "text",
         text: "ask @reviewer now",
-      } as Part,
+      },
       {
         id: "agent-1",
         sessionID: "session-1",
@@ -160,10 +147,10 @@ describe("message-normalizers", () => {
           start: 4,
           end: 13,
         },
-      } as Part,
+      },
     ];
 
-    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+    expect(normalizeUserMessageDisplayParts(parseOpencodeParts(parts))).toEqual([
       {
         kind: "text",
         text: "ask @reviewer now",
@@ -185,24 +172,24 @@ describe("message-normalizers", () => {
   });
 
   test("keeps only the slash-command envelope text when OpenCode echoes instruction text separately", () => {
-    const parts: Part[] = [
+    const parts: OpenCodeProtocolObject[] = [
       {
         id: "slash-envelope",
         sessionID: "session-1",
         messageID: "message-1",
         type: "text",
         text: "<auto-slash-command>\n# /test-command Command\n\n## User Request\n\npouet\n</auto-slash-command>",
-      } as Part,
+      },
       {
         id: "slash-echo",
         sessionID: "session-1",
         messageID: "message-1",
         type: "text",
         text: "I just want to test the slash commands mechanism.\nReturn the arguments of this command: pouet",
-      } as Part,
+      },
     ];
 
-    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+    expect(normalizeUserMessageDisplayParts(parseOpencodeParts(parts))).toEqual([
       {
         kind: "text",
         text: "<auto-slash-command>\n# /test-command Command\n\n## User Request\n\npouet\n</auto-slash-command>",
@@ -211,7 +198,7 @@ describe("message-normalizers", () => {
   });
 
   test("normalizes local multimodal file parts into attachment display parts", () => {
-    const parts: Part[] = [
+    const parts: OpenCodeProtocolObject[] = [
       {
         id: "image-1",
         sessionID: "session-1",
@@ -220,7 +207,7 @@ describe("message-normalizers", () => {
         mime: "image/png",
         filename: "diagram.png",
         url: "file:///tmp/diagram.png",
-      } as Part,
+      },
       {
         id: "audio-1",
         sessionID: "session-1",
@@ -229,7 +216,7 @@ describe("message-normalizers", () => {
         mime: "audio/mpeg",
         filename: "meeting.mp3",
         url: "file:///tmp/meeting.mp3",
-      } as Part,
+      },
       {
         id: "video-1",
         sessionID: "session-1",
@@ -238,7 +225,7 @@ describe("message-normalizers", () => {
         mime: "video/mp4",
         filename: "demo.mp4",
         url: "file:///tmp/demo.mp4",
-      } as Part,
+      },
       {
         id: "pdf-1",
         sessionID: "session-1",
@@ -247,10 +234,10 @@ describe("message-normalizers", () => {
         mime: "application/pdf",
         filename: "spec.pdf",
         url: "file:///tmp/spec.pdf",
-      } as Part,
+      },
     ];
 
-    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+    expect(normalizeUserMessageDisplayParts(parseOpencodeParts(parts))).toEqual([
       {
         kind: "attachment",
         attachment: {
@@ -295,7 +282,7 @@ describe("message-normalizers", () => {
   });
 
   test("keeps attachment echoes as attachments when runtime adds non-@ source text", () => {
-    const parts: Part[] = [
+    const parts: OpenCodeProtocolObject[] = [
       {
         id: "pdf-runtime-echo",
         sessionID: "session-1",
@@ -313,10 +300,10 @@ describe("message-normalizers", () => {
             end: 9,
           },
         },
-      } as Part,
+      },
     ];
 
-    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+    expect(normalizeUserMessageDisplayParts(parseOpencodeParts(parts))).toEqual([
       {
         kind: "attachment",
         attachment: {
@@ -331,7 +318,7 @@ describe("message-normalizers", () => {
   });
 
   test("preserves raw filesystem paths returned in attachment urls", () => {
-    const parts: Part[] = [
+    const parts: OpenCodeProtocolObject[] = [
       {
         id: "image-raw-path",
         sessionID: "session-1",
@@ -340,7 +327,7 @@ describe("message-normalizers", () => {
         mime: "image/png",
         filename: "Screenshot 2026-04-01 at 00.33.32.png",
         url: "/var/folders/example/Screenshot 2026-04-01 at 00.33.32.png",
-      } as Part,
+      },
       {
         id: "image-windows-path",
         sessionID: "session-1",
@@ -349,10 +336,10 @@ describe("message-normalizers", () => {
         mime: "image/png",
         filename: "",
         url: "C:\\Temp\\Preview.png",
-      } as Part,
+      },
     ];
 
-    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+    expect(normalizeUserMessageDisplayParts(parseOpencodeParts(parts))).toEqual([
       {
         kind: "attachment",
         attachment: {
@@ -377,7 +364,7 @@ describe("message-normalizers", () => {
   });
 
   test("falls back to source file path for attachments when the runtime omits a file url", () => {
-    const parts: Part[] = [
+    const parts: OpenCodeProtocolObject[] = [
       {
         id: "image-source-path",
         sessionID: "session-1",
@@ -390,10 +377,10 @@ describe("message-normalizers", () => {
           type: "file",
           path: "/var/folders/example/Screenshot 2026-04-01 at 00.33.32.png",
         },
-      } as Part,
+      },
     ];
 
-    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+    expect(normalizeUserMessageDisplayParts(parseOpencodeParts(parts))).toEqual([
       {
         kind: "attachment",
         attachment: {
@@ -408,7 +395,7 @@ describe("message-normalizers", () => {
   });
 
   test("normalizes only supported media file attachments without inline source text", () => {
-    const parts: Part[] = [
+    const parts: OpenCodeProtocolObject[] = [
       {
         id: "file-1",
         sessionID: "session-1",
@@ -421,7 +408,7 @@ describe("message-normalizers", () => {
           type: "file",
           path: "src/styles.scss",
         },
-      } as Part,
+      },
       {
         id: "file-2",
         sessionID: "session-1",
@@ -434,7 +421,7 @@ describe("message-normalizers", () => {
           type: "file",
           path: "assets/preview.webp",
         },
-      } as Part,
+      },
       {
         id: "file-3",
         sessionID: "session-1",
@@ -447,10 +434,10 @@ describe("message-normalizers", () => {
           type: "file",
           path: "recordings/demo.webm",
         },
-      } as Part,
+      },
     ];
 
-    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+    expect(normalizeUserMessageDisplayParts(parseOpencodeParts(parts))).toEqual([
       {
         kind: "attachment",
         attachment: {
@@ -614,9 +601,23 @@ describe("message-normalizers", () => {
   test("readMessageModelSelection supports assistant and user message shapes", () => {
     expect(
       readMessageModelSelection({
+        id: "assistant-1",
+        sessionID: "session-1",
+        role: "assistant",
+        time: { created: 1 },
         providerID: "openai",
         modelID: "gpt-5",
+        parentID: "user-1",
+        mode: "build",
         agent: "Hephaestus",
+        path: { cwd: "/repo", root: "/repo" },
+        cost: 0,
+        tokens: {
+          input: 0,
+          output: 0,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
         variant: "high",
       }),
     ).toEqual({
@@ -628,12 +629,16 @@ describe("message-normalizers", () => {
 
     expect(
       readMessageModelSelection({
+        id: "user-1",
+        sessionID: "session-1",
+        role: "user",
+        time: { created: 1 },
         model: {
           providerID: "anthropic",
           modelID: "claude-3-7-sonnet",
+          variant: "max",
         },
         agent: "Ares",
-        variant: "max",
       }),
     ).toEqual({
       providerId: "anthropic",
@@ -645,6 +650,17 @@ describe("message-normalizers", () => {
 
   test("extractMessageTotalTokens prefers info token breakdown", () => {
     const info = {
+      id: "assistant-1",
+      sessionID: "session-1",
+      role: "assistant",
+      time: { created: 1 },
+      parentID: "user-1",
+      providerID: "openai",
+      modelID: "gpt-5",
+      mode: "build",
+      agent: "build",
+      path: { cwd: "/repo", root: "/repo" },
+      cost: 0,
       tokens: {
         input: 300,
         output: 120,
@@ -661,16 +677,34 @@ describe("message-normalizers", () => {
   });
 
   test("extractMessageTotalTokens falls back to max part token total", () => {
-    const parts: Array<Part | Record<string, unknown>> = [
+    const parts: OpenCodeProtocolObject[] = [
       {
         id: "part-1",
-        tokens: 42,
+        sessionID: "session-1",
+        messageID: "assistant-1",
+        type: "step-finish",
+        cost: 0,
+        reason: "stop",
+        tokens: {
+          total: 42,
+          input: 10,
+          output: 30,
+          reasoning: 2,
+          cache: { read: 0, write: 0 },
+        },
       },
       {
         id: "part-2",
+        sessionID: "session-1",
+        messageID: "assistant-1",
+        type: "step-finish",
+        cost: 0,
+        reason: "stop",
         tokens: {
           input: 10,
           output: 60,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
         },
       },
     ];
@@ -710,6 +744,6 @@ describe("message-normalizers", () => {
       ],
     );
 
-    expect(total).toBe(17);
+    expect(total).toBeUndefined();
   });
 });

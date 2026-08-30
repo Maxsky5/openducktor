@@ -233,7 +233,7 @@ export function WorkspaceRail({
   const activeDragWorkspace = activeWorkspaceId
     ? (workspaces.find((workspace) => workspace.workspaceId === activeWorkspaceId) ?? null)
     : null;
-  const PrimarySensor = typeof globalThis.PointerEvent === "function" ? PointerSensor : MouseSensor;
+  const PrimarySensor = globalThis.PointerEvent === undefined ? MouseSensor : PointerSensor;
   const sensors = useSensors(
     useSensor(PrimarySensor, {
       activationConstraint: {

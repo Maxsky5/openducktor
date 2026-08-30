@@ -1,5 +1,9 @@
 import { Effect } from "effect";
-import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  HostValidationError,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import type {
   CodexAppServerRequestMethod,
   CodexAppServerRequestResult,
@@ -11,6 +15,12 @@ import type {
 } from "./codex-app-server-transport-types";
 
 type ResponseEffect = Effect.Effect<CodexAppServerRequestResult, CodexAppServerTransportError>;
+type ScheduleTimeout = (callback: () => void, timeoutMs: number) => () => void;
+
+const scheduleTimeout: ScheduleTimeout = (callback, timeoutMs) => {
+  const timeout = setTimeout(callback, timeoutMs);
+  return () => clearTimeout(timeout);
+};
 
 type PendingResponseInput = {
   id: number;
@@ -19,6 +29,7 @@ type PendingResponseInput = {
   requestTimeoutMs: number;
   pending: Map<number, PendingCodexAppServerRequest>;
   rememberCancelledSentRequest(id: number): void;
+  scheduleTimeout?: ScheduleTimeout;
 };
 
 export const acquirePendingResponse = ({
@@ -28,9 +39,10 @@ export const acquirePendingResponse = ({
   requestTimeoutMs,
   pending,
   rememberCancelledSentRequest,
+  scheduleTimeout: scheduleRequestTimeout = scheduleTimeout,
 }: PendingResponseInput) =>
   Effect.sync(() => {
-    let timeout: NodeJS.Timeout | undefined;
+    let cancelTimeout: (() => void) | undefined;
     let released = false;
     let finished = false;
     let writeStarted = false;
@@ -42,7 +54,7 @@ export const acquirePendingResponse = ({
         return;
       }
       released = true;
-      clearTimeout(timeout);
+      cancelTimeout?.();
       pending.delete(id);
       if (options.preserveLateResponse && writeStarted && !finished) {
         rememberCancelledSentRequest(id);
@@ -62,7 +74,7 @@ export const acquirePendingResponse = ({
       settledEffect = effect;
     };
 
-    timeout = setTimeout(() => {
+    cancelTimeout = scheduleRequestTimeout(() => {
       finish(
         Effect.fail(
           new HostOperationError({
@@ -83,10 +95,12 @@ export const acquirePendingResponse = ({
       reject: (error) => {
         finish(
           Effect.fail(
-            toHostOperationError(error, `codexAppServerTransport.request.${method}`, {
-              runtimeId,
-              method,
-            }),
+            error instanceof HostValidationError
+              ? error
+              : toHostOperationError(error, `codexAppServerTransport.request.${method}`, {
+                  runtimeId,
+                  method,
+                }),
           ),
         );
       },

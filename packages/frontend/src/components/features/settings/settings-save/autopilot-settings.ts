@@ -1,8 +1,4 @@
-import type {
-  AutopilotActionId,
-  AutopilotEventId,
-  AutopilotSettings,
-} from "@openducktor/contracts";
+import type { AutopilotEventId, AutopilotSettings } from "@openducktor/contracts";
 import { AUTOPILOT_EVENT_IDS, createDefaultAutopilotSettings } from "@openducktor/contracts";
 
 export const prepareAutopilotSettingsForSave = (
@@ -18,7 +14,7 @@ export const prepareAutopilotSettingsForSave = (
       const explicitRule = rulesByEvent.get(eventId);
       const actionIds = (explicitRule?.actionIds ?? []).filter(
         (actionId, index, list) => list.indexOf(actionId) === index,
-      ) as AutopilotActionId[];
+      );
 
       return {
         eventId,

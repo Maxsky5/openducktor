@@ -4,7 +4,8 @@
   "private": true,
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "tools/oxlint/*"
   ],
   "scripts": {
     "dev": "bun run electron:dev",
@@ -18,6 +19,7 @@
     "release:version:check": "bun run scripts/release-version.ts check",
     "release:homebrew:cask": "bun run scripts/release-homebrew-cask.ts",
     "test:release:homebrew:cask": "bun test scripts/release-homebrew-cask.test.ts",
+    "test:anti-slop": "bun run --filter @openducktor/anti-slop-oxlint test",
     "test:scripts": "bun test scripts/release-version.test.ts scripts/release-homebrew-cask.test.ts",
     "build": "bun run --workspaces build",
     "typecheck": "bun run --workspaces typecheck",
@@ -47,7 +49,8 @@
     "oxfmt": "^0.63.0",
     "oxlint": "^1.78.0",
     "typescript": "^5.7.3",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3"
   },
   "overrides": {
     "@hono/node-server": "^1.19.11",

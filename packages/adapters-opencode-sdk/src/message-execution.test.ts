@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
+import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { sendUserMessage } from "./message-execution";
 import type { SessionRecord } from "./types";
 import {
@@ -59,7 +60,7 @@ const createSession = (overrides?: {
   const promptAsync = mock(async () => overrides?.promptAsyncResult ?? { error: null });
   const summarize = mock(async () => overrides?.summarizeResult ?? { data: true, error: null });
 
-  const session = {
+  const session: SessionRecord = {
     externalSessionId: "session-opencode-1",
     input: {
       externalSessionId: "session-1",
@@ -82,7 +83,7 @@ const createSession = (overrides?: {
     streamTurnStatus: "idle",
     isSendingUserMessage: false,
     isAwaitingRuntimeTurnStart: false,
-  } as unknown as SessionRecord;
+  };
 
   return { session, command, promptAsync, summarize };
 };
@@ -164,7 +165,7 @@ describe("message-execution", () => {
     class SdkSessionClient {
       readonly summarizeCalls: unknown[] = [];
 
-      async summarize(input: unknown) {
+      async summarize(input: Parameters<OpencodeClient["session"]["summarize"]>[0]) {
         this.summarizeCalls.push(input);
         return { data: true, error: null };
       }
@@ -172,7 +173,7 @@ describe("message-execution", () => {
 
     const { session } = createSession();
     const sdkSessionClient = new SdkSessionClient();
-    session.client.session = sdkSessionClient as never;
+    session.client.session = sdkSessionClient;
 
     await sendUserMessage({
       session,
@@ -240,7 +241,7 @@ describe("message-execution", () => {
     const { session } = createSession();
     session.client.session.summarize = mock(async () => {
       throw new Error("connection closed");
-    }) as never;
+    });
 
     await expect(
       sendUserMessage({
@@ -614,9 +615,8 @@ describe("message-execution", () => {
       tools: {},
     });
 
-    const promptRequest = promptAsync.mock.calls[0]?.[0] as
-      | { parts?: Array<{ type: string; source?: unknown }> }
-      | undefined;
+    const promptRequest: { parts?: Array<{ type: string; source?: unknown }> } | undefined =
+      promptAsync.mock.calls[0]?.[0];
     const attachmentPart = promptRequest?.parts?.find((part) => part.type === "file");
     expect(attachmentPart).toBeDefined();
     expect(attachmentPart?.source).toBeUndefined();

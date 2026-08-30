@@ -42,10 +42,11 @@ export const normalizeTargetBranch = (
     normalizedBranch = normalizedBranch.slice(normalizedRemote.length + 1);
   }
 
-  return {
-    ...(normalizedRemote ? { remote: normalizedRemote } : {}),
-    branch: normalizedBranch,
-  };
+  const targetBranch: GitTargetBranch = { branch: normalizedBranch };
+  if (normalizedRemote) {
+    targetBranch.remote = normalizedRemote;
+  }
+  return targetBranch;
 };
 
 export const effectiveTaskTargetBranch = (
@@ -74,12 +75,7 @@ export const resolveTaskTargetBranchState = ({
   taskTargetBranch: GitTargetBranch | null | undefined;
   taskTargetBranchError: string | null | undefined;
   defaultTargetBranch: GitTargetBranch | null | undefined;
-}): {
-  effectiveTargetBranch: GitTargetBranch;
-  validationError: string | null;
-  displayTargetBranch: string;
-  selectionValue: string;
-} => {
+}) => {
   const effectiveTargetBranch = effectiveTaskTargetBranch(taskTargetBranch, defaultTargetBranch);
   const validationError = taskTargetBranchValidationError(taskTargetBranchError);
 
@@ -90,6 +86,11 @@ export const resolveTaskTargetBranchState = ({
       ? INVALID_TASK_TARGET_BRANCH_LABEL
       : canonicalTargetBranch(effectiveTargetBranch),
     selectionValue: targetBranchSelectionValue(effectiveTargetBranch),
+  } satisfies {
+    effectiveTargetBranch: GitTargetBranch;
+    validationError: string | null;
+    displayTargetBranch: string;
+    selectionValue: string;
   };
 };
 

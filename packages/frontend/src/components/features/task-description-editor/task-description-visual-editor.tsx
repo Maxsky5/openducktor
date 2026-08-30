@@ -6,6 +6,7 @@ import { Mathematics } from "@tiptap/extension-mathematics";
 import { EditorContent, ReactNodeViewRenderer, useEditor, useEditorState } from "@tiptap/react";
 import { ImagePlus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { MermaidPreviewProvider } from "@/components/ui/markdown-mermaid";
 import type { MermaidPreviews } from "@/components/ui/markdown-mermaid-state";
@@ -216,7 +217,8 @@ export default function TaskDescriptionVisualEditor({
           state={toolbar}
           onEditLink={() => {
             const href = editor.getAttributes("link").href;
-            setLinkHref(typeof href === "string" ? href : "");
+            const hrefResult = z.string().safeParse(href);
+            setLinkHref(hrefResult.success ? hrefResult.data : "");
           }}
           onEditMath={(kind) => setMathEdit({ kind, latex: "" })}
         />

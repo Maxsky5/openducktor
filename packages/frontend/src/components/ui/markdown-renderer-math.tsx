@@ -35,17 +35,22 @@ export default function MarkdownRendererMath({
   });
   const content = markdown.trim();
   if (!content) return null;
+  const componentInput: Parameters<typeof createTaskDescriptionComponents>[0] = {
+    components: premiumComponents,
+  };
+  if (resolveTaskAssetSrc) {
+    componentInput.resolveTaskAssetSrc = resolveTaskAssetSrc;
+  }
+  if (taskAssetContext) {
+    componentInput.taskAssetContext = taskAssetContext;
+  }
   return (
     <Markdown
       remarkPlugins={[remarkGfm, remarkMath, remarkTaskListBlockMath]}
       rehypePlugins={[rehypeKatex]}
       skipHtml
       urlTransform={TASK_DESCRIPTION_URL_TRANSFORM}
-      components={createTaskDescriptionComponents({
-        components: premiumComponents,
-        ...(resolveTaskAssetSrc ? { resolveTaskAssetSrc } : {}),
-        ...(taskAssetContext ? { taskAssetContext } : {}),
-      })}
+      components={createTaskDescriptionComponents(componentInput)}
     >
       {content}
     </Markdown>

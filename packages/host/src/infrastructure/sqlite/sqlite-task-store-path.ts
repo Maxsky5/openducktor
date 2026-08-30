@@ -12,7 +12,7 @@ export type ResolveSqliteTaskStoreDatabasePathInput = {
 
 const validateSqliteTaskStoreWorkspaceId = (
   workspaceId: string,
-): Effect.Effect<string, HostInvariantError> => {
+): Effect.Effect<string, HostInvariantError<{ workspaceId: string }>> => {
   if (!WORKSPACE_ID_PATTERN.test(workspaceId)) {
     return Effect.fail(
       new HostInvariantError({
@@ -28,7 +28,10 @@ const validateSqliteTaskStoreWorkspaceId = (
 
 const sqliteTaskStoreDatabasePathSegments = (
   workspaceId: string,
-): Effect.Effect<[string, string, typeof TASK_STORE_DATABASE_FILENAME], HostInvariantError> =>
+): Effect.Effect<
+  [string, string, typeof TASK_STORE_DATABASE_FILENAME],
+  HostInvariantError<{ workspaceId: string }>
+> =>
   validateSqliteTaskStoreWorkspaceId(workspaceId).pipe(
     Effect.map((validWorkspaceId) => [
       "task-stores",
@@ -40,7 +43,10 @@ const sqliteTaskStoreDatabasePathSegments = (
 export const resolveSqliteTaskStoreDatabasePath = ({
   configDir,
   workspaceId,
-}: ResolveSqliteTaskStoreDatabasePathInput): Effect.Effect<string, HostInvariantError> =>
+}: ResolveSqliteTaskStoreDatabasePathInput): Effect.Effect<
+  string,
+  HostInvariantError<{ workspaceId: string }>
+> =>
   sqliteTaskStoreDatabasePathSegments(workspaceId).pipe(
     Effect.map((segments) => path.join(configDir, ...segments)),
   );

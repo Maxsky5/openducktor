@@ -1,7 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import type { Query } from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
 import { HostDependencyError } from "../../effect/host-errors";
 import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
@@ -9,12 +8,12 @@ import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribut
 import { scheduleClaudeLiveContextUsageRefresh } from "./claude-agent-sdk-context-usage";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { createClaudeAgentSdkService } from "./claude-agent-sdk-service";
+import {
+  createClaudeContextUsageResponse,
+  createClaudeQueryFixture,
+} from "./claude-agent-sdk-session-io.test-support";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
-import type {
-  ClaudeAgentSdkEventEmitter,
-  ClaudeSession,
-  CreateClaudeAgentSdkServiceInput,
-} from "./claude-agent-sdk-types";
+import type { ClaudeAgentSdkEventEmitter, ClaudeSession } from "./claude-agent-sdk-types";
 
 const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession => ({
   acceptedUserMessages: [],
@@ -36,9 +35,9 @@ const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession =>
   pendingQuestions: new Map(),
   queuedSdkMessages: [],
   pendingUserTurnCount: 0,
-  query: {
+  query: createClaudeQueryFixture({
     close: mock(() => {}),
-  } as unknown as ClaudeSession["query"],
+  }),
   queue: new AsyncInputQueue(),
   runtimeId: "runtime-1",
   startedAt: "2026-06-25T20:00:00.000Z",
@@ -86,8 +85,7 @@ const createService = (session: ClaudeSession | null, emit?: ClaudeAgentSdkEvent
   if (session) {
     sessionStore.set(session);
   }
-  return createClaudeAgentSdkService({
-    ...(emit ? { emit } : {}),
+  const serviceInput: Parameters<typeof createClaudeAgentSdkService>[0] = {
     now: () => "2026-06-25T20:00:00.000Z",
     onBackgroundFailure: () => Effect.void,
     resolveMcpBridgeConnection: () => {
@@ -101,14 +99,25 @@ const createService = (session: ClaudeSession | null, emit?: ClaudeAgentSdkEvent
     }),
     sessionStore,
     settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
-    toolDiscovery: {} as CreateClaudeAgentSdkServiceInput["toolDiscovery"],
-  });
+    toolDiscovery: {
+      discoverTool: () => Effect.die("unused"),
+      resolveTool: () => Effect.die("unused"),
+      resolveToolPath: () => Effect.die("unused"),
+      validateToolPath: () => Effect.die("unused"),
+    },
+  };
+  if (emit) {
+    serviceInput.emit = emit;
+  }
+  return createClaudeAgentSdkService(serviceInput);
 };
 
 describe("createClaudeAgentSdkService", () => {
   test("resumes and sends through a retained repository session without a fake workflow role", async () => {
     const repositoryScope = { kind: "repository" } as const;
-    const mcpServerStatus = mock(async () => [{ name: "openducktor", status: "connected" }]);
+    const mcpServerStatus = mock(async () => [
+      { name: "openducktor", status: "connected" as const },
+    ]);
     const repositorySession = createSession({
       input: {
         repoPath: "/repo/",
@@ -127,11 +136,11 @@ describe("createClaudeAgentSdkService", () => {
         startedAt: "2026-06-25T20:00:00.000Z",
         status: "idle",
       },
-      query: {
+      query: createClaudeQueryFixture({
         close: mock(() => {}),
-        getContextUsage: mock(async () => ({})),
+        getContextUsage: mock(async () => createClaudeContextUsageResponse(0, 0)),
         mcpServerStatus,
-      } as unknown as ClaudeSession["query"],
+      }),
     });
     const service = createService(repositorySession);
 
@@ -369,19 +378,13 @@ describe("createClaudeAgentSdkService", () => {
   });
 
   test("does not report live parent context usage for a Claude subagent", async () => {
-    const getContextUsage = mock(
-      async () =>
-        ({
-          totalTokens: 176_005,
-          maxTokens: 272_000,
-        }) as Awaited<ReturnType<Query["getContextUsage"]>>,
-    );
+    const getContextUsage = mock(async () => createClaudeContextUsageResponse(176_005, 272_000));
     const service = createService(
       createSession({
-        query: {
+        query: createClaudeQueryFixture({
           close: mock(() => {}),
           getContextUsage,
-        } as unknown as ClaudeSession["query"],
+        }),
       }),
     );
 
@@ -402,19 +405,13 @@ describe("createClaudeAgentSdkService", () => {
   });
 
   test("reads context usage from an idle live Claude session without resuming it", async () => {
-    const getContextUsage = mock(
-      async () =>
-        ({
-          totalTokens: 176_005,
-          maxTokens: 272_000,
-        }) as Awaited<ReturnType<Query["getContextUsage"]>>,
-    );
+    const getContextUsage = mock(async () => createClaudeContextUsageResponse(176_005, 272_000));
     const service = createService(
       createSession({
-        query: {
+        query: createClaudeQueryFixture({
           close: mock(() => {}),
           getContextUsage,
-        } as unknown as ClaudeSession["query"],
+        }),
       }),
     );
 
@@ -435,13 +432,14 @@ describe("createClaudeAgentSdkService", () => {
   });
 
   test("drains live context refreshes before releasing a session", async () => {
-    const contextRead = Promise.withResolvers<{ maxTokens: number; totalTokens: number }>();
+    const contextRead =
+      Promise.withResolvers<ReturnType<typeof createClaudeContextUsageResponse>>();
     const queryClosed = Promise.withResolvers<void>();
     const session = createSession({
-      query: {
+      query: createClaudeQueryFixture({
         close: mock(() => queryClosed.resolve()),
         getContextUsage: () => contextRead.promise,
-      } as unknown as ClaudeSession["query"],
+      }),
     });
     scheduleClaudeLiveContextUsageRefresh({
       session,
@@ -465,7 +463,7 @@ describe("createClaudeAgentSdkService", () => {
     await Promise.resolve();
     expect(released).toBe(false);
 
-    contextRead.resolve({ maxTokens: 200_000, totalTokens: 95_000 });
+    contextRead.resolve(createClaudeContextUsageResponse(95_000, 200_000));
     await releasePromise;
 
     expect(released).toBe(true);
@@ -496,41 +494,6 @@ describe("createClaudeAgentSdkService", () => {
         }),
       ),
     ).resolves.toEqual([todo]);
-  });
-
-  test("emits nested transcript events for host-owned projection", () => {
-    const session = createSession();
-    const emitted: Array<{ session: ClaudeSession; event: unknown }> = [];
-    const service = createService(session, (eventSession, event) => {
-      emitted.push({ session: eventSession as ClaudeSession, event });
-    });
-    const emit = Reflect.get(service as object, "emit") as (
-      session: ClaudeSession,
-      event: {
-        type: "assistant_message";
-        externalSessionId: string;
-        timestamp: string;
-        messageId: string;
-        message: string;
-      },
-    ) => void;
-
-    emit.call(service, session, {
-      type: "assistant_message",
-      externalSessionId: "session-1::claude-subagent::task-1",
-      timestamp: "2026-06-25T20:00:01.000Z",
-      messageId: "assistant-child-1",
-      message: "Nested update",
-    });
-
-    expect(emitted).toEqual([
-      {
-        session,
-        event: expect.objectContaining({
-          externalSessionId: "session-1::claude-subagent::task-1",
-        }),
-      },
-    ]);
   });
 
   test("cleans session-scoped MCP token files when Claude executable resolution fails before store ownership", async () => {
@@ -623,7 +586,7 @@ describe("createClaudeAgentSdkService", () => {
 
   test("applies live Claude effort changes through the SDK session", async () => {
     const setModel = mock(async (_model?: string) => {});
-    const applyFlagSettings = mock(async (_settings: unknown) => {});
+    const applyFlagSettings = mock(async () => {});
     const session = createSession({
       model: {
         runtimeKind: "claude",
@@ -631,11 +594,11 @@ describe("createClaudeAgentSdkService", () => {
         modelId: "claude-opus-4-6",
         variant: "high",
       },
-      query: {
+      query: createClaudeQueryFixture({
         applyFlagSettings,
         close: mock(() => {}),
         setModel,
-      } as unknown as ClaudeSession["query"],
+      }),
     });
     const service = createService(session);
 
@@ -675,11 +638,11 @@ describe("createClaudeAgentSdkService", () => {
         modelId: "claude-sonnet-4-6",
         variant: "high",
       },
-      query: {
-        applyFlagSettings: mock(async (_settings: unknown) => {}),
+      query: createClaudeQueryFixture({
+        applyFlagSettings: mock(async () => {}),
         close: mock(() => {}),
         setModel: mock(async (_model?: string) => {}),
-      } as unknown as ClaudeSession["query"],
+      }),
     });
     const service = createService(session);
     const latestModel = {

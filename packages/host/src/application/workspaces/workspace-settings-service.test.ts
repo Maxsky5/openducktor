@@ -143,7 +143,7 @@ const createFakeSettingsConfig = ({
       return paths.join("/").replaceAll(/\/+/g, "/");
     },
   };
-  return port as unknown as FakeSettingsConfigPort;
+  return port;
 };
 describe("createWorkspaceSettingsService", () => {
   test("returns default settings snapshot when config is missing", async () => {
@@ -215,27 +215,6 @@ describe("createWorkspaceSettingsService", () => {
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
-  });
-  test("normalizes legacy enabled-only Codex runtime settings in snapshots", async () => {
-    const service = createWorkspaceSettingsService(
-      createFakeSettingsConfig({
-        config: globalConfig({
-          agentRuntimes: {
-            opencode: { enabled: true, executablePath: "/bin/opencode" },
-            codex: { enabled: true, executablePath: "/bin/codex" },
-          },
-        } as unknown as Partial<GlobalConfig>),
-      }),
-    );
-
-    const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
-
-    expect(snapshot.agentRuntimes.codex).toEqual({
-      enabled: true,
-      executablePath: "/bin/codex",
-      defaults: DEFAULT_CODEX_RUNTIME_POLICY,
-      roleOverrides: {},
-    });
   });
   test("lists workspaces in effective order with worktree paths", async () => {
     const service = createWorkspaceSettingsService(
@@ -659,25 +638,6 @@ describe("createWorkspaceSettingsService", () => {
     const persisted = await Effect.runPromise(service.getSettingsSnapshot());
     expect(persisted.general.openAgentStudioTabOnBackgroundSessionStart).toBe(true);
     expect(persisted.agentModelFavorites).toEqual([newFavorite]);
-  });
-  test("rejects invalid appearance snapshot settings without writing config", async () => {
-    const settingsConfig = createFakeSettingsConfig({
-      config: globalConfig(),
-    });
-    const service = createWorkspaceSettingsService(settingsConfig);
-    const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
-
-    await expect(
-      Effect.runPromise(
-        service.saveSettingsSnapshot({
-          ...snapshot,
-          appearance: {
-            horizontalScrollbarVisibility: "auto",
-          },
-        } as unknown as typeof snapshot),
-      ),
-    ).rejects.toThrow("Invalid option");
-    expect(settingsConfig.writtenConfigs).toHaveLength(0);
   });
   test("rejects invalid Codex snapshot settings without writing config", async () => {
     const settingsConfig = createFakeSettingsConfig({

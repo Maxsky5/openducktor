@@ -27,7 +27,7 @@ describe("createTaskService direct merge", () => {
       gitPort: createDirectMergeGitPort({ calls }),
       settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
       systemCommands: createApprovalSystemCommands(),
-      taskStore: {} as TaskStorePort,
+      taskStore: {} satisfies TaskStorePort,
       taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",

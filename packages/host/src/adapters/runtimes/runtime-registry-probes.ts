@@ -1,5 +1,6 @@
 import { ODT_WORKFLOW_AGENT_TOOL_NAMES, type RuntimeRoute } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { z, type JSONType } from "zod";
 import {
   errorMessage,
   HostOperationError,
@@ -12,25 +13,34 @@ import type {
   RuntimeMcpStatusProbeResult,
   RuntimeRegistryError,
 } from "../../ports/runtime-registry-port";
+import { isTimeoutError } from "./runtime-probe-errors";
 
 const SESSION_REQUEST_TIMEOUT_MS = 2000;
 const MCP_REQUEST_TIMEOUT_MS = 2000;
 const MAX_ABORT_ERROR_BODY_BYTES = 64 * 1024;
 const CODEX_ODT_TOOL_IDS = [...ODT_WORKFLOW_AGENT_TOOL_NAMES];
-const TIMEOUT_ERROR_NAMES = new Set(["TimeoutError"]);
-const TIMEOUT_ERROR_CODES = new Set([
-  "ABORT_ERR",
-  "ETIMEDOUT",
-  "UND_ERR_BODY_TIMEOUT",
-  "UND_ERR_CONNECT_TIMEOUT",
-  "UND_ERR_HEADERS_TIMEOUT",
-]);
 const TIMEOUT_RESPONSE_STATUSES = new Set([408, 504]);
+const toolIdsSchema = z.array(z.unknown());
+type RuntimeProbeObject = Record<string, JSONType>;
+const runtimeProbeObjectSchema = z.record(z.string(), z.json());
+const isRuntimeProbeObject = (value: JSONType | undefined): value is RuntimeProbeObject =>
+  runtimeProbeObjectSchema.safeParse(value).success;
 
 type RuntimeSessionRouteInput = {
   runtimeKind: string;
   runtimeRoute: RuntimeRoute;
   externalSessionId: string;
+  workingDirectory: string;
+};
+
+type RuntimeProbeFailureDetails = {
+  detail?: string;
+  failureKind?: "timeout";
+  method?: string;
+  operation?: string;
+  path: string;
+  status?: number;
+  url?: string;
   workingDirectory: string;
 };
 
@@ -80,16 +90,15 @@ const mcpEndpoint = (endpoint: URL, routePath: string, workingDirectory: string)
   return url;
 };
 
-const isLiveSessionStatus = (value: unknown): boolean => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-  const status = (value as Record<string, unknown>).type;
+const isLiveSessionStatus = (value: JSONType | undefined): boolean => {
+  if (!isRuntimeProbeObject(value)) return false;
+  const status = value.type;
   return status === "busy" || status === "retry";
 };
 
-const requireObjectPayload = (value: unknown, context: string) => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+const requireObjectPayload = (value: JSONType | null, context: string) => {
+  const parsed = runtimeProbeObjectSchema.safeParse(value);
+  if (!parsed.success) {
     return Effect.fail(
       new HostValidationError({
         message: `${context} must be an object`,
@@ -97,53 +106,14 @@ const requireObjectPayload = (value: unknown, context: string) => {
       }),
     );
   }
-  return Effect.succeed(value as Record<string, unknown>);
+  return Effect.succeed(parsed.data);
 };
 
-const readStringProperty = (value: Record<string, unknown>, property: string): string | null => {
-  const raw = value[property];
-  return typeof raw === "string" && raw.trim().length > 0 ? raw.trim() : null;
-};
-
-const readStringField = (value: unknown, field: "code" | "name"): string | null => {
-  if (!value || typeof value !== "object" || !(field in value)) {
-    return null;
-  }
-  const raw = (value as Record<string, unknown>)[field];
-  return typeof raw === "string" ? raw : null;
-};
-
-const readFailureKind = (value: unknown): string | null => {
-  if (!value || typeof value !== "object" || !("details" in value)) {
-    return null;
-  }
-  const details = (value as { details?: unknown }).details;
-  if (!details || typeof details !== "object" || !("failureKind" in details)) {
-    return null;
-  }
-  const failureKind = (details as { failureKind?: unknown }).failureKind;
-  return typeof failureKind === "string" ? failureKind : null;
-};
-
-const readCause = (value: unknown): unknown | null =>
-  value && typeof value === "object" && "cause" in value
-    ? ((value as { cause?: unknown }).cause ?? null)
-    : null;
-
-const isTimeoutError = (cause: unknown): boolean => {
-  if (readFailureKind(cause) === "timeout") {
-    return true;
-  }
-  const name = readStringField(cause, "name");
-  if (name && TIMEOUT_ERROR_NAMES.has(name)) {
-    return true;
-  }
-  const code = readStringField(cause, "code");
-  if (code && TIMEOUT_ERROR_CODES.has(code)) {
-    return true;
-  }
-  const nestedCause = readCause(cause);
-  return nestedCause !== null && nestedCause !== cause && isTimeoutError(nestedCause);
+const readStringProperty = (value: RuntimeProbeObject, property: string): string | null => {
+  const parsed = z.string().safeParse(value[property]);
+  if (!parsed.success) return null;
+  const trimmed = parsed.data.trim();
+  return trimmed.length > 0 ? trimmed : null;
 };
 
 const timeoutMcpProbeResult = (detail: string): RuntimeMcpStatusProbeResult => ({
@@ -155,19 +125,23 @@ const timeoutMcpProbeResult = (detail: string): RuntimeMcpStatusProbeResult => (
   failureKind: "timeout",
 });
 
-const parseToolIds = (payload: unknown) => {
-  if (!Array.isArray(payload)) {
+const parseToolIds = (payload: JSONType | null) => {
+  const parsedPayload = toolIdsSchema.safeParse(payload);
+  if (!parsedPayload.success) {
     return Effect.fail(
       new HostValidationError({
         message: "OpenCode tool id payload must be an array",
-        details: { payloadType: typeof payload },
+        cause: parsedPayload.error,
       }),
     );
   }
   return Effect.succeed(
     Array.from(
       new Set(
-        payload.map((entry) => (typeof entry === "string" ? entry.trim() : "")).filter(Boolean),
+        parsedPayload.data
+          .map((entry) => z.string().safeParse(entry))
+          .map((entry) => (entry.success ? entry.data.trim() : ""))
+          .filter(Boolean),
       ),
     ),
   );
@@ -276,7 +250,7 @@ export const probeOpenCodeSessionStatus = ({
       );
     }
     const statuses = yield* Effect.try({
-      try: () => JSON.parse(body) as Record<string, unknown>,
+      try: () => parseJson(body),
       catch: (cause) =>
         new HostValidationError({
           message: cause instanceof Error ? cause.message : String(cause),
@@ -284,6 +258,14 @@ export const probeOpenCodeSessionStatus = ({
           details: { operation: "runtimeRegistry.parseSessionStatusResponse" },
         }),
     });
+    if (!isRuntimeProbeObject(statuses)) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          message: "OpenCode session status response must be an object",
+          details: { operation: "runtimeRegistry.parseSessionStatusResponse" },
+        }),
+      );
+    }
     return {
       supported: true,
       hasLiveSession: isLiveSessionStatus(statuses[externalSessionId]),
@@ -306,15 +288,23 @@ const fetchOpenCodeJson = (
           method,
           signal: AbortSignal.timeout(MCP_REQUEST_TIMEOUT_MS),
         }),
-      catch: (cause) =>
-        toHostOperationError(cause, `runtimeRegistry.fetchOpenCodeJson.${operation}`, {
+      catch: (cause) => {
+        const details: RuntimeProbeFailureDetails = {
           operation,
           method,
           path: routePath,
           workingDirectory,
           url: url.toString(),
-          ...(isTimeoutError(cause) ? { failureKind: "timeout" as const } : {}),
-        }),
+        };
+        if (isTimeoutError(cause)) {
+          details.failureKind = "timeout";
+        }
+        return toHostOperationError(
+          cause,
+          `runtimeRegistry.fetchOpenCodeJson.${operation}`,
+          details,
+        );
+      },
     });
     const body = yield* Effect.tryPromise({
       try: () => response.text(),
@@ -323,19 +313,22 @@ const fetchOpenCodeJson = (
     if (!response.ok) {
       const detail = body.trim();
       const timedOut = TIMEOUT_RESPONSE_STATUSES.has(response.status);
+      const details: RuntimeProbeFailureDetails = {
+        status: response.status,
+        detail,
+        path: routePath,
+        workingDirectory,
+      };
+      if (timedOut) {
+        details.failureKind = "timeout";
+      }
       return yield* Effect.fail(
         new HostOperationError({
           operation: `runtimeRegistry.fetchOpenCodeJson.${operation}`,
           message: detail
             ? `OpenCode ${operation} failed with status ${response.status}: ${detail}`
             : `OpenCode ${operation} failed with status ${response.status}`,
-          details: {
-            status: response.status,
-            detail,
-            path: routePath,
-            workingDirectory,
-            ...(timedOut ? { failureKind: "timeout" as const } : {}),
-          },
+          details,
         }),
       );
     }

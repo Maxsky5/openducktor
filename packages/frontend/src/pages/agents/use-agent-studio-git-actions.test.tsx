@@ -1,30 +1,56 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import type { HostClient } from "@openducktor/host-client";
 import type { GitConflict } from "@/features/agent-studio-git";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import {
   createDeferred,
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
 
-const actualSharedHostModule = await import("@/state/operations/shared/host");
 const actualSonnerModule = await import("sonner");
+
+type RestorableSpy = { mockRestore(): void };
+let testSpies: RestorableSpy[] = [];
+type GitCommitResult = Awaited<ReturnType<HostClient["gitCommitAll"]>>;
+type GitPushResult = Awaited<ReturnType<HostClient["gitPushBranch"]>>;
+type GitPullResult = Awaited<ReturnType<HostClient["gitPullBranch"]>>;
+type GitRebaseResult = Awaited<ReturnType<HostClient["gitRebaseBranch"]>>;
 
 enableReactActEnvironment();
 
-const gitCommitAllMock = mock(async () => ({ outcome: "committed", commitHash: "abc123" }));
-const gitPushBranchMock = mock(async () => ({
+const gitCommitAllMock = mock<HostClient["gitCommitAll"]>(async () => ({
+  outcome: "committed",
+  commitHash: "abc123",
+  output: "committed",
+}));
+const gitPushBranchMock = mock<HostClient["gitPushBranch"]>(async () => ({
+  outcome: "pushed",
   remote: "origin",
   branch: "feature/task-10",
   output: "done",
 }));
-const gitPullBranchMock = mock(async () => ({ outcome: "pulled", output: "updated" }));
-const gitRebaseBranchMock = mock(async () => ({ outcome: "rebased" }));
-const gitAbortConflictMock = mock(async () => ({ output: "aborted" }));
-const gitRebaseAbortMock = mock(async () => ({ outcome: "aborted" }));
-const gitResetWorktreeSelectionMock = mock(async () => ({ affectedPaths: ["src/main.ts"] }));
-const toastSuccessMock = mock(() => {});
-const toastErrorMock = mock(() => {});
+const gitPullBranchMock = mock<HostClient["gitPullBranch"]>(async () => ({
+  outcome: "pulled",
+  output: "updated",
+}));
+const gitRebaseBranchMock = mock<HostClient["gitRebaseBranch"]>(async () => ({
+  outcome: "rebased",
+  output: "rebased",
+}));
+const gitAbortConflictMock = mock<HostClient["gitAbortConflict"]>(async () => ({
+  output: "aborted",
+}));
+const gitRebaseAbortMock = mock<HostClient["gitRebaseAbort"]>(async () => ({
+  outcome: "aborted",
+  output: "aborted",
+}));
+const gitResetWorktreeSelectionMock = mock<HostClient["gitResetWorktreeSelection"]>(async () => ({
+  affectedPaths: ["src/main.ts"],
+}));
+const toastSuccessMock = mock(() => "toast-success");
+const toastErrorMock = mock(() => "toast-error");
 
 type UseAgentStudioGitActionsHook =
   (typeof import("./use-agent-studio-git-actions"))["useAgentStudioGitActions"];
@@ -59,31 +85,30 @@ const createDetectedConflict = (overrides: Partial<GitConflict> = {}): GitConfli
 });
 
 beforeEach(async () => {
-  mock.module("@/state/operations/shared/host", () => ({
-    host: {
-      gitCommitAll: gitCommitAllMock,
-      gitPushBranch: gitPushBranchMock,
-      gitPullBranch: gitPullBranchMock,
-      gitRebaseBranch: gitRebaseBranchMock,
-      gitAbortConflict: gitAbortConflictMock,
-      gitRebaseAbort: gitRebaseAbortMock,
-      gitResetWorktreeSelection: gitResetWorktreeSelectionMock,
-    },
-  }));
-  mock.module("sonner", () => ({
-    toast: {
-      success: toastSuccessMock,
-      error: toastErrorMock,
-    },
-  }));
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitCommitAll: gitCommitAllMock,
+        gitPushBranch: gitPushBranchMock,
+        gitPullBranch: gitPullBranchMock,
+        gitRebaseBranch: gitRebaseBranchMock,
+        gitAbortConflict: gitAbortConflictMock,
+        gitRebaseAbort: gitRebaseAbortMock,
+        gitResetWorktreeSelection: gitResetWorktreeSelectionMock,
+      },
+    }),
+  );
+  testSpies = [
+    spyOn(actualSonnerModule.toast, "success").mockImplementation(toastSuccessMock),
+    spyOn(actualSonnerModule.toast, "error").mockImplementation(toastErrorMock),
+  ];
   ({ useAgentStudioGitActions } = await import("./use-agent-studio-git-actions"));
 });
 
-afterEach(async () => {
-  await restoreMockedModules([
-    ["@/state/operations/shared/host", async () => actualSharedHostModule],
-    ["sonner", async () => actualSonnerModule],
-  ]);
+afterEach(() => {
+  for (const testSpy of testSpies) testSpy.mockRestore();
+  testSpies = [];
+  configureShellBridge(createUnavailableShellBridge());
 });
 
 beforeEach(() => {
@@ -96,16 +121,21 @@ beforeEach(() => {
   gitResetWorktreeSelectionMock.mockClear();
   toastSuccessMock.mockClear();
   toastErrorMock.mockClear();
-  gitCommitAllMock.mockImplementation(async () => ({ outcome: "committed", commitHash: "abc123" }));
+  gitCommitAllMock.mockImplementation(async () => ({
+    outcome: "committed",
+    commitHash: "abc123",
+    output: "committed",
+  }));
   gitPushBranchMock.mockImplementation(async () => ({
+    outcome: "pushed",
     remote: "origin",
     branch: "feature/task-10",
     output: "done",
   }));
   gitPullBranchMock.mockImplementation(async () => ({ outcome: "pulled", output: "updated" }));
-  gitRebaseBranchMock.mockImplementation(async () => ({ outcome: "rebased" }));
+  gitRebaseBranchMock.mockImplementation(async () => ({ outcome: "rebased", output: "rebased" }));
   gitAbortConflictMock.mockImplementation(async () => ({ output: "aborted" }));
-  gitRebaseAbortMock.mockImplementation(async () => ({ outcome: "aborted" }));
+  gitRebaseAbortMock.mockImplementation(async () => ({ outcome: "aborted", output: "aborted" }));
   gitResetWorktreeSelectionMock.mockImplementation(async () => ({
     affectedPaths: ["src/main.ts"],
   }));
@@ -114,7 +144,7 @@ beforeEach(() => {
 describe("useAgentStudioGitActions", () => {
   test("tracks commit action lifecycle and rejects blank commit messages", async () => {
     const refreshDiffData = mock(async () => {});
-    const commitDeferred = createDeferred<{ outcome: string; commitHash: string }>();
+    const commitDeferred = createDeferred<GitCommitResult>();
     const harness = createHookHarness(
       createBaseArgs({
         refreshDiffData,
@@ -141,7 +171,7 @@ describe("useAgentStudioGitActions", () => {
       expect(harness.getLatest().isPushing).toBe(false);
       expect(harness.getLatest().isRebasing).toBe(false);
 
-      commitDeferred.resolve({ outcome: "committed", commitHash: "abc123" });
+      commitDeferred.resolve({ outcome: "committed", commitHash: "abc123", output: "committed" });
 
       await harness.waitFor((state) => state.isCommitting === false);
       expect(refreshDiffData).toHaveBeenCalledTimes(1);
@@ -208,7 +238,7 @@ describe("useAgentStudioGitActions", () => {
 
   test("tracks push action lifecycle and validates missing branch errors", async () => {
     const refreshDiffData = mock(async () => {});
-    const pushDeferred = createDeferred<{ remote: string; branch: string; output: string }>();
+    const pushDeferred = createDeferred<GitPushResult>();
     const harness = createHookHarness(
       createBaseArgs({
         branch: null,
@@ -246,7 +276,12 @@ describe("useAgentStudioGitActions", () => {
       expect(pushHarness.getLatest().isCommitting).toBe(false);
       expect(pushHarness.getLatest().isRebasing).toBe(false);
 
-      pushDeferred.resolve({ remote: "origin", branch: "feature/task-10", output: "done" });
+      pushDeferred.resolve({
+        outcome: "pushed",
+        remote: "origin",
+        branch: "feature/task-10",
+        output: "done",
+      });
       await pushHarness.waitFor((state) => state.isPushing === false);
       expect(refreshDiffData).toHaveBeenCalledTimes(1);
       expect(refreshDiffData).toHaveBeenCalledWith("soft");
@@ -261,7 +296,7 @@ describe("useAgentStudioGitActions", () => {
   });
 
   test("tracks rebase action transition and clears error boundaries", async () => {
-    const rebaseDeferred = createDeferred<{ outcome: string }>();
+    const rebaseDeferred = createDeferred<GitRebaseResult>();
     const refreshDiffData = mock(async () => {});
     const harness = createHookHarness(
       createBaseArgs({
@@ -284,7 +319,7 @@ describe("useAgentStudioGitActions", () => {
       expect(harness.getLatest().isCommitting).toBe(false);
       expect(harness.getLatest().isPushing).toBe(false);
 
-      rebaseDeferred.resolve({ outcome: "rebased" });
+      rebaseDeferred.resolve({ outcome: "rebased", output: "rebased" });
       await harness.waitFor((state) => state.isRebasing === false);
       expect(refreshDiffData).toHaveBeenCalledTimes(1);
       expect(refreshDiffData).toHaveBeenCalledWith("soft");
@@ -547,7 +582,7 @@ describe("useAgentStudioGitActions", () => {
 
   test("keeps the pull confirmation state open until the confirmed pull completes", async () => {
     const refreshDiffData = mock(async () => {});
-    const pullDeferred = createDeferred<{ outcome: string; output: string }>();
+    const pullDeferred = createDeferred<GitPullResult>();
     gitPullBranchMock.mockImplementationOnce(async () => pullDeferred.promise);
     const harness = createHookHarness(
       createBaseArgs({
@@ -1181,7 +1216,7 @@ describe("useAgentStudioGitActions", () => {
   });
 
   test("keeps failure state isolated when rebase fails", async () => {
-    const rebaseDeferred = createDeferred<{ outcome: string }>();
+    const rebaseDeferred = createDeferred<GitRebaseResult>();
     gitRebaseBranchMock.mockImplementationOnce(() => rebaseDeferred.promise);
     const refreshDiffData = mock(async () => {});
     const harness = createHookHarness(
@@ -1220,7 +1255,7 @@ describe("useAgentStudioGitActions", () => {
       expect(state.pushError).toBeNull();
       expect(refreshDiffData).toHaveBeenCalledTimes(0);
     } finally {
-      rebaseDeferred.resolve({ outcome: "rebased" });
+      rebaseDeferred.resolve({ outcome: "rebased", output: "rebased" });
       await harness.unmount();
     }
   });

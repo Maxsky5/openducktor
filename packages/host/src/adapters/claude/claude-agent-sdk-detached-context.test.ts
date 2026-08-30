@@ -1,20 +1,28 @@
+import type { SDKControlInitializeResponse } from "@anthropic-ai/claude-agent-sdk";
 import { describe, expect, mock, test } from "bun:test";
-import type { Query } from "@anthropic-ai/claude-agent-sdk";
-import { loadClaudeDetachedSessionContextUsage } from "./claude-agent-sdk-detached-context";
+import {
+  type ClaudeContextUsageQueryFactory,
+  loadClaudeDetachedSessionContextUsage,
+} from "./claude-agent-sdk-detached-context";
+import { createClaudeContextUsageResponse } from "./claude-agent-sdk-session-io.test-support";
 
-const contextUsageResponse = {
-  totalTokens: 176_005,
-  maxTokens: 200_000,
-} as Awaited<ReturnType<Query["getContextUsage"]>>;
+const contextUsageResponse = createClaudeContextUsageResponse(176_005, 200_000);
+
+const initializationResponse = (): SDKControlInitializeResponse => ({
+  account: {},
+  agents: [],
+  available_output_styles: [],
+  commands: [],
+  models: [],
+  output_style: "default",
+});
 
 describe("loadClaudeDetachedSessionContextUsage", () => {
   test("resumes an idle persisted session only to read its context usage", async () => {
     const close = mock(() => {});
-    const initializationResult = mock(
-      async () => ({}) as Awaited<ReturnType<Query["initializationResult"]>>,
-    );
+    const initializationResult = mock(async () => initializationResponse());
     const getContextUsage = mock(async () => contextUsageResponse);
-    const createQuery = mock((_input: unknown) => ({
+    const createQuery = mock((_input: Parameters<ClaudeContextUsageQueryFactory>[0]) => ({
       close,
       getContextUsage,
       initializationResult,
@@ -52,12 +60,12 @@ describe("loadClaudeDetachedSessionContextUsage", () => {
 
   test("closes the resumed query when the context read fails", async () => {
     const close = mock(() => {});
-    const createQuery = mock((_input: unknown) => ({
+    const createQuery = mock((_input: Parameters<ClaudeContextUsageQueryFactory>[0]) => ({
       close,
       getContextUsage: async () => {
         throw new Error("context unavailable");
       },
-      initializationResult: async () => ({}) as Awaited<ReturnType<Query["initializationResult"]>>,
+      initializationResult: async () => initializationResponse(),
     }));
 
     await expect(

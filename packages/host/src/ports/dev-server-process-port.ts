@@ -1,5 +1,8 @@
 import { Context, Data, type Effect } from "effect";
-import type { HostOperationError, HostValidationError } from "../effect/host-errors";
+import type {
+  HostOperationErrorAggregate,
+  HostValidationErrorAggregate,
+} from "../effect/host-errors";
 
 export type DevServerProcessExit = {
   pid: number;
@@ -19,14 +22,14 @@ export type DevServerProcessStartInput = {
 };
 export type DevServerProcessHandle = {
   pid: number;
-  stop(): Effect.Effect<void, HostOperationError>;
+  stop(): Effect.Effect<void, HostOperationErrorAggregate>;
 };
 export type DevServerProcessPort = {
   start(
     input: DevServerProcessStartInput,
   ): Effect.Effect<
     DevServerProcessHandle,
-    DevServerProcessStartExitError | HostOperationError | HostValidationError
+    DevServerProcessStartExitError | HostOperationErrorAggregate | HostValidationErrorAggregate
   >;
 };
 

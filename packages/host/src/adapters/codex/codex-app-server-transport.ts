@@ -1,5 +1,7 @@
 import { createInterface } from "node:readline";
+import { type CodexAppServerJsonObject } from "@openducktor/contracts";
 import { Effect, Exit } from "effect";
+import { z } from "zod";
 import {
   HostOperationError,
   HostResourceError,
@@ -15,12 +17,15 @@ import {
   parseCodexAppServerRequestResult,
 } from "../../ports/codex-app-server-protocol";
 import { acquirePendingResponse } from "./codex-app-server-pending-response";
-import { writeCodexAppServerRequestLine } from "./codex-app-server-request-writer";
+import {
+  writeCodexAppServerRequestLine,
+  type CodexAppServerRequestLineMessage,
+} from "./codex-app-server-request-writer";
 import {
   appendCapturedStderr,
   extractErrorMessage,
-  isJsonRecord,
   parseStreamMessage,
+  respondToAutomaticServerRequest,
 } from "./codex-app-server-transport-messages";
 import type {
   CodexAppServerChildTransport,
@@ -28,9 +33,13 @@ import type {
   CodexChildProcess,
   PendingCodexAppServerRequest,
 } from "./codex-app-server-transport-types";
-import { writeJsonLine } from "./codex-json-line-writer";
-
+import {
+  type CodexTransportNotifyMessage,
+  type CodexTransportResponseMessage,
+  writeJsonLine,
+} from "./codex-json-line-writer";
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
+const codexAppServerJsonObjectSchema = z.record(z.string(), z.json());
 export const createCodexAppServerTransport = (
   runtimeId: string,
   child: CodexChildProcess,
@@ -95,7 +104,7 @@ export const createCodexAppServerTransport = (
         toHostOperationError(cause, "codexAppServerTransport.ensureOpen", { runtimeId }),
     });
 
-  const sendMessage = (message: Record<string, unknown>) =>
+  const sendMessage = (message: CodexTransportResponseMessage | CodexTransportNotifyMessage) =>
     Effect.gen(function* () {
       yield* ensureOpenEffect();
       yield* writeJsonLine(child.stdin, message).pipe(
@@ -111,7 +120,10 @@ export const createCodexAppServerTransport = (
       );
     });
 
-  const sendRequestMessage = (message: Record<string, unknown>, markWriteStarted: () => void) =>
+  const sendRequestMessage = (
+    message: CodexAppServerRequestLineMessage,
+    markWriteStarted: () => void,
+  ) =>
     Effect.gen(function* () {
       yield* ensureOpenEffect();
       yield* writeCodexAppServerRequestLine({
@@ -139,7 +151,7 @@ export const createCodexAppServerTransport = (
     cancelledSentRequests.set(id, timeout);
   };
 
-  const resolveResponse = (id: number, message: Record<string, unknown>): void => {
+  const resolveResponse = (id: number, message: CodexAppServerJsonObject): void => {
     const request = pending.get(id);
     if (!request) {
       if (forgetCancelledSentRequest(id)) {
@@ -160,12 +172,14 @@ export const createCodexAppServerTransport = (
         new HostOperationError({
           operation: `codexAppServerTransport.request.${request.method}`,
           message: `Codex app-server request ${request.method} failed for runtime ${runtimeId}: ${extractErrorMessage(message.error)}`,
+          cause: message.error,
           details: { runtimeId, method: request.method },
         }),
       );
       return;
     }
-    if (!("result" in message)) {
+    const result = message.result;
+    if (!("result" in message) || result === undefined) {
       request.reject(
         new HostValidationError({
           message: `Codex app-server response ${id} for runtime ${runtimeId} is missing result or error`,
@@ -175,8 +189,8 @@ export const createCodexAppServerTransport = (
       );
       return;
     }
-    const result = Effect.try({
-      try: () => parseCodexAppServerRequestResult(request.method, message.result),
+    const parsedResultEffect = Effect.try({
+      try: () => parseCodexAppServerRequestResult(request.method, result),
       catch: (cause) =>
         new HostValidationError({
           message: cause instanceof Error ? cause.message : String(cause),
@@ -185,14 +199,17 @@ export const createCodexAppServerTransport = (
           details: { runtimeId, id, method: request.method },
         }),
     });
-    const parsedResult = Effect.runSync(Effect.either(result));
+    const parsedResult = Effect.runSync(Effect.either(parsedResultEffect));
     if (parsedResult._tag === "Left") {
       request.reject(parsedResult.left);
       return;
     }
     request.resolve(parsedResult.right);
   };
-  const emitEvent = (event: Omit<CodexAppServerStreamEvent, "receivedAt">) => {
+  type StreamEventInput =
+    | Omit<Extract<CodexAppServerStreamEvent, { kind: "notification" }>, "receivedAt">
+    | Omit<Extract<CodexAppServerStreamEvent, { kind: "server_request" }>, "receivedAt">;
+  const emitEvent = (event: StreamEventInput) => {
     const receivedEvent: CodexAppServerStreamEvent = {
       ...event,
       receivedAt: new Date().toISOString(),
@@ -226,22 +243,13 @@ export const createCodexAppServerTransport = (
     pending.clear();
   };
 
-  const handleMessage = (message: unknown): void => {
-    if (!isJsonRecord(message)) {
-      failFast(
-        new HostValidationError({
-          message: `Codex app-server stdout message for ${runtimeId} must be an object`,
-          details: { runtimeId },
-        }),
-      );
-      return;
-    }
-
-    const responseId = typeof message.id === "number" ? message.id : null;
-    const serverRequestId =
-      typeof message.id === "number" || typeof message.id === "string" ? message.id : null;
-    const hasMethod = typeof message.method === "string";
-    const hasResponse = "result" in message || "error" in message;
+  const handleMessage = (messageRecord: CodexAppServerJsonObject): void => {
+    const parsedResponseId = z.number().safeParse(messageRecord.id);
+    const responseId = parsedResponseId.success ? parsedResponseId.data : null;
+    const parsedServerRequestId = z.union([z.number(), z.string()]).safeParse(messageRecord.id);
+    const serverRequestId = parsedServerRequestId.success ? parsedServerRequestId.data : null;
+    const hasMethod = z.string().safeParse(messageRecord.method).success;
+    const hasResponse = "result" in messageRecord || "error" in messageRecord;
 
     if (hasResponse) {
       if (responseId === null) {
@@ -254,13 +262,13 @@ export const createCodexAppServerTransport = (
         );
         return;
       }
-      resolveResponse(responseId, message);
+      resolveResponse(responseId, messageRecord);
       return;
     }
 
     if (hasMethod && serverRequestId === null) {
       try {
-        const notification = parseStreamMessage(runtimeId, message, "notification");
+        const notification = parseStreamMessage(runtimeId, messageRecord, "notification");
         emitEvent({
           runtimeId,
           kind: "notification",
@@ -278,10 +286,14 @@ export const createCodexAppServerTransport = (
 
     if (hasMethod && serverRequestId !== null) {
       try {
+        const request = parseStreamMessage(runtimeId, messageRecord, "server_request");
+        if (respondToAutomaticServerRequest(request, sendMessage, failFast)) {
+          return;
+        }
         emitEvent({
           runtimeId,
           kind: "server_request",
-          message: parseStreamMessage(runtimeId, message, "server_request"),
+          message: request,
         });
       } catch (error) {
         failFast(
@@ -301,7 +313,9 @@ export const createCodexAppServerTransport = (
     );
   };
 
-  const processClosedError = (detail: string): HostOperationError => {
+  const processClosedError = (
+    detail: string,
+  ): HostOperationError<{ runtimeId: string; stderr: string }> => {
     const stderr = stderrOutput.trim();
     return new HostOperationError({
       operation: "codexAppServerTransport.childProcess",
@@ -312,7 +326,6 @@ export const createCodexAppServerTransport = (
       details: { runtimeId, stderr },
     });
   };
-
   const lines = createInterface({ input: child.stdout });
   lines.on("line", (line) => {
     const trimmed = line.trim();
@@ -320,7 +333,17 @@ export const createCodexAppServerTransport = (
       return;
     }
     try {
-      handleMessage(JSON.parse(trimmed));
+      const parsedMessage = codexAppServerJsonObjectSchema.safeParse(JSON.parse(trimmed));
+      if (!parsedMessage.success) {
+        failFast(
+          new HostValidationError({
+            message: `Codex app-server stdout message for ${runtimeId} must be an object`,
+            details: { runtimeId },
+          }),
+        );
+        return;
+      }
+      handleMessage(parsedMessage.data);
     } catch (error) {
       failFast(
         new HostValidationError({
@@ -350,6 +373,7 @@ export const createCodexAppServerTransport = (
     stderrClosed = true;
   });
   child.stderr.on("error", (error) => failFast(error));
+  child.stdin.on("error", (error) => failFast(error));
   child.once("error", (error) => failFast(error));
   child.once("close", (exitCode, signal) => {
     clearUnexpectedStdoutCloseTimer();
@@ -365,14 +389,14 @@ export const createCodexAppServerTransport = (
   });
 
   return {
-    request({ method, params }: CodexAppServerClientRequest) {
+    request(input: CodexAppServerClientRequest) {
       return Effect.gen(function* () {
         yield* ensureOpenEffect();
         const id = nextRequestId++;
         return yield* Effect.acquireUseRelease(
           acquirePendingResponse({
             id,
-            method,
+            method: input.method,
             pending,
             rememberCancelledSentRequest,
             requestTimeoutMs,
@@ -384,8 +408,7 @@ export const createCodexAppServerTransport = (
                 {
                   jsonrpc: "2.0",
                   id,
-                  method,
-                  ...(params !== undefined ? { params } : {}),
+                  ...input,
                 },
                 markWriteStarted,
               );
@@ -420,12 +443,17 @@ export const createCodexAppServerTransport = (
             }),
           );
         }
-        yield* sendMessage({
+        const response: CodexTransportResponseMessage = {
           jsonrpc: "2.0",
           id: requestId,
-          ...(result !== undefined ? { result } : {}),
-          ...(error !== undefined ? { error } : {}),
-        });
+        };
+        if (result !== undefined) {
+          response.result = result;
+        }
+        if (error !== undefined) {
+          response.error = error;
+        }
+        yield* sendMessage(response);
       });
     },
     rejectPendingRequestsForShutdown() {

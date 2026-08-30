@@ -13,19 +13,19 @@ import { errorMessage } from "@/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
 
-const PULL_REQUEST_STATUS_STYLES: Record<PullRequest["state"], string> = {
+const PULL_REQUEST_STATUS_STYLES = {
   open: "text-emerald-600 dark:text-emerald-400",
   draft: "text-zinc-600 dark:text-zinc-400",
   merged: "text-violet-600 dark:text-violet-400",
   closed_unmerged: "text-rose-600 dark:text-rose-400",
-};
+} satisfies Record<PullRequest["state"], string>;
 
-const PULL_REQUEST_STATUS_ICONS: Record<PullRequest["state"], typeof GitPullRequest> = {
+const PULL_REQUEST_STATUS_ICONS = {
   open: GitPullRequest,
   draft: GitPullRequestDraft,
   merged: GitMerge,
   closed_unmerged: GitPullRequestClosed,
-};
+} satisfies Record<PullRequest["state"], typeof GitPullRequest>;
 
 export function TaskPullRequestLink({
   pullRequest,

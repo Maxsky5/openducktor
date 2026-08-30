@@ -63,15 +63,23 @@ const canonicalizeBody = (body: string): string => {
   }
 };
 
-const semanticTree = (value: JSONContent): JSONContent =>
-  JSON.parse(
-    JSON.stringify(value, (key, nestedValue) => {
-      if (key === "position" || key === "spread") {
-        return undefined;
-      }
-      return nestedValue;
-    }),
-  ) as JSONContent;
+type MarkdownJsonContent = JSONContent & {
+  position?: unknown;
+  spread?: unknown;
+};
+
+const semanticTree: (node: MarkdownJsonContent) => JSONContent = ({
+  position: _position,
+  spread: _spread,
+  content,
+  ...node
+}) => {
+  const semanticNode: JSONContent = { ...node };
+  if (content !== undefined) {
+    semanticNode.content = content.map(semanticTree);
+  }
+  return semanticNode;
+};
 
 const visualEditorMathSemantics = (tree: JSONContent): MarkdownMathSemantic[] => {
   const semantics: MarkdownMathSemantic[] = [];

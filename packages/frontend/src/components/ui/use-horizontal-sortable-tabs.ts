@@ -12,6 +12,12 @@ import { restrictToHorizontalAxis } from "@dnd-kit/modifiers";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export type HorizontalTabDropPosition = "before" | "after";
+type HorizontalTabDragStartEvent = {
+  active: Pick<DragStartEvent["active"], "id">;
+};
+type HorizontalTabDragEndEvent = HorizontalTabDragStartEvent & {
+  over: Pick<NonNullable<DragEndEvent["over"]>, "id"> | null;
+};
 
 export const horizontalTabDropAnimation = {
   duration: 220,
@@ -24,7 +30,7 @@ export const horizontalTabSortTransition = {
 };
 
 const horizontalTabMeasuring = { droppable: { strategy: MeasuringStrategy.Always } };
-const horizontalTabModifiers = [restrictToHorizontalAxis] as [typeof restrictToHorizontalAxis];
+const horizontalTabModifiers: [typeof restrictToHorizontalAxis] = [restrictToHorizontalAxis];
 
 const cancelPendingAnimationFrame = (frameRef: { current: number | null }): void => {
   if (frameRef.current === null) return;
@@ -39,7 +45,7 @@ export const useHorizontalSortableTabs = ({
   itemIds: string[];
   onReorder: (draggedId: string, targetId: string, position: HorizontalTabDropPosition) => void;
 }) => {
-  const PrimarySensor = typeof globalThis.PointerEvent === "function" ? PointerSensor : MouseSensor;
+  const PrimarySensor = globalThis.PointerEvent === undefined ? MouseSensor : PointerSensor;
   const sensors = useSensors(
     useSensor(PrimarySensor, {
       activationConstraint: { distance: 6 },
@@ -56,7 +62,7 @@ export const useHorizontalSortableTabs = ({
       selectionSuppressionFrameRef.current = null;
     });
   }, []);
-  const handleDragStart = useCallback((event: DragStartEvent): void => {
+  const handleDragStart = useCallback((event: HorizontalTabDragStartEvent): void => {
     const id = String(event.active.id);
     suppressedSelectionIdRef.current = id;
     setActiveId(id);
@@ -66,7 +72,7 @@ export const useHorizontalSortableTabs = ({
     scheduleSelectionSuppressionClear();
   }, [scheduleSelectionSuppressionClear]);
   const handleDragEnd = useCallback(
-    (event: DragEndEvent): void => {
+    (event: HorizontalTabDragEndEvent): void => {
       const draggedId = String(event.active.id);
       const targetId = event.over ? String(event.over.id) : null;
       setActiveId(null);

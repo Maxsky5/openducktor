@@ -1,18 +1,17 @@
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import { host } from "@/state/operations/host";
 import { AppRuntimeProvider } from "@/state/providers/app-runtime-provider";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { SessionStartModal, type SessionStartModalModel } from "./session-start-modal";
 
-const reactActEnvironment = globalThis as {
-  IS_REACT_ACT_ENVIRONMENT?: boolean;
-};
-reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 const noop = () => {};
 const existingSessionOption = (externalSessionId: string) => ({
@@ -344,17 +343,20 @@ describe("SessionStartModal", () => {
   });
 
   test("retries a settings-only startup failure through the settings query", async () => {
-    const originalRuntimeDefinitionsList = host.runtimeDefinitionsList;
-    const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
     let settingsAttempts = 0;
-    host.runtimeDefinitionsList = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]) as never;
-    host.workspaceGetSettingsSnapshot = mock(async () => {
+    const runtimeDefinitionsList = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]);
+    const workspaceGetSettingsSnapshot = mock(async () => {
       settingsAttempts += 1;
       if (settingsAttempts === 1) {
         throw new Error("Settings unavailable");
       }
       return createSettingsSnapshotFixture();
-    }) as never;
+    });
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: { runtimeDefinitionsList, workspaceGetSettingsSnapshot },
+      }),
+    );
 
     const { unmount } = render(
       <QueryProvider useIsolatedClient>
@@ -387,11 +389,10 @@ describe("SessionStartModal", () => {
         ).toBeTruthy();
       });
       expect(settingsAttempts).toBe(2);
-      expect(host.runtimeDefinitionsList).toHaveBeenCalledTimes(1);
+      expect(runtimeDefinitionsList).toHaveBeenCalledTimes(1);
     } finally {
       unmount();
-      host.runtimeDefinitionsList = originalRuntimeDefinitionsList;
-      host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+      configureShellBridge(createUnavailableShellBridge());
     }
   });
 

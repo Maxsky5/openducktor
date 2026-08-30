@@ -1,5 +1,10 @@
 import type { AgentStreamPart, AgentSubagentStatus } from "@openducktor/core";
-import type { CodexThreadSnapshot } from "./codex-app-server-threads";
+import type {
+  CodexAppServerCollabAgentTool,
+  CodexAppServerSubAgentActivityKind,
+} from "@openducktor/contracts";
+import type { CodexSubAgentSourceMetadata, CodexThreadSnapshot } from "./codex-app-server-threads";
+import type { CodexToolTimingFields } from "./codex-tool-timing";
 
 type CodexSubagentPart = Extract<AgentStreamPart, { kind: "subagent" }>;
 
@@ -10,16 +15,27 @@ export type CodexSubagentRoute = {
   subagentCorrelationKey: string;
 };
 
-export const codexSubagentRouteEventFields = (route: CodexSubagentRoute | null | undefined) =>
-  route
-    ? {
-        parentExternalSessionId: route.parentExternalSessionId,
-        childExternalSessionId: route.childExternalSessionId,
-        subagentCorrelationKey: route.subagentCorrelationKey,
-      }
-    : {};
+type CodexSubagentRouteEventFieldSet = {
+  parentExternalSessionId?: string;
+  childExternalSessionId?: string;
+  subagentCorrelationKey?: string;
+};
 
-export type CodexSubagentLinkInput = {
+export const codexSubagentRouteEventFields = (
+  route: CodexSubagentRoute | null | undefined,
+): CodexSubagentRouteEventFieldSet => {
+  if (!route) {
+    return {};
+  }
+
+  return {
+    parentExternalSessionId: route.parentExternalSessionId,
+    childExternalSessionId: route.childExternalSessionId,
+    subagentCorrelationKey: route.subagentCorrelationKey,
+  };
+};
+
+export type CodexSubagentLinkInput = CodexToolTimingFields & {
   runtimeId?: string;
   parentThreadId: string;
   childThreadId?: string;
@@ -29,12 +45,36 @@ export type CodexSubagentLinkInput = {
   description?: string;
   error?: string;
   agent?: string;
-  metadata?: Record<string, unknown>;
+  metadata?: CodexSubagentLinkMetadata;
   executionMode?: "background";
   preferItemCorrelationKey?: boolean;
   allowStatusRestart?: boolean;
-  startedAtMs?: number;
-  endedAtMs?: number;
+};
+
+type CodexSubagentLinkMetadata = {
+  codexThread?: {
+    parentThreadId: string;
+    childThreadId: string;
+    agentNickname?: string;
+    agentRole?: string;
+    subAgentSource?: CodexSubAgentSourceMetadata;
+  };
+  codexSubagent?:
+    | {
+        source: "collabAgentToolCall";
+        itemId: string;
+        tool: CodexAppServerCollabAgentTool;
+        parentThreadId: string;
+        childThreadId?: string;
+      }
+    | {
+        source: "subAgentActivity";
+        itemId: string;
+        kind: CodexAppServerSubAgentActivityKind;
+        parentThreadId: string;
+        childThreadId: string;
+        agentPath: string;
+      };
 };
 
 type CodexStoredSubagentLink = {
@@ -47,7 +87,7 @@ type CodexStoredSubagentLink = {
   description?: string;
   error?: string;
   agent?: string;
-  metadata?: Record<string, unknown>;
+  metadata?: CodexSubagentLinkMetadata;
   executionMode?: "background";
   startedAtMs?: number;
   endedAtMs?: number;
@@ -77,13 +117,13 @@ const defaultCorrelationKey = (input: CodexSubagentLinkInput): string => {
   return linkedCorrelationKey(input.parentThreadId, input.childThreadId);
 };
 
-const STATUS_PRECEDENCE: Record<AgentSubagentStatus, number> = {
+const STATUS_PRECEDENCE = {
   pending: 0,
   running: 1,
   cancelled: 2,
   completed: 3,
   error: 4,
-};
+} satisfies Record<AgentSubagentStatus, number>;
 
 const isTerminalStatus = (status: AgentSubagentStatus): boolean =>
   status === "completed" || status === "cancelled" || status === "error";
@@ -94,8 +134,8 @@ const isPreviousRunTerminalUpdate = (
 ): boolean =>
   existing?.status === "running" &&
   isTerminalStatus(input.status) &&
-  typeof existing.startedAtMs === "number" &&
-  typeof input.endedAtMs === "number" &&
+  existing.startedAtMs !== undefined &&
+  input.endedAtMs !== undefined &&
   input.endedAtMs < existing.startedAtMs;
 
 const isExplicitRunningRestart = (
@@ -107,15 +147,15 @@ const isExplicitRunningRestart = (
     input.status !== "running" ||
     !existing ||
     !isTerminalStatus(existing.status) ||
-    typeof input.startedAtMs !== "number"
+    input.startedAtMs === undefined
   ) {
     return false;
   }
   let lifecycleBoundaryMs = existing.endedAtMs;
-  if (typeof lifecycleBoundaryMs !== "number" && existing.status === "completed") {
+  if (lifecycleBoundaryMs === undefined && existing.status === "completed") {
     lifecycleBoundaryMs = existing.startedAtMs;
   }
-  return typeof lifecycleBoundaryMs === "number" && input.startedAtMs > lifecycleBoundaryMs;
+  return lifecycleBoundaryMs !== undefined && input.startedAtMs > lifecycleBoundaryMs;
 };
 
 const resolveStatus = (
@@ -150,7 +190,7 @@ class CodexSubagentLinkError extends Error {
   }
 }
 
-const mergeDefined = <T extends Record<string, unknown>>(
+const mergeDefined = <T extends object>(
   existing: T | undefined,
   incoming: T | undefined,
 ): T | undefined => {
@@ -160,15 +200,23 @@ const mergeDefined = <T extends Record<string, unknown>>(
   return incoming ?? existing;
 };
 
-const routeFromLink = (link: CodexStoredSubagentLink): CodexSubagentRoute | null =>
-  link.childThreadId
-    ? {
-        ...(link.runtimeId ? { runtimeId: link.runtimeId } : {}),
-        parentExternalSessionId: link.parentThreadId,
-        childExternalSessionId: link.childThreadId,
-        subagentCorrelationKey: link.correlationKey,
-      }
-    : null;
+const routeFromLink = (link: CodexStoredSubagentLink): CodexSubagentRoute | null => {
+  if (!link.childThreadId) {
+    return null;
+  }
+
+  const route: CodexSubagentRoute = {
+    parentExternalSessionId: link.parentThreadId,
+    childExternalSessionId: link.childThreadId,
+    subagentCorrelationKey: link.correlationKey,
+  };
+
+  if (link.runtimeId) {
+    route.runtimeId = link.runtimeId;
+  }
+
+  return route;
+};
 
 const sameRoute = (previous: CodexSubagentRoute | null, next: CodexSubagentRoute | null): boolean =>
   previous?.runtimeId === next?.runtimeId &&
@@ -216,28 +264,43 @@ export class CodexSubagentLinkState {
       status = existing?.status === "cancelled" ? "cancelled" : "completed";
     }
     let timing: Pick<CodexSubagentLinkInput, "startedAtMs" | "endedAtMs"> = {};
-    if (typeof thread.updatedAtMs === "number") {
+    if (thread.updatedAtMs !== null) {
       timing = isActive ? { startedAtMs: thread.updatedAtMs } : { endedAtMs: thread.updatedAtMs };
     }
-    this.upsertLink({
-      ...(runtimeId ? { runtimeId } : {}),
+    const link: CodexSubagentLinkInput = {
       parentThreadId,
       childThreadId: thread.id,
       itemId: thread.id,
       status,
       allowStatusRestart: isActive,
       ...timing,
-      ...(agent ? { agent } : {}),
       metadata: {
         codexThread: {
           parentThreadId,
           childThreadId: thread.id,
-          ...(thread.agentNickname ? { agentNickname: thread.agentNickname } : {}),
-          ...(thread.agentRole ? { agentRole: thread.agentRole } : {}),
-          ...(thread.subAgentSource ? { subAgentSource: thread.subAgentSource } : {}),
         },
       },
-    });
+    };
+    if (runtimeId) {
+      link.runtimeId = runtimeId;
+    }
+    if (agent) {
+      link.agent = agent;
+    }
+    const codexThreadMetadata = link.metadata?.codexThread;
+    if (!codexThreadMetadata) {
+      throw new CodexSubagentLinkError("Codex subagent link metadata is missing codexThread.");
+    }
+    if (thread.agentNickname) {
+      codexThreadMetadata.agentNickname = thread.agentNickname;
+    }
+    if (thread.agentRole) {
+      codexThreadMetadata.agentRole = thread.agentRole;
+    }
+    if (thread.subAgentSource) {
+      codexThreadMetadata.subAgentSource = thread.subAgentSource;
+    }
+    this.upsertLink(link);
   }
 
   upsertLink(input: CodexSubagentLinkInput): CodexSubagentPart {
@@ -295,8 +358,8 @@ export class CodexSubagentLinkState {
     if (
       status === "running" &&
       existing?.status === "running" &&
-      typeof existing.startedAtMs === "number" &&
-      typeof input.startedAtMs === "number"
+      existing.startedAtMs !== undefined &&
+      input.startedAtMs !== undefined
     ) {
       startedAtMs = Math.max(existing.startedAtMs, input.startedAtMs);
     }
@@ -306,26 +369,46 @@ export class CodexSubagentLinkState {
         : (input.endedAtMs ?? existing?.endedAtMs);
     if (
       isTerminalStatus(status) &&
-      typeof existing?.endedAtMs === "number" &&
-      typeof input.endedAtMs === "number"
+      existing?.endedAtMs !== undefined &&
+      input.endedAtMs !== undefined
     ) {
       endedAtMs = Math.max(existing.endedAtMs, input.endedAtMs);
     }
     const link: CodexStoredSubagentLink = {
-      ...(input.runtimeId ? { runtimeId: input.runtimeId } : {}),
       parentThreadId: input.parentThreadId,
-      ...(childThreadId ? { childThreadId } : {}),
       correlationKey,
       status,
-      ...(prompt ? { prompt } : {}),
-      ...(description ? { description } : {}),
-      ...(error ? { error } : {}),
-      ...(agent ? { agent } : {}),
-      ...(metadata ? { metadata } : {}),
-      ...(executionMode ? { executionMode } : {}),
-      ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
-      ...(typeof endedAtMs === "number" ? { endedAtMs } : {}),
     };
+    if (input.runtimeId) {
+      link.runtimeId = input.runtimeId;
+    }
+    if (childThreadId) {
+      link.childThreadId = childThreadId;
+    }
+    if (prompt) {
+      link.prompt = prompt;
+    }
+    if (description) {
+      link.description = description;
+    }
+    if (error) {
+      link.error = error;
+    }
+    if (agent) {
+      link.agent = agent;
+    }
+    if (metadata) {
+      link.metadata = metadata;
+    }
+    if (executionMode) {
+      link.executionMode = executionMode;
+    }
+    if (startedAtMs !== undefined) {
+      link.startedAtMs = startedAtMs;
+    }
+    if (endedAtMs !== undefined) {
+      link.endedAtMs = endedAtMs;
+    }
     this.storeLink(link, parentItemKey);
     const route = routeFromLink(link);
     if (route && !sameRoute(previousRoute, route)) {
@@ -578,21 +661,40 @@ export class CodexSubagentLinkState {
   }
 
   private toPart(link: CodexStoredSubagentLink): CodexSubagentPart {
-    return {
+    const part: CodexSubagentPart = {
       kind: "subagent",
       messageId: link.correlationKey,
       partId: link.correlationKey,
       correlationKey: link.correlationKey,
       status: link.status,
-      ...(link.agent ? { agent: link.agent } : {}),
-      ...(link.prompt ? { prompt: link.prompt } : {}),
-      ...(link.description ? { description: link.description } : {}),
-      ...(link.error ? { error: link.error } : {}),
-      ...(link.childThreadId ? { externalSessionId: link.childThreadId } : {}),
-      ...(link.executionMode ? { executionMode: link.executionMode } : {}),
-      ...(link.metadata ? { metadata: link.metadata } : {}),
-      ...(typeof link.startedAtMs === "number" ? { startedAtMs: link.startedAtMs } : {}),
-      ...(typeof link.endedAtMs === "number" ? { endedAtMs: link.endedAtMs } : {}),
     };
+    if (link.agent) {
+      part.agent = link.agent;
+    }
+    if (link.prompt) {
+      part.prompt = link.prompt;
+    }
+    if (link.description) {
+      part.description = link.description;
+    }
+    if (link.error) {
+      part.error = link.error;
+    }
+    if (link.childThreadId) {
+      part.externalSessionId = link.childThreadId;
+    }
+    if (link.executionMode) {
+      part.executionMode = link.executionMode;
+    }
+    if (link.metadata) {
+      part.metadata = link.metadata;
+    }
+    if (link.startedAtMs !== undefined) {
+      part.startedAtMs = link.startedAtMs;
+    }
+    if (link.endedAtMs !== undefined) {
+      part.endedAtMs = link.endedAtMs;
+    }
+    return part;
   }
 }

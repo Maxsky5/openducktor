@@ -3,6 +3,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
+import { z } from "zod";
 
 const electronBuilderConfigPath = "apps/electron/electron-builder.yml";
 const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/;
@@ -10,13 +11,13 @@ const desktopDescription = "Task-first agentic development environment";
 const armArchCandidates = ["aarch64", "arm64"] as const;
 const intelArchCandidates = ["x86_64", "x64", "amd64", "intel"] as const;
 
-const macosVersionSymbols: Record<string, string> = {
+const macosVersionSymbols = {
   "11": "big_sur",
   "12": "monterey",
   "13": "ventura",
   "14": "sonoma",
   "15": "sequoia",
-};
+} satisfies Record<string, string>;
 
 type ElectronBuilderConfig = {
   productName?: string;
@@ -25,6 +26,16 @@ type ElectronBuilderConfig = {
     minimumSystemVersion?: string;
   };
 };
+
+const electronBuilderConfigSchema = z.object({
+  productName: z.string().optional(),
+  appId: z.string().optional(),
+  mac: z
+    .object({
+      minimumSystemVersion: z.string().optional(),
+    })
+    .optional(),
+});
 
 export type HomebrewCaskRenderInput = {
   version: string;
@@ -95,11 +106,7 @@ function validateDerivedAssetPattern(assetPattern: string, assetName: string): v
   }
 }
 
-export function resolveAssetPattern(
-  version: string,
-  armAssetName: string,
-  intelAssetName: string,
-): { armArchToken: string; intelArchToken: string; assetPattern: string } {
+export function resolveAssetPattern(version: string, armAssetName: string, intelAssetName: string) {
   validateVersion(version);
 
   if (armAssetName === intelAssetName) {
@@ -131,7 +138,7 @@ export function resolveAssetPattern(
     armArchToken,
     intelArchToken,
     assetPattern: armPattern,
-  };
+  } satisfies { armArchToken: string; intelArchToken: string; assetPattern: string };
 }
 
 export function resolveHomebrewMacosRequirement(minimumSystemVersion: string): string {
@@ -147,13 +154,11 @@ export function resolveHomebrewMacosRequirement(minimumSystemVersion: string): s
   return `>= :${symbol}`;
 }
 
-export function readDesktopReleaseMetadata(workspaceRoot = process.cwd()): {
-  productName: string;
-  bundleIdentifier: string;
-  minimumSystemVersion: string;
-} {
+export function readDesktopReleaseMetadata(workspaceRoot = process.cwd()) {
   const absolutePath = resolve(workspaceRoot, electronBuilderConfigPath);
-  const parsed = parseYaml(readFileSync(absolutePath, "utf8")) as ElectronBuilderConfig;
+  const parsed: ElectronBuilderConfig = electronBuilderConfigSchema.parse(
+    parseYaml(readFileSync(absolutePath, "utf8")),
+  );
   const productName = parsed.productName?.trim();
   const bundleIdentifier = parsed.appId?.trim();
   const minimumSystemVersion = parsed.mac?.minimumSystemVersion?.trim();
@@ -174,6 +179,10 @@ export function readDesktopReleaseMetadata(workspaceRoot = process.cwd()): {
     productName,
     bundleIdentifier,
     minimumSystemVersion,
+  } satisfies {
+    productName: string;
+    bundleIdentifier: string;
+    minimumSystemVersion: string;
   };
 }
 

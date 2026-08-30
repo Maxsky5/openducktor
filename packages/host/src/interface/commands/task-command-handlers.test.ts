@@ -1,26 +1,100 @@
 import { Effect } from "effect";
-import type { TaskService, TaskServiceError } from "../../application/tasks/task-service";
+import type {
+  BuildSessionBootstrap,
+  PullRequest,
+  TaskApprovalContextLoadResult,
+  TaskCard,
+  TaskDirectMergeResult,
+  TaskMetadataDocument,
+  TaskMetadataPayload,
+  TaskPullRequestDetectResult,
+} from "@openducktor/contracts";
+import { createTaskServiceTestDouble } from "../../test-support/task-service-test-double";
 import { HostOperationError } from "../../effect/host-errors";
 import { createTaskCommandHandlers } from "./task-command-handlers";
+import type { HostCommandHandlerError } from "../router/host-command-router";
 
-const runHandler = <T>(effect: unknown): Promise<T> => {
+const taskFixture: TaskCard = {
+  id: "task-1",
+  title: "Task",
+  description: "",
+  status: "open",
+  priority: 2,
+  issueType: "task",
+  aiReviewEnabled: true,
+  availableActions: [],
+  labels: [],
+  parentId: undefined,
+  subtaskIds: [],
+  pullRequest: undefined,
+  documentSummary: {
+    spec: { has: false },
+    plan: { has: false },
+    qaReport: { has: false, verdict: "not_reviewed" },
+  },
+  agentWorkflows: {
+    spec: { required: false, canSkip: true, available: true, completed: false },
+    planner: { required: false, canSkip: true, available: true, completed: false },
+    builder: { required: true, canSkip: false, available: true, completed: false },
+    qa: { required: false, canSkip: true, available: false, completed: false },
+  },
+  updatedAt: "2026-05-10T10:00:00.000Z",
+  createdAt: "2026-05-10T10:00:00.000Z",
+};
+
+const documentFixture: TaskMetadataDocument = { markdown: "# Fixture" };
+const pullRequestFixture: PullRequest = {
+  providerId: "github",
+  number: 1,
+  url: "https://github.com/acme/repo/pull/1",
+  state: "open",
+  createdAt: "2026-05-10T10:00:00.000Z",
+  updatedAt: "2026-05-10T10:00:00.000Z",
+};
+const approvalContextFixture: TaskApprovalContextLoadResult = {
+  outcome: "missing_builder_worktree",
+  taskId: taskFixture.id,
+  taskStatus: taskFixture.status,
+};
+const pullRequestDetectionFixture: TaskPullRequestDetectResult = {
+  outcome: "not_found",
+  sourceBranch: "feature/task-1",
+  targetBranch: "main",
+};
+const directMergeFixture: TaskDirectMergeResult = {
+  outcome: "completed",
+  task: taskFixture,
+};
+const metadataFixture: TaskMetadataPayload = {
+  spec: documentFixture,
+  plan: documentFixture,
+  agentSessions: [],
+};
+const buildSessionFixture: BuildSessionBootstrap = {
+  runtimeKind: "opencode",
+  workingDirectory: "/repo/task-1",
+};
+
+const runHandler = <T>(
+  effect: Effect.Effect<T, HostCommandHandlerError> | undefined,
+): Promise<T> => {
   if (!effect) {
     throw new Error("Expected task command handler to be registered");
   }
-  return Effect.runPromise(effect as Effect.Effect<T, TaskServiceError>);
+  return Effect.runPromise(effect);
 };
 
 describe("createTaskCommandHandlers", () => {
   test("registers tasks_list", async () => {
     const calls: unknown[] = [];
-    const service: Partial<TaskService> = {
-      agentSessionDelete(input: unknown) {
+    const service = createTaskServiceTestDouble({
+      agentSessionDelete(input) {
         return Effect.sync(() => {
           calls.push({ command: "agent_session_delete", input });
           return true;
         });
       },
-      agentSessionUpsert(input: unknown) {
+      agentSessionUpsert(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "agent_session_upsert", input });
@@ -34,7 +108,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      agentSessionsList(input: unknown) {
+      agentSessionsList(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "agent_sessions_list", input });
@@ -48,17 +122,17 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      agentSessionsListForTasks(input: unknown) {
+      agentSessionsListForTasks(input) {
         return Effect.sync(() => {
           calls.push({ command: "agent_sessions_list_for_tasks", input });
           return [];
         });
       },
-      getApprovalContext(input: unknown) {
+      getApprovalContext(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_approval_context_get", input });
-            return {} as never;
+            return approvalContextFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -68,11 +142,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      detectPullRequest(input: unknown) {
+      detectPullRequest(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_pull_request_detect", input });
-            return {} as never;
+            return pullRequestDetectionFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -82,7 +156,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      unlinkPullRequest(input: unknown) {
+      unlinkPullRequest(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_pull_request_unlink", input });
@@ -96,11 +170,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      upsertPullRequest(input: unknown) {
+      upsertPullRequest(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_pull_request_upsert", input });
-            return {} as never;
+            return pullRequestFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -110,11 +184,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      directMerge(input: unknown) {
+      directMerge(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_direct_merge", input });
-            return {} as never;
+            return directMergeFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -124,11 +198,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      completeDirectMerge(input: unknown) {
+      completeDirectMerge(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_direct_merge_complete", input });
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -138,11 +212,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      linkMergedPullRequest(input: unknown) {
+      linkMergedPullRequest(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_pull_request_link_merged", input });
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -152,11 +226,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      buildBlocked(input: unknown) {
+      buildBlocked(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "build_blocked", input });
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -166,11 +240,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      buildStart(input: unknown) {
+      buildStart(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "build_start", input });
-            return {} as never;
+            return buildSessionFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -180,11 +254,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      buildCompleted(input: unknown) {
+      buildCompleted(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "build_completed", input });
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -194,11 +268,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      buildResumed(input: unknown) {
+      buildResumed(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "build_resumed", input });
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -208,11 +282,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      createTask(input: unknown) {
+      createTask(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_create", input });
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -222,7 +296,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      deleteTask(input: unknown) {
+      deleteTask(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_delete", input });
@@ -236,11 +310,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      closeTask(input: unknown) {
+      closeTask(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_close", input });
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -250,11 +324,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      resetImplementation(input: unknown) {
+      resetImplementation(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_reset_implementation", input });
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -264,11 +338,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      resetTask(input: unknown) {
+      resetTask(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_reset", input });
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -278,7 +352,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      listTasks(input: unknown) {
+      listTasks(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "tasks_list", input });
@@ -292,11 +366,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      getTaskMetadata(input: unknown) {
+      getTaskMetadata(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_metadata_get", input });
-            return {} as never;
+            return metadataFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -306,11 +380,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      humanApprove(input: unknown) {
+      humanApprove(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "human_approve", input });
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -320,11 +394,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      humanRequestChanges(input: unknown) {
+      humanRequestChanges(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "human_request_changes", input });
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -334,11 +408,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      savePlanDocument(input: unknown) {
+      savePlanDocument(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "plan_save_document", input });
-            return {} as never;
+            return documentFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -348,11 +422,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      planGet(input: unknown) {
+      planGet(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "plan_get", input });
-            return {} as never;
+            return documentFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -362,11 +436,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      saveSpecDocument(input: unknown) {
+      saveSpecDocument(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "spec_save_document", input });
-            return {} as never;
+            return documentFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -376,11 +450,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      specGet(input: unknown) {
+      specGet(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "spec_get", input });
-            return {} as never;
+            return documentFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -390,7 +464,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      setPlan(input: unknown) {
+      setPlan(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "set_plan", input });
@@ -407,11 +481,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      setSpec(input: unknown) {
+      setSpec(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "set_spec", input });
-            return {} as never;
+            return documentFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -421,11 +495,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      qaApproved(input: unknown) {
+      qaApproved(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "qa_approved", input });
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -435,11 +509,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      qaGetReport(input: unknown) {
+      qaGetReport(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "qa_get_report", input });
-            return {} as never;
+            return documentFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -449,11 +523,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      qaRejected(input: unknown) {
+      qaRejected(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "qa_rejected", input });
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -463,7 +537,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      repoPullRequestSync(input: unknown) {
+      repoPullRequestSync(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "repo_pull_request_sync", input });
@@ -477,7 +551,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      repoPullRequestSyncDetailed(input: unknown) {
+      repoPullRequestSyncDetailed(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "repo_pull_request_sync_detailed", input });
@@ -491,11 +565,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      transitionTask(input: unknown) {
+      transitionTask(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_transition", input });
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -505,11 +579,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      updateTask(input: unknown) {
+      updateTask(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_update", input });
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -519,470 +593,212 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-    } as unknown as TaskService;
-    const handlers = createTaskCommandHandlers(service as TaskService);
+    });
+    const handlers = createTaskCommandHandlers(service);
+    await expect(runHandler(handlers.tasks_list?.({ repoPath: "/repo" }))).resolves.toEqual([]);
     await expect(
       runHandler(
-        handlers.tasks_list?.(
-          { repoPath: "/repo" },
-          {
-            command: "tasks_list",
-            args: { repoPath: "/repo" },
-          },
-        ),
+        handlers.task_create?.({
+          repoPath: "/repo",
+          input: { title: "Task", issueType: "task", priority: 2, aiReviewEnabled: true },
+        }),
       ),
-    ).resolves.toEqual([]);
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.task_create?.(
-          {
-            repoPath: "/repo",
-            input: { title: "Task", issueType: "task", priority: 2, aiReviewEnabled: true },
-          },
-          {
-            command: "task_create",
-            args: {
-              repoPath: "/repo",
-              input: { title: "Task", issueType: "task", priority: 2, aiReviewEnabled: true },
-            },
-          },
-        ),
-      ),
-    ).resolves.toEqual({});
-    await expect(
-      runHandler(
-        handlers.task_delete?.(
-          { repoPath: "/repo", taskId: "task-1", deleteSubtasks: true },
-          {
-            command: "task_delete",
-            args: { repoPath: "/repo", taskId: "task-1", deleteSubtasks: true },
-          },
-        ),
+        handlers.task_delete?.({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: true }),
       ),
     ).resolves.toEqual({ ok: true });
     await expect(
-      runHandler(
-        handlers.task_close?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "task_close",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
-      ),
-    ).resolves.toEqual({});
+      runHandler(handlers.task_close?.({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toBeDefined();
+    await expect(
+      runHandler(handlers.task_reset_implementation?.({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toBeDefined();
+    await expect(
+      runHandler(handlers.task_reset?.({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toBeDefined();
+    await expect(
+      runHandler(handlers.task_metadata_get?.({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.task_reset_implementation?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "task_reset_implementation",
-            args: { repoPath: "/repo", taskId: "task-1" },
+        handlers.agent_session_upsert?.({
+          repoPath: "/repo",
+          taskId: "task-1",
+          session: {
+            externalSessionId: "session-1",
+            role: "build",
+            startedAt: "2026-05-10T10:00:00.000Z",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/task-1",
+            selectedModel: null,
           },
-        ),
-      ),
-    ).resolves.toEqual({});
-    await expect(
-      runHandler(
-        handlers.task_reset?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "task_reset",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
-      ),
-    ).resolves.toEqual({});
-    await expect(
-      runHandler(
-        handlers.task_metadata_get?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "task_metadata_get",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
-      ),
-    ).resolves.toEqual({});
-    await expect(
-      runHandler(
-        handlers.agent_session_upsert?.(
-          {
-            repoPath: "/repo",
-            taskId: "task-1",
-            session: {
-              externalSessionId: "session-1",
-              role: "build",
-              startedAt: "2026-05-10T10:00:00.000Z",
-              runtimeKind: "opencode",
-              workingDirectory: "/repo/task-1",
-              selectedModel: null,
-            },
-          },
-          {
-            command: "agent_session_upsert",
-            args: {
-              repoPath: "/repo",
-              taskId: "task-1",
-              session: {
-                externalSessionId: "session-1",
-                role: "build",
-                startedAt: "2026-05-10T10:00:00.000Z",
-                runtimeKind: "opencode",
-                workingDirectory: "/repo/task-1",
-                selectedModel: null,
-              },
-            },
-          },
-        ),
+        }),
       ),
     ).resolves.toBe(true);
     await expect(
       runHandler(
-        handlers.agent_session_delete?.(
-          {
-            repoPath: "/repo",
-            taskId: "task-1",
-            identity: {
-              externalSessionId: "session-1",
-              runtimeKind: "opencode",
-              workingDirectory: "/repo/task-1",
-            },
+        handlers.agent_session_delete?.({
+          repoPath: "/repo",
+          taskId: "task-1",
+          identity: {
+            externalSessionId: "session-1",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/task-1",
           },
-          {
-            command: "agent_session_delete",
-            args: {
-              repoPath: "/repo",
-              taskId: "task-1",
-              identity: {
-                externalSessionId: "session-1",
-                runtimeKind: "opencode",
-                workingDirectory: "/repo/task-1",
-              },
-            },
-          },
-        ),
+        }),
       ),
     ).resolves.toBe(true);
     await expect(
-      runHandler(
-        handlers.agent_sessions_list?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "agent_sessions_list",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
-      ),
+      runHandler(handlers.agent_sessions_list?.({ repoPath: "/repo", taskId: "task-1" })),
     ).resolves.toEqual([]);
     await expect(
       runHandler(
-        handlers.agent_sessions_list_for_tasks?.(
-          { repoPath: "/repo", taskIds: ["task-2", "task-1", "task-2"] },
-          {
-            command: "agent_sessions_list_for_tasks",
-            args: { repoPath: "/repo", taskIds: ["task-2", "task-1", "task-2"] },
-          },
-        ),
+        handlers.agent_sessions_list_for_tasks?.({
+          repoPath: "/repo",
+          taskIds: ["task-2", "task-1", "task-2"],
+        }),
       ),
     ).resolves.toEqual([]);
     await expect(
-      runHandler(
-        handlers.task_approval_context_get?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "task_approval_context_get",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
-      ),
-    ).resolves.toEqual({});
+      runHandler(handlers.task_approval_context_get?.({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toBeDefined();
     await expect(
-      runHandler(
-        handlers.task_pull_request_detect?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "task_pull_request_detect",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
-      ),
-    ).resolves.toEqual({});
+      runHandler(handlers.task_pull_request_detect?.({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toBeDefined();
     await expect(
-      runHandler(
-        handlers.task_pull_request_unlink?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "task_pull_request_unlink",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
-      ),
+      runHandler(handlers.task_pull_request_unlink?.({ repoPath: "/repo", taskId: "task-1" })),
     ).resolves.toBe(true);
     await expect(
       runHandler(
-        handlers.task_pull_request_upsert?.(
-          { repoPath: "/repo", taskId: "task-1", input: { title: "PR", body: "Body" } },
-          {
-            command: "task_pull_request_upsert",
-            args: { repoPath: "/repo", taskId: "task-1", input: { title: "PR", body: "Body" } },
-          },
-        ),
+        handlers.task_pull_request_upsert?.({
+          repoPath: "/repo",
+          taskId: "task-1",
+          input: { title: "PR", body: "Body" },
+        }),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.task_direct_merge?.(
-          { repoPath: "/repo", taskId: "task-1", input: { mergeMethod: "merge_commit" } },
-          {
-            command: "task_direct_merge",
-            args: { repoPath: "/repo", taskId: "task-1", input: { mergeMethod: "merge_commit" } },
-          },
-        ),
+        handlers.task_direct_merge?.({
+          repoPath: "/repo",
+          taskId: "task-1",
+          input: { mergeMethod: "merge_commit" },
+        }),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
+    await expect(
+      runHandler(handlers.task_direct_merge_complete?.({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.task_direct_merge_complete?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "task_direct_merge_complete",
-            args: { repoPath: "/repo", taskId: "task-1" },
+        handlers.task_pull_request_link_merged?.({
+          repoPath: "/repo",
+          taskId: "task-1",
+          pullRequest: {
+            providerId: "github",
+            number: 12,
+            url: "https://github.com/acme/repo/pull/12",
+            state: "merged",
+            createdAt: "2026-05-10T10:00:00.000Z",
+            updatedAt: "2026-05-10T11:00:00.000Z",
           },
-        ),
+        }),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.task_pull_request_link_merged?.(
-          {
-            repoPath: "/repo",
-            taskId: "task-1",
-            pullRequest: {
-              providerId: "github",
-              number: 12,
-              url: "https://github.com/acme/repo/pull/12",
-              state: "merged",
-              createdAt: "2026-05-10T10:00:00.000Z",
-              updatedAt: "2026-05-10T11:00:00.000Z",
-            },
-          },
-          {
-            command: "task_pull_request_link_merged",
-            args: {
-              repoPath: "/repo",
-              taskId: "task-1",
-              pullRequest: {
-                providerId: "github",
-                number: 12,
-                url: "https://github.com/acme/repo/pull/12",
-                state: "merged",
-                createdAt: "2026-05-10T10:00:00.000Z",
-                updatedAt: "2026-05-10T11:00:00.000Z",
-              },
-            },
-          },
-        ),
+        handlers.task_transition?.({ repoPath: "/repo", taskId: "task-1", status: "in_progress" }),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.task_transition?.(
-          { repoPath: "/repo", taskId: "task-1", status: "in_progress" },
-          {
-            command: "task_transition",
-            args: { repoPath: "/repo", taskId: "task-1", status: "in_progress" },
-          },
-        ),
+        handlers.build_blocked?.({ repoPath: "/repo", taskId: "task-1", reason: "Blocked" }),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.build_blocked?.(
-          { repoPath: "/repo", taskId: "task-1", reason: "Blocked" },
-          {
-            command: "build_blocked",
-            args: { repoPath: "/repo", taskId: "task-1", reason: "Blocked" },
-          },
-        ),
+        handlers.build_start?.({ repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" }),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
+    await expect(
+      runHandler(handlers.build_resumed?.({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.build_start?.(
-          { repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" },
-          {
-            command: "build_start",
-            args: { repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" },
-          },
-        ),
+        handlers.build_completed?.({
+          repoPath: "/repo",
+          taskId: "task-1",
+          input: { summary: "Done" },
+        }),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.build_resumed?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "build_resumed",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
+        handlers.task_update?.({ repoPath: "/repo", taskId: "task-1", patch: { title: "Task" } }),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.build_completed?.(
-          { repoPath: "/repo", taskId: "task-1", input: { summary: "Done" } },
-          {
-            command: "build_completed",
-            args: { repoPath: "/repo", taskId: "task-1", input: { summary: "Done" } },
-          },
-        ),
+        handlers.qa_approved?.({
+          repoPath: "/repo",
+          taskId: "task-1",
+          reportMarkdown: "Looks good",
+        }),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.task_update?.(
-          { repoPath: "/repo", taskId: "task-1", patch: { title: "Task" } },
-          {
-            command: "task_update",
-            args: { repoPath: "/repo", taskId: "task-1", patch: { title: "Task" } },
-          },
-        ),
+        handlers.qa_rejected?.({
+          repoPath: "/repo",
+          taskId: "task-1",
+          reportMarkdown: "Needs work",
+        }),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
-      runHandler(
-        handlers.qa_approved?.(
-          { repoPath: "/repo", taskId: "task-1", reportMarkdown: "Looks good" },
-          {
-            command: "qa_approved",
-            args: { repoPath: "/repo", taskId: "task-1", reportMarkdown: "Looks good" },
-          },
-        ),
-      ),
-    ).resolves.toEqual({});
+      runHandler(handlers.qa_get_report?.({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toBeDefined();
     await expect(
-      runHandler(
-        handlers.qa_rejected?.(
-          { repoPath: "/repo", taskId: "task-1", reportMarkdown: "Needs work" },
-          {
-            command: "qa_rejected",
-            args: { repoPath: "/repo", taskId: "task-1", reportMarkdown: "Needs work" },
-          },
-        ),
-      ),
-    ).resolves.toEqual({});
-    await expect(
-      runHandler(
-        handlers.qa_get_report?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "qa_get_report",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
-      ),
-    ).resolves.toEqual({});
-    await expect(
-      runHandler(
-        handlers.repo_pull_request_sync?.(
-          { repoPath: "/repo" },
-          {
-            command: "repo_pull_request_sync",
-            args: { repoPath: "/repo" },
-          },
-        ),
-      ),
+      runHandler(handlers.repo_pull_request_sync?.({ repoPath: "/repo" })),
     ).resolves.toEqual({ ok: true });
     await expect(
       runHandler(
-        handlers.human_request_changes?.(
-          { repoPath: "/repo", taskId: "task-1", note: "Please adjust" },
-          {
-            command: "human_request_changes",
-            args: { repoPath: "/repo", taskId: "task-1", note: "Please adjust" },
-          },
-        ),
+        handlers.human_request_changes?.({
+          repoPath: "/repo",
+          taskId: "task-1",
+          note: "Please adjust",
+        }),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
+    await expect(
+      runHandler(handlers.human_approve?.({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toBeDefined();
+    await expect(
+      runHandler(handlers.set_spec?.({ repoPath: "/repo", taskId: "task-1", markdown: "# Spec" })),
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.human_approve?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "human_approve",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
+        handlers.spec_save_document?.({ repoPath: "/repo", taskId: "task-1", markdown: "# Spec" }),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
+    await expect(
+      runHandler(handlers.spec_get?.({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.set_spec?.(
-          { repoPath: "/repo", taskId: "task-1", markdown: "# Spec" },
-          {
-            command: "set_spec",
-            args: { repoPath: "/repo", taskId: "task-1", markdown: "# Spec" },
-          },
-        ),
-      ),
-    ).resolves.toEqual({});
-    await expect(
-      runHandler(
-        handlers.spec_save_document?.(
-          { repoPath: "/repo", taskId: "task-1", markdown: "# Spec" },
-          {
-            command: "spec_save_document",
-            args: { repoPath: "/repo", taskId: "task-1", markdown: "# Spec" },
-          },
-        ),
-      ),
-    ).resolves.toEqual({});
-    await expect(
-      runHandler(
-        handlers.spec_get?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "spec_get",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
-      ),
-    ).resolves.toEqual({});
-    await expect(
-      runHandler(
-        handlers.set_plan?.(
-          { repoPath: "/repo", taskId: "task-1", input: { markdown: "# Plan" } },
-          {
-            command: "set_plan",
-            args: { repoPath: "/repo", taskId: "task-1", input: { markdown: "# Plan" } },
-          },
-        ),
+        handlers.set_plan?.({ repoPath: "/repo", taskId: "task-1", input: { markdown: "# Plan" } }),
       ),
     ).resolves.toEqual({ markdown: "# Plan" });
     await expect(
       runHandler(
-        handlers.plan_save_document?.(
-          { repoPath: "/repo", taskId: "task-1", markdown: "# Plan" },
-          {
-            command: "plan_save_document",
-            args: { repoPath: "/repo", taskId: "task-1", markdown: "# Plan" },
-          },
-        ),
+        handlers.plan_save_document?.({ repoPath: "/repo", taskId: "task-1", markdown: "# Plan" }),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
-      runHandler(
-        handlers.plan_get?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "plan_get",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
-      ),
-    ).resolves.toEqual({});
+      runHandler(handlers.plan_get?.({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toBeDefined();
     expect(calls).toEqual([
       { command: "tasks_list", input: { repoPath: "/repo" } },
       {

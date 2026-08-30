@@ -55,10 +55,20 @@ const createController = () => {
   return {
     controller: {
       close: mock(() => {}),
-      enqueue: mock((value: Uint8Array) => enqueued.push(value)),
-    } as unknown as ReadableStreamDefaultController<Uint8Array>,
+      desiredSize: null,
+      enqueue: mock((value: Uint8Array) => {
+        enqueued.push(value);
+      }),
+      error: mock(() => {}),
+    } satisfies ReadableStreamDefaultController<Uint8Array>,
     enqueued,
   };
+};
+
+const createInactiveTimer = (): ReturnType<typeof setTimeout> => {
+  const timer = setTimeout(() => {}, 0);
+  clearTimeout(timer);
+  return timer;
 };
 
 test("expires a created lease that never attaches and unsubscribes exactly once", () => {
@@ -69,7 +79,7 @@ test("expires a created lease that never attaches and unsubscribes exactly once"
     reportDeliveryFailure: () => {},
     scheduleExpiry: (callback) => {
       expiryCallbacks.push(callback);
-      return {} as ReturnType<typeof setTimeout>;
+      return createInactiveTimer();
     },
     taskEventStream: fake.stream,
   });
@@ -92,7 +102,7 @@ test("cancels the creation expiry timer when an SSE connection attaches", () => 
     clearExpiryTimer,
     encodeFrame: () => new Uint8Array(),
     reportDeliveryFailure: () => {},
-    scheduleExpiry: () => ({}) as ReturnType<typeof setTimeout>,
+    scheduleExpiry: createInactiveTimer,
     taskEventStream: fake.stream,
   });
   const lease = manager.create({ cursor: null }, "05e77c20-ebf2-4e7f-a880-9c95c24627ee");
@@ -111,7 +121,7 @@ test("clears the creation timer and unsubscribes once on explicit delete or shut
     clearExpiryTimer,
     encodeFrame: () => new Uint8Array(),
     reportDeliveryFailure: () => {},
-    scheduleExpiry: () => ({}) as ReturnType<typeof setTimeout>,
+    scheduleExpiry: createInactiveTimer,
     taskEventStream: fake.stream,
   });
   const deletedLease = manager.create({ cursor: null }, "05e77c20-ebf2-4e7f-a880-9c95c24627ee");
@@ -195,10 +205,12 @@ test("isolates enqueue failures and deletes host subscriptions on explicit dispo
   const failure = new Error("closed response");
   const brokenController = {
     close: mock(() => {}),
+    desiredSize: null,
     enqueue: mock(() => {
       throw failure;
     }),
-  } as unknown as ReadableStreamDefaultController<Uint8Array>;
+    error: mock(() => {}),
+  } satisfies ReadableStreamDefaultController<Uint8Array>;
   manager.attach(lease, brokenController);
   fake.emit(change(1));
 
@@ -220,7 +232,7 @@ test("cancels reconnect expiry and expires a detached lease exactly once", () =>
     reportDeliveryFailure: () => {},
     scheduleExpiry: (callback) => {
       expiryCallbacks.push(callback);
-      return {} as ReturnType<typeof setTimeout>;
+      return createInactiveTimer();
     },
     taskEventStream: fake.stream,
   });

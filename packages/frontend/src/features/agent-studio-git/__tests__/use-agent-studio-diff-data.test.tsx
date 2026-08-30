@@ -293,12 +293,10 @@ describe("useAgentStudioDiffData", () => {
         originalDocumentRemoveEventListener(type, listener, options);
       },
     );
-    globalThis.addEventListener = windowAddEventListenerMock as typeof globalThis.addEventListener;
-    globalThis.removeEventListener =
-      windowRemoveEventListenerMock as typeof globalThis.removeEventListener;
-    document.addEventListener = documentAddEventListenerMock as typeof document.addEventListener;
-    document.removeEventListener =
-      documentRemoveEventListenerMock as typeof document.removeEventListener;
+    globalThis.addEventListener = windowAddEventListenerMock;
+    globalThis.removeEventListener = windowRemoveEventListenerMock;
+    document.addEventListener = documentAddEventListenerMock;
+    document.removeEventListener = documentRemoveEventListenerMock;
 
     const scheduledRefreshArgs = {
       ...createBaseArgs(),

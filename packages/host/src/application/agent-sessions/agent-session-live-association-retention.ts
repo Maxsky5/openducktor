@@ -12,18 +12,27 @@ import {
 import { Effect } from "effect";
 import { HostInvariantError } from "../../effect/host-errors";
 
+type AgentSessionLiveAssociationRetentionError = HostInvariantError<
+  | {
+      readonly incoming: AgentSessionAssociation;
+      readonly previous: AgentSessionAssociation;
+      readonly ref: AgentSessionLiveRef;
+    }
+  | { readonly ref: AgentSessionLiveRef }
+>;
+
 export type AgentSessionLiveAssociationRetention = {
   readonly forget: (ref: AgentSessionLiveRef) => void;
   readonly retainEnvelope: (
     envelope: AgentSessionLiveEnvelope,
-  ) => Effect.Effect<AgentSessionLiveEnvelope, HostInvariantError>;
+  ) => Effect.Effect<AgentSessionLiveEnvelope, AgentSessionLiveAssociationRetentionError>;
   readonly retainSnapshot: (
     snapshot: AgentSessionLiveSnapshot,
-  ) => Effect.Effect<AgentSessionLiveSnapshot, HostInvariantError>;
+  ) => Effect.Effect<AgentSessionLiveSnapshot, AgentSessionLiveAssociationRetentionError>;
   readonly retainSnapshots: (
     snapshots: ReadonlyArray<AgentSessionLiveSnapshot>,
     authoritativeRepoPath?: string,
-  ) => Effect.Effect<AgentSessionLiveSnapshot[], HostInvariantError>;
+  ) => Effect.Effect<AgentSessionLiveSnapshot[], AgentSessionLiveAssociationRetentionError>;
 };
 
 export const createAgentSessionLiveAssociationRetention =

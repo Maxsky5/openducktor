@@ -94,13 +94,18 @@ export const loadRepoDefaultModel = async (
     return null;
   }
 
-  return {
+  const selection: AgentModelSelection = {
     runtimeKind: roleDefault.runtimeKind,
     providerId: roleDefault.providerId,
     modelId: roleDefault.modelId,
-    ...(roleDefault.variant ? { variant: roleDefault.variant } : {}),
-    ...(roleDefault.profileId ? { profileId: roleDefault.profileId } : {}),
   };
+  if (roleDefault.variant) {
+    selection.variant = roleDefault.variant;
+  }
+  if (roleDefault.profileId) {
+    selection.profileId = roleDefault.profileId;
+  }
+  return selection;
 };
 
 export const loadRepoPromptOverrides = async (

@@ -3,11 +3,12 @@ import {
   type WorkspaceFileTree,
   type WorkspaceFileTreeEntry,
   type WorkspaceTextFileReadResult,
+  type WorkspaceTextFileWriteInput,
   type WorkspaceTextFileWriteResult,
   workspaceFileTreeSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostValidationError } from "../../effect/host-errors";
+import { HostValidationError, type HostValidationErrorAggregate } from "../../effect/host-errors";
 import type { FilesystemPort, FilesystemStats } from "../../ports/filesystem-port";
 import type { GitPort } from "../../ports/git-port";
 import {
@@ -25,24 +26,38 @@ export type WorkspaceFilesService = {
   listTree(input: {
     rootPath: string;
     targetBranch?: string;
-  }): Effect.Effect<WorkspaceFileTree, HostValidationError>;
+  }): Effect.Effect<WorkspaceFileTree, HostValidationErrorAggregate>;
   readTextFile(input: {
     rootPath: string;
     relativePath: string;
-  }): Effect.Effect<WorkspaceTextFileReadResult, HostValidationError>;
+  }): Effect.Effect<WorkspaceTextFileReadResult, HostValidationErrorAggregate>;
   writeTextFile(
-    input: unknown,
+    input: WorkspaceTextFileWriteInput,
   ): Effect.Effect<WorkspaceTextFileWriteResult, WorkspaceTextFileWriteError>;
 };
 
-const PIERRE_GIT_STATUSES = new Set<WorkspaceFileGitStatus>([
+type WorkspaceGitChange = {
+  originalPath?: string;
+  path: string;
+  status: string;
+};
+
+type ProjectedWorkspaceGitChange = {
+  path: string;
+  status: string;
+};
+
+const PIERRE_GIT_STATUSES: ReadonlySet<string> = new Set([
   "added",
   "deleted",
   "modified",
   "renamed",
   "untracked",
   "ignored",
-]);
+] satisfies readonly WorkspaceFileGitStatus[]);
+
+const isWorkspaceFileGitStatus = (status: string): status is WorkspaceFileGitStatus =>
+  PIERRE_GIT_STATUSES.has(status);
 
 const compareWorkspacePaths = (left: string, right: string): number => {
   const insensitive = left.toLowerCase().localeCompare(right.toLowerCase());
@@ -51,12 +66,12 @@ const compareWorkspacePaths = (left: string, right: string): number => {
 
 const normalizeGitStatus = (
   status: string | null | undefined,
-): Effect.Effect<WorkspaceFileGitStatus | null, HostValidationError> => {
+): Effect.Effect<WorkspaceFileGitStatus | null, HostValidationError<{ status: string }>> => {
   if (!status) {
     return Effect.succeed(null);
   }
-  if (PIERRE_GIT_STATUSES.has(status as WorkspaceFileGitStatus)) {
-    return Effect.succeed(status as WorkspaceFileGitStatus);
+  if (isWorkspaceFileGitStatus(status)) {
+    return Effect.succeed(status);
   }
   if (status === "copied") {
     return Effect.succeed("added");
@@ -72,14 +87,14 @@ const normalizeGitStatus = (
     }),
   );
 };
-const GIT_STATUS_PRIORITY: Record<WorkspaceFileGitStatus, number> = {
+const GIT_STATUS_PRIORITY = {
   ignored: 0,
   modified: 1,
   untracked: 2,
   added: 3,
   renamed: 4,
   deleted: 5,
-};
+} satisfies Record<WorkspaceFileGitStatus, number>;
 
 const mergeGitStatus = (
   current: WorkspaceFileGitStatus | null | undefined,
@@ -98,8 +113,8 @@ const projectGitChangeToWorkspace = (
   filesystem: FilesystemPort,
   repositoryRoot: string,
   workspaceRoot: string,
-  change: { originalPath?: string; path: string; status: string },
-): { path: string; status: string } | null => {
+  change: WorkspaceGitChange,
+): ProjectedWorkspaceGitChange | null => {
   const path = toWorkspaceRelativeGitPath(filesystem, repositoryRoot, workspaceRoot, change.path);
   if (path) {
     return { path, status: change.status };
@@ -131,7 +146,10 @@ const statFile = (
   filesystem: FilesystemPort,
   canonicalRoot: string,
   relativePath: string,
-): Effect.Effect<FilesystemStats, HostValidationError> =>
+): Effect.Effect<
+  FilesystemStats,
+  HostValidationError<{ rootPath: string; relativePath: string }>
+> =>
   filesystem
     .stat(filesystem.join(canonicalRoot, relativePath), { followSymbolicLinks: false })
     .pipe(
@@ -145,7 +163,10 @@ const statFile = (
 
 export const createWorkspaceFilesService = (
   filesystem: FilesystemPort,
-  gitPort: GitPort,
+  gitPort: Pick<
+    GitPort,
+    "getRepositoryRoot" | "getStatus" | "isGitRepository" | "listChangedFiles" | "listFiles"
+  >,
 ): WorkspaceFilesService => {
   const textFiles = createWorkspaceTextFileService(filesystem, gitPort);
   return {

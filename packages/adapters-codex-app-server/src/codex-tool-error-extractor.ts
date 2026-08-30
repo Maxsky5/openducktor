@@ -1,55 +1,58 @@
-import { odtToolErrorPayloadSchema } from "@openducktor/contracts";
 import {
-  arrayFromUnknown,
+  odtToolErrorPayloadSchema,
+  type CodexAppServerThreadItem,
+  type CodexAppServerJsonValue,
+} from "@openducktor/contracts";
+import {
+  arrayFromCodexJsonValue,
   extractStringField,
   isPlainObject,
+  parseCodexJsonObjectString,
+  readCodexString,
+  readNonEmptyCodexString,
   stringifyJsonValue,
 } from "./codex-app-server-shared";
 
-const parseJsonObjectString = (value: unknown): Record<string, unknown> | null => {
-  if (typeof value !== "string") {
+type CodexDynamicToolCallItem = Extract<CodexAppServerThreadItem, { type: "dynamicToolCall" }>;
+type CodexFileChangeItem = Extract<CodexAppServerThreadItem, { type: "fileChange" }>;
+type CodexMcpToolCallItem = Extract<CodexAppServerThreadItem, { type: "mcpToolCall" }>;
+type CodexJsonObject = Record<string, CodexAppServerJsonValue>;
+
+const parseJsonObjectString = (value: CodexAppServerJsonValue | undefined) => {
+  const text = readCodexString(value);
+  if (text === null) {
     return null;
   }
-  const trimmed = value.trim();
+  const trimmed = text.trim();
   if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
     return null;
   }
-
-  try {
-    const parsed: unknown = JSON.parse(trimmed);
-    return isPlainObject(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
+  return parseCodexJsonObjectString(trimmed);
 };
 
-const asRecord = (value: unknown): Record<string, unknown> | null =>
+const asRecord = (value: CodexAppServerJsonValue | undefined): CodexJsonObject | null =>
   isPlainObject(value) ? value : parseJsonObjectString(value);
 
-const nonEmptyString = (value: unknown): string | null => {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-};
+const nonEmptyString = (value: CodexAppServerJsonValue | undefined): string | null =>
+  readNonEmptyCodexString(value);
 
-const errorMessageFromValue = (value: unknown): string | null => {
+const errorMessageFromValue = (value: CodexAppServerJsonValue | undefined): string | null => {
   return nonEmptyString(value) ?? extractStringField(value, ["message"]);
 };
 
-const contentText = (value: unknown): string | null => {
-  let content: unknown[] = [];
+const contentText = (value: CodexAppServerJsonValue | undefined): string | null => {
+  let content: CodexAppServerJsonValue[] = [];
   if (Array.isArray(value)) {
     content = value;
   } else if (isPlainObject(value)) {
-    content = arrayFromUnknown(value.content ?? value.contentItems ?? value.content_items);
+    content = arrayFromCodexJsonValue(value.content ?? value.contentItems ?? value.content_items);
   }
 
   const text = content
     .map((entry) => {
-      if (typeof entry === "string") {
-        return entry.trim();
+      const entryText = readCodexString(entry);
+      if (entryText !== null) {
+        return entryText.trim();
       }
       if (!isPlainObject(entry)) {
         return "";
@@ -62,7 +65,7 @@ const contentText = (value: unknown): string | null => {
   return text.length > 0 ? text : null;
 };
 
-const odtErrorEnvelopeMessage = (value: unknown): string | null => {
+const odtErrorEnvelopeMessage = (value: CodexAppServerJsonValue | undefined): string | null => {
   const record = asRecord(value);
   if (!record) {
     return null;
@@ -77,7 +80,7 @@ const odtErrorEnvelopeMessage = (value: unknown): string | null => {
   return message.length > 0 ? message : "Tool failed";
 };
 
-const looseErrorEnvelopeMessage = (value: unknown): string | null => {
+const looseErrorEnvelopeMessage = (value: CodexAppServerJsonValue | undefined): string | null => {
   const record = asRecord(value);
   if (record?.ok !== false) {
     return null;
@@ -86,12 +89,12 @@ const looseErrorEnvelopeMessage = (value: unknown): string | null => {
   return odtErrorEnvelopeMessage(record) ?? errorMessageFromValue(record.error) ?? "Tool failed";
 };
 
-const mcpTransportErrorMessage = (value: unknown): string | null => {
+const mcpTransportErrorMessage = (value: CodexAppServerJsonValue | undefined): string | null => {
   const text = nonEmptyString(value);
   return text && /^MCP error\s+-?\d+:/i.test(text) ? text : null;
 };
 
-const mcpContentErrorMessage = (value: unknown): string | null => {
+const mcpContentErrorMessage = (value: CodexAppServerJsonValue | undefined): string | null => {
   const text = contentText(value);
   if (!text) {
     return null;
@@ -99,15 +102,12 @@ const mcpContentErrorMessage = (value: unknown): string | null => {
   return odtErrorEnvelopeMessage(text) ?? mcpTransportErrorMessage(text);
 };
 
-const dynamicContentErrorMessage = (value: unknown): string | null => {
+const dynamicContentErrorMessage = (value: CodexAppServerJsonValue | undefined): string | null => {
   const text = contentText(value);
   return text ? looseErrorEnvelopeMessage(text) : null;
 };
 
-const objectField = (
-  value: Record<string, unknown>,
-  keys: string[],
-): Record<string, unknown> | null => {
+const objectField = (value: CodexJsonObject, keys: string[]) => {
   for (const key of keys) {
     const candidate = value[key];
     if (isPlainObject(candidate)) {
@@ -118,8 +118,8 @@ const objectField = (
 };
 
 const failureMarkerMessage = (
-  record: Record<string, unknown>,
-  structuredContent: Record<string, unknown> | null,
+  record: CodexJsonObject,
+  structuredContent: CodexJsonObject | null,
 ): string | null => {
   if (record.isError !== true && record.ok !== false && record.success !== false) {
     return null;
@@ -135,23 +135,7 @@ const failureMarkerMessage = (
   );
 };
 
-const failedStatus = (value: unknown): boolean => {
-  if (typeof value !== "string") {
-    return false;
-  }
-  const normalized = value
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-    .toLowerCase()
-    .replace(/-/g, "_");
-  return (
-    normalized === "failed" ||
-    normalized === "failure" ||
-    normalized === "error" ||
-    normalized === "declined"
-  );
-};
-
-const mcpToolErrorFromValue = (value: unknown): string | null => {
+const mcpToolErrorFromValue = (value: CodexAppServerJsonValue | undefined): string | null => {
   const record = asRecord(value);
   if (!record) {
     return mcpContentErrorMessage(value) ?? mcpTransportErrorMessage(value);
@@ -167,7 +151,7 @@ const mcpToolErrorFromValue = (value: unknown): string | null => {
   );
 };
 
-const dynamicToolErrorFromValue = (value: unknown): string | null => {
+const dynamicToolErrorFromValue = (value: CodexAppServerJsonValue | undefined): string | null => {
   const record = asRecord(value);
   if (!record) {
     return dynamicContentErrorMessage(value);
@@ -184,33 +168,16 @@ const dynamicToolErrorFromValue = (value: unknown): string | null => {
   );
 };
 
-export const codexMcpToolErrorFromResult = (
-  result: unknown,
-  item?: Record<string, unknown>,
-): string | null => {
-  return mcpToolErrorFromValue(result) ?? (item ? mcpToolErrorFromValue(item) : null);
-};
+export const codexMcpToolErrorFromResult = (item: CodexMcpToolCallItem): string | null =>
+  item.error?.message ?? mcpToolErrorFromValue(item.result);
 
-export const codexDynamicToolDisplayPayload = (item: Record<string, unknown>): unknown =>
-  item.contentItems ?? item.content_items ?? item.result;
+export const codexDynamicToolDisplayPayload = (
+  item: CodexDynamicToolCallItem,
+): CodexDynamicToolCallItem["contentItems"] => item.contentItems;
 
-export const codexDynamicToolErrorFromItem = (item: Record<string, unknown>): string | null => {
-  return (
-    dynamicToolErrorFromValue(codexDynamicToolDisplayPayload(item)) ??
-    dynamicToolErrorFromValue(item.result) ??
-    dynamicToolErrorFromValue(item)
-  );
-};
+export const codexDynamicToolErrorFromItem = (item: CodexDynamicToolCallItem): string | null =>
+  dynamicToolErrorFromValue(codexDynamicToolDisplayPayload(item)) ??
+  (item.success === false || item.status === "failed" ? "Tool failed" : null);
 
-export const codexFileChangeErrorFromItem = (item: Record<string, unknown>): string | null => {
-  const explicitError = errorMessageFromValue(item.error) ?? extractStringField(item, ["stderr"]);
-  if (explicitError) {
-    return explicitError;
-  }
-
-  if (item.isError === true || item.success === false || failedStatus(item.status)) {
-    return extractStringField(item, ["message"]) ?? "Tool failed";
-  }
-
-  return null;
-};
+export const codexFileChangeErrorFromItem = (item: CodexFileChangeItem): string | null =>
+  item.status === "failed" || item.status === "declined" ? "Tool failed" : null;

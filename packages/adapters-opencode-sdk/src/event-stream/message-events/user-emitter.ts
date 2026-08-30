@@ -18,17 +18,21 @@ export const persistUserMessageMetadata = (input: {
   visible: string;
   displayParts: AgentUserMessageDisplayPart[];
 }): void => {
-  input.session.messageMetadataById.set(input.messageId, {
+  const metadata: SessionMessageMetadata = {
     timestamp: input.metadata?.timestamp ?? input.timestamp,
-    ...(input.model
-      ? { model: input.model }
-      : input.metadata?.model
-        ? { model: input.metadata.model }
-        : {}),
-    ...(input.metadata?.parentId ? { parentId: input.metadata.parentId } : {}),
     text: input.visible,
-    ...(input.displayParts.length > 0 ? { displayParts: input.displayParts } : {}),
-  });
+  };
+  const model = input.model ?? input.metadata?.model;
+  if (model) {
+    metadata.model = model;
+  }
+  if (input.metadata?.parentId) {
+    metadata.parentId = input.metadata.parentId;
+  }
+  if (input.displayParts.length > 0) {
+    metadata.displayParts = input.displayParts;
+  }
+  input.session.messageMetadataById.set(input.messageId, metadata);
 };
 
 const buildUserMessageSignature = (input: {
@@ -51,6 +55,11 @@ const buildUserMessageSignature = (input: {
   });
 };
 
+type KnownUserMessageContent = {
+  displayParts: AgentUserMessageDisplayPart[];
+  visible: string;
+};
+
 const buildKnownUserMessageContent = (
   runtime: EventStreamRuntime,
   input: {
@@ -58,7 +67,7 @@ const buildKnownUserMessageContent = (
     visible?: string;
     displayParts?: AgentUserMessageDisplayPart[];
   },
-): { visible: string; displayParts: AgentUserMessageDisplayPart[] } | null => {
+): KnownUserMessageContent | null => {
   const { session } = runtime;
   const metadata = session.messageMetadataById.get(input.messageId);
   const fallbackText = metadata?.text ?? "";
@@ -98,7 +107,7 @@ export const emitUserMessage = (
     return true;
   }
 
-  runtime.emit(runtime.externalSessionId, {
+  const event: Parameters<EventStreamRuntime["emit"]>[1] = {
     type: "user_message",
     externalSessionId: runtime.externalSessionId,
     timestamp: input.timestamp,
@@ -106,8 +115,11 @@ export const emitUserMessage = (
     message: input.message,
     parts: input.parts,
     state: input.state,
-    ...(input.model ? { model: input.model } : {}),
-  });
+  };
+  if (input.model) {
+    event.model = input.model;
+  }
+  runtime.emit(runtime.externalSessionId, event);
   session.emittedUserMessageSignatures.set(input.messageId, signature);
   session.emittedUserMessageStates.set(input.messageId, input.state);
   return true;
@@ -129,14 +141,17 @@ export const emitKnownUserMessage = (
     return false;
   }
 
-  return emitUserMessage(runtime, {
+  const messageInput: Parameters<typeof emitUserMessage>[1] = {
     messageId: input.messageId,
     timestamp: input.timestamp,
     message: content.visible,
     parts: content.displayParts,
     state: input.state,
-    ...(input.model ? { model: input.model } : {}),
-  });
+  };
+  if (input.model) {
+    messageInput.model = input.model;
+  }
+  return emitUserMessage(runtime, messageInput);
 };
 
 export const emitAdmittedUserMessage = (
@@ -152,14 +167,17 @@ export const emitAdmittedUserMessage = (
 ): boolean => {
   const { session } = runtime;
   session.messageRoleById.set(input.messageId, "user");
-  persistUserMessageMetadata({
+  const metadataInput: Parameters<typeof persistUserMessageMetadata>[0] = {
     session,
     messageId: input.messageId,
     timestamp: input.timestamp,
-    ...(input.model ? { model: input.model } : {}),
     visible: input.message,
     displayParts: input.parts,
-  });
+  };
+  if (input.model) {
+    metadataInput.model = input.model;
+  }
+  persistUserMessageMetadata(metadataInput);
 
   return emitUserMessage(runtime, input);
 };

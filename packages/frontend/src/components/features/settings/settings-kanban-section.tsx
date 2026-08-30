@@ -33,7 +33,7 @@ const EMPTY_COLUMN_DISPLAY_OPTIONS: ComboboxOption[] = [
 ];
 
 const isKanbanEmptyColumnDisplay = (value: string): value is KanbanEmptyColumnDisplay =>
-  KANBAN_EMPTY_COLUMN_DISPLAY_VALUES.includes(value as KanbanEmptyColumnDisplay);
+  KANBAN_EMPTY_COLUMN_DISPLAY_VALUES.some((candidate) => candidate === value);
 
 export function SettingsKanbanSection({
   kanban,

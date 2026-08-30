@@ -1,5 +1,6 @@
 import {
   type AgentRuntimes,
+  agentRoleValues,
   type AgentSessionStartMode,
   formatRuntimeDescriptorSchemaIssue,
   getMissingRequiredRuntimeSupportedScopes,
@@ -18,7 +19,7 @@ import { SESSION_LAUNCH_ACTIONS, sessionLaunchActionIds } from "./session-launch
 
 export const DEFAULT_RUNTIME_KIND = "opencode" as const satisfies RuntimeKind;
 
-const agentRoles = Object.keys(runtimeRequiredScopesByRole) as AgentRole[];
+const agentRoles: readonly AgentRole[] = agentRoleValues;
 
 export const toAgentRuntimeOptions = (
   runtimeDefinitions: RuntimeDescriptor[],
@@ -85,11 +86,14 @@ export const resolveRuntimeKindSelectionState = ({
   requestedRuntimeKind?: RuntimeKind | null;
 }): RuntimeKindSelectionResolution => {
   if (runtimeDefinitions.length === 0) {
-    return {
+    const resolution: Extract<RuntimeKindSelectionResolution, { status: "no-definitions" }> = {
       status: "no-definitions",
       runtimeKind: null,
-      ...(requestedRuntimeKind === undefined ? {} : { requestedRuntimeKind }),
     };
+    if (requestedRuntimeKind !== undefined) {
+      resolution.requestedRuntimeKind = requestedRuntimeKind;
+    }
+    return resolution;
   }
 
   if (!requestedRuntimeKind) {

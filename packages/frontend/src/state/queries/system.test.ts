@@ -41,7 +41,7 @@ describe("system queries", () => {
         [
           { toolId: "finder", iconDataUrl: null },
           { toolId: "ghostty", iconDataUrl: "data:image/png;base64,ghostty" },
-        ] satisfies SystemOpenInToolInfo[],
+        ] satisfies Array<SystemOpenInToolInfo>,
     );
     const hostClient = { systemListOpenInTools };
 
@@ -61,7 +61,7 @@ describe("system queries", () => {
             toolId: forceRefresh ? "zed" : "finder",
             iconDataUrl: null,
           },
-        ] satisfies SystemOpenInToolInfo[],
+        ] satisfies Array<SystemOpenInToolInfo>,
     );
     const hostClient = { systemListOpenInTools };
 

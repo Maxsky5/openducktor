@@ -1,4 +1,4 @@
-import type { OpencodeClient, Part, Session } from "@opencode-ai/sdk/v2/client";
+import type { OpencodeClient, Session } from "@opencode-ai/sdk/v2/client";
 import type {
   AgentSessionHistoryMessage,
   AgentSessionTodoItem,
@@ -13,43 +13,27 @@ import {
   mergePreservedAttachmentDisplayParts,
   normalizeUserMessageDisplayParts,
   readMessageModelSelection,
-  readTextFromMessageInfo,
   readTextFromParts,
   readVisibleUserTextFromDisplayParts,
   sanitizeAssistantMessage,
 } from "./message-normalizers";
 import { mapOpenCodeBackgroundTaskResultPart } from "./opencode-background-task-result";
+import {
+  opencodeSessionMessagesPayloadSchema,
+  type ParsedOpencodeMessage,
+  type ParsedOpencodePart,
+} from "./opencode-ingress";
 import { toOpenCodeRequestError } from "./request-errors";
 import { toIsoFromEpoch } from "./session-runtime-utils";
 import { mapPartToAgentStreamPart } from "./stream-part-mapper";
 import { normalizeTodoList } from "./todo-normalizers";
 import type { ClientFactory } from "./types";
 
-const asRecord = (value: unknown): Record<string, unknown> | null => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return null;
-  }
-  return value as Record<string, unknown>;
-};
+const hasCompletedAssistantMessage = (value: ParsedOpencodeMessage["info"]): boolean =>
+  value.role === "assistant" && value.time.completed !== undefined;
 
-const readString = (record: Record<string, unknown>, keys: string[]): string | undefined => {
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "string" && value.trim().length > 0) {
-      return value;
-    }
-  }
-  return undefined;
-};
-
-const hasCompletedAssistantMessage = (value: unknown): boolean => {
-  const record = asRecord(value);
-  const time = record ? asRecord(record.time) : null;
-  return typeof time?.completed === "number";
-};
-
-const isCompactionMarkerEntry = (entry: { parts: Part[] }): boolean =>
-  entry.parts.some((part) => asRecord(part)?.type === "compaction");
+const isCompactionMarkerEntry = (entry: { parts: ParsedOpencodePart[] }): boolean =>
+  entry.parts.some((part) => part.type === "compaction");
 
 type MappedSubagentPart = Extract<AgentStreamPart, { kind: "subagent" }>;
 type ChildSessionLink = {
@@ -61,6 +45,17 @@ type HistoryStreamPartNormalizationState = {
   correlationByExternalSessionId: Map<string, string>;
   unmatchedChildSessionLinks: ChildSessionLink[];
   pendingBackgroundTaskResultsByExternalSessionId: Map<string, MappedSubagentPart[]>;
+};
+
+type NormalizedHistoryEntry = {
+  entry: ParsedOpencodeMessage;
+  timestamp: string;
+  text: string;
+  totalTokens?: number;
+  model?: ReturnType<typeof readMessageModelSelection>;
+  parentId?: string;
+  displayParts?: AgentUserMessageDisplayPart[];
+  rawParts: ParsedOpencodePart[];
 };
 
 const CHILD_SESSION_START_TOLERANCE_MS = 5_000;
@@ -82,19 +77,14 @@ const buildPartScopedSubagentCorrelationKey = (
   return ["part", part.messageId, rawPartId].join(":");
 };
 
-const readChildSessionCreatedAt = (session: Session): number | undefined => {
-  const record = asRecord(session);
-  const time = record ? asRecord(record.time) : null;
-  const created = time?.created;
-  return typeof created === "number" ? created : undefined;
-};
+const readChildSessionCreatedAt = (session: Session): number | undefined => session.time?.created;
 
 const toChildSessionLink = (session: Session): ChildSessionLink | null => {
-  if (typeof session.id !== "string" || session.id.trim().length === 0) {
+  if (session.id.trim().length === 0) {
     return null;
   }
   const createdAtMs = readChildSessionCreatedAt(session);
-  if (typeof createdAtMs !== "number") {
+  if (createdAtMs === undefined) {
     return null;
   }
 
@@ -111,14 +101,6 @@ const listChildSessionLinks = async (
     externalSessionId: string;
   },
 ): Promise<ChildSessionLink[]> => {
-  const childrenApi = (client as OpencodeClient & { session?: { children?: unknown } }).session
-    ?.children;
-  if (typeof childrenApi !== "function") {
-    throw new Error(
-      "OpenCode SDK does not expose session.children(); cannot load subagent transcript links.",
-    );
-  }
-
   const response = await client.session.children({
     sessionID: input.externalSessionId,
     directory: input.workingDirectory,
@@ -134,7 +116,7 @@ const takeChildSessionLinkForSubagentPart = (
   part: MappedSubagentPart,
 ): ChildSessionLink | undefined => {
   const startedAtMs = part.startedAtMs;
-  if (part.externalSessionId || typeof startedAtMs !== "number") {
+  if (part.externalSessionId || startedAtMs === undefined) {
     return undefined;
   }
 
@@ -260,7 +242,7 @@ const createHistoryStreamPartNormalizationState = (
 });
 
 const normalizeHistoryStreamParts = (
-  parts: Part[],
+  parts: ParsedOpencodePart[],
   state: HistoryStreamPartNormalizationState,
   timestamp?: string,
 ): AgentStreamPart[] => {
@@ -384,17 +366,23 @@ export const loadSessionHistory = async (
     runtimeEndpoint: input.runtimeEndpoint,
     workingDirectory: input.workingDirectory,
   });
-  const response = await client.session.messages({
+  const messagesRequest: Parameters<typeof client.session.messages>[0] = {
     sessionID: input.externalSessionId,
     directory: input.workingDirectory,
-    ...(typeof input.limit === "number" ? { limit: input.limit } : {}),
-  });
-  const data = unwrapData(response, "load session messages");
+  };
+  if (input.limit !== undefined) {
+    messagesRequest.limit = input.limit;
+  }
+  const response = await client.session.messages(messagesRequest);
+  const data = opencodeSessionMessagesPayloadSchema.parse(
+    unwrapData(response, "load session messages"),
+  );
   const childSessionLinks = await listChildSessionLinks(client, input);
   const normalizedEntries = data
     .filter((entry) => !isCompactionMarkerEntry(entry))
     .map((entry) => {
-      const infoText = readTextFromMessageInfo(entry.info);
+      const info = entry.info;
+      const infoText = "";
       const displayParts =
         entry.info.role === "user"
           ? ensureVisibleUserTextDisplayParts(
@@ -416,24 +404,30 @@ export const loadSessionHistory = async (
           : readTextFromParts(entry.parts);
       const rawText = rawTextFromParts.length > 0 ? rawTextFromParts : infoText;
       const text = entry.info.role === "assistant" ? sanitizeAssistantMessage(rawText) : rawText;
-      const totalTokens = extractMessageTotalTokens(entry.info, entry.parts);
-      const timestamp = toIsoFromEpoch(entry.info.time.created, now);
-      const model = readMessageModelSelection(entry.info);
-      const infoRecord = asRecord(entry.info);
-      const parentId = infoRecord
-        ? readString(infoRecord, ["parentID", "parentId", "parent_id"])
-        : undefined;
+      const totalTokens = extractMessageTotalTokens(info, entry.parts);
+      const timestamp = toIsoFromEpoch(info.time.created, now);
+      const model = readMessageModelSelection(info);
+      const parentId = info.role === "assistant" ? info.parentID : undefined;
 
-      return {
+      const normalizedEntry: NormalizedHistoryEntry = {
         entry,
         timestamp,
         text,
-        ...(typeof totalTokens === "number" ? { totalTokens } : {}),
-        ...(model ? { model } : {}),
-        ...(parentId ? { parentId } : {}),
-        ...(entry.info.role === "user" ? { displayParts } : {}),
         rawParts: entry.parts,
       };
+      if (totalTokens !== undefined) {
+        normalizedEntry.totalTokens = totalTokens;
+      }
+      if (model) {
+        normalizedEntry.model = model;
+      }
+      if (parentId) {
+        normalizedEntry.parentId = parentId;
+      }
+      if (entry.info.role === "user") {
+        normalizedEntry.displayParts = displayParts;
+      }
+      return normalizedEntry;
     })
     .sort((a, b) => {
       const aTime = Date.parse(a.timestamp);
@@ -483,28 +477,36 @@ export const loadSessionHistory = async (
     }
 
     if (item.entry.info.role === "assistant") {
-      history.push({
+      const assistantMessage: AgentSessionHistoryMessage = {
         messageId: item.entry.info.id,
         role: "assistant",
         timestamp: item.timestamp,
         text: item.text,
-        ...(typeof item.totalTokens === "number" ? { totalTokens: item.totalTokens } : {}),
-        ...(item.model ? { model: item.model } : {}),
         parts: item.parts,
-      });
+      };
+      if (item.totalTokens !== undefined) {
+        assistantMessage.totalTokens = item.totalTokens;
+      }
+      if (item.model) {
+        assistantMessage.model = item.model;
+      }
+      history.push(assistantMessage);
       continue;
     }
 
-    history.push({
+    const userMessage: AgentSessionHistoryMessage = {
       messageId: item.entry.info.id,
       role: "user",
       timestamp: item.timestamp,
       text: item.text,
       displayParts: item.displayParts ?? [],
       state: pendingAssistantIndex >= 0 && index > pendingAssistantIndex ? "queued" : "read",
-      ...(item.model ? { model: item.model } : {}),
       parts: item.parts,
-    });
+    };
+    if (item.model) {
+      userMessage.model = item.model;
+    }
+    history.push(userMessage);
   }
 
   return history;
@@ -524,19 +526,17 @@ export const loadSessionTodos = async (
       runtimeEndpoint: input.runtimeEndpoint,
       workingDirectory: input.workingDirectory,
     });
-    const response = await client.session.todo({
+    const todoRequest: Parameters<typeof client.session.todo>[0] = {
       sessionID: input.externalSessionId,
-      ...(trimmedWorkingDirectory.length > 0 ? { directory: trimmedWorkingDirectory } : {}),
-    });
-    if (response.data === undefined || response.data === null) {
-      throw toOpenCodeRequestError(
-        "load session todos",
-        response.error,
-        (response as { response?: { status?: unknown; statusText?: unknown } }).response,
-      );
+    };
+    if (trimmedWorkingDirectory.length > 0) {
+      todoRequest.directory = trimmedWorkingDirectory;
     }
-    const payload = response.data;
-    return normalizeTodoList(payload);
+    const response = await client.session.todo(todoRequest);
+    if (response.data === undefined || response.data === null) {
+      throw toOpenCodeRequestError("load session todos", response.error, response.response);
+    }
+    return normalizeTodoList(response.data);
   } catch (error) {
     throw toOpenCodeRequestError("load session todos", error);
   }

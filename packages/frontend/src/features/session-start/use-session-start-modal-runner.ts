@@ -51,6 +51,10 @@ type SessionStartModalConfirmPayload = Exclude<
 
 type SessionStartDecisionInput = Omit<SessionStartModalConfirmPayload, "runInBackground">;
 
+type SessionStartTargetBranchFields = {
+  targetBranch?: GitTargetBranch;
+};
+
 type SessionStartDecisionRequestContext = Pick<
   SessionStartModalRunRequest,
   "role" | "launchActionId" | "taskId"
@@ -64,8 +68,8 @@ type SessionStartModalRunResult = {
 
 type PendingModalRun = {
   request: SessionStartModalRunRequest;
-  execute: (result: SessionStartModalRunResult) => Promise<unknown>;
-  resolve: (value: unknown) => void;
+  execute: (result: SessionStartModalRunResult) => Promise<() => void>;
+  cancel: () => void;
 };
 
 const requireSelectedModel = (
@@ -109,7 +113,7 @@ export const buildSessionStartModalDecision = ({
   requestContext: SessionStartDecisionRequestContext;
   selectedModel: AgentModelSelection | null;
 }): SessionStartModalDecision => {
-  const buildTargetBranchFields = (): { targetBranch?: GitTargetBranch } =>
+  const buildTargetBranchFields = (): SessionStartTargetBranchFields =>
     input.targetBranch ? { targetBranch: targetBranchFromSelection(input.targetBranch) } : {};
 
   if (input.startMode === "reuse") {
@@ -201,13 +205,7 @@ export function useSessionStartModalRunner({
   favoriteState: SessionStartModalModel["favoriteState"];
   repoSettings: RepoSettingsInput | null;
   workspaceRepoPath: string | null;
-}): {
-  sessionStartModal: SessionStartModalModel | null;
-  runSessionStartRequest: <T>(
-    request: SessionStartModalRunRequest,
-    execute: (result: SessionStartModalRunResult) => Promise<T>,
-  ) => Promise<T | undefined>;
-} {
+}) {
   const selectionRef = useRef<AgentModelSelection | null>(null);
   const pendingRunRef = useRef<PendingModalRun | null>(null);
   const [isStarting, setIsStarting] = useState(false);
@@ -273,7 +271,7 @@ export function useSessionStartModalRunner({
   }, [retryRuntimeSettings]);
 
   const resolvePendingRun = useCallback(
-    (value: unknown): void => {
+    (settle?: () => void): void => {
       const pendingRun = pendingRunRef.current;
       if (!pendingRun) {
         return;
@@ -281,7 +279,7 @@ export function useSessionStartModalRunner({
 
       pendingRunRef.current = null;
       closeStartModal();
-      pendingRun.resolve(value);
+      (settle ?? pendingRun.cancel)();
     },
     [closeStartModal],
   );
@@ -294,7 +292,7 @@ export function useSessionStartModalRunner({
       if (isStarting) {
         throw new Error("A session start is already in progress.");
       }
-      resolvePendingRun(undefined);
+      resolvePendingRun();
       const targetBranchValidationError = taskTargetBranchValidationError(
         request.initialTargetBranchError,
       );
@@ -312,8 +310,11 @@ export function useSessionStartModalRunner({
       return new Promise<T | undefined>((resolve) => {
         pendingRunRef.current = {
           request,
-          execute: execute as (result: SessionStartModalRunResult) => Promise<unknown>,
-          resolve: resolve as (value: unknown) => void,
+          execute: async (result) => {
+            const value = await execute(result);
+            return () => resolve(value);
+          },
+          cancel: () => resolve(undefined),
         };
       });
     },
@@ -322,7 +323,7 @@ export function useSessionStartModalRunner({
 
   const confirmModal = useCallback(
     async (input?: Parameters<SessionStartModalModel["onConfirm"]>[0]) => {
-      if (!input || typeof input === "boolean") {
+      if (!input || input === true) {
         return;
       }
 
@@ -368,12 +369,12 @@ export function useSessionStartModalRunner({
           });
         }
 
-        const value = await pendingRun.execute({
+        const settle = await pendingRun.execute({
           decision,
           runInBackground: input.runInBackground ?? false,
           request: requestContext,
         });
-        resolvePendingRun(value);
+        resolvePendingRun(settle);
       } catch (error) {
         toast.error("Failed to start the session.", {
           description: errorMessage(error),
@@ -441,7 +442,7 @@ export function useSessionStartModalRunner({
           if (isStarting) {
             return;
           }
-          resolvePendingRun(undefined);
+          resolvePendingRun();
         }
       },
       onConfirm: confirmModal,
@@ -487,5 +488,11 @@ export function useSessionStartModalRunner({
   return {
     sessionStartModal,
     runSessionStartRequest,
+  } satisfies {
+    sessionStartModal: SessionStartModalModel | null;
+    runSessionStartRequest: <T>(
+      request: SessionStartModalRunRequest,
+      execute: (result: SessionStartModalRunResult) => Promise<T>,
+    ) => Promise<T | undefined>;
   };
 }

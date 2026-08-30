@@ -2,23 +2,35 @@ import { Effect, Exit } from "effect";
 import {
   causeToElectronBoundaryError,
   type ElectronError,
-  type ElectronErrorDetails,
   ElectronLifecycleError,
 } from "../effect/electron-errors";
 
-type ElectronMainLifecycleLogger = {
-  error(message: string, error?: unknown): Effect.Effect<void, unknown>;
-  info(message: string): Effect.Effect<void, unknown>;
+type ElectronStartupPhaseDetails = {
+  readonly phase: "configure-ready" | "create-window" | "initialize-host" | "register-activate";
 };
 
+type ElectronMainLifecycleLogger = {
+  error(message: string, cause?: unknown): Effect.Effect<void, Error>;
+  info(message: string): Effect.Effect<void, Error>;
+};
+
+const toLifecycleError = (cause: unknown, operation: string): Error =>
+  cause instanceof Error
+    ? cause
+    : new ElectronLifecycleError({
+        operation,
+        message: String(cause),
+        cause,
+      });
+
 const captureLoggingFailure = async (
-  operation: () => Effect.Effect<void, unknown>,
-): Promise<unknown | undefined> => {
+  operation: () => Effect.Effect<void, Error>,
+): Promise<Error | undefined> => {
   try {
     const result = await Effect.runPromise(Effect.either(operation()));
-    return result._tag === "Left" ? result.left : undefined;
+    return result._tag === "Left" ? toLifecycleError(result.left, "electron.main.log") : undefined;
   } catch (cause) {
-    return cause;
+    return toLifecycleError(cause, "electron.main.log");
   }
 };
 
@@ -28,11 +40,11 @@ const lifecycleReportingFailure = ({
   operation,
   relatedFailures,
 }: {
-  loggingFailures: unknown[];
+  loggingFailures: Error[];
   message: string;
   operation: string;
-  relatedFailures: unknown[];
-}): unknown | undefined => {
+  relatedFailures: Error[];
+}): Error | undefined => {
   const failures = [...new Set([...loggingFailures, ...relatedFailures])];
   if (failures.length === 0) {
     return undefined;
@@ -61,13 +73,22 @@ export type ElectronMainStartupSteps<PreReady, Ready> = {
 const ensureStartupContinuesEffect = (
   shouldContinueStartup: (() => boolean) | undefined,
   operation: string,
-  details?: ElectronErrorDetails,
-): Effect.Effect<void, ElectronLifecycleError> => {
+  details?: ElectronStartupPhaseDetails,
+): Effect.Effect<void, ElectronLifecycleError<ElectronStartupPhaseDetails>> => {
   if (!shouldContinueStartup || shouldContinueStartup()) {
     return Effect.void;
   }
+  if (details === undefined) {
+    return Effect.fail(
+      new ElectronLifecycleError<ElectronStartupPhaseDetails>({
+        operation,
+        message: "Electron startup stopped because host shutdown has started.",
+        reason: "shutdown-started",
+      }),
+    );
+  }
   return Effect.fail(
-    new ElectronLifecycleError({
+    new ElectronLifecycleError<ElectronStartupPhaseDetails>({
       operation,
       message: "Electron startup stopped because host shutdown has started.",
       reason: "shutdown-started",
@@ -135,7 +156,7 @@ export const runElectronMainStartupBoundary = async ({
   }
 
   markShutdownStarted();
-  const loggingFailures: unknown[] = [];
+  const loggingFailures: Error[] = [];
   const startupLoggingFailure = await captureLoggingFailure(() =>
     logger.error(
       "OpenDucktor Electron startup failed",
@@ -145,7 +166,7 @@ export const runElectronMainStartupBoundary = async ({
   if (startupLoggingFailure !== undefined) {
     loggingFailures.push(startupLoggingFailure);
   }
-  const cleanupFailures: unknown[] = [];
+  const cleanupFailures: Error[] = [];
   const cleanupExit = await Effect.runPromiseExit(cleanupAfterFailure());
   if (Exit.isFailure(cleanupExit)) {
     const cleanupFailure = causeToElectronBoundaryError(cleanupExit.cause);
@@ -232,11 +253,11 @@ export const createElectronMainShutdownController = ({
     hostShutdownStarted = true;
     const hostCommandDrain = drainHostCommands().then(
       () => undefined,
-      (cause: unknown) => cause,
+      (cause: unknown) => toLifecycleError(cause, "electron.main.drain-host-commands"),
     );
     let exitCode = hostShutdownExitCode ?? 0;
-    const loggingFailures: unknown[] = [];
-    const shutdownFailures: unknown[] = [];
+    const loggingFailures: Error[] = [];
+    const shutdownFailures: Error[] = [];
     const startLoggingFailure = await captureLoggingFailure(() =>
       logger.info(`OpenDucktor host shutdown started (${reason})`),
     );
@@ -248,7 +269,7 @@ export const createElectronMainShutdownController = ({
     if (hostCommandLoggingFailure !== undefined) {
       loggingFailures.push(hostCommandLoggingFailure);
     }
-    let completionLoggingFailure: unknown | undefined;
+    let completionLoggingFailure: Error | undefined;
     if (Exit.isFailure(disposeExit)) {
       exitCode = 1;
       const disposalFailure = causeToElectronBoundaryError(disposeExit.cause);

@@ -120,7 +120,6 @@ describe("Codex tool normalization", () => {
         },
       },
       "message-live",
-      "tool-1",
     )[0];
 
     expect(part).toEqual(
@@ -156,7 +155,6 @@ describe("Codex tool normalization", () => {
         ],
       },
       "message-live",
-      "tool-1",
     )[0];
 
     expect(part).toEqual(
@@ -171,28 +169,21 @@ describe("Codex tool normalization", () => {
     expect(part).not.toHaveProperty("output");
   });
 
-  test("keeps file change cards out of ODT error parsing", () => {
+  test("renders exact Codex file changes as completed tool cards", () => {
     const part = toStreamPart(
       {
         type: "fileChange",
         id: "change-1",
         status: "completed",
-        changes: [{ file: "src/app.ts", diff: "@@ -1 +1 @@\n-old\n+new" }],
-        content: [
+        changes: [
           {
-            type: "text",
-            text: JSON.stringify({
-              ok: false,
-              error: {
-                code: "TASK_POLICY_ERROR",
-                message: "This belongs to another tool surface",
-              },
-            }),
+            path: "src/app.ts",
+            kind: { type: "update", move_path: null },
+            diff: "@@ -1 +1 @@\n-old\n+new",
           },
         ],
       },
       "message-live",
-      "change-1",
     )[0];
 
     expect(part).toEqual(
@@ -222,10 +213,15 @@ describe("Codex tool normalization", () => {
         type: "fileChange",
         id: "change-1",
         status: "completed",
-        changes: [{ file: "src/app.ts" }],
+        changes: [
+          {
+            path: "   ",
+            kind: { type: "update", move_path: null },
+            diff: "@@ -1 +1 @@\n-old\n+new",
+          },
+        ],
       },
       "message-live",
-      "change-1",
     )[0];
 
     expect(part).toEqual(
@@ -234,8 +230,7 @@ describe("Codex tool normalization", () => {
         tool: "apply_patch",
         toolType: "file_edit",
         status: "error",
-        error:
-          "Malformed Codex file change: entry 0 is missing string file/path or diff/patch fields.",
+        error: "Malformed Codex file change: entry 0 has empty file path.",
       }),
     );
     expect(part).not.toHaveProperty("input");
@@ -251,14 +246,13 @@ describe("Codex tool normalization", () => {
         status: "completed",
         changes: [
           {
-            file: "/Users/maxsky5/.openducktor-local/worktrees/fairnest/apps/web/__tests__/contexts/AuthContext.test.tsx",
-            type: "modified",
+            path: "/Users/maxsky5/.openducktor-local/worktrees/fairnest/apps/web/__tests__/contexts/AuthContext.test.tsx",
+            kind: { type: "update", move_path: null },
             diff: "import { render, screen } from '@testing-library/react';\nfunction AuthConsumer() {}\n",
           },
         ],
       },
       "message-live",
-      "change-1",
     )[0];
 
     expect(part).toEqual(
@@ -296,12 +290,11 @@ describe("Codex tool normalization", () => {
         id: "patch-1",
         namespace: "functions",
         tool: "apply_patch",
-        input: patch,
+        arguments: { patch },
         success: true,
         status: "completed",
       },
       "message-live",
-      "patch-1",
     )[0];
 
     expect(part).toEqual(
@@ -340,7 +333,6 @@ describe("Codex tool normalization", () => {
         status: "completed",
       },
       "message-live",
-      "patch-1",
     )[0];
 
     expect(part).toEqual(
@@ -375,12 +367,11 @@ function AuthConsumer() {}
         id: "patch-1",
         namespace: "functions",
         tool: "apply_patch",
-        input: patch,
+        arguments: { patch },
         success: true,
         status: "completed",
       },
       "message-live",
-      "patch-1",
     )[0];
 
     expect(part).toEqual(
@@ -410,13 +401,15 @@ function AuthConsumer() {}
         id: "question-1",
         namespace: "functions",
         tool: "request_user_input",
-        input: JSON.stringify({ requestId: "32", questions: [{ question: "Pick a mode" }] }),
+        arguments: JSON.stringify({
+          requestId: "32",
+          questions: [{ question: "Pick a mode" }],
+        }),
         contentItems: [{ type: "text", text: "answered" }],
         success: true,
         status: "completed",
       },
       "message-live",
-      "question-1",
     )[0];
 
     expect(part).toEqual(
@@ -447,7 +440,6 @@ function AuthConsumer() {}
         durationMs: 0,
       },
       "message-live",
-      "cmd-1",
     )[0];
 
     expect(part).toEqual(
@@ -471,10 +463,10 @@ function AuthConsumer() {}
       startedAtMs: 1000,
     };
 
-    expect(toStreamPart(item, "message-history", "cmd-1")[0]).not.toEqual(
+    expect(toStreamPart(item, "message-history")[0]).not.toEqual(
       expect.objectContaining({ startedAtMs: expect.any(Number) }),
     );
-    expect(toStreamPart(item, "message-live", "cmd-1", { allowStartedAtOnly: true })[0]).toEqual(
+    expect(toStreamPart(item, "message-live", { allowStartedAtOnly: true })[0]).toEqual(
       expect.objectContaining({ startedAtMs: 1000 }),
     );
   });
@@ -493,7 +485,6 @@ function AuthConsumer() {}
           durationMs: "0",
         },
         "message-live",
-        "cmd-1",
       ),
     ).toThrow("Codex tool durationMs must be a finite number when present.");
   });
@@ -506,7 +497,6 @@ function AuthConsumer() {}
         action: { type: "search", query: null, queries: ["actual query"] },
       },
       "message-live",
-      "web-1",
     )[0];
 
     expect(part).toEqual(
@@ -524,7 +514,6 @@ function AuthConsumer() {}
     const part = toStreamPart(
       { type: "webSearch", id: "web-1", action: { type: "other" } },
       "message-live",
-      "web-1",
     )[0];
 
     expect(part).toEqual(
@@ -542,7 +531,6 @@ function AuthConsumer() {}
     const part = toStreamPart(
       { type: "plan", id: "plan-1", text: "1. Inspect\n2. Fix" },
       "message-live",
-      "plan-1",
     )[0];
 
     expect(part).toEqual(

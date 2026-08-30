@@ -310,7 +310,10 @@ test("shows either a lazy author avatar or its fallback", () => {
     </TooltipProvider>,
   );
 
-  const avatar = view.getByAltText("reviewer avatar") as HTMLImageElement;
+  const avatar = view.getByAltText("reviewer avatar");
+  if (!(avatar instanceof HTMLImageElement)) {
+    throw new TypeError("Expected reviewer avatar to be an image element.");
+  }
 
   expect(avatar.src).toBe("https://avatars.githubusercontent.com/u/1?v=4");
   expect(avatar.loading).toBe("lazy");

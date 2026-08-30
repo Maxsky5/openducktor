@@ -10,7 +10,7 @@ const isAbsolutePathLike = (value: string): boolean =>
 
 export const requireRelativePath = (
   relativePath: string,
-): Effect.Effect<string, HostValidationError> => {
+): Effect.Effect<string, HostValidationError<{ relativePath: string }>> => {
   if (relativePath.trim().length === 0) {
     return Effect.fail(
       new HostValidationError({

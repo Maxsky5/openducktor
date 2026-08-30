@@ -434,11 +434,13 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     (!isReuseMode &&
       (isSelectionCatalogLoading || !selectedRuntimeKind || !selectedModelSelection)) ||
     (requiresExistingSession && !hasExistingSessionSelection);
-  const confirmInput = {
+  const confirmInput: SessionStartModalConfirmDraft = {
     startMode: selectedStartMode,
     sourceSessionOptionValue: requiresExistingSession ? selectedSourceSessionValue : null,
-    ...(showTargetBranchSelector ? { targetBranch: selectedTargetBranch } : {}),
   };
+  if (showTargetBranchSelector) {
+    confirmInput.targetBranch = selectedTargetBranch;
+  }
   const handleConfirm = (): void => {
     if (confirmDisabled) {
       return;

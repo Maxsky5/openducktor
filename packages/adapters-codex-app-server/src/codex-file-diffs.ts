@@ -1,6 +1,16 @@
-import type { FileDiff } from "@openducktor/contracts";
-import { countRenderableFileDiffLines, selectRenderableFileDiff } from "@openducktor/core";
-import { arrayFromUnknown, extractStringField, isPlainObject } from "./codex-app-server-shared";
+import type {
+  CodexAppServerFileUpdateChange,
+  CodexAppServerJsonValue,
+  CodexAppServerThreadItem,
+  FileDiff,
+} from "@openducktor/contracts";
+import {
+  countRenderableFileDiffLines,
+  normalizeRenderableFileDiffCandidate,
+  selectRenderableFileDiff,
+  splitFileDiffCandidates,
+} from "@openducktor/core";
+import { extractStringField } from "./codex-app-server-shared";
 
 export class CodexFileDiffParseError extends Error {
   constructor(message: string) {
@@ -9,60 +19,17 @@ export class CodexFileDiffParseError extends Error {
   }
 }
 
-export const codexFileChangeEntries = (value: Record<string, unknown>): unknown[] => {
-  const changes = arrayFromUnknown(value.changes);
-  const diffs = arrayFromUnknown(value.diffs);
-  return changes.length > 0 ? changes : diffs;
-};
+type CodexFileChangeItem = Extract<CodexAppServerThreadItem, { type: "fileChange" }>;
 
-const normalizeExplicitDiffType = (value: unknown): string | null => {
-  if (typeof value === "string" && value.trim().length > 0) {
-    const normalized = value.trim();
-    if (normalized === "add") {
-      return "added";
-    }
-    if (normalized === "delete") {
-      return "deleted";
-    }
-    if (normalized === "update") {
-      return "modified";
-    }
-    return normalized;
-  }
+export const codexFileChangeEntries = (
+  value: CodexFileChangeItem,
+): CodexAppServerFileUpdateChange[] => value.changes;
 
-  if (isPlainObject(value)) {
-    return normalizeExplicitDiffType(value.type);
-  }
-
-  return null;
-};
-
-const inferDiffType = (entry: Record<string, unknown>, diff: string): string => {
-  const explicitType =
-    normalizeExplicitDiffType(entry.type) ??
-    normalizeExplicitDiffType(entry.status) ??
-    normalizeExplicitDiffType(entry.kind);
-  if (explicitType) {
-    return explicitType;
-  }
-
-  if (/^---\s+\/dev\/null\r?$/m.test(diff)) {
-    return "added";
-  }
-  if (/^\+\+\+\s+\/dev\/null\r?$/m.test(diff)) {
-    return "deleted";
-  }
-  return "modified";
-};
-
-const movePathFromKind = (value: unknown): string | null => {
-  if (!isPlainObject(value)) {
-    return null;
-  }
-
-  const movePath = value.movePath ?? value.move_path;
-  return typeof movePath === "string" && movePath.trim().length > 0 ? movePath.trim() : null;
-};
+const CODEX_DIFF_TYPES = {
+  add: "added",
+  delete: "deleted",
+  update: "modified",
+} as const satisfies Record<CodexAppServerFileUpdateChange["kind"]["type"], FileDiff["type"]>;
 
 const stripMoveTrailer = (diff: string, movePath: string | null): string => {
   if (!movePath) {
@@ -91,66 +58,71 @@ const selectCodexRenderableDiff = (
   return "";
 };
 
-const parseFileDiffEntry = (entry: unknown, location: string): FileDiff => {
-  if (!isPlainObject(entry)) {
-    throw new CodexFileDiffParseError(`entry ${location} must be an object.`);
-  }
-
-  const rawFile = entry.file ?? entry.path;
-  const diff = entry.diff ?? entry.patch;
-  if (typeof rawFile !== "string" || typeof diff !== "string") {
-    throw new CodexFileDiffParseError(
-      `entry ${location} is missing string file/path or diff/patch fields.`,
-    );
-  }
-
-  const movePath = movePathFromKind(entry.kind);
-  const sourceFile = rawFile.trim();
+const parseFileDiffEntry = (entry: CodexAppServerFileUpdateChange, index: number): FileDiff => {
+  const sourceFile = entry.path.trim();
+  const movePath = entry.kind.type === "update" ? (entry.kind.move_path?.trim() ?? null) : null;
   const file = movePath ?? sourceFile;
   if (file.length === 0) {
-    throw new CodexFileDiffParseError(`entry ${location} has empty file path.`);
+    throw new CodexFileDiffParseError(`entry ${index} has empty file path.`);
   }
-  const type = inferDiffType(entry, diff);
+  const type = CODEX_DIFF_TYPES[entry.kind.type];
   const renderableDiff = selectCodexRenderableDiff(
-    stripMoveTrailer(diff, movePath),
+    stripMoveTrailer(entry.diff, movePath),
     file,
     sourceFile,
     type,
   );
   const counts = countRenderableFileDiffLines(renderableDiff);
-  const additions =
-    typeof entry.additions === "number" && Number.isFinite(entry.additions)
-      ? entry.additions
-      : counts.additions;
-  const deletions =
-    typeof entry.deletions === "number" && Number.isFinite(entry.deletions)
-      ? entry.deletions
-      : counts.deletions;
   return {
     file,
     type,
-    additions,
-    deletions,
+    additions: counts.additions,
+    deletions: counts.deletions,
     diff: renderableDiff,
   };
 };
 
-export const toFileDiffs = (value: unknown): FileDiff[] => {
-  return arrayFromUnknown(value).flatMap((entry, entryIndex): FileDiff[] => {
-    if (!isPlainObject(entry)) {
-      throw new CodexFileDiffParseError(`entry ${entryIndex} must be an object.`);
-    }
+export const toFileDiffs = (changes: CodexAppServerFileUpdateChange[]): FileDiff[] =>
+  changes.map(parseFileDiffEntry);
 
-    const nested = arrayFromUnknown(entry.fileChanges ?? entry.changes ?? entry.files);
-    if (nested.length > 0) {
-      return nested.map((nestedEntry, nestedIndex) =>
-        parseFileDiffEntry(nestedEntry, `${entryIndex}.${nestedIndex}`),
+const unifiedDiffHeaderPath = (candidate: string, prefix: "--- " | "+++ "): string | null => {
+  const line = candidate.split("\n").find((candidateLine) => candidateLine.startsWith(prefix));
+  if (!line) {
+    return null;
+  }
+  const path = line.slice(prefix.length).split("\t", 1)[0]?.trim();
+  if (!path || path === "/dev/null") {
+    return null;
+  }
+  return path.replace(/^"|"$/g, "").replace(/^(?:a|b)\//, "");
+};
+
+export const fileDiffsFromUnifiedDiff = (unifiedDiff: string): FileDiff[] =>
+  splitFileDiffCandidates(unifiedDiff).map((candidate, index) => {
+    const previousPath = unifiedDiffHeaderPath(candidate, "--- ");
+    const nextPath = unifiedDiffHeaderPath(candidate, "+++ ");
+    const file = nextPath ?? previousPath;
+    if (!file) {
+      throw new CodexFileDiffParseError(
+        `unified diff entry ${index} is missing a non-null file header.`,
       );
     }
-
-    return [parseFileDiffEntry(entry, String(entryIndex))];
+    const type = previousPath === null ? "added" : nextPath === null ? "deleted" : "modified";
+    const diff = normalizeRenderableFileDiffCandidate(candidate, file);
+    if (!diff) {
+      throw new CodexFileDiffParseError(
+        `unified diff entry ${index} for '${file}' is not renderable.`,
+      );
+    }
+    const counts = countRenderableFileDiffLines(diff);
+    return {
+      file,
+      type,
+      additions: counts.additions,
+      deletions: counts.deletions,
+      diff,
+    };
   });
-};
 
 export const fileDiffsPatchOutput = (fileDiffs: ReadonlyArray<{ diff: string }>): string | null => {
   const diffs = fileDiffs.map((fileDiff) => fileDiff.diff.trim()).filter((diff) => diff.length > 0);
@@ -171,18 +143,24 @@ type ApplyPatchFileEntry = {
   lines: string[];
 };
 
-const applyPatchFileHeader = (
-  line: string,
-): { operation: ApplyPatchFileType; file: string } | null => {
+type ApplyPatchFileHeader = {
+  file: string;
+  operation: ApplyPatchFileType;
+};
+
+const isApplyPatchFileType = (value: string | undefined): value is ApplyPatchFileType =>
+  value === "Add" || value === "Delete" || value === "Update";
+
+const applyPatchFileHeader = (line: string): ApplyPatchFileHeader | null => {
   const match = /^\*\*\* (Add|Delete|Update) File: (.+)$/.exec(line);
   const operation = match?.[1];
   const file = match?.[2];
-  if (!operation || !file) {
+  if (!isApplyPatchFileType(operation) || !file) {
     return null;
   }
 
   return {
-    operation: operation as ApplyPatchFileType,
+    operation,
     file: file.trim(),
   };
 };
@@ -248,7 +226,9 @@ export const codexApplyPatchFileDiffs = (patch: string): FileDiff[] => {
   return diffs;
 };
 
-const patchInputFromObject = (value: Record<string, unknown> | null | undefined): string | null =>
+const patchInputFromObject = (
+  value: Record<string, CodexAppServerJsonValue> | null | undefined,
+): string | null =>
   value
     ? (extractStringField(value, ["patch"]) ??
       extractStringField(value, ["patchText", "patch_text"]) ??
@@ -256,11 +236,5 @@ const patchInputFromObject = (value: Record<string, unknown> | null | undefined)
     : null;
 
 export const codexPatchInputFromToolPayload = (
-  value: Record<string, unknown>,
-  input: Record<string, unknown> | null | undefined,
-): string | null => {
-  if (typeof value.input === "string") {
-    return value.input;
-  }
-  return patchInputFromObject(input);
-};
+  input: Record<string, CodexAppServerJsonValue> | null | undefined,
+): string | null => patchInputFromObject(input);

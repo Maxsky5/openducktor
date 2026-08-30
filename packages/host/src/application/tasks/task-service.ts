@@ -16,11 +16,11 @@ import {
 import { Effect } from "effect";
 import { TaskPolicyError } from "../../domain/task/task-policy-error";
 import type {
-  HostDependencyError,
-  HostInvariantError,
-  HostOperationError,
-  HostResourceError,
-  HostValidationError,
+  HostDependencyErrorAggregate,
+  HostInvariantErrorAggregate,
+  HostOperationErrorAggregate,
+  HostResourceErrorAggregate,
+  HostValidationErrorAggregate,
 } from "../../effect/host-errors";
 import {
   errorMessage,
@@ -98,11 +98,11 @@ import type { TaskWorktreeService } from "./worktrees/task-worktree-service";
 export type TaskServiceError =
   | DevServerServiceError
   | GitPortError
-  | HostDependencyError
-  | HostInvariantError
-  | HostOperationError
-  | HostResourceError
-  | HostValidationError
+  | HostDependencyErrorAggregate
+  | HostInvariantErrorAggregate
+  | HostOperationErrorAggregate
+  | HostResourceErrorAggregate
+  | HostValidationErrorAggregate
   | RuntimeRegistryError
   | SettingsConfigError
   | TaskAssetError

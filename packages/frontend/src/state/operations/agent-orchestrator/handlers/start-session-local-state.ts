@@ -20,35 +20,40 @@ export const buildInitialSession = ({
   selectedModel: AgentModelSelection;
   systemPrompt: string;
   initialMessages?: AgentSessionState["messages"];
-}): AgentSessionState => ({
-  externalSessionId: startedCtx.summary.externalSessionId,
-  ...(startedCtx.summary.title ? { title: startedCtx.summary.title } : {}),
-  sessionAssociation: {
-    kind: "workflow",
-    taskId: startedCtx.taskId,
-    role: startedCtx.role,
-  },
-  runtimeKind: startedCtx.summary.runtimeKind,
-  status: startedCtx.holdForPostStartMessage ? "starting" : "idle",
-  runtimeStatusMessage: null,
-  startedAt: startedCtx.summary.startedAt,
-  workingDirectory: startedCtx.summary.workingDirectory,
-  historyLoadState: "loaded",
-  messages:
-    initialMessages ??
-    createSessionMessagesState(
-      startedCtx.summary.externalSessionId,
-      buildSessionHeaderMessages({
-        externalSessionId: startedCtx.summary.externalSessionId,
-        systemPrompt,
-        startedAt: startedCtx.summary.startedAt,
-      }),
-    ),
-  contextUsage: null,
-  pendingApprovals: [],
-  pendingQuestions: [],
-  selectedModel,
-});
+}): AgentSessionState => {
+  const session: AgentSessionState = {
+    externalSessionId: startedCtx.summary.externalSessionId,
+    sessionAssociation: {
+      kind: "workflow",
+      taskId: startedCtx.taskId,
+      role: startedCtx.role,
+    },
+    runtimeKind: startedCtx.summary.runtimeKind,
+    status: startedCtx.holdForPostStartMessage ? "starting" : "idle",
+    runtimeStatusMessage: null,
+    startedAt: startedCtx.summary.startedAt,
+    workingDirectory: startedCtx.summary.workingDirectory,
+    historyLoadState: "loaded",
+    messages:
+      initialMessages ??
+      createSessionMessagesState(
+        startedCtx.summary.externalSessionId,
+        buildSessionHeaderMessages({
+          externalSessionId: startedCtx.summary.externalSessionId,
+          systemPrompt,
+          startedAt: startedCtx.summary.startedAt,
+        }),
+      ),
+    contextUsage: null,
+    pendingApprovals: [],
+    pendingQuestions: [],
+    selectedModel,
+  };
+  if (startedCtx.summary.title) {
+    session.title = startedCtx.summary.title;
+  }
+  return session;
+};
 
 export const persistInitialSession = async ({
   initialSession,

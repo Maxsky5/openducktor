@@ -11,14 +11,43 @@ import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { useTaskCleanupImpact } from "./use-task-cleanup-impact";
 
-const createWorkspaceState = (): WorkspaceStateContextValue =>
-  ({
-    activeWorkspace: {
-      workspaceId: "workspace-a",
-      workspaceName: "Workspace A",
-      repoPath: "/repo",
-    },
-  }) as WorkspaceStateContextValue;
+const createWorkspaceState = (): WorkspaceStateContextValue => ({
+  isSwitchingWorkspace: false,
+  isLoadingBranches: false,
+  isSwitchingBranch: false,
+  branchSyncDegraded: false,
+  workspaces: [],
+  activeWorkspace: {
+    workspaceId: "workspace-a",
+    workspaceName: "Workspace A",
+    repoPath: "/repo",
+    isActive: true,
+    hasConfig: true,
+    configuredWorktreeBasePath: "/worktrees/repo",
+    defaultWorktreeBasePath: "/worktrees/repo",
+    effectiveWorktreeBasePath: "/worktrees/repo",
+  },
+  branches: [],
+  activeBranch: null,
+  addWorkspace: async () => {},
+  selectWorkspace: async () => {},
+  reorderWorkspaces: async () => {},
+  refreshBranches: async () => {},
+  switchBranch: async () => {},
+  loadRepoSettings: async () => {
+    throw new Error("Not used by this test.");
+  },
+  saveRepoSettings: async () => {},
+  loadSettingsSnapshot: async () => {
+    throw new Error("Not used by this test.");
+  },
+  detectGithubRepository: async () => null,
+  saveGlobalGitConfig: async () => {},
+  saveSettingsSnapshot: async () => {},
+  saveAgentModelFavorites: async () => {
+    throw new Error("Not used by this test.");
+  },
+});
 
 const createWrapper = () => {
   const workspaceState = createWorkspaceState();

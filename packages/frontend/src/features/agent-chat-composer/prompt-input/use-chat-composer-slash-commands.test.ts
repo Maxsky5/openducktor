@@ -96,7 +96,7 @@ describe("use-chat-composer-slash-commands", () => {
     expect(filterSlashCommandsForComposerScope(mergedCommands, "repo", "opencode")).toEqual([]);
   });
 
-  test("removes system commands from unsupported session runtimes", () => {
+  test("keeps runtime commands alongside compact in Claude session composers", () => {
     expect(
       filterSlashCommandsForComposerScope(
         [
@@ -104,8 +104,8 @@ describe("use-chat-composer-slash-commands", () => {
           { id: "review", trigger: "review", title: "Review", hints: [] },
         ],
         "session",
-        "third-party" as never,
+        "claude",
       ).map((command) => command.id),
-    ).toEqual(["review"]);
+    ).toEqual(["system:compact", "review"]);
   });
 });

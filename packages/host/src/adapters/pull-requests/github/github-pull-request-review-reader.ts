@@ -8,17 +8,17 @@ import {
   pullRequestReviewContextSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { z } from "zod";
 import { combinedCommandOutput } from "../../../application/tasks/support/github-pull-request-model";
 import type { GithubCommandDependencies } from "../../../application/tasks/support/github-pull-requests";
 import { runGithubRepositoryCommandAllowFailure } from "../../../application/tasks/support/github-repository-command";
-import { errorMessage, HostValidationError } from "../../../effect/host-errors";
-import { loadGithubPullRequestReviewOverview } from "./github-pull-request-review-overview";
 import {
-  parseGithubJson,
-  requireGithubObject,
-  requireGithubString,
-  toNullableGithubString,
-} from "./github-pull-request-review-payload";
+  errorMessage,
+  HostValidationError,
+  type HostValidationErrorAggregate,
+} from "../../../effect/host-errors";
+import { loadGithubPullRequestReviewOverview } from "./github-pull-request-review-overview";
+import { parseGithubJson } from "./github-pull-request-review-payload";
 import { loadGithubReviewThreads } from "./github-pull-request-review-threads";
 
 type GithubPullRequestReviewReadInput = {
@@ -31,7 +31,7 @@ type GithubPullRequestReviewReadInput = {
 export type GithubPullRequestReviewReader = {
   read(
     input: GithubPullRequestReviewReadInput,
-  ): Effect.Effect<PullRequestReviewContext, HostValidationError>;
+  ): Effect.Effect<PullRequestReviewContext, HostValidationErrorAggregate>;
 };
 
 const isNoChecksReported = (result: {
@@ -43,8 +43,8 @@ const isNoChecksReported = (result: {
   result.stdout.trim().length === 0 &&
   result.stderr.toLowerCase().includes("no checks reported");
 
-const normalizeCheckStatus = (state: unknown): PullRequestReviewCheckStatus => {
-  const normalized = typeof state === "string" ? state.trim().toLowerCase() : "";
+const normalizeCheckStatus = (state: string | null): PullRequestReviewCheckStatus => {
+  const normalized = state?.trim().toLowerCase() ?? "";
   if (
     normalized.includes("queued") ||
     normalized.includes("pending") ||
@@ -62,15 +62,10 @@ const normalizeCheckStatus = (state: unknown): PullRequestReviewCheckStatus => {
 };
 
 const normalizeCheckConclusion = (
-  bucket: unknown,
-  state: unknown,
+  bucket: string | null,
+  state: string | null,
 ): PullRequestReviewCheckConclusion | null => {
-  const value =
-    typeof bucket === "string" && bucket.trim().length > 0
-      ? bucket.trim().toLowerCase()
-      : typeof state === "string"
-        ? state.trim().toLowerCase()
-        : "";
+  const value = bucket?.trim().toLowerCase() || state?.trim().toLowerCase() || "";
   if (!value || value === "pending" || value === "queued" || value === "in_progress") {
     return null;
   }
@@ -98,25 +93,37 @@ const normalizeCheckConclusion = (
   return "unknown";
 };
 
+const optionalCheckTextSchema = z.string().nullable().optional();
+const checksResponseSchema = z.array(
+  z.object({
+    name: z.string().min(1),
+    workflow: optionalCheckTextSchema,
+    state: optionalCheckTextSchema,
+    bucket: optionalCheckTextSchema,
+    link: optionalCheckTextSchema,
+    description: optionalCheckTextSchema,
+    event: optionalCheckTextSchema,
+    startedAt: optionalCheckTextSchema,
+    completedAt: optionalCheckTextSchema,
+  }),
+);
+
+const toNullableCheckText = (value: string | null | undefined): string | null =>
+  value && value.trim().length > 0 ? value : null;
+
 const parseChecks = (payload: string): PullRequestReviewCheck[] => {
-  const parsed = parseGithubJson(payload, "pull request checks");
-  if (!Array.isArray(parsed)) {
-    throw new HostValidationError({
-      field: "payload",
-      message: "Failed to parse GitHub pull request checks response: expected an array.",
-    });
-  }
-  return parsed.map((entry, index) => {
-    const check = requireGithubObject(entry, `checks.${index}`);
+  const checks = parseGithubJson(payload, "pull request checks", checksResponseSchema, "checks");
+  return checks.map((check) => {
+    const state = toNullableCheckText(check.state);
     return {
-      name: requireGithubString(check.name, `checks.${index}.name`),
-      workflow: toNullableGithubString(check.workflow),
-      status: normalizeCheckStatus(check.state),
-      conclusion: normalizeCheckConclusion(check.bucket, check.state),
-      url: toNullableGithubString(check.link),
-      details: toNullableGithubString(check.description) ?? toNullableGithubString(check.event),
-      startedAt: toNullableGithubString(check.startedAt),
-      completedAt: toNullableGithubString(check.completedAt),
+      name: check.name,
+      workflow: toNullableCheckText(check.workflow),
+      status: normalizeCheckStatus(state),
+      conclusion: normalizeCheckConclusion(toNullableCheckText(check.bucket), state),
+      url: toNullableCheckText(check.link),
+      details: toNullableCheckText(check.description) ?? toNullableCheckText(check.event),
+      startedAt: toNullableCheckText(check.startedAt),
+      completedAt: toNullableCheckText(check.completedAt),
     };
   });
 };

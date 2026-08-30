@@ -1,4 +1,4 @@
-import type { Part } from "@opencode-ai/sdk/v2/client";
+import type { ParsedOpencodePart } from "../../opencode-ingress";
 import type { EventStreamRuntime } from "../shared";
 import {
   bindSubagentExternalSession,
@@ -69,13 +69,13 @@ const peekPendingSubagentCorrelationKeys = (
 const queuePendingSubagentPartEmission = (
   runtime: EventStreamRuntime,
   externalSessionId: string,
-  part: Part,
+  part: ParsedOpencodePart,
   roleHint?: string,
 ): void => {
   runtime.session.subagentPartIdByExternalSessionId.set(externalSessionId, part.id);
   const pending =
     runtime.session.pendingSubagentPartEmissionsByExternalSessionId.get(externalSessionId) ?? [];
-  pending.push({ part, ...(roleHint ? { roleHint } : {}) });
+  pending.push(roleHint ? { part, roleHint } : { part });
   runtime.session.pendingSubagentPartEmissionsByExternalSessionId.set(externalSessionId, pending);
 };
 
@@ -120,7 +120,7 @@ const shouldTrackPendingSubagentPart = (
 
 export const normalizeLiveSubagentCorrelation = (
   runtime: EventStreamRuntime,
-  rawPart: Part,
+  rawPart: ParsedOpencodePart,
   part: MappedSubagentPart,
   roleHint?: string,
   linkedSubagentExternalSessionId?: string,
@@ -138,11 +138,13 @@ export const normalizeLiveSubagentCorrelation = (
       );
       removePendingSubagentCorrelationKey(runtime.session, existingCorrelationKey);
     }
-    return {
-      ...part,
-      correlationKey: existingCorrelationKey,
-      ...(effectiveExternalSessionId ? { externalSessionId: effectiveExternalSessionId } : {}),
-    };
+    return effectiveExternalSessionId
+      ? {
+          ...part,
+          correlationKey: existingCorrelationKey,
+          externalSessionId: effectiveExternalSessionId,
+        }
+      : { ...part, correlationKey: existingCorrelationKey };
   }
 
   const signature = buildSubagentSignature(part);
@@ -172,11 +174,9 @@ export const normalizeLiveSubagentCorrelation = (
       removePendingSubagentCorrelationKey(runtime.session, correlationKey);
     }
 
-    return {
-      ...part,
-      correlationKey,
-      ...(linkedExternalSessionId ? { externalSessionId: linkedExternalSessionId } : {}),
-    };
+    return linkedExternalSessionId
+      ? { ...part, correlationKey, externalSessionId: linkedExternalSessionId }
+      : { ...part, correlationKey };
   }
 
   const sessionCorrelationKey = effectiveExternalSessionId
@@ -187,7 +187,7 @@ export const normalizeLiveSubagentCorrelation = (
     : [];
   const pendingSessionId = effectiveExternalSessionId;
   const shouldDeferAmbiguousSessionBinding =
-    typeof pendingSessionId === "string" &&
+    pendingSessionId !== undefined &&
     pendingSessionId.length > 0 &&
     !sessionCorrelationKey &&
     pendingCorrelationKeys.length > 1;
@@ -217,11 +217,9 @@ export const normalizeLiveSubagentCorrelation = (
     removePendingSubagentCorrelationKey(runtime.session, correlationKey);
   }
 
-  return {
-    ...part,
-    correlationKey,
-    ...(effectiveExternalSessionId ? { externalSessionId: effectiveExternalSessionId } : {}),
-  };
+  return effectiveExternalSessionId
+    ? { ...part, correlationKey, externalSessionId: effectiveExternalSessionId }
+    : { ...part, correlationKey };
 };
 
 export const removeSubagentCorrelationForPart = (

@@ -1,4 +1,4 @@
-import type { RuntimeKind } from "@openducktor/contracts";
+import { runtimeKindSchema, type RuntimeKind } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 
@@ -29,7 +29,7 @@ export function AgentRuntimeCombobox({
       disabled={disabled}
       {...(className ? { className } : {})}
       {...(triggerClassName ? { triggerClassName } : {})}
-      onValueChange={(nextValue) => onValueChange(nextValue as RuntimeKind)}
+      onValueChange={(nextValue) => onValueChange(runtimeKindSchema.parse(nextValue))}
     />
   );
 }

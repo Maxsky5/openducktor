@@ -16,6 +16,6 @@
   "dependencies": {
     "@openducktor/contracts": "workspace:*",
     "@openducktor/core": "workspace:*",
-    "@openducktor/host": "workspace:*"
+    "zod": "^4.4.3"
   }
 }

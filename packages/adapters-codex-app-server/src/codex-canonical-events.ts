@@ -15,7 +15,6 @@ export type CodexCanonicalEventBase = {
   threadId: string;
   turnId?: string;
   timestamp?: string;
-  raw?: unknown;
 };
 
 export type CodexCanonicalToolEvent = CodexCanonicalEventBase & {

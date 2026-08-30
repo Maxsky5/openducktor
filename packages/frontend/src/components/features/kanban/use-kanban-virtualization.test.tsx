@@ -1,24 +1,22 @@
-import { describe, expect, mock, test } from "bun:test";
-import type { KanbanColumn as KanbanColumnData } from "@openducktor/core";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import type { RenderResult } from "@testing-library/react";
 import { render } from "@testing-library/react";
 import { act, createElement, type ReactElement } from "react";
+import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { useKanbanVirtualization } from "./use-kanban-virtualization";
 
-(
-  globalThis as typeof globalThis & {
-    IS_REACT_ACT_ENVIRONMENT?: boolean;
-  }
-).IS_REACT_ACT_ENVIRONMENT = true;
+Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
+  configurable: true,
+  value: true,
+  writable: true,
+});
 
 type HookArgs = Parameters<typeof useKanbanVirtualization>[0];
 type HookState = ReturnType<typeof useKanbanVirtualization>;
 
-const createTasks = (count: number): KanbanColumnData["tasks"] =>
-  Array.from({ length: count }, (_unused, index) => ({
-    id: `task-${index}`,
-  })) as KanbanColumnData["tasks"];
+const createTasks = (count: number) =>
+  Array.from({ length: count }, (_unused, index) => createTaskCardFixture({ id: `task-${index}` }));
 
 const getVirtualizedRenderModel = (
   state: HookState,
@@ -34,16 +32,28 @@ const createHarness = (initialProps: HookArgs) => {
   return createSharedHookHarness(useKanbanVirtualization, initialProps);
 };
 
+type ContainerElementOptions = {
+  getBoundingClientRect?: () => DOMRect;
+  closest?: () => Element | null;
+};
+
+const createContainerElement = ({
+  getBoundingClientRect = () => new DOMRect(),
+  closest = () => null,
+}: ContainerElementOptions = {}): HTMLDivElement => {
+  const container = document.createElement("div");
+  Object.defineProperties(container, {
+    getBoundingClientRect: { configurable: true, value: getBoundingClientRect },
+    closest: { configurable: true, value: closest },
+  });
+  return container;
+};
+
 const attachContainer = async (
   harness: Pick<ReturnType<typeof createHarness>, "getLatest" | "run">,
-  container?: Partial<HTMLDivElement>,
 ): Promise<void> => {
   await harness.run(() => {
-    harness.getLatest().containerRef({
-      getBoundingClientRect: () => ({ top: 0 }),
-      closest: () => null,
-      ...container,
-    } as HTMLDivElement);
+    harness.getLatest().containerRef(createContainerElement());
   });
 };
 
@@ -104,16 +114,27 @@ const installMockWindow = ({
 }: {
   runAnimationFrameCallbacks?: boolean;
 } = {}) => {
-  const globalWithWindow = globalThis as typeof globalThis & {
-    window?: Window & typeof globalThis;
+  const previousDescriptors = {
+    innerHeight: Object.getOwnPropertyDescriptor(window, "innerHeight"),
+    addEventListener: Object.getOwnPropertyDescriptor(window, "addEventListener"),
+    removeEventListener: Object.getOwnPropertyDescriptor(window, "removeEventListener"),
+    requestAnimationFrame: Object.getOwnPropertyDescriptor(window, "requestAnimationFrame"),
+    cancelAnimationFrame: Object.getOwnPropertyDescriptor(window, "cancelAnimationFrame"),
   };
-  const previousWindow = globalWithWindow.window;
 
   const addEventListener = mock(
-    (_type: string, _listener: EventListenerOrEventListenerObject, _options?: unknown) => {},
+    (
+      _type: string,
+      _listener: EventListenerOrEventListenerObject,
+      _options?: boolean | AddEventListenerOptions,
+    ) => {},
   );
   const removeEventListener = mock(
-    (_type: string, _listener: EventListenerOrEventListenerObject, _options?: unknown) => {},
+    (
+      _type: string,
+      _listener: EventListenerOrEventListenerObject,
+      _options?: boolean | EventListenerOptions,
+    ) => {},
   );
   const requestAnimationFrame = mock((callback: FrameRequestCallback): number => {
     if (runAnimationFrameCallbacks) {
@@ -123,21 +144,22 @@ const installMockWindow = ({
   });
   const cancelAnimationFrame = mock((_handle: number) => {});
 
-  globalWithWindow.window = {
-    innerHeight: 900,
-    addEventListener: addEventListener as unknown as Window["addEventListener"],
-    removeEventListener: removeEventListener as unknown as Window["removeEventListener"],
-    requestAnimationFrame: requestAnimationFrame as unknown as Window["requestAnimationFrame"],
-    cancelAnimationFrame: cancelAnimationFrame as unknown as Window["cancelAnimationFrame"],
-  } as Window & typeof globalThis;
+  Object.defineProperties(window, {
+    innerHeight: { configurable: true, value: 900 },
+    addEventListener: { configurable: true, value: addEventListener },
+    removeEventListener: { configurable: true, value: removeEventListener },
+    requestAnimationFrame: { configurable: true, value: requestAnimationFrame },
+    cancelAnimationFrame: { configurable: true, value: cancelAnimationFrame },
+  });
 
   const restore = (): void => {
-    if (typeof previousWindow === "undefined") {
-      delete globalWithWindow.window;
-      return;
+    for (const [property, descriptor] of Object.entries(previousDescriptors)) {
+      if (descriptor) {
+        Object.defineProperty(window, property, descriptor);
+      } else {
+        Reflect.deleteProperty(window, property);
+      }
     }
-
-    globalWithWindow.window = previousWindow;
   };
 
   return {
@@ -150,46 +172,44 @@ const installMockWindow = ({
 };
 
 const installMockResizeObserver = () => {
-  const globalWithResizeObserver = globalThis as typeof globalThis & {
-    ResizeObserver?: typeof ResizeObserver;
-  };
-  const previousResizeObserver = globalWithResizeObserver.ResizeObserver;
-  const activeCallbacks = new Set<ResizeObserverCallback>();
+  const previousDescriptor = Object.getOwnPropertyDescriptor(globalThis, "ResizeObserver");
+  const activeObservers = new Map<ResizeObserverCallback, ResizeObserver>();
 
-  class MockResizeObserver {
-    private callback: ResizeObserverCallback;
+  class MockResizeObserver implements ResizeObserver {
+    readonly #callback: ResizeObserverCallback;
 
     constructor(callback: ResizeObserverCallback) {
-      this.callback = callback;
+      this.#callback = callback;
     }
 
     observe(_target: Element): void {
-      activeCallbacks.add(this.callback);
+      activeObservers.set(this.#callback, this);
     }
 
     unobserve(_target: Element): void {}
 
     disconnect(): void {
-      activeCallbacks.delete(this.callback);
+      activeObservers.delete(this.#callback);
     }
   }
 
-  globalWithResizeObserver.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+  Object.defineProperty(globalThis, "ResizeObserver", {
+    configurable: true,
+    value: MockResizeObserver,
+  });
 
   const trigger = (): void => {
-    // oxlint-disable-next-line unicorn/no-useless-spread -- callbacks can unsubscribe during delivery
-    for (const callback of [...activeCallbacks]) {
-      callback([], {} as ResizeObserver);
+    for (const [callback, observer] of Array.from(activeObservers)) {
+      callback([], observer);
     }
   };
 
   const restore = (): void => {
-    if (typeof previousResizeObserver === "undefined") {
-      delete globalWithResizeObserver.ResizeObserver;
-      return;
+    if (previousDescriptor) {
+      Object.defineProperty(globalThis, "ResizeObserver", previousDescriptor);
+    } else {
+      Reflect.deleteProperty(globalThis, "ResizeObserver");
     }
-
-    globalWithResizeObserver.ResizeObserver = previousResizeObserver;
   };
 
   return { trigger, restore };
@@ -306,16 +326,13 @@ describe("useKanbanVirtualization", () => {
   test("recomputes viewport when measured heights change without scroll events", async () => {
     const mockWindow = installMockWindow();
     const harness = createHarness({ tasks: createTasks(30) });
-    const getBoundingClientRect = mock(() => ({ top: 120 }));
+    const getBoundingClientRect = mock(() => new DOMRect(0, 120));
 
     try {
       await harness.mount();
 
       await harness.run(() => {
-        harness.getLatest().containerRef({
-          getBoundingClientRect,
-          closest: () => null,
-        } as unknown as HTMLDivElement);
+        harness.getLatest().containerRef(createContainerElement({ getBoundingClientRect }));
       });
 
       const callsBeforeMeasure = getBoundingClientRect.mock.calls.length;
@@ -357,15 +374,12 @@ describe("useKanbanVirtualization", () => {
     const mockWindow = installMockWindow({ runAnimationFrameCallbacks: true });
     const resizeObserver = installMockResizeObserver();
     const harness = createHarness({ tasks: createTasks(30) });
-    const getBoundingClientRect = mock(() => ({ top: 120 }));
+    const getBoundingClientRect = mock(() => new DOMRect(0, 120));
 
     try {
       await harness.mount();
       await harness.run(() => {
-        harness.getLatest().containerRef({
-          getBoundingClientRect,
-          closest: () => null,
-        } as unknown as HTMLDivElement);
+        harness.getLatest().containerRef(createContainerElement({ getBoundingClientRect }));
       });
 
       const callsBeforeResize = getBoundingClientRect.mock.calls.length;
@@ -384,28 +398,24 @@ describe("useKanbanVirtualization", () => {
 
   test("shares global viewport listeners across multiple virtualized lanes", async () => {
     const mockWindow = installMockWindow();
-    const scrollContainerAddEventListener = mock(
-      (_type: string, _listener: EventListenerOrEventListenerObject, _options?: unknown) => {},
-    );
-    const scrollContainerRemoveEventListener = mock(
-      (_type: string, _listener: EventListenerOrEventListenerObject, _options?: unknown) => {},
-    );
-    const scrollContainer = {
-      addEventListener: scrollContainerAddEventListener,
-      removeEventListener: scrollContainerRemoveEventListener,
-      getBoundingClientRect: () => ({ top: 0 }),
-      clientHeight: 900,
-    } as unknown as HTMLElement;
+    const scrollContainer = document.createElement("div");
+    Object.defineProperties(scrollContainer, {
+      getBoundingClientRect: { configurable: true, value: () => new DOMRect() },
+      clientHeight: { configurable: true, value: 900 },
+    });
+    const scrollContainerAddEventListener = spyOn(scrollContainer, "addEventListener");
+    const scrollContainerRemoveEventListener = spyOn(scrollContainer, "removeEventListener");
     const harness = createPairHarness([{ tasks: createTasks(30) }, { tasks: createTasks(30) }]);
 
     try {
       await harness.mount();
       await harness.run(() => {
         for (const state of harness.getLatestStates()) {
-          state.containerRef({
-            getBoundingClientRect: () => ({ top: 0 }),
-            closest: () => scrollContainer,
-          } as unknown as HTMLDivElement);
+          state.containerRef(
+            createContainerElement({
+              closest: () => scrollContainer,
+            }),
+          );
         }
       });
 

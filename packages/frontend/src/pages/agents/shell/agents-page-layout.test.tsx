@@ -62,23 +62,24 @@ describe("AgentsPageWorkspacePanes", () => {
 describe("AgentsPageWorkspace terminal visibility", () => {
   test("keeps the selected file draft mounted across responsive layout changes", () => {
     let isNarrow = false;
-    const listeners = new Set<() => void>();
-    window.matchMedia = ((query: string) => ({
+    const listeners = new Set<EventListener>();
+    const mediaQueryList = {
       get matches() {
         return isNarrow;
       },
-      media: query,
+      media: "(max-width: 1023px)",
       onchange: null,
       addListener: () => undefined,
       removeListener: () => undefined,
-      addEventListener: (_type: string, listener: () => void) => {
+      addEventListener: (_type: string, listener: EventListener) => {
         listeners.add(listener);
       },
-      removeEventListener: (_type: string, listener: () => void) => {
+      removeEventListener: (_type: string, listener: EventListener) => {
         listeners.delete(listener);
       },
       dispatchEvent: () => true,
-    })) as unknown as typeof window.matchMedia;
+    } satisfies MediaQueryList;
+    window.matchMedia = () => mediaQueryList;
     const terminalPanel: AgentStudioTerminalPanelModel = {
       scopeKey: "repo:task-1",
       isAvailable: true,
@@ -115,12 +116,18 @@ describe("AgentsPageWorkspace terminal visibility", () => {
         terminalPanel,
       }),
     );
-    const draft = view.getByRole("textbox", { name: "Draft preview" }) as HTMLTextAreaElement;
+    const draft = view.getByRole("textbox", { name: "Draft preview" });
+    if (!(draft instanceof HTMLTextAreaElement)) {
+      throw new TypeError("Expected draft preview to be a textarea.");
+    }
     fireEvent.change(draft, { target: { value: "unsaved draft" } });
 
     isNarrow = true;
     act(() => {
-      for (const listener of listeners) listener();
+      const event = new Event("change");
+      for (const listener of listeners) {
+        listener(event);
+      }
     });
 
     expect(view.getByRole("textbox", { name: "Draft preview" })).toBe(draft);
@@ -128,7 +135,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
   });
 
   test("keeps the terminal panel mounted while hiding and reopening it", () => {
-    window.matchMedia = ((query: string) => ({
+    window.matchMedia = (query: string) => ({
       matches: false,
       media: query,
       onchange: null,
@@ -137,7 +144,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       addEventListener: () => undefined,
       removeEventListener: () => undefined,
       dispatchEvent: () => true,
-    })) as typeof window.matchMedia;
+    });
     const terminalPanel: AgentStudioTerminalPanelModel = {
       scopeKey: "repo:task-1",
       isAvailable: true,
@@ -205,7 +212,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
   });
 
   test("uses terminal mode at 767px and keeps a path back to the workspace", () => {
-    window.matchMedia = ((query: string) => ({
+    window.matchMedia = (query: string) => ({
       matches: query === "(max-width: 767px)",
       media: query,
       onchange: null,
@@ -214,7 +221,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       addEventListener: () => undefined,
       removeEventListener: () => undefined,
       dispatchEvent: () => true,
-    })) as typeof window.matchMedia;
+    });
     const onHide = () => undefined;
     const terminalPanel: AgentStudioTerminalPanelModel = {
       scopeKey: "repo:task-1",

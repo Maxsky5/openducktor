@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { CODEX_APP_SERVER_SERVER_REQUEST_METHOD } from "@openducktor/contracts";
+import {
+  CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
+  type CodexAppServerJsonValue,
+} from "@openducktor/contracts";
 import {
   classifyCodexRequestMutation,
   codexApprovalResponseForRequest,
-  extractThreadIdFromParams,
+  codexServerRequestThreadId,
   parseNotificationRecord,
   parseQuestionRequest,
   parseServerRequestRecord,
@@ -11,23 +14,33 @@ import {
   toMcpElicitationApprovalRequest,
 } from "./codex-app-server-requests";
 
-const codexMcpToolApprovalRequest = (persist: unknown, includeToolTitle = true) => ({
-  id: 7,
-  method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST,
-  params: {
-    threadId: "thread-1",
-    turnId: "turn-1",
-    serverName: "semble",
-    mode: "form" as const,
-    message: 'Allow the semble MCP server to run tool "search"?',
-    requestedSchema: { type: "object", properties: {} },
-    _meta: {
-      codex_approval_kind: "mcp_tool_call",
-      ...(includeToolTitle ? { tool_title: "search" } : {}),
-      persist,
+const codexMcpToolApprovalRequest = (
+  persist: CodexAppServerJsonValue | undefined,
+  includeToolTitle = true,
+) => {
+  const meta = {
+    codex_approval_kind: "mcp_tool_call" as const,
+    persist,
+  };
+
+  if (includeToolTitle) {
+    meta.tool_title = "search";
+  }
+
+  return {
+    id: 7,
+    method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST,
+    params: {
+      threadId: "thread-1",
+      turnId: "turn-1",
+      serverName: "semble",
+      mode: "form" as const,
+      message: 'Allow the semble MCP server to run tool "search"?',
+      requestedSchema: { type: "object", properties: {} },
+      _meta: meta,
     },
-  },
-});
+  };
+};
 
 describe("Codex App Server request parsing", () => {
   test("preserves string request ids from the Codex protocol", () => {
@@ -59,14 +72,22 @@ describe("Codex App Server request parsing", () => {
       id: "53",
       method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_TOOL_REQUEST_USER_INPUT,
       params: {
+        autoResolutionMs: null,
+        isBlocking: true,
+        itemId: "item-1",
         threadId: "thread-1",
         turnId: "turn-1",
         questions: [
           {
             id: "question-1",
             header: "Proceed",
+            isOther: false,
+            isSecret: false,
             question: "Continue?",
-            options: ["Yes", "No"],
+            options: [
+              { label: "Yes", description: "Continue" },
+              { label: "No", description: "Stop" },
+            ],
           },
         ],
       },
@@ -81,7 +102,19 @@ describe("Codex App Server request parsing", () => {
   });
 
   test("extracts legacy conversation ids as thread identifiers", () => {
-    expect(extractThreadIdFromParams({ conversationId: "thread-legacy" })).toBe("thread-legacy");
+    const request = parseServerRequestRecord({
+      id: 54,
+      method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.APPLY_PATCH_APPROVAL,
+      params: {
+        callId: "call-1",
+        conversationId: "thread-legacy",
+        fileChanges: {},
+        grantRoot: null,
+        reason: null,
+      },
+    });
+
+    expect(codexServerRequestThreadId(request)).toBe("thread-legacy");
   });
 });
 
@@ -362,7 +395,7 @@ describe("Codex App Server notification parsing", () => {
         method: "thread/tokenUsage/updated",
         params: { threadId: "thread-1" },
       }),
-    ).toThrow("Codex app-server notification is missing receivedAt.");
+    ).toThrow("receivedAt");
   });
 
   test("rejects empty explicit receivedAt arguments", () => {
@@ -374,7 +407,7 @@ describe("Codex App Server notification parsing", () => {
         },
         "",
       ),
-    ).toThrow("Codex app-server notification is missing receivedAt.");
+    ).toThrow("Expected a parseable timestamp");
   });
 
   test("rejects unparsable receivedAt timestamps", () => {
@@ -384,6 +417,6 @@ describe("Codex App Server notification parsing", () => {
         params: { threadId: "thread-1" },
         receivedAt: "not-a-date",
       }),
-    ).toThrow("Codex app-server notification has an unparsable receivedAt timestamp 'not-a-date'.");
+    ).toThrow("Expected a parseable timestamp");
   });
 });

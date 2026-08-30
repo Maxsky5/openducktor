@@ -31,13 +31,18 @@ export const pickDefaultVisibleSelectionForCatalog = (
     return null;
   }
 
-  return {
+  const selection: AgentModelSelection = {
     runtimeKind,
     providerId: defaultModel.providerId,
     modelId: defaultModel.modelId,
-    ...(variant ? { variant } : {}),
-    ...(profileId ? { profileId } : {}),
   };
+  if (variant) {
+    selection.variant = variant;
+  }
+  if (profileId) {
+    selection.profileId = profileId;
+  }
+  return selection;
 };
 
 export const coerceVisibleSelectionToCatalog = (
@@ -67,13 +72,18 @@ export const coerceVisibleSelectionToCatalog = (
     return null;
   }
 
-  return {
+  const normalizedSelection: AgentModelSelection = {
     runtimeKind,
     providerId: model.providerId,
     modelId: model.modelId,
-    ...(variant ? { variant } : {}),
-    ...(profileId ? { profileId } : {}),
   };
+  if (variant) {
+    normalizedSelection.variant = variant;
+  }
+  if (profileId) {
+    normalizedSelection.profileId = profileId;
+  }
+  return normalizedSelection;
 };
 
 export const isSameSelection = (
@@ -277,13 +287,18 @@ export const resolveModelSelectionForModelChange = ({
     catalog,
     currentSelection?.profileId ?? pickVisibleCatalogDefaultProfileId(catalog),
   );
-  return {
+  const selection: AgentModelSelection = {
     runtimeKind,
     providerId: model.providerId,
     modelId: model.modelId,
-    ...(variant ? { variant } : {}),
-    ...(profileId ? { profileId } : {}),
   };
+  if (variant) {
+    selection.variant = variant;
+  }
+  if (profileId) {
+    selection.profileId = profileId;
+  }
+  return selection;
 };
 
 export const resolveModelSelectionForVariantChange = ({
@@ -308,8 +323,9 @@ export const resolveModelSelectionForVariantChange = ({
   }
   const normalizedVariant = normalizeCatalogVariant(model, variant);
   const { variant: _currentVariant, ...selectionWithoutVariant } = currentSelection;
-  return {
-    ...selectionWithoutVariant,
-    ...(normalizedVariant ? { variant: normalizedVariant } : {}),
-  };
+  const nextSelection: AgentModelSelection = { ...selectionWithoutVariant };
+  if (normalizedVariant) {
+    nextSelection.variant = normalizedVariant;
+  }
+  return nextSelection;
 };

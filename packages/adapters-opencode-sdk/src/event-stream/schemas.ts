@@ -1,15 +1,9 @@
-import type { Event } from "@opencode-ai/sdk/v2/client";
-import {
-  asUnknownRecord,
-  readArrayProp,
-  readBooleanProp,
-  readNumberProp,
-  readRecordProp,
-  readStringArrayProp,
-  readStringProp,
-  readUnknownProp,
-  type UnknownRecord,
-} from "../guards";
+import type { OpenCodeProtocolObject } from "../guards";
+import type {
+  ParsedOpencodeEvent as Event,
+  ParsedOpencodeQuestionAskedProperties,
+} from "../opencode-global-event-ingress";
+import { z } from "zod";
 
 type BusyStatus = {
   type: "busy";
@@ -32,7 +26,8 @@ export type ParsedPermissionAsked = {
   requestId: string;
   permission: string;
   patterns: string[];
-  metadata?: UnknownRecord;
+  save?: string[];
+  metadata?: OpenCodeProtocolObject;
 };
 
 type ParsedQuestionOption = {
@@ -53,149 +48,121 @@ export type ParsedQuestionAsked = {
   questions: ParsedQuestion[];
 };
 
-export type ParsedPendingInputReplied = {
-  requestId: string;
+export type ParsedSessionControlEvent =
+  | { type: "session_status"; status: ParsedSessionStatus }
+  | { type: "permission_asked"; request: ParsedPermissionAsked }
+  | { type: "question_asked"; request: ParsedQuestionAsked }
+  | {
+      type: "pending_input_resolved";
+      resolvedType: "approval_resolved" | "question_resolved";
+      requestId: string;
+    };
+
+const toParsedQuestionAsked = (
+  properties: ParsedOpencodeQuestionAskedProperties,
+): ParsedQuestionAsked => ({
+  requestId: properties.id,
+  questions: properties.questions.map((question) => {
+    const parsedQuestion: ParsedQuestion = {
+      header: question.header,
+      question: question.question,
+      options: question.options,
+    };
+    if (question.multiple !== undefined) {
+      parsedQuestion.multiple = question.multiple;
+    }
+    if (question.custom !== undefined) {
+      parsedQuestion.custom = question.custom;
+    }
+    return parsedQuestion;
+  }),
+});
+
+export const parseSessionControlEvent = (event: Event): ParsedSessionControlEvent | undefined => {
+  switch (event.type) {
+    case "session.status": {
+      const status = event.properties.status;
+      if (status.type !== "retry") {
+        return { type: "session_status", status };
+      }
+      return {
+        type: "session_status",
+        status: {
+          type: "retry",
+          attempt: status.attempt,
+          message: status.message,
+          nextEpochMs: status.next,
+        },
+      };
+    }
+    case "permission.v2.asked": {
+      const properties = event.properties;
+      const request: ParsedPermissionAsked = {
+        requestId: properties.id,
+        permission: properties.action,
+        patterns: properties.resources,
+      };
+      if (properties.save) {
+        request.save = properties.save;
+      }
+      if (properties.metadata) {
+        request.metadata = properties.metadata;
+      }
+      return {
+        type: "permission_asked",
+        request,
+      };
+    }
+    case "permission.asked": {
+      const properties = event.properties;
+      return {
+        type: "permission_asked",
+        request: {
+          requestId: properties.id,
+          permission: properties.permission,
+          patterns: properties.patterns,
+          save: properties.always,
+          metadata: properties.metadata,
+        },
+      };
+    }
+    case "question.v2.asked":
+    case "question.asked": {
+      return { type: "question_asked", request: toParsedQuestionAsked(event.properties) };
+    }
+    case "permission.v2.replied":
+    case "permission.replied": {
+      return {
+        type: "pending_input_resolved",
+        resolvedType: "approval_resolved",
+        requestId: event.properties.requestID,
+      };
+    }
+    case "question.v2.replied":
+    case "question.replied":
+    case "question.v2.rejected":
+    case "question.rejected": {
+      return {
+        type: "pending_input_resolved",
+        resolvedType: "question_resolved",
+        requestId: event.properties.requestID,
+      };
+    }
+    default:
+      return undefined;
+  }
 };
 
-export const readEventProperties = (event: Event): UnknownRecord | undefined => {
-  return asUnknownRecord(event.properties);
-};
+type OpencodeSessionError = Extract<Event, { type: "session.error" }>["properties"]["error"];
 
-export const readEventInfo = (properties: unknown): UnknownRecord | undefined => {
-  return readRecordProp(properties, "info");
-};
-
-export const readEventPart = (properties: unknown): UnknownRecord | undefined => {
-  return readRecordProp(properties, "part");
-};
-
-export const readMessageCompletedAt = (info: unknown): number | undefined => {
-  return readNumberProp(readRecordProp(info, "time"), ["completed"]);
-};
-
-const parseQuestionOption = (value: unknown): ParsedQuestionOption | null => {
-  const record = asUnknownRecord(value);
-  if (!record) {
-    return null;
+export const readSessionErrorMessage = (error: OpencodeSessionError): string => {
+  if (!error || !("message" in error.data)) {
+    return "Unknown session error";
   }
-  const label = readStringProp(record, ["label"]);
-  const description = readStringProp(record, ["description"]);
-  if (!label || !description) {
-    return null;
+  const parsedMessage = z.string().safeParse(error.data.message);
+  if (!parsedMessage.success) {
+    return "Unknown session error";
   }
-  return { label, description };
-};
-
-const parseQuestion = (value: unknown): ParsedQuestion | null => {
-  const record = asUnknownRecord(value);
-  if (!record) {
-    return null;
-  }
-  const header = readStringProp(record, ["header"]);
-  const question = readStringProp(record, ["question"]);
-  if (!header || !question) {
-    return null;
-  }
-
-  const options = (readArrayProp(record, "options") ?? [])
-    .map(parseQuestionOption)
-    .filter((entry): entry is ParsedQuestionOption => entry !== null);
-
-  const multiple = readBooleanProp(record, ["multiple"]);
-  const custom = readBooleanProp(record, ["custom"]);
-
-  return {
-    header,
-    question,
-    options,
-    ...(multiple !== undefined ? { multiple } : {}),
-    ...(custom !== undefined ? { custom } : {}),
-  };
-};
-
-export const parseSessionStatus = (properties: unknown): ParsedSessionStatus => {
-  const status = readRecordProp(properties, "status");
-  if (!status) {
-    throw new Error("OpenCode session.status event is missing its status object.");
-  }
-
-  const type = readStringProp(status, ["type"]);
-  if (type === "busy" || type === "idle") {
-    return { type };
-  }
-  if (!type) {
-    throw new Error("OpenCode session.status event is missing status.type.");
-  }
-  if (type !== "retry") {
-    throw new Error(`OpenCode session.status event has unsupported status type '${type}'.`);
-  }
-
-  const attempt = readNumberProp(status, ["attempt"]);
-  const message = readStringProp(status, ["message"]);
-  const nextEpochMs = readNumberProp(status, ["next"]);
-  if (attempt === undefined || !message?.trim() || nextEpochMs === undefined) {
-    throw new Error(
-      "OpenCode retry status must include numeric attempt and next values plus a non-blank message.",
-    );
-  }
-  return { type, attempt, message, nextEpochMs };
-};
-
-export const parsePermissionAsked = (properties: unknown): ParsedPermissionAsked | undefined => {
-  const requestId = readStringProp(properties, ["id"]);
-  const permission = readStringProp(properties, ["permission", "action"]);
-  if (!requestId || !permission) {
-    return undefined;
-  }
-
-  const propertiesRecord = asUnknownRecord(properties);
-  let patterns: string[] = [];
-  if (propertiesRecord) {
-    const patternsKey = Object.hasOwn(propertiesRecord, "patterns") ? "patterns" : "resources";
-    patterns = readStringArrayProp(propertiesRecord, patternsKey) ?? [];
-  }
-  const metadata = readRecordProp(properties, "metadata");
-  return {
-    requestId,
-    permission,
-    patterns,
-    ...(metadata ? { metadata } : {}),
-  };
-};
-
-export const parseQuestionAsked = (properties: unknown): ParsedQuestionAsked | undefined => {
-  const requestId = readStringProp(properties, ["id"]);
-  if (!requestId) {
-    return undefined;
-  }
-
-  const questions = (readArrayProp(properties, "questions") ?? [])
-    .map(parseQuestion)
-    .filter((entry): entry is ParsedQuestion => entry !== null);
-  return {
-    requestId,
-    questions,
-  };
-};
-
-export const parsePendingInputReplied = (
-  properties: unknown,
-): ParsedPendingInputReplied | undefined => {
-  const requestId = readStringProp(properties, ["requestID", "requestId", "id"]);
-  if (!requestId) {
-    return undefined;
-  }
-
-  return { requestId };
-};
-
-export const readSessionErrorMessage = (properties: unknown): string => {
-  const message = readStringProp(readRecordProp(readRecordProp(properties, "error"), "data"), [
-    "message",
-  ]);
-  return message ?? "Unknown session error";
-};
-
-export const readTodoPayload = (properties: unknown): unknown => {
-  return readUnknownProp(properties, "todos");
+  const message = parsedMessage.data.trim();
+  return message.length > 0 ? message : "Unknown session error";
 };

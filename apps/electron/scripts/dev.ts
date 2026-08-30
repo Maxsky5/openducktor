@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveDevelopmentInstanceId } from "@openducktor/host";
 import { Effect, Exit } from "effect";
+import { z } from "zod";
 import {
   createElectronRendererDevServerEffect,
   type ElectronRendererDevServer,
@@ -16,7 +17,8 @@ import {
 import {
   causeToElectronBoundaryError,
   ElectronOperationError,
-  type ElectronValidationError,
+  type ElectronOperationErrorAggregate,
+  type ElectronValidationErrorAggregate,
   errorMessage,
   toElectronOperationError,
 } from "../src/effect/electron-errors";
@@ -41,6 +43,11 @@ const MACOS_DEV_BUNDLE_IDENTIFIER = "com.openducktor.app.dev";
 const MACOS_DEV_ICON_FILE_NAME = "openducktor-dev-rounded.icns";
 const ELECTRON_RESTART_DEBOUNCE_MS = 100;
 const ELECTRON_STOP_TIMEOUT_MS = 30_000;
+const nodeErrorSchema = z.object({ code: z.string() });
+
+type DevFileOperationDetails = { readonly targetPath: string };
+type ElectronDevCommandErrorDetails = { readonly command: string[]; readonly label: string };
+type ElectronNodeErrorDetails = { readonly code: string | null };
 
 export const ELECTRON_RESTART_WATCH_ROOTS = [
   path.join(packageRoot, "src/main"),
@@ -68,7 +75,7 @@ const sleep = (durationMs: number): Promise<void> =>
 const runStepEffect = (
   label: string,
   command: string[],
-): Effect.Effect<void, ElectronOperationError> =>
+): Effect.Effect<void, ElectronOperationError<ElectronDevCommandErrorDetails>> =>
   Effect.tryPromise({
     try: async () => {
       const process = Bun.spawn(command, {
@@ -90,14 +97,14 @@ const runStepEffect = (
       }),
   });
 
-const nodeErrorCode = (cause: unknown): string | null =>
-  typeof cause === "object" && cause !== null && "code" in cause && typeof cause.code === "string"
-    ? cause.code
-    : null;
+const nodeErrorCode = (cause: unknown): string | null => {
+  const parsedCause = nodeErrorSchema.safeParse(cause);
+  return parsedCause.success ? parsedCause.data.code : null;
+};
 
 const readFileIfExistsEffect = (
   filePath: string,
-): Effect.Effect<string | null, ElectronOperationError> =>
+): Effect.Effect<string | null, ElectronOperationError<ElectronNodeErrorDetails>> =>
   Effect.tryPromise({
     try: () => readFile(filePath, "utf8"),
     catch: (cause) =>
@@ -114,7 +121,9 @@ const readFileIfExistsEffect = (
     ),
   );
 
-const fileExistsEffect = (filePath: string): Effect.Effect<boolean, ElectronOperationError> =>
+const fileExistsEffect = (
+  filePath: string,
+): Effect.Effect<boolean, ElectronOperationError<ElectronNodeErrorDetails>> =>
   Effect.tryPromise({
     try: async () => {
       await stat(filePath);
@@ -137,7 +146,7 @@ const fileExistsEffect = (filePath: string): Effect.Effect<boolean, ElectronOper
 const assertFileExistsEffect = (
   filePath: string,
   label: string,
-): Effect.Effect<void, ElectronOperationError> =>
+): Effect.Effect<void, ElectronOperationError<ElectronDevCommandErrorDetails>> =>
   Effect.tryPromise({
     try: async () => {
       const metadata = await stat(filePath);
@@ -234,28 +243,38 @@ const resolveElectronExecutablePath = (): string => String(nodeRequire("electron
 const runDevFileOperationEffect = (
   operation: string,
   filePath: string,
-  action: () => Promise<unknown>,
-  details?: Record<string, unknown>,
-): Effect.Effect<void, ElectronOperationError> =>
+  action: () => Promise<void>,
+  details?: DevFileOperationDetails,
+): Effect.Effect<void, ElectronOperationError<DevFileOperationDetails>> =>
   Effect.tryPromise({
     try: async () => {
       await action();
     },
-    catch: (cause) =>
-      new ElectronOperationError({
+    catch: (cause) => {
+      const message = errorMessage(cause);
+      if (details === undefined) {
+        return new ElectronOperationError<DevFileOperationDetails>({
+          operation,
+          message,
+          path: filePath,
+          cause,
+        });
+      }
+      return new ElectronOperationError<DevFileOperationDetails>({
         operation,
-        message: errorMessage(cause),
+        message,
         path: filePath,
         cause,
         details,
-      }),
+      });
+    },
   });
 
 const replacePlistStringEffect = (
   infoPlistPath: string,
   key: string,
   value: string,
-): Effect.Effect<void, ElectronOperationError> =>
+): Effect.Effect<void, ElectronOperationError<ElectronDevCommandErrorDetails>> =>
   runStepEffect(`Electron dev app ${key}`, [
     "/usr/bin/plutil",
     "-replace",
@@ -302,7 +321,7 @@ const buildMacosDevAppSignatureEffect = ({
 
 const resolveRequiredMacosAppBundlePathEffect = (
   sourceExecutablePath: string,
-): Effect.Effect<string, ElectronOperationError> =>
+): Effect.Effect<string, ElectronOperationErrorAggregate> =>
   Effect.try({
     try: () => resolveRequiredMacosAppBundlePath(sourceExecutablePath),
     catch: (cause) => toElectronOperationError(cause, "electron.dev.resolve-macos-app-bundle"),
@@ -310,7 +329,7 @@ const resolveRequiredMacosAppBundlePathEffect = (
 
 const prepareMacosDevElectronBundleEffect = (
   sourceExecutablePath: string,
-): Effect.Effect<string, ElectronOperationError> =>
+): Effect.Effect<string, ElectronOperationErrorAggregate> =>
   Effect.gen(function* () {
     const sourceAppPath = yield* resolveRequiredMacosAppBundlePathEffect(sourceExecutablePath);
 
@@ -335,7 +354,7 @@ const prepareMacosDevElectronBundleEffect = (
       path.join(devAppPath, "Contents", "Resources", fileName);
     const copyIconResourceEffect = (
       targetFileName: string,
-    ): Effect.Effect<void, ElectronOperationError> => {
+    ): Effect.Effect<void, ElectronOperationError<DevFileOperationDetails>> => {
       const targetPath = resolveResourcePath(targetFileName);
       return runDevFileOperationEffect(
         "electron.dev.copy-macos-dev-icon",
@@ -345,9 +364,9 @@ const prepareMacosDevElectronBundleEffect = (
       );
     };
 
-    yield* runDevFileOperationEffect("electron.dev.create-macos-dev-root", devRoot, () =>
-      mkdir(devRoot, { recursive: true }),
-    );
+    yield* runDevFileOperationEffect("electron.dev.create-macos-dev-root", devRoot, async () => {
+      await mkdir(devRoot, { recursive: true });
+    });
     if (shouldCopyBundle) {
       yield* runDevFileOperationEffect("electron.dev.remove-macos-dev-marker", markerPath, () =>
         rm(markerPath, { force: true }),
@@ -381,7 +400,10 @@ const prepareMacosDevElectronBundleEffect = (
     return devExecutablePath;
   });
 
-export const buildElectronBundlesEffect = (): Effect.Effect<void, ElectronOperationError> =>
+export const buildElectronBundlesEffect = (): Effect.Effect<
+  void,
+  ElectronOperationErrorAggregate
+> =>
   Effect.gen(function* () {
     yield* runStepEffect("Electron main build", ["bun", "run", "build:main"]);
     yield* runStepEffect("Electron preload build", ["bun", "run", "build:preload"]);
@@ -393,7 +415,10 @@ export const buildElectronBundlesEffect = (): Effect.Effect<void, ElectronOperat
     );
   });
 
-const resolveElectronDevExecutablePathEffect = (): Effect.Effect<string, ElectronOperationError> =>
+const resolveElectronDevExecutablePathEffect = (): Effect.Effect<
+  string,
+  ElectronOperationErrorAggregate
+> =>
   Effect.gen(function* () {
     const electronExecutablePath = yield* Effect.try({
       try: resolveElectronExecutablePath,
@@ -439,7 +464,7 @@ const startElectron = (
 
 export const stopElectronEffect = (
   electron: ManagedElectronProcess | null,
-  stopSleep: (durationMs: number) => Promise<unknown> = sleep,
+  stopSleep: (durationMs: number) => Promise<void> = sleep,
 ): Effect.Effect<void, ElectronOperationError> =>
   Effect.tryPromise({
     try: async () => {
@@ -499,7 +524,7 @@ const defaultElectronDevProcessHandlers: ElectronDevProcessHandlers = {
 };
 
 type ElectronDevLifecycleOptions = {
-  buildBundles?: () => Effect.Effect<void, ElectronOperationError>;
+  buildBundles?: () => Effect.Effect<void, ElectronOperationErrorAggregate>;
   electronExecutablePath: string;
   processHandlers?: ElectronDevProcessHandlers;
   renderer: ElectronRendererDevServer;
@@ -512,8 +537,8 @@ export const runElectronDevLifecycleEffect = ({
   processHandlers = defaultElectronDevProcessHandlers,
   renderer,
   startElectronProcess = startElectron,
-}: ElectronDevLifecycleOptions): Effect.Effect<number, ElectronOperationError> =>
-  Effect.async<number, ElectronOperationError>((resume) => {
+}: ElectronDevLifecycleOptions): Effect.Effect<number, ElectronOperationErrorAggregate> =>
+  Effect.async<number, ElectronOperationErrorAggregate>((resume) => {
     let electron: ManagedElectronProcess | null = null;
     let shutdownStarted = false;
     let restarting = false;
@@ -550,7 +575,7 @@ export const runElectronDevLifecycleEffect = ({
     };
 
     const settle = (
-      effect: Effect.Effect<number, ElectronOperationError>,
+      effect: Effect.Effect<number, ElectronOperationErrorAggregate>,
       options: { keepExitHandler?: boolean } = {},
     ): void => {
       if (settled) {
@@ -572,7 +597,9 @@ export const runElectronDevLifecycleEffect = ({
       });
     };
 
-    const shutdownEffect = (exitCode: number): Effect.Effect<void, ElectronOperationError> =>
+    const shutdownEffect = (
+      exitCode: number,
+    ): Effect.Effect<void, ElectronOperationErrorAggregate> =>
       Effect.gen(function* () {
         if (shutdownStarted) {
           return;
@@ -605,7 +632,7 @@ export const runElectronDevLifecycleEffect = ({
     };
 
     const runLifecycleTask = (
-      effect: Effect.Effect<void, ElectronOperationError>,
+      effect: Effect.Effect<void, ElectronOperationErrorAggregate>,
       onFailure: (cause: unknown) => void,
     ): void => {
       void Effect.runPromiseExit(effect).then((exit) => {
@@ -615,7 +642,7 @@ export const runElectronDevLifecycleEffect = ({
       });
     };
 
-    const launchElectronEffect = (): Effect.Effect<void, ElectronOperationError> =>
+    const launchElectronEffect = (): Effect.Effect<void, ElectronOperationErrorAggregate> =>
       Effect.gen(function* () {
         if (shutdownStarted || settled) {
           return;
@@ -638,7 +665,7 @@ export const runElectronDevLifecycleEffect = ({
         });
       });
 
-    const restartElectronEffect = (): Effect.Effect<void, ElectronOperationError> =>
+    const restartElectronEffect = (): Effect.Effect<void, ElectronOperationErrorAggregate> =>
       Effect.gen(function* () {
         if (shutdownStarted) {
           return;
@@ -784,7 +811,7 @@ export const runElectronDevLifecycleEffect = ({
 
 export const mainEffect = (): Effect.Effect<
   number,
-  ElectronOperationError | ElectronValidationError
+  ElectronOperationErrorAggregate | ElectronValidationErrorAggregate
 > =>
   Effect.gen(function* () {
     const rendererPort = yield* resolveRendererDevPortEffect(
@@ -843,8 +870,8 @@ export const mainEffect = (): Effect.Effect<
   });
 
 if (import.meta.main) {
-  const exitCode = await runElectronEffect(mainEffect()).catch((error: unknown) => {
-    console.error(error);
+  const exitCode = await runElectronEffect(mainEffect()).catch((cause: unknown) => {
+    console.error(cause);
     return 1;
   });
   process.exit(exitCode);

@@ -22,29 +22,47 @@ import {
   createSessionTurnStateFixture,
   getSession,
 } from "./session-actions.test-helpers";
+import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
 
 const acceptedUserMessage = (
   input: SendAgentUserMessageInput,
   messageId = "accepted-user-message",
-): AcceptedAgentUserMessage => ({
-  type: "user_message",
-  externalSessionId: input.externalSessionId,
-  timestamp: "2026-02-22T08:00:01.000Z",
-  messageId,
-  message: serializeAgentUserMessagePartsToText(input.parts),
-  parts: [],
-  state: "read",
-  ...(input.model ? { model: input.model } : {}),
-});
+): AcceptedAgentUserMessage => {
+  const event: AcceptedAgentUserMessage = {
+    type: "user_message",
+    externalSessionId: input.externalSessionId,
+    timestamp: "2026-02-22T08:00:01.000Z",
+    messageId,
+    message: serializeAgentUserMessagePartsToText(input.parts),
+    parts: [],
+    state: "read",
+  };
+  if (input.model) {
+    event.model = input.model;
+  }
+  return event;
+};
 
 describe("agent-orchestrator/handlers/session-actions send", () => {
   test("routes a normalized workflow control without loading runtime policy settings", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter());
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendInput: unknown;
     adapter.sendUserMessage = async (input) => {
       sendInput = input;
-      return acceptedUserMessage(input);
+      const event: AcceptedAgentUserMessage = {
+        type: "user_message",
+        externalSessionId: input.externalSessionId,
+        timestamp: "2026-02-22T08:00:01.000Z",
+        messageId: "accepted-user-message",
+        message: "hello",
+        parts: [],
+        state: "read",
+      };
+      if (input.model) {
+        event.model = input.model;
+      }
+      return event;
     };
     const sessionsRef = createSessionsRef([
       buildSession({
@@ -369,7 +387,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
         throw new Error("Expected fake adapter to accept the Codex user message.");
       }
       for (const handler of handlers) {
-        handler({
+        const runtimeEvent: Parameters<(typeof handlers)[number]>[0] = {
           type: confirmedEvent.type,
           externalSessionId: confirmedEvent.externalSessionId,
           messageId: "runtime-user-confirmed",
@@ -377,8 +395,11 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
           parts: confirmedEvent.parts,
           state: confirmedEvent.state,
           timestamp: "2026-02-22T08:00:06.000Z",
-          ...(confirmedEvent.model ? { model: confirmedEvent.model } : {}),
-        });
+        };
+        if (confirmedEvent.model) {
+          runtimeEvent.model = confirmedEvent.model;
+        }
+        handler(runtimeEvent);
       }
 
       const userMessages = sessionMessagesToArray(getSession(sessionsRef)).filter(

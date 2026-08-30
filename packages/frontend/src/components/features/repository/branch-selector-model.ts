@@ -28,13 +28,18 @@ export const toBranchSelectorOptions = (
   args: BranchSelectorOptionsArgs = {},
 ): ComboboxOption[] => {
   const { includeBranchNames = [], includeOptions = [], valueFormat = "name" } = args;
-  const options: ComboboxOption[] = branches.map((branch) => ({
-    value: branchOptionValue(branch, valueFormat),
-    label: branch.name,
-    secondaryLabel: branchSourceLabel(branch),
-    ...(branch.isCurrent ? { description: "current" } : {}),
-    searchKeywords: branch.name.split("/").filter(Boolean),
-  }));
+  const options: ComboboxOption[] = branches.map((branch) => {
+    const option: ComboboxOption = {
+      value: branchOptionValue(branch, valueFormat),
+      label: branch.name,
+      secondaryLabel: branchSourceLabel(branch),
+      searchKeywords: branch.name.split("/").filter(Boolean),
+    };
+    if (branch.isCurrent) {
+      option.description = "current";
+    }
+    return option;
+  });
 
   const existingValues = new Set(options.map((option) => option.value));
   for (const option of includeOptions) {

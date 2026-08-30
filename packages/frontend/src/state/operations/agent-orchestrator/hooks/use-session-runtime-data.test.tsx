@@ -1,3 +1,4 @@
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
@@ -15,9 +16,7 @@ import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orch
 import { createSessionMessagesState } from "../support/messages";
 import { useSessionRuntimeData } from "./use-session-runtime-data";
 
-(
-  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 const cloneRuntimeDescriptor = (descriptor: RuntimeDescriptor): RuntimeDescriptor =>
   structuredClone(descriptor);

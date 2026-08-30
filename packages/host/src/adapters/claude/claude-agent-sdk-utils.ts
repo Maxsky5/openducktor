@@ -1,3 +1,4 @@
+import type { CanUseTool, SDKMessage, SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
 import { type OdtToolName, toClaudeOdtToolAliases } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
@@ -9,12 +10,38 @@ import type {
 } from "@openducktor/core";
 import { isOdtMutationToolName, normalizeOdtToolName } from "@openducktor/core";
 import { Effect } from "effect";
+import { z } from "zod";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
+import {
+  type ClaudeProtocolObject,
+  claudeProtocolObjectSchema,
+} from "./claude-agent-sdk-ingress-schemas";
 import type {
   ClaudeAgentSdkServiceError,
   ClaudeSessionContext,
   ClaudeSessionInput,
 } from "./claude-agent-sdk-types";
+
+type ClaudeAssistantSdkMessage = Extract<SDKMessage, { type: "assistant" }>["message"];
+type ClaudeAssistantContentBlock = ClaudeAssistantSdkMessage["content"][number];
+type ClaudeTaskNotification = Extract<SDKMessage, { subtype: "task_notification" }>;
+export type ClaudeTaskUpdatedPatch = Extract<SDKMessage, { subtype: "task_updated" }>["patch"];
+export type ClaudeFailureDetails = {
+  readonly description?: string;
+  readonly error?: string;
+  readonly message?: string;
+  readonly reason?: string;
+  readonly summary?: string;
+};
+type ClaudeStringPropertySource =
+  | ClaudeAssistantContentBlock
+  | ClaudeAssistantSdkMessage
+  | ClaudeTaskNotification
+  | ClaudeTaskUpdatedPatch
+  | ClaudeFailureDetails
+  | ClaudeProtocolObject
+  | Parameters<CanUseTool>[1]
+  | undefined;
 
 export const INIT_TIMEOUT_MS = 60_000;
 export const FILE_SEARCH_LIMIT = 30;
@@ -71,14 +98,25 @@ export const withTimeout = async <A>(
   }
 };
 
-export const readText = (value: unknown): string | undefined =>
-  typeof value === "string" && value.trim().length > 0 ? value : undefined;
+const claudeTextSchema = z.string();
+const claudeContentBlockSchema = z.looseObject({
+  text: z.string().optional(),
+  type: z.string().optional(),
+});
+const claudeMessageSchema = z.looseObject({ content: z.unknown() });
 
-export const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+export const readText = (value: SessionStoreEntry[string]): string | undefined => {
+  const parsed = claudeTextSchema.safeParse(value);
+  return parsed.success && parsed.data.trim().length > 0 ? parsed.data : undefined;
+};
 
-export const readStringProp = (value: unknown, key: string): string | undefined =>
-  isRecord(value) ? readText(value[key]) : undefined;
+export const readStringProp = (
+  value: ClaudeStringPropertySource,
+  key: string,
+): string | undefined => {
+  const parsed = claudeProtocolObjectSchema.safeParse(value);
+  return parsed.success ? readText(parsed.data[key]) : undefined;
+};
 
 export const claudeSessionScope = (input: ClaudeSessionInput) => input.sessionScope;
 
@@ -120,7 +158,7 @@ export const permissionRequestTypeForTool = (
 
 export const mutationForTool = (
   toolName: string,
-  _input?: Record<string, unknown>,
+  _input?: Parameters<CanUseTool>[1],
 ): NonNullable<AgentPendingApprovalRequest["mutation"]> => {
   if (/bash|shell/iu.test(toolName)) {
     return "unknown";
@@ -138,7 +176,7 @@ export const mutationForTool = (
   return "unknown";
 };
 
-export const previewInput = (input: Record<string, unknown>): string | undefined => {
+export const previewInput = (input: Parameters<CanUseTool>[1]): string | undefined => {
   const command = readStringProp(input, "command");
   if (command) {
     return command;
@@ -152,33 +190,6 @@ export const previewInput = (input: Record<string, unknown>): string | undefined
     return undefined;
   }
   return JSON.stringify(input).slice(0, 500);
-};
-
-export const detectFileKind = (
-  path: string,
-  isDirectory: boolean,
-): AgentStreamPart["kind"] | "code" | "css" | "default" | "directory" | "image" | "video" => {
-  if (isDirectory) {
-    return "directory";
-  }
-  const lower = path.toLowerCase();
-  if (/\.(css|scss|sass|less)$/u.test(lower)) {
-    return "css";
-  }
-  if (/\.(png|jpg|jpeg|gif|webp|avif|svg)$/u.test(lower)) {
-    return "image";
-  }
-  if (/\.(mp4|mov|webm|m4v)$/u.test(lower)) {
-    return "video";
-  }
-  if (
-    /\.(ts|tsx|js|jsx|json|md|go|rs|py|java|kt|swift|c|cc|cpp|h|hpp|cs|rb|php|sql|sh|yml|yaml|toml)$/u.test(
-      lower,
-    )
-  ) {
-    return "code";
-  }
-  return "default";
 };
 
 export const toolPartType = (
@@ -220,27 +231,32 @@ export const toolPartPresentation = (
 ): Pick<Extract<AgentStreamPart, { kind: "tool" }>, "toolType"> &
   Partial<Pick<Extract<AgentStreamPart, { kind: "tool" }>, "displayLabel">> => {
   const toolType = toolPartType(toolName);
-  return {
-    toolType,
-    ...(toolType === "todo" ? { displayLabel: "todo" } : {}),
-  };
+  if (toolType === "todo") {
+    return { toolType, displayLabel: "todo" };
+  }
+  return { toolType };
 };
 
-export const textFromContentBlocks = (content: unknown): string => {
-  if (typeof content === "string") {
-    return content;
+type ClaudeMessageContent =
+  | Extract<SDKMessage, { type: "assistant" | "user" }>["message"]["content"]
+  | SessionStoreEntry[string];
+
+export const textFromContentBlocks = (content: ClaudeMessageContent): string => {
+  const text = claudeTextSchema.safeParse(content);
+  if (text.success) {
+    return text.data;
   }
   if (!Array.isArray(content)) {
     return "";
   }
   return content
     .map((block) => {
-      if (!isRecord(block)) {
+      const parsed = claudeContentBlockSchema.safeParse(block);
+      if (!parsed.success) {
         return "";
       }
-      const type = readStringProp(block, "type");
-      if (type === "text") {
-        return readStringProp(block, "text") ?? "";
+      if (parsed.data.type === "text") {
+        return parsed.data.text ?? "";
       }
       return "";
     })
@@ -248,11 +264,12 @@ export const textFromContentBlocks = (content: unknown): string => {
     .join("\n");
 };
 
-export const historyMessageText = (message: unknown): string => {
-  if (!isRecord(message)) {
+export const historyMessageText = (message: SessionStoreEntry[string]): string => {
+  const parsed = claudeMessageSchema.safeParse(message);
+  if (!parsed.success) {
     return "";
   }
-  return textFromContentBlocks(message.content);
+  return textFromContentBlocks(parsed.data.content);
 };
 
 export const modelSelection = (model: string): AgentModelSelection => ({

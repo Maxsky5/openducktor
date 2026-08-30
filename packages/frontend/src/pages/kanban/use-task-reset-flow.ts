@@ -36,10 +36,7 @@ export function useTaskResetFlow({
   taskWorktreeBasePath,
   resetTaskImplementation,
   closeTaskDetails,
-}: UseTaskResetFlowArgs): {
-  resetImplementationModal: ResetImplementationModalModel;
-  openResetImplementation: (taskId: string, options?: ResetImplementationOptions) => boolean;
-} {
+}: UseTaskResetFlowArgs) {
   const [taskId, setTaskId] = useState<string | null>(null);
   const [closeDetailsAfterReset, setCloseDetailsAfterReset] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -127,6 +124,9 @@ export function useTaskResetFlow({
     return {
       resetImplementationModal: null,
       openResetImplementation,
+    } satisfies {
+      resetImplementationModal: ResetImplementationModalModel;
+      openResetImplementation: (taskId: string, options?: ResetImplementationOptions) => boolean;
     };
   }
 
@@ -154,5 +154,8 @@ export function useTaskResetFlow({
       onConfirm: confirmReset,
     },
     openResetImplementation,
+  } satisfies {
+    resetImplementationModal: ResetImplementationModalModel;
+    openResetImplementation: (taskId: string, options?: ResetImplementationOptions) => boolean;
   };
 }

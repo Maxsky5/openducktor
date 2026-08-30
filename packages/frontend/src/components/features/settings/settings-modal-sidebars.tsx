@@ -91,10 +91,10 @@ export function RepositorySidebar({
       repoErrorCountByWorkspaceId[workspace.workspaceId] = errorCount;
     }
   }
-  const sectionErrorCountById: Partial<Record<RepositorySectionId, number>> = {
-    prompts: selectedRepoPromptValidationErrorCount,
-    scripts: selectedRepoScriptValidationErrorCount,
-  };
+  const sectionErrorCountById = new Map<RepositorySectionId, number>([
+    ["prompts", selectedRepoPromptValidationErrorCount],
+    ["scripts", selectedRepoScriptValidationErrorCount],
+  ]);
 
   return (
     <aside className="space-y-3 border-r border-border bg-muted p-3">
@@ -113,7 +113,7 @@ export function RepositorySidebar({
 
       <div className="space-y-1">
         {REPOSITORY_SECTIONS.map((entry) => {
-          const sectionErrorCount = sectionErrorCountById[entry.id] ?? 0;
+          const sectionErrorCount = sectionErrorCountById.get(entry.id) ?? 0;
           return (
             <Button
               key={entry.id}

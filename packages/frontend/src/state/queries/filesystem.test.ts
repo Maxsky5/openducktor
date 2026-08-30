@@ -8,6 +8,7 @@ import type {
 } from "@openducktor/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
+import type { HostClient } from "@openducktor/host-client";
 import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
 import {
   filesystemQueryKeys,
@@ -29,7 +30,7 @@ const unusedTextFile = async (): Promise<WorkspaceTextFileReadResult> => {
 
 describe("workspaceFileTreeQueryOptions", () => {
   test("passes the target branch to the filesystem tree host read", async () => {
-    const inputs: unknown[] = [];
+    const inputs: Array<Parameters<HostClient["filesystemListTree"]>[0]> = [];
     const hostClient = {
       filesystemListDirectory: async (): Promise<DirectoryListing> => ({
         currentPath: "/repo",
@@ -38,7 +39,9 @@ describe("workspaceFileTreeQueryOptions", () => {
         homePath: "/home/dev",
         entries: [],
       }),
-      filesystemListTree: async (input: unknown): Promise<WorkspaceFileTree> => {
+      filesystemListTree: async (
+        input: Parameters<HostClient["filesystemListTree"]>[0],
+      ): Promise<WorkspaceFileTree> => {
         inputs.push(input);
         return {
           rootPath: "/repo",
@@ -165,7 +168,8 @@ describe("workspaceFileTreeQueryOptions", () => {
     });
     await waitFor(() => expect(result.current.mutation.isError).toBe(true));
     expect(mutationError).toBeInstanceOf(Error);
-    expect((mutationError as Error).message).toBe("The file changed after it was loaded.");
+    if (!(mutationError instanceof Error)) throw mutationError;
+    expect(mutationError.message).toBe("The file changed after it was loaded.");
     expect(result.current.queryClient.getQueryData<WorkspaceTextFileReadResult>(key)).toEqual(
       baseline,
     );

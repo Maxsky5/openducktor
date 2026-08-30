@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { CODEX_APP_SERVER_SERVER_REQUEST_METHOD } from "@openducktor/contracts";
-import type { AgentModelSelection } from "@openducktor/core";
+import {
+  CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
+  type CodexAppServerThreadItem,
+} from "@openducktor/contracts";
+import type { AgentEvent, AgentModelSelection } from "@openducktor/core";
 import type { ActiveCodexTurn } from "./codex-app-server-shared";
 import { CodexPendingInputState } from "./codex-pending-input-state";
 import { CodexRuntimeSessionEvents } from "./codex-runtime-session-events";
@@ -8,7 +11,14 @@ import { CodexSessionEventBus } from "./codex-session-event-bus";
 import { codexSessionRef } from "./codex-session-ref";
 import { CodexSubagentLinkState } from "./codex-subagent-link-state";
 import { codex0144MultiAgentV2Replay } from "./test-fixtures/codex-0-144-multi-agent-v2";
+import {
+  codexCommandExecutionItemFixture,
+  codexTokenUsageFixture,
+  codexTurnFixture,
+} from "./test-fixtures/codex-protocol";
 import type { CodexRuntimeEventQueueFailureHandler, CodexSessionState } from "./types";
+
+type CodexCommandExecutionItem = Extract<CodexAppServerThreadItem, { type: "commandExecution" }>;
 
 const waitForRuntimeEvent = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 const flushRuntimeEvents = async (): Promise<void> => {
@@ -25,6 +35,11 @@ type RuntimeEventInput = {
 };
 
 type RuntimeListener = (event: RuntimeEventInput) => void;
+
+const isSubagentAssistantPartEvent = (
+  event: AgentEvent,
+): event is Extract<AgentEvent, { type: "assistant_part"; part: { kind: "subagent" } }> =>
+  event.type === "assistant_part" && event.part.kind === "subagent";
 
 const withRuntimeReceivedAt = (event: RuntimeEventInput) => ({
   ...event,
@@ -63,17 +78,6 @@ const createRuntimeEvents = (
       }),
   });
 };
-
-type StartedItemTimestampState = Map<string, Map<string, Map<string, number>>>;
-
-const startedItemTimestampState = (
-  runtimeEvents: CodexRuntimeSessionEvents,
-): StartedItemTimestampState =>
-  (
-    runtimeEvents as unknown as {
-      startedItemTimestampsByRuntimeId: StartedItemTimestampState;
-    }
-  ).startedItemTimestampsByRuntimeId;
 
 type ItemLifecycleMethod = "item/started" | "item/completed";
 
@@ -114,7 +118,7 @@ const createItemLifecycleHarness = (...initialSessions: CodexSessionState[]) => 
       method: ItemLifecycleMethod,
       timestampMs: number,
       itemId: string,
-      itemOverrides: Record<string, unknown> = {},
+      itemOverrides: Partial<CodexCommandExecutionItem> = {},
     ): void {
       const listener = listenersByRuntimeId.get(session.runtimeId);
       if (!listener) {
@@ -122,7 +126,6 @@ const createItemLifecycleHarness = (...initialSessions: CodexSessionState[]) => 
       }
       const isStarted = method === "item/started";
       const timing = isStarted ? { startedAtMs: timestampMs } : { completedAtMs: timestampMs };
-      const completionFields = isStarted ? {} : { exitCode: 0 };
       sessions.set(session.threadId, session);
       listener({
         runtimeId: session.runtimeId,
@@ -133,17 +136,12 @@ const createItemLifecycleHarness = (...initialSessions: CodexSessionState[]) => 
             threadId: session.threadId,
             turnId: `${session.runtimeId}-turn`,
             ...timing,
-            item: {
-              type: "commandExecution",
+            item: codexCommandExecutionItemFixture({
               id: itemId,
-              command: "true",
-              cwd: "/repo",
               status: isStarted ? "inProgress" : "completed",
-              commandActions: [],
-              aggregatedOutput: "",
-              ...completionFields,
+              exitCode: isStarted ? null : 0,
               ...itemOverrides,
-            },
+            }),
           },
         },
       });
@@ -197,7 +195,7 @@ const createActiveTurn = (
   session: createSession(threadId),
   startedAtMs: Date.now(),
   turnStartRequestSentAtMs: 0,
-  turnStartPromise: Promise.resolve({}),
+  turnStartPromise: null,
   isTurnSettled: () => false,
   markTurnSettled: () => undefined,
   handledRequestKeys: new Set(),
@@ -288,7 +286,7 @@ describe("CodexRuntimeSessionEvents", () => {
     let listener: RuntimeListener | null = null;
     const session = createSession("thread-live-mutation");
     const sessionEvents = new CodexSessionEventBus();
-    const emittedEvents: unknown[] = [];
+    const emittedEvents: AgentEvent[] = [];
     const failures: Array<{ runtimeId: string; error: unknown }> = [];
     const deliveryFailure = new Error("live mutation delivery failed");
     sessionEvents.subscribe(codexSessionRef(session), (event) => emittedEvents.push(event));
@@ -419,7 +417,7 @@ describe("CodexRuntimeSessionEvents", () => {
     const failures: Array<{ runtimeId: string; error: unknown }> = [];
     const mutations: unknown[] = [];
     let attempts = 0;
-    let rejectFirstDelivery: ((error: unknown) => void) | undefined;
+    let rejectFirstDelivery: ((cause: unknown) => void) | undefined;
     const firstDelivery = new Promise<void>((_resolve, reject) => {
       rejectFirstDelivery = reject;
     });
@@ -466,7 +464,7 @@ describe("CodexRuntimeSessionEvents", () => {
     const deliveryFailure = new Error("catalog delivery failed");
     const deliveries: string[] = [];
     const failures: Array<{ runtimeId: string; error: unknown }> = [];
-    let rejectCatalog: ((error: unknown) => void) | undefined;
+    let rejectCatalog: ((cause: unknown) => void) | undefined;
     let resolveMutation: (() => void) | undefined;
     const catalogDelivery = new Promise<void>((_resolve, reject) => {
       rejectCatalog = reject;
@@ -583,17 +581,7 @@ describe("CodexRuntimeSessionEvents", () => {
     }
 
     const subagentParts = emittedEvents.flatMap((event) => {
-      if (
-        typeof event !== "object" ||
-        event === null ||
-        !("type" in event) ||
-        event.type !== "assistant_part" ||
-        !("part" in event) ||
-        typeof event.part !== "object" ||
-        event.part === null ||
-        !("kind" in event.part) ||
-        event.part.kind !== "subagent"
-      ) {
+      if (!isSubagentAssistantPartEvent(event)) {
         return [];
       }
       return [event.part];
@@ -618,7 +606,7 @@ describe("CodexRuntimeSessionEvents", () => {
     const parentSession = createSession("parent-thread");
     const sessions = new Map([[parentSession.threadId, parentSession]]);
     const sessionEvents = new CodexSessionEventBus();
-    const emittedEvents: unknown[] = [];
+    const emittedEvents: AgentEvent[] = [];
     sessionEvents.subscribe(codexSessionRef(parentSession), (event) => emittedEvents.push(event));
     const runtimeEvents = createRuntimeEvents({
       subscribeEvents: (_runtimeId, next) => {
@@ -694,18 +682,7 @@ describe("CodexRuntimeSessionEvents", () => {
     await flushRuntimeEvents();
 
     const statuses = emittedEvents.flatMap((event) => {
-      if (
-        typeof event !== "object" ||
-        event === null ||
-        !("type" in event) ||
-        event.type !== "assistant_part" ||
-        !("part" in event) ||
-        typeof event.part !== "object" ||
-        event.part === null ||
-        !("kind" in event.part) ||
-        event.part.kind !== "subagent" ||
-        !("status" in event.part)
-      ) {
+      if (!isSubagentAssistantPartEvent(event)) {
         return [];
       }
       return [event.part.status];
@@ -772,8 +749,8 @@ describe("CodexRuntimeSessionEvents", () => {
       [parentTwo.threadId, parentTwo],
     ]);
     const sessionEvents = new CodexSessionEventBus();
-    const parentOneEvents: unknown[] = [];
-    const parentTwoEvents: unknown[] = [];
+    const parentOneEvents: AgentEvent[] = [];
+    const parentTwoEvents: AgentEvent[] = [];
     sessionEvents.subscribe(codexSessionRef(parentOne), (event) => parentOneEvents.push(event));
     sessionEvents.subscribe(codexSessionRef(parentTwo), (event) => parentTwoEvents.push(event));
     const runtimeEvents = createRuntimeEvents({
@@ -844,8 +821,8 @@ describe("CodexRuntimeSessionEvents", () => {
       [parentTwo.threadId, parentTwo],
     ]);
     const sessionEvents = new CodexSessionEventBus();
-    const parentOneEvents: unknown[] = [];
-    const parentTwoEvents: unknown[] = [];
+    const parentOneEvents: AgentEvent[] = [];
+    const parentTwoEvents: AgentEvent[] = [];
     sessionEvents.subscribe(codexSessionRef(parentOne), (event) => parentOneEvents.push(event));
     sessionEvents.subscribe(codexSessionRef(parentTwo), (event) => parentTwoEvents.push(event));
     const subagents = new CodexSubagentLinkState();
@@ -879,6 +856,8 @@ describe("CodexRuntimeSessionEvents", () => {
         threadId: "shared-child-thread",
         turnId: "child-turn",
         itemId: "child-command",
+        startedAtMs: 1,
+        environmentId: "local",
         command: "pwd",
         cwd: "/repo",
       },
@@ -899,12 +878,11 @@ describe("CodexRuntimeSessionEvents", () => {
     });
     await flushRuntimeEvents();
 
-    const parentOneApproval = parentOneEvents.find(
-      (event) => (event as { type?: string }).type === "approval_required",
-    ) as { externalSessionId: string; requestId: string };
-    const parentTwoApproval = parentTwoEvents.find(
-      (event) => (event as { type?: string }).type === "approval_required",
-    ) as { externalSessionId: string; requestId: string };
+    const parentOneApproval = parentOneEvents.find((event) => event.type === "approval_required");
+    const parentTwoApproval = parentTwoEvents.find((event) => event.type === "approval_required");
+    if (parentOneApproval === undefined || parentTwoApproval === undefined) {
+      throw new Error("Expected both parent sessions to emit an approval request.");
+    }
     expect(parentOneApproval.externalSessionId).toBe("parent-one");
     expect(parentTwoApproval.externalSessionId).toBe("parent-two");
     expect(parentOneApproval.requestId).not.toBe("0");
@@ -933,11 +911,7 @@ describe("CodexRuntimeSessionEvents", () => {
           params: {
             threadId,
             turnId: `${threadId}-turn`,
-            tokenUsage: {
-              total: { totalTokens },
-              last: { totalTokens },
-              modelContextWindow: 200_000,
-            },
+            tokenUsage: codexTokenUsageFixture(totalTokens),
           },
         },
       });
@@ -961,7 +935,6 @@ describe("CodexRuntimeSessionEvents", () => {
     await flushRuntimeEvents();
 
     harness.runtimeEvents.clearSession(session.threadId, session.runtimeId);
-    expect(startedItemTimestampState(harness.runtimeEvents).size).toBe(0);
     harness.emittedEvents.length = 0;
 
     harness.emitItem(session, "item/completed", 1_783_109_995_000, "reused-item");
@@ -996,16 +969,9 @@ describe("CodexRuntimeSessionEvents", () => {
     harness.emitItem(session, "item/started", 1_783_109_996_000, "matched-item");
     await flushRuntimeEvents();
 
-    expect(
-      startedItemTimestampState(harness.runtimeEvents)
-        .get(session.runtimeId)
-        ?.get(session.threadId),
-    ).toEqual(new Map([["matched-item", 1_783_109_996_000]]));
-
     harness.emitItem(session, "item/completed", 1_783_109_997_000, "matched-item");
     await flushRuntimeEvents();
 
-    expect(startedItemTimestampState(harness.runtimeEvents).size).toBe(0);
     expect(harness.emittedEvents).toContainEqual(
       expect.objectContaining({
         type: "assistant_part",
@@ -1033,18 +999,7 @@ describe("CodexRuntimeSessionEvents", () => {
       await flushRuntimeEvents();
     }
 
-    expect(
-      startedItemTimestampState(harness.runtimeEvents).get("runtime-1")?.get(threadId),
-    ).toEqual(new Map([["shared-item", 1_783_109_998_000]]));
-    expect(
-      startedItemTimestampState(harness.runtimeEvents).get("runtime-2")?.get(threadId),
-    ).toEqual(new Map([["shared-item", 1_783_109_999_000]]));
-
     harness.runtimeEvents.clearRuntime("runtime-1");
-    expect(startedItemTimestampState(harness.runtimeEvents).has("runtime-1")).toBe(false);
-    expect(
-      startedItemTimestampState(harness.runtimeEvents).get("runtime-2")?.get(threadId),
-    ).toEqual(new Map([["shared-item", 1_783_109_999_000]]));
 
     harness.emitItem(runtimeTwoSession, "item/completed", 1_783_110_000_000, "shared-item");
     await flushRuntimeEvents();
@@ -1060,13 +1015,10 @@ describe("CodexRuntimeSessionEvents", () => {
         }),
       }),
     );
-    expect(startedItemTimestampState(harness.runtimeEvents).size).toBe(0);
 
     harness.emitItem(runtimeTwoSession, "item/started", 1_783_110_001_000, "orphaned-item");
     await flushRuntimeEvents();
     harness.runtimeEvents.clearRuntime("runtime-2");
-
-    expect(startedItemTimestampState(harness.runtimeEvents).size).toBe(0);
   });
 
   test("reuses item IDs and preserves runtime-supplied completion timing", async () => {
@@ -1112,7 +1064,6 @@ describe("CodexRuntimeSessionEvents", () => {
         }),
       }),
     );
-    expect(startedItemTimestampState(harness.runtimeEvents).size).toBe(0);
   });
 
   test("returns null after a successful resume with no retained usage", async () => {
@@ -1152,18 +1103,14 @@ describe("CodexRuntimeSessionEvents", () => {
         method: "thread/tokenUsage/updated",
         params: {
           turnId: "thread-target-turn",
-          tokenUsage: {
-            total: { totalTokens: 300 },
-            last: { totalTokens: 300 },
-            modelContextWindow: 200_000,
-          },
+          tokenUsage: codexTokenUsageFixture(300),
         },
       },
     });
     await flushRuntimeEvents();
 
     expect(runtimeEvents.latestContextUsage("runtime-1", "thread-target")).toBeNull();
-    expect(mutations.at(-1)?.fault).toContain("missing threadId");
+    expect(mutations.at(-1)?.fault).toContain("threadId");
     expect(mutations.at(-1)?.faultRef).toBeUndefined();
   });
 
@@ -1211,7 +1158,7 @@ describe("CodexRuntimeSessionEvents", () => {
     });
     await flushRuntimeEvents();
 
-    expect(mutations.at(-1)?.fault).toBe("Codex app-server server request is missing method.");
+    expect(mutations.at(-1)?.fault).toContain("method");
     expect(mutations.at(-1)?.faultRef).toEqual(codexSessionRef(childLiveSession));
     const sessionErrors =
       mutations.at(-1)?.transcriptEvents.filter((event) => event.type === "session_error") ?? [];
@@ -1339,9 +1286,21 @@ describe("CodexRuntimeSessionEvents", () => {
         id: "nested-question",
         method: "item/tool/requestUserInput",
         params: {
+          autoResolutionMs: null,
+          isBlocking: true,
+          itemId: "grandchild-question-item",
           threadId: grandchildSession.threadId,
           turnId: "grandchild-turn",
-          questions: [{ id: "question-1", header: "Proceed", question: "Continue?" }],
+          questions: [
+            {
+              id: "question-1",
+              header: "Proceed",
+              question: "Continue?",
+              isOther: false,
+              isSecret: false,
+              options: null,
+            },
+          ],
         },
       },
     });
@@ -1603,9 +1562,21 @@ describe("CodexRuntimeSessionEvents", () => {
         id: "retained-child-question",
         method: "item/tool/requestUserInput",
         params: {
+          autoResolutionMs: null,
+          isBlocking: true,
+          itemId: "retained-child-question-item",
           threadId: childSession.threadId,
           turnId: "child-turn",
-          questions: [{ id: "question-1", header: "Proceed", question: "Continue?" }],
+          questions: [
+            {
+              id: "question-1",
+              header: "Proceed",
+              question: "Continue?",
+              isOther: false,
+              isSecret: false,
+              options: null,
+            },
+          ],
         },
       },
     });
@@ -1627,11 +1598,8 @@ describe("CodexRuntimeSessionEvents", () => {
     });
     await flushRuntimeEvents();
 
-    const eventsByType = (events: unknown[], type: string) =>
-      events.filter(
-        (event) =>
-          typeof event === "object" && event !== null && "type" in event && event.type === type,
-      );
+    const eventsByType = (events: AgentEvent[], type: AgentEvent["type"]) =>
+      events.filter((event) => event.type === type);
     const parentRequired = eventsByType(parentEvents, "question_required");
     const childRequired = eventsByType(childEvents, "question_required");
     const parentResolved = eventsByType(parentEvents, "question_resolved");
@@ -1785,9 +1753,7 @@ describe("CodexRuntimeSessionEvents", () => {
     });
     await flushRuntimeEvents();
 
-    expect(mutations.at(-1)?.fault).toBe(
-      "Codex context usage notification for thread 'child-thread' has invalid token usage.",
-    );
+    expect(mutations.at(-1)?.fault).toContain('"tokenUsage"');
     expect(mutations.at(-1)?.faultRef).toEqual(codexSessionRef(childLiveSession));
     const sessionErrors =
       mutations.at(-1)?.transcriptEvents.filter((event) => event.type === "session_error") ?? [];
@@ -1887,11 +1853,7 @@ describe("CodexRuntimeSessionEvents", () => {
         params: {
           threadId: "thread-target",
           turnId: "thread-target-turn",
-          tokenUsage: {
-            total: { totalTokens: 0 },
-            last: { totalTokens: 0 },
-            modelContextWindow: 200_000,
-          },
+          tokenUsage: codexTokenUsageFixture(0),
         },
       },
     });
@@ -1921,11 +1883,7 @@ describe("CodexRuntimeSessionEvents", () => {
           params: {
             threadId: "shared-thread",
             turnId: `${runtimeId}-turn`,
-            tokenUsage: {
-              total: { totalTokens },
-              last: { totalTokens },
-              modelContextWindow: 200_000,
-            },
+            tokenUsage: codexTokenUsageFixture(totalTokens),
           },
         },
       });
@@ -1985,6 +1943,9 @@ describe("CodexRuntimeSessionEvents", () => {
         id: 50,
         method: "item/tool/requestUserInput",
         params: {
+          autoResolutionMs: null,
+          isBlocking: true,
+          itemId: "child-question-item",
           threadId: "child-thread",
           turnId: "turn-child",
           questions: [
@@ -1992,7 +1953,12 @@ describe("CodexRuntimeSessionEvents", () => {
               id: "question-item-1",
               header: "Choose",
               question: "Proceed?",
-              options: ["Yes", "No"],
+              isOther: false,
+              isSecret: false,
+              options: [
+                { label: "Yes", description: "Continue" },
+                { label: "No", description: "Stop" },
+              ],
             },
           ],
         },
@@ -2048,6 +2014,7 @@ describe("CodexRuntimeSessionEvents", () => {
             "Do you want to allow a shell `curl` check so I can verify terminal network access directly?",
           networkApprovalContext: {
             host: "example.com",
+            protocol: "https",
           },
         },
       },
@@ -2145,11 +2112,16 @@ describe("CodexRuntimeSessionEvents", () => {
         method: "turn/completed",
         params: {
           threadId: session.threadId,
-          turn: {
+          turn: codexTurnFixture({
             id: "turn-1",
             status: "failed",
-            error: { message: "Child execution failed" },
-          },
+            error: {
+              message: "Child execution failed",
+              codexErrorInfo: null,
+              additionalDetails: null,
+            },
+            items: [],
+          }),
         },
       },
     });
@@ -2275,7 +2247,7 @@ describe("CodexRuntimeSessionEvents", () => {
       expect.objectContaining({
         type: "session_error",
         externalSessionId: "parent-thread",
-        message: expect.stringContaining("missing a thread identifier"),
+        message: expect.stringContaining("threadId"),
       }),
     );
   });
@@ -2334,7 +2306,7 @@ describe("CodexRuntimeSessionEvents", () => {
       expect.objectContaining({
         type: "session_error",
         externalSessionId: "child-thread",
-        message: "Codex app-server server request is missing method.",
+        message: expect.stringContaining("method"),
       }),
     );
     expect(parentEvents).not.toContainEqual(expect.objectContaining({ type: "session_error" }));

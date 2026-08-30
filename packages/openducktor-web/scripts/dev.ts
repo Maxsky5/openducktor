@@ -9,10 +9,13 @@ import {
 } from "../src/effect/web-errors";
 
 type ManagedWebProcess = Bun.Subprocess<"ignore", "inherit", "inherit">;
-type KeepAliveTimer = ReturnType<typeof setInterval>;
 type ProcessKeepAliveDependencies = {
-  clearInterval: (timer: KeepAliveTimer) => void;
-  setInterval: (callback: () => void, durationMs: number) => KeepAliveTimer;
+  scheduleInterval: (callback: () => void, durationMs: number) => () => void;
+};
+
+const scheduleInterval = (callback: () => void, durationMs: number): (() => void) => {
+  const intervalId = setInterval(callback, durationMs);
+  return () => clearInterval(intervalId);
 };
 
 const scriptPath = fileURLToPath(import.meta.url);
@@ -72,21 +75,19 @@ export const buildWebDevProcessEnvironment = (
 export const keepWebDevProcessAliveDuringEffect = <T, E>(
   operation: Effect.Effect<T, E>,
   dependencies: ProcessKeepAliveDependencies = {
-    clearInterval,
-    setInterval,
+    scheduleInterval,
   },
 ): Effect.Effect<T, E> =>
   Effect.acquireUseRelease(
-    Effect.sync(() => dependencies.setInterval(() => {}, WEB_SHUTDOWN_KEEP_ALIVE_INTERVAL_MS)),
+    Effect.sync(() => dependencies.scheduleInterval(() => {}, WEB_SHUTDOWN_KEEP_ALIVE_INTERVAL_MS)),
     () => operation,
-    (timer) => Effect.sync(() => dependencies.clearInterval(timer)),
+    (cancelInterval) => Effect.sync(cancelInterval),
   );
 
 export const keepWebDevProcessAliveDuring = <T>(
   operation: Promise<T>,
   dependencies: ProcessKeepAliveDependencies = {
-    clearInterval,
-    setInterval,
+    scheduleInterval,
   },
 ): Promise<T> =>
   runWebBoundary(
@@ -200,9 +201,9 @@ export const runWebDevEffect = (
               await runWebBoundary(keepWebDevProcessAliveDuringEffect(stopWebCliEffect(webCli)));
               cleanupCompleted = true;
               resolveExit(exitCode);
-            } catch (error) {
+            } catch (cause) {
               cleanupCompleted = true;
-              rejectExit(error);
+              rejectExit(cause);
             }
           };
 
@@ -213,11 +214,11 @@ export const runWebDevEffect = (
                 void shutdown(exitCode);
               }
             },
-            (error: unknown) => {
+            (cause: unknown) => {
               webCliExited = true;
               if (!shutdownStarted) {
                 shutdownStarted = true;
-                rejectExit(error);
+                rejectExit(cause);
               }
             },
           );
@@ -232,8 +233,8 @@ export const runWebDevEffect = (
             if (!webCliExited) {
               try {
                 webCli.kill();
-              } catch (error) {
-                console.error(errorMessage(error));
+              } catch (cause) {
+                console.error(errorMessage(cause));
               }
             }
           };
@@ -284,8 +285,8 @@ export const runWebDev = (args: readonly string[] = process.argv.slice(2)): Prom
   runWebBoundary(runWebDevEffect(args));
 
 if (import.meta.main) {
-  const exitCode = await runWebDev().catch((error: unknown) => {
-    console.error(errorMessage(error));
+  const exitCode = await runWebDev().catch((cause: unknown) => {
+    console.error(errorMessage(cause));
     return 1;
   });
   process.exit(exitCode);

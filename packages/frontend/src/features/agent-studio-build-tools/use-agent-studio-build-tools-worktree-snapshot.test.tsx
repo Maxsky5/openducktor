@@ -20,15 +20,21 @@ import {
 } from "./use-agent-studio-build-tools-worktree-snapshot";
 
 enableReactActEnvironment();
-if (typeof document === "undefined") {
+if (globalThis.document === undefined) {
   GlobalRegistrator.register();
 }
 
 const refreshDiffMock = mock(async (_mode?: string) => {});
 const setDiffScopeMock = mock((_scope: "target" | "uncommitted") => {});
-const useAgentStudioDiffDataMock = mock((args: Record<string, unknown>): DiffDataState => ({
+type SnapshotDependencies = Parameters<
+  typeof createAgentStudioBuildToolsWorktreeSnapshotHookForTest
+>[0];
+type UseDiffData = NonNullable<SnapshotDependencies["useDiffData"]>;
+type UseDevServerPanel = NonNullable<SnapshotDependencies["useDevServerPanel"]>;
+
+const useAgentStudioDiffDataMock = mock((args: Parameters<UseDiffData>[0]): DiffDataState => ({
   branch: "feature/task-24",
-  worktreePath: (args.worktreePath as string | null) ?? null,
+  worktreePath: args.worktreePath,
   targetBranch: "origin/main",
   diffScope: "uncommitted",
   gitConflict: null,
@@ -48,36 +54,45 @@ const useAgentStudioDiffDataMock = mock((args: Record<string, unknown>): DiffDat
   diffHash: null,
   uncommittedFileCount: 0,
   isLoading: Boolean(args.isWorktreeResolutionResolving),
-  error: (args.worktreeResolutionError as string | null) ?? null,
+  error: args.worktreeResolutionError,
   refresh: refreshDiffMock,
   setDiffScope: setDiffScopeMock,
 }));
-const useAgentStudioDevServerPanelMock = mock((args: Record<string, unknown>) => ({
-  mode: "unconfigured" as const,
-  repoPath: args.repoPath,
-  taskId: args.taskId,
-  enabled: args.enabled,
-}));
+const useAgentStudioDevServerPanelMock = mock(
+  (args: Parameters<UseDevServerPanel>[0]): ReturnType<UseDevServerPanel> => ({
+    mode: "empty",
+    isExpanded: false,
+    isLoading: false,
+    disabledReason: null,
+    repoPath: args.repoPath,
+    taskId: args.taskId,
+    worktreePath: null,
+    scripts: [],
+    selectedScriptId: null,
+    selectedScript: null,
+    selectedScriptTerminalBuffer: null,
+    error: null,
+    isStartPending: false,
+    isStopPending: false,
+    isRestartPending: false,
+    onSelectScript: () => {},
+    onStart: () => {},
+    onStop: () => {},
+    onRestart: () => {},
+  }),
+);
 const taskWorktreeGetMock = mock(
   async (_repoPath: string, _taskId: string): Promise<{ workingDirectory: string } | null> => ({
     workingDirectory: "/repo/.worktrees/task-24",
   }),
 );
 
-type SnapshotDependencies = Parameters<
-  typeof createAgentStudioBuildToolsWorktreeSnapshotHookForTest
->[0];
-
 const useSnapshotHookForTest = createAgentStudioBuildToolsWorktreeSnapshotHookForTest({
   taskWorktreeHost: {
     taskWorktreeGet: taskWorktreeGetMock,
   },
-  useDiffData: useAgentStudioDiffDataMock as unknown as NonNullable<
-    SnapshotDependencies["useDiffData"]
-  >,
-  useDevServerPanel: useAgentStudioDevServerPanelMock as unknown as NonNullable<
-    SnapshotDependencies["useDevServerPanel"]
-  >,
+  useDiffData: useAgentStudioDiffDataMock,
+  useDevServerPanel: useAgentStudioDevServerPanelMock,
 });
 
 type UseSnapshotHook = typeof useAgentStudioBuildToolsWorktreeSnapshot;

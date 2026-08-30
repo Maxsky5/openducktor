@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
-import { agentRuntimeEventSchema } from "./agent-session-event-schemas";
+import { agentUserMessageEventSchema } from "./agent-session-event-schemas";
 import {
   agentModelSelectionSchema,
   agentSessionAssociationSchema,
@@ -13,13 +13,11 @@ import { subagentDescriptorSchema } from "./subagent-schemas";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 
-const agentSessionControlWorkingDirectoryShape = {
+const agentSessionControlWorkingDirectoryFields = {
   repoPath: nonEmptyStringSchema,
   runtimeKind: runtimeKindSchema,
   workingDirectory: nonEmptyStringSchema,
 };
-
-const agentSessionControlRefShape = agentSessionLiveRefSchema.shape;
 
 const fileReferenceSchema = z
   .object({
@@ -57,13 +55,13 @@ export const agentSessionUserMessagePartSchema = z.discriminatedUnion("kind", [
   z
     .object({
       kind: z.literal("skill_mention"),
-      skill: skillDescriptorSchema.strict(),
+      skill: skillDescriptorSchema,
     })
     .strict(),
   z
     .object({
       kind: z.literal("subagent_reference"),
-      subagent: subagentDescriptorSchema.strict(),
+      subagent: subagentDescriptorSchema,
     })
     .strict(),
   z
@@ -77,7 +75,7 @@ export type AgentSessionUserMessagePart = z.infer<typeof agentSessionUserMessage
 
 export const agentSessionControlStartInputSchema = z
   .object({
-    ...agentSessionControlWorkingDirectoryShape,
+    ...agentSessionControlWorkingDirectoryFields,
     sessionScope: agentSessionScopeSchema,
     systemPrompt: z.string(),
     model: agentModelSelectionSchema.optional(),
@@ -85,9 +83,8 @@ export const agentSessionControlStartInputSchema = z
   .strict();
 export type AgentSessionControlStartInput = z.infer<typeof agentSessionControlStartInputSchema>;
 
-export const agentSessionControlResumeInputSchema = z
-  .object({
-    ...agentSessionControlRefShape,
+export const agentSessionControlResumeInputSchema = agentSessionLiveRefSchema
+  .extend({
     sessionScope: agentSessionScopeSchema,
     model: agentModelSelectionSchema.optional(),
     systemPrompt: z.string().optional(),
@@ -97,7 +94,7 @@ export type AgentSessionControlResumeInput = z.infer<typeof agentSessionControlR
 
 export const agentSessionControlForkInputSchema = z
   .object({
-    ...agentSessionControlWorkingDirectoryShape,
+    ...agentSessionControlWorkingDirectoryFields,
     sessionScope: agentSessionScopeSchema,
     systemPrompt: z.string(),
     model: agentModelSelectionSchema.optional(),
@@ -107,9 +104,8 @@ export const agentSessionControlForkInputSchema = z
   .strict();
 export type AgentSessionControlForkInput = z.infer<typeof agentSessionControlForkInputSchema>;
 
-export const agentSessionControlSendInputSchema = z
-  .object({
-    ...agentSessionControlRefShape,
+export const agentSessionControlSendInputSchema = agentSessionLiveRefSchema
+  .extend({
     sessionScope: agentSessionScopeSchema,
     parts: z.array(agentSessionUserMessagePartSchema).min(1),
     model: agentModelSelectionSchema.optional(),
@@ -129,9 +125,8 @@ export const agentSessionControlSendInputSchema = z
   });
 export type AgentSessionControlSendInput = z.infer<typeof agentSessionControlSendInputSchema>;
 
-export const agentSessionControlUpdateModelInputSchema = z
-  .object({
-    ...agentSessionControlRefShape,
+export const agentSessionControlUpdateModelInputSchema = agentSessionLiveRefSchema
+  .extend({
     model: agentModelSelectionSchema.nullable(),
   })
   .strict();
@@ -158,11 +153,5 @@ export const agentSessionControlSummarySchema = z
   .strict();
 export type AgentSessionControlSummary = z.infer<typeof agentSessionControlSummarySchema>;
 
-export type AcceptedAgentUserMessage = Extract<
-  z.infer<typeof agentRuntimeEventSchema>,
-  { type: "user_message" }
->;
-export const acceptedAgentUserMessageSchema: z.ZodType<AcceptedAgentUserMessage> =
-  agentRuntimeEventSchema.refine((event) => event.type === "user_message", {
-    message: "Accepted user message output must be a user_message event.",
-  }) as unknown as z.ZodType<AcceptedAgentUserMessage>;
+export const acceptedAgentUserMessageSchema = agentUserMessageEventSchema;
+export type AcceptedAgentUserMessage = z.infer<typeof acceptedAgentUserMessageSchema>;

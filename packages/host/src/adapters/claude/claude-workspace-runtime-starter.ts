@@ -11,7 +11,7 @@ import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-s
 import type { RuntimeWorkspaceStarterPort } from "../../ports/runtime-registry-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
-import type { ClaudeLiveSessionAdapterPreparer } from "../agent-sessions/claude-live-session-adapter";
+import type { ClaudeLiveSessionAdapterPreparer } from "../agent-sessions/claude-live-session-adapter-contract";
 
 export type CreateClaudeWorkspaceRuntimeStarterInput = {
   liveSessionLifecycle: RuntimeLiveSessionLifecyclePort;

@@ -2,8 +2,8 @@ import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import type { SessionRef } from "@openducktor/core";
 import { toOpenCodePermissionReply } from "./approval-translation";
 import { unwrapData } from "./data-utils";
-import { asUnknownRecord, readStringProp } from "./guards";
 import { extractMessageTotalTokens, readMessageModelSelection } from "./message-normalizers";
+import { opencodeSessionMessagesPayloadSchema } from "./opencode-ingress";
 import type { OpencodeSessionContextUsage } from "./opencode-session-runtime-signals";
 import { toOpenCodeRequestError } from "./request-errors";
 import type { ClientFactory } from "./types";
@@ -39,21 +39,21 @@ export const readLatestOpencodeContextUsage = async (
     sessionID: ref.externalSessionId,
     limit: 1,
   });
-  const messages = unwrapData(response, "load latest session context usage");
+  const messages = opencodeSessionMessagesPayloadSchema.parse(
+    unwrapData(response, "load latest session context usage"),
+  );
   const latestAssistant = [...messages]
     .reverse()
-    .find(
-      (message) => readStringProp(asUnknownRecord(message.info) ?? {}, ["role"]) === "assistant",
-    );
+    .find((message) => message.info.role === "assistant");
   if (!latestAssistant) {
     return null;
   }
   const totalTokens = extractMessageTotalTokens(latestAssistant.info, latestAssistant.parts);
-  if (typeof totalTokens !== "number") {
+  if (totalTokens === undefined) {
     return null;
   }
   const model = readMessageModelSelection(latestAssistant.info);
-  return { totalTokens, ...(model ? { model } : {}) };
+  return model ? { totalTokens, model } : { totalTokens };
 };
 
 export const replyToOpencodeApproval = async (
@@ -64,12 +64,15 @@ export const replyToOpencodeApproval = async (
     runtimeEndpoint: context.runtimeEndpoint,
     workingDirectory: input.ref.workingDirectory,
   });
-  const response = await client.permission.reply({
+  const request: Parameters<typeof client.permission.reply>[0] = {
     directory: input.ref.workingDirectory,
     requestID: input.nativeRequestId,
     reply: toOpenCodePermissionReply(input.outcome),
-    ...(input.message ? { message: input.message } : {}),
-  });
+  };
+  if (input.message) {
+    request.message = input.message;
+  }
+  const response = await client.permission.reply(request);
   if (response.error) {
     throw toOpenCodeRequestError("reply to permission request", response.error, response.response);
   }

@@ -32,9 +32,10 @@ export const useSettingsModalRepoScriptValidation = ({
 
   const repoScriptValidationSummary = useMemo(() => {
     if (!snapshotDraft) {
+      const repoScriptValidationErrorCountByWorkspaceId: Record<string, number> = {};
       return {
-        invalidRepoPathsWithDevServerErrors: [] as string[],
-        repoScriptValidationErrorCountByWorkspaceId: {} as Record<string, number>,
+        invalidRepoPathsWithDevServerErrors: new Array<string>(),
+        repoScriptValidationErrorCountByWorkspaceId,
         repoScriptValidationErrorCount: 0,
       };
     }

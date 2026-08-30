@@ -1,11 +1,11 @@
 import { type SystemOpenInToolId, systemOpenInToolIdValues } from "@openducktor/contracts";
 import { toRightPanelStorageKey } from "@/pages/agents/agents-page-selection";
-
-type PersistedOpenInPreference = {
-  openInToolId?: string;
-};
+import { z } from "zod";
 
 const systemOpenInToolIdSet = new Set<string>(systemOpenInToolIdValues);
+const persistedOpenInPreferenceSchema = z.object({
+  openInToolId: z.string().optional(),
+});
 
 const isSystemOpenInToolId = (value: string): value is SystemOpenInToolId =>
   systemOpenInToolIdSet.has(value);
@@ -13,7 +13,7 @@ const isSystemOpenInToolId = (value: string): value is SystemOpenInToolId =>
 const openInPreferencesStorageKey = (): string => toRightPanelStorageKey();
 
 export function readPreferredOpenInTool(): SystemOpenInToolId | null {
-  if (typeof globalThis.localStorage === "undefined") {
+  if (globalThis.localStorage === undefined) {
     return null;
   }
 
@@ -25,13 +25,13 @@ export function readPreferredOpenInTool(): SystemOpenInToolId | null {
       return null;
     }
 
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") {
+    const parsed = persistedOpenInPreferenceSchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) {
       return null;
     }
 
-    const toolId = (parsed as PersistedOpenInPreference).openInToolId;
-    if (typeof toolId !== "string" || !isSystemOpenInToolId(toolId)) {
+    const toolId = parsed.data.openInToolId;
+    if (toolId === undefined || !isSystemOpenInToolId(toolId)) {
       return null;
     }
 
@@ -46,7 +46,7 @@ export function readPreferredOpenInTool(): SystemOpenInToolId | null {
 }
 
 export function persistPreferredOpenInTool(toolId: SystemOpenInToolId): void {
-  if (typeof globalThis.localStorage === "undefined") {
+  if (globalThis.localStorage === undefined) {
     return;
   }
 
@@ -54,11 +54,10 @@ export function persistPreferredOpenInTool(toolId: SystemOpenInToolId): void {
 
   try {
     const raw = globalThis.localStorage.getItem(storageKey);
-    const parsed = raw ? (JSON.parse(raw) as unknown) : null;
-    const nextValue =
-      parsed && typeof parsed === "object"
-        ? { ...parsed, openInToolId: toolId }
-        : { openInToolId: toolId };
+    const parsed = raw ? persistedOpenInPreferenceSchema.safeParse(JSON.parse(raw)) : null;
+    const nextValue = parsed?.success
+      ? { ...parsed.data, openInToolId: toolId }
+      : { openInToolId: toolId };
     globalThis.localStorage.setItem(storageKey, JSON.stringify(nextValue));
   } catch (error) {
     console.error("[agent-studio-open-in] Failed to persist preferred tool.", {

@@ -6,6 +6,7 @@ import type {
   SelectionSide,
 } from "@pierre/diffs";
 import { getFiletypeFromFileName, getSingularPatch } from "@pierre/diffs";
+import { z } from "zod";
 import type {
   InlineCommentContextLine,
   InlineCommentSide,
@@ -28,6 +29,11 @@ export type HunkResetAnnotationMetadata = {
   kind: "hunk-reset";
   hunkIndex: number;
 };
+
+export const hunkResetAnnotationMetadataSchema = z.object({
+  kind: z.literal("hunk-reset"),
+  hunkIndex: z.number().int().nonnegative(),
+});
 
 type RenderableFileDiff = {
   fileDiff: FileDiffMetadata | null;
@@ -168,7 +174,7 @@ export const getRenderableFileDiff = (patch: string, filePath: string) => {
   renderableFileDiffCache.set(cacheKey, result);
   if (renderableFileDiffCache.size > MAX_RENDERABLE_DIFF_CACHE_ENTRIES) {
     const oldestKey = renderableFileDiffCache.keys().next().value;
-    if (typeof oldestKey === "string") {
+    if (oldestKey !== undefined) {
       renderableFileDiffCache.delete(oldestKey);
     }
   }
@@ -185,11 +191,14 @@ const normalizeSelectedLineRange = (selectedLines: SelectedLineRange): SelectedL
     startSide: SelectionSide | undefined,
     endSide: SelectionSide | undefined,
   ): SelectedLineRange => {
-    return {
-      ...range,
-      ...(startSide ? { side: startSide } : {}),
-      ...(endSide ? { endSide } : {}),
-    };
+    const normalizedRange: SelectedLineRange = { ...range };
+    if (startSide) {
+      normalizedRange.side = startSide;
+    }
+    if (endSide) {
+      normalizedRange.endSide = endSide;
+    }
+    return normalizedRange;
   };
 
   if (selectedLines.start < selectedLines.end) {

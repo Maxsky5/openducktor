@@ -22,7 +22,7 @@ export type BunPtyTerminal = {
 };
 export type BunPtySubprocess = {
   readonly pid: number;
-  readonly terminal?: BunPtyTerminal;
+  readonly terminal: BunPtyTerminal;
   kill(signal?: NodeJS.Signals | number): void;
 };
 export type BunPtyTerminalOptions = {
@@ -46,6 +46,32 @@ export type BunPtySpawnOptions = {
   ): void;
 };
 export type BunPtySpawn = (command: string[], options: BunPtySpawnOptions) => BunPtySubprocess;
+
+const toBunPtySubprocess = (
+  subprocess: Bun.Subprocess<"ignore", "pipe", "inherit">,
+): BunPtySubprocess => {
+  const terminal = subprocess.terminal;
+  if (!terminal) {
+    throw new Error("Bun did not attach the requested terminal to the subprocess.");
+  }
+  return {
+    pid: subprocess.pid,
+    terminal,
+    kill: (signal) => subprocess.kill(signal),
+  };
+};
+
+const spawnBunPty: BunPtySpawn = (command, options) => {
+  const subprocess = Bun.spawn(command, {
+    cwd: options.cwd,
+    env: options.env,
+    detached: options.detached,
+    terminal: options.terminal,
+    onExit: (exitedSubprocess, exitCode, signalCode, error) =>
+      options.onExit(toBunPtySubprocess(exitedSubprocess), exitCode, signalCode, error),
+  });
+  return toBunPtySubprocess(subprocess);
+};
 
 type CreateBunPtyPortInput = {
   spawn?: BunPtySpawn;
@@ -77,13 +103,21 @@ const operationFailure = (
   operation: TerminalPtyError["operation"],
   message: string,
   cause?: unknown,
-): TerminalPtyError =>
-  new TerminalPtyError({
+): TerminalPtyError => {
+  if (cause === undefined) {
+    return new TerminalPtyError({
+      code: "operation_failed",
+      operation,
+      message,
+    });
+  }
+  return new TerminalPtyError({
     code: "operation_failed",
     operation,
     message,
-    ...(cause !== undefined ? { cause } : {}),
+    cause,
   });
+};
 
 class BunPtySession implements TerminalPtyHandle {
   readonly supportsOutputPause = false;
@@ -343,7 +377,7 @@ class BunPtySession implements TerminalPtyHandle {
 }
 
 export const createBunPtyPort = ({
-  spawn = Bun.spawn as BunPtySpawn,
+  spawn = spawnBunPty,
   platform = process.platform,
   processTreeInspector = processTreeHasChildren,
   processTreeTerminator = terminateProcessTree,
@@ -351,7 +385,7 @@ export const createBunPtyPort = ({
   start: (plan: TerminalPtyLaunchPlan, handlers: TerminalPtyHandlers) =>
     Effect.try({
       try: (): TerminalPtyHandle => {
-        if (typeof Bun.Terminal !== "function") throw unsupported();
+        if (Bun.Terminal === undefined) throw unsupported();
         const session = new BunPtySession(
           handlers,
           platform,

@@ -1,12 +1,14 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { DevServerGroupState } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
 import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import type { DevServerEventListener } from "@/lib/shell-bridge";
 import { devServerQueryKeys } from "@/state/queries/dev-servers";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import {
   buildScript,
   buildState,
@@ -15,9 +17,7 @@ import {
 } from "./use-agent-studio-dev-server-panel-test-fixtures";
 import { renderDevServerPanelHook } from "./use-agent-studio-dev-server-panel-test-harness";
 
-const actualHostClientModule = await import("@/lib/host-client");
-
-if (typeof document === "undefined") {
+if (globalThis.document === undefined) {
   GlobalRegistrator.register();
 }
 
@@ -29,10 +29,10 @@ let devServerStop = async (_repoPath: string, _taskId: string): Promise<DevServe
   buildState();
 let devServerRestart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
   buildState();
-let devServerEventListener: ((payload: unknown) => void) | null = null;
+let devServerEventListener: DevServerEventListener | null = null;
 let nextSubscriptionTransportEpoch = 0;
 let subscribeDevServerEventsMock = async (
-  listener: (payload: unknown) => void,
+  listener: DevServerEventListener,
 ): Promise<{ transportEpoch: string; unsubscribe: () => void }> => {
   devServerEventListener = listener;
   const transportEpoch = `test:${nextSubscriptionTransportEpoch}`;
@@ -46,16 +46,6 @@ let subscribeDevServerEventsMock = async (
 };
 
 beforeEach(() => {
-  mock.module("@/lib/host-client", () => ({
-    hostClient: {
-      devServerGetState: (...args: [string, string]) => devServerGetState(...args),
-      devServerStart: (...args: [string, string]) => devServerStart(...args),
-      devServerStop: (...args: [string, string]) => devServerStop(...args),
-      devServerRestart: (...args: [string, string]) => devServerRestart(...args),
-    },
-    subscribeDevServerEvents: (listener: (payload: unknown) => void) =>
-      subscribeDevServerEventsMock(listener),
-  }));
   devServerGetState = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
     buildState();
   devServerStart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
@@ -66,7 +56,7 @@ beforeEach(() => {
     buildState();
   devServerEventListener = null;
   nextSubscriptionTransportEpoch = 0;
-  subscribeDevServerEventsMock = async (listener: (payload: unknown) => void) => {
+  subscribeDevServerEventsMock = async (listener: DevServerEventListener) => {
     devServerEventListener = listener;
     const transportEpoch = `test:${nextSubscriptionTransportEpoch}`;
     nextSubscriptionTransportEpoch += 1;
@@ -77,10 +67,23 @@ beforeEach(() => {
       },
     };
   };
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        devServerGetState: (...args) => devServerGetState(...args),
+        devServerStart: (...args) => devServerStart(...args),
+        devServerStop: (...args) => devServerStop(...args),
+        devServerRestart: (...args) => devServerRestart(...args),
+      },
+      bridge: {
+        subscribeDevServerEvents: (listener) => subscribeDevServerEventsMock(listener),
+      },
+    }),
+  );
 });
 
-afterEach(async () => {
-  await restoreMockedModules([["@/lib/host-client", async () => actualHostClientModule]]);
+afterEach(() => {
+  configureShellBridge(createUnavailableShellBridge());
 });
 
 describe("useAgentStudioDevServerPanel", () => {

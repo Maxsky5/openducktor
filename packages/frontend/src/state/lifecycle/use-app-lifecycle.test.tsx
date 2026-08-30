@@ -16,6 +16,10 @@ import { createTaskStoreCheckFixture } from "@/test-utils/shared-test-fixtures";
 import type { TaskStreamControllerFactory } from "./use-app-lifecycle";
 import { useAppLifecycle } from "./use-app-lifecycle";
 
+interface FactoryStateContract {
+  queryClient: QueryClient | null;
+}
+
 const createRuntime = (): RuntimeInstanceSummary => ({
   kind: "opencode",
   runtimeId: "runtime-1",
@@ -53,7 +57,7 @@ describe("useAppLifecycle task stream", () => {
   test("uses the isolated query client to construct and stop its controller", async () => {
     const unsubscribe = mock(async () => {});
     const start = mock(async () => {});
-    const factoryState: { queryClient: QueryClient | null } = { queryClient: null };
+    const factoryState: FactoryStateContract = { queryClient: null };
     const factory = mock<TaskStreamControllerFactory>(({ queryClient }) => {
       factoryState.queryClient = queryClient;
       queryClient.setQueryData(["task-stream-factory"], "isolated");
@@ -89,7 +93,7 @@ describe("useAppLifecycle task stream", () => {
     const factory = mock<TaskStreamControllerFactory>(() => ({ start, stop }));
     const toastError = mock(() => "task-stream-toast");
     const originalToastError = toast.error;
-    toast.error = toastError as typeof toast.error;
+    toast.error = toastError;
     const args = { ...lifecycleArgs, taskStreamControllerFactory: factory };
     const Harness = () => {
       useAppLifecycle(args);

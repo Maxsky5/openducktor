@@ -5,6 +5,19 @@ import { createTerminalClientSession } from "./terminal-client-session";
 import type { TerminalService } from "./terminal-service";
 import { TerminalServiceError } from "./terminal-service-error";
 
+type TerminalClientService = Parameters<typeof createTerminalClientSession>[0]["terminalService"];
+
+const createTerminalClientService = <Overrides extends Partial<TerminalClientService>>(
+  overrides: Overrides,
+): TerminalClientService => ({
+  acknowledge: () => Effect.die("acknowledge is not configured for this test"),
+  attach: () => Effect.die("attach is not configured for this test"),
+  detach: () => Effect.die("detach is not configured for this test"),
+  resize: () => Effect.die("resize is not configured for this test"),
+  write: () => Effect.die("write is not configured for this test"),
+  ...overrides,
+});
+
 describe("TerminalClientSession", () => {
   test("serializes client frames behind an asynchronous attach", async () => {
     const operations: string[] = [];
@@ -12,7 +25,7 @@ describe("TerminalClientSession", () => {
     const attachBlocked = new Promise<void>((resolve) => {
       releaseAttach = resolve;
     });
-    const service = {
+    const service = createTerminalClientService({
       attach: () =>
         Effect.gen(function* () {
           operations.push("attach:start");
@@ -20,7 +33,7 @@ describe("TerminalClientSession", () => {
           operations.push("attach:complete");
         }),
       acknowledge: () => Effect.sync(() => operations.push("ack")),
-    } as unknown as TerminalService;
+    });
     const session = createTerminalClientSession({
       clientId: "test-client",
       terminalService: service,
@@ -61,7 +74,7 @@ describe("TerminalClientSession", () => {
     const sent: TerminalServerMessage[] = [];
     const detached: string[] = [];
     let rejectAttach = true;
-    const service = {
+    const service = createTerminalClientService({
       attach: ({ terminalId }: Parameters<TerminalService["attach"]>[0]) =>
         rejectAttach
           ? Effect.fail(
@@ -75,7 +88,7 @@ describe("TerminalClientSession", () => {
           : Effect.void,
       detach: (terminalId: string, attachmentId: string) =>
         Effect.sync(() => detached.push(`${terminalId}:${attachmentId}`)),
-    } as unknown as TerminalService;
+    });
     const session = createTerminalClientSession({
       clientId: "test-client",
       terminalService: service,

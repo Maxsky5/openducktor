@@ -18,6 +18,7 @@ import {
   type WebError,
   type WebHostRequestError,
 } from "./effect/web-errors";
+import { z } from "zod";
 
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const TASK_STREAM_TOKEN_HEADER = "x-openducktor-task-stream-token";
@@ -29,33 +30,41 @@ type LocalTaskEventTransportContext = {
   localHostRequestErrorEffect: (
     response: Response,
   ) => Effect.Effect<never, WebDependencyError | WebHostRequestError>;
+  scheduleInitialReadinessTimeout?: (callback: () => void, delayMs: number) => () => void;
 };
 
+const scheduleTimeout = (callback: () => void, delayMs: number): (() => void) => {
+  const timeoutId = setTimeout(callback, delayMs);
+  return () => clearTimeout(timeoutId);
+};
+
+const taskEventSubscriptionSchema = z
+  .object({
+    streamToken: z.string().min(1),
+    subscriptionId: z.string().uuid(),
+  })
+  .strict();
+type TaskEventSubscriptionResponse = z.infer<typeof taskEventSubscriptionSchema>;
+
 const parseTaskEventSubscription = (
-  value: unknown,
-): { subscriptionId: string; streamToken: string } => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("Task event stream subscription response must be an object.");
-  }
-  const { streamToken, subscriptionId } = value as Record<string, unknown>;
-  if (
-    typeof streamToken !== "string" ||
-    streamToken.length === 0 ||
-    typeof subscriptionId !== "string" ||
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      subscriptionId,
-    )
-  ) {
+  value: z.input<typeof taskEventSubscriptionSchema>,
+): TaskEventSubscriptionResponse => {
+  const parsed = taskEventSubscriptionSchema.safeParse(value);
+  if (!parsed.success) {
     throw new Error("Task event stream subscription response is invalid.");
   }
-  return { streamToken, subscriptionId };
+  return parsed.data;
 };
 
 export const subscribeLocalTaskEventStreamEffect = (
   input: { cursor: TaskEventCursor | null },
   onFrame: (frame: TaskStreamFrame) => void,
-  onTerminalFailure: ((error: unknown) => void) | undefined,
-  { ensureSession, localHostRequestErrorEffect }: LocalTaskEventTransportContext,
+  onTerminalFailure: ((cause: unknown) => void) | undefined,
+  {
+    ensureSession,
+    localHostRequestErrorEffect,
+    scheduleInitialReadinessTimeout = scheduleTimeout,
+  }: LocalTaskEventTransportContext,
 ): Effect.Effect<TaskStreamSubscription, WebError> =>
   Effect.gen(function* () {
     const cursor = yield* Effect.try({
@@ -91,7 +100,9 @@ export const subscribeLocalTaskEventStreamEffect = (
       return yield* localHostRequestErrorEffect(createResponse);
     }
     const created = yield* Effect.tryPromise({
-      try: async () => parseTaskEventSubscription(await createResponse.json()),
+      try: async () => {
+        return parseTaskEventSubscription(await createResponse.json());
+      },
       catch: (cause) =>
         new WebDependencyError({
           dependency: "local-web-host",
@@ -156,15 +167,15 @@ export const subscribeLocalTaskEventStreamEffect = (
       hasInitialReadiness = true;
       resolveInitialReadiness();
     };
-    const handleOpen = (): void => {
+    const handleOpen: EventListener = () => {
       markInitialReadiness();
     };
-    const reportTerminalFailure = (failure: unknown): void => {
+    const reportTerminalFailure = (cause: unknown): void => {
       if (unsubscribed || terminalFailureReported) {
         return;
       }
       terminalFailureReported = true;
-      onTerminalFailure?.(failure);
+      onTerminalFailure?.(cause);
     };
     const failSetupOrReportTerminalFailure = (failure: WebDependencyError): void => {
       if (subscriptionReady) {
@@ -177,7 +188,7 @@ export const subscribeLocalTaskEventStreamEffect = (
       setupFailure = failure;
       rejectInitialReadiness(failure);
     };
-    const handleError = (): void => {
+    const handleError: EventListener = () => {
       if (eventSource.readyState !== EventSource.CLOSED) {
         return;
       }
@@ -194,11 +205,11 @@ export const subscribeLocalTaskEventStreamEffect = (
         }),
       );
     };
-    const handleFrame = (event: MessageEvent<string>): void => {
+    const handleFrame = (data: string): void => {
       if (closed) return;
-      let raw: unknown;
+      let raw: z.output<typeof taskEventStreamFrameSchema>;
       try {
-        raw = JSON.parse(event.data);
+        raw = taskEventStreamFrameSchema.parse(JSON.parse(data));
       } catch (cause) {
         const failure = new WebDependencyError({
           dependency: "task-event-stream",
@@ -227,35 +238,53 @@ export const subscribeLocalTaskEventStreamEffect = (
       }
       markInitialReadiness();
     };
-    eventSource.addEventListener("task-frame", handleFrame as EventListener);
-    eventSource.addEventListener("open", handleOpen as EventListener);
-    eventSource.addEventListener("error", handleError as EventListener);
+    const handleFrameEvent: EventListener = (event) => {
+      if (!(event instanceof MessageEvent)) {
+        failSetupOrReportTerminalFailure(
+          new WebDependencyError({
+            dependency: "task-event-stream",
+            operation: "parse-frame",
+            message: "OpenDucktor task event stream received a non-text frame.",
+          }),
+        );
+        return;
+      }
+      const data = z.string().safeParse(event.data);
+      if (!data.success) {
+        failSetupOrReportTerminalFailure(
+          new WebDependencyError({
+            dependency: "task-event-stream",
+            operation: "parse-frame",
+            message: "OpenDucktor task event stream received a non-text frame.",
+          }),
+        );
+        return;
+      }
+      handleFrame(data.data);
+    };
+    eventSource.addEventListener("task-frame", handleFrameEvent);
+    eventSource.addEventListener("open", handleOpen);
+    eventSource.addEventListener("error", handleError);
     const initialReadyExit = yield* Effect.exit(
       Effect.tryPromise({
         try: () => {
-          let timeoutId: ReturnType<typeof setTimeout> | null = null;
-          const timeout = new Promise<never>((_, reject) => {
-            timeoutId = setTimeout(
-              () =>
-                reject(
-                  new WebDependencyError({
-                    dependency: "event-source",
-                    operation: "task-event-stream.await-ready",
-                    message: "Timed out waiting for task event stream subscription to open.",
-                    details: {
-                      path: streamUrl.pathname,
-                      timeoutMs: INITIAL_SSE_READY_TIMEOUT_MS,
-                    },
-                  }),
-                ),
-              INITIAL_SSE_READY_TIMEOUT_MS,
-            );
-          });
-          return Promise.race([initialReadiness, timeout]).finally(() => {
-            if (timeoutId) {
-              clearTimeout(timeoutId);
-            }
-          });
+          const { promise: timeout, reject: rejectTimeout } = Promise.withResolvers<never>();
+          const cancelTimeout = scheduleInitialReadinessTimeout(
+            () =>
+              rejectTimeout(
+                new WebDependencyError({
+                  dependency: "event-source",
+                  operation: "task-event-stream.await-ready",
+                  message: "Timed out waiting for task event stream subscription to open.",
+                  details: {
+                    path: streamUrl.pathname,
+                    timeoutMs: INITIAL_SSE_READY_TIMEOUT_MS,
+                  },
+                }),
+              ),
+            INITIAL_SSE_READY_TIMEOUT_MS,
+          );
+          return Promise.race([initialReadiness, timeout]).finally(cancelTimeout);
         },
         catch: (cause) =>
           isWebError(cause)
@@ -272,18 +301,18 @@ export const subscribeLocalTaskEventStreamEffect = (
     const setupFailureBeforeReturn = setupFailure;
     if (setupFailureBeforeReturn) {
       closed = true;
-      eventSource.removeEventListener("task-frame", handleFrame as EventListener);
-      eventSource.removeEventListener("open", handleOpen as EventListener);
-      eventSource.removeEventListener("error", handleError as EventListener);
+      eventSource.removeEventListener("task-frame", handleFrameEvent);
+      eventSource.removeEventListener("open", handleOpen);
+      eventSource.removeEventListener("error", handleError);
       eventSource.close();
       yield* Effect.promise(deleteLeaseBestEffort);
       return yield* Effect.fail(setupFailureBeforeReturn);
     }
     if (initialReadyExit._tag === "Failure") {
       closed = true;
-      eventSource.removeEventListener("task-frame", handleFrame as EventListener);
-      eventSource.removeEventListener("open", handleOpen as EventListener);
-      eventSource.removeEventListener("error", handleError as EventListener);
+      eventSource.removeEventListener("task-frame", handleFrameEvent);
+      eventSource.removeEventListener("open", handleOpen);
+      eventSource.removeEventListener("error", handleError);
       eventSource.close();
       yield* Effect.promise(deleteLeaseBestEffort);
       return yield* causeToWebBoundaryError(initialReadyExit.cause);

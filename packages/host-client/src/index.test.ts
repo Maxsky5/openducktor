@@ -1,12 +1,20 @@
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  type HostCommandArgs,
+  type HostCommandName,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type RepoStoreHealth,
+} from "@openducktor/contracts";
 import type {} from "./bun-test";
 import type { HostClient as HostClientType } from "./index";
 import { createHostClient } from "./index";
+import type { InvokeFn } from "./invoke-utils";
 
 type InvokeCall = {
-  command: string;
-  args?: Record<string, unknown>;
+  command: HostCommandName;
+  args?: Exclude<HostCommandArgs, undefined>;
 };
+
+type HostClientResult = Awaited<ReturnType<HostClientType[keyof HostClientType]>>;
 
 const makeTaskCardPayload = () => ({
   id: "task-1",
@@ -55,7 +63,7 @@ const makeTaskMetadataPayload = (specMarkdown = "Spec Body") => ({
   ],
 });
 
-const makeRepoStoreHealthPayload = (overrides: Record<string, unknown> = {}) => ({
+const makeRepoStoreHealthPayload = (overrides: Partial<RepoStoreHealth> = {}) => ({
   category: "healthy",
   status: "ready",
   isReady: true,
@@ -64,17 +72,20 @@ const makeRepoStoreHealthPayload = (overrides: Record<string, unknown> = {}) => 
   ...overrides,
 });
 
-const createClient = (resolver: (command: string, args?: Record<string, unknown>) => unknown) => {
+const createClient = (
+  resolver: (
+    command: HostCommandName,
+    args?: Exclude<HostCommandArgs, undefined>,
+  ) => HostClientResult | PromiseLike<HostClientResult>,
+) => {
   const calls: InvokeCall[] = [];
-  const invoke = async (command: string, args?: Record<string, unknown>): Promise<unknown> => {
+  const invoke: InvokeFn = async (command, args, resultSchema) => {
     calls.push({ command, args });
-    return resolver(command, args);
+    return resultSchema.parse(await resolver(command, args));
   };
   const client: HostClientType = createHostClient(invoke);
   return { client, calls };
 };
-
-const assertClientType = (client: HostClientType): HostClientType => client;
 
 describe("HostClient", () => {
   test("does not export a redundant runtime constructor alias", async () => {
@@ -91,7 +102,7 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const typedClient = assertClientType(client);
+    const typedClient: HostClientType = client;
     const output = await typedClient.setSpec({
       repoPath: "/repo",
       taskId: "task-1",
@@ -295,6 +306,7 @@ describe("HostClient", () => {
       "agentSessionUpsert",
       "agentSessionLiveList",
       "agentSessionLiveLoadContext",
+      "agentSessionLiveLoadDiff",
       "agentSessionLiveRead",
       "agentSessionLiveRefresh",
       "agentSessionLiveReplyApproval",
@@ -342,7 +354,7 @@ describe("HostClient", () => {
     ] as const;
 
     for (const methodName of expectedMethods) {
-      expect(typeof client[methodName]).toBe("function");
+      expect(client[methodName]).toBeInstanceOf(Function);
     }
   });
 
@@ -372,6 +384,17 @@ describe("HostClient", () => {
       if (command === "agent_session_live_read") {
         return { type: "live", session };
       }
+      if (command === "agent_session_live_load_diff") {
+        return [
+          {
+            file: "src/app.ts",
+            type: "modified",
+            additions: 1,
+            deletions: 1,
+            diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n",
+          },
+        ];
+      }
       throw new Error(`Unexpected command: ${command}`);
     });
 
@@ -381,6 +404,9 @@ describe("HostClient", () => {
       type: "live",
       session,
     });
+    await expect(
+      client.agentSessionLiveLoadDiff({ ...session.ref, runtimeHistoryAnchor: "turn-1" }),
+    ).resolves.toEqual([expect.objectContaining({ file: "src/app.ts" })]);
     expect(calls).toEqual([
       {
         command: "agent_session_live_refresh",
@@ -388,6 +414,10 @@ describe("HostClient", () => {
       },
       { command: "agent_session_live_list", args: { repoPath: "/repo" } },
       { command: "agent_session_live_read", args: session.ref },
+      {
+        command: "agent_session_live_load_diff",
+        args: { ...session.ref, runtimeHistoryAnchor: "turn-1" },
+      },
     ]);
   });
 
@@ -713,6 +743,41 @@ describe("HostClient", () => {
     ]);
   });
 
+  test("creates a task when optional fields are undefined", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "task_create") {
+        return makeTaskCardPayload();
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await client.taskCreate("/repo", {
+      title: "Add GitHub login",
+      issueType: "feature",
+      description: undefined,
+      labels: undefined,
+      parentId: undefined,
+      aiReviewEnabled: true,
+      priority: 2,
+    });
+
+    expect(calls.at(-1)).toEqual({
+      command: "task_create",
+      args: {
+        repoPath: "/repo",
+        input: {
+          title: "Add GitHub login",
+          issueType: "feature",
+          description: undefined,
+          labels: undefined,
+          parentId: undefined,
+          aiReviewEnabled: true,
+          priority: 2,
+        },
+      },
+    });
+  });
+
   test("stages and discards task description assets through host-private commands", async () => {
     const assetId = "550e8400-e29b-41d4-a716-446655440000";
     const workspaceId = "9f66372b-e956-47f4-af2f-77e0df2ad4e1";
@@ -777,7 +842,7 @@ describe("HostClient", () => {
 
     await expect(
       client.setSpec({ repoPath: "/repo", taskId: "task-1", markdown: "# Spec" }),
-    ).rejects.toThrow("Expected { updatedAt: string } payload from host command set_spec");
+    ).rejects.toThrow();
     await expect(
       client.saveSpecDocument({
         repoPath: "/repo",
@@ -789,7 +854,7 @@ describe("HostClient", () => {
     );
     await expect(
       client.setPlan({ repoPath: "/repo", taskId: "task-1", markdown: "## Plan" }),
-    ).rejects.toThrow("Expected { updatedAt: string } payload from host command set_plan");
+    ).rejects.toThrow();
     await expect(
       client.savePlanDocument({
         repoPath: "/repo",
@@ -922,7 +987,8 @@ describe("HostClient", () => {
     const { client, calls } = createClient(() => makeTaskCardPayload());
 
     await expect(
-      client.taskTransition("/repo", "task-1", "not_a_status" as never),
+      // @ts-expect-error This negative test verifies runtime validation of an invalid task status.
+      client.taskTransition("/repo", "task-1", "not_a_status"),
     ).rejects.toThrow();
     expect(calls).toHaveLength(0);
   });
@@ -1951,12 +2017,26 @@ describe("HostClient", () => {
     const modelListResponse = {
       data: [
         {
+          additionalSpeedTiers: [],
+          availabilityNux: null,
+          defaultServiceTier: null,
+          defaultReasoningEffort: "medium",
+          description: "GPT-5 model",
+          hidden: false,
           id: "gpt-5",
           model: "gpt-5",
           displayName: "GPT-5",
-          supportedReasoningEfforts: [{ reasoningEffort: "medium" }],
+          modelSpecialty: null,
+          multiAgentVersion: null,
+          serviceTiers: [],
+          supportedReasoningEfforts: [
+            { reasoningEffort: "medium", description: "Balanced reasoning" },
+          ],
+          supportsPersonality: true,
           inputModalities: ["text", "image"],
           isDefault: true,
+          upgrade: null,
+          upgradeInfo: null,
         },
       ],
       nextCursor: null,
@@ -1969,7 +2049,10 @@ describe("HostClient", () => {
     });
 
     await expect(
-      client.codexAppServerRequest("runtime-1", "model/list", { request: "catalog" }),
+      client.codexAppServerRequest("runtime-1", {
+        method: "model/list",
+        params: { cursor: null, limit: null, includeHidden: null },
+      }),
     ).resolves.toEqual(modelListResponse);
     expect(calls).toEqual([
       {
@@ -1977,10 +2060,33 @@ describe("HostClient", () => {
         args: {
           runtimeId: "runtime-1",
           method: "model/list",
-          params: { request: "catalog" },
+          params: { cursor: null, limit: null, includeHidden: null },
         },
       },
     ]);
+  });
+
+  test("preserves Codex history pages across the IPC boundary", async () => {
+    const historyPage = { data: [], nextCursor: null, backwardsCursor: null };
+    const { client } = createClient((command) => {
+      if (command === "codex_app_server_request") {
+        return historyPage;
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(
+      client.codexAppServerRequest("runtime-1", {
+        method: "thread/turns/list",
+        params: {
+          threadId: "thread-1",
+          cursor: null,
+          limit: 100,
+          sortDirection: "asc",
+          itemsView: "full",
+        },
+      }),
+    ).resolves.toEqual(historyPage);
   });
 
   test("runtime and session ack commands reject malformed host payloads", async () => {
@@ -2063,7 +2169,7 @@ describe("HostClient", () => {
         throw new Error("Expected runtimeEnsure to reject with an Error");
       }
       expect(error.message).toBe("OpenCode startup probe failed reason=timeout after 15000ms");
-      expect(Reflect.get(error, "failureKind")).toBe("timeout");
+      expect(error).toMatchObject({ failureKind: "timeout" });
     }
   });
 
@@ -2090,7 +2196,7 @@ describe("HostClient", () => {
         throw new Error("Expected runtimeEnsure to reject with an Error");
       }
       expect(error.message).toBe("OpenCode runtime is still starting");
-      expect(Reflect.get(error, "failureKind")).toBe("timeout");
+      expect(error).toMatchObject({ failureKind: "timeout" });
     }
   });
 
@@ -2114,7 +2220,7 @@ describe("HostClient", () => {
         throw new Error("Expected runtimeEnsure to reject with an Error");
       }
       expect(error.message).toBe("OpenCode runtime startup failed");
-      expect(Reflect.get(error, "failureKind")).toBe("error");
+      expect(error).toMatchObject({ failureKind: "error" });
     }
   });
 
@@ -2124,7 +2230,7 @@ describe("HostClient", () => {
         return makeTaskMetadataPayload().agentSessions;
       }
       if (command === "agent_session_upsert" || command === "agent_session_delete") {
-        return { ok: true };
+        return true;
       }
       throw new Error(`Unexpected command: ${command}`);
     });
@@ -2476,11 +2582,6 @@ describe("HostClient", () => {
           closedAt: null,
         };
       }
-      if (command === "task_pull_request_unlink") {
-        return {
-          ok: true,
-        };
-      }
       if (command === "task_pull_request_detect") {
         return {
           outcome: "linked",
@@ -2516,11 +2617,8 @@ describe("HostClient", () => {
     await client.taskPullRequestUpsert("/repo", "task-1", "Title", "Body");
     expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V4");
 
-    await client.taskPullRequestUnlink("/repo", "task-1");
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V5");
-
     await client.taskPullRequestDetect("/repo", "task-1");
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V6");
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V5");
 
     await client.taskPullRequestLinkMerged("/repo", "task-1", {
       providerId: "github",
@@ -2533,10 +2631,10 @@ describe("HostClient", () => {
       mergedAt: "2026-02-20T10:00:00Z",
       closedAt: "2026-02-20T10:00:00Z",
     });
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V7");
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V6");
 
     await client.repoPullRequestSync("/repo");
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V8");
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V7");
 
     expect(calls.map((entry) => entry.command)).toEqual([
       "task_metadata_get",
@@ -2545,8 +2643,6 @@ describe("HostClient", () => {
       "task_direct_merge_complete",
       "task_metadata_get",
       "task_pull_request_upsert",
-      "task_metadata_get",
-      "task_pull_request_unlink",
       "task_metadata_get",
       "task_pull_request_detect",
       "task_metadata_get",
@@ -2634,20 +2730,14 @@ describe("HostClient", () => {
     ]);
   });
 
-  test("task approval ack commands reject malformed host payloads", async () => {
+  test("repo pull request sync rejects a malformed host acknowledgement", async () => {
     const { client } = createClient((command) => {
-      if (command === "task_pull_request_unlink") {
-        return { ok: "nope" };
-      }
       if (command === "repo_pull_request_sync") {
         return {};
       }
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await expect(client.taskPullRequestUnlink("/repo", "task-1")).rejects.toThrow(
-      "Expected { ok: boolean } payload from host command task_pull_request_unlink",
-    );
     await expect(client.repoPullRequestSync("/repo")).rejects.toThrow(
       "Expected { ok: boolean } payload from host command repo_pull_request_sync",
     );

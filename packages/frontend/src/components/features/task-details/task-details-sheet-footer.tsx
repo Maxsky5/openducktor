@@ -9,7 +9,7 @@ import {
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
 import { Button } from "@/components/ui/button";
 
-type TaskDetailsSheetFooterProps = {
+export type TaskDetailsSheetFooterProps = {
   task: TaskCard;
   onOpenChange: (open: boolean) => void;
   onEdit?: (taskId: string) => void;
@@ -32,14 +32,19 @@ export function TaskDetailsSheetFooter({
   onWorkflowAction,
   onDeleteSelect,
 }: TaskDetailsSheetFooterProps): ReactElement {
+  const actionOptions: Parameters<typeof resolveTaskCardActions>[1] = { hasActiveSession };
+  if (includeActions) {
+    actionOptions.include = includeActions;
+  }
+  if (activeSessionRole) {
+    actionOptions.activeSessionRole = activeSessionRole;
+  }
+  if (historicalSessionRoles) {
+    actionOptions.historicalSessionRoles = historicalSessionRoles;
+  }
   const hasWorkflowAction = Boolean(
     includeActions && onWorkflowAction
-      ? resolveTaskCardActions(task, {
-          include: includeActions,
-          hasActiveSession,
-          ...(activeSessionRole ? { activeSessionRole } : {}),
-          ...(historicalSessionRoles ? { historicalSessionRoles } : {}),
-        }).allActions.length > 0
+      ? resolveTaskCardActions(task, actionOptions).allActions.length > 0
       : false,
   );
   const extraMenuActions = onDeleteSelect

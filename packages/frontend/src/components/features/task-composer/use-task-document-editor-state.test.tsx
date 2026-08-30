@@ -1,13 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import {
-  type TaskDocumentSection,
-  useTaskDocumentEditorState,
-} from "./use-task-document-editor-state";
+import { useTaskDocumentEditorState } from "./use-task-document-editor-state";
 
-const reactActEnvironment = globalThis as typeof globalThis & {
+const reactActEnvironment: typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
-};
+} = globalThis;
 reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
 const originalConsoleError = console.error;
@@ -17,12 +14,12 @@ type HookArgs = Parameters<typeof useTaskDocumentEditorState>[0];
 type Deferred<T> = {
   promise: Promise<T>;
   resolve: (value: T) => void;
-  reject: (reason?: unknown) => void;
+  reject: (cause?: unknown) => void;
 };
 
 const createDeferred = <T,>(): Deferred<T> => {
   let resolve: (value: T) => void = () => {};
-  let reject: (reason?: unknown) => void = () => {};
+  let reject: (cause?: unknown) => void = () => {};
   const promise = new Promise<T>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
     reject = rejectPromise;
@@ -281,7 +278,7 @@ describe("useTaskDocumentEditorState", () => {
     expect(harness.getLatest().documents.spec.error).toContain("first failure");
 
     await harness.run(async () => {
-      await harness.getLatest().loadSection("spec" as TaskDocumentSection, true);
+      await harness.getLatest().loadSection("spec", true);
     });
     await harness.waitFor((state) => state.documents.spec.loaded);
 

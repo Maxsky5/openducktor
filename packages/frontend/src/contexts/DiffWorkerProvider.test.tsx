@@ -4,6 +4,6 @@ describe("DiffWorkerProvider", () => {
   test("imports without evaluating the Pierre worker url module at load time", async () => {
     const module = await import("./DiffWorkerProvider");
 
-    expect(typeof module.DiffWorkerProvider).toBe("function");
+    expect(module.DiffWorkerProvider).toBeInstanceOf(Function);
   }, 5000);
 });

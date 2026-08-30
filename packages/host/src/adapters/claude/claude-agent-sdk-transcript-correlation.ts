@@ -1,12 +1,14 @@
+import type { ClaudeToolInput } from "./claude-agent-sdk-types";
+
 export type ClaudeTranscriptCorrelationState = {
   hiddenSubagentTaskIds?: Set<string>;
   retractedSubagentTaskIds?: Set<string>;
   retractedToolUseIds?: Set<string>;
-  subagentEventSessionsByToolUseId?: Map<string, unknown>;
+  subagentEventSessionsByToolUseId?: Map<string, ClaudeTranscriptCorrelationState>;
   subagentMessageIdsByTaskId: Map<string, string>;
   subagentTaskIdsByToolUseId: Map<string, string>;
   toolEndedAtMsByCallId?: Map<string, number>;
-  toolInputsByCallId?: Map<string, Record<string, unknown>>;
+  toolInputsByCallId?: Map<string, ClaudeToolInput>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
   toolStartedAtMsByCallId?: Map<string, number>;
@@ -33,7 +35,7 @@ export const retireClaudeSubagentTask = (
 export const retractClaudeTranscriptCorrelations = (
   state: ClaudeTranscriptCorrelationState,
   messageIds: readonly string[],
-): { toolUseIds: string[] } => {
+) => {
   const retractedMessageIds = new Set(messageIds);
   const toolUseIds = new Set<string>();
   for (const [toolUseId, messageId] of state.toolMessageIdsByCallId) {
@@ -80,5 +82,5 @@ export const retractClaudeTranscriptCorrelations = (
 
   return {
     toolUseIds: [...toolUseIds],
-  };
+  } satisfies { toolUseIds: string[] };
 };

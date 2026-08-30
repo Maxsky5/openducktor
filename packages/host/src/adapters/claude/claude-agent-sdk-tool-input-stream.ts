@@ -1,5 +1,10 @@
 import type { ClaudeDecodedToolUse } from "./claude-agent-sdk-tool-shapes";
-import { isRecord } from "./claude-agent-sdk-utils";
+import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
+import {
+  claudeProtocolObjectSchema,
+  type ClaudeProtocolObject,
+} from "./claude-agent-sdk-ingress-schemas";
+import type { ClaudeToolInput } from "./claude-agent-sdk-types";
 
 type ToolStreamEntry = {
   blockIndex: number;
@@ -13,9 +18,11 @@ type ToolStreamState = {
   toolsByCallId: Map<string, ToolStreamEntry>;
 };
 
-const toolStreamStates = new WeakMap<object, ToolStreamState>();
+type ClaudeToolInputStreamSession = Pick<ClaudeEventSession, "externalSessionId">;
 
-const toolStreamStateFor = (session: object): ToolStreamState => {
+const toolStreamStates = new WeakMap<ClaudeToolInputStreamSession, ToolStreamState>();
+
+const toolStreamStateFor = (session: ClaudeToolInputStreamSession): ToolStreamState => {
   const existing = toolStreamStates.get(session);
   if (existing) {
     return existing;
@@ -28,25 +35,19 @@ const toolStreamStateFor = (session: object): ToolStreamState => {
   return state;
 };
 
-const tryParseJsonRecord = (json: string): Record<string, unknown> | null => {
+const tryParseJsonRecord = (json: string) => {
   try {
-    const parsed = JSON.parse(json) as unknown;
-    return isRecord(parsed) ? parsed : null;
+    const parsed = claudeProtocolObjectSchema.safeParse(JSON.parse(json));
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }
 };
 
-const toolInputFingerprint = (input: Record<string, unknown>): string => {
-  try {
-    return JSON.stringify(input);
-  } catch {
-    return Object.keys(input).sort().join("\u001f");
-  }
-};
+const toolInputFingerprint = (input: ClaudeProtocolObject): string => JSON.stringify(input);
 
 export const rememberClaudeStreamToolStart = (
-  session: object,
+  session: ClaudeToolInputStreamSession,
   blockIndex: number,
   toolUse: ClaudeDecodedToolUse,
 ): void => {
@@ -54,15 +55,17 @@ export const rememberClaudeStreamToolStart = (
     blockIndex,
     partialInputJson: "",
     toolUse,
-    ...(toolUse.input ? { lastEmittedInputFingerprint: toolInputFingerprint(toolUse.input) } : {}),
   };
+  if (toolUse.input) {
+    entry.lastEmittedInputFingerprint = toolInputFingerprint(toolUse.input);
+  }
   const state = toolStreamStateFor(session);
   state.toolsByBlockIndex.set(blockIndex, entry);
   state.toolsByCallId.set(toolUse.callId, entry);
 };
 
 export const appendClaudeStreamToolInputJson = (
-  session: object,
+  session: ClaudeToolInputStreamSession,
   blockIndex: number,
   partialJson: string,
 ): ClaudeDecodedToolUse | null => {
@@ -91,9 +94,9 @@ export const appendClaudeStreamToolInputJson = (
 };
 
 export const consumeClaudeStreamEmittedToolInput = (
-  session: object,
+  session: ClaudeToolInputStreamSession,
   callId: string,
-  input: Record<string, unknown>,
+  input: ClaudeToolInput,
 ): boolean => {
   const state = toolStreamStateFor(session);
   const entry = state.toolsByCallId.get(callId);

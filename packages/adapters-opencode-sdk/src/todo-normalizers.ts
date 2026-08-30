@@ -1,8 +1,9 @@
-import { parseAgentSessionTodoPayloadList } from "@openducktor/contracts";
-import type { AgentSessionTodoItem } from "@openducktor/core";
-import { normalizeAgentSessionTodoList } from "@openducktor/core";
+import type { Todo } from "@opencode-ai/sdk/v2/client";
+import { agentSessionTodoPayloadListSchema } from "@openducktor/contracts";
+import { normalizeAgentSessionTodoList, type AgentSessionTodoItem } from "@openducktor/core";
 
-export const normalizeTodoList = (payload: unknown): AgentSessionTodoItem[] => {
-  const parsed = parseAgentSessionTodoPayloadList(payload);
-  return normalizeAgentSessionTodoList(parsed);
+const todoPayloadListSchema = agentSessionTodoPayloadListSchema();
+
+export const normalizeTodoList = (payload: Todo[]): AgentSessionTodoItem[] => {
+  return normalizeAgentSessionTodoList(todoPayloadListSchema.parse(payload));
 };

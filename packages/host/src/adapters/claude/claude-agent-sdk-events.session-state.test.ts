@@ -22,7 +22,7 @@ describe("handleClaudeSdkMessage session state and catalog events", () => {
         type: "system",
         subtype: "session_state_changed",
         state: "idle",
-        uuid: "state-1",
+        uuid: "7b7fe9e0-fd84-476f-8610-4c9ce2beb135",
         session_id: "session-1",
       }),
     });
@@ -48,7 +48,7 @@ describe("handleClaudeSdkMessage session state and catalog events", () => {
         type: "system",
         subtype: "session_state_changed",
         state: "running",
-        uuid: "state-1",
+        uuid: "7b7fe9e0-fd84-476f-8610-4c9ce2beb135",
         session_id: "session-1",
       }),
     });
@@ -76,7 +76,7 @@ describe("handleClaudeSdkMessage session state and catalog events", () => {
         type: "system",
         subtype: "session_state_changed",
         state: "running",
-        uuid: "state-1",
+        uuid: "7b7fe9e0-fd84-476f-8610-4c9ce2beb135",
         session_id: "session-1",
       }),
     });
@@ -108,7 +108,7 @@ describe("handleClaudeSdkMessage session state and catalog events", () => {
         type: "system",
         subtype: "session_state_changed",
         state: "idle",
-        uuid: "state-1",
+        uuid: "7b7fe9e0-fd84-476f-8610-4c9ce2beb135",
         session_id: "session-1",
       }),
     });
@@ -134,7 +134,7 @@ describe("handleClaudeSdkMessage session state and catalog events", () => {
         type: "system",
         subtype: "session_state_changed",
         state: "requires_action",
-        uuid: "state-1",
+        uuid: "7b7fe9e0-fd84-476f-8610-4c9ce2beb135",
         session_id: "session-1",
       }),
     });
@@ -147,7 +147,19 @@ describe("handleClaudeSdkMessage session state and catalog events", () => {
   test("keeps the turn active when Claude requires pending approval input", () => {
     const events: AgentEvent[] = [];
     const session = createSession("running");
-    session.pendingApprovals.set("approval-1", {});
+    session.pendingApprovals.set("approval-1", {
+      event: {
+        type: "approval_required",
+        externalSessionId: "session-1",
+        timestamp: "2026-06-25T20:00:00.000Z",
+        requestId: "approval-1",
+        requestType: "runtime_tool",
+        title: "Approve tool",
+        tool: { name: "TestTool", input: {} },
+        mutation: "unknown",
+      },
+      resolve: () => {},
+    });
 
     handleClaudeSdkMessage({
       session,
@@ -162,7 +174,7 @@ describe("handleClaudeSdkMessage session state and catalog events", () => {
         type: "system",
         subtype: "session_state_changed",
         state: "requires_action",
-        uuid: "state-1",
+        uuid: "7b7fe9e0-fd84-476f-8610-4c9ce2beb135",
         session_id: "session-1",
       }),
     });
@@ -194,7 +206,7 @@ describe("handleClaudeSdkMessage session state and catalog events", () => {
             argumentHint: "[focus]",
           },
         ],
-        uuid: "commands-1",
+        uuid: "88b86b46-2fc8-4031-88d5-fb068b53f034",
         session_id: "session-1",
       }),
     });

@@ -1,4 +1,4 @@
-import type { RegisteredCodexEventMapper } from "../codex-event-mapper";
+import { registerCodexEventMapper, type RegisteredCodexEventMapper } from "../codex-event-mapper";
 import type { CodexSubagentLinkState } from "../codex-subagent-link-state";
 import { emptyMapper } from "./empty";
 import { compactionMapper, deltaMapper, lifecycleMapper, tokenUsageMapper } from "./lifecycle";
@@ -21,23 +21,24 @@ export { type CodexTodoUpdate, codexTodosFromThreadRead, todoMapper } from "./to
 
 export const createCodexEventMappers = (
   subagents: CodexSubagentLinkState,
-): RegisteredCodexEventMapper[] => [
-  compactionMapper,
-  lifecycleMapper,
-  tokenUsageMapper,
-  deltaMapper,
-  todoMapper,
-  emptyMapper("question"),
-  userMessageMapper,
-  assistantMessageMapper,
-  reasoningMapper,
-  planMapper,
-  commandToolMapper,
-  fileChangeMapper,
-  mcpToolMapper,
-  webSearchMapper,
-  createSubagentMapper(subagents),
-  collabToolMapper,
-  dynamicToolMapper,
-  hiddenItemMapper,
-];
+): RegisteredCodexEventMapper[] =>
+  [
+    compactionMapper,
+    lifecycleMapper,
+    tokenUsageMapper,
+    deltaMapper,
+    todoMapper,
+    emptyMapper("question"),
+    userMessageMapper,
+    assistantMessageMapper,
+    reasoningMapper,
+    planMapper,
+    commandToolMapper,
+    fileChangeMapper,
+    mcpToolMapper,
+    webSearchMapper,
+    createSubagentMapper(subagents),
+    collabToolMapper,
+    dynamicToolMapper,
+    hiddenItemMapper,
+  ].map(registerCodexEventMapper);

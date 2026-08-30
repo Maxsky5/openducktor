@@ -1,27 +1,26 @@
 import path from "node:path";
 import { Effect } from "effect";
-import { createServer } from "vite";
+import { createServer, type ViteDevServer } from "vite";
 import {
   ElectronOperationError,
+  type ElectronOperationErrorAggregate,
   errorMessage,
   toElectronOperationError,
 } from "../effect/electron-errors";
 
 const RENDERER_DEV_HOST = "127.0.0.1";
 
-type ForceCloseableHttpServer = {
-  closeAllConnections?: () => void;
-  closeIdleConnections?: () => void;
-};
-
 export type ElectronDevRendererWatcher = {
-  add(paths: string | readonly string[]): unknown;
-  on(event: "add" | "change" | "unlink", listener: (filePath: string) => void): unknown;
+  add(paths: string | readonly string[]): ElectronDevRendererWatcher;
+  on(
+    event: "add" | "change" | "unlink",
+    listener: (filePath: string) => void,
+  ): ElectronDevRendererWatcher;
 };
 
 export type ElectronDevRendererServer = {
   close(): Promise<void>;
-  httpServer?: object | null;
+  httpServer?: ViteDevServer["httpServer"];
   resolvedUrls?: { local: string[] } | null;
   watcher: ElectronDevRendererWatcher;
 };
@@ -34,23 +33,11 @@ export type ElectronRendererDevServer = {
   readonly watcher: ElectronDevRendererWatcher;
 };
 
-const callRendererConnectionCloseMethod = (
-  httpServer: object | null | undefined,
-  method: keyof ForceCloseableHttpServer,
-): void => {
-  if (!httpServer || !(method in httpServer)) {
-    return;
-  }
-
-  const close = Reflect.get(httpServer, method);
-  if (typeof close === "function") {
-    close.call(httpServer);
-  }
-};
-
 const forceCloseRendererConnections = (server: ElectronDevRendererServerHandle): void => {
-  callRendererConnectionCloseMethod(server.httpServer, "closeIdleConnections");
-  callRendererConnectionCloseMethod(server.httpServer, "closeAllConnections");
+  const { httpServer } = server;
+  if (!httpServer) return;
+  if ("closeIdleConnections" in httpServer) httpServer.closeIdleConnections();
+  if ("closeAllConnections" in httpServer) httpServer.closeAllConnections();
 };
 
 export const closeRendererServerEffect = (
@@ -97,7 +84,7 @@ export const createElectronRendererDevServerEffect = ({
 }: {
   packageRoot: string;
   port: number;
-}): Effect.Effect<ElectronRendererDevServer, ElectronOperationError> =>
+}): Effect.Effect<ElectronRendererDevServer, ElectronOperationErrorAggregate> =>
   Effect.tryPromise({
     try: async () => {
       const server = await createServer({

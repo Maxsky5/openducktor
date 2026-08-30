@@ -1,96 +1,77 @@
-import { isUnknownRecord as isCoreUnknownRecord, type UnknownRecord } from "@openducktor/core";
+import { z, type JSONType } from "zod";
 
-export type { UnknownRecord };
+export type OpenCodeProtocolValue = JSONType;
+export type OpenCodeProtocolObject = Record<string, OpenCodeProtocolValue>;
 
-const isUnknownRecord = isCoreUnknownRecord;
+export const opencodeProtocolValueSchema = z.json();
+export const opencodeProtocolObjectSchema = z.record(z.string(), opencodeProtocolValueSchema);
 
-export const asUnknownRecord = (value: unknown): UnknownRecord | undefined => {
-  return isUnknownRecord(value) ? value : undefined;
+export const asJsonObject = (
+  value: OpenCodeProtocolValue | undefined,
+): OpenCodeProtocolObject | undefined => {
+  const parsed = opencodeProtocolObjectSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 };
 
-const safeProp = <T>(
-  source: unknown,
+export const readStringProp = (
+  source: OpenCodeProtocolValue | undefined,
+  keys: readonly string[],
+): string | undefined => {
+  const record = asJsonObject(source);
+  if (!record) {
+    return undefined;
+  }
+
+  for (const key of keys) {
+    const value = z.string().safeParse(record[key]);
+    if (value.success && value.data.length > 0) {
+      return value.data;
+    }
+  }
+  return undefined;
+};
+
+export const readNumberProp = (
+  source: OpenCodeProtocolValue | undefined,
+  keys: string[],
+): number | undefined => {
+  const record = asJsonObject(source);
+  if (!record) {
+    return undefined;
+  }
+
+  for (const key of keys) {
+    const value = z.number().finite().safeParse(record[key]);
+    if (value.success) {
+      return value.data;
+    }
+  }
+  return undefined;
+};
+
+export const readBooleanProp = (
+  source: OpenCodeProtocolValue | undefined,
+  keys: string[],
+): boolean | undefined => {
+  const record = asJsonObject(source);
+  if (!record) {
+    return undefined;
+  }
+
+  for (const key of keys) {
+    const value = z.boolean().safeParse(record[key]);
+    if (value.success) {
+      return value.data;
+    }
+  }
+  return undefined;
+};
+
+export const readStringArrayProp = (
+  source: OpenCodeProtocolValue | undefined,
   key: string,
-  guard: (value: unknown) => value is T,
-): T | undefined => {
-  const record = asUnknownRecord(source);
-  if (!record) {
-    return undefined;
-  }
-  const value = record[key];
-  return guard(value) ? value : undefined;
-};
-
-export const readUnknownProp = (source: unknown, key: string): unknown => {
-  const record = asUnknownRecord(source);
-  return record?.[key];
-};
-
-export const readRecordProp = (source: unknown, key: string): UnknownRecord | undefined => {
-  return safeProp(source, key, isUnknownRecord);
-};
-
-export const readArrayProp = (source: unknown, key: string): unknown[] | undefined => {
-  return safeProp(source, key, Array.isArray);
-};
-
-export const readStringProp = (source: unknown, keys: readonly string[]): string | undefined => {
-  const record = asUnknownRecord(source);
-  if (!record) {
-    return undefined;
-  }
-
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "string" && value.length > 0) {
-      return value;
-    }
-  }
-  return undefined;
-};
-
-export const readNumberProp = (source: unknown, keys: string[]): number | undefined => {
-  const record = asUnknownRecord(source);
-  if (!record) {
-    return undefined;
-  }
-
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "number" && Number.isFinite(value) && !Number.isNaN(value)) {
-      return value;
-    }
-  }
-  return undefined;
-};
-
-export const readBooleanProp = (source: unknown, keys: string[]): boolean | undefined => {
-  const record = asUnknownRecord(source);
-  if (!record) {
-    return undefined;
-  }
-
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "boolean") {
-      return value;
-    }
-  }
-  return undefined;
-};
-
-export const readStringArrayProp = (source: unknown, key: string): string[] | undefined => {
-  const values = readArrayProp(source, key);
-  if (!values) {
-    return undefined;
-  }
-
-  const stringArray: string[] = [];
-  for (const value of values) {
-    if (typeof value !== "string") {
-      return undefined;
-    }
-    stringArray.push(value);
-  }
-  return stringArray;
+): string[] | undefined => {
+  const record = asJsonObject(source);
+  const values = z.array(z.string()).safeParse(record?.[key]);
+  return values.success ? values.data : undefined;
 };

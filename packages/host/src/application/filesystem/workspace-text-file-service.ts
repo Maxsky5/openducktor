@@ -9,7 +9,8 @@ import {
   workspaceTextFileWriteResultSchema,
 } from "@openducktor/contracts";
 import { Data, Effect } from "effect";
-import { HostValidationError } from "../../effect/host-errors";
+import { z } from "zod";
+import { HostValidationError, type HostValidationErrorAggregate } from "../../effect/host-errors";
 import type {
   FilesystemFileOperationError,
   FilesystemFileSnapshot,
@@ -39,9 +40,9 @@ export type WorkspaceTextFileService = {
   readTextFile(input: {
     rootPath: string;
     relativePath: string;
-  }): Effect.Effect<WorkspaceTextFileReadResult, HostValidationError>;
+  }): Effect.Effect<WorkspaceTextFileReadResult, HostValidationErrorAggregate>;
   writeTextFile(
-    input: unknown,
+    input: WorkspaceTextFileWriteInput,
   ): Effect.Effect<WorkspaceTextFileWriteResult, WorkspaceTextFileWriteError>;
 };
 
@@ -58,7 +59,7 @@ const isBinaryBytes = (bytes: Uint8Array, maxBytes = 8192): boolean => {
 const readSnapshotAsText = (
   snapshot: FilesystemFileSnapshot,
   input: { rootPath: string; relativePath: string },
-): Effect.Effect<string, HostValidationError> => {
+): Effect.Effect<string, HostValidationError<{ rootPath: string; relativePath: string }>> => {
   if (!snapshot.isFile) {
     return Effect.fail(
       new HostValidationError({
@@ -105,14 +106,19 @@ const writeFailure = (
     cause,
   });
 
-const invalidWriteInput = (input: unknown, cause: unknown): WorkspaceTextFileWriteError => {
-  const record = typeof input === "object" && input !== null ? input : {};
-  const rootPath =
-    "rootPath" in record && typeof record.rootPath === "string" ? record.rootPath : ".";
-  const relativePath =
-    "relativePath" in record && typeof record.relativePath === "string"
-      ? record.relativePath
-      : "unknown";
+const invalidWriteInputSchema = z
+  .object({
+    rootPath: z.string().optional(),
+    relativePath: z.string().optional(),
+  })
+  .passthrough();
+const invalidWriteInput = (
+  input: WorkspaceTextFileWriteInput,
+  cause: unknown,
+): WorkspaceTextFileWriteError => {
+  const parsed = invalidWriteInputSchema.safeParse(input);
+  const rootPath = parsed.success ? (parsed.data.rootPath ?? ".") : ".";
+  const relativePath = parsed.success ? (parsed.data.relativePath ?? "unknown") : "unknown";
   return writeFailure(
     "invalid_input",
     "The workspace text file write input is invalid.",
@@ -122,7 +128,7 @@ const invalidWriteInput = (input: unknown, cause: unknown): WorkspaceTextFileWri
 };
 
 const mapValidationFailure = (
-  cause: HostValidationError,
+  cause: HostValidationErrorAggregate,
   input: WorkspaceTextFileWriteInput,
 ): WorkspaceTextFileWriteError => writeFailure("invalid_input", cause.message, input, cause);
 
@@ -131,7 +137,7 @@ const mapAccessFailure = (
   input: WorkspaceTextFileWriteInput,
 ): WorkspaceTextFileWriteError => writeFailure(cause.code, cause.message, input, cause);
 
-const mapReadAccessFailure = (cause: WorkspaceFileAccessError): HostValidationError =>
+const mapReadAccessFailure = (cause: WorkspaceFileAccessError): HostValidationErrorAggregate =>
   new HostValidationError({
     message: cause.message,
     field: cause.field,
@@ -163,7 +169,7 @@ const unsupportedWrite = (
 
 export const createWorkspaceTextFileService = (
   filesystem: FilesystemPort,
-  gitPort: GitPort,
+  gitPort: Pick<GitPort, "isGitRepository" | "listFiles">,
 ): WorkspaceTextFileService => ({
   readTextFile(input) {
     return Effect.gen(function* () {

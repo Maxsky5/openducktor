@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { TaskWorktreeSummary } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
+import type { ScheduleTask } from "@/lib/scheduling";
 import {
   TASK_WORKTREE_TIMEOUT_MS,
   taskWorktreeQueryKeys,
@@ -78,41 +79,30 @@ describe("build runtime queries", () => {
       await new Promise(() => {});
       return { workingDirectory: "/repo/.worktrees/task-24" };
     });
-    const originalSetTimeout = globalThis.setTimeout;
-    const originalClearTimeout = globalThis.clearTimeout;
-    const setTimeoutMock = mock((handler: TimerHandler, _delay?: number) => {
-      if (typeof handler !== "function") {
-        throw new Error("Expected timeout callback function");
-      }
-      return originalSetTimeout(() => {
-        handler();
-      }, 0);
-    });
-    const clearTimeoutMock = mock((timeoutId: ReturnType<typeof globalThis.setTimeout>) => {
-      originalClearTimeout(timeoutId);
+    const scheduleTask = mock<ScheduleTask>((callback, _delayMs) => {
+      let cancelled = false;
+      queueMicrotask(() => {
+        if (!cancelled) {
+          callback();
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
     });
 
-    globalThis.setTimeout = setTimeoutMock as unknown as typeof globalThis.setTimeout;
-    globalThis.clearTimeout = clearTimeoutMock as unknown as typeof globalThis.clearTimeout;
-
-    try {
-      await expect(
-        queryClient.fetchQuery(
-          taskWorktreeQueryOptions({
-            repoPath: "/repo",
-            taskId: "task-24",
-            hostClient: {
-              taskWorktreeGet,
-            },
-          }),
-        ),
-      ).rejects.toThrow(
-        `Timed out after ${TASK_WORKTREE_TIMEOUT_MS}ms while loading task worktree.`,
-      );
-      expect(setTimeoutMock).toHaveBeenCalledWith(expect.any(Function), TASK_WORKTREE_TIMEOUT_MS);
-    } finally {
-      globalThis.setTimeout = originalSetTimeout;
-      globalThis.clearTimeout = originalClearTimeout;
-    }
+    await expect(
+      queryClient.fetchQuery(
+        taskWorktreeQueryOptions({
+          repoPath: "/repo",
+          taskId: "task-24",
+          hostClient: {
+            taskWorktreeGet,
+          },
+          scheduleTask,
+        }),
+      ),
+    ).rejects.toThrow(`Timed out after ${TASK_WORKTREE_TIMEOUT_MS}ms while loading task worktree.`);
+    expect(scheduleTask).toHaveBeenCalledWith(expect.any(Function), TASK_WORKTREE_TIMEOUT_MS);
   });
 });

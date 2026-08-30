@@ -56,7 +56,7 @@ const reconnectingRuntimeHealth = {
     status: "reconnecting",
     serverName: "openducktor",
     serverStatus: null,
-    toolIds: [] as string[],
+    toolIds: [] satisfies string[],
     detail: "The operation was aborted due to timeout",
     failureKind: "timeout",
   },
@@ -217,7 +217,7 @@ describe("repoRuntimeHealthQueryOptions", () => {
       },
     );
 
-    expect(typeof queryOptions.refetchInterval).toBe("function");
+    expect(queryOptions.refetchInterval).toBeInstanceOf(Function);
     expect(repoRuntimeHealthRefetchInterval(undefined)).toBe(false);
     expect(repoRuntimeHealthRefetchInterval({ opencode: readyRuntimeHealth })).toBe(false);
     expect(repoRuntimeHealthRefetchInterval({ opencode: errorRuntimeHealth })).toBe(false);

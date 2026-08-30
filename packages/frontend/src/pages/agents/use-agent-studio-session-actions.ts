@@ -38,8 +38,8 @@ import type { SelectAgentStudioSelection } from "./shell/agent-studio-selection-
 
 export type { NewSessionStartDecision, NewSessionStartRequest } from "@/features/session-start";
 
-const EMPTY_PENDING_APPROVAL_REQUESTS = Object.freeze([]) as readonly AgentApprovalRequest[];
-const EMPTY_PENDING_QUESTION_REQUESTS = Object.freeze([]) as readonly AgentQuestionRequest[];
+const EMPTY_PENDING_APPROVAL_REQUESTS = Object.freeze(new Array<AgentApprovalRequest>());
+const EMPTY_PENDING_QUESTION_REQUESTS = Object.freeze(new Array<AgentQuestionRequest>());
 
 type UseAgentStudioSessionActionsArgs = {
   activeWorkspaceId: string | null;
@@ -146,17 +146,7 @@ export function useAgentStudioSessionActions({
     [agentStudioReady, isActiveTaskReady, selectedTask, taskId],
   );
   const canStartNewSession = canStartRole(role);
-
-  const {
-    isStarting,
-    sessionStartModal,
-    humanReviewFeedbackModal,
-    startSessionRequest,
-    startSession,
-    startLaunchKickoff,
-    handleCreateSession,
-    handleQuickAction,
-  } = useAgentStudioSessionStartFlow({
+  const sessionStartInput: Parameters<typeof useAgentStudioSessionStartFlow>[0] = {
     branches,
     favoriteState,
     taskId,
@@ -174,9 +164,22 @@ export function useAgentStudioSessionActions({
     workspaceRepoPath,
     runSessionStartWorkflow,
     humanRequestChangesTask,
-    ...(setTaskTargetBranch ? { setTaskTargetBranch } : {}),
     scheduleQueryUpdate,
-  });
+  };
+  if (setTaskTargetBranch) {
+    sessionStartInput.setTaskTargetBranch = setTaskTargetBranch;
+  }
+
+  const {
+    isStarting,
+    sessionStartModal,
+    humanReviewFeedbackModal,
+    startSessionRequest,
+    startSession,
+    startLaunchKickoff,
+    handleCreateSession,
+    handleQuickAction,
+  } = useAgentStudioSessionStartFlow(sessionStartInput);
 
   const { isSending, onSend } = useAgentStudioSendAction({
     workspaceId: activeWorkspaceId,

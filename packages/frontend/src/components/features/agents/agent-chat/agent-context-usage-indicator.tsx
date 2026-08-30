@@ -9,7 +9,12 @@ type AgentContextUsageIndicatorProps = {
   className?: string;
 };
 
-const usageColorClasses = (usagePercent: number): { text: string; bar: string } => {
+type ContextUsageColorClasses = {
+  text: string;
+  bar: string;
+};
+
+const usageColorClasses = (usagePercent: number): ContextUsageColorClasses => {
   if (usagePercent >= 90) {
     return { text: "text-destructive-muted", bar: "bg-destructive-accent" };
   }

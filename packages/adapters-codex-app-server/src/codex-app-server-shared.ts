@@ -1,12 +1,22 @@
+import { z } from "zod";
 import type { AgentModelSelection } from "@openducktor/core";
+import type { CodexAppServerThreadItem, CodexAppServerJsonValue } from "@openducktor/contracts";
 import type { CodexSessionState, CodexTurnStartResult, CodexUserInput } from "./types";
 
 export const unsupported = (surface: string): never => {
   throw new Error(`Codex App Server adapter does not support ${surface}.`);
 };
 
-export const isPlainObject = (value: unknown): value is Record<string, unknown> => {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+const codexStringValueSchema = z.string();
+
+export const isPlainObject = (
+  value: CodexAppServerJsonValue | undefined,
+): value is Record<string, CodexAppServerJsonValue> => {
+  if (value === undefined || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 };
 
 export const CODEX_USER_INPUT_REQUEST_METHOD = "item/tool/requestUserInput";
@@ -15,7 +25,7 @@ export type ActiveCodexTurn = {
   session: CodexSessionState;
   startedAtMs: number;
   turnStartRequestSentAtMs: number | null;
-  turnStartPromise: Promise<CodexTurnStartResult>;
+  turnStartPromise: Promise<CodexTurnStartResult> | null;
   isTurnSettled: () => boolean;
   markTurnSettled: () => void;
   handledRequestKeys: Set<string>;
@@ -33,6 +43,38 @@ export const MAX_CODEX_EVENT_BACKLOG_PER_SESSION = 500;
 export const MAX_CODEX_BUFFERED_THREAD_COUNT = 100;
 export const CODEX_MODEL_CATALOG_TTL_MS = 5 * 60_000;
 
+export const readCodexString = (value: CodexAppServerJsonValue | undefined): string | null => {
+  const parsed = codexStringValueSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+};
+
+export const readNonEmptyCodexString = (
+  value: CodexAppServerJsonValue | undefined,
+): string | null => {
+  const text = readCodexString(value);
+  if (text === null) {
+    return null;
+  }
+  const trimmed = text.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+export const parseCodexJsonObjectString = (
+  value: CodexAppServerJsonValue | undefined,
+): Record<string, CodexAppServerJsonValue> | null => {
+  const text = readCodexString(value);
+  if (text === null) {
+    return null;
+  }
+
+  try {
+    const parsed = z.json().safeParse(JSON.parse(text));
+    return parsed.success && isPlainObject(parsed.data) ? parsed.data : null;
+  } catch {
+    return null;
+  }
+};
+
 export const trimOldestMapKeys = <Value>(map: Map<string, Value>, maxSize: number): void => {
   while (map.size > maxSize) {
     const oldestKey = map.keys().next().value;
@@ -42,24 +84,8 @@ export const trimOldestMapKeys = <Value>(map: Map<string, Value>, maxSize: numbe
     map.delete(oldestKey);
   }
 };
-export const extractText = (value: unknown): string | null => {
-  if (typeof value === "string") {
-    return value;
-  }
-  if (!isPlainObject(value)) {
-    return null;
-  }
-  for (const key of ["text", "message", "content", "summary", "delta"]) {
-    const candidate = value[key];
-    if (typeof candidate === "string" && candidate.trim().length > 0) {
-      return candidate;
-    }
-  }
-  return null;
-};
-
-export const isCodexUnmaterializedThreadError = (error: unknown): boolean => {
-  const message = error instanceof Error ? error.message : String(error);
+export const isCodexUnmaterializedThreadError = (cause: unknown): boolean => {
+  const message = cause instanceof Error ? cause.message : String(cause);
   const inlineTurnsUnavailable =
     message.includes("is not materialized yet") &&
     message.includes("includeTurns is unavailable before first user message");
@@ -69,38 +95,30 @@ export const isCodexUnmaterializedThreadError = (error: unknown): boolean => {
   return inlineTurnsUnavailable || paginatedTurnsUnavailable;
 };
 
-export const isCodexThreadNotLoadedError = (error: unknown): boolean => {
-  const message = error instanceof Error ? error.message : String(error);
+export const isCodexThreadNotLoadedError = (cause: unknown): boolean => {
+  const message = cause instanceof Error ? cause.message : String(cause);
   return message.includes("thread not loaded:");
 };
 
-export const extractStringField = (value: unknown, keys: string[]): string | null => {
+export const extractStringField = (
+  value: CodexAppServerJsonValue | undefined,
+  keys: string[],
+): string | null => {
   if (!isPlainObject(value)) {
     return null;
   }
   for (const key of keys) {
-    const candidate = value[key];
-    if (typeof candidate === "string" && candidate.trim().length > 0) {
+    const candidate = readNonEmptyCodexString(value[key]);
+    if (candidate !== null) {
       return candidate;
     }
   }
   return null;
 };
 
-export const extractNumberField = (value: unknown, keys: string[]): number | null => {
-  if (!isPlainObject(value)) {
-    return null;
-  }
-  for (const key of keys) {
-    const candidate = value[key];
-    if (typeof candidate === "number" && Number.isFinite(candidate)) {
-      return candidate;
-    }
-  }
-  return null;
-};
-
-export const arrayFromUnknown = (value: unknown): unknown[] => {
+export const arrayFromCodexJsonValue = (
+  value: CodexAppServerJsonValue | undefined,
+): CodexAppServerJsonValue[] => {
   if (Array.isArray(value)) {
     return value;
   }
@@ -116,29 +134,15 @@ export const arrayFromUnknown = (value: unknown): unknown[] => {
   return [];
 };
 
-export const stringifyJsonValue = (value: unknown): string | null => {
+export const stringifyJsonValue = (value: CodexAppServerJsonValue | undefined): string | null => {
   if (value === undefined || value === null) {
     return null;
   }
-  if (typeof value === "string") {
-    return value;
+  const text = readCodexString(value);
+  if (text !== null) {
+    return text;
   }
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-};
-
-export const extractOptionalObject = (
-  value: unknown,
-  key: string,
-): Record<string, unknown> | undefined => {
-  if (!isPlainObject(value)) {
-    return undefined;
-  }
-  const candidate = value[key];
-  return isPlainObject(candidate) ? candidate : undefined;
+  return JSON.stringify(value, null, 2);
 };
 
 const CODEX_CONTEXTUAL_USER_FRAGMENT_MARKERS = [
@@ -174,23 +178,21 @@ const isCodexContextualUserTextFragment = (text: string): boolean =>
     textMatchesCodexMarkedContextFragment(text, start, end),
   );
 
-const codexMessageContentItems = (payload: Record<string, unknown>): Record<string, unknown>[] =>
-  arrayFromUnknown(payload.content).filter(isPlainObject);
+type CodexUserMessageItem = Extract<CodexAppServerThreadItem, { type: "userMessage" }>;
 
-export const isCodexContextualUserMessage = (payload: Record<string, unknown>): boolean => {
-  const role = extractStringField(payload, ["role"]);
-  if (role !== "user") {
-    return false;
-  }
-  const content = codexMessageContentItems(payload);
-  return content.some((entry) => {
-    const text = extractStringField(entry, ["text"]);
-    return Boolean(text && isCodexContextualUserTextFragment(text));
-  });
-};
+export const isCodexContextualUserMessage = (payload: CodexUserMessageItem): boolean =>
+  payload.content.some(
+    (entry) => entry.type === "text" && isCodexContextualUserTextFragment(entry.text),
+  );
 
 const stripShellQuotes = (value: string): string =>
   value.replace(/^[']|^["]/, "").replace(/[']$|["]$/, "");
+
+type SearchCommandInput = {
+  command: string;
+  query?: string;
+  path?: string;
+};
 
 export const readPathFromCommand = (command: string): string | null => {
   const sedMatch = command.match(/\bsed\s+(?:-n\s+)?['"]?[^'"\s]+['"]?\s+(.+)$/);
@@ -199,8 +201,8 @@ export const readPathFromCommand = (command: string): string | null => {
   return rawPath ? stripShellQuotes(rawPath.trim()) : null;
 };
 
-export const searchInputFromCommand = (command: string): Record<string, unknown> => {
-  const input: Record<string, unknown> = { command };
+export const searchInputFromCommand = (command: string): SearchCommandInput => {
+  const input: SearchCommandInput = { command };
   const rgMatch = command.match(/\brg\s+(?:-[^\s]+\s+)*(?:['"]([^'"]+)['"]|(\S+))(?:\s+(.+))?$/);
   if (!rgMatch) {
     return input;

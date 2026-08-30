@@ -25,7 +25,7 @@ describe("handleClaudeSdkMessage denied tool events", () => {
       timestamp: "2026-07-20T20:48:15.000Z",
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-agent",
+        uuid: "157faa7e-ec81-4b09-8ca5-51cfb3d63955",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -55,7 +55,7 @@ describe("handleClaudeSdkMessage denied tool events", () => {
       message: claudeSdkMessageFixture({
         type: "system",
         subtype: "permission_denied",
-        uuid: "permission-agent",
+        uuid: "be536a91-a420-4f7d-8758-c66aae8a5d95",
         session_id: "session-1",
         tool_use_id: "agent-call",
         tool_name: "Task",
@@ -71,7 +71,7 @@ describe("handleClaudeSdkMessage denied tool events", () => {
       timestamp: "2026-07-20T20:48:15.020Z",
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "agent-result",
+        uuid: "052e4215-3d49-42b0-8022-aa8454eb34bf",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -145,7 +145,7 @@ describe("handleClaudeSdkMessage denied tool events", () => {
       message: claudeSdkMessageFixture({
         type: "system",
         subtype: "permission_denied",
-        uuid: "permission-1",
+        uuid: "ed94e41d-b99d-4cf0-85de-a9b94b807576",
         session_id: "session-1",
         tool_use_id: "tool-1",
         tool_name: "Bash",
@@ -203,7 +203,7 @@ describe("handleClaudeSdkMessage denied tool events", () => {
       handleMessage(
         claudeSdkMessageFixture({
           type: "assistant",
-          uuid: "assistant-subagent",
+          uuid: "6d20b6bd-01fa-491e-8ad1-57da1660d4e2",
           session_id: "session-1",
           parent_tool_use_id: "agent-call",
           message: {
@@ -225,7 +225,7 @@ describe("handleClaudeSdkMessage denied tool events", () => {
         claudeSdkMessageFixture({
           type: "system",
           subtype: "permission_denied",
-          uuid: "permission-subagent",
+          uuid: "21b0a2cf-46e0-49d8-8121-77070d2718a5",
           session_id: "session-1",
           tool_use_id: "bash-call",
           tool_name: "Bash",

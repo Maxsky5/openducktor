@@ -130,19 +130,24 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
           hashWorktreeDiffPayload(statusData.fileDiffs),
           observedAtMs,
         );
+        const statusInput = {
+          currentBranch: statusData.currentBranch,
+          fileStatuses: statusData.fileStatuses,
+          fileDiffs: statusData.fileDiffs,
+          targetAheadBehind: statusData.targetAheadBehind,
+          upstreamAheadBehind: statusData.upstreamAheadBehind,
+          snapshot,
+        };
         return yield* Effect.try({
           try: () =>
-            gitWorktreeStatusSchema.parse({
-              currentBranch: statusData.currentBranch,
-              fileStatuses: statusData.fileStatuses,
-              fileDiffs: statusData.fileDiffs,
-              targetAheadBehind: statusData.targetAheadBehind,
-              upstreamAheadBehind: statusData.upstreamAheadBehind,
-              gitConflict: statusData.gitConflict
-                ? { ...statusData.gitConflict, workingDir: workingDirectory }
-                : undefined,
-              snapshot,
-            }),
+            gitWorktreeStatusSchema.parse(
+              statusData.gitConflict
+                ? {
+                    ...statusInput,
+                    gitConflict: { ...statusData.gitConflict, workingDir: workingDirectory },
+                  }
+                : statusInput,
+            ),
           catch: (cause) =>
             new HostValidationError({
               message: cause instanceof Error ? cause.message : String(cause),
@@ -178,18 +183,23 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
           ),
           observedAtMs,
         );
+        const summaryInput = {
+          currentBranch: summaryData.currentBranch,
+          fileStatusCounts: summaryData.fileStatusCounts,
+          targetAheadBehind: summaryData.targetAheadBehind,
+          upstreamAheadBehind: summaryData.upstreamAheadBehind,
+          snapshot,
+        };
         return yield* Effect.try({
           try: () =>
-            gitWorktreeStatusSummarySchema.parse({
-              currentBranch: summaryData.currentBranch,
-              fileStatusCounts: summaryData.fileStatusCounts,
-              targetAheadBehind: summaryData.targetAheadBehind,
-              upstreamAheadBehind: summaryData.upstreamAheadBehind,
-              gitConflict: summaryData.gitConflict
-                ? { ...summaryData.gitConflict, workingDir: workingDirectory }
-                : undefined,
-              snapshot,
-            }),
+            gitWorktreeStatusSummarySchema.parse(
+              summaryData.gitConflict
+                ? {
+                    ...summaryInput,
+                    gitConflict: { ...summaryData.gitConflict, workingDir: workingDirectory },
+                  }
+                : summaryInput,
+            ),
           catch: (cause) =>
             new HostValidationError({
               message: cause instanceof Error ? cause.message : String(cause),

@@ -1,5 +1,6 @@
 import type { AgentRole } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { z } from "zod";
 import type {
   TaskExecutionFileExplorerPanelModel,
   TaskExecutionPanelModel,
@@ -29,27 +30,35 @@ type UseAgentStudioRightPanelState = {
   rightPanelToggleModel: TaskExecutionPanelToggleModel | null;
 };
 
-const DEFAULT_OPEN_BY_ROLE: Record<AgentRole, boolean> = {
+const DEFAULT_OPEN_BY_ROLE = {
   spec: true,
   planner: true,
   build: true,
   qa: true,
-};
+} satisfies Record<AgentRole, boolean>;
+
+const openByRoleSchema = z.object({
+  spec: z.boolean(),
+  planner: z.boolean(),
+  build: z.boolean(),
+  qa: z.boolean(),
+});
+const persistedRightPanelPayloadSchema = z.record(z.string(), z.json());
+type PersistedRightPanelPayload = z.infer<typeof persistedRightPanelPayloadSchema>;
 
 const RIGHT_PANEL_ROLES: AgentRole[] = ["spec", "planner", "build", "qa"];
-const DEFAULT_ACTIVE_TAB_BY_ROLE: Record<AgentRole, TaskExecutionPanelTabId> = {
+const DEFAULT_ACTIVE_TAB_BY_ROLE = {
   spec: "document",
   planner: "document",
   build: "git",
   qa: "document",
-};
+} satisfies Record<AgentRole, TaskExecutionPanelTabId>;
 
-const cloneDefaultOpenByRole = (): Record<AgentRole, boolean> => ({
-  ...DEFAULT_OPEN_BY_ROLE,
-});
+const cloneDefaultOpenByRole = (): Record<AgentRole, boolean> =>
+  openByRoleSchema.parse(DEFAULT_OPEN_BY_ROLE);
 
-const readPersistedRightPanelPayload = (): Record<string, unknown> | null => {
-  if (typeof globalThis.localStorage === "undefined") {
+const readPersistedRightPanelPayload = (): PersistedRightPanelPayload | null => {
+  if (globalThis.localStorage === undefined) {
     return null;
   }
 
@@ -58,16 +67,12 @@ const readPersistedRightPanelPayload = (): Record<string, unknown> | null => {
     return null;
   }
 
-  const parsed: unknown = JSON.parse(raw);
-  if (!parsed || typeof parsed !== "object") {
-    return null;
-  }
-
-  return parsed as Record<string, unknown>;
+  const parsed = persistedRightPanelPayloadSchema.safeParse(JSON.parse(raw));
+  return parsed.success ? parsed.data : null;
 };
 
 const readPersistedOpenByRole = (): Record<AgentRole, boolean> => {
-  if (typeof globalThis.localStorage === "undefined") {
+  if (globalThis.localStorage === undefined) {
     return cloneDefaultOpenByRole();
   }
 
@@ -77,8 +82,9 @@ const readPersistedOpenByRole = (): Record<AgentRole, boolean> => {
     if (parsed) {
       for (const role of RIGHT_PANEL_ROLES) {
         const value = parsed[role];
-        if (typeof value === "boolean") {
-          next[role] = value;
+        const valueResult = z.boolean().safeParse(value);
+        if (valueResult.success) {
+          next[role] = valueResult.data;
         }
       }
     }
@@ -178,7 +184,7 @@ export function useAgentStudioRightPanel({
   hasTaskContext = true,
 }: UseAgentStudioRightPanelInput): UseAgentStudioRightPanelState {
   const [isOpenByRole, setIsOpenByRole] = useState<Record<AgentRole, boolean>>(() => {
-    if (typeof globalThis.localStorage === "undefined") {
+    if (globalThis.localStorage === undefined) {
       return cloneDefaultOpenByRole();
     }
 
@@ -186,7 +192,7 @@ export function useAgentStudioRightPanel({
   });
 
   useEffect(() => {
-    if (typeof globalThis.localStorage === "undefined") {
+    if (globalThis.localStorage === undefined) {
       return;
     }
 

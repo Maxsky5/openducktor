@@ -38,18 +38,23 @@ export const createUpdateError = ({
 }: {
   cause?: unknown;
   code: AppUpdateErrorCode;
-  details?: Record<string, unknown>;
+  details?: AppUpdateError["details"];
   message: string;
   operation: AppUpdateOperation;
 }): AppUpdateError => {
   const causeName = errorCauseName(cause);
-  return {
+  const error: AppUpdateError = {
     code,
     message,
     operation,
-    ...(causeName ? { causeName } : {}),
-    ...(details === undefined ? {} : { details }),
   };
+  if (causeName) {
+    error.causeName = causeName;
+  }
+  if (details !== undefined) {
+    error.details = details;
+  }
+  return error;
 };
 
 export const createDisabledUpdateState = ({
@@ -95,15 +100,22 @@ export const markChecking = ({
   currentVersion: string;
   initiator: AppUpdateCheckInitiator;
   previousState?: AppUpdateState;
-}): AppUpdateState => ({
-  status: "checking",
-  currentVersion,
-  ...(availableVersionFromState(previousState)
-    ? { availableVersion: availableVersionFromState(previousState) }
-    : {}),
-  checkInitiator: initiator,
-  ...(checkedAtFromState(previousState) ? { checkedAt: checkedAtFromState(previousState) } : {}),
-});
+}): AppUpdateState => {
+  const state: Extract<AppUpdateState, { status: "checking" }> = {
+    status: "checking",
+    currentVersion,
+    checkInitiator: initiator,
+  };
+  const availableVersion = availableVersionFromState(previousState);
+  if (availableVersion) {
+    state.availableVersion = availableVersion;
+  }
+  const checkedAt = checkedAtFromState(previousState);
+  if (checkedAt) {
+    state.checkedAt = checkedAt;
+  }
+  return state;
+};
 
 export const markAvailable = ({
   availableVersion,
@@ -115,15 +127,19 @@ export const markAvailable = ({
   checkedAt: string;
   currentVersion: string;
   previousState: AppUpdateState;
-}): AppUpdateState => ({
-  status: "available",
-  currentVersion,
-  availableVersion,
-  ...(checkInitiatorFromState(previousState)
-    ? { checkInitiator: checkInitiatorFromState(previousState) }
-    : {}),
-  checkedAt,
-});
+}): AppUpdateState => {
+  const state: Extract<AppUpdateState, { status: "available" }> = {
+    status: "available",
+    currentVersion,
+    availableVersion,
+    checkedAt,
+  };
+  const checkInitiator = checkInitiatorFromState(previousState);
+  if (checkInitiator) {
+    state.checkInitiator = checkInitiator;
+  }
+  return state;
+};
 
 export const markUpToDate = ({
   checkedAt,
@@ -133,14 +149,18 @@ export const markUpToDate = ({
   checkedAt: string;
   currentVersion: string;
   previousState: AppUpdateState;
-}): AppUpdateState => ({
-  status: "upToDate",
-  currentVersion,
-  ...(checkInitiatorFromState(previousState)
-    ? { checkInitiator: checkInitiatorFromState(previousState) }
-    : {}),
-  checkedAt,
-});
+}): AppUpdateState => {
+  const state: Extract<AppUpdateState, { status: "upToDate" }> = {
+    status: "upToDate",
+    currentVersion,
+    checkedAt,
+  };
+  const checkInitiator = checkInitiatorFromState(previousState);
+  if (checkInitiator) {
+    state.checkInitiator = checkInitiator;
+  }
+  return state;
+};
 
 const clampProgressPercent = (percent: number): number => Math.max(0, Math.min(100, percent));
 
@@ -152,16 +172,23 @@ export const markDownloading = ({
   availableVersion: string;
   currentVersion: string;
   previousState: AppUpdateStateWithAvailableVersion;
-}): AppUpdateState => ({
-  status: "downloading",
-  currentVersion,
-  availableVersion,
-  progressPercent: progressPercentFromState(previousState) ?? 0,
-  ...(checkInitiatorFromState(previousState)
-    ? { checkInitiator: checkInitiatorFromState(previousState) }
-    : {}),
-  ...(checkedAtFromState(previousState) ? { checkedAt: checkedAtFromState(previousState) } : {}),
-});
+}): AppUpdateState => {
+  const state: Extract<AppUpdateState, { status: "downloading" }> = {
+    status: "downloading",
+    currentVersion,
+    availableVersion,
+    progressPercent: progressPercentFromState(previousState) ?? 0,
+  };
+  const checkInitiator = checkInitiatorFromState(previousState);
+  if (checkInitiator) {
+    state.checkInitiator = checkInitiator;
+  }
+  const checkedAt = checkedAtFromState(previousState);
+  if (checkedAt) {
+    state.checkedAt = checkedAt;
+  }
+  return state;
+};
 
 export const markDownloadProgress = ({
   currentVersion,
@@ -171,16 +198,23 @@ export const markDownloadProgress = ({
   currentVersion: string;
   percent: number;
   previousState: DownloadingAppUpdateState;
-}): AppUpdateState => ({
-  status: "downloading",
-  currentVersion,
-  availableVersion: previousState.availableVersion,
-  progressPercent: clampProgressPercent(percent),
-  ...(checkInitiatorFromState(previousState)
-    ? { checkInitiator: checkInitiatorFromState(previousState) }
-    : {}),
-  ...(checkedAtFromState(previousState) ? { checkedAt: checkedAtFromState(previousState) } : {}),
-});
+}): AppUpdateState => {
+  const state: Extract<AppUpdateState, { status: "downloading" }> = {
+    status: "downloading",
+    currentVersion,
+    availableVersion: previousState.availableVersion,
+    progressPercent: clampProgressPercent(percent),
+  };
+  const checkInitiator = checkInitiatorFromState(previousState);
+  if (checkInitiator) {
+    state.checkInitiator = checkInitiator;
+  }
+  const checkedAt = checkedAtFromState(previousState);
+  if (checkedAt) {
+    state.checkedAt = checkedAt;
+  }
+  return state;
+};
 
 export const markDownloaded = ({
   availableVersion,
@@ -190,16 +224,23 @@ export const markDownloaded = ({
   availableVersion: string;
   currentVersion: string;
   previousState: AppUpdateStateWithAvailableVersion;
-}): AppUpdateState => ({
-  status: "downloaded",
-  currentVersion,
-  availableVersion,
-  progressPercent: 100,
-  ...(checkInitiatorFromState(previousState)
-    ? { checkInitiator: checkInitiatorFromState(previousState) }
-    : {}),
-  ...(checkedAtFromState(previousState) ? { checkedAt: checkedAtFromState(previousState) } : {}),
-});
+}): AppUpdateState => {
+  const state: Extract<AppUpdateState, { status: "downloaded" }> = {
+    status: "downloaded",
+    currentVersion,
+    availableVersion,
+    progressPercent: 100,
+  };
+  const checkInitiator = checkInitiatorFromState(previousState);
+  if (checkInitiator) {
+    state.checkInitiator = checkInitiator;
+  }
+  const checkedAt = checkedAtFromState(previousState);
+  if (checkedAt) {
+    state.checkedAt = checkedAt;
+  }
+  return state;
+};
 
 export const markDownloadedInstallRequested = (
   previousState: DownloadedAppUpdateState,
@@ -249,14 +290,21 @@ export const markUpdateError = ({
 }): AppUpdateState => {
   const resolvedAvailableVersion = availableVersion ?? availableVersionFromState(previousState);
   const checkInitiator = checkInitiatorFromState(previousState);
-  return {
+  const state: Extract<AppUpdateState, { status: "error" }> = {
     status: "error",
     currentVersion,
-    ...(resolvedAvailableVersion ? { availableVersion: resolvedAvailableVersion } : {}),
-    ...(checkInitiator ? { checkInitiator } : {}),
-    ...(checkedAt ? { checkedAt } : {}),
     error: createUpdateError({ cause, code, message, operation }),
   };
+  if (resolvedAvailableVersion) {
+    state.availableVersion = resolvedAvailableVersion;
+  }
+  if (checkInitiator) {
+    state.checkInitiator = checkInitiator;
+  }
+  if (checkedAt) {
+    state.checkedAt = checkedAt;
+  }
+  return state;
 };
 
 export const markDownloadedInstallError = ({

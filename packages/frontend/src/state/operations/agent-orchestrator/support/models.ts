@@ -20,12 +20,15 @@ export const pickDefaultSessionSelectionForCatalog = (
     return null;
   }
 
-  return {
+  const selection: AgentModelSelection = {
     runtimeKind,
     providerId: model.providerId,
     modelId: model.modelId,
-    ...(variant ? { variant } : {}),
   };
+  if (variant) {
+    selection.variant = variant;
+  }
+  return selection;
 };
 
 export const coerceSessionSelectionToCatalog = (
@@ -48,13 +51,18 @@ export const coerceSessionSelectionToCatalog = (
     return null;
   }
 
-  return {
+  const normalizedSelection: AgentModelSelection = {
     runtimeKind,
     providerId: model.providerId,
     modelId: model.modelId,
-    ...(variant ? { variant } : {}),
-    ...(profileId ? { profileId } : {}),
   };
+  if (variant) {
+    normalizedSelection.variant = variant;
+  }
+  if (profileId) {
+    normalizedSelection.profileId = profileId;
+  }
+  return normalizedSelection;
 };
 
 export const normalizePersistedSelection = (
@@ -63,13 +71,18 @@ export const normalizePersistedSelection = (
   if (!selection) {
     return null;
   }
-  return {
+  const normalizedSelection: AgentModelSelection = {
     runtimeKind: selection.runtimeKind,
     providerId: selection.providerId,
     modelId: selection.modelId,
-    ...(selection.variant ? { variant: selection.variant } : {}),
-    ...(selection.profileId ? { profileId: selection.profileId } : {}),
   };
+  if (selection.variant) {
+    normalizedSelection.variant = selection.variant;
+  }
+  if (selection.profileId) {
+    normalizedSelection.profileId = selection.profileId;
+  }
+  return normalizedSelection;
 };
 
 export const mergeModelSelection = (
@@ -83,15 +96,21 @@ export const mergeModelSelection = (
     return base;
   }
 
-  return {
-    ...((override.runtimeKind ?? base.runtimeKind)
-      ? { runtimeKind: override.runtimeKind ?? base.runtimeKind }
-      : {}),
+  const runtimeKind = override.runtimeKind ?? base.runtimeKind;
+  const variant = override.variant ?? base.variant;
+  const profileId = override.profileId ?? base.profileId;
+  const selection: AgentModelSelection = {
     providerId: override.providerId,
     modelId: override.modelId,
-    ...((override.variant ?? base.variant) ? { variant: override.variant ?? base.variant } : {}),
-    ...((override.profileId ?? base.profileId)
-      ? { profileId: override.profileId ?? base.profileId }
-      : {}),
   };
+  if (runtimeKind) {
+    selection.runtimeKind = runtimeKind;
+  }
+  if (variant) {
+    selection.variant = variant;
+  }
+  if (profileId) {
+    selection.profileId = profileId;
+  }
+  return selection;
 };

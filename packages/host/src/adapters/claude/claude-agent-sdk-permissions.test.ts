@@ -18,6 +18,34 @@ const addNestedSubagent = (session: ClaudeSessionContext): void => {
 };
 
 describe("createClaudeCanUseTool", () => {
+  test("rejects non-JSON tool input before publishing an approval", async () => {
+    const events: AgentEvent[] = [];
+    const session = createSession();
+    const canUseTool = createClaudeCanUseTool({
+      session,
+      now: () => "2026-06-25T12:00:00.000Z",
+      randomId: () => "request-1",
+      emit: (_session, event) => events.push(event),
+    });
+
+    await expect(
+      canUseTool(
+        "Bash",
+        { command: new Date() },
+        {
+          signal: new AbortController().signal,
+          toolUseID: "tool-use-1",
+          requestId: "sdk-request-1",
+        },
+      ),
+    ).rejects.toMatchObject({
+      _tag: "HostValidationError",
+      field: "claudeToolInput",
+    });
+    expect(events).toEqual([]);
+    expect(session.pendingApprovals.size).toBe(0);
+  });
+
   test("requests approval for repository task creation as a mutating runtime tool", async () => {
     const events: AgentEvent[] = [];
     const session = createClaudeRepositoryPermissionTestSession();

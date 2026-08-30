@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
-import { createEventTestSession as createSession } from "./claude-agent-sdk-events.test-support";
+import {
+  claudeAcceptedUserMessageFixture,
+  createEventTestSession as createSession,
+} from "./claude-agent-sdk-events.test-support";
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 
 describe("handleClaudeSdkMessage result events", () => {
@@ -85,7 +88,7 @@ describe("handleClaudeSdkMessage result events", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
-        uuid: "result-1",
+        uuid: "dcc7f731-b816-43af-8384-3d398334d9c1",
         session_id: "session-1",
         is_error: false,
         result: "FINALSMOKE_VISIBLE",
@@ -101,7 +104,7 @@ describe("handleClaudeSdkMessage result events", () => {
         type: "assistant_message",
         externalSessionId: "session-1",
         timestamp: "2026-06-25T20:00:00.000Z",
-        messageId: "result-1",
+        messageId: "dcc7f731-b816-43af-8384-3d398334d9c1",
         message: "FINALSMOKE_VISIBLE",
       },
       {
@@ -132,7 +135,9 @@ describe("handleClaudeSdkMessage result events", () => {
       ...createSession(),
       model: selectedNextModel,
     };
-    session.acceptedUserMessages.push({ model: acceptedTurnModel });
+    session.acceptedUserMessages.push(
+      claudeAcceptedUserMessageFixture({ model: acceptedTurnModel }),
+    );
     session.pendingUserTurnCount = 1;
     const input = {
       session,
@@ -149,7 +154,7 @@ describe("handleClaudeSdkMessage result events", () => {
       ...input,
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-final",
+        uuid: "befb9ace-857d-4900-8d40-a428dd99cc46",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -167,7 +172,7 @@ describe("handleClaudeSdkMessage result events", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
-        uuid: "result-1",
+        uuid: "dcc7f731-b816-43af-8384-3d398334d9c1",
         session_id: "session-1",
         is_error: false,
         duration_ms: 2_000,
@@ -183,7 +188,7 @@ describe("handleClaudeSdkMessage result events", () => {
       type: "assistant_message",
       externalSessionId: "session-1",
       timestamp: "2026-06-25T20:00:02.000Z",
-      messageId: "assistant-final",
+      messageId: "befb9ace-857d-4900-8d40-a428dd99cc46",
       message: "Final answer",
       model: {
         providerId: "claude",
@@ -198,7 +203,7 @@ describe("handleClaudeSdkMessage result events", () => {
   test("does not use the persistent SDK query duration as the visible turn duration", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
-    session.acceptedUserMessages.push({});
+    session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     session.pendingUserTurnCount = 1;
 
     handleClaudeSdkMessage({
@@ -213,7 +218,7 @@ describe("handleClaudeSdkMessage result events", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
-        uuid: "result-long-lived-query",
+        uuid: "90aa9a3a-d1f6-4dda-88fb-d56e8ac6711a",
         session_id: "session-1",
         is_error: false,
         duration_ms: 12_198_000,
@@ -228,7 +233,7 @@ describe("handleClaudeSdkMessage result events", () => {
       type: "assistant_message",
       externalSessionId: "session-1",
       timestamp: "2026-06-25T23:23:18.000Z",
-      messageId: "result-long-lived-query",
+      messageId: "90aa9a3a-d1f6-4dda-88fb-d56e8ac6711a",
       message: "Build complete.",
     });
   });
@@ -236,7 +241,7 @@ describe("handleClaudeSdkMessage result events", () => {
   test("finalizes streamed assistant text with the stream id when the result carries the final text", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
-    session.acceptedUserMessages.push({});
+    session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     session.pendingUserTurnCount = 1;
     const commonInput = {
       session,
@@ -253,7 +258,7 @@ describe("handleClaudeSdkMessage result events", () => {
       ...commonInput,
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "partial-event-1",
+        uuid: "9def3c6e-18d1-4706-8032-9ab256a177f9",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: {
@@ -269,7 +274,7 @@ describe("handleClaudeSdkMessage result events", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
-        uuid: "result-1",
+        uuid: "dcc7f731-b816-43af-8384-3d398334d9c1",
         session_id: "session-1",
         is_error: false,
         result: "Final result",
@@ -296,7 +301,7 @@ describe("handleClaudeSdkMessage result events", () => {
   test("finalizes multi-block streamed result text without keeping duplicate stream rows", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
-    session.acceptedUserMessages.push({});
+    session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     session.pendingUserTurnCount = 1;
     session.streamAssistantMessageIdsByBlockIndex.set(0, "claude-stream:session-1:1:1:0");
     session.streamAssistantMessageIdsByBlockIndex.set(1, "claude-stream:session-1:1:1:1");
@@ -316,7 +321,7 @@ describe("handleClaudeSdkMessage result events", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
-        uuid: "result-1",
+        uuid: "dcc7f731-b816-43af-8384-3d398334d9c1",
         session_id: "session-1",
         is_error: false,
         result: "First block\nSecond block",
@@ -343,7 +348,7 @@ describe("handleClaudeSdkMessage result events", () => {
   test("preserves a native response id shared by multiple streamed text blocks", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
-    session.acceptedUserMessages.push({});
+    session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     session.pendingUserTurnCount = 1;
     session.streamAssistantMessageIdsByBlockIndex.set(0, "native-response-1");
     session.streamAssistantMessageIdsByBlockIndex.set(1, "native-response-1");
@@ -363,7 +368,7 @@ describe("handleClaudeSdkMessage result events", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
-        uuid: "result-1",
+        uuid: "dcc7f731-b816-43af-8384-3d398334d9c1",
         session_id: "session-1",
         is_error: false,
         result: "First block\nSecond block",
@@ -386,7 +391,7 @@ describe("handleClaudeSdkMessage result events", () => {
   test("does not reuse stream ids after result-finalized text when Claude omits message_start", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
-    session.acceptedUserMessages.push({});
+    session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     session.pendingUserTurnCount = 1;
     const commonInput = {
       session,
@@ -403,7 +408,7 @@ describe("handleClaudeSdkMessage result events", () => {
       ...commonInput,
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "partial-event-1",
+        uuid: "9def3c6e-18d1-4706-8032-9ab256a177f9",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: {
@@ -418,7 +423,7 @@ describe("handleClaudeSdkMessage result events", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
-        uuid: "result-1",
+        uuid: "dcc7f731-b816-43af-8384-3d398334d9c1",
         session_id: "session-1",
         is_error: false,
         result: "First result",
@@ -428,13 +433,13 @@ describe("handleClaudeSdkMessage result events", () => {
       }),
     });
 
-    session.acceptedUserMessages.push({});
+    session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     session.pendingUserTurnCount = 1;
     handleClaudeSdkMessage({
       ...commonInput,
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "partial-event-2",
+        uuid: "2d04ba25-bf57-4aff-85c5-c75cb7698460",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: {
@@ -459,7 +464,7 @@ describe("handleClaudeSdkMessage result events", () => {
   test("keeps streamed intermediate tool-use text separate from final result text", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
-    session.acceptedUserMessages.push({});
+    session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     session.pendingUserTurnCount = 1;
     const commonInput = {
       session,
@@ -476,7 +481,7 @@ describe("handleClaudeSdkMessage result events", () => {
       ...commonInput,
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "partial-event-1",
+        uuid: "9def3c6e-18d1-4706-8032-9ab256a177f9",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: {
@@ -491,7 +496,7 @@ describe("handleClaudeSdkMessage result events", () => {
       ...commonInput,
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-tool-use",
+        uuid: "346c6a8a-f6a5-4e9c-8815-f4d2d457fa07",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -516,7 +521,7 @@ describe("handleClaudeSdkMessage result events", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
-        uuid: "result-1",
+        uuid: "dcc7f731-b816-43af-8384-3d398334d9c1",
         session_id: "session-1",
         is_error: false,
         result: "Spec persisted and task moved to spec_ready.",
@@ -540,7 +545,7 @@ describe("handleClaudeSdkMessage result events", () => {
         type: "assistant_part",
         part: expect.objectContaining({
           kind: "text",
-          messageId: "assistant-tool-use",
+          messageId: "346c6a8a-f6a5-4e9c-8815-f4d2d457fa07",
           text: "Now let me write and persist the spec.",
           completed: true,
         }),
@@ -555,7 +560,7 @@ describe("handleClaudeSdkMessage result events", () => {
       }),
       expect.objectContaining({
         type: "assistant_message",
-        messageId: "result-1",
+        messageId: "dcc7f731-b816-43af-8384-3d398334d9c1",
         message: "Spec persisted and task moved to spec_ready.",
       }),
       expect.objectContaining({ type: "session_idle" }),
@@ -578,7 +583,7 @@ describe("handleClaudeSdkMessage result events", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
-        uuid: "result-1",
+        uuid: "dcc7f731-b816-43af-8384-3d398334d9c1",
         session_id: "session-1",
         is_error: false,
         result: "FINAL_WITH_USAGE",
@@ -599,7 +604,7 @@ describe("handleClaudeSdkMessage result events", () => {
         type: "assistant_message",
         externalSessionId: "session-1",
         timestamp: "2026-06-25T20:00:00.000Z",
-        messageId: "result-1",
+        messageId: "dcc7f731-b816-43af-8384-3d398334d9c1",
         message: "FINAL_WITH_USAGE",
       },
       {

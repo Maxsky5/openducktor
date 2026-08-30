@@ -1,5 +1,6 @@
-import type { RepoConfig, TaskWorktreeSummary } from "@openducktor/contracts";
+import type { HostEventEnvelope, RepoConfig, TaskWorktreeSummary } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { z } from "zod";
 import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
 import type { HostEventBusPort } from "../../events/host-event-bus";
 import type {
@@ -11,6 +12,7 @@ import { DevServerProcessStartExitError } from "../../ports/dev-server-process-p
 import type { TaskWorktreeService } from "../tasks/worktrees/task-worktree-service";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-service";
 import { createDevServerService as createEffectDevServerService } from "./dev-server-service";
+import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
 
 const createDevServerService = (input: Parameters<typeof createEffectDevServerService>[0]) =>
   createEffectDevServerService(input);
@@ -37,8 +39,8 @@ const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   ...overrides,
 });
 const createWorkspaceSettingsService = (config: RepoConfig): WorkspaceSettingsService =>
-  ({
-    getRepoConfigByRepoPath(repoPath: unknown) {
+  createWorkspaceSettingsServiceTestDouble({
+    getRepoConfigByRepoPath(repoPath: string) {
       return Effect.try({
         try: () => {
           if (repoPath !== "/repo") {
@@ -50,12 +52,12 @@ const createWorkspaceSettingsService = (config: RepoConfig): WorkspaceSettingsSe
           toHostOperationError(cause, "test.workspaceSettings.getRepoConfigByRepoPath"),
       });
     },
-  }) as unknown as WorkspaceSettingsService;
+  });
 const createWorkspaceSettingsServiceByRepoPath = (
   configs: Record<string, RepoConfig>,
 ): WorkspaceSettingsService =>
-  ({
-    getRepoConfigByRepoPath(repoPath: unknown) {
+  createWorkspaceSettingsServiceTestDouble({
+    getRepoConfigByRepoPath(repoPath: string) {
       return Effect.try({
         try: () => {
           const config = configs[String(repoPath)];
@@ -68,17 +70,17 @@ const createWorkspaceSettingsServiceByRepoPath = (
           toHostOperationError(cause, "test.workspaceSettings.getRepoConfigByRepoPath"),
       });
     },
-  }) as unknown as WorkspaceSettingsService;
+  });
 const createTaskWorktreeService = (worktree: TaskWorktreeSummary | null): TaskWorktreeService => ({
   getTaskWorktree() {
     return Effect.succeed(worktree);
   },
 });
 const createEventBus = () => {
-  const events: unknown[] = [];
+  const events: HostEventEnvelope[] = [];
   const eventBus: HostEventBusPort = {
-    publish(channel, payload) {
-      events.push({ channel, payload });
+    publish(envelope) {
+      events.push(envelope);
     },
     subscribe() {
       return () => {};
@@ -115,7 +117,36 @@ const createProcessPort = () => {
   };
   return { handles, processPort, starts, stoppedPids };
 };
-const expectStartFailure = async (service: TestDevServerService): Promise<HostOperationError> => {
+const devServerStartFailureSchema = z.object({
+  message: z.string(),
+  details: z.object({
+    cleanupErrors: z.array(z.string()),
+    failedScripts: z.array(
+      z.object({
+        command: z.string(),
+        message: z.string(),
+        name: z.string(),
+        scriptId: z.string(),
+      }),
+    ),
+    repoPath: z.string(),
+    stoppedScripts: z.array(
+      z.object({
+        command: z.string(),
+        name: z.string(),
+        pid: z.number(),
+        repoPath: z.string(),
+        scriptId: z.string(),
+        taskId: z.string(),
+      }),
+    ),
+    taskId: z.string(),
+  }),
+});
+
+const expectStartFailure = async (
+  service: TestDevServerService,
+): Promise<z.output<typeof devServerStartFailureSchema>> => {
   const startResult = await Effect.runPromise(
     Effect.either(service.start({ repoPath: "/repo", taskId: "task-1" })),
   );
@@ -125,7 +156,7 @@ const expectStartFailure = async (service: TestDevServerService): Promise<HostOp
   if (!(startResult.left instanceof HostOperationError)) {
     throw new Error("Expected dev server start to fail with HostOperationError.");
   }
-  return startResult.left;
+  return devServerStartFailureSchema.parse(startResult.left);
 };
 describe("createDevServerService", () => {
   test("returns stopped state for configured dev server scripts", async () => {
@@ -313,17 +344,14 @@ describe("createDevServerService", () => {
     });
 
     const state = await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    const terminalChunkPayloadSchema = z.object({
+      type: z.literal("terminal_chunk"),
+      terminalChunk: z.object({ data: z.string(), sequence: z.number() }),
+    });
     const terminalChunks = events
-      .map((event) => (event as { payload?: unknown }).payload)
-      .filter(
-        (payload): payload is { terminalChunk: { data: string; sequence: number }; type: string } =>
-          typeof payload === "object" &&
-          payload !== null &&
-          "type" in payload &&
-          payload.type === "terminal_chunk" &&
-          "terminalChunk" in payload,
-      )
-      .map((payload) => payload.terminalChunk);
+      .map((event) => terminalChunkPayloadSchema.safeParse(event.payload))
+      .filter((payload) => payload.success)
+      .map((payload) => payload.data.terminalChunk);
 
     expect(terminalChunks.map((chunk) => chunk.sequence)).toEqual([0, 1, 2]);
     expect(terminalChunks.map((chunk) => chunk.data)).toEqual([
@@ -382,9 +410,7 @@ describe("createDevServerService", () => {
       start(input) {
         starts.push(input.command);
         if (input.command === "exit 42") {
-          return Effect.fail(new DevServerProcessStartExitError(42, null)) as unknown as ReturnType<
-            DevServerProcessPort["start"]
-          >;
+          return Effect.fail(new DevServerProcessStartExitError(42, null));
         }
         return Effect.succeed({
           pid: 501,
@@ -456,9 +482,7 @@ describe("createDevServerService", () => {
     const processPort: DevServerProcessPort = {
       start(input) {
         if (input.command === "exit 42") {
-          return Effect.fail(new DevServerProcessStartExitError(42, null)) as unknown as ReturnType<
-            DevServerProcessPort["start"]
-          >;
+          return Effect.fail(new DevServerProcessStartExitError(42, null));
         }
         return Effect.succeed({
           pid: 501,
@@ -648,11 +672,7 @@ describe("createDevServerService", () => {
     expect(
       state.scripts[0]?.bufferedTerminalChunks.some((chunk) => chunk.data.includes("LATE-OLD")),
     ).toBe(false);
-    expect(
-      events.some((event) =>
-        JSON.stringify((event as { payload?: unknown }).payload).includes("LATE-OLD"),
-      ),
-    ).toBe(false);
+    expect(events.some((event) => JSON.stringify(event.payload).includes("LATE-OLD"))).toBe(false);
     expect(state.scripts[0]).toMatchObject({ status: "running", pid: 700 });
   });
   test("uses a distinct run epoch after the host service is replaced", async () => {

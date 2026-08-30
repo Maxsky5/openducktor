@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import type { AgentToolData } from "@openducktor/contracts";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
@@ -8,6 +9,7 @@ import {
   sessionMessageAt,
   sessionMessagesToArray,
 } from "@/test-utils/session-message-test-helpers";
+import type { AgentChatMessage } from "@/types/agent-orchestrator";
 
 enableReactActEnvironment();
 
@@ -39,8 +41,19 @@ const toolTypeForFixture = (tool: string): import("@openducktor/core").AgentTool
   return "generic";
 };
 
-const createCompletedToolSession = (tool: string, id = tool, input?: Record<string, unknown>) =>
-  createAgentSessionFixture({
+const createCompletedToolSession = (tool: string, id = tool, input?: AgentToolData) => {
+  const meta: Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "tool" }> = {
+    kind: "tool",
+    partId: `part-${id}`,
+    callId: `call-${id}`,
+    tool,
+    toolType: toolTypeForFixture(tool),
+    status: "completed",
+  };
+  if (input) {
+    meta.input = input;
+  }
+  return createAgentSessionFixture({
     externalSessionId: "build-session-1",
     sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
     messages: [
@@ -49,18 +62,11 @@ const createCompletedToolSession = (tool: string, id = tool, input?: Record<stri
         role: "tool",
         content: "",
         timestamp: "2026-02-22T08:10:00.000Z",
-        meta: {
-          kind: "tool",
-          partId: `part-${id}`,
-          callId: `call-${id}`,
-          tool,
-          toolType: toolTypeForFixture(tool),
-          status: "completed",
-          ...(input ? { input } : {}),
-        },
+        meta,
       },
     ],
   });
+};
 
 const createSelectedView = (
   overrides: Partial<HookArgs["selectedView"]> = {},

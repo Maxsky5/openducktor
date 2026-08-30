@@ -1,19 +1,23 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { GitConflict } from "@/features/agent-studio-git";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import {
   createDeferred,
   createHookHarness,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
 
-const actualSharedHostModule = await import("@/state/operations/shared/host");
+const actualSonnerModule = await import("sonner");
+
+type RestorableSpy = { mockRestore(): void };
+let testSpies: RestorableSpy[] = [];
 
 enableReactActEnvironment();
 
 const gitAbortConflictMock = mock(async () => ({ output: "aborted" }));
-const toastSuccessMock = mock(() => {});
-const toastErrorMock = mock(() => {});
+const toastSuccessMock = mock(() => "toast-success");
+const toastErrorMock = mock(() => "toast-error");
 
 type UseAgentStudioGitConflictControllerHook =
   (typeof import("./use-agent-studio-git-conflict-controller"))["useAgentStudioGitConflictController"];
@@ -45,26 +49,21 @@ const createConflict = (overrides: Partial<GitConflict> = {}): GitConflict => ({
 });
 
 beforeEach(async () => {
-  mock.module("@/state/operations/shared/host", () => ({
-    host: {
-      gitAbortConflict: gitAbortConflictMock,
-    },
-  }));
-  mock.module("sonner", () => ({
-    toast: {
-      success: toastSuccessMock,
-      error: toastErrorMock,
-    },
-  }));
+  configureShellBridge(
+    createShellBridgeFixture({ client: { gitAbortConflict: gitAbortConflictMock } }),
+  );
+  testSpies = [
+    spyOn(actualSonnerModule.toast, "success").mockImplementation(toastSuccessMock),
+    spyOn(actualSonnerModule.toast, "error").mockImplementation(toastErrorMock),
+  ];
   ({ useAgentStudioGitConflictController } =
     await import("./use-agent-studio-git-conflict-controller"));
 });
 
-afterEach(async () => {
-  await restoreMockedModules([
-    ["@/state/operations/shared/host", async () => actualSharedHostModule],
-    ["sonner", () => import("sonner")],
-  ]);
+afterEach(() => {
+  for (const testSpy of testSpies) testSpy.mockRestore();
+  testSpies = [];
+  configureShellBridge(createUnavailableShellBridge());
 });
 
 beforeEach(() => {

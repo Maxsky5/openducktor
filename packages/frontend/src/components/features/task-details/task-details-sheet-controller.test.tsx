@@ -1,29 +1,20 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { TaskCard } from "@openducktor/contracts";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { render } from "@testing-library/react";
 import { act, createElement, createRef, type ReactElement } from "react";
-import type { KanbanTaskSession } from "@/components/features/kanban/kanban-task-activity";
 import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import type { TaskCard } from "@openducktor/contracts";
 import type { TaskDetailsSheetControllerHandle } from "./task-details-sheet-controller";
 
 enableReactActEnvironment();
 
 const actualTaskDetailsSheetModule = await import("./task-details-sheet");
 
-type TaskDetailsSheetRenderProps = {
-  activeWorkspace?: { workspaceId: string; workspaceName: string; repoPath: string } | null;
-  task: TaskCard | null;
-  allTasks: TaskCard[];
-  taskSessions: KanbanTaskSession[];
-  hasActiveSession: boolean;
-  open: boolean;
-  workflowActionsEnabled?: boolean;
-  onOpenChange: (open: boolean) => void;
-};
+type TaskDetailsSheetRenderProps = Parameters<
+  typeof actualTaskDetailsSheetModule.TaskDetailsSheet
+>[0];
 
 type TaskDetailsSheetControllerComponent =
   typeof import("./task-details-sheet-controller").TaskDetailsSheetController;
@@ -35,29 +26,26 @@ const activeWorkspace = {
 };
 
 const taskDetailsSheetRenderMock = mock((_props: TaskDetailsSheetRenderProps) => null);
-
-async function restoreTaskDetailsSheetModule(): Promise<void> {
-  await restoreMockedModules([["./task-details-sheet", async () => actualTaskDetailsSheetModule]]);
-}
+let taskDetailsSheetSpy: { mockRestore(): void };
 
 async function importMockedTaskDetailsSheetController(): Promise<TaskDetailsSheetControllerComponent> {
   const { TaskDetailsSheetController } = await import("./task-details-sheet-controller");
-  await restoreTaskDetailsSheetModule();
   return TaskDetailsSheetController;
 }
 
 describe("TaskDetailsSheetController", () => {
   beforeEach(() => {
-    mock.module("./task-details-sheet", () => ({
-      TaskDetailsSheet: (props: TaskDetailsSheetRenderProps): ReactElement | null => {
-        taskDetailsSheetRenderMock(props);
-        return null;
-      },
-    }));
+    taskDetailsSheetSpy = spyOn(
+      actualTaskDetailsSheetModule,
+      "TaskDetailsSheet",
+    ).mockImplementation((props: TaskDetailsSheetRenderProps): ReactElement => {
+      taskDetailsSheetRenderMock(props);
+      return createElement("div");
+    });
   });
 
-  afterEach(async () => {
-    await restoreTaskDetailsSheetModule();
+  afterEach(() => {
+    taskDetailsSheetSpy.mockRestore();
   });
 
   beforeEach(() => {

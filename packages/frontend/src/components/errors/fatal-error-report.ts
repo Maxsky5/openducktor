@@ -1,3 +1,7 @@
+import { z } from "zod";
+
+const thrownStringSchema = z.string();
+
 export interface FatalErrorReport {
   title: string;
   message: string;
@@ -14,46 +18,53 @@ export interface FatalErrorReport {
  * Duck-type check for PromiseRejectionEvent since the constructor is not
  * available in every JS runtime (e.g. Bun).
  */
-function isPromiseRejectionLike(value: unknown): value is Event & { reason: unknown } {
+function isPromiseRejectionLike(cause: unknown): cause is Event & { reason: unknown } {
+  const EventConstructor = globalThis.Event;
   return (
-    typeof Event !== "undefined" &&
-    value instanceof Event &&
-    value.type === "unhandledrejection" &&
-    "reason" in value
+    EventConstructor !== undefined &&
+    cause instanceof EventConstructor &&
+    cause.type === "unhandledrejection" &&
+    "reason" in cause
   );
 }
 
 export function buildFatalErrorReport(
-  value: unknown,
+  cause: unknown,
   source: FatalErrorReport["source"],
 ): FatalErrorReport {
   const timestamp = new Date().toISOString();
 
-  if (value instanceof ErrorEvent) {
-    const inner = value.error;
-    const location = formatErrorLocation(value);
+  if (cause instanceof ErrorEvent) {
+    const inner = cause.error;
+    const location = formatErrorLocation(cause);
     if (inner instanceof Error) {
-      return {
+      const report: FatalErrorReport = {
         title: inner.name || "Error",
         message: inner.message,
         stack: inner.stack,
-        ...(location ? { location } : {}),
         source,
         timestamp,
       };
+      if (location) {
+        report.location = location;
+      }
+      return report;
     }
-    return {
+    const report: FatalErrorReport = {
       title: "Uncaught error",
-      message: value.message || String(inner ?? value),
+      message: cause.message || String(inner ?? cause),
       stack: undefined,
-      ...(location ? { location } : {}),
       source,
       timestamp,
     };
+    if (location) {
+      report.location = location;
+    }
+    return report;
   }
 
-  if (isPromiseRejectionLike(value)) {
-    const reason = value.reason;
+  if (isPromiseRejectionLike(cause)) {
+    const reason = cause.reason;
     if (reason instanceof Error) {
       return {
         title: reason.name || "Unhandled rejection",
@@ -63,32 +74,34 @@ export function buildFatalErrorReport(
         timestamp,
       };
     }
+    const parsedReason = thrownStringSchema.safeParse(reason);
     return {
       title: "Unhandled promise rejection",
-      message: typeof reason === "string" ? reason : safeStringify(reason),
+      message: parsedReason.success ? parsedReason.data : safeStringify(reason),
       stack: undefined,
       source,
       timestamp,
     };
   }
 
-  if (value instanceof Error) {
+  if (cause instanceof Error) {
     return {
-      title: value.name || "Error",
-      message: value.message,
-      stack: value.stack,
+      title: cause.name || "Error",
+      message: cause.message,
+      stack: cause.stack,
       source,
       timestamp,
     };
   }
 
-  if (typeof value === "string") {
-    return { title: "Error", message: value, stack: undefined, source, timestamp };
+  const parsedCause = thrownStringSchema.safeParse(cause);
+  if (parsedCause.success) {
+    return { title: "Error", message: parsedCause.data, stack: undefined, source, timestamp };
   }
 
   return {
     title: "Unknown error",
-    message: safeStringify(value),
+    message: safeStringify(cause),
     stack: undefined,
     source,
     timestamp,
@@ -102,15 +115,23 @@ export function buildFatalErrorReport(
  * the **original raw thrown value / event** (so devtools can inspect the live
  * object), and an optional React component stack when available.
  */
+type FatalErrorContext = {
+  source: FatalErrorReport["source"];
+  timestamp: string;
+  rawValue: unknown;
+  location?: string;
+  componentStack?: string;
+};
+
 export function logFatalError(
   report: FatalErrorReport,
-  rawValue: unknown,
+  cause: unknown,
   componentStack?: string,
 ): void {
-  const context: Record<string, unknown> = {
+  const context: FatalErrorContext = {
     source: report.source,
     timestamp: report.timestamp,
-    rawValue,
+    rawValue: cause,
   };
   if (report.location) {
     context.location = report.location;
@@ -153,11 +174,11 @@ function formatErrorLocation(event: ErrorEvent): string | undefined {
   return `line ${line}, column ${column}`;
 }
 
-function safeStringify(value: unknown): string {
+function safeStringify(cause: unknown): string {
   try {
-    const json = JSON.stringify(value);
-    return typeof json === "string" ? json : String(value);
+    const json = JSON.stringify(cause);
+    return json ?? String(cause);
   } catch {
-    return String(value);
+    return String(cause);
   }
 }

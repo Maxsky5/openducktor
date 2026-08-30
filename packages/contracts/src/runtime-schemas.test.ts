@@ -1,5 +1,6 @@
 // @ts-expect-error
 import { describe, expect, test } from "bun:test";
+import { z, type JSONType } from "zod";
 import opencodeRuntimeDescriptorFixture from "../../../docs/contracts/opencode-runtime-descriptor.fixture.json";
 import runtimeDescriptorInvalidCasesFixture from "../../../docs/contracts/runtime-descriptor-invalid-cases.fixture.json";
 import {
@@ -76,27 +77,32 @@ const expectRuntimeDescriptorIssue = (
   );
 };
 
-type JsonObject = Record<string, unknown>;
-
 type RuntimeDescriptorInvalidCase = {
   name: string;
   patch: Array<{
     path: string[];
-    value: unknown;
+    value: JSONType;
   }>;
 };
 
-const isJsonObject = (value: unknown): value is JsonObject =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+type RuntimeDescriptorFixtureObject = Record<string, JSONType>;
+const runtimeDescriptorFixtureObjectSchema = z.record(z.string(), z.json());
+const isRuntimeDescriptorFixtureObject = (
+  value: JSONType | undefined,
+): value is RuntimeDescriptorFixtureObject =>
+  runtimeDescriptorFixtureObjectSchema.safeParse(value).success;
 
-const cloneJson = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+const cloneJson = <T>(value: T): T => structuredClone(value);
 
-const applyJsonPatch = (target: JsonObject, patch: RuntimeDescriptorInvalidCase["patch"]): void => {
+const applyJsonPatch = (
+  target: RuntimeDescriptorFixtureObject,
+  patch: RuntimeDescriptorInvalidCase["patch"],
+): void => {
   for (const operation of patch) {
-    let current: JsonObject = target;
+    let current: RuntimeDescriptorFixtureObject = target;
     for (const segment of operation.path.slice(0, -1)) {
       const next = current[segment];
-      if (!isJsonObject(next)) {
+      if (!isRuntimeDescriptorFixtureObject(next)) {
         throw new Error(`Invalid fixture path segment: ${operation.path.join(".")}`);
       }
       current = next;
@@ -109,8 +115,8 @@ const applyJsonPatch = (target: JsonObject, patch: RuntimeDescriptorInvalidCase[
   }
 };
 
-const invalidRuntimeDescriptorCases =
-  runtimeDescriptorInvalidCasesFixture as RuntimeDescriptorInvalidCase[];
+const invalidRuntimeDescriptorCases: RuntimeDescriptorInvalidCase[] =
+  runtimeDescriptorInvalidCasesFixture;
 
 describe("runtime schemas", () => {
   test("formats runtime descriptor schema issues with capability ownership", () => {
@@ -230,7 +236,9 @@ describe("runtime schemas", () => {
   test.each(invalidRuntimeDescriptorCases)(
     "shared invalid runtime descriptor fixture is rejected: $name",
     (fixtureCase) => {
-      const descriptor = cloneJson(opencodeRuntimeDescriptorFixture) as JsonObject;
+      const descriptor: RuntimeDescriptorFixtureObject = cloneJson(
+        opencodeRuntimeDescriptorFixture,
+      );
       applyJsonPatch(descriptor, fixtureCase.patch);
 
       const result = runtimeDescriptorSchema.safeParse(descriptor);
@@ -1070,9 +1078,8 @@ describe("runtime schemas", () => {
     expect(result.error.issues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          code: "unrecognized_keys",
-          keys: ["odt_set_specc"],
-          path: ["workflowToolAliasesByCanonical"],
+          code: "invalid_key",
+          path: ["workflowToolAliasesByCanonical", "odt_set_specc"],
         }),
       ]),
     );

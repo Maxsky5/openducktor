@@ -1,13 +1,22 @@
 import { codexItemTypeMatches } from "../codex-app-server-transcript";
-import type { CodexMappingContext, CodexMappingResult } from "../codex-canonical-events";
+import type {
+  CodexCanonicalStreamPartEvent,
+  CodexMappingContext,
+  CodexMappingResult,
+} from "../codex-canonical-events";
 import { emptyCodexMappingResult } from "../codex-canonical-events";
-import type { CodexEventMapper } from "../codex-event-mapper";
+import type { CodexEventMapper, CodexTimedThreadItem } from "../codex-event-mapper";
 import { noCodexMapperState } from "../codex-event-mapper";
 import { codexSubagentPartsFromItem } from "../codex-subagent-items";
 import type { CodexSubagentLinkState } from "../codex-subagent-link-state";
 
+type CodexSubagentItem = Extract<
+  CodexTimedThreadItem,
+  { type: "collabAgentToolCall" | "subAgentActivity" }
+>;
+
 const subagentEvents = (
-  item: Record<string, unknown>,
+  item: CodexSubagentItem,
   ctx: CodexMappingContext,
   linkState: CodexSubagentLinkState,
   timestamp?: string,
@@ -22,44 +31,33 @@ const subagentEvents = (
   const eventTimestamp = ctx.timestamp ?? timestamp;
   return {
     handled: true,
-    events: parts.map((part) => ({
-      kind: "stream_part",
-      source: ctx.source,
-      mapper: "subagent",
-      threadId: ctx.threadId,
-      ...(ctx.turnId ? { turnId: ctx.turnId } : {}),
-      ...(eventTimestamp ? { timestamp: eventTimestamp } : {}),
-      raw: item,
-      part,
-    })),
+    events: parts.map((part) => {
+      const event: CodexCanonicalStreamPartEvent = {
+        kind: "stream_part",
+        source: ctx.source,
+        mapper: "subagent",
+        threadId: ctx.threadId,
+        part,
+      };
+      if (ctx.turnId) {
+        event.turnId = ctx.turnId;
+      }
+      if (eventTimestamp) {
+        event.timestamp = eventTimestamp;
+      }
+      return event;
+    }),
   };
 };
 
-const shouldMapAsSubagentItem = (item: Record<string, unknown>): boolean => {
-  const isCollabToolCall =
-    codexItemTypeMatches(item, "collabAgentToolCall") ||
-    codexItemTypeMatches(item, "collabToolCall");
-  if (!isCollabToolCall) {
-    return codexItemTypeMatches(item, "subAgentActivity");
-  }
-
-  const tool = item.tool;
-  const receiverThreadIds = item.receiverThreadIds ?? item.receiver_thread_ids;
-  const receiverThreadId =
-    item.receiverThreadId ?? item.receiver_thread_id ?? item.newThreadId ?? item.new_thread_id;
-  if (tool === "spawnAgent") {
+const shouldMapAsSubagentItem = (item: CodexTimedThreadItem): item is CodexSubagentItem => {
+  if (codexItemTypeMatches(item, "subAgentActivity")) {
     return true;
   }
-  if (Array.isArray(receiverThreadIds)) {
-    return receiverThreadIds.length > 0;
-  }
-  if (receiverThreadIds !== undefined && receiverThreadIds !== null) {
-    return true;
-  }
-  if (typeof receiverThreadId === "string") {
-    return receiverThreadId.trim().length > 0;
-  }
-  return receiverThreadId !== undefined && receiverThreadId !== null;
+  return (
+    codexItemTypeMatches(item, "collabAgentToolCall") &&
+    (item.tool === "spawnAgent" || item.receiverThreadIds.length > 0)
+  );
 };
 
 export const createSubagentMapper = (linkState: CodexSubagentLinkState): CodexEventMapper => ({

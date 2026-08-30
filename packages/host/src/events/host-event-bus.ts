@@ -1,13 +1,11 @@
+import {
+  type HostEventChannel,
+  type HostEventEnvelope,
+  parseHostEventChannel as parseContractHostEventChannel,
+} from "@openducktor/contracts";
 import { HostValidationError } from "../effect/host-errors";
 
-export const HOST_EVENT_CHANNELS = [
-  "openducktor://run-event",
-  "openducktor://dev-server-event",
-  "openducktor://agent-session-live-event",
-] as const;
-
-export type HostEventChannel = (typeof HOST_EVENT_CHANNELS)[number];
-export type HostEventListener = (payload: unknown) => void;
+export type HostEventListener = (envelope: HostEventEnvelope) => void;
 export type HostEventUnsubscribe = () => void;
 export type HostEventDeliveryFailure = {
   channel: HostEventChannel;
@@ -18,34 +16,29 @@ export type HostEventDeliveryReporter = {
 };
 
 export type HostEventBusPort = {
-  publish(channel: string, payload: unknown): void;
+  publish(envelope: HostEventEnvelope): void;
   subscribe(channel: string, listener: HostEventListener): HostEventUnsubscribe;
 };
 
-const hostEventChannelSet = new Set<string>(HOST_EVENT_CHANNELS);
-
-export const isHostEventChannel = (value: string): value is HostEventChannel =>
-  hostEventChannelSet.has(value);
-
-export const parseHostEventChannel = (value: string): HostEventChannel => {
-  if (isHostEventChannel(value)) {
-    return value;
+const parseHostEventChannel = (value: string): HostEventChannel => {
+  try {
+    return parseContractHostEventChannel(value);
+  } catch (cause) {
+    throw new HostValidationError({
+      message: `Unknown OpenDucktor host event channel: ${value}`,
+      field: "channel",
+      details: { value },
+      cause,
+    });
   }
-
-  throw new HostValidationError({
-    message: `Unknown OpenDucktor host event channel: ${value}`,
-    field: "channel",
-    details: { value },
-  });
 };
 
 export const createHostEventBus = (reporter: HostEventDeliveryReporter): HostEventBusPort => {
   const listenersByChannel = new Map<HostEventChannel, Set<HostEventListener>>();
 
   return {
-    publish(channel, payload) {
-      const hostChannel = parseHostEventChannel(channel);
-      const listeners = listenersByChannel.get(hostChannel);
+    publish(envelope) {
+      const listeners = listenersByChannel.get(envelope.channel);
       if (!listeners) {
         return;
       }
@@ -53,9 +46,9 @@ export const createHostEventBus = (reporter: HostEventDeliveryReporter): HostEve
       // oxlint-disable-next-line unicorn/no-useless-spread -- listeners can unsubscribe during delivery
       for (const listener of [...listeners]) {
         try {
-          listener(payload);
+          listener(envelope);
         } catch (cause) {
-          reporter.report({ channel: hostChannel, cause });
+          reporter.report({ channel: envelope.channel, cause });
         }
       }
     },

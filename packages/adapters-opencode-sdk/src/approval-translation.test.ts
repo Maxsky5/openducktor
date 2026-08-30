@@ -22,7 +22,7 @@ describe("OpenCode approval translation", () => {
 
   test("normalizes an OpenCode permission request into a neutral approval request", () => {
     const request = normalizeOpenCodeApprovalRequest({
-      id: "req-shell",
+      requestId: "req-shell",
       permission: "tool",
       patterns: ["src/app.ts"],
       metadata: {
@@ -50,35 +50,6 @@ describe("OpenCode approval translation", () => {
             tool: "bash",
             command: "python build.py",
             workingDirectory: "/repo",
-          },
-        },
-      },
-    });
-  });
-
-  test("normalizes an OpenCode v2 permission request into a neutral approval request", () => {
-    const request = normalizeOpenCodeApprovalRequest({
-      id: "req-edit",
-      action: "write",
-      resources: ["src/**"],
-      metadata: {
-        tool: "edit",
-      },
-    });
-
-    expect(request).toMatchObject({
-      requestId: "req-edit",
-      requestType: "runtime_tool",
-      title: "Approve runtime tool: edit",
-      affectedPaths: ["src/**"],
-      action: { name: "write" },
-      tool: { name: "edit" },
-      metadata: {
-        opencode: {
-          permission: "write",
-          patterns: ["src/**"],
-          metadata: {
-            tool: "edit",
           },
         },
       },

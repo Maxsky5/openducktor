@@ -9,9 +9,9 @@ import type { AgentChatTranscriptSession } from "./agent-chat.types";
 import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
 import { useAgentChatTranscriptModel } from "./use-agent-chat-transcript-model";
 
-const actEnvironment = globalThis as typeof globalThis & {
+const actEnvironment: typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
-};
+} = globalThis;
 const previousActEnvironment = actEnvironment.IS_REACT_ACT_ENVIRONMENT;
 
 type HarnessProps = {

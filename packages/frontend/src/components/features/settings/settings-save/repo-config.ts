@@ -15,6 +15,19 @@ export const prepareRepoConfigForSave = (repo: RepoConfig): RepoConfig => {
   const planner = normalizeRepoAgentDefaultForSave("planner", repo.agentDefaults.planner);
   const build = normalizeRepoAgentDefaultForSave("build", repo.agentDefaults.build);
   const qa = normalizeRepoAgentDefaultForSave("qa", repo.agentDefaults.qa);
+  const agentDefaults: RepoConfig["agentDefaults"] = {};
+  if (spec) {
+    agentDefaults.spec = spec;
+  }
+  if (planner) {
+    agentDefaults.planner = planner;
+  }
+  if (build) {
+    agentDefaults.build = build;
+  }
+  if (qa) {
+    agentDefaults.qa = qa;
+  }
   const { hooks, devServers } = normalizeRepoScripts({
     hooks: repo.hooks,
     devServers: repo.devServers ?? [],
@@ -36,11 +49,6 @@ export const prepareRepoConfigForSave = (repo: RepoConfig): RepoConfig => {
       return trimmed ? [trimmed] : [];
     }),
     promptOverrides: preparePromptOverridesForSave(repo.promptOverrides),
-    agentDefaults: {
-      ...(spec ? { spec } : {}),
-      ...(planner ? { planner } : {}),
-      ...(build ? { build } : {}),
-      ...(qa ? { qa } : {}),
-    },
+    agentDefaults,
   };
 };

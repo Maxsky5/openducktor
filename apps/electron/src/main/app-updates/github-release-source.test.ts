@@ -67,4 +67,14 @@ describe("GitHub release source", () => {
 
     await expect(source.resolve(null)).rejects.toThrow("not a valid OpenDucktor version");
   });
+
+  test("rejects release payloads that do not match the GitHub contract", async () => {
+    const source = createGitHubReleaseSource({
+      fetch: mock(async () => Response.json({ prerelease: "false", tag_name: "v0.6.0" })),
+      owner: "Maxsky5",
+      repo: "openducktor",
+    });
+
+    await expect(source.resolve(null)).rejects.toThrow("GitHub release has no valid prerelease.");
+  });
 });

@@ -4,10 +4,13 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runCommand } from "@openducktor/build-tools";
 import { Effect } from "effect";
+import { z } from "zod";
 import { runElectronEffect } from "../src/effect/electron-boundary";
 import {
   ElectronOperationError,
+  type ElectronOperationErrorAggregate,
   ElectronValidationError,
+  type ElectronValidationErrorAggregate,
   errorMessage,
 } from "../src/effect/electron-errors";
 import {
@@ -51,6 +54,13 @@ type ElectronReleaseVersionMetadata = {
 
 const releaseVersionPattern =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
+const nodeErrorSchema = z.object({ code: z.string() });
+
+type ElectronPackageCommandErrorDetails = {
+  readonly command: readonly [string, ...string[]];
+  readonly cwd: string;
+  readonly label: string;
+};
 
 export const resolveElectronReleaseVersionMetadata = (
   releaseVersion: string | undefined,
@@ -173,10 +183,10 @@ export const resolveElectronBuilderEnv = (
   return builderEnv;
 };
 
-const nodeErrorCode = (cause: unknown): string | null =>
-  typeof cause === "object" && cause !== null && "code" in cause && typeof cause.code === "string"
-    ? cause.code
-    : null;
+const nodeErrorCode = (cause: unknown): string | null => {
+  const parsedCause = nodeErrorSchema.safeParse(cause);
+  return parsedCause.success ? parsedCause.data.code : null;
+};
 
 const readReleaseDirectoryEntriesEffect = (
   releaseDirectory: string,
@@ -205,7 +215,7 @@ export const collectReleaseArtifactsEffect = ({
   platform: ElectronReleasePlatform;
   releaseDirectory: string;
   updateChannel?: string;
-}): Effect.Effect<string[], ElectronOperationError> =>
+}): Effect.Effect<string[], ElectronOperationErrorAggregate> =>
   Effect.gen(function* () {
     const entries = yield* readReleaseDirectoryEntriesEffect(releaseDirectory);
     yield* Effect.tryPromise({
@@ -308,7 +318,10 @@ const runPackageCommandEffect = ({
   cwd,
   env,
   label,
-}: Parameters<typeof runCommand>[0]): Effect.Effect<void, ElectronOperationError> =>
+}: Parameters<typeof runCommand>[0]): Effect.Effect<
+  void,
+  ElectronOperationError<ElectronPackageCommandErrorDetails>
+> =>
   Effect.tryPromise({
     try: () => {
       const input = env === undefined ? { command, cwd, label } : { command, cwd, env, label };
@@ -334,7 +347,7 @@ export const buildElectronPackageEffect = ({
   workspaceRoot,
 }: ElectronPackageBuildOptions): Effect.Effect<
   string[],
-  ElectronOperationError | ElectronValidationError
+  ElectronOperationErrorAggregate | ElectronValidationErrorAggregate
 > =>
   Effect.gen(function* () {
     const releaseDirectory = join(electronPackageDirectory, "release");
@@ -360,12 +373,15 @@ export const buildElectronPackageEffect = ({
       workspaceRoot,
     });
 
-    yield* runPackageCommandEffect({
+    const electronBuildCommand: Parameters<typeof runCommand>[0] = {
       command: ["bun", "run", "build"],
       cwd: electronPackageDirectory,
-      ...(electronBuildEnv ? { env: electronBuildEnv } : {}),
       label: "Electron app build",
-    });
+    };
+    if (electronBuildEnv) {
+      electronBuildCommand.env = electronBuildEnv;
+    }
+    yield* runPackageCommandEffect(electronBuildCommand);
     yield* runPackageCommandEffect({
       command: [
         "bun",

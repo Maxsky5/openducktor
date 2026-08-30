@@ -8,7 +8,7 @@ type ReactActGlobal = typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };
 
-const actGlobal = globalThis as ReactActGlobal;
+const actGlobal: ReactActGlobal = globalThis;
 const originalActEnvironment = actGlobal.IS_REACT_ACT_ENVIRONMENT;
 
 beforeAll(() => {

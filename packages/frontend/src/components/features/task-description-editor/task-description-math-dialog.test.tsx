@@ -9,7 +9,11 @@ const pressEnter = (element: HTMLElement): void => {
     if (element.tagName === "BUTTON") {
       fireEvent.click(element);
     } else {
-      fireEvent.submit(element.closest("form") as HTMLFormElement);
+      const form = element.closest<HTMLFormElement>("form");
+      if (!form) {
+        throw new Error("Expected the dialog field to belong to a form.");
+      }
+      fireEvent.submit(form);
     }
   }
 };

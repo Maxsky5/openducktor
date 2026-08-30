@@ -1,8 +1,9 @@
 import { Context, type Effect } from "effect";
+import type { CodexAppServerRuntimeStreamEvent } from "@openducktor/contracts";
 import type {
-  HostOperationError,
-  HostResourceError,
-  HostValidationError,
+  HostOperationErrorAggregate,
+  HostResourceErrorAggregate,
+  HostValidationErrorAggregate,
 } from "../effect/host-errors";
 import type {
   CodexAppServerClientRequest,
@@ -14,7 +15,10 @@ import type {
   CodexAppServerRespondResult,
 } from "./codex-app-server-protocol";
 
-export type CodexAppServerError = HostOperationError | HostResourceError | HostValidationError;
+export type CodexAppServerError =
+  | HostOperationErrorAggregate
+  | HostResourceErrorAggregate
+  | HostValidationErrorAggregate;
 
 export const CODEX_APP_SERVER_REQUEST_METHODS = [
   "initialize",
@@ -60,12 +64,7 @@ export type CodexAppServerLoadedThreadListResponse = {
   nextCursor: string | null;
 };
 export type CodexSessionStatus = "active" | "idle" | "notLoaded" | "systemError";
-export type CodexAppServerStreamEvent = {
-  runtimeId: string;
-  kind: "notification" | "server_request";
-  receivedAt: string;
-  message: CodexAppServerProtocolMessage;
-};
+export type CodexAppServerStreamEvent = CodexAppServerRuntimeStreamEvent;
 export type CodexAppServerThreadEntry = {
   id: string;
   cwd: string;

@@ -14,7 +14,7 @@ const cleanupResolution = (
 ): CleanupResolution => ({ canonicalPath, cleanupPath, isSymlink, kind });
 type CleanupHarnessInput = {
   isRegistered?: (worktreePath: string) => boolean;
-  pathExists?: boolean | (() => boolean);
+  pathExists?: () => boolean;
   pathIsWithinRoot?: (root: string, candidate: string) => boolean;
   removePathError?: HostOperationError;
   removalError?: Error;
@@ -22,7 +22,7 @@ type CleanupHarnessInput = {
 };
 const createCleanupHarness = ({
   isRegistered = () => false,
-  pathExists = true,
+  pathExists = () => true,
   pathIsWithinRoot = () => false,
   removePathError,
   removalError,
@@ -51,12 +51,25 @@ const createCleanupHarness = ({
           : Effect.void;
       });
     },
-  } as unknown as GitPort;
+  } satisfies Pick<GitPort, "isRegisteredWorktree" | "removeWorktree">;
   const settingsConfig = {
-    join: (...paths: string[]) => paths.join("/"),
-    pathExists: () =>
-      Effect.sync(() => (typeof pathExists === "function" ? pathExists() : pathExists)),
-  } as unknown as SettingsConfigPort;
+    canonicalizePath: () => Effect.die("canonicalizePath is not used with a managed root"),
+    defaultWorktreeBasePath: () => {
+      throw new Error("defaultWorktreeBasePath is not used with a managed root");
+    },
+    pathExists: () => Effect.sync(pathExists),
+    readConfig: () => Effect.die("readConfig is not used with a managed root"),
+    resolveConfiguredPath: () => {
+      throw new Error("resolveConfiguredPath is not used with a managed root");
+    },
+  } satisfies Pick<
+    SettingsConfigPort,
+    | "canonicalizePath"
+    | "defaultWorktreeBasePath"
+    | "pathExists"
+    | "readConfig"
+    | "resolveConfiguredPath"
+  >;
   const worktreeFiles: WorktreeFilePort = {
     ensureDirectory: () => Effect.void,
     copyConfiguredPaths: () => Effect.void,
@@ -148,7 +161,7 @@ describe("removeWorktreeAndFilesystemPath", () => {
   test("does not remove a missing path whose symlinked parent resolves outside the managed root", async () => {
     const removalError = new Error("worktree removal race");
     const harness = createCleanupHarness({
-      pathExists: false,
+      pathExists: () => false,
       pathIsWithinRoot: (root, candidate) => candidate.startsWith(`${root}/`),
       removalError,
       resolvedPaths: [
@@ -164,7 +177,7 @@ describe("removeWorktreeAndFilesystemPath", () => {
   });
   test("cleans a missing canonical path under a symlinked managed root", async () => {
     const harness = createCleanupHarness({
-      pathExists: false,
+      pathExists: () => false,
       removalError: new Error("worktree removal race"),
       resolvedPaths: [
         cleanupResolution("/real/worktrees/task-1", "descendant"),
@@ -269,7 +282,7 @@ describe("removeWorktreeAndFilesystemPath", () => {
   test("propagates the removal error when a missing outside identity is unproved", async () => {
     const removalError = new Error("worktree removal race");
     const harness = createCleanupHarness({
-      pathExists: false,
+      pathExists: () => false,
       removalError,
       resolvedPaths: [
         cleanupResolution("/legacy/task-1", "outside"),
@@ -400,7 +413,7 @@ describe("removeWorktreeAndFilesystemPath", () => {
   test("skips an unregistered missing outside path when policy allows it", async () => {
     const outsidePath = "/legacy/task-1";
     const harness = createCleanupHarness({
-      pathExists: false,
+      pathExists: () => false,
       removalError: new Error("worktree removal race"),
       resolvedPaths: [
         cleanupResolution(outsidePath, "outside"),
@@ -415,7 +428,7 @@ describe("removeWorktreeAndFilesystemPath", () => {
   });
   test("does not apply the outside-missing skip policy to a managed identity change", async () => {
     const harness = createCleanupHarness({
-      pathExists: false,
+      pathExists: () => false,
       resolvedPaths: [
         cleanupResolution("/managed/worktrees/task-1", "descendant"),
         cleanupResolution("/managed/worktrees/task-2", "descendant"),

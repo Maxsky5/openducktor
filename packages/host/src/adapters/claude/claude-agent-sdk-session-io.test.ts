@@ -17,7 +17,7 @@ describe("sendClaudeUserMessage", () => {
       query: claudeQueryWithMessages([
         claudeSdkMessageFixture({
           type: "assistant",
-          uuid: "assistant-1",
+          uuid: "06f148f0-bd09-403a-8120-1b89a5737347",
           session_id: "session-1",
           timestamp: "2026-06-25T20:00:10.000Z",
           message: {
@@ -48,7 +48,7 @@ describe("sendClaudeUserMessage", () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "assistant_message",
-        messageId: "assistant-1",
+        messageId: "06f148f0-bd09-403a-8120-1b89a5737347",
         timestamp: "2026-06-25T20:00:10.000Z",
       }),
     );
@@ -73,7 +73,7 @@ describe("sendClaudeUserMessage", () => {
           claudeSdkMessageFixture({
             type: "result",
             subtype: "success",
-            uuid: "result-1",
+            uuid: "89c62bd4-3b2a-476e-8df9-1559ad2a22a1",
             session_id: "session-1",
             timestamp: "2026-06-25T20:00:10.000Z",
             is_error: false,
@@ -136,7 +136,7 @@ describe("sendClaudeUserMessage", () => {
           claudeSdkMessageFixture({
             type: "result",
             subtype: "success",
-            uuid: "result-1",
+            uuid: "89c62bd4-3b2a-476e-8df9-1559ad2a22a1",
             session_id: "session-1",
             timestamp: "2026-06-25T20:00:10.000Z",
             is_error: false,
@@ -193,7 +193,7 @@ describe("sendClaudeUserMessage", () => {
     const { query, release } = openClaudeQueryWithMessages([
       claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "06f148f0-bd09-403a-8120-1b89a5737347",
         session_id: "session-1",
         timestamp: "2026-06-25T20:00:10.000Z",
         message: {
@@ -251,12 +251,11 @@ describe("sendClaudeUserMessage", () => {
           claudeSdkMessageFixture({
             type: "result",
             subtype: "success",
-            uuid: "result-1",
+            uuid: "89c62bd4-3b2a-476e-8df9-1559ad2a22a1",
             session_id: "session-1",
             timestamp: "2026-06-25T20:00:10.000Z",
             is_error: false,
             stop_reason: "tool_use",
-            terminal_reason: "tool_use",
             usage: {
               input_tokens: 20_000,
               output_tokens: 1_000,

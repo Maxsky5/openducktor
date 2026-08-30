@@ -14,12 +14,10 @@ import {
 describe("agent-orchestrator session transcript events", () => {
   test("records inputReadyAtMs when tool input first becomes meaningful", async () => {
     const originalDateNow = Date.now;
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -139,12 +137,10 @@ describe("agent-orchestrator session transcript events", () => {
   });
 
   test("preserves file edit diffs across later tool updates for the same call", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -223,12 +219,10 @@ describe("agent-orchestrator session transcript events", () => {
   });
 
   test("does not revive an idle session from a terminal tool update", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -285,12 +279,10 @@ describe("agent-orchestrator session transcript events", () => {
   });
 
   test("inserts delayed live tool rows by transcript timestamp instead of arrival order", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},

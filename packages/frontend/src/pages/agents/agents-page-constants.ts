@@ -5,7 +5,6 @@ import { AGENT_ROLE_LABELS } from "@/types";
 
 export {
   firstLaunchAction,
-  isLaunchActionId,
   kickoffPromptForLaunchAction,
   kickoffPromptForTemplate,
   LAUNCH_ACTION_LABELS,

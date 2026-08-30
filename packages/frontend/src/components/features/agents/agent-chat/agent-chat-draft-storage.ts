@@ -1,5 +1,11 @@
-import { runtimeKindSchema } from "@openducktor/contracts";
+import {
+  runtimeKindSchema,
+  skillDescriptorSchema,
+  slashCommandDescriptorSchema,
+  subagentDescriptorSchema,
+} from "@openducktor/contracts";
 import type { AgentAttachmentKind } from "@openducktor/core";
+import { z } from "zod";
 import {
   type AgentSessionIdentityLike,
   agentSessionIdentityKey,
@@ -65,24 +71,72 @@ export const AGENT_CHAT_DRAFT_STORAGE_MAX_BYTES = 20_480;
 export const AGENT_CHAT_DRAFT_STORAGE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const encoder = new TextEncoder();
-const ATTACHMENT_KINDS = new Set<AgentAttachmentKind>(["image", "audio", "video", "pdf"]);
-const FILE_REFERENCE_KINDS = new Set(["directory", "css", "code", "image", "video", "default"]);
-const SLASH_COMMAND_SOURCES = new Set(["command", "mcp", "skill", "custom"]);
+const ATTACHMENT_KINDS = ["image", "audio", "video", "pdf"] as const;
+const FILE_REFERENCE_KINDS = ["directory", "css", "code", "image", "video", "default"] as const;
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const isNonEmptyString = (value: unknown): value is string =>
-  typeof value === "string" && value.trim().length > 0;
-
-const optionalString = (value: unknown): value is string | undefined =>
-  typeof value === "undefined" || typeof value === "string";
-
-const optionalNonEmptyString = (value: unknown): value is string | undefined =>
-  typeof value === "undefined" || isNonEmptyString(value);
-
-const isStringArray = (value: unknown): value is string[] =>
-  Array.isArray(value) && value.every((entry) => typeof entry === "string");
+const nonEmptyStringSchema = z
+  .string()
+  .refine((value) => value.trim().length > 0, { message: "String must contain non-whitespace." });
+const attachmentKindSchema = z.enum(ATTACHMENT_KINDS);
+const fileReferenceKindSchema = z.enum(FILE_REFERENCE_KINDS);
+const attachmentSchema = z.object({
+  id: nonEmptyStringSchema,
+  path: nonEmptyStringSchema,
+  name: nonEmptyStringSchema,
+  kind: attachmentKindSchema,
+  mime: z.string().optional(),
+});
+const fileReferenceSchema = z.object({
+  id: nonEmptyStringSchema,
+  path: nonEmptyStringSchema,
+  name: nonEmptyStringSchema,
+  kind: fileReferenceKindSchema,
+});
+const textSegmentSchema = z.object({
+  id: nonEmptyStringSchema,
+  kind: z.literal("text"),
+  text: z.string(),
+});
+const slashCommandSegmentSchema = z.object({
+  id: nonEmptyStringSchema,
+  kind: z.literal("slash_command"),
+  command: slashCommandDescriptorSchema,
+});
+const fileReferenceSegmentSchema = z.object({
+  id: nonEmptyStringSchema,
+  kind: z.literal("file_reference"),
+  file: fileReferenceSchema,
+});
+const skillReferenceSegmentSchema = z.object({
+  id: nonEmptyStringSchema,
+  kind: z.literal("skill_mention"),
+  skill: skillDescriptorSchema,
+});
+const subagentReferenceSegmentSchema = z.object({
+  id: nonEmptyStringSchema,
+  kind: z.literal("subagent_reference"),
+  subagent: subagentDescriptorSchema,
+});
+const persistedSegmentSchema = z.discriminatedUnion("kind", [
+  textSegmentSchema,
+  slashCommandSegmentSchema,
+  fileReferenceSegmentSchema,
+  skillReferenceSegmentSchema,
+  subagentReferenceSegmentSchema,
+]);
+const persistedAgentChatDraftPayloadSchema = z.object({
+  version: z.literal(2),
+  workspaceId: nonEmptyStringSchema,
+  externalSessionId: nonEmptyStringSchema,
+  runtimeKind: runtimeKindSchema,
+  workingDirectory: nonEmptyStringSchema,
+  taskId: nonEmptyStringSchema,
+  updatedAt: nonEmptyStringSchema,
+  draft: z.object({
+    segments: z.array(persistedSegmentSchema),
+    attachments: z.array(attachmentSchema),
+  }),
+});
 
 export const toAgentChatDraftStorageKey = (identity: AgentChatDraftSessionIdentity): string =>
   `${AGENT_CHAT_DRAFT_STORAGE_PREFIX}:${encodeURIComponent(
@@ -96,61 +150,6 @@ export const isAgentChatDraftStorageKey = (key: string): boolean =>
 export const measureAgentChatDraftPayloadBytes = (payload: string): number =>
   encoder.encode(payload).byteLength;
 
-const isValidSlashCommand = (value: unknown): boolean => {
-  if (!isRecord(value)) {
-    return false;
-  }
-  return (
-    isNonEmptyString(value.id) &&
-    isNonEmptyString(value.trigger) &&
-    isNonEmptyString(value.title) &&
-    optionalString(value.description) &&
-    (typeof value.source === "undefined" ||
-      (typeof value.source === "string" && SLASH_COMMAND_SOURCES.has(value.source))) &&
-    (typeof value.hints === "undefined" || isStringArray(value.hints))
-  );
-};
-
-const isValidFileReference = (value: unknown): boolean => {
-  if (!isRecord(value)) {
-    return false;
-  }
-  return (
-    isNonEmptyString(value.id) &&
-    isNonEmptyString(value.path) &&
-    isNonEmptyString(value.name) &&
-    typeof value.kind === "string" &&
-    FILE_REFERENCE_KINDS.has(value.kind)
-  );
-};
-
-const isValidSkillReference = (value: unknown): boolean => {
-  if (!isRecord(value)) {
-    return false;
-  }
-  return (
-    isNonEmptyString(value.id) &&
-    isNonEmptyString(value.name) &&
-    isNonEmptyString(value.path) &&
-    optionalNonEmptyString(value.title) &&
-    optionalNonEmptyString(value.displayName) &&
-    optionalString(value.description) &&
-    optionalString(value.color)
-  );
-};
-
-const isValidSubagentReference = (value: unknown): boolean => {
-  if (!isRecord(value)) {
-    return false;
-  }
-  return (
-    isNonEmptyString(value.id) &&
-    isNonEmptyString(value.name) &&
-    optionalNonEmptyString(value.label) &&
-    optionalString(value.description)
-  );
-};
-
 const toPersistedAttachment = (
   attachment: AgentChatComposerAttachment,
 ): PersistedAgentChatDraftAttachment | null => {
@@ -158,13 +157,16 @@ const toPersistedAttachment = (
     return null;
   }
 
-  return {
+  const persistedAttachment: PersistedAgentChatDraftAttachment = {
     id: attachment.id,
     path: attachment.path,
     name: attachment.name,
     kind: attachment.kind,
-    ...(attachment.mime ? { mime: attachment.mime } : {}),
   };
+  if (attachment.mime) {
+    persistedAttachment.mime = attachment.mime;
+  }
+  return persistedAttachment;
 };
 
 export const serializeAgentChatDraftPayload = ({
@@ -213,47 +215,17 @@ export const serializeAgentChatDraftPayload = ({
   return { status: "serialized", payload: serialized, byteLength };
 };
 
-const isValidSegment = (segment: unknown): segment is AgentChatComposerSegment => {
-  if (!isRecord(segment) || !isNonEmptyString(segment.id)) {
-    return false;
-  }
-
-  switch (segment.kind) {
-    case "text":
-      return typeof segment.text === "string";
-    case "slash_command":
-      return isValidSlashCommand(segment.command);
-    case "file_reference":
-      return isValidFileReference(segment.file);
-    case "skill_mention":
-      return isValidSkillReference(segment.skill);
-    case "subagent_reference":
-      return isValidSubagentReference(segment.subagent);
-    default:
-      return false;
-  }
-};
-
-const parseAttachment = (value: unknown): AgentChatComposerAttachment | null => {
-  if (!isRecord(value)) {
-    return null;
-  }
-  if (
-    !isNonEmptyString(value.id) ||
-    !isNonEmptyString(value.path) ||
-    !isNonEmptyString(value.name) ||
-    typeof value.kind !== "string" ||
-    !ATTACHMENT_KINDS.has(value.kind as AgentAttachmentKind) ||
-    !optionalString(value.mime)
-  ) {
-    return null;
-  }
-
-  const attachment = buildComposerAttachmentFromPath(value.path, {
+const parseAttachment = (
+  value: z.infer<typeof attachmentSchema>,
+): AgentChatComposerAttachment | null => {
+  const metadata: NonNullable<Parameters<typeof buildComposerAttachmentFromPath>[1]> = {
     name: value.name,
-    kind: value.kind as AgentAttachmentKind,
-    ...(value.mime ? { mime: value.mime } : {}),
-  });
+    kind: value.kind,
+  };
+  if (value.mime) {
+    metadata.mime = value.mime;
+  }
+  const attachment = buildComposerAttachmentFromPath(value.path, metadata);
   return attachment ? { ...attachment, id: value.id } : null;
 };
 
@@ -275,37 +247,24 @@ export const parseAgentChatDraftPayload = ({
     return { status: "oversized", byteLength };
   }
 
-  let parsed: unknown;
+  let parsedJson: unknown;
   try {
-    parsed = JSON.parse(raw);
+    parsedJson = JSON.parse(raw);
   } catch {
     return { status: "invalid", reason: "Stored chat draft is not valid JSON." };
   }
 
-  if (!isRecord(parsed)) {
-    return { status: "invalid", reason: "Stored chat draft is not an object." };
+  const parsed = persistedAgentChatDraftPayloadSchema.safeParse(parsedJson);
+  if (!parsed.success) {
+    return { status: "invalid", reason: "Stored chat draft body is invalid." };
   }
-  if (parsed.version !== 2) {
-    return { status: "invalid", reason: "Stored chat draft uses an unsupported version." };
-  }
-  if (!isNonEmptyString(parsed.workspaceId)) {
-    return { status: "invalid", reason: "Stored chat draft is missing a workspace id." };
-  }
-  const parsedRuntimeKind = runtimeKindSchema.safeParse(parsed.runtimeKind);
-  if (!parsedRuntimeKind.success) {
-    return { status: "invalid", reason: "Stored chat draft runtime kind is invalid." };
-  }
-  if (!isNonEmptyString(parsed.workingDirectory)) {
-    return { status: "invalid", reason: "Stored chat draft is missing a working directory." };
-  }
-  if (!isNonEmptyString(parsed.externalSessionId)) {
-    return { status: "invalid", reason: "Stored chat draft is missing a session id." };
-  }
+
+  const payload = parsed.data;
   const parsedIdentity: AgentChatDraftSessionIdentity = {
-    workspaceId: parsed.workspaceId,
-    externalSessionId: parsed.externalSessionId,
-    runtimeKind: parsedRuntimeKind.data,
-    workingDirectory: parsed.workingDirectory,
+    workspaceId: payload.workspaceId,
+    externalSessionId: payload.externalSessionId,
+    runtimeKind: payload.runtimeKind,
+    workingDirectory: payload.workingDirectory,
   };
   if (
     parsedIdentity.workspaceId !== identity.workspaceId ||
@@ -313,13 +272,7 @@ export const parseAgentChatDraftPayload = ({
   ) {
     return { status: "invalid", reason: "Stored chat draft identity does not match the key." };
   }
-  if (!isNonEmptyString(parsed.taskId)) {
-    return { status: "invalid", reason: "Stored chat draft is missing a task id." };
-  }
-  if (!isNonEmptyString(parsed.updatedAt)) {
-    return { status: "invalid", reason: "Stored chat draft is missing an update date." };
-  }
-  const updatedAtMs = Date.parse(parsed.updatedAt);
+  const updatedAtMs = Date.parse(payload.updatedAt);
   if (!Number.isFinite(updatedAtMs)) {
     return { status: "invalid", reason: "Stored chat draft update date is invalid." };
   }
@@ -330,23 +283,14 @@ export const parseAgentChatDraftPayload = ({
   if (ageMs >= AGENT_CHAT_DRAFT_STORAGE_TTL_MS) {
     return { status: "expired" };
   }
-  if (!isRecord(parsed.draft) || !Array.isArray(parsed.draft.segments)) {
-    return { status: "invalid", reason: "Stored chat draft body is invalid." };
-  }
 
   const segments: AgentChatComposerSegment[] = [];
-  for (const segment of parsed.draft.segments) {
-    if (!isValidSegment(segment)) {
-      return { status: "invalid", reason: "Stored chat draft contains an invalid segment." };
-    }
+  for (const segment of payload.draft.segments) {
     segments.push(segment);
   }
 
-  if (!Array.isArray(parsed.draft.attachments)) {
-    return { status: "invalid", reason: "Stored chat draft attachments are invalid." };
-  }
   const attachments: AgentChatComposerAttachment[] = [];
-  for (const attachmentValue of parsed.draft.attachments) {
+  for (const attachmentValue of payload.draft.attachments) {
     const attachment = parseAttachment(attachmentValue);
     if (!attachment) {
       return { status: "invalid", reason: "Stored chat draft contains an invalid attachment." };
@@ -357,8 +301,8 @@ export const parseAgentChatDraftPayload = ({
   return {
     status: "restored",
     value: {
-      taskId: parsed.taskId,
-      updatedAt: parsed.updatedAt,
+      taskId: payload.taskId,
+      updatedAt: payload.updatedAt,
       draft: { segments, attachments },
     },
   };

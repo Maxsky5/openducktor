@@ -1,4 +1,6 @@
 import {
+  agentPromptTemplateIdValues,
+  type AgentPromptPlaceholder,
   type AgentPromptTemplateId,
   type GitTargetBranch,
   type RepoPromptOverrides,
@@ -26,6 +28,12 @@ export type BuildAgentPromptInput = {
 };
 
 export type AgentKickoffTemplateId = Extract<AgentPromptTemplateId, `kickoff.${string}`>;
+
+type AgentPromptPlaceholderValues = Record<
+  Exclude<AgentPromptPlaceholder, "humanFeedback" | `git.${string}`>,
+  string
+> &
+  Partial<Record<Extract<AgentPromptPlaceholder, "humanFeedback" | `git.${string}`>, string>>;
 
 export type BuildAgentKickoffPromptInput = {
   role: AgentRole;
@@ -114,7 +122,7 @@ export type BuiltAgentPrompt = {
   warnings: AgentPromptWarning[];
 };
 
-const TOOL_ARG_SPEC: Record<AgentToolName, string> = {
+const TOOL_ARG_SPEC = {
   odt_read_task: `odt_read_task({"taskId": string})`,
   odt_read_task_assets: `odt_read_task_assets({"taskId": string, "assetIds": string[]})`,
   odt_read_task_documents: `odt_read_task_documents({"taskId": string, "includeSpec"?: boolean, "includePlan"?: boolean, "includeQaReport"?: boolean})`,
@@ -126,7 +134,7 @@ const TOOL_ARG_SPEC: Record<AgentToolName, string> = {
   odt_set_pull_request: `odt_set_pull_request({"taskId": string, "providerId": "github", "number": number})`,
   odt_qa_approved: `odt_qa_approved({"taskId": string, "reportMarkdown": string})`,
   odt_qa_rejected: `odt_qa_rejected({"taskId": string, "reportMarkdown": string})`,
-};
+} satisfies Record<AgentToolName, string>;
 
 const joinPromptBlocks = (...blocks: string[]): string => {
   return blocks
@@ -143,7 +151,7 @@ const lineSection = (title: string, lines: string[]): string => {
   return `${title}:\n${lines.join("\n")}`;
 };
 
-const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplateDefinition> = {
+const AGENT_PROMPT_DEFINITIONS = {
   "system.shared.workflow_guards": {
     id: "system.shared.workflow_guards",
     purpose: "system",
@@ -526,7 +534,7 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
     template:
       "Rejected by OpenDucktor {{role}} read-only policy: this role cannot use mutating tools in this session.",
   },
-};
+} satisfies Record<AgentPromptTemplateId, AgentPromptTemplateDefinition>;
 
 const PLACEHOLDER_PATTERN = /{{\s*([a-zA-Z0-9_.-]+)\s*}}/g;
 
@@ -584,7 +592,7 @@ const buildPlaceholderValues = ({
   extraPlaceholders?: BuildAgentKickoffPromptInput["extraPlaceholders"];
   pullRequestTarget?: string;
   git?: AgentPromptGitContext;
-}): Record<string, string> => {
+}) => {
   const humanFeedback = extraPlaceholders?.humanFeedback?.trim();
   const targetBranchPlaceholder = pullRequestTarget ?? compact(git?.targetBranch);
 
@@ -592,7 +600,7 @@ const buildPlaceholderValues = ({
     throw new Error('Prompt placeholder "humanFeedback" must not be empty.');
   }
 
-  return {
+  const values: AgentPromptPlaceholderValues = {
     role,
     "role.allowedTools": buildToolListPlaceholder(role),
     "task.id": task.taskId,
@@ -601,21 +609,18 @@ const buildPlaceholderValues = ({
     "task.status": compact(task.status),
     "task.qaRequired": task.qaRequired ? "true" : "false",
     "task.description": compact(task.description),
-    ...(humanFeedback
-      ? {
-          humanFeedback,
-        }
-      : {}),
-    ...(git || pullRequestTarget
-      ? {
-          "git.operationLabel": compact(git?.operationLabel),
-          "git.currentBranch": compact(git?.currentBranch),
-          "git.targetBranch": targetBranchPlaceholder,
-          "git.conflictedFiles": compactList(git?.conflictedFiles),
-          "git.conflictOutput": compact(git?.conflictOutput),
-        }
-      : {}),
   };
+  if (humanFeedback) {
+    values.humanFeedback = humanFeedback;
+  }
+  if (git || pullRequestTarget) {
+    values["git.operationLabel"] = compact(git?.operationLabel);
+    values["git.currentBranch"] = compact(git?.currentBranch);
+    values["git.targetBranch"] = targetBranchPlaceholder;
+    values["git.conflictedFiles"] = compactList(git?.conflictedFiles);
+    values["git.conflictOutput"] = compact(git?.conflictOutput);
+  }
+  return values;
 };
 
 const collectPromptWarnings = (templates: ResolvedAgentPromptTemplate[]): AgentPromptWarning[] => {
@@ -679,15 +684,18 @@ const resolveTemplate = ({
     return value;
   });
 
-  return {
+  const resolved: ResolvedAgentPromptTemplate = {
     id: definition.id,
     purpose: definition.purpose,
     source,
     builtinVersion: definition.builtinVersion,
-    ...(override ? { overrideBaseVersion: override.baseVersion } : {}),
     hasStaleOverride: Boolean(override && override.baseVersion !== definition.builtinVersion),
     content,
   };
+  if (override) {
+    resolved.overrideBaseVersion = override.baseVersion;
+  }
+  return resolved;
 };
 
 const buildPromptFromTemplates = ({
@@ -707,13 +715,20 @@ const buildPromptFromTemplates = ({
   git?: AgentPromptGitContext;
   overrides: RepoPromptOverrides | undefined;
 }): BuiltAgentPrompt => {
-  const placeholderValues = buildPlaceholderValues({
+  const placeholderInput: Parameters<typeof buildPlaceholderValues>[0] = {
     role,
     task,
-    ...(extraPlaceholders ? { extraPlaceholders } : {}),
-    ...(pullRequestTarget ? { pullRequestTarget } : {}),
-    ...(git ? { git } : {}),
-  });
+  };
+  if (extraPlaceholders) {
+    placeholderInput.extraPlaceholders = extraPlaceholders;
+  }
+  if (pullRequestTarget) {
+    placeholderInput.pullRequestTarget = pullRequestTarget;
+  }
+  if (git) {
+    placeholderInput.git = git;
+  }
+  const placeholderValues = buildPlaceholderValues(placeholderInput);
   const templates = templateIds.map((templateId) =>
     resolveTemplate({
       templateId,
@@ -733,7 +748,9 @@ const buildPromptFromTemplates = ({
 };
 
 export const listBuiltinAgentPromptTemplates = (): AgentPromptTemplateDefinition[] => {
-  return Object.values(AGENT_PROMPT_DEFINITIONS).map((definition) => ({ ...definition }));
+  return Object.values<AgentPromptTemplateDefinition>(AGENT_PROMPT_DEFINITIONS).map(
+    (definition) => ({ ...definition }),
+  );
 };
 
 export const buildAgentSystemPromptBundle = (input: BuildAgentPromptInput): BuiltAgentPrompt => {
@@ -762,14 +779,19 @@ export const buildAgentKickoffPromptBundle = (
       ? resolvePullRequestTarget(input.git?.targetBranch)
       : undefined;
 
-  return buildPromptFromTemplates({
+  const promptInput: Parameters<typeof buildPromptFromTemplates>[0] = {
     templateIds: [input.templateId],
     role: input.role,
     task: input.task,
-    ...(input.extraPlaceholders ? { extraPlaceholders: input.extraPlaceholders } : {}),
-    ...(pullRequestTarget ? { pullRequestTarget } : {}),
     overrides: input.overrides,
-  });
+  };
+  if (input.extraPlaceholders) {
+    promptInput.extraPlaceholders = input.extraPlaceholders;
+  }
+  if (pullRequestTarget) {
+    promptInput.pullRequestTarget = pullRequestTarget;
+  }
+  return buildPromptFromTemplates(promptInput);
 };
 
 export const buildAgentKickoffPrompt = (input: BuildAgentKickoffPromptInput): string => {
@@ -810,13 +832,16 @@ export const buildAgentMessagePromptBundle = (
     }
   }
 
-  return buildPromptFromTemplates({
+  const promptInput: Parameters<typeof buildPromptFromTemplates>[0] = {
     templateIds: [input.templateId],
     role: input.role,
     task: input.task,
-    ...(input.git ? { git: input.git } : {}),
     overrides: input.overrides,
-  });
+  };
+  if (input.git) {
+    promptInput.git = input.git;
+  }
+  return buildPromptFromTemplates(promptInput);
 };
 
 export const buildAgentMessagePrompt = (input: BuildAgentMessagePromptInput): string => {
@@ -845,15 +870,13 @@ export const buildReadOnlyPermissionRejectionMessage = (
 export const mergePromptOverrides = ({
   globalOverrides,
   repoOverrides,
-}: MergePromptOverridesInput): RepoPromptOverrides => {
+}: MergePromptOverridesInput) => {
   const result: RepoPromptOverrides = {};
-  const keys = new Set([
-    ...Object.keys(globalOverrides ?? {}),
-    ...Object.keys(repoOverrides ?? {}),
-  ]);
+  const keys = agentPromptTemplateIdValues.filter(
+    (templateId) => globalOverrides?.[templateId] || repoOverrides?.[templateId],
+  );
 
-  for (const key of keys) {
-    const templateId = key as AgentPromptTemplateId;
+  for (const templateId of keys) {
     const repoOverride = repoOverrides?.[templateId];
     if (repoOverride) {
       if (repoOverride.enabled !== false) {

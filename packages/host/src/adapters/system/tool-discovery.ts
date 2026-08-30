@@ -7,6 +7,7 @@ import { isExecutableCommandFile } from "../../infrastructure/process/process-co
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type {
   ResolvedTool,
+  ToolDiscoveryDetails,
   ToolDiscoveryError,
   ToolDiscoveryId,
   ToolDiscoveryPort,
@@ -66,37 +67,58 @@ const invalidOverrideError = (
   descriptor: ToolDiscoveryDescriptor,
   variable: string,
   message: string,
-  details?: Record<string, unknown>,
-) =>
-  new HostValidationError({
+  details?: ToolDiscoveryDetails,
+) => {
+  if (details === undefined) {
+    return new HostValidationError({
+      field: variable,
+      message: `Configured ${descriptor.displayName} override ${variable} ${message}`,
+    });
+  }
+  return new HostValidationError({
     field: variable,
     message: `Configured ${descriptor.displayName} override ${variable} ${message}`,
     details,
   });
+};
 
 const invalidProvidedToolPathError = (
   descriptor: ToolDiscoveryDescriptor,
   toolId: ToolDiscoveryId,
   message: string,
-  details?: Record<string, unknown>,
-) =>
-  new HostValidationError({
+  details?: ToolDiscoveryDetails,
+) => {
+  if (details === undefined) {
+    return new HostValidationError({
+      field: `providedToolPaths.${toolId}`,
+      message: `Provided ${descriptor.displayName} path for ${toolId} ${message}`,
+    });
+  }
+  return new HostValidationError({
     field: `providedToolPaths.${toolId}`,
     message: `Provided ${descriptor.displayName} path for ${toolId} ${message}`,
     details,
   });
+};
 
 const invalidSavedToolPathError = (
   descriptor: ToolDiscoveryDescriptor,
   toolId: ToolDiscoveryId,
   message: string,
-  details?: Record<string, unknown>,
-) =>
-  new HostValidationError({
+  details?: ToolDiscoveryDetails,
+) => {
+  if (details === undefined) {
+    return new HostValidationError({
+      field: `agentRuntimes.${toolId}.executablePath`,
+      message: `Saved ${descriptor.displayName} path ${message}`,
+    });
+  }
+  return new HostValidationError({
     field: `agentRuntimes.${toolId}.executablePath`,
     message: `Saved ${descriptor.displayName} path ${message}`,
     details,
   });
+};
 
 const resolveExplicitToolPathSource = ({
   context,
@@ -109,10 +131,13 @@ const resolveExplicitToolPathSource = ({
   systemCommands,
 }: {
   context: ToolDiscoveryContext;
-  detailKey: string;
+  detailKey: "executablePath" | "resolvedOverride" | "resolvedProvidedPath";
   displayLabel: string;
   env: NodeJS.ProcessEnv;
-  invalidError: (message: string, details?: Record<string, unknown>) => HostValidationError;
+  invalidError: (
+    message: string,
+    details?: ToolDiscoveryDetails,
+  ) => HostValidationError<ToolDiscoveryDetails>;
   rawPath: string;
   sourceCategory: ToolDiscoverySourceCategory;
   systemCommands: SystemCommandPort;
@@ -129,25 +154,26 @@ const resolveExplicitToolPathSource = ({
       return { displayLabel, path: resolved, sourceCategory } satisfies ResolvedTool;
     }
 
+    let details: ToolDiscoveryDetails;
+    if (detailKey === "resolvedOverride") {
+      details = { resolvedOverride: resolvedPath };
+    } else if (detailKey === "resolvedProvidedPath") {
+      details = { resolvedProvidedPath: resolvedPath };
+    } else {
+      details = { executablePath: resolvedPath };
+    }
     return yield* Effect.fail(
-      invalidError(`points to a missing or non-executable file: ${resolvedPath}`, {
-        [detailKey]: resolvedPath,
-      }),
+      invalidError(`points to a missing or non-executable file: ${resolvedPath}`, details),
     );
   });
 
-const missingToolError = (
-  descriptor: ToolDiscoveryDescriptor,
-  checked: readonly string[],
-  details?: Record<string, unknown>,
-) =>
-  new HostDependencyError({
+const missingToolError = (descriptor: ToolDiscoveryDescriptor, checked: readonly string[]) =>
+  new HostDependencyError<ToolDiscoveryDetails>({
     dependency: descriptor.command,
     operation: "toolDiscovery.discoverTool",
     message: `${descriptor.command} not found. Checked ${checked.join(
       ", ",
     )}. ${descriptor.installHint}`,
-    details,
   });
 
 const missingRequiredSourceError = (
@@ -156,7 +182,7 @@ const missingRequiredSourceError = (
   source: Extract<ToolDiscoverySource, { kind: "searchDirectories" }>,
   directories: readonly string[],
 ) =>
-  new HostDependencyError({
+  new HostDependencyError<ToolDiscoveryDetails>({
     dependency: descriptor.command,
     operation: "toolDiscovery.discoverTool",
     message:

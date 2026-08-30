@@ -14,10 +14,9 @@ export const createTerminalTitleTracker = (
   schedule?: TerminalTitleSettlementScheduler,
 ): TerminalTitleTracker => {
   const parser = createTerminalTitleParser();
-  const settler = createTerminalTitleSettler({
-    onSettledTitle,
-    ...(schedule ? { schedule } : {}),
-  });
+  const settler = schedule
+    ? createTerminalTitleSettler({ onSettledTitle, schedule })
+    : createTerminalTitleSettler({ onSettledTitle });
   let disposed = false;
 
   return {

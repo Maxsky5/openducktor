@@ -118,7 +118,7 @@ const createFakeGitPort = ({
   statuses?: GitFileStatus[];
   diffs?: FileDiff[];
   changedFiles?: GitChangedFile[];
-} = {}): GitPort =>
+} = {}): Parameters<typeof createWorkspaceFilesService>[1] & Pick<GitPort, "getDiff"> =>
   ({
     isGitRepository: () => Effect.succeed(isRepository),
     getRepositoryRoot: () => Effect.succeed(repositoryRoot),
@@ -127,7 +127,7 @@ const createFakeGitPort = ({
     getDiff: () => Effect.succeed(diffs),
     listChangedFiles: () =>
       Effect.succeed(changedFiles ?? diffs.map((diff) => ({ path: diff.file, status: diff.type }))),
-  }) as unknown as GitPort;
+  }) satisfies Parameters<typeof createWorkspaceFilesService>[1] & Pick<GitPort, "getDiff">;
 
 describe("createWorkspaceFilesService", () => {
   test("lists git-tracked files, parent directories, and compatible git status", async () => {

@@ -7,16 +7,15 @@ export const toRepositorySelectorOptions = (
 ): ComboboxOption[] => {
   return workspaces.map((workspace) => {
     const repoErrorCount = errorCountByWorkspaceId[workspace.workspaceId] ?? 0;
-    return {
+    const option: ComboboxOption = {
       value: workspace.workspaceId,
       label: workspace.workspaceName,
       searchKeywords: [workspace.workspaceName, ...workspace.repoPath.split("/").filter(Boolean)],
-      ...(repoErrorCount > 0
-        ? {
-            accentColor: "hsl(var(--destructive))",
-            secondaryLabel: `${repoErrorCount} error${repoErrorCount > 1 ? "s" : ""}`,
-          }
-        : {}),
     };
+    if (repoErrorCount > 0) {
+      option.accentColor = "hsl(var(--destructive))";
+      option.secondaryLabel = `${repoErrorCount} error${repoErrorCount > 1 ? "s" : ""}`;
+    }
+    return option;
   });
 };

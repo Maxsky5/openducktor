@@ -13,9 +13,16 @@ import {
 import { type WebLogger, writeWebLogEffect } from "./logger";
 import type { TypescriptHostBackend } from "./typescript-host-backend";
 
+interface LauncherEarlyExitRef {
+  current:
+    | { readonly _tag: "exit-code"; readonly exitCode: number }
+    | { readonly _tag: "failure"; readonly cause: unknown }
+    | null;
+}
+
 type ManagedHost = Pick<Bun.Subprocess, "exited"> | TypescriptHostBackend;
 type FetchFunction = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
-type SleepFunction = (durationMs: number) => Promise<unknown>;
+type SleepFunction = (durationMs: number) => Promise<void>;
 type BackendReadinessDependencies = {
   fetch: FetchFunction;
   sleep: SleepFunction;
@@ -37,10 +44,13 @@ type LauncherShutdownDependencies = {
   closeServer: (server: FrontendServer | null) => Promise<void>;
   stopHost: (hostBackend: TypescriptHostBackend) => Promise<void>;
 };
-type KeepAliveTimer = ReturnType<typeof setInterval>;
 type ProcessKeepAliveDependencies = {
-  clearInterval: (timer: KeepAliveTimer) => void;
-  setInterval: (callback: () => void, durationMs: number) => KeepAliveTimer;
+  scheduleInterval: (callback: () => void, durationMs: number) => () => void;
+};
+
+const scheduleInterval = (callback: () => void, durationMs: number): (() => void) => {
+  const intervalId = setInterval(callback, durationMs);
+  return () => clearInterval(intervalId);
 };
 
 export const LOCALHOST = "127.0.0.1";
@@ -85,14 +95,18 @@ const verifyBackendReadinessEffect = (
     }
 
     const sessionResponse = yield* Effect.tryPromise({
-      try: () =>
-        fetchImpl(`${backendUrl}/session`, {
+      try: () => {
+        const init: RequestInit = {
           method: "POST",
           headers: {
             [APP_TOKEN_HEADER]: appToken,
           },
-          ...(signal ? { signal } : {}),
-        }),
+        };
+        if (signal) {
+          init.signal = signal;
+        }
+        return fetchImpl(`${backendUrl}/session`, init);
+      },
       catch: (cause) =>
         new WebDependencyError({
           dependency: "typescript-host-backend",
@@ -165,12 +179,7 @@ export const waitForBackendEffect = (
   Effect.gen(function* () {
     const startedAt = Date.now();
     let lastError: unknown;
-    const earlyExit: {
-      current:
-        | { readonly _tag: "exit-code"; readonly exitCode: number }
-        | { readonly _tag: "failure"; readonly cause: unknown }
-        | null;
-    } = { current: null };
+    const earlyExit: LauncherEarlyExitRef = { current: null };
 
     yield* Effect.sync(() => {
       void hostProcess.exited.then(
@@ -451,21 +460,19 @@ export const stopLauncherServices = (
 export const keepProcessAliveDuringEffect = <T, E>(
   operation: Effect.Effect<T, E>,
   dependencies: ProcessKeepAliveDependencies = {
-    clearInterval,
-    setInterval,
+    scheduleInterval,
   },
 ): Effect.Effect<T, E> =>
   Effect.acquireUseRelease(
-    Effect.sync(() => dependencies.setInterval(() => {}, SHUTDOWN_KEEP_ALIVE_INTERVAL_MS)),
+    Effect.sync(() => dependencies.scheduleInterval(() => {}, SHUTDOWN_KEEP_ALIVE_INTERVAL_MS)),
     () => operation,
-    (timer) => Effect.sync(() => dependencies.clearInterval(timer)),
+    (cancelInterval) => Effect.sync(cancelInterval),
   );
 
 export const keepProcessAliveDuring = <T>(
   operation: Promise<T>,
   dependencies: ProcessKeepAliveDependencies = {
-    clearInterval,
-    setInterval,
+    scheduleInterval,
   },
 ): Promise<T> =>
   runWebBoundary(

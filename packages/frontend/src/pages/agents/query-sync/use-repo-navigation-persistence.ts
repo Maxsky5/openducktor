@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { errorMessage } from "@/lib/errors";
+import { scheduleTask, type ScheduleTask } from "@/lib/scheduling";
 import {
   type AgentStudioNavigationState,
   clearAgentStudioNavigationState,
@@ -16,6 +17,7 @@ type UseRepoNavigationPersistenceArgs = {
   activeWorkspaceId: string | null;
   navigation: AgentStudioNavigationState;
   setNavigation: Dispatch<SetStateAction<AgentStudioNavigationState>>;
+  scheduleTask?: ScheduleTask;
 };
 
 type UseRepoNavigationPersistenceResult = {
@@ -101,12 +103,13 @@ export function useRepoNavigationPersistence({
   activeWorkspaceId,
   navigation,
   setNavigation,
+  scheduleTask: scheduler = scheduleTask,
 }: UseRepoNavigationPersistenceArgs): UseRepoNavigationPersistenceResult {
   const lastWorkspaceIdRef = useRef<string | null>(activeWorkspaceId);
   const restoredContextWorkspaceIdRef = useRef<string | null>(null);
   const persistedContextPayloadRef = useRef<string | null>(null);
   const pendingContextPersistRef = useRef<{ key: string; payload: string } | null>(null);
-  const pendingPersistTimeoutIdRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
+  const pendingPersistCancellationRef = useRef<(() => void) | null>(null);
   const [{ boundaryWorkspaceId, persistenceError }, dispatchPersistenceState] = useReducer(
     repoNavigationPersistenceReducer,
     {
@@ -127,10 +130,8 @@ export function useRepoNavigationPersistence({
       return;
     }
 
-    if (pendingPersistTimeoutIdRef.current !== null) {
-      globalThis.clearTimeout(pendingPersistTimeoutIdRef.current);
-      pendingPersistTimeoutIdRef.current = null;
-    }
+    pendingPersistCancellationRef.current?.();
+    pendingPersistCancellationRef.current = null;
 
     writePersistedContextPayload(pendingPersist.key, pendingPersist.payload);
     pendingContextPersistRef.current = null;
@@ -145,7 +146,8 @@ export function useRepoNavigationPersistence({
   const surfacePersistenceWriteError = useCallback((cause: unknown): void => {
     persistedContextPayloadRef.current = null;
     pendingContextPersistRef.current = null;
-    pendingPersistTimeoutIdRef.current = null;
+    pendingPersistCancellationRef.current?.();
+    pendingPersistCancellationRef.current = null;
     dispatchPersistenceState({
       type: "setPersistenceError",
       persistenceError: cause instanceof Error ? cause : new Error(errorMessage(cause)),
@@ -272,29 +274,27 @@ export function useRepoNavigationPersistence({
     const storageKey = toContextStorageKey(activeWorkspaceId);
     pendingContextPersistRef.current = { key: storageKey, payload: serializedPayload };
 
-    if (pendingPersistTimeoutIdRef.current !== null) {
-      globalThis.clearTimeout(pendingPersistTimeoutIdRef.current);
-      pendingPersistTimeoutIdRef.current = null;
-    }
+    pendingPersistCancellationRef.current?.();
+    pendingPersistCancellationRef.current = null;
 
-    const timeoutId = globalThis.setTimeout(() => {
+    const cancelPersist = scheduler(() => {
       const pendingPersist = pendingContextPersistRef.current;
       if (!pendingPersist || pendingPersist.key !== storageKey) {
-        pendingPersistTimeoutIdRef.current = null;
+        pendingPersistCancellationRef.current = null;
         return;
       }
       try {
         writePersistedContextPayload(pendingPersist.key, pendingPersist.payload);
         pendingContextPersistRef.current = null;
-        pendingPersistTimeoutIdRef.current = null;
+        pendingPersistCancellationRef.current = null;
       } catch (cause) {
         surfacePersistenceWriteError(cause);
       }
     }, 0);
-    pendingPersistTimeoutIdRef.current = timeoutId;
+    pendingPersistCancellationRef.current = cancelPersist;
 
     return () => {
-      if (pendingPersistTimeoutIdRef.current === timeoutId) {
+      if (pendingPersistCancellationRef.current === cancelPersist) {
         tryFlushPendingContextPersist();
       }
     };
@@ -303,12 +303,13 @@ export function useRepoNavigationPersistence({
     isRepoNavigationBoundaryPending,
     navigation,
     persistenceError,
+    scheduler,
     surfacePersistenceWriteError,
     tryFlushPendingContextPersist,
   ]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || typeof document === "undefined") {
+    if (globalThis.window === undefined || globalThis.document === undefined) {
       return;
     }
 

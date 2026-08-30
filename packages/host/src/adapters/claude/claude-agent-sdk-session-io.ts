@@ -1,8 +1,4 @@
-import {
-  renameSession,
-  type SDKMessage,
-  type SDKUserMessage,
-} from "@anthropic-ai/claude-agent-sdk";
+import { renameSession, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import {
   type AcceptedAgentUserMessage,
   type AgentModelSelection,
@@ -17,13 +13,21 @@ import {
   shouldRefreshClaudeContextUsageForMessage,
 } from "./claude-agent-sdk-context-usage";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
-import { toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
+import { readClaudeSdkMessageTimestamp } from "./claude-agent-sdk-message-timestamp";
+import { isClaudeMessageUuid, toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
 import {
   assertClaudeSessionModelUpdateSupported,
   assertSupportedClaudeLiveEffort,
 } from "./claude-agent-sdk-session-model";
+import {
+  canFlushQueuedClaudeUserMessage,
+  canPushSdkUserMessageNow,
+  canRestoreClaudeSessionModelAfterQueuedTurns,
+  hasActiveSdkUserTurn,
+} from "./claude-agent-sdk-session-queue-policy";
 import { toClaudeDisplayParts } from "./claude-agent-sdk-session-shape";
 import type {
+  ClaudeAcceptedUserMessage,
   ClaudeAgentSdkEventEmitter,
   ClaudeSession,
   ClaudeSessionStore,
@@ -31,28 +35,7 @@ import type {
 } from "./claude-agent-sdk-types";
 import { modelSelection, textFromContentBlocks } from "./claude-agent-sdk-utils";
 
-const hasActiveSdkUserTurn = (session: ClaudeSession): boolean =>
-  session.activeSdkUserTurnCount > 0;
-
-const canFlushQueuedClaudeUserMessage = (session: ClaudeSession): boolean =>
-  session.activity !== "stopped" &&
-  session.queuedSdkMessages.length > 0 &&
-  !hasActiveSdkUserTurn(session) &&
-  session.sdkState !== "running";
-
-const canPushSdkUserMessageNow = (session: ClaudeSession): boolean =>
-  !hasActiveSdkUserTurn(session) &&
-  session.queuedSdkMessages.length === 0 &&
-  session.sdkState !== "running" &&
-  session.modelAfterQueuedTurns === undefined;
-
 const isClaudeSessionStopped = (session: ClaudeSession): boolean => session.activity === "stopped";
-
-const canRestoreClaudeSessionModelAfterQueuedTurns = (session: ClaudeSession): boolean =>
-  session.modelAfterQueuedTurns !== undefined &&
-  !hasActiveSdkUserTurn(session) &&
-  session.queuedSdkMessages.length === 0 &&
-  session.sdkState === "idle";
 
 const assertClaudeSessionAcceptingMessages = (session: ClaudeSession): void => {
   if (session.activity !== "stopped") {
@@ -78,14 +61,6 @@ const pushClaudeSdkUserMessage = (session: ClaudeSession, message: SDKUserMessag
     session.activeSdkUserTurnCount -= 1;
     throw error;
   }
-};
-
-const readClaudeSdkMessageTimestamp = (message: SDKMessage, now: () => string): string => {
-  const timestamp = (message as { timestamp?: unknown }).timestamp;
-  if (typeof timestamp !== "string") {
-    return now();
-  }
-  return Number.isNaN(Date.parse(timestamp)) ? now() : timestamp;
 };
 
 export const applyClaudeSessionModel = async (
@@ -198,7 +173,7 @@ export const consumeClaudeSession = async (input: {
       sessionStore.close(session);
     }
   };
-  const failSession = async (error: unknown): Promise<void> => {
+  const failSession = async (cause: unknown): Promise<void> => {
     if (!isLiveSession()) {
       return;
     }
@@ -207,7 +182,7 @@ export const consumeClaudeSession = async (input: {
       type: "session_error",
       externalSessionId: session.externalSessionId,
       timestamp,
-      message: errorMessage(error),
+      message: errorMessage(cause),
     });
     session.activity = "stopped";
     await flushClaudeLiveContextUsageRefresh(session);
@@ -281,11 +256,18 @@ export const sendClaudeUserMessage = async (input: {
   assertClaudeSessionAcceptingMessages(session);
   const timestamp = now();
   const messageId = randomId();
+  if (!isClaudeMessageUuid(messageId)) {
+    throw new HostValidationError({
+      field: "randomId",
+      message: "Claude user-message IDs must be UUIDs.",
+      details: { messageId },
+    });
+  }
   const sdkMessage = await toClaudeMessageFromParts(messageInput.parts);
   const message = textFromContentBlocks(sdkMessage.message.content);
   assertClaudeSessionAcceptingMessages(session);
   const displayParts = toClaudeDisplayParts(messageInput.parts);
-  sdkMessage.uuid = messageId as NonNullable<SDKUserMessage["uuid"]>;
+  sdkMessage.uuid = messageId;
   sdkMessage.session_id = session.externalSessionId;
   sdkMessage.timestamp = timestamp;
   const canSendImmediately = canPushSdkUserMessageNow(session);
@@ -303,14 +285,19 @@ export const sendClaudeUserMessage = async (input: {
   const previousActivity = session.activity;
   const previousSdkState = session.sdkState;
   const previousPendingUserTurnCount = session.pendingUserTurnCount;
-  session.acceptedUserMessages.push({
+  const acceptedMessage: ClaudeAcceptedUserMessage = {
     messageId,
-    ...(isManualCompaction ? { isManualCompaction: true } : {}),
-    ...(messageInput.model ? { model: messageInput.model } : {}),
     parts: displayParts,
     text: message,
     timestamp,
-  });
+  };
+  if (isManualCompaction) {
+    acceptedMessage.isManualCompaction = true;
+  }
+  if (messageInput.model) {
+    acceptedMessage.model = messageInput.model;
+  }
+  session.acceptedUserMessages.push(acceptedMessage);
   session.pendingUserTurnCount = previousPendingUserTurnCount + 1;
   session.activity = "running";
   try {
@@ -357,7 +344,7 @@ export const sendClaudeUserMessage = async (input: {
     timestamp,
     status: { type: "busy", message: null },
   });
-  return {
+  const acceptedEvent: AcceptedAgentUserMessage = {
     type: "user_message",
     externalSessionId: session.externalSessionId,
     timestamp,
@@ -365,8 +352,11 @@ export const sendClaudeUserMessage = async (input: {
     message,
     parts: displayParts,
     state: canSendImmediately ? "read" : "queued",
-    ...(messageInput.model ? { model: messageInput.model } : {}),
   };
+  if (messageInput.model) {
+    acceptedEvent.model = messageInput.model;
+  }
+  return acceptedEvent;
 };
 
 export const flushQueuedClaudeUserMessage = (input: {
@@ -431,7 +421,7 @@ export const flushQueuedClaudeUserMessage = (input: {
     .then(() => {
       assertClaudeSessionAcceptingMessages(session);
       if (acceptedMessage && !acceptedMessage.isManualCompaction) {
-        emit(session, {
+        const acceptedEvent: AcceptedAgentUserMessage = {
           type: "user_message",
           externalSessionId: session.externalSessionId,
           timestamp,
@@ -439,8 +429,11 @@ export const flushQueuedClaudeUserMessage = (input: {
           message: acceptedMessage.text,
           parts: acceptedMessage.parts,
           state: "read",
-          ...(acceptedMessage.model ? { model: acceptedMessage.model } : {}),
-        });
+        };
+        if (acceptedMessage.model) {
+          acceptedEvent.model = acceptedMessage.model;
+        }
+        emit(session, acceptedEvent);
       }
       emit(session, {
         type: "session_status",

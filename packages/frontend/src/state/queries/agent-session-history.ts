@@ -54,10 +54,13 @@ export const runtimeSessionHistoryRefQueryOptions = (
         sessionScope: input.sessionScope,
         loadSettingsSnapshot,
       });
-      return {
+      const sessionRef: PolicyBoundSessionRef = {
         ...toRuntimeSessionRefWithPolicy(input.repoPath, input, runtimePolicy),
-        ...(input.sessionScope ? { sessionScope: input.sessionScope } : {}),
       };
+      if (input.sessionScope) {
+        sessionRef.sessionScope = input.sessionScope;
+      }
+      return sessionRef;
     },
     staleTime: Number.POSITIVE_INFINITY,
     refetchOnWindowFocus: false,

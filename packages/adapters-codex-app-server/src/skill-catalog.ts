@@ -1,89 +1,75 @@
-import { skillCatalogSchema } from "@openducktor/contracts";
+import {
+  type CodexAppServerSkillRecord,
+  type CodexAppServerSkillsListResponse,
+  skillCatalogSchema,
+} from "@openducktor/contracts";
 import type { AgentSkillCatalog } from "@openducktor/core";
-import { isPlainObject } from "./codex-app-server-shared";
-import type { CodexSkillsListResponse } from "./types";
 
-const readOptionalString = (value: unknown, fieldName: string): string | undefined => {
+const readOptionalString = (value: string | null | undefined): string | undefined => {
   if (value === undefined || value === null) {
     return undefined;
-  }
-  if (typeof value !== "string") {
-    throw new Error(`Invalid Codex skill payload: ${fieldName} must be a string.`);
   }
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
-const requireString = (value: unknown, fieldName: string): string => {
-  const trimmed = readOptionalString(value, fieldName);
+const requireString = (value: string | null | undefined, fieldName: string): string => {
+  const trimmed = readOptionalString(value);
   if (!trimmed) {
     throw new Error(`Invalid Codex skill payload: missing ${fieldName}.`);
   }
   return trimmed;
 };
 
-const readEnabled = (value: unknown): boolean => {
-  if (value === undefined || value === null) {
-    return true;
-  }
-  if (typeof value !== "boolean") {
-    throw new Error("Invalid Codex skill payload: enabled must be a boolean.");
-  }
-  return value;
-};
-
 const compareSkillsByName = (
-  left: { displayName: string | undefined; name: string; title: string | undefined },
-  right: { displayName: string | undefined; name: string; title: string | undefined },
+  left: Pick<AgentSkillCatalog["skills"][number], "displayName" | "name" | "title">,
+  right: Pick<AgentSkillCatalog["skills"][number], "displayName" | "name" | "title">,
 ): number => {
   const leftLabel = left.displayName ?? left.title ?? left.name;
   const rightLabel = right.displayName ?? right.title ?? right.name;
   return leftLabel.localeCompare(rightLabel, undefined, { sensitivity: "base" });
 };
 
-export const toCodexSkillCatalog = (response: unknown): AgentSkillCatalog => {
-  if (!isPlainObject(response) || !Array.isArray(response.data)) {
-    throw new Error("Invalid Codex skills/list payload: expected an object with data array.");
+const toAgentSkillCatalogEntry = (
+  record: CodexAppServerSkillRecord,
+): AgentSkillCatalog["skills"][number] | null => {
+  if (!record.enabled) {
+    return null;
   }
 
-  const catalogs = (response as CodexSkillsListResponse).data as unknown[];
-  const skills = catalogs.flatMap((catalog, catalogIndex) => {
-    if (!isPlainObject(catalog)) {
-      throw new Error(
-        `Invalid Codex skills/list payload at catalog index ${catalogIndex}: expected object.`,
-      );
-    }
-    requireString(catalog.cwd, "cwd");
-    if (!Array.isArray(catalog.skills)) {
-      throw new Error(
-        `Invalid Codex skills/list payload at catalog index ${catalogIndex}: missing skills array.`,
-      );
-    }
+  const name = requireString(record.name, "name");
+  const path = requireString(record.path, "path");
+  const displayName = readOptionalString(record.interface?.displayName);
+  const description = readOptionalString(record.description);
+  const skill: AgentSkillCatalog["skills"][number] = {
+    id: path,
+    name,
+    path,
+  };
+  if (displayName) {
+    skill.displayName = displayName;
+  }
+  if (description) {
+    skill.description = description;
+  }
+  return skill;
+};
 
-    return catalog.skills.flatMap((record, skillIndex) => {
-      if (!isPlainObject(record)) {
-        throw new Error(
-          `Invalid Codex skill payload at catalog index ${catalogIndex}, skill index ${skillIndex}: expected object.`,
-        );
-      }
-      if (!readEnabled(record.enabled)) {
-        return [];
-      }
+export const toCodexSkillCatalog = (
+  response: CodexAppServerSkillsListResponse,
+): AgentSkillCatalog => {
+  const errors = response.data.flatMap((catalog) => catalog.errors);
+  if (errors.length > 0) {
+    const details = errors.map((error) => `${error.path}: ${error.message}`).join("; ");
+    throw new Error(`Codex skills/list reported invalid skills: ${details}`);
+  }
 
-      const name = requireString(record.name, "name");
-      const path = requireString(record.path, "path");
-      return [
-        {
-          id: path,
-          name,
-          path,
-          title: readOptionalString(record.title, "title"),
-          displayName: readOptionalString(record.displayName, "displayName"),
-          description: readOptionalString(record.description, "description"),
-        },
-      ];
-    });
-  });
+  const skills = response.data.flatMap((catalog) =>
+    catalog.skills.flatMap((record) => {
+      const skill = toAgentSkillCatalogEntry(record);
+      return skill ? [skill] : [];
+    }),
+  );
 
   return skillCatalogSchema.parse({ skills: [...skills].sort(compareSkillsByName) });
 };

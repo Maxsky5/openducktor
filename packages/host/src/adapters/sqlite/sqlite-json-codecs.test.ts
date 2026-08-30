@@ -1,10 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
+import { z } from "zod";
 import {
   createAgentSessionRecord,
   expectFailureTag,
 } from "../../ports/task-store-port-contract.test-support";
-import { agentSessionsFromRow, labelsFromRow, normalizeLabels } from "./sqlite-json-codecs";
+import {
+  agentSessionsFromRow,
+  encodeJson,
+  labelsFromRow,
+  normalizeLabels,
+} from "./sqlite-json-codecs";
 import { taskRowFixture } from "./sqlite-task-row-test-fixtures";
 
 describe("SQLite JSON codecs", () => {
@@ -14,6 +20,12 @@ describe("SQLite JSON codecs", () => {
       "ops",
       "ui",
     ]);
+  });
+
+  test("encodes only values accepted by the JSON boundary", () => {
+    expect(encodeJson(z.json().parse({ id: "task-1" }))).toBe('{"id":"task-1"}');
+    expect(() => z.json().parse({ optional: undefined })).toThrow();
+    expect(() => z.json().parse(() => "not JSON")).toThrow();
   });
 
   test("rejects corrupted label JSON through the Effect error channel", async () => {

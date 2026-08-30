@@ -5,7 +5,7 @@ import { HostValidationError } from "../../effect/host-errors";
 export const requireWorkflowAgentSessionScope = (
   scope: AgentSessionScope | undefined,
   action: string,
-): Effect.Effect<AgentSessionWorkflowScope, HostValidationError> => {
+): Effect.Effect<AgentSessionWorkflowScope, HostValidationError<{ action: string }>> => {
   if (!scope) {
     return Effect.fail(
       new HostValidationError({

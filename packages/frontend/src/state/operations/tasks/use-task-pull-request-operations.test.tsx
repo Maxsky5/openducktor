@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { PullRequest, TaskPullRequestDetectResult } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
-import type { PropsWithChildren, ReactElement } from "react";
+import { createRef, type PropsWithChildren, type ReactElement } from "react";
 import { createQueryClient } from "@/lib/query-client";
 import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
@@ -29,10 +29,7 @@ type NotificationEvent = {
   description: string;
 };
 
-const createNotificationPort = (): {
-  events: NotificationEvent[];
-  port: TaskPullRequestNotificationPort;
-} => {
+const createNotificationPort = () => {
   const events: NotificationEvent[] = [];
   const report =
     (level: NotificationEvent["level"]) =>
@@ -47,6 +44,9 @@ const createNotificationPort = (): {
       warning: report("warning"),
       error: report("error"),
     },
+  } satisfies {
+    events: NotificationEvent[];
+    port: TaskPullRequestNotificationPort;
   };
 };
 
@@ -357,9 +357,9 @@ describe("useTaskPullRequestOperations", () => {
 
   test("delegates unlink failures to the mutation runner and clears unlinking state", async () => {
     const unlinkFailure = new Error("GitHub is unavailable");
-    const mutationFailure = { title: null as string | null };
+    const mutationFailureTitle = createRef<string>();
     const runTaskMutation: TaskMutationRunner["runTaskMutation"] = async (options) => {
-      mutationFailure.title = options.failureTitle;
+      mutationFailureTitle.current = options.failureTitle;
       await options.run("/repo");
       throw unlinkFailure;
     };
@@ -376,7 +376,7 @@ describe("useTaskPullRequestOperations", () => {
     try {
       await testHarness.harness.run(() => testHarness.getLatest().unlinkPullRequest("task-1"));
 
-      expect(mutationFailure.title).toBe("Failed to unlink pull request");
+      expect(mutationFailureTitle.current).toBe("Failed to unlink pull request");
       expect(testHarness.getLatest().unlinkingPullRequestTaskId).toBeNull();
     } finally {
       await testHarness.harness.unmount();

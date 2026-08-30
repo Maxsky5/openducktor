@@ -24,10 +24,7 @@ import { createGitService } from "../../application/git/git-service";
 import { createGithubRepositoryDetectionService } from "../../application/git/github-repository-detection-service";
 import { createOdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import { createPullRequestReviewService } from "../../application/pull-requests/pull-request-review-service";
-import {
-  type CodexAppServerService,
-  createCodexAppServerService,
-} from "../../application/runtimes/codex-app-server-service";
+import { createCodexAppServerService } from "../../application/runtimes/codex-app-server-service";
 import { createRuntimeDefinitionsService } from "../../application/runtimes/runtime-definitions-service";
 import { createRuntimeOrchestratorService } from "../../application/runtimes/runtime-orchestrator-service";
 import { readSavedRuntimeExecutablePath } from "../../application/runtimes/saved-runtime-executable";
@@ -120,8 +117,7 @@ export const createNodeEffectHostCommandRouter = (
     toolDiscovery,
     worktreeFiles,
   } = createNodeHostDefaultPorts(input);
-  const codexAppServerService: CodexAppServerService =
-    createCodexAppServerService(effectiveCodexAppServer);
+  const codexAppServerService = createCodexAppServerService(effectiveCodexAppServer);
   const liveSessionAdapterRegistry = createLiveSessionAdapterRegistry();
   const agentSessionLiveStateService = createAgentSessionLiveStateService({
     adapterRegistry: liveSessionAdapterRegistry,
@@ -134,7 +130,10 @@ export const createNodeEffectHostCommandRouter = (
           message: "Live agent-session events require a configured host event bus.",
         });
       }
-      eventBus.publish("openducktor://agent-session-live-event", envelope);
+      eventBus.publish({
+        channel: "openducktor://agent-session-live-event",
+        payload: envelope,
+      });
     },
   });
   const filesystemService = createFilesystemService(filesystem);
@@ -145,12 +144,15 @@ export const createNodeEffectHostCommandRouter = (
   const openInToolsService = createOpenInToolsService(openInTools);
   const runtimeDefinitionsService = createRuntimeDefinitionsService();
   const workspaceSettingsService = createWorkspaceSettingsService(settingsConfig);
-  const assets = createNodeTaskAssetServices({
-    ...(configuredTaskStore ? { configuredTaskStore } : {}),
+  const taskAssetServiceInput: Parameters<typeof createNodeTaskAssetServices>[0] = {
     onBackgroundFailure,
     processEnv,
     workspaceSettingsService,
-  });
+  };
+  if (configuredTaskStore) {
+    taskAssetServiceInput.configuredTaskStore = configuredTaskStore;
+  }
+  const assets = createNodeTaskAssetServices(taskAssetServiceInput);
   const { startupSweep, taskAssetReadService, taskAssetStagingService, taskStore } = assets;
   const systemDiagnosticsService = createSystemDiagnosticsService({
     runtimeDefinitionsService,
@@ -190,34 +192,39 @@ export const createNodeEffectHostCommandRouter = (
             }),
           ),
   });
-  const workspaceStarter = createRuntimeWorkspaceStarterDispatcher({
-    claude: claudeRuntime.workspaceStarter,
-    codex: createCodexWorkspaceRuntimeStarter({
-      toolDiscovery,
-      settingsConfig,
-      codexAppServer: effectiveCodexTransportRegistry,
+  const codexWorkspaceRuntimeStarterInput: Parameters<
+    typeof createCodexWorkspaceRuntimeStarter
+  >[0] = {
+    toolDiscovery,
+    settingsConfig,
+    codexAppServer: effectiveCodexTransportRegistry,
+    liveSessionLifecycle: agentSessionLiveStateService,
+    prepareLiveSessionAdapter: createCodexLiveSessionAdapterPreparer({
       liveSessionLifecycle: agentSessionLiveStateService,
-      prepareLiveSessionAdapter: createCodexLiveSessionAdapterPreparer({
-        liveSessionLifecycle: agentSessionLiveStateService,
-        codexAppServer: effectiveCodexAppServer,
-        onBackgroundFailure,
-        resolveRuntimePolicy: (scope) =>
-          loadGlobalConfig(settingsConfig).pipe(
-            Effect.map(({ agentRuntimes: { codex } }) =>
-              resolveCodexEffectivePolicy(codex, scope.kind === "workflow" ? scope.role : null),
-            ),
+      codexAppServer: effectiveCodexAppServer,
+      onBackgroundFailure,
+      resolveRuntimePolicy: (scope) =>
+        loadGlobalConfig(settingsConfig).pipe(
+          Effect.map(({ agentRuntimes: { codex } }) =>
+            resolveCodexEffectivePolicy(codex, scope.kind === "workflow" ? scope.role : null),
           ),
-      }),
-      processEnv,
-      runtimeDistribution,
-      ...(clientVersion ? { clientVersion } : {}),
-      resolveMcpBridgeConnection: (runtimeInput) =>
-        resolveWorkspaceRuntimeMcpBridgeConnection(
-          resolvedMcpHostBridge,
-          "codex",
-          runtimeInput.repoPath,
         ),
     }),
+    processEnv,
+    runtimeDistribution,
+    resolveMcpBridgeConnection: (runtimeInput) =>
+      resolveWorkspaceRuntimeMcpBridgeConnection(
+        resolvedMcpHostBridge,
+        "codex",
+        runtimeInput.repoPath,
+      ),
+  };
+  if (clientVersion) {
+    codexWorkspaceRuntimeStarterInput.clientVersion = clientVersion;
+  }
+  const workspaceStarter = createRuntimeWorkspaceStarterDispatcher({
+    claude: claudeRuntime.workspaceStarter,
+    codex: createCodexWorkspaceRuntimeStarter(codexWorkspaceRuntimeStarterInput),
     opencode: createOpenCodeWorkspaceRuntimeStarter({
       toolDiscovery,
       settingsConfig,
@@ -261,12 +268,15 @@ export const createNodeEffectHostCommandRouter = (
       resolveLaunchEnvironment: createTerminalLaunchEnvironment({ processEnv }),
     }),
   );
-  const devServerService = createDevServerService({
-    ...(eventBus ? { eventBus } : {}),
+  const devServerServiceInput: Parameters<typeof createDevServerService>[0] = {
     processPort: devServerProcesses,
     taskWorktreeService,
     workspaceSettingsService,
-  });
+  };
+  if (eventBus) {
+    devServerServiceInput.eventBus = eventBus;
+  }
+  const devServerService = createDevServerService(devServerServiceInput);
   const taskActivityGuard = createRuntimeTaskActivityGuard({
     runtimeRegistry: effectiveRuntimeRegistry,
   });

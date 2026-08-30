@@ -5,9 +5,14 @@ import {
   type StdioPipe,
   spawn,
 } from "node:child_process";
+import type { EventEmitter } from "node:events";
 import type { Readable } from "node:stream";
 import { Effect } from "effect";
-import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  type HostOperationErrorAggregate,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import { createProcessCommandLaunch } from "../../infrastructure/process/process-command-launch";
 import {
   type ProcessTreePlatform,
@@ -26,8 +31,12 @@ const DEFAULT_RETRY_DELAY_MS = 100;
 const DEFAULT_STOP_TIMEOUT_MS = 3_000;
 const MAX_CAPTURED_OUTPUT_BYTES = 16 * 1024;
 
-type OpenCodeProbeChildProcess = ChildProcessByStdio<null, Readable, Readable>;
-type LocalPortAllocator = () => Effect.Effect<number, HostOperationError>;
+type OpenCodeProbeChildProcess = Pick<
+  ChildProcessByStdio<null, Readable, Readable>,
+  "pid" | "stderr" | "stdout"
+> &
+  Pick<EventEmitter, "off" | "once">;
+type LocalPortAllocator = () => Effect.Effect<number, HostOperationErrorAggregate>;
 type OpenCodeReadinessProbe = (port: number, timeoutMs: number) => Effect.Effect<boolean>;
 type OpenCodeProbeSpawner = (
   command: string,

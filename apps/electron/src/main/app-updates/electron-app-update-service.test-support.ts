@@ -1,5 +1,8 @@
 import { mock } from "bun:test";
-import { createElectronAppUpdateService } from "./electron-app-update-service";
+import {
+  createElectronAppUpdateService,
+  type ElectronAppUpdateScheduler,
+} from "./electron-app-update-service";
 import type {
   ElectronAppUpdaterAdapter,
   ElectronUpdaterCheckResult,
@@ -8,9 +11,15 @@ import type {
   ElectronUpdaterUpdateInfo,
 } from "./electron-app-updater-adapter";
 
+type FakeUpdaterListeners = {
+  [EventName in keyof ElectronUpdaterEventMap]: Set<
+    (payload: ElectronUpdaterEventMap[EventName]) => void
+  >;
+};
+
 export class FakeUpdaterAdapter implements ElectronAppUpdaterAdapter {
   checkCalls = 0;
-  configureError: unknown = null;
+  configureError: Error | null = null;
   configureOptions: ElectronUpdaterConfigureOptions | null = null;
   disposeCalls = 0;
   downloadCalls = 0;
@@ -26,7 +35,10 @@ export class FakeUpdaterAdapter implements ElectronAppUpdaterAdapter {
   };
   nextDownloadResult: Promise<ElectronUpdaterUpdateInfo> = Promise.resolve({ version: "0.4.3" });
 
-  private readonly listeners = new Map<string, Set<(payload: unknown) => void>>();
+  private readonly listeners: FakeUpdaterListeners = {
+    error: new Set(),
+    "download-progress": new Set(),
+  };
 
   async checkForUpdates() {
     this.checkCalls += 1;
@@ -54,7 +66,7 @@ export class FakeUpdaterAdapter implements ElectronAppUpdaterAdapter {
     eventName: EventName,
     payload: ElectronUpdaterEventMap[EventName],
   ): void {
-    for (const listener of this.listeners.get(eventName) ?? []) {
+    for (const listener of this.listeners[eventName]) {
       listener(payload);
     }
   }
@@ -63,11 +75,10 @@ export class FakeUpdaterAdapter implements ElectronAppUpdaterAdapter {
     eventName: EventName,
     listener: (payload: ElectronUpdaterEventMap[EventName]) => void,
   ): () => void {
-    const listeners = this.listeners.get(eventName) ?? new Set<(payload: unknown) => void>();
-    listeners.add(listener as (payload: unknown) => void);
-    this.listeners.set(eventName, listeners);
+    const listeners = this.listeners[eventName];
+    listeners.add(listener);
     return () => {
-      listeners.delete(listener as (payload: unknown) => void);
+      listeners.delete(listener);
     };
   }
 
@@ -89,12 +100,14 @@ export const fixedNow = "2026-07-08T22:00:00.000Z";
 
 type FakeScheduledInterval = {
   callback: () => void;
+  cancel(): void;
   cleared: boolean;
   intervalMs: number;
 };
 
 type FakeScheduledTimeout = {
   callback: () => void;
+  cancel(): void;
   cleared: boolean;
   timeoutMs: number;
 };
@@ -107,22 +120,30 @@ export const flushAsyncWork = async (): Promise<void> => {
 export const createFakeScheduler = () => {
   const intervals: FakeScheduledInterval[] = [];
   const timeouts: FakeScheduledTimeout[] = [];
-  const scheduler = {
+  const scheduler: ElectronAppUpdateScheduler = {
     setInterval(callback: () => void, intervalMs: number): FakeScheduledInterval {
-      const interval = { callback, cleared: false, intervalMs };
+      const interval: FakeScheduledInterval = {
+        callback,
+        cancel() {
+          this.cleared = true;
+        },
+        cleared: false,
+        intervalMs,
+      };
       intervals.push(interval);
       return interval;
     },
-    clearInterval(handle: unknown): void {
-      (handle as FakeScheduledInterval).cleared = true;
-    },
     setTimeout(callback: () => void, timeoutMs: number): FakeScheduledTimeout {
-      const timeout = { callback, cleared: false, timeoutMs };
+      const timeout: FakeScheduledTimeout = {
+        callback,
+        cancel() {
+          this.cleared = true;
+        },
+        cleared: false,
+        timeoutMs,
+      };
       timeouts.push(timeout);
       return timeout;
-    },
-    clearTimeout(handle: unknown): void {
-      (handle as FakeScheduledTimeout).cleared = true;
     },
   };
 

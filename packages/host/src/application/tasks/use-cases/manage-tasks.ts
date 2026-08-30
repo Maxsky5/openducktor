@@ -48,12 +48,15 @@ export const createTaskCrudUseCases = ({
       if (needsParentValidation) {
         yield* validateParentRelationshipsForCreateEffect(currentTasks, normalizedTask);
       }
+      const createInput: Parameters<typeof taskStore.createTask>[0] = {
+        repoPath,
+        task: normalizedTask,
+      };
+      if (descriptionAssets) {
+        createInput.descriptionAssets = descriptionAssets;
+      }
       const created = yield* taskStore
-        .createTask({
-          repoPath,
-          task: normalizedTask,
-          ...(descriptionAssets ? { descriptionAssets } : {}),
-        })
+        .createTask(createInput)
         .pipe(
           Effect.mapError((error) =>
             preserveCommittedAssetMutation(
@@ -83,13 +86,12 @@ export const createTaskCrudUseCases = ({
         );
       }
       yield* validateParentRelationshipsForUpdateEffect(currentTasks, current, patch);
+      const updateInput: Parameters<typeof taskStore.updateTask>[0] = { repoPath, taskId, patch };
+      if (descriptionAssets) {
+        updateInput.descriptionAssets = descriptionAssets;
+      }
       const updated = yield* taskStore
-        .updateTask({
-          repoPath,
-          taskId,
-          patch,
-          ...(descriptionAssets ? { descriptionAssets } : {}),
-        })
+        .updateTask(updateInput)
         .pipe(
           Effect.mapError((error) => preserveCommittedAssetMutation("update-task", taskId, error)),
         );

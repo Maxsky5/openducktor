@@ -11,22 +11,29 @@ import {
 } from "./codex-app-server-threads";
 import type { CodexSessionState } from "./types";
 
-const createSession = (liveStatus?: CodexSessionState["liveStatus"]): CodexSessionState => ({
-  summary: {
-    externalSessionId: "thread-1",
-    sessionAssociation: { kind: "unbound" },
-    startedAt: "2026-05-07T00:00:00.000Z",
-    status: liveStatus ? agentSessionStatusFromActivity(liveStatus.classification) : "idle",
-  },
-  systemPrompt: "Use the repo rules.",
-  role: null,
-  runtimeId: "runtime-1",
-  repoPath: "/repo",
-  threadId: "thread-1",
-  workingDirectory: "/repo",
-  taskId: "task-1",
-  ...(liveStatus ? { liveStatus } : {}),
-});
+const createSession = (liveStatus?: CodexSessionState["liveStatus"]): CodexSessionState => {
+  const session: CodexSessionState = {
+    summary: {
+      externalSessionId: "thread-1",
+      sessionAssociation: { kind: "unbound" },
+      startedAt: "2026-05-07T00:00:00.000Z",
+      status: liveStatus ? agentSessionStatusFromActivity(liveStatus.classification) : "idle",
+    },
+    systemPrompt: "Use the repo rules.",
+    role: null,
+    runtimeId: "runtime-1",
+    repoPath: "/repo",
+    threadId: "thread-1",
+    workingDirectory: "/repo",
+    taskId: "task-1",
+  };
+
+  if (liveStatus) {
+    session.liveStatus = liveStatus;
+  }
+
+  return session;
+};
 
 const createThread = (status: "active" | "idle" = "active"): CodexThreadSnapshot => ({
   id: "thread-1",

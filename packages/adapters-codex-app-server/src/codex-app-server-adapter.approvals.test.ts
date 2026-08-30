@@ -1,12 +1,15 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
+  agentRuntimeEventSchema,
   agentSessionLiveSnapshotSchema,
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
 } from "@openducktor/contracts";
+import type { AgentEvent } from "@openducktor/core";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
   codexStartSessionInput,
+  codexThreadFixture,
   codexUserMessageInput,
   createAdapterWithTransport,
   createDeferred,
@@ -37,36 +40,42 @@ type ApprovalRequiredEvent = {
   requestType: string;
 };
 
-const isApprovalRequiredEvent = (event: unknown): event is ApprovalRequiredEvent =>
-  typeof event === "object" &&
-  event !== null &&
-  (event as { type?: unknown }).type === "approval_required" &&
-  typeof (event as { requestId?: unknown }).requestId === "string";
+const isApprovalRequiredEvent = <Event>(event: Event): event is Event & ApprovalRequiredEvent => {
+  const parsed = agentRuntimeEventSchema.safeParse(event);
+  return parsed.success && parsed.data.type === "approval_required";
+};
+
+const isQuestionRequiredEvent = (
+  event: AgentEvent,
+): event is Extract<AgentEvent, { type: "question_required" }> =>
+  event.type === "question_required";
+
+const isSessionErrorEvent = (
+  event: AgentEvent,
+): event is Extract<AgentEvent, { type: "session_error" }> => event.type === "session_error";
 
 class ReloadedParentWithChildTransport extends RecordingTransport {
-  async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+  async request(request: CodexJsonRpcRequest) {
     if (request.method === "thread/loaded/list") {
       this.calls.push(request);
-      return { data: ["parent-thread", "child-thread"], nextCursor: null } as Response;
+      return { data: ["parent-thread", "child-thread"], nextCursor: null };
     }
     if (request.method === "thread/list") {
       this.calls.push(request);
-      const sourceKinds = (request.params as { sourceKinds?: unknown }).sourceKinds;
+      const { sourceKinds } = request.params;
       const includesSubagents = Array.isArray(sourceKinds) && sourceKinds.includes("subAgent");
       return {
         data: [
-          {
+          codexThreadFixture({
             id: "parent-thread",
-            cwd: "/repo",
             createdAt: 1,
             preview: "Parent",
             status: { type: "active", activeFlags: [] },
-          },
+          }),
           ...(includesSubagents
             ? [
-                {
+                codexThreadFixture({
                   id: "child-thread",
-                  cwd: "/repo",
                   createdAt: 2,
                   preview: "Child",
                   status: { type: "active", activeFlags: ["waitingOnApproval"] },
@@ -82,14 +91,15 @@ class ReloadedParentWithChildTransport extends RecordingTransport {
                       },
                     },
                   },
-                },
+                }),
               ]
             : []),
         ],
         nextCursor: null,
-      } as Response;
+        backwardsCursor: null,
+      };
     }
-    return super.request<Response>(request);
+    return super.request(request);
   }
 }
 
@@ -107,7 +117,7 @@ describe("CodexAppServerAdapter approvals", () => {
       respondServerRequest,
     });
 
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("parent-thread"), (event) =>
       events.push(event),
     );
@@ -123,6 +133,7 @@ describe("CodexAppServerAdapter approvals", () => {
           turnId: "child-turn",
           itemId: "child-command",
           startedAtMs: 1,
+          environmentId: "local",
           command: "pwd",
           cwd: "/repo",
           commandActions: [{ type: "unknown", command: "pwd" }],
@@ -163,7 +174,7 @@ describe("CodexAppServerAdapter approvals", () => {
 
     await adapter.startSession(codexStartSessionInput());
 
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
@@ -172,17 +183,13 @@ describe("CodexAppServerAdapter approvals", () => {
     streamListeners[0]?.({
       runtimeId: "runtime-live",
       kind: "server_request",
-      message: { id: 71, method: "approval/request", params: { tool: "network" } },
+      message: { id: 71, method: "attestation/generate", params: {} },
     });
 
     await waitForEvent(
       events,
       (event) =>
-        typeof event === "object" &&
-        event !== null &&
-        (event as { type?: unknown; message?: unknown }).type === "session_error" &&
-        typeof (event as { message?: unknown }).message === "string" &&
-        (event as { message: string }).message.includes("missing a thread identifier"),
+        isSessionErrorEvent(event) && event.message.includes("missing a thread identifier"),
     );
     unsubscribe();
   });
@@ -197,7 +204,7 @@ describe("CodexAppServerAdapter approvals", () => {
 
     await adapter.startSession(codexStartSessionInput());
 
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
@@ -251,7 +258,7 @@ describe("CodexAppServerAdapter approvals", () => {
     const { adapter } = createHarness({ respondServerRequest, subscribeEvents });
 
     await adapter.startSession(codexStartSessionInput());
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
@@ -268,6 +275,7 @@ describe("CodexAppServerAdapter approvals", () => {
           turnId: "turn-permission",
           itemId: "permission-item-1",
           startedAtMs: 1,
+          environmentId: "local",
           cwd: "/repo",
           reason: "Need one-time network access.",
           permissions: {
@@ -323,7 +331,7 @@ describe("CodexAppServerAdapter approvals", () => {
     });
     const { adapter } = createHarness({ respondServerRequest, subscribeEvents });
     await adapter.startSession(codexStartSessionInput());
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       events.push(event),
     );
@@ -332,11 +340,12 @@ describe("CodexAppServerAdapter approvals", () => {
       kind: "server_request",
       message: {
         id: 72,
-        method: "approval/request",
+        method: "item/fileChange/requestApproval",
         params: {
+          itemId: "item-concurrent-approval",
+          startedAtMs: 1,
           threadId: "thread/start-runtime-live",
           turnId: "turn-concurrent-approval",
-          tool: "network",
         },
       },
     });
@@ -379,7 +388,7 @@ describe("CodexAppServerAdapter approvals", () => {
     });
     const { adapter } = createHarness({ respondServerRequest, subscribeEvents });
     await adapter.startSession(codexStartSessionInput());
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       events.push(event),
     );
@@ -390,21 +399,26 @@ describe("CodexAppServerAdapter approvals", () => {
         id: 73,
         method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_TOOL_REQUEST_USER_INPUT,
         params: {
+          autoResolutionMs: null,
+          isBlocking: true,
           threadId: "thread/start-runtime-live",
           turnId: "turn-concurrent-question",
           itemId: "question-item",
-          questions: [{ id: "question-1", header: "Confirm", question: "Continue?" }],
+          questions: [
+            {
+              id: "question-1",
+              header: "Confirm",
+              question: "Continue?",
+              isOther: false,
+              isSecret: false,
+              options: null,
+            },
+          ],
         },
       },
     });
-    const question = await waitForEvent(
-      events,
-      (event) =>
-        typeof event === "object" &&
-        event !== null &&
-        (event as { type?: unknown }).type === "question_required",
-    );
-    const requestId = (question as { requestId: string }).requestId;
+    const question = await waitForEvent(events, isQuestionRequiredEvent);
+    const requestId = question.requestId;
     const reply = {
       runtimeId: "runtime-live",
       externalSessionId: "thread/start-runtime-live",
@@ -440,7 +454,7 @@ describe("CodexAppServerAdapter approvals", () => {
     });
     const { adapter } = createHarness({ respondServerRequest, subscribeEvents });
     await adapter.startSession(codexStartSessionInput());
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       events.push(event),
     );
@@ -449,11 +463,12 @@ describe("CodexAppServerAdapter approvals", () => {
       kind: "server_request",
       message: {
         id: 74,
-        method: "approval/request",
+        method: "item/fileChange/requestApproval",
         params: {
+          itemId: "item-retry-approval",
+          startedAtMs: 1,
           threadId: "thread/start-runtime-live",
           turnId: "turn-retry-approval",
-          tool: "network",
         },
       },
     });
@@ -490,7 +505,7 @@ describe("CodexAppServerAdapter approvals", () => {
     });
     const { adapter } = createHarness({ respondServerRequest, subscribeEvents });
     await adapter.startSession(codexStartSessionInput());
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       events.push(event),
     );
@@ -501,21 +516,26 @@ describe("CodexAppServerAdapter approvals", () => {
         id: 75,
         method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_TOOL_REQUEST_USER_INPUT,
         params: {
+          autoResolutionMs: null,
+          isBlocking: true,
           threadId: "thread/start-runtime-live",
           turnId: "turn-retry-question",
           itemId: "question-item-retry",
-          questions: [{ id: "question-retry", header: "Confirm", question: "Continue?" }],
+          questions: [
+            {
+              id: "question-retry",
+              header: "Confirm",
+              question: "Continue?",
+              isOther: false,
+              isSecret: false,
+              options: null,
+            },
+          ],
         },
       },
     });
-    const question = await waitForEvent(
-      events,
-      (event) =>
-        typeof event === "object" &&
-        event !== null &&
-        (event as { type?: unknown }).type === "question_required",
-    );
-    const requestId = (question as { requestId: string }).requestId;
+    const question = await waitForEvent(events, isQuestionRequiredEvent);
+    const requestId = question.requestId;
     const reply = {
       runtimeId: "runtime-live",
       externalSessionId: "thread/start-runtime-live",
@@ -554,16 +574,16 @@ describe("CodexAppServerAdapter approvals", () => {
       kind: "server_request",
       message: {
         id: 31,
-        method: "approval/request",
+        method: "item/fileChange/requestApproval",
         params: {
+          itemId: "item-approval-initial",
+          startedAtMs: 1,
           threadId: "thread/start-runtime-live",
           turnId: "turn-approval-initial",
-          tool: "network",
-          url: "https://example.com",
         },
       },
     });
-    const replayedEvents: unknown[] = [];
+    const replayedEvents: AgentEvent[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       replayedEvents.push(event),
     );
@@ -607,7 +627,7 @@ describe("CodexAppServerAdapter approvals", () => {
     await adapter.prepareRuntime("runtime-live");
 
     await adapter.startSession(codexStartSessionInput());
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       events.push(event),
     );
@@ -624,20 +644,25 @@ describe("CodexAppServerAdapter approvals", () => {
         id: 36,
         method: "item/tool/requestUserInput",
         params: {
+          autoResolutionMs: null,
+          isBlocking: true,
           threadId: "thread/start-runtime-live",
           turnId: "turn-question",
           itemId: "item-1",
-          questions: [{ id: "question-1", header: "Confirm", question: "Continue?" }],
+          questions: [
+            {
+              id: "question-1",
+              header: "Confirm",
+              question: "Continue?",
+              isOther: false,
+              isSecret: false,
+              options: null,
+            },
+          ],
         },
       },
     });
-    const question = await waitForEvent(
-      events,
-      (event) =>
-        typeof event === "object" &&
-        event !== null &&
-        (event as { type?: unknown }).type === "question_required",
-    );
+    const question = await waitForEvent(events, isQuestionRequiredEvent);
 
     const snapshot = await adapter.readSessionRuntimeSnapshot({
       repoPath: "/repo",
@@ -647,7 +672,7 @@ describe("CodexAppServerAdapter approvals", () => {
     });
     expect(snapshot.classification).toBe("waiting_for_question");
     expect(snapshot.pendingQuestions).toHaveLength(1);
-    const requestId = (question as { requestId: string }).requestId;
+    const { requestId } = question;
     if (!requestId) {
       throw new Error("expected pending question");
     }

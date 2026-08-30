@@ -22,6 +22,7 @@ import { eventTimestampMs, hasMeaningfulToolInput } from "./session-helpers";
 type ToolPart = Extract<SessionPart, { kind: "tool" }>;
 type ToolPartStatus = ToolPart["status"];
 type ToolMeta = Extract<AgentChatMessageMeta, { kind: "tool" }>;
+type ToolInput = NonNullable<ToolMeta["input"]>;
 type PrepareCurrent = (current: AgentSessionState) => AgentSessionState;
 
 type ToolTimingMeta = {
@@ -32,7 +33,7 @@ type ToolTimingMeta = {
 
 const resolveTodoUpdateFromTool = (
   part: ToolPart,
-  input: Record<string, unknown> | undefined,
+  input: ToolInput | undefined,
   output: string | undefined,
 ) => {
   if (part.toolType !== "todo") {
@@ -45,65 +46,93 @@ const composeToolTimingMeta = (
   existingToolMeta: ToolMeta | null,
   observedEventTimestampMs: number,
   status: ToolPartStatus,
-  input: Record<string, unknown> | undefined,
+  input: ToolInput | undefined,
 ): ToolTimingMeta => {
   const observedStartedAtMs =
-    typeof existingToolMeta?.observedStartedAtMs === "number"
+    existingToolMeta?.observedStartedAtMs !== undefined
       ? existingToolMeta.observedStartedAtMs
       : observedEventTimestampMs;
   const observedEndedAtMs =
     status === "completed" || status === "error" ? observedEventTimestampMs : undefined;
   const inputReadyAtMs =
-    typeof existingToolMeta?.inputReadyAtMs === "number"
+    existingToolMeta?.inputReadyAtMs !== undefined
       ? existingToolMeta.inputReadyAtMs
       : hasMeaningfulToolInput(input)
         ? observedEventTimestampMs
         : undefined;
 
-  return {
-    observedStartedAtMs,
-    ...(typeof observedEndedAtMs === "number" ? { observedEndedAtMs } : {}),
-    ...(typeof inputReadyAtMs === "number" ? { inputReadyAtMs } : {}),
-  };
+  const timingMeta: ToolTimingMeta = { observedStartedAtMs };
+  if (observedEndedAtMs !== undefined) {
+    timingMeta.observedEndedAtMs = observedEndedAtMs;
+  }
+  if (inputReadyAtMs !== undefined) {
+    timingMeta.inputReadyAtMs = inputReadyAtMs;
+  }
+  return timingMeta;
 };
 
 const composeToolMessageMeta = (
   part: ToolPart,
   status: ToolPartStatus,
-  input: Record<string, unknown> | undefined,
+  input: ToolInput | undefined,
   output: string | undefined,
   error: string | undefined,
   timingMeta: ToolTimingMeta,
 ): ToolMeta => {
-  return {
+  const meta: ToolMeta = {
     kind: "tool",
     partId: part.partId,
     callId: part.callId,
     tool: part.tool,
     toolType: part.toolType,
     status,
-    ...(part.preview ? { preview: part.preview } : {}),
-    ...(part.title ? { title: part.title } : {}),
-    ...(part.displayLabel ? { displayLabel: part.displayLabel } : {}),
-    ...(input ? { input } : {}),
-    ...(output ? { output } : {}),
-    ...(error ? { error } : {}),
-    ...(part.fileDiffs ? { fileDiffs: part.fileDiffs } : {}),
-    ...(part.fileContent ? { fileContent: part.fileContent } : {}),
-    ...(part.fileChanges ? { fileChanges: part.fileChanges } : {}),
-    ...(part.metadata ? { metadata: part.metadata } : {}),
-    ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
-    ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
-    ...(typeof timingMeta.observedStartedAtMs === "number"
-      ? { observedStartedAtMs: timingMeta.observedStartedAtMs }
-      : {}),
-    ...(typeof timingMeta.observedEndedAtMs === "number"
-      ? { observedEndedAtMs: timingMeta.observedEndedAtMs }
-      : {}),
-    ...(typeof timingMeta.inputReadyAtMs === "number"
-      ? { inputReadyAtMs: timingMeta.inputReadyAtMs }
-      : {}),
   };
+  if (part.preview) {
+    meta.preview = part.preview;
+  }
+  if (part.title) {
+    meta.title = part.title;
+  }
+  if (part.displayLabel) {
+    meta.displayLabel = part.displayLabel;
+  }
+  if (input) {
+    meta.input = input;
+  }
+  if (output) {
+    meta.output = output;
+  }
+  if (error) {
+    meta.error = error;
+  }
+  if (part.fileDiffs) {
+    meta.fileDiffs = part.fileDiffs;
+  }
+  if (part.fileContent) {
+    meta.fileContent = part.fileContent;
+  }
+  if (part.fileChanges) {
+    meta.fileChanges = part.fileChanges;
+  }
+  if (part.metadata) {
+    meta.metadata = part.metadata;
+  }
+  if (part.startedAtMs !== undefined) {
+    meta.startedAtMs = part.startedAtMs;
+  }
+  if (part.endedAtMs !== undefined) {
+    meta.endedAtMs = part.endedAtMs;
+  }
+  if (timingMeta.observedStartedAtMs !== undefined) {
+    meta.observedStartedAtMs = timingMeta.observedStartedAtMs;
+  }
+  if (timingMeta.observedEndedAtMs !== undefined) {
+    meta.observedEndedAtMs = timingMeta.observedEndedAtMs;
+  }
+  if (timingMeta.inputReadyAtMs !== undefined) {
+    meta.inputReadyAtMs = timingMeta.inputReadyAtMs;
+  }
+  return meta;
 };
 
 const preserveExistingToolValue = <T>(
@@ -137,7 +166,7 @@ const composeToolPartSessionUpdate = ({
   part: ToolPart;
   status: ToolPartStatus;
   observedEventTimestampMs: number;
-  input: Record<string, unknown> | undefined;
+  input: ToolInput | undefined;
   output: string | undefined;
   error: string | undefined;
   timestamp: string;
@@ -159,28 +188,22 @@ const composeToolPartSessionUpdate = ({
   const resolvedInput = preserveExistingToolValue(input, existingToolMeta?.input);
   const resolvedOutput = preserveExistingToolValue(output, existingToolMeta?.output);
   const resolvedError = preserveExistingToolValue(error, existingToolMeta?.error);
-  const resolvedPart: ToolPart = {
-    ...part,
-    ...(part.fileDiffs === undefined && existingToolMeta?.fileDiffs !== undefined
-      ? { fileDiffs: existingToolMeta.fileDiffs }
-      : {}),
-    ...(part.fileContent === undefined && existingToolMeta?.fileContent !== undefined
-      ? { fileContent: existingToolMeta.fileContent }
-      : {}),
-    ...(part.fileChanges === undefined && existingToolMeta?.fileChanges !== undefined
-      ? { fileChanges: existingToolMeta.fileChanges }
-      : {}),
-    ...(typeof part.startedAtMs === "number"
-      ? {}
-      : typeof existingToolMeta?.startedAtMs === "number"
-        ? { startedAtMs: existingToolMeta.startedAtMs }
-        : {}),
-    ...(typeof part.endedAtMs === "number"
-      ? {}
-      : typeof existingToolMeta?.endedAtMs === "number"
-        ? { endedAtMs: existingToolMeta.endedAtMs }
-        : {}),
-  };
+  const resolvedPart: ToolPart = { ...part };
+  if (part.fileDiffs === undefined && existingToolMeta?.fileDiffs !== undefined) {
+    resolvedPart.fileDiffs = existingToolMeta.fileDiffs;
+  }
+  if (part.fileContent === undefined && existingToolMeta?.fileContent !== undefined) {
+    resolvedPart.fileContent = existingToolMeta.fileContent;
+  }
+  if (part.fileChanges === undefined && existingToolMeta?.fileChanges !== undefined) {
+    resolvedPart.fileChanges = existingToolMeta.fileChanges;
+  }
+  if (part.startedAtMs === undefined && existingToolMeta?.startedAtMs !== undefined) {
+    resolvedPart.startedAtMs = existingToolMeta.startedAtMs;
+  }
+  if (part.endedAtMs === undefined && existingToolMeta?.endedAtMs !== undefined) {
+    resolvedPart.endedAtMs = existingToolMeta.endedAtMs;
+  }
   const timingMeta = composeToolTimingMeta(
     existingToolMeta,
     observedEventTimestampMs,
@@ -188,22 +211,21 @@ const composeToolPartSessionUpdate = ({
     resolvedInput,
   );
 
+  const contentPart: ToolPart = { ...resolvedPart, status };
+  if (resolvedError !== undefined && resolvedError.length > 0) {
+    contentPart.error = resolvedError;
+  }
+  if (resolvedOutput !== undefined && resolvedOutput.length > 0) {
+    contentPart.output = resolvedOutput;
+  }
+
   return {
     ...prepared,
     status: nextSessionStatusForToolPart(prepared.status, status),
     messages: upsertSessionMessageByTimestamp(prepared, {
       id: messageId,
       role: "tool",
-      content: formatToolContent({
-        ...resolvedPart,
-        status,
-        ...(typeof resolvedError === "string" && resolvedError.length > 0
-          ? { error: resolvedError }
-          : {}),
-        ...(typeof resolvedOutput === "string" && resolvedOutput.length > 0
-          ? { output: resolvedOutput }
-          : {}),
-      }),
+      content: formatToolContent(contentPart),
       timestamp: existing?.timestamp ?? timestamp,
       meta: composeToolMessageMeta(
         resolvedPart,

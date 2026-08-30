@@ -22,7 +22,7 @@ export const buildReusableSessionOptions = ({
 
   return roleSessions.sort(compareAgentSessionRecency).map((session, index) => {
     const runtimeKind = session.selectedModel?.runtimeKind ?? session.runtimeKind;
-    return {
+    const option: SessionStartExistingSessionOption = {
       value: agentSessionIdentityKey(session),
       sourceSession: toAgentSessionIdentity(session),
       runtimeKind: session.runtimeKind,
@@ -39,7 +39,12 @@ export const buildReusableSessionOptions = ({
             runtimeKind,
           }
         : null,
-      ...(index === 0 ? { secondaryLabel: "Latest" } : {}),
     };
+
+    if (index === 0) {
+      option.secondaryLabel = "Latest";
+    }
+
+    return option;
   });
 };

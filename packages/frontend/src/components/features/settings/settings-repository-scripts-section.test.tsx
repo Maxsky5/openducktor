@@ -126,15 +126,12 @@ describe("RepositoryScriptsSection", () => {
 
     try {
       expect(screen.getByText("Tab label is required.")).toBeTruthy();
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Add server" }).disabled).toBe(
+        true,
+      );
       expect(
-        (screen.getByRole("button", { name: "Add server" }) as HTMLButtonElement).disabled,
-      ).toBe(true);
-      expect(
-        (
-          screen.getByLabelText(
-            "Worktree setup script (one command per line)",
-          ) as HTMLTextAreaElement
-        ).disabled,
+        screen.getByLabelText<HTMLTextAreaElement>("Worktree setup script (one command per line)")
+          .disabled,
       ).toBe(true);
     } finally {
       rendered.unmount();

@@ -20,8 +20,8 @@ export type AgentSessionVisiblePendingInput = {
 
 export const EMPTY_AGENT_SESSION_VISIBLE_PENDING_INPUT: AgentSessionVisiblePendingInput =
   Object.freeze({
-    pendingApprovals: Object.freeze([]) as readonly AgentApprovalRequest[],
-    pendingQuestions: Object.freeze([]) as readonly AgentQuestionRequest[],
+    pendingApprovals: Object.freeze(new Array<AgentApprovalRequest>()),
+    pendingQuestions: Object.freeze(new Array<AgentQuestionRequest>()),
   });
 
 type PendingInputRequest = AgentApprovalRequest | AgentQuestionRequest;

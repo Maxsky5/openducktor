@@ -3,9 +3,12 @@ import { realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { Effect } from "effect";
+import { z } from "zod";
 import {
   HostOperationError,
   HostValidationError,
+  type HostOperationErrorAggregate,
+  type HostValidationErrorAggregate,
   toHostOperationError,
   toHostPathStatError,
 } from "../../effect/host-errors";
@@ -13,11 +16,14 @@ import { createProcessCommandLaunch } from "../process/process-command-launch";
 import { normalizeProcessEnvironment } from "../process/process-environment";
 
 const execFileAsync = promisify(execFile);
+const failedGitCommandSchema = z
+  .object({ stdout: z.string().optional(), stderr: z.string().optional() })
+  .passthrough();
 export type GitCommandResult = {
   stdout: string;
   stderr: string;
 };
-export type GitCommandError = HostOperationError | HostValidationError;
+export type GitCommandError = HostOperationErrorAggregate | HostValidationErrorAggregate;
 export type GitCommandRunner = (
   workingDirectory: string,
   args: string[],
@@ -38,7 +44,7 @@ const createGitEnvironment = (
   ...normalizeProcessEnvironment(env, platform),
   GIT_TERMINAL_PROMPT: "0",
 });
-export type ResolveGitCommand = () => Effect.Effect<string, HostOperationError>;
+export type ResolveGitCommand = () => Effect.Effect<string, HostOperationErrorAggregate>;
 export type GitCommandLaunchOptions = (
   | { command: string; resolveCommand?: never }
   | { command?: never; resolveCommand: ResolveGitCommand }
@@ -81,13 +87,13 @@ const runSpawnedGit = (
   GitCommandResult & {
     ok: boolean;
   },
-  HostOperationError
+  HostOperationErrorAggregate
 > =>
   Effect.async<
     GitCommandResult & {
       ok: boolean;
     },
-    HostOperationError
+    HostOperationErrorAggregate
   >((resume, signal) => {
     let child: ReturnType<typeof spawn>;
     try {
@@ -123,7 +129,7 @@ const runSpawnedGit = (
         GitCommandResult & {
           ok: boolean;
         },
-        HostOperationError
+        HostOperationErrorAggregate
       >,
     ): void => {
       if (settled) {
@@ -226,14 +232,16 @@ export const createDefaultGitRunner = (
         return { ok: true, stdout: exit.right.stdout, stderr: exit.right.stderr };
       }
       if (options?.allowFailure) {
-        const failed = exit.left as {
-          stdout?: string;
-          stderr?: string;
-        };
+        const failed = exit.left;
+        const parsedFailure = failedGitCommandSchema.safeParse(failed);
+        const stdout = parsedFailure.success ? (parsedFailure.data.stdout ?? "") : "";
+        const stderr = parsedFailure.success
+          ? (parsedFailure.data.stderr ?? String(failed))
+          : String(failed);
         return {
           ok: false,
-          stdout: failed.stdout ?? "",
-          stderr: failed.stderr ?? String(exit.left),
+          stdout,
+          stderr,
         };
       }
       return yield* Effect.fail(

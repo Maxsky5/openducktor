@@ -1,13 +1,10 @@
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { describe, expect, test } from "bun:test";
 import { DismissableLayer, DismissableLayerBranch } from "@radix-ui/react-dismissable-layer";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 
-(
-  globalThis as typeof globalThis & {
-    IS_REACT_ACT_ENVIRONMENT?: boolean;
-  }
-).IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 function BranchDismissHarness() {
   const [open, setOpen] = useState(true);

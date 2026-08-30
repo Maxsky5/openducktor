@@ -3,7 +3,10 @@ import type { AgentEvent } from "@openducktor/core";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { createEventTestSession as createSession } from "./claude-agent-sdk-events.test-support";
-import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
+import {
+  claudeSdkMessageFixture,
+  claudeSdkMessageUuidFixture,
+} from "./claude-agent-sdk-test-messages";
 
 describe("handleClaudeSdkMessage subagent task lifecycle", () => {
   test("maps Claude task events for Agent tool calls without subagent_type", () => {
@@ -30,7 +33,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         tool_use_id: "toolu_agent_1",
         description: "Locate package.json",
         prompt: "Find the root package.json",
-        uuid: "agent-task-started-1",
+        uuid: "8c6e09b4-c141-40b5-8cc2-56a175dee427",
         session_id: "session-1",
       }),
     });
@@ -78,7 +81,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         description: "Inspect auth",
         prompt: "Check the login flow",
         subagent_type: "builder",
-        uuid: "task-started-1",
+        uuid: "19c28805-2f44-4a39-8182-f112b04129db",
         session_id: "session-1",
       }),
     });
@@ -97,7 +100,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         description: "Still inspecting",
         summary: "Found auth config",
         subagent_type: "builder",
-        uuid: "task-progress-1",
+        uuid: "928e57f6-4775-465a-8dac-09a08c543669",
         session_id: "session-1",
       }),
     });
@@ -114,7 +117,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         status: "completed",
         summary: "Auth inspected",
         output_file: "/tmp/auth-report.md",
-        uuid: "task-notification-1",
+        uuid: "7024bacb-5fae-4e48-8d57-2ffbf3ba28ef",
         session_id: "session-1",
       }),
     });
@@ -189,7 +192,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
           subtype: "task_updated",
           task_id,
           patch: { status },
-          uuid: `${task_id}-event`,
+          uuid: claudeSdkMessageUuidFixture(`${task_id}-event`),
           session_id: "session-1",
         }),
       });
@@ -209,7 +212,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
     ]);
   });
 
-  test("maps failed Claude task updates with top-level error reasons", () => {
+  test("maps failed Claude task updates with patch error reasons", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
     session.subagentMessageIdsByTaskId.set("task-1", "assistant-1");
@@ -230,9 +233,11 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         subtype: "task_updated",
         task_id: "task-1",
         description: "Locate callback.mjs absolute path",
-        error: "callback.mjs was not found under the Claude config directory",
-        patch: { status: "failed" },
-        uuid: "task-updated-1",
+        patch: {
+          status: "failed",
+          error: "callback.mjs was not found under the Claude config directory",
+        },
+        uuid: "a13ecc94-dd28-4b88-8b49-69f0ca6516c4",
         session_id: "session-1",
       }),
     });
@@ -274,7 +279,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         task_id: "task-1",
         description: "Locate callback.mjs absolute path",
         patch: { status: "failed" },
-        uuid: "task-updated-1",
+        uuid: "a13ecc94-dd28-4b88-8b49-69f0ca6516c4",
         session_id: "session-1",
       }),
     });
@@ -316,7 +321,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         task_id: "task-1",
         status: "failed",
         summary: "Locate callback.mjs absolute path failed",
-        uuid: "task-notification-1",
+        uuid: "7024bacb-5fae-4e48-8d57-2ffbf3ba28ef",
         session_id: "session-1",
       }),
     });
@@ -359,7 +364,7 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
         task_id: "task-1",
         status: "failed",
         message: "Subagent process exited before producing a transcript",
-        uuid: "task-notification-2",
+        uuid: "1b902bf3-3f00-42a5-8154-730431462e51",
         session_id: "session-1",
       }),
     });

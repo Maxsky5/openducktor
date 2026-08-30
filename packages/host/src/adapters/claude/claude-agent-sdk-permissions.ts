@@ -9,6 +9,7 @@ import {
   resolveAgainstWorkingDirectory,
   toProjectRelativePath,
 } from "@openducktor/path-support";
+import { z } from "zod";
 import {
   claudePendingInputResolutionRoute,
   claudeSubagentPendingInputRoute,
@@ -18,6 +19,10 @@ import {
   isClaudeAskUserQuestionTool,
   requestClaudeAskUserQuestion,
 } from "./claude-agent-sdk-questions";
+import {
+  type ClaudeProtocolObject,
+  parseClaudeCanonicalJsonObject,
+} from "./claude-agent-sdk-ingress-schemas";
 import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
 import {
   canonicalOdtToolName,
@@ -40,7 +45,7 @@ export type ClaudeToolUseAuthorization =
   | {
       behavior: "allow";
       approval: "automatic" | "interactive" | "workflow_role";
-      toolInput: Record<string, unknown>;
+      toolInput: ClaudeProtocolObject;
     }
   | {
       behavior: "deny";
@@ -49,7 +54,7 @@ export type ClaudeToolUseAuthorization =
 
 type AuthorizeClaudeToolUseInput = {
   session: ClaudeSessionContext;
-  toolInput: Record<string, unknown>;
+  toolInput: ClaudeProtocolObject;
   toolName: string;
   blockedPath?: string;
   canonicalizePath?: (path: string) => Promise<string>;
@@ -57,7 +62,7 @@ type AuthorizeClaudeToolUseInput = {
 
 const withAllowedToolInput = (
   result: PermissionResult,
-  toolInput: Record<string, unknown>,
+  toolInput: ClaudeProtocolObject,
 ): PermissionResult =>
   result.behavior === "allow"
     ? {
@@ -79,6 +84,7 @@ const SESSION_PATH_INPUT_KEYS = [
   "notebook_path",
   "target_file",
 ] as const;
+const claudePathInputSchema = z.string().refine((value) => value.trim().length > 0);
 
 const rewriteSessionPath = (session: ClaudeSessionContext, value: string): string => {
   const { repoPath, workingDirectory } = session.input;
@@ -100,18 +106,19 @@ const rewriteSessionPath = (session: ClaudeSessionContext, value: string): strin
 const normalizeToolInputForSession = (
   session: ClaudeSessionContext,
   _toolName: string,
-  toolInput: Record<string, unknown>,
-): Record<string, unknown> => {
+  toolInput: ClaudeProtocolObject,
+): ClaudeProtocolObject => {
   const nextInput = { ...toolInput };
   let changed = false;
 
   for (const key of SESSION_PATH_INPUT_KEYS) {
     const value = nextInput[key];
-    if (typeof value !== "string") {
+    const parsed = claudePathInputSchema.safeParse(value);
+    if (!parsed.success) {
       continue;
     }
-    const rewritten = rewriteSessionPath(session, value);
-    if (rewritten !== value) {
+    const rewritten = rewriteSessionPath(session, parsed.data);
+    if (rewritten !== parsed.data) {
       nextInput[key] = rewritten;
       changed = true;
     }
@@ -122,7 +129,7 @@ const normalizeToolInputForSession = (
 
 const readOnlyToolPathValues = (
   session: ClaudeSessionContext,
-  toolInput: Record<string, unknown>,
+  toolInput: ClaudeProtocolObject,
   blockedPath: string | undefined,
 ): string[] => {
   const paths: string[] = [];
@@ -132,8 +139,9 @@ const readOnlyToolPathValues = (
 
   for (const key of SESSION_PATH_INPUT_KEYS) {
     const value = toolInput[key];
-    if (typeof value === "string" && value.trim().length > 0) {
-      paths.push(value);
+    const parsed = claudePathInputSchema.safeParse(value);
+    if (parsed.success) {
+      paths.push(parsed.data);
     }
   }
 
@@ -173,7 +181,7 @@ const canonicalReadPathViolation = async (
 
 const findReadOnlyPathPolicyViolation = async (
   session: ClaudeSessionContext,
-  toolInput: Record<string, unknown>,
+  toolInput: ClaudeProtocolObject,
   blockedPath: string | undefined,
   canonicalizePath: (path: string) => Promise<string>,
 ): Promise<string | null> => {
@@ -204,7 +212,7 @@ export const authorizeClaudeToolUse = ({
   const role = claudeWorkflowRole(session.input);
   const odtToolName = canonicalOdtToolName(toolName);
   if (odtToolName && role) {
-    if (!(AGENT_ROLE_TOOL_POLICY[role] as readonly string[]).includes(odtToolName)) {
+    if (!AGENT_ROLE_TOOL_POLICY[role].some((allowedToolName) => allowedToolName === odtToolName)) {
       return {
         behavior: "deny",
         message: `Tool ${odtToolName} is not allowed for ${role} sessions.`,
@@ -329,9 +337,26 @@ export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanU
 
       const requestId = randomId();
       const command = readStringProp(effectiveToolInput, "command");
+      const canonicalToolInput = parseClaudeCanonicalJsonObject(
+        effectiveToolInput,
+        "claudePermissionToolInput",
+      );
       const blockedPath = options.blockedPath
         ? rewriteSessionPath(session, options.blockedPath)
         : undefined;
+      const tool: Extract<AgentEvent, { type: "approval_required" }>["tool"] = {
+        name: toolName,
+        input: canonicalToolInput,
+      };
+      if (options.displayName) {
+        tool.title = options.displayName;
+      }
+      const metadata: Extract<AgentEvent, { type: "approval_required" }>["metadata"] = {
+        runtime: "claude",
+      };
+      if (options.agentID) {
+        metadata.agentId = options.agentID;
+      }
       const event: Extract<AgentEvent, { type: "approval_required" }> = {
         type: "approval_required",
         externalSessionId: session.externalSessionId,
@@ -339,30 +364,27 @@ export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanU
         requestId,
         requestType: permissionRequestTypeForTool(toolName),
         title: options.title ?? options.displayName ?? `Approve ${toolName}`,
-        ...(options.description ? { summary: options.description } : {}),
-        ...(options.decisionReason ? { details: options.decisionReason } : {}),
-        ...(blockedPath ? { affectedPaths: [blockedPath] } : {}),
-        ...(command
-          ? {
-              command: {
-                command,
-                workingDirectory: session.input.workingDirectory,
-              },
-            }
-          : {}),
-        tool: {
-          name: toolName,
-          ...(options.displayName ? { title: options.displayName } : {}),
-          input: effectiveToolInput,
-        },
+        tool,
         mutation,
         supportedReplyOutcomes: ["approve_once", "reject"],
-        metadata: {
-          runtime: "claude",
-          ...(options.agentID ? { agentId: options.agentID } : {}),
-        },
+        metadata,
         ...claudeSubagentPendingInputRoute(session, options.agentID),
       };
+      if (options.description) {
+        event.summary = options.description;
+      }
+      if (options.decisionReason) {
+        event.details = options.decisionReason;
+      }
+      if (blockedPath) {
+        event.affectedPaths = [blockedPath];
+      }
+      if (command) {
+        event.command = {
+          command,
+          workingDirectory: session.input.workingDirectory,
+        };
+      }
       return new Promise<PermissionResult>((resolveResult, rejectResult) => {
         let requestPublished = false;
         const onAbort = () => {
@@ -416,13 +438,16 @@ export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanU
       });
     };
 
-    const authorization = authorizeClaudeToolUse({
+    const authorizationInput: Parameters<typeof authorizeClaudeToolUse>[0] = {
       session,
       toolName,
-      toolInput,
-      ...(options.blockedPath ? { blockedPath: options.blockedPath } : {}),
+      toolInput: parseClaudeCanonicalJsonObject(toolInput, "claudeToolInput"),
       canonicalizePath,
-    });
+    };
+    if (options.blockedPath) {
+      authorizationInput.blockedPath = options.blockedPath;
+    }
+    const authorization = authorizeClaudeToolUse(authorizationInput);
     return authorization instanceof Promise
       ? authorization.then(handleAuthorization)
       : handleAuthorization(authorization);

@@ -1,17 +1,26 @@
 import { type IncomingMessage, request } from "node:http";
 import { createServer } from "node:net";
 import { Effect } from "effect";
+import { z } from "zod";
 import {
   HostOperationError,
+  type HostOperationErrorAggregate,
   HostResourceError,
+  type HostResourceErrorAggregate,
   toHostOperationError,
 } from "../../effect/host-errors";
+import { parseJson } from "../../effect/json";
 
-export const pickFreePort = (): Effect.Effect<number, HostOperationError | HostResourceError> =>
-  Effect.async<number, HostOperationError | HostResourceError>((resume, signal) => {
+const openCodeHealthSchema = z.object({ healthy: z.literal(true) }).passthrough();
+const tcpAddressSchema = z.object({ port: z.number() }).passthrough();
+
+type PickFreePortError = HostOperationErrorAggregate | HostResourceErrorAggregate;
+
+export const pickFreePort = (): Effect.Effect<number, PickFreePortError> =>
+  Effect.async<number, PickFreePortError>((resume, signal) => {
     const server = createServer();
     let settled = false;
-    const finish = (effect: Effect.Effect<number, HostOperationError | HostResourceError>) => {
+    const finish = (effect: Effect.Effect<number, PickFreePortError>) => {
       if (settled) {
         return;
       }
@@ -20,9 +29,7 @@ export const pickFreePort = (): Effect.Effect<number, HostOperationError | HostR
       server.off("error", onError);
       resume(effect);
     };
-    const closeThenFinish = (
-      effect: Effect.Effect<number, HostOperationError | HostResourceError>,
-    ): void => {
+    const closeThenFinish = (effect: Effect.Effect<number, PickFreePortError>): void => {
       if (!server.listening) {
         finish(effect);
         return;
@@ -54,8 +61,8 @@ export const pickFreePort = (): Effect.Effect<number, HostOperationError | HostR
     server.once("error", onError);
     try {
       server.listen(0, "127.0.0.1", () => {
-        const address = server.address();
-        if (!address || typeof address === "string") {
+        const address = tcpAddressSchema.safeParse(server.address());
+        if (!address.success) {
           closeThenFinish(
             Effect.fail(
               new HostResourceError({
@@ -67,7 +74,7 @@ export const pickFreePort = (): Effect.Effect<number, HostOperationError | HostR
           );
           return;
         }
-        closeThenFinish(Effect.succeed(address.port));
+        closeThenFinish(Effect.succeed(address.data.port));
       });
     } catch (error) {
       finish(Effect.fail(toHostOperationError(error, "opencode.pickFreePort")));
@@ -112,13 +119,7 @@ export const isOpenCodeHealthy = (port: number, timeoutMs: number): Effect.Effec
         });
         nextResponse.once("end", () => {
           try {
-            const parsed: unknown = JSON.parse(body);
-            finish(
-              typeof parsed === "object" &&
-                parsed !== null &&
-                "healthy" in parsed &&
-                parsed.healthy === true,
-            );
+            finish(openCodeHealthSchema.safeParse(parseJson(body)).success);
           } catch {
             finish(false);
           }

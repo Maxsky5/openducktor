@@ -4,7 +4,10 @@ import {
   taskWorktreeSummarySchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostValidationError } from "../../../effect/host-errors";
+import {
+  HostValidationError,
+  type HostValidationErrorAggregate,
+} from "../../../effect/host-errors";
 import type { SettingsConfigError, SettingsConfigPort } from "../../../ports/settings-config-port";
 import type {
   WorkspaceSettingsError,
@@ -12,7 +15,7 @@ import type {
 } from "../../workspaces/workspace-settings-service";
 
 export type TaskWorktreeServiceError =
-  | HostValidationError
+  | HostValidationErrorAggregate
   | SettingsConfigError
   | WorkspaceSettingsError;
 

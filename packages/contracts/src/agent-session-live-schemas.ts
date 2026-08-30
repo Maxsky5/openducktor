@@ -4,7 +4,10 @@ import {
   runtimeApprovalRequestTypeSchema,
   runtimeKindSchema,
 } from "./agent-runtime-schemas";
-import { agentSessionTranscriptEventSchema } from "./agent-session-event-schemas";
+import {
+  agentSessionTranscriptEventSchema,
+  agentToolDataSchema,
+} from "./agent-session-event-schemas";
 import { agentSessionQuestionItemSchema } from "./agent-session-pending-schemas";
 import {
   agentSessionAssociationSchema,
@@ -12,6 +15,7 @@ import {
   agentSessionScopeSchema,
 } from "./agent-session-schemas";
 import { slashCommandCatalogSchema } from "./slash-command-schemas";
+import { fileDiffSchema } from "./git-schemas";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 const isoTimestampSchema = z.string().datetime({ offset: true });
@@ -67,7 +71,7 @@ export const agentSessionLivePendingApprovalRequestSchema = z
       .object({
         name: z.string(),
         title: z.string().optional(),
-        input: z.record(z.string(), z.unknown()).optional(),
+        input: agentToolDataSchema.optional(),
       })
       .strict()
       .optional(),
@@ -215,6 +219,14 @@ export const agentSessionLiveLoadContextResultSchema = agentSessionContextUsageS
 export type AgentSessionLiveLoadContextResult = z.infer<
   typeof agentSessionLiveLoadContextResultSchema
 >;
+
+export const agentSessionLiveLoadDiffInputSchema = agentSessionLiveRefSchema
+  .extend({ runtimeHistoryAnchor: nonEmptyStringSchema.optional() })
+  .strict();
+export type AgentSessionLiveLoadDiffInput = z.infer<typeof agentSessionLiveLoadDiffInputSchema>;
+
+export const agentSessionLiveLoadDiffResultSchema = z.array(fileDiffSchema);
+export type AgentSessionLiveLoadDiffResult = z.infer<typeof agentSessionLiveLoadDiffResultSchema>;
 
 export const agentSessionLiveReplyApprovalInputSchema = agentSessionLiveRefSchema.extend({
   requestId: agentPendingRequestIdSchema,

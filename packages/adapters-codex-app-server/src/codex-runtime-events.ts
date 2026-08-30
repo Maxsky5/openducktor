@@ -1,13 +1,12 @@
-import { extractThreadIdFromParams } from "./codex-app-server-requests";
-import { type CodexLiveEventPump, isPlainObject } from "./codex-app-server-shared";
+import {
+  codexRuntimeStreamFault,
+  parseCodexRuntimeStreamEvent,
+  type CodexRuntimeStreamEvent,
+} from "./codex-runtime-event-schema";
+import type { CodexLiveEventPump } from "./codex-app-server-shared";
 import type { CodexAppServerAdapterOptions } from "./types";
 
-export type CodexRuntimeStreamEvent = {
-  runtimeId: string;
-  kind: "notification" | "server_request";
-  receivedAt: string;
-  message: unknown;
-};
+export { type CodexRuntimeStreamEvent } from "./codex-runtime-event-schema";
 
 export class CodexRuntimeEventSubscriptions {
   private readonly pumpsByRuntimeId = new Map<string, CodexLiveEventPump>();
@@ -36,7 +35,22 @@ export class CodexRuntimeEventSubscriptions {
         if (event.runtimeId !== runtimeId) {
           return;
         }
-        onEvent(event);
+        try {
+          const parsed = parseCodexRuntimeStreamEvent(event);
+          if (parsed.kind !== "ignored_notification") {
+            onEvent(parsed);
+          }
+        } catch (cause) {
+          onEvent(
+            codexRuntimeStreamFault({
+              cause,
+              message: event.message,
+              receivedAt: event.receivedAt,
+              runtimeId: event.runtimeId,
+              sourceKind: event.kind,
+            }),
+          );
+        }
       });
     } catch (error) {
       if (this.pumpsByRuntimeId.get(runtimeId) === pump) {
@@ -45,26 +59,21 @@ export class CodexRuntimeEventSubscriptions {
       throw error;
     }
 
-    if (typeof (unsubscribe as Promise<() => void>).then === "function") {
-      pump.ready = (async () => {
-        try {
-          const resolved = await (unsubscribe as Promise<() => void>);
-          if (this.pumpsByRuntimeId.get(runtimeId) !== pump) {
-            resolved();
-            return;
-          }
-          pump.unsubscribe = resolved;
-        } catch (error) {
-          if (this.pumpsByRuntimeId.get(runtimeId) === pump) {
-            this.pumpsByRuntimeId.delete(runtimeId);
-          }
-          throw error;
+    pump.ready = (async () => {
+      try {
+        const resolved = await unsubscribe;
+        if (this.pumpsByRuntimeId.get(runtimeId) !== pump) {
+          resolved();
+          return;
         }
-      })();
-      return pump.ready;
-    }
-
-    pump.unsubscribe = unsubscribe as () => void;
+        pump.unsubscribe = resolved;
+      } catch (error) {
+        if (this.pumpsByRuntimeId.get(runtimeId) === pump) {
+          this.pumpsByRuntimeId.delete(runtimeId);
+        }
+        throw error;
+      }
+    })();
     return pump.ready;
   }
 
@@ -78,11 +87,21 @@ export class CodexRuntimeEventSubscriptions {
   }
 }
 
-export const threadIdFromRuntimeStreamEvent = (
-  event: Pick<CodexRuntimeStreamEvent, "message">,
-): string | null => {
-  if (!isPlainObject(event.message)) {
-    return null;
+export const threadIdFromRuntimeStreamEvent = (event: CodexRuntimeStreamEvent): string | null => {
+  if (event.kind === "fault") {
+    return event.threadId;
   }
-  return extractThreadIdFromParams(event.message.params);
+  if (event.kind === "notification") {
+    return event.message.method === "skills/changed" ? null : event.message.params.threadId;
+  }
+  switch (event.message.method) {
+    case "execCommandApproval":
+    case "applyPatchApproval":
+      return event.message.params.conversationId;
+    case "account/chatgptAuthTokens/refresh":
+    case "attestation/generate":
+      return null;
+    default:
+      return event.message.params.threadId ?? null;
+  }
 };

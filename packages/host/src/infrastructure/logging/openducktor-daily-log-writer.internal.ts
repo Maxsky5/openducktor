@@ -4,7 +4,7 @@ import path from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import { Data, Effect } from "effect";
 import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
-import { HostValidationError } from "../../effect/host-errors";
+import { HostValidationError, type HostValidationErrorAggregate } from "../../effect/host-errors";
 
 export type OpenDucktorLogSurface = "electron" | "web";
 
@@ -113,7 +113,10 @@ export const createOpenDucktorDailyLogWriterWithDependencies = (
     clock = () => new Date(),
   }: OpenDucktorDailyLogWriterOptions,
   dependencyOverrides: Partial<OpenDucktorDailyLogWriterDependencies> = {},
-): Effect.Effect<OpenDucktorDailyLogWriter, HostValidationError | OpenDucktorLogPersistenceError> =>
+): Effect.Effect<
+  OpenDucktorDailyLogWriter,
+  HostValidationErrorAggregate | OpenDucktorLogPersistenceError
+> =>
   Effect.gen(function* () {
     const dependencies: OpenDucktorDailyLogWriterDependencies = {
       ...defaultDependencies,
@@ -187,5 +190,7 @@ export const createOpenDucktorDailyLogWriterWithDependencies = (
 
 export const createOpenDucktorDailyLogWriter = (
   options: OpenDucktorDailyLogWriterOptions,
-): Effect.Effect<OpenDucktorDailyLogWriter, HostValidationError | OpenDucktorLogPersistenceError> =>
-  createOpenDucktorDailyLogWriterWithDependencies(options);
+): Effect.Effect<
+  OpenDucktorDailyLogWriter,
+  HostValidationErrorAggregate | OpenDucktorLogPersistenceError
+> => createOpenDucktorDailyLogWriterWithDependencies(options);

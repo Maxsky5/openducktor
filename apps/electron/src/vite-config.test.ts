@@ -42,7 +42,10 @@ describe("resolveAppVersion", () => {
         operation: "electron.config.read-package-version",
         path: packageJsonPath,
       });
-      expect((error as Error).message).toBe(`Missing package version in ${packageJsonPath}`);
+      if (!(error instanceof Error)) {
+        throw new TypeError("Expected an Error instance.");
+      }
+      expect(error.message).toBe(`Missing package version in ${packageJsonPath}`);
     } finally {
       await rm(tempDirectory, { force: true, recursive: true });
     }

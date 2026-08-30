@@ -1,5 +1,12 @@
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
+import {
+  createDataTransferItemFixture,
+  createDataTransferItemListFixture,
+  createDataTransferFixture,
+  createFileListFixture,
+} from "@/test-utils/focused-fixture";
 import { type AgentChatComposerDraft, createTextSegment } from "./agent-chat-composer-draft";
 import { useAgentChatComposerEditorEvents } from "./use-agent-chat-composer-editor-events";
 import type {
@@ -7,11 +14,7 @@ import type {
   TextSelectionTarget,
 } from "./use-agent-chat-composer-editor-selection";
 
-(
-  globalThis as typeof globalThis & {
-    IS_REACT_ACT_ENVIRONMENT?: boolean;
-  }
-).IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 type EventsHookArgs = Parameters<typeof useAgentChatComposerEditorEvents>[0];
 
@@ -42,15 +45,15 @@ const createBeforeInputEvent = (
   inputType: string,
   data: string | null = null,
 ) => {
+  const nativeEvent = new InputEvent("beforeinput", { inputType, data });
+  Object.defineProperty(nativeEvent, "data", { value: data });
+
   return {
     currentTarget: root,
     target: root,
     preventDefault: mock(() => {}),
-    nativeEvent: {
-      inputType,
-      data,
-    },
-  } as unknown as React.FormEvent<HTMLDivElement>;
+    nativeEvent,
+  };
 };
 
 const createPasteEvent = (root: HTMLDivElement, file: File) => {
@@ -58,23 +61,22 @@ const createPasteEvent = (root: HTMLDivElement, file: File) => {
     currentTarget: root,
     target: root,
     preventDefault: mock(() => {}),
-    clipboardData: {
-      items: [
-        {
+    clipboardData: createDataTransferFixture({
+      items: createDataTransferItemListFixture([
+        createDataTransferItemFixture({
           kind: "file",
           type: file.type,
-          getAsFile: () => file,
-        },
-      ],
-      files: [file],
+          file,
+        }),
+      ]),
+      files: createFileListFixture([file]),
       types: ["Files"],
-      getData: mock(() => ""),
-    },
-  } as unknown as React.ClipboardEvent<HTMLDivElement>;
+    }),
+  };
 };
 
 const createEventsTestSetup = (overrides: EventsTestSetupOverrides = {}) => {
-  const root = document.createElement("div") as HTMLDivElement;
+  const root: HTMLDivElement = document.createElement("div");
   const sourceDraft = overrides.draft ?? createDraft();
   const activeSelection = overrides.activeSelection ?? createActiveSelection();
   const lineBreakTarget = overrides.lineBreakTarget ?? { segmentId: "segment-1", offset: 5 };

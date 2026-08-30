@@ -1,14 +1,18 @@
 import { pathToFileURL } from "node:url";
 import { Cause, Chunk, Effect, Exit, Option } from "effect";
+import { z } from "zod";
 import {
   ElectronOperationError,
+  type ElectronOperationErrorAggregate,
   ElectronValidationError,
+  type ElectronValidationErrorAggregate,
   errorMessage,
 } from "../effect/electron-errors";
 
 export const ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL = "openducktor-local-attachment";
 
 const ELECTRON_LOCAL_ATTACHMENT_PREVIEW_HOST = "preview";
+const localAttachmentPreviewPathSchema = z.string().refine((path) => path.trim().length > 0);
 
 type ElectronPreviewProtocol = {
   handle(scheme: string, handler: (request: Request) => Response | Promise<Response>): void;
@@ -24,26 +28,27 @@ type ElectronPreviewNet = {
 
 type RegisterElectronLocalAttachmentPreviewProtocolInput = {
   net: ElectronPreviewNet;
-  resolveLocalAttachmentPath: (filePath: string) => Promise<unknown>;
+  resolveLocalAttachmentPath: (filePath: string) => Promise<string>;
   session: ElectronPreviewSession;
 };
 
-export const readLocalAttachmentPreviewPath = (filePath: unknown): string => {
-  if (typeof filePath !== "string" || filePath.trim().length === 0) {
+export const readLocalAttachmentPreviewPath = (filePath: string): string => {
+  const parsedPath = localAttachmentPreviewPathSchema.safeParse(filePath);
+  if (!parsedPath.success) {
     throw new ElectronValidationError({
       operation: "electron.preview.read-path",
       message: "Local attachment preview path must be a non-empty string.",
       field: "path",
-      details: { valueType: typeof filePath },
+      cause: parsedPath.error,
     });
   }
 
-  return filePath.trim();
+  return parsedPath.data.trim();
 };
 
 export const readLocalAttachmentPreviewPathEffect = (
-  filePath: unknown,
-): Effect.Effect<string, ElectronValidationError> =>
+  filePath: string,
+): Effect.Effect<string, ElectronValidationErrorAggregate> =>
   Effect.try({
     try: () => readLocalAttachmentPreviewPath(filePath),
     catch: (cause) =>
@@ -117,7 +122,7 @@ export const readElectronLocalAttachmentPreviewRequestPath = (requestUrl: string
 
 export const readElectronLocalAttachmentPreviewRequestPathEffect = (
   requestUrl: string,
-): Effect.Effect<string, ElectronValidationError> =>
+): Effect.Effect<string, ElectronValidationErrorAggregate> =>
   Effect.try({
     try: () => readElectronLocalAttachmentPreviewRequestPath(requestUrl),
     catch: (cause) =>
@@ -132,15 +137,15 @@ export const readElectronLocalAttachmentPreviewRequestPathEffect = (
           }),
   });
 
-const createLocalAttachmentPreviewErrorResponse = (error: unknown, status: 400 | 500): Response =>
-  new Response(errorMessage(error) || "Local attachment preview failed.", {
+const createLocalAttachmentPreviewErrorResponse = (cause: unknown, status: 400 | 500): Response =>
+  new Response(errorMessage(cause) || "Local attachment preview failed.", {
     status,
   });
 
 const resolveLocalAttachmentPathEffect = (
-  resolveLocalAttachmentPath: (filePath: string) => Promise<unknown>,
+  resolveLocalAttachmentPath: (filePath: string) => Promise<string>,
   requestedPath: string,
-): Effect.Effect<string, ElectronOperationError | ElectronValidationError> =>
+): Effect.Effect<string, ElectronOperationErrorAggregate | ElectronValidationErrorAggregate> =>
   Effect.tryPromise({
     try: () => resolveLocalAttachmentPath(requestedPath),
     catch: (cause) =>

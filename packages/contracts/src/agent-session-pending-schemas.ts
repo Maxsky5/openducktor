@@ -7,15 +7,7 @@ const agentSessionQuestionOptionSchema = z
   })
   .strict();
 
-export type AgentTranscriptQuestionItem = {
-  header: string;
-  question: string;
-  options: Array<{ label: string; description: string }>;
-  multiple?: boolean;
-  custom?: boolean;
-};
-
-const inferredAgentSessionQuestionItemSchema = z
+export const agentSessionQuestionItemSchema = z
   .object({
     header: z.string(),
     question: z.string(),
@@ -25,5 +17,4 @@ const inferredAgentSessionQuestionItemSchema = z
   })
   .strict();
 
-export const agentSessionQuestionItemSchema =
-  inferredAgentSessionQuestionItemSchema as unknown as z.ZodType<AgentTranscriptQuestionItem>;
+export type AgentTranscriptQuestionItem = z.infer<typeof agentSessionQuestionItemSchema>;

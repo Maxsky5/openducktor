@@ -30,11 +30,12 @@ const createInitialSectionLoadState = (): SectionLoadState => ({
   pendingForcedReload: false,
 });
 
-const createInitialSectionsState = (): Record<TaskDocumentSectionKey, SectionLoadState> => ({
-  spec: createInitialSectionLoadState(),
-  plan: createInitialSectionLoadState(),
-  qa: createInitialSectionLoadState(),
-});
+const createInitialSectionsState = () =>
+  ({
+    spec: createInitialSectionLoadState(),
+    plan: createInitialSectionLoadState(),
+    qa: createInitialSectionLoadState(),
+  }) satisfies Record<TaskDocumentSectionKey, SectionLoadState>;
 
 export const createTaskDocumentLoadController = (): TaskDocumentLoadController => ({
   contextVersion: 0,

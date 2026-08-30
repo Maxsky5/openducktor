@@ -68,7 +68,7 @@ type SkippedAutopilotStart = {
 
 type AutopilotStartResolution = ResolvedAutopilotStart | SkippedAutopilotStart;
 
-const ROLE_LABELS = AGENT_ROLE_LABELS as Record<AgentRole, string>;
+const ROLE_LABELS = AGENT_ROLE_LABELS;
 
 const findLatestSessionRecordByRole = (
   sessions: AgentSessionRecord[],
@@ -88,13 +88,18 @@ const toAgentModelSelection = (
     return null;
   }
 
-  return {
+  const normalizedSelection: AgentModelSelection = {
     runtimeKind: selection.runtimeKind,
     providerId: selection.providerId,
     modelId: selection.modelId,
-    ...(selection.variant ? { variant: selection.variant } : {}),
-    ...(selection.profileId ? { profileId: selection.profileId } : {}),
   };
+  if (selection.variant) {
+    normalizedSelection.variant = selection.variant;
+  }
+  if (selection.profileId) {
+    normalizedSelection.profileId = selection.profileId;
+  }
+  return normalizedSelection;
 };
 
 const resolveAutopilotSelection = async ({
@@ -144,15 +149,15 @@ const resolveAutopilotSelection = async ({
   return catalogDefaultSelection;
 };
 
-const isSkippableAutopilotError = (action: AutopilotActionDefinition, error: unknown): boolean => {
-  if (!(error instanceof Error)) {
+const isSkippableAutopilotError = (action: AutopilotActionDefinition, cause: unknown): boolean => {
+  if (!(cause instanceof Error)) {
     return false;
   }
 
   return (
     action.startPolicy.kind === "launchAction" &&
     action.startPolicy.missingBuildTargetOutcome === "skip" &&
-    error.message.includes(MISSING_BUILD_TARGET_ERROR)
+    cause.message.includes(MISSING_BUILD_TARGET_ERROR)
   );
 };
 
@@ -290,29 +295,31 @@ export const executeAutopilotAction = async ({
     if (startResolution.kind === "skipped") {
       return startResolution;
     }
-    const selectedModel =
-      startResolution.startMode === "reuse"
-        ? null
-        : await resolveAutopilotSelection({
-            activeWorkspace,
-            role: action.role,
-            ...(startResolution.preferredSelection !== undefined
-              ? { preferredSelection: startResolution.preferredSelection }
-              : {}),
-            queryClient,
-            loadRepoRuntimeCatalog,
-          });
-
-    const workflow = await runSessionStartWorkflow({
-      request: {
-        taskId: task.id,
+    let selectedModel: AgentModelSelection | null = null;
+    if (startResolution.startMode !== "reuse") {
+      const selectionInput: Parameters<typeof resolveAutopilotSelection>[0] = {
+        activeWorkspace,
         role: action.role,
-        launchActionId: action.launchActionId,
-        postStartAction: "kickoff",
-        ...(startResolution.targetWorkingDirectory !== undefined
-          ? { targetWorkingDirectory: startResolution.targetWorkingDirectory }
-          : {}),
-      },
+        queryClient,
+        loadRepoRuntimeCatalog,
+      };
+      if (startResolution.preferredSelection !== undefined) {
+        selectionInput.preferredSelection = startResolution.preferredSelection;
+      }
+      selectedModel = await resolveAutopilotSelection(selectionInput);
+    }
+
+    const request: Parameters<typeof runSessionStartWorkflow>[0]["request"] = {
+      taskId: task.id,
+      role: action.role,
+      launchActionId: action.launchActionId,
+      postStartAction: "kickoff",
+    };
+    if (startResolution.targetWorkingDirectory !== undefined) {
+      request.targetWorkingDirectory = startResolution.targetWorkingDirectory;
+    }
+    const workflow = await runSessionStartWorkflow({
+      request,
       decision: toSessionStartDecision({
         resolution: startResolution,
         selectedModel,

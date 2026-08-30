@@ -2,10 +2,14 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { useAgentStudioDiffRequestController } from "./use-diff-request-controller";
 
+interface LatestResultRefContract {
+  current: HookResult | null;
+}
+
 type HookResult = ReturnType<typeof useAgentStudioDiffRequestController>;
 
 const createHarness = () => {
-  const latestResultRef: { current: HookResult | null } = { current: null };
+  const latestResultRef: LatestResultRefContract = { current: null };
 
   const harness = createSharedHookHarness(() => {
     latestResultRef.current = useAgentStudioDiffRequestController();

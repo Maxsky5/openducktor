@@ -1,5 +1,6 @@
 import type { TaskWorktreeSummary } from "@openducktor/contracts";
 import { queryOptions } from "@tanstack/react-query";
+import { scheduleTask, type ScheduleTask } from "@/lib/scheduling";
 import { host } from "../operations/host";
 
 export type TaskWorktreeQueryHost = Pick<typeof host, "taskWorktreeGet">;
@@ -10,6 +11,7 @@ type TaskWorktreeQueryInput = {
 };
 type TaskWorktreeQueryOptionsInput = TaskWorktreeQueryInput & {
   hostClient?: TaskWorktreeQueryHost;
+  scheduleTask?: ScheduleTask;
 };
 
 const TASK_WORKTREE_STALE_TIME_MS = 30_000;
@@ -19,20 +21,17 @@ const withTimeout = async <T>(
   promise: Promise<T>,
   timeoutMs: number,
   timeoutMessage: string,
+  scheduler: ScheduleTask,
 ): Promise<T> => {
-  let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
-  const timeoutPromise = new Promise<never>((_resolve, reject) => {
-    timeoutId = globalThis.setTimeout(() => {
-      reject(new Error(timeoutMessage));
-    }, timeoutMs);
-  });
+  const { promise: timeoutPromise, reject: rejectTimeout } = Promise.withResolvers<never>();
+  const cancelTimeout = scheduler(() => {
+    rejectTimeout(new Error(timeoutMessage));
+  }, timeoutMs);
 
   try {
     return await Promise.race([promise, timeoutPromise]);
   } finally {
-    if (timeoutId !== null) {
-      globalThis.clearTimeout(timeoutId);
-    }
+    cancelTimeout();
   }
 };
 
@@ -48,6 +47,7 @@ export const taskWorktreeQueryOptions = ({
   repoPath,
   taskId,
   hostClient = host,
+  scheduleTask: scheduler = scheduleTask,
   taskVersion = null,
 }: TaskWorktreeQueryOptionsInput) =>
   queryOptions({
@@ -57,6 +57,7 @@ export const taskWorktreeQueryOptions = ({
         hostClient.taskWorktreeGet(repoPath, taskId),
         TASK_WORKTREE_TIMEOUT_MS,
         `Timed out after ${TASK_WORKTREE_TIMEOUT_MS}ms while loading task worktree.`,
+        scheduler,
       ),
     retry: false,
     staleTime: TASK_WORKTREE_STALE_TIME_MS,

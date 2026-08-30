@@ -24,7 +24,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "ef694cce-c5c2-45b0-8261-617bf3838880",
         session_id: "session-1",
         parent_tool_use_id: "task-tool-1",
         message: {
@@ -40,7 +40,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
       expect.objectContaining({
         type: "assistant_message",
         externalSessionId: "session-1::claude-subagent::task-1",
-        messageId: "assistant-1",
+        messageId: "ef694cce-c5c2-45b0-8261-617bf3838880",
         message: "nested subagent text",
       }),
     ]);
@@ -65,7 +65,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
       timestamp: "2026-06-25T20:00:00.000Z",
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "parent-agent-tool-call",
+        uuid: "16b3f855-e9f7-4138-8ca0-33a273a34525",
         session_id: "session-1",
         parent_tool_use_id: "outer-agent-tool",
         message: {
@@ -93,7 +93,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
       message: claudeSdkMessageFixture({
         type: "system",
         subtype: "task_started",
-        uuid: "nested-task-started",
+        uuid: "55002b99-1c0c-4a68-8b9a-d0ff0b7f0658",
         session_id: "session-1",
         task_id: "child-agent",
         tool_use_id: "inner-agent-tool",
@@ -108,7 +108,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
       message: claudeSdkMessageFixture({
         type: "system",
         subtype: "task_progress",
-        uuid: "nested-task-progress",
+        uuid: "98fe29f1-3117-46aa-8d0e-c93e16160157",
         session_id: "session-1",
         task_id: "child-agent",
         description: "Inspecting",
@@ -122,7 +122,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
       message: claudeSdkMessageFixture({
         type: "system",
         subtype: "task_updated",
-        uuid: "nested-task-updated",
+        uuid: "d170b5e6-d8c6-4268-8c30-75c8dcd8ad1a",
         session_id: "session-1",
         task_id: "child-agent",
         patch: { status: "running" },
@@ -134,7 +134,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
       message: claudeSdkMessageFixture({
         type: "system",
         subtype: "task_notification",
-        uuid: "nested-task-completed",
+        uuid: "069fc692-d511-4e74-8949-6f3cf04b893e",
         session_id: "session-1",
         task_id: "child-agent",
         status: "completed",
@@ -178,7 +178,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
       timestamp: "2026-06-25T20:00:00.000Z",
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-final",
+        uuid: "7e7bf9c6-cb28-46bf-87cb-39c2d8438a7c",
         session_id: "session-1",
         parent_tool_use_id: "task-tool-1",
         subagent_type: "Explore",
@@ -198,7 +198,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
       timestamp: "2026-06-25T20:00:01.000Z",
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-tool",
+        uuid: "adbe50f5-1713-4703-87fb-2de494476d47",
         session_id: "session-1",
         parent_tool_use_id: "task-tool-1",
         message: {
@@ -222,7 +222,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
       message: claudeSdkMessageFixture({
         type: "system",
         subtype: "task_notification",
-        uuid: "task-completed",
+        uuid: "7cf57b57-b342-4db6-891d-97b88916c75b",
         session_id: "session-1",
         task_id: "task-1",
         tool_use_id: "task-tool-1",
@@ -243,7 +243,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
       (event) =>
         event.type === "assistant_message" &&
         event.externalSessionId === "session-1::claude-subagent::task-1" &&
-        event.messageId === "assistant-final",
+        event.messageId === "7e7bf9c6-cb28-46bf-87cb-39c2d8438a7c",
     );
     expect(toolIndex).toBeGreaterThanOrEqual(0);
     expect(finalIndex).toBeGreaterThan(toolIndex);
@@ -270,7 +270,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "user-subagent-1",
+        uuid: "d4110c19-680e-4182-8583-efb29089616b",
         session_id: "session-1",
         parent_tool_use_id: "task-tool-1",
         message: {
@@ -284,7 +284,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
       expect.objectContaining({
         type: "user_message",
         externalSessionId: "session-1::claude-subagent::task-1",
-        messageId: "user-subagent-1",
+        messageId: "d4110c19-680e-4182-8583-efb29089616b",
         message: "Inspect the runtime subscription",
         state: "read",
       }),
@@ -307,7 +307,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-final",
+        uuid: "7e7bf9c6-cb28-46bf-87cb-39c2d8438a7c",
         session_id: "session-1",
         parent_tool_use_id: "task-tool-1",
         message: {
@@ -363,7 +363,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
       timestamp: "2026-06-25T20:00:00.000Z",
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-agent",
+        uuid: "2377d9e9-15d5-4670-8259-a5762a74de21",
         session_id: "session-1",
         message: {
           role: "assistant",
@@ -390,7 +390,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
       timestamp: "2026-06-25T20:00:01.000Z",
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "agent-result",
+        uuid: "5ded3745-c4f1-495a-883f-d8d0c9cc94d8",
         session_id: "session-1",
         tool_use_result: {
           agentId: "agent-1",
@@ -417,7 +417,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
         task_id: "task-1",
         tool_use_id: "agent-tool",
         description: "Audit API changes",
-        uuid: "agent-task-started",
+        uuid: "a11a6543-e2d8-4658-8f65-af86a1a53339",
         session_id: "session-1",
       }),
     });
@@ -428,7 +428,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
       timestamp: "2026-06-25T20:00:03.000Z",
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-stop",
+        uuid: "8617502d-76d5-4f06-8acd-118ae47e40d3",
         session_id: "session-1",
         message: {
           role: "assistant",
@@ -450,7 +450,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
       timestamp: "2026-06-25T20:00:04.000Z",
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "stop-result",
+        uuid: "3a4897fd-e796-418c-844a-3eb582cdb845",
         session_id: "session-1",
         tool_use_result: {
           message: "Successfully stopped task",
@@ -478,7 +478,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
       timestamp: "2026-06-25T20:00:04.000Z",
       part: {
         kind: "subagent",
-        messageId: "assistant-agent",
+        messageId: "2377d9e9-15d5-4670-8259-a5762a74de21",
         partId: "claude-subagent:agent-tool",
         correlationKey: "agent-tool",
         status: "cancelled",
@@ -507,7 +507,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
       timestamp: "2026-06-25T20:00:00.000Z",
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-tool-1",
+        uuid: "221616c4-6f7d-4434-81a1-286af00e1e5a",
         session_id: "session-1",
         parent_tool_use_id: "task-tool-1",
         message: {
@@ -550,7 +550,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
       timestamp: "2026-06-25T20:00:01.000Z",
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "user-tool-1",
+        uuid: "e491e0f5-4178-418e-883e-9cfd06577eb5",
         session_id: "session-1",
         parent_tool_use_id: "task-tool-1",
         message: {

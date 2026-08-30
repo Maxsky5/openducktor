@@ -1,5 +1,6 @@
 import { McpServer, type ToolCallback } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import type { z } from "zod";
 import packageJson from "../package.json" with { type: "json" };
 import {
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
@@ -15,6 +16,7 @@ import {
 import { OdtTaskStore } from "./odt-task-store";
 import { type OdtStoreContext, resolveStoreContext } from "./store-context";
 import {
+  mcpToolPayloadSchema,
   OdtToolError,
   type ToolResult,
   toTaskAssetsToolResult,
@@ -22,53 +24,34 @@ import {
   toToolResult,
 } from "./tool-results";
 
-type ToolInputByName<Name extends RegisteredToolName> = ReturnType<
-  (typeof ODT_TOOL_SCHEMAS)[Name]["parse"]
+type RegisteredToolInputSchema = (typeof ODT_TOOL_SCHEMAS)[RegisteredToolName];
+type ToolInput<InputSchema extends z.ZodObject> = Parameters<ToolCallback<InputSchema["shape"]>>[0];
+type ToolOutput<Name extends RegisteredToolName> = z.output<
+  (typeof ODT_HOST_BRIDGE_RESPONSE_SCHEMAS)[Name]
 >;
 
-type RegisteredTool<Name extends RegisteredToolName = RegisteredToolName> = {
+type OdtToolDefinition<Name extends RegisteredToolName = RegisteredToolName> = {
   name: Name;
   description: string;
-  execute(store: OdtTaskStore, input: ToolInputByName<Name>): Promise<unknown>;
-  result: ToolResultContract;
+  resultKind: "structured" | "native-content";
+  register(
+    server: McpServer,
+    store: OdtTaskStore,
+    options: { forbidWorkspaceIdInput: boolean },
+  ): void;
 };
 
-type RegisteredToolSpecs = {
-  [Name in RegisteredToolName]: {
-    description: string;
-    execute(store: OdtTaskStore, input: ToolInputByName<Name>): Promise<unknown>;
-    result: ToolResultContract;
-  };
+type OdtToolDefinitions<Names extends readonly RegisteredToolName[]> = {
+  readonly [Index in keyof Names]: OdtToolDefinition<Names[Index]>;
 };
 
-type ToolResultContract =
-  | {
-      kind: "structured";
-      outputSchema: (typeof ODT_HOST_BRIDGE_RESPONSE_SCHEMAS)[RegisteredToolName];
-      formatResult(payload: unknown): ToolResult;
-    }
-  | {
-      kind: "native-content";
-      formatResult(payload: unknown): ToolResult;
-    };
-
-type RegisterToolCallback<Name extends RegisteredToolName> = ToolCallback<
-  (typeof ODT_TOOL_SCHEMAS)[Name]
->;
-
-const structuredResult = (toolName: RegisteredToolName): ToolResultContract => ({
-  kind: "structured",
-  outputSchema: ODT_HOST_BRIDGE_RESPONSE_SCHEMAS[toolName],
-  formatResult: toToolResult,
-});
-
-const nativeTaskAssetsResult: ToolResultContract = {
-  kind: "native-content",
-  formatResult: (payload) => toTaskAssetsToolResult(payload),
+type ToolDefinitionOptions<Name extends RegisteredToolName, InputSchema extends z.ZodObject> = {
+  description: string;
+  execute(store: OdtTaskStore, input: ToolInput<InputSchema>): Promise<ToolOutput<Name>>;
+  nativeResult?: (payload: ToolOutput<Name>) => ToolResult;
 };
 
 const WORKSPACE_SCOPED_TOOL_NAMES = new Set<RegisteredToolName>(ODT_WORKSPACE_SCOPED_TOOL_NAMES);
-const KNOWN_TOOL_NAMES = new Set<string>(ODT_MCP_TOOL_NAMES);
 const ALLOWED_TOOLS_ENV = "ODT_ALLOWED_TOOLS";
 // Deliberately allow workflow-scoped calls with workspaceId through schema validation so
 // rejectForbiddenWorkspaceIdInput can return the canonical structured ODT error envelope.
@@ -97,28 +80,29 @@ const parseAllowedToolNames = (): RegisteredToolName[] => {
     throw new Error(`${ALLOWED_TOOLS_ENV} must list at least one tool when provided.`);
   }
 
+  const parsedToolNames = new Set<RegisteredToolName>();
   for (const toolName of toolNames) {
-    if (!KNOWN_TOOL_NAMES.has(toolName)) {
+    const registeredToolName = ODT_MCP_TOOL_NAMES.find((candidate) => candidate === toolName);
+    if (!registeredToolName) {
       throw new Error(`${ALLOWED_TOOLS_ENV} contains unknown OpenDucktor MCP tool '${toolName}'.`);
     }
+    parsedToolNames.add(registeredToolName);
   }
 
-  return [...new Set(toolNames)] as RegisteredToolName[];
+  return [...parsedToolNames];
 };
 
-const hasOwnWorkspaceIdInput = (input: unknown): boolean => {
-  return typeof input === "object" && input !== null && Object.hasOwn(input, "workspaceId");
-};
+type RegisteredToolInput = ToolInput<RegisteredToolInputSchema>;
 
 const rejectForbiddenWorkspaceIdInput = (
   toolName: RegisteredToolName,
-  input: unknown,
+  input: RegisteredToolInput,
   options: { forbidWorkspaceIdInput: boolean },
 ): void => {
   if (
     options.forbidWorkspaceIdInput &&
     WORKSPACE_SCOPED_TOOL_NAMES.has(toolName) &&
-    hasOwnWorkspaceIdInput(input)
+    Object.hasOwn(input, "workspaceId")
   ) {
     const message =
       "workspaceId is fixed by the startup workspace and is not allowed in tool input.";
@@ -137,45 +121,73 @@ const rejectForbiddenWorkspaceIdInput = (
   }
 };
 
-const registerOdtTool = <Name extends RegisteredToolName>(
+const registerOdtTool = <
+  Name extends RegisteredToolName,
+  InputSchema extends RegisteredToolInputSchema,
+>(
   server: McpServer,
   store: OdtTaskStore,
-  tool: RegisteredTool<Name>,
+  name: Name,
+  inputSchema: InputSchema,
+  definition: ToolDefinitionOptions<Name, InputSchema>,
   options: { forbidWorkspaceIdInput: boolean },
 ): void => {
-  const schema = ODT_TOOL_SCHEMAS[tool.name];
-  const config =
-    tool.result.kind === "structured"
-      ? {
-          title: tool.name,
-          description: tool.description,
-          inputSchema: schema,
-          outputSchema: tool.result.outputSchema,
-        }
-      : {
-          title: tool.name,
-          description: tool.description,
-          inputSchema: schema,
-        };
-  // Indexed access loses the generic name/schema correlation, so restore it at this boundary.
-  const callback = (async (input: unknown) => {
+  const execute = async (input: ToolInput<InputSchema>): Promise<ToolResult> => {
     try {
-      rejectForbiddenWorkspaceIdInput(tool.name, input, options);
-      const parsedInput = schema.parse(input) as ToolInputByName<Name>;
-      const result = await tool.execute(store, parsedInput);
-      return tool.result.formatResult(result);
-    } catch (error) {
-      return toToolError(error);
+      rejectForbiddenWorkspaceIdInput(name, input, options);
+      const payload = await definition.execute(store, input);
+      return definition.nativeResult
+        ? definition.nativeResult(payload)
+        : toToolResult(mcpToolPayloadSchema.parse(payload));
+    } catch (cause) {
+      return toToolError(cause);
     }
-  }) as RegisterToolCallback<Name>;
+  };
+  if (definition.nativeResult) {
+    server.registerTool(
+      name,
+      {
+        title: name,
+        description: definition.description,
+        inputSchema: inputSchema.shape,
+      },
+      async (input: ToolInput<InputSchema>) => execute(input),
+    );
+    return;
+  }
 
-  server.registerTool(tool.name, config, callback);
+  server.registerTool(
+    name,
+    {
+      title: name,
+      description: definition.description,
+      inputSchema: inputSchema.shape,
+      outputSchema: ODT_HOST_BRIDGE_RESPONSE_SCHEMAS[name],
+    },
+    async (input: ToolInput<InputSchema>) => execute(input),
+  );
+};
+
+const defineOdtTool = <Name extends RegisteredToolName>(
+  name: Name,
+  inputSchema: (typeof ODT_TOOL_SCHEMAS)[Name],
+  definition: ToolDefinitionOptions<Name, (typeof ODT_TOOL_SCHEMAS)[Name]>,
+): OdtToolDefinition<Name> => {
+  const resultKind = definition.nativeResult ? "native-content" : "structured";
+
+  return {
+    name,
+    description: definition.description,
+    resultKind,
+    register: (server, store, options) =>
+      registerOdtTool(server, store, name, inputSchema, definition, options),
+  };
 };
 
 type ListedOdtTool = {
   name: RegisteredToolName;
   description: string;
-  result: ToolResultContract;
+  resultKind: "structured" | "native-content";
 };
 
 const toListedToolDefinition = (
@@ -190,7 +202,7 @@ const toListedToolDefinition = (
       hideWorkspaceId: options.forbidWorkspaceIdInput,
     }),
   };
-  return tool.result.kind === "structured"
+  return tool.resultKind === "structured"
     ? { ...definition, outputSchema: getListedToolOutputSchema(tool.name) }
     : definition;
 };
@@ -205,109 +217,90 @@ const installVisibleToolListHandler = (
   }));
 };
 
-const ODT_REGISTERED_TOOL_SPECS: Readonly<RegisteredToolSpecs> = {
-  odt_get_workspaces: {
+const ODT_TOOL_DEFINITIONS = [
+  defineOdtTool("odt_get_workspaces", ODT_TOOL_SCHEMAS.odt_get_workspaces, {
     description:
       "List the workspaces currently known to OpenDucktor. Use the returned workspaceId values to scope later workspace-bound tool calls.",
     execute: (store, input) => store.getWorkspaces(input),
-    result: structuredResult("odt_get_workspaces"),
-  },
-  odt_read_task: {
-    description:
-      "Read one OpenDucktor task as a single summary object containing current public task fields plus nested qaVerdict and document presence booleans for spec/plan/latest QA.",
-    execute: (store, input) => store.readTask(input),
-    result: structuredResult("odt_read_task"),
-  },
-  odt_read_task_assets: {
-    description:
-      "Read task description images by taskId and a non-empty assetIds batch whose raw total is at most 20 MiB. Returns one native MCP image content block per requested asset, in request order, and fails the whole call if any asset is unavailable.",
-    execute: (store, input) => store.readTaskAssets(input),
-    result: nativeTaskAssetsResult,
-  },
-  odt_read_task_documents: {
-    description:
-      "Read only the requested OpenDucktor task document bodies. Provide taskId plus one or more true include flags for spec, implementation plan, or latest QA report.",
-    execute: (store, input) => store.readTaskDocuments(input),
-    result: structuredResult("odt_read_task_documents"),
-  },
-  odt_create_task: {
+  }),
+  defineOdtTool("odt_create_task", ODT_TOOL_SCHEMAS.odt_create_task, {
     description:
       "Create a new OpenDucktor task, feature, or bug using the same lightweight public task summary model as odt_read_task. Epic creation is not supported by this public tool.",
     execute: (store, input) => store.createTask(input),
-    result: structuredResult("odt_create_task"),
-  },
-  odt_search_tasks: {
+  }),
+  defineOdtTool("odt_search_tasks", ODT_TOOL_SCHEMAS.odt_search_tasks, {
     description:
       "Search active OpenDucktor tasks using exact filters for priority/issueType/status plus title substring and tag AND matching. The response is paginated as { results, limit, totalCount, hasMore }, and each item in results uses the same lightweight single-task summary model as odt_read_task, with qaVerdict and documents nested under task.",
     execute: (store, input) => store.searchTasks(input),
-    result: structuredResult("odt_search_tasks"),
-  },
-  odt_set_spec: {
+  }),
+  defineOdtTool("odt_read_task", ODT_TOOL_SCHEMAS.odt_read_task, {
+    description:
+      "Read one OpenDucktor task as a single summary object containing current public task fields plus nested qaVerdict and document presence booleans for spec/plan/latest QA.",
+    execute: (store, input) => store.readTask(input),
+  }),
+  defineOdtTool("odt_read_task_assets", ODT_TOOL_SCHEMAS.odt_read_task_assets, {
+    description:
+      "Read task description images by taskId and a non-empty assetIds batch whose raw total is at most 20 MiB. Returns one native MCP image content block per requested asset, in request order, and fails the whole call if any asset is unavailable.",
+    execute: (store, input) => store.readTaskAssets(input),
+    nativeResult: toTaskAssetsToolResult,
+  }),
+  defineOdtTool("odt_read_task_documents", ODT_TOOL_SCHEMAS.odt_read_task_documents, {
+    description:
+      "Read only the requested OpenDucktor task document bodies. Provide taskId plus one or more true include flags for spec, implementation plan, or latest QA report.",
+    execute: (store, input) => store.readTaskDocuments(input),
+  }),
+  defineOdtTool("odt_set_spec", ODT_TOOL_SCHEMAS.odt_set_spec, {
     description:
       "Persist specification markdown for a task. Transitions open->spec_ready only when starting from open; allowed revisions from later active/review states leave status unchanged.",
     execute: (store, input) => store.setSpec(input),
-    result: structuredResult("odt_set_spec"),
-  },
-  odt_set_plan: {
+  }),
+  defineOdtTool("odt_set_plan", ODT_TOOL_SCHEMAS.odt_set_plan, {
     description:
       "Persist implementation plan markdown. Valid pre-build planning transitions to ready_for_dev; allowed revisions from active/review states leave status unchanged.",
     execute: (store, input) => store.setPlan(input),
-    result: structuredResult("odt_set_plan"),
-  },
-  odt_build_blocked: {
+  }),
+  defineOdtTool("odt_build_blocked", ODT_TOOL_SCHEMAS.odt_build_blocked, {
     description: "Transition task to blocked with explicit reason.",
     execute: (store, input) => store.buildBlocked(input),
-    result: structuredResult("odt_build_blocked"),
-  },
-  odt_build_resumed: {
+  }),
+  defineOdtTool("odt_build_resumed", ODT_TOOL_SCHEMAS.odt_build_resumed, {
     description: "Transition blocked task back to in_progress.",
     execute: (store, input) => store.buildResumed(input),
-    result: structuredResult("odt_build_resumed"),
-  },
-  odt_build_completed: {
+  }),
+  defineOdtTool("odt_build_completed", ODT_TOOL_SCHEMAS.odt_build_completed, {
     description: "Transition in_progress task to ai_review/human_review according to qaRequired.",
     execute: (store, input) => store.buildCompleted(input),
-    result: structuredResult("odt_build_completed"),
-  },
-  odt_set_pull_request: {
+  }),
+  defineOdtTool("odt_set_pull_request", ODT_TOOL_SCHEMAS.odt_set_pull_request, {
     description:
       "Persist the canonical pull request metadata for a task after Builder creates or updates the pull request with provider-native tools. The tool resolves authoritative metadata from providerId and pull request number.",
     execute: (store, input) => store.setPullRequest(input),
-    result: structuredResult("odt_set_pull_request"),
-  },
-  odt_qa_approved: {
+  }),
+  defineOdtTool("odt_qa_approved", ODT_TOOL_SCHEMAS.odt_qa_approved, {
     description: "Append approved QA report and transition ai_review->human_review.",
     execute: (store, input) => store.qaApproved(input),
-    result: structuredResult("odt_qa_approved"),
-  },
-  odt_qa_rejected: {
+  }),
+  defineOdtTool("odt_qa_rejected", ODT_TOOL_SCHEMAS.odt_qa_rejected, {
     description: "Append rejected QA report and transition ai_review->in_progress.",
     execute: (store, input) => store.qaRejected(input),
-    result: structuredResult("odt_qa_rejected"),
-  },
-};
+  }),
+] satisfies OdtToolDefinitions<typeof ODT_MCP_TOOL_NAMES>;
 
 const registerTools = (
   server: McpServer,
   store: OdtTaskStore,
   options: { forbidWorkspaceIdInput: boolean; allowedToolNames: readonly RegisteredToolName[] },
 ): void => {
+  const allowedToolNames = new Set(options.allowedToolNames);
   const registeredTools: ListedOdtTool[] = [];
 
-  const registerOneTool = <Name extends RegisteredToolName>(toolName: Name): void => {
-    const spec = ODT_REGISTERED_TOOL_SPECS[toolName];
-    const tool: RegisteredTool<Name> = {
-      name: toolName,
-      description: spec.description,
-      execute: spec.execute,
-      result: spec.result,
-    };
-    registerOdtTool(server, store, tool, options);
-    registeredTools.push(tool);
-  };
+  for (const tool of ODT_TOOL_DEFINITIONS) {
+    if (!allowedToolNames.has(tool.name)) {
+      continue;
+    }
 
-  for (const toolName of options.allowedToolNames) {
-    registerOneTool(toolName);
+    tool.register(server, store, options);
+    registeredTools.push(tool);
   }
 
   installVisibleToolListHandler(server, registeredTools, options);

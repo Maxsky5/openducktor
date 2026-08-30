@@ -7,6 +7,7 @@ import type {
   TaskCreateInput,
 } from "@openducktor/contracts";
 import { Cause, Chunk, Effect, Exit } from "effect";
+import { z } from "zod";
 import type { TaskStorePort } from "./task-repository-ports";
 
 export type TaskStorePortContractHarness = {
@@ -29,20 +30,18 @@ const firstFailure = async <A, E>(effect: Effect.Effect<A, E>): Promise<E> => {
   return failureOption.value;
 };
 
-const readTag = (value: unknown): string | undefined => {
-  if (typeof value !== "object" || value === null || !("_tag" in value)) {
-    return undefined;
-  }
-  const tag = value._tag;
-  return typeof tag === "string" ? tag : undefined;
-};
+const failureTagSchema = z.object({ _tag: z.string() }).passthrough();
+
+const readTag = (
+  result: z.ZodSafeParseResult<z.output<typeof failureTagSchema>>,
+): string | undefined => (result.success ? result.data._tag : undefined);
 
 export const expectFailureTag = async <A, E>(
   effect: Effect.Effect<A, E>,
   expectedTag: string,
 ): Promise<E> => {
   const failure = await firstFailure(effect);
-  expect(readTag(failure)).toBe(expectedTag);
+  expect(readTag(failureTagSchema.safeParse(failure))).toBe(expectedTag);
   return failure;
 };
 

@@ -4,18 +4,20 @@ import {
   agentSessionRecordSchema,
   type PlanSubtaskInput,
   type PullRequest,
-  planSubtaskInputSchema,
-  pullRequestSchema,
   type TaskCreateInput,
+  type TaskDirectMergeInput,
+  type TaskAssetDescriptionMutation,
+  type TaskStatus,
   type TaskUpdatePatch,
-  taskAssetDescriptionMutationSchema,
-  taskCreateInputSchema,
-  taskDirectMergeInputSchema,
-  taskStatusSchema,
-  taskUpdatePatchSchema,
 } from "@openducktor/contracts";
+import { z } from "zod";
 import { compactAgentSessionRecord } from "../../domain/agent-session-records";
 import { HostValidationError } from "../../effect/host-errors";
+import {
+  commandInputStringSchema,
+  type CommandInputRecord,
+  requireParsedRecord,
+} from "./command-inputs";
 
 const invalidInput = (message: string, field?: string): HostValidationError =>
   new HostValidationError({
@@ -23,92 +25,90 @@ const invalidInput = (message: string, field?: string): HostValidationError =>
     field,
   });
 
-export const requireRecord = (value: unknown, label: string): Record<string, unknown> => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw invalidInput(`${label} must be an object.`, label);
-  }
-
-  return value as Record<string, unknown>;
+type PullRequestContent = {
+  title: string;
+  body: string;
 };
 
-export const requireString = (value: unknown, label: string): string => {
-  if (typeof value !== "string" || value.trim().length === 0) {
+export const requireString = (result: z.ZodSafeParseResult<string>, label: string): string => {
+  if (!result.success || result.data.trim().length === 0) {
     throw invalidInput(`${label} is required.`, label);
   }
 
-  return value.trim();
+  return result.data.trim();
 };
 
-export const optionalNonNegativeInteger = (value: unknown, label: string): number | undefined => {
-  if (value === undefined || value === null) {
-    return undefined;
-  }
-
-  if (!Number.isInteger(value) || typeof value !== "number" || value < 0) {
+export const optionalNonNegativeInteger = (
+  result: z.ZodSafeParseResult<number | null | undefined>,
+  label: string,
+): number | undefined => {
+  if (!result.success) {
     throw invalidInput(`${label} must be greater than or equal to 0.`, label);
   }
 
-  return value;
+  return result.data ?? undefined;
 };
 
-export const parseCreateInput = (value: unknown): TaskCreateInput => {
-  const parsed = taskCreateInputSchema.safeParse(value);
-  if (parsed.success) {
-    return parsed.data;
+export const parseCreateInput = (
+  result: z.ZodSafeParseResult<TaskCreateInput>,
+): TaskCreateInput => {
+  if (result.success) {
+    return result.data;
   }
 
-  throw invalidInput(`task_create input.input is invalid: ${parsed.error.message}`, "input.input");
+  throw invalidInput(`task_create input.input is invalid: ${result.error.message}`, "input.input");
 };
 
-export const parseUpdatePatch = (value: unknown): TaskUpdatePatch => {
-  const parsed = taskUpdatePatchSchema.safeParse(value);
-  if (parsed.success) {
-    return parsed.data;
+export const parseUpdatePatch = (
+  result: z.ZodSafeParseResult<TaskUpdatePatch>,
+): TaskUpdatePatch => {
+  if (result.success) {
+    return result.data;
   }
 
-  throw invalidInput(`task_update input.patch is invalid: ${parsed.error.message}`, "input.patch");
+  throw invalidInput(`task_update input.patch is invalid: ${result.error.message}`, "input.patch");
 };
 
-export const parseDescriptionAssets = (value: unknown) => {
-  if (value === undefined) {
-    return undefined;
+export const parseDescriptionAssets = (
+  result: z.ZodSafeParseResult<TaskAssetDescriptionMutation | undefined>,
+): TaskAssetDescriptionMutation | undefined => {
+  if (result.success) {
+    return result.data;
   }
-  const parsed = taskAssetDescriptionMutationSchema.safeParse(value);
-  if (parsed.success) {
-    return parsed.data;
-  }
-  throw invalidInput(`descriptionAssets is invalid: ${parsed.error.message}`, "descriptionAssets");
+  throw invalidInput(`descriptionAssets is invalid: ${result.error.message}`, "descriptionAssets");
 };
 
-export const parseTransitionStatus = (value: unknown) => {
-  const parsed = taskStatusSchema.safeParse(value);
-  if (parsed.success) {
-    return parsed.data;
+export const parseTransitionStatus = (result: z.ZodSafeParseResult<TaskStatus>): TaskStatus => {
+  if (result.success) {
+    return result.data;
   }
 
   throw invalidInput(
-    `task_transition input.status is invalid: ${parsed.error.message}`,
+    `task_transition input.status is invalid: ${result.error.message}`,
     "input.status",
   );
 };
 
-export const optionalBoolean = (value: unknown, label: string): boolean | undefined => {
-  if (value === undefined || value === null) {
-    return undefined;
-  }
-  if (typeof value !== "boolean") {
+export const optionalBoolean = (
+  result: z.ZodSafeParseResult<boolean | null | undefined>,
+  label: string,
+): boolean | undefined => {
+  if (!result.success) {
     throw invalidInput(`${label} must be a boolean when provided.`, label);
   }
 
-  return value;
+  return result.data ?? undefined;
 };
 
-export const parseRequiredMarkdown = (value: unknown, label: string): string => {
-  if (typeof value !== "string") {
+export const parseRequiredMarkdown = (
+  result: z.ZodSafeParseResult<string>,
+  label: string,
+): string => {
+  if (!result.success) {
     throw invalidInput(`${label} markdown cannot be empty.`, label);
   }
 
-  const trimmed = value.trim();
+  const trimmed = result.data.trim();
   if (!trimmed) {
     throw invalidInput(`${label} markdown cannot be empty.`, label);
   }
@@ -116,65 +116,70 @@ export const parseRequiredMarkdown = (value: unknown, label: string): string => 
   return trimmed;
 };
 
-export const parseOptionalNote = (value: unknown, label: string): string | undefined => {
-  if (value === undefined || value === null) {
-    return undefined;
-  }
-  if (typeof value !== "string") {
+export const parseOptionalNote = (
+  result: z.ZodSafeParseResult<string | null | undefined>,
+  label: string,
+): string | undefined => {
+  if (!result.success) {
     throw invalidInput(`${label} must be a string when present.`, label);
   }
+  if (result.data === undefined || result.data === null) return undefined;
 
-  const trimmed = value.trim();
+  const trimmed = result.data.trim();
   return trimmed ? trimmed : undefined;
 };
 
-export const parsePlanSubtasks = (value: unknown): PlanSubtaskInput[] => {
-  if (value === undefined) {
-    return [];
-  }
-
-  const parsed = planSubtaskInputSchema.array().safeParse(value);
-  if (parsed.success) {
-    return parsed.data;
+export const parsePlanSubtasks = (
+  result: z.ZodSafeParseResult<PlanSubtaskInput[] | undefined>,
+): PlanSubtaskInput[] => {
+  if (result.success) {
+    return result.data ?? [];
   }
 
   throw invalidInput(
-    `set_plan input.input.subtasks is invalid: ${parsed.error.message}`,
+    `set_plan input.input.subtasks is invalid: ${result.error.message}`,
     "input.input.subtasks",
   );
 };
 
-const normalizeAgentSessionInput = (value: unknown): unknown => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return value;
+const agentSessionStringKeys: ReadonlyArray<
+  keyof Pick<
+    AgentSessionRecord,
+    "externalSessionId" | "role" | "startedAt" | "runtimeKind" | "workingDirectory"
+  >
+> = ["externalSessionId", "role", "startedAt", "runtimeKind", "workingDirectory"];
+const normalizedAgentSessionInputSchema = z.record(z.string(), z.json()).transform((record) => {
+  const normalized = { ...record };
+  for (const key of agentSessionStringKeys) {
+    const value = normalized[key];
+    const parsed = z.string().safeParse(value);
+    if (parsed.success) {
+      normalized[key] = parsed.data.trim();
+    }
   }
+  return normalized;
+});
 
-  const record = value as Record<string, unknown>;
-  return {
-    ...record,
-    externalSessionId:
-      typeof record.externalSessionId === "string"
-        ? record.externalSessionId.trim()
-        : record.externalSessionId,
-    role: typeof record.role === "string" ? record.role.trim() : record.role,
-    startedAt: typeof record.startedAt === "string" ? record.startedAt.trim() : record.startedAt,
-    runtimeKind:
-      typeof record.runtimeKind === "string" ? record.runtimeKind.trim() : record.runtimeKind,
-    workingDirectory:
-      typeof record.workingDirectory === "string"
-        ? record.workingDirectory.trim()
-        : record.workingDirectory,
-  };
-};
+export const normalizedAgentSessionRecordSchema = normalizedAgentSessionInputSchema.transform(
+  (record, context) => {
+    const parsed = agentSessionRecordSchema.safeParse(record);
+    if (parsed.success) return parsed.data;
+    for (const issue of parsed.error.issues) {
+      context.addIssue({ code: "custom", message: issue.message, path: issue.path });
+    }
+    return z.NEVER;
+  },
+);
 
-export const parseAgentSessionRecord = (value: unknown): AgentSessionRecord => {
-  const parsed = agentSessionRecordSchema.safeParse(normalizeAgentSessionInput(value));
-  if (parsed.success) {
-    return parsed.data;
+export const parseAgentSessionRecord = (
+  result: z.ZodSafeParseResult<AgentSessionRecord>,
+): AgentSessionRecord => {
+  if (result.success) {
+    return result.data;
   }
 
   throw invalidInput(
-    `agent_session_upsert input.session is invalid: ${parsed.error.message}`,
+    `agent_session_upsert input.session is invalid: ${result.error.message}`,
     "input.session",
   );
 };
@@ -184,49 +189,63 @@ const agentSessionIdentitySchema = agentSessionRecordSchema.pick({
   runtimeKind: true,
   workingDirectory: true,
 });
+export const normalizedAgentSessionIdentitySchema = normalizedAgentSessionInputSchema.transform(
+  (record, context) => {
+    const parsed = agentSessionIdentitySchema.safeParse(record);
+    if (parsed.success) return parsed.data;
+    for (const issue of parsed.error.issues) {
+      context.addIssue({ code: "custom", message: issue.message, path: issue.path });
+    }
+    return z.NEVER;
+  },
+);
 
-export const parseAgentSessionIdentity = (value: unknown): AgentSessionIdentity => {
-  const parsed = agentSessionIdentitySchema.safeParse(normalizeAgentSessionInput(value));
-  if (parsed.success) {
-    return parsed.data;
+export const parseAgentSessionIdentity = (
+  result: z.ZodSafeParseResult<AgentSessionIdentity>,
+): AgentSessionIdentity => {
+  if (result.success) {
+    return result.data;
   }
 
   throw invalidInput(
-    `agent_session_delete input.identity is invalid: ${parsed.error.message}`,
+    `agent_session_delete input.identity is invalid: ${result.error.message}`,
     "input.identity",
   );
 };
 
-export const parsePullRequest = (value: unknown): PullRequest => {
-  const parsed = pullRequestSchema.safeParse(value);
-  if (parsed.success) {
-    return parsed.data;
+export const parsePullRequest = (result: z.ZodSafeParseResult<PullRequest>): PullRequest => {
+  if (result.success) {
+    return result.data;
   }
 
   throw invalidInput(
-    `task_pull_request_link_merged input.pullRequest is invalid: ${parsed.error.message}`,
+    `task_pull_request_link_merged input.pullRequest is invalid: ${result.error.message}`,
     "input.pullRequest",
   );
 };
 
-export const parsePullRequestContent = (value: unknown): { title: string; body: string } => {
-  const record = requireRecord(value, "task_pull_request_upsert input.input");
-  const title = requireString(record.title, "input.title");
-  if (typeof record.body !== "string") {
+export const parsePullRequestContent = (
+  result: z.ZodSafeParseResult<CommandInputRecord>,
+): PullRequestContent => {
+  const record = requireParsedRecord(result, "task_pull_request_upsert input.input");
+  const title = requireString(commandInputStringSchema.safeParse(record.title), "input.title");
+  const body = z.string().safeParse(record.body);
+  if (!body.success) {
     throw invalidInput("input.body is required.", "input.body");
   }
 
-  return { title, body: record.body };
+  return { title, body: body.data };
 };
 
-export const parseTaskDirectMergeInput = (value: unknown) => {
-  const parsed = taskDirectMergeInputSchema.safeParse(value);
-  if (parsed.success) {
-    return parsed.data;
+export const parseTaskDirectMergeInput = (
+  result: z.ZodSafeParseResult<TaskDirectMergeInput>,
+): TaskDirectMergeInput => {
+  if (result.success) {
+    return result.data;
   }
 
   throw invalidInput(
-    `task_direct_merge input.input is invalid: ${parsed.error.message}`,
+    `task_direct_merge input.input is invalid: ${result.error.message}`,
     "input.input",
   );
 };

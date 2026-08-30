@@ -86,10 +86,9 @@ export class TaskMetadataCache {
     this.nextFetchToken = fetchToken;
     this.latestFetchTokenByKey.set(cacheKey, fetchToken);
 
-    const next = invokeFn("task_metadata_get", { repoPath, taskId })
+    const next = invokeFn("task_metadata_get", { repoPath, taskId }, taskMetadataPayloadSchema)
       .then((payload) => {
-        const parsed = taskMetadataPayloadSchema.parse(payload);
-        const metadata: ParsedTaskMetadata = parsed;
+        const metadata: ParsedTaskMetadata = payload;
 
         if (this.latestFetchTokenByKey.get(cacheKey) === fetchToken) {
           this.cache.set(cacheKey, metadata);

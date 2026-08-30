@@ -1,4 +1,4 @@
-import type { HostEventChannel } from "@openducktor/host";
+import type { HostEventChannel } from "@openducktor/contracts";
 import type { ElectronHostEventEnvelope } from "../shared/electron-bridge-contract";
 
 type ElectronHostEventWindow = {
@@ -12,7 +12,7 @@ type ElectronHostEventWindow = {
 export const forwardElectronHostEvent = (
   windows: readonly ElectronHostEventWindow[],
   ipcChannel: string,
-  envelope: ElectronHostEventEnvelope & { channel: HostEventChannel },
+  envelope: ElectronHostEventEnvelope,
   reportDeliveryFailure: (failure: { channel: HostEventChannel; cause: unknown }) => void,
 ): void => {
   for (const window of windows) {

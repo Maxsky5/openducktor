@@ -281,14 +281,16 @@ export const useSettingsModalController = ({
   });
   const reusablePromptValidationState = useSettingsModalReusablePromptValidation({ snapshotDraft });
   const hasReusablePromptValidationErrors = reusablePromptValidationState.totalErrorCount > 0;
-  const runtimeAvailabilityValidationState = useSettingsModalRuntimeValidation({
+  const runtimeValidationInput: Parameters<typeof useSettingsModalRuntimeValidation>[0] = {
     runtimeDefinitions,
     snapshotDraft,
     checkingRuntimeKinds: runtimeExecutableValidation.checkingRuntimeKinds,
-    ...(runtimeExecutableValidation.results.length > 0
-      ? { runtimeExecutableResults: runtimeExecutableValidation.results }
-      : {}),
-  });
+  };
+  if (runtimeExecutableValidation.results.length > 0) {
+    runtimeValidationInput.runtimeExecutableResults = runtimeExecutableValidation.results;
+  }
+  const runtimeAvailabilityValidationState =
+    useSettingsModalRuntimeValidation(runtimeValidationInput);
   const hasRuntimeAvailabilityErrors = runtimeAvailabilityValidationState.totalErrorCount > 0;
   const invalidRuntimeKind = snapshotDraft
     ? (invalidEnabledRuntime(snapshotDraft.agentRuntimes, runtimeExecutableValidation.results)

@@ -14,6 +14,7 @@ import {
 import path from "node:path";
 import { taskAssetIdSchema } from "@openducktor/contracts";
 import { Effect, Exit } from "effect";
+import { z } from "zod";
 import { TaskAssetError } from "../../application/task-assets/task-asset-error";
 import type { TaskAssetFilePort, TaskAssetQuarantine } from "../../ports/task-asset-file-port";
 import {
@@ -33,8 +34,8 @@ import {
 
 type QuarantineMove = { from: string; to: string };
 
-const isMissing = (cause: unknown): boolean =>
-  typeof cause === "object" && cause !== null && "code" in cause && cause.code === "ENOENT";
+const missingErrorSchema = z.object({ code: z.literal("ENOENT") }).passthrough();
+const isMissing = (cause: unknown): boolean => missingErrorSchema.safeParse(cause).success;
 
 const existingStat = async (target: string) => {
   try {

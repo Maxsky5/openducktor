@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { AgentEvent } from "@openducktor/core";
 import {
   buildSession,
   createSessionsRef,
@@ -8,14 +9,11 @@ import {
   listenToAgentSessionEvents,
   type SessionEventAdapter,
 } from "./session-events-test-harness";
-
-type RoutedEvent = { type: string; [key: string]: unknown };
-
 const observeSession = async (session = buildSession()) => {
-  let handleEvent: ((event: RoutedEvent) => void) | undefined;
+  let handleEvent: Parameters<SessionEventAdapter["subscribeEvents"]>[1] | undefined;
   const adapter: SessionEventAdapter = {
     subscribeEvents: async (_externalSessionId, handler) => {
-      handleEvent = handler as unknown as (event: RoutedEvent) => void;
+      handleEvent = handler;
       return () => {};
     },
     replyApproval: async () => {},
@@ -47,7 +45,7 @@ const safetyBufferingStatus = {
     message: "Our systems are thinking a bit more about this request before responding.",
   },
   timestamp: "2026-07-10T10:00:00.000Z",
-};
+} satisfies Extract<AgentEvent, { type: "session_status" }>;
 
 describe("agent-orchestrator session status", () => {
   test("settles accepted no-output turns after runtime status confirms activity", async () => {
@@ -139,7 +137,7 @@ describe("agent-orchestrator session status", () => {
   });
 
   test("clears the message on terminal session events", async () => {
-    const terminalEvents: RoutedEvent[] = [
+    const terminalEvents: AgentEvent[] = [
       {
         type: "session_error",
         externalSessionId: "session-1",
@@ -150,6 +148,7 @@ describe("agent-orchestrator session status", () => {
         type: "session_finished",
         externalSessionId: "session-1",
         timestamp: "2026-07-10T10:00:01.000Z",
+        message: "Session finished",
       },
     ];
 

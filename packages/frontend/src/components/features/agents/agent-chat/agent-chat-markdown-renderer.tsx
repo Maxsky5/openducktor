@@ -2,34 +2,9 @@ import { memo, type ReactElement } from "react";
 import { MarkdownRenderer, type MarkdownRendererVariant } from "@/components/ui/markdown-renderer";
 import { cn } from "@/lib/utils";
 import { closeOpenStreamingCodeFence } from "./agent-chat-code-fence-healing";
-import { hasMarkdownSyntaxHint } from "./agent-chat-markdown-hints";
-import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
-
-const PLAIN_TEXT_CLASSES: Record<MarkdownRendererVariant, string> = {
-  compact: "text-[13px] leading-relaxed text-foreground",
-  document: "leading-6 py-4 text-foreground",
-};
 
 const MARKDOWN_PROSE_WRAPPING_CLASSES =
-  "prose-p:break-words prose-li:break-words prose-blockquote:break-words";
-
-type PlainTextMarkdownFallbackProps = {
-  content: string;
-  variant: MarkdownRendererVariant;
-  className?: string;
-};
-
-const PlainTextMarkdownFallback = ({
-  content,
-  variant,
-  className,
-}: PlainTextMarkdownFallbackProps): ReactElement => {
-  return (
-    <AgentChatTranscriptProse className={cn(PLAIN_TEXT_CLASSES[variant], className)}>
-      {content}
-    </AgentChatTranscriptProse>
-  );
-};
+  "prose-p:whitespace-pre-wrap prose-p:break-words prose-li:break-words prose-blockquote:break-words";
 
 type AgentChatMarkdownRendererProps = {
   markdown: string;
@@ -46,15 +21,8 @@ export const AgentChatMarkdownRenderer = memo(function AgentChatMarkdownRenderer
 }: AgentChatMarkdownRendererProps): ReactElement | null {
   const content = markdown;
   const trimmedContent = content.trim();
-  const plainTextClassNameProps = className ? { className } : {};
   if (!trimmedContent) {
     return null;
-  }
-
-  if (!hasMarkdownSyntaxHint(trimmedContent)) {
-    return (
-      <PlainTextMarkdownFallback content={content} variant={variant} {...plainTextClassNameProps} />
-    );
   }
 
   const preparedMarkdown = closeOpenStreamingCodeFence(content, streaming);

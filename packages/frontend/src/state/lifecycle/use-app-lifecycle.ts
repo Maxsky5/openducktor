@@ -5,7 +5,7 @@ import type {
   TaskStoreCheck,
 } from "@openducktor/contracts";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
@@ -22,7 +22,7 @@ import {
 export type TaskStreamControllerFactory = (input: {
   queryClient: QueryClient;
   getActiveRepoPath: () => string | null;
-  onDegraded: (error: unknown) => void;
+  onDegraded: (cause: unknown) => void;
 }) => TaskStreamController;
 
 type UseAppLifecycleArgs = {
@@ -44,9 +44,9 @@ const lifecycleNotifications: LifecycleNotificationPort = {
   dismiss: (id) => toast.dismiss(id),
 };
 
-const lifecycleTimers: LifecycleTimerPort = {
+const lifecycleTimers: LifecycleTimerPort<ReturnType<typeof setTimeout>> = {
   setTimeout: (callback, delayMs) => setTimeout(callback, delayMs),
-  clearTimeout: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
+  clearTimeout: (timer) => clearTimeout(timer),
 };
 
 export function useAppLifecycle({
@@ -70,15 +70,17 @@ export function useAppLifecycle({
     loadWorkspaceTasksRef.current = loadWorkspaceTasks;
   }, [activeWorkspace, loadWorkspaceTasks]);
 
-  const runtimeKindsKey = runtimeDefinitions.map((definition) => definition.kind).join(",");
+  const runtimeKinds = useMemo(
+    () => runtimeDefinitions.map((definition) => definition.kind),
+    [runtimeDefinitions],
+  );
 
   useEffect(() => {
     const repoPath = activeWorkspace?.repoPath ?? null;
-    if (!repoPath || runtimeKindsKey.length === 0) {
+    if (!repoPath || runtimeKinds.length === 0) {
       return;
     }
 
-    const runtimeKinds = runtimeKindsKey.split(",") as RuntimeKind[];
     return startRepositoryRuntimes({
       repoPath,
       runtimeKinds,
@@ -88,7 +90,7 @@ export function useAppLifecycle({
       notifications: lifecycleNotifications,
       timers: lifecycleTimers,
     });
-  }, [activeWorkspace?.repoPath, refreshRepoRuntimeHealth, runtimeKindsKey, startRepoRuntime]);
+  }, [activeWorkspace?.repoPath, refreshRepoRuntimeHealth, runtimeKinds, startRepoRuntime]);
 
   useEffect(() => {
     const controller = taskStreamControllerFactory({
@@ -99,8 +101,8 @@ export function useAppLifecycle({
         toast.error("Task stream degraded", { description });
       },
     });
-    void controller.start().catch((error: unknown) => {
-      toast.error("Task stream unavailable", { description: errorMessage(error) });
+    void controller.start().catch((cause: unknown) => {
+      toast.error("Task stream unavailable", { description: errorMessage(cause) });
     });
     return () => {
       void controller.stop();

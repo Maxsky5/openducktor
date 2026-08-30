@@ -16,8 +16,8 @@ import type { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import type { CodexSessionState } from "./types";
 
 export type CodexSessionRuntimeSnapshotReaderDeps = {
-  runtimeClients: CodexRuntimeClientResolver;
-  threadInventory: CodexThreadInventoryReader;
+  runtimeClients: Pick<CodexRuntimeClientResolver, "clientForRuntime" | "resolve">;
+  threadInventory: Pick<CodexThreadInventoryReader, "read" | "refresh" | "readForDirectories">;
   sessions: CodexSessionLookup;
   pendingInput: CodexPendingInputState;
   hasActiveTurn: (externalSessionId: string) => boolean;
@@ -38,10 +38,9 @@ const toLocalRuntimeSnapshot = async (
     deps.runtimeClients.clientForRuntime(session.runtimeId),
     session.runtimeId,
   );
-  return toRefreshedRuntimeSnapshot({
+  const refreshInput: Parameters<typeof toRefreshedRuntimeSnapshot>[0] = {
     session,
     inventory,
-    ...(input ? { input } : {}),
     pendingApprovals: deps.pendingInput.pendingApprovalsForSession(
       session.threadId,
       session.runtimeId,
@@ -51,7 +50,11 @@ const toLocalRuntimeSnapshot = async (
       session.runtimeId,
     ),
     hasActiveTurn: deps.hasActiveTurn(session.threadId),
-  });
+  };
+  if (input) {
+    refreshInput.input = input;
+  }
+  return toRefreshedRuntimeSnapshot(refreshInput);
 };
 
 const readRuntimeInventoryOnce = (

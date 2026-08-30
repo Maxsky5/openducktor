@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { EventEmitter } from "node:events";
 import {
   type KillProcess,
   processTreeHasChildren,
@@ -248,28 +249,15 @@ describe("process-tree", () => {
   });
 
   test("observes child close and removes its listener", async () => {
-    const closeListeners: Array<() => void> = [];
-    const removed: Array<() => void> = [];
-    const child = {
-      once: (_event: "close", listener: () => void) => {
-        closeListeners.push(listener);
-        return child;
-      },
-      off: (_event: "close", listener: () => void) => {
-        removed.push(listener);
-        return child;
-      },
-    } as unknown as Parameters<typeof waitForChildProcessClose>[0];
+    const child = new EventEmitter();
     let closed = false;
     const waiting = Effect.runPromise(waitForChildProcessClose(child, () => closed, 100));
 
     await Promise.resolve();
-    const closeListener = closeListeners[0];
-    if (!closeListener) throw new Error("Expected a child close listener.");
+    expect(child.listenerCount("close")).toBe(1);
     closed = true;
-    closeListener();
-
+    child.emit("close");
     await expect(waiting).resolves.toBe(true);
-    expect(removed).toEqual([closeListener]);
+    expect(child.listenerCount("close")).toBe(0);
   });
 });

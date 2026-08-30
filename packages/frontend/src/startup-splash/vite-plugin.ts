@@ -428,36 +428,37 @@ type StartupSplashHtmlTag = {
 export const createOpenDucktorStartupSplashPlugin = () => ({
   name: "openducktor-startup-splash",
   enforce: "pre" as const,
-  transformIndexHtml: (): { tags: StartupSplashHtmlTag[] } => ({
-    tags: [
-      {
-        tag: "link",
-        attrs: {
-          rel: "preload",
-          href: STARTUP_FONT_PATH,
-          as: "font",
-          type: "font/woff2",
-          crossorigin: "anonymous",
+  transformIndexHtml: () =>
+    ({
+      tags: [
+        {
+          tag: "link",
+          attrs: {
+            rel: "preload",
+            href: STARTUP_FONT_PATH,
+            as: "font",
+            type: "font/woff2",
+            crossorigin: "anonymous",
+          },
+          injectTo: "head-prepend",
         },
-        injectTo: "head-prepend",
-      },
-      {
-        tag: "style",
-        attrs: { id: "openducktor-startup-styles" },
-        children: STARTUP_SPLASH_STYLES,
-        injectTo: "head-prepend",
-      },
-      {
-        tag: "div",
-        attrs: {
-          id: "openducktor-startup",
-          class: "odt-startup",
-          role: "status",
-          "aria-label": "OpenDucktor is starting",
+        {
+          tag: "style",
+          attrs: { id: "openducktor-startup-styles" },
+          children: STARTUP_SPLASH_STYLES,
+          injectTo: "head-prepend",
         },
-        children: STARTUP_SPLASH_MARKUP,
-        injectTo: "body-prepend",
-      },
-    ],
-  }),
+        {
+          tag: "div",
+          attrs: {
+            id: "openducktor-startup",
+            class: "odt-startup",
+            role: "status",
+            "aria-label": "OpenDucktor is starting",
+          },
+          children: STARTUP_SPLASH_MARKUP,
+          injectTo: "body-prepend",
+        },
+      ],
+    }) satisfies { tags: StartupSplashHtmlTag[] },
 });

@@ -3,9 +3,9 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { buildTodoItem } from "./agent-chat-test-fixtures";
 import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
 
-const reactActEnvironmentGlobal = globalThis as typeof globalThis & {
+const reactActEnvironmentGlobal: typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
-};
+} = globalThis;
 const previousActEnvironmentValue = reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT;
 
 beforeAll(() => {
@@ -13,7 +13,7 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  if (typeof previousActEnvironmentValue === "undefined") {
+  if (previousActEnvironmentValue === undefined) {
     delete reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT;
     return;
   }

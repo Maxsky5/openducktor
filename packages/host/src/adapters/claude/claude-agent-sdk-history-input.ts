@@ -1,5 +1,7 @@
+import type { SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
+import { parseClaudeHistoryConversationEntry } from "./claude-agent-sdk-ingress-schemas";
 import {
   type ClaudeLiveUserMessage,
   createLiveUserMessageResolver,
@@ -21,11 +23,21 @@ type ClaudeVisibleHistoryMessage = Extract<
   { role: "assistant" | "user" }
 >;
 
+type PendingQueuedPrompt = {
+  text: string;
+  timestamp: string;
+};
+
+type ManualCompactionInput = {
+  messageId: string;
+  timestamp: string;
+};
+
 type ClaudeHistoryInputProjection =
   | { handled: false }
   | {
       handled: true;
-      manualCompaction?: { messageId: string; timestamp: string };
+      manualCompaction?: ManualCompactionInput;
       message?: ClaudeVisibleHistoryMessage;
     };
 
@@ -37,11 +49,11 @@ export const createClaudeHistoryInputProjector = (options: {
 }) => {
   const resolveLiveUserMessage = createLiveUserMessageResolver(options.liveUserMessages);
   const compactPromptIds = new Set<string>();
-  let pendingQueuedPrompt: { text: string; timestamp: string } | null = null;
+  let pendingQueuedPrompt: PendingQueuedPrompt | null = null;
 
   const createUserMessage = (input: {
     fallbackMessageId: string;
-    message: unknown;
+    message: SessionStoreEntry["message"];
     text: string;
     timestamp: string;
   }): ClaudeVisibleHistoryMessage | undefined => {
@@ -56,19 +68,23 @@ export const createClaudeHistoryInputProjector = (options: {
     if (input.text.trim().length === 0 && displayParts.length === 0) {
       return undefined;
     }
-    return {
+    const message: ClaudeVisibleHistoryMessage = {
       messageId,
       role: "user",
       timestamp: input.timestamp,
       text: input.text,
       displayParts,
       state: liveUserMessage?.state ?? "read",
-      ...(liveUserMessage?.model ? { model: liveUserMessage.model } : {}),
       parts: [],
     };
+    if (liveUserMessage?.model) {
+      message.model = liveUserMessage.model;
+    }
+    return message;
   };
 
   return (entry: ClaudeHistoryMessage, timestamp: string): ClaudeHistoryInputProjection => {
+    const entryValue = entry;
     const queuedPrompt = readClaudeQueuedPrompt(entry);
     if (queuedPrompt) {
       pendingQueuedPrompt = { text: queuedPrompt, timestamp };
@@ -76,11 +92,11 @@ export const createClaudeHistoryInputProjector = (options: {
     }
 
     if (entry.type === "system") {
-      const subtype = readStringProp(entry, "subtype");
+      const subtype = readStringProp(entryValue, "subtype");
       if (subtype !== "local_command" && subtype !== "local_command_output") {
         return notHandled;
       }
-      const content = readStringProp(entry, "content") ?? "";
+      const content = readStringProp(entryValue, "content") ?? "";
       const messageId = entry.uuid ?? `claude-${subtype}:${timestamp}`;
       const command = readClaudeCommandEnvelope(content);
       if (command) {
@@ -129,13 +145,13 @@ export const createClaudeHistoryInputProjector = (options: {
     if (
       entry.parent_tool_use_id ||
       isClaudeMetaHistoryMessage(entry) ||
-      !isClaudeHumanUserMessage(entry)
+      !isClaudeHumanUserMessage(entryValue)
     ) {
       return handledWithoutMessage;
     }
 
-    const promptId = readStringProp(entry, "promptId");
-    const isCompactSummary = (entry as { isCompactSummary?: unknown }).isCompactSummary === true;
+    const promptId = readStringProp(entryValue, "promptId");
+    const isCompactSummary = entry.isCompactSummary === true;
     if (isCompactSummary) {
       if (promptId) {
         compactPromptIds.add(promptId);
@@ -146,7 +162,8 @@ export const createClaudeHistoryInputProjector = (options: {
       compactPromptIds.add(promptId);
     }
 
-    const rawText = historyMessageText(entry.message);
+    const entryMessage = parseClaudeHistoryConversationEntry(entryValue).message;
+    const rawText = historyMessageText(entryMessage);
     const command = readClaudeCommandEnvelope(rawText);
     if (promptId && compactPromptIds.has(promptId) && !command) {
       return handledWithoutMessage;
@@ -168,7 +185,7 @@ export const createClaudeHistoryInputProjector = (options: {
     }
     const message = createUserMessage({
       fallbackMessageId: entry.uuid,
-      message: command ? { content: text } : entry.message,
+      message: command ? { content: text } : entryMessage,
       text,
       timestamp: queuedPromptTimestamp ?? timestamp,
     });

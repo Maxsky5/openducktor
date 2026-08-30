@@ -337,7 +337,7 @@ const createRecordingGitService = () => {
       });
     },
   };
-  const service = promiseService as GitService;
+  const service: GitService = promiseService;
   return { calls, service };
 };
 describe("createGitCommandHandlers", () => {

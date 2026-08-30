@@ -2,8 +2,12 @@ import { describe, expect, mock, test } from "bun:test";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
-import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support";
-import type { ClaudeSession } from "./claude-agent-sdk-types";
+import {
+  createClaudeQueryFixture,
+  createClaudeSession,
+} from "./claude-agent-sdk-session-io.test-support";
+
+const MESSAGE_ID = "00000000-0000-4000-8000-000000000001";
 
 describe("Claude session I/O model changes", () => {
   test("does not change the query creation system prompt on later sends", async () => {
@@ -14,7 +18,7 @@ describe("Claude session I/O model changes", () => {
     await sendClaudeUserMessage({
       session,
       now: () => "2026-06-25T20:00:00.000Z",
-      randomId: () => "message-1",
+      randomId: () => MESSAGE_ID,
       emit: () => {},
       messageInput: {
         externalSessionId: "session-1",
@@ -41,14 +45,14 @@ describe("Claude session I/O model changes", () => {
     };
     const session = createClaudeSession({
       activity: "idle",
-      query: { setModel } as unknown as ClaudeSession["query"],
+      query: createClaudeQueryFixture({ setModel }),
       queue,
     });
 
     await sendClaudeUserMessage({
       session,
       now: () => "2026-06-25T20:00:00.000Z",
-      randomId: () => "message-1",
+      randomId: () => MESSAGE_ID,
       emit: () => {},
       messageInput: {
         externalSessionId: "session-1",
@@ -72,7 +76,7 @@ describe("Claude session I/O model changes", () => {
     expect(session.activeSdkUserTurnCount).toBe(1);
     expect(session.acceptedUserMessages).toEqual([
       {
-        messageId: "message-1",
+        messageId: MESSAGE_ID,
         model: {
           providerId: "claude",
           modelId: "claude-opus-4-6",
@@ -87,7 +91,7 @@ describe("Claude session I/O model changes", () => {
 
   test("applies supported per-message effort changes through Claude flag settings", async () => {
     const setModel = mock(async (_model?: string) => {});
-    const applyFlagSettings = mock(async (_settings: unknown) => {});
+    const applyFlagSettings = mock(async () => {});
     const pushed: SDKUserMessage[] = [];
     const queue = new AsyncInputQueue<SDKUserMessage>();
     queue.push = (message) => {
@@ -101,17 +105,17 @@ describe("Claude session I/O model changes", () => {
         runtimeKind: "claude",
         variant: "high",
       },
-      query: {
+      query: createClaudeQueryFixture({
         applyFlagSettings,
         setModel,
-      } as unknown as ClaudeSession["query"],
+      }),
       queue,
     });
 
     await sendClaudeUserMessage({
       session,
       now: () => "2026-06-25T20:00:00.000Z",
-      randomId: () => "message-1",
+      randomId: () => MESSAGE_ID,
       emit: () => {},
       messageInput: {
         externalSessionId: "session-1",
@@ -149,7 +153,7 @@ describe("Claude session I/O model changes", () => {
         modelId: "claude-sonnet-4-6",
         runtimeKind: "claude",
       },
-      query: { setModel } as unknown as ClaudeSession["query"],
+      query: createClaudeQueryFixture({ setModel }),
       queue,
     });
 
@@ -157,7 +161,7 @@ describe("Claude session I/O model changes", () => {
       sendClaudeUserMessage({
         session,
         now: () => "2026-06-25T20:00:00.000Z",
-        randomId: () => "message-1",
+        randomId: () => MESSAGE_ID,
         emit: () => {},
         messageInput: {
           externalSessionId: "session-1",

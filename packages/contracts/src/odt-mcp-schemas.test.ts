@@ -7,7 +7,6 @@ import {
   odtToolErrorPayloadSchema,
   publicTaskSchema,
   ReadTaskAssetsInputSchema,
-  ReadTaskInputSchema,
   readTaskAssetsResultSchema,
   SetPlanInputSchema,
   taskSummarySchema,
@@ -110,14 +109,6 @@ describe("odt mcp public task schemas", () => {
     for (const toolName of workflowTools) {
       expect(blockedTools.has(toolName)).toBe(false);
     }
-  });
-
-  test("workspace-scoped tool workspaceId description distinguishes ids from paths", () => {
-    const description = ReadTaskInputSchema.shape.workspaceId.description ?? "";
-
-    expect(description).toBe(
-      "Optional workspaceId. Overrides startup workspace; workflow agents omit.",
-    );
   });
 
   test("read task assets accepts one ordered batch and rejects empty or duplicate ids", () => {

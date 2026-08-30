@@ -19,13 +19,20 @@ import type { SessionStartExistingSessionOption } from "./session-start-types";
 
 const EMPTY_EXISTING_SESSION_OPTIONS: SessionStartExistingSessionOption[] = [];
 
+type SourceSelection = {
+  runtimeKind: RuntimeKind;
+  selectedModel: AgentModelSelection | null;
+};
+
+type SourceSelectionDraft = {
+  runtimeKind: RuntimeKind | null;
+  selection: AgentModelSelection | null;
+};
+
 const resolveSourceSelection = (
   options: SessionStartExistingSessionOption[],
   sourceSessionValue: string,
-): {
-  runtimeKind: RuntimeKind;
-  selectedModel: AgentModelSelection | null;
-} | null => {
+): SourceSelection | null => {
   if (!sourceSessionValue) {
     return null;
   }
@@ -82,10 +89,7 @@ const resolveInitialStartState = ({
   initialSourceSession: AgentSessionIdentity | null | undefined;
   initialStartMode: AgentSessionStartMode | undefined;
   launchActionId: SessionLaunchActionId;
-}): {
-  selectedSourceSessionValue: string;
-  selectedStartMode: AgentSessionStartMode;
-} => {
+}) => {
   const allowedStartModes = getSessionLaunchAction(launchActionId).allowedStartModes;
   const hasExistingSession = existingSessionOptions.length > 0;
   let selectedStartMode: AgentSessionStartMode;
@@ -112,6 +116,9 @@ const resolveInitialStartState = ({
       existingSessionOptions,
       initialSourceSession,
     ),
+  } satisfies {
+    selectedSourceSessionValue: string;
+    selectedStartMode: AgentSessionStartMode;
   };
 };
 
@@ -127,10 +134,7 @@ const buildSourceSelectionDraft = ({
   runtimeDefinitions: RuntimeDescriptor[];
   startMode: "reuse" | "fork";
   sourceSessionValue: string;
-}): {
-  runtimeKind: RuntimeKind | null;
-  selection: AgentModelSelection | null;
-} => {
+}): SourceSelectionDraft => {
   const sourceSelection = resolveSourceSelection(options, sourceSessionValue);
   const runtimeKind = resolveRuntimeKindSelection({
     runtimeDefinitions: filterRuntimeDefinitionsForStartMode(runtimeDefinitions, startMode),

@@ -14,6 +14,7 @@
         "oxlint": "^1.78.0",
         "typescript": "^5.7.3",
         "yaml": "^2.9.0",
+        "zod": "^4.4.3",
       },
     },
     "apps/electron": {
@@ -53,6 +54,7 @@
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
         "@openducktor/path-support": "workspace:*",
+        "zod": "^4.4.3",
       },
     },
     "packages/adapters-opencode-sdk": {
@@ -64,6 +66,7 @@
         "@openducktor/core": "workspace:*",
         "@openducktor/path-support": "workspace:*",
         "undici": "^7.28.0",
+        "zod": "^4.4.3",
       },
     },
     "packages/build-tools": {
@@ -86,6 +89,7 @@
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/path-support": "workspace:*",
+        "zod": "^4.4.3",
       },
     },
     "packages/frontend": {
@@ -149,6 +153,7 @@
         "tailwind-merge": "^3.6.0",
         "unified": "^11.0.5",
         "unist-util-visit": "^5.0.0",
+        "zod": "^4.4.3",
         "zustand": "^5.0.15",
       },
       "devDependencies": {
@@ -183,6 +188,7 @@
         "remark-parse": "^11.0.0",
         "unified": "^11.0.5",
         "unist-util-visit": "^5.0.0",
+        "zod": "^4.4.3",
       },
       "devDependencies": {
         "@types/node": "^26.1.2",
@@ -196,7 +202,7 @@
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
-        "@openducktor/host": "workspace:*",
+        "zod": "^4.4.3",
       },
     },
     "packages/openducktor-mcp": {
@@ -226,6 +232,7 @@
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "0.3.232",
         "undici": "^7.28.0",
+        "zod": "^4.4.3",
       },
       "devDependencies": {
         "@openducktor/build-tools": "workspace:*",
@@ -246,6 +253,12 @@
       "version": "0.6.0-beta.2",
       "devDependencies": {
         "bun-types": "^1.3.14",
+      },
+    },
+    "tools/oxlint/anti-slop": {
+      "name": "@openducktor/anti-slop-oxlint",
+      "devDependencies": {
+        "@oxlint/plugins": "1.78.0",
       },
     },
   },
@@ -472,6 +485,8 @@
 
     "@openducktor/adapters-opencode-sdk": ["@openducktor/adapters-opencode-sdk@workspace:packages/adapters-opencode-sdk"],
 
+    "@openducktor/anti-slop-oxlint": ["@openducktor/anti-slop-oxlint@workspace:tools/oxlint/anti-slop"],
+
     "@openducktor/build-tools": ["@openducktor/build-tools@workspace:packages/build-tools"],
 
     "@openducktor/contracts": ["@openducktor/contracts@workspace:packages/contracts"],
@@ -645,6 +660,8 @@
     "@oxlint/binding-win32-ia32-msvc": ["@oxlint/binding-win32-ia32-msvc@1.78.0", "", { "os": "win32", "cpu": "ia32" }, "sha512-zcuXFVrEFHIafRfkCQT8w/Xe41o07ozl/vwHq7p94vB29xVzsB0sZGYORU1jhcYKv3Lr0J3HbJ2T4fHH5rWmvA=="],
 
     "@oxlint/binding-win32-x64-msvc": ["@oxlint/binding-win32-x64-msvc@1.78.0", "", { "os": "win32", "cpu": "x64" }, "sha512-Sb5ocmLSuYeOuXd+CFOToGKp/gjXUEWDnvIGwhnh8aq8wY4TMmEnKnvbogSW7RdMZv77JSARduS7/gv+khYEjA=="],
+
+    "@oxlint/plugins": ["@oxlint/plugins@1.78.0", "", {}, "sha512-Ypt8KeRYw+4jUtlPirfcHWMrn5ms12VrrFPD+Mds477/7tJxG1Kcz2Yrg2nVcTQEUx/GdlhS+BUg1kmxNm04Ug=="],
 
     "@peculiar/asn1-schema": ["@peculiar/asn1-schema@2.8.0", "", { "dependencies": { "@peculiar/utils": "^2.0.2", "asn1js": "^3.0.10", "tslib": "^2.8.1" } }, "sha512-7YT0U/ze0tF2QOBbE15gKZwy5tvgGyLRiRHLzhlbOpf7BT032oBSd0haZqXn5W6l26WLlu3dyxzjM+2638/z2Q=="],
 

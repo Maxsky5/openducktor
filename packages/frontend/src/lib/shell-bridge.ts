@@ -3,14 +3,19 @@ import type {
   AgentSessionLiveRefreshInput,
   AppUpdateCommandResult,
   AppUpdateState,
+  HostEventPayload,
   TaskAssetRenderContext,
   TaskEventCursor,
   TaskEventStreamFrame,
   TerminalFailure,
 } from "@openducktor/contracts";
 import { createHostClient, type HostClient } from "@openducktor/host-client";
+import type { BrowserLiveControlEvent } from "@/types";
 
-export type HostEventListener = (payload: unknown) => void;
+export type RunEventListener = (payload: HostEventPayload<"openducktor://run-event">) => void;
+export type DevServerEventListener = (
+  payload: HostEventPayload<"openducktor://dev-server-event"> | BrowserLiveControlEvent,
+) => void;
 
 export type TaskStreamFrame = TaskEventStreamFrame;
 
@@ -27,8 +32,10 @@ export type DevServerEventSubscription = {
 
 export type HostBridge = {
   client: HostClient;
-  subscribeRunEvents: (listener: HostEventListener) => Promise<() => void>;
-  subscribeDevServerEvents: (listener: HostEventListener) => Promise<DevServerEventSubscription>;
+  subscribeRunEvents: (listener: RunEventListener) => Promise<() => void>;
+  subscribeDevServerEvents: (
+    listener: DevServerEventListener,
+  ) => Promise<DevServerEventSubscription>;
   observeAgentSessionLive: (
     input: AgentSessionLiveRefreshInput,
     listener: (envelope: AgentSessionLiveEnvelope) => void,
@@ -36,7 +43,7 @@ export type HostBridge = {
   subscribeTaskStream: (
     input: { cursor: TaskEventCursor | null },
     onFrame: (frame: TaskStreamFrame) => void,
-    onTerminalFailure?: (error: unknown) => void,
+    onTerminalFailure?: (cause: unknown) => void,
   ) => Promise<TaskStreamSubscription>;
 };
 

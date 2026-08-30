@@ -1,4 +1,3 @@
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
 import { errorMessage, HostOperationError } from "../../effect/host-errors";
 import type {
@@ -9,6 +8,7 @@ import type {
 } from "./claude-agent-sdk-types";
 import { contextUsageFromClaudeControlResponse } from "./claude-agent-sdk-usage";
 import { withTimeout } from "./claude-agent-sdk-utils";
+import type { ClaudeSdkMessageProjection } from "./claude-agent-sdk-message-projection";
 
 export const CLAUDE_CONTEXT_USAGE_TIMEOUT_MS = 30_000;
 const CONTEXT_USAGE_REFRESH_MIN_INTERVAL_MS = process.env.NODE_ENV === "test" ? 0 : 250;
@@ -33,6 +33,11 @@ type LiveContextUsageRefreshInput = {
   timestamp: string;
 };
 
+type ClaudeContextUsageResponse = Pick<
+  Awaited<ReturnType<ClaudeSession["query"]["getContextUsage"]>>,
+  "maxTokens" | "totalTokens"
+>;
+
 const refreshStates = new WeakMap<ClaudeSession, ContextUsageRefreshState>();
 
 const waitBeforeNextContextUsageRefresh = async (): Promise<void> => {
@@ -42,9 +47,9 @@ const waitBeforeNextContextUsageRefresh = async (): Promise<void> => {
   await new Promise<void>((resolve) => setTimeout(resolve, CONTEXT_USAGE_REFRESH_MIN_INTERVAL_MS));
 };
 
-export const readClaudeContextUsageFromQuery = async (
-  sdkQuery: Pick<ClaudeSession["query"], "getContextUsage">,
-): Promise<{ usedTokens: number; maxTokens: number } | null> => {
+export const readClaudeContextUsageFromQuery = async (sdkQuery: {
+  getContextUsage(): Promise<ClaudeContextUsageResponse>;
+}): Promise<{ usedTokens: number; maxTokens: number } | null> => {
   const contextUsage = contextUsageFromClaudeControlResponse(
     await withTimeout(
       sdkQuery.getContextUsage(),
@@ -178,22 +183,17 @@ export const flushClaudeLiveContextUsageRefresh = async (session: ClaudeSession)
   await refreshStates.get(session)?.promise;
 };
 
-const readStreamEventType = (message: SDKMessage): string | undefined =>
-  message.type === "stream_event" &&
-  "event" in message &&
-  message.event &&
-  typeof message.event === "object" &&
-  "type" in message.event &&
-  typeof message.event.type === "string"
-    ? message.event.type
-    : undefined;
+const readStreamEventType = (message: ClaudeSdkMessageProjection): string | undefined =>
+  message.type === "stream_event" ? message.event.type : undefined;
 
-export const shouldRefreshClaudeContextUsageForMessage = (message: SDKMessage): boolean => {
+export const shouldRefreshClaudeContextUsageForMessage = (
+  message: ClaudeSdkMessageProjection,
+): boolean => {
   if (message.type === "assistant" || message.type === "user") {
     return true;
   }
   if (message.type === "result") {
-    return (message as { stop_reason?: unknown }).stop_reason !== "tool_use";
+    return message.stop_reason !== "tool_use";
   }
   return readStreamEventType(message) === "message_stop";
 };

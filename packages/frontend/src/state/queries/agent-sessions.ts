@@ -185,11 +185,10 @@ export const loadAgentSessionListFromQuery = (
     forceFresh?: boolean;
     readPort?: AgentSessionReadPort;
   },
-): Promise<AgentSessionRecord[]> =>
-  queryClient.fetchQuery({
-    ...agentSessionListQueryOptions(repoPath, taskId, options?.readPort),
-    ...(options?.forceFresh ? { staleTime: 0 } : {}),
-  });
+): Promise<AgentSessionRecord[]> => {
+  const query = agentSessionListQueryOptions(repoPath, taskId, options?.readPort);
+  return queryClient.fetchQuery(options?.forceFresh ? { ...query, staleTime: 0 } : query);
+};
 
 export const loadAgentSessionListsFromQuery = async (
   queryClient: QueryClient,
@@ -221,15 +220,14 @@ export const loadAgentSessionListsFromQuery = async (
     refreshesInvalidatedData ||= queryState?.isInvalidated === true;
   }
   if (taskIdsToHydrate.length > 0) {
-    await queryClient.fetchQuery({
-      ...agentSessionListHydrationQueryOptions(
-        queryClient,
-        repoPath,
-        taskIdsToHydrate,
-        options?.readPort,
-      ),
-      ...(options?.forceFresh || refreshesInvalidatedData ? { staleTime: 0 } : {}),
-    });
+    const query = agentSessionListHydrationQueryOptions(
+      queryClient,
+      repoPath,
+      taskIdsToHydrate,
+      options?.readPort,
+    );
+    const forceFresh = options?.forceFresh || refreshesInvalidatedData;
+    await queryClient.fetchQuery(forceFresh ? { ...query, staleTime: 0 } : query);
     await Promise.all(
       taskIdsToHydrate.flatMap((taskId) => {
         const queryState = queryClient.getQueryState(agentSessionQueryKeys.list(repoPath, taskId));

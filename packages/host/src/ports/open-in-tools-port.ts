@@ -1,25 +1,28 @@
 import type { SystemOpenInToolId, SystemOpenInToolInfo } from "@openducktor/contracts";
 import { Context, type Effect } from "effect";
 import type {
-  HostOperationError,
-  HostPathAccessError,
-  HostPathNotFoundError,
-  HostValidationError,
+  HostOperationErrorAggregate,
+  HostPathAccessErrorAggregate,
+  HostPathNotFoundErrorAggregate,
+  HostValidationErrorAggregate,
 } from "../effect/host-errors";
 
 export type OpenInToolsPortError =
-  | HostOperationError
-  | HostPathAccessError
-  | HostPathNotFoundError
-  | HostValidationError;
+  | HostOperationErrorAggregate
+  | HostPathAccessErrorAggregate
+  | HostPathNotFoundErrorAggregate
+  | HostValidationErrorAggregate;
 
 export type OpenInToolsPort = {
   canonicalizeDirectory(
     directoryPath: string,
-  ): Effect.Effect<string, HostOperationError | HostPathAccessError | HostPathNotFoundError>;
+  ): Effect.Effect<
+    string,
+    HostOperationErrorAggregate | HostPathAccessErrorAggregate | HostPathNotFoundErrorAggregate
+  >;
   isDirectory(
     directoryPath: string,
-  ): Effect.Effect<boolean, HostOperationError | HostPathAccessError>;
+  ): Effect.Effect<boolean, HostOperationErrorAggregate | HostPathAccessErrorAggregate>;
   discoverOpenInTools(): Effect.Effect<SystemOpenInToolInfo[], OpenInToolsPortError>;
   openDirectoryInTool(
     directoryPath: string,

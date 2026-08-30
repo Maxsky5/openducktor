@@ -8,6 +8,42 @@ const EDITOR_WAIT_TIMEOUT_MS = 2_000;
 const waitFor = <Result,>(callback: () => Result): Promise<Result> =>
   testingLibraryWaitFor(callback, { timeout: EDITOR_WAIT_TIMEOUT_MS });
 
+const requireForm = (input: HTMLInputElement): HTMLFormElement => {
+  if (!input.form) {
+    throw new Error("Expected the formula input to belong to a form");
+  }
+  return input.form;
+};
+
+const requireElement = (parent: ParentNode, selector: string): Element => {
+  const element = parent.querySelector(selector);
+  if (!element) {
+    throw new Error(`Expected the test fixture to contain ${selector}`);
+  }
+  return element;
+};
+
+const requireTextArea = (element: HTMLElement): HTMLTextAreaElement => {
+  if (!(element instanceof HTMLTextAreaElement)) {
+    throw new Error("Expected the textbox to be a textarea");
+  }
+  return element;
+};
+
+const requireInput = (element: HTMLElement): HTMLInputElement => {
+  if (!(element instanceof HTMLInputElement)) {
+    throw new Error("Expected the textbox to be an input");
+  }
+  return element;
+};
+
+const requireButton = (element: HTMLElement): HTMLButtonElement => {
+  if (!(element instanceof HTMLButtonElement)) {
+    throw new Error("Expected the control to be a button");
+  }
+  return element;
+};
+
 const createProps = () => ({
   workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
   taskId: "task-1",
@@ -92,14 +128,14 @@ describe("TaskDescriptionEditor", () => {
     await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
 
     fireEvent.click(view.getByRole("button", { name: "Markdown" }));
-    const textarea = view.getByRole("textbox") as HTMLTextAreaElement;
+    const textarea = requireTextArea(view.getByRole("textbox"));
     expect(textarea.className).toContain("font-sans");
     expect(textarea.className).not.toContain("font-mono");
 
     fireEvent.change(textarea, { target: { value: "Body!" } });
 
     expect(view.queryByText("Checking whether Visual mode can preserve this Markdown…")).toBeNull();
-    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe("Body!");
+    expect(requireTextArea(view.getByRole("textbox")).value).toBe("Body!");
   });
 
   test("uses the card surface for the Visual editor in both themes", async () => {
@@ -132,12 +168,10 @@ describe("TaskDescriptionEditor", () => {
     );
 
     await waitFor(() =>
-      expect((view.getByRole("button", { name: "Visual" }) as HTMLButtonElement).disabled).toBe(
-        false,
-      ),
+      expect(requireButton(view.getByRole("button", { name: "Visual" })).disabled).toBe(false),
     );
     fireEvent.click(view.getByRole("button", { name: "Markdown" }));
-    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+    expect(requireTextArea(view.getByRole("textbox")).value).toBe(markdown);
     fireEvent.click(view.getByRole("button", { name: "Visual" }));
     expect(view.queryByRole("status", { name: "Loading Visual editor" })).toBeNull();
     await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
@@ -223,7 +257,7 @@ describe("TaskDescriptionEditor", () => {
 
       fireEvent.click(view.getByRole("button", { name: "Markdown" }));
 
-      expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+      expect(requireTextArea(view.getByRole("textbox")).value).toBe(markdown);
       expect(onChange).not.toHaveBeenCalled();
     },
     5_000,
@@ -241,11 +275,11 @@ describe("TaskDescriptionEditor", () => {
         <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
       );
 
-      const textarea = await waitFor(() => view.getByRole("textbox"));
-      expect((textarea as HTMLTextAreaElement).value).toBe(markdown);
+      const textarea = await waitFor(() => requireTextArea(view.getByRole("textbox")));
+      expect(textarea.value).toBe(markdown);
       expect(view.getByRole("alert").textContent).toContain("blank line");
       fireEvent.click(view.getByRole("button", { name: "Visual" }));
-      expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+      expect(requireTextArea(view.getByRole("textbox")).value).toBe(markdown);
       expect(onChange).not.toHaveBeenCalled();
     },
     5_000,
@@ -305,7 +339,7 @@ describe("TaskDescriptionEditor", () => {
     );
 
     expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain("escaped pipe");
-    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+    expect(requireTextArea(view.getByRole("textbox")).value).toBe(markdown);
     fireEvent.click(view.getByRole("button", { name: "Visual" }));
     expect(onChange).not.toHaveBeenCalled();
   });
@@ -320,10 +354,8 @@ describe("TaskDescriptionEditor", () => {
     expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
       "cannot be preserved",
     );
-    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
-    expect((view.getByRole("button", { name: "Visual" }) as HTMLButtonElement).disabled).toBe(
-      false,
-    );
+    expect(requireTextArea(view.getByRole("textbox")).value).toBe(markdown);
+    expect(requireButton(view.getByRole("button", { name: "Visual" })).disabled).toBe(false);
     fireEvent.click(view.getByRole("button", { name: "Visual" }));
     expect(view.getByRole("textbox")).toBeTruthy();
     expect(onChange).not.toHaveBeenCalled();
@@ -339,9 +371,9 @@ describe("TaskDescriptionEditor", () => {
     expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
       "Block math delimiters",
     );
-    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+    expect(requireTextArea(view.getByRole("textbox")).value).toBe(markdown);
     fireEvent.click(view.getByRole("button", { name: "Visual" }));
-    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+    expect(requireTextArea(view.getByRole("textbox")).value).toBe(markdown);
     expect(onChange).not.toHaveBeenCalled();
   });
 
@@ -354,7 +386,7 @@ describe("TaskDescriptionEditor", () => {
     expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
       "Block math delimiters",
     );
-    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+    expect(requireTextArea(view.getByRole("textbox")).value).toBe(markdown);
     fireEvent.click(view.getByRole("button", { name: "Visual" }));
     expect(view.getByRole("textbox")).toBeTruthy();
   });
@@ -367,12 +399,10 @@ describe("TaskDescriptionEditor", () => {
 
     expect(view.getByText(/Front matter preserved/)).toBeTruthy();
     await waitFor(() =>
-      expect((view.getByRole("button", { name: "Visual" }) as HTMLButtonElement).disabled).toBe(
-        false,
-      ),
+      expect(requireButton(view.getByRole("button", { name: "Visual" })).disabled).toBe(false),
     );
     fireEvent.click(view.getByRole("button", { name: "Markdown" }));
-    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+    expect(requireTextArea(view.getByRole("textbox")).value).toBe(markdown);
   });
 
   test("external replacements hydrate Visual mode without emitting updates", async () => {
@@ -409,9 +439,11 @@ describe("TaskDescriptionEditor", () => {
     await waitFor(() => expect(view.getByRole("button", { name: "Inline math" })).toBeTruthy());
 
     fireEvent.click(view.getByRole("button", { name: "Inline math" }));
-    const input = await waitFor(() => view.getByRole("textbox", { name: "LaTeX formula" }));
+    const input = await waitFor(() =>
+      requireInput(view.getByRole("textbox", { name: "LaTeX formula" })),
+    );
     fireEvent.change(input, { target: { value: "x" } });
-    fireEvent.submit(input.closest("form") as HTMLFormElement);
+    fireEvent.submit(requireForm(input));
 
     expect(onChange).toHaveBeenCalled();
     expect(view.container.querySelector(".tiptap")).not.toBeNull();
@@ -611,7 +643,7 @@ describe("TaskDescriptionEditor", () => {
     );
     await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
 
-    fireEvent.paste(view.container.querySelector(".tiptap") as Element, {
+    fireEvent.paste(requireElement(view.container, ".tiptap"), {
       clipboardData: { files: [file] },
     });
 
@@ -652,7 +684,7 @@ describe("TaskDescriptionEditor", () => {
     );
     await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
 
-    fireEvent.drop(view.container.querySelector(".tiptap") as Element, {
+    fireEvent.drop(requireElement(view.container, ".tiptap"), {
       dataTransfer: { files: [failedFile, acceptedFile] },
     });
 
@@ -695,9 +727,11 @@ describe("TaskDescriptionEditor", () => {
     await waitFor(() => expect(view.getByRole("button", { name: "Inline math" })).toBeTruthy());
 
     fireEvent.click(view.getByRole("button", { name: "Inline math" }));
-    const input = await waitFor(() => view.getByRole("textbox", { name: "LaTeX formula" }));
+    const input = await waitFor(() =>
+      requireInput(view.getByRole("textbox", { name: "LaTeX formula" })),
+    );
     fireEvent.change(input, { target: { value: "y" } });
-    fireEvent.submit(input.closest("form") as HTMLFormElement);
+    fireEvent.submit(requireForm(input));
 
     await waitFor(() =>
       expect(
@@ -723,9 +757,11 @@ describe("TaskDescriptionEditor", () => {
     await waitFor(() => expect(view.getByRole("button", { name: "Inline math" })).toBeTruthy());
 
     fireEvent.click(view.getByRole("button", { name: "Inline math" }));
-    const input = await waitFor(() => view.getByRole("textbox", { name: "LaTeX formula" }));
+    const input = await waitFor(() =>
+      requireInput(view.getByRole("textbox", { name: "LaTeX formula" })),
+    );
     fireEvent.change(input, { target: { value: "y" } });
-    fireEvent.submit(input.closest("form") as HTMLFormElement);
+    fireEvent.submit(requireForm(input));
 
     await waitFor(() =>
       expect(
@@ -742,18 +778,16 @@ describe("TaskDescriptionEditor", () => {
     const view = render(
       <TaskDescriptionEditor {...createProps()} markdown="Formula $x$" onChange={onChange} />,
     );
-    const mathNode = await waitFor(() => {
-      const node = view.container.querySelector('[data-type="inline-math"]');
-      expect(node).not.toBeNull();
-      return node as Element;
-    });
+    const mathNode = await waitFor(() =>
+      requireElement(view.container, '[data-type="inline-math"]'),
+    );
 
     fireEvent.click(mathNode);
     expect(
       await waitFor(() => view.getByRole("dialog", { name: "Edit inline formula" })),
     ).toBeTruthy();
-    const input = view.getByRole("textbox", { name: "LaTeX formula" });
-    expect((input as HTMLInputElement).value).toBe("x");
+    const input = requireInput(view.getByRole("textbox", { name: "LaTeX formula" }));
+    expect(input.value).toBe("x");
     fireEvent.change(input, { target: { value: "\\frac{" } });
     fireEvent.click(view.getByRole("button", { name: "Save formula" }));
     expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain("valid LaTeX");
@@ -769,9 +803,9 @@ describe("TaskDescriptionEditor", () => {
     expect(
       await waitFor(() => view.getByRole("dialog", { name: "Edit inline formula" })),
     ).toBeTruthy();
-    const replacement = view.getByRole("textbox", { name: "LaTeX formula" });
+    const replacement = requireInput(view.getByRole("textbox", { name: "LaTeX formula" }));
     fireEvent.change(replacement, { target: { value: "y^2" } });
-    fireEvent.submit(replacement.closest("form") as HTMLFormElement);
+    fireEvent.submit(requireForm(replacement));
     await waitFor(() =>
       expect(onChange.mock.calls.some(([value]) => String(value).includes("$y^2$"))).toBe(true),
     );

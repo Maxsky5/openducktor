@@ -13,6 +13,7 @@ import { resolveAgentChatRuntimePresentation } from "@/components/features/agent
 import { resolveAgentChatTranscriptPresentation } from "@/components/features/agents/agent-chat/agent-chat-transcript-presentation";
 import { withClaudeSkillMentions } from "@/components/features/agents/agent-chat/claude-skill-mentions";
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
+import type { AgentChatComposerConfig } from "@/components/features/agents/agent-chat/use-agent-chat-composer-model";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -100,13 +101,14 @@ const toChatContextUsage = (
     return null;
   }
 
-  return {
+  const contextUsage: NonNullable<AgentChatModel["composer"]["contextUsage"]> = {
     totalTokens: selectedSessionContextUsage.totalTokens,
     contextWindow: selectedSessionContextUsage.contextWindow,
-    ...(typeof selectedSessionContextUsage.outputLimit === "number"
-      ? { outputLimit: selectedSessionContextUsage.outputLimit }
-      : {}),
   };
+  if (selectedSessionContextUsage.outputLimit !== undefined) {
+    contextUsage.outputLimit = selectedSessionContextUsage.outputLimit;
+  }
+  return contextUsage;
 };
 
 export function useAgentStudioChatModel({
@@ -335,8 +337,8 @@ export function useAgentStudioChatModel({
     };
   }, [reviewCommentComposer.pendingInlineCommentCount]);
 
-  const composerConfig = useMemo(
-    () => ({
+  const composerConfig = useMemo<AgentChatComposerConfig>(() => {
+    const config: AgentChatComposerConfig = {
       displayedSessionKey: selectedSessionKey,
       selectedSession: selectedSessionIdentity
         ? {
@@ -353,7 +355,6 @@ export function useAgentStudioChatModel({
       stopAgentSession: sessionActions.stopAgentSession,
       isReadOnly: surfaceState.composerReadOnly,
       readOnlyReason: surfaceState.composerReadOnlyReason,
-      ...(pendingSendItems ? { pendingSendItems } : {}),
       draftScope: composerDraftScope,
       onSend: reviewCommentComposer.onSend,
       isSending: sessionActions.isSending,
@@ -386,55 +387,58 @@ export function useAgentStudioChatModel({
       variantOptions: modelSelection.variantOptions,
       onSelectAgent: modelSelection.onSelectAgent,
       onSelectVariant: modelSelection.onSelectVariant,
-    }),
-    [
-      chatContextUsage,
-      composerDraftScope,
-      modelSelection.agentOptions,
-      modelSelection.isSelectionCatalogLoading,
-      modelSelection.isSlashCommandsLoading,
-      modelSelection.isSkillsLoading,
-      modelSelection.isSubagentsLoading,
-      modelSelection.modelPicker,
-      modelSelection.onSelectAgent,
-      modelSelection.onSelectVariant,
-      modelSelection.searchFiles,
-      modelSelection.selectedModelDescriptor,
-      modelSelection.selectedModelSelection,
-      modelSelection.slashCommandCatalog,
-      modelSelection.slashCommands,
-      modelSelection.slashCommandsError,
-      modelSelection.skillCatalog,
-      modelSelection.skills,
-      modelSelection.skillsError,
-      modelSelection.subagentCatalog,
-      modelSelection.subagents,
-      modelSelection.subagentsError,
-      modelSelection.supportsFileSearch,
-      modelSelection.supportsAttachments,
-      modelSelection.supportsProfiles,
-      modelSelection.supportsSkillReferences,
-      modelSelection.supportsSlashCommands,
-      modelSelection.supportsSubagentReferences,
-      modelSelection.variantOptions,
-      reviewCommentComposer.onSend,
-      pendingSendItems,
-      selectedSession.pendingInput.waitingInputPlaceholder,
-      selectedSessionIdentity,
-      selectedSessionModel,
-      selectedSessionKey,
-      selectedSessionRuntimeData.isLoadingModelCatalog,
-      surfaceState.composerReadOnly,
-      surfaceState.composerReadOnlyReason,
-      sessionActions.busySendBlockedReason,
-      sessionActions.canStopSession,
-      sessionActions.isSending,
-      sessionActions.isSessionWorking,
-      sessionActions.isStarting,
-      sessionActions.isWaitingInput,
-      sessionActions.stopAgentSession,
-    ],
-  );
+    };
+    if (pendingSendItems) {
+      config.pendingSendItems = pendingSendItems;
+    }
+    return config;
+  }, [
+    chatContextUsage,
+    composerDraftScope,
+    modelSelection.agentOptions,
+    modelSelection.isSelectionCatalogLoading,
+    modelSelection.isSlashCommandsLoading,
+    modelSelection.isSkillsLoading,
+    modelSelection.isSubagentsLoading,
+    modelSelection.modelPicker,
+    modelSelection.onSelectAgent,
+    modelSelection.onSelectVariant,
+    modelSelection.searchFiles,
+    modelSelection.selectedModelDescriptor,
+    modelSelection.selectedModelSelection,
+    modelSelection.slashCommandCatalog,
+    modelSelection.slashCommands,
+    modelSelection.slashCommandsError,
+    modelSelection.skillCatalog,
+    modelSelection.skills,
+    modelSelection.skillsError,
+    modelSelection.subagentCatalog,
+    modelSelection.subagents,
+    modelSelection.subagentsError,
+    modelSelection.supportsFileSearch,
+    modelSelection.supportsAttachments,
+    modelSelection.supportsProfiles,
+    modelSelection.supportsSkillReferences,
+    modelSelection.supportsSlashCommands,
+    modelSelection.supportsSubagentReferences,
+    modelSelection.variantOptions,
+    reviewCommentComposer.onSend,
+    pendingSendItems,
+    selectedSession.pendingInput.waitingInputPlaceholder,
+    selectedSessionIdentity,
+    selectedSessionModel,
+    selectedSessionKey,
+    selectedSessionRuntimeData.isLoadingModelCatalog,
+    surfaceState.composerReadOnly,
+    surfaceState.composerReadOnlyReason,
+    sessionActions.busySendBlockedReason,
+    sessionActions.canStopSession,
+    sessionActions.isSending,
+    sessionActions.isSessionWorking,
+    sessionActions.isStarting,
+    sessionActions.isWaitingInput,
+    sessionActions.stopAgentSession,
+  ]);
 
   const surfaceModel = useAgentChatSurfaceModel({
     modelCatalog: selectedSessionRuntimeData.modelCatalog,

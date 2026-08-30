@@ -134,7 +134,8 @@ const findConfirmedLocalAcceptedUserMessage = ({
   }
 
   const currentSlice = getSessionMessagesSlice(currentOwner, 0);
-  let nearestMatch: { message: AgentChatMessage; distanceMs: number } | null = null;
+  type NearestMessageMatch = { message: AgentChatMessage; distanceMs: number };
+  let nearestMatch: NearestMessageMatch | null = null;
   for (let index = currentSlice.length - 1; index >= 0; index -= 1) {
     const candidate = currentSlice[index];
     if (!candidate || absorbedCurrentMessageIds.has(candidate.id)) {
@@ -216,11 +217,13 @@ const mergeSameMessageId = (
     currentMessage.meta?.kind === "user"
   ) {
     const parts = currentMessage.meta.parts ?? loadedMessage.meta.parts;
-    const meta = {
+    const meta: Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "user" }> = {
       ...currentMessage.meta,
       ...loadedMessage.meta,
-      ...(parts ? { parts } : {}),
     };
+    if (parts) {
+      meta.parts = parts;
+    }
     return applyPreferredMessageTimestamp(
       {
         ...loadedMessage,
@@ -237,15 +240,11 @@ const mergeSameMessageId = (
       currentMessage.meta && loadedMessage.meta
         ? { ...currentMessage.meta, ...loadedMessage.meta }
         : (loadedMessage.meta ?? currentMessage.meta);
-    return applyPreferredMessageTimestamp(
-      {
-        ...currentMessage,
-        ...loadedMessage,
-        ...(mergedMeta ? { meta: mergedMeta } : {}),
-      },
-      loadedMessage,
-      currentMessage,
-    );
+    const mergedMessage: AgentChatMessage = { ...currentMessage, ...loadedMessage };
+    if (mergedMeta) {
+      mergedMessage.meta = mergedMeta;
+    }
+    return applyPreferredMessageTimestamp(mergedMessage, loadedMessage, currentMessage);
   }
 
   if (isSubagentMessage(loadedMessage) && isSubagentMessage(currentMessage)) {

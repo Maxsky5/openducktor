@@ -14,6 +14,7 @@ import { getListMarker, ListItem, OrderedList } from "@tiptap/extension-list";
 import { Mathematics } from "@tiptap/extension-mathematics";
 import { TableKit } from "@tiptap/extension-table";
 import TaskItem from "@tiptap/extension-task-item";
+import { z } from "zod";
 import TaskList from "@tiptap/extension-task-list";
 import { Markdown } from "@tiptap/markdown";
 import StarterKit from "@tiptap/starter-kit";
@@ -22,13 +23,13 @@ const requireMarkdownHook = <Hook>(
   extensionName: string,
   hookName: string,
   hook: Hook | undefined,
-): NonNullable<Hook> => {
-  if (typeof hook !== "function") {
+): Hook => {
+  if (hook === undefined) {
     throw new Error(
       `TipTap 3.30.0 ${extensionName}.${hookName} is required by the task-description Markdown dialect. Align all TipTap packages before starting the editor.`,
     );
   }
-  return hook as NonNullable<Hook>;
+  return hook;
 };
 
 const defaultListItemParseMarkdown = requireMarkdownHook(
@@ -64,7 +65,7 @@ export const TaskDescriptionImage = Image.extend({
 const isEmptyParagraph = (node: JSONContent | undefined): boolean =>
   node?.type === "paragraph" && (!node.content || node.content.length === 0);
 
-const ensureLeadingMathParagraph = (node: JSONContent): JSONContent => {
+const ensureLeadingMathParagraph = (node: JSONContent) => {
   if (node.type !== "listItem" || node.content?.[0]?.type !== "blockMath") {
     return node;
   }
@@ -77,7 +78,7 @@ const ensureLeadingMathParagraph = (node: JSONContent): JSONContent => {
 const ensureOrderedListMathParagraphs = (
   parsed: JSONContent | JSONContent[],
 ): JSONContent | JSONContent[] => {
-  const ensureNode = (node: JSONContent): JSONContent => {
+  const ensureNode = (node: JSONContent) => {
     if (node.type !== "orderedList" || !node.content) {
       return node;
     }
@@ -171,25 +172,33 @@ const preserveOrderedListStart = (
 
 // TipTap leaves one list-indent space on prose after a second block-math token.
 // Remove only that paragraph-start artifact before parsing the trailing tokens.
-const trimParagraphTokenStart = (token: MarkdownToken): MarkdownToken => {
+const trimParagraphTokenStart = (token: MarkdownToken) => {
   if (token.type !== "paragraph") {
     return token;
   }
 
   const inlineTokens = Array.isArray(token.tokens) ? [...token.tokens] : undefined;
   if (inlineTokens?.[0]) {
-    inlineTokens[0] = {
-      ...inlineTokens[0],
-      ...(inlineTokens[0].raw === undefined ? {} : { raw: inlineTokens[0].raw.trimStart() }),
-      ...(inlineTokens[0].text === undefined ? {} : { text: inlineTokens[0].text.trimStart() }),
-    };
+    const firstToken: MarkdownToken = { ...inlineTokens[0] };
+    if (inlineTokens[0].raw !== undefined) {
+      firstToken.raw = inlineTokens[0].raw.trimStart();
+    }
+    if (inlineTokens[0].text !== undefined) {
+      firstToken.text = inlineTokens[0].text.trimStart();
+    }
+    inlineTokens[0] = firstToken;
   }
-  return {
-    ...token,
-    ...(token.raw === undefined ? {} : { raw: token.raw.trimStart() }),
-    ...(token.text === undefined ? {} : { text: token.text.trimStart() }),
-    ...(inlineTokens === undefined ? {} : { tokens: inlineTokens }),
-  };
+  const trimmedToken: MarkdownToken = { ...token };
+  if (token.raw !== undefined) {
+    trimmedToken.raw = token.raw.trimStart();
+  }
+  if (token.text !== undefined) {
+    trimmedToken.text = token.text.trimStart();
+  }
+  if (inlineTokens !== undefined) {
+    trimmedToken.tokens = inlineTokens;
+  }
+  return trimmedToken;
 };
 
 const findTrailingTokens = (
@@ -203,7 +212,11 @@ const findTrailingTokens = (
 
   let suffix = "";
   for (let index = tokens.length - 1; index >= 0; index -= 1) {
-    suffix = `${tokenSource(tokens[index] as MarkdownToken)}${suffix}`;
+    const token = tokens[index];
+    if (!token) {
+      continue;
+    }
+    suffix = `${tokenSource(token)}${suffix}`;
     if (suffix.trim() === trailingSource) {
       const trailingTokens = tokens.slice(index);
       const first = trailingTokens[0];
@@ -216,7 +229,7 @@ const findTrailingTokens = (
   );
 };
 
-const withLeadingListItemMathTokens = (token: MarkdownToken): MarkdownToken => {
+const withLeadingListItemMathTokens = (token: MarkdownToken) => {
   const itemSource = listItemSource(token);
   if (itemSource === undefined) {
     return token;
@@ -250,7 +263,7 @@ const withLeadingListItemMathTokens = (token: MarkdownToken): MarkdownToken => {
 const withOrderedListItemParagraphTokens = (
   token: MarkdownToken,
   helpers: MarkdownParseHelpers,
-): MarkdownToken => {
+) => {
   if (!Array.isArray(token.items)) {
     return token;
   }
@@ -351,7 +364,9 @@ const listItemPrefix = (context: RenderContext): string => {
     return "- ";
   }
   const start = Number(context.meta?.parentAttrs?.start ?? 1);
-  const type = context.meta?.parentAttrs?.type as string | undefined;
+  const rawType = context.meta?.parentAttrs?.type;
+  const typeResult = z.string().safeParse(rawType);
+  const type = typeResult.success ? typeResult.data : undefined;
   return getListMarker(type, start - 1 + context.index, ". ");
 };
 

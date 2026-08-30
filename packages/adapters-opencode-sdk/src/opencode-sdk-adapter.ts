@@ -82,6 +82,7 @@ import {
   failOpencodeUserMessageSend,
   projectAdmittedOpencodeUserMessage,
 } from "./opencode-agent-session-projection";
+import { opencodeSessionDetailPayloadSchema } from "./opencode-ingress";
 import { replyApproval, replyQuestion } from "./pending-input-ops";
 import { toOpenCodeRequestError } from "./request-errors";
 import {
@@ -194,7 +195,7 @@ export class OpencodeSdkAdapter
     const externalSessionId = createdData.id;
     const sessionInput = toSessionInput(input);
 
-    return registerSession({
+    const registrationInput: Parameters<typeof registerSession>[0] = {
       sessions: this.sessions,
       runtimeEventTransports: this.runtimeEventTransports,
       createClient: this.createClient,
@@ -207,8 +208,11 @@ export class OpencodeSdkAdapter
       startedMessage: `Started ${policy.activityLabel} session`,
       now: this.now,
       emit: this.emit.bind(this),
-      ...(this.logEvent ? { logEvent: this.logEvent } : {}),
-    });
+    };
+    if (this.logEvent) {
+      registrationInput.logEvent = this.logEvent;
+    }
+    return registerSession(registrationInput);
   }
 
   async resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary> {
@@ -254,12 +258,10 @@ export class OpencodeSdkAdapter
       policy,
       workingDirectory: input.workingDirectory,
     });
-    const startedAt = toIsoFromEpoch(
-      (detailData as { time?: { created?: unknown } }).time?.created,
-      this.now,
-    );
+    const detailRecord = opencodeSessionDetailPayloadSchema.parse(detailData);
+    const startedAt = toIsoFromEpoch(detailRecord.time.created, this.now);
     const sessionInput = toSessionInput(input);
-    return registerSession({
+    const registrationInput: Parameters<typeof registerSession>[0] = {
       sessions: this.sessions,
       runtimeEventTransports: this.runtimeEventTransports,
       createClient: this.createClient,
@@ -272,8 +274,11 @@ export class OpencodeSdkAdapter
       startedMessage: `Resumed ${policy.activityLabel} session`,
       now: this.now,
       emit: this.emit.bind(this),
-      ...(this.logEvent ? { logEvent: this.logEvent } : {}),
-    });
+    };
+    if (this.logEvent) {
+      registrationInput.logEvent = this.logEvent;
+    }
+    return registerSession(registrationInput);
   }
 
   private async ensureSessionState(input: PolicyBoundSessionRef): Promise<AgentSessionSummary> {
@@ -332,13 +337,11 @@ export class OpencodeSdkAdapter
         workingDirectory: input.workingDirectory,
       });
     }
-    const startedAt = toIsoFromEpoch(
-      (detailData as { time?: { created?: unknown } }).time?.created,
-      this.now,
-    );
+    const detailRecord = opencodeSessionDetailPayloadSchema.parse(detailData);
+    const startedAt = toIsoFromEpoch(detailRecord.time.created, this.now);
     const sessionInput = toExistingSessionInput(input);
 
-    const summary = registerSession({
+    const registrationInput: Parameters<typeof registerSession>[0] = {
       sessions: this.sessions,
       runtimeEventTransports: this.runtimeEventTransports,
       createClient: this.createClient,
@@ -352,11 +355,14 @@ export class OpencodeSdkAdapter
       subscribeToEvents: false,
       now: this.now,
       emit: this.emit.bind(this),
-      ...(this.logEvent ? { logEvent: this.logEvent } : {}),
-    });
+    };
+    if (this.logEvent) {
+      registrationInput.logEvent = this.logEvent;
+    }
+    const summary = registerSession(registrationInput);
 
     try {
-      subscribeSessionToRuntimeEvents({
+      const subscriptionInput: Parameters<typeof subscribeSessionToRuntimeEvents>[0] = {
         sessions: this.sessions,
         runtimeEventTransports: this.runtimeEventTransports,
         createClient: this.createClient,
@@ -366,8 +372,11 @@ export class OpencodeSdkAdapter
         sessionInput,
         now: this.now,
         emit: this.emit.bind(this),
-        ...(this.logEvent ? { logEvent: this.logEvent } : {}),
-      });
+      };
+      if (this.logEvent) {
+        subscriptionInput.logEvent = this.logEvent;
+      }
+      subscribeSessionToRuntimeEvents(subscriptionInput);
     } catch (error) {
       const session = this.sessions.get(input.externalSessionId);
       if (session) {
@@ -425,11 +434,14 @@ export class OpencodeSdkAdapter
       policy,
       workingDirectory: input.workingDirectory,
     });
-    const forked = await client.session.fork({
+    const forkRequest: Parameters<typeof client.session.fork>[0] = {
       directory: input.workingDirectory,
       sessionID: input.parentExternalSessionId,
-      ...(input.runtimeHistoryAnchor ? { messageID: input.runtimeHistoryAnchor } : {}),
-    });
+    };
+    if (input.runtimeHistoryAnchor) {
+      forkRequest.messageID = input.runtimeHistoryAnchor;
+    }
+    const forked = await client.session.fork(forkRequest);
     const forkedData = unwrapData(forked, "fork session");
     const externalSessionId = forkedData.id;
     try {
@@ -462,7 +474,7 @@ export class OpencodeSdkAdapter
     }
     const sessionInput = toSessionInput(input);
 
-    return registerSession({
+    const registrationInput: Parameters<typeof registerSession>[0] = {
       sessions: this.sessions,
       runtimeEventTransports: this.runtimeEventTransports,
       createClient: this.createClient,
@@ -475,8 +487,11 @@ export class OpencodeSdkAdapter
       startedMessage: `Forked ${policy.activityLabel} session`,
       now: this.now,
       emit: this.emit.bind(this),
-      ...(this.logEvent ? { logEvent: this.logEvent } : {}),
-    });
+    };
+    if (this.logEvent) {
+      registrationInput.logEvent = this.logEvent;
+    }
+    return registerSession(registrationInput);
   }
 
   async listSessionRuntimeSnapshots(
@@ -486,23 +501,29 @@ export class OpencodeSdkAdapter
       { ...input, workingDirectory: input.repoPath },
       "list session runtime snapshots",
     );
-    const snapshots = await listOpencodeRuntimeSnapshotSources({
+    const snapshotInput: Parameters<typeof listOpencodeRuntimeSnapshotSources>[0] = {
       createClient: this.createClient,
       runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
       now: this.now,
-      ...(input.directories ? { directories: input.directories } : {}),
-    });
+    };
+    if (input.directories) {
+      snapshotInput.directories = input.directories;
+    }
+    const snapshots = await listOpencodeRuntimeSnapshotSources(snapshotInput);
     const existingExternalSessionIds = new Set(
       snapshots.map((snapshot) => snapshot.externalSessionId),
     );
-    const localSnapshots = listOpencodeLocalRuntimeSnapshots({
+    const localSnapshotInput: Parameters<typeof listOpencodeLocalRuntimeSnapshots>[0] = {
       sessions: this.sessions,
       runtimeId: runtimeClientInput.runtimeId,
       repoPath: input.repoPath,
       runtimeKind: input.runtimeKind,
-      ...(input.directories ? { directories: input.directories } : {}),
       existingExternalSessionIds,
-    });
+    };
+    if (input.directories) {
+      localSnapshotInput.directories = input.directories;
+    }
+    const localSnapshots = listOpencodeLocalRuntimeSnapshots(localSnapshotInput);
     const liveSnapshots = snapshots.map((snapshot) =>
       toAgentSessionRuntimeSnapshot({
         ref: {
@@ -633,12 +654,16 @@ export class OpencodeSdkAdapter
       ),
     );
 
-    const historyInput = {
+    const historyInput: Parameters<typeof loadSessionHistory>[2] = {
       ...runtimeClientInput,
       externalSessionId: input.externalSessionId,
-      ...(typeof input.limit === "number" ? { limit: input.limit } : {}),
-      ...(preservedDisplayPartsByMessageId.size > 0 ? { preservedDisplayPartsByMessageId } : {}),
     };
+    if (input.limit !== undefined) {
+      historyInput.limit = input.limit;
+    }
+    if (preservedDisplayPartsByMessageId.size > 0) {
+      historyInput.preservedDisplayPartsByMessageId = preservedDisplayPartsByMessageId;
+    }
 
     return loadSessionHistory(this.createClient, this.now, historyInput);
   }
@@ -744,13 +769,18 @@ export class OpencodeSdkAdapter
         systemInvocation.kind === "manual_session_compaction"
           ? {}
           : await this.resolveSessionToolSelection(session);
-      const admittedUserMessage = await sendUserMessage({
+      const sendInput: Parameters<typeof sendUserMessage>[0] = {
         session,
         request: input,
         tools,
-        ...(messageId ? { messageId } : {}),
-        ...(admission ? { admission: admission.promise } : {}),
-      });
+      };
+      if (messageId) {
+        sendInput.messageId = messageId;
+      }
+      if (admission) {
+        sendInput.admission = admission.promise;
+      }
+      const admittedUserMessage = await sendUserMessage(sendInput);
       const timestamp = this.now();
       const event: AcceptedAgentUserMessage = {
         type: "user_message",
@@ -790,13 +820,13 @@ export class OpencodeSdkAdapter
 
   async updateSessionModel(input: UpdateAgentSessionModelInput): Promise<void> {
     const session = requireSession(this.sessions, input.externalSessionId);
-    session.input = {
-      ...session.input,
-      ...(input.model ? { model: input.model } : {}),
-    };
-    if (!input.model) {
-      delete session.input.model;
+    const nextInput: SessionInput = { ...session.input };
+    if (input.model) {
+      nextInput.model = input.model;
+    } else {
+      delete nextInput.model;
     }
+    session.input = nextInput;
     delete session.workflowToolSelectionCache;
     delete session.workflowToolSelectionCachedAt;
   }
@@ -930,21 +960,24 @@ export class OpencodeSdkAdapter
       client: session.client,
       workingDirectory: session.input.workingDirectory,
       onReconnectStart: (event) => {
-        this.emit(session.summary.externalSessionId, {
+        const reconnectEvent: AgentEvent = {
           type: "mcp_reconnect_started",
           externalSessionId: session.summary.externalSessionId,
           timestamp: this.now(),
           serverName: event.serverName,
           workingDirectory: event.workingDirectory,
           status: event.status,
-          ...(event.errorDetails ? { errorDetails: event.errorDetails } : {}),
-        });
+        };
+        if (event.errorDetails) {
+          reconnectEvent.errorDetails = event.errorDetails;
+        }
+        this.emit(session.summary.externalSessionId, reconnectEvent);
       },
     });
 
     if (
       session.workflowToolSelectionCache &&
-      typeof session.workflowToolSelectionCachedAt === "number" &&
+      session.workflowToolSelectionCachedAt !== undefined &&
       nowMs - session.workflowToolSelectionCachedAt < WORKFLOW_TOOL_CACHE_TTL_MS
     ) {
       return session.workflowToolSelectionCache;

@@ -90,7 +90,7 @@ export const useSettingsModalPromptValidation = ({
     [selectedRepoPromptValidationErrors],
   );
 
-  const settingsSectionErrorCountById: Record<SettingsSectionId, number> = {
+  const settingsSectionErrorCountById = {
     general: 0,
     git: 0,
     runtimes: 0,
@@ -101,7 +101,7 @@ export const useSettingsModalPromptValidation = ({
     chat: 0,
     kanban: 0,
     autopilot: 0,
-  };
+  } satisfies Record<SettingsSectionId, number>;
 
   return {
     promptValidationState,

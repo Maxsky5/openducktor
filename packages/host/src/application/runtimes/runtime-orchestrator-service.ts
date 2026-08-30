@@ -5,9 +5,15 @@ import {
   runtimeInstanceSummarySchema,
 } from "@openducktor/contracts";
 import { Clock, Effect } from "effect";
-import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
+import {
+  errorMessage,
+  HostOperationError,
+  type HostOperationErrorAggregate,
+  HostValidationError,
+  type HostValidationErrorAggregate,
+} from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
-import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
+import type { RuntimeRegistryError, RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { TaskReader } from "../../ports/task-repository-ports";
 import type { RuntimeDefinitionsService } from "./runtime-definitions-service";
 import {
@@ -35,7 +41,12 @@ export type {
   RuntimeStopInput,
 } from "./runtime-orchestrator-model";
 
-class RuntimeOrchestratorLoggingError extends HostOperationError {}
+type RuntimeOrchestratorLoggingFailureDetails = {
+  readonly loggingFailure: HostOperationErrorAggregate;
+  readonly runtimeFailure: RuntimeRegistryError | HostValidationErrorAggregate;
+};
+
+class RuntimeOrchestratorLoggingError extends HostOperationError<RuntimeOrchestratorLoggingFailureDetails> {}
 
 export const createRuntimeOrchestratorService = ({
   gitPort,
@@ -45,10 +56,10 @@ export const createRuntimeOrchestratorService = ({
   activeMcpProbeRetryDelayMs = ACTIVE_MCP_PROBE_RETRY_DELAY_MS,
   logger,
 }: {
-  gitPort: GitPort;
+  gitPort: Pick<GitPort, "canonicalizePath" | "isGitRepository">;
   runtimeDefinitionsService: RuntimeDefinitionsService;
   runtimeRegistry: RuntimeRegistryPort;
-  taskReader: TaskReader;
+  taskReader: Pick<TaskReader, "getTaskMetadata">;
   activeMcpProbeRetryDelayMs?: number;
   logger?: RuntimeOrchestratorLogger;
 }): RuntimeOrchestratorService => {
@@ -56,7 +67,7 @@ export const createRuntimeOrchestratorService = ({
   const writeRuntimeLog = (
     level: "error" | "info",
     message: string,
-  ): Effect.Effect<void, HostOperationError> =>
+  ): Effect.Effect<void, RuntimeOrchestratorLoggingError> =>
     logger
       ? logger[level](message).pipe(
           Effect.mapError(

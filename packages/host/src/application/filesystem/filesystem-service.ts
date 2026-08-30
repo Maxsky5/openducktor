@@ -5,6 +5,7 @@ import {
 } from "@openducktor/contracts";
 import { normalizeUserPathInput, resolveNormalizedUserPath } from "@openducktor/path-support";
 import { Data, Effect, Either } from "effect";
+import { hasNestedNodeErrorCode } from "../../effect/host-errors";
 import type { FilesystemPort } from "../../ports/filesystem-port";
 export type FilesystemListDirectoryErrorKind =
   | "home_directory_unavailable"
@@ -27,21 +28,6 @@ export type FilesystemService = {
   listDirectory(
     input?: FilesystemListDirectoryInput,
   ): Effect.Effect<DirectoryListing, FilesystemListDirectoryError>;
-};
-const hasNodeErrorCode = (error: unknown, code: string): boolean => {
-  const visited = new Set<object>();
-  let current: unknown = error;
-  while (typeof current === "object" && current !== null) {
-    if (visited.has(current)) {
-      return false;
-    }
-    visited.add(current);
-    if ("code" in current && current.code === code) {
-      return true;
-    }
-    current = "cause" in current ? current.cause : undefined;
-  }
-  return false;
 };
 const resolveHome = (filesystem: FilesystemPort): string => {
   const home = filesystem.homeDirectory();
@@ -76,7 +62,7 @@ const canonicalizeDirectoryEffect = (
   Effect.gen(function* () {
     const currentPath = yield* filesystem.canonicalize(requestedPath).pipe(
       Effect.mapError((error) => {
-        if (hasNodeErrorCode(error, "ENOENT")) {
+        if (hasNestedNodeErrorCode(error, "ENOENT")) {
           return new FilesystemListDirectoryError(
             "directory_does_not_exist",
             `Directory does not exist: ${requestedPath}`,
@@ -147,7 +133,7 @@ const readDirectoryEntriesEffect = (
     for (const entry of entries) {
       const metadataResult = yield* Effect.either(filesystem.stat(entry.path));
       if (Either.isLeft(metadataResult)) {
-        if (hasNodeErrorCode(metadataResult.left, "ENOENT")) {
+        if (hasNestedNodeErrorCode(metadataResult.left, "ENOENT")) {
           continue;
         }
         return yield* Effect.fail(

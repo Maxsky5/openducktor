@@ -1,4 +1,5 @@
 import {
+  agentSessionTranscriptEventSchema,
   type AgentSessionLiveRef,
   type AgentSessionTranscriptEvent,
   type CodexAppServerRequestId,
@@ -13,17 +14,12 @@ import type {
 } from "@openducktor/core";
 import { agentSessionStatusFromActivity, withAgentSessionRef } from "@openducktor/core";
 import { codexServerRequestKey } from "./codex-app-server-approvals";
-import {
-  codexTurnKey,
-  extractThreadIdFromParams,
-  parseNotificationRecord,
-  parseServerRequestRecord,
-} from "./codex-app-server-requests";
+import { codexServerRequestThreadId, codexTurnKey } from "./codex-app-server-requests";
 import {
   type CodexServerRequestHandlerContext,
   handleCodexServerRequest,
 } from "./codex-app-server-server-requests";
-import { type ActiveCodexTurn, isPlainObject } from "./codex-app-server-shared";
+import type { ActiveCodexTurn } from "./codex-app-server-shared";
 import {
   type CodexStreamingContext,
   type CompletedAgentMessage,
@@ -42,6 +38,7 @@ import {
   type CodexRuntimeStreamEvent,
   threadIdFromRuntimeStreamEvent,
 } from "./codex-runtime-events";
+import type { CodexRuntimeNotification } from "./codex-runtime-event-schema";
 import type { CodexSessionEventBus } from "./codex-session-event-bus";
 import { codexSessionRef } from "./codex-session-ref";
 import { CodexSubagentLifecycleProjector } from "./codex-subagent-lifecycle-projector";
@@ -100,6 +97,11 @@ type CodexRuntimeStreamEventSessionOwner = {
   targetSession: CodexSessionState;
 };
 
+type CodexThreadDiffState = {
+  latestTurnId: string;
+  byTurnId: Map<string, string>;
+};
+
 export type CodexRuntimeLiveSessionMutation = {
   runtimeId: string;
   transcriptEvents: AgentSessionTranscriptEvent[];
@@ -119,15 +121,19 @@ const receivedAtMsFromRuntimeStreamEvent = (receivedAt: string): number => {
 };
 
 const serverRequestFromRuntimeEvent = (
-  event: Pick<CodexRuntimeStreamEvent, "message" | "receivedAt">,
+  event: Extract<CodexRuntimeStreamEvent, { kind: "server_request" }>,
   retainedSession: CodexSessionState,
   targetSession: CodexSessionState,
 ): CodexServerRequestEnvelope => ({
-  request: parseServerRequestRecord(event.message),
+  request: event.message,
   receivedAt: event.receivedAt,
   retainedSession,
   targetSession,
 });
+
+const isServerRequestStreamEvent = (event: CodexRuntimeStreamEvent): boolean =>
+  event.kind === "server_request" ||
+  (event.kind === "fault" && event.sourceKind === "server_request");
 
 const routedSession = (
   retainedSession: CodexSessionState,
@@ -156,6 +162,7 @@ export class CodexRuntimeSessionEvents {
     Map<string, Map<string, number>>
   >();
   private readonly latestTodosBySessionId = new Map<string, AgentSessionTodoItem[]>();
+  private readonly threadDiffsByRuntimeId = new Map<string, Map<string, CodexThreadDiffState>>();
   private readonly runtimeEventProcessingByRuntimeId = new Map<string, Promise<void>>();
   private readonly runtimeEventGenerationByRuntimeId = new Map<string, symbol>();
   private readonly activeMutationByRuntimeId = new Map<string, CodexRuntimeLiveSessionMutation>();
@@ -215,6 +222,7 @@ export class CodexRuntimeSessionEvents {
       this.subagentLifecycle.clearRuntime(runtimeId);
       this.clearStartedItemTimestampsForRuntime(runtimeId);
       this.handledStreamRequestKeysByRuntimeId.delete(runtimeId);
+      this.threadDiffsByRuntimeId.delete(runtimeId);
       this.activeMutationByRuntimeId.delete(runtimeId);
     }
   }
@@ -293,6 +301,9 @@ export class CodexRuntimeSessionEvents {
     try {
       try {
         owner = this.prepareRuntimeStreamEvent(event);
+        if (event.kind === "fault") {
+          throw new Error(event.message);
+        }
         if (owner) {
           await this.processRuntimeStreamEventForSession(owner, event);
         }
@@ -301,10 +312,10 @@ export class CodexRuntimeSessionEvents {
           return;
         }
         const retainedOwner = owner ?? this.runtimeStreamEventSessionOwner(event);
-        Object.assign(mutation, {
-          fault: this.errorMessage(error),
-          ...(retainedOwner ? { faultRef: codexSessionRef(retainedOwner.targetSession) } : {}),
-        });
+        mutation.fault = this.errorMessage(error);
+        if (retainedOwner) {
+          mutation.faultRef = codexSessionRef(retainedOwner.targetSession);
+        }
         this.emitRuntimeStreamEventError(event, error, retainedOwner);
       }
       if (!this.runtimeStreamEventCanDeliver(event.runtimeId, generation, owner)) {
@@ -359,6 +370,19 @@ export class CodexRuntimeSessionEvents {
     this.latestTodosBySessionId.set(externalSessionId, todos);
   }
 
+  sessionDiff(runtimeId: string, threadId: string, turnId?: string): string {
+    const threadDiff = this.threadDiffsByRuntimeId.get(runtimeId)?.get(threadId);
+    const selectedTurnId = turnId ?? threadDiff?.latestTurnId;
+    const diff = selectedTurnId ? threadDiff?.byTurnId.get(selectedTurnId) : undefined;
+    if (diff === undefined) {
+      const turnDetail = turnId ? ` turn '${turnId}'` : " its latest turn";
+      throw new Error(
+        `Codex app-server has not streamed a turn/diff/updated notification for thread '${threadId}'${turnDetail} on runtime '${runtimeId}'.`,
+      );
+    }
+    return diff;
+  }
+
   clearSession(externalSessionId: string, runtimeId?: string): void {
     const routedDescendantThreadIds =
       runtimeId === undefined
@@ -379,6 +403,7 @@ export class CodexRuntimeSessionEvents {
     this.clearHandledStreamRequestKeys(externalSessionId, runtimeId);
     this.syntheticUserMessageTextsByThreadId.delete(externalSessionId);
     this.latestTodosBySessionId.delete(externalSessionId);
+    this.clearSessionDiffs(externalSessionId, runtimeId);
     this.contextUsage.clearSession(externalSessionId, runtimeId);
     this.clearTurnScopedMap(this.completedAgentMessagesByTurnKey, externalSessionId);
     this.clearTurnScopedMap(this.tokenUsageByTurnKey, externalSessionId);
@@ -429,8 +454,12 @@ export class CodexRuntimeSessionEvents {
   }
 
   async continueTurnAfterPendingInput(activeTurn: ActiveCodexTurn): Promise<void> {
+    const turnStartPromise = activeTurn.turnStartPromise;
+    if (!turnStartPromise) {
+      return;
+    }
     try {
-      await activeTurn.turnStartPromise;
+      await turnStartPromise;
     } catch (error) {
       if (this.deps.sessions.get(activeTurn.session.threadId) !== activeTurn.session) {
         return;
@@ -497,7 +526,7 @@ export class CodexRuntimeSessionEvents {
     }
   }
 
-  private emitSubagentRouteError(route: CodexSubagentRoute, error: unknown): void {
+  private emitSubagentRouteError(route: CodexSubagentRoute, cause: unknown): void {
     const externalSessionId = this.deps.sessions.get(route.parentExternalSessionId)
       ? route.parentExternalSessionId
       : this.deps.sessions.get(route.childExternalSessionId)
@@ -506,26 +535,24 @@ export class CodexRuntimeSessionEvents {
     if (!externalSessionId) {
       return;
     }
-    this.emitSessionError(externalSessionId, error);
+    this.emitSessionError(externalSessionId, cause);
   }
 
   private prepareRuntimeStreamEvent(
     event: CodexRuntimeStreamEvent,
   ): CodexRuntimeStreamEventSessionOwner | undefined {
-    this.assertRuntimeStreamEventReceivedAt(event);
-    if (event.kind === "notification") {
-      this.observeCatalogInvalidation(event.runtimeId, event.message);
-    }
     const notification =
-      event.kind === "notification"
-        ? parseNotificationRecord(event.message, event.receivedAt)
-        : null;
+      event.kind === "notification" ? { ...event.message, receivedAt: event.receivedAt } : null;
+    if (notification) {
+      this.observeCatalogInvalidation(event.runtimeId, notification);
+    }
     if (notification?.method === "thread/tokenUsage/updated") {
       this.contextUsage.observeNotification(event.runtimeId, notification);
     }
+    const isServerRequest = isServerRequestStreamEvent(event);
     const threadId = threadIdFromRuntimeStreamEvent(event);
     if (!threadId) {
-      if (event.kind === "server_request") {
+      if (isServerRequest && event.kind !== "fault") {
         this.emitUnroutableRuntimeServerRequest(event.runtimeId);
       }
       return;
@@ -536,7 +563,7 @@ export class CodexRuntimeSessionEvents {
     }
     const session = this.deps.sessions.get(threadId);
     if (session && session.runtimeId !== event.runtimeId) {
-      if (event.kind === "server_request") {
+      if (isServerRequest) {
         throw new Error(
           `Cannot route Codex server request for thread '${threadId}' from runtime '${event.runtimeId}' because the session belongs to runtime '${session.runtimeId}'.`,
         );
@@ -548,28 +575,71 @@ export class CodexRuntimeSessionEvents {
     }
     const owner = this.resolveRuntimeStreamEventSessionOwner(threadId, event.runtimeId);
     if (!owner) {
-      if (event.kind === "server_request") {
+      if (isServerRequest) {
         throw new Error(
           `Cannot route Codex server request for thread '${threadId}' because no retained same-runtime session exists.`,
         );
       }
       return;
     }
+    if (notification?.method === "turn/diff/updated") {
+      this.rememberSessionDiff(
+        event.runtimeId,
+        notification.params.threadId,
+        notification.params.turnId,
+        notification.params.diff,
+      );
+    } else if (notification?.method === "turn/started") {
+      this.rememberSessionDiff(
+        event.runtimeId,
+        notification.params.threadId,
+        notification.params.turn.id,
+        "",
+      );
+    }
     return owner;
+  }
+
+  private rememberSessionDiff(
+    runtimeId: string,
+    threadId: string,
+    turnId: string,
+    diff: string,
+  ): void {
+    let threadDiffs = this.threadDiffsByRuntimeId.get(runtimeId);
+    if (!threadDiffs) {
+      threadDiffs = new Map();
+      this.threadDiffsByRuntimeId.set(runtimeId, threadDiffs);
+    }
+    const threadDiff = threadDiffs.get(threadId) ?? {
+      latestTurnId: turnId,
+      byTurnId: new Map<string, string>(),
+    };
+    threadDiff.latestTurnId = turnId;
+    threadDiff.byTurnId.set(turnId, diff);
+    threadDiffs.set(threadId, threadDiff);
+  }
+
+  private clearSessionDiffs(threadId: string, runtimeId?: string): void {
+    const runtimeIds = runtimeId ? [runtimeId] : [...this.threadDiffsByRuntimeId.keys()];
+    for (const currentRuntimeId of runtimeIds) {
+      const threadDiffs = this.threadDiffsByRuntimeId.get(currentRuntimeId);
+      threadDiffs?.delete(threadId);
+      if (threadDiffs?.size === 0) {
+        this.threadDiffsByRuntimeId.delete(currentRuntimeId);
+      }
+    }
   }
 
   private handleServerRequestResolvedNotification(
     runtimeId: string,
-    notification: CodexNotificationRecord,
+    notification: Extract<CodexNotificationRecord, { method: "serverRequest/resolved" }>,
   ): void {
-    const threadId = extractThreadIdFromParams(notification.params);
-    const requestId = this.resolvedServerRequestId(notification);
-    if (!threadId || requestId === null) {
-      throw new Error(
-        "Codex serverRequest/resolved notification is missing threadId or requestId.",
-      );
-    }
-    this.resolvePendingServerRequest(threadId, requestId, runtimeId);
+    this.resolvePendingServerRequest(
+      notification.params.threadId,
+      notification.params.requestId,
+      runtimeId,
+    );
   }
 
   private resolvePendingServerRequest(
@@ -586,15 +656,20 @@ export class CodexRuntimeSessionEvents {
     }
     const { entry } = pending;
     const route = entry.route ?? this.deps.subagents.routeForChild(threadId, entry.runtimeId);
-    const eventBase = {
+    const eventBase: {
+      externalSessionId: string;
+      timestamp: string;
+      requestId: string;
+      requestInstanceId?: string;
+    } & ReturnType<typeof codexSubagentRouteEventFields> = {
       externalSessionId: threadId,
       timestamp: new Date().toISOString(),
       requestId: entry.request.requestId,
-      ...(entry.request.requestInstanceId
-        ? { requestInstanceId: entry.request.requestInstanceId }
-        : {}),
       ...codexSubagentRouteEventFields(route),
     };
+    if (entry.request.requestInstanceId) {
+      eventBase.requestInstanceId = entry.request.requestInstanceId;
+    }
     const activeTurn =
       pending.kind === "approval"
         ? this.deps.pendingInput.resolveApproval(entry.request.requestId, entry.runtimeId)
@@ -602,10 +677,17 @@ export class CodexRuntimeSessionEvents {
     const type = pending.kind === "approval" ? "approval_resolved" : "question_resolved";
     const owner = this.resolveRuntimeStreamEventSessionOwner(threadId, runtimeId);
     if (owner) {
-      this.emitRoutedRequestEvent(owner.targetSession, {
-        ...eventBase,
-        type,
-      });
+      if (type === "approval_resolved") {
+        this.emitRoutedRequestEvent(owner.targetSession, {
+          ...eventBase,
+          type: "approval_resolved",
+        });
+      } else {
+        this.emitRoutedRequestEvent(owner.targetSession, {
+          ...eventBase,
+          type: "question_resolved",
+        });
+      }
     }
     if (activeTurn && !activeTurn.isTurnSettled()) {
       void this.continueTurnAfterPendingInput(activeTurn);
@@ -614,34 +696,20 @@ export class CodexRuntimeSessionEvents {
     return true;
   }
 
-  private resolvedServerRequestId(
-    notification: CodexNotificationRecord,
-  ): CodexAppServerRequestId | null {
-    if (!isPlainObject(notification.params)) {
-      return null;
-    }
-    const params = notification.params;
-    const requestId = params.requestId ?? params.request_id;
-    if (typeof requestId === "number" || typeof requestId === "string") {
-      return requestId;
-    }
-    return null;
-  }
-
   private emitRuntimeStreamEventError(
     event: CodexRuntimeStreamEvent,
-    error: unknown,
+    cause: unknown,
     owner: CodexRuntimeStreamEventSessionOwner | undefined,
   ): void {
     const threadId = threadIdFromRuntimeStreamEvent(event);
     if (!threadId) {
-      if (event.kind === "server_request") {
-        this.emitUnroutableRuntimeServerRequest(event.runtimeId, this.errorMessage(error));
+      if (isServerRequestStreamEvent(event)) {
+        this.emitUnroutableRuntimeServerRequest(event.runtimeId, this.errorMessage(cause));
       }
       return;
     }
     if (owner) {
-      this.emitSessionErrorForSession(owner.targetSession, error);
+      this.emitSessionErrorForSession(owner.targetSession, cause);
     }
   }
 
@@ -737,11 +805,14 @@ export class CodexRuntimeSessionEvents {
 
   private async processRuntimeStreamEventForSession(
     owner: CodexRuntimeStreamEventSessionOwner,
-    event: Pick<CodexRuntimeStreamEvent, "kind" | "receivedAt" | "message">,
+    event: CodexRuntimeStreamEvent,
   ): Promise<void> {
+    if (event.kind === "fault") {
+      throw new Error(event.message);
+    }
     if (event.kind === "notification") {
       await this.handlePendingNotifications(owner.targetSession, [
-        parseNotificationRecord(event.message, event.receivedAt),
+        { ...event.message, receivedAt: event.receivedAt },
       ]);
       return;
     }
@@ -759,7 +830,7 @@ export class CodexRuntimeSessionEvents {
     let hasPendingInput = false;
     const requestsByOwnerThreadId = new Map<string, CodexServerRequestEnvelope[]>();
     for (const request of requests) {
-      const ownerThreadId = extractThreadIdFromParams(request.request.params) ?? session.threadId;
+      const ownerThreadId = codexServerRequestThreadId(request.request) ?? session.threadId;
       const ownerRequests = requestsByOwnerThreadId.get(ownerThreadId) ?? [];
       ownerRequests.push(request);
       requestsByOwnerThreadId.set(ownerThreadId, ownerRequests);
@@ -799,8 +870,11 @@ export class CodexRuntimeSessionEvents {
     }
   }
 
-  private observeCatalogInvalidation(runtimeId: string, message: unknown): void {
-    if (!isPlainObject(message) || message.method !== "skills/changed") {
+  private observeCatalogInvalidation(
+    runtimeId: string,
+    notification: CodexRuntimeNotification,
+  ): void {
+    if (notification.method !== "skills/changed") {
       return;
     }
     const mutation = this.activeMutationByRuntimeId.get(runtimeId);
@@ -987,34 +1061,25 @@ export class CodexRuntimeSessionEvents {
     }
   }
 
-  private emitSessionError(externalSessionId: string, error: unknown): void {
+  private emitSessionError(externalSessionId: string, cause: unknown): void {
     const session = this.deps.sessions.get(externalSessionId);
     if (!session) {
       return;
     }
-    this.emitSessionErrorForSession(session, error);
+    this.emitSessionErrorForSession(session, cause);
   }
 
-  private emitSessionErrorForSession(session: CodexSessionState, error: unknown): void {
+  private emitSessionErrorForSession(session: CodexSessionState, cause: unknown): void {
     this.emitSessionEventForSession(session, {
       type: "session_error",
       externalSessionId: session.threadId,
       timestamp: new Date().toISOString(),
-      message: this.errorMessage(error),
+      message: this.errorMessage(cause),
     });
   }
 
-  private errorMessage(error: unknown): string {
-    return error instanceof Error ? error.message : String(error);
-  }
-
-  private assertRuntimeStreamEventReceivedAt(
-    event: Pick<CodexRuntimeStreamEvent, "receivedAt">,
-  ): void {
-    const receivedAt = (event as { receivedAt?: unknown }).receivedAt;
-    if (typeof receivedAt !== "string" || receivedAt.trim().length === 0) {
-      throw new Error("Codex app-server stream event is missing receivedAt.");
-    }
+  private errorMessage(cause: unknown): string {
+    return cause instanceof Error ? cause.message : String(cause);
   }
 
   private emitSessionEvent(externalSessionId: string, event: AgentEvent): void {
@@ -1034,7 +1099,7 @@ export class CodexRuntimeSessionEvents {
     if (isAgentSessionTranscriptEventType(normalizedEvent.type)) {
       this.activeMutationByRuntimeId
         .get(session.runtimeId)
-        ?.transcriptEvents.push(normalizedEvent as AgentSessionTranscriptEvent);
+        ?.transcriptEvents.push(agentSessionTranscriptEventSchema.parse(normalizedEvent));
     }
   }
 

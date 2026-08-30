@@ -71,17 +71,20 @@ const createHarness = (
       </RuntimeDefinitionsContext.Provider>
     </QueryProvider>
   );
+  const target: Parameters<typeof useRuntimeTranscriptSessionHistory>[0]["target"] = {
+    externalSessionId: liveSession.externalSessionId,
+    runtimeKind: liveSession.runtimeKind,
+    workingDirectory: liveSession.workingDirectory,
+  };
+  if (targetSessionScope) {
+    target.sessionScope = targetSessionScope;
+  }
   return createHookHarness(
     useRuntimeTranscriptSessionHistory,
     {
       isOpen: true,
       repoPath: "/repo",
-      target: {
-        externalSessionId: liveSession.externalSessionId,
-        runtimeKind: liveSession.runtimeKind,
-        workingDirectory: liveSession.workingDirectory,
-        ...(targetSessionScope ? { sessionScope: targetSessionScope } : {}),
-      },
+      target,
       repoReadinessState: "ready" as const,
       liveSession,
     },

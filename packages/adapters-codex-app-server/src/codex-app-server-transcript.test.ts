@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
   codexTurnItemsFromThreadRead,
-  timestampFromCodexParams,
   timestampFromCodexTurn,
   toHistoryMessage,
 } from "./codex-app-server-transcript";
@@ -13,32 +12,21 @@ import {
   toCodexTurnInputList,
   toCodexUserInputList,
 } from "./codex-user-inputs";
+import { codexTurnFixture } from "./test-fixtures/codex-protocol";
 
 describe("Codex App Server transcript parsing", () => {
-  test("preserves zero millisecond notification timestamps", () => {
-    expect(timestampFromCodexParams({ timestampMs: 0 })).toBe("1970-01-01T00:00:00.000Z");
-  });
-
-  test("ignores malformed notification timestamps instead of throwing", () => {
-    expect(timestampFromCodexParams({ timestampMs: Number.MAX_VALUE })).toBeNull();
-  });
-
-  test("does not invent timestamps when notification params omit runtime timestamps", () => {
-    expect(timestampFromCodexParams({})).toBeNull();
-  });
-
   test("ignores malformed turn timestamps instead of throwing", () => {
     expect(
-      timestampFromCodexTurn({ completedAt: Number.NaN }, ["completedAt", "completed_at"]),
+      timestampFromCodexTurn({ completedAt: Number.NaN, startedAt: null }, "completedAt"),
     ).toBeNull();
     expect(
-      timestampFromCodexTurn({ completedAt: Number.POSITIVE_INFINITY }, [
+      timestampFromCodexTurn(
+        { completedAt: Number.POSITIVE_INFINITY, startedAt: null },
         "completedAt",
-        "completed_at",
-      ]),
+      ),
     ).toBeNull();
     expect(
-      timestampFromCodexTurn({ completedAt: Number.MAX_VALUE }, ["completedAt", "completed_at"]),
+      timestampFromCodexTurn({ completedAt: Number.MAX_VALUE, startedAt: null }, "completedAt"),
     ).toBeNull();
   });
 
@@ -55,7 +43,6 @@ describe("Codex App Server transcript parsing", () => {
         result: { content: [{ type: "text", text: "ok" }] },
         durationMs: 8,
       },
-      "fallback-id",
       undefined,
       timestamp,
     );
@@ -75,20 +62,17 @@ describe("Codex App Server transcript parsing", () => {
 
   test("derives tool timing from Codex duration and explicit completion timestamp", () => {
     const completedAtMs = Date.parse("2026-05-07T00:00:10.000Z");
-    const message = toHistoryMessage(
-      {
-        id: "tool-1",
-        type: "mcpToolCall",
-        server: "openducktor",
-        tool: "odt_read_task",
-        status: "completed",
-        arguments: { taskId: "task-1" },
-        result: { content: [{ type: "text", text: "ok" }] },
-        durationMs: 8,
-        completedAtMs,
-      },
-      "fallback-id",
-    );
+    const message = toHistoryMessage({
+      id: "tool-1",
+      type: "mcpToolCall",
+      server: "openducktor",
+      tool: "odt_read_task",
+      status: "completed",
+      arguments: { taskId: "task-1" },
+      result: { content: [{ type: "text", text: "ok" }] },
+      durationMs: 8,
+      completedAtMs,
+    });
 
     expect(message?.parts).toEqual([
       expect.objectContaining({
@@ -174,7 +158,7 @@ describe("Codex App Server transcript parsing", () => {
         { kind: "text", text: " please" },
       ]),
     ).toEqual([
-      { type: "text", text: "Tell me about " },
+      { type: "text", text: "Tell me about ", text_elements: [] },
       {
         type: "text",
         text: "@src/main.ts",
@@ -186,7 +170,7 @@ describe("Codex App Server transcript parsing", () => {
         ],
       },
       { type: "mention", name: "main.ts", path: "src/main.ts" },
-      { type: "text", text: " please" },
+      { type: "text", text: " please", text_elements: [] },
     ]);
   });
 
@@ -206,7 +190,7 @@ describe("Codex App Server transcript parsing", () => {
     ]);
 
     expect(input).toEqual([
-      { type: "text", text: "Tell me what's in " },
+      { type: "text", text: "Tell me what's in ", text_elements: [] },
       {
         type: "text",
         text: "@apps/api/src/routes/auth.ts ",
@@ -218,7 +202,7 @@ describe("Codex App Server transcript parsing", () => {
         ],
       },
       { type: "mention", name: "auth.ts", path: "apps/api/src/routes/auth.ts" },
-      { type: "text", text: "please" },
+      { type: "text", text: "please", text_elements: [] },
     ]);
     expect(codexUserInputListToText(input)).toBe(
       "Tell me what's in @apps/api/src/routes/auth.ts please",
@@ -269,7 +253,7 @@ describe("Codex App Server transcript parsing", () => {
         { kind: "text", text: " please" },
       ]),
     ).toEqual([
-      { type: "text", text: "Use " },
+      { type: "text", text: "Use ", text_elements: [] },
       {
         type: "text",
         text: "$review",
@@ -281,7 +265,7 @@ describe("Codex App Server transcript parsing", () => {
         ],
       },
       { type: "skill", name: "review", path: "/skills/review/SKILL.md" },
-      { type: "text", text: " please" },
+      { type: "text", text: " please", text_elements: [] },
     ]);
   });
 
@@ -319,19 +303,16 @@ describe("Codex App Server transcript parsing", () => {
     });
 
     expect(input).toEqual([
-      { type: "text", text: "Tell me the purpose of ", text_elements: [] },
+      { type: "text", text: "Tell me the purpose of " },
       { type: "skill", name: "review", path: "/skills/review/SKILL.md" },
-      { type: "text", text: " please", text_elements: [] },
+      { type: "text", text: " please" },
     ]);
 
-    const message = toHistoryMessage(
-      {
-        id: "user-1",
-        type: "userMessage",
-        content: input,
-      },
-      "fallback-id",
-    );
+    const message = toHistoryMessage({
+      id: "user-1",
+      type: "userMessage",
+      content: input,
+    });
 
     expect(message).toMatchObject({
       role: "user",
@@ -372,14 +353,11 @@ describe("Codex App Server transcript parsing", () => {
 
     expect(codexUserInputListToText(input)).toBe("Tell me about @src/main.ts please");
 
-    const message = toHistoryMessage(
-      {
-        id: "user-1",
-        type: "userMessage",
-        content: input,
-      },
-      "fallback-id",
-    );
+    const message = toHistoryMessage({
+      id: "user-1",
+      type: "userMessage",
+      content: input,
+    });
 
     expect(message).toMatchObject({
       role: "user",
@@ -427,14 +405,11 @@ describe("Codex App Server transcript parsing", () => {
       "Now tell me what's in @apps/web/src/contexts/ExpenseContext.tsx please",
     );
 
-    const message = toHistoryMessage(
-      {
-        id: "user-1",
-        type: "userMessage",
-        content: input,
-      },
-      "fallback-id",
-    );
+    const message = toHistoryMessage({
+      id: "user-1",
+      type: "userMessage",
+      content: input,
+    });
 
     expect(message).toMatchObject({
       role: "user",
@@ -472,14 +447,11 @@ describe("Codex App Server transcript parsing", () => {
 
     expect(codexUserInputListToText(input)).toBe("Tell me about @src/main.ts");
 
-    const message = toHistoryMessage(
-      {
-        id: "user-1",
-        type: "userMessage",
-        content: input,
-      },
-      "fallback-id",
-    );
+    const message = toHistoryMessage({
+      id: "user-1",
+      type: "userMessage",
+      content: input,
+    });
 
     expect(message).toMatchObject({
       role: "user",
@@ -508,14 +480,11 @@ describe("Codex App Server transcript parsing", () => {
       ],
     });
 
-    const message = toHistoryMessage(
-      {
-        id: "user-1",
-        type: "userMessage",
-        content: input,
-      },
-      "fallback-id",
-    );
+    const message = toHistoryMessage({
+      id: "user-1",
+      type: "userMessage",
+      content: input,
+    });
 
     expect(message).toMatchObject({
       role: "user",
@@ -544,14 +513,11 @@ describe("Codex App Server transcript parsing", () => {
       ],
     });
 
-    const message = toHistoryMessage(
-      {
-        id: "user-1",
-        type: "userMessage",
-        content: input,
-      },
-      "fallback-id",
-    );
+    const message = toHistoryMessage({
+      id: "user-1",
+      type: "userMessage",
+      content: input,
+    });
 
     expect(message).toMatchObject({
       role: "user",
@@ -583,14 +549,11 @@ describe("Codex App Server transcript parsing", () => {
       "Tell me what's in @apps/api/src/routes/groups.ts",
     );
 
-    const message = toHistoryMessage(
-      {
-        id: "user-1",
-        type: "userMessage",
-        content: input,
-      },
-      "fallback-id",
-    );
+    const message = toHistoryMessage({
+      id: "user-1",
+      type: "userMessage",
+      content: input,
+    });
 
     expect(message).toMatchObject({
       role: "user",
@@ -637,14 +600,11 @@ describe("Codex App Server transcript parsing", () => {
 
     expect(codexUserInputListToText(input)).toBe("Tell me the purpose of $review please");
 
-    const message = toHistoryMessage(
-      {
-        id: "user-1",
-        type: "userMessage",
-        content: input,
-      },
-      "fallback-id",
-    );
+    const message = toHistoryMessage({
+      id: "user-1",
+      type: "userMessage",
+      content: input,
+    });
 
     expect(message).toMatchObject({
       role: "user",
@@ -682,14 +642,11 @@ describe("Codex App Server transcript parsing", () => {
       ],
     });
 
-    const message = toHistoryMessage(
-      {
-        id: "user-1",
-        type: "userMessage",
-        content: input,
-      },
-      "fallback-id",
-    );
+    const message = toHistoryMessage({
+      id: "user-1",
+      type: "userMessage",
+      content: input,
+    });
 
     expect(message?.displayParts).toEqual([
       { kind: "text", text: "Tell me the purpose of " },
@@ -730,14 +687,11 @@ describe("Codex App Server transcript parsing", () => {
       ],
     });
 
-    const message = toHistoryMessage(
-      {
-        id: "user-1",
-        type: "userMessage",
-        content: input,
-      },
-      "fallback-id",
-    );
+    const message = toHistoryMessage({
+      id: "user-1",
+      type: "userMessage",
+      content: input,
+    });
 
     expect(message).toMatchObject({
       text: "Use $review now",
@@ -785,14 +739,11 @@ describe("Codex App Server transcript parsing", () => {
       ],
     });
 
-    const message = toHistoryMessage(
-      {
-        id: "user-1",
-        type: "userMessage",
-        content: input,
-      },
-      "fallback-id",
-    );
+    const message = toHistoryMessage({
+      id: "user-1",
+      type: "userMessage",
+      content: input,
+    });
 
     expect(message).toMatchObject({
       text: "$review then $review",
@@ -834,14 +785,11 @@ describe("Codex App Server transcript parsing", () => {
       ],
     });
 
-    const message = toHistoryMessage(
-      {
-        id: "user-1",
-        type: "userMessage",
-        content: input,
-      },
-      "fallback-id",
-    );
+    const message = toHistoryMessage({
+      id: "user-1",
+      type: "userMessage",
+      content: input,
+    });
 
     expect(message).toMatchObject({
       text: "Use $レビュー please",
@@ -865,167 +813,29 @@ describe("Codex App Server transcript parsing", () => {
     });
   });
 
-  test("preserves turn model and reasoning effort from thread reads", () => {
+  test("does not invent model metadata that thread reads do not provide", () => {
     const items = codexTurnItemsFromThreadRead({
       thread: {
-        modelProvider: "openai",
         turns: [
-          {
+          codexTurnFixture({
             id: "turn-1",
             status: "completed",
-            startedAt: 1_778_112_001,
-            completedAt: 1_778_112_031,
-            model: "gpt-5",
-            reasoningEffort: "high",
             items: [
               {
                 id: "message-1",
                 type: "agentMessage",
                 phase: "final_answer",
                 text: "Done",
+                memoryCitation: null,
               },
             ],
-          },
-        ],
-      },
-    });
-
-    expect(items).toHaveLength(1);
-    expect(items[0]?.model).toEqual({
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-    });
-  });
-
-  test("does not invent a provider when thread reads omit provider metadata", () => {
-    const items = codexTurnItemsFromThreadRead({
-      thread: {
-        turns: [
-          {
-            id: "turn-1",
-            status: "completed",
-            model: "gpt-5",
-            reasoningEffort: "high",
-            items: [
-              {
-                id: "message-1",
-                type: "agentMessage",
-                phase: "final_answer",
-                text: "Done",
-              },
-            ],
-          },
+          }),
         ],
       },
     });
 
     expect(items).toHaveLength(1);
     expect(items[0]?.model).toBeUndefined();
-  });
-
-  test("prefers item timestamp evidence over turn completion timestamps", () => {
-    const itemTimestampMs = Date.parse("2026-05-20T10:00:02.000Z");
-    const items = codexTurnItemsFromThreadRead({
-      thread: {
-        turns: [
-          {
-            id: "turn-1",
-            status: "completed",
-            startedAt: 1_779_270_000,
-            completedAt: 1_779_270_030,
-            items: [
-              {
-                id: "tool-1",
-                type: "mcpToolCall",
-                server: "openducktor",
-                tool: "odt_read_task",
-                status: "completed",
-                arguments: { taskId: "task-1" },
-                result: { content: [{ type: "text", text: "ok" }] },
-                timestampMs: itemTimestampMs,
-              },
-            ],
-          },
-        ],
-      },
-    });
-
-    expect(items[0]?.timestamp).toBe("2026-05-20T10:00:02.000Z");
-    expect(items[0]?.item).not.toEqual(
-      expect.objectContaining({ completedAtMs: expect.any(Number) }),
-    );
-  });
-
-  test("ignores malformed item timestamp evidence instead of throwing", () => {
-    const items = codexTurnItemsFromThreadRead({
-      thread: {
-        turns: [
-          {
-            id: "turn-1",
-            status: "completed",
-            completedAt: 1,
-            items: [
-              {
-                id: "tool-1",
-                type: "mcpToolCall",
-                server: "openducktor",
-                tool: "odt_read_task",
-                status: "completed",
-                arguments: { taskId: "task-1" },
-                result: { content: [{ type: "text", text: "ok" }] },
-                timestampMs: Number.MAX_VALUE,
-              },
-            ],
-          },
-        ],
-      },
-    });
-
-    expect(items[0]?.timestamp).toBe("1970-01-01T00:00:01.000Z");
-  });
-
-  test("does not hydrate start-only tool timing from item display timestamps", () => {
-    const timestampMs = Date.parse("2026-05-20T10:00:02.000Z");
-    const [threadItem] = codexTurnItemsFromThreadRead({
-      thread: {
-        turns: [
-          {
-            id: "turn-1",
-            status: "completed",
-            completedAt: 1_779_270_030,
-            items: [
-              {
-                id: "tool-1",
-                type: "mcpToolCall",
-                server: "openducktor",
-                tool: "odt_read_task",
-                status: "completed",
-                arguments: { taskId: "task-1" },
-                result: { content: [{ type: "text", text: "ok" }] },
-                startedAtMs: timestampMs - 1000,
-                timestampMs,
-              },
-            ],
-          },
-        ],
-      },
-    });
-    if (!threadItem) {
-      throw new Error("Expected Codex thread item");
-    }
-
-    const events = projectCodexCanonicalEvents(
-      createCodexEventMapperPipeline().runThreadItem(
-        { item: threadItem.item, index: 0, timestamp: threadItem.timestamp ?? undefined },
-        { source: "thread_read", threadId: "thread-1" },
-      ),
-    );
-
-    const tool = events.find((event) => event.type === "assistant_part")?.part;
-    expect(tool).toEqual(expect.objectContaining({ kind: "tool" }));
-    expect(tool).not.toEqual(expect.objectContaining({ startedAtMs: expect.any(Number) }));
-    expect(tool).not.toEqual(expect.objectContaining({ endedAtMs: expect.any(Number) }));
   });
 
   test("hydrates thread-read tool duration through the canonical event mapper path", () => {
@@ -1114,7 +924,7 @@ describe("Codex App Server transcript parsing", () => {
       },
     });
 
-    const message = toHistoryMessage(items[0]?.item, "fallback-id");
+    const message = toHistoryMessage(items[0]?.item);
 
     expect(message).toMatchObject({
       role: "user",

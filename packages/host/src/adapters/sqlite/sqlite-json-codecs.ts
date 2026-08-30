@@ -1,52 +1,81 @@
 import { type AgentSessionRecord, agentSessionRecordSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { z, type JSONType } from "zod";
 import { errorMessage } from "../../effect/host-errors";
-import { SqliteTaskStoreDataError } from "./sqlite-task-store-errors";
+import {
+  SqliteTaskStoreDataError,
+  type SqliteTaskStoreDataErrorDetails,
+} from "./sqlite-task-store-errors";
 import type { TaskRow } from "./sqlite-task-store-schema";
 
 type SafeParseResult<A> =
   | { readonly success: true; readonly data: A }
   | { readonly success: false; readonly error: { readonly message: string } };
 
-type SafeParser<A> = {
-  readonly safeParse: (value: unknown) => SafeParseResult<A>;
+type SafeParser<Input, Output> = {
+  readonly safeParse: (value: Input) => SafeParseResult<Output>;
 };
+
+const labelsSchema = z.array(z.string());
 
 export const normalizeLabels = (labels: string[]): string[] =>
   Array.from(new Set(labels.map((label) => label.trim()).filter(Boolean))).sort();
 
-export const encodeJson = (value: unknown): string => JSON.stringify(value);
+export const encodeJson = (value: JSONType): string => JSON.stringify(value);
 
-export const decodeWithSchema = <A>(
-  parser: SafeParser<A>,
-  value: unknown,
+const parseWithSchema = <Input, Output>(
+  parser: SafeParser<Input, Output>,
+  value: Input,
   field: string,
-  details?: Readonly<Record<string, unknown>>,
-): Effect.Effect<A, SqliteTaskStoreDataError> => {
+  details?: Readonly<SqliteTaskStoreDataErrorDetails>,
+): Effect.Effect<Output, SqliteTaskStoreDataError> => {
   const parsed = parser.safeParse(value);
   if (parsed.success) {
     return Effect.succeed(parsed.data);
+  }
+  if (details !== undefined) {
+    return Effect.fail(
+      new SqliteTaskStoreDataError({
+        message: `Invalid SQLite task-store ${field}: ${parsed.error.message}`,
+        field,
+        details,
+      }),
+    );
   }
   return Effect.fail(
     new SqliteTaskStoreDataError({
       message: `Invalid SQLite task-store ${field}: ${parsed.error.message}`,
       field,
-      details,
     }),
   );
 };
 
+export const decodeWithSchema = <A>(
+  parser: SafeParser<JSONType, A>,
+  value: JSONType,
+  field: string,
+  details?: Readonly<SqliteTaskStoreDataErrorDetails>,
+): Effect.Effect<A, SqliteTaskStoreDataError> => parseWithSchema(parser, value, field, details);
+
+export const validateWithSchema = <Input, Output>(
+  parser: SafeParser<Input, Output>,
+  value: Input,
+  field: string,
+  details?: Readonly<SqliteTaskStoreDataErrorDetails>,
+): Effect.Effect<Output, SqliteTaskStoreDataError> =>
+  parseWithSchema(parser, value, field, details);
+
 export const parseJsonColumnValue = (
   value: string | null,
-  fallback: unknown,
+  fallback: JSONType,
   field: string,
   taskId: string,
-): Effect.Effect<unknown, SqliteTaskStoreDataError> => {
+): Effect.Effect<JSONType, SqliteTaskStoreDataError> => {
   if (value === null) {
     return Effect.succeed(fallback);
   }
   return Effect.try({
-    try: () => JSON.parse(value),
+    try: () => z.json().parse(JSON.parse(value)),
     catch: (cause) =>
       new SqliteTaskStoreDataError({
         message: `Invalid SQLite task ${taskId} ${field} JSON: ${errorMessage(cause)}`,
@@ -59,8 +88,8 @@ export const parseJsonColumnValue = (
 
 const parseJsonColumn = <A>(
   value: string | null,
-  fallback: unknown,
-  parse: (value: unknown) => Effect.Effect<A, SqliteTaskStoreDataError>,
+  fallback: JSONType,
+  parse: (value: JSONType) => Effect.Effect<A, SqliteTaskStoreDataError>,
   field: string,
   taskId: string,
 ): Effect.Effect<A, SqliteTaskStoreDataError> =>
@@ -74,7 +103,8 @@ export const labelsFromRow = (row: TaskRow): Effect.Effect<string[], SqliteTaskS
     row.labelsJson,
     [],
     (value) => {
-      if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) {
+      const parsed = labelsSchema.safeParse(value);
+      if (!parsed.success) {
         return Effect.fail(
           new SqliteTaskStoreDataError({
             message: "SQLite labels_json must be an array of strings.",
@@ -83,7 +113,7 @@ export const labelsFromRow = (row: TaskRow): Effect.Effect<string[], SqliteTaskS
           }),
         );
       }
-      return Effect.succeed(normalizeLabels(value));
+      return Effect.succeed(normalizeLabels(parsed.data));
     },
     "labels_json",
     row.id,
@@ -110,7 +140,7 @@ export const agentSessionsFromRow = (
 export const optionalJsonFromRow = <A>(
   row: TaskRow,
   field: keyof Pick<TaskRow, "directMergeJson" | "pullRequestJson" | "targetBranchJson">,
-  parse: (value: unknown) => Effect.Effect<A, SqliteTaskStoreDataError>,
+  parse: (value: JSONType) => Effect.Effect<A, SqliteTaskStoreDataError>,
 ): Effect.Effect<A | undefined, SqliteTaskStoreDataError> =>
   parseJsonColumn(
     row[field],

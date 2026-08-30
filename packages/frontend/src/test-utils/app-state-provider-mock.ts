@@ -1,4 +1,4 @@
-import type { ReactElement, ReactNode } from "react";
+import { createElement, Fragment, type ReactNode } from "react";
 
 export type AppStateProviderModule = typeof import("@/state/app-state-provider");
 
@@ -9,7 +9,8 @@ const unused = (name: keyof AppStateProviderModule) => () => {
 export const createAppStateProviderModuleMock = (
   overrides: Partial<AppStateProviderModule>,
 ): AppStateProviderModule => ({
-  AppStateProvider: ({ children }: { children?: ReactNode }) => children as ReactElement,
+  AppStateProvider: ({ children }: { children?: ReactNode }) =>
+    createElement(Fragment, null, children),
   useActiveWorkspace: unused("useActiveWorkspace"),
   useWorkspaceBranchState: unused("useWorkspaceBranchState"),
   useWorkspacePresence: unused("useWorkspacePresence"),

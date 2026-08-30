@@ -1,12 +1,11 @@
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createDeferred, TEST_EXTERNAL_SESSION_IDS } from "@/test-utils/shared-test-fixtures";
 import type { AgentApprovalRequest, AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { useAgentSessionApprovalActions } from "./use-agent-session-approval-actions";
 
-(
-  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentSessionApprovalActions>[0];
 
@@ -218,9 +217,7 @@ describe("useAgentSessionApprovalActions", () => {
       await harness.run(async (state) => {
         await state.onReplyApproval("req-1", "reject");
       });
-      await harness.waitFor(
-        (state) => typeof state.approvalReplyErrorByRequestId["req-1"] === "string",
-      );
+      await harness.waitFor((state) => state.approvalReplyErrorByRequestId["req-1"] !== undefined);
 
       await harness.update({
         ...baseArgs,
@@ -247,9 +244,7 @@ describe("useAgentSessionApprovalActions", () => {
       await harness.run(async (state) => {
         await state.onReplyApproval("req-1", "reject");
       });
-      await harness.waitFor(
-        (state) => typeof state.approvalReplyErrorByRequestId["req-1"] === "string",
-      );
+      await harness.waitFor((state) => state.approvalReplyErrorByRequestId["req-1"] !== undefined);
 
       await harness.update({
         ...baseArgs,

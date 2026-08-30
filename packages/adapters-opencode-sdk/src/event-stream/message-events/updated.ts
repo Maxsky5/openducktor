@@ -1,24 +1,17 @@
-import type { Event, Part } from "@opencode-ai/sdk/v2/client";
-import { asUnknownRecord, readRecordProp, readStringProp } from "../../guards";
+import type { ParsedOpencodeEvent as Event } from "../../opencode-global-event-ingress";
 import { readMessageModelSelection } from "../../message-normalizers";
 import { toIsoFromEpoch } from "../../session-runtime-utils";
-import { readEventInfo, readEventProperties, readMessageCompletedAt } from "../schemas";
 import type { EventStreamRuntime } from "../shared";
-import { setMessagePart } from "../shared";
 import {
-  emitAssistantPart,
   emitKnownAssistantPartsForMessage,
   maybeEmitCompletedAssistantMessage,
   updateAssistantMessageCompletionState,
 } from "./assistant";
 import {
-  applyPendingDeltas,
   getKnownMessageParts,
   hasMessageStopSignal,
   isAssistantMessage,
   isAssistantMessageSettled,
-  normalizeMessagePart,
-  readRawMessageParts,
   suppressCompactionMessage,
   updateMessageMetadata,
 } from "./helpers";
@@ -29,130 +22,79 @@ export const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRunt
     return false;
   }
 
-  const properties = readEventProperties(event);
-  if (!properties) {
-    return true;
-  }
-  const infoRecord = readEventInfo(properties);
-
-  const messageId = infoRecord
-    ? readStringProp(infoRecord, ["id", "messageID", "messageId", "message_id"])
-    : undefined;
-  if (messageId && runtime.session.compactionMessageIds.has(messageId)) {
+  const info = event.properties.info;
+  const messageId = info.id;
+  if (runtime.session.compactionMessageIds.has(messageId)) {
     suppressCompactionMessage(runtime, messageId);
     return true;
   }
-  const role = infoRecord ? readStringProp(infoRecord, ["role"]) : undefined;
-  const messageTimestamp = (() => {
-    const infoTime = infoRecord ? readRecordProp(infoRecord, "time") : undefined;
-    return toIsoFromEpoch(infoTime?.created, runtime.now);
-  })();
-  const messageCompletedAt = infoRecord ? readMessageCompletedAt(infoRecord) : undefined;
-  const messageModel = readMessageModelSelection(infoRecord);
+  const role = info.role;
+  const messageTimestamp = toIsoFromEpoch(info.time.created, runtime.now);
+  const messageCompletedAt = info.role === "assistant" ? info.time.completed : undefined;
+  const messageModel = readMessageModelSelection(info);
   const { session } = runtime;
-  const previousRole = messageId ? session.messageRoleById.get(messageId) : undefined;
-  const finish = infoRecord ? readStringProp(infoRecord, ["finish"]) : undefined;
-  const rawParts = readRawMessageParts(properties, infoRecord);
-  const parentId = infoRecord
-    ? readStringProp(infoRecord, ["parentID", "parentId", "parent_id"])
-    : undefined;
-  const existingMetadata = messageId ? session?.messageMetadataById.get(messageId) : undefined;
-  if (messageId && role) {
-    session.messageRoleById.set(messageId, role);
-    updateMessageMetadata(runtime, messageId, {
-      timestamp: messageTimestamp,
-      ...(messageModel
-        ? { model: messageModel }
-        : existingMetadata?.model
-          ? { model: existingMetadata.model }
-          : {}),
-      ...(parentId
-        ? { parentId }
-        : existingMetadata?.parentId
-          ? { parentId: existingMetadata.parentId }
-          : {}),
-      ...(existingMetadata?.text ? { text: existingMetadata.text } : {}),
-      ...(existingMetadata?.displayParts ? { displayParts: existingMetadata.displayParts } : {}),
-    });
+  const previousRole = session.messageRoleById.get(messageId);
+  const finish = info.role === "assistant" ? info.finish : undefined;
+  const parentId = info.role === "assistant" ? info.parentID : undefined;
+  const existingMetadata = session.messageMetadataById.get(messageId);
+  session.messageRoleById.set(messageId, role);
+  const metadataUpdates: Parameters<typeof updateMessageMetadata>[2] = {
+    timestamp: messageTimestamp,
+  };
+  const model = messageModel ?? existingMetadata?.model;
+  if (model) {
+    metadataUpdates.model = model;
   }
+  const resolvedParentId = parentId ?? existingMetadata?.parentId;
+  if (resolvedParentId) {
+    metadataUpdates.parentId = resolvedParentId;
+  }
+  if (existingMetadata?.text) {
+    metadataUpdates.text = existingMetadata.text;
+  }
+  if (existingMetadata?.displayParts) {
+    metadataUpdates.displayParts = existingMetadata.displayParts;
+  }
+  updateMessageMetadata(runtime, messageId, metadataUpdates);
 
-  const isAssistantRole = messageId ? isAssistantMessage(runtime, messageId, role) : false;
-  const assistantMessageHasStopSignal =
-    messageId && isAssistantRole
-      ? hasMessageStopSignal({
-          finish,
-          rawParts,
-          parts: getKnownMessageParts(runtime, messageId),
-        })
-      : false;
-  const assistantMessageSettled =
-    messageId && isAssistantRole
-      ? isAssistantMessageSettled({
-          messageCompletedAt,
-          hasStopSignal: assistantMessageHasStopSignal,
-        })
-      : false;
+  const isAssistantRole = isAssistantMessage(runtime, messageId, role);
+  const assistantMessageHasStopSignal = isAssistantRole
+    ? hasMessageStopSignal({ finish, parts: getKnownMessageParts(runtime, messageId) })
+    : false;
+  const assistantMessageSettled = isAssistantRole
+    ? isAssistantMessageSettled({
+        messageCompletedAt,
+        hasStopSignal: assistantMessageHasStopSignal,
+      })
+    : false;
 
-  if (messageId && isAssistantRole) {
+  if (isAssistantRole) {
     updateAssistantMessageCompletionState(runtime, messageId, assistantMessageSettled);
   }
 
-  const normalizedParts: Part[] = [];
-  if (messageId && rawParts.length > 0) {
-    for (const rawPart of rawParts) {
-      const rawPartRecord = asUnknownRecord(rawPart);
-      if (!rawPartRecord) {
-        continue;
-      }
-
-      const rawPartId = readStringProp(rawPartRecord, ["id"]);
-      if (!rawPartId) {
-        continue;
-      }
-
-      const normalizedPart = normalizeMessagePart(
-        rawPartRecord,
-        messageId,
-        runtime.externalSessionId,
-      );
-      const partWithPendingDelta = applyPendingDeltas(runtime, rawPartId, normalizedPart);
-
-      setMessagePart(runtime.session, partWithPendingDelta);
-      normalizedParts.push(partWithPendingDelta);
-      if (isAssistantRole) {
-        emitAssistantPart(runtime, partWithPendingDelta, role);
-      }
-    }
-  }
-
-  if (
-    messageId &&
-    isAssistantRole &&
-    previousRole !== "assistant" &&
-    normalizedParts.length === 0
-  ) {
+  if (isAssistantRole && previousRole !== "assistant") {
     emitKnownAssistantPartsForMessage(runtime, messageId, role);
   }
 
-  if (messageId && role === "user") {
-    return handleUserMessageUpdated(runtime, {
+  if (role === "user") {
+    const userMessageInput: Parameters<typeof handleUserMessageUpdated>[1] = {
       messageId,
       messageTimestamp,
-      infoRecord,
-      properties,
-      normalizedParts,
-      ...(messageModel ? { messageModel } : {}),
-    });
+    };
+    if (messageModel) {
+      userMessageInput.messageModel = messageModel;
+    }
+    return handleUserMessageUpdated(runtime, userMessageInput);
   }
 
-  if (!messageId || !isAssistantRole) {
+  if (!isAssistantRole) {
     return true;
   }
 
   maybeEmitCompletedAssistantMessage(runtime, {
     messageId,
     timestamp: messageTimestamp,
-    info: infoRecord,
+    info,
     hasStopSignal: assistantMessageHasStopSignal,
   });
   return true;

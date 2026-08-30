@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
-import { type AgentRole, agentRoleValues } from "./agent-workflow-schemas";
+import { type AgentRole, agentRoleSchema } from "./agent-workflow-schemas";
 import { gitTargetBranchSchema, globalGitConfigSchema, repoGitConfigSchema } from "./git-schemas";
 import { repoPromptOverridesSchema } from "./prompt-schemas";
 
@@ -130,23 +130,8 @@ const codexRoleOverrideSchema = z
     commandNetworkAccess: z.boolean().optional(),
   })
   .strict();
-const codexRoleOverridesSchema = z
-  .record(z.string(), codexRoleOverrideSchema)
-  .superRefine((overrides, context) => {
-    const supportedRoles = new Set<string>(agentRoleValues);
-    for (const role of Object.keys(overrides)) {
-      if (!supportedRoles.has(role)) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `Unsupported Codex role override: ${role}`,
-          path: [role],
-        });
-      }
-    }
-  })
-  .transform(
-    (overrides) => overrides as Partial<Record<AgentRole, z.infer<typeof codexRoleOverrideSchema>>>,
-  );
+export type CodexRoleOverride = z.infer<typeof codexRoleOverrideSchema>;
+const codexRoleOverridesSchema = z.partialRecord(agentRoleSchema, codexRoleOverrideSchema);
 
 const persistedCodexRuntimeConfigV2Schema = persistedAgentRuntimeEnabledConfigV2Schema
   .extend({
@@ -155,10 +140,13 @@ const persistedCodexRuntimeConfigV2Schema = persistedAgentRuntimeEnabledConfigV2
   })
   .strict();
 
-const withCodexRuntimeValidation = <T extends z.ZodTypeAny>(schema: T) =>
+const withCodexRuntimeValidation = <
+  T extends z.ZodType<{ roleOverrides: z.output<typeof codexRoleOverridesSchema> }>,
+>(
+  schema: T,
+) =>
   schema.superRefine((config, context) => {
-    const candidate = config as CodexRuntimeConfig;
-    if (candidate.roleOverrides.build?.sandboxMode === "read-only") {
+    if (config.roleOverrides.build?.sandboxMode === "read-only") {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message:
@@ -259,14 +247,19 @@ export const resolveCodexEffectivePolicy = (
       : undefined;
   const sandboxMode = adjustmentReason ? "workspace-write" : policy.sandboxMode;
 
-  return {
+  const effectivePolicy: CodexEffectivePolicy = {
     ...policy,
     sandboxMode,
     approvalsReviewerApplies: policy.approvalPolicy !== "never",
     commandNetworkAccess:
       sandboxMode === "danger-full-access" ? false : policy.commandNetworkAccess,
-    ...(adjustmentReason ? { adjustmentReason } : {}),
   };
+
+  if (adjustmentReason) {
+    effectivePolicy.adjustmentReason = adjustmentReason;
+  }
+
+  return effectivePolicy;
 };
 
 export const REUSABLE_PROMPT_ARGUMENTS_PLACEHOLDER = "$ARGUMENTS";
@@ -424,6 +417,29 @@ export const repoConfigSchema = z.object({
   }),
 });
 export type RepoConfig = z.infer<typeof repoConfigSchema>;
+
+export const workspaceRepoHooksInputSchema = repoHooksSchema.partial();
+export type WorkspaceRepoHooksInput = z.output<typeof workspaceRepoHooksInputSchema>;
+
+export const workspaceRepoConfigInputSchema = repoConfigSchema
+  .pick({
+    defaultRuntimeKind: true,
+    worktreeBasePath: true,
+    branchPrefix: true,
+    defaultTargetBranch: true,
+    git: true,
+    devServers: true,
+    worktreeCopyPaths: true,
+    agentDefaults: true,
+    promptOverrides: true,
+  })
+  .partial();
+export type WorkspaceRepoConfigInput = z.output<typeof workspaceRepoConfigInputSchema>;
+
+export const workspaceRepoSettingsInputSchema = workspaceRepoConfigInputSchema.extend({
+  hooks: workspaceRepoHooksInputSchema.optional(),
+});
+export type WorkspaceRepoSettingsInput = z.output<typeof workspaceRepoSettingsInputSchema>;
 
 export const chatSettingsSchema = z.object({
   showThinkingMessages: z.boolean().default(DEFAULT_CHAT_SETTINGS.showThinkingMessages),
@@ -604,7 +620,7 @@ export const agentModelFavoritesSchema = z
   })
   .default([]);
 
-const globalConfigSharedShape = {
+const globalConfigSharedFields = {
   activeWorkspace: workspaceIdSchema.optional(),
   theme: themeSchema,
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
@@ -624,14 +640,14 @@ const globalConfigSharedShape = {
 
 export const persistedGlobalConfigV2Schema = z.object({
   version: z.literal(2),
-  ...globalConfigSharedShape,
+  ...globalConfigSharedFields,
   agentRuntimes: persistedAgentRuntimesV2Schema,
 });
 export type PersistedGlobalConfigV2 = z.infer<typeof persistedGlobalConfigV2Schema>;
 
 export const globalConfigSchema = z.object({
   version: z.literal(3),
-  ...globalConfigSharedShape,
+  ...globalConfigSharedFields,
   agentRuntimes: agentRuntimesSchema,
 });
 type ParsedGlobalConfig = z.infer<typeof globalConfigSchema>;
@@ -654,6 +670,12 @@ export const settingsSnapshotSchema = z.object({
 type ParsedSettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;
 export type SettingsSnapshot = ParsedSettingsSnapshot;
 
+const settingsSnapshotSaveAgentModelFavoritesSchema = agentModelFavoritesSchema
+  .removeDefault()
+  .describe(
+    "Echo the current canonical favorites. Change favorites through the narrow favorites command.",
+  );
+
 export const settingsSnapshotSaveInputSchema = z.object({
   git: globalGitConfigSchema,
   general: generalSettingsSchema,
@@ -663,11 +685,7 @@ export const settingsSnapshotSaveInputSchema = z.object({
   kanban: kanbanSettingsSchema,
   autopilot: autopilotSettingsSchema,
   agentRuntimes: agentRuntimesSchema.removeDefault(),
-  agentModelFavorites: agentModelFavoritesSchema
-    .removeDefault()
-    .describe(
-      "Echo the current canonical favorites. Change favorites through the narrow favorites command.",
-    ),
+  agentModelFavorites: settingsSnapshotSaveAgentModelFavoritesSchema,
   workspaces: z.record(workspaceIdSchema, repoConfigSchema),
   globalPromptOverrides: repoPromptOverridesSchema,
 });

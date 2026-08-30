@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import type { HostClient } from "@openducktor/host-client";
 import { clearAppQueryClient } from "@/lib/query-client";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { host } from "../shared/host";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { useDelegationOperations } from "./use-delegation-operations";
 
 const activeWorkspace = {
@@ -10,15 +12,22 @@ const activeWorkspace = {
   repoPath: "/repo",
 };
 
-const original = {
-  buildStart: host.buildStart,
-  workspaceGetRepoConfig: host.workspaceGetRepoConfig,
-};
-
 describe("useDelegationOperations", () => {
   beforeEach(async () => {
     await clearAppQueryClient();
-    host.workspaceGetRepoConfig = mock(async () => ({
+  });
+
+  afterEach(async () => {
+    await clearAppQueryClient();
+  });
+
+  test("refreshes the delegated task scope after a successful build start", async () => {
+    const buildStart = mock(async () => ({
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo",
+    }));
+    const refreshTaskData = mock(async () => undefined);
+    const repoConfig: Awaited<ReturnType<HostClient["workspaceGetRepoConfig"]>> = {
       workspaceId: "repo",
       workspaceName: "Repo",
       repoPath: "/repo",
@@ -31,22 +40,11 @@ describe("useDelegationOperations", () => {
       worktreeCopyPaths: [],
       promptOverrides: {},
       agentDefaults: {},
-    })) as typeof host.workspaceGetRepoConfig;
-  });
-
-  afterEach(async () => {
-    host.buildStart = original.buildStart;
-    host.workspaceGetRepoConfig = original.workspaceGetRepoConfig;
-    await clearAppQueryClient();
-  });
-
-  test("refreshes the delegated task scope after a successful build start", async () => {
-    const buildStart = mock(async () => ({
-      runtimeKind: "opencode" as const,
-      workingDirectory: "/repo",
-    }));
-    const refreshTaskData = mock(async () => undefined);
-    host.buildStart = buildStart;
+    };
+    const workspaceGetRepoConfig = mock(async () => repoConfig);
+    configureShellBridge(
+      createShellBridgeFixture({ client: { buildStart, workspaceGetRepoConfig } }),
+    );
     const harness = createHookHarness(
       () => useDelegationOperations({ activeWorkspace, refreshTaskData }),
       undefined,
@@ -62,6 +60,7 @@ describe("useDelegationOperations", () => {
       expect(refreshTaskData).toHaveBeenCalledWith("/repo", "task-1");
     } finally {
       await harness.unmount();
+      configureShellBridge(createUnavailableShellBridge());
     }
   });
 });

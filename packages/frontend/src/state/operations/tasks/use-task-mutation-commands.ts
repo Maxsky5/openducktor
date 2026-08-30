@@ -55,23 +55,47 @@ export type TaskMutationCommandHostPort = {
     repoPath: string,
     input: TaskCreateInput,
     assets?: TaskAssetDescriptionMutation,
-  ) => Promise<unknown>;
+  ) => Promise<void>;
   taskUpdate: (
     repoPath: string,
     taskId: string,
     patch: TaskUpdatePatch,
     assets?: TaskAssetDescriptionMutation,
-  ) => Promise<unknown>;
-  taskDelete: (repoPath: string, taskId: string, deleteSubtasks: boolean) => Promise<unknown>;
-  taskClose: (repoPath: string, taskId: string) => Promise<unknown>;
+  ) => Promise<void>;
+  taskDelete: (repoPath: string, taskId: string, deleteSubtasks: boolean) => Promise<void>;
+  taskClose: (repoPath: string, taskId: string) => Promise<void>;
   taskTransition: (
     repoPath: string,
     taskId: string,
     status: TaskStatus,
     reason?: string,
-  ) => Promise<unknown>;
-  humanApprove: (repoPath: string, taskId: string) => Promise<unknown>;
-  humanRequestChanges: (repoPath: string, taskId: string, note?: string) => Promise<unknown>;
+  ) => Promise<void>;
+  humanApprove: (repoPath: string, taskId: string) => Promise<void>;
+  humanRequestChanges: (repoPath: string, taskId: string, note?: string) => Promise<void>;
+};
+
+const productionTaskMutationHostPort: TaskMutationCommandHostPort = {
+  taskCreate: async (...args) => {
+    await host.taskCreate(...args);
+  },
+  taskUpdate: async (...args) => {
+    await host.taskUpdate(...args);
+  },
+  taskDelete: async (...args) => {
+    await host.taskDelete(...args);
+  },
+  taskClose: async (...args) => {
+    await host.taskClose(...args);
+  },
+  taskTransition: async (...args) => {
+    await host.taskTransition(...args);
+  },
+  humanApprove: async (...args) => {
+    await host.humanApprove(...args);
+  },
+  humanRequestChanges: async (...args) => {
+    await host.humanRequestChanges(...args);
+  },
 };
 
 export type TaskMutationCommandCacheImpact = {
@@ -294,7 +318,7 @@ export function useTaskMutationCommands({
         activeWorkspaceId,
         tasks,
         runTaskMutation,
-        hostPort: host,
+        hostPort: productionTaskMutationHostPort,
         queryClient,
         cacheImpact,
         taskChatDraftCleanup,

@@ -18,7 +18,10 @@ const createDatabasePath = async (): Promise<string> => {
 const readJournalMode = (databasePath: string): string => {
   const database = new Database(databasePath);
   try {
-    const result = database.query("PRAGMA journal_mode;").get() as { journal_mode: string };
+    const result = database.query<{ journal_mode: string }, []>("PRAGMA journal_mode;").get();
+    if (!result) {
+      throw new Error("Expected SQLite to return its journal mode.");
+    }
     return result.journal_mode;
   } finally {
     database.close();

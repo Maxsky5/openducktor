@@ -23,35 +23,46 @@ type AgentRuntimeServices = {
 
 const toAgentSessionSummary = (
   summary: Awaited<ReturnType<typeof host.agentSessionControlStart>>,
-): AgentSessionSummary => ({
-  externalSessionId: summary.externalSessionId,
-  runtimeKind: summary.runtimeKind,
-  workingDirectory: summary.workingDirectory,
-  sessionAssociation: summary.sessionAssociation,
-  startedAt: summary.startedAt,
-  status: summary.status,
-  ...(summary.title !== undefined ? { title: summary.title } : {}),
-});
+): AgentSessionSummary => {
+  const session: AgentSessionSummary = {
+    externalSessionId: summary.externalSessionId,
+    runtimeKind: summary.runtimeKind,
+    workingDirectory: summary.workingDirectory,
+    sessionAssociation: summary.sessionAssociation,
+    startedAt: summary.startedAt,
+    status: summary.status,
+  };
+  if (summary.title !== undefined) {
+    session.title = summary.title;
+  }
+  return session;
+};
 
 const toAcceptedAgentUserMessage = (
   event: Awaited<ReturnType<typeof host.agentSessionControlSend>>,
 ): AcceptedAgentUserMessage => {
   const { model, sessionRef, ...message } = event;
-  return {
-    ...message,
-    ...(sessionRef ? { sessionRef } : {}),
-    ...(model
-      ? {
-          model: {
-            providerId: model.providerId,
-            modelId: model.modelId,
-            ...(model.runtimeKind !== undefined ? { runtimeKind: model.runtimeKind } : {}),
-            ...(model.variant !== undefined ? { variant: model.variant } : {}),
-            ...(model.profileId !== undefined ? { profileId: model.profileId } : {}),
-          },
-        }
-      : {}),
-  } as AcceptedAgentUserMessage;
+  const acceptedMessage: AcceptedAgentUserMessage = { ...message };
+  if (sessionRef) {
+    acceptedMessage.sessionRef = sessionRef;
+  }
+  if (model) {
+    const acceptedModel: NonNullable<AcceptedAgentUserMessage["model"]> = {
+      providerId: model.providerId,
+      modelId: model.modelId,
+    };
+    if (model.runtimeKind !== undefined) {
+      acceptedModel.runtimeKind = model.runtimeKind;
+    }
+    if (model.variant !== undefined) {
+      acceptedModel.variant = model.variant;
+    }
+    if (model.profileId !== undefined) {
+      acceptedModel.profileId = model.profileId;
+    }
+    acceptedMessage.model = acceptedModel;
+  }
+  return acceptedMessage;
 };
 
 export const createAgentRuntimeServices = (): AgentRuntimeServices => {

@@ -15,7 +15,7 @@ import {
 } from "../../application/task-assets/task-asset-staging-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-model";
 import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
-import type { HostOperationError } from "../../effect/host-errors";
+import type { HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
 import type { HostShutdownStep } from "../host-lifecycle";
 
@@ -34,7 +34,7 @@ export const createNodeTaskAssetServices = ({
   workspaceSettingsService,
 }: {
   configuredTaskStore?: TaskStorePort;
-  onBackgroundFailure: (failure: HostOperationError) => Effect.Effect<void, never>;
+  onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   processEnv: NodeJS.ProcessEnv;
   workspaceSettingsService: WorkspaceSettingsService;
 }): NodeTaskAssetServices => {

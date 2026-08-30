@@ -1,6 +1,18 @@
 import { describe, expect, test } from "bun:test";
-import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { createPrepareOpencodeSessionRuntime, type OpencodeSessionRuntimeSignal } from "./index";
+import {
+  permissionAskedEvent,
+  permissionRepliedEvent,
+  sessionStatusEvent,
+} from "./event-stream.test-support";
+import {
+  createOpencodeEventFixtures,
+  createOpencodeMessageInfoFixture,
+  createOpencodeMessageEventGroupFixture,
+  createOpencodeSessionFixture,
+  type OpencodeEventFixtureInput,
+} from "./opencode-protocol-test-fixtures";
 
 type LiveClientHarness = {
   client: OpencodeClient;
@@ -9,17 +21,22 @@ type LiveClientHarness = {
   promptCalls: unknown[];
   permissionReplyCalls: unknown[];
   questionReplyCalls: unknown[];
-  setPermissionReplyError: (error: unknown | null) => void;
+  setPermissionReplyError: (error: Error | null) => void;
   setPendingApproval: (pending: boolean) => void;
-  emit: (event: Event) => void;
-  emitAndWait: (event: Event) => Promise<void>;
+  emit: (event: OpencodeEventFixtureInput) => void;
+  emitAndWait: (event: OpencodeEventFixtureInput) => Promise<void>;
   completeStream: () => Promise<void>;
   failStream: (error: Error) => Promise<void>;
   streamSignal: () => AbortSignal | null;
 };
 
+type SessionMessagesRequest = Parameters<OpencodeClient["session"]["messages"]>[0];
+type SessionPromptRequest = Parameters<OpencodeClient["session"]["promptAsync"]>[0];
+type PermissionReplyRequest = Parameters<OpencodeClient["permission"]["reply"]>[0];
+type QuestionReplyRequest = Parameters<OpencodeClient["question"]["reply"]>[0];
+
 type QueuedStreamEntry =
-  | { type: "event"; event: Event; consumed?: () => void }
+  | { type: "event"; event: OpencodeEventFixtureInput; consumed?: () => void }
   | { type: "complete"; consumed: () => void }
   | { type: "failure"; error: Error; consumed: () => void };
 
@@ -30,18 +47,18 @@ const createLiveClientHarness = (
     nativeRequestId?: string;
     totalTokens?: number;
     pendingQuestion?: boolean;
-    listBarrier?: Promise<void> | (() => Promise<void>);
+    listBarrier?: () => Promise<void>;
     listError?: Error;
     onList?: () => void;
-    messagesBarrier?: Promise<void>;
+    messagesBarrier?: () => Promise<void>;
     onMessages?: () => void;
-    permissionListBarrier?: Promise<void> | (() => Promise<void>);
+    permissionListBarrier?: () => Promise<void>;
     onPermissionList?: () => void;
     onPermissionListSettled?: () => void;
-    questionListBarrier?: Promise<void> | (() => Promise<void>);
+    questionListBarrier?: () => Promise<void>;
     onQuestionList?: () => void;
     onQuestionListSettled?: () => void;
-    streamCloseBarrier?: Promise<void>;
+    streamCloseBarrier?: () => Promise<void>;
     initiallyConnected?: boolean;
   } = {},
 ): LiveClientHarness => {
@@ -53,7 +70,7 @@ const createLiveClientHarness = (
   const promptCalls: unknown[] = [];
   const permissionReplyCalls: unknown[] = [];
   const questionReplyCalls: unknown[] = [];
-  let permissionReplyError: unknown | null = null;
+  let permissionReplyError: Error | null = null;
   let pendingApproval = input.pendingQuestion !== true;
   let pendingQuestion = input.pendingQuestion === true;
   let signal: AbortSignal | null = null;
@@ -66,31 +83,35 @@ const createLiveClientHarness = (
             event: {
               type: "server.connected",
               properties: {},
-            } as unknown as Event,
+            },
           },
         ];
   let wakeStream: (() => void) | null = null;
 
-  const client = {
+  const baseClient = createOpencodeClient({ baseUrl: "http://127.0.0.1:12345" });
+  const client: OpencodeClient = {
+    ...baseClient,
     session: {
+      ...baseClient.session,
       list: async () => {
         callOrder.push("list");
         input.onList?.();
-        if (typeof input.listBarrier === "function") {
-          await input.listBarrier();
-        } else {
-          await input.listBarrier;
-        }
+        await input.listBarrier?.();
         if (input.listError) {
           throw input.listError;
         }
         return {
-          data: externalSessionIds.map((sessionId) => ({
-            id: sessionId,
-            directory: "/repo",
-            title: "Live session",
-            time: { created: Date.parse("2026-07-16T10:00:00.000Z") },
-          })),
+          data: externalSessionIds.map((sessionId) =>
+            createOpencodeSessionFixture({
+              id: sessionId,
+              directory: "/repo",
+              title: "Live session",
+              time: {
+                created: Date.parse("2026-07-16T10:00:00.000Z"),
+                updated: Date.parse("2026-07-16T10:00:00.000Z"),
+              },
+            }),
+          ),
           error: undefined,
         };
       },
@@ -100,23 +121,24 @@ const createLiveClientHarness = (
         ),
         error: undefined,
       }),
-      messages: async (request: unknown) => {
+      messages: async (request: SessionMessagesRequest) => {
         messageCalls.push(request);
         input.onMessages?.();
-        await input.messagesBarrier;
+        await input.messagesBarrier?.();
         return {
           data:
-            typeof input.totalTokens === "number"
+            input.totalTokens !== undefined
               ? [
                   {
-                    info: {
+                    info: createOpencodeMessageInfoFixture({
                       id: "assistant-latest",
                       role: "assistant",
+                      sessionID: externalSessionId,
                       providerID: "openai",
                       modelID: "gpt-5",
                       tokens: { input: input.totalTokens - 100, output: 100 },
                       time: { created: Date.parse("2026-07-16T10:01:00.000Z") },
-                    },
+                    }),
                     parts: [],
                   },
                 ]
@@ -124,13 +146,14 @@ const createLiveClientHarness = (
           error: undefined,
         };
       },
-      promptAsync: async (request: unknown) => {
+      promptAsync: async (request: SessionPromptRequest) => {
         promptCalls.push(request);
         return { data: {}, error: undefined };
       },
       update: async () => ({ data: { id: externalSessionId }, error: undefined }),
     },
     permission: {
+      ...baseClient.permission,
       list: async () => {
         const data = pendingApproval
           ? externalSessionIds.map((sessionId) => ({
@@ -138,18 +161,16 @@ const createLiveClientHarness = (
               sessionID: sessionId,
               permission: "read",
               patterns: ["README.md"],
+              metadata: {},
+              always: [],
             }))
           : [];
         input.onPermissionList?.();
-        if (typeof input.permissionListBarrier === "function") {
-          await input.permissionListBarrier();
-        } else {
-          await input.permissionListBarrier;
-        }
+        await input.permissionListBarrier?.();
         input.onPermissionListSettled?.();
         return { data, error: undefined };
       },
-      reply: async (request: unknown) => {
+      reply: async (request: PermissionReplyRequest) => {
         permissionReplyCalls.push(request);
         if (permissionReplyError) {
           return { data: undefined, error: permissionReplyError };
@@ -159,6 +180,7 @@ const createLiveClientHarness = (
       },
     },
     question: {
+      ...baseClient.question,
       list: async () => {
         const data = pendingQuestion
           ? [
@@ -176,25 +198,23 @@ const createLiveClientHarness = (
             ]
           : [];
         input.onQuestionList?.();
-        if (typeof input.questionListBarrier === "function") {
-          await input.questionListBarrier();
-        } else {
-          await input.questionListBarrier;
-        }
+        await input.questionListBarrier?.();
         input.onQuestionListSettled?.();
         return { data, error: undefined };
       },
-      reply: async (request: unknown) => {
+      reply: async (request: QuestionReplyRequest) => {
         questionReplyCalls.push(request);
         pendingQuestion = false;
         return { data: true, error: undefined };
       },
     },
     global: {
+      ...baseClient.global,
       event: async (options?: { signal?: AbortSignal }) => {
         callOrder.push("subscribe");
         signal = options?.signal ?? null;
-        async function* events(): AsyncGenerator<{ directory: string; payload: Event }> {
+        async function* events() {
+          let eventIndex = 0;
           try {
             while (!options?.signal?.aborted) {
               if (queuedEvents.length === 0) {
@@ -218,26 +238,31 @@ const createLiveClientHarness = (
               if (entry.event.type === "server.connected") {
                 callOrder.push("connected");
               }
-              yield { directory: "/repo", payload: entry.event };
+              for (const payload of createOpencodeEventFixtures(entry.event, eventIndex)) {
+                yield { directory: "/repo", payload };
+              }
+              eventIndex += 1;
               entry.consumed?.();
             }
           } finally {
-            await input.streamCloseBarrier;
+            await input.streamCloseBarrier?.();
           }
         }
         return { stream: events() };
       },
     },
     mcp: {
+      ...baseClient.mcp,
       status: async () => ({
         data: { openducktor: { status: "connected" } },
         error: undefined,
       }),
     },
     tool: {
+      ...baseClient.tool,
       ids: async () => ({ data: [], error: undefined }),
     },
-  } as unknown as OpencodeClient;
+  };
 
   return {
     client,
@@ -325,14 +350,8 @@ describe("OpenCode session runtime connection", () => {
       id: "event-heartbeat-1",
       type: "server.heartbeat",
       properties: {},
-    } as unknown as Event);
-    harness.emit({
-      type: "session.status",
-      properties: {
-        sessionID: "session-1",
-        status: { type: "busy" },
-      },
-    } as Event);
+    });
+    harness.emit(sessionStatusEvent({ type: "busy" }, "session-1"));
 
     expect(await observation).toBe("status");
     expect(await prepared.connection.readSessionSources()).toHaveLength(1);
@@ -397,7 +416,7 @@ describe("OpenCode session runtime connection", () => {
     });
     const harness = createLiveClientHarness({
       onList: reportListStarted,
-      listBarrier,
+      listBarrier: () => listBarrier,
     });
     const controller = new AbortController();
     const preparing = createPrepareRuntime(harness)({
@@ -438,7 +457,7 @@ describe("OpenCode session runtime connection", () => {
     await expect(firstPreparing).rejects.toBeDefined();
     expect(harness.streamSignal()?.aborted).toBe(false);
 
-    harness.emit({ type: "server.connected", properties: {} } as unknown as Event);
+    harness.emit({ type: "server.connected", properties: {} });
     const secondPrepared = await secondPreparing;
     await secondPrepared.release();
     expect(harness.streamSignal()?.aborted).toBe(true);
@@ -505,15 +524,14 @@ describe("OpenCode session runtime connection", () => {
     const creating = createPrepareRuntime(createdHarness)(runtimeInput);
     await createdReadStarted;
     createdHarness.setPendingApproval(true);
-    await createdHarness.emitAndWait({
-      type: "permission.asked",
-      properties: {
-        id: "native-request-1",
-        sessionID: "session-1",
+    await createdHarness.emitAndWait(
+      permissionAskedEvent({
+        requestId: "native-request-1",
+        sessionId: "session-1",
         permission: "read",
         patterns: ["README.md"],
-      },
-    } as Event);
+      }),
+    );
     releaseCreatedRead();
     const created = await creating;
     expect(created.initialSources[0]?.pendingApprovals).toHaveLength(1);
@@ -540,13 +558,9 @@ describe("OpenCode session runtime connection", () => {
     const resolving = createPrepareRuntime(resolvedHarness)(runtimeInput);
     await resolvedReadStarted;
     resolvedHarness.setPendingApproval(false);
-    await resolvedHarness.emitAndWait({
-      type: "permission.replied",
-      properties: {
-        requestID: "native-request-1",
-        sessionID: "session-1",
-      },
-    } as Event);
+    await resolvedHarness.emitAndWait(
+      permissionRepliedEvent({ requestId: "native-request-1", sessionId: "session-1" }),
+    );
     releaseResolvedRead();
     const resolved = await resolving;
     expect(resolved.initialSources[0]?.pendingApprovals).toEqual([]);
@@ -563,14 +577,13 @@ describe("OpenCode session runtime connection", () => {
       releaseList = resolve;
     });
     const harness = createLiveClientHarness({
-      listBarrier: listGate,
+      listBarrier: () => listGate,
       onList: resolveListStarted,
     });
     const preparing = createPrepareRuntime(harness)(runtimeInput);
     await listStarted;
-    harness.emit({
-      type: "message.updated",
-      properties: {
+    harness.emit(
+      createOpencodeMessageEventGroupFixture({
         info: {
           id: "assistant-buffered",
           sessionID: "session-1",
@@ -588,8 +601,8 @@ describe("OpenCode session runtime connection", () => {
             time: { start: 1, end: 2 },
           },
         ],
-      },
-    } as unknown as Event);
+      }),
+    );
     releaseList();
     const prepared = await preparing;
 
@@ -614,9 +627,8 @@ describe("OpenCode session runtime connection", () => {
     });
     await firstStarted;
 
-    await harness.emitAndWait({
-      type: "message.updated",
-      properties: {
+    await harness.emitAndWait(
+      createOpencodeMessageEventGroupFixture({
         info: {
           id: "assistant-live",
           sessionID: "session-1",
@@ -634,8 +646,8 @@ describe("OpenCode session runtime connection", () => {
             time: { start: 3, end: 4 },
           },
         ],
-      },
-    } as unknown as Event);
+      }),
+    );
     expect(messages).toEqual(["Buffered transcript"]);
 
     releaseFirst();
@@ -659,18 +671,12 @@ describe("OpenCode session runtime connection", () => {
       }
     });
 
-    await harness.emitAndWait({
-      type: "session.status",
-      properties: {
-        sessionID: "session-1",
-        status: {
-          type: "retry",
-          attempt: 2,
-          message: "Retrying request",
-          next: 250,
-        },
-      },
-    } as Event);
+    await harness.emitAndWait(
+      sessionStatusEvent(
+        { type: "retry", attempt: 2, message: "Retrying request", next: 250 },
+        "session-1",
+      ),
+    );
     await statusSignal;
 
     expect(signals).toContainEqual({
@@ -702,9 +708,9 @@ describe("OpenCode session runtime connection", () => {
       type: "session.error",
       properties: {
         sessionID: "session-1",
-        error: { data: { message: "Provider failed" } },
+        error: { name: "UnknownError", data: { message: "Provider failed" } },
       },
-    } as unknown as Event);
+    });
 
     expect(signals).toContainEqual({
       type: "transcript_event",
@@ -755,14 +761,16 @@ describe("OpenCode session runtime connection", () => {
             messageID: "assistant-stop-only",
             type: "step-finish",
             reason: "stop",
+            cost: 0,
+            tokens: {},
           },
         ],
       },
-    } as unknown as Event);
+    });
     await harness.emitAndWait({
       type: "session.idle",
       properties: { sessionID: "session-1" },
-    } as Event);
+    });
 
     expect(sessionStatuses).toEqual(["busy"]);
     expect(transcriptEventTypes).toContain("session_idle");
@@ -780,7 +788,7 @@ describe("OpenCode session runtime connection", () => {
       releaseList = resolve;
     });
     const retainedHarness = createLiveClientHarness({
-      listBarrier: listGate,
+      listBarrier: () => listGate,
       onList: resolveListStarted,
     });
     const preparing = createPrepareRuntime(retainedHarness)(runtimeInput);
@@ -798,7 +806,7 @@ describe("OpenCode session runtime connection", () => {
         },
         parts: [],
       },
-    } as Event);
+    });
     releaseList();
     const retained = await preparing;
     expect(retained.initialContextUsageBySessionId.get("session-1")).toEqual({
@@ -806,6 +814,7 @@ describe("OpenCode session runtime connection", () => {
       model: {
         providerId: "openai",
         modelId: "gpt-5",
+        profileId: "build",
       },
     });
     expect(retainedHarness.messageCalls).toEqual([]);
@@ -825,6 +834,7 @@ describe("OpenCode session runtime connection", () => {
       model: {
         providerId: "openai",
         modelId: "gpt-5",
+        profileId: "build",
       },
     });
     expect(missingHarness.messageCalls).toEqual([

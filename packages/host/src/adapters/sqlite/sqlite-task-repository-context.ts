@@ -1,6 +1,6 @@
 import { Deferred, Effect } from "effect";
 import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import { resolveSqliteTaskStoreDatabasePath } from "../../infrastructure/sqlite/sqlite-task-store-path";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
 import {
@@ -37,12 +37,15 @@ export type SqliteTaskRepositoryContextProvider = <A>(
 ) => Effect.Effect<A, TaskStoreError>;
 
 export type SqliteTaskRepositoryContextManager = {
-  readonly dispose: () => Effect.Effect<void, HostOperationError>;
+  readonly dispose: () => Effect.Effect<
+    void,
+    HostOperationError<{ failures: HostOperationErrorAggregate[] }>
+  >;
   readonly withDatabase: SqliteTaskRepositoryContextProvider;
 };
 
 type CreateSqliteTaskRepositoryContextManagerInput = {
-  onBackgroundFailure?: (failure: HostOperationError) => Effect.Effect<void, never>;
+  onBackgroundFailure?: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   openConnection?: OpenSqliteTaskStoreConnection;
   processEnv: NodeJS.ProcessEnv;
   resolveDatabasePath?: ResolveSqliteTaskStorePath;

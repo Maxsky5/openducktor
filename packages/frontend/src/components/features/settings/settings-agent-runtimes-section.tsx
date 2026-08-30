@@ -4,6 +4,7 @@ import {
   CODEX_APPROVALS_REVIEWER_VALUES,
   CODEX_SANDBOX_MODE_VALUES,
   type CodexPolicyFields,
+  type CodexRoleOverride,
   type CodexRuntimeConfig,
   DEFAULT_CODEX_RUNTIME_POLICY,
   type RuntimeCheck,
@@ -56,6 +57,13 @@ type AgentRuntimesSectionProps = {
 };
 
 type CodexPolicyField = keyof CodexPolicyFields;
+type CodexPolicyValuesByField = {
+  readonly [Field in CodexPolicyField]: readonly CodexPolicyFields[Field][];
+};
+type PolicyValueDisplay = {
+  label: string;
+  description: string;
+};
 
 const AGENT_ROLE_ORDER: AgentRole[] = ["spec", "planner", "build", "qa"];
 
@@ -66,31 +74,31 @@ const POLICY_LABELS = {
   commandNetworkAccess: "Command network access",
 } satisfies Record<CodexPolicyField, string>;
 
-const VALUE_LABELS = {
-  "read-only": "Read-only",
-  "workspace-write": "Workspace-write",
-  "danger-full-access": "Danger full access",
-  untrusted: "Untrusted",
-  "on-request": "On request",
-  never: "Never",
-  user: "User",
-  auto_review: "Auto review",
-  true: "On",
-  false: "Off",
-} satisfies Record<string, string>;
+const VALUE_LABELS: ReadonlyMap<string, string> = new Map([
+  ["read-only", "Read-only"],
+  ["workspace-write", "Workspace-write"],
+  ["danger-full-access", "Danger full access"],
+  ["untrusted", "Untrusted"],
+  ["on-request", "On request"],
+  ["never", "Never"],
+  ["user", "User"],
+  ["auto_review", "Auto review"],
+  ["true", "On"],
+  ["false", "Off"],
+]);
 
-const VALUE_HELP = {
-  "read-only": "Codex can inspect files but cannot change the workspace.",
-  "workspace-write": "Codex can edit files in the workspace while keeping sandbox boundaries.",
-  "danger-full-access": "Codex runs without sandbox boundaries. Use only for trusted tasks.",
-  untrusted: "Codex asks before writes or commands that need trust.",
-  "on-request": "Codex asks when it decides a command needs approval.",
-  never: "Codex does not ask for approval prompts.",
-  user: "Approval prompts go to the user.",
-  auto_review: "Eligible prompts go through Codex automatic review.",
-  true: "Allow network for commands in sandboxed Codex turns.",
-  false: "Keep command network blocked in sandboxed Codex turns.",
-} satisfies Record<string, string>;
+const VALUE_HELP: ReadonlyMap<string, string> = new Map([
+  ["read-only", "Codex can inspect files but cannot change the workspace."],
+  ["workspace-write", "Codex can edit files in the workspace while keeping sandbox boundaries."],
+  ["danger-full-access", "Codex runs without sandbox boundaries. Use only for trusted tasks."],
+  ["untrusted", "Codex asks before writes or commands that need trust."],
+  ["on-request", "Codex asks when it decides a command needs approval."],
+  ["never", "Codex does not ask for approval prompts."],
+  ["user", "Approval prompts go to the user."],
+  ["auto_review", "Eligible prompts go through Codex automatic review."],
+  ["true", "Allow network for commands in sandboxed Codex turns."],
+  ["false", "Keep command network blocked in sandboxed Codex turns."],
+]);
 
 const FEATURE_HELP = {
   sandboxMode:
@@ -123,16 +131,16 @@ const openClaudeSetupUrl = (url: string): void => {
   });
 };
 
+const CODEX_POLICY_VALUES_BY_FIELD: CodexPolicyValuesByField = {
+  sandboxMode: CODEX_SANDBOX_MODE_VALUES,
+  approvalPolicy: CODEX_APPROVAL_POLICY_VALUES,
+  approvalsReviewer: CODEX_APPROVALS_REVIEWER_VALUES,
+  commandNetworkAccess: [false, true],
+};
+
 const defaultValuesForField = <Field extends CodexPolicyField>(
   field: Field,
-): CodexPolicyFields[Field][] => {
-  if (field === "sandboxMode") return [...CODEX_SANDBOX_MODE_VALUES] as CodexPolicyFields[Field][];
-  if (field === "approvalPolicy")
-    return [...CODEX_APPROVAL_POLICY_VALUES] as CodexPolicyFields[Field][];
-  if (field === "approvalsReviewer")
-    return [...CODEX_APPROVALS_REVIEWER_VALUES] as CodexPolicyFields[Field][];
-  return [false, true] as CodexPolicyFields[Field][];
-};
+): readonly CodexPolicyFields[Field][] => CODEX_POLICY_VALUES_BY_FIELD[field];
 
 const sortRuntimeDefinitionsForSettings = (
   runtimeDefinitions: RuntimeDescriptor[],
@@ -155,22 +163,37 @@ const codexConfigWithDefaults = (config: CodexRuntimeConfig): CodexRuntimeConfig
   roleOverrides: config.roleOverrides ?? {},
 });
 
-const removeUndefinedFields = (override: {
-  [Field in CodexPolicyField]?: CodexPolicyFields[Field] | undefined;
-}): Partial<CodexPolicyFields> => {
-  const next: Partial<CodexPolicyFields> = {};
-  for (const field of Object.keys(override) as CodexPolicyField[]) {
-    if (override[field] !== undefined) {
-      next[field] = override[field] as never;
-    }
+const removeUndefinedFields = (override: CodexRoleOverride): Partial<CodexPolicyFields> => {
+  const fields: Partial<CodexPolicyFields> = {};
+  if (override.sandboxMode !== undefined) {
+    fields.sandboxMode = override.sandboxMode;
   }
-  return next;
+  if (override.approvalPolicy !== undefined) {
+    fields.approvalPolicy = override.approvalPolicy;
+  }
+  if (override.approvalsReviewer !== undefined) {
+    fields.approvalsReviewer = override.approvalsReviewer;
+  }
+  if (override.commandNetworkAccess !== undefined) {
+    fields.commandNetworkAccess = override.commandNetworkAccess;
+  }
+  return fields;
 };
 
-const valueKey = (value: string | boolean): keyof typeof VALUE_LABELS =>
-  String(value) as keyof typeof VALUE_LABELS;
+const policyValueDisplay = (value: string | boolean): PolicyValueDisplay => {
+  const key = String(value);
+  const label = VALUE_LABELS.get(key);
+  const description = VALUE_HELP.get(key);
+  if (!label || !description) {
+    throw new Error(`Unknown Codex policy value: ${key}`);
+  }
+  return { label, description };
+};
 
-const policyValueFromOption = <T extends string | boolean>(values: T[], nextValue: string): T => {
+const policyValueFromOption = <T extends string | boolean>(
+  values: readonly T[],
+  nextValue: string,
+): T => {
   const selectedValue = values.find((value) => String(value) === nextValue);
   if (selectedValue === undefined) {
     throw new Error(`Unknown Codex policy value: ${nextValue}`);
@@ -189,17 +212,17 @@ function PolicyValueDropdown<T extends string | boolean>({
   onChange,
 }: {
   value: T;
-  values: T[];
+  values: readonly T[];
   disabled: boolean;
   labelId: string;
   onChange: (value: T) => void;
 }): ReactElement {
   const options = values.map((option) => {
-    const key = valueKey(option);
+    const display = policyValueDisplay(option);
     return {
       value: String(option),
-      label: VALUE_LABELS[key],
-      description: VALUE_HELP[key],
+      label: display.label,
+      description: display.description,
     };
   });
 
@@ -326,11 +349,11 @@ function CodexSettings({
     value: CodexPolicyFields[Field] | undefined,
   ) =>
     onUpdate((current) => {
-      const draftRoleOverride = { ...current.roleOverrides[role] };
+      const draftRoleOverride: CodexRoleOverride = { ...current.roleOverrides[role] };
       if (value === undefined) {
         delete draftRoleOverride[field];
       } else {
-        draftRoleOverride[field] = value as never;
+        draftRoleOverride[field] = value;
       }
       const nextRoleOverride = removeUndefinedFields(draftRoleOverride);
       const nextRoleOverrides = { ...current.roleOverrides };
@@ -487,7 +510,7 @@ function CodexFeatureGroup<Field extends CodexPolicyField>({
           values={defaultValuesForField(field)}
           disabled={disabled}
           labelId={defaultLabelId}
-          onChange={(value) => onDefaultChange(field, value as CodexPolicyFields[Field])}
+          onChange={(value) => onDefaultChange(field, value)}
         />
       </div>
 
@@ -536,11 +559,11 @@ function PolicyInfoPanel<Field extends CodexPolicyField>({
       <p className="max-w-3xl text-sm leading-6 text-pretty">{FEATURE_HELP[field]}</p>
       <dl className="grid gap-1.5 border-info-border/70 border-t pt-2 text-sm">
         {values.map((option) => {
-          const key = valueKey(option);
+          const display = policyValueDisplay(option);
           return (
             <div key={String(option)} className="grid gap-1 sm:grid-cols-[10rem_minmax(0,1fr)]">
-              <dt className="font-semibold">{VALUE_LABELS[key]}</dt>
-              <dd className="leading-relaxed text-foreground/80">{VALUE_HELP[key]}</dd>
+              <dt className="font-semibold">{display.label}</dt>
+              <dd className="leading-relaxed text-foreground/80">{display.description}</dd>
             </div>
           );
         })}
@@ -568,9 +591,7 @@ function RoleOverrideRows<Field extends CodexPolicyField>({
     <div className="divide-y divide-border rounded-md border border-border">
       {AGENT_ROLE_ORDER.map((role) => {
         const roleLabelId = `codex-${field}-${role}-override-label`;
-        const overrideValue = config.roleOverrides[role]?.[field] as
-          | CodexPolicyFields[Field]
-          | undefined;
+        const roleOverride = config.roleOverrides[role];
 
         return (
           <div
@@ -581,8 +602,9 @@ function RoleOverrideRows<Field extends CodexPolicyField>({
               {AGENT_ROLE_LABELS[role]}
             </Label>
             <RoleOverrideDropdown
-              value={overrideValue}
-              values={valuesForRole(field, role)}
+              field={field}
+              role={role}
+              roleOverride={roleOverride}
               disabled={disabled}
               labelId={roleLabelId}
               onChange={(value) => onOverrideChange(role, field, value)}
@@ -594,19 +616,23 @@ function RoleOverrideRows<Field extends CodexPolicyField>({
   );
 }
 
-function RoleOverrideDropdown<T extends string | boolean>({
-  value,
-  values,
+function RoleOverrideDropdown<Field extends CodexPolicyField>({
+  field,
+  role,
+  roleOverride,
   disabled,
   labelId,
   onChange,
 }: {
-  value: T | undefined;
-  values: T[];
+  field: Field;
+  role: AgentRole;
+  roleOverride: CodexRoleOverride | undefined;
   disabled: boolean;
   labelId: string;
-  onChange: (value: T | undefined) => void;
+  onChange: (value: CodexPolicyFields[Field] | undefined) => void;
 }): ReactElement {
+  const value = roleOverride?.[field];
+  const values = valuesForRole(field, role);
   const options = [
     {
       value: INHERIT_ROLE_OVERRIDE_VALUE,
@@ -614,11 +640,11 @@ function RoleOverrideDropdown<T extends string | boolean>({
       description: "Use the default value for this role.",
     },
     ...values.map((option) => {
-      const key = valueKey(option);
+      const display = policyValueDisplay(option);
       return {
         value: String(option),
-        label: VALUE_LABELS[key],
-        description: VALUE_HELP[key],
+        label: display.label,
+        description: display.description,
       };
     }),
   ];
@@ -647,10 +673,10 @@ function RoleOverrideDropdown<T extends string | boolean>({
 function valuesForRole<Field extends CodexPolicyField>(
   field: Field,
   role: AgentRole,
-): CodexPolicyFields[Field][] {
+): readonly CodexPolicyFields[Field][] {
   const values = defaultValuesForField(field);
   if (field === "sandboxMode") {
-    if (role === "build") return values.filter((v) => v !== "read-only");
+    if (role === "build") return values.filter((value) => value !== "read-only");
   }
   return values;
 }
@@ -673,7 +699,7 @@ function EffectivePolicyNotes({
 
       if (field === "sandboxMode" && effective.adjustmentReason) {
         notes.push(
-          `Effective for ${AGENT_ROLE_LABELS[role]}: ${VALUE_LABELS[valueKey(effectiveValue)]}. ${effective.adjustmentReason}`,
+          `Effective for ${AGENT_ROLE_LABELS[role]}: ${policyValueDisplay(effectiveValue).label}. ${effective.adjustmentReason}`,
         );
       }
       if (field === "approvalsReviewer" && !effective.approvalsReviewerApplies) {
@@ -809,7 +835,7 @@ export function AgentRuntimesSection({
           <aside className="border-border bg-muted/50 p-3 md:border-r">
             <div className="space-y-1" role="tablist">
               {sortedRuntimeDefinitions.map((definition) => {
-                const runtimeKind = definition.kind as RuntimeKind;
+                const runtimeKind = definition.kind;
                 const enabled = agentRuntimes[runtimeKind]?.enabled === true;
                 const tabId = `agent-runtime-tab-${definition.kind}`;
                 const panelId = `agent-runtime-panel-${definition.kind}`;
@@ -861,15 +887,6 @@ export function AgentRuntimesSection({
           </aside>
 
           {(() => {
-            const runtimeKind = selectedDefinition.kind as RuntimeKind;
-            const updateRuntime = (
-              updater: (config: AgentRuntimes[RuntimeKind]) => AgentRuntimes[RuntimeKind],
-            ) =>
-              onUpdateAgentRuntimes((current) => ({
-                ...current,
-                [runtimeKind]: updater(current[runtimeKind]),
-              }));
-
             return (
               <div
                 id={`agent-runtime-panel-${selectedDefinition.kind}`}
@@ -903,9 +920,10 @@ export function AgentRuntimesSection({
                     isDangerAcknowledged={isCodexDangerAcknowledged}
                     onDangerAcknowledgedChange={onCodexDangerAcknowledgedChange}
                     onUpdate={(updater) =>
-                      updateRuntime((current) =>
-                        updater(codexConfigWithDefaults(current as CodexRuntimeConfig)),
-                      )
+                      onUpdateAgentRuntimes((current) => ({
+                        ...current,
+                        codex: updater(codexConfigWithDefaults(current.codex)),
+                      }))
                     }
                   />
                 ) : null}

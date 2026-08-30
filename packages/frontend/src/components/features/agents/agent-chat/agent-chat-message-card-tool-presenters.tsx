@@ -9,6 +9,7 @@ import {
   Wrench,
 } from "lucide-react";
 import type { ReactElement } from "react";
+import type { AgentToolData } from "@openducktor/contracts";
 import { cn } from "@/lib/utils";
 import { AgentChatFileEditCard } from "./agent-chat-file-edit-card";
 import {
@@ -92,10 +93,7 @@ const ToolJsonDetails = ({
   );
 };
 
-const formatToolInput = (
-  input: Record<string, unknown>,
-  workingDirectory?: string | null,
-): string => {
+const formatToolInput = (input: AgentToolData, workingDirectory?: string | null): string => {
   return JSON.stringify(relativizeDisplayPathsInValue(input, workingDirectory), null, 2);
 };
 

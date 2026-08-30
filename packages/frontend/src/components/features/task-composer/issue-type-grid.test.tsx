@@ -1,14 +1,12 @@
-import { describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { IssueTypeGrid } from "./issue-type-grid";
 
-const reactActEnvironment = globalThis as {
-  IS_REACT_ACT_ENVIRONMENT?: boolean;
-};
+beforeEach(enableReactActEnvironment);
 
 describe("IssueTypeGrid", () => {
   test("selects a type when a card is clicked", () => {
-    reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
     const onSelectIssueType = mock(() => {});
     const { unmount } = render(
       <IssueTypeGrid selectedIssueType={null} onSelectIssueType={onSelectIssueType} />,
@@ -26,7 +24,6 @@ describe("IssueTypeGrid", () => {
   });
 
   test("renders disabled state for epic with coming soon text", () => {
-    reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
     const onSelectIssueType = mock(() => {});
     const { container, unmount } = render(
       <IssueTypeGrid selectedIssueType={null} onSelectIssueType={onSelectIssueType} />,
@@ -46,7 +43,6 @@ describe("IssueTypeGrid", () => {
   });
 
   test("disables the epic button when not selected", () => {
-    reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
     const onSelectIssueType = mock(() => {});
     const { container, unmount } = render(
       <IssueTypeGrid selectedIssueType={null} onSelectIssueType={onSelectIssueType} />,
@@ -65,7 +61,6 @@ describe("IssueTypeGrid", () => {
   });
 
   test("selected epic does not show disabled state", () => {
-    reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
     const onSelectIssueType = mock(() => {});
     const { container, unmount } = render(
       <IssueTypeGrid selectedIssueType="epic" onSelectIssueType={onSelectIssueType} />,

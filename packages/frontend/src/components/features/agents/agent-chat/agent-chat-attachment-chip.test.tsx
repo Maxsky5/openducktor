@@ -15,18 +15,7 @@ const configureAttachmentPreviewShellBridge = (
   resolveLocalAttachmentPreviewSrc: ShellBridge["resolveLocalAttachmentPreviewSrc"],
 ): void => {
   configureShellBridge({
-    client: {} as ShellBridge["client"],
-    subscribeRunEvents: async () => () => {},
-    subscribeDevServerEvents: async () => ({
-      transportEpoch: "test:0",
-      unsubscribe: () => {},
-    }),
-    observeAgentSessionLive: async () => () => {},
-    subscribeTaskStream: async () => ({
-      subscriptionId: "test-subscription",
-      acknowledge: async () => {},
-      unsubscribe: () => {},
-    }),
+    ...createUnavailableShellBridge(),
     appUpdates: createDisabledAppUpdateBridge({
       status: "disabled",
       currentVersion: "unknown",
@@ -40,7 +29,6 @@ const configureAttachmentPreviewShellBridge = (
     openExternalUrl: async () => {},
     resolveLocalAttachmentPreviewSrc,
     resolveTaskAssetSrc: async () => "asset://task-preview",
-    terminals: createUnavailableShellBridge().terminals,
   });
 };
 

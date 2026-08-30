@@ -38,11 +38,14 @@ export const toAgentStudioTranscriptSession = ({
     return null;
   }
 
-  return {
+  const transcriptSession: AgentChatTranscriptSession = {
     ...identity,
-    ...(loadedSession.title ? { title: loadedSession.title } : {}),
     activityState,
     runtimeStatusMessage: loadedSession.runtimeStatusMessage,
     messages: toSessionMessagesState(loadedSession),
   };
+  if (loadedSession.title) {
+    transcriptSession.title = loadedSession.title;
+  }
+  return transcriptSession;
 };

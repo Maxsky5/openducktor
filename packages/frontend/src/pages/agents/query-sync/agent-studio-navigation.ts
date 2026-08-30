@@ -1,6 +1,7 @@
 import { agentRoleValues } from "@openducktor/contracts";
-import { type AgentRole, isRecord } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
+import { z } from "zod";
 
 const AGENT_STUDIO_CONTEXT_STORAGE_PREFIX = "openducktor:agent-studio:context";
 const AGENT_STUDIO_TABS_STORAGE_PREFIX = "openducktor:agent-studio:tabs";
@@ -56,12 +57,18 @@ export type PersistedAgentStudioContext = {
 };
 
 const AGENT_ROLE_SET = new Set<string>(agentRoleValues);
+const persistedAgentStudioContextSchema = z.object({
+  taskId: z.string().optional(),
+  role: z.string().optional(),
+  sessionExternalId: z.string().optional(),
+});
+type ParsedPersistedAgentStudioContext = z.output<typeof persistedAgentStudioContextSchema>;
 
 const isRole = (value: string | null): value is AgentRole =>
   value != null && AGENT_ROLE_SET.has(value);
 
-const readOptionalString = (value: unknown): string | undefined => {
-  if (typeof value !== "string") {
+const readOptionalString = (value: string | null | undefined): string | undefined => {
+  if (value === null || value === undefined) {
     return undefined;
   }
   const trimmed = value.trim();
@@ -141,11 +148,12 @@ export const applyQueryUpdateToNavigationState = (
 
 export const buildAgentStudioSelectionQueryUpdate = (
   params: AgentStudioSessionSelectionQueryParams,
-): AgentStudioQueryUpdate => ({
-  [AGENT_STUDIO_QUERY_KEYS.task]: params.taskId,
-  [AGENT_STUDIO_QUERY_KEYS.session]: params.sessionExternalId ?? undefined,
-  [AGENT_STUDIO_QUERY_KEYS.agent]: params.role,
-});
+) =>
+  ({
+    [AGENT_STUDIO_QUERY_KEYS.task]: params.taskId,
+    [AGENT_STUDIO_QUERY_KEYS.session]: params.sessionExternalId ?? undefined,
+    [AGENT_STUDIO_QUERY_KEYS.agent]: params.role,
+  }) satisfies AgentStudioQueryUpdate;
 
 export const buildAgentStudioHref = (params: AgentStudioSessionSelectionQueryParams): string => {
   const searchParams = buildSearchParamsFromNavigationState(new URLSearchParams(), {
@@ -185,17 +193,13 @@ export const hasAgentStudioNavigationSelection = (
 };
 
 export const parsePersistedContext = (raw: string): PersistedAgentStudioContext => {
-  let parsed: unknown;
+  let parsed: ParsedPersistedAgentStudioContext;
   try {
-    parsed = JSON.parse(raw);
+    parsed = persistedAgentStudioContextSchema.parse(JSON.parse(raw));
   } catch (cause) {
     throw new Error(`Failed to parse persisted agent studio context: ${errorMessage(cause)}`, {
       cause,
     });
-  }
-
-  if (!isRecord(parsed)) {
-    throw new Error("Failed to parse persisted agent studio context: expected an object payload.");
   }
 
   const taskId = parsePersistedContextString(parsed, AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.taskId);
@@ -214,11 +218,17 @@ export const parsePersistedContext = (raw: string): PersistedAgentStudioContext 
     parsed,
     AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.sessionExternalId,
   );
-  return {
-    ...(taskId ? { taskId } : {}),
-    ...(role ? { role } : {}),
-    ...(sessionExternalId ? { sessionExternalId } : {}),
-  };
+  const persistedContext: PersistedAgentStudioContext = {};
+  if (taskId) {
+    persistedContext.taskId = taskId;
+  }
+  if (role) {
+    persistedContext.role = role;
+  }
+  if (sessionExternalId) {
+    persistedContext.sessionExternalId = sessionExternalId;
+  }
+  return persistedContext;
 };
 
 export const restoreNavigationFromPersistedContext = (
@@ -261,18 +271,12 @@ export const toTabsStorageKey = (workspaceId: string): string =>
 export const toRightPanelStorageKey = (): string => AGENT_STUDIO_RIGHT_PANEL_STORAGE_KEY;
 
 const parsePersistedContextString = (
-  parsed: Record<string, unknown>,
+  parsed: ParsedPersistedAgentStudioContext,
   key: (typeof AGENT_STUDIO_PERSISTED_CONTEXT_KEYS)[keyof typeof AGENT_STUDIO_PERSISTED_CONTEXT_KEYS],
 ): string | undefined => {
   const value = parsed[key];
   if (value === undefined || value === null) {
     return undefined;
-  }
-
-  if (typeof value !== "string") {
-    throw new Error(
-      `Failed to parse persisted agent studio context: field "${key}" must be a string.`,
-    );
   }
 
   const trimmed = value.trim();

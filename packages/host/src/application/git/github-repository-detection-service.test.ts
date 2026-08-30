@@ -398,7 +398,7 @@ const createFakeGitPort = ({
           }),
       });
     },
-  }) as GitPort as unknown as GitPort;
+  }) satisfies GitPort;
 describe("parseGithubRemoteUrl", () => {
   test("parses supported GitHub remote URL forms", () => {
     expect(parseGithubRemoteUrl("https://token@github.com/owner/repo.git")).toEqual({

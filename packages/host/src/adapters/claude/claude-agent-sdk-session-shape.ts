@@ -22,15 +22,18 @@ export const createClaudeSessionSummary = (
   startedAt: string,
 ): AgentSessionSummary => {
   const sessionAssociation = claudeSessionScope(input);
-  return {
+  const summary: AgentSessionSummary = {
     externalSessionId: sessionInput.externalSessionId,
     runtimeKind: "claude",
     workingDirectory: input.workingDirectory,
-    ...(sessionInput.title ? { title: sessionInput.title } : {}),
     sessionAssociation,
     startedAt,
     status: "starting",
   };
+  if (sessionInput.title) {
+    summary.title = sessionInput.title;
+  }
+  return summary;
 };
 
 export const toClaudeDisplayParts = (
@@ -70,17 +73,20 @@ export const toClaudeDisplayParts = (
           displayParts.push({ kind: "text", text: offsetSourceText.value });
           continue;
         }
-        displayParts.push({
+        const skillMention: Extract<AgentUserMessageDisplayPart, { kind: "skill_mention" }> = {
           kind: "skill_mention",
           skill: {
             id: part.command.id,
             name: part.command.trigger,
             path: part.command.trigger,
             title: part.command.title,
-            ...(part.command.description ? { description: part.command.description } : {}),
           },
           sourceText: offsetSourceText,
-        });
+        };
+        if (part.command.description) {
+          skillMention.skill.description = part.command.description;
+        }
+        displayParts.push(skillMention);
         continue;
       }
       if (part.kind === "text") {
@@ -88,27 +94,39 @@ export const toClaudeDisplayParts = (
         continue;
       }
       if (part.kind === "file_reference") {
-        displayParts.push({
+        const fileReference: Extract<AgentUserMessageDisplayPart, { kind: "file_reference" }> = {
           kind: "file_reference",
           file: part.file,
-          ...(offsetSourceText ? { sourceText: offsetSourceText } : {}),
-        });
+        };
+        if (offsetSourceText) {
+          fileReference.sourceText = offsetSourceText;
+        }
+        displayParts.push(fileReference);
         continue;
       }
       if (part.kind === "skill_mention") {
-        displayParts.push({
+        const skillMention: Extract<AgentUserMessageDisplayPart, { kind: "skill_mention" }> = {
           kind: "skill_mention",
           skill: part.skill,
-          ...(offsetSourceText ? { sourceText: offsetSourceText } : {}),
-        });
+        };
+        if (offsetSourceText) {
+          skillMention.sourceText = offsetSourceText;
+        }
+        displayParts.push(skillMention);
         continue;
       }
       if (part.kind === "subagent_reference") {
-        displayParts.push({
+        const subagentReference: Extract<
+          AgentUserMessageDisplayPart,
+          { kind: "subagent_reference" }
+        > = {
           kind: "subagent_reference",
           subagent: part.subagent,
-          ...(offsetSourceText ? { sourceText: offsetSourceText } : {}),
-        });
+        };
+        if (offsetSourceText) {
+          subagentReference.sourceText = offsetSourceText;
+        }
+        displayParts.push(subagentReference);
       }
     }
     flattenedTextLength = sourceOffset + text.length;
@@ -139,19 +157,17 @@ export const snapshotForClaudeSession = (session: ClaudeSession): AgentSessionRu
     session.queuedSdkMessages.length === 0
       ? "idle"
       : session.activity;
-  return toAgentSessionRuntimeSnapshot({
-    ref,
-    snapshot: {
-      ...(session.parentExternalSessionId
-        ? { parentExternalSessionId: session.parentExternalSessionId }
-        : {}),
-      title: session.summary.title ?? "Claude session",
-      startedAt: session.startedAt,
-      runtimeActivity,
-      pendingApprovals: [...session.pendingApprovals.values()].map((entry) => entry.event),
-      pendingQuestions: [...session.pendingQuestions.values()].map((entry) => entry.event),
-    },
-  });
+  const snapshot: NonNullable<Parameters<typeof toAgentSessionRuntimeSnapshot>[0]["snapshot"]> = {
+    title: session.summary.title ?? "Claude session",
+    startedAt: session.startedAt,
+    runtimeActivity,
+    pendingApprovals: [...session.pendingApprovals.values()].map((entry) => entry.event),
+    pendingQuestions: [...session.pendingQuestions.values()].map((entry) => entry.event),
+  };
+  if (session.parentExternalSessionId) {
+    snapshot.parentExternalSessionId = session.parentExternalSessionId;
+  }
+  return toAgentSessionRuntimeSnapshot({ ref, snapshot });
 };
 
 export const assertClaudeSessionRef = (

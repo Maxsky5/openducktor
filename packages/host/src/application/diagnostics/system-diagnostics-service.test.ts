@@ -2,6 +2,7 @@ import {
   DEFAULT_AGENT_RUNTIMES,
   type GlobalConfig,
   type RepoStoreHealth,
+  RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeDescriptor,
   type RuntimeHealth,
 } from "@openducktor/contracts";
@@ -14,13 +15,12 @@ import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { SystemCommandPort, SystemCommandRunResult } from "../../ports/system-command-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
+import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
 import { createSystemDiagnosticsService } from "./system-diagnostics-service";
 
 const runtimeDefinition = (kind: RuntimeDescriptor["kind"]): RuntimeDescriptor =>
-  ({
-    kind,
-  }) as RuntimeDescriptor;
+  RUNTIME_DESCRIPTORS_BY_KIND[kind];
 const runtimeHealth = (
   kind: RuntimeHealth["kind"],
   error: string | null = null,
@@ -76,7 +76,7 @@ const createSettingsConfig = (config: GlobalConfig | null): SettingsConfigPort =
       }),
     pathExists: () => Effect.succeed(true),
     join: (...paths) => paths.join("/"),
-  }) as SettingsConfigPort as SettingsConfigPort;
+  }) satisfies SettingsConfigPort;
 const createRuntimeDefinitions = (
   kinds: RuntimeDescriptor["kind"][] = ["opencode", "codex"],
 ): RuntimeDefinitionsService => ({
@@ -149,7 +149,7 @@ const createSystemCommandPort = ({
           }),
       }),
   };
-  return port as SystemCommandPort;
+  return port;
 };
 const createToolDiscoveryPort = ({
   missingCommands = [],
@@ -178,7 +178,7 @@ const createTaskStore = (
     prepare?: boolean;
   }> = [],
 ): TaskStorePort =>
-  ({
+  createTaskStoreTestDouble({
     diagnoseRepoStore: (input) =>
       Effect.tryPromise({
         try: async () => {
@@ -192,7 +192,7 @@ const createTaskStore = (
             cause: cause,
           }),
       }),
-  }) as Pick<TaskStorePort, "diagnoseRepoStore"> as unknown as TaskStorePort;
+  });
 const createSystemDiagnosticsServiceForTest = (
   input: Omit<Parameters<typeof createSystemDiagnosticsService>[0], "toolDiscovery"> & {
     toolDiscovery?: ToolDiscoveryPort;

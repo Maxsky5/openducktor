@@ -8,7 +8,12 @@ import {
 import { gte, ne, or } from "drizzle-orm";
 import { Effect } from "effect";
 import type { TaskStoreListTasksInput } from "../../ports/task-repository-ports";
-import { decodeWithSchema, labelsFromRow, optionalJsonFromRow } from "./sqlite-json-codecs";
+import {
+  decodeWithSchema,
+  labelsFromRow,
+  optionalJsonFromRow,
+  validateWithSchema,
+} from "./sqlite-json-codecs";
 import { documentSummariesByTaskId, documentSummary } from "./sqlite-task-document-queries";
 import { requireTaskRow, taskRows } from "./sqlite-task-queries";
 import type { SqliteTaskStoreReadError } from "./sqlite-task-store-errors";
@@ -43,29 +48,33 @@ const rowToTaskCard = (
     );
     const labels = yield* labelsFromRow(row);
     const summary = documentSummaryOverride ?? (yield* documentSummary(session, row.id));
-    return yield* decodeWithSchema(
-      taskCardSchema,
-      {
-        aiReviewEnabled: row.qaRequired === 1,
-        availableActions: [],
-        createdAt: row.createdAt.toISOString(),
-        description: row.description ?? "",
-        documentSummary: summary,
-        id: row.id,
-        issueType: row.issueType,
-        labels,
-        parentId: row.parentId ?? undefined,
-        priority: row.priority,
-        pullRequest,
-        status: row.status,
-        subtaskIds: [],
-        targetBranch,
-        title: row.title,
-        updatedAt: row.updatedAt.toISOString(),
+    const taskCard: TaskCard = {
+      aiReviewEnabled: row.qaRequired === 1,
+      agentWorkflows: {
+        spec: { required: false, canSkip: true, available: false, completed: false },
+        planner: { required: false, canSkip: true, available: false, completed: false },
+        builder: { required: true, canSkip: false, available: false, completed: false },
+        qa: { required: false, canSkip: true, available: false, completed: false },
       },
-      "task card read model",
-      { taskId: row.id },
-    );
+      availableActions: [],
+      createdAt: row.createdAt.toISOString(),
+      description: row.description ?? "",
+      documentSummary: summary,
+      id: row.id,
+      issueType: row.issueType,
+      labels,
+      parentId: row.parentId ?? undefined,
+      priority: row.priority,
+      pullRequest,
+      status: row.status,
+      subtaskIds: [],
+      targetBranch,
+      title: row.title,
+      updatedAt: row.updatedAt.toISOString(),
+    };
+    return yield* validateWithSchema(taskCardSchema, taskCard, "task card read model", {
+      taskId: row.id,
+    });
   });
 
 export const getTaskCard = (

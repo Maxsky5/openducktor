@@ -1,4 +1,9 @@
-import type { AgentModelCatalog, AgentRole, AgentUserMessageDisplayPart } from "@openducktor/core";
+import type {
+  AgentAttachmentReference,
+  AgentModelCatalog,
+  AgentRole,
+  AgentUserMessageDisplayPart,
+} from "@openducktor/core";
 import { Brain, Cpu, Hammer, LoaderCircle } from "lucide-react";
 import {
   Fragment,
@@ -37,6 +42,28 @@ import { SubagentTranscriptButton } from "./subagent-transcript-button";
 
 const TEXT_RENDER_PACE_MS = 24;
 const TEXT_RENDER_SNAP = /[\s.,!?;:)\]]/;
+
+type TranscriptAttachmentReference = AgentAttachmentReference & {
+  localPreviewAvailable?: boolean;
+};
+
+const toTranscriptAttachment = (
+  attachment: Extract<AgentUserMessageDisplayPart, { kind: "attachment" }>["attachment"],
+): TranscriptAttachmentReference => {
+  const reference: TranscriptAttachmentReference = {
+    id: attachment.id,
+    path: attachment.path,
+    name: attachment.name,
+    kind: attachment.kind,
+  };
+  if (attachment.mime !== undefined) {
+    reference.mime = attachment.mime;
+  }
+  if (attachment.localPreviewAvailable !== undefined) {
+    reference.localPreviewAvailable = attachment.localPreviewAvailable;
+  }
+  return reference;
+};
 
 const pacedStep = (size: number): number => {
   if (size <= 12) {
@@ -613,8 +640,8 @@ const SubagentMessage = ({
   const durationMs =
     meta.status !== "pending" &&
     meta.status !== "running" &&
-    typeof meta.startedAtMs === "number" &&
-    typeof meta.endedAtMs === "number"
+    meta.startedAtMs !== undefined &&
+    meta.endedAtMs !== undefined
       ? Math.max(0, meta.endedAtMs - meta.startedAtMs)
       : null;
 
@@ -805,7 +832,7 @@ export const MessageBody = ({
                   <AgentChatAttachmentChip
                     key={part.attachment.id}
                     variant="transcript"
-                    attachment={part.attachment}
+                    attachment={toTranscriptAttachment(part.attachment)}
                     className="w-32"
                   />
                 ))}

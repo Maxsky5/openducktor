@@ -23,14 +23,14 @@ const ORCHESTRATOR_ERROR_PREFIX = "[agent-orchestrator]";
 
 const createOrchestratorAsyncFailure = (
   operation: string,
-  error: unknown,
+  cause: unknown,
   tags?: OrchestratorAsyncTags,
 ): OrchestratorAsyncFailure => {
   return {
     operation,
-    reason: errorMessage(error),
+    reason: errorMessage(cause),
     tags: tags ?? {},
-    error,
+    error: cause,
   };
 };
 
@@ -56,9 +56,9 @@ const logOrchestratorAsyncFailure = (
   console.error(ORCHESTRATOR_ERROR_PREFIX, failure.operation, details);
 };
 
-export const runOrchestratorSideEffect = (
+export const runOrchestratorSideEffect = <T>(
   operation: string,
-  effect: Promise<unknown>,
+  effect: Promise<T>,
   options?: AsyncFailureOptions,
 ): void => {
   void effect.catch((error) => {

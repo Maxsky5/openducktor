@@ -8,23 +8,17 @@ import type {
 
 export const createLiveSessionAdapterRegistry = (): AgentSessionLiveAdapterRegistryPort => {
   const adaptersByRuntimeId = new Map<string, AgentSessionLiveAdapterPort>();
-
   const requireControlAdapter = (
     adapter: AgentSessionLiveAdapterPort,
-  ): Effect.Effect<AgentSessionRuntimeAdapterPort, HostResourceError> => {
-    if (
-      "startSession" in adapter &&
-      "resumeSession" in adapter &&
-      "forkSession" in adapter &&
-      "sendUserMessage" in adapter &&
-      "updateSessionModel" in adapter &&
-      "stopSession" in adapter &&
-      "releaseSession" in adapter
-    ) {
-      return Effect.succeed(adapter as AgentSessionRuntimeAdapterPort);
+  ): Effect.Effect<
+    AgentSessionRuntimeAdapterPort,
+    HostResourceError<{ readonly runtimeId: string }>
+  > => {
+    if (adapter.supportsSessionControl) {
+      return Effect.succeed(adapter);
     }
     return Effect.fail(
-      new HostResourceError({
+      new HostResourceError<{ readonly runtimeId: string }>({
         resource: "agent_session_control_adapter",
         operation: "resolveControl",
         message: `Live runtime '${adapter.binding.runtimeId}' does not provide session control.`,

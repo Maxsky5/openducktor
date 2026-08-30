@@ -23,10 +23,10 @@ type UseRepoRuntimeHealthResult = {
 
 const buildRuntimeHealthQueryErrorMap = (
   runtimeDefinitions: RuntimeDescriptor[],
-  error: unknown,
+  cause: unknown,
 ): RepoRuntimeHealthMap => {
   const checkedAt = new Date().toISOString();
-  const { failureKind, message } = classifyDiagnosticsQueryError(error);
+  const { failureKind, message } = classifyDiagnosticsQueryError(cause);
   const entries = runtimeDefinitions.map((definition) => {
     const runtimeHealth: RepoRuntimeHealthCheck = {
       status: "error",

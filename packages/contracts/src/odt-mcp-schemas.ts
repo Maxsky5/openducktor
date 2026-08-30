@@ -6,10 +6,8 @@ import {
   workspaceRecordSchema,
 } from "./git-schemas";
 import {
-  type ODT_MCP_TOOL_NAMES,
   ODT_TOOL_NAMES,
   ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES,
-  ODT_WORKFLOW_AGENT_TOOL_NAMES,
   ODT_WORKSPACE_DISCOVERY_TOOL_NAME,
 } from "./odt-tool-names";
 import {
@@ -24,6 +22,8 @@ import {
   taskPrioritySchema,
   taskStatusSchema,
 } from "./task-schemas";
+
+const odtToolErrorDetailsSchema = z.record(z.string(), z.json());
 
 export const ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES = 20 * 1024 * 1024;
 
@@ -52,7 +52,7 @@ export const odtToolErrorSchema = z
   .object({
     code: odtToolErrorCodeSchema,
     message: z.string(),
-    details: z.record(z.string(), z.unknown()).optional(),
+    details: odtToolErrorDetailsSchema.optional(),
     issues: z.array(odtToolErrorIssueSchema).optional(),
   })
   .strict();
@@ -329,20 +329,8 @@ export type SearchTasksInput = z.infer<typeof SearchTasksInputSchema>;
 export const GetWorkspacesInputSchema = z.object({}).strict();
 export type GetWorkspacesInput = z.infer<typeof GetWorkspacesInputSchema>;
 
-const pickToolSchemas = <
-  TSchemas extends Record<string, unknown>,
-  const TNames extends readonly (keyof TSchemas)[],
->(
-  schemas: TSchemas,
-  toolNames: TNames,
-): Pick<TSchemas, TNames[number]> => {
-  return Object.fromEntries(toolNames.map((toolName) => [toolName, schemas[toolName]])) as Pick<
-    TSchemas,
-    TNames[number]
-  >;
-};
-
-export type OdtToolName = (typeof ODT_MCP_TOOL_NAMES)[number];
+export const odtToolNameSchema = z.enum(ODT_TOOL_NAMES);
+export type OdtToolName = z.infer<typeof odtToolNameSchema>;
 
 export const ODT_TOOL_SCHEMAS = {
   odt_get_workspaces: GetWorkspacesInputSchema,
@@ -359,22 +347,32 @@ export const ODT_TOOL_SCHEMAS = {
   odt_set_pull_request: SetPullRequestInputSchema,
   odt_qa_approved: QaApprovedInputSchema,
   odt_qa_rejected: QaRejectedInputSchema,
-} as const satisfies Record<OdtToolName, unknown>;
+} as const satisfies Record<OdtToolName, z.ZodTypeAny>;
 
-export const ODT_WORKFLOW_TOOL_SCHEMAS = pickToolSchemas(
-  ODT_TOOL_SCHEMAS,
-  ODT_WORKFLOW_AGENT_TOOL_NAMES,
-);
+export const ODT_WORKFLOW_TOOL_SCHEMAS = {
+  odt_read_task: ODT_TOOL_SCHEMAS.odt_read_task,
+  odt_read_task_assets: ODT_TOOL_SCHEMAS.odt_read_task_assets,
+  odt_read_task_documents: ODT_TOOL_SCHEMAS.odt_read_task_documents,
+  odt_set_spec: ODT_TOOL_SCHEMAS.odt_set_spec,
+  odt_set_plan: ODT_TOOL_SCHEMAS.odt_set_plan,
+  odt_build_blocked: ODT_TOOL_SCHEMAS.odt_build_blocked,
+  odt_build_resumed: ODT_TOOL_SCHEMAS.odt_build_resumed,
+  odt_build_completed: ODT_TOOL_SCHEMAS.odt_build_completed,
+  odt_set_pull_request: ODT_TOOL_SCHEMAS.odt_set_pull_request,
+  odt_qa_approved: ODT_TOOL_SCHEMAS.odt_qa_approved,
+  odt_qa_rejected: ODT_TOOL_SCHEMAS.odt_qa_rejected,
+} as const;
 
 export type OdtWorkflowToolName = keyof typeof ODT_WORKFLOW_TOOL_SCHEMAS;
 
 export type WorkflowAgentBlockedOdtToolName =
   (typeof ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES)[number];
 
-export const ODT_WORKFLOW_AGENT_BLOCKED_TOOL_SCHEMAS = pickToolSchemas(
-  ODT_TOOL_SCHEMAS,
-  ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES,
-);
+export const ODT_WORKFLOW_AGENT_BLOCKED_TOOL_SCHEMAS = {
+  odt_get_workspaces: ODT_TOOL_SCHEMAS.odt_get_workspaces,
+  odt_create_task: ODT_TOOL_SCHEMAS.odt_create_task,
+  odt_search_tasks: ODT_TOOL_SCHEMAS.odt_search_tasks,
+} as const;
 
 export type WorkspaceScopedOdtToolName = Exclude<
   OdtToolName,
@@ -386,10 +384,21 @@ export const ODT_WORKSPACE_SCOPED_TOOL_NAMES = ODT_TOOL_NAMES.filter(
     toolName !== ODT_WORKSPACE_DISCOVERY_TOOL_NAME,
 );
 
-export const ODT_WORKSPACE_SCOPED_TOOL_SCHEMAS = pickToolSchemas(
-  ODT_TOOL_SCHEMAS,
-  ODT_WORKSPACE_SCOPED_TOOL_NAMES,
-);
+export const ODT_WORKSPACE_SCOPED_TOOL_SCHEMAS = {
+  odt_create_task: ODT_TOOL_SCHEMAS.odt_create_task,
+  odt_search_tasks: ODT_TOOL_SCHEMAS.odt_search_tasks,
+  odt_read_task: ODT_TOOL_SCHEMAS.odt_read_task,
+  odt_read_task_assets: ODT_TOOL_SCHEMAS.odt_read_task_assets,
+  odt_read_task_documents: ODT_TOOL_SCHEMAS.odt_read_task_documents,
+  odt_set_spec: ODT_TOOL_SCHEMAS.odt_set_spec,
+  odt_set_plan: ODT_TOOL_SCHEMAS.odt_set_plan,
+  odt_build_blocked: ODT_TOOL_SCHEMAS.odt_build_blocked,
+  odt_build_resumed: ODT_TOOL_SCHEMAS.odt_build_resumed,
+  odt_build_completed: ODT_TOOL_SCHEMAS.odt_build_completed,
+  odt_set_pull_request: ODT_TOOL_SCHEMAS.odt_set_pull_request,
+  odt_qa_approved: ODT_TOOL_SCHEMAS.odt_qa_approved,
+  odt_qa_rejected: ODT_TOOL_SCHEMAS.odt_qa_rejected,
+} as const;
 
 export const odtPersistedDocumentSchema = z
   .object({

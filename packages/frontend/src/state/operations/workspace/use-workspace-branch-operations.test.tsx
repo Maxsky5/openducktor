@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { GitBranch, GitCurrentBranch } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -50,12 +50,13 @@ const createBranchHarness = (initialArgs: BranchHarnessArgs) => {
     run: async (
       fn: (value: ReturnType<typeof useWorkspaceBranchOperations>) => Promise<void> | void,
     ) => {
-      if (!latest) {
+      const hook = latest;
+      if (!hook) {
         throw new Error("Hook not mounted");
       }
 
       await sharedHarness.run(async () => {
-        await fn(latest as ReturnType<typeof useWorkspaceBranchOperations>);
+        await fn(hook);
       });
     },
     getLatest: () => {
@@ -813,19 +814,22 @@ describe("use-workspace-branch-operations", () => {
         throw new Error("refreshBranches promise was not captured");
       }
 
-      let caughtError: unknown = null;
+      const caughtErrors = new Array<Error>();
       const pendingRefresh = refreshPromise;
       await harness.run(async () => {
         currentBranchDeferred.reject(refreshError);
         try {
           await pendingRefresh;
-        } catch (error) {
-          caughtError = error;
+        } catch (cause) {
+          if (!(cause instanceof Error)) {
+            throw new Error("Expected branch refresh to reject with Error.", { cause });
+          }
+          caughtErrors.push(cause);
         }
         await flush();
       });
 
-      expect(caughtError).toBe(refreshError);
+      expect(caughtErrors).toEqual([refreshError]);
     } finally {
       currentBranchDeferred.resolve({ name: "main", detached: false });
       await harness.unmount();
@@ -871,9 +875,7 @@ describe("use-workspace-branch-operations", () => {
 
   test("restores the prior branch snapshot and reports the error when switching fails", async () => {
     const switchError = new Error("branch checkout failed");
-    const originalToastError = toast.error;
-    const toastError = mock(() => "toast-id");
-    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    const toastError = spyOn(toast, "error").mockImplementation(() => "toast-id");
 
     workspaceHost.gitGetCurrentBranch = mock(async () => ({
       name: "main",
@@ -920,16 +922,14 @@ describe("use-workspace-branch-operations", () => {
         description: "branch checkout failed",
       });
     } finally {
-      (toast as { error: typeof toast.error }).error = originalToastError;
+      toastError.mockRestore();
       await harness.unmount();
     }
   });
 
   test("keeps the switched branch and rejects when branch list refresh fails after checkout", async () => {
     const branchListError = new Error("branch list unavailable");
-    const originalToastError = toast.error;
-    const toastError = mock(() => "toast-id");
-    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    const toastError = spyOn(toast, "error").mockImplementation(() => "toast-id");
 
     workspaceHost.gitGetCurrentBranch = mock(async () => ({
       name: "main",
@@ -971,12 +971,15 @@ describe("use-workspace-branch-operations", () => {
         await value.refreshBranches();
       });
 
-      let caughtError: unknown = null;
+      const caughtErrors = new Array<Error>();
       await harness.run(async (value) => {
         try {
           await value.switchBranch("feature");
-        } catch (error) {
-          caughtError = error;
+        } catch (cause) {
+          if (!(cause instanceof Error)) {
+            throw new Error("Expected branch list refresh to reject with Error.", { cause });
+          }
+          caughtErrors.push(cause);
         }
       });
 
@@ -986,7 +989,7 @@ describe("use-workspace-branch-operations", () => {
         revision: "def456",
       });
       expect(harness.getLatest().branches).toEqual(initialBranches);
-      expect(caughtError).toBe(branchListError);
+      expect(caughtErrors).toEqual([branchListError]);
       expect(toastError).toHaveBeenCalledWith(
         "Branch switched, but failed to refresh branch list",
         {
@@ -994,7 +997,7 @@ describe("use-workspace-branch-operations", () => {
         },
       );
     } finally {
-      (toast as { error: typeof toast.error }).error = originalToastError;
+      toastError.mockRestore();
       await harness.unmount();
     }
   });

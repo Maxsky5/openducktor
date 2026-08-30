@@ -1,57 +1,79 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { TaskCard } from "@openducktor/contracts";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import type { ComposerState } from "@/types/task-composer";
 import { render, screen } from "@testing-library/react";
 import { act, createElement } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import * as taskCreateModalControllerModule from "./use-task-create-modal-controller";
 
 enableReactActEnvironment();
 
-const realTaskCreateModalControllerModule = { ...taskCreateModalControllerModule };
+const taskCreateDiscardDialogModule = await import("./task-create-discard-dialog");
+const taskDocumentEditorModule =
+  await import("@/components/features/task-composer/task-document-editor");
+let testSpies: Array<{ mockRestore(): void }> = [];
 
-const controllerMock = {
-  mode: "edit" as const,
+const noDocumentSaveInProgress = (): "spec" | "plan" | null => null;
+const noFooterError = (): string | null => null;
+
+const emptyDocument = {
+  serverMarkdown: "",
+  draftMarkdown: "",
+  updatedAt: null,
+  isLoading: false,
+  loaded: true,
+  error: null,
+};
+
+const controllerMock: ReturnType<
+  typeof taskCreateModalControllerModule.useTaskCreateModalController
+> = {
+  mode: "edit",
+  workspaceId: "workspace-1",
   onDialogOpenChange: (_open: boolean) => {},
   isBusy: false,
   isFormDisabled: false,
   isRecoveryBlocked: false,
   hasExternalTaskConflict: false,
-  step: "details" as const,
+  step: "details",
   setStep: (_step: "type" | "details") => {},
-  editSection: "spec" as const,
+  editSection: "spec",
   isSpecDirty: false,
   isPlanDirty: false,
   requestSectionChange: (_section: "details" | "spec" | "plan") => {},
   isTypeStepVisible: false,
-  selectedCreateIssueType: "task" as const,
+  selectedCreateIssueType: "task",
   selectCreateIssueType: (_issueType: string) => {},
-  activeDocumentSection: "spec" as const,
+  activeDocumentSection: "spec",
   activeDraft: "# Spec",
   views: {
-    spec: "split" as const,
-    plan: "split" as const,
+    spec: "split",
+    plan: "split",
   },
   setDocumentView: (_section: "spec" | "plan", _view: "write" | "split" | "preview") => {},
-  activeDocument: {
-    updatedAt: null,
-    isLoading: false,
-    error: null,
-    loaded: true,
+  activeDocument: { ...emptyDocument },
+  documents: {
+    spec: { ...emptyDocument },
+    plan: { ...emptyDocument },
   },
-  isSavingDocument: null as "spec" | "plan" | null,
+  isSavingDocument: noDocumentSaveInProgress(),
   isActiveDocumentDirty: false,
   updateDocumentDraft: (_section: "spec" | "plan", _value: string) => {},
   loadDocumentSection: async (_section: "spec" | "plan", _force?: boolean) => {},
   state: {
+    issueType: "task",
+    aiReviewEnabled: false,
     title: "Task",
+    priority: 2,
+    description: "",
+    labels: [],
   },
   priorityComboboxOptions: [],
   knownLabels: [],
-  updateState: (_patch: unknown) => {},
-  footerError: null as string | null,
+  updateState: (_patch: Partial<ComposerState>) => {},
+  footerError: noFooterError(),
   isEditingDocument: true,
-  close: () => {},
+  close: async () => {},
   discardCurrentDocumentDraft: () => {},
   taskId: "TASK-123",
   saveActiveDocument: async () => {},
@@ -59,44 +81,39 @@ const controllerMock = {
   submit: async () => {},
   pendingDiscardIntent: null,
   clearPendingDiscardIntent: () => {},
-  confirmDiscard: () => {},
+  confirmDiscard: async () => {},
+  stageDescriptionImage: async () => {
+    throw new Error("Image staging is not used in this test.");
+  },
+  descriptionAssetUploads: [],
+  descriptionAssetPreviews: new Map(),
 };
 
 describe("TaskCreateModal", () => {
   let TaskCreateModal: typeof import("./task-create-modal").TaskCreateModal;
 
   beforeEach(async () => {
-    mock.module("@/components/features/task-create/task-create-discard-dialog", () => ({
-      TaskCreateDiscardDialog: () => null,
-    }));
-    mock.module("@/components/features/task-create/use-task-create-modal-controller", () => ({
-      useTaskCreateModalController: () => controllerMock,
-    }));
-    mock.module("@/components/features/task-composer/task-document-editor", () => ({
-      TaskDocumentEditor: () => createElement("div", null, "Mock task document editor"),
-    }));
+    testSpies = [
+      spyOn(taskCreateDiscardDialogModule, "TaskCreateDiscardDialog").mockImplementation(() =>
+        createElement("div", { "data-testid": "mock-task-create-discard-dialog" }),
+      ),
+      spyOn(taskCreateModalControllerModule, "useTaskCreateModalController").mockImplementation(
+        () => controllerMock,
+      ),
+      spyOn(taskDocumentEditorModule, "TaskDocumentEditor").mockImplementation(() =>
+        createElement("div", null, "Mock task document editor"),
+      ),
+    ];
     ({ TaskCreateModal } = await import("./task-create-modal"));
   });
 
-  afterEach(async () => {
-    await restoreMockedModules([
-      [
-        "@/components/features/task-create/task-create-discard-dialog",
-        () => import("./task-create-discard-dialog"),
-      ],
-      [
-        "@/components/features/task-create/use-task-create-modal-controller",
-        async () => realTaskCreateModalControllerModule,
-      ],
-      [
-        "@/components/features/task-composer/task-document-editor",
-        () => import("@/components/features/task-composer/task-document-editor"),
-      ],
-    ]);
+  afterEach(() => {
+    for (const testSpy of testSpies) testSpy.mockRestore();
+    testSpies = [];
   });
 
   test("renders the edit modal shell for the document editor flow", async () => {
-    const task = { id: "TASK-123" } as TaskCard;
+    const task = createTaskCardFixture({ id: "TASK-123" });
     const rendered = render(
       createElement(TaskCreateModal, {
         open: true,
@@ -122,7 +139,7 @@ describe("TaskCreateModal", () => {
     controllerMock.isEditingDocument = false;
     controllerMock.footerError =
       "Refresh before continuing. Task: created-task · Phase: compensate_create · Durable state: created_partial";
-    const task = { id: "TASK-123" } as TaskCard;
+    const task = createTaskCardFixture({ id: "TASK-123" });
 
     try {
       const rendered = render(
@@ -136,12 +153,12 @@ describe("TaskCreateModal", () => {
 
       expect(await screen.findByText(/created-task/)).toBeTruthy();
       const closeButton = screen
-        .getAllByRole("button", { name: "Close" })
-        .find((button) => button.textContent === "Close") as HTMLButtonElement | undefined;
+        .getAllByRole<HTMLButtonElement>("button", { name: "Close" })
+        .find((button) => button.textContent === "Close");
       expect(closeButton?.disabled).toBe(false);
-      expect(
-        (screen.getByRole("button", { name: "Save Changes" }) as HTMLButtonElement).disabled,
-      ).toBe(true);
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" }).disabled).toBe(
+        true,
+      );
       await act(async () => rendered.unmount());
     } finally {
       controllerMock.isRecoveryBlocked = false;
@@ -156,7 +173,7 @@ describe("TaskCreateModal", () => {
     controllerMock.isEditingDocument = false;
     controllerMock.footerError =
       "This task changed while you were editing. Close and reopen it to load the latest version before saving.";
-    const task = { id: "TASK-123" } as TaskCard;
+    const task = createTaskCardFixture({ id: "TASK-123" });
 
     try {
       const rendered = render(
@@ -169,9 +186,9 @@ describe("TaskCreateModal", () => {
       );
 
       expect(await screen.findByText(/changed while you were editing/)).toBeTruthy();
-      expect(
-        (screen.getByRole("button", { name: "Save Changes" }) as HTMLButtonElement).disabled,
-      ).toBe(true);
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" }).disabled).toBe(
+        true,
+      );
       await act(async () => rendered.unmount());
     } finally {
       controllerMock.hasExternalTaskConflict = false;

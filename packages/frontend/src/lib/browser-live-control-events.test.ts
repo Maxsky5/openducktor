@@ -24,21 +24,22 @@ describe("browser-live-control-events", () => {
     ).toBe(true);
   });
 
-  test("rejects reconnect events without a transport epoch", () => {
+  test("rejects dev server events", () => {
     expect(
       isBrowserLiveControlEvent({
-        __openducktorBrowserLive: true,
-        kind: BROWSER_LIVE_RECONNECTED_EVENT_KIND,
-      }),
-    ).toBe(false);
-  });
-
-  test("rejects control events with non-string messages", () => {
-    expect(
-      isBrowserLiveControlEvent({
-        __openducktorBrowserLive: true,
-        kind: BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
-        message: 42,
+        type: "terminal_chunk",
+        repoPath: "/repo",
+        taskId: "task-1",
+        terminalChunk: {
+          scriptId: "dev",
+          runIdentity: {
+            runId: "run-1",
+            runOrder: { hostInstanceId: "host-1", generation: 1 },
+          },
+          sequence: 0,
+          data: "ready",
+          timestamp: "2026-08-30T10:00:00.000Z",
+        },
       }),
     ).toBe(false);
   });

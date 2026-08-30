@@ -26,49 +26,57 @@ export const taskMetadataQaReportSchema = z.object({
 });
 export type TaskMetadataQaReport = z.infer<typeof taskMetadataQaReportSchema>;
 
-const isPlainObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const normalizeLegacyTaskMetadataPayload = (value: unknown): unknown => {
-  if (!isPlainObject(value)) {
-    return value;
-  }
-
-  const payload = value;
-  const delivery = payload.delivery;
-  if (!isPlainObject(delivery)) {
-    return value;
-  }
-
-  return {
-    ...payload,
-    pullRequest: payload.pullRequest ?? delivery.linkedPullRequest,
-    directMerge: payload.directMerge ?? delivery.directMerge,
-  };
+const taskMetadataPayloadFields = {
+  spec: taskMetadataDocumentSchema,
+  plan: taskMetadataDocumentSchema,
+  targetBranch: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    gitTargetBranchSchema.optional(),
+  ),
+  qaReport: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    taskMetadataQaReportSchema.optional(),
+  ),
+  pullRequest: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    pullRequestSchema.optional(),
+  ),
+  directMerge: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    directMergeRecordSchema.optional(),
+  ),
+  agentSessions: z.array(agentSessionRecordSchema).default([]),
 };
 
-export const taskMetadataPayloadSchema = z.preprocess(
-  normalizeLegacyTaskMetadataPayload,
-  z.object({
-    spec: taskMetadataDocumentSchema,
-    plan: taskMetadataDocumentSchema,
-    targetBranch: z.preprocess(
-      (value) => (value === null ? undefined : value),
-      gitTargetBranchSchema.optional(),
-    ),
-    qaReport: z.preprocess(
-      (value) => (value === null ? undefined : value),
-      taskMetadataQaReportSchema.optional(),
-    ),
-    pullRequest: z.preprocess(
-      (value) => (value === null ? undefined : value),
-      pullRequestSchema.optional(),
-    ),
-    directMerge: z.preprocess(
-      (value) => (value === null ? undefined : value),
-      directMergeRecordSchema.optional(),
-    ),
-    agentSessions: z.array(agentSessionRecordSchema).default([]),
-  }),
-);
+const taskMetadataPayloadBodySchema = z.object(taskMetadataPayloadFields);
+const legacyTaskDeliverySchema = z.object({
+  linkedPullRequest: pullRequestSchema.nullable().optional(),
+  directMerge: directMergeRecordSchema.nullable().optional(),
+});
+const legacyTaskMetadataPayloadSchema = z.object({
+  ...taskMetadataPayloadFields,
+  delivery: legacyTaskDeliverySchema.nullish(),
+});
+
+export const taskMetadataPayloadSchema = legacyTaskMetadataPayloadSchema
+  .transform(({ delivery, ...payload }): z.input<typeof taskMetadataPayloadBodySchema> => {
+    const linkedPullRequest = delivery?.linkedPullRequest;
+    if (
+      payload.pullRequest === undefined &&
+      linkedPullRequest !== null &&
+      linkedPullRequest !== undefined
+    ) {
+      payload.pullRequest = linkedPullRequest;
+    }
+    const legacyDirectMerge = delivery?.directMerge;
+    if (
+      payload.directMerge === undefined &&
+      legacyDirectMerge !== null &&
+      legacyDirectMerge !== undefined
+    ) {
+      payload.directMerge = legacyDirectMerge;
+    }
+    return payload;
+  })
+  .pipe(taskMetadataPayloadBodySchema);
 export type TaskMetadataPayload = z.infer<typeof taskMetadataPayloadSchema>;

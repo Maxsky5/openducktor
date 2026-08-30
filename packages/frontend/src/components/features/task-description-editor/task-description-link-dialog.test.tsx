@@ -9,7 +9,11 @@ const pressEnter = (element: HTMLElement): void => {
     if (element.tagName === "BUTTON") {
       fireEvent.click(element);
     } else {
-      fireEvent.submit(element.closest("form") as HTMLFormElement);
+      const form = element.closest<HTMLFormElement>("form");
+      if (!form) {
+        throw new Error("Expected the dialog field to belong to a form.");
+      }
+      fireEvent.submit(form);
     }
   }
 };
@@ -88,7 +92,10 @@ describe("TaskDescriptionLinkDialog", () => {
     );
 
     const input = view.getByRole("textbox", { name: "Link destination" });
-    expect((input as HTMLInputElement).value).toBe("https://example.com/old");
+    if (!(input instanceof HTMLInputElement)) {
+      throw new TypeError("Expected link destination to be an input.");
+    }
+    expect(input.value).toBe("https://example.com/old");
     fireEvent.change(input, { target: { value: "https://example.com/new" } });
     fireEvent.click(view.getByRole("button", { name: "Save link" }));
     expect(onSubmit).toHaveBeenCalledWith("https://example.com/new");

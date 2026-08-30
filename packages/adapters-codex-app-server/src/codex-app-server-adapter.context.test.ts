@@ -10,17 +10,14 @@ import {
   createRuntimeStreamSubscription,
   flushCodexAdapterWork,
 } from "./codex-app-server-adapter.test-harness";
+import { codexTokenUsageFixture } from "./test-fixtures/codex-protocol";
 
 const tokenUsageNotification = (totalTokens: number, threadId = "thread/start-runtime-live") => ({
   method: "thread/tokenUsage/updated",
   params: {
     threadId,
     turnId: "turn-1",
-    tokenUsage: {
-      total: { totalTokens },
-      last: { totalTokens },
-      modelContextWindow: 200_000,
-    },
+    tokenUsage: codexTokenUsageFixture(totalTokens),
   },
 });
 
@@ -118,12 +115,12 @@ describe("CodexAppServerAdapter context loading", () => {
     const resumeStarted = createDeferred<void>();
     const resume = createDeferred<void>();
     if (transport && request) {
-      transport.request = async <Response>(input): Promise<Response> => {
+      transport.request = async (input) => {
         if (input.method === "thread/resume") {
           resumeStarted.resolve(undefined);
           await resume.promise;
         }
-        return request<Response>(input);
+        return request(input);
       };
     }
 

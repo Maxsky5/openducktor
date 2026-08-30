@@ -1,5 +1,6 @@
 import {
   type AgentPromptTemplateId,
+  agentPromptTemplateIdValues,
   type RepoConfig,
   type RepoPromptOverrides,
   type RuntimeDescriptor,
@@ -59,13 +60,16 @@ export const ensureDraftAgentDefault = (
     | null
     | undefined,
 ): RepoAgentDefaultInput => {
-  return {
-    ...(value?.runtimeKind ? { runtimeKind: value.runtimeKind } : {}),
+  const draft: RepoAgentDefaultInput = {
     providerId: value?.providerId ?? "",
     modelId: value?.modelId ?? "",
     variant: value?.variant ?? "",
     profileId: value?.profileId ?? "",
   };
+  if (value?.runtimeKind) {
+    draft.runtimeKind = value.runtimeKind;
+  }
+  return draft;
 };
 
 export const updateRoleDefault = (
@@ -192,7 +196,7 @@ export const canClearPromptOverride = (
 export const clearPromptOverride = (
   overrides: RepoPromptOverrides,
   templateId: AgentPromptTemplateId,
-): RepoPromptOverrides => {
+) => {
   const existing = overrides[templateId];
   if (!existing) {
     return overrides;
@@ -209,7 +213,7 @@ export const togglePromptOverrideEnabled = (
   nextEnabled: boolean,
   fallbackTemplate: string,
   fallbackBaseVersion: number,
-): RepoPromptOverrides => {
+) => {
   const existing = overrides[templateId];
   if (nextEnabled) {
     return {
@@ -245,7 +249,7 @@ export const updatePromptOverrideTemplate = (
   templateId: AgentPromptTemplateId,
   nextTemplate: string,
   fallbackBaseVersion: number,
-): RepoPromptOverrides => {
+) => {
   const existing = overrides[templateId];
   return {
     ...overrides,
@@ -263,14 +267,11 @@ const formatPlaceholders = (placeholders: string[]): string => {
   return placeholders.map((placeholder) => `{{${placeholder}}}`).join(", ");
 };
 
-export const buildPromptOverrideValidationErrors = (
-  overrides: RepoPromptOverrides,
-): PromptOverrideValidationErrors => {
+export const buildPromptOverrideValidationErrors = (overrides: RepoPromptOverrides) => {
   const errors: PromptOverrideValidationErrors = {};
 
-  for (const [templateId, override] of Object.entries(overrides) as Array<
-    [AgentPromptTemplateId, RepoPromptOverrides[AgentPromptTemplateId]]
-  >) {
+  for (const templateId of agentPromptTemplateIdValues) {
+    const override = overrides[templateId];
     if (!override || override.enabled === false) {
       continue;
     }
@@ -298,5 +299,5 @@ export const buildPromptOverrideValidationErrors = (
     errors[templateId] = messages.join(" ");
   }
 
-  return errors;
+  return errors satisfies PromptOverrideValidationErrors;
 };

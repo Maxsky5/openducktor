@@ -6,8 +6,8 @@ export type DiagnosticsToastApi = {
   error: (
     message: string,
     options?: { description?: string; id?: string; duration?: number },
-  ) => unknown;
-  dismiss: (toastId?: string | number) => unknown;
+  ) => void;
+  dismiss: (toastId?: string | number) => void;
 };
 
 export function useDiagnosticsToasts(

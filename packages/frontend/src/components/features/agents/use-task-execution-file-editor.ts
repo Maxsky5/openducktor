@@ -313,7 +313,9 @@ export const useTaskExecutionFileEditor = ({
       const latestDraft = draftRef.current;
       const hasNewerDraft = latestDraft !== contentsToSave;
       const isDirty = hasNewerDraft && latestDraft !== saved.contents;
-      if (!hasNewerDraft) draftRef.current = saved.contents;
+      if (!hasNewerDraft) {
+        draftRef.current = saved.contents;
+      }
       dispatch({
         type: "save_succeeded",
         sessionId: session.id,

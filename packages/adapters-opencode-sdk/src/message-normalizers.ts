@@ -1,22 +1,20 @@
-import type { Part } from "@opencode-ai/sdk/v2/client";
 import type {
   AgentModelSelection,
   AgentSubagentReference,
   AgentUserMessageDisplayPart,
   AgentUserMessagePart,
-  AgentUserMessageSourceText,
 } from "@openducktor/core";
 import { basenameForPath } from "@openducktor/path-support";
 import { detectAgentFileReferenceKind } from "./file-reference-utils";
-import { asUnknownRecord, readNumberProp, readRecordProp, readUnknownProp } from "./guards";
 import { buildOpenCodeVisibleText } from "./opencode-user-message-encoding";
+import type { ParsedOpencodeMessage, ParsedOpencodePart } from "./opencode-ingress";
 
 const AUTO_SLASH_COMMAND_OPEN = "<auto-slash-command>";
 const AUTO_SLASH_COMMAND_CLOSE = "</auto-slash-command>";
 
-export const readTextFromParts = (parts: Part[]): string => {
+export const readTextFromParts = (parts: ParsedOpencodePart[]): string => {
   return parts
-    .filter((part): part is Extract<Part, { type: "text" }> => part.type === "text")
+    .filter((part): part is Extract<ParsedOpencodePart, { type: "text" }> => part.type === "text")
     .map((part) => part.text)
     .join("\n")
     .trim();
@@ -46,27 +44,8 @@ const readFilePathFromUrl = (url: string): string | null => {
   }
 };
 
-const normalizeSourceText = (value: unknown): AgentUserMessageSourceText | undefined => {
-  const record = asUnknownRecord(value);
-  if (!record) {
-    return undefined;
-  }
-
-  const textValue = readUnknownProp(record, "value");
-  const start = readNumberProp(record, ["start"]);
-  const end = readNumberProp(record, ["end"]);
-  if (typeof textValue !== "string" || typeof start !== "number" || typeof end !== "number") {
-    return undefined;
-  }
-  return {
-    value: textValue,
-    start,
-    end,
-  };
-};
-
 const normalizeAttachmentPart = (
-  part: Extract<Part, { type: "file" }>,
+  part: Extract<ParsedOpencodePart, { type: "file" }>,
 ): AgentUserMessageDisplayPart | null => {
   const sourcePath = part.source?.type === "file" ? part.source.path.trim() : "";
   const filePath = readFilePathFromUrl(part.url) ?? (sourcePath || part.filename?.trim() || "");
@@ -128,7 +107,7 @@ const normalizeAttachmentPart = (
 };
 
 const normalizeFileReferencePart = (
-  part: Extract<Part, { type: "file" }>,
+  part: Extract<ParsedOpencodePart, { type: "file" }>,
 ): AgentUserMessageDisplayPart | null => {
   const source = part.source;
   const sourceTextValue = source?.type === "file" ? (source.text?.value?.trim() ?? "") : "";
@@ -146,7 +125,6 @@ const normalizeFileReferencePart = (
   }
 
   const name = part.filename?.trim() || basenameForPath(filePath);
-  const sourceText = normalizeSourceText(source.text);
   return {
     kind: "file_reference",
     file: {
@@ -155,21 +133,16 @@ const normalizeFileReferencePart = (
       name,
       kind: detectAgentFileReferenceKind({ filePath, mime: part.mime }),
     },
-    ...(sourceText ? { sourceText } : {}),
+    sourceText: source.text,
   };
 };
 
-type OpenCodeAgentPart = {
-  id?: string;
-  type: "agent";
-  name?: string;
-  source?: unknown;
-};
+type OpenCodeAgentPart = Extract<ParsedOpencodePart, { type: "agent" }>;
 
 const normalizeSubagentReferencePart = (
   part: OpenCodeAgentPart,
 ): AgentUserMessageDisplayPart | null => {
-  const name = typeof part.name === "string" ? part.name.trim() : "";
+  const name = part.name.trim();
   if (name.length === 0) {
     return null;
   }
@@ -178,19 +151,23 @@ const normalizeSubagentReferencePart = (
     name,
     label: name,
   };
-  const sourceText = normalizeSourceText(part.source);
-  return {
+  const displayPart: AgentUserMessageDisplayPart = {
     kind: "subagent_reference",
     subagent,
-    ...(sourceText ? { sourceText } : {}),
   };
+  if (part.source) {
+    displayPart.sourceText = part.source;
+  }
+  return displayPart;
 };
 
 const isAutoSlashCommandEnvelopeText = (text: string): boolean => {
   return text.startsWith(AUTO_SLASH_COMMAND_OPEN) && text.includes(AUTO_SLASH_COMMAND_CLOSE);
 };
 
-export const normalizeUserMessageDisplayParts = (parts: Part[]): AgentUserMessageDisplayPart[] => {
+export const normalizeUserMessageDisplayParts = (
+  parts: ParsedOpencodePart[],
+): AgentUserMessageDisplayPart[] => {
   const normalizedParts: AgentUserMessageDisplayPart[] = [];
   let hasAutoSlashCommandEnvelope = false;
 
@@ -223,7 +200,7 @@ export const normalizeUserMessageDisplayParts = (parts: Part[]): AgentUserMessag
     }
 
     if (part.type === "agent") {
-      const subagentReference = normalizeSubagentReferencePart(part as OpenCodeAgentPart);
+      const subagentReference = normalizeSubagentReferencePart(part);
       if (subagentReference) {
         normalizedParts.push(subagentReference);
       }
@@ -326,132 +303,71 @@ export const readVisibleUserTextFromDisplayParts = (
   return buildOpenCodeVisibleText(userMessageParts);
 };
 
-export const readTextFromMessageInfo = (info: unknown): string => {
-  const record = asUnknownRecord(info);
-  if (!record) {
-    return "";
-  }
-
-  const direct =
-    readUnknownProp(record, "text") ??
-    readUnknownProp(record, "content") ??
-    readUnknownProp(readRecordProp(record, "message"), "text");
-  return typeof direct === "string" ? direct : "";
-};
-
 export const sanitizeAssistantMessage = (rawMessage: string): string => rawMessage.trim();
 
-export const readMessageModelSelection = (info: unknown): AgentModelSelection | undefined => {
-  const record = asUnknownRecord(info);
-  if (!record) {
-    return undefined;
-  }
+type MessageInfoInput = ParsedOpencodeMessage["info"];
 
-  const nestedModel = readRecordProp(record, "model");
-  const providerId =
-    readUnknownProp(record, "providerID") ?? readUnknownProp(nestedModel, "providerID");
-  const modelId = readUnknownProp(record, "modelID") ?? readUnknownProp(nestedModel, "modelID");
-  const variant = readUnknownProp(record, "variant");
-  const profileId = readUnknownProp(record, "agent");
-  if (typeof providerId !== "string" || typeof modelId !== "string") {
-    return undefined;
-  }
+export const readMessageModelSelection = (
+  info: MessageInfoInput,
+): AgentModelSelection | undefined => {
+  const providerId = info.role === "user" ? info.model.providerID : info.providerID;
+  const modelId = info.role === "user" ? info.model.modelID : info.modelID;
+  const variant = info.role === "user" ? info.model.variant : info.variant;
 
-  return {
+  const selection: AgentModelSelection = {
     providerId,
     modelId,
-    ...(typeof variant === "string" && variant.trim().length > 0 ? { variant } : {}),
-    ...(typeof profileId === "string" && profileId.trim().length > 0 ? { profileId } : {}),
   };
+  if (variant?.trim()) {
+    selection.variant = variant;
+  }
+  if (info.agent.trim()) {
+    selection.profileId = info.agent;
+  }
+  return selection;
 };
 
-type TokenBreakdown = {
-  input?: number;
-  output?: number;
-  reasoning?: number;
-  cache?: {
-    read?: number;
-    write?: number;
-  };
-};
+type TokenBreakdown = Extract<ParsedOpencodePart, { type: "step-finish" }>["tokens"];
 
-const toFiniteNumber = (value: unknown): number | null => {
-  if (typeof value !== "number" || Number.isNaN(value) || !Number.isFinite(value)) {
+const toFiniteNumber = (value: number | undefined): number | null => {
+  if (value === undefined || Number.isNaN(value) || !Number.isFinite(value)) {
     return null;
   }
   return value;
 };
 
-const readTokenBreakdown = (value: unknown): TokenBreakdown | undefined => {
-  const record = asUnknownRecord(value);
-  if (!record) {
-    return undefined;
-  }
-
-  const input = readNumberProp(record, ["input"]);
-  const output = readNumberProp(record, ["output"]);
-  const reasoning = readNumberProp(record, ["reasoning"]);
-  const cacheRecord = readRecordProp(record, "cache");
-  const cacheRead = cacheRecord ? readNumberProp(cacheRecord, ["read"]) : undefined;
-  const cacheWrite = cacheRecord ? readNumberProp(cacheRecord, ["write"]) : undefined;
-  const cache =
-    cacheRead !== undefined || cacheWrite !== undefined
-      ? {
-          ...(cacheRead !== undefined ? { read: cacheRead } : {}),
-          ...(cacheWrite !== undefined ? { write: cacheWrite } : {}),
-        }
-      : undefined;
-
-  return {
-    ...(input !== undefined ? { input } : {}),
-    ...(output !== undefined ? { output } : {}),
-    ...(reasoning !== undefined ? { reasoning } : {}),
-    ...(cache ? { cache } : {}),
-  };
-};
-
-const sumTokenBreakdown = (breakdown: TokenBreakdown | null | undefined): number => {
-  if (!breakdown || typeof breakdown !== "object") {
-    return 0;
-  }
+const sumTokenBreakdown = (breakdown: TokenBreakdown): number => {
   const input = toFiniteNumber(breakdown.input) ?? 0;
   const output = toFiniteNumber(breakdown.output) ?? 0;
   const reasoning = toFiniteNumber(breakdown.reasoning) ?? 0;
-  const cacheRead = toFiniteNumber(breakdown.cache?.read) ?? 0;
-  const cacheWrite = toFiniteNumber(breakdown.cache?.write) ?? 0;
+  const cacheRead = toFiniteNumber(breakdown.cache.read) ?? 0;
+  const cacheWrite = toFiniteNumber(breakdown.cache.write) ?? 0;
   return Math.max(0, input + output + reasoning + cacheRead + cacheWrite);
 };
 
-export const toTokenTotal = (value: unknown): number | undefined => {
-  const direct = toFiniteNumber(value);
-  if (direct !== null) {
-    return Math.max(0, direct);
-  }
-  const breakdown = readTokenBreakdown(value);
-  if (!breakdown) {
-    return undefined;
-  }
-
-  const summed = sumTokenBreakdown(breakdown);
-  if (summed > 0) {
-    return summed;
-  }
-  return undefined;
+export const toTokenTotal = (value: TokenBreakdown): number | undefined => {
+  const summed = sumTokenBreakdown(value);
+  return summed > 0 ? summed : undefined;
 };
 
 export const extractMessageTotalTokens = (
-  info: unknown,
-  parts: Part[] | unknown[],
+  info: MessageInfoInput,
+  parts: readonly ParsedOpencodePart[],
 ): number | undefined => {
-  const infoTokens = toTokenTotal(readUnknownProp(info, "tokens"));
-  if (typeof infoTokens === "number" && infoTokens > 0) {
-    return infoTokens;
+  if (info.role === "assistant") {
+    const infoTokens = toTokenTotal(info.tokens);
+    if (infoTokens !== undefined) {
+      return infoTokens;
+    }
   }
 
   let maxPartTokens = 0;
   for (const part of parts) {
-    const partTokens = toTokenTotal(readUnknownProp(part, "tokens"));
-    if (typeof partTokens === "number" && partTokens > maxPartTokens) {
+    if (part.type !== "step-finish") {
+      continue;
+    }
+    const partTokens = toTokenTotal(part.tokens);
+    if (partTokens !== undefined && partTokens > maxPartTokens) {
       maxPartTokens = partTokens;
     }
   }

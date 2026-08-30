@@ -7,11 +7,10 @@ import { toRightPanelStorageKey } from "@/pages/agents/agents-page-selection";
 import { host } from "@/state/operations/host";
 import { withCapturedConsole } from "@/test-utils/console-capture";
 import { withMockedToast } from "@/test-utils/mock-toast";
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { OpenInMenu } from "./open-in-menu";
 
-(
-  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 const REACT_ACT_ENVIRONMENT_WARNING =
   "The current testing environment is not configured to support act";
@@ -29,9 +28,7 @@ describe("OpenInMenu", () => {
   let rendered: ReturnType<typeof render> | null = null;
 
   beforeEach(() => {
-    (
-      globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
-    ).IS_REACT_ACT_ENVIRONMENT = true;
+    enableReactActEnvironment();
   });
 
   afterEach(async () => {
@@ -52,7 +49,7 @@ describe("OpenInMenu", () => {
           { toolId: "finder", iconDataUrl: "data:image/png;base64,finder" },
           { toolId: "ghostty", iconDataUrl: "data:image/png;base64,ghostty" },
           { toolId: "zed", iconDataUrl: "data:image/png;base64,zed" },
-        ] satisfies SystemOpenInToolInfo[],
+        ] satisfies Array<SystemOpenInToolInfo>,
     );
     const onOpenInTool = mock(async () => {});
     host.systemListOpenInTools = systemListOpenInTools;
@@ -92,7 +89,7 @@ describe("OpenInMenu", () => {
       expect(screen.queryByText("Editors & IDEs")).toBeNull();
       expect(screen.queryByTestId("agent-studio-git-open-in-item-finder")).toBeNull();
       expect(
-        (screen.getByTestId("agent-studio-git-open-in-icon-zed") as HTMLImageElement).tagName,
+        screen.getByTestId<HTMLImageElement>("agent-studio-git-open-in-icon-zed").tagName,
       ).toBe("IMG");
 
       await runWithReactAct(async () => {
@@ -113,7 +110,7 @@ describe("OpenInMenu", () => {
       async () =>
         [
           { toolId: "finder", iconDataUrl: "data:image/png;base64,finder" },
-        ] satisfies SystemOpenInToolInfo[],
+        ] satisfies Array<SystemOpenInToolInfo>,
     );
 
     try {
@@ -129,7 +126,7 @@ describe("OpenInMenu", () => {
         </QueryProvider>,
       );
 
-      const trigger = screen.getByTestId("agent-studio-git-open-in-trigger") as HTMLButtonElement;
+      const trigger: HTMLButtonElement = screen.getByTestId("agent-studio-git-open-in-trigger");
       const disabledTrigger = screen.getByTestId("agent-studio-git-open-in-disabled-trigger");
 
       expect(trigger.disabled).toBe(true);
@@ -151,7 +148,7 @@ describe("OpenInMenu", () => {
       async () =>
         [
           { toolId: "finder", iconDataUrl: "data:image/png;base64,finder" },
-        ] satisfies SystemOpenInToolInfo[],
+        ] satisfies Array<SystemOpenInToolInfo>,
     );
 
     try {
@@ -163,7 +160,10 @@ describe("OpenInMenu", () => {
         </QueryProvider>,
       );
 
-      const trigger = screen.getByTestId("agent-studio-git-open-in-trigger") as HTMLButtonElement;
+      const trigger = screen.getByTestId("agent-studio-git-open-in-trigger");
+      if (!(trigger instanceof HTMLButtonElement)) {
+        throw new Error("Expected the open-in trigger to be a button");
+      }
 
       expect(trigger.disabled).toBe(true);
       expect(
@@ -184,7 +184,7 @@ describe("OpenInMenu", () => {
         async () =>
           [
             { toolId: "zed", iconDataUrl: "data:image/png;base64,zed" },
-          ] satisfies SystemOpenInToolInfo[],
+          ] satisfies Array<SystemOpenInToolInfo>,
       );
 
       try {
@@ -228,7 +228,7 @@ describe("OpenInMenu", () => {
           { toolId: "finder", iconDataUrl: "data:image/png;base64,finder" },
           { toolId: "terminal", iconDataUrl: "data:image/png;base64,terminal" },
           { toolId: "zed", iconDataUrl: "data:image/png;base64,zed" },
-        ] satisfies SystemOpenInToolInfo[],
+        ] satisfies Array<SystemOpenInToolInfo>,
     );
     const onOpenInTool = mock(async () => {});
 
@@ -278,7 +278,7 @@ describe("OpenInMenu", () => {
         [
           { toolId: "explorer", iconDataUrl: null },
           { toolId: "vscode", iconDataUrl: null },
-        ] satisfies SystemOpenInToolInfo[],
+        ] satisfies Array<SystemOpenInToolInfo>,
     );
     const onOpenInTool = mock(async () => {});
 
@@ -309,7 +309,7 @@ describe("OpenInMenu", () => {
 
   test("shows platform-neutral empty discovery copy and disables the default action", async () => {
     const originalSystemListOpenInTools = host.systemListOpenInTools;
-    const systemListOpenInTools = mock(async () => [] satisfies SystemOpenInToolInfo[]);
+    const systemListOpenInTools = mock(async () => [] satisfies Array<SystemOpenInToolInfo>);
     host.systemListOpenInTools = systemListOpenInTools;
 
     try {
@@ -326,9 +326,9 @@ describe("OpenInMenu", () => {
         </QueryProvider>,
       );
 
-      const defaultButton = screen.getByTestId(
+      const defaultButton: HTMLButtonElement = screen.getByTestId(
         "agent-studio-git-open-in-default-button",
-      ) as HTMLButtonElement;
+      );
       expect(defaultButton.disabled).toBe(true);
 
       await runWithReactAct(async () => {
@@ -354,7 +354,7 @@ describe("OpenInMenu", () => {
 
       return [
         { toolId: "finder", iconDataUrl: "data:image/png;base64,finder" },
-      ] satisfies SystemOpenInToolInfo[];
+      ] satisfies Array<SystemOpenInToolInfo>;
     });
     host.systemListOpenInTools = systemListOpenInTools;
 
@@ -378,8 +378,7 @@ describe("OpenInMenu", () => {
 
       expect(await screen.findByTestId("agent-studio-git-open-in-error")).toBeTruthy();
       expect(
-        (screen.getByTestId("agent-studio-git-open-in-default-button") as HTMLButtonElement)
-          .disabled,
+        screen.getByTestId<HTMLButtonElement>("agent-studio-git-open-in-default-button").disabled,
       ).toBe(true);
 
       await runWithReactAct(async () => {

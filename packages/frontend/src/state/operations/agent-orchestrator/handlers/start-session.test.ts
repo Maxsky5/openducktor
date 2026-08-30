@@ -27,6 +27,7 @@ import {
   sessionIdentity,
   taskFixture,
 } from "./start-session.test-helpers";
+import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
 
 const waitForSessionCount = async (
   getCount: () => number,
@@ -67,7 +68,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
   });
 
   test("starts through a normalized workflow control without loading runtime policy settings", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter());
     const originalStartSession = adapter.startSession;
     let startInput: unknown;
     adapter.startSession = async (input) => {
@@ -549,7 +550,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     if (!persistedRecord) {
       throw new Error("Expected persisted record to be captured.");
     }
-    const persistedSessionRecord = persistedRecord as AgentSessionRecord;
+    const persistedSessionRecord: AgentSessionRecord = persistedRecord;
 
     expect(persistedSessionRecord.externalSessionId).toBe("external-1");
     expect("status" in persistedSessionRecord).toBe(false);
@@ -573,9 +574,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       startedAt: "2026-02-22T08:00:00.000Z",
     });
     adapter.stopSession = async (sessionRef) => {
-      stoppedSessionIds.push(
-        typeof sessionRef === "string" ? sessionRef : sessionRef.externalSessionId,
-      );
+      stoppedSessionIds.push(sessionRef.externalSessionId);
     };
 
     const { start } = createStartSessionTestHarness({
@@ -1411,15 +1410,16 @@ describe("agent-orchestrator/handlers/start-session", () => {
         throw new Error("startSession should not be reached");
       };
 
-      const selectedModel = (() => {
+      // @ts-expect-error -- This case verifies that a fresh session rejects a missing or blank runtime kind.
+      const selectedModel: AgentModelSelection = (() => {
         if (runtimeKind === undefined) {
           const { runtimeKind: _runtimeKind, ...selectionWithoutRuntime } = BUILD_SELECTION;
-          return selectionWithoutRuntime as AgentModelSelection;
+          return selectionWithoutRuntime;
         }
         return {
           ...BUILD_SELECTION,
           runtimeKind,
-        } as unknown as AgentModelSelection;
+        };
       })();
 
       const { start } = createStartSessionTestHarness({
@@ -1472,7 +1472,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       variant: "high",
       profileId: "Hephaestus",
     };
-    let observedStartInput: { model?: AgentModelSelection } | null = null;
+    let observedStartInput: Parameters<OpencodeSdkAdapter["startSession"]>[0] | null = null;
 
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;

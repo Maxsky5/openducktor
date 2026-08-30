@@ -1,42 +1,13 @@
-import { extractThreadIdFromParams } from "./codex-app-server-requests";
-import { isPlainObject } from "./codex-app-server-shared";
 import { extractCodexTokenUsageTotals } from "./codex-app-server-transcript";
 import type { CodexNotificationRecord, CodexSessionContextUsage } from "./types";
+import { z } from "zod";
 
 const contextUsageKey = (runtimeId: string, threadId: string): string =>
   JSON.stringify([runtimeId, threadId]);
 
-const parseContextUsageKey = (key: string): [string, string] => JSON.parse(key) as [string, string];
-
-const canonicalZeroUsage = (params: unknown): CodexSessionContextUsage | null => {
-  if (!isPlainObject(params) || !isPlainObject(params.tokenUsage)) {
-    return null;
-  }
-  const usage = params.tokenUsage;
-  if (!isPlainObject(usage.last) || !isPlainObject(usage.total)) {
-    return null;
-  }
-  if (
-    usage.last.totalTokens !== 0 ||
-    typeof usage.total.totalTokens !== "number" ||
-    !Number.isFinite(usage.total.totalTokens) ||
-    usage.total.totalTokens < 0
-  ) {
-    return null;
-  }
-  const contextWindow = usage.modelContextWindow;
-  if (
-    contextWindow !== null &&
-    contextWindow !== undefined &&
-    (typeof contextWindow !== "number" || contextWindow <= 0)
-  ) {
-    return null;
-  }
-  return {
-    totalTokens: 0,
-    ...(typeof contextWindow === "number" ? { contextWindow } : {}),
-  };
-};
+const contextUsageKeySchema = z.tuple([z.string(), z.string()]);
+const parseContextUsageKey = (key: string): [string, string] =>
+  contextUsageKeySchema.parse(JSON.parse(key));
 
 export class CodexContextUsageTracker {
   private readonly latestByKey = new Map<string, CodexSessionContextUsage>();
@@ -89,12 +60,8 @@ export class CodexContextUsageTracker {
     if (notification.method !== "thread/tokenUsage/updated") {
       return;
     }
-    const threadId = extractThreadIdFromParams(notification.params);
-    if (!threadId) {
-      throw new Error("Codex context usage notification is missing threadId.");
-    }
-    const usage =
-      extractCodexTokenUsageTotals(notification.params) ?? canonicalZeroUsage(notification.params);
+    const { threadId } = notification.params;
+    const usage = extractCodexTokenUsageTotals(notification.params);
     if (!usage) {
       throw new Error(
         `Codex context usage notification for thread '${threadId}' has invalid token usage.`,

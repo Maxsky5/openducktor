@@ -16,12 +16,7 @@ const createChatSettingsLoadError = (workspaceRepoPath: string, cause: unknown):
   );
 };
 
-export function useAgentStudioChatSettings(args: { workspaceRepoPath: string | null }): {
-  chatSettings: ChatSettings;
-  reusablePrompts: ReusablePrompt[];
-  chatSettingsLoadError: Error | null;
-  retryChatSettingsLoad: () => void;
-} {
+export function useAgentStudioChatSettings(args: { workspaceRepoPath: string | null }) {
   const { workspaceRepoPath } = args;
   const hasWorkspace = workspaceRepoPath !== null;
   const { chatSettings, chatSettingsError, retryChatSettingsLoad } = useWorkspaceChatSettings({
@@ -47,5 +42,10 @@ export function useAgentStudioChatSettings(args: { workspaceRepoPath: string | n
       : DEFAULT_REUSABLE_PROMPTS,
     chatSettingsLoadError,
     retryChatSettingsLoad,
+  } satisfies {
+    chatSettings: ChatSettings;
+    reusablePrompts: ReusablePrompt[];
+    chatSettingsLoadError: Error | null;
+    retryChatSettingsLoad: () => void;
   };
 }

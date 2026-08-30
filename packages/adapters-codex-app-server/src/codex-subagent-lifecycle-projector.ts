@@ -1,17 +1,16 @@
 import type { AgentEvent } from "@openducktor/core";
-import { extractThreadIdFromParams } from "./codex-app-server-requests";
-import {
-  extractStringField,
-  isPlainObject,
-  MAX_CODEX_BUFFERED_THREAD_COUNT,
-  trimOldestMapKeys,
-} from "./codex-app-server-shared";
+import { codexNotificationThreadId } from "./codex-app-server-requests";
+import { MAX_CODEX_BUFFERED_THREAD_COUNT, trimOldestMapKeys } from "./codex-app-server-shared";
 import type { CodexSessionLookup } from "./codex-local-session-state";
 import {
   type CodexSubagentLifecycleUpdate,
   codexSubagentLifecycleUpdateFromNotification,
 } from "./codex-subagent-lifecycle";
-import type { CodexSubagentLinkState, CodexSubagentRoute } from "./codex-subagent-link-state";
+import type {
+  CodexSubagentLinkInput,
+  CodexSubagentLinkState,
+  CodexSubagentRoute,
+} from "./codex-subagent-link-state";
 import type { CodexNotificationRecord, CodexSessionState } from "./types";
 
 type CodexSubagentLifecycleProjectorDeps = {
@@ -20,13 +19,13 @@ type CodexSubagentLifecycleProjectorDeps = {
   emitParentSessionEvent: (externalSessionId: string, event: AgentEvent) => void;
 };
 
-const LIFECYCLE_STATUS_PRECEDENCE: Record<CodexSubagentLifecycleUpdate["status"], number> = {
+const LIFECYCLE_STATUS_PRECEDENCE = {
   pending: 0,
   running: 1,
   cancelled: 2,
   completed: 3,
   error: 4,
-};
+} satisfies Record<CodexSubagentLifecycleUpdate["status"], number>;
 
 const isNewerLifecycleUpdate = (
   existing: CodexSubagentLifecycleUpdate,
@@ -44,9 +43,10 @@ const isNewerLifecycleUpdate = (
 };
 
 const hasLifecycleStatus = (notification: CodexNotificationRecord): boolean => {
-  const params = isPlainObject(notification.params) ? notification.params : null;
-  const turn = params && isPlainObject(params.turn) ? params.turn : null;
-  return extractStringField(turn, ["status"]) !== null;
+  if (notification.method !== "turn/started" && notification.method !== "turn/completed") {
+    return false;
+  }
+  return notification.params.turn.status.length > 0;
 };
 
 export class CodexSubagentLifecycleProjector {
@@ -87,7 +87,7 @@ export class CodexSubagentLifecycleProjector {
     if (notification.method !== "turn/started" && notification.method !== "turn/completed") {
       return;
     }
-    const childThreadId = extractThreadIdFromParams(notification.params);
+    const childThreadId = codexNotificationThreadId(notification);
     if (!childThreadId) {
       throw new Error(`Codex ${notification.method} notification is missing threadId.`);
     }
@@ -140,18 +140,23 @@ export class CodexSubagentLifecycleProjector {
       );
     }
     const previousStatus = this.deps.subagents.statusForChild(childThreadId, runtimeId);
-    const part = this.deps.subagents.upsertLink({
+    const linkInput: CodexSubagentLinkInput = {
       runtimeId,
       parentThreadId: route.parentExternalSessionId,
       childThreadId,
       itemId: childThreadId,
       status: update.status,
-      ...(update.error ? { error: update.error } : {}),
       allowStatusRestart: update.allowStatusRestart,
-      ...(update.status === "running"
-        ? { startedAtMs: update.timestampMs }
-        : { endedAtMs: update.timestampMs }),
-    });
+    };
+    if (update.error) {
+      linkInput.error = update.error;
+    }
+    if (update.status === "running") {
+      linkInput.startedAtMs = update.timestampMs;
+    } else {
+      linkInput.endedAtMs = update.timestampMs;
+    }
+    const part = this.deps.subagents.upsertLink(linkInput);
     if (!parentSession) {
       return false;
     }

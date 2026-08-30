@@ -55,7 +55,9 @@ export function OnboardingLayout({ stage, children }: OnboardingLayoutProps): Re
 
   useLayoutEffect(() => {
     const scrollContainer = scrollContainerRef.current;
-    if (scrollContainer?.dataset.stage === stage) scrollContainer.scrollTop = 0;
+    if (scrollContainer?.dataset.stage === stage) {
+      scrollContainer.scrollTop = 0;
+    }
   }, [stage]);
 
   return (

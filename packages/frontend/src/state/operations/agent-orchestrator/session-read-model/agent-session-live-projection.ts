@@ -90,82 +90,115 @@ type PendingInputRouting = {
 const toApprovalRequest = (
   request: AgentSessionLivePendingApprovalRequest,
   routing?: PendingInputRouting,
-): AgentApprovalRequest => ({
-  requestId: request.requestId,
-  requestType: request.requestType,
-  title: request.title,
-  ...(request.summary !== undefined ? { summary: request.summary } : {}),
-  ...(request.details !== undefined ? { details: request.details } : {}),
-  ...(request.affectedPaths !== undefined ? { affectedPaths: request.affectedPaths } : {}),
-  ...(request.command !== undefined
-    ? {
-        command: {
-          command: request.command.command,
-          ...(request.command.workingDirectory !== undefined
-            ? { workingDirectory: request.command.workingDirectory }
-            : {}),
-        },
-      }
-    : {}),
-  ...(request.action !== undefined
-    ? {
-        action: {
-          name: request.action.name,
-          ...(request.action.description !== undefined
-            ? { description: request.action.description }
-            : {}),
-        },
-      }
-    : {}),
-  ...(request.tool !== undefined
-    ? {
-        tool: {
-          name: request.tool.name,
-          ...(request.tool.title !== undefined ? { title: request.tool.title } : {}),
-          ...(request.tool.input !== undefined ? { input: request.tool.input } : {}),
-        },
-      }
-    : {}),
-  ...(request.mutation !== undefined ? { mutation: request.mutation } : {}),
-  ...(request.supportedReplyOutcomes !== undefined
-    ? { supportedReplyOutcomes: request.supportedReplyOutcomes }
-    : {}),
-  ...routing,
-});
+): AgentApprovalRequest => {
+  const approval: AgentApprovalRequest = {
+    requestId: request.requestId,
+    requestType: request.requestType,
+    title: request.title,
+  };
+  if (request.summary !== undefined) {
+    approval.summary = request.summary;
+  }
+  if (request.details !== undefined) {
+    approval.details = request.details;
+  }
+  if (request.affectedPaths !== undefined) {
+    approval.affectedPaths = request.affectedPaths;
+  }
+  if (request.command !== undefined) {
+    const command: NonNullable<AgentApprovalRequest["command"]> = {
+      command: request.command.command,
+    };
+    if (request.command.workingDirectory !== undefined) {
+      command.workingDirectory = request.command.workingDirectory;
+    }
+    approval.command = command;
+  }
+  if (request.action !== undefined) {
+    const action: NonNullable<AgentApprovalRequest["action"]> = { name: request.action.name };
+    if (request.action.description !== undefined) {
+      action.description = request.action.description;
+    }
+    approval.action = action;
+  }
+  if (request.tool !== undefined) {
+    const tool: NonNullable<AgentApprovalRequest["tool"]> = { name: request.tool.name };
+    if (request.tool.title !== undefined) {
+      tool.title = request.tool.title;
+    }
+    if (request.tool.input !== undefined) {
+      tool.input = request.tool.input;
+    }
+    approval.tool = tool;
+  }
+  if (request.mutation !== undefined) {
+    approval.mutation = request.mutation;
+  }
+  if (request.supportedReplyOutcomes !== undefined) {
+    approval.supportedReplyOutcomes = request.supportedReplyOutcomes;
+  }
+  if (routing) {
+    approval.source = routing.source;
+    approval.responseSession = routing.responseSession;
+  }
+  return approval;
+};
 
 const toQuestionRequest = (
   request: AgentSessionLivePendingQuestionRequest,
   routing?: PendingInputRouting,
-): AgentQuestionRequest => ({
-  requestId: request.requestId,
-  questions: request.questions.map((question) => ({
-    header: question.header,
-    question: question.question,
-    options: question.options,
-    ...(question.multiple !== undefined ? { multiple: question.multiple } : {}),
-    ...(question.custom !== undefined ? { custom: question.custom } : {}),
-  })),
-  ...routing,
-});
+): AgentQuestionRequest => {
+  const questions: AgentQuestionRequest["questions"] = request.questions.map((question) => {
+    const projectedQuestion: AgentQuestionRequest["questions"][number] = {
+      header: question.header,
+      question: question.question,
+      options: question.options,
+    };
+    if (question.multiple !== undefined) {
+      projectedQuestion.multiple = question.multiple;
+    }
+    if (question.custom !== undefined) {
+      projectedQuestion.custom = question.custom;
+    }
+    return projectedQuestion;
+  });
+  const questionRequest: AgentQuestionRequest = { requestId: request.requestId, questions };
+  if (routing) {
+    questionRequest.source = routing.source;
+    questionRequest.responseSession = routing.responseSession;
+  }
+  return questionRequest;
+};
 
 export const toContextUsage = (
   contextUsage: AgentSessionLiveSnapshot["contextUsage"],
-): Exclude<AgentSessionState["contextUsage"], undefined> =>
-  contextUsage === null
-    ? null
-    : {
-        totalTokens: contextUsage.totalTokens,
-        ...(contextUsage.contextWindow !== undefined
-          ? { contextWindow: contextUsage.contextWindow }
-          : {}),
-        ...(contextUsage.outputLimit !== undefined
-          ? { outputLimit: contextUsage.outputLimit }
-          : {}),
-        ...(contextUsage.providerId !== undefined ? { providerId: contextUsage.providerId } : {}),
-        ...(contextUsage.modelId !== undefined ? { modelId: contextUsage.modelId } : {}),
-        ...(contextUsage.variant !== undefined ? { variant: contextUsage.variant } : {}),
-        ...(contextUsage.profileId !== undefined ? { profileId: contextUsage.profileId } : {}),
-      };
+): Exclude<AgentSessionState["contextUsage"], undefined> => {
+  if (contextUsage === null) {
+    return null;
+  }
+  const projected: NonNullable<AgentSessionState["contextUsage"]> = {
+    totalTokens: contextUsage.totalTokens,
+  };
+  if (contextUsage.contextWindow !== undefined) {
+    projected.contextWindow = contextUsage.contextWindow;
+  }
+  if (contextUsage.outputLimit !== undefined) {
+    projected.outputLimit = contextUsage.outputLimit;
+  }
+  if (contextUsage.providerId !== undefined) {
+    projected.providerId = contextUsage.providerId;
+  }
+  if (contextUsage.modelId !== undefined) {
+    projected.modelId = contextUsage.modelId;
+  }
+  if (contextUsage.variant !== undefined) {
+    projected.variant = contextUsage.variant;
+  }
+  if (contextUsage.profileId !== undefined) {
+    projected.profileId = contextUsage.profileId;
+  }
+  return projected;
+};
 
 const applyDirectSnapshot = (
   current: AgentSessionState,
@@ -390,21 +423,14 @@ const materializePersistedSessions = ({
   for (const { taskId, record } of taskSessionRecords.records) {
     const identity = toPersistedSessionIdentity(record);
     const currentSession = getAgentSession(current, identity);
-    collection = replaceAgentSession(
-      collection,
-      toPersistedSessionView({
-        taskId,
-        record,
-        ...(currentSession
-          ? {
-              current: resetSessionLiveStateForSnapshot(
-                currentSession,
-                liveSnapshotKeys.has(agentSessionIdentityKey(currentSession)),
-              ),
-            }
-          : {}),
-      }),
-    );
+    const persistedInput: Parameters<typeof toPersistedSessionView>[0] = { taskId, record };
+    if (currentSession) {
+      persistedInput.current = resetSessionLiveStateForSnapshot(
+        currentSession,
+        liveSnapshotKeys.has(agentSessionIdentityKey(currentSession)),
+      );
+    }
+    collection = replaceAgentSession(collection, toPersistedSessionView(persistedInput));
   }
   return collection;
 };
@@ -462,14 +488,11 @@ export const applyTaskSessionRecords = ({
   for (const { taskId, record } of taskSessionRecords.records) {
     const identity = toPersistedSessionIdentity(record);
     const currentSession = getAgentSession(collection, identity);
-    collection = replaceAgentSession(
-      collection,
-      toPersistedSessionView({
-        taskId,
-        record,
-        ...(currentSession ? { current: currentSession } : {}),
-      }),
-    );
+    const persistedInput: Parameters<typeof toPersistedSessionView>[0] = { taskId, record };
+    if (currentSession) {
+      persistedInput.current = currentSession;
+    }
+    collection = replaceAgentSession(collection, toPersistedSessionView(persistedInput));
   }
   return rebuildProjectedPendingInput(collection);
 };

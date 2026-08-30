@@ -65,12 +65,15 @@ function ReadyInlineWorkspaceCreationForm({
     addWorkspace,
     initialPickerOpen: true,
   });
-  const folderPicker = useInlineFolderPickerController({
-    ...(workspaceCreation.repoPath ? { initialPath: workspaceCreation.repoPath } : {}),
+  const folderPickerInput: Parameters<typeof useInlineFolderPickerController>[0] = {
     requireGitRepo: true,
     onCancel: workspaceCreation.closePicker,
     onConfirm: workspaceCreation.confirmRepo,
-  });
+  };
+  if (workspaceCreation.repoPath) {
+    folderPickerInput.initialPath = workspaceCreation.repoPath;
+  }
+  const folderPicker = useInlineFolderPickerController(folderPickerInput);
   return (
     <>
       <WorkspaceCreationFields
@@ -118,29 +121,30 @@ const renderForm = ({
   onSuccess?: () => void;
   duplicate?: boolean;
 }): void => {
+  const formProps: Parameters<typeof WorkspaceCreationForm>[0] = {
+    workspaces: duplicate
+      ? [
+          {
+            workspaceId: "existing",
+            workspaceName: "Existing",
+            repoPath: "/repo",
+            isActive: true,
+            hasConfig: true,
+            configuredWorktreeBasePath: null,
+            defaultWorktreeBasePath: "/worktrees",
+            effectiveWorktreeBasePath: "/worktrees",
+          },
+        ]
+      : [],
+    addWorkspace,
+  };
+  if (onSuccess) {
+    formProps.onSuccess = onSuccess;
+  }
   const view = render(
     <QueryProvider useIsolatedClient>
       <SeedFilesystemDirectory />
-      <WorkspaceCreationForm
-        workspaces={
-          duplicate
-            ? [
-                {
-                  workspaceId: "existing",
-                  workspaceName: "Existing",
-                  repoPath: "/repo",
-                  isActive: true,
-                  hasConfig: true,
-                  configuredWorktreeBasePath: null,
-                  defaultWorktreeBasePath: "/worktrees",
-                  effectiveWorktreeBasePath: "/worktrees",
-                },
-              ]
-            : []
-        }
-        addWorkspace={addWorkspace}
-        {...(onSuccess ? { onSuccess } : {})}
-      />
+      <WorkspaceCreationForm {...formProps} />
     </QueryProvider>,
   );
   mountedViews.add(view);
@@ -197,7 +201,7 @@ describe("WorkspaceCreationForm", () => {
       "Repository is already configured as Existing.",
     );
     expect(
-      (screen.getByRole("button", { name: /^open repository$/i }) as HTMLButtonElement).disabled,
+      screen.getByRole<HTMLButtonElement>("button", { name: /^open repository$/i }).disabled,
     ).toBe(true);
     expect(addWorkspace).not.toHaveBeenCalled();
   });
@@ -209,12 +213,15 @@ describe("WorkspaceCreationForm", () => {
     renderForm({ addWorkspace, onSuccess });
     await chooseRepository();
 
-    expect((screen.getByLabelText("Workspace ID") as HTMLInputElement).value).toBe("repo");
-    expect((screen.getByLabelText("Workspace name") as HTMLInputElement).value).toBe("repo");
+    expect(screen.getByLabelText<HTMLInputElement>("Workspace ID").value).toBe("repo");
+    expect(screen.getByLabelText<HTMLInputElement>("Workspace name").value).toBe("repo");
     fireEvent.click(screen.getByRole("button", { name: /^open repository$/i }));
 
     const busyButton = await screen.findByRole("button", { name: "Opening repository..." });
-    expect((busyButton as HTMLButtonElement).disabled).toBe(true);
+    if (!(busyButton instanceof HTMLButtonElement)) {
+      throw new TypeError("Expected the busy repository action to be a button.");
+    }
+    expect(busyButton.disabled).toBe(true);
     expect(addWorkspace).toHaveBeenCalledWith({
       repoPath: "/repo",
       workspaceId: "repo",
@@ -256,7 +263,7 @@ describe("WorkspaceCreationForm", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^open repository$/i }));
     await screen.findByText("Repository open failed");
-    expect((screen.getByLabelText("Repository path") as HTMLInputElement).value).toBe("/repo");
+    expect(screen.getByLabelText<HTMLInputElement>("Repository path").value).toBe("/repo");
     fireEvent.click(screen.getByRole("button", { name: /^open repository$/i }));
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));

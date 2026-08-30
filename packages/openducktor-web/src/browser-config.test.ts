@@ -1,21 +1,25 @@
 import { beforeEach, describe, expect, test } from "bun:test";
+import { z } from "zod";
 import {
   configureBrowserRuntimeConfig,
   getBrowserAuthToken,
   getBrowserBackendUrl,
 } from "./browser-config";
 
-type OriginValidationCase = {
-  name: string;
-  input: string;
-  expected?: string;
-  errorIncludes?: string;
-};
+const originValidationCaseSchema = z.object({
+  name: z.string(),
+  input: z.string(),
+  expected: z.string().optional(),
+  errorIncludes: z.string().optional(),
+});
+type OriginValidationCase = z.output<typeof originValidationCaseSchema>;
 
 const loadOriginValidationCases = async (): Promise<OriginValidationCase[]> =>
-  (await Bun.file(
-    new URL("./browser-origin-validation-cases.json", import.meta.url),
-  ).json()) as OriginValidationCase[];
+  z
+    .array(originValidationCaseSchema)
+    .parse(
+      await Bun.file(new URL("./browser-origin-validation-cases.json", import.meta.url)).json(),
+    );
 
 describe("browser web host config", () => {
   beforeEach(() => {

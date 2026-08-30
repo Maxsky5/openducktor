@@ -2,82 +2,44 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeApprovalReplyOutcome,
 } from "@openducktor/contracts";
+import type { OpenCodeProtocolObject } from "./guards";
 import { type AgentPendingApprovalRequest, classifyAgentApprovalMutation } from "@openducktor/core";
+import { z } from "zod";
 
-type UnknownRecord = Record<string, unknown>;
 type OpenCodePermissionReply = "once" | "always" | "reject";
 
 const OPENCODE_APPROVAL_OUTCOMES = ["approve_once", "approve_session", "reject"] as const;
 const OPENCODE_ODT_WORKFLOW_TOOL_ALIASES =
   OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical;
 
-const asRecord = (value: unknown): UnknownRecord | null => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return null;
-  }
-  return value as UnknownRecord;
-};
-
-const readString = (record: UnknownRecord, keys: string[]): string | undefined => {
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "string" && value.trim().length > 0) {
-      return value;
-    }
-  }
-  return undefined;
-};
-
-const readStringArray = (record: UnknownRecord, keys: string[]): string[] => {
-  for (const key of keys) {
-    const value = record[key];
-    if (!Array.isArray(value)) {
-      continue;
-    }
-    return value.filter((entry): entry is string => typeof entry === "string");
-  }
-  return [];
-};
-
-const readOptionalString = (record: UnknownRecord | undefined, key: string): string | undefined => {
+const readOptionalString = (
+  record: OpenCodeProtocolObject | undefined,
+  key: string,
+): string | undefined => {
   const value = record?.[key];
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+  const parsed = z.string().safeParse(value);
+  return parsed.success && parsed.data.trim().length > 0 ? parsed.data : undefined;
 };
 
 export type ParsedOpenCodePermissionRequest = {
   requestId: string;
   permission: string;
   patterns: string[];
-  metadata?: UnknownRecord;
+  save?: string[];
+  metadata?: OpenCodeProtocolObject;
 };
 
-export const normalizeOpenCodeApprovalRequest = (value: unknown): AgentPendingApprovalRequest => {
-  const record = asRecord(value);
-  if (!record) {
-    throw new Error("Malformed Opencode pending approval payload: expected an object.");
-  }
-
-  const requestId = readString(record, ["id", "requestID", "requestId"]);
-  const permission = readString(record, ["permission", "action"]);
-  if (!requestId) {
-    throw new Error("Malformed Opencode pending approval payload: missing request id.");
-  }
-  if (!permission) {
-    throw new Error("Malformed Opencode pending approval payload: missing permission.");
-  }
-
-  return toAgentApprovalRequestFromOpenCodePermission({
-    requestId,
-    permission,
-    patterns: readStringArray(record, ["patterns", "resources"]),
-    ...(asRecord(record.metadata) ? { metadata: asRecord(record.metadata) as UnknownRecord } : {}),
-  });
+export const normalizeOpenCodeApprovalRequest = (
+  request: ParsedOpenCodePermissionRequest,
+): AgentPendingApprovalRequest => {
+  return toAgentApprovalRequestFromOpenCodePermission(request);
 };
 
 export const toAgentApprovalRequestFromOpenCodePermission = ({
   requestId,
   permission,
   patterns,
+  save,
   metadata,
 }: ParsedOpenCodePermissionRequest): AgentPendingApprovalRequest => {
   const toolName = readOptionalString(metadata, "tool");
@@ -88,15 +50,20 @@ export const toAgentApprovalRequestFromOpenCodePermission = ({
   const summary = `OpenCode requested approval for ${permission}.`;
   const workingDirectory = readOptionalString(metadata, "workingDirectory");
 
-  return {
+  const opencodeMetadata: OpenCodeProtocolObject = { permission, patterns };
+  if (save && save.length > 0) {
+    opencodeMetadata.save = save;
+  }
+  if (metadata) {
+    opencodeMetadata.metadata = metadata;
+  }
+
+  const approvalRequest: AgentPendingApprovalRequest = {
     requestId,
     requestType: toolName ? "runtime_tool" : "permission_grant",
     title,
     summary,
-    ...(patterns.length > 0 ? { affectedPaths: patterns } : {}),
-    ...(command ? { command: { command, ...(workingDirectory ? { workingDirectory } : {}) } } : {}),
     action: { name: permission },
-    ...(toolName ? { tool: { name: toolName } } : {}),
     mutation: classifyAgentApprovalMutation({
       actionName: permission,
       toolName,
@@ -106,13 +73,19 @@ export const toAgentApprovalRequestFromOpenCodePermission = ({
     }),
     supportedReplyOutcomes: [...OPENCODE_APPROVAL_OUTCOMES],
     metadata: {
-      opencode: {
-        permission,
-        patterns,
-        ...(metadata ? { metadata } : {}),
-      },
+      opencode: opencodeMetadata,
     },
   };
+  if (patterns.length > 0) {
+    approvalRequest.affectedPaths = patterns;
+  }
+  if (command) {
+    approvalRequest.command = workingDirectory ? { command, workingDirectory } : { command };
+  }
+  if (toolName) {
+    approvalRequest.tool = { name: toolName };
+  }
+  return approvalRequest;
 };
 
 export const toOpenCodePermissionReply = (

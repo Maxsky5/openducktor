@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import type { CodexAppServerTurn } from "@openducktor/contracts";
+import { codexThreadFixture } from "./codex-app-server-adapter.test-harness";
 import {
   codexForkBoundaryHistoryMessage,
   codexForkHistoryIsChildOwned,
@@ -6,7 +8,6 @@ import {
 } from "./codex-fork-boundary";
 
 const childThreadRead = ({
-  childThreadIdField = "id",
   forkedFromId = "parent-thread",
   parentThreadId = "parent-thread",
   turns = [
@@ -15,19 +16,30 @@ const childThreadRead = ({
     { id: "child-turn-1", startedAt: 30, status: "completed", items: [] },
   ],
 }: {
-  childThreadIdField?: "id" | "threadId";
   forkedFromId?: string | null;
   parentThreadId?: string | null;
-  turns?: unknown[];
-} = {}) => ({
-  thread: {
-    [childThreadIdField]: "child-thread",
+  turns?: Array<Pick<CodexAppServerTurn, "id" | "items" | "startedAt" | "status">>;
+} = {}) => {
+  const thread = {
+    id: "child-thread",
+    status: { type: "idle" as const },
     forkedFromId,
-    ...(parentThreadId ? { parentThreadId } : {}),
     createdAt: 25,
-    turns,
-  },
-});
+    turns: turns.map((turn) => ({
+      completedAt: null,
+      durationMs: null,
+      error: null,
+      itemsView: "full" as const,
+      ...turn,
+    })),
+  } satisfies Parameters<typeof codexThreadFixture>[0];
+
+  if (parentThreadId) {
+    thread.parentThreadId = parentThreadId;
+  }
+
+  return { thread: codexThreadFixture(thread) };
+};
 
 describe("resolveCodexForkBoundary", () => {
   test("keeps the boundary message id stable when the first child turn appears", () => {
@@ -77,15 +89,6 @@ describe("resolveCodexForkBoundary", () => {
         new Set(["parent-turn-1", "parent-turn-8", "parent-turn-9"]),
       ),
     ).toMatchObject({ beforeTurnId: "child-turn-1" });
-  });
-
-  test("accepts threadId as the child identifier", () => {
-    expect(
-      resolveCodexForkBoundary(
-        childThreadRead({ childThreadIdField: "threadId" }),
-        new Set(["parent-turn-1", "parent-turn-2"]),
-      ),
-    ).toMatchObject({ childThreadId: "child-thread" });
   });
 
   test("does not create a history boundary for a non-forked child thread", () => {

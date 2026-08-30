@@ -10,7 +10,7 @@ import type {
   TaskServiceWithMutationProgress,
 } from "../../application/tasks/task-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-model";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import { createTaskEventStream, type TaskEventStreamPort } from "../../events/task-event-stream";
 import type { HostLifecycleLogger } from "../host-lifecycle";
 
@@ -29,7 +29,7 @@ export const createNodeTaskEventServices = ({
 }: {
   baseTaskService: TaskServiceWithMutationProgress;
   lifecycleLogger: HostLifecycleLogger;
-  onBackgroundFailure(failure: HostOperationError): Effect.Effect<void, never>;
+  onBackgroundFailure(failure: HostOperationErrorAggregate): Effect.Effect<void, never>;
   taskEventPublicationReporter: TaskEventPublicationReporter;
   workspaceSettingsService: WorkspaceSettingsService;
 }): NodeTaskEventServices => {

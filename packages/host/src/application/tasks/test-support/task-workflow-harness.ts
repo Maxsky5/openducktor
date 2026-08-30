@@ -1,3 +1,10 @@
+import {
+  createGitPortTestDouble,
+  createSettingsConfigTestDouble,
+  createWorkspaceSettingsServiceTestDouble,
+  createWorktreeFilePortTestDouble,
+} from "../../../test-support/service-test-doubles";
+import { createTaskStoreTestDouble } from "../../../test-support/task-store-test-double";
 import type {
   AgentSessionRecord,
   CommitsAheadBehind,
@@ -19,6 +26,7 @@ import type { TaskActivityGuardPort as RealTaskActivityGuardPort } from "../../.
 import type { TaskStorePort as RealTaskStorePort } from "../../../ports/task-repository-ports";
 import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
 import type { DevServerService } from "../../dev-servers/dev-server-service";
+import type { DevServerTaskInput } from "../../dev-servers/dev-server-service-types";
 import { createRuntimeDefinitionsService } from "../../runtimes/runtime-definitions-service";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import {
@@ -76,26 +84,20 @@ const pullRequest = () => ({
 });
 type TaskStorePort = Partial<RealTaskStorePort>;
 type TaskActivityGuardPort = RealTaskActivityGuardPort;
-const createSettingsConfigPort = (port: SettingsConfigPort): SettingsConfigPort =>
-  port as unknown as SettingsConfigPort;
-const createSystemCommandPort = (port: Partial<SystemCommandPort>): SystemCommandPort =>
-  ({
-    resolveCommandPath: (command: string) => Effect.succeed(command),
-    versionCommand: () => Effect.succeed(null),
-    runCommandAllowFailure: () => Effect.succeed({ ok: false, stdout: "", stderr: "" }),
-    ...port,
-  }) as unknown as SystemCommandPort;
+const createSettingsConfigPort = <Overrides extends Partial<SettingsConfigPort>>(
+  port: Overrides,
+): SettingsConfigPort => createSettingsConfigTestDouble(port);
+const createSystemCommandPort = <Overrides extends Partial<SystemCommandPort>>(
+  port: Overrides,
+): SystemCommandPort => ({
+  resolveCommandPath: (command: string) => Effect.succeed(command),
+  versionCommand: () => Effect.succeed(null),
+  runCommandAllowFailure: () => Effect.succeed({ ok: false, stdout: "", stderr: "" }),
+  ...port,
+});
 const defaultSystemCommands = createSystemCommandPort({});
 const createWorktreeFilePort = (port: Partial<WorktreeFilePort>): WorktreeFilePort =>
-  ({
-    ensureDirectory: () => Effect.dieMessage("unexpected ensure directory"),
-    copyConfiguredPaths: () => Effect.dieMessage("unexpected copy configured paths"),
-    removePathIfPresent: () => Effect.dieMessage("unexpected remove path"),
-    resolveWorktreePath: (_repoPath, worktreePath) => worktreePath,
-    resolvePathWithinRoot: () => Effect.dieMessage("unexpected path resolution"),
-    pathIsWithinRoot: () => Effect.dieMessage("unexpected path root check"),
-    ...port,
-  }) as WorktreeFilePort;
+  createWorktreeFilePortTestDouble(port);
 const unexpectedRuntimeRegistryCall = (operation: string) =>
   Effect.fail(
     new HostOperationError({
@@ -103,119 +105,64 @@ const unexpectedRuntimeRegistryCall = (operation: string) =>
       message: `Unexpected runtime registry call: ${operation}`,
     }),
   );
-const createRuntimeRegistryPort = (port: Partial<RuntimeRegistryPort>): RuntimeRegistryPort =>
-  ({
-    ensureWorkspaceRuntime: () =>
-      unexpectedRuntimeRegistryCall("runtimeRegistry.ensureWorkspaceRuntime"),
-    findRuntimeById: () => Effect.succeed(null),
-    findWorkspaceRuntime: () => Effect.succeed(null),
-    listRuntimes: () => Effect.succeed([]),
-    listRuntimesByRepo: () => Effect.succeed([]),
-    stopRuntime: () => unexpectedRuntimeRegistryCall("runtimeRegistry.stopRuntime"),
-    stopAllRuntimes: () => Effect.succeed([]),
-    stopSession: () => unexpectedRuntimeRegistryCall("runtimeRegistry.stopSession"),
-    probeSessionStatus: () => Effect.succeed({ supported: false, hasLiveSession: false }),
-    probeMcpStatus: () =>
-      Effect.succeed({
-        supported: false,
-        connected: false,
-        serverStatus: null,
-        toolIds: [],
-        detail: null,
-        failureKind: null,
-      }),
-    ...port,
-  }) as RuntimeRegistryPort;
+const createRuntimeRegistryPort = <Overrides extends Partial<RuntimeRegistryPort>>(
+  port: Overrides,
+): RuntimeRegistryPort => ({
+  ensureWorkspaceRuntime: () =>
+    unexpectedRuntimeRegistryCall("runtimeRegistry.ensureWorkspaceRuntime"),
+  findRuntimeById: () => Effect.succeed(null),
+  findWorkspaceRuntime: () => Effect.succeed(null),
+  listRuntimes: () => Effect.succeed([]),
+  listRuntimesByRepo: () => Effect.succeed([]),
+  stopRuntime: () => unexpectedRuntimeRegistryCall("runtimeRegistry.stopRuntime"),
+  stopAllRuntimes: () => Effect.succeed([]),
+  stopSession: () => unexpectedRuntimeRegistryCall("runtimeRegistry.stopSession"),
+  probeSessionStatus: () => Effect.succeed({ supported: false, hasLiveSession: false }),
+  probeMcpStatus: () =>
+    Effect.succeed({
+      supported: false,
+      connected: false,
+      serverStatus: null,
+      toolIds: [],
+      detail: null,
+      failureKind: null,
+    }),
+  ...port,
+});
 const createGitPort = (port: Partial<GitPort>): GitPort =>
-  ({
+  createGitPortTestDouble({
     canonicalizePath: (path: string) => Effect.succeed(path),
-    isGitRepository: () => Effect.dieMessage("unexpected git repository check"),
-    shareGitCommonDirectory: () => Effect.dieMessage("unexpected git common directory check"),
-    referenceExists: () => Effect.dieMessage("unexpected reference exists"),
-    listRemotes: () => Effect.dieMessage("unexpected list remotes"),
-    listBranches: () => Effect.dieMessage("unexpected list branches"),
-    getCurrentBranch: () => Effect.dieMessage("unexpected current branch"),
-    getStatus: () => Effect.dieMessage("unexpected git status"),
-    getDiff: () => Effect.dieMessage("unexpected git diff"),
-    getWorktreeStatusData: () => Effect.dieMessage("unexpected worktree status data"),
-    getWorktreeStatusSummaryData: () => Effect.dieMessage("unexpected worktree status summary"),
-    createWorktree: () => Effect.dieMessage("unexpected create worktree"),
-    configureBranchUpstream: () => Effect.dieMessage("unexpected configure branch upstream"),
-    deleteReference: () => Effect.dieMessage("unexpected delete reference"),
-    removeWorktree: () => Effect.dieMessage("unexpected remove worktree"),
-    deleteLocalBranch: () => Effect.dieMessage("unexpected delete local branch"),
-    isAncestor: () => Effect.dieMessage("unexpected ancestor check"),
-    suggestedSquashCommitMessage: () => Effect.dieMessage("unexpected squash message"),
-    mergeBranch: () => Effect.dieMessage("unexpected merge branch"),
-    switchBranch: () => Effect.dieMessage("unexpected switch branch"),
-    resetWorktreeSelection: () => Effect.dieMessage("unexpected reset worktree selection"),
-    commitsAheadBehind: () => Effect.dieMessage("unexpected commits ahead behind"),
-    fetchRemote: () => Effect.dieMessage("unexpected fetch remote"),
-    pullBranch: () => Effect.dieMessage("unexpected pull branch"),
-    commitAll: () => Effect.dieMessage("unexpected commit all"),
-    pushBranch: () => Effect.dieMessage("unexpected push branch"),
-    rebaseBranch: () => Effect.dieMessage("unexpected rebase branch"),
-    rebaseAbort: () => Effect.dieMessage("unexpected rebase abort"),
-    abortConflict: () => Effect.dieMessage("unexpected abort conflict"),
     ...port,
-  }) as GitPort;
+  });
 const createWorkspaceSettingsServicePort = (
-  service: WorkspaceSettingsService | undefined,
+  service: Partial<WorkspaceSettingsService> | undefined,
 ): WorkspaceSettingsService | undefined =>
-  service
-    ? (service as unknown as WorkspaceSettingsService as unknown as WorkspaceSettingsService)
-    : undefined;
+  service ? createWorkspaceSettingsServiceTestDouble(service) : undefined;
 const extendGitPort = (base: GitPort, overrides: Partial<GitPort>): GitPort =>
-  createGitPort({
-    ...base,
-    ...overrides,
-  } as GitPort);
+  createGitPort({ ...base, ...overrides });
 const extendSettingsConfigPort = (
   base: SettingsConfigPort,
   overrides: Partial<SettingsConfigPort>,
-): SettingsConfigPort =>
-  createSettingsConfigPort({
-    ...base,
-    ...overrides,
-  } as SettingsConfigPort);
-const unexpectedTaskStoreCall = (methodName: string) => () =>
-  Effect.dieMessage(`unexpected task store call: ${methodName}`);
+): SettingsConfigPort => createSettingsConfigPort({ ...base, ...overrides });
 const createTaskStorePort = (overrides: TaskStorePort): RealTaskStorePort =>
-  ({
-    clearAgentSessionsByRoles: unexpectedTaskStoreCall("clearAgentSessionsByRoles"),
-    clearQaReports: unexpectedTaskStoreCall("clearQaReports"),
-    clearWorkflowDocuments: unexpectedTaskStoreCall("clearWorkflowDocuments"),
-    createTask: unexpectedTaskStoreCall("createTask"),
-    deleteAgentSession: unexpectedTaskStoreCall("deleteAgentSession"),
-    deleteTask: unexpectedTaskStoreCall("deleteTask"),
-    diagnoseRepoStore: unexpectedTaskStoreCall("diagnoseRepoStore"),
-    getTask: unexpectedTaskStoreCall("getTask"),
-    getTaskMetadata: unexpectedTaskStoreCall("getTaskMetadata"),
-    listPullRequestSyncCandidates: unexpectedTaskStoreCall("listPullRequestSyncCandidates"),
-    listAgentSessionsForTasks: unexpectedTaskStoreCall("listAgentSessionsForTasks"),
-    listTasks: unexpectedTaskStoreCall("listTasks"),
-    recordQaOutcome: unexpectedTaskStoreCall("recordQaOutcome"),
-    setDirectMerge: unexpectedTaskStoreCall("setDirectMerge"),
-    setPlanDocument: unexpectedTaskStoreCall("setPlanDocument"),
-    setPullRequest: unexpectedTaskStoreCall("setPullRequest"),
-    setSpecDocument: unexpectedTaskStoreCall("setSpecDocument"),
-    transitionTask: unexpectedTaskStoreCall("transitionTask"),
-    updateTask: unexpectedTaskStoreCall("updateTask"),
-    upsertAgentSession: unexpectedTaskStoreCall("upsertAgentSession"),
-    ...overrides,
-  }) as unknown as RealTaskStorePort;
-const createTaskActivityGuardPort = (
-  guard: TaskActivityGuardPort | undefined,
-): RealTaskActivityGuardPort | undefined =>
-  guard ? (guard as unknown as RealTaskActivityGuardPort) : undefined;
+  createTaskStoreTestDouble(overrides);
 const createTaskService = (
   input: Omit<CreateTaskServiceInput, "taskStore" | "taskActivityGuard"> & {
     taskActivityGuard?: TaskActivityGuardPort;
     taskStore: TaskStorePort;
   },
 ) => {
-  const { taskActivityGuard, taskStore, toolDiscovery, ...rest } = input;
-  return createRealTaskService({
+  const {
+    taskActivityGuard,
+    taskStore,
+    toolDiscovery,
+    workspaceSettingsService: workspaceSettingsServiceInput,
+    ...rest
+  } = input;
+  const workspaceSettingsService = createWorkspaceSettingsServicePort(
+    workspaceSettingsServiceInput,
+  );
+  const taskServiceInput: CreateTaskServiceInput = {
     ...rest,
     terminalService:
       rest.terminalService ??
@@ -225,12 +172,15 @@ const createTaskService = (
     toolDiscovery:
       toolDiscovery ??
       createToolDiscoveryAdapter({ systemCommands: rest.systemCommands ?? defaultSystemCommands }),
-    workspaceSettingsService: createWorkspaceSettingsServicePort(rest.workspaceSettingsService),
-    ...(taskActivityGuard
-      ? { taskActivityGuard: createTaskActivityGuardPort(taskActivityGuard) }
-      : {}),
     taskStore: createTaskStorePort(taskStore),
-  } as CreateTaskServiceInput);
+  };
+  if (workspaceSettingsService) {
+    taskServiceInput.workspaceSettingsService = workspaceSettingsService;
+  }
+  if (taskActivityGuard) {
+    taskServiceInput.taskActivityGuard = taskActivityGuard;
+  }
+  return createRealTaskService(taskServiceInput);
 };
 const createTaskServiceWithMutationProgress = (
   input: Omit<CreateTaskServiceInput, "taskStore" | "taskActivityGuard"> & {
@@ -238,8 +188,17 @@ const createTaskServiceWithMutationProgress = (
     taskStore: TaskStorePort;
   },
 ) => {
-  const { taskActivityGuard, taskStore, toolDiscovery, ...rest } = input;
-  return createRealTaskServiceWithMutationProgress({
+  const {
+    taskActivityGuard,
+    taskStore,
+    toolDiscovery,
+    workspaceSettingsService: workspaceSettingsServiceInput,
+    ...rest
+  } = input;
+  const workspaceSettingsService = createWorkspaceSettingsServicePort(
+    workspaceSettingsServiceInput,
+  );
+  const taskServiceInput: CreateTaskServiceInput = {
     ...rest,
     terminalService:
       rest.terminalService ??
@@ -249,12 +208,15 @@ const createTaskServiceWithMutationProgress = (
     toolDiscovery:
       toolDiscovery ??
       createToolDiscoveryAdapter({ systemCommands: rest.systemCommands ?? defaultSystemCommands }),
-    workspaceSettingsService: createWorkspaceSettingsServicePort(rest.workspaceSettingsService),
-    ...(taskActivityGuard
-      ? { taskActivityGuard: createTaskActivityGuardPort(taskActivityGuard) }
-      : {}),
     taskStore: createTaskStorePort(taskStore),
-  } as CreateTaskServiceInput);
+  };
+  if (workspaceSettingsService) {
+    taskServiceInput.workspaceSettingsService = workspaceSettingsService;
+  }
+  if (taskActivityGuard) {
+    taskServiceInput.taskActivityGuard = taskActivityGuard;
+  }
+  return createRealTaskServiceWithMutationProgress(taskServiceInput);
 };
 const createAgentSessionTaskStore = (calls: unknown[]): TaskStorePort => ({
   upsertAgentSession(input) {
@@ -302,7 +264,7 @@ const createAgentSessionSettingsConfig = (existingPaths: Set<string>): SettingsC
 const createAgentSessionWorkspaceSettingsService = (
   workspace: Pick<WorkspaceRecord, "repoPath" | "effectiveWorktreeBasePath">,
 ): WorkspaceSettingsService =>
-  ({
+  createWorkspaceSettingsServiceTestDouble({
     listWorkspaces() {
       return Effect.sync(() => {
         return [
@@ -320,7 +282,7 @@ const createAgentSessionWorkspaceSettingsService = (
         ];
       });
     },
-  }) as unknown as WorkspaceSettingsService;
+  });
 const createBuildSettingsConfig = (
   existingPaths: Set<string>,
   repoPath = "/repo",
@@ -375,7 +337,7 @@ const createBuildSettingsConfig = (
 const createBuildWorkspaceSettingsService = (
   repoConfig: Partial<RepoConfig> & Pick<RepoConfig, "workspaceId" | "repoPath" | "hooks">,
 ): WorkspaceSettingsService =>
-  ({
+  createWorkspaceSettingsServiceTestDouble({
     getRepoConfigByRepoPath() {
       return Effect.sync(() => {
         return {
@@ -392,7 +354,7 @@ const createBuildWorkspaceSettingsService = (
         } satisfies RepoConfig;
       });
     },
-  }) as unknown as WorkspaceSettingsService;
+  });
 const createBuildSystemCommands = (calls: unknown[], ok = true): SystemCommandPort =>
   createSystemCommandPort({
     versionCommand() {
@@ -452,7 +414,7 @@ const createBuildStartRuntimeRegistry = (calls: unknown[]): RuntimeRegistryPort 
       return Effect.sync(() => {
         calls.push({ type: "ensureRuntime", input });
         return {
-          kind: input.runtimeKind as "opencode" | "codex",
+          kind: input.descriptor.kind,
           runtimeId: "runtime-1",
           repoPath: input.repoPath,
           taskId: null,
@@ -784,7 +746,7 @@ const createDirectMergeDevServerService = (calls: unknown[]): DevServerService =
     start() {
       return Effect.dieMessage("unexpected dev server start");
     },
-    stop(input: unknown) {
+    stop(input: DevServerTaskInput) {
       return Effect.sync(() => {
         calls.push({ type: "stopDevServers", input });
         return {
@@ -796,7 +758,7 @@ const createDirectMergeDevServerService = (calls: unknown[]): DevServerService =
         };
       });
     },
-  }) satisfies DevServerService as unknown as DevServerService;
+  }) satisfies DevServerService;
 const createDirectMergeTaskWorktreeService = (
   workingDirectory: string | null,
 ): TaskWorktreeService => ({

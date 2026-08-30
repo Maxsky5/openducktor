@@ -1,14 +1,47 @@
 import type {
   AgentSessionLiveRef,
   AgentSessionLiveSnapshot,
-  CodexAppServerApprovalsReviewer,
-  CodexAppServerAskForApproval,
+  CodexAppServerModel,
+  CodexAppServerModelListResponse,
+  CodexAppServerSkillCatalogEntry,
+  CodexAppServerSkillRecord,
+  CodexAppServerSkillsListResponse,
+  CodexAppServerInitializeParams,
+  CodexAppServerThread,
+  CodexAppServerThreadForkResult,
+  CodexAppServerThreadLoadedListResponse,
+  CodexAppServerThreadLoadedListParams,
+  CodexAppServerThreadListResponse,
+  CodexAppServerThreadReadParams,
+  CodexAppServerThreadReadResponse,
+  CodexAppServerThreadResumeResult,
+  CodexAppServerThreadStartResult,
+  CodexAppServerThreadTurnsListResponse,
+  CodexAppServerThreadTurnsListParams,
+  CodexAppServerClientRequest,
   CodexAppServerFuzzyFileSearchParams,
   CodexAppServerFuzzyFileSearchResponse,
   CodexAppServerRequestId,
-  CodexAppServerSandboxMode,
-  CodexAppServerSandboxPolicy,
+  CodexAppServerRequestResult,
+  CodexAppServerRuntimeStreamEvent,
+  CodexAppServerRespondError,
+  CodexAppServerRespondResult,
+  CodexAppServerSkillsListParams,
+  CodexAppServerThreadCompactStartParams,
+  CodexAppServerThreadCompactStartResult,
+  CodexAppServerThreadForkParams,
   CodexAppServerThreadListParams,
+  CodexAppServerThreadResumeParams,
+  CodexAppServerThreadSetNameParams,
+  CodexAppServerThreadStartParams,
+  CodexAppServerThreadSetNameResult,
+  CodexAppServerTurnInterruptResult,
+  CodexAppServerTurnStartResult,
+  CodexAppServerTurnSteerResult,
+  CodexAppServerTurnInterruptParams,
+  CodexAppServerTurnStartParams,
+  CodexAppServerTurnSteerParams,
+  CodexAppServerUserInput,
   RuntimeApprovalReplyOutcome,
   RuntimeDescriptor,
 } from "@openducktor/contracts";
@@ -32,27 +65,21 @@ import type {
   StartAgentSessionInput,
 } from "@openducktor/core";
 import type { CodexPolicyLogEntry } from "./codex-session-policy";
-
-export type CodexJsonRpcRequest = {
-  method: string;
-  params?: unknown;
-};
+import type {
+  CodexRuntimeNotification,
+  CodexRuntimeServerRequest,
+} from "./codex-runtime-event-schema";
+export type CodexJsonRpcRequest = CodexAppServerClientRequest;
 
 export type CodexJsonRpcTransport = {
-  request<Response = unknown>(request: CodexJsonRpcRequest): Promise<Response>;
+  request(request: CodexJsonRpcRequest): Promise<CodexAppServerRequestResult>;
 };
 
 export type CodexJsonRpcTransportFactory = (runtimeId: string) => CodexJsonRpcTransport;
 
-export type CodexServerRequestRecord = {
-  id?: CodexAppServerRequestId;
-  method: string;
-  params?: unknown;
-};
+export type CodexServerRequestRecord = CodexRuntimeServerRequest;
 
-export type CodexNotificationRecord = {
-  method: string;
-  params?: unknown;
+export type CodexNotificationRecord = CodexRuntimeNotification & {
   receivedAt: string;
 };
 
@@ -85,220 +112,62 @@ export type CodexCatalogInvalidation = {
 export type CodexServerRequestResponder = (
   runtimeId: string,
   requestId: CodexAppServerRequestId,
-  result?: unknown,
-  error?: unknown,
+  result?: CodexAppServerRespondResult,
+  error?: CodexAppServerRespondError,
 ) => Promise<void>;
 
-export type CodexAppServerStreamEvent = {
-  runtimeId: string;
-  kind: "notification" | "server_request";
-  receivedAt: string;
-  message: unknown;
-};
+export type CodexAppServerStreamEvent = CodexAppServerRuntimeStreamEvent;
 
 export type CodexRepoRuntimeResolverPort = {
   requireRepoRuntime(ref: RepoRuntimeRef): Promise<RepoRuntimeRouteResolution>;
 };
 
-export type CodexModelCatalogRecord = {
-  id: string;
-  model: string;
-  displayName: string;
-  description?: string;
-  hidden?: boolean;
-  supportedReasoningEfforts: Array<{
-    reasoningEffort: string;
-    description?: string;
-  }>;
-  defaultReasoningEffort?: string | { reasoningEffort: string; description?: string };
-  inputModalities: string[];
-  supportsPersonality?: boolean;
-  isDefault?: boolean;
-};
+export type CodexModelCatalogRecord = CodexAppServerModel;
 
-export type CodexModelListResponse = {
-  data: CodexModelCatalogRecord[];
-  nextCursor: string | null;
-};
+export type CodexModelListResponse = CodexAppServerModelListResponse;
 
-export type CodexSkillRecord = {
-  name?: unknown;
-  path?: unknown;
-  scope?: unknown;
-  title?: unknown;
-  displayName?: unknown;
-  description?: unknown;
-  enabled?: unknown;
-};
+export type CodexSkillRecord = CodexAppServerSkillRecord;
 
-export type CodexSkillsListParams = {
-  cwd: string;
-  forceReload?: boolean;
-};
+export type CodexSkillsListParams = CodexAppServerSkillsListParams;
 
-export type CodexSkillCatalogEntry = {
-  cwd?: unknown;
-  skills: CodexSkillRecord[];
-};
+export type CodexSkillCatalogEntry = CodexAppServerSkillCatalogEntry;
 
-export type CodexSkillsListResponse = {
-  data?: unknown;
-  errors?: unknown;
-};
+export type CodexSkillsListResponse = CodexAppServerSkillsListResponse;
 
 export type CodexModelSelectionPayload = {
   model: string;
   effort: string;
 };
 
-export type CodexTextElement = {
-  byteRange: {
-    start: number;
-    end: number;
-  };
-  placeholder: string | null;
+export type CodexUserInput = CodexAppServerUserInput;
+export type CodexTextElement = Extract<CodexUserInput, { type: "text" }>["text_elements"][number];
+
+export type CodexInitializeParams = CodexAppServerInitializeParams;
+export type CodexThreadStartParams = CodexAppServerThreadStartParams;
+export type CodexThreadResumeParams = CodexAppServerThreadResumeParams;
+export type CodexThreadForkParams = CodexAppServerThreadForkParams;
+export type CodexThreadSetNameParams = CodexAppServerThreadSetNameParams;
+export type CodexThreadCompactStartParams = CodexAppServerThreadCompactStartParams;
+
+export type CodexThreadCompactStartResponse = CodexAppServerThreadCompactStartResult;
+
+export type CodexTurnStartParams = CodexAppServerTurnStartParams;
+export type CodexTurnStartResult = CodexAppServerTurnStartResult;
+
+export type CodexTurnSteerParams = CodexAppServerTurnSteerParams;
+export type CodexTurnSteerResult = CodexAppServerTurnSteerResult;
+
+export type CodexTurnInterruptParams = CodexAppServerTurnInterruptParams;
+export type CodexThreadStartResult = CodexAppServerThreadStartResult;
+export type CodexThreadResumeResult = CodexAppServerThreadResumeResult;
+export type CodexThreadForkResult = CodexAppServerThreadForkResult;
+
+export type CodexUnmaterializedThread = Pick<CodexAppServerThread, "id" | "turns"> & {
+  cwd?: CodexAppServerThread["cwd"];
 };
 
-export type CodexUserInput =
-  | {
-      type: "text";
-      text: string;
-      text_elements?: CodexTextElement[];
-    }
-  | {
-      type: "mention";
-      name: string;
-      path: string;
-    }
-  | {
-      type: "skill";
-      name: string;
-      path: string;
-    }
-  | {
-      type: "localImage";
-      path: string;
-    };
-
-export type CodexInitializeParams = {
-  clientInfo: {
-    name: string;
-    title?: string;
-    version: string;
-  };
-  capabilities?: {
-    experimentalApi: boolean;
-    optOutNotificationMethods?: string[];
-  };
-};
-
-export type CodexThreadStartParams = {
-  approvalPolicy: CodexAppServerAskForApproval;
-  approvalsReviewer: CodexAppServerApprovalsReviewer | null;
-  cwd: string;
-  developerInstructions: string;
-  historyMode: "paginated";
-  sandbox: CodexAppServerSandboxMode;
-  model: string;
-  effort: string;
-  config?: Record<string, unknown>;
-};
-
-export type CodexThreadResumeParams = {
-  approvalPolicy: CodexAppServerAskForApproval;
-  approvalsReviewer: CodexAppServerApprovalsReviewer | null;
-  threadId: string;
-  cwd: string;
-  developerInstructions?: string;
-  sandbox: CodexAppServerSandboxMode;
-  model?: string;
-  effort?: string;
-  excludeTurns?: boolean;
-  config?: Record<string, unknown>;
-};
-
-export type CodexThreadForkParams = {
-  approvalPolicy: CodexAppServerAskForApproval;
-  approvalsReviewer: CodexAppServerApprovalsReviewer | null;
-  threadId: string;
-  cwd: string;
-  developerInstructions: string;
-  excludeTurns: boolean;
-  sandbox: CodexAppServerSandboxMode;
-  model: string;
-  effort: string;
-  config?: Record<string, unknown>;
-};
-
-export type CodexThreadSetNameParams = {
-  threadId: string;
-  name: string;
-};
-
-export type CodexThreadCompactStartParams = {
-  threadId: string;
-};
-
-export type CodexThreadCompactStartResponse = Record<string, never>;
-
-export type CodexTurnStartParams = {
-  approvalPolicy: CodexAppServerAskForApproval;
-  approvalsReviewer: CodexAppServerApprovalsReviewer | null;
-  threadId: string;
-  input: CodexUserInput[];
-  sandboxPolicy: CodexAppServerSandboxPolicy;
-  model?: string;
-  effort?: string;
-};
-
-export type CodexTurnStartResult = {
-  turnId?: string;
-  turn?: {
-    id?: string;
-    turnId?: string;
-  };
-};
-
-export type CodexTurnSteerParams = {
-  threadId: string;
-  input: CodexUserInput[];
-  expectedTurnId: string;
-};
-
-export type CodexTurnSteerResult = {
-  turnId?: string;
-};
-
-export type CodexTurnInterruptParams = {
-  threadId: string;
-  turnId: string;
-};
-
-export type CodexThreadStartResult = {
-  thread?: {
-    id?: string;
-    threadId?: string;
-  };
-  threadId?: string;
-  startedAt?: string;
-};
-
-export type CodexThreadResumeResult = {
-  thread?: {
-    id?: string;
-    threadId?: string;
-  };
-  threadId?: string;
-  startedAt?: string;
-};
-
-export type CodexThreadForkResult = {
-  thread?: {
-    id?: string;
-    threadId?: string;
-  };
-  threadId?: string;
-  startedAt?: string;
+export type CodexThreadHistoryReadResponse = {
+  thread: CodexAppServerThread | CodexUnmaterializedThread;
 };
 
 export type CodexSessionState = {
@@ -322,27 +191,24 @@ export type CodexAppServerClient = {
   threadStart(params: CodexThreadStartParams): Promise<CodexThreadStartResult>;
   threadResume(params: CodexThreadResumeParams): Promise<CodexThreadResumeResult>;
   threadFork(params: CodexThreadForkParams): Promise<CodexThreadForkResult>;
-  threadSetName(params: CodexThreadSetNameParams): Promise<Record<string, never>>;
+  threadSetName(params: CodexThreadSetNameParams): Promise<CodexAppServerThreadSetNameResult>;
   threadCompactStart(
     params: CodexThreadCompactStartParams,
   ): Promise<CodexThreadCompactStartResponse>;
   turnStart(params: CodexTurnStartParams): Promise<CodexTurnStartResult>;
   turnSteer(params: CodexTurnSteerParams): Promise<CodexTurnSteerResult>;
-  turnInterrupt(params: CodexTurnInterruptParams): Promise<Record<string, never>>;
+  turnInterrupt(params: CodexTurnInterruptParams): Promise<CodexAppServerTurnInterruptResult>;
   fuzzyFileSearch(
     params: CodexAppServerFuzzyFileSearchParams,
   ): Promise<CodexAppServerFuzzyFileSearchResponse>;
-  threadRead(params: { threadId: string; includeTurns?: boolean }): Promise<unknown>;
-  threadList(params?: CodexAppServerThreadListParams): Promise<unknown>;
-  threadLoadedList(params?: { limit?: number; cursor?: string | null }): Promise<unknown>;
-  threadTurnsList(params: {
-    threadId: string;
-    limit?: number;
-    cursor?: string | null;
-    sortDirection?: "asc" | "desc";
-    itemsView?: "notLoaded" | "summary" | "full";
-  }): Promise<unknown>;
-  turnDiff(params: { threadId: string; turnId?: string }): Promise<unknown>;
+  threadRead(params: CodexAppServerThreadReadParams): Promise<CodexAppServerThreadReadResponse>;
+  threadList(params?: CodexAppServerThreadListParams): Promise<CodexAppServerThreadListResponse>;
+  threadLoadedList(
+    params?: CodexAppServerThreadLoadedListParams,
+  ): Promise<CodexAppServerThreadLoadedListResponse>;
+  threadTurnsList(
+    params: CodexAppServerThreadTurnsListParams,
+  ): Promise<CodexAppServerThreadTurnsListResponse>;
 };
 
 type CodexAppServerAdapterBaseOptions = {

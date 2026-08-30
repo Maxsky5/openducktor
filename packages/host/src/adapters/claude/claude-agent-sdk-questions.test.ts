@@ -76,6 +76,33 @@ describe("createClaudeUserDialogHandler", () => {
     expect(isClaudeAskUserQuestionTool("mcp__example__AskUserQuestion")).toBe(false);
   });
 
+  test("rejects non-JSON question dialog payloads before publishing a question", async () => {
+    const events: AgentEvent[] = [];
+    const session = createSession();
+    const handler = createClaudeUserDialogHandler({
+      session,
+      now: () => "2026-06-25T12:00:00.000Z",
+      randomId: () => "request-1",
+      emit: (_session, event) => events.push(event),
+    });
+
+    await expect(
+      handler(
+        {
+          dialogKind: "permission_ask_user_question",
+          payload: { ...createQuestionPayload(), receivedAt: new Date() },
+          toolUseID: "tool-use-1",
+        },
+        { signal: new AbortController().signal, requestId: "sdk-request-1" },
+      ),
+    ).rejects.toMatchObject({
+      _tag: "HostValidationError",
+      field: "claudeUserDialogPayload",
+    });
+    expect(events).toEqual([]);
+    expect(session.pendingQuestions.size).toBe(0);
+  });
+
   test("maps Claude AskUserQuestion dialogs to pending questions and returns answers", async () => {
     const events: AgentEvent[] = [];
     const session = createSession();

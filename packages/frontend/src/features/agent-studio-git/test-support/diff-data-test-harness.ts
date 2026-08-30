@@ -3,17 +3,15 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { GitWorktreeStatus, GitWorktreeStatusSummary } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import { clearAppQueryClient } from "@/lib/query-client";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
-
-const actualHostOperationsModule = await import("@/state/operations/host");
-const actualHostClientModule = await import("@/lib/host-client");
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 
 enableReactActEnvironment();
-if (typeof document === "undefined") {
+if (globalThis.document === undefined) {
   GlobalRegistrator.register();
 }
 
@@ -78,7 +76,7 @@ export const createHookHarness = (
 
 export const createDeferred = <T>() => {
   let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
+  let reject!: (cause?: unknown) => void;
   const promise = new Promise<T>((res, rej) => {
     resolve = res;
     reject = rej;
@@ -87,7 +85,14 @@ export const createDeferred = <T>() => {
   return { promise, resolve, reject };
 };
 
-const stableTestToken = (value: unknown): string => {
+type WorktreeSnapshotTokenValue =
+  | Pick<
+      GitWorktreeStatus,
+      "currentBranch" | "fileStatuses" | "targetAheadBehind" | "upstreamAheadBehind"
+    >
+  | Pick<GitWorktreeStatus, "fileDiffs">;
+
+const stableTestToken = (value: WorktreeSnapshotTokenValue): string => {
   return `test:${JSON.stringify(value)}`;
 };
 
@@ -120,7 +125,7 @@ export const withSnapshotHashes = (
 export const toWorktreeStatusSummary = (status: GitWorktreeStatus): GitWorktreeStatusSummary => {
   const staged = status.fileStatuses.filter((fileStatus) => fileStatus.staged).length;
   const total = status.fileStatuses.length;
-  return {
+  const summary: GitWorktreeStatusSummary = {
     currentBranch: status.currentBranch,
     fileStatusCounts: {
       total,
@@ -129,9 +134,12 @@ export const toWorktreeStatusSummary = (status: GitWorktreeStatus): GitWorktreeS
     },
     targetAheadBehind: status.targetAheadBehind,
     upstreamAheadBehind: status.upstreamAheadBehind,
-    ...(status.gitConflict ? { gitConflict: status.gitConflict } : {}),
     snapshot: status.snapshot,
   };
+  if (status.gitConflict) {
+    summary.gitConflict = status.gitConflict;
+  }
+  return summary;
 };
 
 const createDefaultWorktreeStatus = (
@@ -194,25 +202,16 @@ export const dispatchScheduledRefresh = (): void => {
 
 export const setupAgentStudioDiffDataTestHarness = (): void => {
   beforeEach(async () => {
-    mock.module("@/state/operations/host", () => ({
-      host: {
-        taskWorktreeGet: taskWorktreeGetMock,
-        runsList: taskWorktreeEntriesMock,
-        gitFetchRemote: gitFetchRemoteMock,
-        gitGetWorktreeStatus: gitGetWorktreeStatusMock,
-        gitGetWorktreeStatusSummary: gitGetWorktreeStatusSummaryMock,
-      },
-    }));
-
-    mock.module("@/lib/host-client", () => ({
-      hostClient: {
-        taskWorktreeGet: taskWorktreeGetMock,
-        runsList: taskWorktreeEntriesMock,
-        gitFetchRemote: gitFetchRemoteMock,
-        gitGetWorktreeStatus: gitGetWorktreeStatusMock,
-        gitGetWorktreeStatusSummary: gitGetWorktreeStatusSummaryMock,
-      },
-    }));
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: {
+          taskWorktreeGet: taskWorktreeGetMock,
+          gitFetchRemote: gitFetchRemoteMock,
+          gitGetWorktreeStatus: gitGetWorktreeStatusMock,
+          gitGetWorktreeStatusSummary: gitGetWorktreeStatusSummaryMock,
+        },
+      }),
+    );
 
     ({ useAgentStudioDiffData } = await import("../use-agent-studio-diff-data"));
     taskWorktreeEntriesMock.mockClear();
@@ -243,10 +242,7 @@ export const setupAgentStudioDiffDataTestHarness = (): void => {
     );
   });
 
-  afterEach(async () => {
-    await restoreMockedModules([
-      ["@/state/operations/host", async () => actualHostOperationsModule],
-      ["@/lib/host-client", async () => actualHostClientModule],
-    ]);
+  afterEach(() => {
+    configureShellBridge(createUnavailableShellBridge());
   });
 };

@@ -7,7 +7,9 @@ import { resolveSavedRuntimeExecutableConfig } from "../../application/runtimes/
 import {
   type HostError,
   HostOperationError,
+  type HostOperationErrorAggregate,
   HostResourceError,
+  type HostResourceErrorAggregate,
   HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
@@ -41,14 +43,17 @@ export type OpenCodeMcpBridgeConnection = {
 
 export type OpenCodeMcpBridgeConnectionResolver = (
   input: RuntimeEnsureWorkspaceInput,
-) => Effect.Effect<OpenCodeMcpBridgeConnection, HostOperationError | HostResourceError>;
+) => Effect.Effect<
+  OpenCodeMcpBridgeConnection,
+  HostOperationErrorAggregate | HostResourceErrorAggregate
+>;
 
-type LocalPortAllocator = () => Effect.Effect<number, HostOperationError>;
+type LocalPortAllocator = () => Effect.Effect<number, HostOperationErrorAggregate>;
 
 type OpenCodeReadinessProbe = (
   port: number,
   timeoutMs: number,
-) => Effect.Effect<boolean, HostOperationError>;
+) => Effect.Effect<boolean, HostOperationErrorAggregate>;
 
 export type CreateOpenCodeWorkspaceRuntimeStarterInput = {
   toolDiscovery: ToolDiscoveryPort;
@@ -216,7 +221,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
       const runtimeScope = yield* Scope.make();
       scope = runtimeScope;
       const child = yield* Effect.try({
-        try: () =>
+        try: (): OpenCodeChildProcess =>
           spawn(command.command, command.args, {
             cwd: input.workingDirectory,
             detached: shouldStartDetachedProcessGroup(platform),
@@ -224,7 +229,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
             stdio: ["ignore", "pipe", "pipe"],
             windowsHide: command.windowsHide,
             windowsVerbatimArguments: command.windowsVerbatimArguments,
-          }) as OpenCodeChildProcess,
+          }),
         catch: (cause) =>
           toHostOperationError(cause, "opencodeWorkspaceRuntime.spawn", {
             binary,
@@ -261,7 +266,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
         }
         return liveSessionReleasePromise;
       };
-      const awaitLiveSessionRelease = (): Effect.Effect<void, HostOperationError> =>
+      const awaitLiveSessionRelease = (): Effect.Effect<void, HostOperationErrorAggregate> =>
         Effect.suspend(() => {
           const releasePromise = requestLiveSessionRelease();
           if (!releasePromise) {

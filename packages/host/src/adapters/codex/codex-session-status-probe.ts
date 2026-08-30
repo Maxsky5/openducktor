@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { z } from "zod";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type {
   CodexAppServerError,
@@ -16,14 +17,21 @@ export type CodexSessionStatusProbeInput = {
 
 export type CodexSessionStatusProbeError = CodexAppServerError;
 
-const isCodexThreadNotFoundError = (cause: CodexAppServerError): boolean =>
-  cause instanceof HostOperationError &&
-  cause.details?.method === "thread/read" &&
-  cause.message.toLowerCase().includes("not found");
+const threadReadErrorDetailsSchema = z.object({ method: z.literal("thread/read") });
+
+const isCodexThreadNotFoundError = (cause: CodexAppServerError): boolean => {
+  if (!(cause instanceof HostOperationError)) {
+    return false;
+  }
+  return (
+    threadReadErrorDetailsSchema.safeParse(cause.details).success &&
+    cause.message.toLowerCase().includes("not found")
+  );
+};
 
 const isLiveCodexThreadStatus = (
   statusType: CodexSessionStatus,
-): Effect.Effect<boolean, HostValidationError> => {
+): Effect.Effect<boolean, HostValidationError<never>> => {
   switch (statusType) {
     case "active":
     case "systemError":
@@ -36,7 +44,6 @@ const isLiveCodexThreadStatus = (
       return Effect.fail(
         new HostValidationError({
           message: `Unsupported Codex thread status: ${String(unhandledStatus)}`,
-          details: { statusType: unhandledStatus },
         }),
       );
     }

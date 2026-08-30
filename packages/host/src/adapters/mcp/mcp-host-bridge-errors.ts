@@ -1,21 +1,26 @@
 import { type OdtToolErrorPayload, odtToolErrorCodeSchema } from "@openducktor/contracts";
+import { z } from "zod";
+import type { OdtMcpBridgeError } from "../../application/mcp/odt-mcp-bridge-service";
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+export const bridgeErrorPayload = (
+  cause: OdtMcpBridgeError | null,
+  message: string,
+): OdtToolErrorPayload => {
+  const parsedCode = cause && "code" in cause ? odtToolErrorCodeSchema.safeParse(cause.code) : null;
+  const code = parsedCode?.success ? parsedCode.data : "ODT_HOST_BRIDGE_ERROR";
+  const rawDetails = cause && "details" in cause ? cause.details : undefined;
 
-export const bridgeErrorPayload = (error: unknown, message: string): OdtToolErrorPayload => {
-  const parsedCode = isRecord(error)
-    ? odtToolErrorCodeSchema.safeParse(error.code)
-    : { success: false as const };
-  const details = isRecord(error) && isRecord(error.details) ? error.details : undefined;
+  if (rawDetails !== undefined) {
+    const details = z.record(z.string(), z.json()).parse(rawDetails);
+    return {
+      ok: false,
+      error: { code, message, details },
+    };
+  }
 
   return {
     ok: false,
-    error: {
-      code: parsedCode.success ? parsedCode.data : "ODT_HOST_BRIDGE_ERROR",
-      message,
-      ...(details ? { details } : {}),
-    },
+    error: { code, message },
   };
 };
 

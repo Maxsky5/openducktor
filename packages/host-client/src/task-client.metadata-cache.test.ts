@@ -1,7 +1,8 @@
-import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
+import type { ExternalTaskSyncEvent, TaskMetadataPayload } from "@openducktor/contracts";
 import type {} from "./bun-test";
 import { HostTaskClient } from "./task-client";
 import { TaskMetadataCache } from "./task-metadata-cache";
+import type { InvokeFn } from "./invoke-utils";
 
 type Deferred<T> = {
   promise: Promise<T>;
@@ -16,7 +17,7 @@ const createDeferred = <T>(): Deferred<T> => {
   return { promise, resolve };
 };
 
-const metadata = (version: string) => ({
+const metadata = (version: string): TaskMetadataPayload => ({
   spec: { markdown: `Spec ${version}`, updatedAt: `2026-07-22T00:00:0${version}Z` },
   plan: { markdown: `Plan ${version}`, updatedAt: `2026-07-22T00:00:0${version}Z` },
   qaReport: {
@@ -28,9 +29,7 @@ const metadata = (version: string) => ({
   agentSessions: [],
 });
 
-const createTaskClient = (
-  invoke: (command: string, args?: Record<string, unknown>) => Promise<unknown>,
-) => new HostTaskClient(invoke as never, new TaskMetadataCache());
+const createTaskClient = (invoke: InvokeFn) => new HostTaskClient(invoke, new TaskMetadataCache());
 
 const tasksUpdated = (repoPath: string, taskIds: string[]): ExternalTaskSyncEvent => ({
   eventId: `update-${repoPath}-${taskIds.join("-")}`,
@@ -61,7 +60,7 @@ describe("HostTaskClient external task sync metadata reconciliation", () => {
   });
 
   test("does not let a pre-event in-flight read overwrite a post-event read", async () => {
-    const stale = createDeferred<unknown>();
+    const stale = createDeferred<TaskMetadataPayload>();
     let reads = 0;
     const client = createTaskClient((command) => {
       if (command !== "task_metadata_get") {
@@ -111,7 +110,7 @@ describe("HostTaskClient external task sync metadata reconciliation", () => {
       if (command !== "task_metadata_get") {
         throw new Error(`Unexpected command: ${command}`);
       }
-      const taskId = args?.taskId as string;
+      const taskId: string = args?.taskId;
       const nextRead = (readsByTaskId.get(taskId) ?? 0) + 1;
       readsByTaskId.set(taskId, nextRead);
       return metadata(`${taskId}-V${nextRead}`);
@@ -145,7 +144,7 @@ describe("HostTaskClient external task sync metadata reconciliation", () => {
   });
 
   test("clears every repository and keeps stale in-flight reads from repopulating the cache", async () => {
-    const stale = createDeferred<unknown>();
+    const stale = createDeferred<TaskMetadataPayload>();
     const readsByKey = new Map<string, number>();
     const client = createTaskClient((command, args) => {
       if (command !== "task_metadata_get") {

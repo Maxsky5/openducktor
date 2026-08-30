@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { CancelledError, type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { render } from "@testing-library/react";
 import { useLayoutEffect } from "react";
@@ -8,6 +8,10 @@ import { useWorkspaceBranchProbe } from "./use-workspace-branch-probe";
 import { createBrowserListenerHarness } from "./workspace-browser-test-utils";
 import { createDeferred, createWorkspaceHostClient, flush } from "./workspace-hook-test-fixtures";
 import { IsolatedQueryWrapper } from "./workspace-hook-test-utils";
+
+interface QueryClientCaptureContract {
+  current: QueryClient | null;
+}
 
 let workspaceHost = createWorkspaceHostClient();
 
@@ -60,7 +64,7 @@ describe("use-workspace-branch-probe", () => {
     };
     const setBranchSyncDegraded = mock((_repoPath: string, _value: boolean) => {});
     const gitGetBranches = mock(async () => []);
-    const queryClientCapture: { current: QueryClient | null } = { current: null };
+    const queryClientCapture: QueryClientCaptureContract = { current: null };
     workspaceHost.gitGetCurrentBranch = mock(async () => currentBranch);
     workspaceHost.gitGetBranches = gitGetBranches;
 
@@ -98,7 +102,7 @@ describe("use-workspace-branch-probe", () => {
   test("retries a failed branch-list refresh when the branch identity is unchanged", async () => {
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
     const setBranchSyncDegraded = mock((_repoPath: string, _value: boolean) => {});
-    const queryClientCapture: { current: QueryClient | null } = { current: null };
+    const queryClientCapture: QueryClientCaptureContract = { current: null };
     const gitGetBranches = mock(async () => []);
     gitGetBranches.mockImplementationOnce(async () => {
       throw new Error("branch list unavailable");
@@ -149,12 +153,11 @@ describe("use-workspace-branch-probe", () => {
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
     const currentBranchDeferred = createDeferred<{ name: string | undefined; detached: boolean }>();
     const setBranchSyncDegraded = mock((_repoPath: string, _value: boolean) => {});
-    const queryClientCapture: { current: QueryClient | null } = { current: null };
+    const queryClientCapture: QueryClientCaptureContract = { current: null };
     workspaceHost.gitGetCurrentBranch = mock(async () => currentBranchDeferred.promise);
 
-    const originalToastError = toast.error;
-    const toastError = mock((_message: string, _options?: { description?: string }) => "");
-    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    const toastError = spyOn(toast, "error").mockImplementation(() => "");
+    toastError.mockClear();
 
     const rendered = render(
       <ProbeHarness
@@ -190,7 +193,7 @@ describe("use-workspace-branch-probe", () => {
     } finally {
       currentBranchDeferred.resolve({ name: "main", detached: false });
       rendered.unmount();
-      (toast as { error: typeof toast.error }).error = originalToastError;
+      toastError.mockRestore();
       restoreBrowserGlobals();
     }
   });
@@ -207,9 +210,8 @@ describe("use-workspace-branch-probe", () => {
     }));
     workspaceHost.gitGetBranches = gitGetBranches;
 
-    const originalToastError = toast.error;
-    const toastError = mock((_message: string, _options?: { description?: string }) => "");
-    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    const toastError = spyOn(toast, "error").mockImplementation(() => "");
+    toastError.mockClear();
 
     const rendered = render(
       <ProbeHarness
@@ -230,7 +232,7 @@ describe("use-workspace-branch-probe", () => {
       expect(toastError).not.toHaveBeenCalled();
     } finally {
       rendered.unmount();
-      (toast as { error: typeof toast.error }).error = originalToastError;
+      toastError.mockRestore();
       restoreBrowserGlobals();
     }
   });

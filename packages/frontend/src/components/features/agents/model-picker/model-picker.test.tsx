@@ -417,7 +417,7 @@ describe("ModelPicker", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
     });
-    const search = screen.getByPlaceholderText("Search models...") as HTMLInputElement;
+    const search: HTMLInputElement = screen.getByPlaceholderText("Search models...");
     fireEvent.change(search, { target: { value: "gpt" } });
     const star = screen.getByRole("button", { name: "Add GPT Five to favorites" });
     await act(async () => {

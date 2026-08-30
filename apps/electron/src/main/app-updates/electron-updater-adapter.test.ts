@@ -1,7 +1,16 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { ElectronUpdaterConfigureOptions } from "./electron-app-updater-adapter";
+import type {
+  ElectronUpdaterConfigureOptions,
+  ElectronUpdaterEventMap,
+} from "./electron-app-updater-adapter";
 import { createElectronUpdaterAdapter } from "./electron-updater-adapter";
 import type { GitHubReleaseSource } from "./github-release-source";
+
+type NativeUpdaterListeners = {
+  [EventName in keyof ElectronUpdaterEventMap]: Set<
+    (payload: ElectronUpdaterEventMap[EventName]) => void
+  >;
+};
 
 class FakeNativeUpdater {
   allowPrerelease = false;
@@ -16,23 +25,38 @@ class FakeNativeUpdater {
     versionInfo: { version: "0.5.0" },
   }));
   downloadUpdate = mock(async (): Promise<string[]> => ["/tmp/OpenDucktor-update"]);
-  private readonly listeners = new Map<string, Set<(payload: never) => void>>();
+  private readonly listeners: NativeUpdaterListeners = {
+    error: new Set(),
+    "download-progress": new Set(),
+  };
 
-  on = mock((eventName: string, listener: (payload: never) => void) => {
-    const listeners = this.listeners.get(eventName) ?? new Set();
-    listeners.add(listener);
-    this.listeners.set(eventName, listeners);
-    return this;
-  });
+  on = mock(
+    <EventName extends keyof ElectronUpdaterEventMap>(
+      eventName: EventName,
+      listener: (payload: ElectronUpdaterEventMap[EventName]) => void,
+    ) => {
+      const listeners = this.listeners[eventName];
+      listeners.add(listener);
+      return this;
+    },
+  );
   quitAndInstall = mock(() => {});
-  removeListener = mock((eventName: string, listener: (payload: never) => void) => {
-    this.listeners.get(eventName)?.delete(listener);
-    return this;
-  });
+  removeListener = mock(
+    <EventName extends keyof ElectronUpdaterEventMap>(
+      eventName: EventName,
+      listener: (payload: ElectronUpdaterEventMap[EventName]) => void,
+    ) => {
+      this.listeners[eventName].delete(listener);
+      return this;
+    },
+  );
 
-  emit(eventName: string, payload: unknown): void {
-    for (const listener of this.listeners.get(eventName) ?? []) {
-      listener(payload as never);
+  emit<EventName extends keyof ElectronUpdaterEventMap>(
+    eventName: EventName,
+    payload: ElectronUpdaterEventMap[EventName],
+  ): void {
+    for (const listener of this.listeners[eventName]) {
+      listener(payload);
     }
   }
 }
@@ -177,14 +201,14 @@ describe("electron updater adapter", () => {
     await adapter.checkForUpdates();
 
     const downloadResult = adapter.downloadUpdate();
-    const settledDownload = downloadResult.then(
-      () => ({ error: null }),
-      (error: unknown) => ({ error }),
-    );
+    let error: unknown;
+    const settledDownload = downloadResult.catch((cause: unknown): void => {
+      error = cause;
+    });
     await adapter.dispose();
     finishLoading(nativeUpdater);
 
-    const { error } = await settledDownload;
+    await settledDownload;
     expect(error).toMatchObject({ operation: "electron.updater.initialize" });
     expect(nativeUpdater.on).not.toHaveBeenCalled();
     expect(nativeUpdater.checkForUpdates).not.toHaveBeenCalled();

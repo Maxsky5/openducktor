@@ -35,8 +35,8 @@ const buildModel = () => ({
     todoPanelCollapsed: false,
     onToggleTodoPanel: () => {},
     messagesContainerRef: createRef<HTMLDivElement>(),
-    scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
-    syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
+    scrollToBottomOnSendRef: { current: null } satisfies { current: (() => void) | null },
+    syncBottomAfterComposerLayoutRef: { current: null } satisfies { current: (() => void) | null },
   }),
   composer: {
     displayedSessionKey: "session-1",
@@ -119,8 +119,8 @@ const buildModel = () => ({
     composerFormRef: createRef<HTMLFormElement>(),
     composerEditorRef: createRef<HTMLDivElement>(),
     onComposerEditorInput: () => {},
-    scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
-    syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
+    scrollToBottomOnSendRef: { current: null } satisfies { current: (() => void) | null },
+    syncBottomAfterComposerLayoutRef: { current: null } satisfies { current: (() => void) | null },
     accentColor: undefined,
   },
 });

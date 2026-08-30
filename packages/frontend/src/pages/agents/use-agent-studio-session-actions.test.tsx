@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeDescriptor } from "@openducktor/contracts";
+import {
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  repoConfigSchema,
+  type RuntimeDescriptor,
+} from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import {
@@ -394,12 +398,13 @@ describe("useAgentStudioSessionActions", () => {
   beforeEach(async () => {
     await clearAppQueryClient();
     host.workspaceGetRepoConfig = async () =>
-      ({
+      repoConfigSchema.parse({
         workspaceId: "repo",
         workspaceName: "Repo",
         repoPath: "/repo",
+        defaultRuntimeKind: "opencode",
         promptOverrides: {},
-      }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
+      });
     host.workspaceGetSettingsSnapshot = async () => createSettingsSnapshotFixture();
   });
 

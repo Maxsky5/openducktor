@@ -48,8 +48,8 @@ describe("TaskResetConfirmDialog", () => {
       />,
     );
 
-    expect(
-      (screen.getByRole("button", { name: "Checking..." }) as HTMLButtonElement).disabled,
-    ).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Checking..." }).disabled).toBe(
+      true,
+    );
   });
 });

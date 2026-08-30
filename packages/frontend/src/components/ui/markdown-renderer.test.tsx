@@ -12,14 +12,14 @@ import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures
 import { MarkdownMermaid } from "./markdown-mermaid";
 import { MERMAID_RENDER_CONFIG } from "./markdown-mermaid-render";
 import { MarkdownRenderer } from "./markdown-renderer";
-import { MARKDOWN_COMPONENTS } from "./markdown-renderer-components";
 
 const renderMarkdownLink = (href: string, label: string) => {
-  const MarkdownLink = MARKDOWN_COMPONENTS.document.a;
-  if (typeof MarkdownLink !== "function") {
-    throw new Error("Expected the shared Markdown anchor to be a React component.");
-  }
-  return render(createElement(MarkdownLink, { href }, label));
+  return render(
+    createElement(MarkdownRenderer, {
+      markdown: `[${label}](${href})`,
+      variant: "document",
+    }),
+  );
 };
 
 const StaticThemeProvider = ({ children }: { children: ReactNode }) => {

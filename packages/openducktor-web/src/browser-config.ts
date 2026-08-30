@@ -1,7 +1,13 @@
 import { Effect } from "effect";
+import { z } from "zod";
 import { runWebSyncBoundary, WebValidationError } from "./effect/web-errors";
 
-type BrowserEnv = Record<string, string | undefined> | undefined;
+type BrowserEnvValues = {
+  VITE_ODT_BROWSER_AUTH_TOKEN?: string;
+  VITE_ODT_BROWSER_BACKEND_URL?: string;
+};
+type BrowserEnv = BrowserEnvValues | undefined;
+type BrowserEnvKey = keyof BrowserEnvValues;
 export type BrowserRuntimeConfig = {
   backendUrl?: string;
   appToken?: string;
@@ -13,18 +19,36 @@ export const configureBrowserRuntimeConfig = (config: BrowserRuntimeConfig): voi
   browserRuntimeConfig = config;
 };
 
-const readBrowserEnv = (): BrowserEnv =>
-  (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ??
-  (typeof process !== "undefined" ? process.env : undefined);
+const readBrowserEnv = (): BrowserEnv => {
+  const processEnv = globalThis.process === undefined ? undefined : process.env;
+  const viteBackendUrl: unknown = import.meta.env.VITE_ODT_BROWSER_BACKEND_URL;
+  const viteAuthToken: unknown = import.meta.env.VITE_ODT_BROWSER_AUTH_TOKEN;
+  const parsedBackendUrl = z.string().safeParse(viteBackendUrl);
+  const parsedAuthToken = z.string().safeParse(viteAuthToken);
+  const backendUrl =
+    (parsedBackendUrl.success ? parsedBackendUrl.data : undefined) ??
+    processEnv?.VITE_ODT_BROWSER_BACKEND_URL;
+  const authToken =
+    (parsedAuthToken.success ? parsedAuthToken.data : undefined) ??
+    processEnv?.VITE_ODT_BROWSER_AUTH_TOKEN;
+  const env: BrowserEnvValues = {};
+  if (backendUrl !== undefined) {
+    env.VITE_ODT_BROWSER_BACKEND_URL = backendUrl;
+  }
+  if (authToken !== undefined) {
+    env.VITE_ODT_BROWSER_AUTH_TOKEN = authToken;
+  }
+  return env;
+};
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 const OPAQUE_BROWSER_ORIGIN = "null";
 
 const isUsableBrowserOrigin = (origin: string | undefined): origin is string =>
-  typeof origin === "string" && origin.length > 0 && origin !== OPAQUE_BROWSER_ORIGIN;
+  origin !== undefined && origin.length > 0 && origin !== OPAQUE_BROWSER_ORIGIN;
 
 const readBrowserLocationOrigin = (): string | undefined => {
-  if (typeof window === "undefined") {
+  if (globalThis.window === undefined) {
     return undefined;
   }
 
@@ -38,7 +62,7 @@ const readBrowserRuntimeConfig = (): BrowserRuntimeConfig | undefined => {
 
 const requireBrowserEnvValueEffect = (
   env: BrowserEnv,
-  key: string,
+  key: BrowserEnvKey,
   description: string,
 ): Effect.Effect<string, WebValidationError> =>
   Effect.gen(function* () {

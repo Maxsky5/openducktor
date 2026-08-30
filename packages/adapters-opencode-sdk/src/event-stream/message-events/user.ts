@@ -1,9 +1,7 @@
-import type { Part } from "@opencode-ai/sdk/v2/client";
 import type { AgentUserMessageDisplayPart } from "@openducktor/core";
 import {
   normalizeUserMessageDisplayParts,
   type readMessageModelSelection,
-  readTextFromMessageInfo,
 } from "../../message-normalizers";
 import type { QueuedUserMessageSend, SessionMessageMetadata } from "../../types";
 import { admitUserMessage } from "../../user-message-admission";
@@ -13,7 +11,6 @@ import { getKnownMessageParts } from "./helpers";
 import { buildVisibleUserMessage } from "./user-display";
 import { emitKnownUserMessage, emitUserMessage, persistUserMessageMetadata } from "./user-emitter";
 import {
-  readExplicitUserMessageState,
   resolveLiveUserMessageState,
   resolveUserMessageStateFromPendingAssistant,
   takeQueuedUserSendMatch,
@@ -25,16 +22,15 @@ const resolveUserMessageDisplay = (input: {
   metadata?: SessionMessageMetadata;
   runtime: EventStreamRuntime;
   model?: ReturnType<typeof readMessageModelSelection>;
-}): {
-  displayParts: AgentUserMessageDisplayPart[];
-  matchedQueuedSend: QueuedUserMessageSend | null;
-  visible: string;
-} => {
-  const initialVisibleUserMessage = buildVisibleUserMessage({
+}) => {
+  const initialInput: Parameters<typeof buildVisibleUserMessage>[0] = {
     fallbackText: input.fallbackText,
     normalizedDisplayParts: input.normalizedDisplayParts,
-    ...(input.metadata ? { metadata: input.metadata } : {}),
-  });
+  };
+  if (input.metadata) {
+    initialInput.metadata = input.metadata;
+  }
+  const initialVisibleUserMessage = buildVisibleUserMessage(initialInput);
   const matchedQueuedSend = takeQueuedUserSendMatch(
     input.runtime,
     initialVisibleUserMessage.visible,
@@ -43,17 +39,28 @@ const resolveUserMessageDisplay = (input: {
   );
 
   if (!matchedQueuedSend) {
-    return { ...initialVisibleUserMessage, matchedQueuedSend: null };
+    return { ...initialVisibleUserMessage, matchedQueuedSend: null } satisfies {
+      displayParts: AgentUserMessageDisplayPart[];
+      matchedQueuedSend: QueuedUserMessageSend | null;
+      visible: string;
+    };
   }
 
-  const finalVisibleUserMessage = buildVisibleUserMessage({
+  const finalInput: Parameters<typeof buildVisibleUserMessage>[0] = {
     fallbackText: input.fallbackText,
     normalizedDisplayParts: input.normalizedDisplayParts,
-    ...(input.metadata ? { metadata: input.metadata } : {}),
     matchedQueuedSend,
-  });
+  };
+  if (input.metadata) {
+    finalInput.metadata = input.metadata;
+  }
+  const finalVisibleUserMessage = buildVisibleUserMessage(finalInput);
 
-  return { ...finalVisibleUserMessage, matchedQueuedSend };
+  return { ...finalVisibleUserMessage, matchedQueuedSend } satisfies {
+    displayParts: AgentUserMessageDisplayPart[];
+    matchedQueuedSend: QueuedUserMessageSend | null;
+    visible: string;
+  };
 };
 
 export const publishUserMessageReadStateChanges = (runtime: EventStreamRuntime): void => {
@@ -70,12 +77,15 @@ export const publishUserMessageReadStateChanges = (runtime: EventStreamRuntime):
     }
 
     const metadata = session.messageMetadataById.get(messageId);
-    emitKnownUserMessage(runtime, {
+    const messageInput: Parameters<typeof emitKnownUserMessage>[1] = {
       messageId,
       timestamp: metadata?.timestamp ?? runtime.now(),
       state: nextState,
-      ...(metadata?.model ? { model: metadata.model } : {}),
-    });
+    };
+    if (metadata?.model) {
+      messageInput.model = metadata.model;
+    }
+    emitKnownUserMessage(runtime, messageInput);
   }
 };
 
@@ -84,49 +94,52 @@ export const handleUserMessageUpdated = (
   input: {
     messageId: string;
     messageTimestamp: string;
-    infoRecord: unknown;
-    properties: unknown;
-    normalizedParts: Part[];
     messageModel?: ReturnType<typeof readMessageModelSelection>;
   },
 ): boolean => {
   const { session } = runtime;
   admitUserMessage(session, input.messageId);
-  const userParts =
-    input.normalizedParts.length > 0
-      ? input.normalizedParts
-      : getKnownMessageParts(runtime, input.messageId);
+  const userParts = getKnownMessageParts(runtime, input.messageId);
   emitBackgroundTaskResultSubagentParts(runtime, {
     parts: userParts,
     timestamp: input.messageTimestamp,
   });
   const currentMetadata = session.messageMetadataById.get(input.messageId);
   const normalizedDisplayParts = normalizeUserMessageDisplayParts(userParts);
-  const fallbackText = currentMetadata?.text ?? readTextFromMessageInfo(input.infoRecord);
-  const { displayParts, matchedQueuedSend, visible } = resolveUserMessageDisplay({
+  const fallbackText = currentMetadata?.text ?? "";
+  const displayInput: Parameters<typeof resolveUserMessageDisplay>[0] = {
     fallbackText,
     normalizedDisplayParts,
     runtime,
-    ...(currentMetadata ? { metadata: currentMetadata } : {}),
-    ...(input.messageModel ? { model: input.messageModel } : {}),
-  });
+  };
+  if (currentMetadata) {
+    displayInput.metadata = currentMetadata;
+  }
+  if (input.messageModel) {
+    displayInput.model = input.messageModel;
+  }
+  const { displayParts, matchedQueuedSend, visible } = resolveUserMessageDisplay(displayInput);
   if (visible.trim().length === 0 && displayParts.length === 0) {
     return true;
   }
 
   const timestamp = currentMetadata?.timestamp ?? input.messageTimestamp;
-  persistUserMessageMetadata({
+  const metadataInput: Parameters<typeof persistUserMessageMetadata>[0] = {
     session,
     messageId: input.messageId,
     timestamp,
-    ...(currentMetadata ? { metadata: currentMetadata } : {}),
-    ...(input.messageModel ? { model: input.messageModel } : {}),
     visible,
     displayParts,
-  });
+  };
+  if (currentMetadata) {
+    metadataInput.metadata = currentMetadata;
+  }
+  if (input.messageModel) {
+    metadataInput.model = input.messageModel;
+  }
+  persistUserMessageMetadata(metadataInput);
 
-  const explicitState = readExplicitUserMessageState(input.infoRecord, input.properties);
-  return emitUserMessage(runtime, {
+  const messageInput: Parameters<typeof emitUserMessage>[1] = {
     messageId: input.messageId,
     timestamp,
     message: visible,
@@ -134,10 +147,12 @@ export const handleUserMessageUpdated = (
     state: resolveLiveUserMessageState(runtime, {
       messageId: input.messageId,
       matchedQueuedSend,
-      ...(explicitState ? { explicitState } : {}),
     }),
-    ...(input.messageModel ? { model: input.messageModel } : {}),
-  });
+  };
+  if (input.messageModel) {
+    messageInput.model = input.messageModel;
+  }
+  return emitUserMessage(runtime, messageInput);
 };
 
 export const handleUserPartUpdated = (
@@ -156,25 +171,35 @@ export const handleUserPartUpdated = (
     });
   }
   const fallbackText = metadata?.text ?? "";
-  const { displayParts, matchedQueuedSend, visible } = resolveUserMessageDisplay({
+  const displayInput: Parameters<typeof resolveUserMessageDisplay>[0] = {
     fallbackText,
     normalizedDisplayParts,
     runtime,
-    ...(metadata ? { metadata } : {}),
-    ...(metadata?.model ? { model: metadata.model } : {}),
-  });
+  };
+  if (metadata) {
+    displayInput.metadata = metadata;
+  }
+  if (metadata?.model) {
+    displayInput.model = metadata.model;
+  }
+  const { displayParts, matchedQueuedSend, visible } = resolveUserMessageDisplay(displayInput);
   if (visible.trim().length > 0 || displayParts.length > 0) {
-    persistUserMessageMetadata({
+    const metadataInput: Parameters<typeof persistUserMessageMetadata>[0] = {
       session,
       messageId,
       timestamp: runtime.now(),
-      ...(metadata ? { metadata } : {}),
-      ...(metadata?.model ? { model: metadata.model } : {}),
       visible,
       displayParts,
-    });
+    };
+    if (metadata) {
+      metadataInput.metadata = metadata;
+    }
+    if (metadata?.model) {
+      metadataInput.model = metadata.model;
+    }
+    persistUserMessageMetadata(metadataInput);
   }
-  emitKnownUserMessage(runtime, {
+  const messageInput: Parameters<typeof emitKnownUserMessage>[1] = {
     messageId,
     timestamp: metadata?.timestamp ?? runtime.now(),
     visible,
@@ -183,6 +208,9 @@ export const handleUserPartUpdated = (
       messageId,
       matchedQueuedSend,
     }),
-    ...(metadata?.model ? { model: metadata.model } : {}),
-  });
+  };
+  if (metadata?.model) {
+    messageInput.model = metadata.model;
+  }
+  emitKnownUserMessage(runtime, messageInput);
 };

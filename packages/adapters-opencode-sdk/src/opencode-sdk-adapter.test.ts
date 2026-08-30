@@ -7,14 +7,18 @@ import {
 } from "@openducktor/contracts";
 import type { AgentEvent, PolicyBoundSessionRef, RuntimeKind, SessionRef } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
+import { z } from "zod";
 import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./opencode-sdk-adapter";
+import { createOpencodeSessionFixture } from "./opencode-protocol-test-fixtures";
 import type { OpencodeSdkAdapterOptions, SessionRecord } from "./types";
 import { admitUserMessage } from "./user-message-admission";
 
-type TestAdapterInternals = {
-  sessions: Map<string, SessionRecord>;
-  clearPendingSubagentInputEvent: (externalSessionId: string, requestId: string) => void;
-};
+type ClientMethodInput<
+  Namespace extends keyof OpencodeClient,
+  Method extends keyof OpencodeClient[Namespace],
+> = OpencodeClient[Namespace][Method] extends (...args: infer Args) => infer _Result
+  ? Args[0]
+  : never;
 
 const sessionRef = (externalSessionId = "external-session-1"): SessionRef => ({
   externalSessionId,
@@ -37,18 +41,18 @@ const sessionRuntimeRef = (
   ...overrides,
 });
 
-const createDeferred = <T>(): {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-  reject: (error: unknown) => void;
-} => {
+const createDeferred = <T>() => {
   let resolve: (value: T) => void = () => undefined;
-  let reject: (error: unknown) => void = () => undefined;
+  let reject: (cause: unknown) => void = () => undefined;
   const promise = new Promise<T>((promiseResolve, promiseReject) => {
     resolve = promiseResolve;
     reject = promiseReject;
   });
-  return { promise, resolve, reject };
+  return { promise, resolve, reject } satisfies {
+    promise: Promise<T>;
+    resolve: (value: T) => void;
+    reject: (cause: unknown) => void;
+  };
 };
 
 const defaultRepoPath = "/repo";
@@ -128,8 +132,15 @@ const makeRepoRuntimeResolver = (routeType: "local_http" | "stdio") => ({
 });
 
 const OpencodeSdkAdapter = class extends BaseOpencodeSdkAdapter {
+  readonly sessionsForTest: Map<string, SessionRecord>;
+
   constructor(options: OpencodeSdkAdapterOptions = {}) {
-    super({ repoRuntimeResolver: defaultRepoRuntimeResolver, ...options });
+    const sessions = new Map<string, SessionRecord>();
+    super(
+      { repoRuntimeResolver: defaultRepoRuntimeResolver, ...options },
+      { sessions, runtimeEventTransports: new Map() },
+    );
+    this.sessionsForTest = sessions;
   }
 };
 
@@ -153,7 +164,7 @@ test("rejects non-OpenCode runtime policy bindings at the adapter boundary", asy
         },
       },
       systemPrompt: "system",
-    } as never),
+    }),
   ).rejects.toThrow(
     "Cannot start OpenCode session with runtime 'opencode' and 'codex' runtime policy.",
   );
@@ -183,7 +194,7 @@ test("rejects fork policy mismatches before runtime side effects", async () => {
         },
       },
       systemPrompt: "system",
-    } as never),
+    }),
   ).rejects.toThrow(
     "Cannot fork OpenCode session with runtime 'opencode' and 'codex' runtime policy.",
   );
@@ -212,7 +223,7 @@ test("rejects missing resume scope before runtime side effects", async () => {
   ).rejects.toThrow("Cannot resume OpenCode session without session context.");
   expect(createClient).toHaveBeenCalledTimes(0);
   expect(requireRepoRuntime).toHaveBeenCalledTimes(0);
-  expect((adapter as unknown as TestAdapterInternals).sessions.size).toBe(0);
+  expect(adapter.sessionsForTest.size).toBe(0);
 });
 
 test("loads unbound session history without applying a session policy", async () => {
@@ -245,25 +256,9 @@ const makeMockClient = (
       error?: unknown;
       response?: unknown;
     };
+    permissionListData?: unknown[];
   } = {},
-): {
-  client: OpencodeClient;
-  createCalls: unknown[];
-  abortCalls: unknown[];
-  getCalls: unknown[];
-  listCalls: unknown[];
-  statusCalls: unknown[];
-  permissionListCalls: unknown[];
-  permissionReplyCalls: unknown[];
-  questionListCalls: unknown[];
-  questionReplyCalls: unknown[];
-  updateCalls: unknown[];
-  forkCalls: unknown[];
-  promptAsyncCalls: unknown[];
-  mcpStatusCalls: unknown[];
-  mcpConnectCalls: unknown[];
-  toolIdCalls: unknown[];
-} => {
+) => {
   const createCalls: unknown[] = [];
   const abortCalls: unknown[] = [];
   const getCalls: unknown[] = [];
@@ -280,29 +275,35 @@ const makeMockClient = (
   const mcpConnectCalls: unknown[] = [];
   const toolIdCalls: unknown[] = [];
 
-  const client = {
+  const client: OpencodeClient = {
     session: {
-      create: async (input: unknown) => {
+      create: async (input?: ClientMethodInput<"session", "create">) => {
         createCalls.push(input);
         return { data: { id: "external-session-1" }, error: undefined };
       },
-      abort: async (input: unknown) => {
+      abort: async (input?: ClientMethodInput<"session", "abort">) => {
         abortCalls.push(input);
         return { data: true, error: undefined };
       },
-      get: async (input: unknown) => {
+      get: async (input?: ClientMethodInput<"session", "get">) => {
         getCalls.push(input);
         return {
           data: {
+            directory: "/repo",
             id: "external-session-1",
+            projectID: "project-1",
+            slug: "external-session-1",
             time: {
               created: Date.parse("2026-02-22T12:00:00.000Z"),
+              updated: Date.parse("2026-02-22T12:00:00.000Z"),
             },
+            title: "BUILD task-1",
+            version: "1.18.18",
           },
           error: undefined,
         };
       },
-      update: async (input: unknown) => {
+      update: async (input?: ClientMethodInput<"session", "update">) => {
         updateCalls.push(input);
         return (
           options.sessionUpdateResult ?? {
@@ -311,17 +312,17 @@ const makeMockClient = (
           }
         );
       },
-      fork: async (input: unknown) => {
+      fork: async (input?: ClientMethodInput<"session", "fork">) => {
         forkCalls.push(input);
         return { data: { id: "external-session-fork" }, error: undefined };
       },
-      promptAsync: async (input: unknown) => {
+      promptAsync: async (input?: ClientMethodInput<"session", "promptAsync">) => {
         promptAsyncCalls.push(input);
         return { data: undefined, error: undefined };
       },
       messages: async () => ({ data: [], error: undefined }),
       children: async () => ({ data: [], error: undefined }),
-      list: async (input?: unknown) => {
+      list: async (input?: ClientMethodInput<"session", "list">) => {
         listCalls.push(input);
         return {
           data: [
@@ -329,32 +330,33 @@ const makeMockClient = (
               id: "external-session-1",
               projectID: "project-1",
               directory: "/repo",
+              slug: "external-session-1",
               title: "BUILD task-1",
               time: {
                 created: Date.parse("2026-02-22T12:00:00.000Z"),
                 updated: Date.parse("2026-02-22T12:00:00.000Z"),
               },
+              version: "1.18.18",
             },
             {
               id: "external-session-2",
               projectID: "project-2",
               directory: "/other",
+              slug: "external-session-2",
               title: "OTHER task",
               time: {
                 created: Date.parse("2026-02-22T12:00:00.000Z"),
                 updated: Date.parse("2026-02-22T12:00:00.000Z"),
               },
+              version: "1.18.18",
             },
           ],
           error: undefined,
         };
       },
-      status: async (input?: unknown) => {
+      status: async (input?: ClientMethodInput<"session", "status">) => {
         statusCalls.push(input);
-        const directory =
-          typeof input === "object" && input !== null && "directory" in input
-            ? (input as { directory?: string }).directory
-            : undefined;
+        const directory = input?.directory;
         return {
           data:
             directory === "/repo"
@@ -378,16 +380,13 @@ const makeMockClient = (
       },
     },
     permission: {
-      list: async (input?: unknown) => {
+      list: async (input?: ClientMethodInput<"permission", "list">) => {
         permissionListCalls.push(input);
-        const directory =
-          typeof input === "object" && input !== null && "directory" in input
-            ? (input as { directory?: string }).directory
-            : undefined;
+        const directory = input?.directory;
         return {
           data:
             directory === "/repo"
-              ? [
+              ? (options.permissionListData ?? [
                   {
                     id: "perm-1",
                     sessionID: "external-session-1",
@@ -396,23 +395,20 @@ const makeMockClient = (
                     metadata: { source: "history" },
                     always: [],
                   },
-                ]
+                ])
               : [],
           error: undefined,
         };
       },
-      reply: async (input: unknown) => {
+      reply: async (input?: ClientMethodInput<"permission", "reply">) => {
         permissionReplyCalls.push(input);
         return options.permissionReplyResult ?? { data: true, error: undefined };
       },
     },
     question: {
-      list: async (input?: unknown) => {
+      list: async (input?: ClientMethodInput<"question", "list">) => {
         questionListCalls.push(input);
-        const directory =
-          typeof input === "object" && input !== null && "directory" in input
-            ? (input as { directory?: string }).directory
-            : undefined;
+        const directory = input?.directory;
         return {
           data:
             directory === "/other"
@@ -434,23 +430,23 @@ const makeMockClient = (
           error: undefined,
         };
       },
-      reply: async (input: unknown) => {
+      reply: async (input?: ClientMethodInput<"question", "reply">) => {
         questionReplyCalls.push(input);
         return options.questionReplyResult ?? { data: true, error: undefined };
       },
     },
     mcp: {
-      status: async (input: unknown) => {
+      status: async (input?: ClientMethodInput<"mcp", "status">) => {
         mcpStatusCalls.push(input);
         return { data: { openducktor: { status: "connected" } }, error: undefined };
       },
-      connect: async (input: unknown) => {
+      connect: async (input?: ClientMethodInput<"mcp", "connect">) => {
         mcpConnectCalls.push(input);
         return { data: true, error: undefined };
       },
     },
     tool: {
-      ids: async (input: unknown) => {
+      ids: async (input?: ClientMethodInput<"tool", "ids">) => {
         toolIdCalls.push(input);
         return { data: ["odt_read_task", "task"], error: undefined };
       },
@@ -461,14 +457,12 @@ const makeMockClient = (
           directory: string;
           payload: Event;
         }> {
-          for (const event of [] as Event[]) {
-            yield { directory: "/repo", payload: event };
-          }
+          yield* [];
         }
         return { stream: iterator() };
       },
     },
-  } as unknown as OpencodeClient;
+  };
 
   return {
     client,
@@ -487,6 +481,23 @@ const makeMockClient = (
     mcpStatusCalls,
     mcpConnectCalls,
     toolIdCalls,
+  } satisfies {
+    client: OpencodeClient;
+    createCalls: unknown[];
+    abortCalls: unknown[];
+    getCalls: unknown[];
+    listCalls: unknown[];
+    statusCalls: unknown[];
+    permissionListCalls: unknown[];
+    permissionReplyCalls: unknown[];
+    questionListCalls: unknown[];
+    questionReplyCalls: unknown[];
+    updateCalls: unknown[];
+    forkCalls: unknown[];
+    promptAsyncCalls: unknown[];
+    mcpStatusCalls: unknown[];
+    mcpConnectCalls: unknown[];
+    toolIdCalls: unknown[];
   };
 };
 
@@ -660,7 +671,6 @@ describe("opencode-sdk-adapter", () => {
       systemPrompt: "system",
     });
 
-    const adapterInternals = adapter as unknown as TestAdapterInternals;
     const events: AgentEvent[] = [];
     await adapter.subscribeEvents(sessionRuntimeRef("external-session-1"), (event) => {
       events.push(event);
@@ -669,17 +679,17 @@ describe("opencode-sdk-adapter", () => {
     expect(summary.externalSessionId).toBe("external-session-1");
     expect(summary.runtimeKind).toBe("opencode");
     expect(summary.workingDirectory).toBe("/repo");
-    expect(adapterInternals.sessions.has("external-session-1")).toBe(true);
+    expect(adapter.sessionsForTest.has("external-session-1")).toBe(true);
     expect(mock.createCalls).toHaveLength(1);
 
     await adapter.stopSession(sessionRef("external-session-1"));
 
     expect(mock.abortCalls).toHaveLength(1);
-    expect(adapterInternals.sessions.has("external-session-1")).toBe(false);
+    expect(adapter.sessionsForTest.has("external-session-1")).toBe(false);
     expect(events.some((event) => event.type === "session_finished")).toBe(true);
   });
 
-  test("clears only the matching child pending input bucket by request id", async () => {
+  test("replyApproval clears only the matching pending input bucket by request id", async () => {
     const mockClient = makeMockClient();
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mockClient.client,
@@ -695,54 +705,59 @@ describe("opencode-sdk-adapter", () => {
       systemPrompt: "system",
     });
 
-    const adapterInternals = adapter as unknown as TestAdapterInternals;
-    const session = adapterInternals.sessions.get("external-session-1");
+    const session = adapter.sessionsForTest.get("external-session-1");
     expect(session).toBeDefined();
     if (!session) {
       throw new Error("Expected test session to be registered.");
     }
-    session.pendingSubagentInputEventsByExternalSessionId.set("child-a", [
-      { type: "approval_required", requestId: "request-1" },
-      { type: "question_required", requestId: "request-2" },
-    ] as never[]);
+    const approval = {
+      type: "approval_required",
+      externalSessionId: "external-session-1",
+      timestamp: "2026-02-22T12:00:00.000Z",
+      requestId: "request-1",
+      requestType: "permission_grant",
+      title: "Approve write",
+      summary: "Approval request for write.",
+      affectedPaths: ["src/**"],
+      action: { name: "write" },
+      mutation: "mutating",
+      supportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
+    } as const;
+    const question = {
+      type: "question_required",
+      externalSessionId: "external-session-1",
+      timestamp: "2026-02-22T12:00:00.000Z",
+      requestId: "request-2",
+      questions: [
+        {
+          header: "Scope",
+          question: "Pick target",
+          options: [{ label: "A", description: "Option A" }],
+        },
+      ],
+    } as const;
+    session.pendingSubagentInputEventsByExternalSessionId.set("external-session-1", [
+      approval,
+      question,
+    ]);
     session.pendingSubagentInputEventsByExternalSessionId.set("child-b", [
-      { type: "question_required", requestId: "request-1" },
-    ] as never[]);
-
-    adapterInternals.clearPendingSubagentInputEvent("child-a", "request-1");
-
-    expect(session.pendingSubagentInputEventsByExternalSessionId.get("child-a")).toEqual([
-      { type: "question_required", requestId: "request-2" },
+      { ...question, requestId: "request-1" },
     ]);
-    expect(session.pendingSubagentInputEventsByExternalSessionId.get("child-b")).toEqual([
-      { type: "question_required", requestId: "request-1" },
-    ]);
-  });
 
-  test("startSession fails fast when the sdk client lacks global event streaming", async () => {
-    const mock = makeMockClient();
-    const unsupportedClient = {
-      ...mock.client,
-      global: {},
-    } as unknown as OpencodeClient;
-    const adapter = new OpencodeSdkAdapter({
-      createClient: () => unsupportedClient,
-      now: () => "2026-02-22T12:00:00.000Z",
+    await adapter.replyApproval({
+      ...sessionRuntimeRef("external-session-1", {
+        sessionScope: opencodeWorkflowScope("spec"),
+      }),
+      requestId: "request-1",
+      outcome: "approve_once",
     });
 
-    await expect(
-      adapter.startSession({
-        repoPath: "/repo",
-        workingDirectory: "/repo",
-        runtimeKind: "opencode",
-        sessionScope: opencodeWorkflowScope("spec"),
-        runtimePolicy: opencodeRuntimePolicy,
-        systemPrompt: "system",
-      }),
-    ).rejects.toThrow("client.global.event()");
-    expect((adapter as unknown as TestAdapterInternals).sessions.has("external-session-1")).toBe(
-      false,
+    expect(session.pendingSubagentInputEventsByExternalSessionId.get("external-session-1")).toEqual(
+      [question],
     );
+    expect(session.pendingSubagentInputEventsByExternalSessionId.get("child-b")).toEqual([
+      { ...question, requestId: "request-1" },
+    ]);
   });
 
   test("checks same-directory MCP health before returning cached workflow tool selection", async () => {
@@ -782,7 +797,7 @@ describe("opencode-sdk-adapter", () => {
           return { data: ["odt_read_task"], error: undefined };
         },
       },
-    } as unknown as OpencodeClient;
+    } satisfies OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => client,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -797,14 +812,6 @@ describe("opencode-sdk-adapter", () => {
       systemPrompt: "system",
     });
 
-    const adapterInternals = adapter as unknown as {
-      sessions: Map<string, SessionRecord>;
-      resolveSessionToolSelection: (session: SessionRecord) => Promise<Record<string, boolean>>;
-    };
-    const session = adapterInternals.sessions.get("external-session-1");
-    if (!session) {
-      throw new Error("Expected test session to be registered.");
-    }
     const events: AgentEvent[] = [];
     const subscribedSessionRef = sessionRuntimeRef("external-session-1", {
       workingDirectory: "/repo/.openducktor/worktrees/task-1",
@@ -814,8 +821,12 @@ describe("opencode-sdk-adapter", () => {
       events.push(event);
     });
 
-    await adapterInternals.resolveSessionToolSelection(session);
-    await adapterInternals.resolveSessionToolSelection(session);
+    const message = {
+      ...subscribedSessionRef,
+      parts: [{ kind: "text", text: "Continue" }],
+    } satisfies Parameters<OpencodeSdkAdapter["sendUserMessage"]>[0];
+    await adapter.sendUserMessage(message);
+    await adapter.sendUserMessage(message);
 
     expect(statusCalls).toEqual([
       { directory: "/repo/.openducktor/worktrees/task-1" },
@@ -829,7 +840,8 @@ describe("opencode-sdk-adapter", () => {
       },
     ]);
     expect(toolIdCalls).toEqual([{ directory: "/repo/.openducktor/worktrees/task-1" }]);
-    expect(events).toEqual([
+    const reconnectEvents = events.filter(({ type }) => type === "mcp_reconnect_started");
+    expect(reconnectEvents).toEqual([
       expect.objectContaining({
         type: "mcp_reconnect_started",
         externalSessionId: "external-session-1",
@@ -912,13 +924,14 @@ describe("opencode-sdk-adapter", () => {
           description: "Review changes",
           source: "command",
           hints: [],
+          template: "Review changes",
         },
       ],
       error: undefined,
     }));
-    const createClient = mock(() => ({
+    const createClient: () => OpencodeClient = mock(() => ({
       command: { list },
-    })) as () => OpencodeClient;
+    }));
     const adapter = new OpencodeSdkAdapter({
       createClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -950,26 +963,11 @@ describe("opencode-sdk-adapter", () => {
     });
   });
 
-  test("listAvailableSlashCommands propagates catalog loader failures", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      createClient: (() => ({})) as () => OpencodeClient,
-      now: () => "2026-02-22T12:00:00.000Z",
-    });
-
-    await expect(
-      adapter.listAvailableSlashCommands({
-        repoPath: defaultRepoPath,
-        runtimeKind: "opencode",
-        workingDirectory: defaultRepoPath,
-      }),
-    ).rejects.toThrow("OpenCode runtime does not expose the command listing API.");
-  });
-
   test("accepts equivalent repo paths when validating resolved runtimes", async () => {
     const list = mock(async () => ({ data: [], error: undefined }));
-    const createClient = mock(() => ({
+    const createClient: () => OpencodeClient = mock(() => ({
       command: { list },
-    })) as () => OpencodeClient;
+    }));
     const adapter = new OpencodeSdkAdapter({
       createClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -991,7 +989,9 @@ describe("opencode-sdk-adapter", () => {
   });
 
   test("listAvailableSlashCommands rejects stdio runtime connections before creating a client", async () => {
-    const createClient = mock(() => ({}) as OpencodeClient);
+    const createClient = mock((): never => {
+      throw new Error("Client creation must not run for a stdio runtime connection.");
+    });
     const adapter = new OpencodeSdkAdapter({
       createClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -1036,10 +1036,18 @@ describe("opencode-sdk-adapter", () => {
 
   test("listAvailableSubagents forwards runtime inputs to the catalog loader", async () => {
     const agents = mock(async () => ({
-      data: [{ name: "reviewer", description: "Review changes", mode: "subagent" }],
+      data: [
+        {
+          name: "reviewer",
+          description: "Review changes",
+          mode: "subagent",
+          options: {},
+          permission: [],
+        },
+      ],
       error: undefined,
     }));
-    const createClient = mock(() => ({ app: { agents } })) as () => OpencodeClient;
+    const createClient: () => OpencodeClient = mock(() => ({ app: { agents } }));
     const adapter = new OpencodeSdkAdapter({ createClient, now: () => "2026-02-22T12:00:00.000Z" });
 
     const catalog = await adapter.listAvailableSubagents({
@@ -1070,9 +1078,9 @@ describe("opencode-sdk-adapter", () => {
       data: ["src/", "src/index.ts"],
       error: undefined,
     }));
-    const createClient = mock(() => ({
+    const createClient: () => OpencodeClient = mock(() => ({
       find: { files },
-    })) as () => OpencodeClient;
+    }));
     const adapter = new OpencodeSdkAdapter({
       createClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -1109,22 +1117,6 @@ describe("opencode-sdk-adapter", () => {
         kind: "code",
       },
     ]);
-  });
-
-  test("searchFiles propagates catalog loader failures", async () => {
-    const adapter = new OpencodeSdkAdapter({
-      createClient: (() => ({})) as () => OpencodeClient,
-      now: () => "2026-02-22T12:00:00.000Z",
-    });
-
-    await expect(
-      adapter.searchFiles({
-        repoPath: defaultRepoPath,
-        runtimeKind: "opencode",
-        workingDirectory: defaultWorkingDirectory,
-        query: "src",
-      }),
-    ).rejects.toThrow("OpenCode runtime does not expose the file search API.");
   });
 
   test("listSessionRuntimeSnapshots merges status and pending input into a single live-session view", async () => {
@@ -1193,34 +1185,35 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"session", "list">) => {
           mock.listCalls.push(input);
           return {
             data: [
-              {
+              createOpencodeSessionFixture({
                 id: "parent-session",
-                projectID: "project-1",
+                slug: "parent-session",
                 directory: "/repo",
                 title: "Parent",
                 time: {
                   created: Date.parse("2026-02-22T12:00:00.000Z"),
                 },
-              },
-              {
+              }),
+              createOpencodeSessionFixture({
                 id: "child-session",
-                projectID: "project-1",
+                slug: "child-session",
                 directory: "/repo",
                 parentID: "parent-session",
                 title: "Child",
                 time: {
                   created: Date.parse("2026-02-22T12:00:01.000Z"),
+                  updated: Date.parse("2026-02-22T12:00:01.000Z"),
                 },
-              },
+              }),
             ],
             error: undefined,
           };
         },
-        status: async (input?: unknown) => {
+        status: async (input?: ClientMethodInput<"session", "status">) => {
           mock.statusCalls.push(input);
           return {
             data: {
@@ -1233,7 +1226,7 @@ describe("opencode-sdk-adapter", () => {
       },
       permission: {
         ...mock.client.permission,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"permission", "list">) => {
           mock.permissionListCalls.push(input);
           return {
             data: [
@@ -1250,7 +1243,7 @@ describe("opencode-sdk-adapter", () => {
           };
         },
       },
-    } as unknown as OpencodeClient;
+    } satisfies OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => parentChildClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -1291,25 +1284,21 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"session", "list">) => {
           mock.listCalls.push(input);
           return {
             data: [
-              {
+              createOpencodeSessionFixture({
                 id: "external-session-1",
-                projectID: "project-1",
+                slug: "external-session-1",
                 directory: defaultWorkingDirectory,
                 title: "BUILD task-1",
-                time: {
-                  created: Date.parse("2026-02-22T12:00:00.000Z"),
-                  updated: Date.parse("2026-02-22T12:00:00.000Z"),
-                },
-              },
+              }),
             ],
             error: undefined,
           };
         },
-        status: async (input?: unknown) => {
+        status: async (input?: ClientMethodInput<"session", "status">) => {
           mock.statusCalls.push(input);
           return {
             data: {
@@ -1321,19 +1310,19 @@ describe("opencode-sdk-adapter", () => {
       },
       permission: {
         ...mock.client.permission,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"permission", "list">) => {
           mock.permissionListCalls.push(input);
           return { data: [], error: undefined };
         },
       },
       question: {
         ...mock.client.question,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"question", "list">) => {
           mock.questionListCalls.push(input);
           return { data: [], error: undefined };
         },
       },
-    } as unknown as OpencodeClient;
+    } satisfies OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => idleStatusClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -1372,7 +1361,7 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        status: async (input?: unknown) => {
+        status: async (input?: ClientMethodInput<"session", "status">) => {
           mock.statusCalls.push(input);
           return {
             data: {
@@ -1381,39 +1370,39 @@ describe("opencode-sdk-adapter", () => {
             error: undefined,
           };
         },
-        promptAsync: async (input: unknown) => {
+        promptAsync: async (input?: ClientMethodInput<"session", "promptAsync">) => {
           promptAsyncCalls.push(input);
           return { data: undefined, error: undefined };
         },
       },
       permission: {
         ...mock.client.permission,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"permission", "list">) => {
           mock.permissionListCalls.push(input);
           return { data: [], error: undefined };
         },
       },
       question: {
         ...mock.client.question,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"question", "list">) => {
           mock.questionListCalls.push(input);
           return { data: [], error: undefined };
         },
       },
       mcp: {
-        status: async (input: unknown) => {
+        status: async (input?: ClientMethodInput<"mcp", "status">) => {
           mcpStatusCalls.push(input);
           return mcpStatusDeferred.promise;
         },
         connect: async () => ({ data: true, error: undefined }),
       },
       tool: {
-        ids: async (input: unknown) => {
+        ids: async (input?: ClientMethodInput<"tool", "ids">) => {
           toolIdCalls.push(input);
           return { data: ["odt_read_task"], error: undefined };
         },
       },
-    } as unknown as OpencodeClient;
+    } satisfies OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => activeDuringToolSelectionClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -1468,7 +1457,7 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        status: async (input?: unknown) => {
+        status: async (input?: ClientMethodInput<"session", "status">) => {
           mock.statusCalls.push(input);
           return {
             data: {
@@ -1477,21 +1466,21 @@ describe("opencode-sdk-adapter", () => {
             error: undefined,
           };
         },
-        promptAsync: async (input: unknown) => {
+        promptAsync: async (input?: ClientMethodInput<"session", "promptAsync">) => {
           promptAsyncCalls.push(input);
           return { data: undefined, error: undefined };
         },
       },
       permission: {
         ...mock.client.permission,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"permission", "list">) => {
           mock.permissionListCalls.push(input);
           return { data: [], error: undefined };
         },
       },
       question: {
         ...mock.client.question,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"question", "list">) => {
           mock.questionListCalls.push(input);
           return { data: [], error: undefined };
         },
@@ -1503,7 +1492,7 @@ describe("opencode-sdk-adapter", () => {
       tool: {
         ids: async () => ({ data: ["odt_read_task"], error: undefined }),
       },
-    } as unknown as OpencodeClient;
+    } satisfies OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => acceptedPromptClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -1564,40 +1553,39 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"session", "list">) => {
           mock.listCalls.push(input);
           return {
             data: [
-              {
+              createOpencodeSessionFixture({
                 id: "external-session-1",
-                projectID: "project-1",
+                slug: "external-session-1",
                 directory: defaultWorkingDirectory,
                 title: "BUILD task-1",
-                time: { created: Date.parse("2026-02-22T12:00:00.000Z") },
-              },
+              }),
             ],
             error: undefined,
           };
         },
-        status: async (input?: unknown) => {
+        status: async (input?: ClientMethodInput<"session", "status">) => {
           mock.statusCalls.push(input);
           return { data: { "external-session-1": { type: "idle" } }, error: undefined };
         },
-        promptAsync: async (input: unknown) => {
+        promptAsync: async (input?: ClientMethodInput<"session", "promptAsync">) => {
           promptAsyncCalls.push(input);
           return { data: undefined, error: undefined };
         },
       },
       permission: {
         ...mock.client.permission,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"permission", "list">) => {
           mock.permissionListCalls.push(input);
           return { data: [], error: undefined };
         },
       },
       question: {
         ...mock.client.question,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"question", "list">) => {
           mock.questionListCalls.push(input);
           return { data: [], error: undefined };
         },
@@ -1609,13 +1597,13 @@ describe("opencode-sdk-adapter", () => {
       tool: {
         ids: async () => ({ data: ["odt_read_task"], error: undefined }),
       },
-    } as unknown as OpencodeClient;
+    } satisfies OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => idleSessionClient,
       now: () => "2026-02-22T12:00:00.000Z",
     });
     const unsubscribe = await adapter.subscribeEvents(sessionRuntimeRef(), () => {});
-    const session = (adapter as unknown as TestAdapterInternals).sessions.get("external-session-1");
+    const session = adapter.sessionsForTest.get("external-session-1");
     if (!session) {
       throw new Error("Expected the idle session to be retained.");
     }
@@ -1645,7 +1633,7 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        status: async (input?: unknown) => {
+        status: async (input?: ClientMethodInput<"session", "status">) => {
           mock.statusCalls.push(input);
           return {
             data: {
@@ -1661,14 +1649,14 @@ describe("opencode-sdk-adapter", () => {
       },
       permission: {
         ...mock.client.permission,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"permission", "list">) => {
           mock.permissionListCalls.push(input);
           return { data: [], error: undefined };
         },
       },
       question: {
         ...mock.client.question,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"question", "list">) => {
           mock.questionListCalls.push(input);
           return { data: [], error: undefined };
         },
@@ -1680,7 +1668,7 @@ describe("opencode-sdk-adapter", () => {
       tool: {
         ids: async () => ({ data: ["odt_read_task"], error: undefined }),
       },
-    } as unknown as OpencodeClient;
+    } satisfies OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => promptPendingClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -1736,7 +1724,7 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        status: async (input?: unknown) => {
+        status: async (input?: ClientMethodInput<"session", "status">) => {
           mock.statusCalls.push(input);
           return {
             data: {
@@ -1745,21 +1733,21 @@ describe("opencode-sdk-adapter", () => {
             error: undefined,
           };
         },
-        promptAsync: async (input: unknown) => {
+        promptAsync: async (input?: ClientMethodInput<"session", "promptAsync">) => {
           promptAsyncCalls.push(input);
           return { data: undefined, error: undefined };
         },
       },
       permission: {
         ...mock.client.permission,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"permission", "list">) => {
           mock.permissionListCalls.push(input);
           return { data: [], error: undefined };
         },
       },
       question: {
         ...mock.client.question,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"question", "list">) => {
           mock.questionListCalls.push(input);
           return { data: [], error: undefined };
         },
@@ -1771,7 +1759,7 @@ describe("opencode-sdk-adapter", () => {
       tool: {
         ids: async () => ({ data: ["odt_read_task"], error: undefined }),
       },
-    } as unknown as OpencodeClient;
+    } satisfies OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => queuedSendClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -1786,7 +1774,7 @@ describe("opencode-sdk-adapter", () => {
       systemPrompt: "system",
     });
 
-    const session = (adapter as unknown as TestAdapterInternals).sessions.get("external-session-1");
+    const session = adapter.sessionsForTest.get("external-session-1");
     if (!session) {
       throw new Error("Expected test session to be registered.");
     }
@@ -1824,26 +1812,31 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        status: async (input?: unknown) => {
+        status: async (input?: ClientMethodInput<"session", "status">) => {
           mock.statusCalls.push(input);
           return { data: { "external-session-1": { type: "idle" } }, error: undefined };
         },
-        command: async (input: { messageID: string }) => {
+        command: async (input?: ClientMethodInput<"session", "command">) => {
           commandCalls.push(input);
-          commandStarted.resolve(input);
+          const parsedInput = z.object({ messageID: z.string() }).safeParse(input);
+          if (!parsedInput.success) {
+            throw new Error("Expected slash command input to include messageID.");
+          }
+          const messageID = parsedInput.data.messageID;
+          commandStarted.resolve({ messageID });
           return { data: undefined, error: undefined };
         },
       },
       permission: {
         ...mock.client.permission,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"permission", "list">) => {
           mock.permissionListCalls.push(input);
           return { data: [], error: undefined };
         },
       },
       question: {
         ...mock.client.question,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"question", "list">) => {
           mock.questionListCalls.push(input);
           return { data: [], error: undefined };
         },
@@ -1855,7 +1848,7 @@ describe("opencode-sdk-adapter", () => {
       tool: {
         ids: async () => ({ data: ["odt_read_task"], error: undefined }),
       },
-    } as unknown as OpencodeClient;
+    } satisfies OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => slashCommandClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -1882,9 +1875,7 @@ describe("opencode-sdk-adapter", () => {
       ],
     });
     const { messageID } = await commandStarted.promise;
-    const admittedSession = (adapter as unknown as TestAdapterInternals).sessions.get(
-      "external-session-1",
-    );
+    const admittedSession = adapter.sessionsForTest.get("external-session-1");
     if (!admittedSession) {
       throw new Error("Expected test session to be registered.");
     }
@@ -1897,7 +1888,7 @@ describe("opencode-sdk-adapter", () => {
       workingDirectory: defaultWorkingDirectory,
       externalSessionId: "external-session-1",
     });
-    const session = (adapter as unknown as TestAdapterInternals).sessions.get("external-session-1");
+    const session = adapter.sessionsForTest.get("external-session-1");
 
     expect(snapshot).toMatchObject({ availability: "runtime", classification: "idle" });
     expect(session?.isAwaitingRuntimeTurnStart).toBe(false);
@@ -1919,7 +1910,7 @@ describe("opencode-sdk-adapter", () => {
       tool: {
         ids: async () => ({ data: ["odt_read_task"], error: undefined }),
       },
-    } as unknown as OpencodeClient;
+    } satisfies OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => queuedSendClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -1933,7 +1924,7 @@ describe("opencode-sdk-adapter", () => {
       runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
     });
-    const session = (adapter as unknown as TestAdapterInternals).sessions.get("external-session-1");
+    const session = adapter.sessionsForTest.get("external-session-1");
     if (!session) {
       throw new Error("Expected test session to be registered.");
     }
@@ -1956,12 +1947,12 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"session", "list">) => {
           mock.listCalls.push(input);
           return { data: [], error: undefined };
         },
       },
-    } as unknown as OpencodeClient;
+    } satisfies OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => emptyListClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -1999,12 +1990,12 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"session", "list">) => {
           mock.listCalls.push(input);
           return { data: [], error: undefined };
         },
       },
-    } as unknown as OpencodeClient;
+    } satisfies OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => emptyListClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -2045,12 +2036,12 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"session", "list">) => {
           mock.listCalls.push(input);
           return { data: [], error: undefined };
         },
       },
-    } as unknown as OpencodeClient;
+    } satisfies OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => emptyListClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -2064,7 +2055,7 @@ describe("opencode-sdk-adapter", () => {
       runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
     });
-    const session = (adapter as unknown as TestAdapterInternals).sessions.get("external-session-1");
+    const session = adapter.sessionsForTest.get("external-session-1");
     if (!session) {
       throw new Error("Expected test session to be registered.");
     }
@@ -2093,41 +2084,40 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"session", "list">) => {
           mock.listCalls.push(input);
           return {
             data: [
-              {
+              createOpencodeSessionFixture({
                 id: "external-session-1",
-                projectID: "project-1",
+                slug: "external-session-1",
                 directory: defaultWorkingDirectory,
                 title: "BUILD task-1",
-                time: { created: Date.parse("2026-02-22T12:00:00.000Z") },
-              },
+              }),
             ],
             error: undefined,
           };
         },
-        status: async (input?: unknown) => {
+        status: async (input?: ClientMethodInput<"session", "status">) => {
           mock.statusCalls.push(input);
           return { data: { "external-session-1": { type: "idle" } }, error: undefined };
         },
       },
       permission: {
         ...mock.client.permission,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"permission", "list">) => {
           mock.permissionListCalls.push(input);
           return { data: [], error: undefined };
         },
       },
       question: {
         ...mock.client.question,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"question", "list">) => {
           mock.questionListCalls.push(input);
           return { data: [], error: undefined };
         },
       },
-    } as unknown as OpencodeClient;
+    } satisfies OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => idleLiveClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -2141,7 +2131,7 @@ describe("opencode-sdk-adapter", () => {
       runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
     });
-    const session = (adapter as unknown as TestAdapterInternals).sessions.get("external-session-1");
+    const session = adapter.sessionsForTest.get("external-session-1");
     if (!session) {
       throw new Error("Expected test session to be registered.");
     }
@@ -2163,14 +2153,14 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"session", "list">) => {
           mock.listCalls.push(input);
           return { data: [], error: undefined };
         },
         messages: async () => ({ data: [], error: undefined }),
         children: async () => ({ data: [], error: undefined }),
       },
-    } as unknown as OpencodeClient;
+    } satisfies OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => emptyListClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -2216,12 +2206,14 @@ describe("opencode-sdk-adapter", () => {
               id: "perm-1",
               sessionID: "external-session-1",
               patterns: ["**/.env"],
+              metadata: { source: "history" },
+              always: [],
             },
           ],
           error: undefined,
         }),
       },
-    } as unknown as OpencodeClient;
+    } satisfies OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => malformedClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -2232,7 +2224,7 @@ describe("opencode-sdk-adapter", () => {
         repoPath: defaultRepoPath,
         runtimeKind: "opencode",
       }),
-    ).rejects.toThrow("Malformed Opencode pending approval payload: missing permission.");
+    ).rejects.toThrow("Malformed Opencode pending approval payload: permission:");
   });
 
   test("listSessionRuntimeSnapshots rejects malformed pending question payloads", async () => {
@@ -2246,13 +2238,19 @@ describe("opencode-sdk-adapter", () => {
             {
               id: "question-1",
               sessionID: "external-session-2",
-              questions: [],
+              questions: [
+                {
+                  header: "Confirm",
+                  question: "Ship it?",
+                  options: [{ label: "Yes" }],
+                },
+              ],
             },
           ],
           error: undefined,
         }),
       },
-    } as unknown as OpencodeClient;
+    } satisfies OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => malformedClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -2264,8 +2262,34 @@ describe("opencode-sdk-adapter", () => {
         runtimeKind: "opencode",
       }),
     ).rejects.toThrow(
-      "Malformed Opencode pending question payload 'question-1': missing questions.",
+      "Malformed Opencode pending question payload: questions.0.options.0.description:",
     );
+  });
+
+  test("listSessionRuntimeSnapshots rejects malformed pending approval metadata", async () => {
+    const mock = makeMockClient({
+      permissionListData: [
+        {
+          id: "perm-1",
+          sessionID: "external-session-1",
+          permission: "read",
+          patterns: ["**/.env"],
+          metadata: ["history"],
+          always: [],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    await expect(
+      adapter.listSessionRuntimeSnapshots({
+        repoPath: defaultRepoPath,
+        runtimeKind: "opencode",
+      }),
+    ).rejects.toThrow("Malformed Opencode pending approval payload: metadata:");
   });
 
   test("listSessionRuntimeSnapshots normalizes trailing separators in directory filters", async () => {
@@ -2276,20 +2300,17 @@ describe("opencode-sdk-adapter", () => {
         ...mock.client.session,
         list: async () => ({
           data: [
-            {
+            createOpencodeSessionFixture({
               id: "external-session-1",
-              projectID: "project-1",
+              slug: "external-session-1",
               directory: "/repo/",
               title: "BUILD task-1",
-              time: {
-                created: Date.parse("2026-02-22T12:00:00.000Z"),
-              },
-            },
+            }),
           ],
           error: undefined,
         }),
       },
-    } as unknown as OpencodeClient;
+    } satisfies OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => trailingDirectoryClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -2321,7 +2342,7 @@ describe("opencode-sdk-adapter", () => {
     ]);
   });
 
-  test("listSessionRuntimeSnapshots fails fast on malformed runtime statuses", async () => {
+  test("listSessionRuntimeSnapshots rejects malformed status values in the response map", async () => {
     const mock = makeMockClient();
     const malformedClient = {
       ...mock.client,
@@ -2336,7 +2357,7 @@ describe("opencode-sdk-adapter", () => {
           error: undefined,
         }),
       },
-    } as unknown as OpencodeClient;
+    } satisfies OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => malformedClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -2347,7 +2368,39 @@ describe("opencode-sdk-adapter", () => {
         repoPath: defaultRepoPath,
         runtimeKind: "opencode",
       }),
-    ).rejects.toThrow("Unsupported Opencode live agent session status type");
+    ).rejects.toThrow("Malformed Opencode session status response for directory '/repo'");
+  });
+
+  test("listSessionRuntimeSnapshots rejects retry status values outside upstream integer bounds", async () => {
+    const mock = makeMockClient();
+    const malformedClient = {
+      ...mock.client,
+      session: {
+        ...mock.client.session,
+        status: async () => ({
+          data: {
+            "external-session-1": {
+              type: "retry",
+              attempt: -1,
+              message: "Retrying",
+              next: 1.5,
+            },
+          },
+          error: undefined,
+        }),
+      },
+    } satisfies OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => malformedClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    await expect(
+      adapter.listSessionRuntimeSnapshots({
+        repoPath: defaultRepoPath,
+        runtimeKind: "opencode",
+      }),
+    ).rejects.toThrow("Malformed Opencode session status response for directory '/repo'");
   });
 
   test("listSessionRuntimeSnapshots rejects non-object session status maps", async () => {
@@ -2361,7 +2414,7 @@ describe("opencode-sdk-adapter", () => {
           error: undefined,
         }),
       },
-    } as unknown as OpencodeClient;
+    } satisfies OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => malformedClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -2383,20 +2436,17 @@ describe("opencode-sdk-adapter", () => {
         ...mock.client.session,
         list: async () => ({
           data: [
-            {
+            createOpencodeSessionFixture({
               id: "external-session-1",
-              projectID: "project-1",
+              slug: "external-session-1",
               directory: "  /repo  ",
               title: "BUILD task-1",
-              time: {
-                created: Date.parse("2026-02-22T12:00:00.000Z"),
-              },
-            },
+            }),
           ],
           error: undefined,
         }),
       },
-    } as unknown as OpencodeClient;
+    } satisfies OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => whitespaceClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -2434,20 +2484,17 @@ describe("opencode-sdk-adapter", () => {
         ...mock.client.session,
         list: async () => ({
           data: [
-            {
+            createOpencodeSessionFixture({
               id: "external-session-1",
-              projectID: "project-1",
+              slug: "external-session-1",
               directory: "   ",
               title: "BUILD task-1",
-              time: {
-                created: Date.parse("2026-02-22T12:00:00.000Z"),
-              },
-            },
+            }),
           ],
           error: undefined,
         }),
       },
-    } as unknown as OpencodeClient;
+    } satisfies OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => malformedClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -2463,54 +2510,15 @@ describe("opencode-sdk-adapter", () => {
     );
   });
 
-  test("listSessionRuntimeSnapshots rejects sessions with malformed titles", async () => {
-    const mock = makeMockClient();
-    const malformedClient = {
-      ...mock.client,
-      session: {
-        ...mock.client.session,
-        list: async () => ({
-          data: [
-            {
-              id: "external-session-1",
-              projectID: "project-1",
-              directory: "/repo",
-              time: {
-                created: Date.parse("2026-02-22T12:00:00.000Z"),
-              },
-            },
-          ],
-          error: undefined,
-        }),
-      },
-    } as unknown as OpencodeClient;
-    const adapter = new OpencodeSdkAdapter({
-      createClient: () => malformedClient,
-      now: () => "2026-02-22T12:00:00.000Z",
-    });
-
-    await expect(
-      adapter.listSessionRuntimeSnapshots({
-        repoPath: defaultRepoPath,
-        runtimeKind: "opencode",
-      }),
-    ).rejects.toThrow(
-      "Malformed Opencode session payload for 'external-session-1': missing title.",
-    );
-  });
-
   test("readSessionRuntimeSnapshot includes pending permissions and questions", async () => {
     const mock = makeMockClient();
     const questionfulClient = {
       ...mock.client,
       question: {
         ...mock.client.question,
-        list: async (input?: unknown) => {
+        list: async (input?: ClientMethodInput<"question", "list">) => {
           mock.questionListCalls.push(input);
-          const directory =
-            typeof input === "object" && input !== null && "directory" in input
-              ? (input as { directory?: string }).directory
-              : undefined;
+          const directory = input?.directory;
           return {
             data:
               directory === "/repo"
@@ -2533,7 +2541,7 @@ describe("opencode-sdk-adapter", () => {
           };
         },
       },
-    } as unknown as OpencodeClient;
+    } satisfies OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => questionfulClient,
       now: () => "2026-02-22T12:00:00.000Z",

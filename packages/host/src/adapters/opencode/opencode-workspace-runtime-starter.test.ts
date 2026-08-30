@@ -69,13 +69,14 @@ const createOpenCodeWorkspaceRuntimeStarter = (input: OpenCodeWorkspaceRuntimeSt
     releaseRuntime: () => Effect.succeed([]),
     runAdapterMutation: (mutation) => Effect.map(mutation, (result) => result.value),
   };
-  const effectiveToolDiscovery =
-    toolDiscovery ??
-    createToolDiscoveryAdapter({
-      ...(processEnv === undefined ? {} : { env: processEnv }),
-      systemCommands: systemCommands ?? createSystemCommands(),
-    });
-  return createEffectOpenCodeWorkspaceRuntimeStarter({
+  const toolDiscoveryInput: Parameters<typeof createToolDiscoveryAdapter>[0] = {
+    systemCommands: systemCommands ?? createSystemCommands(),
+  };
+  if (processEnv !== undefined) {
+    toolDiscoveryInput.env = processEnv;
+  }
+  const effectiveToolDiscovery = toolDiscovery ?? createToolDiscoveryAdapter(toolDiscoveryInput);
+  const runtimeStarterInput: Parameters<typeof createEffectOpenCodeWorkspaceRuntimeStarter>[0] = {
     runtimeDistribution: testRuntimeDistribution,
     toolDiscovery: effectiveToolDiscovery,
     settingsConfig:
@@ -85,6 +86,7 @@ const createOpenCodeWorkspaceRuntimeStarter = (input: OpenCodeWorkspaceRuntimeSt
       prepareLiveSessionAdapter ??
       ((runtime) => {
         const adapter: AgentSessionLiveAdapterPort = {
+          supportsSessionControl: false,
           binding: {
             runtimeId: runtime.runtimeId,
             runtimeKind: runtime.kind,
@@ -104,9 +106,12 @@ const createOpenCodeWorkspaceRuntimeStarter = (input: OpenCodeWorkspaceRuntimeSt
           discard: () => Effect.void,
         } satisfies PreparedRuntimeLiveSessionAdapter);
       }),
-    ...(processEnv === undefined ? {} : { processEnv }),
     ...starterInput,
-  });
+  };
+  if (processEnv !== undefined) {
+    runtimeStarterInput.processEnv = processEnv;
+  }
+  return createEffectOpenCodeWorkspaceRuntimeStarter(runtimeStarterInput);
 };
 const createSystemCommands = (): SystemCommandPort => ({
   resolveCommandPath(command) {
@@ -174,6 +179,9 @@ const waitFor = async (predicate: () => boolean, timeoutMs = 1_000): Promise<voi
   throw new Error("Timed out waiting for condition.");
 };
 
+const PROCESS_CLEANUP_TIMEOUT_MS = 3_000;
+const PROCESS_START_TIMEOUT_MS = 3_000;
+
 const waitForProcessExit = async (pid: number, timeoutMs: number): Promise<boolean> => {
   try {
     await waitFor(() => !processIsAlive(pid), timeoutMs);
@@ -206,7 +214,7 @@ const forceStopProcessTree = (pid: number) =>
           try {
             process.kill(pid, "SIGKILL");
           } catch (cause) {
-            if ((cause as NodeJS.ErrnoException).code !== "ESRCH") {
+            if (!(cause instanceof Error && "code" in cause && cause.code === "ESRCH")) {
               throw cause;
             }
           }
@@ -280,6 +288,7 @@ if (exitAfterMs !== null) {
 };
 
 const createLiveAdapter = (runtime: RuntimeInstanceSummary): AgentSessionLiveAdapterPort => ({
+  supportsSessionControl: false,
   binding: {
     runtimeId: runtime.runtimeId,
     runtimeKind: runtime.kind,
@@ -639,7 +648,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
           descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
         }),
       );
-      await waitFor(() => releasedRuntimeIds.length === 1);
+      await waitFor(() => releasedRuntimeIds.length === 1, PROCESS_CLEANUP_TIMEOUT_MS);
       expect(releasedRuntimeIds).toEqual(["runtime-unexpected-close"]);
       await Effect.runPromise(handle.stop());
       expect(releasedRuntimeIds).toEqual(["runtime-unexpected-close"]);
@@ -806,12 +815,13 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
           descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
         }),
       );
-      await waitFor(() => existsSync(childPidPath));
+      await waitFor(() => existsSync(childPidPath), PROCESS_START_TIMEOUT_MS);
       childPid = Number(await readFile(childPidPath, "utf8"));
       expect(processIsAlive(childPid)).toBe(true);
 
       await Effect.runPromise(handle.stop());
-      await waitFor(() => !processIsAlive(childPid as number));
+      const stoppedPid = childPid;
+      await waitFor(() => !processIsAlive(stoppedPid), PROCESS_CLEANUP_TIMEOUT_MS);
     } finally {
       if (childPid !== null && processIsAlive(childPid)) {
         process.kill(childPid, "SIGKILL");
@@ -841,7 +851,9 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         retryDelayMs: 5,
         portAllocator: () => Effect.succeed(43123),
         readinessProbe: () =>
-          Effect.promise(() => waitFor(() => existsSync(childPidPath))).pipe(Effect.as(false)),
+          Effect.promise(() =>
+            waitFor(() => existsSync(childPidPath), PROCESS_START_TIMEOUT_MS),
+          ).pipe(Effect.as(false)),
       });
 
       await expect(
@@ -855,7 +867,8 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         ),
       ).rejects.toThrow("Timed out waiting for OpenCode runtime on 127.0.0.1:43123.");
       childPid = Number(await readFile(childPidPath, "utf8"));
-      await waitFor(() => !processIsAlive(childPid as number));
+      const stoppedPid = childPid;
+      await waitFor(() => !processIsAlive(stoppedPid), PROCESS_CLEANUP_TIMEOUT_MS);
     } finally {
       if (childPid !== null && processIsAlive(childPid)) {
         process.kill(childPid, "SIGKILL");

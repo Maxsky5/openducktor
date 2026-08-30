@@ -15,12 +15,10 @@ import {
 
 describe("agent-orchestrator session context usage and idle settlement", () => {
   test("does not derive host-owned context usage from transcript step tokens", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -84,12 +82,10 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
   });
 
   test("does not mark a step message as tokenized when the step update is ignored", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -140,12 +136,10 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
   });
 
   test("keeps host-owned context independent from in-flight turn model changes", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -208,12 +202,10 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
   });
 
   test("does not derive context usage from step or final transcript messages", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -296,12 +288,10 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
   });
 
   test("does not derive context usage before an assistant transcript row exists", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -371,12 +361,10 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
   });
 
   test("preserves host-owned context across transcript events without a live usage update", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -467,12 +455,10 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
   });
 
   test("keeps reasoning-only deltas out of assistant transcript messages", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -531,12 +517,10 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
   });
 
   test("keeps starting sessions active when an early idle event arrives before kickoff send", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -576,12 +560,10 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
   });
 
   test("ignores idle until runtime activity begins, then trusts the runtime idle state", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -683,12 +665,10 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
   });
 
   test("keeps streamed text messages through terminal idle settlement", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -745,12 +725,10 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
   });
 
   test("upserts the finalized assistant message instead of appending a duplicate", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},

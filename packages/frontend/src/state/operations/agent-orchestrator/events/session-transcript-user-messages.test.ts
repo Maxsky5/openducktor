@@ -14,12 +14,10 @@ import {
 
 describe("agent-orchestrator session transcript events", () => {
   test("writes canonical user_message events into the transcript", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -88,12 +86,10 @@ describe("agent-orchestrator session transcript events", () => {
   });
 
   test("preserves attachment display parts on user_message events", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -329,12 +325,10 @@ describe("agent-orchestrator session transcript events", () => {
   });
 
   test("merges queued user_message updates in place when the agent reads the turn", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-        );
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},

@@ -1,3 +1,5 @@
+import { agentToolDataSchema, type AgentToolData } from "@openducktor/contracts";
+import { z } from "zod";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { extractAllFileEditData } from "./file-edit-tool";
 import { extractPathFromInput, readInputString } from "./tool-input-utils";
@@ -52,7 +54,7 @@ const PATH_DISPLAY_TOOL_NAMES = new Set([
 
 const summarizeSearchToolInput = (
   tool: string,
-  input: Record<string, unknown> | undefined,
+  input: AgentToolData | undefined,
 ): string | null => {
   if (!input) {
     return null;
@@ -90,20 +92,16 @@ const parseStructuredOutputSummary = (output: string): string | null => {
   }
 
   try {
-    const parsed = JSON.parse(trimmed) as unknown;
-    if (Array.isArray(parsed)) {
+    const parsed = agentToolDataSchema.safeParse(JSON.parse(trimmed));
+    if (!parsed.success) {
       return null;
     }
-    if (!parsed || typeof parsed !== "object") {
-      return null;
-    }
-
-    const record = parsed as Record<string, unknown>;
-    if (typeof record.message === "string" && record.message.trim().length > 0) {
+    const record = parsed.data;
+    if (hasNonEmptyText(record.message)) {
       return compactText(record.message, 160);
     }
 
-    if (typeof record.result === "string" && record.result.trim().length > 0) {
+    if (hasNonEmptyText(record.result)) {
       return compactText(record.result, 160);
     }
 
@@ -113,14 +111,15 @@ const parseStructuredOutputSummary = (output: string): string | null => {
   }
 };
 
-const countTodosFromUnknown = (value: unknown): number | null => {
+const countTodos = (value: AgentToolData[string]): number | null => {
   if (Array.isArray(value)) {
     return value.length;
   }
-  if (!value || typeof value !== "object") {
+  const parsed = agentToolDataSchema.safeParse(value);
+  if (!parsed.success) {
     return null;
   }
-  const record = value as Record<string, unknown>;
+  const record = parsed.data;
   if (Array.isArray(record.todos)) {
     return record.todos.length;
   }
@@ -130,11 +129,11 @@ const countTodosFromUnknown = (value: unknown): number | null => {
   return null;
 };
 
-const countTodosFromInput = (input: Record<string, unknown> | undefined): number | null => {
+const countTodosFromInput = (input: AgentToolData | undefined): number | null => {
   if (!input) {
     return null;
   }
-  return countTodosFromUnknown(input.todos ?? input.items ?? null);
+  return countTodos(input.todos ?? input.items ?? null);
 };
 
 const countTodosFromOutput = (output: string | undefined): number | null => {
@@ -142,8 +141,8 @@ const countTodosFromOutput = (output: string | undefined): number | null => {
     return null;
   }
   try {
-    const parsed = JSON.parse(output) as unknown;
-    return countTodosFromUnknown(parsed);
+    const parsed = z.json().parse(JSON.parse(output));
+    return countTodos(parsed);
   } catch {
     return null;
   }
@@ -163,9 +162,9 @@ const normalizeDisplaySummary = (
   return relativizeDisplayPath(summary, workingDirectory);
 };
 
-const extractTaskId = (input: Record<string, unknown> | undefined): string | null => {
+const extractTaskId = (input: AgentToolData | undefined): string | null => {
   const taskId = input?.taskId;
-  return typeof taskId === "string" && taskId.trim().length > 0 ? taskId.trim() : null;
+  return hasNonEmptyText(taskId) ? taskId.trim() : null;
 };
 
 export const buildToolSummary = (
@@ -215,7 +214,7 @@ export const buildToolSummary = (
   }
 
   const command = meta.input?.command;
-  if (toolType === "bash" && typeof command === "string" && command.trim().length > 0) {
+  if (toolType === "bash" && hasNonEmptyText(command)) {
     return compactText(command, 120);
   }
 
@@ -223,7 +222,7 @@ export const buildToolSummary = (
     return "";
   }
 
-  if (typeof meta.preview === "string" && meta.preview.trim().length > 0) {
+  if (meta.preview !== undefined && meta.preview.trim().length > 0) {
     return compactText(normalizeDisplaySummary(lowerTool, meta.preview, workingDirectory), 160);
   }
 

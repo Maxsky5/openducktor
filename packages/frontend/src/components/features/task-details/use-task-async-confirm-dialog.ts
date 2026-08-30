@@ -57,15 +57,7 @@ export function useTaskAsyncConfirmDialog({
   scopeKey,
   onOpenChange,
   run,
-}: UseTaskAsyncConfirmDialogOptions): {
-  isDialogOpen: boolean;
-  isPending: boolean;
-  error: string | null;
-  openDialog: () => void;
-  closeDialog: () => void;
-  handleDialogOpenChange: (nextOpen: boolean) => void;
-  confirm: () => void;
-} {
+}: UseTaskAsyncConfirmDialogOptions) {
   const [state, dispatch] = useReducer(asyncConfirmDialogReducer, {
     isOpen: false,
     isPending: false,
@@ -128,11 +120,11 @@ export function useTaskAsyncConfirmDialog({
         dispatch({ type: "succeeded" });
         onOpenChange(false);
       })
-      .catch((error: unknown) => {
+      .catch((cause: unknown) => {
         if (requestToken !== requestTokenRef.current) {
           return;
         }
-        dispatch({ type: "failed", error: errorMessage(error) });
+        dispatch({ type: "failed", error: errorMessage(cause) });
       })
       .finally(() => {
         if (requestToken !== requestTokenRef.current) {
@@ -151,5 +143,13 @@ export function useTaskAsyncConfirmDialog({
     closeDialog,
     handleDialogOpenChange,
     confirm,
+  } satisfies {
+    isDialogOpen: boolean;
+    isPending: boolean;
+    error: string | null;
+    openDialog: () => void;
+    closeDialog: () => void;
+    handleDialogOpenChange: (nextOpen: boolean) => void;
+    confirm: () => void;
   };
 }

@@ -1,17 +1,18 @@
 import { describe, expect, test } from "bun:test";
+import type { CodexAppServerFuzzyFileSearchResponse } from "@openducktor/contracts";
 import { searchCodexFiles } from "./file-search";
 import type { CodexAppServerClient } from "./types";
 
 const createClient = (
-  response: unknown,
+  response: CodexAppServerFuzzyFileSearchResponse,
   calls: Array<{ query: string; roots: string[]; cancellationToken: string | null }>,
 ): CodexAppServerClient =>
   ({
     async fuzzyFileSearch(params) {
       calls.push(params);
-      return response as Awaited<ReturnType<CodexAppServerClient["fuzzyFileSearch"]>>;
+      return response;
     },
-  }) as CodexAppServerClient;
+  }) satisfies CodexAppServerClient;
 
 describe("searchCodexFiles", () => {
   test("calls Codex fuzzyFileSearch and maps ordered file and directory results", async () => {
@@ -149,6 +150,7 @@ describe("searchCodexFiles", () => {
           {
             root: "/repo/worktree",
             path: "src/link",
+            // @ts-expect-error This negative test verifies rejection of an unknown Codex match type.
             match_type: "symlink",
             file_name: "link",
             score: 1,
@@ -168,11 +170,11 @@ describe("searchCodexFiles", () => {
   });
 
   test("propagates upstream Codex app-server failures", async () => {
-    const client = {
+    const client: CodexAppServerClient = {
       async fuzzyFileSearch() {
         throw new Error("Codex app-server unavailable");
       },
-    } as CodexAppServerClient;
+    };
 
     await expect(
       searchCodexFiles(client, {

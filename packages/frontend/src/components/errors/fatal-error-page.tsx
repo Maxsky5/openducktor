@@ -1,11 +1,11 @@
 import { type ReactElement, useState } from "react";
 import type { FatalErrorReport } from "./fatal-error-report";
 
-const SOURCE_LABELS: Record<FatalErrorReport["source"], string> = {
+const SOURCE_LABELS = {
   boundary: "React render error",
   error: "Uncaught runtime error",
   unhandledrejection: "Unhandled promise rejection",
-};
+} satisfies Record<FatalErrorReport["source"], string>;
 
 interface FatalErrorPageProps {
   report: FatalErrorReport;

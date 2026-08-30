@@ -2,41 +2,29 @@ import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import type { GithubCommandDependencies } from "../../../application/tasks/support/github-pull-requests";
 import { HostOperationError } from "../../../effect/host-errors";
-import type { SystemCommandPort } from "../../../ports/system-command-port";
 import { loadGithubPullRequestReviewOverview } from "./github-pull-request-review-overview";
+import { createGithubReviewTestDependencies } from "./github-pull-request-review.test-support";
 
-const createDependencies = ({
+const createDependencies = <Response>({
   commands = [],
   response,
 }: {
   commands?: string[][];
-  response: unknown | ((args: string[]) => unknown);
+  response: (args: string[]) => Response;
 }): GithubCommandDependencies => {
-  const systemCommands: Pick<SystemCommandPort, "runCommandAllowFailure"> = {
-    runCommandAllowFailure: (_command, args) => {
-      commands.push(args);
-      if (!args.join(" ").includes("PullRequestReviewOverview")) {
-        return Effect.fail(
-          new HostOperationError({
-            operation: "gh",
-            message: `Unexpected gh command: ${args.join(" ")}`,
-          }),
-        );
-      }
-      const payload = typeof response === "function" ? response(args) : response;
-      return Effect.succeed({ ok: true, stdout: JSON.stringify(payload), stderr: "" });
-    },
-  };
-
-  return {
-    resolveGithubCommand: () =>
-      Effect.succeed({
-        ghCommand: "gh",
-        systemCommands: systemCommands as SystemCommandPort,
-      }),
-    systemCommands: systemCommands as SystemCommandPort,
-    toolDiscovery: {} as GithubCommandDependencies["toolDiscovery"],
-  };
+  return createGithubReviewTestDependencies((_command, args) => {
+    commands.push(args);
+    if (!args.join(" ").includes("PullRequestReviewOverview")) {
+      return Effect.fail(
+        new HostOperationError({
+          operation: "gh",
+          message: `Unexpected gh command: ${args.join(" ")}`,
+        }),
+      );
+    }
+    const payload = response(args);
+    return Effect.succeed({ ok: true, stdout: JSON.stringify(payload), stderr: "" });
+  });
 };
 
 const input = (dependencies: GithubCommandDependencies) => ({
@@ -54,9 +42,9 @@ const responsePage = ({
   reviews,
   reviewsPageInfo = { hasNextPage: false, endCursor: null },
 }: {
-  comments: unknown[];
+  comments: Array<object | null>;
   commentsPageInfo?: { hasNextPage: boolean; endCursor: string | null };
-  reviews: unknown[];
+  reviews: Array<object | null>;
   reviewsPageInfo?: { hasNextPage: boolean; endCursor: string | null };
 }) => ({
   data: {
@@ -88,30 +76,31 @@ describe("loadGithubPullRequestReviewOverview", () => {
         input(
           createDependencies({
             commands,
-            response: responsePage({
-              comments: [
-                {
-                  id: "comment-1",
-                  author: { login: "reviewer", avatarUrl: reviewerAvatarUrl },
-                  body: "Please check spacing.",
-                  url: "https://github.com/openai/openducktor/pull/42#issuecomment-1",
-                  createdAt: "2026-07-08T10:00:00Z",
-                  updatedAt: "2026-07-08T10:01:00Z",
-                },
-              ],
-              reviews: [
-                {
-                  id: "review-1",
-                  author: { login: "reviewer", avatarUrl: reviewerAvatarUrl },
-                  body: "Changes requested.",
-                  state: "CHANGES_REQUESTED",
-                  url: "https://github.com/openai/openducktor/pull/42#pullrequestreview-1",
-                  createdAt: "2026-07-08T10:02:00Z",
-                  submittedAt: "2026-07-08T10:03:00Z",
-                  updatedAt: "2026-07-08T10:04:00Z",
-                },
-              ],
-            }),
+            response: () =>
+              responsePage({
+                comments: [
+                  {
+                    id: "comment-1",
+                    author: { login: "reviewer", avatarUrl: reviewerAvatarUrl },
+                    body: "Please check spacing.",
+                    url: "https://github.com/openai/openducktor/pull/42#issuecomment-1",
+                    createdAt: "2026-07-08T10:00:00Z",
+                    updatedAt: "2026-07-08T10:01:00Z",
+                  },
+                ],
+                reviews: [
+                  {
+                    id: "review-1",
+                    author: { login: "reviewer", avatarUrl: reviewerAvatarUrl },
+                    body: "Changes requested.",
+                    state: "CHANGES_REQUESTED",
+                    url: "https://github.com/openai/openducktor/pull/42#pullrequestreview-1",
+                    createdAt: "2026-07-08T10:02:00Z",
+                    submittedAt: "2026-07-08T10:03:00Z",
+                    updatedAt: "2026-07-08T10:04:00Z",
+                  },
+                ],
+              }),
           }),
         ),
       ),
@@ -188,7 +177,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
 
   test("paginates comments and reviews independently without refetching completed connections", async () => {
     const commands: string[][] = [];
-    const response = (args: string[]): unknown => {
+    const response = (args: string[]): object => {
       const command = args.join(" ");
       if (command.includes("commentsCursor=comments-page-2")) {
         expect(command).toContain("includeComments=true");
@@ -249,7 +238,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
 
   test("continues review history after comments finish and keeps repeated reviewers", async () => {
     const commands: string[][] = [];
-    const response = (args: string[]): unknown => {
+    const response = (args: string[]): object => {
       const command = args.join(" ");
       if (command.includes("reviewsCursor=reviews-page-2")) {
         expect(command).toContain("includeComments=false");
@@ -307,15 +296,16 @@ describe("loadGithubPullRequestReviewOverview", () => {
       loadGithubPullRequestReviewOverview(
         input(
           createDependencies({
-            response: responsePage({
-              comments: [],
-              reviews: [
-                { id: "approved", body: "", state: "APPROVED" },
-                { id: "changes", body: "   ", state: "CHANGES_REQUESTED" },
-                { id: "commented", body: "", state: "COMMENTED" },
-                { id: "dismissed", body: "", state: "DISMISSED" },
-              ],
-            }),
+            response: () =>
+              responsePage({
+                comments: [],
+                reviews: [
+                  { id: "approved", body: "", state: "APPROVED" },
+                  { id: "changes", body: "   ", state: "CHANGES_REQUESTED" },
+                  { id: "commented", body: "", state: "COMMENTED" },
+                  { id: "dismissed", body: "", state: "DISMISSED" },
+                ],
+              }),
           }),
         ),
       ),
@@ -341,13 +331,14 @@ describe("loadGithubPullRequestReviewOverview", () => {
       loadGithubPullRequestReviewOverview(
         input(
           createDependencies({
-            response: responsePage({
-              comments: [],
-              reviews: [
-                { id: "pending-empty", body: "", state: "PENDING" },
-                { id: "pending-draft", body: "Draft guidance", state: "PENDING" },
-              ],
-            }),
+            response: () =>
+              responsePage({
+                comments: [],
+                reviews: [
+                  { id: "pending-empty", body: "", state: "PENDING" },
+                  { id: "pending-draft", body: "Draft guidance", state: "PENDING" },
+                ],
+              }),
           }),
         ),
       ),
@@ -365,10 +356,11 @@ describe("loadGithubPullRequestReviewOverview", () => {
       loadGithubPullRequestReviewOverview(
         input(
           createDependencies({
-            response: responsePage({
-              comments: [],
-              reviews: [{ id: "review-invalid", body: "Review", state }],
-            }),
+            response: () =>
+              responsePage({
+                comments: [],
+                reviews: [{ id: "review-invalid", body: "Review", state }],
+              }),
           }),
         ),
       ).pipe(Effect.either),
@@ -377,7 +369,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
     expect(result._tag).toBe("Left");
     if (result._tag === "Left") {
       expect(result.left._tag).toBe("HostValidationError");
-      expect(result.left.field).toBe("pullRequest.reviews.nodes.0.state");
+      expect(result.left.field).toBe("data.repository.pullRequest.reviews.nodes.0.state");
       expect(result.left.message).toContain("review state");
     }
   });
@@ -387,10 +379,11 @@ describe("loadGithubPullRequestReviewOverview", () => {
       loadGithubPullRequestReviewOverview(
         input(
           createDependencies({
-            response: responsePage({
-              comments: [],
-              reviews: [{ id: "review-invalid", body: { text: "Review" }, state: "APPROVED" }],
-            }),
+            response: () =>
+              responsePage({
+                comments: [],
+                reviews: [{ id: "review-invalid", body: { text: "Review" }, state: "APPROVED" }],
+              }),
           }),
         ),
       ).pipe(Effect.either),
@@ -399,7 +392,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
     expect(result._tag).toBe("Left");
     if (result._tag === "Left") {
       expect(result.left._tag).toBe("HostValidationError");
-      expect(result.left.field).toBe("pullRequest.reviews.nodes.0.body");
+      expect(result.left.field).toBe("data.repository.pullRequest.reviews.nodes.0.body");
       expect(result.left.message).toContain("review body");
     }
   });
@@ -409,7 +402,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
       loadGithubPullRequestReviewOverview(
         input(
           createDependencies({
-            response: responsePage({ comments: [], reviews: [null] }),
+            response: () => responsePage({ comments: [], reviews: [null] }),
           }),
         ),
       ).pipe(Effect.either),
@@ -418,7 +411,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
     expect(result._tag).toBe("Left");
     if (result._tag === "Left") {
       expect(result.left._tag).toBe("HostValidationError");
-      expect(result.left.field).toBe("pullRequest.reviews.nodes.0");
+      expect(result.left.field).toBe("data.repository.pullRequest.reviews.nodes.0");
     }
   });
 
@@ -443,15 +436,15 @@ describe("loadGithubPullRequestReviewOverview", () => {
     };
 
     const result = await Effect.runPromise(
-      loadGithubPullRequestReviewOverview(input(createDependencies({ response: malformed }))).pipe(
-        Effect.either,
-      ),
+      loadGithubPullRequestReviewOverview(
+        input(createDependencies({ response: () => malformed })),
+      ).pipe(Effect.either),
     );
 
     expect(result._tag).toBe("Left");
     if (result._tag === "Left") {
       expect(result.left._tag).toBe("HostValidationError");
-      expect(result.left.field).toBe("pullRequest.comments.pageInfo");
+      expect(result.left.field).toBe("data.repository.pullRequest.comments.pageInfo");
     }
   });
 });

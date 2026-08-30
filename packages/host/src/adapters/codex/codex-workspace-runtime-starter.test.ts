@@ -1,3 +1,4 @@
+import type { CodexAppServerStreamEvent } from "../../ports/codex-app-server-port";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -11,6 +12,7 @@ import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryId, ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { writeFakeRuntimeCommand } from "../../test-support/fake-runtime-command";
 import { createDiscoveredRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
+import { createAgentSessionRuntimeAdapterTestDouble } from "../../test-support/service-test-doubles";
 import { removeTestDirectory } from "../../test-support/temp-directory";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { createSystemCommandRunner } from "../system/system-command-runner";
@@ -64,36 +66,41 @@ const createCodexWorkspaceRuntimeStarter = (input: CodexWorkspaceRuntimeStarterT
     releaseRuntime: () => Effect.succeed([]),
     runAdapterMutation: (mutation) => mutation.pipe(Effect.map((result) => result.value)),
   } satisfies RuntimeLiveSessionLifecyclePort;
-  const effectiveToolDiscovery =
-    toolDiscovery ??
-    createToolDiscoveryAdapter({
-      ...(processEnv === undefined ? {} : { env: processEnv }),
-      systemCommands: systemCommands ?? createSystemCommands(),
-    });
-  return createEffectCodexWorkspaceRuntimeStarter({
+  const toolDiscoveryInput: Parameters<typeof createToolDiscoveryAdapter>[0] = {
+    systemCommands: systemCommands ?? createSystemCommands(),
+  };
+  if (processEnv !== undefined) {
+    toolDiscoveryInput.env = processEnv;
+  }
+  const effectiveToolDiscovery = toolDiscovery ?? createToolDiscoveryAdapter(toolDiscoveryInput);
+  const runtimeStarterInput: Parameters<typeof createEffectCodexWorkspaceRuntimeStarter>[0] = {
     runtimeDistribution: testRuntimeDistribution,
     toolDiscovery: effectiveToolDiscovery,
     settingsConfig:
       settingsConfig ?? createDiscoveredRuntimeSettingsConfig("codex", effectiveToolDiscovery),
-    ...(processEnv === undefined ? {} : { processEnv }),
     liveSessionLifecycle: liveSessionLifecycle ?? defaultLiveSessionLifecycle,
     prepareLiveSessionAdapter:
       prepareLiveSessionAdapter ??
       ((runtime) =>
         Effect.succeed({
-          adapter: {
-            binding: {
+          adapter: createAgentSessionRuntimeAdapterTestDouble(
+            {
               runtimeId: runtime.runtimeId,
               runtimeKind: runtime.kind,
               repoPath: runtime.repoPath,
             },
-          } as never,
+            {},
+          ),
           emitRuntimeEvent: () => {},
           startForwarding: () => Effect.void,
           discard: () => Effect.void,
         })),
     ...starterInput,
-  });
+  };
+  if (processEnv !== undefined) {
+    runtimeStarterInput.processEnv = processEnv;
+  }
+  return createEffectCodexWorkspaceRuntimeStarter(runtimeStarterInput);
 };
 const createCodexAppServerTransportRegistry = (
   ...args: Parameters<typeof createEffectCodexAppServerTransportRegistry>
@@ -437,7 +444,11 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       await waitForRuntimeExit();
       await expect(
         Effect.runPromise(
-          promiseCodexAppServer.request({ runtimeId: "runtime-1", method: "thread/loaded/list" }),
+          promiseCodexAppServer.request({
+            runtimeId: "runtime-1",
+            method: "thread/loaded/list",
+            params: {},
+          }),
         ),
       ).rejects.toThrow("Codex app-server transport not found for runtime runtime-1");
     } finally {
@@ -489,7 +500,8 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       expect(processIsAlive(childPid)).toBe(true);
 
       await Effect.runPromise(handle.stop());
-      await waitFor(() => !processIsAlive(childPid as number));
+      const stoppedPid = childPid;
+      await waitFor(() => !processIsAlive(stoppedPid));
     } finally {
       if (childPid !== null && processIsAlive(childPid)) {
         process.kill(childPid, "SIGKILL");
@@ -583,6 +595,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
           codexAppServer.request({
             runtimeId: "runtime-cleanup-failure",
             method: "thread/loaded/list",
+            params: {},
           }),
         ),
       ).rejects.toThrow("Codex app-server transport not found");
@@ -593,8 +606,6 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
 
   test("rejects pending Codex transport requests before waiting on process-tree cleanup", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-codex-transport-first-"));
-    const originalSetTimeout = globalThis.setTimeout;
-    const originalClearTimeout = globalThis.clearTimeout;
     try {
       const repo = join(root, "repo");
       await mkdir(repo);
@@ -604,17 +615,22 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       });
       const codexAppServer = createCodexAppServerTransportRegistry();
       let pendingRequestSettled = false;
-      let requestTimeoutClearedBeforeProcessCleanup = false;
-      let requestTimeout: ReturnType<typeof setTimeout> | null = null;
-      let requestTimeoutCleared = false;
+      let markProcessCleanupStarted: () => void = () => undefined;
+      let releaseProcessCleanup: () => void = () => undefined;
+      const processCleanupStarted = new Promise<void>((resolve) => {
+        markProcessCleanupStarted = resolve;
+      });
+      const processCleanupGate = new Promise<void>((resolve) => {
+        releaseProcessCleanup = resolve;
+      });
 
       const starter = createCodexWorkspaceRuntimeStarter({
         codexAppServer,
         processEnv: { ...process.env, PATH: `${root}:${process.env.PATH ?? ""}` },
         processTreeTerminator: () =>
           Effect.gen(function* () {
-            yield* Effect.promise(() => Promise.resolve());
-            requestTimeoutClearedBeforeProcessCleanup = requestTimeoutCleared;
+            markProcessCleanupStarted();
+            yield* Effect.promise(() => processCleanupGate);
             return yield* Effect.fail(
               new HostOperationError({
                 operation: "process-tree.stop",
@@ -643,24 +659,11 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         }),
       );
 
-      globalThis.setTimeout = ((handler: (...args: unknown[]) => void, timeout?: number) => {
-        const timer = originalSetTimeout(handler, timeout);
-        if (timeout === 4_000) {
-          requestTimeout = timer;
-        }
-        return timer;
-      }) as typeof setTimeout;
-      globalThis.clearTimeout = ((timer) => {
-        if (timer === requestTimeout) {
-          requestTimeoutCleared = true;
-        }
-        return originalClearTimeout(timer as Parameters<typeof originalClearTimeout>[0]);
-      }) as typeof clearTimeout;
-
       const requestPromise = Effect.runPromise(
         codexAppServer.request({
           runtimeId,
           method: "thread/loaded/list",
+          params: {},
         }),
       ).catch((error) => {
         pendingRequestSettled = true;
@@ -670,14 +673,13 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
       expect(pendingRequestSettled).toBe(false);
 
-      await expect(Effect.runPromise(handle.stop())).rejects.toThrow(
-        "process tree: process tree stayed alive",
-      );
-      expect(requestTimeoutClearedBeforeProcessCleanup).toBe(true);
-      await expect(requestPromise).resolves.toBeInstanceOf(Error);
+      const stopping = Effect.runPromise(handle.stop());
+      await processCleanupStarted;
+      const requestError = await requestPromise;
+      releaseProcessCleanup();
+      expect(requestError).toBeInstanceOf(Error);
+      await expect(stopping).rejects.toThrow("process tree: process tree stayed alive");
     } finally {
-      globalThis.setTimeout = originalSetTimeout;
-      globalThis.clearTimeout = originalClearTimeout;
       await removeTestDirectory(root);
     }
   });
@@ -780,14 +782,15 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
           Effect.sync(() => {
             order.push("prepare");
             return {
-              adapter: {
-                binding: {
+              adapter: createAgentSessionRuntimeAdapterTestDouble(
+                {
                   runtimeId: runtime.runtimeId,
                   runtimeKind: "codex",
                   repoPath: runtime.repoPath,
                 },
-              } as never,
-              emitRuntimeEvent: (event: unknown) => {
+                {},
+              ),
+              emitRuntimeEvent: (event: CodexAppServerStreamEvent) => {
                 order.push("event");
                 events.push(event);
               },
@@ -907,13 +910,14 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         liveSessionLifecycle,
         prepareLiveSessionAdapter: (runtime) =>
           Effect.succeed({
-            adapter: {
-              binding: {
+            adapter: createAgentSessionRuntimeAdapterTestDouble(
+              {
                 runtimeId: runtime.runtimeId,
                 runtimeKind: runtime.kind,
                 repoPath: runtime.repoPath,
               },
-            } as never,
+              {},
+            ),
             emitRuntimeEvent: () => {},
             startForwarding: () =>
               Effect.fail(
@@ -947,9 +951,10 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       );
       await registrationStarted;
       await waitFor(() => existsSync(runtimePidPath));
-      runtimePid = Number(await readFile(runtimePidPath, "utf8"));
-      process.kill(runtimePid, "SIGTERM");
-      await waitFor(() => !processIsAlive(runtimePid as number), 2_000);
+      const startedRuntimePid = Number(await readFile(runtimePidPath, "utf8"));
+      runtimePid = startedRuntimePid;
+      process.kill(startedRuntimePid, "SIGTERM");
+      await waitFor(() => !processIsAlive(startedRuntimePid), 2_000);
       await expect(
         Effect.runPromise(
           codexAppServer.request({

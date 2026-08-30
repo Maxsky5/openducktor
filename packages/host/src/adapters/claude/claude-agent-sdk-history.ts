@@ -1,4 +1,5 @@
 import type { AgentEvent, AgentSessionHistoryMessage } from "@openducktor/core";
+import { z } from "zod";
 import { CLAUDE_COMPACTED_MESSAGE } from "./claude-agent-sdk-compaction";
 import {
   addClaudeHistoryFinishStep,
@@ -17,6 +18,7 @@ import {
   isClaudeHistoryCompactBoundaryMessage,
   isClaudeHistorySubagentSystemMessage,
 } from "./claude-agent-sdk-history-import";
+import { toClaudeTaskNotificationMessage } from "./claude-agent-sdk-history-notifications";
 import { createClaudeHistoryInputProjector } from "./claude-agent-sdk-history-input";
 import {
   appendUnmatchedLiveUserMessages,
@@ -36,24 +38,28 @@ import {
   successfulClaudeResultText,
 } from "./claude-agent-sdk-result-lifecycle";
 import { readClaudeTaskNotifications } from "./claude-agent-sdk-runtime-messages";
-import {
-  emitClaudeAgentToolResultSubagentPart,
-  type handleClaudeSubagentSystemMessage,
-} from "./claude-agent-sdk-subagents";
+import { emitClaudeAgentToolResultSubagentPart } from "./claude-agent-sdk-subagents";
 import {
   type ClaudeTodoProjectionState,
   type ClaudeTodoState,
   retractClaudeTodoToolResults,
 } from "./claude-agent-sdk-todos";
 import { retractClaudeTranscriptCorrelations } from "./claude-agent-sdk-transcript-correlation";
+import type { ClaudeToolInput } from "./claude-agent-sdk-types";
 import {
   readClaudeTurnOriginKind,
   shouldFinalizeClaudeTurn,
 } from "./claude-agent-sdk-user-messages";
-import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
+
+const claudeCompactMetadataSchema = z.object({ trigger: z.string().optional() });
 
 const removeClaudeHistoryFinishStep = (message: MutableAssistantHistoryMessage): void => {
   message.parts = message.parts.filter((part) => part.kind !== "step" || part.phase !== "finish");
+};
+
+type PendingManualCompaction = {
+  messageId: string;
+  timestamp: string;
 };
 
 export const toClaudeHistoryMessages = (
@@ -71,7 +77,7 @@ export const toClaudeHistoryMessages = (
   const assistantMessagesByToolCallId = new Map<string, MutableAssistantHistoryMessage>();
   const toolMessageIdsByCallId = new Map<string, string>();
   const toolNamesByCallId = new Map<string, string>();
-  const toolInputsByCallId = new Map<string, Record<string, unknown>>();
+  const toolInputsByCallId = new Map<string, ClaudeToolInput>();
   const hiddenSubagentTaskIds = new Set<string>();
   const subagentMessageIdsByTaskId = new Map<string, string>();
   const subagentAgentIdsByToolUseId = new Map(options.subagentAgentIdsByToolUseId);
@@ -114,7 +120,7 @@ export const toClaudeHistoryMessages = (
   let lastFinalAssistantText: string | undefined;
   let lastAutonomousFinalAssistantMessage: MutableAssistantHistoryMessage | null = null;
   let assistantTurnOriginKind: string | undefined;
-  let pendingManualCompaction: { messageId: string; timestamp: string } | null = null;
+  let pendingManualCompaction: PendingManualCompaction | null = null;
   let manualCompactionBoundaryReceived = false;
   let unclaimedManualCompactionBoundary = false;
   const appendOrMergeAssistantSnapshot = (
@@ -192,12 +198,13 @@ export const toClaudeHistoryMessages = (
     if (!entry) {
       continue;
     }
-    removeRetractedMessages(retractedHistoryMessageIds(entry));
+    const entryValue = entry;
+    removeRetractedMessages(retractedHistoryMessageIds(entryValue));
     if (!options.includeNestedEntries && isNestedHistoryEntry(entry)) {
       continue;
     }
     if (entry.type === "user") {
-      const originKind = readClaudeTurnOriginKind(entry);
+      const originKind = readClaudeTurnOriginKind(entryValue);
       if (originKind !== undefined) {
         if (originKind !== "human" && lastAutonomousFinalAssistantMessage) {
           removeClaudeHistoryFinishStep(lastAutonomousFinalAssistantMessage);
@@ -209,22 +216,12 @@ export const toClaudeHistoryMessages = (
       }
     }
     const timestamp = readHistoryTimestamp(entry, now);
-    const taskNotifications = readClaudeTaskNotifications(entry);
+    const taskNotifications = readClaudeTaskNotifications(entryValue);
     if (taskNotifications.length > 0) {
-      for (const taskNotification of taskNotifications) {
+      for (const notification of taskNotifications) {
         appendClaudeHistorySubagentSystemMessage({
           entry,
-          message: {
-            type: "system",
-            subtype: "task_notification",
-            uuid: entry.uuid,
-            session_id: readHistorySessionId(entry),
-            task_id: taskNotification.taskId,
-            status: taskNotification.status,
-            ...(taskNotification.toolUseId ? { tool_use_id: taskNotification.toolUseId } : {}),
-            ...(taskNotification.outputFile ? { output_file: taskNotification.outputFile } : {}),
-            ...(taskNotification.summary ? { summary: taskNotification.summary } : {}),
-          } as Parameters<typeof handleClaudeSubagentSystemMessage>[0]["message"],
+          message: toClaudeTaskNotificationMessage(entry, notification),
           state: toolResultState,
           timestamp,
         });
@@ -273,18 +270,18 @@ export const toClaudeHistoryMessages = (
       });
       if (pendingManualCompaction) {
         manualCompactionBoundaryReceived = true;
-      } else if (
-        isRecord(entry.compact_metadata) &&
-        readStringProp(entry.compact_metadata, "trigger") === "manual"
-      ) {
-        unclaimedManualCompactionBoundary = true;
+      } else {
+        const parsedCompactMetadata = claudeCompactMetadataSchema.safeParse(entry.compact_metadata);
+        if (parsedCompactMetadata.success && parsedCompactMetadata.data.trigger === "manual") {
+          unclaimedManualCompactionBoundary = true;
+        }
       }
       continue;
     }
     if (isClaudeHistorySubagentSystemMessage(entry)) {
       appendClaudeHistorySubagentSystemMessage({
         entry,
-        message: entry as Parameters<typeof handleClaudeSubagentSystemMessage>[0]["message"],
+        message: entry,
         state: toolResultState,
         timestamp,
       });
@@ -318,7 +315,7 @@ export const toClaudeHistoryMessages = (
         }
         const input = toolInputsByCallId.get(part.callId);
         const subagentEvents: AgentEvent[] = [];
-        emitClaudeAgentToolResultSubagentPart({
+        const subagentResult: Parameters<typeof emitClaudeAgentToolResultSubagentPart>[0] = {
           emit: (event) => subagentEvents.push(event),
           isError: false,
           resultRaw: { agentId, status: "running" },
@@ -336,8 +333,11 @@ export const toClaudeHistoryMessages = (
           },
           timestamp,
           toolUseId: part.callId,
-          ...(input ? { input } : {}),
-        });
+        };
+        if (input) {
+          subagentResult.input = input;
+        }
+        emitClaudeAgentToolResultSubagentPart(subagentResult);
         return [
           part,
           ...subagentEvents.flatMap((event) =>
@@ -375,7 +375,7 @@ export const toClaudeHistoryMessages = (
       continue;
     }
     if (entry.type === "result") {
-      const resultOriginKind = readClaudeTurnOriginKind(entry) ?? assistantTurnOriginKind;
+      const resultOriginKind = readClaudeTurnOriginKind(entryValue) ?? assistantTurnOriginKind;
       const shouldFinalize = shouldFinalizeClaudeTurn(
         resultOriginKind,
         activeBackgroundSubagentTaskIds.size,

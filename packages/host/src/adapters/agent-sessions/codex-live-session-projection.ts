@@ -7,6 +7,7 @@ import {
   agentSessionTranscriptEventSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import type { z } from "zod";
 import {
   type HostError,
   HostValidationError,
@@ -24,8 +25,18 @@ type CodexProjectionRuntime = {
 type QueuedMutation = {
   readonly mutation: CodexLiveSessionMutation;
   readonly resolve: () => void;
-  readonly reject: (error: unknown) => void;
+  readonly reject: (cause: unknown) => void;
 };
+
+type NormalizedCodexLiveSessionMutation = Pick<
+  CodexLiveSessionMutation,
+  "catalogInvalidated" | "fault" | "faultRef"
+> & {
+  readonly snapshots: AgentSessionLiveSnapshot[];
+  readonly transcriptEvents: Array<z.output<typeof agentSessionTranscriptEventSchema>>;
+};
+
+type OperationValidationDetails = { readonly operation: string };
 
 const refKey = (ref: AgentSessionLiveRef): string =>
   [ref.repoPath, ref.runtimeKind, ref.workingDirectory, ref.externalSessionId].join("\u0000");
@@ -36,15 +47,15 @@ const refsEqual = (left: AgentSessionLiveRef, right: AgentSessionLiveRef): boole
 const snapshotsEqual = (left: AgentSessionLiveSnapshot, right: AgentSessionLiveSnapshot): boolean =>
   JSON.stringify(left) === JSON.stringify(right);
 
-const parseProjectionValue = <Output>(
-  schema: { parse(value: unknown): Output },
-  value: unknown,
+const parseProjectionValue = <Schema extends z.ZodType, Input>(
+  schema: Schema,
+  value: Input,
   operation: string,
-): Effect.Effect<Output, HostValidationError> =>
+): Effect.Effect<z.output<Schema>, HostValidationError<OperationValidationDetails>> =>
   Effect.try({
     try: () => schema.parse(value),
     catch: (cause) =>
-      new HostValidationError({
+      new HostValidationError<OperationValidationDetails>({
         message: cause instanceof Error ? cause.message : String(cause),
         cause,
         details: { operation },
@@ -134,13 +145,18 @@ export const createCodexLiveSessionProjection = ({
         ),
       );
       const faultRef = mutation.faultRef ? yield* normalizeFaultRef(mutation.faultRef) : undefined;
-      return {
+      const normalized: NormalizedCodexLiveSessionMutation = {
         snapshots,
         transcriptEvents,
         catalogInvalidated: mutation.catalogInvalidated,
-        ...(mutation.fault ? { fault: mutation.fault } : {}),
-        ...(faultRef ? { faultRef } : {}),
       };
+      if (mutation.fault) {
+        normalized.fault = mutation.fault;
+      }
+      if (faultRef) {
+        normalized.faultRef = faultRef;
+      }
+      return normalized;
     });
 
   const applyMutation = (mutation: CodexLiveSessionMutation): Effect.Effect<void, HostError> =>
@@ -179,13 +195,13 @@ export const createCodexLiveSessionProjection = ({
               });
             }
             if (normalized.fault) {
-              changes.push({
+              const fault = {
                 type: "fault",
                 repoPath: runtime.repoPath,
                 operation: "codex-live-session.process-event",
                 message: normalized.fault,
-                ...(normalized.faultRef ? { ref: normalized.faultRef } : {}),
-              });
+              } satisfies AgentSessionLiveAdapterChange;
+              changes.push(normalized.faultRef ? { ...fault, ref: normalized.faultRef } : fault);
             }
             return { value: undefined, changes };
           }),

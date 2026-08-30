@@ -102,14 +102,6 @@ const CLAUDE_CATALOG: AgentModelCatalog = {
   },
 };
 
-const ALTERNATE_RUNTIME_DESCRIPTOR = {
-  ...OPENCODE_RUNTIME_DESCRIPTOR,
-  kind: "opencode",
-  label: "Alternate Runtime",
-} as const;
-
-const runtimeKind = (kind: string): RuntimeKind => kind as unknown as RuntimeKind;
-
 const createRuntimeDescriptor = ({
   kind,
   label,
@@ -119,7 +111,11 @@ const createRuntimeDescriptor = ({
   label: string;
   supportedStartModes: AgentSessionStartMode[];
 }): RuntimeDescriptor => ({
-  ...OPENCODE_RUNTIME_DESCRIPTOR,
+  ...{
+    opencode: OPENCODE_RUNTIME_DESCRIPTOR,
+    codex: CODEX_RUNTIME_DESCRIPTOR,
+    claude: CLAUDE_RUNTIME_DESCRIPTOR,
+  }[kind],
   kind,
   label,
   capabilities: {
@@ -133,8 +129,8 @@ const createRuntimeDescriptor = ({
   },
 });
 
-const REUSE_RUNTIME_KIND = runtimeKind("reuse-runtime");
-const FORK_RUNTIME_KIND = runtimeKind("fork-runtime");
+const REUSE_RUNTIME_KIND: RuntimeKind = "opencode";
+const FORK_RUNTIME_KIND: RuntimeKind = "codex";
 const REUSE_RUNTIME_DESCRIPTOR = createRuntimeDescriptor({
   kind: REUSE_RUNTIME_KIND,
   label: "Reuse Runtime",
@@ -146,21 +142,21 @@ const FORK_RUNTIME_DESCRIPTOR = createRuntimeDescriptor({
   supportedStartModes: ["fresh", "fork"],
 });
 
-const FRESH_RUNTIME_KIND = runtimeKind("fresh-runtime");
+const FRESH_RUNTIME_KIND: RuntimeKind = "claude";
 const FRESH_RUNTIME_DESCRIPTOR = createRuntimeDescriptor({
   kind: FRESH_RUNTIME_KIND,
   label: "Fresh Runtime",
   supportedStartModes: ["fresh"],
 });
 
-const REUSE_ONLY_RUNTIME_KIND = runtimeKind("reuse-only-runtime");
+const REUSE_ONLY_RUNTIME_KIND: RuntimeKind = "opencode";
 const REUSE_ONLY_RUNTIME_DESCRIPTOR = createRuntimeDescriptor({
   kind: REUSE_ONLY_RUNTIME_KIND,
   label: "Reuse Only Runtime",
   supportedStartModes: ["reuse"],
 });
 
-const FORK_ONLY_RUNTIME_KIND = runtimeKind("fork-only-runtime");
+const FORK_ONLY_RUNTIME_KIND: RuntimeKind = "codex";
 const FORK_ONLY_RUNTIME_DESCRIPTOR = createRuntimeDescriptor({
   kind: FORK_ONLY_RUNTIME_KIND,
   label: "Fork Only Runtime",
@@ -170,12 +166,7 @@ const FORK_ONLY_RUNTIME_DESCRIPTOR = createRuntimeDescriptor({
 const SESSION_START_TEST_RUNTIME_DEFINITIONS: RuntimeDescriptor[] = [
   OPENCODE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
-  ALTERNATE_RUNTIME_DESCRIPTOR,
-  REUSE_RUNTIME_DESCRIPTOR,
-  FORK_RUNTIME_DESCRIPTOR,
-  FRESH_RUNTIME_DESCRIPTOR,
-  REUSE_ONLY_RUNTIME_DESCRIPTOR,
-  FORK_ONLY_RUNTIME_DESCRIPTOR,
+  CLAUDE_RUNTIME_DESCRIPTOR,
 ];
 
 const createRepoSettings = (
@@ -210,20 +201,17 @@ const createRepoSettings = (
   },
 });
 
-const createReadyRuntimeHealthMap = (
-  runtimeDefinitions: RuntimeDescriptor[],
-): RepoRuntimeHealthMap => {
+const createReadyRuntimeHealthMap = (runtimeDefinitions: RuntimeDescriptor[]) => {
   const definitionsByKind = new Map<RuntimeKind, RuntimeDescriptor>();
   for (const definition of [...SESSION_START_TEST_RUNTIME_DEFINITIONS, ...runtimeDefinitions]) {
     definitionsByKind.set(definition.kind, definition);
   }
 
-  return Object.fromEntries(
-    Array.from(definitionsByKind.values()).map((definition) => [
-      definition.kind,
-      createRepoRuntimeHealthFixture({ status: "ready" }),
-    ]),
-  ) as RepoRuntimeHealthMap;
+  const runtimeHealthByKind: RepoRuntimeHealthMap = {};
+  for (const definition of definitionsByKind.values()) {
+    runtimeHealthByKind[definition.kind] = createRepoRuntimeHealthFixture({ status: "ready" });
+  }
+  return runtimeHealthByKind;
 };
 
 const createHookHarness = (
@@ -971,7 +959,6 @@ describe("useSessionStartModalState", () => {
       createBaseProps({
         repoSettings: createRepoSettings({
           spec: {
-            runtimeKind: undefined as never,
             providerId: "openai",
             modelId: "gpt-5",
             variant: "high",
@@ -1396,7 +1383,7 @@ describe("useSessionStartModalState", () => {
   test("locks selection to selected source session model in reuse mode", async () => {
     const harness = createHookHarness(
       createBaseProps({
-        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, ALTERNATE_RUNTIME_DESCRIPTOR],
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       }),
     );
 
@@ -1483,7 +1470,7 @@ describe("useSessionStartModalState", () => {
   test("restores source-session model state when switching back to reuse for pull request generation", async () => {
     const harness = createHookHarness(
       createBaseProps({
-        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, ALTERNATE_RUNTIME_DESCRIPTOR],
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       }),
     );
 

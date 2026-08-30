@@ -57,8 +57,8 @@ export function useAgentStudioRebaseConflictResolution({
   loadPromptOverrides = loadEffectivePromptOverrides,
 }: UseAgentStudioRebaseConflictResolutionArgs): UseAgentStudioRebaseConflictResolutionResult {
   const startConflictResolutionSession = useCallback(
-    async (request: StartGitConflictResolutionSessionInput) =>
-      startSessionRequest({
+    async (request: StartGitConflictResolutionSessionInput) => {
+      const input: Parameters<typeof startSessionRequest>[0] = {
         taskId: request.taskId,
         role: request.role,
         launchActionId: "build_rebase_conflict_resolution" as const,
@@ -66,13 +66,15 @@ export function useAgentStudioRebaseConflictResolution({
         message: request.message,
         initialStartMode: request.initialStartMode,
         targetWorkingDirectory: request.targetWorkingDirectory,
-        ...(request.existingSessionOptions.length > 0
-          ? { existingSessionOptions: request.existingSessionOptions }
-          : {}),
-        ...(request.initialSourceSession !== undefined
-          ? { initialSourceSession: request.initialSourceSession }
-          : {}),
-      }),
+      };
+      if (request.existingSessionOptions.length > 0) {
+        input.existingSessionOptions = request.existingSessionOptions;
+      }
+      if (request.initialSourceSession !== undefined) {
+        input.initialSourceSession = request.initialSourceSession;
+      }
+      return startSessionRequest(input);
+    },
     [startSessionRequest],
   );
 

@@ -172,8 +172,14 @@ describe("agent-chat-attachments", () => {
     if (!first || !second) {
       throw new Error("Expected PDF attachments to classify");
     }
-    first.file = { size: LOCAL_ATTACHMENT_BYTE_LIMIT / 2 + 1 } as File;
-    second.file = { size: LOCAL_ATTACHMENT_BYTE_LIMIT / 2 } as File;
+    Object.defineProperty(first.file, "size", {
+      configurable: true,
+      value: LOCAL_ATTACHMENT_BYTE_LIMIT / 2 + 1,
+    });
+    Object.defineProperty(second.file, "size", {
+      configurable: true,
+      value: LOCAL_ATTACHMENT_BYTE_LIMIT / 2,
+    });
 
     expect(
       validateComposerAttachments([first, second], {

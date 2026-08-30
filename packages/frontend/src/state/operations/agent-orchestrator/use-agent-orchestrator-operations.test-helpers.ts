@@ -32,13 +32,18 @@ export { createDeferred } from "./use-agent-orchestrator-operations.test-support
 export const acceptedUserMessageForInput = (
   input: SendAgentUserMessageInput,
   messageId = "accepted-user-message",
-): AcceptedAgentUserMessage => ({
-  type: "user_message",
-  externalSessionId: input.externalSessionId,
-  timestamp: "2026-02-22T08:00:01.000Z",
-  messageId,
-  message: serializeAgentUserMessagePartsToText(input.parts),
-  parts: [],
-  state: "read",
-  ...(input.model ? { model: input.model } : {}),
-});
+): AcceptedAgentUserMessage => {
+  const message: AcceptedAgentUserMessage = {
+    type: "user_message",
+    externalSessionId: input.externalSessionId,
+    timestamp: "2026-02-22T08:00:01.000Z",
+    messageId,
+    message: serializeAgentUserMessagePartsToText(input.parts),
+    parts: [],
+    state: "read",
+  };
+  if (input.model) {
+    message.model = input.model;
+  }
+  return message;
+};

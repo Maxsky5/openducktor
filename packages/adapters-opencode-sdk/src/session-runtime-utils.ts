@@ -4,8 +4,8 @@ import type { SessionInput } from "./types";
 
 type SessionInputSource = StartAgentSessionInput | PolicyBoundSessionRef;
 
-export const toIsoFromEpoch = (value: unknown, fallback: () => string): string => {
-  if (typeof value !== "number" || Number.isNaN(value)) {
+export const toIsoFromEpoch = (value: number | undefined, fallback: () => string): string => {
+  if (value === undefined || Number.isNaN(value)) {
     return fallback();
   }
   const iso = new Date(value).toISOString();
@@ -14,12 +14,17 @@ export const toIsoFromEpoch = (value: unknown, fallback: () => string): string =
 
 export const toSessionInput = (input: SessionInputSource): SessionInput => {
   const sessionScope = "sessionScope" in input ? input.sessionScope : undefined;
-  return {
+  const sessionInput: SessionInput = {
     repoPath: input.repoPath,
     workingDirectory: input.workingDirectory,
     systemPrompt: input.systemPrompt ?? "",
     ...toAgentRuntimePolicyBinding(input),
-    ...(sessionScope ? { sessionScope } : {}),
-    ...(input.model ? { model: input.model } : {}),
   };
+  if (sessionScope) {
+    sessionInput.sessionScope = sessionScope;
+  }
+  if (input.model) {
+    sessionInput.model = input.model;
+  }
+  return sessionInput;
 };

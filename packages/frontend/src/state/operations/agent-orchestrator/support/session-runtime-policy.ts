@@ -42,11 +42,14 @@ export const resolveAgentSessionRuntimePolicy = async ({
     return settingsIndependentPolicy;
   }
   const snapshot = await loadSettingsSnapshot();
-  return resolveAgentSessionRuntimePolicyFromSnapshot({
+  const input: Parameters<typeof resolveAgentSessionRuntimePolicyFromSnapshot>[0] = {
     runtimeKind,
     snapshot,
-    ...(sessionScope !== undefined ? { sessionScope } : {}),
-  });
+  };
+  if (sessionScope !== undefined) {
+    input.sessionScope = sessionScope;
+  }
+  return resolveAgentSessionRuntimePolicyFromSnapshot(input);
 };
 
 export const resolveAgentSessionRuntimePolicyFromSnapshot = ({
@@ -84,12 +87,15 @@ export const resolveRuntimeSessionContextRef = async (
     sessionScope,
     loadSettingsSnapshot,
   });
-  return {
+  const sessionRef: PolicyBoundSessionRef = {
     ...toRuntimeSessionRefWithPolicy(
       repoPath,
       { ...session.identity, selectedModel: session.selectedModel },
       runtimePolicy,
     ),
-    ...(sessionScope ? { sessionScope } : {}),
   };
+  if (sessionScope) {
+    sessionRef.sessionScope = sessionScope;
+  }
+  return sessionRef;
 };

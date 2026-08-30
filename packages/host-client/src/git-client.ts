@@ -43,11 +43,17 @@ import {
   gitWorktreeSummarySchema,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
-import { parseArray, parseOkResult } from "./invoke-utils";
+import { arrayResultSchema, okResultSchema } from "./invoke-utils";
+import { z } from "zod";
+
+const canonicalPathSchema = z.string().min(1);
 
 const gitGetBranches = async (invokeFn: InvokeFn, repoPath: string): Promise<GitBranch[]> => {
-  const payload = await invokeFn("git_get_branches", { repoPath });
-  return parseArray(gitBranchSchema, payload, "git_get_branches");
+  return invokeFn(
+    "git_get_branches",
+    { repoPath },
+    arrayResultSchema(gitBranchSchema, "git_get_branches"),
+  );
 };
 
 const gitGetCurrentBranch = async (
@@ -55,11 +61,11 @@ const gitGetCurrentBranch = async (
   repoPath: string,
   workingDir?: string,
 ): Promise<GitCurrentBranch> => {
-  const payload = await invokeFn("git_get_current_branch", {
-    repoPath,
-    workingDir: workingDir ?? null,
-  });
-  return gitCurrentBranchSchema.parse(payload);
+  return invokeFn(
+    "git_get_current_branch",
+    { repoPath, workingDir: workingDir ?? null },
+    gitCurrentBranchSchema,
+  );
 };
 
 const gitSwitchBranch = async (
@@ -68,12 +74,11 @@ const gitSwitchBranch = async (
   branch: string,
   options?: { create?: boolean },
 ): Promise<GitCurrentBranch> => {
-  const payload = await invokeFn("git_switch_branch", {
-    repoPath,
-    branch,
-    create: options?.create ?? false,
-  });
-  return gitCurrentBranchSchema.parse(payload);
+  return invokeFn(
+    "git_switch_branch",
+    { repoPath, branch, create: options?.create ?? false },
+    gitCurrentBranchSchema,
+  );
 };
 
 const gitCreateWorktree = async (
@@ -83,13 +88,11 @@ const gitCreateWorktree = async (
   branch: string,
   options?: { createBranch?: boolean },
 ): Promise<GitWorktreeSummary> => {
-  const payload = await invokeFn("git_create_worktree", {
-    repoPath,
-    worktreePath,
-    branch,
-    createBranch: options?.createBranch ?? false,
-  });
-  return gitWorktreeSummarySchema.parse(payload);
+  return invokeFn(
+    "git_create_worktree",
+    { repoPath, worktreePath, branch, createBranch: options?.createBranch ?? false },
+    gitWorktreeSummarySchema,
+  );
 };
 
 const gitRemoveWorktree = async (
@@ -98,12 +101,11 @@ const gitRemoveWorktree = async (
   worktreePath: string,
   options?: { force?: boolean },
 ): Promise<{ ok: boolean }> => {
-  const payload = await invokeFn("git_remove_worktree", {
-    repoPath,
-    worktreePath,
-    force: options?.force ?? false,
-  });
-  return parseOkResult(payload, "git_remove_worktree");
+  return invokeFn(
+    "git_remove_worktree",
+    { repoPath, worktreePath, force: options?.force ?? false },
+    okResultSchema("git_remove_worktree"),
+  );
 };
 
 const gitPushBranch = async (
@@ -117,15 +119,18 @@ const gitPushBranch = async (
     workingDir?: string;
   },
 ): Promise<GitPushBranchResult> => {
-  const payload = await invokeFn("git_push_branch", {
-    repoPath,
-    branch,
-    remote: options?.remote,
-    setUpstream: options?.setUpstream ?? false,
-    forceWithLease: options?.forceWithLease ?? false,
-    workingDir: options?.workingDir ?? null,
-  });
-  return gitPushBranchResultSchema.parse(payload);
+  return invokeFn(
+    "git_push_branch",
+    {
+      repoPath,
+      branch,
+      remote: options?.remote,
+      setUpstream: options?.setUpstream ?? false,
+      forceWithLease: options?.forceWithLease ?? false,
+      workingDir: options?.workingDir ?? null,
+    },
+    gitPushBranchResultSchema,
+  );
 };
 
 const gitPullBranch = async (
@@ -137,11 +142,11 @@ const gitPullBranch = async (
     repoPath,
     workingDir,
   };
-  const payload = await invokeFn("git_pull_branch", {
-    repoPath: request.repoPath,
-    workingDir: request.workingDir ?? null,
-  });
-  return gitPullBranchResultSchema.parse(payload);
+  return invokeFn(
+    "git_pull_branch",
+    { repoPath: request.repoPath, workingDir: request.workingDir ?? null },
+    gitPullBranchResultSchema,
+  );
 };
 
 const gitFetchRemote = async (
@@ -155,12 +160,15 @@ const gitFetchRemote = async (
     targetBranch,
     workingDir,
   };
-  const payload = await invokeFn("git_fetch_remote", {
-    repoPath: request.repoPath,
-    targetBranch: request.targetBranch,
-    workingDir: request.workingDir ?? null,
-  });
-  return gitFetchRemoteResultSchema.parse(payload);
+  return invokeFn(
+    "git_fetch_remote",
+    {
+      repoPath: request.repoPath,
+      targetBranch: request.targetBranch,
+      workingDir: request.workingDir ?? null,
+    },
+    gitFetchRemoteResultSchema,
+  );
 };
 
 const gitGetStatus = async (
@@ -168,11 +176,11 @@ const gitGetStatus = async (
   repoPath: string,
   workingDir?: string,
 ): Promise<FileStatus[]> => {
-  const payload = await invokeFn("git_get_status", {
-    repoPath,
-    workingDir: workingDir ?? null,
-  });
-  return parseArray(fileStatusSchema, payload, "git_get_status");
+  return invokeFn(
+    "git_get_status",
+    { repoPath, workingDir: workingDir ?? null },
+    arrayResultSchema(fileStatusSchema, "git_get_status"),
+  );
 };
 
 const gitGetDiff = async (
@@ -181,12 +189,11 @@ const gitGetDiff = async (
   targetBranch?: string,
   workingDir?: string,
 ): Promise<FileDiff[]> => {
-  const payload = await invokeFn("git_get_diff", {
-    repoPath,
-    targetBranch: targetBranch ?? null,
-    workingDir: workingDir ?? null,
-  });
-  return parseArray(fileDiffSchema, payload, "git_get_diff");
+  return invokeFn(
+    "git_get_diff",
+    { repoPath, targetBranch: targetBranch ?? null, workingDir: workingDir ?? null },
+    arrayResultSchema(fileDiffSchema, "git_get_diff"),
+  );
 };
 
 const gitCommitsAheadBehind = async (
@@ -195,12 +202,11 @@ const gitCommitsAheadBehind = async (
   targetBranch: string,
   workingDir?: string,
 ): Promise<CommitsAheadBehind> => {
-  const payload = await invokeFn("git_commits_ahead_behind", {
-    repoPath,
-    targetBranch,
-    workingDir: workingDir ?? null,
-  });
-  return commitsAheadBehindSchema.parse(payload);
+  return invokeFn(
+    "git_commits_ahead_behind",
+    { repoPath, targetBranch, workingDir: workingDir ?? null },
+    commitsAheadBehindSchema,
+  );
 };
 
 const gitGetWorktreeStatus = async (
@@ -210,13 +216,16 @@ const gitGetWorktreeStatus = async (
   diffScope?: "target" | "uncommitted",
   workingDir?: string,
 ): Promise<GitWorktreeStatus> => {
-  const payload = await invokeFn("git_get_worktree_status", {
-    repoPath,
-    targetBranch,
-    diffScope: gitDiffScopeSchema.parse(diffScope ?? "target"),
-    workingDir: workingDir ?? null,
-  });
-  return gitWorktreeStatusSchema.parse(payload);
+  return invokeFn(
+    "git_get_worktree_status",
+    {
+      repoPath,
+      targetBranch,
+      diffScope: gitDiffScopeSchema.parse(diffScope ?? "target"),
+      workingDir: workingDir ?? null,
+    },
+    gitWorktreeStatusSchema,
+  );
 };
 
 const gitGetWorktreeStatusSummary = async (
@@ -226,13 +235,16 @@ const gitGetWorktreeStatusSummary = async (
   diffScope?: "target" | "uncommitted",
   workingDir?: string,
 ): Promise<GitWorktreeStatusSummary> => {
-  const payload = await invokeFn("git_get_worktree_status_summary", {
-    repoPath,
-    targetBranch,
-    diffScope: gitDiffScopeSchema.parse(diffScope ?? "target"),
-    workingDir: workingDir ?? null,
-  });
-  return gitWorktreeStatusSummarySchema.parse(payload);
+  return invokeFn(
+    "git_get_worktree_status_summary",
+    {
+      repoPath,
+      targetBranch,
+      diffScope: gitDiffScopeSchema.parse(diffScope ?? "target"),
+      workingDir: workingDir ?? null,
+    },
+    gitWorktreeStatusSummarySchema,
+  );
 };
 
 const gitCommitAll = async (
@@ -246,12 +258,15 @@ const gitCommitAll = async (
     message,
     workingDir,
   };
-  const payload = await invokeFn("git_commit_all", {
-    repoPath: request.repoPath,
-    workingDir: request.workingDir ?? null,
-    message: request.message,
-  });
-  return gitCommitAllResultSchema.parse(payload);
+  return invokeFn(
+    "git_commit_all",
+    {
+      repoPath: request.repoPath,
+      workingDir: request.workingDir ?? null,
+      message: request.message,
+    },
+    gitCommitAllResultSchema,
+  );
 };
 
 const gitResetWorktreeSelection = async (
@@ -259,14 +274,17 @@ const gitResetWorktreeSelection = async (
   request: GitResetWorktreeSelectionRequest,
 ): Promise<GitResetWorktreeSelectionResult> => {
   const parsedRequest = gitResetWorktreeSelectionRequestSchema.parse(request);
-  const payload = await invokeFn("git_reset_worktree_selection", {
-    repoPath: parsedRequest.repoPath,
-    workingDir: parsedRequest.workingDir ?? null,
-    targetBranch: parsedRequest.targetBranch,
-    snapshot: parsedRequest.snapshot,
-    selection: parsedRequest.selection,
-  });
-  return gitResetWorktreeSelectionResultSchema.parse(payload);
+  return invokeFn(
+    "git_reset_worktree_selection",
+    {
+      repoPath: parsedRequest.repoPath,
+      workingDir: parsedRequest.workingDir ?? null,
+      targetBranch: parsedRequest.targetBranch,
+      snapshot: parsedRequest.snapshot,
+      selection: parsedRequest.selection,
+    },
+    gitResetWorktreeSelectionResultSchema,
+  );
 };
 
 const gitRebaseBranch = async (
@@ -280,12 +298,15 @@ const gitRebaseBranch = async (
     targetBranch,
     workingDir,
   };
-  const payload = await invokeFn("git_rebase_branch", {
-    repoPath: request.repoPath,
-    targetBranch: request.targetBranch,
-    workingDir: request.workingDir ?? null,
-  });
-  return gitRebaseBranchResultSchema.parse(payload);
+  return invokeFn(
+    "git_rebase_branch",
+    {
+      repoPath: request.repoPath,
+      targetBranch: request.targetBranch,
+      workingDir: request.workingDir ?? null,
+    },
+    gitRebaseBranchResultSchema,
+  );
 };
 
 const gitRebaseAbort = async (
@@ -297,11 +318,11 @@ const gitRebaseAbort = async (
     repoPath,
     workingDir,
   };
-  const payload = await invokeFn("git_rebase_abort", {
-    repoPath: request.repoPath,
-    workingDir: request.workingDir ?? null,
-  });
-  return gitRebaseAbortResultSchema.parse(payload);
+  return invokeFn(
+    "git_rebase_abort",
+    { repoPath: request.repoPath, workingDir: request.workingDir ?? null },
+    gitRebaseAbortResultSchema,
+  );
 };
 
 const gitAbortConflict = async (
@@ -315,12 +336,15 @@ const gitAbortConflict = async (
     operation,
     workingDir,
   };
-  const payload = await invokeFn("git_abort_conflict", {
-    repoPath: request.repoPath,
-    operation: request.operation,
-    workingDir: request.workingDir ?? null,
-  });
-  return gitConflictAbortResultSchema.parse(payload);
+  return invokeFn(
+    "git_abort_conflict",
+    {
+      repoPath: request.repoPath,
+      operation: request.operation,
+      workingDir: request.workingDir ?? null,
+    },
+    gitConflictAbortResultSchema,
+  );
 };
 
 export class HostGitClient {
@@ -463,10 +487,6 @@ export class HostGitClient {
   }
 
   async gitCanonicalizePath(path: string): Promise<string> {
-    const payload = await this.invokeFn("git_canonicalize_path", { repoPath: path });
-    if (typeof payload !== "string" || payload.length === 0) {
-      throw new Error("git_canonicalize_path returned an invalid path.");
-    }
-    return payload;
+    return this.invokeFn("git_canonicalize_path", { repoPath: path }, canonicalPathSchema);
   }
 }

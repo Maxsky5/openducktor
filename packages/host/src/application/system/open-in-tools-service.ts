@@ -5,13 +5,18 @@ import {
   systemOpenInToolListSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  type HostOperationErrorAggregate,
+  HostValidationError,
+  type HostValidationErrorAggregate,
+} from "../../effect/host-errors";
 import type { OpenInToolsPort, OpenInToolsPortError } from "../../ports/open-in-tools-port";
 
 const OPEN_IN_TOOL_CACHE_TTL_MS = 5 * 60 * 1000;
 export type OpenInToolsServiceError =
-  | HostOperationError
-  | HostValidationError
+  | HostOperationErrorAggregate
+  | HostValidationErrorAggregate
   | OpenInToolsPortError;
 
 export type OpenInToolsService = {

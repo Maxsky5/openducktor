@@ -1,7 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
-import { isRecord } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import { toTabsStorageKey } from "./query-sync/agent-studio-navigation";
+import { z } from "zod";
 
 type PersistedTaskTabsPayload = {
   tabs: string[];
@@ -18,17 +18,17 @@ const DEFAULT_PERSISTED_TABS_STATE: PersistedTaskTabsState = {
   activeTaskId: null,
 };
 
-const normalizeTaskTabs = (entries: unknown): string[] => {
-  if (!Array.isArray(entries)) {
-    return [];
-  }
-  return Array.from(
-    new Set(
-      entries.filter(
-        (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
-      ),
-    ),
-  );
+const persistedTaskTabsObjectSchema = z.object({
+  tabs: z.array(z.json()),
+  activeTaskId: z.string().nullable().optional(),
+});
+
+const normalizeTaskTabs = (entries: readonly unknown[]): string[] => {
+  const taskIds = entries.flatMap((entry) => {
+    const result = z.string().safeParse(entry);
+    return result.success && result.data.trim().length > 0 ? [result.data] : [];
+  });
+  return Array.from(new Set(taskIds));
 };
 
 export const parsePersistedTaskTabs = (raw: string | null): PersistedTaskTabsState => {
@@ -46,15 +46,10 @@ export const parsePersistedTaskTabs = (raw: string | null): PersistedTaskTabsSta
       };
     }
 
-    if (!isRecord(parsed)) {
-      return DEFAULT_PERSISTED_TABS_STATE;
-    }
-
-    const tabs = normalizeTaskTabs(parsed.tabs);
+    const payload = persistedTaskTabsObjectSchema.parse(parsed);
+    const tabs = normalizeTaskTabs(payload.tabs);
     const activeTaskId =
-      typeof parsed.activeTaskId === "string" && parsed.activeTaskId.trim().length > 0
-        ? parsed.activeTaskId
-        : null;
+      payload.activeTaskId && payload.activeTaskId.trim().length > 0 ? payload.activeTaskId : null;
     return {
       tabs,
       activeTaskId,

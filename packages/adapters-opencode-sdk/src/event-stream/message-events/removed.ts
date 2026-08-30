@@ -1,6 +1,4 @@
-import type { Event } from "@opencode-ai/sdk/v2/client";
-import { readStringProp } from "../../guards";
-import { readEventProperties } from "../schemas";
+import type { ParsedOpencodeEvent as Event } from "../../opencode-global-event-ingress";
 import type { EventStreamRuntime } from "../shared";
 import { removeMessageProjectionState } from "./message-state";
 import { publishUserMessageReadStateChanges } from "./user";
@@ -10,13 +8,7 @@ export const handleMessageRemovedEvent = (event: Event, runtime: EventStreamRunt
     return false;
   }
 
-  const properties = readEventProperties(event);
-  const messageId = properties
-    ? readStringProp(properties, ["messageID", "messageId", "message_id"])
-    : undefined;
-  if (!messageId) {
-    return true;
-  }
+  const messageId = event.properties.messageID;
 
   if (removeMessageProjectionState(runtime, messageId)) {
     publishUserMessageReadStateChanges(runtime);

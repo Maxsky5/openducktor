@@ -213,7 +213,7 @@ export const buildCompletionWorktreePath = (
     return worktreePath;
   });
 export const blockBuildCompletionTask = (
-  taskStore: TaskStorePort,
+  taskStore: Pick<TaskStorePort, "transitionTask">,
   repoPath: string,
   taskId: string,
   current: TaskCard,

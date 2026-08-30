@@ -50,10 +50,21 @@ export const routeClaudePendingInputEvent = <Event extends ClaudePendingInputEve
 
 export const claudePendingInputResolutionRoute = (
   event: Extract<AgentEvent, { type: "approval_required" | "question_required" }>,
-) => ({
-  ...(event.parentExternalSessionId
-    ? { parentExternalSessionId: event.parentExternalSessionId }
-    : {}),
-  ...(event.childExternalSessionId ? { childExternalSessionId: event.childExternalSessionId } : {}),
-  ...(event.subagentCorrelationKey ? { subagentCorrelationKey: event.subagentCorrelationKey } : {}),
-});
+) => {
+  const route: Partial<
+    Pick<
+      typeof event,
+      "parentExternalSessionId" | "childExternalSessionId" | "subagentCorrelationKey"
+    >
+  > = {};
+  if (event.parentExternalSessionId) {
+    route.parentExternalSessionId = event.parentExternalSessionId;
+  }
+  if (event.childExternalSessionId) {
+    route.childExternalSessionId = event.childExternalSessionId;
+  }
+  if (event.subagentCorrelationKey) {
+    route.subagentCorrelationKey = event.subagentCorrelationKey;
+  }
+  return route;
+};

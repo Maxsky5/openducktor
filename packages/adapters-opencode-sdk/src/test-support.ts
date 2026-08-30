@@ -1,12 +1,75 @@
-import type { Event, OpencodeClient, Part } from "@opencode-ai/sdk/v2";
+import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { RuntimeKind } from "@openducktor/contracts";
 import { ODT_MCP_TOOL_NAMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentRole, PolicyBoundSessionRef, SessionRef } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./index";
+import type { ParsedOpencodeMessage } from "./opencode-ingress";
+import type { ParsedOpencodeGlobalEventPayload } from "./opencode-global-event-ingress";
 import { buildQueuedRequestSignature } from "./user-message-signatures";
+import { z } from "zod";
+import {
+  createOpencodeEventFixtures,
+  createOpencodeMessageInfoFixture,
+  createOpencodePartFixture,
+  createParsedOpencodeEventFixture,
+  type DirectEventFixtureInput,
+  type OpencodeEventFixtureInput,
+  type OpencodeMessageInfoFixtureInput,
+  type OpencodePartFixtureInput,
+} from "./opencode-protocol-test-fixtures";
 
 type OpencodePolicyBoundSessionRef = Extract<PolicyBoundSessionRef, { runtimeKind: "opencode" }>;
+type ClientMethodInput<
+  Namespace extends keyof OpencodeClient,
+  Method extends keyof OpencodeClient[Namespace],
+> = OpencodeClient[Namespace][Method] extends (...args: infer Args) => infer _Result
+  ? Args[0]
+  : never;
+
+type MockApiError = Error | { message: string };
+
+type MockSessionMessage = {
+  info: OpencodeMessageInfoFixtureInput;
+  parts: OpencodePartFixtureInput[];
+};
+
+const completeMockMessage = (message: MockSessionMessage): ParsedOpencodeMessage => ({
+  info: createOpencodeMessageInfoFixture(message.info),
+  parts: message.parts.map(createOpencodePartFixture),
+});
+
+export const completeMockEvent = (
+  event: DirectEventFixtureInput,
+  index: number,
+): ParsedOpencodeGlobalEventPayload => createParsedOpencodeEventFixture(event, index);
+
+type MockChildSession = {
+  id: string;
+  parentID?: string;
+  time: { created: number };
+};
+
+type MockTodoPayload = {
+  id?: string;
+  content: string;
+  status: string;
+  priority: string;
+};
+
+type MockAgentPayload =
+  | null
+  | number
+  | {
+      name: string;
+      description?: string;
+      mode: "primary" | "subagent";
+      hidden?: boolean;
+      native?: boolean;
+      color?: string;
+    };
+
+type MockMcpStatus = { status: "connected" } | { status: "failed"; error: string };
 
 export const flushAsync = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 export const buildQueuedSignature = (text: string): string =>
@@ -83,67 +146,58 @@ const DEFAULT_ODT_RUNTIME_TOOL_IDS = [
 ] as const;
 
 export type MockSession = {
-  createCalls: unknown[];
-  promptCalls: unknown[];
-  promptAsyncCalls: unknown[];
-  commandCalls: unknown[];
-  abortCalls: unknown[];
-  getCalls: unknown[];
-  updateCalls: unknown[];
-  forkCalls: unknown[];
-  deleteCalls: unknown[];
+  createCalls: ClientMethodInput<"session", "create">[];
+  promptCalls: ClientMethodInput<"session", "prompt">[];
+  promptAsyncCalls: ClientMethodInput<"session", "promptAsync">[];
+  commandCalls: ClientMethodInput<"session", "command">[];
+  abortCalls: ClientMethodInput<"session", "abort">[];
+  getCalls: ClientMethodInput<"session", "get">[];
+  updateCalls: ClientMethodInput<"session", "update">[];
+  forkCalls: ClientMethodInput<"session", "fork">[];
+  deleteCalls: ClientMethodInput<"session", "delete">[];
   updateResult: SessionUpdateMockResult;
-  messagesCalls: unknown[];
-  childrenCalls: unknown[];
-  todoCalls: unknown[];
-  messagesResponse: Array<{
-    info: {
-      id: string;
-      role: "user" | "assistant";
-      time: { created: number };
-      [key: string]: unknown;
-    };
-    parts: Part[];
-  }>;
+  messagesCalls: ClientMethodInput<"session", "messages">[];
+  childrenCalls: ClientMethodInput<"session", "children">[];
+  todoCalls: ClientMethodInput<"session", "todo">[];
+  messagesResponse: MockSessionMessage[];
   todoResult: TodoMockResult;
 };
 
 export type SessionUpdateMockResult = {
-  data?: unknown;
-  error?: unknown;
-  response?: unknown;
+  data?: { id: string };
+  error?: MockApiError;
 };
 
 export type MockTool = {
-  idsCalls: unknown[];
-  listCalls: unknown[];
+  idsCalls: ClientMethodInput<"tool", "ids">[];
+  listCalls: ClientMethodInput<"tool", "list">[];
 };
 
 export type MockMcp = {
-  statusCalls: unknown[];
-  connectCalls: unknown[];
+  statusCalls: ClientMethodInput<"mcp", "status">[];
+  connectCalls: ClientMethodInput<"mcp", "connect">[];
 };
 
 export type MockPermission = {
-  replyCalls: unknown[];
+  replyCalls: ClientMethodInput<"permission", "reply">[];
 };
 
 export type MockQuestion = {
-  replyCalls: unknown[];
+  replyCalls: ClientMethodInput<"question", "reply">[];
 };
 
 export type MockEventStream = {
-  events: Event[];
+  events: OpencodeEventFixtureInput[];
 };
 
 export type TodoMockResult =
   | {
       mode: "success";
-      data: unknown;
+      data: MockTodoPayload[];
     }
   | {
       mode: "api_error";
-      error: unknown;
+      error: MockApiError;
       status?: number;
       statusText?: string;
     }
@@ -154,12 +208,8 @@ export type TodoMockResult =
 
 export type AgentsMockResult =
   | {
-      mode: "success";
-      data: unknown;
-    }
-  | {
       mode: "api_error";
-      error: unknown;
+      error: MockApiError;
     }
   | {
       mode: "throw";
@@ -169,11 +219,10 @@ export type AgentsMockResult =
 export type PromptAsyncMockResult =
   | {
       mode: "success";
-      data?: unknown;
     }
   | {
       mode: "api_error";
-      error: unknown;
+      error: MockApiError;
       response?: { status?: number; statusText?: string };
     }
   | {
@@ -184,11 +233,11 @@ export type PromptAsyncMockResult =
 export type CommandMockResult =
   | {
       mode: "success";
-      data?: unknown;
+      data?: { info: { id: string } };
     }
   | {
       mode: "api_error";
-      error: unknown;
+      error: MockApiError;
       response?: { status?: number; statusText?: string };
     }
   | {
@@ -203,24 +252,14 @@ export type MakeMockClientInput = {
   sessionUpdateResult?: SessionUpdateMockResult;
   promptAsyncResult?: PromptAsyncMockResult;
   commandResult?: CommandMockResult;
-  streamEvents?: Event[];
-  messagesResponse?: Array<{
-    info: {
-      id: string;
-      role: "user" | "assistant";
-      time: { created: number };
-      [key: string]: unknown;
-    };
-    parts: Part[];
-  }>;
-  childrenResponse?: unknown[];
+  streamEvents?: OpencodeEventFixtureInput[];
+  messagesResponse?: MockSessionMessage[];
+  childrenResponse?: MockChildSession[];
   todoResult?: TodoMockResult;
-  providerResponse?: unknown;
-  agentsResponse?: unknown;
+  agentsResponse?: MockAgentPayload[];
   agentsResult?: AgentsMockResult;
-  toolIdsResponse?: unknown;
-  modelToolsResponse?: unknown;
-  mcpStatusResponse?: unknown;
+  toolIdsResponse?: string[];
+  mcpStatusResponse?: Record<string, MockMcpStatus>;
 };
 
 export const makeMockClient = ({
@@ -237,44 +276,11 @@ export const makeMockClient = ({
     mode: "success",
     data: [],
   },
-  providerResponse = {
-    providers: [
-      {
-        id: "openai",
-        name: "OpenAI",
-        models: {
-          "gpt-5": {
-            name: "GPT-5",
-            limit: {
-              context: 400_000,
-              output: 32_000,
-            },
-            variants: {
-              high: {},
-              low: {},
-            },
-          },
-        },
-      },
-    ],
-    default: {
-      openai: "gpt-5",
-    },
-  },
   agentsResponse = [],
   agentsResult,
   toolIdsResponse = [...DEFAULT_ODT_RUNTIME_TOOL_IDS],
-  modelToolsResponse = [],
   mcpStatusResponse = { openducktor: { status: "connected" } },
-}: MakeMockClientInput = {}): {
-  client: OpencodeClient;
-  session: MockSession;
-  tool: MockTool;
-  mcp: MockMcp;
-  permission: MockPermission;
-  question: MockQuestion;
-  stream: MockEventStream;
-} => {
+}: MakeMockClientInput = {}) => {
   const session: MockSession = {
     createCalls: [],
     promptCalls: [],
@@ -310,14 +316,17 @@ export const makeMockClient = ({
     events: [...streamEvents],
   };
   const queuedSessionIds = [...(sessionIds ?? [sessionId])];
+  const baseClient = createOpencodeClient({ baseUrl: defaultRuntimeConnection.endpoint });
 
-  const client = {
+  const client: OpencodeClient = {
+    ...baseClient,
     session: {
-      create: async (input: unknown) => {
+      ...baseClient.session,
+      create: async (input: ClientMethodInput<"session", "create">) => {
         session.createCalls.push(input);
         return { data: { id: queuedSessionIds.shift() ?? sessionId }, error: undefined };
       },
-      promptAsync: async (input: unknown) => {
+      promptAsync: async (input: ClientMethodInput<"session", "promptAsync">) => {
         session.promptAsyncCalls.push(input);
         if (promptAsyncResult.mode === "throw") {
           throw promptAsyncResult.error;
@@ -329,9 +338,9 @@ export const makeMockClient = ({
             response: promptAsyncResult.response,
           };
         }
-        return { data: promptAsyncResult.data, error: undefined };
+        return { data: undefined, error: undefined };
       },
-      command: async (input: unknown) => {
+      command: async (input: ClientMethodInput<"session", "command">) => {
         session.commandCalls.push(input);
         if (commandResult.mode === "throw") {
           throw commandResult.error;
@@ -345,52 +354,59 @@ export const makeMockClient = ({
         }
         return { data: commandResult.data, error: undefined };
       },
-      prompt: async (input: unknown) => {
+      prompt: async (input: ClientMethodInput<"session", "prompt">) => {
         session.promptCalls.push(input);
         return { data: undefined, error: undefined };
       },
-      abort: async (input: unknown) => {
+      abort: async (input: ClientMethodInput<"session", "abort">) => {
         session.abortCalls.push(input);
         return { data: true, error: undefined };
       },
-      get: async (input: unknown) => {
+      get: async (input: ClientMethodInput<"session", "get">) => {
         session.getCalls.push(input);
         return {
           data: {
+            directory: defaultRuntimeConnection.workingDirectory,
             id: sessionId,
-            role: "assistant",
-            time: { created: Date.parse("2026-02-17T12:00:00Z") },
+            projectID: "project-1",
+            slug: sessionId,
+            time: {
+              created: Date.parse("2026-02-17T12:00:00Z"),
+              updated: Date.parse("2026-02-17T12:00:00Z"),
+            },
+            title: "OpenDucktor test session",
+            version: "1.18.18",
           },
           error: undefined,
         };
       },
-      update: async (input: unknown) => {
+      update: async (input: ClientMethodInput<"session", "update">) => {
         session.updateCalls.push(input);
         return session.updateResult;
       },
-      fork: async (input: unknown) => {
+      fork: async (input: ClientMethodInput<"session", "fork">) => {
         session.forkCalls.push(input);
         return { data: { id: forkSessionId }, error: undefined };
       },
-      delete: async (input: unknown) => {
+      delete: async (input: ClientMethodInput<"session", "delete">) => {
         session.deleteCalls.push(input);
         return { data: true, error: undefined };
       },
-      messages: async (input: unknown) => {
+      messages: async (input: ClientMethodInput<"session", "messages">) => {
         session.messagesCalls.push(input);
         return {
-          data: session.messagesResponse,
+          data: session.messagesResponse.map(completeMockMessage),
           error: undefined,
         };
       },
-      children: async (input: unknown) => {
+      children: async (input: ClientMethodInput<"session", "children">) => {
         session.childrenCalls.push(input);
         return {
           data: childrenResponse,
           error: undefined,
         };
       },
-      todo: async (input: unknown) => {
+      todo: async (input: ClientMethodInput<"session", "todo">) => {
         session.todoCalls.push(input);
         if (session.todoResult.mode === "throw") {
           throw session.todoResult.error;
@@ -416,66 +432,125 @@ export const makeMockClient = ({
       },
     },
     permission: {
-      reply: async (input: unknown) => {
+      ...baseClient.permission,
+      reply: async (input: ClientMethodInput<"permission", "reply">) => {
         permission.replyCalls.push(input);
         return { data: true, error: undefined };
       },
     },
     question: {
-      reply: async (input: unknown) => {
+      ...baseClient.question,
+      reply: async (input: ClientMethodInput<"question", "reply">) => {
         question.replyCalls.push(input);
         return { data: true, error: undefined };
       },
     },
     config: {
+      ...baseClient.config,
       providers: async () => {
         return {
-          data: providerResponse,
+          data: {
+            providers: [
+              {
+                env: [],
+                id: "openai",
+                name: "OpenAI",
+                options: {},
+                source: "custom",
+                models: {
+                  "gpt-5": {
+                    api: { id: "gpt-5", npm: "@ai-sdk/openai", url: "https://api.openai.com" },
+                    capabilities: {
+                      attachment: true,
+                      input: { audio: false, image: true, pdf: true, text: true, video: false },
+                      interleaved: false,
+                      output: { audio: false, image: false, pdf: false, text: true, video: false },
+                      reasoning: true,
+                      temperature: true,
+                      toolcall: true,
+                    },
+                    cost: { cache: { read: 0, write: 0 }, input: 0, output: 0 },
+                    headers: {},
+                    id: "gpt-5",
+                    name: "GPT-5",
+                    limit: {
+                      context: 400_000,
+                      output: 32_000,
+                    },
+                    options: {},
+                    providerID: "openai",
+                    release_date: "2026-01-01",
+                    status: "active",
+                    variants: {
+                      high: {},
+                      low: {},
+                    },
+                  },
+                },
+              },
+            ],
+            default: {
+              openai: "gpt-5",
+            },
+          },
           error: undefined,
         };
       },
     },
     app: {
+      ...baseClient.app,
       agents: async () => {
         if (agentsResult?.mode === "throw") {
           throw agentsResult.error;
         }
         return {
           data:
-            agentsResult?.mode === "success"
-              ? agentsResult.data
-              : agentsResult?.mode === "api_error"
-                ? undefined
-                : agentsResponse,
+            agentsResult?.mode === "api_error"
+              ? undefined
+              : agentsResponse.map((agent) => {
+                  const parsed = z
+                    .object({
+                      color: z.string().optional(),
+                      description: z.string().optional(),
+                      hidden: z.boolean().optional(),
+                      mode: z.enum(["primary", "subagent"]),
+                      name: z.string(),
+                      native: z.boolean().optional(),
+                    })
+                    .safeParse(agent);
+                  return parsed.success ? { options: {}, permission: [], ...parsed.data } : agent;
+                }),
           error: agentsResult?.mode === "api_error" ? agentsResult.error : undefined,
         };
       },
     },
     tool: {
-      ids: async (input: unknown) => {
+      ...baseClient.tool,
+      ids: async (input: ClientMethodInput<"tool", "ids">) => {
         tool.idsCalls.push(input);
         return {
           data: toolIdsResponse,
           error: undefined,
         };
       },
-      list: async (input: unknown) => {
+      list: async (input: ClientMethodInput<"tool", "list">) => {
         tool.listCalls.push(input);
         return {
-          data: modelToolsResponse,
+          data: [],
           error: undefined,
         };
       },
     },
     mcp: {
-      status: async (input: unknown) => {
+      ...baseClient.mcp,
+      status: async (input: ClientMethodInput<"mcp", "status">) => {
         mcp.statusCalls.push(input);
         return {
           data: mcpStatusResponse,
           error: undefined,
         };
       },
-      connect: async (input: unknown) => {
+      connect: async (input: ClientMethodInput<"mcp", "connect">) => {
         mcp.connectCalls.push(input);
         return {
           data: true,
@@ -484,24 +559,38 @@ export const makeMockClient = ({
       },
     },
     global: {
+      ...baseClient.global,
       event: async (options?: { signal?: AbortSignal }) => {
-        async function* iterator(): AsyncGenerator<{ directory: string; payload: Event }> {
-          for (const event of stream.events) {
+        async function* iterator() {
+          for (const [index, rawEvent] of stream.events.entries()) {
             if (options?.signal?.aborted) {
               return;
             }
-            const directory =
-              (event as Event & { properties?: { directory?: string } }).properties?.directory ??
-              defaultRuntimeConnection.workingDirectory;
-            yield { directory, payload: event };
+            const properties = z
+              .object({ directory: z.string().optional() })
+              .safeParse("properties" in rawEvent ? rawEvent.properties : undefined);
+            const directory = properties.success
+              ? (properties.data.directory ?? defaultRuntimeConnection.workingDirectory)
+              : defaultRuntimeConnection.workingDirectory;
+            for (const payload of createOpencodeEventFixtures(rawEvent, index)) {
+              yield { directory, payload };
+            }
           }
         }
         return { stream: iterator() };
       },
     },
-  } as unknown as OpencodeClient;
+  };
 
-  return { client, session, tool, mcp, permission, question, stream };
+  return { client, session, tool, mcp, permission, question, stream } satisfies {
+    client: OpencodeClient;
+    session: MockSession;
+    tool: MockTool;
+    mcp: MockMcp;
+    permission: MockPermission;
+    question: MockQuestion;
+    stream: MockEventStream;
+  };
 };
 
 export const startDefaultSession = async (
@@ -514,15 +603,18 @@ export const startDefaultSession = async (
     profileId?: string;
   },
 ): Promise<void> => {
-  await adapter.startSession({
+  const input: Parameters<BaseOpencodeSdkAdapter["startSession"]>[0] = {
     repoPath: "/repo",
     workingDirectory: "/repo",
     runtimeKind: "opencode",
     sessionScope: workflowAgentSessionScope("task-1", role),
     runtimePolicy: { kind: "opencode" },
     systemPrompt: "system prompt",
-    ...(model ? { model } : {}),
-  });
+  };
+  if (model) {
+    input.model = model;
+  }
+  await adapter.startSession(input);
 };
 
 export const defaultLoadSessionTodosInput = {
@@ -530,13 +622,7 @@ export const defaultLoadSessionTodosInput = {
   externalSessionId: "session-opencode-1",
 };
 
-export const createLoadSessionTodosHarness = (
-  mockInput: MakeMockClientInput,
-): {
-  adapter: BaseOpencodeSdkAdapter;
-  session: MockSession;
-  createClientCalls: unknown[];
-} => {
+export const createLoadSessionTodosHarness = (mockInput: MakeMockClientInput) => {
   const createClientCalls: unknown[] = [];
   const mock = makeMockClient(mockInput);
   const adapter = new OpencodeSdkAdapter({
@@ -547,5 +633,9 @@ export const createLoadSessionTodosHarness = (
     now: () => "2026-02-17T12:00:00Z",
   });
 
-  return { adapter, session: mock.session, createClientCalls };
+  return { adapter, session: mock.session, createClientCalls } satisfies {
+    adapter: BaseOpencodeSdkAdapter;
+    session: MockSession;
+    createClientCalls: unknown[];
+  };
 };

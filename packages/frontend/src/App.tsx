@@ -22,10 +22,10 @@ type AppProps = {
 
 type RouterComponent = ComponentType<{ children?: ReactNode; useTransitions?: boolean }>;
 
-const ROUTERS: Record<AppRouterMode, RouterComponent> = {
+const ROUTERS = {
   browser: BrowserRouter,
   hash: HashRouter,
-};
+} satisfies Record<AppRouterMode, RouterComponent>;
 
 function RouteFallback(): ReactElement {
   return (

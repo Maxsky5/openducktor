@@ -11,12 +11,10 @@ import { createFilesystemCommandHandlers } from "./filesystem-command-handlers";
 const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
-const createFilesystemServiceFake = (service: FilesystemService): FilesystemService =>
-  service as FilesystemService;
 describe("createFilesystemCommandHandlers", () => {
   test("routes filesystem_list_directory through the filesystem service", async () => {
     const calls: unknown[] = [];
-    const filesystemService = createFilesystemServiceFake({
+    const filesystemService: FilesystemService = {
       listDirectory(input) {
         return Effect.sync(() => {
           calls.push(input);
@@ -29,7 +27,7 @@ describe("createFilesystemCommandHandlers", () => {
           };
         });
       },
-    });
+    };
     const router = createHostCommandRouter({
       handlers: createFilesystemCommandHandlers(filesystemService),
     });
@@ -43,11 +41,11 @@ describe("createFilesystemCommandHandlers", () => {
     expect(calls).toEqual([{ path: "/repo" }]);
   });
   test("rejects malformed filesystem_list_directory args", async () => {
-    const filesystemService = createFilesystemServiceFake({
+    const filesystemService: FilesystemService = {
       listDirectory() {
         return Effect.dieMessage("should not call filesystem service");
       },
-    });
+    };
     const router = createHostCommandRouter({
       handlers: createFilesystemCommandHandlers(filesystemService),
     });

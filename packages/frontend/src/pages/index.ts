@@ -19,8 +19,8 @@ export const createCachedPageLoader = (loadPage: PageLoader): PageLoader => {
   };
 };
 
-const reportRoutePreloadError = (pageName: string, error: unknown): void => {
-  console.error(`[route-preload] Failed to preload ${pageName} page.`, error);
+const reportRoutePreloadError = (pageName: string, cause: unknown): void => {
+  console.error(`[route-preload] Failed to preload ${pageName} page.`, cause);
 };
 
 const preloadRoutePage = (pageName: string, loadPage: PageLoader): void => {

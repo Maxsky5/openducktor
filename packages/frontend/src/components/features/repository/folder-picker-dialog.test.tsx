@@ -1,13 +1,15 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { DirectoryListing, FilesystemListDirectoryInput } from "@openducktor/contracts";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
+import { z } from "zod";
 import { QueryProvider } from "@/lib/query-provider";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 
-const actualHostOperationsModule = await import("@/state/operations/host");
 const actualScrollAreaModule = await import("@/components/ui/scroll-area");
+let scrollAreaSpy: { mockRestore(): void };
 
 enableReactActEnvironment();
 
@@ -21,8 +23,14 @@ const createListing = (overrides: Partial<DirectoryListing> = {}): DirectoryList
 });
 
 type ListDirectoryInput = string | FilesystemListDirectoryInput | undefined;
-const pathFromInput = (input: ListDirectoryInput): string | undefined =>
-  typeof input === "string" ? input : input?.path;
+const pathFromInput = (input: ListDirectoryInput): string | undefined => {
+  const stringInput = z.string().safeParse(input);
+  if (stringInput.success) {
+    return stringInput.data;
+  }
+  const objectInput = z.object({ path: z.string().optional() }).safeParse(input);
+  return objectInput.success ? objectInput.data.path : undefined;
+};
 const filesystemListDirectoryMock = mock(
   async (_input?: ListDirectoryInput): Promise<DirectoryListing> => createListing(),
 );
@@ -46,25 +54,22 @@ describe("FolderPickerDialog", () => {
       createListing(),
     );
 
-    mock.module("@/state/operations/host", () => ({
-      host: {
-        filesystemListDirectory: filesystemListDirectoryMock,
-      },
-    }));
-
-    mock.module("@/components/ui/scroll-area", () => ({
-      ScrollArea: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
-        createElement("div", props, children),
-    }));
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: { filesystemListDirectory: filesystemListDirectoryMock },
+      }),
+    );
+    scrollAreaSpy = spyOn(actualScrollAreaModule, "ScrollArea").mockImplementation(
+      ({ children, ...props }: Parameters<typeof actualScrollAreaModule.ScrollArea>[0]) =>
+        createElement("div", props, children ?? null),
+    );
 
     ({ FolderPickerDialog } = await import("./folder-picker-dialog"));
   });
 
-  afterEach(async () => {
-    await restoreMockedModules([
-      ["@/state/operations/host", async () => actualHostOperationsModule],
-      ["@/components/ui/scroll-area", async () => actualScrollAreaModule],
-    ]);
+  afterEach(() => {
+    scrollAreaSpy.mockRestore();
+    configureShellBridge(createUnavailableShellBridge());
   });
 
   const renderDialog = (
@@ -74,18 +79,21 @@ describe("FolderPickerDialog", () => {
       selectionMode: "directory" | "file";
     }>,
   ) => {
+    const dialogProps: Parameters<typeof FolderPickerDialog>[0] = {
+      open: true,
+      onOpenChange: () => {},
+      title: "Pick a folder",
+      description: "Browse the filesystem",
+      confirmLabel: "Select Folder",
+      onConfirm: props?.onConfirm ?? (async () => {}),
+      selectionMode: props?.selectionMode ?? "directory",
+    };
+    if (props?.initialPath) {
+      dialogProps.initialPath = props.initialPath;
+    }
     return render(
       <QueryProvider useIsolatedClient>
-        <FolderPickerDialog
-          open
-          onOpenChange={() => {}}
-          title="Pick a folder"
-          description="Browse the filesystem"
-          confirmLabel="Select Folder"
-          onConfirm={props?.onConfirm ?? (async () => {})}
-          selectionMode={props?.selectionMode ?? "directory"}
-          {...(props?.initialPath ? { initialPath: props.initialPath } : {})}
-        />
+        <FolderPickerDialog {...dialogProps} />
       </QueryProvider>,
     );
   };
@@ -129,7 +137,7 @@ describe("FolderPickerDialog", () => {
       await screen.findByText("repo-one");
       expect(screen.getByText("Git repo")).toBeTruthy();
 
-      fireEvent.change(screen.getByLabelText("Filter directories"), {
+      fireEvent.change(screen.getByLabelText<HTMLInputElement>("Filter directories"), {
         target: { value: "repo" },
       });
 
@@ -137,15 +145,15 @@ describe("FolderPickerDialog", () => {
         expect(screen.queryByText("apps")).toBeNull();
       });
 
-      fireEvent.change(screen.getByLabelText("Filter directories"), {
+      fireEvent.change(screen.getByLabelText<HTMLInputElement>("Filter directories"), {
         target: { value: "" },
       });
 
-      fireEvent.click(screen.getByRole("button", { name: /^apps$/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /^apps$/i }));
 
       await waitFor(() => {
         expect(screen.getByText("/Users/dev/apps")).toBeTruthy();
-        expect((screen.getByLabelText("Filter directories") as HTMLInputElement).value).toBe("");
+        expect(screen.getByLabelText<HTMLInputElement>("Filter directories").value).toBe("");
       });
     } finally {
       rendered.unmount();
@@ -155,7 +163,8 @@ describe("FolderPickerDialog", () => {
   test("selects a file and requests file entries only in file mode", async () => {
     const onConfirm = mock(async (_path: string) => {});
     filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {
-      expect(typeof input === "object" ? input.includeFiles : false).toBe(true);
+      const objectInput = z.object({ includeFiles: z.boolean().optional() }).safeParse(input);
+      expect(objectInput.success ? objectInput.data.includeFiles : false).toBe(true);
       return createListing({
         entries: [
           {
@@ -171,7 +180,7 @@ describe("FolderPickerDialog", () => {
 
     try {
       fireEvent.click(await screen.findByRole("button", { name: "codex" }));
-      fireEvent.click(screen.getByRole("button", { name: "Select Folder" }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "Select Folder" }));
 
       await waitFor(() => expect(onConfirm).toHaveBeenCalledWith("/Users/dev/codex"));
     } finally {
@@ -210,8 +219,8 @@ describe("FolderPickerDialog", () => {
 
     try {
       fireEvent.click(await screen.findByRole("button", { name: "old-cli" }));
-      fireEvent.click(screen.getByRole("button", { name: "next" }));
-      fireEvent.click(screen.getByRole("button", { name: "old-cli" }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "next" }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "old-cli" }));
 
       await act(async () => {
         resolveNextDirectory(
@@ -220,8 +229,10 @@ describe("FolderPickerDialog", () => {
       });
       await screen.findByText("/Users/dev/next");
 
-      const confirmButton = screen.getByRole("button", { name: "Select Folder" });
-      expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
+      const confirmButton = screen.getByRole<HTMLButtonElement>("button", {
+        name: "Select Folder",
+      });
+      expect(confirmButton.disabled).toBe(true);
       fireEvent.click(confirmButton);
       expect(onConfirm).not.toHaveBeenCalled();
     } finally {
@@ -260,17 +271,19 @@ describe("FolderPickerDialog", () => {
       fireEvent.click(await screen.findByRole("button", { name: "codex" }));
       expect(requestCount).toBe(1);
       expect(
-        (screen.getByRole("button", { name: "Select Folder" }) as HTMLButtonElement).disabled,
+        screen.getByRole<HTMLButtonElement>("button", { name: "Select Folder" }).disabled,
       ).toBe(false);
 
-      fireEvent.change(screen.getByLabelText("Open path"), {
+      fireEvent.change(screen.getByLabelText<HTMLInputElement>("Open path"), {
         target: { value: "/Users/dev" },
       });
-      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
 
       await waitFor(() => expect(requestCount).toBe(2));
-      const confirmButton = screen.getByRole("button", { name: "Select Folder" });
-      expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
+      const confirmButton = screen.getByRole<HTMLButtonElement>("button", {
+        name: "Select Folder",
+      });
+      expect(confirmButton.disabled).toBe(true);
       fireEvent.click(confirmButton);
       expect(onConfirm).not.toHaveBeenCalled();
 
@@ -279,10 +292,10 @@ describe("FolderPickerDialog", () => {
       await waitFor(() => {
         expect(screen.queryByRole("button", { name: "codex" })).toBeNull();
         expect(
-          (screen.getByRole("button", { name: "Select Folder" }) as HTMLButtonElement).disabled,
+          screen.getByRole<HTMLButtonElement>("button", { name: "Select Folder" }).disabled,
         ).toBe(true);
       });
-      fireEvent.click(screen.getByRole("button", { name: "Select Folder" }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "Select Folder" }));
       expect(onConfirm).not.toHaveBeenCalled();
     } finally {
       rendered.unmount();
@@ -304,17 +317,19 @@ describe("FolderPickerDialog", () => {
     try {
       await screen.findByText("/Users/dev");
       expect(
-        (screen.getByRole("button", { name: "Select Folder" }) as HTMLButtonElement).disabled,
+        screen.getByRole<HTMLButtonElement>("button", { name: "Select Folder" }).disabled,
       ).toBe(false);
 
-      fireEvent.change(screen.getByLabelText("Open path"), {
+      fireEvent.change(screen.getByLabelText<HTMLInputElement>("Open path"), {
         target: { value: "/Users/dev" },
       });
-      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
 
       await screen.findByText("Directory no longer exists: /Users/dev");
-      const confirmButton = screen.getByRole("button", { name: "Select Folder" });
-      expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
+      const confirmButton = screen.getByRole<HTMLButtonElement>("button", {
+        name: "Select Folder",
+      });
+      expect(confirmButton.disabled).toBe(true);
       fireEvent.click(confirmButton);
       expect(onConfirm).not.toHaveBeenCalled();
     } finally {
@@ -350,22 +365,24 @@ describe("FolderPickerDialog", () => {
 
     try {
       fireEvent.click(await screen.findByRole("button", { name: "codex" }));
-      fireEvent.change(screen.getByLabelText("Open path"), {
+      fireEvent.change(screen.getByLabelText<HTMLInputElement>("Open path"), {
         target: { value: "/Users/dev" },
       });
-      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
 
       await screen.findByText("Failed to refresh /Users/dev");
-      const confirmButton = screen.getByRole("button", { name: "Select Folder" });
-      expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
+      const confirmButton = screen.getByRole<HTMLButtonElement>("button", {
+        name: "Select Folder",
+      });
+      expect(confirmButton.disabled).toBe(true);
       fireEvent.click(confirmButton);
       expect(onConfirm).not.toHaveBeenCalled();
 
-      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
 
       await waitFor(() => {
         expect(requestCount).toBe(3);
-        expect((confirmButton as HTMLButtonElement).disabled).toBe(false);
+        expect(confirmButton.disabled).toBe(false);
       });
       fireEvent.click(confirmButton);
       await waitFor(() => expect(onConfirm).toHaveBeenCalledWith("/Users/dev/codex"));
@@ -407,10 +424,10 @@ describe("FolderPickerDialog", () => {
 
     try {
       const nextButton = await screen.findByRole("button", { name: "next" });
-      fireEvent.change(screen.getByLabelText("Open path"), {
+      fireEvent.change(screen.getByLabelText<HTMLInputElement>("Open path"), {
         target: { value: "/Users/dev" },
       });
-      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
       await waitFor(() => expect(rootRequestCount).toBe(2));
 
       fireEvent.click(nextButton);
@@ -419,8 +436,10 @@ describe("FolderPickerDialog", () => {
 
       await act(async () => resolveRefresh(createListing({ currentPathIsGitRepo: true })));
 
-      const confirmButton = screen.getByRole("button", { name: "Select Folder" });
-      expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
+      const confirmButton = screen.getByRole<HTMLButtonElement>("button", {
+        name: "Select Folder",
+      });
+      expect(confirmButton.disabled).toBe(true);
       fireEvent.click(confirmButton);
       expect(onConfirm).not.toHaveBeenCalled();
     } finally {
@@ -472,33 +491,39 @@ describe("FolderPickerDialog", () => {
 
     try {
       await screen.findByText("/Users/dev/projects");
-      expect((screen.getByLabelText("Open path") as HTMLInputElement).value).toBe("");
+      expect(screen.getByLabelText<HTMLInputElement>("Open path").value).toBe("");
 
-      fireEvent.click(screen.getByRole("button", { name: /go to parent folder/i }));
+      fireEvent.click(
+        screen.getByRole<HTMLButtonElement>("button", { name: /go to parent folder/i }),
+      );
       await screen.findByText("/Users/dev");
-      expect((screen.getByLabelText("Open path") as HTMLInputElement).value).toBe("");
+      expect(screen.getByLabelText<HTMLInputElement>("Open path").value).toBe("");
 
-      fireEvent.click(screen.getByRole("button", { name: /go to home folder/i }));
+      fireEvent.click(
+        screen.getByRole<HTMLButtonElement>("button", { name: /go to home folder/i }),
+      );
       await screen.findByText("/Users/home");
-      expect((screen.getByLabelText("Open path") as HTMLInputElement).value).toBe("");
+      expect(screen.getByLabelText<HTMLInputElement>("Open path").value).toBe("");
 
-      fireEvent.change(screen.getByLabelText("Open path"), {
+      fireEvent.change(screen.getByLabelText<HTMLInputElement>("Open path"), {
         target: { value: "/Users/dev/repo-one" },
       });
-      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
 
       await screen.findByText("/Users/dev/repo-one");
-      expect((screen.getByLabelText("Open path") as HTMLInputElement).value).toBe(
+      expect(screen.getByLabelText<HTMLInputElement>("Open path").value).toBe(
         "/Users/dev/repo-one",
       );
 
-      fireEvent.click(screen.getByRole("button", { name: /go to parent folder/i }));
+      fireEvent.click(
+        screen.getByRole<HTMLButtonElement>("button", { name: /go to parent folder/i }),
+      );
       await screen.findByText("/Users/dev");
-      expect((screen.getByLabelText("Open path") as HTMLInputElement).value).toBe(
+      expect(screen.getByLabelText<HTMLInputElement>("Open path").value).toBe(
         "/Users/dev/repo-one",
       );
 
-      fireEvent.click(screen.getByRole("button", { name: /select folder/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /select folder/i }));
 
       await waitFor(() => {
         expect(onConfirm).toHaveBeenCalledWith("/Users/dev");
@@ -549,11 +574,13 @@ describe("FolderPickerDialog", () => {
 
     try {
       await screen.findByText(/only git repositories can be opened/i);
-      const confirmButton = screen.getByRole("button", { name: /open repository/i });
-      expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
+      const confirmButton = screen.getByRole<HTMLButtonElement>("button", {
+        name: /open repository/i,
+      });
+      expect(confirmButton.disabled).toBe(true);
 
       const explorerWarning = screen.getByText(/only git repositories can be opened/i);
-      const repoButton = screen.getByRole("button", { name: /repo-one/i });
+      const repoButton = screen.getByRole<HTMLButtonElement>("button", { name: /repo-one/i });
       expect(repoButton.compareDocumentPosition(explorerWarning)).toBe(
         Node.DOCUMENT_POSITION_FOLLOWING,
       );
@@ -563,7 +590,7 @@ describe("FolderPickerDialog", () => {
       await waitFor(() => {
         expect(screen.getByText("/Users/dev/repo-one")).toBeTruthy();
         expect(
-          (screen.getByRole("button", { name: /open repository/i }) as HTMLButtonElement).disabled,
+          screen.getByRole<HTMLButtonElement>("button", { name: /open repository/i }).disabled,
         ).toBe(false);
       });
     } finally {
@@ -591,32 +618,32 @@ describe("FolderPickerDialog", () => {
 
     try {
       await screen.findByText("/Users/dev");
-      expect((screen.getByLabelText("Open path") as HTMLInputElement).value).toBe("");
+      expect(screen.getByLabelText<HTMLInputElement>("Open path").value).toBe("");
       expect(
-        (screen.getByRole("button", { name: /select folder/i }) as HTMLButtonElement).disabled,
+        screen.getByRole<HTMLButtonElement>("button", { name: /select folder/i }).disabled,
       ).toBe(false);
 
-      fireEvent.change(screen.getByLabelText("Open path"), {
+      fireEvent.change(screen.getByLabelText<HTMLInputElement>("Open path"), {
         target: { value: "/missing" },
       });
-      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
 
       await screen.findByText("Directory does not exist: /missing");
       expect(screen.getByText("/Users/dev")).toBeTruthy();
       expect(
-        (screen.getByRole("button", { name: /select folder/i }) as HTMLButtonElement).disabled,
+        screen.getByRole<HTMLButtonElement>("button", { name: /select folder/i }).disabled,
       ).toBe(true);
 
-      fireEvent.click(screen.getByRole("button", { name: /select folder/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /select folder/i }));
       expect(onConfirm).not.toHaveBeenCalled();
 
-      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
 
       await waitFor(() => {
         expect(missingPathAttempts).toBe(2);
         expect(screen.getByText("/missing")).toBeTruthy();
         expect(
-          (screen.getByRole("button", { name: /select folder/i }) as HTMLButtonElement).disabled,
+          screen.getByRole<HTMLButtonElement>("button", { name: /select folder/i }).disabled,
         ).toBe(false);
       });
     } finally {
@@ -650,17 +677,17 @@ describe("FolderPickerDialog", () => {
     try {
       await screen.findByText("/Users/dev");
 
-      fireEvent.click(screen.getByRole("button", { name: /select folder/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /select folder/i }));
 
       await waitFor(() => {
         expect(onConfirm).toHaveBeenCalledWith("/Users/dev");
-        expect(
-          (screen.getByRole("button", { name: /cancel/i }) as HTMLButtonElement).disabled,
-        ).toBe(true);
+        expect(screen.getByRole<HTMLButtonElement>("button", { name: /cancel/i }).disabled).toBe(
+          true,
+        );
         expect(screen.queryByRole("button", { name: /close/i })).toBeNull();
       });
 
-      fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /cancel/i }));
       expect(onOpenChange).not.toHaveBeenCalled();
 
       if (!resolveConfirm) {

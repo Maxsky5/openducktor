@@ -61,10 +61,7 @@ export function useAgentStudioSendAction({
   supportsAttachments,
   sendAgentMessage,
   startSession,
-}: UseAgentStudioSendActionArgs): {
-  isSending: boolean;
-  onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
-} {
+}: UseAgentStudioSendActionArgs) {
   const {
     begin: beginSendingActivity,
     hasInFlight: hasSendingActivityInFlight,
@@ -181,5 +178,8 @@ export function useAgentStudioSendAction({
     ],
   );
 
-  return { isSending, onSend };
+  return { isSending, onSend } satisfies {
+    isSending: boolean;
+    onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
+  };
 }

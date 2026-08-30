@@ -10,7 +10,6 @@ import { createAgentSessionLiveStateService } from "../../application/agent-sess
 import type {
   AgentSessionLiveAdapterChange,
   AgentSessionLiveAdapterPort,
-  AgentSessionRuntimeAdapterPort,
 } from "../../ports/agent-session-live-adapter-port";
 import { createLiveSessionAdapterRegistry } from "./live-session-adapter-registry";
 import { createOpenCodeLiveSessionAdapterPreparer } from "./opencode-live-session-adapter";
@@ -32,7 +31,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         prepareRuntime: harness.prepareRuntime,
       })(runtime),
     );
-    const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
+    const adapter = prepared.adapter;
 
     const snapshots = await Effect.runPromise(adapter.listRetainedSnapshots("/repo"));
     expect(snapshots).toEqual([
@@ -151,7 +150,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         prepareRuntime: harness.prepareRuntime,
       })(runtime),
     );
-    const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
+    const adapter = prepared.adapter;
     const before = await Effect.runPromise(adapter.readRetainedSnapshot(ref));
     if (before.type !== "live") {
       throw new Error("Expected the OpenCode session to be retained.");
@@ -236,7 +235,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         prepareRuntime,
       })(runtime),
     );
-    const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
+    const adapter = prepared.adapter;
 
     const first = Effect.runPromise(adapter.loadContext(ref));
     const second = Effect.runPromise(adapter.loadContext(ref));
@@ -307,7 +306,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         prepareRuntime,
       })(runtime),
     );
-    const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
+    const adapter = prepared.adapter;
 
     await expect(Effect.runPromise(adapter.loadContext(ref))).rejects.toThrow(
       "context endpoint unavailable",
@@ -365,8 +364,8 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
 
     const first = await Effect.runPromise(prepareAdapter(runtime));
     const second = await Effect.runPromise(prepareAdapter(secondRuntime));
-    const firstAdapter = first.adapter as AgentSessionRuntimeAdapterPort;
-    const secondAdapter = second.adapter as AgentSessionRuntimeAdapterPort;
+    const firstAdapter = first.adapter;
+    const secondAdapter = second.adapter;
     const firstSnapshot = await Effect.runPromise(firstAdapter.readRetainedSnapshot(ref));
     const secondSnapshot = await Effect.runPromise(secondAdapter.readRetainedSnapshot(secondRef));
     if (firstSnapshot.type !== "live" || secondSnapshot.type !== "live") {
@@ -423,6 +422,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       contextUsage: null,
     };
     const otherAdapter: AgentSessionLiveAdapterPort = {
+      supportsSessionControl: false,
       binding: { runtimeId: "runtime-2", runtimeKind: "opencode", repoPath: "/repo" },
       matches: (candidate) => candidate.externalSessionId === otherRef.externalSessionId,
       listRetainedSnapshots: (repoPath) =>

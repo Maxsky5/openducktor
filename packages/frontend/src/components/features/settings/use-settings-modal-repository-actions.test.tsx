@@ -108,17 +108,17 @@ describe("useSettingsModalRepositoryActions", () => {
 
     await harness.mount();
 
-    let detected: unknown = null;
+    const detectedRepositories = new Array<GitProviderRepository | null>();
     await harness.run(async (state) => {
-      detected = await state.detectSelectedRepoGithubRepository();
+      detectedRepositories.push(await state.detectSelectedRepoGithubRepository());
     });
 
     expect(detectGithubRepository).toHaveBeenCalledWith("/repo-a");
-    expect(detected).not.toBeNull();
-    if (typeof detected !== "object" || detected === null) {
+    const [detectedRepo] = detectedRepositories;
+    expect(detectedRepo).not.toBeNull();
+    if (!detectedRepo) {
       throw new Error("Expected detected repository");
     }
-    const detectedRepo = detected as GitProviderRepository;
     expect(detectedRepo.host).toBe("github.com");
     expect(detectedRepo.owner).toBe("duck");
     expect(detectedRepo.name).toBe("repo");

@@ -1,4 +1,5 @@
 import type { GitCurrentBranch } from "@openducktor/contracts";
+import { z } from "zod";
 import { errorMessage } from "@/lib/errors";
 
 type ProbeBranchChangeParams = {
@@ -73,29 +74,34 @@ export const shouldSkipBranchSwitch = (
   branchName: string,
 ): boolean => activeBranch?.name === branchName && !activeBranch.detached;
 
-const toOptionalString = (value: unknown): string | null =>
-  typeof value === "string" && value.trim().length > 0 ? value : null;
+const structuredErrorHintFieldsSchema = z.object({
+  code: z.string().optional(),
+  kind: z.string().optional(),
+});
+const structuredErrorHintSchema = structuredErrorHintFieldsSchema.extend({
+  cause: structuredErrorHintFieldsSchema.optional(),
+});
 
-const toRecord = (value: unknown): Record<string, unknown> | null =>
-  typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+const toOptionalString = (value: string | undefined): string | null =>
+  value && value.trim().length > 0 ? value : null;
 
-const extractStructuredErrorHint = (error: unknown): string | null => {
-  const record = toRecord(error);
-  if (!record) {
+const extractStructuredErrorHint = (cause: unknown): string | null => {
+  const result = structuredErrorHintSchema.safeParse(cause);
+  if (!result.success) {
     return null;
   }
+  const parsed = result.data;
 
-  const directHint = toOptionalString(record.code) ?? toOptionalString(record.kind);
+  const directHint = toOptionalString(parsed.code) ?? toOptionalString(parsed.kind);
   if (directHint) {
     return directHint;
   }
 
-  const causeRecord = toRecord(record.cause);
-  if (!causeRecord) {
+  if (!parsed.cause) {
     return null;
   }
 
-  return toOptionalString(causeRecord.code) ?? toOptionalString(causeRecord.kind);
+  return toOptionalString(parsed.cause.code) ?? toOptionalString(parsed.cause.kind);
 };
 
 const classifyBranchProbeErrorCode = (
@@ -130,17 +136,17 @@ const classifyBranchProbeErrorCode = (
 };
 
 export const classifyBranchProbeError = (
-  error: unknown,
+  cause: unknown,
   stage: BranchProbeStage,
 ): BranchProbeError => {
-  const message = errorMessage(error);
-  const structuredHint = extractStructuredErrorHint(error);
+  const message = errorMessage(cause);
+  const structuredHint = extractStructuredErrorHint(cause);
 
   return {
     code: classifyBranchProbeErrorCode(message, structuredHint),
     stage,
     message,
-    cause: error,
+    cause,
   };
 };
 

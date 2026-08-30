@@ -10,6 +10,9 @@ import {
   resolveWorkflowToolSelection,
 } from "./workflow-tool-selection";
 
+const caughtError = (cause: unknown): Error =>
+  cause instanceof Error ? cause : new Error(String(cause), { cause });
+
 const makeClient = (input: {
   toolIds?: unknown;
   modelTools?: unknown;
@@ -76,7 +79,7 @@ const makeClient = (input: {
         };
       },
     },
-  } as unknown as OpencodeClient;
+  } satisfies OpencodeClient;
 };
 
 describe("workflow-tool-selection", () => {
@@ -214,10 +217,11 @@ describe("workflow-tool-selection", () => {
       role: "spec",
       runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       workingDirectory: "/repo",
-    }).catch((error: unknown) => error);
+    }).catch(caughtError);
 
     expect(selection).toBeInstanceOf(Error);
-    expect((selection as Error).message).toBe("boom");
+    if (!(selection instanceof Error)) throw selection;
+    expect(selection.message).toBe("boom");
   });
 
   test("throws actionable error when trusted MCP server is disconnected", async () => {
@@ -229,14 +233,15 @@ describe("workflow-tool-selection", () => {
       role: "spec",
       runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       workingDirectory: "/repo",
-    }).catch((error: unknown) => error);
+    }).catch(caughtError);
 
     expect(selectionError).toBeInstanceOf(Error);
-    expect((selectionError as Error).message).toContain('unavailable for "/repo"');
-    expect((selectionError as Error).message).toContain(
+    if (!(selectionError instanceof Error)) throw selectionError;
+    expect(selectionError.message).toContain('unavailable for "/repo"');
+    expect(selectionError.message).toContain(
       'MCP server "openducktor" stayed unavailable after reconnect',
     );
-    expect((selectionError as Error).message).toContain("connection closed");
+    expect(selectionError.message).toContain("connection closed");
   });
 
   test("reconnects a failed trusted MCP server for the same worktree before tool selection", async () => {
@@ -299,10 +304,11 @@ describe("workflow-tool-selection", () => {
       role: "build",
       runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       workingDirectory: "/repo/.openducktor/worktrees/task-1",
-    }).catch((error: unknown) => error);
+    }).catch(caughtError);
 
     expect(selectionError).toBeInstanceOf(Error);
-    expect((selectionError as Error).message).toBe("mcp-connect-down");
+    if (!(selectionError instanceof Error)) throw selectionError;
+    expect(selectionError.message).toBe("mcp-connect-down");
   });
 
   test("propagates trusted MCP status lookup failures", async () => {
@@ -314,10 +320,11 @@ describe("workflow-tool-selection", () => {
       role: "spec",
       runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       workingDirectory: "/repo",
-    }).catch((error: unknown) => error);
+    }).catch(caughtError);
 
     expect(selectionError).toBeInstanceOf(Error);
-    expect((selectionError as Error).message).toBe("mcp-down");
+    if (!(selectionError instanceof Error)) throw selectionError;
+    expect(selectionError.message).toBe("mcp-down");
   });
 
   test("keeps canonical trusted role tools when runtime discovery misses ODT ids", async () => {

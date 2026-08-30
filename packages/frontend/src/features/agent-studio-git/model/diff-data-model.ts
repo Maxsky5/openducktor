@@ -228,12 +228,7 @@ export const applySummarySnapshot = ({
   summaryFields: ScopeSummaryFields;
   requestSequence: number;
   latestSharedSequence: number;
-}): {
-  invalidatedScopes: DiffScope[];
-  nextState: DiffBatchState;
-  nextLatestSharedSequence: number;
-  shouldReloadFullScope: boolean;
-} => {
+}) => {
   const { sharedHashesChanged, shouldReloadFullScope } = getSummaryReloadDecision(
     state,
     scope,
@@ -242,9 +237,9 @@ export const applySummarySnapshot = ({
   const previousSummarySnapshot = state.byScope[scope];
 
   let didChange = false;
-  const nextByScope: Record<DiffScope, ScopeSnapshot> = {
+  const nextByScope = {
     ...state.byScope,
-  };
+  } satisfies Record<DiffScope, ScopeSnapshot>;
   const nextFetchedScopeSnapshot: ScopeSnapshot = {
     ...previousSummarySnapshot,
     ...summaryFields,
@@ -305,6 +300,11 @@ export const applySummarySnapshot = ({
     nextState: finalizeCompletedState(state, nextByScope, nextLoadedByScope, didChange),
     nextLatestSharedSequence,
     shouldReloadFullScope,
+  } satisfies {
+    invalidatedScopes: DiffScope[];
+    nextState: DiffBatchState;
+    nextLatestSharedSequence: number;
+    shouldReloadFullScope: boolean;
   };
 };
 
@@ -339,14 +339,11 @@ export const applyFullSnapshot = ({
   snapshot: ScopeSnapshot;
   requestSequence: number;
   latestSharedSequence: number;
-}): {
-  nextState: DiffBatchState;
-  nextLatestSharedSequence: number;
-} => {
+}) => {
   let didChange = false;
-  const nextByScope: Record<DiffScope, ScopeSnapshot> = {
+  const nextByScope = {
     ...state.byScope,
-  };
+  } satisfies Record<DiffScope, ScopeSnapshot>;
   const previousFetchedScopeSnapshot = state.byScope[scope];
 
   if (!scopeSnapshotEqual(previousFetchedScopeSnapshot, snapshot)) {
@@ -388,6 +385,9 @@ export const applyFullSnapshot = ({
   return {
     nextState: finalizeCompletedState(state, nextByScope, nextLoadedByScope, didChange),
     nextLatestSharedSequence,
+  } satisfies {
+    nextState: DiffBatchState;
+    nextLatestSharedSequence: number;
   };
 };
 

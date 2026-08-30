@@ -47,10 +47,7 @@ const resolvePullRequestPrompt: KickoffPromptContextResolver = async ({
   };
 };
 
-const KICKOFF_PROMPT_CONTEXT_RESOLVERS: Record<
-  AgentKickoffTemplateId,
-  KickoffPromptContextResolver
-> = {
+const KICKOFF_PROMPT_CONTEXT_RESOLVERS = {
   "kickoff.spec_initial": resolveContextFreePrompt,
   "kickoff.planner_initial": resolveContextFreePrompt,
   "kickoff.build_implementation_start": resolveContextFreePrompt,
@@ -58,7 +55,7 @@ const KICKOFF_PROMPT_CONTEXT_RESOLVERS: Record<
   "kickoff.build_after_human_request_changes": resolveHumanFeedbackPrompt,
   "kickoff.build_pull_request_generation": resolvePullRequestPrompt,
   "kickoff.qa_review": resolveContextFreePrompt,
-};
+} satisfies Record<AgentKickoffTemplateId, KickoffPromptContextResolver>;
 
 export const resolveSessionStartKickoffPromptContext = async (
   input: ResolveSessionStartKickoffPromptContextInput,

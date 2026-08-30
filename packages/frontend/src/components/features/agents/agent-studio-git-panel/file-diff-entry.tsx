@@ -17,6 +17,7 @@ import {
   useReducer,
   useRef,
 } from "react";
+import { z } from "zod";
 import type {
   PierreDiffSelection,
   PierreDiffStyle,
@@ -67,6 +68,11 @@ type FileDiffEntryProps = {
 type GitDiffCommentAnnotationMetadata =
   | { kind: "new-comment-form" }
   | { kind: "comment"; commentId: string };
+
+const gitDiffCommentAnnotationMetadataSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("new-comment-form") }),
+  z.object({ kind: z.literal("comment"), commentId: z.string() }),
+]);
 
 type FileDiffAnnotationState = {
   selectedLines: SelectedLineRange | null;
@@ -263,8 +269,8 @@ function FileDiffEntry({
 }: FileDiffEntryProps): ReactElement {
   const { isConflicted, reserveConflictSlot, isExpanded } = viewState;
   const { canReset, isResetDisabled } = resetState;
-  const StatusIcon = FILE_STATUS_ICON[diff.type] ?? FileText;
-  const statusColor = FILE_STATUS_COLOR[diff.type] ?? "text-muted-foreground";
+  const StatusIcon = FILE_STATUS_ICON.get(diff.type) ?? FileText;
+  const statusColor = FILE_STATUS_COLOR.get(diff.type) ?? "text-muted-foreground";
   const addDraft = useInlineCommentDraftStore((store) => store.addDraft);
   const updateDraft = useInlineCommentDraftStore((store) => store.updateDraft);
   const removeDraft = useInlineCommentDraftStore((store) => store.removeDraft);
@@ -386,7 +392,11 @@ function FileDiffEntry({
   }, [fileComments, pendingSelection]);
   const renderAnnotation = useCallback(
     (annotation: DiffLineAnnotation<unknown>): ReactElement | null => {
-      const metadata = annotation.metadata as GitDiffCommentAnnotationMetadata;
+      const metadataResult = gitDiffCommentAnnotationMetadataSchema.safeParse(annotation.metadata);
+      if (!metadataResult.success) {
+        return null;
+      }
+      const metadata = metadataResult.data;
       if (metadata.kind === "new-comment-form") {
         if (pendingSelection == null) {
           return null;

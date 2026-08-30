@@ -34,10 +34,10 @@ export const sessionCacheRefreshFailureDescription = ({
   error: unknown;
 }): string => `${repoPath} · ${taskId}: ${errorMessage(error)}`;
 
-const cacheRefreshFailureTitles: Record<SessionCacheRefreshFailure["operation"], string> = {
+const cacheRefreshFailureTitles = {
   delete: "Session deleted, but metadata refresh failed",
   save: "Session saved, but metadata refresh failed",
-};
+} satisfies Record<SessionCacheRefreshFailure["operation"], string>;
 
 const reportDefaultCacheRefreshFailure = (failure: SessionCacheRefreshFailure): void => {
   toast.error(cacheRefreshFailureTitles[failure.operation], {

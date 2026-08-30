@@ -1,8 +1,9 @@
 import { type FailureKind, failureKindSchema } from "@openducktor/contracts";
+import { z } from "zod";
 
 type ResponseMetadata = {
-  status?: unknown;
-  statusText?: unknown;
+  status?: number;
+  statusText?: string;
 };
 
 export type OpenCodeRequestFailureKind = FailureKind;
@@ -13,6 +14,11 @@ type OpenCodeRequestErrorInit = {
   statusText?: string;
   code?: string;
 };
+
+type OpenCodeRequestMessageFailure = Pick<
+  NormalizedRequestFailure,
+  "message" | "status" | "statusText" | "code"
+>;
 
 type NormalizedRequestFailure = OpenCodeRequestErrorInit & {
   message: string;
@@ -53,71 +59,65 @@ export class OpenCodeRequestError extends Error {
   }
 }
 
-const readUnknownProp = (value: unknown, key: string): unknown => {
-  if (!value || typeof value !== "object") {
-    return undefined;
-  }
-  return (value as Record<string, unknown>)[key];
-};
+const requestFailureSourceSchema = z.object({
+  code: z.union([z.string(), z.number()]).optional(),
+  failureKind: failureKindSchema.optional(),
+  message: z.string().optional(),
+  status: z.number().optional(),
+  statusText: z.string().optional(),
+});
+type RequestFailureSource = z.output<typeof requestFailureSourceSchema>;
+type RequestFailureProperty = keyof RequestFailureSource;
 
-const readStringProp = (value: unknown, key: string): string | undefined => {
-  const candidate = readUnknownProp(value, key);
-  return typeof candidate === "string" && candidate.trim().length > 0 ? candidate : undefined;
-};
-
-const readNumberProp = (value: unknown, key: string): number | undefined => {
-  const candidate = readUnknownProp(value, key);
-  return typeof candidate === "number" ? candidate : undefined;
-};
-
-const readCodeProp = (value: unknown, key: string): string | undefined => {
-  const candidate = readUnknownProp(value, key);
-  return typeof candidate === "string" || typeof candidate === "number"
-    ? String(candidate)
-    : undefined;
-};
-
-const readStringPropFromSources = (sources: unknown[], key: string): string | undefined => {
+const readStringPropFromSources = (
+  sources: RequestFailureSource[],
+  key: RequestFailureProperty,
+): string | undefined => {
   for (const source of sources) {
-    const candidate = readStringProp(source, key);
-    if (candidate) {
-      return candidate;
+    const candidate = z.string().safeParse(source[key]);
+    if (candidate.success && candidate.data.trim().length > 0) {
+      return candidate.data;
     }
   }
   return undefined;
 };
 
-const readNumberPropFromSources = (sources: unknown[], key: string): number | undefined => {
+const readNumberPropFromSources = (
+  sources: RequestFailureSource[],
+  key: RequestFailureProperty,
+): number | undefined => {
   for (const source of sources) {
-    const candidate = readNumberProp(source, key);
-    if (candidate !== undefined) {
-      return candidate;
+    const candidate = z.number().safeParse(source[key]);
+    if (candidate.success) {
+      return candidate.data;
     }
   }
   return undefined;
 };
 
-const readCodePropFromSources = (sources: unknown[], key: string): string | undefined => {
+const readCodePropFromSources = (
+  sources: RequestFailureSource[],
+  key: RequestFailureProperty,
+): string | undefined => {
   for (const source of sources) {
-    const candidate = readCodeProp(source, key);
-    if (candidate !== undefined) {
-      return candidate;
+    const candidate = z.union([z.string(), z.number()]).safeParse(source[key]);
+    if (candidate.success) {
+      return String(candidate.data);
     }
   }
   return undefined;
 };
 
-const readFailureKind = (value: unknown): OpenCodeRequestFailureKind | undefined => {
-  const candidate = readUnknownProp(value, "failureKind");
-  const result = failureKindSchema.safeParse(candidate);
-  return result.success ? result.data : undefined;
+const readFailureKind = (cause: unknown): OpenCodeRequestFailureKind | undefined => {
+  const parsed = requestFailureSourceSchema.safeParse(cause);
+  return parsed.success ? parsed.data.failureKind : undefined;
 };
 
 const classifyOpenCodeRequestFailureKind = (failure: {
   status: number | undefined;
   code: string | undefined;
 }): OpenCodeRequestFailureKind => {
-  if (typeof failure.status === "number" && TIMEOUT_STATUS_CODES.has(failure.status)) {
+  if (failure.status !== undefined && TIMEOUT_STATUS_CODES.has(failure.status)) {
     return "timeout";
   }
 
@@ -131,17 +131,12 @@ const classifyOpenCodeRequestFailureKind = (failure: {
 
 const buildOpenCodeRequestErrorMessage = (
   action: string,
-  failure: {
-    message?: string;
-    status?: number;
-    statusText?: string;
-    code?: string;
-  },
+  failure: OpenCodeRequestMessageFailure,
 ): string => {
   const prefix = `OpenCode request failed: ${action}`;
   const detailParts: string[] = [];
 
-  if (typeof failure.status === "number") {
+  if (failure.status !== undefined) {
     detailParts.push(
       failure.statusText && failure.statusText.trim().length > 0
         ? `${failure.status} ${failure.statusText}`
@@ -162,103 +157,139 @@ const buildOpenCodeRequestErrorMessage = (
   return `${base}: ${failure.message}`;
 };
 
-const buildFailureSources = (error: unknown): unknown[] => {
-  return [error, readUnknownProp(error, "cause"), readUnknownProp(error, "data")];
+const buildFailureSources = (cause: unknown): RequestFailureSource[] => {
+  const envelope = z
+    .object({ cause: z.unknown().optional(), data: z.unknown().optional() })
+    .safeParse(cause);
+  const candidates = envelope.success ? [cause, envelope.data.cause, envelope.data.data] : [cause];
+  return candidates.flatMap((candidate) => {
+    const parsed = requestFailureSourceSchema.safeParse(candidate);
+    return parsed.success ? [parsed.data] : [];
+  });
 };
 
 const extractRequestFailure = (
   action: string,
-  error: unknown,
+  cause: unknown,
   response?: ResponseMetadata,
 ): NormalizedRequestFailure => {
   const prefix = `OpenCode request failed: ${action}`;
 
-  if (error instanceof OpenCodeRequestError) {
-    return {
-      message: error.message,
-      failureKind: error.failureKind,
+  if (cause instanceof OpenCodeRequestError) {
+    const failure: NormalizedRequestFailure = {
+      message: cause.message,
+      failureKind: cause.failureKind,
       hasPrefixedMessage: true,
-      ...(error.status !== undefined ? { status: error.status } : {}),
-      ...(error.statusText !== undefined ? { statusText: error.statusText } : {}),
-      ...(error.code !== undefined ? { code: error.code } : {}),
-      ...(error.cause !== undefined ? { cause: error.cause } : {}),
     };
+    if (cause.status !== undefined) {
+      failure.status = cause.status;
+    }
+    if (cause.statusText !== undefined) {
+      failure.statusText = cause.statusText;
+    }
+    if (cause.code !== undefined) {
+      failure.code = cause.code;
+    }
+    if (cause.cause !== undefined) {
+      failure.cause = cause.cause;
+    }
+    return failure;
   }
 
-  const sources = buildFailureSources(error);
+  const sources = buildFailureSources(cause);
   const status = readNumberPropFromSources(sources, "status");
   const statusText = readStringPropFromSources(sources, "statusText");
   const code = readCodePropFromSources(sources, "code");
-  const resolvedStatus =
-    typeof status === "number"
-      ? status
-      : typeof response?.status === "number"
-        ? response.status
-        : undefined;
+  const resolvedStatus = status ?? response?.status;
   const resolvedStatusText =
-    statusText ??
-    (typeof response?.statusText === "string" && response.statusText.trim().length > 0
-      ? response.statusText
-      : undefined);
+    statusText ?? (response?.statusText?.trim() ? response.statusText : undefined);
 
-  if (error instanceof Error && error.message.startsWith(prefix)) {
-    return {
-      message: error.message,
+  if (cause instanceof Error && cause.message.startsWith(prefix)) {
+    const failure: NormalizedRequestFailure = {
+      message: cause.message,
       failureKind:
-        readFailureKind(error) ??
+        readFailureKind(cause) ??
         classifyOpenCodeRequestFailureKind({
           status: resolvedStatus,
           code,
         }),
       hasPrefixedMessage: true,
-      ...(resolvedStatus !== undefined ? { status: resolvedStatus } : {}),
-      ...(resolvedStatusText !== undefined ? { statusText: resolvedStatusText } : {}),
-      ...(code !== undefined ? { code } : {}),
-      ...(error.cause !== undefined ? { cause: error.cause } : {}),
     };
+    if (resolvedStatus !== undefined) {
+      failure.status = resolvedStatus;
+    }
+    if (resolvedStatusText !== undefined) {
+      failure.statusText = resolvedStatusText;
+    }
+    if (code !== undefined) {
+      failure.code = code;
+    }
+    if (cause.cause !== undefined) {
+      failure.cause = cause.cause;
+    }
+    return failure;
   }
 
   const message =
-    (error instanceof Error && error.message.trim().length > 0 ? error.message : undefined) ??
+    (cause instanceof Error && cause.message.trim().length > 0 ? cause.message : undefined) ??
     readStringPropFromSources(sources, "message") ??
     prefix;
 
-  return {
+  const failure: NormalizedRequestFailure = {
     message,
     failureKind: classifyOpenCodeRequestFailureKind({
       status: resolvedStatus,
       code,
     }),
     hasPrefixedMessage: false,
-    ...(resolvedStatus !== undefined ? { status: resolvedStatus } : {}),
-    ...(resolvedStatusText !== undefined ? { statusText: resolvedStatusText } : {}),
-    ...(code !== undefined ? { code } : {}),
-    ...(error instanceof Error ? { cause: error } : {}),
   };
+  if (resolvedStatus !== undefined) {
+    failure.status = resolvedStatus;
+  }
+  if (resolvedStatusText !== undefined) {
+    failure.statusText = resolvedStatusText;
+  }
+  if (code !== undefined) {
+    failure.code = code;
+  }
+  if (cause instanceof Error) {
+    failure.cause = cause;
+  }
+  return failure;
 };
 
 export const toOpenCodeRequestError = (
   action: string,
-  error: unknown,
+  cause: unknown,
   response?: ResponseMetadata,
 ): OpenCodeRequestError => {
-  const failure = extractRequestFailure(action, error, response);
+  const failure = extractRequestFailure(action, cause, response);
+  const messageFailure: OpenCodeRequestMessageFailure = { message: failure.message };
+  if (failure.status !== undefined) {
+    messageFailure.status = failure.status;
+  }
+  if (failure.statusText !== undefined) {
+    messageFailure.statusText = failure.statusText;
+  }
+  if (failure.code !== undefined) {
+    messageFailure.code = failure.code;
+  }
+  const errorInit: OpenCodeRequestErrorInit = { failureKind: failure.failureKind };
+  if (failure.status !== undefined) {
+    errorInit.status = failure.status;
+  }
+  if (failure.statusText !== undefined) {
+    errorInit.statusText = failure.statusText;
+  }
+  if (failure.code !== undefined) {
+    errorInit.code = failure.code;
+  }
 
   return new OpenCodeRequestError(
     failure.hasPrefixedMessage
       ? failure.message
-      : buildOpenCodeRequestErrorMessage(action, {
-          message: failure.message,
-          ...(failure.status !== undefined ? { status: failure.status } : {}),
-          ...(failure.statusText !== undefined ? { statusText: failure.statusText } : {}),
-          ...(failure.code !== undefined ? { code: failure.code } : {}),
-        }),
-    {
-      failureKind: failure.failureKind,
-      ...(failure.status !== undefined ? { status: failure.status } : {}),
-      ...(failure.statusText !== undefined ? { statusText: failure.statusText } : {}),
-      ...(failure.code !== undefined ? { code: failure.code } : {}),
-    },
+      : buildOpenCodeRequestErrorMessage(action, messageFailure),
+    errorInit,
     failure.cause !== undefined ? { cause: failure.cause } : undefined,
   );
 };

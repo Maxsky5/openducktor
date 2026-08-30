@@ -12,6 +12,10 @@ import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shar
 import { ThemeToggle } from "./sidebar/theme-toggle";
 import { ThemeProvider, useTheme } from "./theme-provider";
 
+interface QueryClientRefContract {
+  current: QueryClient | null;
+}
+
 enableReactActEnvironment();
 
 const ThemeHarness = (): ReactElement => {
@@ -76,7 +80,7 @@ const renderThemeProvider = ({
   withSettingsSnapshot = true,
   enableSettingsSnapshotQuery = withSettingsSnapshot,
 }: RenderThemeProviderOptions = {}) => {
-  const queryClientRef: { current: QueryClient | null } = { current: null };
+  const queryClientRef: QueryClientRefContract = { current: null };
 
   render(
     <QueryProvider useIsolatedClient>
@@ -154,16 +158,11 @@ describe("ThemeProvider", () => {
 
     try {
       const queryClient = renderThemeProvider({ withSettingsSnapshot: false });
-      const awaitedLoad = queryClient
-        .fetchQuery(
-          settingsSnapshotQueryOptions({
-            workspaceGetSettingsSnapshot: async () => initialLoad.promise,
-          }),
-        )
-        .then(
-          (snapshot) => ({ snapshot, error: null }),
-          (error: unknown) => ({ snapshot: null, error }),
-        );
+      const awaitedLoad = queryClient.fetchQuery(
+        settingsSnapshotQueryOptions({
+          workspaceGetSettingsSnapshot: async () => initialLoad.promise,
+        }),
+      );
 
       fireEvent.click(screen.getByRole("button", { name: "Dark" }));
 
@@ -172,9 +171,8 @@ describe("ThemeProvider", () => {
         await flushQueryUpdates();
       });
 
-      const loadResult = await awaitedLoad;
-      expect(loadResult.error).toBeNull();
-      expect(loadResult.snapshot?.theme).toBe("light");
+      const loadedSnapshot = await awaitedLoad;
+      expect(loadedSnapshot.theme).toBe("light");
       expectThemeState("dark");
     } finally {
       hostBridge.client.setTheme = originalSetTheme;

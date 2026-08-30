@@ -67,11 +67,16 @@ describe("AgentChatThreadRow", () => {
   });
 
   test("throws for unknown row kinds", () => {
+    const row: AgentChatTranscriptRow = {
+      // @ts-expect-error -- This case verifies the runtime exhaustiveness guard for unknown row kinds.
+      kind: "unexpected",
+      key: "broken",
+    };
     const render = () =>
       renderToStaticMarkup(
         createElement(AgentChatThreadRow, {
           ...createBaseProps(),
-          row: { kind: "unexpected", key: "broken" } as unknown as AgentChatTranscriptRow,
+          row,
         }),
       );
 

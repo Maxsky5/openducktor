@@ -73,16 +73,21 @@ export const codexPolicyLogEntry = ({
   runtimeId: string;
   threadId?: string;
   workingDirectory: string;
-}): CodexPolicyLogEntry => ({
-  operation,
-  runtimeId,
-  ...(threadId ? { threadId } : {}),
-  workingDirectory,
-  sandboxMode: policy.sandboxMode,
-  approvalPolicy: policy.approvalPolicy,
-  promptReviewer: codexApprovalsReviewer(policy),
-  networkAccess: codexNetworkAccessLogValue(policy),
-});
+}): CodexPolicyLogEntry => {
+  const logEntry: CodexPolicyLogEntry = {
+    operation,
+    runtimeId,
+    workingDirectory,
+    sandboxMode: policy.sandboxMode,
+    approvalPolicy: policy.approvalPolicy,
+    promptReviewer: codexApprovalsReviewer(policy),
+    networkAccess: codexNetworkAccessLogValue(policy),
+  };
+  if (threadId) {
+    logEntry.threadId = threadId;
+  }
+  return logEntry;
+};
 
 export type CodexTransportPolicy = {
   approvalPolicy: CodexAppServerAskForApproval;

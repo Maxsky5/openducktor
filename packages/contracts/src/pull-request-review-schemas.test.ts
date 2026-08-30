@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { z, type JSONType } from "zod";
 import {
   pullRequestReviewActivitySchema,
   pullRequestReviewContextSchema,
@@ -20,6 +21,35 @@ const createActivityFields = () => ({
   threadId: null,
   isResolved: null,
 });
+
+type ReviewFixtureObject = Record<string, JSONType>;
+
+const reviewFixtureObjectSchema = z.record(z.string(), z.json());
+const isReviewFixtureObject = (value: JSONType | undefined): value is ReviewFixtureObject =>
+  reviewFixtureObjectSchema.safeParse(value).success;
+const isJsonContainer = (value: JSONType | undefined): value is ReviewFixtureObject | JSONType[] =>
+  Array.isArray(value) || isReviewFixtureObject(value);
+
+const setJsonPath = (
+  root: ReviewFixtureObject,
+  path: readonly (number | string)[],
+  value: JSONType,
+): void => {
+  const finalSegment = path.at(-1);
+  if (finalSegment === undefined) {
+    throw new Error("Expected a non-empty JSON path.");
+  }
+
+  let current: ReviewFixtureObject | JSONType[] = root;
+  for (const segment of path.slice(0, -1)) {
+    const next = current[segment];
+    if (!isJsonContainer(next)) {
+      throw new Error(`Expected a JSON container at path segment '${segment}'.`);
+    }
+    current = next;
+  }
+  current[finalSegment] = value;
+};
 
 describe("pullRequestReviewActivitySchema", () => {
   test.each(["approved", "changes_requested", "commented", "dismissed"] as const)(
@@ -210,12 +240,8 @@ describe("pullRequestReviewContextSchema", () => {
       ],
       reviewThreads: { openCount: 0 },
       refreshedAt: "2026-07-10T08:02:00Z",
-    } as Record<string, unknown>;
-    let current: unknown = context;
-    for (const segment of path.slice(0, -1)) {
-      current = (current as Record<string | number, unknown>)[segment];
-    }
-    (current as Record<string | number, unknown>)[path.at(-1) as string | number] = value;
+    } satisfies ReviewFixtureObject;
+    setJsonPath(context, path, value);
 
     expect(() => pullRequestReviewContextSchema.parse(context)).toThrow();
   });

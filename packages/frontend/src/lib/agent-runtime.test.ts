@@ -118,7 +118,7 @@ describe("agent-runtime capability policies", () => {
   });
 
   test("fails fast on runtime descriptor schema violations before registration", () => {
-    const invariantViolation = {
+    const invariantViolation: RuntimeDescriptor = {
       ...OPENCODE_RUNTIME_DESCRIPTOR,
       capabilities: {
         ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
@@ -135,7 +135,7 @@ describe("agent-runtime capability policies", () => {
           supportsSubagentReferences: false,
         },
       },
-    } as unknown as RuntimeDescriptor;
+    };
 
     expect(validateRuntimeDefinitionForOpenDucktor(invariantViolation)).toEqual([
       "[optional_enhancement] runtime descriptor schema violation at capabilities.promptInput.supportedParts: Runtime descriptors that support slash commands must declare slash command prompt parts.",
@@ -148,7 +148,7 @@ describe("agent-runtime capability policies", () => {
         ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
         supportsFileSearch: true,
       },
-    } as unknown as RuntimeDescriptor;
+    };
 
     expect(validateRuntimeDefinitionForOpenDucktor(staleFlatCapability)).toEqual([
       '[baseline] runtime descriptor schema violation at capabilities: Unrecognized key: "supportsFileSearch"',
@@ -156,13 +156,14 @@ describe("agent-runtime capability policies", () => {
   });
 
   test("returns schema errors instead of crashing for partially migrated descriptors", () => {
-    const malformedDescriptor = {
+    const malformedDescriptor: RuntimeDescriptor = {
       ...OPENCODE_RUNTIME_DESCRIPTOR,
       capabilities: {
         ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+        // @ts-expect-error -- This fixture verifies runtime rejection of a missing workflow contract.
         workflow: undefined,
       },
-    } as unknown as RuntimeDescriptor;
+    };
 
     expect(() => validateRuntimeDefinitionForOpenDucktor(malformedDescriptor)).not.toThrow();
     expect(validateRuntimeDefinitionForOpenDucktor(malformedDescriptor)).toEqual([
@@ -209,12 +210,14 @@ describe("agent-runtime capability policies", () => {
         supportedReplyOutcomes: ["reject"],
       },
     });
-    const structuredInputDescriptor = withCapabilities({
+    const malformedCapabilities: Partial<RuntimeDescriptor["capabilities"]> = {
       structuredInput: {
         ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.structuredInput,
+        // @ts-expect-error -- This fixture verifies runtime rejection of a non-boolean capability.
         supportsQuestions: "yes",
       },
-    } as unknown as Partial<RuntimeDescriptor["capabilities"]>);
+    };
+    const structuredInputDescriptor = withCapabilities(malformedCapabilities);
 
     expect(validateRuntimeDefinitionForOpenDucktor(approvalDescriptor)).toEqual([
       "[workflow] runtime descriptor schema violation at capabilities.approvals.supportedReplyOutcomes: Runtime descriptors with approval requests must support at least one approval reply outcome.",
@@ -246,15 +249,15 @@ describe("agent-runtime capability policies", () => {
 
     expect(getRuntimeDescriptorCapabilityConfigErrors(workspaceOnly)).toEqual([
       "[role_scoped] missing required workflow scopes: task, build",
-      "[role_scoped] unsupported agent roles: qa, build (spec requires workspace; planner requires workspace; qa requires task; build requires build, workspace)",
+      "[role_scoped] unsupported agent roles: build, qa (spec requires workspace; planner requires workspace; build requires build, workspace; qa requires task)",
     ]);
     expect(validateRuntimeDefinitionForOpenDucktor(taskOnly)).toEqual([
       "[role_scoped] missing required workflow scopes: workspace, build",
-      "[role_scoped] unsupported agent roles: spec, planner, build (spec requires workspace; planner requires workspace; qa requires task; build requires build, workspace)",
+      "[role_scoped] unsupported agent roles: spec, planner, build (spec requires workspace; planner requires workspace; build requires build, workspace; qa requires task)",
     ]);
     expect(validateRuntimeDefinitionForOpenDucktor(buildAndWorkspace)).toEqual([
       "[role_scoped] missing required workflow scopes: task",
-      "[role_scoped] unsupported agent roles: qa (spec requires workspace; planner requires workspace; qa requires task; build requires build, workspace)",
+      "[role_scoped] unsupported agent roles: qa (spec requires workspace; planner requires workspace; build requires build, workspace; qa requires task)",
     ]);
   });
 
@@ -268,11 +271,11 @@ describe("agent-runtime capability policies", () => {
 
     expect(getRuntimeDescriptorCapabilityConfigErrors(descriptor)).toEqual([
       "[role_scoped] missing required workflow scopes: workspace, task",
-      "[role_scoped] unsupported agent roles: spec, planner, qa, build (spec requires workspace; planner requires workspace; qa requires task; build requires build, workspace)",
+      "[role_scoped] unsupported agent roles: spec, planner, build, qa (spec requires workspace; planner requires workspace; build requires build, workspace; qa requires task)",
     ]);
     expect(validateRuntimeDefinitionForOpenDucktor(descriptor)).toEqual([
       "[role_scoped] missing required workflow scopes: workspace, task",
-      "[role_scoped] unsupported agent roles: spec, planner, qa, build (spec requires workspace; planner requires workspace; qa requires task; build requires build, workspace)",
+      "[role_scoped] unsupported agent roles: spec, planner, build, qa (spec requires workspace; planner requires workspace; build requires build, workspace; qa requires task)",
     ]);
   });
 
@@ -335,7 +338,7 @@ describe("agent-runtime capability policies", () => {
           forkTargets: ["session"],
         },
       }),
-      kind: "fork-runtime" as unknown as RuntimeDescriptor["kind"],
+      kind: "codex" as const,
       label: "Fork Runtime",
     };
 
@@ -399,21 +402,17 @@ describe("agent-runtime capability policies", () => {
   });
 
   test("runtime selection resolution never falls back to OpenCode implicitly", () => {
-    const codex = {
-      ...OPENCODE_RUNTIME_DESCRIPTOR,
-      kind: "codex" as unknown as RuntimeDescriptor["kind"],
-      label: "Codex",
-    } as RuntimeDescriptor;
+    const codex = CODEX_RUNTIME_DESCRIPTOR;
 
     expect(
       resolveRuntimeKindSelectionState({
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, codex],
-        requestedRuntimeKind: "codex" as unknown as RuntimeDescriptor["kind"],
+        requestedRuntimeKind: "codex",
       }),
     ).toEqual({
       status: "resolved",
-      runtimeKind: "codex" as unknown as RuntimeDescriptor["kind"],
-      requestedRuntimeKind: "codex" as unknown as RuntimeDescriptor["kind"],
+      runtimeKind: "codex",
+      requestedRuntimeKind: "codex",
     });
     expect(
       resolveRuntimeKindSelectionState({
@@ -424,22 +423,22 @@ describe("agent-runtime capability policies", () => {
     expect(
       resolveRuntimeKindSelectionState({
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-        requestedRuntimeKind: "codex" as unknown as RuntimeDescriptor["kind"],
+        requestedRuntimeKind: "codex",
       }),
     ).toEqual({
       status: "unknown-request",
       runtimeKind: null,
-      requestedRuntimeKind: "codex" as unknown as RuntimeDescriptor["kind"],
+      requestedRuntimeKind: "codex",
     });
     expect(
       resolveRuntimeKindSelectionState({
         runtimeDefinitions: [],
-        requestedRuntimeKind: "codex" as unknown as RuntimeDescriptor["kind"],
+        requestedRuntimeKind: "codex",
       }),
     ).toEqual({
       status: "no-definitions",
       runtimeKind: null,
-      requestedRuntimeKind: "codex" as unknown as RuntimeDescriptor["kind"],
+      requestedRuntimeKind: "codex",
     });
     expect(
       resolveRuntimeKindSelection({

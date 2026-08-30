@@ -3,6 +3,7 @@ import type {
   AgentSessionControlSendInput,
   AgentSessionControlStartInput,
   AgentSessionLiveEnvelope,
+  AgentSessionLiveLoadDiffInput,
   AgentSessionLiveSnapshot,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -42,8 +43,10 @@ const createHarness = async (resolveAttachment?: LocalAttachmentService["resolve
   const forks: unknown[] = [];
   const resumes: unknown[] = [];
   const sends: AgentSessionControlSendInput[] = [];
+  const diffLoads: unknown[] = [];
   const starts: AgentSessionControlStartInput[] = [];
   const adapter: AgentSessionRuntimeAdapterPort = {
+    supportsSessionControl: true,
     binding: { runtimeId: "runtime-1", runtimeKind: "opencode", repoPath: "/repo" },
     matches: (ref) =>
       snapshots.some((snapshot) => snapshot.ref.externalSessionId === ref.externalSessionId),
@@ -57,6 +60,19 @@ const createHarness = async (resolveAttachment?: LocalAttachmentService["resolve
       );
     },
     loadContext: () => Effect.succeed(null),
+    loadSessionDiff: (input) =>
+      Effect.sync(() => {
+        diffLoads.push(input);
+        return [
+          {
+            file: "src/app.ts",
+            type: "modified",
+            additions: 1,
+            deletions: 1,
+            diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n",
+          },
+        ];
+      }),
     replyApproval: () => Effect.void,
     replyQuestion: () => Effect.void,
     releaseRuntime: () => Effect.succeed(snapshots.map(({ ref }) => ref)),
@@ -126,6 +142,7 @@ const createHarness = async (resolveAttachment?: LocalAttachmentService["resolve
   return {
     attachmentResolutions,
     envelopes,
+    diffLoads,
     forks,
     resumes,
     router: createEffectHostCommandRouter({
@@ -137,11 +154,30 @@ const createHarness = async (resolveAttachment?: LocalAttachmentService["resolve
 };
 
 describe("createAgentSessionLiveCommandHandlers", () => {
+  test("routes live session diff reads to the owning adapter", async () => {
+    const { diffLoads, router } = await createHarness();
+    await Effect.runPromise(router.invoke("agent_session_control_start", { ...startInput }));
+    const input: AgentSessionLiveLoadDiffInput = {
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+      runtimeHistoryAnchor: "turn-1",
+    };
+
+    await expect(
+      Effect.runPromise(router.invoke("agent_session_live_load_diff", input)),
+    ).resolves.toEqual([
+      expect.objectContaining({ file: "src/app.ts", additions: 1, deletions: 1 }),
+    ]);
+    expect(diffLoads).toEqual([input]);
+  });
+
   test("parses and routes a normalized session-control command", async () => {
     const { forks, resumes, router, starts } = await createHarness();
 
     await expect(
-      Effect.runPromise(router.invoke("agent_session_control_start", startInput)),
+      Effect.runPromise(router.invoke("agent_session_control_start", { ...startInput })),
     ).resolves.toMatchObject({ externalSessionId: "session-1", runtimeKind: "opencode" });
     expect(starts).toEqual([startInput]);
 

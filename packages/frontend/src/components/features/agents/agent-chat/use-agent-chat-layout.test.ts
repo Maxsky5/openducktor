@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   COMPOSER_EDITOR_MAX_HEIGHT_PX,
@@ -10,18 +11,47 @@ import {
   useAgentChatLayout,
 } from "./use-agent-chat-layout";
 
-type LayoutHookState = {
-  messagesContainerRef: { current: HTMLDivElement | null };
-  composerFormRef: { current: HTMLFormElement | null };
-  composerTextareaRef: { current: HTMLTextAreaElement | null };
-  resizeComposerTextarea: () => void;
+type TextareaResizeTarget = Parameters<typeof resizeComposerTextareaElement>[0];
+type EditorResizeTarget = Parameters<typeof resizeComposerEditorElement>[0];
+type ResizeStyle = TextareaResizeTarget["style"];
+type ResizeStyleState = {
+  height: string;
+  overflowY: "auto" | "hidden";
 };
 
-(
-  globalThis as typeof globalThis & {
-    IS_REACT_ACT_ENVIRONMENT?: boolean;
-  }
-).IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
+
+const createTextareaElement = ({
+  height,
+  scrollHeight,
+  value,
+}: {
+  height: number;
+  scrollHeight: number;
+  value: string;
+}): HTMLTextAreaElement => {
+  const textarea = document.createElement("textarea");
+  textarea.style.height = `${height}px`;
+  textarea.style.overflowY = "hidden";
+  textarea.value = value;
+  textarea.getBoundingClientRect = () => new DOMRect(0, 0, 0, height);
+  Object.defineProperty(textarea, "scrollHeight", {
+    configurable: true,
+    value: scrollHeight,
+    writable: true,
+  });
+  return textarea;
+};
+
+const createMessagesContainer = (): HTMLDivElement => {
+  const container = document.createElement("div");
+  Object.defineProperties(container, {
+    clientHeight: { configurable: true, value: 300, writable: true },
+    scrollHeight: { configurable: true, value: 1_000, writable: true },
+    scrollTop: { configurable: true, value: 700, writable: true },
+  });
+  return container;
+};
 
 describe("use-agent-chat-layout helpers", () => {
   test("clamps textarea layout to minimum height", () => {
@@ -43,12 +73,13 @@ describe("use-agent-chat-layout helpers", () => {
       height: "40px",
       overflowY: "hidden" as const,
     };
-    const textarea = {
+    const textarea: TextareaResizeTarget = {
       getBoundingClientRect: () => ({ height: 40 }),
       scrollHeight: 40,
       style: styleState,
+      textContent: null,
       value: "draft",
-    } as unknown as HTMLTextAreaElement;
+    };
 
     resizeComposerTextareaElement(textarea);
 
@@ -57,39 +88,41 @@ describe("use-agent-chat-layout helpers", () => {
   });
 
   test("resizeComposerTextareaElement keeps multiline height stable when the layout is unchanged", () => {
-    const styleState = {
+    const styleState: ResizeStyleState = {
       height: "120px",
-      overflowY: "hidden" as "auto" | "hidden",
+      overflowY: "hidden",
     };
     const assignedHeights: string[] = [];
     const assignedOverflowValues: Array<"auto" | "hidden"> = [];
-    const style = {} as CSSStyleDeclaration;
-
-    Object.defineProperty(style, "height", {
-      configurable: true,
-      get: () => styleState.height,
-      set: (value: string) => {
+    const style: ResizeStyle = {
+      get height() {
+        return styleState.height;
+      },
+      set height(value: string) {
         assignedHeights.push(value);
         styleState.height = value;
       },
-    });
-    Object.defineProperty(style, "overflowY", {
-      configurable: true,
-      get: () => styleState.overflowY,
-      set: (value: "auto" | "hidden") => {
+      get overflowY() {
+        return styleState.overflowY;
+      },
+      set overflowY(value: string) {
+        if (value !== "auto" && value !== "hidden") {
+          throw new Error(`Unexpected overflow value: ${value}`);
+        }
         assignedOverflowValues.push(value);
         styleState.overflowY = value;
       },
-    });
+    };
 
-    const textarea = {
+    const textarea: TextareaResizeTarget = {
       getBoundingClientRect: () => ({ height: 120 }),
       style,
+      textContent: null,
       value: "line one\nline two",
       get scrollHeight() {
         return 120;
       },
-    } as unknown as HTMLTextAreaElement;
+    };
 
     const result = resizeComposerTextareaElement(textarea);
 
@@ -102,33 +135,34 @@ describe("use-agent-chat-layout helpers", () => {
   });
 
   test("resizeComposerEditorElement detects native multiline growth from the last synced height", () => {
-    const styleState = {
+    const styleState: ResizeStyleState = {
       height: "",
-      overflowY: "hidden" as "auto" | "hidden",
+      overflowY: "hidden",
     };
-    const style = {} as CSSStyleDeclaration;
-
-    Object.defineProperty(style, "height", {
-      configurable: true,
-      get: () => styleState.height,
-      set: (value: string) => {
+    const style: ResizeStyle = {
+      get height() {
+        return styleState.height;
+      },
+      set height(value: string) {
         styleState.height = value;
       },
-    });
-    Object.defineProperty(style, "overflowY", {
-      configurable: true,
-      get: () => styleState.overflowY,
-      set: (value: "auto" | "hidden") => {
+      get overflowY() {
+        return styleState.overflowY;
+      },
+      set overflowY(value: string) {
+        if (value !== "auto" && value !== "hidden") {
+          throw new Error(`Unexpected overflow value: ${value}`);
+        }
         styleState.overflowY = value;
       },
-    });
+    };
 
-    const editor = {
+    const editor: EditorResizeTarget = {
       getBoundingClientRect: () => ({ height: 120 }),
       scrollHeight: 120,
       style,
       textContent: "line one\nline two",
-    } as unknown as HTMLDivElement;
+    };
 
     const result = resizeComposerEditorElement(editor, undefined, COMPOSER_EDITOR_MIN_HEIGHT_PX);
 
@@ -140,35 +174,37 @@ describe("use-agent-chat-layout helpers", () => {
   });
 
   test("resizeComposerTextareaElement shrinks when content height decreases", () => {
-    const styleState = {
+    const styleState: ResizeStyleState = {
       height: "120px",
-      overflowY: "hidden" as "auto" | "hidden",
+      overflowY: "hidden",
     };
-    const style = {} as CSSStyleDeclaration;
-
-    Object.defineProperty(style, "height", {
-      configurable: true,
-      get: () => styleState.height,
-      set: (value: string) => {
+    const style: ResizeStyle = {
+      get height() {
+        return styleState.height;
+      },
+      set height(value: string) {
         styleState.height = value;
       },
-    });
-    Object.defineProperty(style, "overflowY", {
-      configurable: true,
-      get: () => styleState.overflowY,
-      set: (value: "auto" | "hidden") => {
+      get overflowY() {
+        return styleState.overflowY;
+      },
+      set overflowY(value: string) {
+        if (value !== "auto" && value !== "hidden") {
+          throw new Error(`Unexpected overflow value: ${value}`);
+        }
         styleState.overflowY = value;
       },
-    });
+    };
 
-    const textarea = {
+    const textarea: TextareaResizeTarget = {
       getBoundingClientRect: () => ({ height: 120 }),
       style,
+      textContent: null,
       value: "short",
       get scrollHeight() {
         return styleState.height === "auto" ? COMPOSER_EDITOR_MIN_HEIGHT_PX : 120;
       },
-    } as unknown as HTMLTextAreaElement;
+    };
 
     const result = resizeComposerTextareaElement(textarea);
 
@@ -180,20 +216,12 @@ describe("use-agent-chat-layout helpers", () => {
   });
 
   test("resizeComposerTextareaElement preserves height when the editor already reports the target size", () => {
-    const styleState = {
+    const styleState: ResizeStyleState = {
       height: "120px",
-      overflowY: "hidden" as "auto" | "hidden",
+      overflowY: "hidden",
     };
     const assignedHeights: string[] = [];
-    const style = {} as CSSStyleDeclaration;
-    const measurementClone = {
-      style: {} as CSSStyleDeclaration,
-      scrollHeight: COMPOSER_EDITOR_MIN_HEIGHT_PX,
-      value: "",
-      rows: 1,
-      setAttribute: () => {},
-      remove: () => {},
-    } as unknown as HTMLTextAreaElement;
+    const style = { height: styleState.height, overflowY: styleState.overflowY };
 
     Object.defineProperty(style, "height", {
       configurable: true,
@@ -212,44 +240,12 @@ describe("use-agent-chat-layout helpers", () => {
     });
 
     const textarea = {
-      cloneNode: () => measurementClone,
-      getBoundingClientRect: () => ({ height: 120, width: 320 }),
-      ownerDocument: {
-        body: {
-          appendChild: () => {},
-        },
-        defaultView: {
-          getComputedStyle: () =>
-            ({
-              boxSizing: "border-box",
-              fontFamily: "monospace",
-              fontSize: "14px",
-              fontStyle: "normal",
-              fontWeight: "400",
-              letterSpacing: "normal",
-              lineHeight: "20px",
-              paddingTop: "8px",
-              paddingRight: "12px",
-              paddingBottom: "8px",
-              paddingLeft: "12px",
-              textIndent: "0px",
-              textTransform: "none",
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-              wordSpacing: "0px",
-              overflowWrap: "break-word",
-              borderTopWidth: "1px",
-              borderRightWidth: "1px",
-              borderBottomWidth: "1px",
-              borderLeftWidth: "1px",
-            }) satisfies Partial<CSSStyleDeclaration>,
-        },
-      },
+      getBoundingClientRect: () => ({ height: 120 }),
       style,
-      rows: 1,
       scrollHeight: 120,
+      textContent: null,
       value: "line one\nline two",
-    } as unknown as HTMLTextAreaElement;
+    };
 
     const result = resizeComposerTextareaElement(textarea);
 
@@ -262,37 +258,39 @@ describe("use-agent-chat-layout helpers", () => {
   });
 
   test("resizeComposerTextareaElement skips no-op writes for single-line drafts already at min height", () => {
-    const styleState = {
+    const styleState: ResizeStyleState = {
       height: "",
-      overflowY: "hidden" as "auto" | "hidden",
+      overflowY: "hidden",
     };
     const assignedHeights: string[] = [];
-    const style = {} as CSSStyleDeclaration;
-
-    Object.defineProperty(style, "height", {
-      configurable: true,
-      get: () => styleState.height,
-      set: (value: string) => {
+    const style: ResizeStyle = {
+      get height() {
+        return styleState.height;
+      },
+      set height(value: string) {
         assignedHeights.push(value);
         styleState.height = value;
       },
-    });
-    Object.defineProperty(style, "overflowY", {
-      configurable: true,
-      get: () => styleState.overflowY,
-      set: (value: "auto" | "hidden") => {
+      get overflowY() {
+        return styleState.overflowY;
+      },
+      set overflowY(value: string) {
+        if (value !== "auto" && value !== "hidden") {
+          throw new Error(`Unexpected overflow value: ${value}`);
+        }
         styleState.overflowY = value;
       },
-    });
+    };
 
-    const textarea = {
+    const textarea: TextareaResizeTarget = {
       getBoundingClientRect: () => ({ height: COMPOSER_EDITOR_MIN_HEIGHT_PX }),
       style,
+      textContent: null,
       value: "draft",
       get scrollHeight() {
         return COMPOSER_EDITOR_MIN_HEIGHT_PX;
       },
-    } as unknown as HTMLTextAreaElement;
+    };
 
     const result = resizeComposerTextareaElement(textarea);
 
@@ -305,16 +303,17 @@ describe("use-agent-chat-layout helpers", () => {
   });
 
   test("resizeComposerTextareaElement clamps empty drafts to minimum height", () => {
-    const styleState = {
+    const styleState: ResizeStyleState = {
       height: "220px",
-      overflowY: "auto" as "auto" | "hidden",
+      overflowY: "auto",
     };
-    const textarea = {
+    const textarea: TextareaResizeTarget = {
       getBoundingClientRect: () => ({ height: 220 }),
       scrollHeight: 220,
       style: styleState,
+      textContent: null,
       value: "",
-    } as unknown as HTMLTextAreaElement;
+    };
 
     resizeComposerTextareaElement(textarea);
 
@@ -332,16 +331,16 @@ describe("use-agent-chat-layout helpers", () => {
 
     await harness.mount();
 
-    const initialState = harness.getLatest() as LayoutHookState;
+    const initialState = harness.getLatest();
 
     expect(initialState.messagesContainerRef.current).toBeNull();
     expect(initialState.composerFormRef.current).toBeNull();
     expect(initialState.composerTextareaRef.current).toBeNull();
-    expect(typeof initialState.resizeComposerTextarea).toBe("function");
+    expect(initialState.resizeComposerTextarea).toBeInstanceOf(Function);
 
     await harness.update({ displayedSessionKey: "session-2", input: "draft" });
 
-    const updatedState = harness.getLatest() as LayoutHookState;
+    const updatedState = harness.getLatest();
     expect(updatedState.messagesContainerRef).toBe(initialState.messagesContainerRef);
 
     await harness.unmount();
@@ -358,17 +357,8 @@ describe("use-agent-chat-layout helpers", () => {
 
       await harness.mount();
 
-      const state = harness.getLatest() as LayoutHookState;
-      const styleState = {
-        height: "44px",
-        overflowY: "hidden" as const,
-      };
-      const textarea = {
-        getBoundingClientRect: () => ({ height: 44 }),
-        scrollHeight: 120,
-        style: styleState,
-        value: "",
-      } as unknown as HTMLTextAreaElement;
+      const state = harness.getLatest();
+      const textarea = createTextareaElement({ height: 44, scrollHeight: 120, value: "" });
       state.composerTextareaRef.current = textarea;
 
       await animationFrameDriver.flushFrames();
@@ -378,12 +368,12 @@ describe("use-agent-chat-layout helpers", () => {
 
       expect(animationFrameDriver.pendingFrameCount()).toBe(1);
       await animationFrameDriver.flushFrame();
-      expect(styleState.height).toBe("120px");
+      expect(textarea.style.height).toBe("120px");
 
       state.resizeComposerTextarea();
       expect(animationFrameDriver.pendingFrameCount()).toBe(1);
       await animationFrameDriver.flushFrame();
-      expect(styleState.height).toBe("120px");
+      expect(textarea.style.height).toBe("120px");
 
       Object.assign(textarea, {
         value: "",
@@ -393,7 +383,7 @@ describe("use-agent-chat-layout helpers", () => {
       expect(animationFrameDriver.pendingFrameCount()).toBe(1);
 
       await animationFrameDriver.flushFrame();
-      expect(styleState.height).toBe("44px");
+      expect(textarea.style.height).toBe("44px");
 
       await harness.unmount();
     });
@@ -406,7 +396,7 @@ describe("use-agent-chat-layout helpers", () => {
         current: () => {
           syncBottomAfterComposerLayoutCallCount += 1;
         },
-      } as { current: (() => void) | null };
+      } satisfies { current: (() => void) | null };
       const harness = createSharedHookHarness(
         ({ displayedSessionKey }: { displayedSessionKey: string | null }) => {
           return useAgentChatLayout({
@@ -419,36 +409,23 @@ describe("use-agent-chat-layout helpers", () => {
 
       await harness.mount();
 
-      const state = harness.getLatest() as LayoutHookState;
-      state.messagesContainerRef.current = {
-        scrollHeight: 1000,
-        scrollTop: 700,
-        clientHeight: 300,
-      } as HTMLDivElement;
+      const state = harness.getLatest();
+      state.messagesContainerRef.current = createMessagesContainer();
 
-      const styleState = {
-        height: "44px",
-        overflowY: "hidden" as const,
-      };
-      const textarea = {
-        getBoundingClientRect: () => ({ height: 44 }),
+      const textarea = createTextareaElement({
+        height: 44,
         scrollHeight: 120,
-        style: styleState,
         value: "line one\nline two",
-      } as unknown as HTMLTextAreaElement;
+      });
       state.composerTextareaRef.current = textarea;
 
       state.resizeComposerTextarea();
       await animationFrameDriver.flushFrame();
 
-      expect(styleState.height).toBe("120px");
+      expect(textarea.style.height).toBe("120px");
       expect(syncBottomAfterComposerLayoutCallCount).toBe(1);
 
-      state.messagesContainerRef.current = {
-        scrollHeight: 1000,
-        scrollTop: 700,
-        clientHeight: 300,
-      } as HTMLDivElement;
+      state.messagesContainerRef.current = createMessagesContainer();
       Object.assign(textarea, {
         scrollHeight: 120,
         value: "line one\nline tw",
@@ -457,7 +434,7 @@ describe("use-agent-chat-layout helpers", () => {
       state.resizeComposerTextarea();
       await animationFrameDriver.flushFrame();
 
-      expect(styleState.height).toBe("120px");
+      expect(textarea.style.height).toBe("120px");
       expect(syncBottomAfterComposerLayoutCallCount).toBe(1);
 
       await harness.unmount();
@@ -475,23 +452,14 @@ describe("use-agent-chat-layout helpers", () => {
 
       await harness.mount();
 
-      const state = harness.getLatest() as LayoutHookState;
-      const styleState = {
-        height: "220px",
-        overflowY: "hidden" as const,
-      };
-      const textarea = {
-        getBoundingClientRect: () => ({ height: 220 }),
-        scrollHeight: 44,
-        style: styleState,
-        value: "",
-      } as unknown as HTMLTextAreaElement;
+      const state = harness.getLatest();
+      const textarea = createTextareaElement({ height: 220, scrollHeight: 44, value: "" });
 
       state.composerTextareaRef.current = textarea;
       state.resizeComposerTextarea();
       await animationFrameDriver.flushFrame();
 
-      expect(styleState.height).toBe("44px");
+      expect(textarea.style.height).toBe("44px");
 
       await harness.unmount();
     });

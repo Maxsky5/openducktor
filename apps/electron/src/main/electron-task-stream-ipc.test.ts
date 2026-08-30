@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { TaskEventStreamFrame } from "@openducktor/contracts";
+import type { TaskEventStreamFrame, TaskEventStreamSubscribe } from "@openducktor/contracts";
 import {
   ELECTRON_TASK_STREAM_ACKNOWLEDGE_CHANNEL,
   ELECTRON_TASK_STREAM_FRAME_CHANNEL,
@@ -7,7 +7,12 @@ import {
   ELECTRON_TASK_STREAM_TERMINAL_FAILURE_CHANNEL,
   ELECTRON_TASK_STREAM_UNSUBSCRIBE_CHANNEL,
 } from "../shared/electron-bridge-contract";
-import { registerElectronTaskStreamIpc } from "./electron-task-stream-ipc";
+import {
+  type ElectronTaskStreamEvent,
+  type ElectronTaskStreamIpcHandler,
+  type ElectronTaskStreamIpcOptions,
+  registerElectronTaskStreamIpc,
+} from "./electron-task-stream-ipc";
 
 const epoch = "11111111-1111-4111-8111-111111111111";
 const subscriptionId = "22222222-2222-4222-8222-222222222222";
@@ -18,7 +23,7 @@ const frame: TaskEventStreamFrame = {
   reason: "buffer_gap",
 };
 
-type Handler = (event: unknown, value: unknown) => unknown;
+type Handler = ElectronTaskStreamIpcHandler;
 type NavigationDetails = { isMainFrame: boolean; isSameDocument: boolean };
 type LifecycleListener = () => void;
 type NavigationListener = (details: NavigationDetails) => void;
@@ -31,11 +36,17 @@ const createFrame = (processId: number, routingId: number, send = mock(() => {})
 });
 
 const createSender = (id: number, frameSend = mock(() => {})) => {
-  const listeners = new Map<string, Set<LifecycleListener | NavigationListener>>();
-  const addListener = (event: string, listener: LifecycleListener | NavigationListener) => {
-    const eventListeners = listeners.get(event) ?? new Set();
+  const lifecycleListeners = new Map<string, Set<LifecycleListener>>();
+  const navigationListeners = new Map<string, Set<NavigationListener>>();
+  const addLifecycleListener = (event: string, listener: LifecycleListener) => {
+    const eventListeners = lifecycleListeners.get(event) ?? new Set();
     eventListeners.add(listener);
-    listeners.set(event, eventListeners);
+    lifecycleListeners.set(event, eventListeners);
+  };
+  const addNavigationListener = (event: string, listener: NavigationListener) => {
+    const eventListeners = navigationListeners.get(event) ?? new Set();
+    eventListeners.add(listener);
+    navigationListeners.set(event, eventListeners);
   };
   let mainFrame = createFrame(id, id * 10, frameSend);
   const sender = {
@@ -44,10 +55,19 @@ const createSender = (id: number, frameSend = mock(() => {})) => {
     },
     isDestroyed: mock(() => false),
     off: mock((event: string, listener: LifecycleListener | NavigationListener) => {
-      listeners.get(event)?.delete(listener);
+      for (const candidate of lifecycleListeners.get(event) ?? []) {
+        if (candidate === listener) lifecycleListeners.get(event)?.delete(candidate);
+      }
+      for (const candidate of navigationListeners.get(event) ?? []) {
+        if (candidate === listener) navigationListeners.get(event)?.delete(candidate);
+      }
     }),
-    on: mock((event: string, listener: NavigationListener) => addListener(event, listener)),
-    once: mock((event: string, listener: LifecycleListener) => addListener(event, listener)),
+    on: mock((event: string, listener: NavigationListener) =>
+      addNavigationListener(event, listener),
+    ),
+    once: mock((event: string, listener: LifecycleListener) =>
+      addLifecycleListener(event, listener),
+    ),
     send: mock(() => {}),
   };
   return {
@@ -57,18 +77,20 @@ const createSender = (id: number, frameSend = mock(() => {})) => {
     },
     emitLifecycle(event: "destroyed" | "render-process-gone") {
       // oxlint-disable-next-line unicorn/no-useless-spread -- match EventEmitter snapshot behavior
-      for (const listener of [...(listeners.get(event) ?? [])]) {
-        (listener as LifecycleListener)();
+      for (const listener of [...(lifecycleListeners.get(event) ?? [])]) {
+        listener();
       }
     },
     emitNavigation(details: NavigationDetails) {
       // oxlint-disable-next-line unicorn/no-useless-spread -- match EventEmitter snapshot behavior
-      for (const listener of [...(listeners.get("did-start-navigation") ?? [])]) {
-        (listener as NavigationListener)(details);
+      for (const listener of [...(navigationListeners.get("did-start-navigation") ?? [])]) {
+        listener(details);
       }
     },
     listenerCount(event: string) {
-      return listeners.get(event)?.size ?? 0;
+      return (
+        (lifecycleListeners.get(event)?.size ?? 0) + (navigationListeners.get(event)?.size ?? 0)
+      );
     },
     replaceMainFrame(nextFrame: ReturnType<typeof createFrame>) {
       mainFrame = nextFrame;
@@ -88,21 +110,31 @@ const createHarness = (subscriptionIds = [subscriptionId]) => {
   const unsubscribe = mock(() => {});
   const acknowledge = mock(() => {});
   const sinks: Array<(received: TaskEventStreamFrame) => void> = [];
-  const stream = {
+  const stream: ElectronTaskStreamIpcOptions["taskEventStream"] = {
     acknowledge,
     publish: mock(() => {}),
-    subscribe: mock((_input: unknown, sink: (received: TaskEventStreamFrame) => void) => {
-      const index = sinks.push(sink) - 1;
-      return { subscriptionId: subscriptionIds[index], unsubscribe };
-    }),
+    subscribe: mock(
+      (_input: TaskEventStreamSubscribe, sink: (received: TaskEventStreamFrame) => void) => {
+        const index = sinks.push(sink) - 1;
+        const currentSubscriptionId = subscriptionIds[index];
+        if (!currentSubscriptionId) {
+          throw new Error(`Missing subscription ID for stream ${index}.`);
+        }
+        return { subscriptionId: currentSubscriptionId, unsubscribe };
+      },
+    ),
   };
   const reportDeliveryFailure = mock(() => {});
   registerElectronTaskStreamIpc({
-    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler as Handler) },
+    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
     reportDeliveryFailure,
-    taskEventStream: stream as never,
+    taskEventStream: stream,
   });
-  const invoke = (channel: string, event: unknown, value: unknown) => {
+  const invoke = (
+    channel: string,
+    event: ElectronTaskStreamEvent,
+    value: Parameters<ElectronTaskStreamIpcHandler>[1],
+  ) => {
     const handler = handlers.get(channel);
     if (!handler) throw new Error(`No handler registered for ${channel}.`);
     return handler(event, value);
@@ -117,6 +149,15 @@ const createHarness = (subscriptionIds = [subscriptionId]) => {
 };
 
 describe("electron task stream IPC", () => {
+  test("rejects malformed input at the raw IPC boundary", () => {
+    const harness = createHarness();
+    const owner = createSender(1);
+
+    expect(() =>
+      harness.invoke(ELECTRON_TASK_STREAM_SUBSCRIBE_CHANNEL, eventFor(owner), null),
+    ).toThrow("Electron task stream IPC payload is invalid.");
+  });
+
   test("authorizes ACK and unsubscribe by sender and document IDs, not frame wrapper identity", () => {
     const harness = createHarness();
     const owner = createSender(1);
@@ -253,7 +294,10 @@ describe("electron task stream IPC", () => {
   });
 
   test("cleans up exactly once on destroyed or render-process-gone", () => {
-    for (const lifecycleEvent of ["destroyed", "render-process-gone"] as const) {
+    for (const lifecycleEvent of ["destroyed", "render-process-gone"] satisfies readonly (
+      | "destroyed"
+      | "render-process-gone"
+    )[]) {
       const harness = createHarness();
       const owner = createSender(1);
       harness.invoke(ELECTRON_TASK_STREAM_SUBSCRIBE_CHANNEL, eventFor(owner), { cursor: null });
@@ -291,7 +335,9 @@ describe("electron task stream IPC", () => {
     const owner = createSender(1);
     harness.invoke(ELECTRON_TASK_STREAM_SUBSCRIBE_CHANNEL, eventFor(owner), { cursor: null });
 
-    harness.sink()?.({ type: "change" } as unknown as TaskEventStreamFrame);
+    // SAFETY: This invalid producer payload exercises the outbound runtime guard.
+    const malformedFrame = { type: "change" } as TaskEventStreamFrame;
+    harness.sink()?.(malformedFrame);
 
     expect(owner.mainFrame.send).toHaveBeenCalledWith(
       ELECTRON_TASK_STREAM_TERMINAL_FAILURE_CHANNEL,

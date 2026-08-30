@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { lazy, Suspense } from "react";
 import { ensurePromiseRejectionEventPolyfill } from "@/test-utils/promise-rejection-event-polyfill";
+import { z } from "zod";
 import { AppCrashShell } from "./app-crash-shell";
 
 ensurePromiseRejectionEventPolyfill();
@@ -11,7 +12,7 @@ let consoleErrorMock: ReturnType<typeof mock>;
 
 beforeEach(() => {
   consoleErrorMock = mock(() => {});
-  console.error = consoleErrorMock as unknown as typeof console.error;
+  console.error = consoleErrorMock;
 });
 
 afterEach(() => {
@@ -454,16 +455,15 @@ describe("AppCrashShell", () => {
     test("removes listeners on unmount", () => {
       const originalRemoveEventListener = window.removeEventListener;
       const removedListeners: string[] = [];
-      const removeListenerSpy = mock((type: string, ...args: unknown[]) => {
+      const removeListenerSpy: typeof window.removeEventListener = (
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: boolean | EventListenerOptions,
+      ) => {
         removedListeners.push(type);
-        return originalRemoveEventListener.call(
-          window,
-          type,
-          ...(args as [EventListenerOrEventListenerObject]),
-        );
-      });
-      window.removeEventListener =
-        removeListenerSpy as unknown as typeof window.removeEventListener;
+        return originalRemoveEventListener.call(window, type, listener, options);
+      };
+      window.removeEventListener = removeListenerSpy;
 
       try {
         const { unmount } = render(
@@ -484,17 +484,17 @@ describe("AppCrashShell", () => {
     test("does not re-register listeners on rerender", () => {
       const originalAddEventListener = window.addEventListener;
       let addCount = 0;
-      const addListenerSpy = mock((type: string, ...args: unknown[]) => {
+      const addListenerSpy: typeof window.addEventListener = (
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: boolean | AddEventListenerOptions,
+      ) => {
         if (type === "error" || type === "unhandledrejection") {
           addCount++;
         }
-        return originalAddEventListener.call(
-          window,
-          type,
-          ...(args as [EventListenerOrEventListenerObject]),
-        );
-      });
-      window.addEventListener = addListenerSpy as unknown as typeof window.addEventListener;
+        return originalAddEventListener.call(window, type, listener, options);
+      };
+      window.addEventListener = addListenerSpy;
 
       try {
         const { rerender } = render(
@@ -529,10 +529,11 @@ describe("AppCrashShell", () => {
       errorMock: ReturnType<typeof mock>,
       sourceFilter: string,
     ): unknown[] {
-      const calls = errorMock.mock.calls as unknown[][];
-      const match = calls.find(
-        (args) => typeof args[0] === "string" && args[0].includes(sourceFilter),
-      );
+      const calls: unknown[][] = errorMock.mock.calls;
+      const match = calls.find((args) => {
+        const firstArgument = z.string().safeParse(args[0]);
+        return firstArgument.success && firstArgument.data.includes(sourceFilter);
+      });
       if (!match) throw new Error(`No console.error call matching "${sourceFilter}"`);
       return match;
     }
@@ -549,10 +550,13 @@ describe("AppCrashShell", () => {
       });
 
       const structuredCall = findStructuredLogCall(consoleErrorMock, "[AppCrashShell]");
-      const context = structuredCall[structuredCall.length - 1] as Record<string, unknown>;
-      expect(context.source).toBe("boundary");
-      expect(context.rawValue).toBeInstanceOf(Error);
-      expect(context.timestamp).toBeDefined();
+      expect(structuredCall.at(-1)).toEqual(
+        expect.objectContaining({
+          source: "boundary",
+          rawValue: expect.any(Error),
+          timestamp: expect.any(String),
+        }),
+      );
     });
 
     test("logs structured context with raw event on browser error", async () => {
@@ -578,9 +582,9 @@ describe("AppCrashShell", () => {
         consoleErrorMock,
         "[AppCrashShell] Fatal error (error)",
       );
-      const context = structuredCall[structuredCall.length - 1] as Record<string, unknown>;
-      expect(context.source).toBe("error");
-      expect(context.rawValue).toBeInstanceOf(ErrorEvent);
+      expect(structuredCall.at(-1)).toEqual(
+        expect.objectContaining({ source: "error", rawValue: expect.any(ErrorEvent) }),
+      );
     });
   });
 });

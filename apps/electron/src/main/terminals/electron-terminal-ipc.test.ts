@@ -8,18 +8,20 @@ import { type TerminalService, TerminalServiceError } from "@openducktor/host";
 import { Effect } from "effect";
 import {
   createElectronTerminalIpcController,
+  type ElectronTerminalIpcHandler,
+  registerElectronTerminalIpc,
   shouldDetachTerminalSenderForNavigation,
 } from "./electron-terminal-ipc";
 
 describe("Electron terminal IPC", () => {
-  test("validates frames and scopes attachments to the sender", async () => {
+  test("decodes frames and scopes attachments to the sender", async () => {
     const calls: string[] = [];
-    const terminalService = {
+    const terminalService: TerminalService = {
       attach: (input: { attachmentId: string; terminalId: string }) =>
         Effect.sync(() => calls.push(`attach:${input.attachmentId}`)),
       detach: (_terminalId: string, attachmentId: string) =>
         Effect.sync(() => calls.push(`detach:${attachmentId}`)),
-    } as TerminalService;
+    };
     const controller = createElectronTerminalIpcController(terminalService);
     const sender = { id: 7, isDestroyed: () => false, send: () => undefined };
     const frame = encodeTerminalProtocolFrame({
@@ -37,19 +39,51 @@ describe("Electron terminal IPC", () => {
       "attach:electron:7:client-a:terminal-1",
       "detach:electron:7:client-a:terminal-1",
     ]);
+  });
+
+  test("rejects malformed frames at the raw IPC boundary", async () => {
+    let sendHandler: ElectronTerminalIpcHandler | undefined;
+    registerElectronTerminalIpc({
+      ipcMain: {
+        handle(channel, handler) {
+          if (channel === "openducktor:terminal:send") sendHandler = handler;
+        },
+      },
+      terminalService: {
+        attach: () => Effect.void,
+        detach: () => Effect.void,
+      },
+    });
+    if (sendHandler === undefined) throw new Error("Expected terminal send handler registration.");
+
     await expect(
-      Effect.runPromise(controller.handleFrame(sender, "client-a", "bad")),
-    ).rejects.toThrow("Uint8Array");
+      sendHandler(
+        {
+          sender: {
+            id: 7,
+            isDestroyed: () => false,
+            on: () => undefined,
+            once: () => undefined,
+            send: () => undefined,
+          },
+        },
+        { clientId: "client-a", frame: "bad" },
+      ),
+    ).rejects.toMatchObject({
+      _tag: "ElectronValidationError",
+      field: "request",
+      operation: "electron.terminal.request",
+    });
   });
 
   test("disconnects one logical renderer client without waiting for WebContents teardown", async () => {
     const calls: string[] = [];
-    const terminalService = {
+    const terminalService: TerminalService = {
       attach: (input: Parameters<TerminalService["attach"]>[0]) =>
         Effect.sync(() => calls.push(`attach:${input.attachmentId}`)),
       detach: (_terminalId: string, attachmentId: string) =>
         Effect.sync(() => calls.push(`detach:${attachmentId}`)),
-    } as TerminalService;
+    };
     const controller = createElectronTerminalIpcController(terminalService);
     const sender = { id: 7, isDestroyed: () => false, send: () => undefined };
     const frame = encodeTerminalProtocolFrame({
@@ -73,7 +107,7 @@ describe("Electron terminal IPC", () => {
 
   test("keeps live attachments during same-document main-frame navigation", async () => {
     const attachments = new Set<string>();
-    const terminalService = {
+    const terminalService: TerminalService = {
       attach: (input: Parameters<TerminalService["attach"]>[0]) =>
         Effect.sync(() => attachments.add(input.attachmentId)),
       detach: (_terminalId: string, attachmentId: string) =>
@@ -89,7 +123,7 @@ describe("Electron terminal IPC", () => {
                 terminalId,
               }),
             ),
-    } as TerminalService;
+    };
     const controller = createElectronTerminalIpcController(terminalService);
     const sender = { id: 7, isDestroyed: () => false, send: () => undefined };
     await Effect.runPromise(
@@ -142,7 +176,7 @@ describe("Electron terminal IPC", () => {
 
   test("reports repeated stale attaches without retaining sender attachments", async () => {
     const detached: string[] = [];
-    const terminalService = {
+    const terminalService: TerminalService = {
       attach: ({ terminalId }: Parameters<TerminalService["attach"]>[0]) =>
         Effect.fail(
           new TerminalServiceError({
@@ -153,7 +187,7 @@ describe("Electron terminal IPC", () => {
           }),
         ),
       detach: (terminalId: string) => Effect.sync(() => detached.push(terminalId)),
-    } as TerminalService;
+    };
     const controller = createElectronTerminalIpcController(terminalService);
     const sent: Uint8Array[] = [];
     const sender = {
@@ -204,7 +238,7 @@ describe("Electron terminal IPC", () => {
     });
     const attachments = new Set<string>();
     const operations: string[] = [];
-    const terminalService = {
+    const terminalService: TerminalService = {
       attach: (input: Parameters<TerminalService["attach"]>[0]) =>
         Effect.sync(() => {
           operations.push("attach");
@@ -229,7 +263,7 @@ describe("Electron terminal IPC", () => {
                 terminalId,
               }),
             ),
-    } as TerminalService;
+    };
     const controller = createElectronTerminalIpcController(terminalService);
     const sender = { id: 7, isDestroyed: () => false, send: () => undefined };
     const frame = (

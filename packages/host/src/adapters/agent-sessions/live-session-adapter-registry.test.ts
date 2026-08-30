@@ -12,6 +12,7 @@ const ref = (externalSessionId: string): AgentSessionLiveRef => ({
 });
 
 const adapter = (runtimeId: string, sessionIds: string[]): AgentSessionLiveAdapterPort => ({
+  supportsSessionControl: false,
   binding: { runtimeId, runtimeKind: "codex", repoPath: "/repo" },
   matches: (candidate) => sessionIds.includes(candidate.externalSessionId),
   listRetainedSnapshots: () => Effect.succeed([]),

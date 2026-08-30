@@ -1,4 +1,4 @@
-import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type {
   AgentModelSelection,
   AgentRuntimePolicyBinding,
@@ -16,6 +16,8 @@ import type {
   PendingSubagentPartEmission,
   PendingSubagentSessionBinding,
 } from "./event-stream/shared";
+import type { ParsedOpencodeEvent as Event } from "./opencode-global-event-ingress";
+import type { ParsedOpencodePart } from "./opencode-ingress";
 
 /**
  * Cache TTL for workflow tool selection (5 minutes).
@@ -66,10 +68,10 @@ export type SessionRecord = {
   emittedUserMessageStates: Map<string, import("@openducktor/core").AgentUserMessageState>;
   pendingUserMessageAdmissions: Map<
     string,
-    { admit: () => void; reject: (reason?: unknown) => void }
+    { admit: () => void; reject: (cause?: unknown) => void }
   >;
   pendingQueuedUserMessages: QueuedUserMessageSend[];
-  partsById: Map<string, import("@opencode-ai/sdk/v2/client").Part>;
+  partsById: Map<string, ParsedOpencodePart>;
   partIdsByMessageId: Map<string, Set<string>>;
   messageRoleById: Map<string, string>;
   messageMetadataById: Map<string, SessionMessageMetadata>;

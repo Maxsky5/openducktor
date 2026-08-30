@@ -82,11 +82,11 @@ export const createTerminalService = ({
 }: CreateTerminalServiceInput): Effect.Effect<TerminalService> =>
   Effect.sync(() => {
     const hostInstanceId = hostInstanceIdFactory();
-    const engine = createTerminalSessionEngine({
-      now,
-      ptyPort,
-      ...(scheduleTitleSettlement ? { scheduleTitleSettlement } : {}),
-    });
+    const engineInput: Parameters<typeof createTerminalSessionEngine>[0] = { now, ptyPort };
+    if (scheduleTitleSettlement) {
+      engineInput.scheduleTitleSettlement = scheduleTitleSettlement;
+    }
+    const engine = createTerminalSessionEngine(engineInput);
     const launch = createTerminalLaunchPolicy({
       filesystem,
       resolveEnvironment: resolveLaunchEnvironment,

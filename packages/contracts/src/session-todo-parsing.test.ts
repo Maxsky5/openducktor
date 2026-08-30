@@ -1,13 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import {
-  parseAgentSessionTodoPayloadEntry,
-  parseAgentSessionTodoPayloadList,
-} from "./session-todo-parsing";
+import { agentSessionTodoPayloadListSchema } from "./session-todo-parsing";
 
 describe("session todo payload parsing", () => {
   test("parses known object aliases into canonical todo payload records", () => {
     expect(
-      parseAgentSessionTodoPayloadEntry(
+      agentSessionTodoPayloadListSchema().parse([
         {
           todoId: "todo-1",
           title: "Write tests",
@@ -15,15 +12,16 @@ describe("session todo payload parsing", () => {
           priority: "high",
           completed: false,
         },
-        "todo:fallback",
-      ),
-    ).toEqual({
-      id: "todo-1",
-      content: "Write tests",
-      status: "active",
-      priority: "high",
-      completed: false,
-    });
+      ]),
+    ).toEqual([
+      {
+        id: "todo-1",
+        content: "Write tests",
+        status: "active",
+        priority: "high",
+        completed: false,
+      },
+    ]);
   });
 
   test("parses list payloads with fallback ids and optional string support", () => {
@@ -39,7 +37,7 @@ describe("session todo payload parsing", () => {
       },
     ];
 
-    expect(parseAgentSessionTodoPayloadList(payload)).toEqual([
+    expect(agentSessionTodoPayloadListSchema().parse(payload)).toEqual([
       {
         id: "todo:1",
         content: "second",
@@ -48,9 +46,9 @@ describe("session todo payload parsing", () => {
     ]);
 
     expect(
-      parseAgentSessionTodoPayloadList(payload, {
+      agentSessionTodoPayloadListSchema({
         allowStringEntries: true,
-      }),
+      }).parse(payload),
     ).toEqual([
       {
         id: "todo:0",
@@ -65,6 +63,16 @@ describe("session todo payload parsing", () => {
   });
 
   test("returns empty list for non-array payloads", () => {
-    expect(parseAgentSessionTodoPayloadList({})).toEqual([]);
+    expect(agentSessionTodoPayloadListSchema().parse({})).toEqual([]);
+  });
+
+  test("keeps valid todo entries when sibling entries are malformed", () => {
+    expect(
+      agentSessionTodoPayloadListSchema().parse([
+        { id: "todo-1", content: "Keep this todo" },
+        { id: 2, content: "Reject this todo" },
+        null,
+      ]),
+    ).toEqual([{ id: "todo-1", content: "Keep this todo" }]);
   });
 });

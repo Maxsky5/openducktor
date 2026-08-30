@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { Query, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { Effect } from "effect";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
@@ -22,6 +22,9 @@ import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-sto
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 import type { ClaudeAgentSdkEventEmitter } from "./claude-agent-sdk-types";
 
+const MESSAGE_ID = "00000000-0000-4000-8000-000000000001";
+const QUEUED_MESSAGE_ID = "00000000-0000-4000-8000-000000000004";
+
 describe("consumeClaudeSession lifecycle", () => {
   test("sends the first resumed user message after an unattributed running replay", async () => {
     const events: AgentEvent[] = [];
@@ -36,7 +39,7 @@ describe("consumeClaudeSession lifecycle", () => {
         type: "system",
         subtype: "session_state_changed",
         state: "running",
-        uuid: "state-1",
+        uuid: "99de2643-2919-47bc-8869-40bed873ae40",
         session_id: "session-1",
       }),
     ]);
@@ -59,7 +62,7 @@ describe("consumeClaudeSession lifecycle", () => {
     const accepted = await sendClaudeUserMessage({
       session,
       now: () => "2026-06-25T20:00:01.000Z",
-      randomId: () => "message-1",
+      randomId: () => MESSAGE_ID,
       emit: (_session, event) => events.push(event),
       messageInput: {
         externalSessionId: "session-1",
@@ -76,7 +79,7 @@ describe("consumeClaudeSession lifecycle", () => {
     expect(pushed).toEqual([
       expect.objectContaining({
         type: "user",
-        uuid: "message-1",
+        uuid: MESSAGE_ID,
       }),
     ]);
 
@@ -107,7 +110,7 @@ describe("consumeClaudeSession lifecycle", () => {
     const session = createClaudeSession({
       acceptedUserMessages: [
         {
-          messageId: "00000000-0000-4000-8000-000000000001",
+          messageId: MESSAGE_ID,
           parts: [{ kind: "text", text: "first turn" }],
           text: "first turn",
           timestamp: "2026-06-25T20:00:00.000Z",
@@ -125,7 +128,7 @@ describe("consumeClaudeSession lifecycle", () => {
       query: claudeQueryWithMessages([
         claudeSdkMessageFixture({
           type: "assistant",
-          uuid: "assistant-1",
+          uuid: "43b2a0dd-fded-4c7e-86ec-8816daecd43d",
           session_id: "session-1",
           parent_tool_use_id: null,
           message: {
@@ -138,7 +141,7 @@ describe("consumeClaudeSession lifecycle", () => {
         claudeSdkMessageFixture({
           type: "result",
           subtype: "success",
-          uuid: "result-1",
+          uuid: "4dbe1b1f-5e52-438d-8847-4966ee5f13e8",
           session_id: "session-1",
           is_error: false,
           result: "first turn done",
@@ -150,7 +153,7 @@ describe("consumeClaudeSession lifecycle", () => {
           type: "system",
           subtype: "session_state_changed",
           state: "idle",
-          uuid: "state-idle-1",
+          uuid: "9909592c-5710-40d1-8c0b-52bb060916f9",
           session_id: "session-1",
         }),
       ]),
@@ -191,7 +194,7 @@ describe("consumeClaudeSession lifecycle", () => {
     const openQuery = openClaudeQueryWithMessages([
       claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "43b2a0dd-fded-4c7e-86ec-8816daecd43d",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -205,7 +208,7 @@ describe("consumeClaudeSession lifecycle", () => {
     const session = createClaudeSession({
       acceptedUserMessages: [
         {
-          messageId: "00000000-0000-4000-8000-000000000001",
+          messageId: MESSAGE_ID,
           parts: [{ kind: "text", text: "write the spec" }],
           text: "write the spec",
           timestamp: "2026-06-25T20:00:00.000Z",
@@ -261,7 +264,7 @@ describe("consumeClaudeSession lifecycle", () => {
     const openQuery = openClaudeQueryWithMessages([
       claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "43b2a0dd-fded-4c7e-86ec-8816daecd43d",
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
@@ -274,7 +277,7 @@ describe("consumeClaudeSession lifecycle", () => {
       claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
-        uuid: "result-1",
+        uuid: "4dbe1b1f-5e52-438d-8847-4966ee5f13e8",
         session_id: "session-1",
         is_error: false,
         result: "first turn done",
@@ -286,14 +289,14 @@ describe("consumeClaudeSession lifecycle", () => {
         type: "system",
         subtype: "session_state_changed",
         state: "idle",
-        uuid: "state-idle-1",
+        uuid: "9909592c-5710-40d1-8c0b-52bb060916f9",
         session_id: "session-1",
       }),
     ]);
     const session = createClaudeSession({
       acceptedUserMessages: [
         {
-          messageId: "00000000-0000-4000-8000-000000000001",
+          messageId: MESSAGE_ID,
           parts: [{ kind: "text", text: "first turn" }],
           text: "first turn",
           timestamp: "2026-06-25T20:00:00.000Z",
@@ -357,7 +360,7 @@ describe("consumeClaudeSession lifecycle", () => {
         claudeSdkMessageFixture({
           type: "result",
           subtype: "success",
-          uuid: "result-queued",
+          uuid: "76e2c747-c64e-4f25-85cc-9510188f8190",
           session_id: "session-1",
           is_error: false,
           result: "queued turn done",
@@ -369,7 +372,7 @@ describe("consumeClaudeSession lifecycle", () => {
           type: "system",
           subtype: "session_state_changed",
           state: "idle",
-          uuid: "state-idle-queued",
+          uuid: "f99a0487-29cb-4141-80fd-e86d1bedbd0b",
           session_id: "session-1",
         }),
       ]),
@@ -377,7 +380,7 @@ describe("consumeClaudeSession lifecycle", () => {
         setModel: async (model?: string) => {
           setModelCalls.push(model);
         },
-        applyFlagSettings: async (_settings: unknown) => {},
+        applyFlagSettings: async (_settings: Parameters<Query["applyFlagSettings"]>[0]) => {},
       },
     );
     const session = createClaudeSession({
@@ -397,7 +400,7 @@ describe("consumeClaudeSession lifecycle", () => {
     await sendClaudeUserMessage({
       session,
       now: () => "2026-06-25T20:00:00.000Z",
-      randomId: () => "message-queued",
+      randomId: () => QUEUED_MESSAGE_ID,
       emit: () => {},
       messageInput: {
         externalSessionId: "session-1",
@@ -440,7 +443,7 @@ describe("consumeClaudeSession lifecycle", () => {
       onBackgroundFailure: ignoreClaudeBackgroundFailure,
     });
 
-    expect(pushed).toEqual([expect.objectContaining({ uuid: "message-queued" })]);
+    expect(pushed).toEqual([expect.objectContaining({ uuid: QUEUED_MESSAGE_ID })]);
     expect(setModelCalls).toEqual(["claude-haiku-4-5", "claude-opus-4-6", "claude-haiku-4-5"]);
     expect(session.model).toEqual({
       providerId: "claude",
@@ -517,7 +520,7 @@ describe("consumeClaudeSession lifecycle", () => {
       sendClaudeUserMessage({
         session,
         now: () => "2026-06-25T20:00:01.000Z",
-        randomId: () => "message-1",
+        randomId: () => MESSAGE_ID,
         emit: () => {},
         messageInput: {
           externalSessionId: "session-1",
@@ -545,7 +548,7 @@ describe("consumeClaudeSession lifecycle", () => {
       throwingClaudeQuery(new Error("transport crashed"), [
         claudeSdkMessageFixture({
           type: "assistant",
-          uuid: "assistant-1",
+          uuid: "43b2a0dd-fded-4c7e-86ec-8816daecd43d",
           session_id: "session-1",
           timestamp: "2026-06-25T20:00:01.000Z",
           message: {

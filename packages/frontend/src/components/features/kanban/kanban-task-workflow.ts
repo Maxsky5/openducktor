@@ -31,14 +31,14 @@ const SESSION_CREATING_ACTIONS: readonly TaskWorkflowAction[] = [
   "qa_start",
 ];
 
-const SESSION_VIEW_ACTION_BY_ROLE: Record<AgentRole, SessionRoleViewAction> = {
+const SESSION_VIEW_ACTION_BY_ROLE = {
   spec: "open_spec",
   planner: "open_planner",
   build: "open_builder",
   qa: "open_qa",
-};
+} satisfies Record<AgentRole, SessionRoleViewAction>;
 
-const SESSION_VIEW_ACTIONS = new Set<SessionRoleViewAction>(
+const SESSION_VIEW_ACTIONS: ReadonlySet<TaskWorkflowAction> = new Set(
   Object.values(SESSION_VIEW_ACTION_BY_ROLE),
 );
 const DETAIL_ONLY_WORKFLOW_ACTIONS = new Set<TaskWorkflowAction>(["close_task"]);
@@ -167,7 +167,7 @@ const filterEnabledActions = (
   return enabled;
 };
 
-const ACTION_PRIORITY_BY_ISSUE_TYPE: Record<TaskCard["issueType"], TaskWorkflowAction[]> = {
+const ACTION_PRIORITY_BY_ISSUE_TYPE = {
   epic: [
     "set_spec",
     "set_plan",
@@ -228,7 +228,7 @@ const ACTION_PRIORITY_BY_ISSUE_TYPE: Record<TaskCard["issueType"], TaskWorkflowA
     "reset_task",
     "close_task",
   ],
-};
+} satisfies Record<TaskCard["issueType"], TaskWorkflowAction[]>;
 
 const isWorkflowAction = (action: TaskAction): action is BaseTaskWorkflowAction =>
   action !== "view_details";
@@ -255,7 +255,7 @@ const resolvePriorityForTask = (
   if (options.hasActiveSession && options.activeSessionRole) {
     const activeSessionViewAction = toRoleSessionViewAction(options.activeSessionRole);
     const sessionViewActionsByOrder = basePriority.filter((action) =>
-      SESSION_VIEW_ACTIONS.has(action as SessionRoleViewAction),
+      SESSION_VIEW_ACTIONS.has(action),
     );
     return prioritize(basePriority, [activeSessionViewAction, ...sessionViewActionsByOrder]);
   }

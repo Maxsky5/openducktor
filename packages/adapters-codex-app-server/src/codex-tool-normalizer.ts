@@ -1,18 +1,23 @@
 import type { FileDiff } from "@openducktor/contracts";
-import type { AgentToolType } from "@openducktor/core";
+import type {
+  AgentPendingQuestionRequest,
+  AgentStreamPart,
+  AgentToolType,
+} from "@openducktor/core";
 import {
-  arrayFromUnknown,
+  arrayFromCodexJsonValue,
   codexNamespacedToolName,
   extractStringField,
   isCodexApplyPatchTool,
   isCodexExecCommandTool,
+  isPlainObject,
   isCodexRequestUserInputTool,
   isCodexWriteStdinTool,
-  isPlainObject,
   readPathFromCommand,
   searchInputFromCommand,
 } from "./codex-app-server-shared";
-import { codexToolTimingFields } from "./codex-tool-timing";
+import type { CodexAppServerJsonValue } from "@openducktor/contracts";
+import type { CodexToolTimingFields } from "./codex-tool-timing";
 
 /**
  * Canonical boundary for raw Codex tool invocations.
@@ -30,33 +35,68 @@ export type AgentToolStatus = Extract<
   { kind: "tool" }
 >["status"];
 
-export type NormalizedCodexToolInvocation = {
+export type CodexToolInvocationMetadata = {
+  codexServerRequest?: boolean;
+  codexTodoUpdate?: boolean;
+  requestId?: string;
+  questions?: CodexToolQuestion[];
+  answers?: Record<string, { answers: string[] }>;
+  server?: string;
+};
+
+export type CodexToolQuestion = {
+  header: string;
+  question: string;
+  options: Array<{ label: string; description: string }>;
+  multiple?: boolean;
+  custom?: boolean;
+};
+
+export const toCodexToolQuestions = (
+  questions: AgentPendingQuestionRequest["questions"],
+): CodexToolQuestion[] =>
+  questions.map((question) => {
+    const codexQuestion: CodexToolQuestion = {
+      header: question.header,
+      question: question.question,
+      options: question.options.map((option) => ({
+        label: option.label,
+        description: option.description,
+      })),
+    };
+    if (question.multiple !== undefined) {
+      codexQuestion.multiple = question.multiple;
+    }
+    if (question.custom !== undefined) {
+      codexQuestion.custom = question.custom;
+    }
+    return codexQuestion;
+  });
+
+export type NormalizedCodexToolInvocation = CodexToolTimingFields & {
   messageId: string;
   partId: string;
   callId: string;
   rawToolName: string;
   namespace?: string;
-  status?: unknown;
+  status?: string;
   title?: string;
   displayLabel?: string;
   preview?: string;
-  input?: Record<string, unknown>;
+  input?: Record<string, CodexAppServerJsonValue>;
   output?: string | null;
   error?: string | null;
   fileDiffs?: FileDiff[];
-  metadata?: Record<string, unknown>;
-  startedAtMs?: number;
-  endedAtMs?: number;
+  metadata?: CodexToolInvocationMetadata;
 };
 
-export const statusFromCodexStatus = (status: unknown): AgentToolStatus => {
-  const normalized =
-    typeof status === "string"
-      ? status
-          .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-          .toLowerCase()
-          .replace(/-/g, "_")
-      : "";
+export const statusFromCodexStatus = (status: string | undefined): AgentToolStatus => {
+  const normalized = status
+    ? status
+        .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+        .toLowerCase()
+        .replace(/-/g, "_")
+    : "";
   if (
     normalized === "failed" ||
     normalized === "failure" ||
@@ -127,7 +167,7 @@ const canonicalOdtToolName = (rawToolName: string): string | null => {
 };
 const codexToolType = (
   rawToolName: string,
-  input?: Record<string, unknown>,
+  input?: Record<string, CodexAppServerJsonValue>,
 ): AgentToolType | null => {
   if (isCodexWriteStdinTool(rawToolName)) {
     return null;
@@ -195,8 +235,10 @@ const canonicalCodexToolName = (rawToolName: string): string | null => {
     : rawToolName;
 };
 
-const questionPromptFromInput = (input: Record<string, unknown>): string | undefined => {
-  const questions = arrayFromUnknown(input.questions).filter(isPlainObject);
+const questionPromptFromInput = (
+  input: Record<string, CodexAppServerJsonValue>,
+): string | undefined => {
+  const questions = arrayFromCodexJsonValue(input.questions).filter(isPlainObject);
   for (const question of questions) {
     const prompt = extractStringField(question, ["question", "prompt", "header", "title"]);
     if (prompt) {
@@ -208,7 +250,7 @@ const questionPromptFromInput = (input: Record<string, unknown>): string | undef
 
 const toolPreviewFromInput = (
   toolType: AgentToolType,
-  input?: Record<string, unknown>,
+  input?: Record<string, CodexAppServerJsonValue>,
 ): string | undefined => {
   if (!input) {
     return undefined;
@@ -237,39 +279,72 @@ const toolPreviewFromInput = (
   return path ?? query ?? command ?? undefined;
 };
 
-const codexExecCommandInput = (
-  input: Record<string, unknown>,
-  tool: string,
-): Record<string, unknown> | undefined => {
+type CodexToolInput = Record<string, CodexAppServerJsonValue>;
+type CodexReadCommandInput = {
+  command: string;
+  cwd?: string;
+  path?: string;
+};
+type CodexSearchCommandInput = {
+  command: string;
+  query?: string;
+  path?: string;
+  cwd?: string;
+};
+type CodexShellCommandInput = {
+  command: string;
+  cwd?: string;
+};
+
+const codexExecCommandInput = (input: CodexToolInput, tool: string) => {
   const command = extractStringField(input, ["cmd", "command"]);
   const cwd = extractStringField(input, ["workdir", "cwd"]);
   if (!command) {
     return Object.keys(input).length > 0 ? input : undefined;
   }
   if (tool === "read") {
-    return {
+    const commandInput: CodexReadCommandInput = {
       command,
-      ...(cwd ? { cwd } : {}),
-      ...(readPathFromCommand(command) ? { path: readPathFromCommand(command) } : {}),
     };
+    if (cwd) {
+      commandInput.cwd = cwd;
+    }
+    const path = readPathFromCommand(command);
+    if (path) {
+      commandInput.path = path;
+    }
+    return commandInput;
   }
   if (tool === "search") {
-    return {
-      ...searchInputFromCommand(command),
-      ...(cwd ? { cwd } : {}),
+    const searchInput = searchInputFromCommand(command);
+    const commandInput: CodexSearchCommandInput = {
+      command: searchInput.command,
     };
+    if (searchInput.query !== undefined) {
+      commandInput.query = searchInput.query;
+    }
+    if (searchInput.path !== undefined) {
+      commandInput.path = searchInput.path;
+    }
+    if (cwd) {
+      commandInput.cwd = cwd;
+    }
+    return commandInput;
   }
-  return {
+  const commandInput: CodexShellCommandInput = {
     command,
-    ...(cwd ? { cwd } : {}),
   };
+  if (cwd) {
+    commandInput.cwd = cwd;
+  }
+  return commandInput;
 };
 
 const normalizerInput = (
   toolType: AgentToolType,
   rawToolName: string,
-  input?: Record<string, unknown>,
-): Record<string, unknown> | undefined => {
+  input?: Record<string, CodexAppServerJsonValue>,
+): Record<string, CodexAppServerJsonValue> | undefined => {
   if (isCodexExecCommandTool(rawToolName)) {
     return codexExecCommandInput(input ?? {}, toolType);
   }
@@ -304,28 +379,43 @@ export const normalizeCodexToolInvocation = ({
   const resolvedError = error && error.trim().length > 0 ? error : null;
   const resolvedOutput = output && output.trim().length > 0 ? output : null;
   const resolvedPreview = preview ?? toolPreviewFromInput(toolType, resolvedInput);
-  const item = isPlainObject(metadata?.codexItem) ? metadata.codexItem : {};
-  const metadataTiming = codexToolTimingFields(item);
-  return {
+  const metadataFields: NonNullable<Extract<AgentStreamPart, { kind: "tool" }>["metadata"]> = {
+    ...metadata,
+    rawToolName,
+  };
+  const normalizedTool: Extract<AgentStreamPart, { kind: "tool" }> = {
     kind: "tool",
-    ...metadataTiming,
     ...ids,
     tool,
     toolType,
     title: title ?? defaultTitle(tool),
-    ...(displayLabel ? { displayLabel } : {}),
     status: resolvedError ? "error" : statusFromCodexStatus(status),
-    ...(resolvedInput ? { input: resolvedInput } : {}),
-    ...(resolvedPreview ? { preview: resolvedPreview } : {}),
-    ...(resolvedOutput ? { output: resolvedOutput } : {}),
-    ...(resolvedError ? { error: resolvedError } : {}),
-    ...(fileDiffs && fileDiffs.length > 0 ? { fileDiffs } : {}),
-    metadata: {
-      ...metadata,
-      rawToolName,
-      ...(namespace ? { namespace } : {}),
-    },
+    metadata: metadataFields,
   };
+
+  if (displayLabel) {
+    normalizedTool.displayLabel = displayLabel;
+  }
+  if (resolvedInput) {
+    normalizedTool.input = resolvedInput;
+  }
+  if (resolvedPreview) {
+    normalizedTool.preview = resolvedPreview;
+  }
+  if (resolvedOutput) {
+    normalizedTool.output = resolvedOutput;
+  }
+  if (resolvedError) {
+    normalizedTool.error = resolvedError;
+  }
+  if (fileDiffs && fileDiffs.length > 0) {
+    normalizedTool.fileDiffs = fileDiffs;
+  }
+  if (namespace) {
+    metadataFields.namespace = namespace;
+  }
+
+  return normalizedTool;
 };
 
 export const requireNormalizedCodexToolInvocation = (

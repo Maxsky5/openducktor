@@ -5,7 +5,8 @@ import path from "node:path";
 import { Effect } from "effect";
 import {
   HostOperationError,
-  type HostPathAccessError,
+  type HostOperationErrorAggregate,
+  type HostPathAccessErrorAggregate,
   toHostOperationError,
 } from "../../effect/host-errors";
 import type {
@@ -17,7 +18,7 @@ import { iconsetRepresentationScore } from "./macos-open-in-iconset";
 type ResolveMacOsAppIconInput = {
   appLabel: string;
   appPath: string;
-  pathExists: (inputPath: string) => Effect.Effect<boolean, HostPathAccessError>;
+  pathExists: (inputPath: string) => Effect.Effect<boolean, HostPathAccessErrorAggregate>;
   runCommand: RunOpenInCommand;
 };
 
@@ -25,7 +26,7 @@ type RunOpenInCommand = (
   command: string,
   args: string[],
   options?: SystemCommandRunOptions,
-) => Effect.Effect<SystemCommandRunResult, HostOperationError>;
+) => Effect.Effect<SystemCommandRunResult, HostOperationErrorAggregate>;
 
 const iconFileName = (value: string): string => (value.endsWith(".icns") ? value : `${value}.icns`);
 
@@ -74,7 +75,7 @@ const readBundleIconFile = ({
   runCommand,
 }: Omit<ResolveMacOsAppIconInput, "appLabel">): Effect.Effect<
   string | null,
-  HostOperationError | HostPathAccessError
+  HostOperationErrorAggregate | HostPathAccessErrorAggregate
 > =>
   Effect.gen(function* () {
     const infoPlistPath = path.posix.join(appPath, "Contents", "Info.plist");
@@ -97,7 +98,7 @@ const resolveMetadataIconFile = ({
   runCommand,
 }: Pick<ResolveMacOsAppIconInput, "appPath" | "runCommand">): Effect.Effect<
   string | null,
-  HostOperationError
+  HostOperationErrorAggregate
 > =>
   Effect.gen(function* () {
     const output = yield* runIconCommand(
@@ -116,7 +117,7 @@ const resolveMetadataIconFile = ({
 
 const findFirstResourceIcon = (
   resourcesPath: string,
-): Effect.Effect<string | null, HostOperationError> =>
+): Effect.Effect<string | null, HostOperationErrorAggregate> =>
   Effect.gen(function* () {
     const entries = yield* readDirectoryEntries(
       resourcesPath,
@@ -131,7 +132,7 @@ const resolveAppIconPath = ({
   runCommand,
 }: Omit<ResolveMacOsAppIconInput, "appLabel">): Effect.Effect<
   string | null,
-  HostOperationError | HostPathAccessError
+  HostOperationErrorAggregate | HostPathAccessErrorAggregate
 > =>
   Effect.gen(function* () {
     if (!(yield* pathExists(appPath))) {
@@ -164,15 +165,21 @@ const tempIconOutputPath = (appLabel: string, extension: string): string => {
     `openducktor-open-in-icon-${sanitizedTempName(appLabel)}-${process.pid}-${randomUUID()}.${extension}`,
   );
 };
+
+type IconsetRepresentation = {
+  path: string;
+  score: number;
+};
+
 const resolveBestIconsetRepresentation = (
   iconsetDirectory: string,
-): Effect.Effect<string | null, HostOperationError> =>
+): Effect.Effect<string | null, HostOperationErrorAggregate> =>
   Effect.gen(function* () {
     const entries = yield* readDirectoryEntries(
       iconsetDirectory,
       "openInTools.icon.resolveBestIconsetRepresentation",
     ).pipe(Effect.catchAll(() => Effect.succeed([])));
-    let bestMatch: { path: string; score: number } | null = null;
+    let bestMatch: IconsetRepresentation | null = null;
 
     for (const entry of entries) {
       const score = iconsetRepresentationScore(entry);
@@ -197,7 +204,7 @@ const extractBestPngFromIconset = ({
   runCommand,
 }: Pick<ResolveMacOsAppIconInput, "appLabel" | "runCommand"> & {
   iconPath: string;
-}): Effect.Effect<Buffer | null, HostOperationError> => {
+}): Effect.Effect<Buffer | null, HostOperationErrorAggregate> => {
   const iconsetDirectory = tempIconOutputPath(appLabel, "iconset");
 
   return Effect.gen(function* () {
@@ -223,7 +230,7 @@ const convertIconToPng = ({
   runCommand,
 }: Pick<ResolveMacOsAppIconInput, "appLabel" | "runCommand"> & {
   iconPath: string;
-}): Effect.Effect<Buffer | null, HostOperationError> => {
+}): Effect.Effect<Buffer | null, HostOperationErrorAggregate> => {
   const outputPath = tempIconOutputPath(appLabel, "png");
 
   return Effect.gen(function* () {
@@ -250,7 +257,7 @@ const iconBytesToDataUrl = (bytes: Buffer): string | null => {
 
 export const resolveMacOsAppIconDataUrl = (
   input: ResolveMacOsAppIconInput,
-): Effect.Effect<string | null, HostOperationError | HostPathAccessError> =>
+): Effect.Effect<string | null, HostOperationErrorAggregate | HostPathAccessErrorAggregate> =>
   Effect.gen(function* () {
     const iconPath = yield* resolveAppIconPath(input);
     if (!iconPath) {

@@ -28,6 +28,17 @@ export {
 
 const ISO_TIMESTAMP_PATTERN = /\d{4}-\d{2}-\d{2}T[0-9:.+-]+(?:Z|[+-]\d{2}:\d{2})/;
 
+export type CompletionTimestamp = {
+  raw: string;
+  timestamp: number;
+};
+
+type AgentStudioViewSessionSelection = {
+  role: AgentRole;
+  sessionIdentity: AgentSessionIdentity | null;
+  sessionSummary: AgentSessionSummary | null;
+};
+
 export const parseTimestamp = (value: string | null | undefined): number | null => {
   if (!value) {
     return null;
@@ -39,7 +50,7 @@ export const parseTimestamp = (value: string | null | undefined): number | null 
 
 export const extractCompletionTimestamp = (
   value: string | undefined,
-): { raw: string; timestamp: number } | null => {
+): CompletionTimestamp | null => {
   if (!value) {
     return null;
   }
@@ -57,12 +68,13 @@ export const extractCompletionTimestamp = (
   };
 };
 
-export const emptyDraftSelections = (): Record<AgentRole, AgentModelSelection | null> => ({
-  spec: null,
-  planner: null,
-  build: null,
-  qa: null,
-});
+export const emptyDraftSelections = () =>
+  ({
+    spec: null,
+    planner: null,
+    build: null,
+    qa: null,
+  }) satisfies Record<AgentRole, AgentModelSelection | null>;
 
 export const resolveAgentStudioDefaultRoleForTask = (task: TaskCard | null): AgentRole | null => {
   if (!task) {
@@ -339,11 +351,7 @@ export const resolveAgentStudioViewSessionSelection = ({
   selectedTask: TaskCard | null;
   sessionlessRole: AgentRole;
   keepExplicitRoleSessionless?: boolean;
-}): {
-  role: AgentRole;
-  sessionIdentity: AgentSessionIdentity | null;
-  sessionSummary: AgentSessionSummary | null;
-} => {
+}): AgentStudioViewSessionSelection => {
   if (sessionIdentity) {
     const matchingCandidate = findViewSessionCandidateByIdentity(sessionSummaries, sessionIdentity);
     return {

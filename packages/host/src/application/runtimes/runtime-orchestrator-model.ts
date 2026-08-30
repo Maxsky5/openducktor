@@ -12,7 +12,13 @@ import {
 } from "@openducktor/contracts";
 import { Clock, Effect } from "effect";
 import { hasSameAgentSessionIdentity } from "../../domain/agent-session-identity";
-import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
+import {
+  errorMessage,
+  HostOperationError,
+  type HostOperationErrorAggregate,
+  HostValidationError,
+  type HostValidationErrorAggregate,
+} from "../../effect/host-errors";
 import type { GitPort, GitPortError } from "../../ports/git-port";
 import type {
   RuntimeMcpStatusProbeInput,
@@ -24,8 +30,8 @@ import type { TaskReader, TaskStoreError } from "../../ports/task-repository-por
 import type { RuntimeDefinitionsService } from "./runtime-definitions-service";
 export type RuntimeOrchestratorError =
   | GitPortError
-  | HostOperationError
-  | HostValidationError
+  | HostOperationErrorAggregate
+  | HostValidationErrorAggregate
   | RuntimeRegistryError
   | TaskStoreError;
 
@@ -99,7 +105,10 @@ export const resolveRuntimeDescriptor = (
     }
     return runtime;
   });
-export const resolveRepoPath = (gitPort: GitPort, repoPath: string) =>
+export const resolveRepoPath = (
+  gitPort: Pick<GitPort, "canonicalizePath" | "isGitRepository">,
+  repoPath: string,
+) =>
   Effect.gen(function* () {
     const canonicalRepoPath = yield* gitPort.canonicalizePath(repoPath).pipe(
       Effect.mapError(
@@ -130,7 +139,7 @@ export const describeRuntimeRoute = (runtimeRoute: RuntimeRoute): string => {
   return `${runtimeRoute.type}:${runtimeRoute.identity}`;
 };
 export const loadTargetSession = (
-  taskReader: TaskReader,
+  taskReader: Pick<TaskReader, "getTaskMetadata">,
   repoPath: string,
   taskId: string,
   request: AgentSessionStopTarget,

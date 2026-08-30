@@ -13,12 +13,13 @@ import {
 import { TaskAssetError } from "../../effect/task-asset-error";
 import type { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
 import type { DevServerProcessStartExitError } from "../../ports/dev-server-process-port";
+import type { HostCommandArgs } from "../commands/command-inputs";
 import { type HostCommandName, parseHostCommandName } from "../commands/host-command-registry";
-export type HostCommandArgs = Record<string, unknown> | undefined;
-export type HostCommandContext = {
-  command: HostCommandName;
-  args: HostCommandArgs;
-};
+import type { HostCommandResultMap } from "./host-command-contract-map";
+
+export type HostCommandResult<Command extends HostCommandName = HostCommandName> =
+  HostCommandResultMap[Command];
+export type { HostCommandArgs } from "../commands/command-inputs";
 export type HostCommandHandlerError =
   | CodexSessionHistoryError
   | DevServerProcessStartExitError
@@ -29,23 +30,36 @@ export type HostCommandHandlerError =
   | TerminalServiceError
   | WorkspaceTextFileWriteError;
 
-export type HostCommandHandler = (
+export type HostCommandHandlerDefinitions = Partial<
+  Record<HostCommandName, (args: HostCommandArgs) => void>
+>;
+export type HostCommandHandler<Command extends HostCommandName> = (
   args: HostCommandArgs,
-  context: HostCommandContext,
-) => Effect.Effect<unknown, HostCommandHandlerError>;
-export type HostCommandHandlers = Partial<Record<HostCommandName, HostCommandHandler>>;
+) => Effect.Effect<HostCommandResult<Command>, HostCommandHandlerError>;
+export type HostCommandHandlers = {
+  [Command in HostCommandName]?: HostCommandHandler<Command>;
+};
+
 export type EffectHostCommandRouter = {
   dispose(): Effect.Effect<void, HostCommandHandlerError>;
   initialize(): Effect.Effect<void, HostCommandHandlerError>;
+  invoke<Command extends HostCommandName>(
+    command: Command,
+    args?: Exclude<HostCommandArgs, undefined>,
+  ): Effect.Effect<HostCommandResult<Command>, HostCommandHandlerError>;
   invoke(
     command: string,
-    args?: Record<string, unknown>,
-  ): Effect.Effect<unknown, HostCommandHandlerError>;
+    args?: Exclude<HostCommandArgs, undefined>,
+  ): Effect.Effect<HostCommandResult, HostCommandHandlerError>;
 };
 export type HostCommandRouter = {
   dispose(): Promise<void>;
   initialize(): Promise<void>;
-  invoke(command: string, args?: Record<string, unknown>): Promise<unknown>;
+  invoke<Command extends HostCommandName>(
+    command: Command,
+    args?: Exclude<HostCommandArgs, undefined>,
+  ): Promise<HostCommandResult<Command>>;
+  invoke(command: string, args?: Exclude<HostCommandArgs, undefined>): Promise<HostCommandResult>;
 };
 export type CreateHostCommandRouterInput = {
   dispose?: () => Effect.Effect<void, HostCommandHandlerError>;
@@ -85,14 +99,19 @@ export const createEffectHostCommandRouter = ({
   dispose,
   initialize,
   handlers,
-}: CreateHostCommandRouterInput): EffectHostCommandRouter => ({
-  dispose() {
-    return dispose ? dispose() : Effect.void;
-  },
-  initialize() {
-    return initialize ? initialize() : Effect.void;
-  },
-  invoke(command, args) {
+}: CreateHostCommandRouterInput): EffectHostCommandRouter => {
+  function invoke<Command extends HostCommandName>(
+    command: Command,
+    args?: Exclude<HostCommandArgs, undefined>,
+  ): Effect.Effect<HostCommandResult<Command>, HostCommandHandlerError>;
+  function invoke(
+    command: string,
+    args?: Exclude<HostCommandArgs, undefined>,
+  ): Effect.Effect<HostCommandResult, HostCommandHandlerError>;
+  function invoke(
+    command: string,
+    args?: Exclude<HostCommandArgs, undefined>,
+  ): Effect.Effect<HostCommandResult, HostCommandHandlerError> {
     return Effect.gen(function* () {
       const hostCommand = yield* Effect.try({
         try: () => parseHostCommandName(command),
@@ -119,22 +138,47 @@ export const createEffectHostCommandRouter = ({
         );
       }
       const handlerEffect = yield* Effect.try({
-        try: () => handler(args, { command: hostCommand, args }),
+        try: () => handler(args),
         catch: (cause) => toHostCommandHandlerError(cause, hostCommand),
       });
       return yield* handlerEffect;
     });
-  },
-});
+  }
 
-export const toPromiseHostCommandRouter = (router: EffectHostCommandRouter): HostCommandRouter => ({
-  async dispose() {
-    await runBoundary(router.dispose());
-  },
-  async initialize() {
-    await runBoundary(router.initialize());
-  },
-  async invoke(command, args) {
+  return {
+    dispose() {
+      return dispose ? dispose() : Effect.void;
+    },
+    initialize() {
+      return initialize ? initialize() : Effect.void;
+    },
+    invoke,
+  };
+};
+
+export const toPromiseHostCommandRouter = (router: EffectHostCommandRouter): HostCommandRouter => {
+  function invoke<Command extends HostCommandName>(
+    command: Command,
+    args?: Exclude<HostCommandArgs, undefined>,
+  ): Promise<HostCommandResult<Command>>;
+  function invoke(
+    command: string,
+    args?: Exclude<HostCommandArgs, undefined>,
+  ): Promise<HostCommandResult>;
+  function invoke(
+    command: string,
+    args?: Exclude<HostCommandArgs, undefined>,
+  ): Promise<HostCommandResult> {
     return runBoundary(router.invoke(command, args));
-  },
-});
+  }
+
+  return {
+    async dispose() {
+      await runBoundary(router.dispose());
+    },
+    async initialize() {
+      await runBoundary(router.initialize());
+    },
+    invoke,
+  };
+};

@@ -117,13 +117,12 @@ export function useAgentChatComposerModel({
       return undefined;
     }
 
-    return {
+    const model: AgentChatComposerModel = {
       displayedSessionKey: composer.displayedSessionKey,
       isInteractionEnabled: composerState?.isInteractionEnabled ?? false,
       isReadOnly: composer.isReadOnly,
       readOnlyReason: composer.readOnlyReason,
       busySendBlockedReason: composer.busySendBlockedReason,
-      ...(composer.pendingSendItems ? { pendingSendItems: composer.pendingSendItems } : {}),
       draftScope: composer.draftScope,
       onSend: async (draft: AgentChatComposerDraft): Promise<boolean> => {
         scrollToBottomOnSendRef.current?.();
@@ -136,13 +135,7 @@ export function useAgentChatComposerModel({
       waitingInputPlaceholder: composer.waitingInputPlaceholder,
       isModelSelectionPending: composerState?.isModelSelectionPending ?? false,
       selectedModelSelection: composer.selectedModelSelection,
-      ...(composer.selectedModelDescriptor !== undefined
-        ? { selectedModelDescriptor: composer.selectedModelDescriptor }
-        : {}),
       isSelectionCatalogLoading: composer.isSelectionCatalogLoading,
-      ...(composer.supportsProfiles !== undefined
-        ? { supportsProfiles: composer.supportsProfiles }
-        : {}),
       supportsAttachments: composer.supportsAttachments,
       supportsSlashCommands: composer.supportsSlashCommands,
       supportsFileSearch: composer.supportsFileSearch,
@@ -177,6 +170,16 @@ export function useAgentChatComposerModel({
       scrollToBottomOnSendRef,
       syncBottomAfterComposerLayoutRef,
     };
+    if (composer.pendingSendItems) {
+      model.pendingSendItems = composer.pendingSendItems;
+    }
+    if (composer.selectedModelDescriptor !== undefined) {
+      model.selectedModelDescriptor = composer.selectedModelDescriptor;
+    }
+    if (composer.supportsProfiles !== undefined) {
+      model.supportsProfiles = composer.supportsProfiles;
+    }
+    return model;
   }, [
     composer,
     composerState,

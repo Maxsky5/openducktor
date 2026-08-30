@@ -34,7 +34,11 @@ const createFakePersistence = (
   let draft = initialDraft;
   let version = 0;
   const clear = mock((options?: { onlyIfVersion?: number | null }) => {
-    if (typeof options?.onlyIfVersion === "number" && options.onlyIfVersion !== version) {
+    if (
+      options?.onlyIfVersion !== undefined &&
+      options.onlyIfVersion !== null &&
+      options.onlyIfVersion !== version
+    ) {
       return false;
     }
     draft = createEmptyComposerDraft();

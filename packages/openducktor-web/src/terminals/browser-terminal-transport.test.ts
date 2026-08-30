@@ -1,49 +1,53 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { TerminalFailure } from "@openducktor/contracts";
 import { configureBrowserRuntimeConfig } from "../browser-config";
+import { createFetchFixture } from "../test-support";
 import { createBrowserTerminalBridge } from "./browser-terminal-transport";
 
-type SocketListener = (event: Event) => void;
-
-class FakeWebSocket {
+class FakeWebSocket extends EventTarget implements WebSocket {
+  static readonly CONNECTING = 0;
   static readonly OPEN = 1;
+  static readonly CLOSING = 2;
+  static readonly CLOSED = 3;
   static instances: FakeWebSocket[] = [];
 
-  binaryType = "blob";
+  readonly CONNECTING = 0;
+  readonly OPEN = 1;
+  readonly CLOSING = 2;
+  readonly CLOSED = 3;
+  binaryType: BinaryType = "blob";
+  readonly bufferedAmount = 0;
+  readonly extensions = "";
+  onclose: ((this: WebSocket, event: CloseEvent) => void) | null = null;
+  onerror: ((this: WebSocket, event: Event) => void) | null = null;
+  onmessage: ((this: WebSocket, event: MessageEvent) => void) | null = null;
+  onopen: ((this: WebSocket, event: Event) => void) | null = null;
   readyState = 0;
-  private readonly listeners = new Map<string, Set<SocketListener>>();
 
-  constructor(
-    readonly url: string,
-    readonly protocol: string,
-  ) {
+  readonly url: string;
+  readonly protocol: string;
+
+  constructor(url: string | URL, protocols?: string | string[]) {
+    super();
+    this.url = url.toString();
+    this.protocol = Array.isArray(protocols) ? (protocols[0] ?? "") : (protocols ?? "");
     FakeWebSocket.instances.push(this);
   }
 
-  addEventListener(type: string, listener: SocketListener): void {
-    const listeners = this.listeners.get(type) ?? new Set<SocketListener>();
-    listeners.add(listener);
-    this.listeners.set(type, listeners);
-  }
+  send(_data: string | ArrayBufferLike | Blob | ArrayBufferView): void {}
 
-  send(): void {}
-
-  close(): void {
+  close(_code?: number, _reason?: string): void {
     this.readyState = 3;
   }
 
   emitOpen(): void {
     this.readyState = FakeWebSocket.OPEN;
-    this.emit("open", new Event("open"));
+    this.dispatchEvent(new Event("open"));
   }
 
   emitClose(code: number, reason: string): void {
     this.readyState = 3;
-    this.emit("close", { code, reason } as CloseEvent);
-  }
-
-  private emit(type: string, event: Event): void {
-    for (const listener of this.listeners.get(type) ?? []) listener(event);
+    this.dispatchEvent(Object.assign(new Event("close"), { code, reason }));
   }
 }
 
@@ -62,9 +66,8 @@ const waitForSocket = async (): Promise<FakeWebSocket> => {
 beforeEach(() => {
   FakeWebSocket.instances = [];
   configureBrowserRuntimeConfig({ backendUrl: "http://127.0.0.1:14327", appToken: "app-token" });
-  globalThis.fetch = (async () =>
-    new Response(JSON.stringify({ ok: true }))) as unknown as typeof fetch;
-  globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+  globalThis.fetch = createFetchFixture(async () => new Response(JSON.stringify({ ok: true })));
+  globalThis.WebSocket = FakeWebSocket;
 });
 
 afterEach(() => {
@@ -78,11 +81,11 @@ describe("createBrowserTerminalBridge", () => {
     const failures: TerminalFailure[] = [];
     const states: string[] = [];
     const bridge = createBrowserTerminalBridge();
-    const connectWithFailure = bridge.connect as (
+    const connectWithFailure: (
       onFrame: (frame: Uint8Array) => void,
       onStateChange: (state: "connected" | "disconnected") => void,
       onFailure: (failure: TerminalFailure) => void,
-    ) => ReturnType<typeof bridge.connect>;
+    ) => ReturnType<typeof bridge.connect> = bridge.connect;
 
     const connecting = connectWithFailure(
       () => undefined,

@@ -5,8 +5,9 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { Theme } from "@openducktor/contracts";
 import { createDisabledAppUpdateBridge, type ShellBridge } from "./lib/shell-bridge";
 import { runOpenDucktorShellBootstrap } from "./shell-bootstrap-workflow";
+import { createHostClientFixture } from "./test-utils/focused-fixture";
 
-if (typeof document === "undefined") {
+if (globalThis.document === undefined) {
   GlobalRegistrator.register();
 }
 
@@ -23,7 +24,7 @@ const expectNoManualShellBootstrapSteps = (source: string): void => {
 
 const createTestShellBridge = (): ShellBridge =>
   ({
-    client: {},
+    client: createHostClientFixture({}),
     subscribeRunEvents: async () => () => {},
     subscribeDevServerEvents: async () => ({
       transportEpoch: "test:0",
@@ -34,6 +35,7 @@ const createTestShellBridge = (): ShellBridge =>
       acknowledge: async () => {},
       unsubscribe: () => {},
     }),
+    observeAgentSessionLive: async () => () => {},
     appUpdates: createDisabledAppUpdateBridge({
       status: "disabled",
       currentVersion: "unknown",
@@ -46,7 +48,13 @@ const createTestShellBridge = (): ShellBridge =>
     },
     openExternalUrl: async () => {},
     resolveLocalAttachmentPreviewSrc: async () => "asset://preview",
-  }) as unknown as ShellBridge;
+    resolveTaskAssetSrc: async () => "asset://task-preview",
+    terminals: {
+      connect: async () => {
+        throw new Error("Terminal transport is not configured for this test.");
+      },
+    },
+  }) satisfies ShellBridge;
 
 type BootstrapHarnessOptions = {
   loadSettingsSnapshot?: () => Promise<{ theme: Theme }>;
@@ -57,7 +65,8 @@ const createBootstrapHarness = (options: BootstrapHarnessOptions = {}) => {
   const events: string[] = [];
   const bridge = createTestShellBridge();
   let configuredBridge: ShellBridge | null = null;
-  const reportSettingsPreloadError = mock((_error: unknown) => {
+  const reportSettingsPreloadError = mock((cause: unknown) => {
+    void cause;
     events.push("reportSettingsPreloadError");
   });
   const renderApp = mock((_rootElement: HTMLElement) => {
@@ -287,7 +296,7 @@ describe("shell entrypoints", () => {
       /bootstrapOpenDucktorShell\(\{\s*createShellBridge:\s*createElectronShellBridge,\s*prepare:\s*initializeElectronWindowChrome,\s*routerMode:\s*"hash",?\s*\}\)/u,
     );
     expect(source).toContain("showOpenDucktorStartupFailure();");
-    expect(source).toContain('console.error("Critical Electron bootstrap failure", error);');
+    expect(source).toContain('console.error("Critical Electron bootstrap failure", cause);');
     expectNoManualShellBootstrapSteps(source);
   });
 
@@ -301,7 +310,7 @@ describe("shell entrypoints", () => {
     expect(source).toContain("prepare: loadBrowserRuntimeConfig");
     expect(source).toContain("createShellBridge: createBrowserShellBridge");
     expect(source).toContain("showOpenDucktorStartupFailure();");
-    expect(source).toContain('console.error("Critical browser bootstrap failure", error);');
+    expect(source).toContain('console.error("Critical browser bootstrap failure", cause);');
     expectNoManualShellBootstrapSteps(source);
   });
 

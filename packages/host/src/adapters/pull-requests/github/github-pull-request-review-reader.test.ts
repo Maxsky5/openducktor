@@ -1,9 +1,45 @@
 import { describe, expect, test } from "bun:test";
+import type { JSONType } from "zod";
+
+type GithubApiObject = Record<string, JSONType>;
 import { Effect } from "effect";
 import type { GithubCommandDependencies } from "../../../application/tasks/support/github-pull-requests";
 import { HostOperationError } from "../../../effect/host-errors";
-import type { SystemCommandPort } from "../../../ports/system-command-port";
 import { createGithubPullRequestReviewReader } from "./github-pull-request-review-reader";
+import { createGithubReviewTestDependencies } from "./github-pull-request-review.test-support";
+
+type PullRequestActorFixture = {
+  login: string;
+  avatarUrl?: string;
+};
+
+type PullRequestReviewFixture = {
+  id: string;
+  author: PullRequestActorFixture;
+  body: string;
+  state: string;
+  url?: string;
+  createdAt?: string;
+  submittedAt?: string;
+  updatedAt?: string;
+};
+
+type PullRequestViewFixture = {
+  number: number;
+  title: string;
+  url: string;
+  state: string;
+  isDraft: boolean;
+  comments: Array<{
+    id: string;
+    author: PullRequestActorFixture;
+    body: string;
+    url: string;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  reviews: PullRequestReviewFixture[];
+};
 
 const createDependencies = ({
   commandActivity,
@@ -17,18 +53,18 @@ const createDependencies = ({
   commandActivity?: { active: number; maxActive: number };
   commandDelayMs?: number;
   commands?: string[][];
-  pullRequestViewResponse?: unknown;
-  reviewThreadNodes?: unknown[];
-  reviewThreadResponse?: (args: string[]) => unknown;
+  pullRequestViewResponse?: GithubApiObject;
+  reviewThreadNodes?: JSONType[];
+  reviewThreadResponse?: (args: string[]) => JSONType;
   checksResponse?: {
     ok: boolean;
-    stdout: unknown;
+    stdout: JSONType;
     rawStdout?: string;
     stderr?: string;
     exitCode?: number | null;
   };
 } = {}): GithubCommandDependencies => {
-  const succeed = (stdout: unknown) =>
+  const succeed = (stdout: JSONType) =>
     Effect.gen(function* () {
       if (commandActivity) {
         commandActivity.active += 1;
@@ -46,99 +82,85 @@ const createDependencies = ({
         stderr: "",
       };
     });
-  const systemCommands: Pick<SystemCommandPort, "runCommandAllowFailure"> = {
-    runCommandAllowFailure: (_command, args) => {
-      commands.push(args);
-      const command = args.join(" ");
-      if (command.includes("pr checks")) {
-        if (checksResponse) {
-          return Effect.succeed({
-            ok: checksResponse.ok,
-            stdout: checksResponse.rawStdout ?? JSON.stringify(checksResponse.stdout),
-            stderr: checksResponse.stderr ?? "",
-            exitCode: checksResponse.exitCode,
-          });
-        }
-        return succeed([
-          {
-            name: "lint",
-            workflow: "CI",
-            state: "SUCCESS",
-            bucket: "pass",
-            link: "https://github.com/openai/openducktor/actions/runs/1",
-          },
-          {
-            name: "test",
-            workflow: "CI",
-            state: "FAILURE",
-            bucket: "fail",
-            link: "https://github.com/openai/openducktor/actions/runs/2",
-          },
-        ]);
+  return createGithubReviewTestDependencies((_command, args) => {
+    commands.push(args);
+    const command = args.join(" ");
+    if (command.includes("pr checks")) {
+      if (checksResponse) {
+        return Effect.succeed({
+          ok: checksResponse.ok,
+          stdout: checksResponse.rawStdout ?? JSON.stringify(checksResponse.stdout),
+          stderr: checksResponse.stderr ?? "",
+          exitCode: checksResponse.exitCode,
+        });
       }
-      if (command.includes("api graphql")) {
-        if (command.includes("PullRequestReviewOverview")) {
-          const view = pullRequestViewResponse as {
-            comments?: unknown[];
-            reviews?: unknown[];
-            [key: string]: unknown;
-          };
-          return succeed({
-            data: {
-              repository: {
-                pullRequest: {
-                  ...view,
-                  comments: {
-                    nodes: view.comments ?? [],
-                    pageInfo: { hasNextPage: false, endCursor: null },
-                  },
-                  reviews: {
-                    nodes: view.reviews ?? [],
-                    pageInfo: { hasNextPage: false, endCursor: null },
-                  },
+      return succeed([
+        {
+          name: "lint",
+          workflow: "CI",
+          state: "SUCCESS",
+          bucket: "pass",
+          link: "https://github.com/openai/openducktor/actions/runs/1",
+        },
+        {
+          name: "test",
+          workflow: "CI",
+          state: "FAILURE",
+          bucket: "fail",
+          link: "https://github.com/openai/openducktor/actions/runs/2",
+        },
+      ]);
+    }
+    if (command.includes("api graphql")) {
+      if (command.includes("PullRequestReviewOverview")) {
+        const comments =
+          "comments" in pullRequestViewResponse ? pullRequestViewResponse.comments : [];
+        const reviews = "reviews" in pullRequestViewResponse ? pullRequestViewResponse.reviews : [];
+        return succeed({
+          data: {
+            repository: {
+              pullRequest: {
+                ...pullRequestViewResponse,
+                comments: {
+                  nodes: comments ?? [],
+                  pageInfo: { hasNextPage: false, endCursor: null },
                 },
-              },
-            },
-          });
-        }
-        return succeed(
-          reviewThreadResponse?.(args) ?? {
-            data: {
-              repository: {
-                pullRequest: {
-                  reviewThreads: {
-                    nodes: reviewThreadNodes,
-                    pageInfo: { hasNextPage: false, endCursor: null },
-                  },
+                reviews: {
+                  nodes: reviews ?? [],
+                  pageInfo: { hasNextPage: false, endCursor: null },
                 },
               },
             },
           },
-        );
+        });
       }
-      return Effect.fail(
-        new HostOperationError({
-          operation: "gh",
-          message: `Unexpected gh command: ${command}`,
-        }),
+      return succeed(
+        reviewThreadResponse?.(args) ?? {
+          data: {
+            repository: {
+              pullRequest: {
+                reviewThreads: {
+                  nodes: reviewThreadNodes,
+                  pageInfo: { hasNextPage: false, endCursor: null },
+                },
+              },
+            },
+          },
+        },
       );
-    },
-  };
-
-  return {
-    resolveGithubCommand: () =>
-      Effect.succeed({
-        ghCommand: "gh",
-        systemCommands: systemCommands as SystemCommandPort,
+    }
+    return Effect.fail(
+      new HostOperationError({
+        operation: "gh",
+        message: `Unexpected gh command: ${command}`,
       }),
-    systemCommands: systemCommands as SystemCommandPort,
-    toolDiscovery: {} as GithubCommandDependencies["toolDiscovery"],
-  };
+    );
+  });
 };
 
 const reviewerAvatarUrl = "https://avatars.githubusercontent.com/u/1?v=4";
 
-const defaultPullRequestViewResponse = (): unknown => ({
+const defaultPullRequestViewResponse = (): PullRequestViewFixture => ({
   number: 42,
   title: "Rework panel",
   url: "https://github.com/openai/openducktor/pull/42",
@@ -459,9 +481,7 @@ describe("createGithubPullRequestReviewReader", () => {
 
   test("uses the full review history", async () => {
     const provider = createGithubPullRequestReviewReader();
-    const pullRequestViewResponse = defaultPullRequestViewResponse() as {
-      reviews: unknown[];
-    };
+    const pullRequestViewResponse = defaultPullRequestViewResponse();
     pullRequestViewResponse.reviews.push({
       id: "review-2",
       author: { login: "reviewer" },
@@ -496,20 +516,18 @@ describe("createGithubPullRequestReviewReader", () => {
   test("omits a bodyless commented review when its inline comments are loaded separately", async () => {
     const provider = createGithubPullRequestReviewReader();
     const commands: string[][] = [];
-    const pullRequestViewResponse = defaultPullRequestViewResponse() as {
-      reviews: unknown[];
-    };
+    const pullRequestViewResponse = defaultPullRequestViewResponse();
     pullRequestViewResponse.reviews.push(
       {
         id: "review-inline-only",
-        author: { login: "reviewer" },
+        author: { login: "reviewer", avatarUrl: "https://example.com/reviewer.png" },
         body: "",
         state: "COMMENTED",
         submittedAt: "2026-07-08T10:03:00Z",
       },
       {
         id: "review-standalone",
-        author: { login: "reviewer" },
+        author: { login: "reviewer", avatarUrl: "https://example.com/reviewer.png" },
         body: "",
         state: "COMMENTED",
         submittedAt: "2026-07-08T10:04:00Z",
@@ -966,7 +984,7 @@ describe("createGithubPullRequestReviewReader", () => {
   test("loads every review thread and comment page", async () => {
     const commands: string[][] = [];
     const provider = createGithubPullRequestReviewReader();
-    const reviewThreadResponse = (args: string[]): unknown => {
+    const reviewThreadResponse = (args: string[]) => {
       const command = args.join(" ");
       if (command.includes("PullRequestReviewThreadComments")) {
         expect(command).toContain("threadId=thread-1");
@@ -1168,7 +1186,7 @@ describe("createGithubPullRequestReviewReader", () => {
   test("returns malformed review contexts through the typed error channel", async () => {
     const provider = createGithubPullRequestReviewReader();
     const malformedView = {
-      ...(defaultPullRequestViewResponse() as Record<string, unknown>),
+      ...defaultPullRequestViewResponse(),
       url: "not-a-url",
     };
 
@@ -1206,7 +1224,7 @@ describe("createGithubPullRequestReviewReader", () => {
     expect(result._tag).toBe("Left");
     if (result._tag === "Left") {
       expect(result.left._tag).toBe("HostValidationError");
-      expect(result.left.field).toBe("reviewThreads.nodes.0");
+      expect(result.left.field).toBe("data.repository.pullRequest.reviewThreads.nodes.0");
     }
   });
 

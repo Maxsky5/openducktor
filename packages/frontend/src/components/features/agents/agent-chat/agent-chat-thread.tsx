@@ -362,7 +362,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     }
 
     const bottomStack = bottomStackRef.current;
-    if (!bottomStack || typeof ResizeObserver === "undefined") {
+    if (!bottomStack || globalThis.ResizeObserver === undefined) {
       return;
     }
 

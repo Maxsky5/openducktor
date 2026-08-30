@@ -136,7 +136,7 @@ let viewportSyncFrameHandle: number | null = null;
 let hasViewportWindowListeners = false;
 
 const scheduleViewportSubscribersSync = (): void => {
-  if (typeof window === "undefined" || viewportSyncFrameHandle !== null) {
+  if (globalThis.window === undefined || viewportSyncFrameHandle !== null) {
     return;
   }
 
@@ -153,7 +153,7 @@ const onViewportWindowEvent = (): void => {
 };
 
 const retainViewportWindowListeners = (): void => {
-  if (typeof window === "undefined" || hasViewportWindowListeners) {
+  if (globalThis.window === undefined || hasViewportWindowListeners) {
     return;
   }
 
@@ -164,7 +164,7 @@ const retainViewportWindowListeners = (): void => {
 
 const releaseViewportWindowListeners = (): void => {
   if (
-    typeof window === "undefined" ||
+    globalThis.window === undefined ||
     !hasViewportWindowListeners ||
     viewportSubscribers.size > 0 ||
     viewportScrollContainers.size > 0
@@ -208,9 +208,9 @@ const releaseViewportScrollContainer = (container: HTMLElement): void => {
 const registerViewportSubscriber = (subscriber: KanbanViewportSubscriber): (() => void) => {
   retainViewportWindowListeners();
 
-  const scrollContainer = subscriber.element.closest(
-    "[data-main-scroll-container='true']",
-  ) as HTMLElement | null;
+  const closestScrollContainer = subscriber.element.closest("[data-main-scroll-container='true']");
+  const scrollContainer =
+    closestScrollContainer instanceof HTMLElement ? closestScrollContainer : null;
   if (scrollContainer) {
     retainViewportScrollContainer(scrollContainer);
   }
@@ -288,14 +288,15 @@ export function useKanbanVirtualization({
       totalHeight: virtualLayout.totalHeight,
       viewportStart: -VIRTUAL_OVERSCAN_PX,
       viewportEnd:
-        (typeof window === "undefined" ? INITIAL_VIEWPORT_HEIGHT_FALLBACK_PX : window.innerHeight) +
-        VIRTUAL_OVERSCAN_PX,
+        (globalThis.window === undefined
+          ? INITIAL_VIEWPORT_HEIGHT_FALLBACK_PX
+          : window.innerHeight) + VIRTUAL_OVERSCAN_PX,
     }),
   );
 
   const syncViewportRef = useRef<() => void>(() => {});
   syncViewportRef.current = () => {
-    if (!shouldVirtualize || typeof window === "undefined") {
+    if (!shouldVirtualize || globalThis.window === undefined) {
       return;
     }
 
@@ -306,9 +307,9 @@ export function useKanbanVirtualization({
 
     const { itemOffsets, itemHeights: latestItemHeights, totalHeight } = layoutRef.current;
     const rect = viewportElement.getBoundingClientRect();
-    const scrollContainer = viewportElement.closest(
-      "[data-main-scroll-container='true']",
-    ) as HTMLElement | null;
+    const closestScrollContainer = viewportElement.closest("[data-main-scroll-container='true']");
+    const scrollContainer =
+      closestScrollContainer instanceof HTMLElement ? closestScrollContainer : null;
     const containerRect = scrollContainer?.getBoundingClientRect();
     const viewportHeight = scrollContainer?.clientHeight ?? window.innerHeight;
     const { viewportStart, viewportEnd } = resolveVirtualViewportWindow({
@@ -335,7 +336,7 @@ export function useKanbanVirtualization({
   };
 
   useEffect(() => {
-    if (!shouldVirtualize || typeof window === "undefined" || !containerElement) {
+    if (!shouldVirtualize || globalThis.window === undefined || !containerElement) {
       return;
     }
 
@@ -348,13 +349,13 @@ export function useKanbanVirtualization({
   }, [containerElement, shouldVirtualize]);
 
   useEffect(() => {
-    if (!shouldVirtualize || !containerElement || typeof ResizeObserver === "undefined") {
+    if (!shouldVirtualize || !containerElement || globalThis.ResizeObserver === undefined) {
       return;
     }
 
     let frameHandle: number | null = null;
     const scheduleMeasurementInvalidation = (): void => {
-      if (typeof window === "undefined") {
+      if (globalThis.window === undefined) {
         dispatchMeasurement({ type: "invalidate" });
         return;
       }
@@ -377,7 +378,7 @@ export function useKanbanVirtualization({
     observer.observe(containerElement);
     return () => {
       observer.disconnect();
-      if (frameHandle !== null && typeof window !== "undefined") {
+      if (frameHandle !== null && globalThis.window !== undefined) {
         window.cancelAnimationFrame(frameHandle);
       }
     };

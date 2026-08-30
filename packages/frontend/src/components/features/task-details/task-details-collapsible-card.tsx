@@ -12,7 +12,8 @@ type TaskDetailsCollapsibleCardProps = {
   defaultExpanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
   headerAction?: ReactElement;
-  children: ReactNode | ((context: { isExpanded: boolean }) => ReactNode);
+  children?: ReactNode;
+  renderChildren?: (context: { isExpanded: boolean }) => ReactNode;
 };
 
 export function TaskDetailsCollapsibleCard({
@@ -24,12 +25,13 @@ export function TaskDetailsCollapsibleCard({
   onExpandedChange,
   headerAction,
   children,
+  renderChildren,
 }: TaskDetailsCollapsibleCardProps): ReactElement {
   const [expandedOverride, setExpandedOverride] = useState<boolean | null>(null);
   const summaryLabel = statusLabel ?? (updatedAt ? humanDate(updatedAt) : null);
   const isExpanded = expandedOverride ?? defaultExpanded;
 
-  const resolvedChildren = typeof children === "function" ? children({ isExpanded }) : children;
+  const resolvedChildren = renderChildren === undefined ? children : renderChildren({ isExpanded });
 
   return (
     <Collapsible

@@ -2,14 +2,7 @@ import type { IssueType } from "@openducktor/contracts";
 import type { LucideIcon } from "lucide-react";
 import { Bug, CheckSquare, Layers3, Sparkles } from "lucide-react";
 
-export const ISSUE_TYPE_STYLES: Record<
-  IssueType,
-  {
-    label: string;
-    icon: LucideIcon;
-    className: string;
-  }
-> = {
+export const ISSUE_TYPE_STYLES = {
   bug: {
     label: "Bug",
     icon: Bug,
@@ -33,19 +26,18 @@ export const ISSUE_TYPE_STYLES: Record<
     icon: CheckSquare,
     className: "border-border bg-muted text-foreground",
   },
-};
+} satisfies Record<
+  IssueType,
+  {
+    label: string;
+    icon: LucideIcon;
+    className: string;
+  }
+>;
 
 type PriorityLevel = 0 | 1 | 2 | 3 | 4;
 
-const PRIORITY_STYLES: Record<
-  PriorityLevel,
-  {
-    label: string;
-    hint: string;
-    dotClassName: string;
-    badgeClassName: string;
-  }
-> = {
+const PRIORITY_STYLES = {
   0: {
     label: "P0",
     hint: "Critical",
@@ -80,7 +72,15 @@ const PRIORITY_STYLES: Record<
     dotClassName: "bg-muted-foreground",
     badgeClassName: "border-border bg-muted text-foreground",
   },
-};
+} satisfies Record<
+  PriorityLevel,
+  {
+    label: string;
+    hint: string;
+    dotClassName: string;
+    badgeClassName: string;
+  }
+>;
 
 const toPriorityLevel = (priority: number): PriorityLevel => {
   if (!Number.isFinite(priority)) {
@@ -92,7 +92,10 @@ const toPriorityLevel = (priority: number): PriorityLevel => {
   if (priority >= 4) {
     return 4;
   }
-  return priority as PriorityLevel;
+  if (priority === 1 || priority === 2 || priority === 3) {
+    return priority;
+  }
+  return 4;
 };
 
 export const getPriorityStyle = (priority: number): (typeof PRIORITY_STYLES)[PriorityLevel] =>

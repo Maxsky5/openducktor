@@ -4,15 +4,15 @@ import {
   type RuntimeDescriptor,
   runtimeDescriptorSchema,
 } from "@openducktor/contracts";
+import { z } from "zod";
 
 export type RuntimeDefinitionsService = {
   listRuntimeDefinitions(): RuntimeDescriptor[];
 };
 
 const describeRuntimeDescriptor = (descriptor: RuntimeDescriptor): string => {
-  return typeof descriptor.kind === "string" && descriptor.kind.length > 0
-    ? descriptor.kind
-    : "unknown";
+  const parsedKind = z.string().min(1).safeParse(descriptor.kind);
+  return parsedKind.success ? parsedKind.data : "unknown";
 };
 
 const parseRuntimeDescriptor = (descriptor: RuntimeDescriptor): RuntimeDescriptor => {

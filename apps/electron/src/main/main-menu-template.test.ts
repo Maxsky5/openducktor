@@ -4,26 +4,17 @@ import {
   createContextMenuTemplate,
   createViewMenu,
 } from "./main-menu-template";
+import type { MenuItemConstructorOptions } from "electron";
 
-const rolesFromSubmenu = (submenu: unknown): string[] => {
-  if (!Array.isArray(submenu)) {
-    throw new Error("submenu must be an array");
-  }
-  const roles: string[] = [];
-  for (const item of submenu) {
-    if (item && typeof item === "object" && "role" in item) {
-      roles.push(String(item.role));
-    }
-  }
-  return roles;
-};
+type MenuSubmenu = MenuItemConstructorOptions["submenu"] | undefined;
 
-const submenuItems = (submenu: unknown): Array<Record<string, unknown>> => {
-  if (!Array.isArray(submenu)) {
-    return [];
-  }
-  return submenu.filter((item): item is Record<string, unknown> => Boolean(item));
-};
+const submenuItems = (submenu: MenuSubmenu): MenuItemConstructorOptions[] =>
+  Array.isArray(submenu) ? submenu : [];
+
+const rolesFromSubmenu = (submenu: MenuSubmenu): string[] =>
+  submenuItems(submenu).flatMap((item) => (item.role ? [item.role] : []));
+
+const isZeroArgumentClickHandler = (click: Function): click is () => void => click.length === 0;
 
 describe("main menu template", () => {
   test("adds devtools but not reload roles to the dev View menu", () => {
@@ -79,10 +70,10 @@ describe("main menu template", () => {
     });
 
     const click = updateItem?.click;
-    if (!click) {
-      throw new Error("Expected Check for Updates menu item click handler.");
+    if (!click || !isZeroArgumentClickHandler(click)) {
+      throw new Error("Expected a zero-argument Check for Updates menu item click handler.");
     }
-    (click as () => void)();
+    click();
     expect(onCheckForUpdates).toHaveBeenCalled();
   });
 });

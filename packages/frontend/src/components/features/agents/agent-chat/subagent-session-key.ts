@@ -39,10 +39,11 @@ export const toSubagentTranscriptTarget = ({
     return null;
   }
 
-  return {
-    ...identity,
-    ...(parentSession.sessionScope ? { sessionScope: parentSession.sessionScope } : {}),
-  };
+  const target: AgentSessionTranscriptTarget = { ...identity };
+  if (parentSession.sessionScope) {
+    target.sessionScope = parentSession.sessionScope;
+  }
+  return target;
 };
 
 export const getSubagentMessageSessionIdentity = ({

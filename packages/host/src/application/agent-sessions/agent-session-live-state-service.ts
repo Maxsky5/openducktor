@@ -12,6 +12,7 @@ import {
   type AgentSessionLiveEnvelope,
   type AgentSessionLiveListInput,
   type AgentSessionLiveLoadContextInput,
+  type AgentSessionLiveLoadDiffInput,
   type AgentSessionLiveReadInput,
   type AgentSessionLiveReadResult,
   type AgentSessionLiveRef,
@@ -19,14 +20,16 @@ import {
   type AgentSessionLiveReplyApprovalInput,
   type AgentSessionLiveReplyQuestionInput,
   type AgentSessionLiveSnapshot,
+  type FileDiff,
   agentSessionContextUsageSchema,
-  agentSessionLiveEnvelopeSchema,
+  agentSessionLiveLoadDiffResultSchema,
   agentSessionLiveReadResultSchema,
   agentSessionLiveRefSchema,
   agentSessionLiveSnapshotSchema,
 } from "@openducktor/contracts";
 import { agentSessionRefKey } from "@openducktor/core";
 import { Cause, Effect, Exit } from "effect";
+import type { z } from "zod";
 import {
   type HostError,
   HostInvariantError,
@@ -40,6 +43,11 @@ import type {
   AgentSessionLiveAdapterRegistryPort,
 } from "../../ports/agent-session-live-adapter-port";
 import { createAgentSessionLiveAssociationRetention } from "./agent-session-live-association-retention";
+import {
+  formatAgentSessionLiveFaultLog,
+  toAgentSessionLiveEnvelope,
+  toAgentSessionLiveEnvelopePublishError,
+} from "./agent-session-live-envelope";
 import { createLiveStateCoordinator, type LiveStateCoordinator } from "./live-state-coordinator";
 
 export type AgentSessionLiveEnvelopePublisher = (envelope: AgentSessionLiveEnvelope) => void;
@@ -57,6 +65,9 @@ export type AgentSessionLiveStateService = {
   readonly loadContext: (
     input: AgentSessionLiveLoadContextInput,
   ) => Effect.Effect<AgentSessionContextUsage | null, HostError>;
+  readonly loadSessionDiff: (
+    input: AgentSessionLiveLoadDiffInput,
+  ) => Effect.Effect<ReadonlyArray<FileDiff>, HostError>;
   readonly replyApproval: (
     input: AgentSessionLiveReplyApprovalInput,
   ) => Effect.Effect<void, HostError>;
@@ -100,11 +111,11 @@ export type CreateAgentSessionLiveStateServiceInput = {
   readonly coordinator?: LiveStateCoordinator;
 };
 
-const parseAdapterOutput = <Output>(
-  schema: { parse(value: unknown): Output },
-  value: unknown,
+const parseAdapterOutput = <Schema extends z.ZodType, Input>(
+  schema: Schema,
+  value: Input,
   operation: string,
-): Effect.Effect<Output, HostValidationError> =>
+): Effect.Effect<z.output<Schema>, HostValidationError<{ operation: string }>> =>
   Effect.try({
     try: () => schema.parse(value),
     catch: (cause) =>
@@ -115,71 +126,6 @@ const parseAdapterOutput = <Output>(
       }),
   });
 
-const toEnvelope = (change: AgentSessionLiveAdapterChange): AgentSessionLiveEnvelope => {
-  switch (change.type) {
-    case "session_upsert":
-      return { type: "session_upsert", session: change.snapshot };
-    case "session_removed":
-      return { type: "session_removed", ref: change.ref };
-    case "transcript_event":
-      return { type: "transcript_event", event: change.event };
-    case "catalog_invalidated":
-      return {
-        type: "catalog_invalidated",
-        scope: {
-          repoPath: change.repoPath,
-          runtimeKind: change.runtimeKind,
-          ...(change.workingDirectory ? { workingDirectory: change.workingDirectory } : {}),
-        },
-      };
-    case "slash_command_catalog_updated":
-      return {
-        type: "slash_command_catalog_updated",
-        scope: {
-          repoPath: change.repoPath,
-          runtimeKind: change.runtimeKind,
-          workingDirectory: change.workingDirectory,
-        },
-        catalog: change.catalog,
-      };
-    case "fault":
-      return {
-        type: "fault",
-        repoPath: change.repoPath,
-        message: change.message,
-        ...(change.operation ? { operation: change.operation } : {}),
-        ...(change.ref ? { ref: change.ref } : {}),
-      };
-  }
-};
-
-const formatFaultLog = (envelope: Extract<AgentSessionLiveEnvelope, { type: "fault" }>): string =>
-  `agent-session-live.fault ${JSON.stringify({
-    repoPath: envelope.repoPath,
-    message: envelope.message,
-    ...(envelope.operation ? { operation: envelope.operation } : {}),
-    ...(envelope.ref
-      ? {
-          runtimeKind: envelope.ref.runtimeKind,
-          workingDirectory: envelope.ref.workingDirectory,
-          externalSessionId: envelope.ref.externalSessionId,
-        }
-      : {}),
-  })}`;
-
-const toEnvelopePublishError = (
-  cause: unknown,
-  eventType: AgentSessionLiveEnvelope["type"],
-): HostOperationError | HostValidationError =>
-  cause instanceof HostOperationError || cause instanceof HostValidationError
-    ? cause
-    : new HostOperationError({
-        operation: "agent-session-live.publish",
-        message: cause instanceof Error ? cause.message : String(cause),
-        cause,
-        details: { eventType },
-      });
-
 export const createAgentSessionLiveStateService = ({
   adapterRegistry,
   faultLog,
@@ -188,22 +134,17 @@ export const createAgentSessionLiveStateService = ({
 }: CreateAgentSessionLiveStateServiceInput): AgentSessionLiveStateService => {
   const associationRetention = createAgentSessionLiveAssociationRetention();
 
-  const validateEnvelope = (envelope: AgentSessionLiveEnvelope) =>
-    Effect.try({
-      try: () => agentSessionLiveEnvelopeSchema.parse(envelope),
-      catch: (cause) => toEnvelopePublishError(cause, envelope.type),
-    });
-
   const publishEnvelopeResult = (envelope: AgentSessionLiveEnvelope) =>
     Effect.gen(function* () {
-      const validatedEnvelope = yield* validateEnvelope(envelope);
-      const retainedEnvelope = yield* associationRetention.retainEnvelope(validatedEnvelope);
+      const retainedEnvelope = yield* associationRetention.retainEnvelope(envelope);
       if (retainedEnvelope.type === "fault") {
-        const faultLogResult = yield* Effect.either(faultLog(formatFaultLog(retainedEnvelope)));
+        const faultLogResult = yield* Effect.either(
+          faultLog(formatAgentSessionLiveFaultLog(retainedEnvelope)),
+        );
         const publishResult = yield* Effect.either(
           Effect.try({
             try: () => publish(retainedEnvelope),
-            catch: (cause) => toEnvelopePublishError(cause, retainedEnvelope.type),
+            catch: (cause) => toAgentSessionLiveEnvelopePublishError(cause, retainedEnvelope.type),
           }),
         );
         if (faultLogResult._tag === "Left" && publishResult._tag === "Left") {
@@ -233,7 +174,7 @@ export const createAgentSessionLiveStateService = ({
       }
       yield* Effect.try({
         try: () => publish(retainedEnvelope),
-        catch: (cause) => toEnvelopePublishError(cause, retainedEnvelope.type),
+        catch: (cause) => toAgentSessionLiveEnvelopePublishError(cause, retainedEnvelope.type),
       });
       return null;
     });
@@ -249,7 +190,7 @@ export const createAgentSessionLiveStateService = ({
     Effect.gen(function* () {
       let faultLogFailure: HostError | null = null;
       for (const change of changes) {
-        const result = yield* publishEnvelopeResult(toEnvelope(change));
+        const result = yield* publishEnvelopeResult(toAgentSessionLiveEnvelope(change));
         if (faultLogFailure === null && result) {
           faultLogFailure = result;
         }
@@ -331,6 +272,28 @@ export const createAgentSessionLiveStateService = ({
             agentSessionContextUsageSchema.nullable(),
             result,
             "agent-session-live.load-context",
+          ),
+        ),
+      ),
+    loadSessionDiff: (input) =>
+      adapterRegistry.resolve(input).pipe(
+        Effect.flatMap((adapter) => {
+          if (!adapter.loadSessionDiff) {
+            return Effect.fail(
+              new HostValidationError({
+                field: "runtimeKind",
+                message: `Runtime '${input.runtimeKind}' does not expose live session diff state.`,
+                details: { runtimeKind: input.runtimeKind },
+              }),
+            );
+          }
+          return adapter.loadSessionDiff(input);
+        }),
+        Effect.flatMap((result) =>
+          parseAdapterOutput(
+            agentSessionLiveLoadDiffResultSchema,
+            result,
+            "agent-session-live.load-diff",
           ),
         ),
       ),

@@ -4,7 +4,10 @@ import {
   runtimeApprovalRequestTypeSchema,
   runtimeKindSchema,
 } from "./agent-runtime-schemas";
+import { agentToolDataSchema } from "./agent-session-event-schemas";
 import { agentRoleSchema } from "./agent-workflow-schemas";
+
+type ZodSchemaFields = Parameters<typeof z.object>[0];
 
 export const agentSessionStatusSchema = z.enum(["starting", "running", "idle", "error", "stopped"]);
 export type AgentSessionStatus = z.infer<typeof agentSessionStatusSchema>;
@@ -16,20 +19,6 @@ const optionalFromNullable = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((value) => (value === null ? undefined : value), schema.optional());
 
 const nonEmptyStringSchema = z.string().trim().min(1);
-
-const agentSessionMetadataValueSchema: z.ZodType<
-  string | number | boolean | null | undefined | Array<unknown> | Record<string, unknown>
-> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.null(),
-    z.undefined(),
-    z.array(agentSessionMetadataValueSchema),
-    z.record(z.string(), agentSessionMetadataValueSchema),
-  ]),
-);
 
 export const agentSessionModelSelectionSchema = z.object({
   runtimeKind: runtimeKindSchema,
@@ -66,12 +55,12 @@ export const agentSessionApprovalRequestSchema = z.object({
     .object({
       name: z.string(),
       title: z.string().optional(),
-      input: z.record(z.string(), z.unknown()).optional(),
+      input: agentToolDataSchema.optional(),
     })
     .optional(),
   mutation: agentSessionApprovalMutationSchema.optional(),
   supportedReplyOutcomes: z.array(runtimeApprovalReplyOutcomeSchema).optional(),
-  metadata: z.record(z.string(), agentSessionMetadataValueSchema).optional(),
+  metadata: agentToolDataSchema.optional(),
 });
 export type AgentSessionApprovalRequest = z.infer<typeof agentSessionApprovalRequestSchema>;
 
@@ -96,7 +85,7 @@ export const agentSessionQuestionRequestSchema = z.object({
 });
 export type AgentSessionQuestionRequest = z.infer<typeof agentSessionQuestionRequestSchema>;
 
-const agentSessionRecordShape = {
+const agentSessionRecordFields = {
   externalSessionId: nonEmptyStringSchema,
   role: agentSessionRoleSchema,
   startedAt: z.string(),
@@ -106,9 +95,9 @@ const agentSessionRecordShape = {
     (value) => (value === undefined ? null : value),
     agentSessionModelSelectionSchema.nullable(),
   ),
-} satisfies z.ZodRawShape;
+} satisfies ZodSchemaFields;
 
-export const agentSessionRecordSchema = z.object(agentSessionRecordShape);
+export const agentSessionRecordSchema = z.object(agentSessionRecordFields);
 export type AgentSessionRecord = z.infer<typeof agentSessionRecordSchema>;
 export type AgentSessionIdentity = Pick<
   AgentSessionRecord,

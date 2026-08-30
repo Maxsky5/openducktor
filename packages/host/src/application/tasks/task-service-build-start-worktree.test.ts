@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
+import { z } from "zod";
 import { HostOperationError } from "../../effect/host-errors";
 import {
   createBuildSettingsConfig,
@@ -54,7 +55,7 @@ describe("createTaskService build start worktree handling", () => {
       const service = createTaskService({
         taskStore: {
           getTask: () => Effect.succeed(task({ status })),
-        } as TaskStorePort,
+        } satisfies TaskStorePort,
         gitPort: createBuildStartGitPort({ calls }),
         runtimeDefinitionsService: createRuntimeDefinitionsService(),
         runtimeRegistry: createBuildStartRuntimeRegistry(calls),
@@ -95,7 +96,7 @@ describe("createTaskService build start worktree handling", () => {
     const service = createTaskService({
       taskStore: {
         getTask: () => Effect.succeed(entry.task),
-      } as TaskStorePort,
+      } satisfies TaskStorePort,
       gitPort: createBuildStartGitPort({ calls }),
       runtimeDefinitionsService: createRuntimeDefinitionsService(),
       runtimeRegistry: createBuildStartRuntimeRegistry(calls),
@@ -140,7 +141,7 @@ describe("createTaskService build start worktree handling", () => {
       const service = createTaskService({
         taskStore: {
           getTask: () => Effect.succeed(currentTask),
-        } as TaskStorePort,
+        } satisfies TaskStorePort,
         taskSessionBootstrapCoordinator: coordinator,
         gitPort: createBuildStartGitPort({ calls }),
         runtimeDefinitionsService: createRuntimeDefinitionsService(),
@@ -199,10 +200,10 @@ describe("createTaskService build start worktree handling", () => {
     let updatedAt = "2026-01-01T00:00:00.000Z";
     const calls: unknown[] = [];
     const coordinator = createTaskSessionBootstrapCoordinator();
-    const taskStore = {
+    const taskStore: TaskStorePort = {
       getTask: () => Effect.succeed(task({ status, updatedAt })),
       transitionTask: () => Effect.succeed(task({ status: "in_progress" })),
-    } as TaskStorePort;
+    };
     const service = createTaskService({
       taskStore,
       taskSessionBootstrapCoordinator: coordinator,
@@ -298,7 +299,7 @@ describe("createTaskService build start worktree handling", () => {
     const service = createTaskService({
       taskStore: {
         getTask: () => Effect.succeed(task({ status: "ai_review" })),
-      } as TaskStorePort,
+      } satisfies TaskStorePort,
       taskSessionBootstrapCoordinator: coordinator,
       gitPort: createBuildStartGitPort({ calls }),
       runtimeDefinitionsService: createRuntimeDefinitionsService(),
@@ -360,7 +361,7 @@ describe("createTaskService build start worktree handling", () => {
     const service = createTaskService({
       taskStore: {
         getTask: () => Effect.succeed(entry.task),
-      } as TaskStorePort,
+      },
       taskSessionBootstrapCoordinator: coordinator,
       gitPort: createBuildStartGitPort({ calls: [] }),
     });
@@ -396,7 +397,7 @@ describe("createTaskService build start worktree handling", () => {
       const service = createTaskService({
         taskStore: {
           getTask: () => Effect.succeed(currentTask),
-        } as TaskStorePort,
+        },
         taskSessionBootstrapCoordinator: coordinator,
         gitPort: createBuildStartGitPort({ calls: [] }),
       });
@@ -444,7 +445,7 @@ describe("createTaskService build start worktree handling", () => {
     const service = createTaskService({
       taskStore: {
         getTask: () => Effect.succeed(currentTask),
-      } as TaskStorePort,
+      } satisfies TaskStorePort,
       taskSessionBootstrapCoordinator: createTaskSessionBootstrapCoordinator(),
       gitPort: createBuildStartGitPort({ calls: [] }),
     });
@@ -483,7 +484,7 @@ describe("createTaskService build start worktree handling", () => {
     const service = createTaskService({
       taskStore: {
         getTask: () => Effect.succeed(task({ status: "blocked" })),
-      } as TaskStorePort,
+      } satisfies TaskStorePort,
       taskSessionBootstrapCoordinator: createTaskSessionBootstrapCoordinator(),
       gitPort: createBuildStartGitPort({ calls: [] }),
     });
@@ -612,7 +613,7 @@ describe("createTaskService build start worktree handling", () => {
     const service = createTaskService({
       taskStore: {
         getTask: () => Effect.succeed(task({ status: "ready_for_dev" })),
-      } as TaskStorePort,
+      } satisfies TaskStorePort,
       gitPort,
       runtimeDefinitionsService: createRuntimeDefinitionsService(),
       runtimeRegistry: createBuildStartRuntimeRegistry(calls),
@@ -920,11 +921,12 @@ describe("createTaskService build start worktree handling", () => {
         },
       ]),
     );
+    const callTypeSchema = z.object({ type: z.string() }).passthrough();
     expect(
-      calls.some(
-        (call) =>
-          typeof call === "object" && call !== null && "type" in call && call.type === "transition",
-      ),
+      calls.some((call) => {
+        const parsed = callTypeSchema.safeParse(call);
+        return parsed.success && parsed.data.type === "transition";
+      }),
     ).toBe(false);
   });
 
@@ -1005,7 +1007,7 @@ describe("createTaskService build start worktree handling", () => {
     const service = createTaskService({
       taskStore: {
         getTask: () => Effect.succeed(task({ status: "ready_for_dev" })),
-      } as TaskStorePort,
+      },
       gitPort,
       runtimeDefinitionsService: createRuntimeDefinitionsService(),
       runtimeRegistry: createBuildStartRuntimeRegistry(calls),
@@ -1061,11 +1063,7 @@ describe("createTaskService build start worktree handling", () => {
     expect(laterSessionBootstrap.workingDirectory).toBe(worktreePath);
     expect(
       calls.filter(
-        (call) =>
-          typeof call === "object" &&
-          call !== null &&
-          "type" in call &&
-          call.type === "createWorktree",
+        (call) => z.object({ type: z.literal("createWorktree") }).safeParse(call).success,
       ),
     ).toHaveLength(2);
     await Effect.runPromise(
@@ -1124,13 +1122,13 @@ describe("createTaskService build start worktree handling", () => {
     ).rejects.toThrow("worktree create failed");
 
     expect(
-      calls.filter(
-        (call) =>
-          typeof call === "object" &&
-          call !== null &&
-          "type" in call &&
-          ["deleteReference", "removeWorktree", "deleteLocalBranch"].includes(String(call.type)),
-      ),
+      calls.filter((call) => {
+        const parsed = z.object({ type: z.string() }).safeParse(call);
+        return (
+          parsed.success &&
+          ["deleteReference", "removeWorktree", "deleteLocalBranch"].includes(parsed.data.type)
+        );
+      }),
     ).toEqual([]);
   });
 

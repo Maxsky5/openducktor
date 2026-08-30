@@ -1,21 +1,21 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
 import { act, render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { useAgentStudioTaskTabReorderDrag } from "./use-agent-studio-task-tab-reorder-drag";
 
 type HookValue = ReturnType<typeof useAgentStudioTaskTabReorderDrag>;
 
-const dragStartEvent = (taskId: string): DragStartEvent =>
-  ({
-    active: { id: taskId },
-  }) as DragStartEvent;
+const dragStartEvent = (taskId: string): Parameters<HookValue["handleDragStart"]>[0] => ({
+  active: { id: taskId },
+});
 
-const dragEndEvent = (draggedTaskId: string, overTaskId: string | null): DragEndEvent =>
-  ({
-    active: { id: draggedTaskId },
-    over: overTaskId === null ? null : { id: overTaskId },
-  }) as DragEndEvent;
+const dragEndEvent = (
+  draggedTaskId: string,
+  overTaskId: string | null,
+): Parameters<HookValue["handleDragEnd"]>[0] => ({
+  active: { id: draggedTaskId },
+  over: overTaskId === null ? null : { id: overTaskId },
+});
 
 const createHarness = ({
   tabTaskIds,

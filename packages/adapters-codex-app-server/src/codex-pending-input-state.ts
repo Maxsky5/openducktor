@@ -2,13 +2,11 @@ import type { CodexAppServerRequestId } from "@openducktor/contracts";
 import type { AgentPendingApprovalRequest, AgentPendingQuestionRequest } from "@openducktor/core";
 import { codexServerRequestKey } from "./codex-app-server-approvals";
 import type { ActiveCodexTurn } from "./codex-app-server-shared";
+import type { CodexRuntimeServerRequest } from "./codex-runtime-event-schema";
 import type { CodexSubagentRoute } from "./codex-subagent-link-state";
 
-export type CodexNativeServerRequest = {
-  id: CodexAppServerRequestId;
-  method: string;
-  params?: unknown;
-};
+export type CodexNativeServerRequest = CodexRuntimeServerRequest;
+type CodexPendingQuestionInput = Pick<AgentPendingQuestionRequest, "questions">;
 
 type PendingApprovalRequestProjection = Omit<
   AgentPendingApprovalRequest,
@@ -34,7 +32,7 @@ export type PendingQuestionEntry = {
   request: AgentPendingQuestionRequest;
   nativeRequest: CodexNativeServerRequest;
   questionIds: string[];
-  input: Record<string, unknown>;
+  input: CodexPendingQuestionInput;
   route?: CodexSubagentRoute;
 };
 
@@ -324,10 +322,15 @@ export class CodexPendingInputState {
           runtimeId,
         ),
       )
-      .map((entry) => ({
-        request: entry.request,
-        ...(entry.route ? { route: entry.route } : {}),
-      }));
+      .map((entry) => {
+        const eventEntry: PendingApprovalEventEntry = {
+          request: entry.request,
+        };
+        if (entry.route) {
+          eventEntry.route = entry.route;
+        }
+        return eventEntry;
+      });
   }
 
   pendingQuestionsForSession(
@@ -357,10 +360,15 @@ export class CodexPendingInputState {
           runtimeId,
         ),
       )
-      .map((entry) => ({
-        request: entry.request,
-        ...(entry.route ? { route: entry.route } : {}),
-      }));
+      .map((entry) => {
+        const eventEntry: PendingQuestionEventEntry = {
+          request: entry.request,
+        };
+        if (entry.route) {
+          eventEntry.route = entry.route;
+        }
+        return eventEntry;
+      });
   }
 
   applyRouteToPendingInput(route: CodexSubagentRoute): PendingInputRouteApplication {

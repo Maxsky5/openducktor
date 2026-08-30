@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export type TaskExecutionCiCommentFilters = {
   hideResolved: boolean;
 };
@@ -7,25 +9,22 @@ const DEFAULT_CI_COMMENT_FILTERS: TaskExecutionCiCommentFilters = {
   hideResolved: false,
 };
 
+const ciCommentFiltersSchema = z.object({ hideResolved: z.boolean() });
+
 const parseFilters = (raw: string | null): TaskExecutionCiCommentFilters => {
   if (raw === null) {
     return DEFAULT_CI_COMMENT_FILTERS;
   }
 
-  const parsed: unknown = JSON.parse(raw);
-  if (!parsed || typeof parsed !== "object") {
+  const parsed = ciCommentFiltersSchema.safeParse(JSON.parse(raw));
+  if (!parsed.success) {
     throw new Error("Persisted CI comment filters are invalid.");
   }
-
-  const hideResolved = (parsed as { hideResolved?: unknown }).hideResolved;
-  if (typeof hideResolved !== "boolean") {
-    throw new Error("Persisted CI comment filters are invalid.");
-  }
-  return { hideResolved };
+  return parsed.data;
 };
 
 export const readTaskExecutionCiCommentFilters = (): TaskExecutionCiCommentFilters => {
-  if (typeof globalThis.localStorage === "undefined") {
+  if (globalThis.localStorage === undefined) {
     return DEFAULT_CI_COMMENT_FILTERS;
   }
 
@@ -39,7 +38,7 @@ export const readTaskExecutionCiCommentFilters = (): TaskExecutionCiCommentFilte
 export const persistTaskExecutionCiCommentFilters = (
   filters: TaskExecutionCiCommentFilters,
 ): void => {
-  if (typeof globalThis.localStorage === "undefined") {
+  if (globalThis.localStorage === undefined) {
     return;
   }
 

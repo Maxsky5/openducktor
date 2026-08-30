@@ -4,6 +4,12 @@ import { Effect } from "effect";
 import { runElectronHostInvoke } from "./electron-host-invoke";
 
 describe("runElectronHostInvoke", () => {
+  test("preserves void command results across the Electron boundary", async () => {
+    const response = await runElectronHostInvoke(Effect.void);
+
+    expect(response).toEqual({ ok: true, value: undefined });
+  });
+
   test("serializes terminal failures instead of losing their code across Electron IPC", async () => {
     const response = await runElectronHostInvoke(
       Effect.fail(

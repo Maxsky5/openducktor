@@ -23,6 +23,8 @@ import type {
   AgentSessionLiveListInput,
   AgentSessionLiveLoadContextInput,
   AgentSessionLiveLoadContextResult,
+  AgentSessionLiveLoadDiffInput,
+  AgentSessionLiveLoadDiffResult,
   AgentSessionLivePendingApprovalRequest,
   AgentSessionLivePendingQuestionRequest,
   AgentSessionLiveReadInput,
@@ -118,9 +120,16 @@ import type {
   GitWorktreeSummary,
   GlobalConfig,
   HorizontalScrollbarVisibility,
+  HostErrorResponse,
+  HostEventChannel,
+  HostEventEnvelope,
+  HostEventEnvelopeFor,
+  HostEventPayload,
+  HostEventWireEnvelope,
   IssueType,
   KanbanEmptyColumnDisplay,
   KanbanSettings,
+  McpBridgeDiscoveryFile,
   PersistedGlobalConfigV2,
   PlanSubtaskInput,
   PlanSubtaskIssueType,
@@ -295,15 +304,31 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentRuntimeEnabledConfigSchema",
   "agentRuntimeEventSchema",
   "agentRuntimesSchema",
+  "agentToolDataSchema",
   "agentToolNameSchema",
   "agentToolNameValues",
   "buildSessionBootstrapSchema",
   "mcpBridgeDevelopmentDiscoveryPathSegments",
+  "mcpBridgeDiscoveryFileSchema",
   "isDevelopmentInstanceId",
   "taskSessionBootstrapSchema",
   "LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT",
   "LOCAL_ATTACHMENT_BYTE_LIMIT",
   "classifyRuntimeDescriptorSchemaIssue",
+  "codexAppServerClientRequestSchema",
+  "codexAppServerReasoningEffortSchema",
+  "codexAppServerRequestParamsSchemas",
+  "codexAppServerRequestResultSchemaFor",
+  "codexAppServerConsumedRuntimeNotificationSchema",
+  "codexAppServerRuntimeNotificationRecordSchema",
+  "codexAppServerRuntimeNotificationSchema",
+  "codexAppServerRuntimeServerRequestRecordSchema",
+  "codexAppServerRuntimeServerRequestSchema",
+  "codexAppServerRuntimeStreamEventSchema",
+  "codexAppServerServerNotificationSchema",
+  "codexAppServerServerRequestSchema",
+  "codexAppServerTurnSchema",
+  "codexAppServerUnconsumedRuntimeNotificationSchema",
   "runtimeInstanceSummarySchema",
   "runtimeInstanceSummaryRoleSchema",
   "agentPromptOverrideSchema",
@@ -330,6 +355,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionLiveListInputSchema",
   "agentSessionLiveLoadContextInputSchema",
   "agentSessionLiveLoadContextResultSchema",
+  "agentSessionLiveLoadDiffInputSchema",
+  "agentSessionLiveLoadDiffResultSchema",
   "agentSessionLivePendingApprovalRequestSchema",
   "agentSessionLivePendingQuestionRequestSchema",
   "agentSessionLiveReadInputSchema",
@@ -353,9 +380,14 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionStatusSchema",
   "agentSessionStopTargetSchema",
   "agentSessionTodoItemSchema",
+  "agentSessionTodoPayloadListSchema",
+  "agentSessionTodoPayloadSchema",
+  "agentSessionTodoPrioritySchema",
+  "agentSessionTodoStatusSchema",
   "agentSessionTodosSchema",
   "agentSessionTranscriptEventSchema",
   "agentSessionUserMessagePartSchema",
+  "agentUserMessageEventSchema",
   "agentSessionUnboundAssociationSchema",
   "agentSessionWorkflowScopeSchema",
   "agentStreamPartSchema",
@@ -396,14 +428,19 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "autopilotRuleSchema",
   "autopilotSettingsSchema",
   "isAgentSessionTranscriptEventType",
-  "isCodexAppServerJsonValue",
-  "isCodexAppServerCommandAction",
   "isCodexAppServerCommandRequestMethod",
+  "isCodexAppServerConsumedRuntimeNotification",
+  "codexAppServerCommandActionSchema",
+  "codexAppServerCommandExecutionRequestApprovalParamsSchema",
+  "codexAppServerCurrentTimeReadParamsSchema",
+  "codexAppServerCurrentTimeReadResponseSchema",
+  "codexAppServerExecCommandApprovalParamsSchema",
+  "codexAppServerLegacyParsedCommandSchema",
+  "codexAppServerMcpServerElicitationRequestParamsSchema",
+  "codexAppServerPermissionsRequestApprovalParamsSchema",
+  "codexAppServerRequestPermissionProfileSchema",
   "isCodexAppServerFileMutationRequestMethod",
-  "isCodexAppServerLegacyParsedCommand",
-  "isCodexAppServerMcpServerElicitationRequestParams",
   "isCodexAppServerPermissionRequestMethod",
-  "isCodexAppServerRequestPermissionProfile",
   "isManualSessionCompactionSlashCommand",
   "isSameAgentModelFavorite",
   "claudeAgentModelCatalogSchema",
@@ -433,9 +470,11 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "claudeRuntimeWorkingDirectoryRefSchema",
   "claudeSearchAgentFilesInputSchema",
   "claudeWorkflowSessionScopeSchema",
-  "parseAgentSessionTodoPayloadEntry",
-  "parseAgentSessionTodoPayloadList",
+  "parseCodexAppServerClientRequest",
   "parseCodexAppServerRequestResult",
+  "parseCodexAppServerRuntimeNotificationRecord",
+  "parseCodexAppServerRuntimeServerRequestRecord",
+  "parseCodexAppServerRuntimeStreamEvent",
   "taskStoreCheckSchema",
   "formatRuntimeDescriptorSchemaIssue",
   "buildBlockedResultSchema",
@@ -563,6 +602,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "odtToolErrorIssueSchema",
   "odtToolErrorPayloadSchema",
   "odtToolErrorSchema",
+  "odtToolNameSchema",
   "ODT_HOST_BRIDGE_RESPONSE_SCHEMAS",
   "ODT_MCP_TOOL_NAMES",
   "ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES",
@@ -633,6 +673,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "runtimeExecutableCheckSchema",
   "runtimeDescriptorCatalogSchema",
   "runtimeDescriptorSchema",
+  "runtimeEnsureFailureSourceSchema",
   "runtimeForkTargetSchema",
   "runtimeForkTargetValues",
   "runtimeHistoryCapabilitiesSchema",
@@ -763,7 +804,15 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "TERMINAL_ID_MAX_LENGTH",
   "decodeTerminalProtocolFrame",
   "encodeTerminalProtocolFrame",
+  "HOST_COMMAND_NAMES",
+  "HOST_EVENT_CHANNELS",
+  "hostCommandInputRecordSchema",
+  "hostEventEnvelopeSchema",
+  "isHostEventChannel",
+  "parseHostEventChannel",
+  "parseHostEventEnvelope",
   "hostInvokeFailureSchema",
+  "hostErrorResponseSchema",
   "terminalClientMessageSchema",
   "terminalCloseRequestSchema",
   "terminalCloseResponseSchema",
@@ -801,6 +850,9 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "workspaceIdSchema",
   "workspaceNameSchema",
   "workspaceRecordSchema",
+  "workspaceRepoConfigInputSchema",
+  "workspaceRepoHooksInputSchema",
+  "workspaceRepoSettingsInputSchema",
   "workspaceTextFileReadResultSchema",
   "workspaceTextFileWriteFailureCodeSchema",
   "workspaceTextFileWriteFailureSchema",
@@ -830,6 +882,8 @@ type ExportedTypeContract = {
   AgentSessionLiveListInput: AgentSessionLiveListInput;
   AgentSessionLiveLoadContextInput: AgentSessionLiveLoadContextInput;
   AgentSessionLiveLoadContextResult: AgentSessionLiveLoadContextResult;
+  AgentSessionLiveLoadDiffInput: AgentSessionLiveLoadDiffInput;
+  AgentSessionLiveLoadDiffResult: AgentSessionLiveLoadDiffResult;
   AgentSessionLivePendingApprovalRequest: AgentSessionLivePendingApprovalRequest;
   AgentSessionLivePendingQuestionRequest: AgentSessionLivePendingQuestionRequest;
   AgentSessionLiveReadInput: AgentSessionLiveReadInput;
@@ -933,9 +987,16 @@ type ExportedTypeContract = {
   PersistedGlobalConfigV2: PersistedGlobalConfigV2;
   GeneralSettings: GeneralSettings;
   HorizontalScrollbarVisibility: HorizontalScrollbarVisibility;
+  HostErrorResponse: HostErrorResponse;
+  HostEventChannel: HostEventChannel;
+  HostEventEnvelope: HostEventEnvelope;
+  HostEventEnvelopeFor: HostEventEnvelopeFor<HostEventChannel>;
+  HostEventPayload: HostEventPayload<HostEventChannel>;
+  HostEventWireEnvelope: HostEventWireEnvelope;
   KanbanEmptyColumnDisplay: KanbanEmptyColumnDisplay;
   KanbanSettings: KanbanSettings;
   IssueType: IssueType;
+  McpBridgeDiscoveryFile: McpBridgeDiscoveryFile;
   PlanSubtaskInput: PlanSubtaskInput;
   PlanSubtaskIssueType: PlanSubtaskIssueType;
   PlanSubtaskPriority: PlanSubtaskPriority;

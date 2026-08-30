@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   failureKindSchema,
   type HostInvokeFailure,
+  hostErrorResponseSchema,
   hostInvokeFailureSchema,
   TERMINAL_PROTOCOL_SUBPROTOCOL,
 } from "@openducktor/contracts";
@@ -20,11 +21,13 @@ import {
   type ToolDiscoveryId,
 } from "@openducktor/host";
 import { Cause, Effect } from "effect";
+import { z } from "zod";
 import {
   causeToWebBoundaryError,
   errorMessage,
   runWebBoundary,
   toWebOperationError,
+  type WebHostCommandErrorDetails,
   WebHostRequestError,
   WebOperationError,
 } from "./effect/web-errors";
@@ -33,6 +36,7 @@ import { routeTaskAssetHttpRequest } from "./task-asset-http-server";
 import {
   routeTaskEventHttpRequest,
   TASK_EVENT_STREAM_TOKEN_HEADER,
+  type WebRequestBody,
   writeTaskFrameSseEvent,
 } from "./task-event-http-server";
 import { createTaskEventLeaseManager, type TaskEventLeaseManager } from "./task-event-leases";
@@ -41,6 +45,7 @@ import {
   type TerminalWebSocketData,
   terminalWebSocketHandler,
 } from "./terminals/terminal-websocket-handler";
+
 import {
   allowedOriginsForFrontendOrigin,
   type BufferedHostEvent,
@@ -57,10 +62,17 @@ export type TypescriptHostBackendOptions = {
   appToken: string;
   logger: WebLogger;
   mcpBridgeDiscoveryMode: McpBridgeDiscoveryMode;
-  onBackgroundFailure(failure: unknown): void;
+  onBackgroundFailure(cause: unknown): void;
   processEnv?: NodeJS.ProcessEnv;
   runtimeDistribution: HostRuntimeDistribution;
   providedToolPaths?: Partial<Record<ToolDiscoveryId, string>>;
+};
+
+type HostErrorPayloadInput = {
+  error: string;
+  message: string;
+  failureKind?: string;
+  failure?: HostInvokeFailure;
 };
 
 const scheduleNonFatalWebEventFailure = (
@@ -70,9 +82,9 @@ const scheduleNonFatalWebEventFailure = (
 ): void => {
   void runWebBoundary(
     writeWebLogEffect(logger, "error", `${message} ${errorMessage(cause)}`),
-  ).catch((loggingCause: unknown) => {
+  ).catch((cause: unknown) => {
     console.error(
-      `OpenDucktor web non-fatal event delivery reporting failed: ${errorMessage(loggingCause)}`,
+      `OpenDucktor web non-fatal event delivery reporting failed: ${errorMessage(cause)}`,
     );
   });
 };
@@ -123,7 +135,7 @@ const tryUpgradeTerminalWebSocket = ({
   appToken: string;
   hostCommandRouter: EffectNodeHostCommandRouter;
   logger: WebLogger;
-  onBackgroundFailure(failure: unknown): void;
+  onBackgroundFailure(cause: unknown): void;
   request: Request;
   server: Bun.Server<TerminalWebSocketData>;
   shutdownStarted: boolean;
@@ -173,13 +185,13 @@ const tryUpgradeTerminalWebSocket = ({
   };
 };
 
-const jsonResponseBody = (payload: unknown): string => {
+const jsonResponseBody = <const Payload>(payload: Payload): string => {
   const serialized = JSON.stringify(payload);
   return serialized === undefined ? "null" : serialized;
 };
 
-const jsonResponse = (
-  payload: unknown,
+const jsonResponse = <const Payload>(
+  payload: Payload,
   init: ResponseInit = {},
   corsHeaders?: HeadersInit,
 ): Response =>
@@ -198,17 +210,16 @@ const errorResponse = (
   corsHeaders?: HeadersInit,
   failureKind?: string,
   failure?: HostInvokeFailure,
-): Response =>
-  jsonResponse(
-    {
-      error: message,
-      message,
-      ...(failureKind ? { failureKind } : {}),
-      ...(failure ? { failure } : {}),
-    },
-    { status },
-    corsHeaders,
-  );
+): Response => {
+  const payload: HostErrorPayloadInput = { error: message, message };
+  if (failureKind) {
+    payload.failureKind = failureKind;
+  }
+  if (failure) {
+    payload.failure = failure;
+  }
+  return jsonResponse(hostErrorResponseSchema.parse(payload), { status }, corsHeaders);
+};
 
 const corsHeadersForRequest = (
   request: Request,
@@ -250,63 +261,65 @@ const preflightResponse = (request: Request, allowedOrigins: Set<string>): Respo
   });
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+const hostFailureDetailsSchema = z.object({ failureKind: failureKindSchema.optional() });
+const hostFailureCauseSchema = z.object({
+  cause: z.unknown().optional(),
+  details: hostFailureDetailsSchema.optional(),
+  failureKind: failureKindSchema.optional(),
+});
+const webHostRequestDetailsSchema = z.object({
+  hostInvokeFailure: hostInvokeFailureSchema.optional(),
+});
 
-const readUnknownProperty = (value: unknown, property: string): unknown =>
-  isRecord(value) ? value[property] : undefined;
-
-const readValidFailureKind = (value: unknown): string | undefined => {
-  const parsed = failureKindSchema.safeParse(value);
-  return parsed.success ? parsed.data : undefined;
+const readCauseStructuredDetails = (cause: unknown) => {
+  const parsed = hostFailureCauseSchema.safeParse(cause);
+  return parsed.success ? parsed.data.details : undefined;
 };
 
-const readStructuredDetails = (value: unknown): Record<string, unknown> | undefined => {
-  const details = readUnknownProperty(value, "details");
-  return isRecord(details) ? details : undefined;
+const extractHostCommandFailureKind = (cause: unknown): string | undefined => {
+  const visitedCauses = new Set<unknown>();
+  let currentCause = cause;
+
+  while (true) {
+    const parsed = hostFailureCauseSchema.safeParse(currentCause);
+    if (!parsed.success) return undefined;
+
+    const direct = parsed.data.failureKind;
+    if (direct) return direct;
+
+    const detailsFailureKind = parsed.data.details?.failureKind;
+    if (detailsFailureKind) return detailsFailureKind;
+
+    const nextCause = parsed.data.cause;
+    if (visitedCauses.has(nextCause)) return undefined;
+    visitedCauses.add(nextCause);
+    currentCause = nextCause;
+  }
 };
 
-const extractHostCommandFailureKind = (
-  value: unknown,
-  visited = new Set<object>(),
-): string | undefined => {
-  if (!isRecord(value)) {
-    return undefined;
+const hostCommandFailureToWebError = (command: string, cause: unknown): WebHostRequestError => {
+  const failureKind = extractHostCommandFailureKind(cause);
+  const details = readCauseStructuredDetails(cause);
+  const hostInvokeFailure = hostInvokeFailureFromError(cause);
+  const errorDetails: WebHostCommandErrorDetails = { command };
+  if (details) {
+    if (details.failureKind === undefined) {
+      errorDetails.hostDetails = {};
+    } else {
+      errorDetails.hostDetails = { failureKind: details.failureKind };
+    }
   }
-  if (visited.has(value)) {
-    return undefined;
+  if (hostInvokeFailure) {
+    errorDetails.hostInvokeFailure = hostInvokeFailure;
   }
-  visited.add(value);
-
-  const direct = readValidFailureKind(readUnknownProperty(value, "failureKind"));
-  if (direct) {
-    return direct;
-  }
-
-  const details = readStructuredDetails(value);
-  const detailsFailureKind = readValidFailureKind(readUnknownProperty(details, "failureKind"));
-  if (detailsFailureKind) {
-    return detailsFailureKind;
-  }
-
-  return extractHostCommandFailureKind(readUnknownProperty(value, "cause"), visited);
-};
-
-const hostCommandFailureToWebError = (command: string, error: unknown): WebHostRequestError => {
-  const failureKind = extractHostCommandFailureKind(error);
-  const details = readStructuredDetails(error);
-  const hostInvokeFailure = hostInvokeFailureFromError(error);
-  return new WebHostRequestError({
-    message: errorMessage(error),
+  const input = {
+    message: errorMessage(cause),
     status: 500,
-    cause: error,
-    details: {
-      command,
-      ...(details ? { hostDetails: details } : {}),
-      ...(hostInvokeFailure ? { hostInvokeFailure } : {}),
-    },
-    ...(failureKind ? { failureKind } : {}),
-  });
+    cause,
+    details: errorDetails,
+  };
+  if (failureKind) return new WebHostRequestError({ ...input, failureKind });
+  return new WebHostRequestError(input);
 };
 
 const validateExpectedToken = (
@@ -473,11 +486,7 @@ const webHostRequestErrorResponse = (
   error: WebHostRequestError,
   corsHeaders: HeadersInit,
 ): Response => {
-  const hostInvokeFailureValue = error.details?.hostInvokeFailure;
-  const hostInvokeFailure =
-    hostInvokeFailureValue === undefined
-      ? undefined
-      : hostInvokeFailureSchema.parse(hostInvokeFailureValue);
+  const { hostInvokeFailure } = webHostRequestDetailsSchema.parse(error.details ?? {});
   return errorResponse(
     error.message,
     error.status,
@@ -487,24 +496,25 @@ const webHostRequestErrorResponse = (
   );
 };
 
-const isJsonObject = (value: unknown): value is Record<string, unknown> => isRecord(value);
+const webRequestBodySchema = z.record(z.string(), z.json());
 
 const parseJsonObjectBody = (
   request: Request,
-): Effect.Effect<Record<string, unknown>, WebHostRequestError> =>
+): Effect.Effect<WebRequestBody, WebHostRequestError> =>
   Effect.gen(function* () {
-    const parsed: unknown = yield* Effect.tryPromise({
-      try: () => request.json(),
+    const parsed = yield* Effect.tryPromise({
+      try: async () => z.json().parse(await request.json()),
       catch: (error) =>
         new WebHostRequestError({
           message: error instanceof Error ? error.message : "Malformed JSON request body.",
           status: 400,
         }),
     });
-    if (!isJsonObject(parsed)) {
+    const body = webRequestBodySchema.safeParse(parsed);
+    if (!body.success) {
       return yield* rejectWebHostRequest("Command request body must be a JSON object.", 400);
     }
-    return parsed;
+    return body.data;
   });
 
 const parseLastEventId = (request: Request): Effect.Effect<number | null, WebHostRequestError> =>
@@ -646,10 +656,10 @@ const routeCorsRequest = ({
       yield* Effect.sync(() => {
         beginShutdown();
         setTimeout(() => {
-          void stop().catch((error: unknown) => {
-            void runWebBoundary(writeWebLogEffect(logger, "error", errorMessage(error))).catch(
-              (logError: unknown) => {
-                console.error(errorMessage(logError));
+          void stop().catch((cause: unknown) => {
+            void runWebBoundary(writeWebLogEffect(logger, "error", errorMessage(cause))).catch(
+              (cause: unknown) => {
+                console.error(errorMessage(cause));
                 process.exitCode = 1;
               },
             );
@@ -659,7 +669,7 @@ const routeCorsRequest = ({
       return jsonResponse({ ok: true }, { status: 202 }, corsHeaders);
     }
 
-    const taskEventResponse = yield* routeTaskEventHttpRequest({
+    const taskEventContext: Parameters<typeof routeTaskEventHttpRequest>[0] = {
       appToken,
       controlToken,
       corsHeaders,
@@ -667,12 +677,15 @@ const routeCorsRequest = ({
       request,
       requestTimeouts,
       shutdownStarted,
-      ...(taskEventLeaseManager ? { taskEventLeaseManager } : {}),
       validateAppCookieOrHeader: (sessionRequest, expectedToken) =>
         validateAppCookieOrHeader(sessionRequest, expectedToken, appSessionCookieName),
       validateAppSessionCookie: (sessionRequest, expectedToken) =>
         validateAppSessionCookie(sessionRequest, expectedToken, appSessionCookieName),
-    });
+    };
+    if (taskEventLeaseManager) {
+      taskEventContext.taskEventLeaseManager = taskEventLeaseManager;
+    }
+    const taskEventResponse = yield* routeTaskEventHttpRequest(taskEventContext);
     if (taskEventResponse) {
       return taskEventResponse;
     }
@@ -793,14 +806,13 @@ export const handleTypescriptHostBackendRequest = ({
       return corsHeaders;
     }
 
-    return yield* routeCorsRequest({
+    const routeInput: Parameters<typeof routeCorsRequest>[0] = {
       appSessionCookieName,
       appToken,
       controlToken,
       corsHeaders,
       eventBus,
       hostCommandRouter,
-      ...(taskEventLeaseManager ? { taskEventLeaseManager } : {}),
       taskAssetReadService,
       localAttachments,
       logger,
@@ -809,7 +821,11 @@ export const handleTypescriptHostBackendRequest = ({
       shutdownStarted,
       beginShutdown,
       stop,
-    }).pipe(
+    };
+    if (taskEventLeaseManager) {
+      routeInput.taskEventLeaseManager = taskEventLeaseManager;
+    }
+    return yield* routeCorsRequest(routeInput).pipe(
       Effect.catchAll((error) => Effect.succeed(webHostRequestErrorResponse(error, corsHeaders))),
     );
   });
@@ -846,14 +862,14 @@ export const startTypescriptHostBackendEffect = ({
       shutdownStarted = true;
     };
     let stopPromise: Promise<void> | null = null;
-    let rejectExited: (failure: unknown) => void = () => {};
+    let rejectExited: (cause: unknown) => void = () => {};
     let resolveExited: (exitCode: number) => void = () => {};
     let server: TypescriptHostBackendServer;
     const exited = new Promise<number>((resolve, reject) => {
       rejectExited = reject;
       resolveExited = resolve;
     });
-    const hostCommandRouter: EffectNodeHostCommandRouter = createNodeEffectHostCommandRouter({
+    const routerInput: Parameters<typeof createNodeEffectHostCommandRouter>[0] = {
       eventBus,
       lifecycleLogger: {
         error: logger.error,
@@ -876,11 +892,17 @@ export const startTypescriptHostBackendEffect = ({
             ),
           ),
       },
-      ...(processEnv ? { processEnv } : {}),
-      ...(providedToolPaths ? { providedToolPaths } : {}),
       runtimeDistribution,
       terminalPty: createBunPtyPort(),
-    });
+    };
+    if (processEnv) {
+      routerInput.processEnv = processEnv;
+    }
+    if (providedToolPaths) {
+      routerInput.providedToolPaths = providedToolPaths;
+    }
+    const hostCommandRouter: EffectNodeHostCommandRouter =
+      createNodeEffectHostCommandRouter(routerInput);
     const taskEventLeaseManager = createTaskEventLeaseManager({
       encodeFrame: writeTaskFrameSseEvent,
       reportDeliveryFailure: ({ cause, subscriptionId }) =>

@@ -1,4 +1,5 @@
 import type { AppUpdater, Logger, ProgressInfo } from "electron-updater";
+import { z } from "zod";
 import { ElectronOperationError } from "../../effect/electron-errors";
 import { createElectronDetachedTaskOwner } from "../electron-main-task-owner";
 import type {
@@ -202,10 +203,11 @@ export const createElectronUpdaterAdapter = ({
       const nativeResult = await updater.checkForUpdates();
       requireActive("electron.updater.download");
       const nativeVersion = nativeResult?.updateInfo.version;
+      const parsedNativeVersion = z.string().safeParse(nativeVersion);
       if (
         !nativeResult?.isUpdateAvailable ||
-        typeof nativeVersion !== "string" ||
-        nativeVersion !== resolvedRelease.version
+        !parsedNativeVersion.success ||
+        parsedNativeVersion.data !== resolvedRelease.version
       ) {
         throw new ElectronOperationError({
           operation: "electron.updater.validate-download-release",

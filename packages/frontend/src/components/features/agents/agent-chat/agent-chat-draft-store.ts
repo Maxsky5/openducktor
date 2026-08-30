@@ -1,4 +1,5 @@
 import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
+import { scheduleTask, type ScheduleTask } from "@/lib/scheduling";
 import {
   type AgentChatComposerAttachment,
   type AgentChatComposerDraft,
@@ -14,7 +15,6 @@ import {
   writeAgentChatDraftToStorage,
 } from "./agent-chat-draft-storage";
 
-type DraftTimerId = ReturnType<typeof globalThis.setTimeout>;
 type DraftStorage = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">;
 type AttachmentStager = (file: File) => Promise<string>;
 type PersistenceErrorReporter = (error: Error) => void;
@@ -30,8 +30,8 @@ type DraftMemoryEntry = {
   version: number;
   userVersion: number;
   persistedVersion: number;
-  maxTimeoutId: DraftTimerId | null;
-  trailingTimeoutId: DraftTimerId | null;
+  cancelMaxFlush: (() => void) | null;
+  cancelTrailingFlush: (() => void) | null;
   isFlushing: boolean;
   flushRequestedAfterCurrent: boolean;
   flushPromise: Promise<void> | null;
@@ -50,6 +50,7 @@ const draftEntries = new Map<string, DraftMemoryEntry>();
 let storageOverride: DraftStorage | null = null;
 let attachmentStager: AttachmentStager = stageLocalAttachmentFile;
 let nowProvider = (): Date => new Date();
+let scheduleDraftTask: ScheduleTask = scheduleTask;
 let persistenceErrorReporter: PersistenceErrorReporter = (error) => {
   console.error(error);
 };
@@ -59,14 +60,14 @@ const getDraftStorage = (): DraftStorage => {
   if (storageOverride) {
     return storageOverride;
   }
-  if (typeof globalThis.localStorage === "undefined") {
+  if (globalThis.localStorage === undefined) {
     throw new Error("Chat draft persistence is unavailable because localStorage is missing.");
   }
   return globalThis.localStorage;
 };
 
-const reportPersistenceError = (error: unknown): void => {
-  persistenceErrorReporter(error instanceof Error ? error : new Error(String(error)));
+const reportPersistenceError = (cause: unknown): void => {
+  persistenceErrorReporter(cause instanceof Error ? cause : new Error(String(cause)));
 };
 
 const createEntry = (
@@ -80,8 +81,8 @@ const createEntry = (
   version: 0,
   userVersion: 0,
   persistedVersion: 0,
-  maxTimeoutId: null,
-  trailingTimeoutId: null,
+  cancelMaxFlush: null,
+  cancelTrailingFlush: null,
   isFlushing: false,
   flushRequestedAfterCurrent: false,
   flushPromise: null,
@@ -90,14 +91,10 @@ const createEntry = (
 });
 
 const clearEntryTimers = (entry: DraftMemoryEntry): void => {
-  if (entry.maxTimeoutId !== null) {
-    globalThis.clearTimeout(entry.maxTimeoutId);
-    entry.maxTimeoutId = null;
-  }
-  if (entry.trailingTimeoutId !== null) {
-    globalThis.clearTimeout(entry.trailingTimeoutId);
-    entry.trailingTimeoutId = null;
-  }
+  entry.cancelMaxFlush?.();
+  entry.cancelMaxFlush = null;
+  entry.cancelTrailingFlush?.();
+  entry.cancelTrailingFlush = null;
 };
 
 const readEntry = (identity: AgentChatDraftSessionIdentity): DraftMemoryEntry | null =>
@@ -127,16 +124,14 @@ const scheduleEntryFlush = (entry: DraftMemoryEntry): void => {
     return;
   }
 
-  if (entry.maxTimeoutId === null) {
-    entry.maxTimeoutId = globalThis.setTimeout(() => {
+  if (entry.cancelMaxFlush === null) {
+    entry.cancelMaxFlush = scheduleDraftTask(() => {
       void flushAgentChatDraft(entry.identity);
     }, MAX_WAIT_MS);
   }
 
-  if (entry.trailingTimeoutId !== null) {
-    globalThis.clearTimeout(entry.trailingTimeoutId);
-  }
-  entry.trailingTimeoutId = globalThis.setTimeout(() => {
+  entry.cancelTrailingFlush?.();
+  entry.cancelTrailingFlush = scheduleDraftTask(() => {
     void flushAgentChatDraft(entry.identity);
   }, TRAILING_WAIT_MS);
 };
@@ -356,7 +351,8 @@ export const clearAgentChatDraft = (
   const key = toAgentChatDraftStorageKey(identity);
   const entry = draftEntries.get(key);
   if (
-    typeof options?.onlyIfVersion === "number" &&
+    options?.onlyIfVersion !== undefined &&
+    options.onlyIfVersion !== null &&
     entry &&
     entry.userVersion !== options.onlyIfVersion
   ) {
@@ -481,6 +477,10 @@ export const setAgentChatDraftNowProviderForTests = (provider: (() => Date) | nu
   nowProvider = provider ?? (() => new Date());
 };
 
+export const setAgentChatDraftScheduleTaskForTests = (scheduler: ScheduleTask | null): void => {
+  scheduleDraftTask = scheduler ?? scheduleTask;
+};
+
 export const resetAgentChatDraftStoreForTests = (): void => {
   for (const entry of draftEntries.values()) {
     clearEntryTimers(entry);
@@ -489,6 +489,7 @@ export const resetAgentChatDraftStoreForTests = (): void => {
   storageOverride = null;
   attachmentStager = stageLocalAttachmentFile;
   nowProvider = () => new Date();
+  scheduleDraftTask = scheduleTask;
   didRunExpiredCleanup = false;
   persistenceErrorReporter = (error) => {
     console.error(error);

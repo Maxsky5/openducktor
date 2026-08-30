@@ -37,12 +37,12 @@ type SessionBootstrap = NonNullable<RuntimeInfo["bootstrap"]>;
 
 const describeRollbackStep = (
   failed: boolean,
-  error: unknown,
+  cause: unknown,
   failurePrefix: string,
   successMessage: string,
 ): string => {
   if (failed) {
-    return `${failurePrefix}: ${errorMessage(error)}.`;
+    return `${failurePrefix}: ${errorMessage(cause)}.`;
   }
   return successMessage;
 };
@@ -112,7 +112,7 @@ export const rollbackStartedSessionAfterPersistenceFailure = async ({
   bootstrap?: SessionBootstrap;
 }): Promise<never> => {
   const externalSessionId = startedCtx.summary.externalSessionId;
-  return rollbackRegisteredStartedSession({
+  const input: Parameters<typeof rollbackRegisteredStartedSession>[0] = {
     message: `Failed to persist started session "${externalSessionId}": ${errorMessage(error)}.`,
     cause: error,
     startedCtx,
@@ -120,8 +120,11 @@ export const rollbackStartedSessionAfterPersistenceFailure = async ({
     session,
     runtime,
     stopReason: "start-session-stop-after-persist-failure",
-    ...(bootstrap ? { bootstrap } : {}),
-  });
+  };
+  if (bootstrap) {
+    input.bootstrap = bootstrap;
+  }
+  return rollbackRegisteredStartedSession(input);
 };
 
 export const rollbackRegisteredStartedSession = async ({

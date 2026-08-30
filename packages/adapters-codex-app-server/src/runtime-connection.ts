@@ -6,7 +6,7 @@ export const resolveCodexRuntimeClientInput = (
   runtime: RepoRuntimeRouteResolution,
   input: RepoRuntimeRef,
   action: string,
-): { runtimeId: string } => {
+) => {
   const ref = requireRepoRuntimeRef(input, action);
   if (ref.runtimeKind !== "codex") {
     throw new Error(`Codex App Server can only ${action} for runtime 'codex'.`);
@@ -27,5 +27,5 @@ export const resolveCodexRuntimeClientInput = (
     );
   }
 
-  return { runtimeId: runtime.runtimeId };
+  return { runtimeId: runtime.runtimeId } satisfies { runtimeId: string };
 };

@@ -260,6 +260,9 @@ describe("asset-aware task store compensation", () => {
 
     expect(error.failedPhase).toBe("register_assets");
     expect(resolverCalls).toBe(1);
+    if (!error.taskId) {
+      throw new Error("Expected the create failure to retain its generated task ID.");
+    }
     expect(
       await Effect.runPromise(harness.innerStore.listTasks({ repoPath: harness.repoPath })),
     ).toEqual([]);
@@ -267,7 +270,7 @@ describe("asset-aware task store compensation", () => {
       await Effect.runPromise(
         harness.filePort.readDurable({
           workspaceId: "fairnest",
-          taskId: error.taskId as string,
+          taskId: error.taskId,
           assetId: staged.assetId,
         }),
       ),

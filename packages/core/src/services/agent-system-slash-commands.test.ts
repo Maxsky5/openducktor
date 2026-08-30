@@ -79,9 +79,12 @@ describe("classifySystemSlashCommandInvocation", () => {
       attachment: { id: "a", path: "a.png", name: "a.png", kind: "image" },
     },
     compactPart(),
-  ] as AgentUserMessagePart[])("rejects unsupported additional part %#", (additionalPart) => {
-    expect(() => classifySystemSlashCommandInvocation([compactPart(), additionalPart])).toThrow(
-      "must be sent without arguments or references",
-    );
-  });
+  ] satisfies AgentUserMessagePart[])(
+    "rejects unsupported additional part %#",
+    (additionalPart) => {
+      expect(() => classifySystemSlashCommandInvocation([compactPart(), additionalPart])).toThrow(
+        "must be sent without arguments or references",
+      );
+    },
+  );
 });

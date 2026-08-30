@@ -1,4 +1,14 @@
-import { agentRoleSchema } from "@openducktor/contracts";
+import {
+  agentRoleSchema,
+  planSubtaskInputSchema,
+  pullRequestSchema,
+  taskAssetDescriptionMutationSchema,
+  taskCreateInputSchema,
+  taskDirectMergeInputSchema,
+  taskStatusSchema,
+  taskUpdatePatchSchema,
+} from "@openducktor/contracts";
+import { z } from "zod";
 import type {
   AgentSessionDeleteInput,
   AgentSessionUpsertInput,
@@ -27,6 +37,8 @@ import type {
 import { HostValidationError } from "../../effect/host-errors";
 import {
   compactAgentSessionForStorage,
+  normalizedAgentSessionIdentitySchema,
+  normalizedAgentSessionRecordSchema,
   optionalBoolean,
   optionalNonNegativeInteger,
   parseAgentSessionIdentity,
@@ -41,200 +53,284 @@ import {
   parseTaskDirectMergeInput,
   parseTransitionStatus,
   parseUpdatePatch,
-  requireRecord,
   requireString,
 } from "./task-command-parsing";
+import {
+  commandInputRecordSchema,
+  type CommandInputRecord,
+  type HostCommandArgs,
+  requireParsedRecord,
+} from "./command-inputs";
 
-export const parseRepoPathInput = (input: unknown, label: string): RepoPathInput => {
-  const record = requireRecord(input, label);
-  return { repoPath: requireString(record.repoPath, "repoPath") };
+const optionalNonNegativeIntegerSchema = z.union([
+  z.number().int().nonnegative(),
+  z.null(),
+  z.undefined(),
+]);
+const optionalBooleanSchema = z.union([z.boolean(), z.null(), z.undefined()]);
+const optionalStringSchema = z.union([z.string(), z.null(), z.undefined()]);
+const taskIdsSchema = z.array(z.unknown());
+
+const readRequiredString = (record: CommandInputRecord, key: string, label: string = key): string =>
+  requireString(z.string().safeParse(record[key]), label);
+
+export const parseRepoPathInput = (input: HostCommandArgs, label: string): RepoPathInput => {
+  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), label);
+  return { repoPath: readRequiredString(record, "repoPath") };
 };
 
-export const parseTaskIdInput = (input: unknown, label: string): TaskIdInput => {
-  const record = requireRecord(input, label);
+export const parseTaskIdInput = (input: HostCommandArgs, label: string): TaskIdInput => {
+  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), label);
   return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    taskId: requireString(record.taskId, "taskId"),
+    repoPath: readRequiredString(record, "repoPath"),
+    taskId: readRequiredString(record, "taskId"),
   };
 };
 
-export const parseListTasksInput = (input: unknown): ListTasksInput => {
-  const record = requireRecord(input, "tasks_list input");
-  const repoPath = requireString(record.repoPath, "repoPath");
-  const doneVisibleDays = optionalNonNegativeInteger(record.doneVisibleDays, "doneVisibleDays");
+export const parseListTasksInput = (input: HostCommandArgs): ListTasksInput => {
+  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), "tasks_list input");
+  const repoPath = readRequiredString(record, "repoPath");
+  const doneVisibleDays = optionalNonNegativeInteger(
+    optionalNonNegativeIntegerSchema.safeParse(record.doneVisibleDays),
+    "doneVisibleDays",
+  );
   return doneVisibleDays === undefined ? { repoPath } : { repoPath, doneVisibleDays };
 };
 
 export const parseListAgentSessionsForTasksInput = (
-  input: unknown,
+  input: HostCommandArgs,
 ): ListAgentSessionsForTasksInput => {
-  const record = requireRecord(input, "agent_sessions_list_for_tasks input");
-  if (!Array.isArray(record.taskIds)) {
+  const record = requireParsedRecord(
+    commandInputRecordSchema.safeParse(input),
+    "agent_sessions_list_for_tasks input",
+  );
+  const parsedTaskIds = taskIdsSchema.safeParse(record.taskIds);
+  if (!parsedTaskIds.success) {
     throw new HostValidationError({
       message: "taskIds must be an array of strings.",
       field: "taskIds",
-      details: { value: record.taskIds },
+      cause: parsedTaskIds.error,
     });
   }
-  const taskIds = record.taskIds.map((taskId, index) => {
+  const taskIds = parsedTaskIds.data.map((taskId, index) => {
     const field = `taskIds[${index}]`;
-    if (typeof taskId !== "string") {
+    const parsedTaskId = z.string().safeParse(taskId);
+    if (!parsedTaskId.success) {
       throw new HostValidationError({
         message: `${field} must be a string.`,
         field,
-        details: { value: taskId },
+        cause: parsedTaskId.error,
       });
     }
-    return requireString(taskId, field);
+    return requireString(parsedTaskId, field);
   });
 
   return {
-    repoPath: requireString(record.repoPath, "repoPath"),
+    repoPath: readRequiredString(record, "repoPath"),
     taskIds: Array.from(new Set(taskIds)),
   };
 };
 
-export const parseAgentSessionUpsertInput = (input: unknown): AgentSessionUpsertInput => {
-  const record = requireRecord(input, "agent_session_upsert input");
+export const parseAgentSessionUpsertInput = (input: HostCommandArgs): AgentSessionUpsertInput => {
+  const record = requireParsedRecord(
+    commandInputRecordSchema.safeParse(input),
+    "agent_session_upsert input",
+  );
   return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    taskId: requireString(record.taskId, "taskId"),
-    session: compactAgentSessionForStorage(parseAgentSessionRecord(record.session)),
+    repoPath: readRequiredString(record, "repoPath"),
+    taskId: readRequiredString(record, "taskId"),
+    session: compactAgentSessionForStorage(
+      parseAgentSessionRecord(normalizedAgentSessionRecordSchema.safeParse(record.session)),
+    ),
   };
 };
 
-export const parseAgentSessionDeleteInput = (input: unknown): AgentSessionDeleteInput => {
-  const record = requireRecord(input, "agent_session_delete input");
+export const parseAgentSessionDeleteInput = (input: HostCommandArgs): AgentSessionDeleteInput => {
+  const record = requireParsedRecord(
+    commandInputRecordSchema.safeParse(input),
+    "agent_session_delete input",
+  );
   return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    taskId: requireString(record.taskId, "taskId"),
-    identity: parseAgentSessionIdentity(record.identity),
+    repoPath: readRequiredString(record, "repoPath"),
+    taskId: readRequiredString(record, "taskId"),
+    identity: parseAgentSessionIdentity(
+      normalizedAgentSessionIdentitySchema.safeParse(record.identity),
+    ),
   };
 };
 
-export const parsePullRequestUpsertInput = (input: unknown): PullRequestUpsertInput => {
-  const record = requireRecord(input, "task_pull_request_upsert input");
+export const parsePullRequestUpsertInput = (input: HostCommandArgs): PullRequestUpsertInput => {
+  const record = requireParsedRecord(
+    commandInputRecordSchema.safeParse(input),
+    "task_pull_request_upsert input",
+  );
   return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    taskId: requireString(record.taskId, "taskId"),
-    content: parsePullRequestContent(record.input),
+    repoPath: readRequiredString(record, "repoPath"),
+    taskId: readRequiredString(record, "taskId"),
+    content: parsePullRequestContent(commandInputRecordSchema.safeParse(record.input)),
   };
 };
 
-export const parsePullRequestLinkMergedInput = (input: unknown): PullRequestLinkMergedInput => {
-  const record = requireRecord(input, "task_pull_request_link_merged input");
+export const parsePullRequestLinkMergedInput = (
+  input: HostCommandArgs,
+): PullRequestLinkMergedInput => {
+  const record = requireParsedRecord(
+    commandInputRecordSchema.safeParse(input),
+    "task_pull_request_link_merged input",
+  );
   return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    taskId: requireString(record.taskId, "taskId"),
-    pullRequest: parsePullRequest(record.pullRequest),
+    repoPath: readRequiredString(record, "repoPath"),
+    taskId: readRequiredString(record, "taskId"),
+    pullRequest: parsePullRequest(pullRequestSchema.safeParse(record.pullRequest)),
   };
 };
 
-export const parseDirectMergeInput = (input: unknown): DirectMergeInput => {
-  const record = requireRecord(input, "task_direct_merge input");
+export const parseDirectMergeInput = (input: HostCommandArgs): DirectMergeInput => {
+  const record = requireParsedRecord(
+    commandInputRecordSchema.safeParse(input),
+    "task_direct_merge input",
+  );
   return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    taskId: requireString(record.taskId, "taskId"),
-    input: parseTaskDirectMergeInput(record.input),
+    repoPath: readRequiredString(record, "repoPath"),
+    taskId: readRequiredString(record, "taskId"),
+    input: parseTaskDirectMergeInput(taskDirectMergeInputSchema.safeParse(record.input)),
   };
 };
 
-export const parseCreateTaskInput = (input: unknown): CreateTaskUseCaseInput => {
-  const record = requireRecord(input, "task_create input");
-  const descriptionAssets = parseDescriptionAssets(record.descriptionAssets);
+export const parseCreateTaskInput = (input: HostCommandArgs): CreateTaskUseCaseInput => {
+  const record = requireParsedRecord(
+    commandInputRecordSchema.safeParse(input),
+    "task_create input",
+  );
+  const descriptionAssets = parseDescriptionAssets(
+    taskAssetDescriptionMutationSchema.optional().safeParse(record.descriptionAssets),
+  );
+  const result: CreateTaskUseCaseInput = {
+    repoPath: readRequiredString(record, "repoPath"),
+    task: parseCreateInput(taskCreateInputSchema.safeParse(record.input)),
+  };
+  if (descriptionAssets) {
+    result.descriptionAssets = descriptionAssets;
+  }
+  return result;
+};
+
+export const parseDeleteTaskInput = (input: HostCommandArgs): DeleteTaskInput => {
+  const record = requireParsedRecord(
+    commandInputRecordSchema.safeParse(input),
+    "task_delete input",
+  );
   return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    task: parseCreateInput(record.input),
-    ...(descriptionAssets ? { descriptionAssets } : {}),
+    repoPath: readRequiredString(record, "repoPath"),
+    taskId: readRequiredString(record, "taskId"),
+    deleteSubtasks:
+      optionalBoolean(optionalBooleanSchema.safeParse(record.deleteSubtasks), "deleteSubtasks") ??
+      false,
   };
 };
 
-export const parseDeleteTaskInput = (input: unknown): DeleteTaskInput => {
-  const record = requireRecord(input, "task_delete input");
-  return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    taskId: requireString(record.taskId, "taskId"),
-    deleteSubtasks: optionalBoolean(record.deleteSubtasks, "deleteSubtasks") ?? false,
-  };
-};
-
-export const parseUpdateTaskInput = (input: unknown): UpdateTaskInput => {
-  const record = requireRecord(input, "task_update input");
-  const patch = parseUpdatePatch(record.patch);
-  const descriptionAssets = parseDescriptionAssets(record.descriptionAssets);
+export const parseUpdateTaskInput = (input: HostCommandArgs): UpdateTaskInput => {
+  const record = requireParsedRecord(
+    commandInputRecordSchema.safeParse(input),
+    "task_update input",
+  );
+  const patch = parseUpdatePatch(taskUpdatePatchSchema.safeParse(record.patch));
+  const descriptionAssets = parseDescriptionAssets(
+    taskAssetDescriptionMutationSchema.optional().safeParse(record.descriptionAssets),
+  );
   if (descriptionAssets && !Object.hasOwn(patch, "description")) {
     throw new HostValidationError({
       message: "descriptionAssets requires a description patch.",
       field: "descriptionAssets",
     });
   }
-  return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    taskId: requireString(record.taskId, "taskId"),
+  const result: UpdateTaskInput = {
+    repoPath: readRequiredString(record, "repoPath"),
+    taskId: readRequiredString(record, "taskId"),
     patch,
-    ...(descriptionAssets ? { descriptionAssets } : {}),
   };
+  if (descriptionAssets) {
+    result.descriptionAssets = descriptionAssets;
+  }
+  return result;
 };
 
-export const parseTransitionTaskInput = (input: unknown): TransitionTaskInput => {
-  const record = requireRecord(input, "task_transition input");
+export const parseTransitionTaskInput = (input: HostCommandArgs): TransitionTaskInput => {
+  const record = requireParsedRecord(
+    commandInputRecordSchema.safeParse(input),
+    "task_transition input",
+  );
   return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    taskId: requireString(record.taskId, "taskId"),
-    status: parseTransitionStatus(record.status),
+    repoPath: readRequiredString(record, "repoPath"),
+    taskId: readRequiredString(record, "taskId"),
+    status: parseTransitionStatus(taskStatusSchema.safeParse(record.status)),
   };
 };
 
 export const parseMarkdownDocumentInput = (
-  input: unknown,
+  input: HostCommandArgs,
   commandLabel: string,
   markdownLabel: string,
 ): MarkdownDocumentInput => {
-  const record = requireRecord(input, commandLabel);
+  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), commandLabel);
   return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    taskId: requireString(record.taskId, "taskId"),
-    markdown: parseRequiredMarkdown(record.markdown, markdownLabel),
+    repoPath: readRequiredString(record, "repoPath"),
+    taskId: readRequiredString(record, "taskId"),
+    markdown: parseRequiredMarkdown(z.string().safeParse(record.markdown), markdownLabel),
   };
 };
 
 export const parseQaOutcomeInput = (
-  input: unknown,
+  input: HostCommandArgs,
   commandLabel: string,
 ): MarkdownDocumentInput => {
-  const record = requireRecord(input, commandLabel);
+  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), commandLabel);
   return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    taskId: requireString(record.taskId, "taskId"),
-    markdown: parseRequiredMarkdown(record.reportMarkdown, "QA report"),
+    repoPath: readRequiredString(record, "repoPath"),
+    taskId: readRequiredString(record, "taskId"),
+    markdown: parseRequiredMarkdown(z.string().safeParse(record.reportMarkdown), "QA report"),
   };
 };
 
-export const parseSetPlanInput = (input: unknown): SetPlanInput => {
-  const record = requireRecord(input, "set_plan input");
-  const planInput = requireRecord(record.input, "set_plan input.input");
+export const parseSetPlanInput = (input: HostCommandArgs): SetPlanInput => {
+  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), "set_plan input");
+  const planInput = requireParsedRecord(
+    commandInputRecordSchema.safeParse(record.input),
+    "set_plan input.input",
+  );
   return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    taskId: requireString(record.taskId, "taskId"),
-    markdown: parseRequiredMarkdown(planInput.markdown, "implementation plan"),
-    subtasks: parsePlanSubtasks(planInput.subtasks),
+    repoPath: readRequiredString(record, "repoPath"),
+    taskId: readRequiredString(record, "taskId"),
+    markdown: parseRequiredMarkdown(
+      z.string().safeParse(planInput.markdown),
+      "implementation plan",
+    ),
+    subtasks: parsePlanSubtasks(
+      planSubtaskInputSchema.array().optional().safeParse(planInput.subtasks),
+    ),
     hasExplicitSubtasks: "subtasks" in planInput,
   };
 };
 
-export const parseBuildStartInput = (input: unknown): BuildStartInput => {
-  const record = requireRecord(input, "build_start input");
+export const parseBuildStartInput = (input: HostCommandArgs): BuildStartInput => {
+  const record = requireParsedRecord(
+    commandInputRecordSchema.safeParse(input),
+    "build_start input",
+  );
   return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    taskId: requireString(record.taskId, "taskId"),
-    runtimeKind: requireString(record.runtimeKind, "runtimeKind"),
+    repoPath: readRequiredString(record, "repoPath"),
+    taskId: readRequiredString(record, "taskId"),
+    runtimeKind: readRequiredString(record, "runtimeKind"),
   };
 };
 
 export const parseTaskSessionBootstrapPrepareInput = (
-  input: unknown,
+  input: HostCommandArgs,
 ): TaskSessionBootstrapPrepareInput => {
-  const record = requireRecord(input, "task_session_bootstrap_prepare input");
+  const record = requireParsedRecord(
+    commandInputRecordSchema.safeParse(input),
+    "task_session_bootstrap_prepare input",
+  );
   const parsedRole = agentRoleSchema.safeParse(record.role);
   if (!parsedRole.success) {
     throw new HostValidationError({
@@ -242,35 +338,41 @@ export const parseTaskSessionBootstrapPrepareInput = (
       message: "A supported agent role is required.",
     });
   }
-  const targetWorkingDirectory =
-    typeof record.targetWorkingDirectory === "string" && record.targetWorkingDirectory.trim()
-      ? record.targetWorkingDirectory.trim()
-      : undefined;
-  return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    taskId: requireString(record.taskId, "taskId"),
-    runtimeKind: requireString(record.runtimeKind, "runtimeKind"),
+  const parsedTargetWorkingDirectory = z.string().safeParse(record.targetWorkingDirectory);
+  const targetWorkingDirectory = parsedTargetWorkingDirectory.success
+    ? parsedTargetWorkingDirectory.data.trim() || undefined
+    : undefined;
+  const result: TaskSessionBootstrapPrepareInput = {
+    repoPath: readRequiredString(record, "repoPath"),
+    taskId: readRequiredString(record, "taskId"),
+    runtimeKind: readRequiredString(record, "runtimeKind"),
     role: parsedRole.data,
-    ...(targetWorkingDirectory ? { targetWorkingDirectory } : {}),
   };
+  if (targetWorkingDirectory) {
+    result.targetWorkingDirectory = targetWorkingDirectory;
+  }
+  return result;
 };
 
 export const parseTaskSessionBootstrapFinalizeInput = (
-  input: unknown,
+  input: HostCommandArgs,
   label: string,
 ): TaskSessionBootstrapFinalizeInput => {
-  const record = requireRecord(input, label);
+  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), label);
   return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    taskId: requireString(record.taskId, "taskId"),
-    bootstrapId: requireString(record.bootstrapId, "bootstrapId"),
+    repoPath: readRequiredString(record, "repoPath"),
+    taskId: readRequiredString(record, "taskId"),
+    bootstrapId: readRequiredString(record, "bootstrapId"),
   };
 };
 
 export const parseTaskSessionStartupLeasePrepareInput = (
-  input: unknown,
+  input: HostCommandArgs,
 ): TaskSessionStartupLeasePrepareInput => {
-  const record = requireRecord(input, "task_session_startup_lease_prepare input");
+  const record = requireParsedRecord(
+    commandInputRecordSchema.safeParse(input),
+    "task_session_startup_lease_prepare input",
+  );
   const role = agentRoleSchema.safeParse(record.role);
   if (!role.success)
     throw new HostValidationError({
@@ -278,27 +380,31 @@ export const parseTaskSessionStartupLeasePrepareInput = (
       message: "A supported agent role is required.",
     });
   return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    taskId: requireString(record.taskId, "taskId"),
+    repoPath: readRequiredString(record, "repoPath"),
+    taskId: readRequiredString(record, "taskId"),
     role: role.data,
   };
 };
 
 export const parseTaskSessionStartupLeaseFinalizeInput = (
-  input: unknown,
+  input: HostCommandArgs,
   label: string,
 ): TaskSessionStartupLeaseFinalizeInput => {
-  const record = requireRecord(input, label);
+  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), label);
   return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    taskId: requireString(record.taskId, "taskId"),
-    leaseId: requireString(record.leaseId, "leaseId"),
+    repoPath: readRequiredString(record, "repoPath"),
+    taskId: readRequiredString(record, "taskId"),
+    leaseId: readRequiredString(record, "leaseId"),
   };
 };
 
-export const parseBuildBlockedInput = (input: unknown): BuildBlockedInput => {
-  const record = requireRecord(input, "build_blocked input");
-  const reason = typeof record.reason === "string" ? record.reason.trim() : "";
+export const parseBuildBlockedInput = (input: HostCommandArgs): BuildBlockedInput => {
+  const record = requireParsedRecord(
+    commandInputRecordSchema.safeParse(input),
+    "build_blocked input",
+  );
+  const parsedReason = z.string().safeParse(record.reason);
+  const reason = parsedReason.success ? parsedReason.data.trim() : "";
   if (!reason) {
     throw new HostValidationError({
       message: "build_blocked requires a non-empty reason",
@@ -306,36 +412,51 @@ export const parseBuildBlockedInput = (input: unknown): BuildBlockedInput => {
     });
   }
   return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    taskId: requireString(record.taskId, "taskId"),
+    repoPath: readRequiredString(record, "repoPath"),
+    taskId: readRequiredString(record, "taskId"),
     reason,
   };
 };
 
-export const parseBuildCompletedInput = (input: unknown): BuildCompletedInput => {
-  const record = requireRecord(input, "build_completed input");
+export const parseBuildCompletedInput = (input: HostCommandArgs): BuildCompletedInput => {
+  const record = requireParsedRecord(
+    commandInputRecordSchema.safeParse(input),
+    "build_completed input",
+  );
   const inputRecord =
     record.input === undefined || record.input === null
       ? undefined
-      : requireRecord(record.input, "build_completed input.input");
-  const summary = parseOptionalNote(inputRecord?.summary, "build_completed summary");
-  return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    taskId: requireString(record.taskId, "taskId"),
-    ...(summary === undefined ? {} : { summary }),
+      : requireParsedRecord(
+          commandInputRecordSchema.safeParse(record.input),
+          "build_completed input.input",
+        );
+  const summary = parseOptionalNote(
+    optionalStringSchema.safeParse(inputRecord?.summary),
+    "build_completed summary",
+  );
+  const result: BuildCompletedInput = {
+    repoPath: readRequiredString(record, "repoPath"),
+    taskId: readRequiredString(record, "taskId"),
   };
+  if (summary !== undefined) {
+    result.summary = summary;
+  }
+  return result;
 };
 
 export const parseOptionalNoteInput = (
-  input: unknown,
+  input: HostCommandArgs,
   label: string,
   noteLabel: string,
 ): OptionalNoteInput => {
-  const record = requireRecord(input, label);
-  const note = parseOptionalNote(record.note, noteLabel);
-  return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    taskId: requireString(record.taskId, "taskId"),
-    ...(note === undefined ? {} : { note }),
+  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), label);
+  const note = parseOptionalNote(optionalStringSchema.safeParse(record.note), noteLabel);
+  const result: OptionalNoteInput = {
+    repoPath: readRequiredString(record, "repoPath"),
+    taskId: readRequiredString(record, "taskId"),
   };
+  if (note !== undefined) {
+    result.note = note;
+  }
+  return result;
 };

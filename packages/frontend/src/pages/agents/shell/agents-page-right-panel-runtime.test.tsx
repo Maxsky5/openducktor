@@ -1,11 +1,14 @@
-import { afterEach, beforeEach, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { render } from "@testing-library/react";
 import type { ComponentProps, PropsWithChildren } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { enableReactActEnvironment } from "../agent-studio-test-utils";
+
+interface QueryClientRefContract {
+  current: QueryClient | null;
+}
 
 enableReactActEnvironment();
 
@@ -15,7 +18,9 @@ type RefreshModule =
 
 let AgentsPageBuildWorktreeRefreshRuntime: RuntimeModule["AgentsPageBuildWorktreeRefreshRuntime"];
 let AgentsPageSelectedFileRefreshRuntime: RuntimeModule["AgentsPageSelectedFileRefreshRuntime"];
-let realRefreshModule: RefreshModule | null = null;
+const realRefreshModule: RefreshModule =
+  await import("@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh");
+let refreshHookSpy: { mockRestore(): void };
 const useBuildWorktreeRefreshMock = mock(
   (_args: Parameters<RefreshModule["useAgentStudioBuildWorktreeRefresh"]>[0]) => {},
 );
@@ -40,26 +45,16 @@ function SeedQueryData({
 
 beforeEach(async () => {
   useBuildWorktreeRefreshMock.mockClear();
-  realRefreshModule =
-    await import("@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh");
-  mock.module(
-    "@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh",
-    () => ({ useAgentStudioBuildWorktreeRefresh: useBuildWorktreeRefreshMock }),
-  );
+  refreshHookSpy = spyOn(
+    realRefreshModule,
+    "useAgentStudioBuildWorktreeRefresh",
+  ).mockImplementation(useBuildWorktreeRefreshMock);
   ({ AgentsPageBuildWorktreeRefreshRuntime, AgentsPageSelectedFileRefreshRuntime } =
     await import("./agents-page-right-panel-runtime"));
 });
 
-afterEach(async () => {
-  if (!realRefreshModule) {
-    return;
-  }
-  await restoreMockedModules([
-    [
-      "@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh",
-      () => Promise.resolve(realRefreshModule as RefreshModule),
-    ],
-  ]);
+afterEach(() => {
+  refreshHookSpy.mockRestore();
 });
 
 test("observes builder mutations while the file explorer tab is active", () => {
@@ -79,7 +74,7 @@ test("observes builder mutations while the file explorer tab is active", () => {
 });
 
 test("invalidates the visible file when the panel is hidden", async () => {
-  const queryClientRef: { current: QueryClient | null } = { current: null };
+  const queryClientRef: QueryClientRefContract = { current: null };
   const selectedFile = {
     rootPath: "/repo/worktrees/task-1",
     relativePath: "src/index.ts",

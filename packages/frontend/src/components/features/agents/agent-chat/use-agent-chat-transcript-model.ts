@@ -65,7 +65,7 @@ const EMPTY_TRANSCRIPT_MODEL_REVISION: TranscriptModelRevision = Object.freeze({
 const EMPTY_TRANSCRIPT_MODEL_STATE: TranscriptModelState = Object.freeze({
   revision: EMPTY_TRANSCRIPT_MODEL_REVISION,
   rows: EMPTY_ROWS,
-  turnAnchors: [] as AgentChatTurnAnchor[],
+  turnAnchors: new Array<AgentChatTurnAnchor>(),
   hasAttachmentMessages: false,
   lastUserMessageKey: null,
   activeStreamingAssistantMessageId: null,
@@ -147,9 +147,7 @@ const createInitialTranscriptModelCache = (
 };
 
 const now = (): number => {
-  return typeof globalThis.performance?.now === "function"
-    ? globalThis.performance.now()
-    : Date.now();
+  return globalThis.performance?.now !== undefined ? globalThis.performance.now() : Date.now();
 };
 
 type IncrementalTranscriptModelPlan = {
@@ -260,13 +258,7 @@ export const useAgentChatTranscriptModel = ({
 }: {
   session: AgentChatTranscriptSession | null;
   showThinkingMessages: boolean;
-}): {
-  transcriptState: TranscriptModelState;
-  hasRowsForActiveSession: boolean;
-  hasCurrentRowsForActiveSession: boolean;
-  isTranscriptModelMissing: boolean;
-  isTranscriptModelPending: boolean;
-} => {
+}) => {
   const [rowsCache] = useState(() =>
     createInitialTranscriptModelCache(session, showThinkingMessages),
   );
@@ -438,5 +430,11 @@ export const useAgentChatTranscriptModel = ({
     hasCurrentRowsForActiveSession,
     isTranscriptModelMissing,
     isTranscriptModelPending,
+  } satisfies {
+    transcriptState: TranscriptModelState;
+    hasRowsForActiveSession: boolean;
+    hasCurrentRowsForActiveSession: boolean;
+    isTranscriptModelMissing: boolean;
+    isTranscriptModelPending: boolean;
   };
 };

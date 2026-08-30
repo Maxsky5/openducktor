@@ -13,11 +13,24 @@ export type RemoveWorktreeAndFilesystemPathInput = {
   worktreePath: string;
 };
 export type RemoveWorktreeAndFilesystemPathDependencies = {
-  gitPort: GitPort;
-  settingsConfig: SettingsConfigPort;
-  worktreeFiles: WorktreeFilePort;
+  gitPort: Pick<GitPort, "isRegisteredWorktree" | "removeWorktree">;
+  settingsConfig: Pick<
+    SettingsConfigPort,
+    | "canonicalizePath"
+    | "defaultWorktreeBasePath"
+    | "pathExists"
+    | "readConfig"
+    | "resolveConfiguredPath"
+  >;
+  worktreeFiles: Pick<
+    WorktreeFilePort,
+    "pathIsWithinRoot" | "removePathIfPresent" | "resolvePathWithinRoot" | "resolveWorktreePath"
+  >;
 };
-const managedWorktreeBasePath = (settingsConfig: SettingsConfigPort, canonicalRepoPath: string) =>
+const managedWorktreeBasePath = (
+  settingsConfig: RemoveWorktreeAndFilesystemPathDependencies["settingsConfig"],
+  canonicalRepoPath: string,
+) =>
   Effect.map(findRepoConfigByPath(settingsConfig, canonicalRepoPath), (repoConfig) =>
     repoConfig.worktreeBasePath !== undefined
       ? settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath)
@@ -38,12 +51,15 @@ const inspectFilesystemCleanup = (
     ]);
     return { ...resolvedPath, managedBasePath: managedBase, targetExists };
   });
-const cleanupRefused = (effectiveWorktreePath: string, cause?: unknown) =>
+const cleanupRefused = (effectiveWorktreePath: string, cause?: unknown): HostValidationError =>
   new HostValidationError({
     message: `Refusing worktree cleanup outside managed roots for ${effectiveWorktreePath}`,
     cause,
   });
-const cleanupIdentityChanged = (effectiveWorktreePath: string, cause?: unknown) =>
+const cleanupIdentityChanged = (
+  effectiveWorktreePath: string,
+  cause?: unknown,
+): HostValidationError =>
   new HostValidationError({
     message: `Refusing worktree cleanup because its filesystem identity changed for ${effectiveWorktreePath}`,
     cause,

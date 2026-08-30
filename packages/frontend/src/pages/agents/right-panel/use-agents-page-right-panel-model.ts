@@ -61,15 +61,25 @@ type BuildAgentsPageDiffModelSnapshot = Pick<
   | "targetBranchState"
 >;
 
-type BuildAgentsPageDiffModelArgs = {
+type BuildAgentsPageDiffModelArgs<GitActions extends object> = {
   branches: GitBranch[];
   buildToolsSnapshot: BuildAgentsPageDiffModelSnapshot;
-  gitActions: ReturnType<typeof useAgentStudioGitActions>;
+  gitActions: GitActions;
   selectedTask: BuildToolsSelectedView["selectedTask"];
   setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
   detectingPullRequestTaskId: string | null;
   onDetectPullRequest: (taskId: string) => void;
   openDirectoryInTool?: (path: string, toolId: SystemOpenInToolId) => Promise<void>;
+};
+
+type BuildAgentsPageDiffOptionalModel = {
+  openDirectoryInTool?: (toolId: SystemOpenInToolId) => Promise<void>;
+  targetBranch?: BuildAgentsPageDiffModelSnapshot["targetBranchState"]["displayTargetBranch"];
+  isDetectingPullRequest?: true;
+  onDetectPullRequest?: () => void;
+  isGitActionsLocked?: true;
+  gitActionsLockReason?: string;
+  showLockReasonBanner?: true;
 };
 
 type FileExplorerRoot = {
@@ -89,7 +99,7 @@ function collectUnmergedFilePaths(
   return paths;
 }
 
-export function buildAgentsPageDiffModel({
+export function buildAgentsPageDiffModel<GitActions extends object>({
   branches,
   buildToolsSnapshot,
   gitActions,
@@ -98,7 +108,7 @@ export function buildAgentsPageDiffModel({
   detectingPullRequestTaskId,
   onDetectPullRequest,
   openDirectoryInTool = hostClient.systemOpenDirectoryInTool,
-}: BuildAgentsPageDiffModelArgs) {
+}: BuildAgentsPageDiffModelArgs<GitActions>) {
   const { diffData, gitPanelContextMode, openInTarget, resolvedGitPanelBranch, targetBranchState } =
     buildToolsSnapshot;
   const targetBranchValidationError = targetBranchState.validationError;
@@ -131,41 +141,34 @@ export function buildAgentsPageDiffModel({
     };
   }
 
+  const openInTargetPath = openInTarget.path;
+  const optionalModel: BuildAgentsPageDiffOptionalModel = {};
+  if (openInTargetPath) {
+    optionalModel.openDirectoryInTool = (toolId) => openDirectoryInTool(openInTargetPath, toolId);
+  }
+  if (targetBranchValidationError) {
+    optionalModel.targetBranch = targetBranchState.displayTargetBranch;
+    optionalModel.isGitActionsLocked = true;
+    optionalModel.gitActionsLockReason = targetBranchValidationError;
+    optionalModel.showLockReasonBanner = true;
+  }
+  if (selectedTask && detectingPullRequestTaskId === selectedTask.id) {
+    optionalModel.isDetectingPullRequest = true;
+  }
+  if (pullRequestDetectionTask) {
+    optionalModel.onDetectPullRequest = () => onDetectPullRequest(pullRequestDetectionTask.id);
+  }
+
   return {
     ...diffData,
     contextMode: gitPanelContextMode,
     branch: resolvedGitPanelBranch,
     openInTargetPath: openInTarget.path,
     openInDisabledReason: openInTarget.disabledReason,
-    ...(openInTarget.path
-      ? {
-          openDirectoryInTool: (toolId: SystemOpenInToolId) =>
-            openDirectoryInTool(openInTarget.path as string, toolId),
-        }
-      : {}),
-    ...(targetBranchValidationError
-      ? {
-          targetBranch: targetBranchState.displayTargetBranch,
-        }
-      : {}),
     pullRequest: selectedTask?.pullRequest ?? null,
     ...targetBranchUpdateModel,
-    ...(selectedTask && detectingPullRequestTaskId === selectedTask.id
-      ? { isDetectingPullRequest: true }
-      : {}),
-    ...(pullRequestDetectionTask
-      ? {
-          onDetectPullRequest: () => onDetectPullRequest(pullRequestDetectionTask.id),
-        }
-      : {}),
     ...gitActions,
-    ...(targetBranchValidationError
-      ? {
-          isGitActionsLocked: true,
-          gitActionsLockReason: targetBranchValidationError,
-          showLockReasonBanner: true,
-        }
-      : {}),
+    ...optionalModel,
   };
 }
 
@@ -277,7 +280,7 @@ export function useAgentsPageRightPanelModel({
     () => collectUnmergedFilePaths(diffData.fileStatuses),
     [diffData.fileStatuses],
   );
-  const gitActions = useAgentStudioGitActions({
+  const gitActionInput: Parameters<typeof useAgentStudioGitActions>[0] = {
     repoPath: workspaceRepoPath,
     workingDir: diffData.worktreePath,
     branch: resolvedGitPanelBranch,
@@ -291,8 +294,11 @@ export function useAgentsPageRightPanelModel({
     worktreeStatusSnapshotKey: diffData.statusSnapshotKey ?? null,
     refreshDiffData: diffData.refresh,
     isDiffDataLoading: diffData.isLoading,
-    ...(onResolveGitConflict ? { onResolveGitConflict } : {}),
-  });
+  };
+  if (onResolveGitConflict) {
+    gitActionInput.onResolveGitConflict = onResolveGitConflict;
+  }
+  const gitActions = useAgentStudioGitActions(gitActionInput);
   const gitConflictQuickActionContext = useMemo<AgentStudioGitConflictQuickActionContext | null>(
     () =>
       gitActions.gitConflict
@@ -324,27 +330,28 @@ export function useAgentsPageRightPanelModel({
   useEffect(publishGitConflictQuickActionContext, [publishGitConflictQuickActionContext]);
 
   useEffect(() => clearGitConflictQuickActionContext, [clearGitConflictQuickActionContext]);
-  const diffModel = useMemo(
-    () =>
-      buildAgentsPageDiffModel({
-        branches,
-        buildToolsSnapshot,
-        gitActions,
-        selectedTask: selectedView.selectedTask,
-        detectingPullRequestTaskId,
-        onDetectPullRequest,
-        ...(setTaskTargetBranch ? { setTaskTargetBranch } : {}),
-      }),
-    [
-      buildToolsSnapshot,
+  const diffModel = useMemo(() => {
+    const input: BuildAgentsPageDiffModelArgs<typeof gitActions> = {
       branches,
+      buildToolsSnapshot,
       gitActions,
-      onDetectPullRequest,
+      selectedTask: selectedView.selectedTask,
       detectingPullRequestTaskId,
-      setTaskTargetBranch,
-      selectedView.selectedTask,
-    ],
-  );
+      onDetectPullRequest,
+    };
+    if (setTaskTargetBranch) {
+      input.setTaskTargetBranch = setTaskTargetBranch;
+    }
+    return buildAgentsPageDiffModel(input);
+  }, [
+    buildToolsSnapshot,
+    branches,
+    gitActions,
+    onDetectPullRequest,
+    detectingPullRequestTaskId,
+    setTaskTargetBranch,
+    selectedView.selectedTask,
+  ]);
 
   const fileExplorerRoot = useMemo(
     () =>

@@ -52,12 +52,12 @@ type QuickActionMenuGroup = {
 
 const QUICK_ACTION_ROLE_ORDER: AgentRole[] = ["spec", "planner", "build", "qa"];
 
-const QUICK_ACTION_ROLE_LABELS: Record<AgentRole, string> = {
+const QUICK_ACTION_ROLE_LABELS = {
   spec: "Spec",
   planner: "Planner",
   build: "Builder",
   qa: "QA",
-};
+} satisfies Record<AgentRole, string>;
 
 const quickActionEntryId = (entry: QuickActionMenuEntry): string =>
   `${entry.kind}:${entry.option.id}`;
@@ -103,12 +103,12 @@ const buildQuickActionMenuEntries = (
 ];
 
 const buildQuickActionMenuGroups = (entries: QuickActionMenuEntry[]): QuickActionMenuGroup[] => {
-  const entriesByRole: Record<AgentRole, QuickActionMenuEntry[]> = {
-    spec: [],
-    planner: [],
-    build: [],
-    qa: [],
-  };
+  const entriesByRole = {
+    spec: new Array<QuickActionMenuEntry>(),
+    planner: new Array<QuickActionMenuEntry>(),
+    build: new Array<QuickActionMenuEntry>(),
+    qa: new Array<QuickActionMenuEntry>(),
+  } satisfies Record<AgentRole, QuickActionMenuEntry[]>;
   const groups: QuickActionMenuGroup[] = [];
 
   for (const entry of entries) {

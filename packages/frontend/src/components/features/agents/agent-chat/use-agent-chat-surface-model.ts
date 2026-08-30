@@ -23,7 +23,7 @@ import {
 
 export { invokeStopAgentSession };
 
-const EMPTY_SESSION_AGENT_COLORS = Object.freeze({}) as Record<string, string>;
+const EMPTY_SESSION_AGENT_COLORS = Object.freeze<Record<string, string>>({});
 
 type UseAgentChatSurfaceModelArgs = {
   modelCatalog?: AgentModelCatalog | null;
@@ -120,12 +120,11 @@ export function useAgentChatSurfaceModel({
     syncBottomAfterComposerLayoutRef,
   });
 
-  return useMemo(
-    () => ({
-      chatSettings,
-      thread: threadModel,
-      ...(composerModel ? { composer: composerModel } : {}),
-    }),
-    [chatSettings, composerModel, threadModel],
-  );
+  return useMemo(() => {
+    const surface: AgentChatSurfaceModel = { chatSettings, thread: threadModel };
+    if (composerModel) {
+      surface.composer = composerModel;
+    }
+    return surface;
+  }, [chatSettings, composerModel, threadModel]);
 }

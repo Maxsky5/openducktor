@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
+import { filterClaudeHistoryMessages } from "./claude-agent-sdk-history-import";
 import { claudeSessionMessageFixture as toSessionMessage } from "./claude-agent-sdk-test-messages";
 
 describe("claude-agent-sdk-history subagents", () => {
@@ -66,7 +67,7 @@ describe("claude-agent-sdk-history subagents", () => {
           terminal_reason: "completed",
           usage: { input_tokens: 2, output_tokens: 3 },
         },
-      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      ] satisfies Parameters<typeof toClaudeHistoryMessages>[0],
       () => "2026-06-26T12:00:00.000Z",
       [],
       { includeNestedEntries: true },
@@ -187,7 +188,7 @@ describe("claude-agent-sdk-history subagents", () => {
         {
           type: "system",
           subtype: "task_started",
-          uuid: "task-started-1",
+          uuid: "00000000-0000-4000-8000-000000000001",
           session_id: "session-1",
           timestamp: "2026-06-26T11:04:11.000Z",
           task_id: "task-1",
@@ -198,14 +199,15 @@ describe("claude-agent-sdk-history subagents", () => {
         {
           type: "system",
           subtype: "task_notification",
-          uuid: "task-finished-1",
+          uuid: "00000000-0000-4000-8000-000000000002",
           session_id: "session-1",
           timestamp: "2026-06-26T11:04:12.000Z",
           task_id: "task-1",
           status: "completed",
+          output_file: "/tmp/task-1.output",
           summary: "Tests passed",
         },
-      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      ] satisfies Parameters<typeof toClaudeHistoryMessages>[0],
       () => "2026-06-26T12:00:00.000Z",
     );
 
@@ -223,6 +225,19 @@ describe("claude-agent-sdk-history subagents", () => {
         endedAtMs: Date.parse("2026-06-26T11:04:12.000Z"),
       }),
     ]);
+  });
+
+  test("rejects incomplete stored task messages at history ingress", () => {
+    expect(() =>
+      filterClaudeHistoryMessages([
+        {
+          type: "system",
+          subtype: "task_updated",
+          uuid: "00000000-0000-4000-8000-000000000003",
+          session_id: "session-1",
+        },
+      ]),
+    ).toThrow("Claude SDK sent an invalid claudeHistorySubagentSystemMessage payload.");
   });
 
   test("anchors nested Claude task system entries to the selected subagent transcript", () => {
@@ -250,7 +265,7 @@ describe("claude-agent-sdk-history subagents", () => {
         {
           type: "system",
           subtype: "task_started",
-          uuid: "task-started-1",
+          uuid: "00000000-0000-4000-8000-000000000004",
           session_id: "session-1",
           timestamp: "2026-06-26T11:04:11.000Z",
           task_id: "child-agent",
@@ -261,7 +276,7 @@ describe("claude-agent-sdk-history subagents", () => {
         {
           type: "system",
           subtype: "task_notification",
-          uuid: "task-finished-1",
+          uuid: "00000000-0000-4000-8000-000000000005",
           session_id: "session-1",
           timestamp: "2026-06-26T11:04:12.000Z",
           task_id: "child-agent",
@@ -269,7 +284,7 @@ describe("claude-agent-sdk-history subagents", () => {
           output_file: "/tmp/child-agent.output",
           summary: "Nested inspection complete",
         },
-      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      ] satisfies Parameters<typeof toClaudeHistoryMessages>[0],
       () => "2026-06-26T12:00:00.000Z",
       [],
       {
@@ -420,7 +435,7 @@ describe("claude-agent-sdk-history subagents", () => {
         }),
         toSessionMessage({
           type: "user",
-          uuid: "agent-notification-1",
+          uuid: "00000000-0000-4000-8000-000000000001",
           session_id: "session-1",
           timestamp: "2026-06-26T11:04:12.000Z",
           message: {
@@ -517,7 +532,7 @@ describe("claude-agent-sdk-history subagents", () => {
         }),
         toSessionMessage({
           type: "user",
-          uuid: "agent-notification-1",
+          uuid: "00000000-0000-4000-8000-000000000002",
           session_id: "session-1",
           timestamp: "2026-06-26T11:05:12.000Z",
           message: {
@@ -602,7 +617,7 @@ describe("claude-agent-sdk-history subagents", () => {
         }),
         toSessionMessage({
           type: "user",
-          uuid: "agent-notification",
+          uuid: "00000000-0000-4000-8000-000000000003",
           session_id: "session-1",
           timestamp: "2026-06-26T11:04:30.000Z",
           message: {
@@ -614,7 +629,7 @@ describe("claude-agent-sdk-history subagents", () => {
 </task-notification>`,
           },
         }),
-      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      ] satisfies Parameters<typeof toClaudeHistoryMessages>[0],
       () => "2026-06-26T12:00:00.000Z",
       [],
       {

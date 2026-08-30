@@ -1,9 +1,22 @@
+import type { AgentToolData } from "@openducktor/contracts";
+import { z } from "zod";
 import { isQuestionToolName } from "@/lib/question-tools";
 import type { AgentQuestionRequest, AgentSessionState } from "@/types/agent-orchestrator";
 import { type SessionMessageOwner, updateLastToolSessionMessage } from "./messages";
 
 type AnsweredQuestion = AgentQuestionRequest["questions"][number] & {
   answers: string[];
+};
+
+const stringValueSchema = z.string();
+const readMetadataRequestId = (metadata: AgentToolData): string | null => {
+  for (const key of ["requestId", "requestID", "questionRequestId"]) {
+    const result = stringValueSchema.safeParse(metadata[key]);
+    if (result.success) {
+      return result.data;
+    }
+  }
+  return null;
 };
 
 export const annotateQuestionToolMessage = (
@@ -20,14 +33,7 @@ export const annotateQuestionToolMessage = (
       }
 
       const metadata = message.meta.metadata ?? {};
-      const metadataRequestId =
-        typeof metadata.requestId === "string"
-          ? metadata.requestId
-          : typeof metadata.requestID === "string"
-            ? metadata.requestID
-            : typeof metadata.questionRequestId === "string"
-              ? metadata.questionRequestId
-              : null;
+      const metadataRequestId = readMetadataRequestId(metadata);
       return !metadataRequestId || metadataRequestId === requestId;
     },
     (message) => {

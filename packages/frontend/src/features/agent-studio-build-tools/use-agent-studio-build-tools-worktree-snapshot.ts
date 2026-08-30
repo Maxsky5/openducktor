@@ -13,7 +13,11 @@ import {
   type TaskWorktreeQueryHost,
   taskWorktreeQueryOptions,
 } from "@/state/queries/build-runtime";
-import type { DiffDataState, GitDiffRefresh } from "../agent-studio-git/contracts";
+import type {
+  DiffDataState,
+  GitDiffRefresh,
+  UseAgentStudioDiffDataInput,
+} from "../agent-studio-git/contracts";
 import { useAgentStudioDiffData } from "../agent-studio-git/use-agent-studio-diff-data";
 import {
   type AgentStudioGitPanelContextMode,
@@ -239,7 +243,7 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
       shouldQueryTaskWorktree &&
       (worktreeError != null || worktreePath == null));
 
-  const diffData = dependencies.useDiffData({
+  const diffDataInput: UseAgentStudioDiffDataInput = {
     repoPath,
     worktreePath,
     worktreeResolutionTaskId: shouldUseTaskWorktreeQuery ? taskId : null,
@@ -248,10 +252,13 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     worktreeResolutionError: worktreeError,
     retryWorktreeResolution,
     defaultTargetBranch: diffComparisonTarget,
-    ...(worktreeDiffPreconditionError ? { preconditionError: worktreeDiffPreconditionError } : {}),
     branchIdentityKey: repositoryBranchIdentityKey,
     enableScheduledRefresh: buildToolsBootstrap.shouldEnableScheduledRefresh && isEnabled,
-  });
+  };
+  if (worktreeDiffPreconditionError) {
+    diffDataInput.preconditionError = worktreeDiffPreconditionError;
+  }
+  const diffData = dependencies.useDiffData(diffDataInput);
   const devServerModel = dependencies.useDevServerPanel({
     repoPath: devServerRepoPath,
     taskId: devServerTaskId,

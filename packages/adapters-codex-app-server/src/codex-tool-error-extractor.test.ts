@@ -1,44 +1,46 @@
 import { describe, expect, test } from "bun:test";
+import type { CodexAppServerThreadItem } from "@openducktor/contracts";
 import {
   codexDynamicToolDisplayPayload,
   codexDynamicToolErrorFromItem,
 } from "./codex-tool-error-extractor";
+import { codexDynamicToolCallFixture } from "./test-fixtures/codex-protocol";
+
+type CodexDynamicToolContentItems = NonNullable<
+  Extract<CodexAppServerThreadItem, { type: "dynamicToolCall" }>["contentItems"]
+>;
 
 describe("Codex dynamic tool error extraction", () => {
-  test("keeps display payload selection separate from result error scanning", () => {
-    const contentItems = [{ type: "text", text: "Plan update output" }];
-    const item = {
-      type: "dynamicToolCall",
+  test("extracts errors from the current protocol content items", () => {
+    const contentItems = [
+      { type: "inputText", text: "Plan update output" },
+    ] satisfies CodexDynamicToolContentItems;
+    const item = codexDynamicToolCallFixture({
+      id: "plan-1",
+      tool: "update_plan",
       contentItems,
-      result: {
-        ok: false,
-        error: { message: "Plan update failed" },
-      },
-    };
+    });
 
     expect(codexDynamicToolDisplayPayload(item)).toBe(contentItems);
-    expect(codexDynamicToolErrorFromItem(item)).toBe("Plan update failed");
+    expect(codexDynamicToolErrorFromItem(item)).toBeNull();
   });
 
-  test("checks visible content before result and raw item fallbacks", () => {
-    const item = {
-      type: "dynamicToolCall",
+  test("checks visible content before the protocol failure status", () => {
+    const item = codexDynamicToolCallFixture({
+      id: "plan-1",
+      tool: "update_plan",
       contentItems: [
         {
-          type: "text",
+          type: "inputText",
           text: JSON.stringify({
             ok: false,
             error: { message: "Visible content failed" },
           }),
         },
       ],
-      result: {
-        ok: false,
-        error: { message: "Result failed" },
-      },
-      isError: true,
-      message: "Raw item failed",
-    };
+      success: false,
+      status: "failed",
+    });
 
     expect(codexDynamicToolErrorFromItem(item)).toBe("Visible content failed");
   });

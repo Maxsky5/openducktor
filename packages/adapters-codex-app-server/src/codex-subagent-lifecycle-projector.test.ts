@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
 import { CodexSubagentLifecycleProjector } from "./codex-subagent-lifecycle-projector";
 import { CodexSubagentLinkState } from "./codex-subagent-link-state";
+import { codexTurnFixture } from "./test-fixtures/codex-protocol";
 import type { CodexNotificationRecord, CodexSessionState } from "./types";
 
 const createSession = (threadId: string, runtimeId = "runtime-1"): CodexSessionState => ({
@@ -28,21 +29,29 @@ const childLifecycleNotification = (
   error?: string,
   timestampSeconds?: number,
   childThreadId = "child-thread",
-): CodexNotificationRecord => ({
-  method,
-  receivedAt: "2026-07-10T12:00:04.000Z",
-  params: {
-    threadId: childThreadId,
-    turn: {
-      id: "child-turn",
-      status,
-      ...(method === "turn/started"
-        ? { startedAt: timestampSeconds ?? 1_783_683_602 }
-        : { completedAt: timestampSeconds ?? 1_783_683_604 }),
-      ...(error ? { error: { message: error } } : {}),
+): CodexNotificationRecord => {
+  const turn = codexTurnFixture({
+    id: "child-turn",
+    items: [],
+    status,
+  });
+  if (method === "turn/started") {
+    turn.startedAt = timestampSeconds ?? 1_783_683_602;
+  } else {
+    turn.completedAt = timestampSeconds ?? 1_783_683_604;
+  }
+  if (error) {
+    turn.error = { additionalDetails: null, codexErrorInfo: null, message: error };
+  }
+  return {
+    method,
+    receivedAt: "2026-07-10T12:00:04.000Z",
+    params: {
+      threadId: childThreadId,
+      turn,
     },
-  },
-});
+  };
+};
 
 const createHarness = () => {
   const parent = createSession("parent-thread");

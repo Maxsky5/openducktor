@@ -21,10 +21,7 @@ export function useAgentSessionQuestionActions({
   pendingQuestions,
   canAnswerQuestions,
   answerAgentQuestion,
-}: UseAgentSessionQuestionActionsArgs): {
-  isSubmittingQuestionByRequestId: Record<string, boolean>;
-  onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
-} {
+}: UseAgentSessionQuestionActionsArgs) {
   const [submittingQuestionBySessionKey, setSubmittingQuestionBySessionKey] = useState<
     AgentSessionRequestState<boolean>
   >({});
@@ -100,5 +97,8 @@ export function useAgentSessionQuestionActions({
   return {
     isSubmittingQuestionByRequestId,
     onSubmitQuestionAnswers,
+  } satisfies {
+    isSubmittingQuestionByRequestId: Record<string, boolean>;
+    onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
   };
 }

@@ -43,38 +43,41 @@ type UseAgentStudioDiffRequestControllerResult = {
   isScopeInvalidated: (scope: DiffScope) => boolean;
 };
 
-const createVersionState = (): RequestStatusByScopeAndMode => ({
-  target: { full: 0, summary: 0 },
-  uncommitted: { full: 0, summary: 0 },
-});
+const createVersionState = () =>
+  ({
+    target: { full: 0, summary: 0 },
+    uncommitted: { full: 0, summary: 0 },
+  }) satisfies RequestStatusByScopeAndMode;
 
-const invalidateVersionState = (
-  currentState: RequestStatusByScopeAndMode,
-): RequestStatusByScopeAndMode => ({
-  target: {
-    full: currentState.target.full + 1,
-    summary: currentState.target.summary + 1,
-  },
-  uncommitted: {
-    full: currentState.uncommitted.full + 1,
-    summary: currentState.uncommitted.summary + 1,
-  },
-});
+const invalidateVersionState = (currentState: RequestStatusByScopeAndMode) =>
+  ({
+    target: {
+      full: currentState.target.full + 1,
+      summary: currentState.target.summary + 1,
+    },
+    uncommitted: {
+      full: currentState.uncommitted.full + 1,
+      summary: currentState.uncommitted.summary + 1,
+    },
+  }) satisfies RequestStatusByScopeAndMode;
 
-const createInFlightState = (): InFlightRequestState => ({
-  target: { full: null, summary: null },
-  uncommitted: { full: null, summary: null },
-});
+const createInFlightState = () =>
+  ({
+    target: { full: null, summary: null },
+    uncommitted: { full: null, summary: null },
+  }) satisfies InFlightRequestState;
 
-const createQueuedFullReloadState = (): QueuedFullReloadState => ({
-  target: null,
-  uncommitted: null,
-});
+const createQueuedFullReloadState = () =>
+  ({
+    target: null,
+    uncommitted: null,
+  }) satisfies QueuedFullReloadState;
 
-const createScopeInvalidationState = (): ScopeInvalidationState => ({
-  target: false,
-  uncommitted: false,
-});
+const createScopeInvalidationState = () =>
+  ({
+    target: false,
+    uncommitted: false,
+  }) satisfies ScopeInvalidationState;
 
 const readControllerRef = <T>(ref: { current: T | null }, label: string): T => {
   if (ref.current === null) {

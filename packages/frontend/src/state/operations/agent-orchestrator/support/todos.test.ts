@@ -46,7 +46,7 @@ describe("agent-orchestrator/support/todos", () => {
           priority: "LOW",
         },
       ],
-    } as const;
+    };
     const outputTodos = [
       {
         id: "todo-3",

@@ -1,19 +1,17 @@
 import { Data, Effect } from "effect";
-import { HostValidationError } from "../../effect/host-errors";
+import { type HostErrorDetails, HostValidationError } from "../../effect/host-errors";
 import type { FilesystemPort } from "../../ports/filesystem-port";
 import type { GitPort } from "../../ports/git-port";
 import { isContainedPath } from "./workspace-files-paths";
 
-export const workspaceFileValidationError = (
+export const workspaceFileValidationError = <Details extends object>(
   cause: unknown,
   message: string,
-  details?: Record<string, unknown>,
-): HostValidationError =>
-  new HostValidationError({
-    message,
-    cause,
-    ...(details ? { details } : {}),
-  });
+  details?: HostErrorDetails<Details>,
+): HostValidationError<Details> =>
+  details
+    ? new HostValidationError({ message, cause, details })
+    : new HostValidationError({ message, cause });
 
 export class WorkspaceFileAccessError extends Data.TaggedError("WorkspaceFileAccessError")<{
   readonly code: "path_escape" | "unavailable_file";
@@ -55,7 +53,10 @@ export const canonicalizeWorkspaceRoot = (filesystem: FilesystemPort, rootPath: 
     return canonicalRoot;
   });
 
-export const loadWorkspaceFilePaths = (gitPort: GitPort, canonicalRoot: string) =>
+export const loadWorkspaceFilePaths = (
+  gitPort: Pick<GitPort, "isGitRepository" | "listFiles">,
+  canonicalRoot: string,
+) =>
   Effect.gen(function* () {
     const isGitRepository = yield* gitPort
       .isGitRepository(canonicalRoot)

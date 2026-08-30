@@ -16,7 +16,7 @@ export const buildRepoRuntimeHealthByRuntime = ({
   availableRuntimeDefinitions,
   isLoadingRuntimeDefinitions,
   runtimeDefinitionsError,
-}: BuildRepoRuntimeHealthInput): RepoRuntimeHealthMap => {
+}: BuildRepoRuntimeHealthInput) => {
   const runtimeHealthByRuntime = { ...checkedRuntimeHealthByRuntime };
   if (isLoadingRuntimeDefinitions || runtimeDefinitionsError) {
     return runtimeHealthByRuntime;

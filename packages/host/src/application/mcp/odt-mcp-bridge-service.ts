@@ -6,6 +6,7 @@ import {
   type GetWorkspacesResult,
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_MCP_TOOL_NAMES,
+  ODT_TOOL_SCHEMAS,
   type OdtHostBridgeReady,
   type QaApprovedResult,
   type QaRejectedResult,
@@ -20,7 +21,13 @@ import {
   type WorkspaceScopedOdtToolName,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import type { JSONType } from "zod";
+import {
+  HostOperationError,
+  type HostOperationErrorAggregate,
+  HostValidationError,
+  type HostValidationErrorAggregate,
+} from "../../effect/host-errors";
 import type { TaskAssetReadService } from "../task-assets/task-asset-read-service";
 import type { TaskService, TaskServiceError } from "../tasks/task-service";
 import type {
@@ -56,8 +63,8 @@ const compareTaskSearchResults = (
 };
 
 export type OdtMcpBridgeError =
-  | HostOperationError
-  | HostValidationError
+  | HostOperationErrorAggregate
+  | HostValidationErrorAggregate
   | TaskServiceError
   | WorkspaceSettingsError;
 
@@ -77,17 +84,30 @@ export type WorkspaceScopedOdtToolResult =
   | TaskSummary;
 
 export type OdtMcpBridgeService = {
-  ready(input?: unknown): Effect.Effect<OdtHostBridgeReady, OdtMcpBridgeError>;
-  getWorkspaces(input?: unknown): Effect.Effect<GetWorkspacesResult, OdtMcpBridgeError>;
+  ready(input?: JSONType): Effect.Effect<OdtHostBridgeReady, OdtMcpBridgeError>;
+  getWorkspaces(input?: JSONType): Effect.Effect<GetWorkspacesResult, OdtMcpBridgeError>;
   invoke(
     toolName: WorkspaceScopedOdtToolName,
-    input: unknown,
+    input: JSONType,
   ): Effect.Effect<WorkspaceScopedOdtToolResult, OdtMcpBridgeError>;
 };
 export type CreateOdtMcpBridgeServiceInput = {
-  taskAssetReadService: TaskAssetReadService;
-  taskService: TaskService;
-  workspaceSettingsService: WorkspaceSettingsService;
+  taskAssetReadService: Pick<TaskAssetReadService, "readBatch">;
+  taskService: Pick<
+    TaskService,
+    | "buildBlocked"
+    | "buildCompleted"
+    | "buildResumed"
+    | "createTask"
+    | "getTaskMetadata"
+    | "linkPullRequest"
+    | "listTasks"
+    | "qaApproved"
+    | "qaRejected"
+    | "setPlan"
+    | "setSpec"
+  >;
+  workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfig" | "listWorkspaces">;
 };
 export const createOdtMcpBridgeService = ({
   taskAssetReadService,
@@ -125,7 +145,11 @@ export const createOdtMcpBridgeService = ({
     },
     getWorkspaces(input) {
       return Effect.gen(function* () {
-        yield* parseToolInput("odt_get_workspaces", input ?? {});
+        yield* parseToolInput(
+          "odt_get_workspaces",
+          ODT_TOOL_SCHEMAS.odt_get_workspaces,
+          input ?? {},
+        );
         return yield* parseResponse("odt_get_workspaces", RESPONSE_SCHEMAS.odt_get_workspaces, {
           workspaces: yield* workspaceSettingsService.listWorkspaces(),
         });
@@ -135,7 +159,7 @@ export const createOdtMcpBridgeService = ({
       return Effect.gen(function* () {
         switch (toolName) {
           case "odt_create_task": {
-            const parsed = yield* parseToolInput(toolName, input);
+            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
             const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
             const created = yield* taskService.createTask({
               repoPath,
@@ -155,7 +179,7 @@ export const createOdtMcpBridgeService = ({
             );
           }
           case "odt_search_tasks": {
-            const parsed = yield* parseToolInput(toolName, input);
+            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
             const tasks = (yield* tasksForWorkspace(parsed.workspaceId ?? "")).filter((task) => {
               if (!activeStatuses.has(task.status)) {
                 return false;
@@ -191,7 +215,7 @@ export const createOdtMcpBridgeService = ({
             });
           }
           case "odt_read_task_assets": {
-            const parsed = yield* parseToolInput(toolName, input);
+            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
             const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
             const batch = yield* taskAssetReadService
               .readBatch({
@@ -248,7 +272,7 @@ export const createOdtMcpBridgeService = ({
             });
           }
           case "odt_read_task": {
-            const parsed = yield* parseToolInput(toolName, input);
+            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
             return yield* parseResponse(
               toolName,
               RESPONSE_SCHEMAS.odt_read_task,
@@ -256,7 +280,7 @@ export const createOdtMcpBridgeService = ({
             );
           }
           case "odt_read_task_documents": {
-            const parsed = yield* parseToolInput(toolName, input);
+            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
             const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
             const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
             const metadata = yield* taskService.getTaskMetadata({ repoPath, taskId: task.id });
@@ -275,7 +299,7 @@ export const createOdtMcpBridgeService = ({
             });
           }
           case "odt_set_spec": {
-            const parsed = yield* parseToolInput(toolName, input);
+            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
             const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
             const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
             const document = yield* taskService.setSpec({
@@ -290,7 +314,7 @@ export const createOdtMcpBridgeService = ({
             });
           }
           case "odt_set_plan": {
-            const parsed = yield* parseToolInput(toolName, input);
+            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
             const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
             const beforeTasks = yield* tasksForWorkspace(parsed.workspaceId ?? "");
             const task = yield* Effect.try({
@@ -332,7 +356,7 @@ export const createOdtMcpBridgeService = ({
             });
           }
           case "odt_build_blocked": {
-            const parsed = yield* parseToolInput(toolName, input);
+            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
             const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
             const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
             const updated = yield* taskService.buildBlocked({
@@ -346,7 +370,7 @@ export const createOdtMcpBridgeService = ({
             });
           }
           case "odt_build_resumed": {
-            const parsed = yield* parseToolInput(toolName, input);
+            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
             const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
             const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
             const updated = yield* taskService.buildResumed({ repoPath, taskId: task.id });
@@ -355,21 +379,27 @@ export const createOdtMcpBridgeService = ({
             });
           }
           case "odt_build_completed": {
-            const parsed = yield* parseToolInput(toolName, input);
+            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
             const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
             const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
-            const updated = yield* taskService.buildCompleted({
+            const completionInput: Parameters<TaskService["buildCompleted"]>[0] = {
               repoPath,
               taskId: task.id,
-              ...(parsed.summary === undefined ? {} : { summary: parsed.summary }),
-            });
-            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_build_completed, {
+            };
+            if (parsed.summary !== undefined) {
+              completionInput.summary = parsed.summary;
+            }
+            const updated = yield* taskService.buildCompleted(completionInput);
+            const response: BuildCompletedResult = {
               task: mapPublicTask(updated),
-              ...(parsed.summary === undefined ? {} : { summary: parsed.summary }),
-            });
+            };
+            if (parsed.summary !== undefined) {
+              response.summary = parsed.summary;
+            }
+            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_build_completed, response);
           }
           case "odt_set_pull_request": {
-            const parsed = yield* parseToolInput(toolName, input);
+            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
             const repoConfig = yield* workspaceSettingsService.getRepoConfig(
               parsed.workspaceId ?? "",
             );
@@ -387,7 +417,7 @@ export const createOdtMcpBridgeService = ({
             });
           }
           case "odt_qa_approved": {
-            const parsed = yield* parseToolInput(toolName, input);
+            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
             const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
             const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
             const updated = yield* taskService.qaApproved({
@@ -400,7 +430,7 @@ export const createOdtMcpBridgeService = ({
             });
           }
           case "odt_qa_rejected": {
-            const parsed = yield* parseToolInput(toolName, input);
+            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
             const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
             const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
             const updated = yield* taskService.qaRejected({

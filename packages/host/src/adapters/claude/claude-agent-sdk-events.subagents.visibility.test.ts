@@ -26,7 +26,7 @@ describe("handleClaudeSdkMessage subagent visibility", () => {
         task_id: "hidden-task",
         description: "Housekeeping",
         skip_transcript: true,
-        uuid: "task-1",
+        uuid: "18fac20d-8611-4244-899e-ca5ab57ff530",
         session_id: "session-1",
       }),
     });
@@ -40,7 +40,7 @@ describe("handleClaudeSdkMessage subagent visibility", () => {
         subtype: "task_updated",
         task_id: "hidden-task",
         patch: { status: "completed" },
-        uuid: "task-2",
+        uuid: "6a75fb59-5b56-4ed2-8a8a-29f63a2c15f0",
         session_id: "session-1",
       }),
     });
@@ -72,7 +72,7 @@ describe("handleClaudeSdkMessage subagent visibility", () => {
         tool_use_id: "toolu_bash_1",
         description: "Harmless live lifecycle verification command",
         task_type: "shell",
-        uuid: "shell-task-started-1",
+        uuid: "0dc37ebc-f8ea-4608-8a38-60f1f3d9b48f",
         session_id: "session-1",
       }),
     });
@@ -87,7 +87,7 @@ describe("handleClaudeSdkMessage subagent visibility", () => {
         subtype: "task_updated",
         task_id: "shell-task-1",
         patch: { status: "completed" },
-        uuid: "shell-task-updated-1",
+        uuid: "0fa19d98-fa08-499b-86d9-0c3be6065600",
         session_id: "session-1",
       }),
     });
@@ -103,7 +103,7 @@ describe("handleClaudeSdkMessage subagent visibility", () => {
         task_id: "shell-task-1",
         status: "completed",
         summary: "Harmless live lifecycle verification command",
-        uuid: "shell-task-notification-1",
+        uuid: "06e48b8b-6168-4dda-8f17-97878b179c6f",
         session_id: "session-1",
       }),
     });

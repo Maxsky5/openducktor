@@ -34,11 +34,8 @@ const parseChangedFiles = (output: string): GitChangedFile[] => {
       index += 1;
     }
     if (path) {
-      files.push({
-        path,
-        ...(isRenameOrCopy && firstPath ? { originalPath: firstPath } : {}),
-        status: nameStatusToFileStatus(status),
-      });
+      const file = { path, status: nameStatusToFileStatus(status) };
+      files.push(isRenameOrCopy && firstPath ? { ...file, originalPath: firstPath } : file);
     }
   }
   return files;

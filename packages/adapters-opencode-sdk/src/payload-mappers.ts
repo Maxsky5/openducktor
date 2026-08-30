@@ -1,178 +1,97 @@
+import type { ConfigProvidersResponse } from "@opencode-ai/sdk/v2/client";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
-import { asUnknownRecord, readArrayProp, readRecordProp, readUnknownProp } from "./guards";
+import {
+  opencodeProviderCatalogPayloadSchema,
+  type ParsedOpencodeProviderModel,
+} from "./opencode-ingress";
 
-const ATTACHMENT_MODALITIES = ["image", "audio", "video", "pdf"] as const;
-
-const toFiniteNumber = (value: unknown): number | null => {
-  if (typeof value !== "number" || Number.isNaN(value) || !Number.isFinite(value)) {
-    return null;
-  }
-  return value;
+type AssistantResponsePayload = {
+  info?: { id?: string };
+  parts?: Array<{ messageID?: string }>;
 };
 
-export const normalizeModelInput = (
-  model: AgentModelSelection | undefined,
-): {
+interface NormalizedModelInput {
   model?: { providerID: string; modelID: string };
   variant?: string;
   agent?: string;
-} => {
+}
+
+export const normalizeModelInput = (
+  model: AgentModelSelection | undefined,
+): NormalizedModelInput => {
   if (!model) {
     return {};
   }
 
-  return {
+  const normalized: NormalizedModelInput = {
     model: {
       providerID: model.providerId,
       modelID: model.modelId,
     },
-    ...(model.variant ? { variant: model.variant } : {}),
-    ...(model.profileId ? { agent: model.profileId } : {}),
   };
+  if (model.variant) {
+    normalized.variant = model.variant;
+  }
+  if (model.profileId) {
+    normalized.agent = model.profileId;
+  }
+  return normalized;
 };
 
-export const resolveAssistantResponseMessageId = (payload: unknown): string | null => {
-  const payloadRecord = asUnknownRecord(payload);
-  if (!payloadRecord) {
-    return null;
-  }
-  const infoId = readUnknownProp(readRecordProp(payloadRecord, "info"), "id");
-  if (typeof infoId === "string" && infoId.trim().length > 0) {
-    return infoId.trim();
+export const resolveAssistantResponseMessageId = (
+  payload: AssistantResponsePayload | undefined,
+): string | null => {
+  const infoId = payload?.info?.id?.trim();
+  if (infoId) {
+    return infoId;
   }
 
-  const parts = readArrayProp(payloadRecord, "parts");
-  if (!parts) {
-    return null;
-  }
-  for (const part of parts) {
-    const partRecord = asUnknownRecord(part);
-    if (!partRecord) {
-      continue;
-    }
-    const messageId = readUnknownProp(partRecord, "messageID");
-    if (typeof messageId === "string" && messageId.trim().length > 0) {
-      return messageId.trim();
+  for (const part of payload?.parts ?? []) {
+    const messageId = part.messageID?.trim();
+    if (messageId) {
+      return messageId;
     }
   }
   return null;
 };
 
-export const toToolIdList = (payload: unknown): string[] => {
-  if (!Array.isArray(payload)) {
-    return [];
-  }
+export const toToolIdList = (payload: readonly string[]): string[] => {
   return payload
-    .filter((entry): entry is string => typeof entry === "string")
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0 && entry !== "invalid");
 };
 
 const normalizeModelAttachmentSupport = (
-  modelRecord: Record<string, unknown>,
-):
-  | {
-      image: boolean;
-      audio: boolean;
-      video: boolean;
-      pdf: boolean;
-    }
-  | undefined => {
-  const capabilities = readRecordProp(modelRecord, "capabilities");
-  const capabilitiesInput = capabilities ? readRecordProp(capabilities, "input") : undefined;
-  if (capabilities && capabilitiesInput) {
-    return {
-      image: readUnknownProp(capabilitiesInput, "image") === true,
-      audio: readUnknownProp(capabilitiesInput, "audio") === true,
-      video: readUnknownProp(capabilitiesInput, "video") === true,
-      pdf: readUnknownProp(capabilitiesInput, "pdf") === true,
-    };
-  }
+  model: ParsedOpencodeProviderModel,
+): NonNullable<AgentModelCatalog["models"][number]["attachmentSupport"]> => ({
+  audio: model.capabilities.input.audio,
+  image: model.capabilities.input.image,
+  pdf: model.capabilities.input.pdf,
+  video: model.capabilities.input.video,
+});
 
-  const modalities = readRecordProp(modelRecord, "modalities");
-  const modalitiesInput = modalities ? readArrayProp(modalities, "input") : undefined;
-  if (modalitiesInput) {
-    const supported = new Set(
-      modalitiesInput.filter(
-        (entry): entry is (typeof ATTACHMENT_MODALITIES)[number] =>
-          typeof entry === "string" && ATTACHMENT_MODALITIES.includes(entry as never),
-      ),
-    );
-    return {
-      image: supported.has("image"),
-      audio: supported.has("audio"),
-      video: supported.has("video"),
-      pdf: supported.has("pdf"),
-    };
-  }
+export const mapProviderListToCatalog = (payload: ConfigProvidersResponse): AgentModelCatalog => {
+  const parsed = opencodeProviderCatalogPayloadSchema.parse(payload);
+  const defaults = { ...parsed.default };
 
-  return undefined;
-};
+  const models = parsed.providers.flatMap((provider) => {
+    return Object.entries(provider.models).map(([modelId, rawModel]) => {
+      const variants = rawModel.variants ? Object.keys(rawModel.variants) : [];
+      const attachmentSupport = normalizeModelAttachmentSupport(rawModel);
 
-export const mapProviderListToCatalog = (payload: unknown): AgentModelCatalog => {
-  const payloadRecord = asUnknownRecord(payload);
-  if (!payloadRecord) {
-    return {
-      runtime: OPENCODE_RUNTIME_DESCRIPTOR,
-      models: [],
-      defaultModelsByProvider: {},
-      profiles: [],
-    };
-  }
-
-  const providers = readArrayProp(payloadRecord, "providers") ?? [];
-  const defaultsRaw = readRecordProp(payloadRecord, "default");
-  const defaults: Record<string, string> = {};
-  if (defaultsRaw) {
-    for (const [providerId, modelId] of Object.entries(defaultsRaw)) {
-      if (typeof modelId === "string") {
-        defaults[providerId] = modelId;
-      }
-    }
-  }
-
-  const models = providers.flatMap((provider) => {
-    const providerRecord = asUnknownRecord(provider);
-    if (!providerRecord) {
-      return [];
-    }
-    const providerId = readUnknownProp(providerRecord, "id");
-    const providerName = readUnknownProp(providerRecord, "name");
-    const rawModels = readRecordProp(providerRecord, "models");
-    if (typeof providerId !== "string" || typeof providerName !== "string" || !rawModels) {
-      return [];
-    }
-
-    return Object.entries(rawModels)
-      .map(([modelId, rawModel]) => {
-        const modelRecord = asUnknownRecord(rawModel);
-        if (!modelRecord) {
-          return null;
-        }
-        const modelName = readUnknownProp(modelRecord, "name");
-        const variantsRaw = readRecordProp(modelRecord, "variants");
-        const limitRaw = readRecordProp(modelRecord, "limit");
-        const contextRaw = readUnknownProp(limitRaw, "context");
-        const outputRaw = readUnknownProp(limitRaw, "output");
-        const contextWindow = limitRaw ? (toFiniteNumber(contextRaw) ?? undefined) : undefined;
-        const outputLimit = limitRaw ? (toFiniteNumber(outputRaw) ?? undefined) : undefined;
-        const variants = variantsRaw ? Object.keys(variantsRaw) : [];
-        const attachmentSupport = normalizeModelAttachmentSupport(modelRecord);
-
-        return {
-          id: `${providerId}/${modelId}`,
-          providerId,
-          providerName,
-          modelId,
-          modelName: typeof modelName === "string" ? modelName : modelId,
-          variants,
-          ...(typeof contextWindow === "number" ? { contextWindow } : {}),
-          ...(typeof outputLimit === "number" ? { outputLimit } : {}),
-          ...(attachmentSupport ? { attachmentSupport } : {}),
-        };
-      })
-      .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+      return {
+        id: `${provider.id}/${modelId}`,
+        providerId: provider.id,
+        providerName: provider.name,
+        modelId,
+        modelName: rawModel.name,
+        variants,
+        contextWindow: rawModel.limit.context,
+        outputLimit: rawModel.limit.output,
+        attachmentSupport,
+      };
+    });
   });
 
   return {

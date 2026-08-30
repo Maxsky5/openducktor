@@ -14,6 +14,10 @@ import {
   taskFixture,
 } from "./start-session.test-helpers";
 
+interface SessionsRefContract {
+  current: AgentSessionCollection;
+}
+
 describe("agent-orchestrator/handlers/start-session stale workspace", () => {
   test("fails fast on stale repo before any side effects", async () => {
     let persistedListCalls = 0;
@@ -45,9 +49,9 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
   });
 
   test("removes local registration when workspace becomes stale during initial session registration", async () => {
-    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
     let stopCalls = 0;
-    const sessionsRef: { current: AgentSessionCollection } = {
+    const sessionsRef: SessionsRefContract = {
       current: emptyAgentSessionCollection(),
     };
     const replaceSession = (session: Parameters<typeof replaceAgentSession>[1]) => {
@@ -100,7 +104,7 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
   });
 
   test("rolls back started remote session when workspace becomes stale after start", async () => {
-    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
     let stopCalls = 0;
 
     const adapter = new OpencodeSdkAdapter();
@@ -148,7 +152,7 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
   });
 
   test("aborts worktree bootstrap when the workspace becomes stale after runtime preparation", async () => {
-    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
     let abortCalls = 0;
     let startCalls = 0;
 
@@ -195,7 +199,7 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
   });
 
   test("rolls back a started remote session when persistence makes the workspace stale", async () => {
-    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
     let stopCalls = 0;
 
     const adapter = new OpencodeSdkAdapter();
@@ -245,7 +249,7 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
   });
 
   test("surfaces stale-start cleanup failures instead of masking them", async () => {
-    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
 
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;

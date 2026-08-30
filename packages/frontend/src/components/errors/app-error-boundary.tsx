@@ -3,7 +3,7 @@ import { buildFatalErrorReport, type FatalErrorReport } from "./fatal-error-repo
 
 interface Props {
   children: ReactNode;
-  onCrash: (report: FatalErrorReport, error: unknown, componentStack?: string) => void;
+  onCrash: (report: FatalErrorReport, cause: unknown, componentStack?: string) => void;
 }
 
 interface State {

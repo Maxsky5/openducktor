@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
   type AppPlatform,
   DEFAULT_AGENT_RUNTIMES,
@@ -13,7 +13,7 @@ import {
 import type { AgentModelCatalog } from "@openducktor/core";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { type RenderResult, render, waitFor } from "@testing-library/react";
-import { act, isValidElement, type ReactElement } from "react";
+import { act, type ComponentProps, isValidElement, type ReactElement } from "react";
 import { MemoryRouter, useLocation } from "react-router";
 import { hostClient } from "@/lib/host-client";
 import { createQueryClient } from "@/lib/query-client";
@@ -37,12 +37,11 @@ import {
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { systemQueryKeys } from "@/state/queries/system";
 import { workspaceQueryKeys } from "@/state/queries/workspace";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import {
   createRepoRuntimeHealthFixture,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { readyAgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
 import type {
   AgentOperationsContextValue,
@@ -62,14 +61,16 @@ import {
   enableReactActEnvironment,
 } from "../agents/agent-studio-test-utils";
 import type { KanbanPageModels } from "./kanban-page-model-types";
+import { KanbanColumn } from "@/components/features/kanban/kanban-column";
+import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 
 enableReactActEnvironment();
 
 const originalConsoleError = console.error;
 
-const sessionIdentity = (externalSessionId: string) => ({
+const sessionIdentity = (externalSessionId: string): AgentSessionIdentity => ({
   externalSessionId,
-  runtimeKind: "opencode" as const,
+  runtimeKind: "opencode",
   workingDirectory: `/repo/worktrees/${externalSessionId}`,
 });
 
@@ -81,8 +82,10 @@ const humanRequestChangesTaskMock = mock(async () => {});
 const deleteTaskMock = mock(async () => {});
 const resetTaskImplementationMock = mock(async () => {});
 const resetTaskMock = mock(async () => {});
-const toastSuccessMock = mock(() => {});
-const toastErrorMock = mock(() => {});
+const sonnerModule = await import("sonner");
+const toastSuccessMock = mock<typeof sonnerModule.toast.success>(() => "toast-success");
+const toastErrorMock = mock<typeof sonnerModule.toast.error>(() => "toast-error");
+let toastSpies: Array<{ mockRestore(): void }> = [];
 const loadRepoRuntimeCatalogMock = mock(async (): Promise<AgentModelCatalog> => ({
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,
   models: [
@@ -130,16 +133,18 @@ type PendingMergedPullRequestFixture = {
   };
 };
 
+type KanbanColumnTestProps = ComponentProps<typeof KanbanColumn>;
+
 type LatestKanbanPageModels = {
-  columnProps: Record<string, unknown> | null;
+  columnProps: KanbanColumnTestProps | null;
   isLoadingTasks: boolean | null;
   showHorizontalScrollbars: boolean | null;
-  humanReviewFeedbackModalModel: Record<string, unknown> | null;
+  humanReviewFeedbackModalModel: HumanReviewFeedbackModalModel | null;
   taskApprovalModalModel: KanbanPageModels["taskApprovalModal"];
   taskGitConflictDialogModel: KanbanPageModels["taskGitConflictDialog"];
   sessionStartModalModel: KanbanPageModels["sessionStartModal"];
-  resetImplementationModalModel: Record<string, unknown> | null;
-  mergedPullRequestModalProps: Record<string, unknown> | null;
+  resetImplementationModalModel: KanbanPageModels["resetImplementationModal"];
+  mergedPullRequestModalProps: KanbanPageModels["mergedPullRequestModal"];
   location: string;
 };
 
@@ -153,21 +158,31 @@ type KanbanPageRenderState = {
 };
 
 type KanbanPageHarness = RenderResult & {
-  getKanbanColumnProps: () => Record<string, unknown>;
+  getKanbanColumnProps: () => KanbanColumnTestProps;
   getIsLoadingTasks: () => boolean | null;
   getShowHorizontalScrollbars: () => boolean | null;
-  getHumanReviewFeedbackModalModel: () => Record<string, unknown> | null;
+  getHumanReviewFeedbackModalModel: () => HumanReviewFeedbackModalModel | null;
   getTaskApprovalModalModel: () => KanbanPageModels["taskApprovalModal"];
   getTaskGitConflictDialogModel: () => KanbanPageModels["taskGitConflictDialog"];
   getSessionStartModalModel: () => KanbanPageModels["sessionStartModal"];
-  getResetImplementationModalModel: () => Record<string, unknown> | null;
-  getMergedPullRequestModalProps: () => Record<string, unknown> | null;
+  getResetImplementationModalModel: () => KanbanPageModels["resetImplementationModal"];
+  getMergedPullRequestModalProps: () => KanbanPageModels["mergedPullRequestModal"];
   getLocation: () => string;
+};
+
+const requireCallback = <Callback extends (...args: never[]) => void>(
+  callback: Callback | undefined,
+  name: string,
+): Callback => {
+  if (!callback) {
+    throw new Error(`Expected ${name} callback`);
+  }
+  return callback;
 };
 
 let currentPendingMergedPullRequest: PendingMergedPullRequestFixture | null = null;
 let currentLinkingMergedPullRequestTaskId: string | null = null;
-const RUNTIME_DEFINITIONS = [OPENCODE_RUNTIME_DESCRIPTOR] as const;
+const RUNTIME_DEFINITIONS = [OPENCODE_RUNTIME_DESCRIPTOR];
 
 let currentTaskFixture = createTaskCardFixture({
   id: "TASK-123",
@@ -203,7 +218,7 @@ let currentSessionsFixture: AgentSessionState[] = [
 ];
 
 const createRepoSettingsFixture = (): RepoSettingsInput => ({
-  defaultRuntimeKind: "opencode" as const,
+  defaultRuntimeKind: "opencode",
   worktreeBasePath: "",
   branchPrefix: "codex/",
   defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -436,7 +451,7 @@ const publishKanbanPageModels = (
   latest.mergedPullRequestModalProps = models.mergedPullRequestModal;
 };
 
-const getKanbanColumnProps = (latest: LatestKanbanPageModels): Record<string, unknown> => {
+const getKanbanColumnProps = (latest: LatestKanbanPageModels): KanbanColumnTestProps => {
   if (!latest.columnProps) {
     throw new Error("Expected the Kanban page model to publish column actions.");
   }
@@ -652,11 +667,7 @@ const confirmSessionStartModal = async (
 
   if (profileId) {
     await act(async () => {
-      (
-        page.getSessionStartModalModel()?.onSelectRuntimeProfile as
-          | ((value: string) => void)
-          | undefined
-      )?.(profileId);
+      page.getSessionStartModalModel()?.onSelectRuntimeProfile?.(profileId);
       await Promise.resolve();
     });
   }
@@ -683,10 +694,7 @@ const confirmSessionStartModal = async (
       await Promise.resolve();
     });
     await waitFor(() => {
-      const selection = page.getSessionStartModalModel()?.selectedModelSelection as
-        | { modelId?: string; profileId?: string }
-        | null
-        | undefined;
+      const selection = page.getSessionStartModalModel()?.selectedModelSelection;
       expect(selection?.modelId).toBe(expectedStoredModelId);
       if (profileId) {
         expect(selection?.profileId).toBe(profileId);
@@ -694,49 +702,33 @@ const confirmSessionStartModal = async (
     });
   } else if (profileId) {
     await waitFor(() => {
-      const selection = page.getSessionStartModalModel()?.selectedModelSelection as
-        | { profileId?: string }
-        | null
-        | undefined;
+      const selection = page.getSessionStartModalModel()?.selectedModelSelection;
       expect(selection?.profileId).toBe(profileId);
     });
   }
 
   if (variant) {
     await act(async () => {
-      (
-        page.getSessionStartModalModel()?.onSelectVariant as ((value: string) => void) | undefined
-      )?.(variant);
+      page.getSessionStartModalModel()?.onSelectVariant?.(variant);
       await Promise.resolve();
     });
     await waitFor(() => {
-      const selection = page.getSessionStartModalModel()?.selectedModelSelection as
-        | { variant?: string }
-        | null
-        | undefined;
+      const selection = page.getSessionStartModalModel()?.selectedModelSelection;
       expect(selection?.variant).toBe(variant);
     });
   }
 
   await act(async () => {
-    const existingSessionOptions =
-      (page.getSessionStartModalModel()?.existingSessionOptions as
-        | Array<{ value: string; sourceSession: { externalSessionId: string } }>
-        | undefined) ?? [];
+    const existingSessionOptions = page.getSessionStartModalModel()?.existingSessionOptions ?? [];
     const sourceSessionOptionValue = input?.sourceExternalSessionId
       ? (existingSessionOptions.find(
           (option) => option.sourceSession.externalSessionId === input.sourceExternalSessionId,
         )?.value ?? null)
       : null;
-    await (
-      page.getSessionStartModalModel()?.onConfirm as
-        | ((value: {
-            runInBackground?: boolean;
-            startMode?: "fresh" | "reuse" | "fork";
-            sourceSessionOptionValue?: string | null;
-          }) => Promise<void> | void)
-        | undefined
-    )?.({
+    await requireCallback(
+      page.getSessionStartModalModel()?.onConfirm,
+      "session start confirmation",
+    )({
       runInBackground: input?.runInBackground ?? false,
       startMode: input?.startMode ?? "fresh",
       sourceSessionOptionValue,
@@ -753,12 +745,10 @@ const kanbanTest = (name: string, fn: () => Promise<void> | void): void => {
 
 describe("KanbanPage session start modal flow", () => {
   beforeEach(() => {
-    mock.module("sonner", () => ({
-      toast: {
-        success: toastSuccessMock,
-        error: toastErrorMock,
-      },
-    }));
+    toastSpies = [
+      spyOn(sonnerModule.toast, "success").mockImplementation(toastSuccessMock),
+      spyOn(sonnerModule.toast, "error").mockImplementation(toastErrorMock),
+    ];
   });
 
   beforeEach(async () => {
@@ -809,8 +799,9 @@ describe("KanbanPage session start modal flow", () => {
     loadRepoRuntimeCatalogMock.mockClear();
   });
 
-  afterEach(async () => {
-    await restoreMockedModules([["sonner", () => import("sonner")]]);
+  afterEach(() => {
+    for (const toastSpy of toastSpies) toastSpy.mockRestore();
+    toastSpies = [];
   });
 
   afterAll(async () => {
@@ -825,7 +816,7 @@ describe("KanbanPage session start modal flow", () => {
       expect(renderer.getKanbanColumnProps()).toBeTruthy();
 
       await act(async () => {
-        (renderer.getKanbanColumnProps().onDelegate as (taskId: string) => void)("TASK-123");
+        renderer.getKanbanColumnProps().onDelegate("TASK-123");
       });
 
       expect(renderer.getSessionStartModalModel()?.open).toBe(true);
@@ -954,7 +945,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        (renderer.getKanbanColumnProps().onDelegate as (taskId: string) => void)("TASK-123");
+        renderer.getKanbanColumnProps().onDelegate("TASK-123");
       });
 
       await confirmSessionStartModal(renderer, {
@@ -975,9 +966,7 @@ describe("KanbanPage session start modal flow", () => {
           duration: 10000,
         }),
       );
-      const toastCall = toastSuccessMock.mock.calls.at(0) as
-        | [string, { description?: unknown }?]
-        | undefined;
+      const toastCall = toastSuccessMock.mock.calls.at(0);
       const toastDescription = toastCall?.[1]?.description;
       expect(isValidElement(toastDescription)).toBe(true);
       if (!isValidElement(toastDescription)) {
@@ -1006,7 +995,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      (renderer.getKanbanColumnProps().onDelegate as (taskId: string) => void)("TASK-123");
+      renderer.getKanbanColumnProps().onDelegate("TASK-123");
     });
 
     const sessionStartModal = renderer.getSessionStartModalModel();
@@ -1015,16 +1004,10 @@ describe("KanbanPage session start modal flow", () => {
     }
 
     await act(async () => {
-      (
-        sessionStartModal.onConfirm as (input: {
-          runInBackground?: boolean;
-          startMode?: "fresh" | "reuse" | "fork";
-          sourceSessionOptionValue?: string | null;
-        }) => void
-      )({
+      sessionStartModal.onConfirm({
+        runInBackground: false,
         startMode: "reuse",
-        sourceSessionOptionValue:
-          (sessionStartModal.selectedSourceSessionValue as string | undefined) ?? null,
+        sourceSessionOptionValue: sessionStartModal.selectedSourceSessionValue ?? null,
       });
       await Promise.resolve();
     });
@@ -1047,7 +1030,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        (renderer.getKanbanColumnProps().onDelegate as (taskId: string) => void)("TASK-123");
+        renderer.getKanbanColumnProps().onDelegate("TASK-123");
       });
 
       await confirmSessionStartModal(renderer, {
@@ -1058,7 +1041,7 @@ describe("KanbanPage session start modal flow", () => {
       });
 
       await act(async () => {
-        (renderer.getKanbanColumnProps().onDelegate as (taskId: string) => void)("TASK-123");
+        renderer.getKanbanColumnProps().onDelegate("TASK-123");
       });
 
       expect(renderer.getSessionStartModalModel()?.isStarting).toBe(false);
@@ -1077,7 +1060,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      (renderer.getKanbanColumnProps().onDelegate as (taskId: string) => void)("TASK-123");
+      renderer.getKanbanColumnProps().onDelegate("TASK-123");
     });
 
     await confirmSessionStartModal(renderer, {
@@ -1111,7 +1094,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      (renderer.getKanbanColumnProps().onDelegate as (taskId: string) => void)("TASK-123");
+      renderer.getKanbanColumnProps().onDelegate("TASK-123");
     });
 
     await confirmSessionStartModal(renderer, {
@@ -1144,7 +1127,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      (renderer.getKanbanColumnProps().onDelegate as (taskId: string) => void)("TASK-123");
+      renderer.getKanbanColumnProps().onDelegate("TASK-123");
     });
 
     await confirmSessionStartModal(renderer, {
@@ -1171,7 +1154,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      (renderer.getKanbanColumnProps().onDelegate as (taskId: string) => void)("TASK-123");
+      renderer.getKanbanColumnProps().onDelegate("TASK-123");
     });
 
     const sessionStartModal = renderer.getSessionStartModalModel();
@@ -1185,8 +1168,8 @@ describe("KanbanPage session start modal flow", () => {
         providerId: "openai",
         modelId: "gpt-5",
       });
-      (sessionStartModal.onSelectRuntimeProfile as (value: string) => void)("build-agent");
-      (sessionStartModal.onSelectVariant as (value: string) => void)("default");
+      sessionStartModal.onSelectRuntimeProfile("build-agent");
+      sessionStartModal.onSelectVariant("default");
     });
 
     await confirmSessionStartModal(renderer, {
@@ -1222,7 +1205,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        (renderer.getKanbanColumnProps().onPlan as (taskId: string, action: string) => void)(
+        requireCallback(renderer.getKanbanColumnProps().onPlan, "plan task")(
           "TASK-123",
           "set_spec",
         );
@@ -1247,7 +1230,7 @@ describe("KanbanPage session start modal flow", () => {
       expect(initialOnHumanRequestChanges).toBeDefined();
 
       await act(async () => {
-        (renderer.getKanbanColumnProps().onDelegate as (taskId: string) => void)("TASK-123");
+        renderer.getKanbanColumnProps().onDelegate("TASK-123");
       });
 
       const nextOnHumanRequestChanges = renderer.getKanbanColumnProps().onHumanRequestChanges;
@@ -1267,8 +1250,9 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      await (
-        renderer.getKanbanColumnProps().onHumanRequestChanges as (taskId: string) => Promise<void>
+      await requireCallback(
+        renderer.getKanbanColumnProps().onHumanRequestChanges,
+        "request human-review changes",
       )("TASK-123");
     });
 
@@ -1292,8 +1276,9 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        await (
-          renderer.getKanbanColumnProps().onHumanRequestChanges as (taskId: string) => Promise<void>
+        await requireCallback(
+          renderer.getKanbanColumnProps().onHumanRequestChanges,
+          "request human-review changes",
         )("TASK-123");
       });
 
@@ -1303,17 +1288,11 @@ describe("KanbanPage session start modal flow", () => {
       }
 
       await act(async () => {
-        (feedbackModal.onMessageChange as (message: string) => void)(
-          "Apply the requested human review changes.",
-        );
+        feedbackModal.onMessageChange("Apply the requested human review changes.");
       });
 
       await act(async () => {
-        void (
-          renderer.getHumanReviewFeedbackModalModel()?.onConfirm as
-            | (() => Promise<void>)
-            | undefined
-        )?.();
+        void renderer.getHumanReviewFeedbackModalModel()?.onConfirm?.();
         await Promise.resolve();
       });
 
@@ -1324,8 +1303,7 @@ describe("KanbanPage session start modal flow", () => {
       expect(sendAgentMessageMock).not.toHaveBeenCalled();
       expect(renderer.getSessionStartModalModel()?.open).toBe(true);
       expect(renderer.getSessionStartModalModel()?.selectedStartMode).toBe("reuse");
-      const existingSessionOptions = renderer.getSessionStartModalModel()
-        ?.existingSessionOptions as Array<{ value: string }> | undefined;
+      const existingSessionOptions = renderer.getSessionStartModalModel()?.existingSessionOptions;
       const selectedSourceOption = existingSessionOptions?.[0];
       if (!selectedSourceOption) {
         throw new Error("Expected a reusable builder session option.");
@@ -1365,8 +1343,9 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        await (
-          renderer.getKanbanColumnProps().onHumanRequestChanges as (taskId: string) => Promise<void>
+        await requireCallback(
+          renderer.getKanbanColumnProps().onHumanRequestChanges,
+          "request human-review changes",
         )("TASK-123");
       });
 
@@ -1378,17 +1357,11 @@ describe("KanbanPage session start modal flow", () => {
       }
 
       await act(async () => {
-        (feedbackModal.onMessageChange as (message: string) => void)(
-          "Use a fresh builder session for these changes.",
-        );
+        feedbackModal.onMessageChange("Use a fresh builder session for these changes.");
       });
 
       await act(async () => {
-        void (
-          renderer.getHumanReviewFeedbackModalModel()?.onConfirm as
-            | (() => Promise<void>)
-            | undefined
-        )?.();
+        void renderer.getHumanReviewFeedbackModalModel()?.onConfirm?.();
         await Promise.resolve();
       });
 
@@ -1414,8 +1387,9 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        await (
-          renderer.getKanbanColumnProps().onHumanRequestChanges as (taskId: string) => Promise<void>
+        await requireCallback(
+          renderer.getKanbanColumnProps().onHumanRequestChanges,
+          "request human-review changes",
         )("TASK-123");
       });
 
@@ -1425,17 +1399,11 @@ describe("KanbanPage session start modal flow", () => {
       }
 
       await act(async () => {
-        (feedbackModal.onMessageChange as (message: string) => void)(
-          "Keep this request-changes draft.",
-        );
+        feedbackModal.onMessageChange("Keep this request-changes draft.");
       });
 
       await act(async () => {
-        void (
-          renderer.getHumanReviewFeedbackModalModel()?.onConfirm as
-            | (() => Promise<void>)
-            | undefined
-        )?.();
+        void renderer.getHumanReviewFeedbackModalModel()?.onConfirm?.();
         await Promise.resolve();
       });
 
@@ -1448,7 +1416,7 @@ describe("KanbanPage session start modal flow", () => {
       expect(sessionStartModal.open).toBe(true);
 
       await act(async () => {
-        (sessionStartModal.onOpenChange as (open: boolean) => void)(false);
+        sessionStartModal.onOpenChange(false);
       });
 
       await waitFor(() => {
@@ -1492,9 +1460,10 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      (renderer.getKanbanColumnProps().onResetImplementation as (taskId: string) => void)(
-        "TASK-123",
-      );
+      requireCallback(
+        renderer.getKanbanColumnProps().onResetImplementation,
+        "reset implementation",
+      )("TASK-123");
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -1507,7 +1476,7 @@ describe("KanbanPage session start modal flow", () => {
     }
 
     await act(async () => {
-      (resetModal.onConfirm as () => void)();
+      resetModal.onConfirm();
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -1557,9 +1526,10 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        (renderer.getKanbanColumnProps().onResetImplementation as (taskId: string) => void)(
-          "TASK-123",
-        );
+        requireCallback(
+          renderer.getKanbanColumnProps().onResetImplementation,
+          "reset implementation",
+        )("TASK-123");
         await Promise.resolve();
         await Promise.resolve();
       });
@@ -1610,9 +1580,10 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        (renderer.getKanbanColumnProps().onResetImplementation as (taskId: string) => void)(
-          "TASK-123",
-        );
+        requireCallback(
+          renderer.getKanbanColumnProps().onResetImplementation,
+          "reset implementation",
+        )("TASK-123");
         await Promise.resolve();
         await Promise.resolve();
       });
@@ -1645,9 +1616,10 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      (renderer.getKanbanColumnProps().onResetImplementation as (taskId: string) => void)(
-        "TASK-123",
-      );
+      requireCallback(
+        renderer.getKanbanColumnProps().onResetImplementation,
+        "reset implementation",
+      )("TASK-123");
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -1662,7 +1634,7 @@ describe("KanbanPage session start modal flow", () => {
     }
 
     await act(async () => {
-      (resetModal.onConfirm as () => void)();
+      resetModal.onConfirm();
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -1683,9 +1655,10 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        (renderer.getKanbanColumnProps().onResetImplementation as (taskId: string) => void)(
-          "MISSING-1",
-        );
+        requireCallback(
+          renderer.getKanbanColumnProps().onResetImplementation,
+          "reset implementation",
+        )("MISSING-1");
         await Promise.resolve();
         await Promise.resolve();
       });
@@ -1705,7 +1678,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      (renderer.getKanbanColumnProps().onBuild as (taskId: string) => void)("TASK-123");
+      renderer.getKanbanColumnProps().onBuild("TASK-123");
     });
 
     expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -1763,7 +1736,10 @@ describe("KanbanPage session start modal flow", () => {
         const page = await renderPage();
         renderer = page;
         await act(async () => {
-          (page.getKanbanColumnProps().onHumanApprove as (taskId: string) => void)("TASK-123");
+          requireCallback(
+            page.getKanbanColumnProps().onHumanApprove,
+            "approve human review",
+          )("TASK-123");
           await Promise.resolve();
         });
         await waitFor(() => {
@@ -1828,7 +1804,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        (renderer.getKanbanColumnProps().onBuild as (taskId: string) => void)("TASK-123");
+        renderer.getKanbanColumnProps().onBuild("TASK-123");
       });
 
       expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -1853,7 +1829,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        (renderer.getKanbanColumnProps().onBuild as (taskId: string) => void)("TASK-123");
+        renderer.getKanbanColumnProps().onBuild("TASK-123");
       });
 
       expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -1876,7 +1852,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      (renderer.getKanbanColumnProps().onQaOpen as (taskId: string) => void)("TASK-123");
+      requireCallback(renderer.getKanbanColumnProps().onQaOpen, "open QA")("TASK-123");
     });
 
     expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -1955,7 +1931,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        (renderer.getKanbanColumnProps().onBuild as (taskId: string) => void)("TASK-123");
+        renderer.getKanbanColumnProps().onBuild("TASK-123");
       });
 
       expect(renderer.getSessionStartModalModel()).toBeNull();

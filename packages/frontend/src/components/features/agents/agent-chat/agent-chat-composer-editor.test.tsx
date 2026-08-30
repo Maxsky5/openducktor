@@ -1,8 +1,7 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { AgentFileSearchResult } from "@openducktor/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactElement, useReducer, useRef } from "react";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import {
   type AgentChatComposerDraft,
   createComposerAttachment,
@@ -15,7 +14,9 @@ import {
 import { buildFileSearchResult, createComposerDraft } from "./agent-chat-test-fixtures";
 
 let AgentChatComposerEditor: typeof import("./agent-chat-composer-editor").AgentChatComposerEditor;
-let actualComposerSelectionModule: typeof import("./agent-chat-composer-selection");
+const actualComposerSelectionModule = await import("./agent-chat-composer-selection");
+type RestorableSpy = { mockRestore(): void };
+let selectionSpies: RestorableSpy[] = [];
 const COMPOSER_WAIT_TIMEOUT_MS = 1000;
 const renderMockEditableTextContent = mock((text: string): string => {
   if (text.length === 0) {
@@ -89,34 +90,35 @@ const getCaretOffsetWithinElementMock = mock(
 );
 
 beforeEach(async () => {
-  actualComposerSelectionModule = await import("./agent-chat-composer-selection");
-
-  mock.module("./agent-chat-composer-selection", () => ({
-    ...actualComposerSelectionModule,
-    EMPTY_TEXT_SEGMENT_SENTINEL: "\u200B",
-    readEditableTextContent: readMockEditableTextContent,
-    renderEditableTextContent: renderMockEditableTextContent,
-    getCaretOffsetWithinElement: getCaretOffsetWithinElementMock,
-    insertTextAtCaretWithinElement: (
-      element: HTMLElement,
-      text: string,
-      fallbackOffset: number,
-    ) => {
-      const currentText = (element.textContent ?? "").replace(/\u200B/g, "");
-      const nextText = `${currentText.slice(0, fallbackOffset)}${text}${currentText.slice(fallbackOffset)}`;
-      element.textContent = nextText;
-      return fallbackOffset + text.length;
-    },
-    setCaretOffsetWithinElement: setCaretOffsetWithinElementMock,
-  }));
+  selectionSpies = [
+    spyOn(actualComposerSelectionModule, "readEditableTextContent").mockImplementation(
+      readMockEditableTextContent,
+    ),
+    spyOn(actualComposerSelectionModule, "renderEditableTextContent").mockImplementation(
+      renderMockEditableTextContent,
+    ),
+    spyOn(actualComposerSelectionModule, "getCaretOffsetWithinElement").mockImplementation(
+      getCaretOffsetWithinElementMock,
+    ),
+    spyOn(actualComposerSelectionModule, "insertTextAtCaretWithinElement").mockImplementation(
+      (element: HTMLElement, text: string, fallbackOffset: number) => {
+        const currentText = (element.textContent ?? "").replace(/\u200B/g, "");
+        const nextText = `${currentText.slice(0, fallbackOffset)}${text}${currentText.slice(fallbackOffset)}`;
+        element.textContent = nextText;
+        return fallbackOffset + text.length;
+      },
+    ),
+    spyOn(actualComposerSelectionModule, "setCaretOffsetWithinElement").mockImplementation(
+      setCaretOffsetWithinElementMock,
+    ),
+  ];
 
   ({ AgentChatComposerEditor } = await import("./agent-chat-composer-editor"));
 });
 
-afterEach(async () => {
-  await restoreMockedModules([
-    ["./agent-chat-composer-selection", () => import("./agent-chat-composer-selection")],
-  ]);
+afterEach(() => {
+  for (const selectionSpy of selectionSpies) selectionSpy.mockRestore();
+  selectionSpies = [];
 });
 
 const resetSelectionMocks = (): void => {
@@ -278,6 +280,14 @@ const getLastTextSegment = (container: HTMLElement): HTMLElement => {
   return editable;
 };
 
+const requireClosestHTMLElement = (element: Element, selector: string): HTMLElement => {
+  const closest = element.closest(selector);
+  if (!(closest instanceof HTMLElement)) {
+    throw new Error(`Expected an HTMLElement matching ${selector}`);
+  }
+  return closest;
+};
+
 const collapseSelectionOnEditorRoot = (container: HTMLElement): HTMLElement => {
   const editorRoot = getEditorRoot(container);
   const collapsedRange = document.createRange();
@@ -425,6 +435,10 @@ const createClipboardFileItem = (file: File) => ({
   getAsFile: () => file,
 });
 
+type FileSearchResolution = {
+  resolve?: (results: AgentFileSearchResult[]) => void;
+};
+
 describe("AgentChatComposerEditor", () => {
   test("exposes the rich editor as a collapsed named combobox", () => {
     render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
@@ -440,11 +454,11 @@ describe("AgentChatComposerEditor", () => {
   });
 
   test("owns reference popup state while focus stays on the editor", async () => {
-    let resolveSearch: ((results: AgentFileSearchResult[]) => void) | null = null;
+    const pendingSearch: FileSearchResolution = {};
     const searchFiles = mock(
       () =>
         new Promise<AgentFileSearchResult[]>((resolve) => {
-          resolveSearch = resolve;
+          pendingSearch.resolve = resolve;
         }),
     );
     const onSend = mock(() => {});
@@ -471,15 +485,15 @@ describe("AgentChatComposerEditor", () => {
 
     await waitFor(
       () => {
-        expect(resolveSearch).not.toBeNull();
+        expect(pendingSearch.resolve).toBeDefined();
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
 
-    if (!resolveSearch) {
+    const finishSearch = pendingSearch.resolve;
+    if (!finishSearch) {
       throw new Error("Expected file search to be pending");
     }
-    const finishSearch = resolveSearch as (results: AgentFileSearchResult[]) => void;
     finishSearch([
       buildFileSearchResult({ id: "alpha", path: "src/alpha.ts", name: "alpha.ts" }),
       buildFileSearchResult({ id: "beta", path: "src/beta.ts", name: "beta.ts" }),
@@ -1228,25 +1242,12 @@ describe("AgentChatComposerEditor", () => {
   });
 
   test("selects the full composer content with the select-all shortcut", () => {
-    let activeRange: Range | null = null;
     const originalGetSelection = globalThis.getSelection;
-    const selection = {
-      removeAllRanges: () => {
-        activeRange = null;
-      },
-      addRange: (range: Range) => {
-        activeRange = range;
-      },
-      get rangeCount() {
-        return activeRange ? 1 : 0;
-      },
-      getRangeAt: () => {
-        if (!activeRange) {
-          throw new Error("Expected active selection range");
-        }
-        return activeRange;
-      },
-    } as unknown as Selection;
+    const selection = document.getSelection();
+    if (!selection) {
+      throw new Error("Expected the test document to provide a Selection.");
+    }
+    selection.removeAllRanges();
     globalThis.getSelection = () => selection;
 
     try {
@@ -1257,11 +1258,11 @@ describe("AgentChatComposerEditor", () => {
         metaKey: true,
       });
 
-      const selectedRange = activeRange as Range | null;
-      expect(selectedRange).toBeTruthy();
-      if (!selectedRange) {
+      expect(selection.rangeCount).toBe(1);
+      if (selection.rangeCount === 0) {
         throw new Error("Expected active selection range");
       }
+      const selectedRange = selection.getRangeAt(0);
       expect(selectedRange.toString()).toContain("hello");
     } finally {
       globalThis.getSelection = originalGetSelection;
@@ -1316,14 +1317,14 @@ describe("AgentChatComposerEditor", () => {
   });
 
   test("keeps previous file-search results visible while the next query loads", async () => {
-    let resolveSecondSearch: ((results: AgentFileSearchResult[]) => void) | null = null;
+    const pendingSecondSearch: FileSearchResolution = {};
     const searchFiles = mock((query: string) => {
       if (query === "a") {
         return Promise.resolve([buildFileSearchResult({ path: "src/alpha.ts", name: "alpha.ts" })]);
       }
       if (query === "ab") {
         return new Promise<AgentFileSearchResult[]>((resolve) => {
-          resolveSecondSearch = resolve;
+          pendingSecondSearch.resolve = resolve;
         });
       }
       return Promise.resolve([]);
@@ -1347,12 +1348,12 @@ describe("AgentChatComposerEditor", () => {
     expect(screen.queryByText("Searching files...")).toBeNull();
 
     await waitFor(() => {
-      expect(resolveSecondSearch).not.toBeNull();
+      expect(pendingSecondSearch.resolve).toBeDefined();
     });
-    if (!resolveSecondSearch) {
+    const finishSecondSearch = pendingSecondSearch.resolve;
+    if (!finishSecondSearch) {
       throw new Error("Expected second file search to be pending");
     }
-    const finishSecondSearch = resolveSecondSearch as (results: AgentFileSearchResult[]) => void;
     finishSecondSearch([buildFileSearchResult({ path: "src/ab.ts", name: "ab.ts" })]);
 
     await waitFor(() => {
@@ -1539,7 +1540,7 @@ describe("AgentChatComposerEditor", () => {
         selection?.removeAllRanges();
         selection?.addRange(range);
       }
-      fireEvent.input(leadingEditable.closest('[contenteditable="true"]') as HTMLElement);
+      fireEvent.input(requireClosestHTMLElement(leadingEditable, '[contenteditable="true"]'));
 
       await waitFor(
         () => {
@@ -1671,24 +1672,27 @@ describe("AgentChatComposerEditor", () => {
 
   test("preserves staged attachments when clearing a full composer selection", async () => {
     resetSelectionMocks();
+    const observedDrafts: AgentChatComposerDraft[] = [];
+    const initialDraft: AgentChatComposerDraft = {
+      segments: createComposerDraft("hello").segments,
+      attachments: [
+        createComposerAttachment(
+          {
+            name: "screenshot.png",
+            kind: "image",
+            mime: "image/png",
+            path: "/tmp/screenshot.png",
+          },
+          "attachment-1",
+        ),
+      ],
+    };
     const rendered = render(
       <EditorHarness
         slashCommands={COMMANDS}
         slashCommandsError={null}
-        initialDraft={{
-          segments: createComposerDraft("hello").segments,
-          attachments: [
-            createComposerAttachment(
-              {
-                name: "screenshot.png",
-                kind: "image",
-                mime: "image/png",
-                path: "/tmp/screenshot.png",
-              },
-              "attachment-1",
-            ),
-          ],
-        }}
+        draft={initialDraft}
+        onDraftChange={(draft) => observedDrafts.push(draft)}
       />,
     );
 
@@ -1697,15 +1701,14 @@ describe("AgentChatComposerEditor", () => {
     fireEvent.keyDown(editorRoot, { key: "Backspace" });
 
     await waitFor(() => {
-      const draftState = screen.getByTestId("draft-state").textContent;
-      if (!draftState) {
-        throw new Error("Expected draft state output");
+      const updatedDraft = observedDrafts.at(-1);
+      if (!updatedDraft) {
+        throw new Error("Expected the editor to emit an updated draft.");
       }
-      const parsed = JSON.parse(draftState) as AgentChatComposerDraft;
-      expect(parsed.attachments).toHaveLength(1);
-      expect(parsed.attachments?.[0]?.name).toBe("screenshot.png");
-      expect(parsed.segments).toHaveLength(1);
-      expect(parsed.segments[0]).toMatchObject({ kind: "text", text: "" });
+      expect(updatedDraft.attachments).toEqual([
+        expect.objectContaining({ id: "attachment-1", name: "screenshot.png" }),
+      ]);
+      expect(updatedDraft.segments).toEqual([expect.objectContaining({ kind: "text", text: "" })]);
     });
   });
 
@@ -2194,8 +2197,8 @@ describe("AgentChatComposerEditor", () => {
       () => {
         const updatedTrailingEditable = getLastTextSegment(rendered.container);
         expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
-        expect((updatedTrailingEditable as HTMLElement).textContent).toBe("\n\u200B");
-        const classNames = (updatedTrailingEditable as HTMLElement).className.split(/\s+/);
+        expect(updatedTrailingEditable.textContent).toBe("\n\u200B");
+        const classNames = updatedTrailingEditable.className.split(/\s+/);
         expect(classNames).toContain("inline");
         expect(classNames).not.toContain("inline-block");
         expect(classNames).not.toContain("min-w-[1px]");
@@ -2242,7 +2245,7 @@ describe("AgentChatComposerEditor", () => {
     await waitFor(
       () => {
         const updatedTrailingEditable = getLastTextSegment(rendered.container);
-        expect((updatedTrailingEditable as HTMLElement).textContent).toBe("\n\u200B");
+        expect(updatedTrailingEditable.textContent).toBe("\n\u200B");
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -2258,9 +2261,9 @@ describe("AgentChatComposerEditor", () => {
       () => {
         const updatedTrailingEditable = getLastTextSegment(rendered.container);
         expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
-        expect((updatedTrailingEditable as HTMLElement).textContent).toBe("");
-        expect((updatedTrailingEditable as HTMLElement).className).toContain("inline-block");
-        expect((updatedTrailingEditable as HTMLElement).className).not.toContain("after:w-px");
+        expect(updatedTrailingEditable.textContent).toBe("");
+        expect(updatedTrailingEditable.className).toContain("inline-block");
+        expect(updatedTrailingEditable.className).not.toContain("after:w-px");
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -2301,8 +2304,8 @@ describe("AgentChatComposerEditor", () => {
       () => {
         const updatedTrailingEditable = getLastTextSegment(rendered.container);
         expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
-        expect((updatedTrailingEditable as HTMLElement).textContent).toBe("\n\u200B");
-        expect((updatedTrailingEditable as HTMLElement).className).toContain("after:w-px");
+        expect(updatedTrailingEditable.textContent).toBe("\n\u200B");
+        expect(updatedTrailingEditable.className).toContain("after:w-px");
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -2376,8 +2379,8 @@ describe("AgentChatComposerEditor", () => {
       () => {
         const updatedTrailingEditable = getLastTextSegment(rendered.container);
         expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
-        expect((updatedTrailingEditable as HTMLElement).textContent).toBe("\n\u200B");
-        expect((updatedTrailingEditable as HTMLElement).className).toContain("after:w-px");
+        expect(updatedTrailingEditable.textContent).toBe("\n\u200B");
+        expect(updatedTrailingEditable.className).toContain("after:w-px");
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -2447,14 +2450,14 @@ describe("AgentChatComposerEditor", () => {
       selection?.removeAllRanges();
       selection?.addRange(range);
     }
-    fireEvent.input(trailingEditable.closest('[contenteditable="true"]') as HTMLElement);
+    fireEvent.input(requireClosestHTMLElement(trailingEditable, '[contenteditable="true"]'));
 
     await waitFor(() => {
       const updatedTrailingEditable = getLastTextSegment(rendered.container);
       expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
-      expect((updatedTrailingEditable as HTMLElement).className).toContain("inline");
-      expect((updatedTrailingEditable as HTMLElement).className).not.toContain("inline-block");
-      expect((updatedTrailingEditable as HTMLElement).className).not.toContain("min-w-[1px]");
+      expect(updatedTrailingEditable.className).toContain("inline");
+      expect(updatedTrailingEditable.className).not.toContain("inline-block");
+      expect(updatedTrailingEditable.className).not.toContain("min-w-[1px]");
     });
   });
 
@@ -2495,7 +2498,7 @@ describe("AgentChatComposerEditor", () => {
       selection?.removeAllRanges();
       selection?.addRange(range);
     }
-    fireEvent.input(trailingEditable.closest('[contenteditable="true"]') as HTMLElement);
+    fireEvent.input(requireClosestHTMLElement(trailingEditable, '[contenteditable="true"]'));
 
     await waitFor(() => {
       const editorRoot = rendered.container.querySelector("[data-composer-content-root]");
@@ -2543,17 +2546,18 @@ describe("AgentChatComposerEditor", () => {
       selection?.removeAllRanges();
       selection?.addRange(range);
     }
-
-    fireEvent.input(originalTrailingEditable.closest('[contenteditable="true"]') as HTMLElement);
+    fireEvent.input(
+      requireClosestHTMLElement(originalTrailingEditable, '[contenteditable="true"]'),
+    );
 
     await waitFor(() => {
       const updatedTrailingEditable =
         rendered.container.querySelectorAll("[data-text-segment-id]")[1];
-      expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
-      expect((updatedTrailingEditable as HTMLElement).dataset.textSegmentId).toBe(
-        trailingSegmentId,
-      );
-      expect(updatedTrailingEditable?.textContent).toBe(" ");
+      if (!(updatedTrailingEditable instanceof HTMLElement)) {
+        throw new Error("Expected the trailing file-chip text segment");
+      }
+      expect(updatedTrailingEditable.dataset.textSegmentId).toBe(trailingSegmentId);
+      expect(updatedTrailingEditable.textContent).toBe(" ");
     });
   });
 
@@ -2596,17 +2600,18 @@ describe("AgentChatComposerEditor", () => {
       selection?.removeAllRanges();
       selection?.addRange(range);
     }
-
-    fireEvent.input(originalTrailingEditable.closest('[contenteditable="true"]') as HTMLElement);
+    fireEvent.input(
+      requireClosestHTMLElement(originalTrailingEditable, '[contenteditable="true"]'),
+    );
 
     await waitFor(() => {
       const updatedTrailingEditable =
         rendered.container.querySelectorAll("[data-text-segment-id]")[1];
-      expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
-      expect((updatedTrailingEditable as HTMLElement).dataset.textSegmentId).toBe(
-        trailingSegmentId,
-      );
-      expect(updatedTrailingEditable?.textContent).toBe(" ");
+      if (!(updatedTrailingEditable instanceof HTMLElement)) {
+        throw new Error("Expected the trailing skill-chip text segment");
+      }
+      expect(updatedTrailingEditable.dataset.textSegmentId).toBe(trailingSegmentId);
+      expect(updatedTrailingEditable.textContent).toBe(" ");
     });
   });
 
@@ -2646,7 +2651,7 @@ describe("AgentChatComposerEditor", () => {
       selection?.removeAllRanges();
       selection?.addRange(range);
     }
-    fireEvent.input(trailingEditable.closest('[contenteditable="true"]') as HTMLElement);
+    fireEvent.input(requireClosestHTMLElement(trailingEditable, '[contenteditable="true"]'));
 
     const editorRoot = rendered.container.querySelector('[contenteditable="true"]');
     if (!(editorRoot instanceof HTMLElement)) {

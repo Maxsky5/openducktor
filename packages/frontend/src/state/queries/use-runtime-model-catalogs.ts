@@ -39,7 +39,7 @@ export function useRuntimeModelCatalogs({
   runtimeKinds,
   enabledRuntimeKinds,
   loadCatalog,
-}: UseRuntimeModelCatalogsArgs): { resources: RuntimeModelCatalogQueryResource[] } {
+}: UseRuntimeModelCatalogsArgs) {
   const uniqueRuntimeKinds = useMemo(() => Array.from(new Set(runtimeKinds)), [runtimeKinds]);
   const enabledRuntimeKindSet = useMemo(() => new Set(enabledRuntimeKinds), [enabledRuntimeKinds]);
   const catalogQueries = useQueries({
@@ -74,5 +74,5 @@ export function useRuntimeModelCatalogs({
     [catalogQueries, enabledRuntimeKindSet, repoPath, uniqueRuntimeKinds],
   );
 
-  return { resources };
+  return { resources } satisfies { resources: RuntimeModelCatalogQueryResource[] };
 }

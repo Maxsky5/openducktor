@@ -3,12 +3,18 @@ import {
   CodexSessionHistoryError,
   createLocalAttachmentAdapter,
   type EffectHostCommandRouter,
+  type HostCommandArgs,
+  type HostCommandName,
+  type HostCommandResult,
   TaskAssetError,
   type TaskAssetReadService,
   TerminalServiceError,
 } from "@openducktor/host";
+import type { HostEventEnvelope } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { WorkspaceTextFileWriteError } from "../../host/src/application/filesystem/workspace-text-file-service";
+import { HostOperationError } from "../../host/src/effect/host-errors";
+import type { HostCommandHandlerError } from "../../host/src/interface/router/host-command-router";
 import type { WebLogger } from "./logger";
 import { createTaskEventLeaseManager, type TaskEventLeaseManager } from "./task-event-leases";
 import {
@@ -16,10 +22,13 @@ import {
   stopTypescriptHostBackendServices,
   validateWebFrontendOrigin,
 } from "./typescript-host-backend-support";
+import type { TaskEventStreamFrame } from "@openducktor/contracts";
 
 const nativeResponse = await Bun.fetch("data:,");
-(globalThis as typeof globalThis & { Response: typeof Response }).Response =
-  nativeResponse.constructor as typeof Response;
+Object.defineProperty(globalThis, "Response", {
+  configurable: true,
+  value: nativeResponse.constructor,
+});
 
 const { handleTypescriptHostBackendRequest, resolveAppSessionCookieName } =
   await import("./typescript-host-backend");
@@ -29,26 +38,26 @@ const APP_SESSION_COOKIE_NAME = "openducktor_web_session";
 const CONTROL_TOKEN = "control-token";
 const DEVELOPMENT_INSTANCE_ID = "browser-0123456789ab";
 const DEVELOPMENT_APP_SESSION_COOKIE_NAME = `${APP_SESSION_COOKIE_NAME}_${DEVELOPMENT_INSTANCE_ID}`;
+
+class TestServerRequest extends Request {
+  override readonly headers: Headers;
+
+  constructor(input: ConstructorParameters<typeof Request>[0], init?: RequestInit) {
+    super(input, init);
+    this.headers = new Headers(init?.headers);
+  }
+}
+
 const testLogger: WebLogger = {
   error: () => Effect.void,
   info: () => Effect.void,
   success: () => Effect.void,
 };
 
-class StructuredHostCommandFailure extends Error {
-  readonly details: { readonly command: string; readonly failureKind: "timeout" };
-
-  constructor(command: string) {
-    super(`Failed to invoke ${command}.`);
-    this.name = "StructuredHostCommandFailure";
-    this.details = { command, failureKind: "timeout" };
-  }
-}
-
 type TestHostCommandInvoke = (
   command: string,
-  args?: Record<string, unknown>,
-) => Effect.Effect<unknown, unknown>;
+  args?: Exclude<HostCommandArgs, undefined>,
+) => Effect.Effect<HostCommandResult, HostCommandHandlerError>;
 
 const createDeferred = <Value = void>() => {
   let resolve: (value: Value | PromiseLike<Value>) => void = () => {};
@@ -77,11 +86,28 @@ const readImmediateStreamChunk = async (
 
 const createTestHostCommandRouter = (
   invoke: TestHostCommandInvoke = () => Effect.succeed(null),
-): EffectHostCommandRouter => ({
-  dispose: () => Effect.void,
-  initialize: () => Effect.void,
-  invoke: (command, args) => invoke(command, args) as ReturnType<EffectHostCommandRouter["invoke"]>,
-});
+): EffectHostCommandRouter => {
+  function invokeCommand<Command extends HostCommandName>(
+    command: Command,
+    args?: Exclude<HostCommandArgs, undefined>,
+  ): Effect.Effect<HostCommandResult<Command>, HostCommandHandlerError>;
+  function invokeCommand(
+    command: string,
+    args?: Exclude<HostCommandArgs, undefined>,
+  ): Effect.Effect<HostCommandResult, HostCommandHandlerError>;
+  function invokeCommand(
+    command: string,
+    args?: Exclude<HostCommandArgs, undefined>,
+  ): Effect.Effect<HostCommandResult, HostCommandHandlerError> {
+    return invoke(command, args);
+  }
+
+  return {
+    dispose: () => Effect.void,
+    initialize: () => Effect.void,
+    invoke: invokeCommand,
+  };
+};
 
 const missingTaskAssetReadService: TaskAssetReadService = {
   read: () => Effect.succeed(null),
@@ -106,26 +132,25 @@ const handleTestRequest = (
   options: TestRequestOptions = {},
 ): Promise<Response> => {
   const hostCommandRouter = options.hostCommandRouter ?? createTestHostCommandRouter();
-  return Effect.runPromise(
-    handleTypescriptHostBackendRequest({
-      allowedOrigins: new Set(),
-      appSessionCookieName: options.appSessionCookieName ?? APP_SESSION_COOKIE_NAME,
-      appToken: options.appToken ?? APP_TOKEN,
-      controlToken: options.controlToken ?? CONTROL_TOKEN,
-      eventBus: options.eventBus ?? new BufferedHostEventBus({ report: () => {} }),
-      hostCommandRouter,
-      ...(options.taskEventLeaseManager
-        ? { taskEventLeaseManager: options.taskEventLeaseManager }
-        : {}),
-      taskAssetReadService: options.taskAssetReadService ?? missingTaskAssetReadService,
-      localAttachments: createLocalAttachmentAdapter(),
-      logger: testLogger,
-      request,
-      shutdownStarted: options.shutdownStarted ?? false,
-      beginShutdown: options.beginShutdown ?? (() => {}),
-      stop: options.stop ?? (async () => {}),
-    }),
-  );
+  const requestInput: Parameters<typeof handleTypescriptHostBackendRequest>[0] = {
+    allowedOrigins: new Set(),
+    appSessionCookieName: options.appSessionCookieName ?? APP_SESSION_COOKIE_NAME,
+    appToken: options.appToken ?? APP_TOKEN,
+    controlToken: options.controlToken ?? CONTROL_TOKEN,
+    eventBus: options.eventBus ?? new BufferedHostEventBus({ report: () => {} }),
+    hostCommandRouter,
+    taskAssetReadService: options.taskAssetReadService ?? missingTaskAssetReadService,
+    localAttachments: createLocalAttachmentAdapter(),
+    logger: testLogger,
+    request,
+    shutdownStarted: options.shutdownStarted ?? false,
+    beginShutdown: options.beginShutdown ?? (() => {}),
+    stop: options.stop ?? (async () => {}),
+  };
+  if (options.taskEventLeaseManager) {
+    requestInput.taskEventLeaseManager = options.taskEventLeaseManager;
+  }
+  return Effect.runPromise(handleTypescriptHostBackendRequest(requestInput));
 };
 
 describe("TypeScript web host backend", () => {
@@ -176,7 +201,13 @@ describe("TypeScript web host backend", () => {
 
   test("preserves structured host command failure kind in invoke error responses", async () => {
     const hostCommandRouter = createTestHostCommandRouter((command) =>
-      Effect.fail(new StructuredHostCommandFailure(command)),
+      Effect.fail(
+        new HostOperationError({
+          message: `Failed to invoke ${command}.`,
+          operation: "test.invoke",
+          details: { command, failureKind: "timeout" },
+        }),
+      ),
     );
 
     const response = await handleTestRequest(
@@ -197,6 +228,25 @@ describe("TypeScript web host backend", () => {
       failureKind: "timeout",
       message: "Failed to invoke runtime_ensure.",
     });
+  });
+
+  test("serializes successful host command results without changing their shape", async () => {
+    const response = await handleTestRequest(
+      new Request("http://127.0.0.1/invoke/system_get_platform", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-openducktor-app-token": APP_TOKEN,
+        },
+        body: JSON.stringify({}),
+      }),
+      {
+        hostCommandRouter: createTestHostCommandRouter(() => Effect.succeed("linux")),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toBe("linux");
   });
 
   test("preserves structured terminal failures in invoke error responses", async () => {
@@ -406,7 +456,10 @@ describe("TypeScript web host backend", () => {
   });
 
   test("uses task leases instead of generic event replay and ignores Last-Event-ID", async () => {
-    let sink: ((frame: unknown) => void) | null = null;
+    type TaskEventSinkHolder = {
+      sink?: (frame: TaskEventStreamFrame) => void;
+    };
+    const subscription: TaskEventSinkHolder = {};
     const subscribeCalls: unknown[] = [];
     const acknowledged: unknown[] = [];
     const taskEventLeaseManager = createTaskEventLeaseManager({
@@ -420,7 +473,7 @@ describe("TypeScript web host backend", () => {
         publish: () => {},
         subscribe: (input, nextSink) => {
           subscribeCalls.push(input);
-          sink = nextSink as (frame: unknown) => void;
+          subscription.sink = nextSink;
           return { subscriptionId: "host-subscription", unsubscribe: () => {} };
         },
       },
@@ -434,40 +487,41 @@ describe("TypeScript web host backend", () => {
       { taskEventLeaseManager },
     );
     expect(create.status).toBe(201);
-    const created = (await create.json()) as { subscriptionId: string; streamToken: string };
+    const created = await create.json();
     expect(subscribeCalls).toEqual([{ cursor: null }]);
 
     const stream = await handleTestRequest(
-      {
-        headers: new Headers([
-          ["cookie", `openducktor_web_session=${APP_TOKEN}`],
-          ["last-event-id", "999999"],
-        ]),
-        method: "GET",
-        url: `http://127.0.0.1/task-events/subscriptions/${created.subscriptionId}/stream?token=${created.streamToken}`,
-      } as Request,
+      new TestServerRequest(
+        `http://127.0.0.1/task-events/subscriptions/${created.subscriptionId}/stream?token=${created.streamToken}`,
+        {
+          headers: new Headers([
+            ["cookie", `openducktor_web_session=${APP_TOKEN}`],
+            ["last-event-id", "999999"],
+          ]),
+        },
+      ),
       { taskEventLeaseManager },
     );
     expect(stream.status).toBe(200);
     const reader = stream.body?.getReader();
+    const sink = subscription.sink;
     if (!reader || !sink) throw new Error("Expected task event stream subscription.");
-    const frame = {
-      type: "snapshot_required" as const,
+    const frame: TaskEventStreamFrame = {
+      type: "snapshot_required",
       cursor: { epoch: "fc49d1f9-708c-4198-b56b-f1437b2bbcea", sequence: 0 },
-      reason: "buffer_gap" as const,
+      reason: "buffer_gap",
     };
-    (sink as (nextFrame: typeof frame) => void)(frame);
+    sink(frame);
     const sse = new TextDecoder().decode((await reader.read()).value);
     expect(sse).toContain("event: task-frame");
     expect(sse).toContain(JSON.stringify(frame));
     await reader.cancel();
 
     const reconnect = await handleTestRequest(
-      {
-        headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]),
-        method: "GET",
-        url: `http://127.0.0.1/task-events/subscriptions/${created.subscriptionId}/stream?token=${created.streamToken}`,
-      } as Request,
+      new TestServerRequest(
+        `http://127.0.0.1/task-events/subscriptions/${created.subscriptionId}/stream?token=${created.streamToken}`,
+        { headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]) },
+      ),
       { taskEventLeaseManager },
     );
     expect(reconnect.status).toBe(200);
@@ -498,22 +552,20 @@ describe("TypeScript web host backend", () => {
     if (!lease) throw new Error("Expected task event stream lease.");
     taskEventLeaseManager.delete(lease);
     const expired = await handleTestRequest(
-      {
-        headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]),
-        method: "GET",
-        url: `http://127.0.0.1/task-events/subscriptions/${created.subscriptionId}/stream?token=${created.streamToken}`,
-      } as Request,
+      new TestServerRequest(
+        `http://127.0.0.1/task-events/subscriptions/${created.subscriptionId}/stream?token=${created.streamToken}`,
+        { headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]) },
+      ),
       { taskEventLeaseManager },
     );
     expect(expired.status).toBe(410);
     expect(subscribeCalls).toHaveLength(1);
 
     const tampered = await handleTestRequest(
-      {
-        headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]),
-        method: "GET",
-        url: `http://127.0.0.1/task-events/subscriptions/${created.subscriptionId}/stream?token=tampered`,
-      } as Request,
+      new TestServerRequest(
+        `http://127.0.0.1/task-events/subscriptions/${created.subscriptionId}/stream?token=tampered`,
+        { headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]) },
+      ),
       { taskEventLeaseManager },
     );
     expect(tampered.status).toBe(403);
@@ -523,19 +575,31 @@ describe("TypeScript web host backend", () => {
   test("multiplexes non-task host event channels through the shared SSE endpoint", async () => {
     const eventBus = new BufferedHostEventBus({ report: () => {} });
     const events = [
-      ["openducktor://run-event", { type: "run" }],
-      ["openducktor://dev-server-event", { type: "dev-server" }],
-      [
-        "openducktor://agent-session-live-event",
-        {
+      { channel: "openducktor://run-event", payload: { type: "run" } },
+      {
+        channel: "openducktor://dev-server-event",
+        payload: {
+          type: "snapshot",
+          state: {
+            repoPath: "/repo",
+            taskId: "task-1",
+            worktreePath: null,
+            scripts: [],
+            updatedAt: "2026-03-19T15:30:00.000Z",
+          },
+        },
+      },
+      {
+        channel: "openducktor://agent-session-live-event",
+        payload: {
           type: "snapshot",
           repoPath: "/repo",
           sessions: [],
         },
-      ],
-    ] as const;
-    for (const [channel, payload] of events) {
-      eventBus.publish(channel, payload);
+      },
+    ] satisfies readonly HostEventEnvelope[];
+    for (const event of events) {
+      eventBus.publish(event);
     }
 
     const response = await handleTestRequest(
@@ -562,8 +626,8 @@ describe("TypeScript web host backend", () => {
       for (const _event of events) {
         replay += new TextDecoder().decode((await readImmediateStreamChunk(reader)).value);
       }
-      for (const [channel, payload] of events) {
-        expect(replay).toContain(JSON.stringify({ channel, payload }));
+      for (const event of events) {
+        expect(replay).toContain(JSON.stringify(event));
       }
     } finally {
       await reader.cancel();
@@ -585,8 +649,13 @@ describe("TypeScript web host backend", () => {
     eventBus.subscribe("openducktor://run-event", () => unsubscribeDuringDelivery());
     unsubscribeDuringDelivery = unsubscribeReceived;
 
-    expect(() => eventBus.publish("openducktor://run-event", { type: "run" })).not.toThrow();
-    expect(received).toHaveBeenCalledWith({ type: "run" });
+    expect(() =>
+      eventBus.publish({ channel: "openducktor://run-event", payload: { type: "run" } }),
+    ).not.toThrow();
+    expect(received).toHaveBeenCalledWith({
+      channel: "openducktor://run-event",
+      payload: { type: "run" },
+    });
     expect(reported).toEqual([failure]);
     expect(eventBus.stream().replayAfter(0)).toHaveLength(1);
   });
@@ -594,15 +663,22 @@ describe("TypeScript web host backend", () => {
   test("emits a stream warning when shared SSE replay cannot cover the reconnect gap", async () => {
     const eventBus = new BufferedHostEventBus({ report: () => {} });
     for (let index = 0; index < 258; index += 1) {
-      eventBus.publish("openducktor://dev-server-event", {
-        type: "terminal_chunk",
-        repoPath: "/repo",
-        taskId: "task-1",
-        terminalChunk: {
-          scriptId: "web",
-          sequence: index,
-          data: `line-${index}\r\n`,
-          timestamp: "2026-03-19T15:30:00.000Z",
+      eventBus.publish({
+        channel: "openducktor://dev-server-event",
+        payload: {
+          type: "terminal_chunk",
+          repoPath: "/repo",
+          taskId: "task-1",
+          terminalChunk: {
+            scriptId: "web",
+            runIdentity: {
+              runId: "run-1",
+              runOrder: { hostInstanceId: "host-1", generation: 1 },
+            },
+            sequence: index,
+            data: `line-${index}\r\n`,
+            timestamp: "2026-03-19T15:30:00.000Z",
+          },
         },
       });
     }
@@ -801,11 +877,11 @@ describe("TypeScript web host backend", () => {
       message: "Missing OpenDucktor web host app token.",
     });
 
-    const previewInvalid = await handleTestRequest({
-      headers: new Headers([["cookie", "openducktor_web_session=wrong"]]),
-      method: "GET",
-      url: previewUrl,
-    } as Request);
+    const previewInvalid = await handleTestRequest(
+      new TestServerRequest(previewUrl, {
+        headers: new Headers([["cookie", "openducktor_web_session=wrong"]]),
+      }),
+    );
     expect(previewInvalid.status).toBe(403);
     expect(await previewInvalid.json()).toEqual({
       error: "Invalid OpenDucktor web host app token.",
@@ -844,11 +920,9 @@ describe("TypeScript web host backend", () => {
     expect(readInput).toBeUndefined();
 
     const response = await handleTestRequest(
-      {
+      new TestServerRequest(url, {
         headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]),
-        method: "GET",
-        url,
-      } as Request,
+      }),
       { taskAssetReadService },
     );
 
@@ -863,11 +937,11 @@ describe("TypeScript web host backend", () => {
   test("returns 404 when an authenticated task asset relation is missing", async () => {
     const url =
       "http://127.0.0.1/task-assets/9f66372b-e956-47f4-af2f-77e0df2ad4e1/task-1/description/550e8400-e29b-41d4-a716-446655440000";
-    const response = await handleTestRequest({
-      headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]),
-      method: "GET",
-      url,
-    } as Request);
+    const response = await handleTestRequest(
+      new TestServerRequest(url, {
+        headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]),
+      }),
+    );
 
     expect(response.status).toBe(404);
   });
@@ -1042,19 +1116,16 @@ describe("TypeScript web host backend", () => {
 
       const shutdown = stop();
       await disposeStarted.promise;
-      eventBus.publish("openducktor://run-event", { type: "run" });
+      eventBus.publish({ channel: "openducktor://run-event", payload: { type: "run" } });
       expect(new TextDecoder().decode((await reader.read()).value)).toContain('"type":"run"');
 
       disposeReleased.resolve();
       await shutdown;
-      const terminalRead = await reader.read().then(
-        (result) => ({ result }),
-        (error: unknown) => ({ error }),
-      );
-      if ("error" in terminalRead) {
-        expect(terminalRead.error).toBeInstanceOf(Error);
-      } else {
-        expect(terminalRead.result.done).toBe(true);
+      try {
+        const terminalRead = await reader.read();
+        expect(terminalRead.done).toBe(true);
+      } catch (cause) {
+        expect(cause).toBeInstanceOf(Error);
       }
     } finally {
       disposeReleased.resolve();

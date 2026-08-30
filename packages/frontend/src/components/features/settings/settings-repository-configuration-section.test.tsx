@@ -33,7 +33,7 @@ describe("RepositoryConfigurationSection", () => {
       createElement(RepositoryConfigurationSection, {
         selectedRepoConfig: repoConfig,
         selectedRepoEffectiveWorktreeBasePath: "/tmp/worktrees",
-        selectedRepoBranches: [] as GitBranch[],
+        selectedRepoBranches: [] satisfies GitBranch[],
         selectedRepoBranchesError: null,
         loadingState: {
           isLoadingSettings: false,

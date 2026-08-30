@@ -19,10 +19,15 @@ type AgentChatTranscriptSessionSource = Pick<
 
 export const toAgentChatTranscriptSession = (
   session: AgentChatTranscriptSessionSource,
-): AgentChatTranscriptSession => ({
-  ...toAgentSessionIdentity(session),
-  ...(session.title ? { title: session.title } : {}),
-  activityState: getAgentSessionActivityStateFromSession(session),
-  runtimeStatusMessage: session.runtimeStatusMessage,
-  messages: toSessionMessagesState(session),
-});
+): AgentChatTranscriptSession => {
+  const transcriptSession: AgentChatTranscriptSession = {
+    ...toAgentSessionIdentity(session),
+    activityState: getAgentSessionActivityStateFromSession(session),
+    runtimeStatusMessage: session.runtimeStatusMessage,
+    messages: toSessionMessagesState(session),
+  };
+  if (session.title) {
+    transcriptSession.title = session.title;
+  }
+  return transcriptSession;
+};

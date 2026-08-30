@@ -86,22 +86,21 @@ const createTerminalCleanupService = (calls: unknown[]): TaskTerminalCleanupPort
     ),
 });
 
-const runtimeDefinitionsWithScopes = (
-  supportedScopes: RuntimeSupportedScope[],
-): { listRuntimeDefinitions(): RuntimeDescriptor[] } => ({
-  listRuntimeDefinitions: () => [
-    {
-      ...RUNTIME_DESCRIPTORS_BY_KIND.opencode,
-      capabilities: {
-        ...RUNTIME_DESCRIPTORS_BY_KIND.opencode.capabilities,
-        workflow: {
-          ...RUNTIME_DESCRIPTORS_BY_KIND.opencode.capabilities.workflow,
-          supportedScopes,
+const runtimeDefinitionsWithScopes = (supportedScopes: RuntimeSupportedScope[]) =>
+  ({
+    listRuntimeDefinitions: () => [
+      {
+        ...RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+        capabilities: {
+          ...RUNTIME_DESCRIPTORS_BY_KIND.opencode.capabilities,
+          workflow: {
+            ...RUNTIME_DESCRIPTORS_BY_KIND.opencode.capabilities.workflow,
+            supportedScopes,
+          },
         },
       },
-    },
-  ],
-});
+    ],
+  }) satisfies { listRuntimeDefinitions(): RuntimeDescriptor[] };
 
 describe("task worktree cleanup", () => {
   test.each([

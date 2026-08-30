@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   type AgentStudioContextUsage,
+  type ExtractLatestSessionContextUsageInput,
   extractLatestSessionContextUsage,
   indexModelDescriptorsByProviderAndModel,
 } from "./context-usage-resolution";
@@ -21,19 +22,19 @@ export const useSelectedSessionContextUsage = ({
   }, [sessionModelCatalog]);
 
   return useMemo<AgentStudioContextUsage>(() => {
-    const fallbackContextWindow =
-      typeof selectedModelEntry?.contextWindow === "number"
-        ? selectedModelEntry.contextWindow
-        : null;
-    const fallbackOutputLimit =
-      typeof selectedModelEntry?.outputLimit === "number" ? selectedModelEntry.outputLimit : null;
-
-    return extractLatestSessionContextUsage({
+    const fallbackContextWindow = selectedModelEntry?.contextWindow ?? null;
+    const fallbackOutputLimit = selectedModelEntry?.outputLimit ?? null;
+    const contextUsageInput: ExtractLatestSessionContextUsageInput = {
       liveContextUsage: selectedSession?.contextUsage ?? null,
       modelDescriptorByKey: selectedSessionModelDescriptorByKey,
-      ...(fallbackContextWindow !== null ? { fallbackContextWindow } : {}),
-      ...(fallbackOutputLimit !== null ? { fallbackOutputLimit } : {}),
-    });
+    };
+    if (fallbackContextWindow !== null) {
+      contextUsageInput.fallbackContextWindow = fallbackContextWindow;
+    }
+    if (fallbackOutputLimit !== null) {
+      contextUsageInput.fallbackOutputLimit = fallbackOutputLimit;
+    }
+    return extractLatestSessionContextUsage(contextUsageInput);
   }, [
     selectedSession,
     selectedSessionModelDescriptorByKey,

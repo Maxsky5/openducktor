@@ -47,7 +47,7 @@ const createRecordingLocalAttachmentService = () => {
       });
     },
   };
-  const service = promiseService as LocalAttachmentService;
+  const service: LocalAttachmentService = promiseService;
   return { calls, service };
 };
 describe("createLocalAttachmentCommandHandlers", () => {

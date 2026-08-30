@@ -2,12 +2,23 @@
 
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { z } from "zod";
 
 const workspaceRoot = process.cwd();
 
 const desktopPackageJsonPaths = new Set(["apps/electron/package.json"]);
 
 type Mode = "check" | "set";
+
+const rootPackageManifestSchema = z.object({
+  workspaces: z.array(z.string()),
+});
+
+const versionedPackageManifestSchema = z
+  .object({
+    version: z.string().optional(),
+  })
+  .catchall(z.json());
 
 function usage(): never {
   console.error("Usage: bun run scripts/release-version.ts <check|set> <version>");
@@ -63,13 +74,11 @@ export function expectedVersionForEntry(file: string, releaseVersion: string): s
 
 function readRootWorkspacePatterns(): string[] {
   const rootPackageJsonPath = resolve(workspaceRoot, "package.json");
-  const parsed = JSON.parse(readFileSync(rootPackageJsonPath, "utf8")) as { workspaces?: unknown };
-
-  if (!Array.isArray(parsed.workspaces)) {
-    throw new Error("Root package.json must define workspaces as an array.");
-  }
-
-  return parsed.workspaces.filter((value): value is string => typeof value === "string");
+  const parsed = rootPackageManifestSchema.safeParse(
+    JSON.parse(readFileSync(rootPackageJsonPath, "utf8")),
+  );
+  if (!parsed.success) throw new Error("Root package.json must define workspaces as strings.");
+  return parsed.data.workspaces;
 }
 
 function expandWorkspacePattern(pattern: string): string[] {
@@ -113,7 +122,9 @@ function collectWorkspacePackageJsonPaths(): string[] {
 
 function readJsonVersion(relativePath: string): string {
   const absolutePath = resolve(workspaceRoot, relativePath);
-  const parsed = JSON.parse(readFileSync(absolutePath, "utf8")) as { version?: string };
+  const parsed = versionedPackageManifestSchema.parse(
+    JSON.parse(readFileSync(absolutePath, "utf8")),
+  );
   if (!parsed.version) {
     throw new Error(`Missing version in ${relativePath}`);
   }
@@ -122,7 +133,9 @@ function readJsonVersion(relativePath: string): string {
 
 function writeJsonVersion(relativePath: string, version: string): void {
   const absolutePath = resolve(workspaceRoot, relativePath);
-  const parsed = JSON.parse(readFileSync(absolutePath, "utf8")) as Record<string, unknown>;
+  const parsed = versionedPackageManifestSchema.parse(
+    JSON.parse(readFileSync(absolutePath, "utf8")),
+  );
 
   if (parsed.version === version) {
     return;

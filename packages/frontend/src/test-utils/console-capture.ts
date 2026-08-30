@@ -1,31 +1,32 @@
+import { z } from "zod";
+
 type ConsoleMethod = "debug" | "error" | "info" | "log" | "warn";
+type ConsoleArguments = Parameters<Console["log"]>;
 
-export type CapturedConsoleCalls = unknown[][];
-
-type ConsoleMethodMap = Record<ConsoleMethod, (...args: unknown[]) => void>;
+export type CapturedConsoleCalls = ConsoleArguments[];
 
 type WritableStreamName = "stderr" | "stdout";
 
-type WritableStreamLike = {
-  write: (chunk: unknown, ...args: unknown[]) => boolean;
-};
+type WritableStreamWrite = (typeof process.stdout)["write"];
+type WriteCallback = (error?: Error | null) => void;
+
+const writeCallbackSchema = z.function();
 
 export const withCapturedConsole = async <Result>(
   method: ConsoleMethod,
   run: (calls: CapturedConsoleCalls) => Promise<Result> | Result,
 ): Promise<Result> => {
-  const consoleMethods = console as unknown as ConsoleMethodMap;
-  const original = consoleMethods[method];
+  const original = console[method];
   const calls: CapturedConsoleCalls = [];
 
-  consoleMethods[method] = (...args: unknown[]): void => {
+  console[method] = (...args: ConsoleArguments): void => {
     calls.push(args);
   };
 
   try {
     return await run(calls);
   } finally {
-    consoleMethods[method] = original;
+    console[method] = original;
   }
 };
 
@@ -33,19 +34,18 @@ export const withCapturedConsoleMethods = async <Result>(
   methods: readonly ConsoleMethod[],
   run: (callsByMethod: Record<ConsoleMethod, CapturedConsoleCalls>) => Promise<Result> | Result,
 ): Promise<Result> => {
-  const consoleMethods = console as unknown as ConsoleMethodMap;
-  const originals = new Map<ConsoleMethod, (...args: unknown[]) => void>();
-  const callsByMethod: Record<ConsoleMethod, CapturedConsoleCalls> = {
-    debug: [],
-    error: [],
-    info: [],
-    log: [],
-    warn: [],
-  };
+  const originals = new Map<ConsoleMethod, (...args: ConsoleArguments) => void>();
+  const callsByMethod = {
+    debug: new Array<ConsoleArguments>(),
+    error: new Array<ConsoleArguments>(),
+    info: new Array<ConsoleArguments>(),
+    log: new Array<ConsoleArguments>(),
+    warn: new Array<ConsoleArguments>(),
+  } satisfies Record<ConsoleMethod, CapturedConsoleCalls>;
 
   for (const method of methods) {
-    originals.set(method, consoleMethods[method]);
-    consoleMethods[method] = (...args: unknown[]): void => {
+    originals.set(method, console[method]);
+    console[method] = (...args: ConsoleArguments): void => {
       callsByMethod[method].push(args);
     };
   }
@@ -54,7 +54,7 @@ export const withCapturedConsoleMethods = async <Result>(
     return await run(callsByMethod);
   } finally {
     for (const [method, original] of originals) {
-      consoleMethods[method] = original;
+      console[method] = original;
     }
   }
 };
@@ -63,37 +63,40 @@ export const withCapturedOutputStreams = async <Result>(
   streamNames: readonly WritableStreamName[],
   run: (chunksByStream: Record<WritableStreamName, string[]>) => Promise<Result> | Result,
 ): Promise<Result> => {
-  const streams = process as unknown as Record<WritableStreamName, WritableStreamLike>;
-  const originals = new Map<WritableStreamName, WritableStreamLike["write"]>();
-  const chunksByStream: Record<WritableStreamName, string[]> = {
-    stderr: [],
-    stdout: [],
-  };
+  const originals = new Map<WritableStreamName, WritableStreamWrite>();
+  const chunksByStream = {
+    stderr: new Array<string>(),
+    stdout: new Array<string>(),
+  } satisfies Record<WritableStreamName, string[]>;
 
   for (const streamName of streamNames) {
-    const stream = streams[streamName];
+    const stream = process[streamName];
     originals.set(streamName, stream.write.bind(stream));
-    stream.write = (chunk: unknown, ...args: unknown[]): boolean => {
+    function captureWrite(chunk: string | Uint8Array, callback?: WriteCallback): boolean;
+    function captureWrite(
+      chunk: string | Uint8Array,
+      encoding?: BufferEncoding,
+      callback?: WriteCallback,
+    ): boolean;
+    function captureWrite(
+      chunk: string | Uint8Array,
+      encodingOrCallback?: BufferEncoding | WriteCallback,
+      callback?: WriteCallback,
+    ): boolean {
       chunksByStream[streamName].push(String(chunk));
-      let callback: (() => void) | null = null;
-      for (const arg of args) {
-        if (typeof arg === "function") {
-          callback = () => {
-            arg();
-          };
-          break;
-        }
-      }
-      callback?.();
+      const parsedWriteCallback = writeCallbackSchema.safeParse(encodingOrCallback);
+      const writeCallback = parsedWriteCallback.success ? parsedWriteCallback.data : callback;
+      writeCallback?.();
       return true;
-    };
+    }
+    stream.write = captureWrite;
   }
 
   try {
     return await run(chunksByStream);
   } finally {
     for (const [streamName, original] of originals) {
-      streams[streamName].write = original;
+      process[streamName].write = original;
     }
   }
 };

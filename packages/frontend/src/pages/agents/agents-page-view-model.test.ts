@@ -200,7 +200,7 @@ describe("agents-page-view-model", () => {
     });
 
     expect(model.workflowSteps).toHaveLength(2);
-    expect(typeof model.onOpenTaskDetails).toBe("function");
+    expect(model.onOpenTaskDetails).toBeInstanceOf(Function);
     expect(model.sessionSelector.disabled).toBe(true);
     expect(
       model.sessionSelector.shouldAutofocusComposerForValue(activeSession.externalSessionId),

@@ -20,7 +20,7 @@ describe("handleClaudeSdkMessage tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "8396b93d-f45e-40a5-895d-43b82c68f129",
         session_id: "session-1",
         message: {
           role: "assistant",
@@ -47,7 +47,7 @@ describe("handleClaudeSdkMessage tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "user-1",
+        uuid: "eab32b65-51c2-4774-8475-31153078d31d",
         session_id: "session-1",
         parent_tool_use_id: "tool-1",
         tool_use_result: {
@@ -77,7 +77,7 @@ describe("handleClaudeSdkMessage tool events", () => {
         part: expect.objectContaining({
           callId: "tool-1",
           input: { taskId: "task-1" },
-          messageId: "assistant-1",
+          messageId: "8396b93d-f45e-40a5-895d-43b82c68f129",
           output: "plan saved",
           status: "completed",
           endedAtMs: Date.parse("2026-06-25T20:00:01.000Z"),
@@ -103,7 +103,7 @@ describe("handleClaudeSdkMessage tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "8396b93d-f45e-40a5-895d-43b82c68f129",
         session_id: "session-1",
         message: {
           role: "assistant",
@@ -112,6 +112,7 @@ describe("handleClaudeSdkMessage tool events", () => {
               type: "mcp_tool_use",
               id: "tool-1",
               name: "mcp__openducktor__odt_read_task",
+              server_name: "openducktor",
               input: { taskId: "task-1" },
             },
           ],
@@ -130,14 +131,14 @@ describe("handleClaudeSdkMessage tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "user-1",
+        uuid: "eab32b65-51c2-4774-8475-31153078d31d",
         session_id: "session-1",
         parent_tool_use_id: "tool-1",
         message: {
           role: "user",
           content: [
             {
-              type: "mcp_tool_result",
+              type: "tool_result",
               tool_use_id: "tool-1",
               content: [{ type: "text", text: "task loaded" }],
             },
@@ -176,7 +177,7 @@ describe("handleClaudeSdkMessage tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "orphan-result-1",
+        uuid: "90506c03-4188-4a2c-8590-9d643c75d1c8",
         session_id: "session-1",
         parent_tool_use_id: "unknown-tool-1",
         tool_use_result: {
@@ -209,7 +210,7 @@ describe("handleClaudeSdkMessage tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "8396b93d-f45e-40a5-895d-43b82c68f129",
         session_id: "session-1",
         message: {
           role: "assistant",
@@ -236,7 +237,7 @@ describe("handleClaudeSdkMessage tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "user-1",
+        uuid: "eab32b65-51c2-4774-8475-31153078d31d",
         session_id: "session-1",
         parent_tool_use_id: "tool-1",
         tool_use_result: {
@@ -259,7 +260,7 @@ describe("handleClaudeSdkMessage tool events", () => {
           callId: "tool-1",
           error: "command failed",
           input: { command: "exit 1" },
-          messageId: "assistant-1",
+          messageId: "8396b93d-f45e-40a5-895d-43b82c68f129",
           status: "error",
           endedAtMs: Date.parse("2026-06-25T20:00:02.000Z"),
           tool: "Bash",
@@ -284,7 +285,7 @@ describe("handleClaudeSdkMessage tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "8396b93d-f45e-40a5-895d-43b82c68f129",
         session_id: "session-1",
         message: {
           role: "assistant",
@@ -333,16 +334,16 @@ describe("handleClaudeSdkMessage tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "8396b93d-f45e-40a5-895d-43b82c68f129",
         session_id: "session-1",
         message: {
           role: "assistant",
           content: [
             {
               type: "server_tool_use",
-              tool_use_id: "tool-1",
-              tool_name: "Read",
-              tool_input: { file_path: "apps/api/src/lib/auth.ts" },
+              id: "tool-1",
+              name: "code_execution",
+              input: { file_path: "apps/api/src/lib/auth.ts" },
             },
           ],
         },
@@ -360,7 +361,7 @@ describe("handleClaudeSdkMessage tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "tool_progress",
-        uuid: "progress-1",
+        uuid: "781af22b-d868-487f-82cd-00708f9acb2e",
         session_id: "session-1",
         parent_tool_use_id: null,
         tool_use_id: "tool-1",
@@ -380,7 +381,7 @@ describe("handleClaudeSdkMessage tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "user-1",
+        uuid: "eab32b65-51c2-4774-8475-31153078d31d",
         session_id: "session-1",
         parent_tool_use_id: "tool-1",
         tool_use_result: {
@@ -401,10 +402,10 @@ describe("handleClaudeSdkMessage tool events", () => {
         type: "assistant_part",
         part: expect.objectContaining({
           callId: "tool-1",
-          messageId: "assistant-1",
+          messageId: "8396b93d-f45e-40a5-895d-43b82c68f129",
           status: "pending",
-          tool: "Read",
-          toolType: "read",
+          tool: "code_execution",
+          toolType: "generic",
         }),
       }),
       expect.objectContaining({
@@ -412,7 +413,7 @@ describe("handleClaudeSdkMessage tool events", () => {
         part: expect.objectContaining({
           callId: "tool-1",
           input: { file_path: "apps/api/src/lib/auth.ts" },
-          messageId: "assistant-1",
+          messageId: "8396b93d-f45e-40a5-895d-43b82c68f129",
           status: "running",
           tool: "Read",
           toolType: "read",
@@ -423,7 +424,7 @@ describe("handleClaudeSdkMessage tool events", () => {
         part: expect.objectContaining({
           callId: "tool-1",
           input: { file_path: "apps/api/src/lib/auth.ts" },
-          messageId: "assistant-1",
+          messageId: "8396b93d-f45e-40a5-895d-43b82c68f129",
           output: "file contents",
           startedAtMs: Date.parse("2026-06-25T20:00:00.000Z"),
           endedAtMs: Date.parse("2026-06-25T20:00:04.000Z"),
@@ -452,7 +453,7 @@ describe("handleClaudeSdkMessage tool events", () => {
       timestamp: "2026-06-25T20:00:00.000Z",
       message: claudeSdkMessageFixture({
         type: "stream_event",
-        uuid: "stream-1",
+        uuid: "a6b3c4b0-ab54-4e3d-8783-b034d0b3e636",
         session_id: "session-1",
         parent_tool_use_id: null,
         event: {
@@ -475,7 +476,7 @@ describe("handleClaudeSdkMessage tool events", () => {
       timestamp: "2026-06-25T20:00:10.000Z",
       message: claudeSdkMessageFixture({
         type: "tool_progress",
-        uuid: "progress-1",
+        uuid: "781af22b-d868-487f-82cd-00708f9acb2e",
         session_id: "session-1",
         parent_tool_use_id: null,
         tool_use_id: "tool-1",
@@ -491,7 +492,7 @@ describe("handleClaudeSdkMessage tool events", () => {
       timestamp: "2026-06-25T20:00:11.000Z",
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "user-1",
+        uuid: "eab32b65-51c2-4774-8475-31153078d31d",
         session_id: "session-1",
         parent_tool_use_id: "tool-1",
         tool_use_result: {
@@ -538,7 +539,7 @@ describe("handleClaudeSdkMessage tool events", () => {
       timestamp: "2026-06-25T20:00:00.000Z",
       message: claudeSdkMessageFixture({
         type: "assistant",
-        uuid: "assistant-1",
+        uuid: "8396b93d-f45e-40a5-895d-43b82c68f129",
         session_id: "session-1",
         message: {
           role: "assistant",
@@ -553,7 +554,7 @@ describe("handleClaudeSdkMessage tool events", () => {
       timestamp: "2026-06-25T20:00:05.000Z",
       message: claudeSdkMessageFixture({
         type: "user",
-        uuid: "user-1",
+        uuid: "eab32b65-51c2-4774-8475-31153078d31d",
         session_id: "session-1",
         parent_tool_use_id: "tool-1",
         tool_use_result: {
@@ -581,7 +582,7 @@ describe("handleClaudeSdkMessage tool events", () => {
   test("emits tool progress with runtime duration metadata", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
-    session.toolMessageIdsByCallId.set("tool-1", "assistant-1");
+    session.toolMessageIdsByCallId.set("tool-1", "8396b93d-f45e-40a5-895d-43b82c68f129");
     session.toolInputsByCallId.set("tool-1", { command: "bun test" });
 
     handleClaudeSdkMessage({
@@ -595,7 +596,7 @@ describe("handleClaudeSdkMessage tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "tool_progress",
-        uuid: "progress-1",
+        uuid: "781af22b-d868-487f-82cd-00708f9acb2e",
         session_id: "session-1",
         parent_tool_use_id: null,
         tool_use_id: "tool-1",
@@ -610,7 +611,7 @@ describe("handleClaudeSdkMessage tool events", () => {
         part: expect.objectContaining({
           callId: "tool-1",
           input: { command: "bun test" },
-          messageId: "assistant-1",
+          messageId: "8396b93d-f45e-40a5-895d-43b82c68f129",
           metadata: {
             elapsedTimeSeconds: 4.25,
             durationMs: 4250,
@@ -638,7 +639,7 @@ describe("handleClaudeSdkMessage tool events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "tool_progress",
-        uuid: "progress-1",
+        uuid: "781af22b-d868-487f-82cd-00708f9acb2e",
         session_id: "session-1",
         parent_tool_use_id: "agent-tool-1",
         tool_use_id: "subagent-tool-1",

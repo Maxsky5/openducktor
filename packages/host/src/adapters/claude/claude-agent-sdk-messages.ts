@@ -9,38 +9,44 @@ type ClaudeMessageContent = Exclude<SDKUserMessage["message"]["content"], string
 type ClaudeMessageContentBlock = ClaudeMessageContent[number];
 type ClaudeDocumentBlock = Extract<ClaudeMessageContentBlock, { type: "document" }>;
 type ClaudeImageBlock = Extract<ClaudeMessageContentBlock, { type: "image" }>;
+type ClaudeMessageUuid = NonNullable<SDKUserMessage["uuid"]>;
+
+const CLAUDE_MESSAGE_UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
+export const isClaudeMessageUuid = (value: string): value is ClaudeMessageUuid =>
+  CLAUDE_MESSAGE_UUID_PATTERN.test(value);
 
 // Claude expands slash commands from streaming content blocks. A bare string is
 // accepted by the type but reaches the model as ordinary prompt text.
-const toClaudeMessage = (text: string): SDKUserMessage => ({
-  type: "user",
-  message: {
+const toClaudeMessage = (text: string): SDKUserMessage => {
+  const message: SDKUserMessage["message"] = {
     role: "user",
     content: [{ type: "text", text }],
-  } as SDKUserMessage["message"],
-  parent_tool_use_id: null,
-});
+  };
+  return { type: "user", message, parent_tool_use_id: null };
+};
 
-const SUPPORTED_CLAUDE_IMAGE_MIMES = new Set([
+const SUPPORTED_CLAUDE_IMAGE_MIMES = new Set<string>([
   "image/jpeg",
   "image/png",
   "image/gif",
   "image/webp",
-] as const);
+]);
 const SUPPORTED_CLAUDE_PDF_MIME = "application/pdf";
 type ClaudeSupportedImageMime = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 
-const MIME_BY_EXTENSION: Record<
+const MIME_BY_EXTENSION = new Map<
   string,
   ClaudeSupportedImageMime | typeof SUPPORTED_CLAUDE_PDF_MIME
-> = {
-  ".gif": "image/gif",
-  ".jpeg": "image/jpeg",
-  ".jpg": "image/jpeg",
-  ".pdf": SUPPORTED_CLAUDE_PDF_MIME,
-  ".png": "image/png",
-  ".webp": "image/webp",
-};
+>([
+  [".gif", "image/gif"],
+  [".jpeg", "image/jpeg"],
+  [".jpg", "image/jpeg"],
+  [".pdf", SUPPORTED_CLAUDE_PDF_MIME],
+  [".png", "image/png"],
+  [".webp", "image/webp"],
+]);
 
 const WORDLIKE_TEXT_START_PATTERN = /[\p{L}\p{N}_]/u;
 
@@ -50,7 +56,14 @@ const readExtension = (pathOrName: string): string => {
 };
 
 const isClaudeSupportedImageMime = (mime: string): mime is ClaudeSupportedImageMime =>
-  SUPPORTED_CLAUDE_IMAGE_MIMES.has(mime as ClaudeSupportedImageMime);
+  SUPPORTED_CLAUDE_IMAGE_MIMES.has(mime);
+
+const attachmentMimeForPath = (
+  path: string,
+): ClaudeSupportedImageMime | typeof SUPPORTED_CLAUDE_PDF_MIME | undefined => {
+  const extension = readExtension(path);
+  return MIME_BY_EXTENSION.get(extension);
+};
 
 const inferClaudeAttachmentMime = (
   attachment: Extract<AgentUserMessagePart, { kind: "attachment" }>["attachment"],
@@ -61,8 +74,7 @@ const inferClaudeAttachmentMime = (
       return mime;
     }
     const inferred =
-      MIME_BY_EXTENSION[readExtension(attachment.name)] ??
-      MIME_BY_EXTENSION[readExtension(attachment.path)];
+      attachmentMimeForPath(attachment.name) ?? attachmentMimeForPath(attachment.path);
     return inferred && isClaudeSupportedImageMime(inferred) ? inferred : null;
   }
 
@@ -71,8 +83,7 @@ const inferClaudeAttachmentMime = (
       return SUPPORTED_CLAUDE_PDF_MIME;
     }
     const inferred =
-      MIME_BY_EXTENSION[readExtension(attachment.name)] ??
-      MIME_BY_EXTENSION[readExtension(attachment.path)];
+      attachmentMimeForPath(attachment.name) ?? attachmentMimeForPath(attachment.path);
     return inferred === SUPPORTED_CLAUDE_PDF_MIME ? inferred : null;
   }
 
@@ -139,12 +150,19 @@ const toClaudeAttachmentBlock = async (
   });
 
   if (attachment.kind === "image") {
+    if (!isClaudeSupportedImageMime(mime)) {
+      throw new HostValidationError({
+        field: "parts",
+        message: `Claude image attachment '${attachment.name}' resolved to non-image MIME type '${mime}'.`,
+        details: { attachmentId: attachment.id, mime },
+      });
+    }
     return {
       block: {
         type: "image",
         source: {
           type: "base64",
-          media_type: mime as ClaudeSupportedImageMime,
+          media_type: mime,
           data,
         },
       },
@@ -208,12 +226,7 @@ const encodeClaudeFileReference = (path: string): string => {
   return `@"${path.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 };
 
-export const encodeClaudePromptTextWithSourceRanges = (
-  parts: AgentUserMessagePart[],
-): {
-  text: string;
-  sourceTextByPartIndex: readonly (AgentUserMessageSourceText | undefined)[];
-} => {
+export const encodeClaudePromptTextWithSourceRanges = (parts: AgentUserMessagePart[]) => {
   let text = "";
   let previousPart: AgentUserMessagePart | null = null;
   const sourceTextByPartIndex: (AgentUserMessageSourceText | undefined)[] = Array.from({
@@ -287,6 +300,9 @@ export const encodeClaudePromptTextWithSourceRanges = (
         end: sourceText.end - leadingWhitespaceLength,
       };
     }),
+  } satisfies {
+    text: string;
+    sourceTextByPartIndex: readonly (AgentUserMessageSourceText | undefined)[];
   };
 };
 
@@ -361,12 +377,10 @@ export const toClaudeMessageFromParts = async (
 
   flushText();
 
+  const message: SDKUserMessage["message"] = { role: "user", content };
   return {
     type: "user",
-    message: {
-      role: "user",
-      content,
-    } as SDKUserMessage["message"],
+    message,
     parent_tool_use_id: null,
   };
 };

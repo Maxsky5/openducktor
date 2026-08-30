@@ -12,13 +12,10 @@ import { createGithubRepositoryDetectionCommandHandlers } from "./github-reposit
 const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
-const createGithubRepositoryDetectionServiceFake = (
-  service: GithubRepositoryDetectionService,
-): GithubRepositoryDetectionService => service as GithubRepositoryDetectionService;
 describe("createGithubRepositoryDetectionCommandHandlers", () => {
   test("routes workspace_detect_github_repository to the detection service", async () => {
     const calls: unknown[] = [];
-    const service = createGithubRepositoryDetectionServiceFake({
+    const service: GithubRepositoryDetectionService = {
       detectGithubRepository(input) {
         return Effect.tryPromise({
           try: async () => {
@@ -33,7 +30,7 @@ describe("createGithubRepositoryDetectionCommandHandlers", () => {
             }),
         });
       },
-    });
+    };
     const router = createHostCommandRouter({
       handlers: createGithubRepositoryDetectionCommandHandlers(service),
     });

@@ -12,6 +12,9 @@ import {
 const testIfUnixModeIsAvailable = process.platform === "win32" ? test.skip : test;
 const releaseDirectories = new Set<string>();
 
+const caughtError = (cause: unknown): Error =>
+  cause instanceof Error ? cause : new Error(String(cause), { cause });
+
 const makeReleaseDirectory = async (): Promise<string> => {
   const releaseDirectory = await mkdtemp(join(tmpdir(), "openducktor-electron-package-sidecars-"));
   releaseDirectories.add(releaseDirectory);
@@ -162,13 +165,16 @@ describe("verifyPackagedElectronSidecars", () => {
       arch: "x64",
       platform: "windows",
       releaseDirectory,
-    }).catch((caught: unknown) => caught);
+    }).catch(caughtError);
 
     expect(error).toMatchObject({
       _tag: "ElectronOperationError",
       operation: "electron.sidecar.verify-packaged",
     });
-    expect((error as Error).message).toContain("openducktor-mcp.exe");
+    if (!(error instanceof Error)) {
+      throw new TypeError("Expected an Error instance.");
+    }
+    expect(error.message).toContain("openducktor-mcp.exe");
   });
 
   test("rejects an empty required Windows MCP sidecar", async () => {
@@ -209,13 +215,16 @@ describe("verifyPackagedElectronSidecars", () => {
       arch: "x64",
       platform: "linux",
       releaseDirectory,
-    }).catch((caught: unknown) => caught);
+    }).catch(caughtError);
 
     expect(error).toMatchObject({
       _tag: "ElectronOperationError",
       operation: "electron.sidecar.verify-packaged-executable",
     });
-    expect((error as Error).message).toContain("expected an executable file");
+    if (!(error instanceof Error)) {
+      throw new TypeError("Expected an Error instance.");
+    }
+    expect(error.message).toContain("expected an executable file");
   });
 
   test("accepts non-empty executable macOS MCP sidecar", async () => {

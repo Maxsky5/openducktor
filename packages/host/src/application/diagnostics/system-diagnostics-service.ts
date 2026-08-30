@@ -10,8 +10,8 @@ import { Clock, Effect } from "effect";
 import { createDefaultGlobalConfig, type LoadedGlobalConfig } from "../../config/global-config";
 import {
   errorMessage,
-  type HostOperationError,
-  type HostValidationError,
+  type HostOperationErrorAggregate,
+  type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
@@ -36,8 +36,8 @@ export type SystemDiagnosticsService = {
   systemCheck(repoPath: string): Effect.Effect<SystemCheck, SystemDiagnosticsError>;
 };
 export type SystemDiagnosticsError =
-  | HostOperationError
-  | HostValidationError
+  | HostOperationErrorAggregate
+  | HostValidationErrorAggregate
   | SettingsConfigError
   | TaskStoreError
   | ToolDiscoveryError;

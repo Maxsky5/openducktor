@@ -1,8 +1,8 @@
-import type { Event, Part } from "@opencode-ai/sdk/v2/client";
-import { asUnknownRecord, readArrayProp, readStringProp, type UnknownRecord } from "../../guards";
 import type { readMessageModelSelection } from "../../message-normalizers";
 import type { mapPartToAgentStreamPart } from "../../stream-part-mapper";
 import type { SessionMessageMetadata } from "../../types";
+import type { ParsedOpencodeEvent as Event } from "../../opencode-global-event-ingress";
+import type { ParsedOpencodePart } from "../../opencode-ingress";
 import type { EventStreamRuntime } from "../shared";
 import { applyDeltaToPart, getMessageParts } from "../shared";
 import { removeMessageProjectionState } from "./message-state";
@@ -26,8 +26,8 @@ export const isAssistantMessage = (
 export const applyPendingDeltas = (
   runtime: EventStreamRuntime,
   partId: string,
-  basePart: Part,
-): Part => {
+  basePart: ParsedOpencodePart,
+): ParsedOpencodePart => {
   const pendingDeltas = runtime.session.pendingDeltasByPartId.get(partId);
   if (!pendingDeltas || pendingDeltas.length === 0) {
     return basePart;
@@ -44,7 +44,10 @@ export const applyPendingDeltas = (
   return nextPart;
 };
 
-export const getKnownMessageParts = (runtime: EventStreamRuntime, messageId: string): Part[] => {
+export const getKnownMessageParts = (
+  runtime: EventStreamRuntime,
+  messageId: string,
+): ParsedOpencodePart[] => {
   return getMessageParts(runtime.session, messageId);
 };
 
@@ -54,7 +57,7 @@ const isTerminalAssistantFinish = (value: string | undefined): boolean =>
 const isTerminalStepFinishReason = (value: string | undefined): boolean => value === "stop";
 
 export const hasTerminalStopSignalInParts = (
-  parts: Part[],
+  parts: ParsedOpencodePart[],
   finish: string | undefined,
 ): boolean => {
   if (isTerminalAssistantFinish(finish)) {
@@ -62,33 +65,15 @@ export const hasTerminalStopSignalInParts = (
   }
 
   return parts.some(
-    (part) =>
-      part.type === "step-finish" &&
-      typeof part.reason === "string" &&
-      isTerminalStepFinishReason(part.reason),
+    (part) => part.type === "step-finish" && isTerminalStepFinishReason(part.reason),
   );
-};
-
-const hasTerminalStopSignalInRawParts = (parts: unknown[]): boolean => {
-  return parts.some((part) => {
-    const record = asUnknownRecord(part);
-    return (
-      record !== undefined &&
-      readStringProp(record, ["type"]) === "step-finish" &&
-      isTerminalStepFinishReason(readStringProp(record, ["reason"]))
-    );
-  });
 };
 
 export const hasMessageStopSignal = (input: {
   finish: string | undefined;
-  rawParts: unknown[];
-  parts: Part[];
+  parts: ParsedOpencodePart[];
 }): boolean => {
-  return (
-    hasTerminalStopSignalInRawParts(input.rawParts) ||
-    hasTerminalStopSignalInParts(input.parts, input.finish)
-  );
+  return hasTerminalStopSignalInParts(input.parts, input.finish);
 };
 
 export const isAssistantMessageSettled = (input: {
@@ -122,39 +107,26 @@ export const updateMessageMetadata = (
   const totalTokens = updates.totalTokens ?? previous?.totalTokens;
   const displayParts = updates.displayParts ?? previous?.displayParts;
 
-  session.messageMetadataById.set(messageId, {
-    timestamp,
-    ...(model ? { model } : {}),
-    ...(parentId ? { parentId } : {}),
-    ...(text ? { text } : {}),
-    ...(hasStopSignal !== undefined ? { hasStopSignal } : {}),
-    ...(totalTokens !== undefined ? { totalTokens } : {}),
-    ...(displayParts ? { displayParts } : {}),
-  });
-};
-
-export const readRawMessageParts = (properties: unknown, info: unknown): unknown[] => {
-  const directParts = readArrayProp(properties, "parts");
-  if (directParts) {
-    return directParts;
+  const metadata: SessionMessageMetadata = { timestamp };
+  if (model) {
+    metadata.model = model;
   }
-  return readArrayProp(info, "parts") ?? [];
-};
-
-export const normalizeMessagePart = (
-  rawPartRecord: UnknownRecord,
-  messageId: string,
-  externalSessionId: string,
-): Part => {
-  return {
-    ...(rawPartRecord as Part),
-    ...(readStringProp(rawPartRecord, ["sessionID", "sessionId", "session_id"])
-      ? {}
-      : { sessionID: externalSessionId }),
-    ...(readStringProp(rawPartRecord, ["messageID", "messageId", "message_id"])
-      ? {}
-      : { messageID: messageId }),
-  } as Part;
+  if (parentId) {
+    metadata.parentId = parentId;
+  }
+  if (text) {
+    metadata.text = text;
+  }
+  if (hasStopSignal !== undefined) {
+    metadata.hasStopSignal = hasStopSignal;
+  }
+  if (totalTokens !== undefined) {
+    metadata.totalTokens = totalTokens;
+  }
+  if (displayParts) {
+    metadata.displayParts = displayParts;
+  }
+  session.messageMetadataById.set(messageId, metadata);
 };
 
 export type MessageEventHandler = (event: Event, runtime: EventStreamRuntime) => boolean;

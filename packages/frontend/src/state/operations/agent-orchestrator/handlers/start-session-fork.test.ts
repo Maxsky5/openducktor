@@ -248,7 +248,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
   });
 
   test("rolls back a stale fork after lease completion without aborting the completed lease", async () => {
-    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
     const adapter = new OpencodeSdkAdapter();
     const stoppedSessionIds: string[] = [];
     const deletedSessionIds: string[] = [];
@@ -269,9 +269,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     });
     adapter.loadSessionHistory = async () => [];
     adapter.stopSession = async (sessionRef) => {
-      stoppedSessionIds.push(
-        typeof sessionRef === "string" ? sessionRef : sessionRef.externalSessionId,
-      );
+      stoppedSessionIds.push(sessionRef.externalSessionId);
     };
 
     const { start } = createStartSessionTestHarness({
@@ -330,9 +328,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     });
     adapter.loadSessionHistory = async () => [];
     adapter.stopSession = async (sessionRef) => {
-      stoppedSessionIds.push(
-        typeof sessionRef === "string" ? sessionRef : sessionRef.externalSessionId,
-      );
+      stoppedSessionIds.push(sessionRef.externalSessionId);
     };
 
     const { start } = createStartSessionTestHarness({
@@ -638,9 +634,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       throw new Error("history unavailable");
     };
     adapter.stopSession = async (sessionRef) => {
-      stoppedSessionIds.push(
-        typeof sessionRef === "string" ? sessionRef : sessionRef.externalSessionId,
-      );
+      stoppedSessionIds.push(sessionRef.externalSessionId);
     };
 
     const { start } = createStartSessionTestHarness({
@@ -737,7 +731,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
   });
 
   test("stops the forked session when the repo becomes stale after child history load", async () => {
-    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
     const adapter = new OpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
     const originalLoadSessionHistory = adapter.loadSessionHistory;
@@ -776,9 +770,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       ];
     };
     adapter.stopSession = async (sessionRef) => {
-      stoppedSessionIds.push(
-        typeof sessionRef === "string" ? sessionRef : sessionRef.externalSessionId,
-      );
+      stoppedSessionIds.push(sessionRef.externalSessionId);
     };
 
     const { start } = createStartSessionTestHarness({

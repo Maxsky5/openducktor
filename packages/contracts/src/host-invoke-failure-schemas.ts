@@ -31,3 +31,13 @@ export const hostInvokeFailureSchema = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 export type HostInvokeFailure = z.infer<typeof hostInvokeFailureSchema>;
+
+export const hostErrorResponseSchema = z
+  .object({
+    error: z.string().trim().min(1).optional(),
+    failure: hostInvokeFailureSchema.optional(),
+    failureKind: z.string().trim().min(1).optional(),
+    message: z.string().trim().min(1).optional(),
+  })
+  .catchall(z.json());
+export type HostErrorResponse = z.infer<typeof hostErrorResponseSchema>;

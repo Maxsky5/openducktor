@@ -25,13 +25,7 @@ export const resolveRuntimePromptInputSupport = ({
 }: {
   runtimeDefinitions: RuntimeDescriptor[];
   runtimeKind: RuntimeKind | null;
-}): {
-  supportsAttachments: boolean;
-  runtimeSupportsSlashCommands: boolean;
-  supportsFileSearch: boolean;
-  supportsSkillReferences: boolean;
-  supportsSubagentReferences: boolean;
-} => {
+}) => {
   return {
     supportsAttachments: runtimeSupportsPromptInput(
       runtimeDefinitions,
@@ -58,5 +52,11 @@ export const resolveRuntimePromptInputSupport = ({
       runtimeKind,
       "supportsSubagentReferences",
     ),
+  } satisfies {
+    supportsAttachments: boolean;
+    runtimeSupportsSlashCommands: boolean;
+    supportsFileSearch: boolean;
+    supportsSkillReferences: boolean;
+    supportsSubagentReferences: boolean;
   };
 };

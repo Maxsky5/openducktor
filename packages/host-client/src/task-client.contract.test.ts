@@ -26,6 +26,6 @@ describe("task-client exports contract", () => {
       subtasks: [{ title: "Subtask" }],
     });
 
-    expect(typeof HostTaskClient).toBe("function");
+    expect(HostTaskClient).toBeInstanceOf(Function);
   });
 });

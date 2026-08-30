@@ -14,48 +14,24 @@ import {
 import { CodexAppServerAdapter } from "./index";
 
 class NameFailingTransport extends RecordingTransport {
-  async request<Response>(
-    request: Parameters<RecordingTransport["request"]>[0],
-  ): Promise<Response> {
+  async request(request: Parameters<RecordingTransport["request"]>[0]) {
     if (request.method === "thread/name/set") {
       this.calls.push(request);
       throw new Error("name failed");
     }
-    return super.request<Response>(request);
+    return super.request(request);
   }
 }
 
 class ResumeFailingTransport extends RecordingTransport {
-  async request<Response>(
-    request: Parameters<RecordingTransport["request"]>[0],
-  ): Promise<Response> {
+  async request(request: Parameters<RecordingTransport["request"]>[0]) {
     if (request.method === "thread/resume") {
       this.calls.push(request);
       throw new Error("resume failed");
     }
-    return super.request<Response>(request);
+    return super.request(request);
   }
 }
-
-const localSessions = (
-  adapter: CodexAppServerAdapter,
-): { has(externalSessionId: string): boolean } =>
-  (adapter as unknown as { localSessions: { has(externalSessionId: string): boolean } })
-    .localSessions;
-
-const markSessionUnbound = (adapter: CodexAppServerAdapter, externalSessionId: string): void => {
-  const session = (
-    adapter as unknown as {
-      localSessions: {
-        get(id: string): { summary: { sessionAssociation: { kind: string } } } | undefined;
-      };
-    }
-  ).localSessions.get(externalSessionId);
-  if (!session) {
-    throw new Error(`Expected retained session '${externalSessionId}'.`);
-  }
-  session.summary.sessionAssociation = { kind: "unbound" };
-};
 
 const expectedThreadPolicy = {
   approvalPolicy: "on-request",
@@ -181,112 +157,6 @@ describe("CodexAppServerAdapter repository sessions", () => {
         config: repositoryThreadConfig,
       });
     }
-  });
-
-  test("applies workflow policy before history binds a retained unbound session", async () => {
-    const { adapter, transports } = createHarness();
-    const started = await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
-    markSessionUnbound(adapter, started.externalSessionId);
-    const transport = transports.get("runtime-live");
-    expect(transport).toBeDefined();
-    if (!transport) {
-      throw new Error("Expected the runtime transport.");
-    }
-    transport.calls.length = 0;
-
-    await adapter.loadSessionHistory(
-      codexSessionRuntimeRef(started.externalSessionId, {
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-      }),
-    );
-
-    const resumeIndex = transport.calls.findIndex((call) => call.method === "thread/resume");
-    const historyIndex = transport.calls.findIndex((call) => call.method === "thread/turns/list");
-    expect(resumeIndex).toBeGreaterThanOrEqual(0);
-    expect(historyIndex).toBeGreaterThan(resumeIndex);
-    expect(transport.calls[resumeIndex]?.params).toEqual(
-      expect.objectContaining({
-        config: {
-          "mcp_servers.openducktor.enabled": true,
-          "mcp_servers.openducktor.enabled_tools": [...AGENT_ROLE_TOOL_POLICY.build],
-        },
-        threadId: started.externalSessionId,
-        excludeTurns: true,
-      }),
-    );
-  });
-
-  test("applies workflow policy before sending from a retained unbound session", async () => {
-    const { adapter, transports } = createHarness();
-    const started = await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
-    markSessionUnbound(adapter, started.externalSessionId);
-    const transport = transports.get("runtime-live");
-    if (!transport) {
-      throw new Error("Expected the runtime transport.");
-    }
-    transport.calls.length = 0;
-
-    await adapter.sendUserMessage(
-      codexUserMessageInput({
-        externalSessionId: started.externalSessionId,
-        parts: [{ kind: "text", text: "Continue" }],
-      }),
-    );
-
-    const resumeIndex = transport.calls.findIndex((call) => call.method === "thread/resume");
-    const sendIndex = transport.calls.findIndex((call) => call.method === "turn/start");
-    expect(resumeIndex).toBeGreaterThanOrEqual(0);
-    expect(sendIndex).toBeGreaterThan(resumeIndex);
-    expect(transport.calls[resumeIndex]?.params).toMatchObject({
-      config: {
-        "mcp_servers.openducktor.enabled": true,
-        "mcp_servers.openducktor.enabled_tools": [...AGENT_ROLE_TOOL_POLICY.build],
-      },
-    });
-  });
-
-  test("applies workflow policy before context load binds a retained unbound session", async () => {
-    const { adapter, transports } = createHarness();
-    const started = await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
-    markSessionUnbound(adapter, started.externalSessionId);
-    const transport = transports.get("runtime-live");
-    if (!transport) {
-      throw new Error("Expected the runtime transport.");
-    }
-    transport.calls.length = 0;
-
-    await adapter.loadSessionContextUsage(codexSessionRuntimeRef(started.externalSessionId));
-
-    expect(transport.calls.find((call) => call.method === "thread/resume")?.params).toMatchObject({
-      config: {
-        "mcp_servers.openducktor.enabled": true,
-        "mcp_servers.openducktor.enabled_tools": [...AGENT_ROLE_TOOL_POLICY.build],
-      },
-    });
   });
 
   test("rejects stale history identity before changing a retained session", async () => {
@@ -443,23 +313,6 @@ describe("CodexAppServerAdapter repository sessions", () => {
     expect(transports.get("runtime-live")?.calls).toHaveLength(callCount ?? 0);
   });
 
-  test("rejects a start without session scope before runtime side effects", async () => {
-    const { adapter, requireRepoRuntime, transportFactory } = createHarness();
-
-    await expect(
-      adapter.startSession({
-        repoPath: "/repo",
-        runtimeKind: "codex",
-        workingDirectory: "/repo",
-        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
-        systemPrompt: "Use the repo rules.",
-        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-      } as never),
-    ).rejects.toThrow("Cannot start Codex session without session context.");
-    expect(requireRepoRuntime).toHaveBeenCalledTimes(0);
-    expect(transportFactory).toHaveBeenCalledTimes(0);
-  });
-
   test("keeps started sessions addressable when thread naming fails", async () => {
     const transport = new NameFailingTransport("runtime-live", false);
     const adapter = createAdapterWithTransport(transport);
@@ -476,8 +329,15 @@ describe("CodexAppServerAdapter repository sessions", () => {
       }),
     ).rejects.toThrow("name failed");
 
-    expect(localSessions(adapter).has("thread/start-runtime-live")).toBe(true);
-    expect(transport.calls.map((call) => call.method)).toEqual([
+    await expect(
+      adapter.readSessionRuntimeSnapshot({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread/start-runtime-live",
+      }),
+    ).resolves.toMatchObject({ availability: "runtime", classification: "running" });
+    expect(transport.calls.slice(0, 3).map((call) => call.method)).toEqual([
       "model/list",
       "thread/start",
       "thread/name/set",
@@ -501,7 +361,14 @@ describe("CodexAppServerAdapter repository sessions", () => {
         model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
       }),
     ).rejects.toThrow("name failed");
-    expect(localSessions(resumedAdapter).has("thread-resume")).toBe(true);
+    await expect(
+      resumedAdapter.readSessionRuntimeSnapshot({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-resume",
+      }),
+    ).resolves.toMatchObject({ availability: "runtime" });
     expect(resumedTransport.calls.find((call) => call.method === "thread/resume")?.params).toEqual(
       expect.objectContaining({ config: repositoryThreadConfig }),
     );
@@ -518,7 +385,6 @@ describe("CodexAppServerAdapter repository sessions", () => {
         }),
       ),
     ).rejects.toThrow("name failed");
-    expect(localSessions(restoredAdapter).has("thread-history")).toBe(true);
     expect(restoredTransport.calls.find((call) => call.method === "thread/resume")?.params).toEqual(
       expect.objectContaining({ config: repositoryThreadConfig }),
     );

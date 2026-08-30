@@ -1,10 +1,20 @@
-import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import type { SDKMessage, SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
+import { z } from "zod";
 
-export const readClaudeTurnOriginKind = (message: unknown): string | undefined => {
-  if (!isRecord(message) || message.shouldQuery === false) {
+const claudeUserTurnSchema = z.looseObject({
+  isSynthetic: z.boolean().optional(),
+  origin: z.looseObject({ kind: z.string().optional() }).optional(),
+  shouldQuery: z.boolean().optional(),
+});
+
+type ClaudeUserTurn = Extract<SDKMessage, { type: "result" | "user" }> | SessionStoreEntry;
+
+export const readClaudeTurnOriginKind = (message: ClaudeUserTurn): string | undefined => {
+  const parsed = claudeUserTurnSchema.safeParse(message);
+  if (!parsed.success || parsed.data.shouldQuery === false) {
     return undefined;
   }
-  return isRecord(message.origin) ? readStringProp(message.origin, "kind") : undefined;
+  return parsed.data.origin?.kind;
 };
 
 export const shouldFinalizeClaudeTurn = (
@@ -15,8 +25,9 @@ export const shouldFinalizeClaudeTurn = (
   originKind === "human" ||
   (originKind === "task-notification" && activeBackgroundSubagentTaskCount === 0);
 
-export const isClaudeHumanUserMessage = (message: unknown): boolean => {
-  if (!isRecord(message) || message.isSynthetic === true || message.shouldQuery === false) {
+export const isClaudeHumanUserMessage = (message: ClaudeUserTurn): boolean => {
+  const parsed = claudeUserTurnSchema.safeParse(message);
+  if (!parsed.success || parsed.data.isSynthetic === true || parsed.data.shouldQuery === false) {
     return false;
   }
   const originKind = readClaudeTurnOriginKind(message);

@@ -3,9 +3,14 @@ import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { flushQueuedClaudeUserMessage, sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
-import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support";
+import {
+  createClaudeQueryFixture,
+  createClaudeSession,
+} from "./claude-agent-sdk-session-io.test-support";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
-import type { ClaudeSession } from "./claude-agent-sdk-types";
+
+const MESSAGE_ID = "00000000-0000-4000-8000-000000000001";
+const SKILL_MESSAGE_ID = "00000000-0000-4000-8000-000000000002";
 
 describe("Claude session I/O queued messages", () => {
   test("returns a skill chip for live Claude skill commands", async () => {
@@ -19,7 +24,7 @@ describe("Claude session I/O queued messages", () => {
     const accepted = await sendClaudeUserMessage({
       session,
       now: () => "2026-06-25T20:00:00.000Z",
-      randomId: () => "message-skill-command",
+      randomId: () => SKILL_MESSAGE_ID,
       emit: () => {},
       messageInput: {
         externalSessionId: "session-1",
@@ -78,17 +83,17 @@ describe("Claude session I/O queued messages", () => {
       activeSdkUserTurnCount: 1,
       activity: "running",
       sdkState: "running",
-      query: {
-        applyFlagSettings: mock(async (_settings: unknown) => {}),
+      query: createClaudeQueryFixture({
+        applyFlagSettings: mock(async () => {}),
         setModel: mock(async (_model?: string) => {}),
-      } as unknown as ClaudeSession["query"],
+      }),
       queue,
     });
 
     const accepted = await sendClaudeUserMessage({
       session,
       now: () => "2026-06-25T20:00:00.000Z",
-      randomId: () => "message-1",
+      randomId: () => MESSAGE_ID,
       emit: (_session, event) => events.push(event),
       messageInput: {
         externalSessionId: "session-1",
@@ -108,7 +113,7 @@ describe("Claude session I/O queued messages", () => {
     expect(session.queuedSdkMessages).toEqual([
       expect.objectContaining({
         type: "user",
-        uuid: "message-1",
+        uuid: MESSAGE_ID,
         session_id: "session-1",
       }),
     ]);
@@ -124,7 +129,7 @@ describe("Claude session I/O queued messages", () => {
   test("marks the local user turn pending before sending it to the SDK queue", async () => {
     const events: AgentEvent[] = [];
     const queue = new AsyncInputQueue<SDKUserMessage>();
-    const messageId = "00000000-0000-4000-8000-000000000001";
+    const messageId = MESSAGE_ID;
     const session = createClaudeSession({
       activity: "idle",
       model: {
@@ -133,10 +138,10 @@ describe("Claude session I/O queued messages", () => {
         runtimeKind: "claude",
         variant: "high",
       },
-      query: {
-        applyFlagSettings: mock(async (_settings: unknown) => {}),
+      query: createClaudeQueryFixture({
+        applyFlagSettings: mock(async () => {}),
         setModel: mock(async (_model?: string) => {}),
-      } as unknown as ClaudeSession["query"],
+      }),
       queue,
     });
     queue.push = (message) => {
@@ -194,7 +199,7 @@ describe("Claude session I/O queued messages", () => {
     const session = createClaudeSession({
       acceptedUserMessages: [
         {
-          messageId: "00000000-0000-4000-8000-000000000002",
+          messageId: SKILL_MESSAGE_ID,
           parts: [{ kind: "text", text: "queued" }],
           text: "queued",
           timestamp: "2026-06-25T20:00:01.000Z",
@@ -207,7 +212,7 @@ describe("Claude session I/O queued messages", () => {
       queuedSdkMessages: [
         {
           type: "user",
-          uuid: "00000000-0000-4000-8000-000000000002",
+          uuid: SKILL_MESSAGE_ID,
           session_id: "session-1",
           timestamp: "2026-06-25T20:00:01.000Z",
           parent_tool_use_id: null,
@@ -229,7 +234,7 @@ describe("Claude session I/O queued messages", () => {
     expect(pushed).toEqual([
       expect.objectContaining({
         type: "user",
-        uuid: "00000000-0000-4000-8000-000000000002",
+        uuid: SKILL_MESSAGE_ID,
         session_id: "session-1",
       }),
     ]);
@@ -240,7 +245,7 @@ describe("Claude session I/O queued messages", () => {
       expect.objectContaining({
         type: "user_message",
         externalSessionId: "session-1",
-        messageId: "00000000-0000-4000-8000-000000000002",
+        messageId: SKILL_MESSAGE_ID,
         state: "read",
       }),
       expect.objectContaining({
@@ -255,7 +260,7 @@ describe("Claude session I/O queued messages", () => {
     const events: AgentEvent[] = [];
     const pushed: SDKUserMessage[] = [];
     const setModel = mock(async (_model?: string) => {});
-    const applyFlagSettings = mock(async (_settings: unknown) => {});
+    const applyFlagSettings = mock(async () => {});
     const queue = new AsyncInputQueue<SDKUserMessage>();
     queue.push = (message) => {
       pushed.push(message);
@@ -269,10 +274,10 @@ describe("Claude session I/O queued messages", () => {
         runtimeKind: "claude",
         variant: "high",
       },
-      query: {
+      query: createClaudeQueryFixture({
         applyFlagSettings,
         setModel,
-      } as unknown as ClaudeSession["query"],
+      }),
       queue,
       sdkState: "running",
     });
@@ -370,10 +375,10 @@ describe("Claude session I/O queued messages", () => {
         runtimeKind: "claude",
         variant: "high",
       },
-      query: {
-        applyFlagSettings: mock(async (_settings: unknown) => {}),
+      query: createClaudeQueryFixture({
+        applyFlagSettings: mock(async () => {}),
         setModel: mock(async (_model?: string) => {}),
-      } as unknown as ClaudeSession["query"],
+      }),
       queue,
       queuedSdkMessages: [queuedMessage],
       sdkState: "idle",
@@ -412,7 +417,7 @@ describe("Claude session I/O queued messages", () => {
       queuedSdkMessages: [
         {
           type: "user",
-          uuid: "00000000-0000-4000-8000-000000000002",
+          uuid: SKILL_MESSAGE_ID,
           session_id: "session-1",
           timestamp: "2026-06-25T20:00:01.000Z",
           parent_tool_use_id: null,
@@ -443,7 +448,7 @@ describe("Claude session I/O queued messages", () => {
 
     expect(pushed).toEqual([]);
     expect(session.queuedSdkMessages.map((message) => message.uuid)).toEqual([
-      "00000000-0000-4000-8000-000000000002",
+      SKILL_MESSAGE_ID,
       "00000000-0000-4000-8000-000000000003",
     ]);
   });
@@ -460,7 +465,7 @@ describe("Claude session I/O queued messages", () => {
     };
     const firstMessage: SDKUserMessage = {
       type: "user",
-      uuid: "00000000-0000-4000-8000-000000000002",
+      uuid: SKILL_MESSAGE_ID,
       session_id: "session-1",
       timestamp: "2026-06-25T20:00:01.000Z",
       parent_tool_use_id: null,
@@ -472,7 +477,7 @@ describe("Claude session I/O queued messages", () => {
     const session = createClaudeSession({
       acceptedUserMessages: [
         {
-          messageId: "00000000-0000-4000-8000-000000000002",
+          messageId: SKILL_MESSAGE_ID,
           model: {
             providerId: "claude",
             modelId: "claude-opus-4-6",
@@ -485,9 +490,9 @@ describe("Claude session I/O queued messages", () => {
       ],
       activity: "running",
       pendingUserTurnCount: 1,
-      query: {
+      query: createClaudeQueryFixture({
         setModel: mock(async () => modelUpdate),
-      } as unknown as ClaudeSession["query"],
+      }),
       queue,
       queuedSdkMessages: [firstMessage],
       sdkState: "idle",
@@ -518,7 +523,7 @@ describe("Claude session I/O queued messages", () => {
 
     expect(pushed).toEqual([]);
     expect(session.queuedSdkMessages.map((message) => message.uuid)).toEqual([
-      "00000000-0000-4000-8000-000000000002",
+      SKILL_MESSAGE_ID,
       "00000000-0000-4000-8000-000000000003",
     ]);
 
@@ -533,7 +538,7 @@ describe("Claude session I/O queued messages", () => {
     });
 
     expect(pushed.map((message) => message.uuid)).toEqual([
-      "00000000-0000-4000-8000-000000000002",
+      SKILL_MESSAGE_ID,
       "00000000-0000-4000-8000-000000000003",
     ]);
   });
@@ -549,7 +554,7 @@ describe("Claude session I/O queued messages", () => {
     });
     const queuedMessage: SDKUserMessage = {
       type: "user",
-      uuid: "00000000-0000-4000-8000-000000000002",
+      uuid: SKILL_MESSAGE_ID,
       session_id: "session-1",
       timestamp: "2026-06-25T20:00:01.000Z",
       parent_tool_use_id: null,
@@ -561,7 +566,7 @@ describe("Claude session I/O queued messages", () => {
     const session = createClaudeSession({
       acceptedUserMessages: [
         {
-          messageId: "00000000-0000-4000-8000-000000000002",
+          messageId: SKILL_MESSAGE_ID,
           model: {
             providerId: "claude",
             modelId: "claude-opus-4-6",
@@ -574,13 +579,13 @@ describe("Claude session I/O queued messages", () => {
       ],
       activity: "running",
       pendingUserTurnCount: 1,
-      query: {
+      query: createClaudeQueryFixture({
         close: mock(() => {}),
         setModel: mock(async () => {
           markModelUpdateStarted?.();
           await modelUpdate;
         }),
-      } as unknown as ClaudeSession["query"],
+      }),
       queuedSdkMessages: [queuedMessage],
       sdkState: "idle",
     });
@@ -625,7 +630,7 @@ describe("Claude session I/O queued messages", () => {
       sendClaudeUserMessage({
         session,
         now: () => "2026-06-25T20:00:00.000Z",
-        randomId: () => "message-1",
+        randomId: () => MESSAGE_ID,
         emit: (_session, event) => events.push(event),
         messageInput: {
           externalSessionId: "session-1",
@@ -649,7 +654,7 @@ describe("Claude session I/O queued messages", () => {
     const queue = new AsyncInputQueue<SDKUserMessage>();
     const queuedMessage: SDKUserMessage = {
       type: "user",
-      uuid: "00000000-0000-4000-8000-000000000002",
+      uuid: SKILL_MESSAGE_ID,
       session_id: "session-1",
       timestamp: "2026-06-25T20:00:01.000Z",
       parent_tool_use_id: null,
@@ -661,7 +666,7 @@ describe("Claude session I/O queued messages", () => {
     const session = createClaudeSession({
       acceptedUserMessages: [
         {
-          messageId: "00000000-0000-4000-8000-000000000002",
+          messageId: SKILL_MESSAGE_ID,
           parts: [{ kind: "text", text: "queued" }],
           text: "queued",
           timestamp: "2026-06-25T20:00:01.000Z",
@@ -669,9 +674,9 @@ describe("Claude session I/O queued messages", () => {
       ],
       activity: "running",
       pendingUserTurnCount: 1,
-      query: {
+      query: createClaudeQueryFixture({
         close: mock(() => {}),
-      } as unknown as ClaudeSession["query"],
+      }),
       queue,
       queuedSdkMessages: [queuedMessage],
       sdkState: "idle",
@@ -709,10 +714,10 @@ describe("Claude session I/O queued messages", () => {
         runtimeKind: "claude",
         variant: "high",
       },
-      query: {
-        applyFlagSettings: mock(async (_settings: unknown) => {}),
+      query: createClaudeQueryFixture({
+        applyFlagSettings: mock(async () => {}),
         setModel: mock(async (_model?: string) => {}),
-      } as unknown as ClaudeSession["query"],
+      }),
       queue,
     });
 
@@ -720,7 +725,7 @@ describe("Claude session I/O queued messages", () => {
       sendClaudeUserMessage({
         session,
         now: () => "2026-06-25T20:00:00.000Z",
-        randomId: () => "message-1",
+        randomId: () => MESSAGE_ID,
         emit: (_session, event) => events.push(event),
         messageInput: {
           externalSessionId: "session-1",

@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
   firstLaunchAction,
-  isLaunchActionId,
   isRole,
   kickoffPromptForLaunchAction,
   LAUNCH_ACTIONS_BY_ROLE,
@@ -15,11 +14,9 @@ describe("agents-page-constants", () => {
     expect(firstLaunchAction("qa")).toBe(LAUNCH_ACTIONS_BY_ROLE.qa[0] ?? "spec_initial");
   });
 
-  test("validates role and launch action guards", () => {
+  test("validates role guards", () => {
     expect(isRole("build")).toBe(true);
     expect(isRole("unknown")).toBe(false);
-    expect(isLaunchActionId("qa_review")).toBe(true);
-    expect(isLaunchActionId("unknown")).toBe(false);
   });
 
   test("includes task instruction in kickoff prompts", () => {

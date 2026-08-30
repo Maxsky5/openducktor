@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { JSONType } from "zod";
 import {
   APP_PLATFORM_VALUES,
   AUTOPILOT_EVENT_IDS,
@@ -111,9 +112,6 @@ describe("config-schemas", () => {
         git: { defaultMergeMethod: "merge_commit" },
       }).success,
     ).toBe(false);
-    expect(settingsSnapshotSaveInputSchema.shape.agentModelFavorites.description).toBe(
-      "Echo the current canonical favorites. Change favorites through the narrow favorites command.",
-    );
   });
 
   test("defaults missing agent model favorites and canonicalizes exact tuples", () => {
@@ -309,9 +307,10 @@ describe("config-schemas", () => {
     expect(() => resolveHorizontalScrollbarVisibility("system")).toThrow(
       "A supported app platform is required to resolve System default horizontal scrollbar visibility.",
     );
-    expect(() => resolveHorizontalScrollbarVisibility("system", "freebsd" as never)).toThrow(
-      "Unsupported app platform for horizontal scrollbar visibility: freebsd",
-    );
+    expect(() =>
+      // @ts-expect-error This negative test verifies rejection of an unsupported platform.
+      resolveHorizontalScrollbarVisibility("system", "freebsd"),
+    ).toThrow("Unsupported app platform for horizontal scrollbar visibility: freebsd");
   });
 
   test("defaults agent runtime enablement for global config and snapshots", () => {
@@ -378,7 +377,7 @@ describe("config-schemas", () => {
       enabled: false,
       executablePath: "/bin/opencode",
     });
-    expect((parsed.agentRuntimes as Record<string, unknown>).custom).toEqual({
+    expect(parsed.agentRuntimes.custom).toEqual({
       enabled: true,
       executablePath: "/bin/custom",
     });
@@ -552,9 +551,10 @@ describe("config-schemas", () => {
   });
 
   test("rejects invalid codex values and out-of-scope keys", () => {
+    const baseConfig = { enabled: true, executablePath: "/usr/local/bin/codex" } as const;
     for (const value of ["on-failure", "guardian_subagent", { mode: "on-request" }]) {
       expect(() =>
-        codexRuntimeConfigSchema.parse({ enabled: true, defaults: { approvalPolicy: value } }),
+        codexRuntimeConfigSchema.parse({ ...baseConfig, defaults: { approvalPolicy: value } }),
       ).toThrow();
     }
 
@@ -568,14 +568,21 @@ describe("config-schemas", () => {
       "permissionProfile",
       "webSearch",
     ]) {
-      expect(() => codexRuntimeConfigSchema.parse({ enabled: true, [key]: true })).toThrow();
+      expect(() => codexRuntimeConfigSchema.parse({ ...baseConfig, [key]: true })).toThrow();
     }
 
+    const invalidRoleOverride = codexRuntimeConfigSchema.safeParse({
+      ...baseConfig,
+      roleOverrides: { review: {} },
+    });
+    expect(invalidRoleOverride.success).toBe(false);
+    if (invalidRoleOverride.success) throw new Error("unsupported Codex role must fail");
+    expect(invalidRoleOverride.error.issues[0]?.path).toEqual(["roleOverrides", "review"]);
     expect(() =>
-      codexRuntimeConfigSchema.parse({ enabled: true, roleOverrides: { review: {} } }),
-    ).toThrow("Unsupported Codex role override: review");
-    expect(() =>
-      codexRuntimeConfigSchema.parse({ enabled: true, defaults: { sandboxMode: "workspace" } }),
+      codexRuntimeConfigSchema.parse({
+        ...baseConfig,
+        defaults: { sandboxMode: "workspace" },
+      }),
     ).toThrow();
   });
 
@@ -704,7 +711,7 @@ describe("config-schemas", () => {
   });
 
   test("rejects invalid explicit chat diff display values", () => {
-    const invalidCases: Array<[string, Record<string, unknown>]> = [
+    const invalidCases: Array<[string, Record<string, JSONType>]> = [
       ["diffStyle", { diffStyle: "side-by-side" }],
       ["diffIndicators", { diffIndicators: "glyphs" }],
       ["diffHeight", { diffHeight: "auto" }],

@@ -1,11 +1,18 @@
 import type { OnUserDialog, UserDialogResult } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
+import { z } from "zod";
 import { HostValidationError } from "../../effect/host-errors";
 import {
   claudePendingInputResolutionRoute,
   claudeSubagentPendingInputRoute,
   emitClaudePendingInputEvent,
 } from "./claude-agent-sdk-pending-input-routing";
+import {
+  isClaudeProtocolObject,
+  parseClaudeCanonicalJsonObject,
+  type ClaudeProtocolObject,
+  type ClaudeProtocolValue,
+} from "./claude-agent-sdk-ingress-schemas";
 import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
 
 const CLAUDE_ASK_USER_QUESTION_TOOL_NAME = "AskUserQuestion";
@@ -47,36 +54,42 @@ const isClaudeAskUserQuestionDialogKind = (dialogKind: string): boolean =>
     (candidate) => candidate.toLowerCase() === dialogKind.trim().toLowerCase(),
   );
 
-const readString = (value: unknown): string | null =>
-  typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+const nonEmptyClaudeQuestionTextSchema = z.string().trim().min(1);
+const claudeQuestionPreviewSchema = z.string();
 
-const readOptions = (value: unknown): ClaudeAskUserQuestionOption[] | null => {
+const readString = (value: ClaudeProtocolValue | undefined): string | null => {
+  const parsed = nonEmptyClaudeQuestionTextSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+};
+
+const readOptions = (
+  value: ClaudeProtocolValue | undefined,
+): ClaudeAskUserQuestionOption[] | null => {
   if (!Array.isArray(value)) {
     return null;
   }
   const options: ClaudeAskUserQuestionOption[] = [];
   for (const option of value) {
-    if (!option || typeof option !== "object") {
+    if (!isClaudeProtocolObject(option)) {
       return null;
     }
-    const record = option as Record<string, unknown>;
-    const label = readString(record.label);
-    const description = readString(record.description);
+    const label = readString(option.label);
+    const description = readString(option.description);
     if (!label || !description) {
       return null;
     }
-    const preview = typeof record.preview === "string" ? record.preview : undefined;
-    options.push({
-      label,
-      description,
-      ...(preview ? { preview } : {}),
-    });
+    const parsedPreview = claudeQuestionPreviewSchema.safeParse(option.preview);
+    const questionOption: ClaudeAskUserQuestionOption = { label, description };
+    if (parsedPreview.success && parsedPreview.data.length > 0) {
+      questionOption.preview = parsedPreview.data;
+    }
+    options.push(questionOption);
   }
   return options;
 };
 
 const parseClaudeAskUserQuestionInput = (
-  toolInput: Record<string, unknown>,
+  toolInput: ClaudeProtocolObject,
 ): ClaudeAskUserQuestionPayload | null => {
   const rawQuestions = toolInput.questions;
   if (!Array.isArray(rawQuestions) || rawQuestions.length === 0) {
@@ -87,18 +100,17 @@ const parseClaudeAskUserQuestionInput = (
   const eventQuestions: Question[] = [];
   const questionTexts = new Set<string>();
   for (const rawQuestion of rawQuestions) {
-    if (!rawQuestion || typeof rawQuestion !== "object") {
+    if (!isClaudeProtocolObject(rawQuestion)) {
       return null;
     }
-    const record = rawQuestion as Record<string, unknown>;
-    const question = readString(record.question);
-    const header = readString(record.header);
-    const options = readOptions(record.options);
+    const question = readString(rawQuestion.question);
+    const header = readString(rawQuestion.header);
+    const options = readOptions(rawQuestion.options);
     if (!question || !header || !options || questionTexts.has(question)) {
       return null;
     }
     questionTexts.add(question);
-    const multiSelect = Boolean(record.multiSelect);
+    const multiSelect = Boolean(rawQuestion.multiSelect);
     sdkQuestions.push({
       question,
       header,
@@ -132,10 +144,7 @@ export const buildClaudeAskUserQuestionResult = ({
 }: {
   answers: readonly string[][];
   payload: ClaudeAskUserQuestionPayload;
-}): {
-  questions: ClaudeAskUserQuestion[];
-  answers: Record<string, string>;
-} => {
+}) => {
   const answersByQuestion: Record<string, string> = {};
   payload.sdkQuestions.forEach((question, index) => {
     answersByQuestion[question.question] = answerString(answers[index] ?? []);
@@ -144,6 +153,9 @@ export const buildClaudeAskUserQuestionResult = ({
   return {
     questions: payload.sdkQuestions,
     answers: answersByQuestion,
+  } satisfies {
+    questions: ClaudeAskUserQuestion[];
+    answers: Record<string, string>;
   };
 };
 
@@ -162,7 +174,7 @@ export const requestClaudeAskUserQuestion = async ({
   randomId: () => string;
   session: ClaudeSessionContext;
   signal: AbortSignal;
-  toolInput: Record<string, unknown>;
+  toolInput: ClaudeProtocolObject;
   toolUseID?: string | undefined;
   agentID?: string | undefined;
 }): Promise<ReturnType<typeof buildClaudeAskUserQuestionResult> | null> => {
@@ -273,7 +285,7 @@ export const createClaudeUserDialogHandler = ({
       randomId,
       session,
       signal: options.signal,
-      toolInput: request.payload,
+      toolInput: parseClaudeCanonicalJsonObject(request.payload, "claudeUserDialogPayload"),
       toolUseID: request.toolUseID,
     });
     if (!result) {

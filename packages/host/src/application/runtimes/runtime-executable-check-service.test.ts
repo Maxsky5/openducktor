@@ -3,15 +3,18 @@ import type { RuntimeHealth, RuntimeKind } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber, Option } from "effect";
 import { HostDependencyError, HostValidationError } from "../../effect/host-errors";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
-import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
+import type { ToolDiscoveryId, ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { createRuntimeDefinitionsService } from "./runtime-definitions-service";
 import { createRuntimeExecutableCheckService } from "./runtime-executable-check-service";
 
-const paths: Record<RuntimeKind, string> = {
+const paths = {
+  bun: "",
   opencode: "/tools/opencode",
   codex: "/tools/codex",
   claude: "/tools/claude",
-};
+  git: "",
+  githubCli: "",
+} satisfies Record<ToolDiscoveryId, string>;
 
 const toolDiscovery: ToolDiscoveryPort = {
   discoverTool(toolId) {
@@ -22,7 +25,7 @@ const toolDiscovery: ToolDiscoveryPort = {
     }
     return Effect.succeed({
       displayLabel: "System PATH",
-      path: paths[toolId as RuntimeKind],
+      path: paths[toolId],
       sourceCategory: "system_path",
     });
   },
@@ -163,7 +166,7 @@ describe("runtime executable check service", () => {
             discoverTool(toolId) {
               return Effect.succeed({
                 displayLabel: "System PATH",
-                path: paths[toolId as RuntimeKind],
+                path: paths[toolId],
                 sourceCategory: "system_path",
               });
             },

@@ -7,13 +7,15 @@ const { GlobalRegistrator } = await import(
   frontendRequire.resolve("@happy-dom/global-registrator")
 );
 
-if (typeof document === "undefined") {
+if (globalThis.document === undefined) {
   GlobalRegistrator.register();
 }
 
-(
-  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
+Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
+  configurable: true,
+  value: true,
+  writable: true,
+});
 
 const { afterEach } = await import("bun:test");
 const { cleanup } = await import(frontendRequire.resolve("@testing-library/react"));

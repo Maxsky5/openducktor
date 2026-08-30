@@ -1,3 +1,5 @@
+import { scheduleTask, type ScheduleTask } from "@/lib/scheduling";
+
 const STARTUP_SPLASH_ID = "openducktor-startup";
 const STARTUP_SPLASH_STATUS_SELECTOR = "[data-odt-startup-status]";
 const STARTUP_SPLASH_LEAVING_CLASS = "odt-startup--leaving";
@@ -21,7 +23,7 @@ const getStartupSplash = (): HTMLElement | null => {
   return splash;
 };
 
-const beginStartupSplashDismissal = (splash: HTMLElement): void => {
+const beginStartupSplashDismissal = (splash: HTMLElement, scheduler: ScheduleTask): void => {
   if (splash.classList.contains(STARTUP_SPLASH_LEAVING_CLASS)) {
     return;
   }
@@ -40,24 +42,24 @@ const beginStartupSplashDismissal = (splash: HTMLElement): void => {
     }
   };
   const cancelRemoval = (): void => {
-    window.clearTimeout(removalFallback);
+    cancelRemovalFallback();
     splash.removeEventListener("transitionend", handleTransitionEnd);
   };
   const removeSplash = (): void => {
     cancelStartupSplashDismissal(splash);
     splash.remove();
   };
-  const removalFallback = window.setTimeout(removeSplash, STARTUP_SPLASH_REMOVAL_FALLBACK_MS);
+  const cancelRemovalFallback = scheduler(removeSplash, STARTUP_SPLASH_REMOVAL_FALLBACK_MS);
   splash.addEventListener("transitionend", handleTransitionEnd, { once: true });
   pendingStartupSplashDismissals.set(splash, cancelRemoval);
 };
 
 // Module evaluation starts a conservative hold before the browser can paint the splash.
-if (typeof document !== "undefined") {
+if (globalThis.document !== undefined) {
   getStartupSplash();
 }
 
-export const dismissOpenDucktorStartupSplash = (): void => {
+export const dismissOpenDucktorStartupSplash = (scheduler: ScheduleTask = scheduleTask): void => {
   const splash = getStartupSplash();
   if (
     !splash ||
@@ -70,17 +72,15 @@ export const dismissOpenDucktorStartupSplash = (): void => {
   const firstSeenAt = startupSplashFirstSeenAt.get(splash) ?? performance.now();
   const remainingVisibleMs = STARTUP_SPLASH_MINIMUM_VISIBLE_MS - (performance.now() - firstSeenAt);
   if (remainingVisibleMs > 0) {
-    const dismissalTimeout = window.setTimeout(() => {
+    const cancelDismissal = scheduler(() => {
       pendingStartupSplashDismissals.delete(splash);
-      beginStartupSplashDismissal(splash);
+      beginStartupSplashDismissal(splash, scheduler);
     }, remainingVisibleMs);
-    pendingStartupSplashDismissals.set(splash, () => {
-      window.clearTimeout(dismissalTimeout);
-    });
+    pendingStartupSplashDismissals.set(splash, cancelDismissal);
     return;
   }
 
-  beginStartupSplashDismissal(splash);
+  beginStartupSplashDismissal(splash, scheduler);
 };
 
 export const showOpenDucktorStartupFailure = (): void => {

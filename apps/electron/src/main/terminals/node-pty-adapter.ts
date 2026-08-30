@@ -1,5 +1,4 @@
 import { Buffer } from "node:buffer";
-import { createRequire } from "node:module";
 import {
   type ProcessTreeInspector,
   type ProcessTreeTerminator,
@@ -12,19 +11,14 @@ import {
   waitForObservedState,
 } from "@openducktor/host";
 import { Effect } from "effect";
-import type * as NodePty from "node-pty";
+import { spawn } from "node-pty";
 
-type NodePtyModule = Pick<typeof NodePty, "spawn">;
+type NodePtyModule = { readonly spawn: typeof spawn };
 
 type CreateNodePtyPortInput = {
   nodePty?: NodePtyModule;
   processTreeInspector?: ProcessTreeInspector;
   processTreeTerminator?: ProcessTreeTerminator;
-};
-
-const loadNodePty = (): NodePtyModule => {
-  const require = createRequire(import.meta.url);
-  return require("node-pty") as NodePtyModule;
 };
 
 const operation = (
@@ -43,7 +37,7 @@ const operation = (
   });
 
 export const createNodePtyPort = ({
-  nodePty = loadNodePty(),
+  nodePty = { spawn },
   processTreeInspector = processTreeHasChildren,
   processTreeTerminator = terminateProcessTree,
 }: CreateNodePtyPortInput = {}): TerminalPtyPort => ({
@@ -53,7 +47,8 @@ export const createNodePtyPort = ({
         let closed = false;
         const exitWaiters = new Set<() => void>();
         let exitPublished = false;
-        let nativeExit: { exitCode: number; signal: string | null } | null = null;
+        type NativeExit = { exitCode: number; signal: string | null };
+        let nativeExit: NativeExit | null = null;
         let cleanupPromise: Promise<void> | null = null;
         const pty = nodePty.spawn(plan.shell, [...plan.args], {
           cols: plan.grid.columns,

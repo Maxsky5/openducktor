@@ -1,8 +1,8 @@
-import type { HookCallback, PreToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
+import type { HookCallback, PreToolUseHookSpecificOutput } from "@anthropic-ai/claude-agent-sdk";
 import { findClaudeSubagentSessionByAgentId } from "./claude-agent-sdk-event-session";
+import { parseClaudePreToolUseIngress } from "./claude-agent-sdk-ingress-schemas";
 import { authorizeClaudeToolUse } from "./claude-agent-sdk-permissions";
 import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
-import { isRecord } from "./claude-agent-sdk-utils";
 
 const denyToolUse = (message: string) => ({
   hookSpecificOutput: {
@@ -18,40 +18,38 @@ export const createClaudePreToolUseHook = ({
   session: ClaudeSessionContext;
 }): HookCallback => {
   return async (input, _toolUseId, { signal }) => {
-    if (input.hook_event_name !== "PreToolUse") {
-      return {};
-    }
+    const preToolUseInput = parseClaudePreToolUseIngress(input);
     if (signal.aborted) {
       return denyToolUse("Claude tool authorization was aborted.");
     }
-    const preToolUseInput = input as PreToolUseHookInput;
-    if (!isRecord(preToolUseInput.tool_input)) {
-      return denyToolUse(`Tool ${preToolUseInput.tool_name} provided an invalid input payload.`);
-    }
+    const toolInput = preToolUseInput.tool_input;
     const toolSession = preToolUseInput.agent_id
       ? findClaudeSubagentSessionByAgentId(session, preToolUseInput.agent_id)
       : session;
     if (toolSession) {
       toolSession.toolNamesByCallId.set(preToolUseInput.tool_use_id, preToolUseInput.tool_name);
-      toolSession.toolInputsByCallId.set(preToolUseInput.tool_use_id, preToolUseInput.tool_input);
+      toolSession.toolInputsByCallId.set(preToolUseInput.tool_use_id, toolInput);
     }
     const authorization = await authorizeClaudeToolUse({
       session,
       toolName: preToolUseInput.tool_name,
-      toolInput: preToolUseInput.tool_input,
+      toolInput,
     });
     if (authorization.behavior === "deny") {
       return denyToolUse(authorization.message);
     }
-    const inputChanged = authorization.toolInput !== preToolUseInput.tool_input;
+    const inputChanged = authorization.toolInput !== toolInput;
     if (authorization.approval === "workflow_role") {
+      const hookSpecificOutput: PreToolUseHookSpecificOutput = {
+        hookEventName: "PreToolUse",
+        permissionDecision: "allow",
+        permissionDecisionReason: "OpenDucktor auto-approved this tool for the workflow role.",
+      };
+      if (inputChanged) {
+        hookSpecificOutput.updatedInput = authorization.toolInput;
+      }
       return {
-        hookSpecificOutput: {
-          hookEventName: "PreToolUse",
-          permissionDecision: "allow",
-          permissionDecisionReason: "OpenDucktor auto-approved this tool for the workflow role.",
-          ...(inputChanged ? { updatedInput: authorization.toolInput } : {}),
-        },
+        hookSpecificOutput,
       };
     }
     if (!inputChanged) {

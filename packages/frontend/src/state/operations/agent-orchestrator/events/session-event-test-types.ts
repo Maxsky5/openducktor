@@ -77,17 +77,22 @@ const createTurnContext = (context: SessionEventContextParams): SessionTurnConte
 
 export const createSessionEventContext = (
   context: SessionEventContextParams,
-): SessionEventContext => ({
-  session: createSessionContext(context),
-  store: createStoreContext(context),
-  turn: createTurnContext(context),
-  approvals: {
+): SessionEventContext => {
+  const approvals: SessionEventContext["approvals"] = {
     replyApproval: context.adapter.replyApproval,
     buildReadOnlyApprovalRejectionMessage: context.buildReadOnlyApprovalRejectionMessage,
     readOnlyApprovalAutoRejectSafe: context.readOnlyApprovalAutoRejectSafe,
-    ...(context.loadSettingsSnapshot ? { loadSettingsSnapshot: context.loadSettingsSnapshot } : {}),
-  },
-  todos: {
-    updateSessionTodos: context.updateSessionTodos,
-  },
-});
+  };
+  if (context.loadSettingsSnapshot) {
+    approvals.loadSettingsSnapshot = context.loadSettingsSnapshot;
+  }
+  return {
+    session: createSessionContext(context),
+    store: createStoreContext(context),
+    turn: createTurnContext(context),
+    approvals,
+    todos: {
+      updateSessionTodos: context.updateSessionTodos,
+    },
+  };
+};

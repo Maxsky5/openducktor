@@ -47,11 +47,19 @@ export const resolveFreshStartRuntimeContext = async ({
     taskCard,
     deps,
   });
-  const runtime = await deps.runtime.ensureRuntime(ctx.repoPath, ctx.taskId, ctx.role, {
+  const runtimeOptions: Parameters<typeof deps.runtime.ensureRuntime>[3] = {
     workspaceId: ctx.workspaceId,
-    ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : {}),
     runtimeKind: requestedRuntimeKind,
-  });
+  };
+  if (targetWorkingDirectory !== undefined) {
+    runtimeOptions.targetWorkingDirectory = targetWorkingDirectory;
+  }
+  const runtime = await deps.runtime.ensureRuntime(
+    ctx.repoPath,
+    ctx.taskId,
+    ctx.role,
+    runtimeOptions,
+  );
   if (ctx.isStaleRepoOperation()) {
     try {
       await runtime.bootstrap?.abort();

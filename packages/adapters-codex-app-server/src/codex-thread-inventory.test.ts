@@ -1,38 +1,68 @@
 import { describe, expect, test } from "bun:test";
-import { createDeferred } from "./codex-app-server-adapter.test-harness";
+import type {
+  CodexAppServerThread,
+  CodexAppServerThreadListParams,
+  CodexAppServerThreadListResponse,
+  CodexAppServerThreadLoadedListResponse,
+  CodexAppServerThreadReadResponse,
+  CodexAppServerThreadStatus,
+  CodexAppServerThreadTurnsListParams,
+  CodexAppServerTurn,
+} from "@openducktor/contracts";
+import { createCodexAppServerClient } from "./app-server-client";
+import {
+  codexThreadFixture,
+  codexTurnFixture,
+  createDeferred,
+} from "./codex-app-server-adapter.test-harness";
 import { codexThreadList, codexThreadStatusSnapshot } from "./codex-app-server-threads";
 import { CodexThreadInventoryReader } from "./codex-thread-inventory";
-import type { CodexAppServerClient } from "./types";
+import type { CodexAppServerClient, CodexJsonRpcRequest } from "./types";
+
+type InventoryClientOverrides = Partial<
+  Pick<CodexAppServerClient, "threadList" | "threadLoadedList" | "threadRead" | "threadTurnsList">
+>;
+
+const createInventoryClient = (overrides: InventoryClientOverrides): CodexAppServerClient => ({
+  ...createCodexAppServerClient({
+    request: async (request) => {
+      throw new Error(`Unexpected Codex request in inventory test: ${request.method}`);
+    },
+  }),
+  ...overrides,
+});
 
 const threadListResponse = (
   id: string,
   preview: string,
   cwd = "/repo",
-  status: Record<string, unknown> = { type: "idle" },
-  extra: Record<string, unknown> = {},
-): unknown => ({
+  status: CodexAppServerThreadStatus = { type: "idle" },
+  overrides: Partial<CodexAppServerThread> = {},
+): CodexAppServerThreadListResponse => ({
   data: [
-    {
+    codexThreadFixture({
       id,
       cwd,
       createdAt: 1,
       updatedAt: 2,
       preview,
       status,
-      ...extra,
-    },
+      ...overrides,
+    }),
   ],
   nextCursor: null,
+  backwardsCursor: null,
 });
 
 const threadReadResponse = (
   id: string,
   cwd = "/repo",
-  status: Record<string, unknown> = { type: "idle" },
-  turns: unknown[] = [{ id: "turn-1", status: "completed", items: [] }],
-  extra: Record<string, unknown> = {},
-): unknown => ({
-  thread: {
+  status: CodexAppServerThreadStatus = { type: "idle" },
+  turns: CodexAppServerTurn[] = [
+    codexTurnFixture({ id: "turn-1", status: "completed", items: [] }),
+  ],
+): CodexAppServerThreadReadResponse => ({
+  thread: codexThreadFixture({
     id,
     cwd,
     createdAt: 1,
@@ -40,8 +70,7 @@ const threadReadResponse = (
     preview: "Stored thread",
     status,
     turns,
-    ...extra,
-  },
+  }),
 });
 
 describe("CodexThreadInventoryReader", () => {
@@ -49,20 +78,7 @@ describe("CodexThreadInventoryReader", () => {
     expect(codexThreadList(threadListResponse("thread-1", "Thread"))[0]?.updatedAtMs).toBe(2_000);
   });
 
-  test("rejects malformed or overflowing Codex thread update timestamps", () => {
-    expect(() =>
-      codexThreadList(
-        threadListResponse(
-          "thread-1",
-          "Thread",
-          "/repo",
-          { type: "idle" },
-          {
-            updatedAt: "invalid",
-          },
-        ),
-      ),
-    ).toThrow("Codex thread updatedAt must be a finite number.");
+  test("rejects overflowing Codex thread update timestamps", () => {
     expect(() =>
       codexThreadList(
         threadListResponse(
@@ -79,15 +95,15 @@ describe("CodexThreadInventoryReader", () => {
   });
 
   test("requests interactive and subagent thread sources from Codex", async () => {
-    const threadListCalls: Array<Record<string, unknown>> = [];
+    const threadListCalls: CodexAppServerThreadListParams[] = [];
     const reader = new CodexThreadInventoryReader();
-    const client = {
+    const client = createInventoryClient({
       threadLoadedList: async () => ({ data: [], nextCursor: null }),
-      threadList: async (params: Record<string, unknown>) => {
+      threadList: async (params) => {
         threadListCalls.push(params);
         return { data: [], nextCursor: null };
       },
-    } as unknown as CodexAppServerClient;
+    });
 
     await reader.refresh(client, "runtime-1");
 
@@ -101,15 +117,15 @@ describe("CodexThreadInventoryReader", () => {
   });
 
   test("scopes startup inventory reads to the requested working directories and state database", async () => {
-    const threadListCalls: Array<Record<string, unknown>> = [];
+    const threadListCalls: CodexAppServerThreadListParams[] = [];
     const reader = new CodexThreadInventoryReader();
-    const client = {
+    const client = createInventoryClient({
       threadLoadedList: async () => ({ data: [], nextCursor: null }),
-      threadList: async (params: Record<string, unknown>) => {
+      threadList: async (params) => {
         threadListCalls.push(params);
         return { data: [], nextCursor: null };
       },
-    } as unknown as CodexAppServerClient;
+    });
 
     await reader.readForDirectories(client, "runtime-1", ["/repo", "/repo/worktree"]);
 
@@ -125,16 +141,16 @@ describe("CodexThreadInventoryReader", () => {
   });
 
   test("reads every parent turn id with summary-only pagination", async () => {
-    const calls: Array<Record<string, unknown>> = [];
+    const calls: CodexAppServerThreadTurnsListParams[] = [];
     const reader = new CodexThreadInventoryReader();
-    const client = {
-      threadTurnsList: async (params: Record<string, unknown>) => {
+    const client = createInventoryClient({
+      threadTurnsList: async (params) => {
         calls.push(params);
         return params.cursor
           ? { data: [{ id: "turn-2" }], nextCursor: null }
           : { data: [{ id: "turn-1" }], nextCursor: "page-2" };
       },
-    } as unknown as CodexAppServerClient;
+    });
 
     const turnIds = await reader.readThreadTurnIds(client, "parent-thread");
 
@@ -157,26 +173,15 @@ describe("CodexThreadInventoryReader", () => {
     ]);
   });
 
-  test("rejects malformed summary turn entries at the pagination boundary", async () => {
-    const reader = new CodexThreadInventoryReader();
-    const client = {
-      threadTurnsList: async () => ({ data: [null], nextCursor: null }),
-    } as unknown as CodexAppServerClient;
-
-    await expect(reader.readThreadTurnIds(client, "parent-thread")).rejects.toThrow(
-      "Codex thread/turns/list response data[0] must be an object.",
-    );
-  });
-
   test("does not let a stale in-flight read overwrite a refreshed inventory", async () => {
     const reader = new CodexThreadInventoryReader();
-    const firstLoaded = createDeferred<unknown>();
-    const firstThreads = createDeferred<unknown>();
-    const refreshedLoaded = createDeferred<unknown>();
-    const refreshedThreads = createDeferred<unknown>();
+    const firstLoaded = createDeferred<CodexAppServerThreadLoadedListResponse>();
+    const firstThreads = createDeferred<CodexAppServerThreadListResponse>();
+    const refreshedLoaded = createDeferred<CodexAppServerThreadLoadedListResponse>();
+    const refreshedThreads = createDeferred<CodexAppServerThreadListResponse>();
     const loadedResponses = [firstLoaded, refreshedLoaded];
     const threadResponses = [firstThreads, refreshedThreads];
-    const client = {
+    const client = createInventoryClient({
       threadLoadedList: () => {
         const response = loadedResponses.shift();
         if (!response) {
@@ -191,7 +196,7 @@ describe("CodexThreadInventoryReader", () => {
         }
         return response.promise;
       },
-    } as unknown as CodexAppServerClient;
+    });
 
     const staleRead = reader.read(client, "runtime-1");
     const refreshedRead = reader.refresh(client, "runtime-1");
@@ -210,11 +215,11 @@ describe("CodexThreadInventoryReader", () => {
 
   test("does not reuse a directory inventory read after clearing its runtime", async () => {
     const reader = new CodexThreadInventoryReader();
-    const staleLoaded = createDeferred<unknown>();
-    const staleThreads = createDeferred<unknown>();
+    const staleLoaded = createDeferred<CodexAppServerThreadLoadedListResponse>();
+    const staleThreads = createDeferred<CodexAppServerThreadListResponse>();
     let loadedCalls = 0;
     let threadCalls = 0;
-    const client = {
+    const client = createInventoryClient({
       threadLoadedList: () => {
         loadedCalls += 1;
         return loadedCalls === 1
@@ -227,7 +232,7 @@ describe("CodexThreadInventoryReader", () => {
           ? staleThreads.promise
           : Promise.resolve(threadListResponse("thread-fresh", "Fresh inventory"));
       },
-    } as unknown as CodexAppServerClient;
+    });
 
     const staleRead = reader.readForDirectories(client, "runtime-1", ["/repo"]);
     reader.clearInventory("runtime-1");
@@ -245,10 +250,10 @@ describe("CodexThreadInventoryReader", () => {
 
   test("coalesces concurrent refreshes for the same runtime", async () => {
     const reader = new CodexThreadInventoryReader();
-    const loaded = createDeferred<unknown>();
-    const threads = createDeferred<unknown>();
+    const loaded = createDeferred<CodexAppServerThreadLoadedListResponse>();
+    const threads = createDeferred<CodexAppServerThreadListResponse>();
     const calls: string[] = [];
-    const client = {
+    const client = createInventoryClient({
       threadLoadedList: () => {
         calls.push("thread/loaded/list");
         return loaded.promise;
@@ -257,7 +262,7 @@ describe("CodexThreadInventoryReader", () => {
         calls.push("thread/list");
         return threads.promise;
       },
-    } as unknown as CodexAppServerClient;
+    });
 
     const firstRefresh = reader.refresh(client, "runtime-1");
     const secondRefresh = reader.refresh(client, "runtime-1");
@@ -274,14 +279,14 @@ describe("CodexThreadInventoryReader", () => {
 
   test("applies runtime status updates to cached inventory", async () => {
     const reader = new CodexThreadInventoryReader();
-    const client = {
+    const client = createInventoryClient({
       threadLoadedList: async () => ({ data: ["thread-1"], nextCursor: null }),
       threadList: async () =>
         threadListResponse("thread-1", "Cached inventory", "/repo", {
           type: "active",
           activeFlags: [],
         }),
-    } as unknown as CodexAppServerClient;
+    });
 
     await reader.refresh(client, "runtime-1");
     reader.updateThreadStatus("runtime-1", "thread-1", codexThreadStatusSnapshot("idle"));
@@ -292,7 +297,7 @@ describe("CodexThreadInventoryReader", () => {
 
   test("extracts Codex subagent parent and label metadata from thread list", async () => {
     const reader = new CodexThreadInventoryReader();
-    const client = {
+    const client = createInventoryClient({
       threadLoadedList: async () => ({ data: ["child-thread"], nextCursor: null }),
       threadList: async () =>
         threadListResponse(
@@ -317,7 +322,7 @@ describe("CodexThreadInventoryReader", () => {
             },
           },
         ),
-    } as unknown as CodexAppServerClient;
+    });
 
     const inventory = await reader.refresh(client, "runtime-1");
 
@@ -338,7 +343,7 @@ describe("CodexThreadInventoryReader", () => {
   test("clears a runtime status override without refetching inventory", async () => {
     const reader = new CodexThreadInventoryReader();
     const calls: string[] = [];
-    const client = {
+    const client = createInventoryClient({
       threadLoadedList: async () => {
         calls.push("thread/loaded/list");
         return { data: ["thread-1"], nextCursor: null };
@@ -350,7 +355,7 @@ describe("CodexThreadInventoryReader", () => {
           activeFlags: [],
         });
       },
-    } as unknown as CodexAppServerClient;
+    });
 
     await reader.refresh(client, "runtime-1");
     reader.updateThreadStatus("runtime-1", "thread-1", codexThreadStatusSnapshot("idle"));
@@ -368,7 +373,7 @@ describe("CodexThreadInventoryReader", () => {
 
   test("clears one runtime status override without touching other sessions", async () => {
     const reader = new CodexThreadInventoryReader();
-    const client = {
+    const client = createInventoryClient({
       threadLoadedList: async () => ({
         data: ["thread-1", "thread-2"],
         nextCursor: null,
@@ -392,7 +397,7 @@ describe("CodexThreadInventoryReader", () => {
         ],
         nextCursor: null,
       }),
-    } as unknown as CodexAppServerClient;
+    });
 
     await reader.refresh(client, "runtime-1");
     reader.updateThreadStatus("runtime-1", "thread-1", codexThreadStatusSnapshot("idle"));
@@ -407,14 +412,14 @@ describe("CodexThreadInventoryReader", () => {
 
   test("clears raw inventory without clearing status overrides", async () => {
     const reader = new CodexThreadInventoryReader();
-    const client = {
+    const client = createInventoryClient({
       threadLoadedList: async () => ({ data: ["thread-1"], nextCursor: null }),
       threadList: async () =>
         threadListResponse("thread-1", "Cached inventory", "/repo", {
           type: "active",
           activeFlags: [],
         }),
-    } as unknown as CodexAppServerClient;
+    });
 
     await reader.refresh(client, "runtime-1");
     reader.updateThreadStatus("runtime-1", "thread-1", codexThreadStatusSnapshot("idle"));
@@ -427,12 +432,12 @@ describe("CodexThreadInventoryReader", () => {
 
   test("applies runtime status updates to in-flight inventory reads", async () => {
     const reader = new CodexThreadInventoryReader();
-    const loaded = createDeferred<unknown>();
-    const threads = createDeferred<unknown>();
-    const client = {
+    const loaded = createDeferred<CodexAppServerThreadLoadedListResponse>();
+    const threads = createDeferred<CodexAppServerThreadListResponse>();
+    const client = createInventoryClient({
       threadLoadedList: () => loaded.promise,
       threadList: () => threads.promise,
-    } as unknown as CodexAppServerClient;
+    });
 
     const inventoryRead = reader.refresh(client, "runtime-1");
     reader.updateThreadStatus("runtime-1", "thread-1", codexThreadStatusSnapshot("idle"));
@@ -450,12 +455,11 @@ describe("CodexThreadInventoryReader", () => {
 
   test("reads stored threads for history without resuming them", async () => {
     const reader = new CodexThreadInventoryReader();
-    const calls: Array<{ method: string; params: unknown }> = [];
-    const pagedTurns = [
-      {
+    const calls: CodexJsonRpcRequest[] = [];
+    const pagedTurns: CodexAppServerTurn[] = [
+      codexTurnFixture({
         id: "turn-1",
         status: "completed",
-        itemsView: "full",
         items: [
           {
             type: "userMessage",
@@ -469,18 +473,18 @@ describe("CodexThreadInventoryReader", () => {
             phase: "final_answer",
           },
         ],
-      },
+      }),
     ];
-    const client = {
-      threadRead: async (params: unknown) => {
+    const client = createInventoryClient({
+      threadRead: async (params: Parameters<CodexAppServerClient["threadRead"]>[0]) => {
         calls.push({ method: "thread/read", params });
         return threadReadResponse("thread-idle", "/repo", { type: "idle" }, []);
       },
-      threadTurnsList: async (params: unknown) => {
+      threadTurnsList: async (params: Parameters<CodexAppServerClient["threadTurnsList"]>[0]) => {
         calls.push({ method: "thread/turns/list", params });
         return { data: pagedTurns, nextCursor: null };
       },
-    } as unknown as CodexAppServerClient;
+    });
 
     const historyLoad = await reader.readThreadHistory(client, {
       externalSessionId: "thread-idle",
@@ -510,7 +514,7 @@ describe("CodexThreadInventoryReader", () => {
 
   test("uses an empty paginated history instead of stale thread metadata turns", async () => {
     const reader = new CodexThreadInventoryReader();
-    const client = {
+    const client = createInventoryClient({
       threadRead: async () =>
         threadReadResponse("thread-idle", "/repo", { type: "idle" }, [
           {
@@ -527,7 +531,7 @@ describe("CodexThreadInventoryReader", () => {
           },
         ]),
       threadTurnsList: async () => ({ data: [], nextCursor: null }),
-    } as unknown as CodexAppServerClient;
+    });
 
     const historyLoad = await reader.readThreadHistory(client, {
       externalSessionId: "thread-idle",
@@ -537,63 +541,15 @@ describe("CodexThreadInventoryReader", () => {
     expect(historyLoad).toEqual(threadReadResponse("thread-idle", "/repo", { type: "idle" }, []));
   });
 
-  test("rejects malformed paginated turn data", async () => {
-    const reader = new CodexThreadInventoryReader();
-    const client = {
-      threadRead: async () => threadReadResponse("thread-idle"),
-      threadTurnsList: async () => ({ data: {}, nextCursor: null }),
-    } as unknown as CodexAppServerClient;
-
-    await expect(
-      reader.readThreadHistory(client, {
-        externalSessionId: "thread-idle",
-        workingDirectory: "/repo",
-      }),
-    ).rejects.toThrow("Codex thread/turns/list response data must be an array.");
-  });
-
-  test("rejects malformed turns in paginated history", async () => {
-    const reader = new CodexThreadInventoryReader();
-    const client = {
-      threadRead: async () => threadReadResponse("thread-idle"),
-      threadTurnsList: async () => ({ data: [null], nextCursor: null }),
-    } as unknown as CodexAppServerClient;
-
-    await expect(
-      reader.readThreadHistory(client, {
-        externalSessionId: "thread-idle",
-        workingDirectory: "/repo",
-      }),
-    ).rejects.toThrow("Codex thread/turns/list response data[0] must be an object.");
-  });
-
-  test("rejects paginated history turns without full items", async () => {
-    const reader = new CodexThreadInventoryReader();
-    const client = {
-      threadRead: async () => threadReadResponse("thread-idle"),
-      threadTurnsList: async () => ({
-        data: [{ id: "turn-1", items: null }],
-        nextCursor: null,
-      }),
-    } as unknown as CodexAppServerClient;
-
-    await expect(
-      reader.readThreadHistory(client, {
-        externalSessionId: "thread-idle",
-        workingDirectory: "/repo",
-      }),
-    ).rejects.toThrow("Codex thread/turns/list response data[0].items must be an array.");
-  });
-
   test("returns null when read-only history has no stored thread", async () => {
     const reader = new CodexThreadInventoryReader();
     const calls: string[] = [];
-    const client = {
+    const client = createInventoryClient({
       threadRead: async () => {
         calls.push("thread/read");
         throw new Error("thread not loaded: thread-idle");
       },
-    } as unknown as CodexAppServerClient;
+    });
 
     const historyLoad = await reader.readThreadHistory(client, {
       externalSessionId: "thread-idle",
@@ -606,13 +562,13 @@ describe("CodexThreadInventoryReader", () => {
 
   test("preserves a synthetic empty history response for a known local session", async () => {
     const reader = new CodexThreadInventoryReader();
-    const client = {
+    const client = createInventoryClient({
       threadRead: async () => {
         throw new Error(
           "thread is not materialized yet: includeTurns is unavailable before first user message",
         );
       },
-    } as unknown as CodexAppServerClient;
+    });
 
     await expect(
       reader.readThreadHistory(client, {
@@ -625,12 +581,12 @@ describe("CodexThreadInventoryReader", () => {
 
   test("preserves empty history when paginated turns are unavailable before the first message", async () => {
     const reader = new CodexThreadInventoryReader();
-    const client = {
+    const client = createInventoryClient({
       threadRead: async () => threadReadResponse("thread-local"),
       threadTurnsList: async () => {
         throw new Error("thread/turns/list is unavailable before first user message");
       },
-    } as unknown as CodexAppServerClient;
+    });
 
     await expect(
       reader.readThreadHistory(client, {
@@ -644,7 +600,7 @@ describe("CodexThreadInventoryReader", () => {
   test("returns null when read-only history cwd does not match", async () => {
     const reader = new CodexThreadInventoryReader();
     const calls: string[] = [];
-    const client = {
+    const client = createInventoryClient({
       threadRead: async () => {
         calls.push("thread/read");
         return threadReadResponse("thread-idle", "/other");
@@ -653,7 +609,7 @@ describe("CodexThreadInventoryReader", () => {
         calls.push("thread/turns/list");
         return { data: [] };
       },
-    } as unknown as CodexAppServerClient;
+    });
 
     const historyLoad = await reader.readThreadHistory(client, {
       externalSessionId: "thread-idle",
@@ -666,11 +622,11 @@ describe("CodexThreadInventoryReader", () => {
 
   test("propagates thread/read history failures", async () => {
     const reader = new CodexThreadInventoryReader();
-    const client = {
+    const client = createInventoryClient({
       threadRead: async () => {
         throw new Error("read failed");
       },
-    } as unknown as CodexAppServerClient;
+    });
 
     await expect(
       reader.readThreadHistory(client, {
@@ -682,10 +638,10 @@ describe("CodexThreadInventoryReader", () => {
 
   test("read-only history does not wait for an in-flight inventory read", async () => {
     const reader = new CodexThreadInventoryReader();
-    const loaded = createDeferred<unknown>();
-    const threads = createDeferred<unknown>();
+    const loaded = createDeferred<CodexAppServerThreadLoadedListResponse>();
+    const threads = createDeferred<CodexAppServerThreadListResponse>();
     const calls: string[] = [];
-    const client = {
+    const client = createInventoryClient({
       threadLoadedList: () => {
         calls.push("thread/loaded/list");
         return loaded.promise;
@@ -702,7 +658,7 @@ describe("CodexThreadInventoryReader", () => {
         calls.push("thread/turns/list");
         return { data: [{ id: "turn-1", status: "completed", items: [] }] };
       },
-    } as unknown as CodexAppServerClient;
+    });
 
     const pendingRead = reader.read(client, "runtime-1");
     const pendingHistoryLoad = reader.readThreadHistory(client, {

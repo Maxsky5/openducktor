@@ -1,9 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
 import { createMarkdownSyntaxLanguageRegistry } from "./markdown-syntax-language-registry";
 
+type GrammarFixture = { name: string };
+
 describe("createMarkdownSyntaxLanguageRegistry", () => {
   test("normalizes aliases and registers default languages at initialization", () => {
-    const registerLanguage = mock((_language: string, _grammar: unknown) => {});
+    const registerLanguage = mock((_language: string, _grammar: GrammarFixture) => {});
 
     const registry = createMarkdownSyntaxLanguageRegistry({
       languageAliases: { js: "javascript" },
@@ -22,7 +24,7 @@ describe("createMarkdownSyntaxLanguageRegistry", () => {
   });
 
   test("loads and registers a lazy language once even with concurrent requests", async () => {
-    const registerLanguage = mock((_language: string, _grammar: unknown) => {});
+    const registerLanguage = mock((_language: string, _grammar: GrammarFixture) => {});
     const loadYamlLanguage = mock(async () => ({ default: { name: "yaml" } }));
 
     const registry = createMarkdownSyntaxLanguageRegistry({
@@ -52,13 +54,15 @@ describe("createMarkdownSyntaxLanguageRegistry", () => {
 
   test("distinguishes unsupported languages from failed lazy loaders", async () => {
     const originalConsoleError = console.error;
-    const consoleError = mock((_message: string, _error?: unknown) => {});
-    const registerLanguage = mock((_language: string, _grammar: unknown) => {});
+    const consoleError = mock((_message: string, cause?: unknown) => {
+      void cause;
+    });
+    const registerLanguage = mock((_language: string, _grammar: GrammarFixture) => {});
     const loadYamlLanguage = mock(async () => {
       throw new Error("bad grammar module");
     });
 
-    console.error = consoleError as typeof console.error;
+    console.error = consoleError;
     try {
       const registry = createMarkdownSyntaxLanguageRegistry({
         languageAliases: {},

@@ -1,5 +1,6 @@
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
+import { z } from "zod";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { resolveAgentPendingInputParticipants } from "@/state/agent-session-pending-input-participants";
 import type {
@@ -48,10 +49,7 @@ const resolvePendingInputRuntimeSession = ({
   readSessionSnapshot: ReadSessionSnapshot;
   currentSession: AgentSessionIdentity;
   request: AgentApprovalRequest | AgentQuestionRequest;
-}): {
-  responseSession: AgentSessionIdentity;
-  turnContextSession: AgentSessionState | null;
-} => {
+}) => {
   const { responseSession, sessions } = resolveAgentPendingInputParticipants(
     currentSession,
     request,
@@ -75,6 +73,9 @@ const resolvePendingInputRuntimeSession = ({
             contextSession.sessionAssociation,
         }
       : null,
+  } satisfies {
+    responseSession: AgentSessionIdentity;
+    turnContextSession: AgentSessionState | null;
   };
 };
 
@@ -82,8 +83,9 @@ const replyRepoPath = (
   workspaceRepoPath: string | null,
   identity: AgentSessionIdentity,
 ): string => {
-  if ("repoPath" in identity && typeof identity.repoPath === "string") {
-    return identity.repoPath;
+  const repoPathResult = z.string().safeParse("repoPath" in identity ? identity.repoPath : null);
+  if (repoPathResult.success) {
+    return repoPathResult.data;
   }
   return requireWorkspaceRepoPath(workspaceRepoPath);
 };
@@ -103,15 +105,19 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
     if (turnContextSession) {
       markTurnUserAnchorIfMissing(dependencies, turnContextSession);
     }
-    await dependencies.liveSessionHost.agentSessionLiveReplyApproval({
-      repoPath: replyRepoPath(dependencies.workspaceRepoPath, identity),
-      externalSessionId: responseSession.externalSessionId,
-      runtimeKind: responseSession.runtimeKind,
-      workingDirectory: responseSession.workingDirectory,
-      requestId: request.requestId,
-      outcome,
-      ...(message ? { message } : {}),
-    });
+    const input: Parameters<typeof dependencies.liveSessionHost.agentSessionLiveReplyApproval>[0] =
+      {
+        repoPath: replyRepoPath(dependencies.workspaceRepoPath, identity),
+        externalSessionId: responseSession.externalSessionId,
+        runtimeKind: responseSession.runtimeKind,
+        workingDirectory: responseSession.workingDirectory,
+        requestId: request.requestId,
+        outcome,
+      };
+    if (message) {
+      input.message = message;
+    }
+    await dependencies.liveSessionHost.agentSessionLiveReplyApproval(input);
   };
 
   const answerAgentQuestion = async (

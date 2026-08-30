@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Cause, Effect, Exit } from "effect";
 import {
   HostOperationError,
+  type HostOperationErrorAggregate,
   HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
@@ -79,7 +80,7 @@ const cleanupCodexProbe = ({
   processTreeTerminator: ProcessTreeTerminator;
   stopTimeoutMs: number;
   transport: CodexProbeTransport;
-}): Effect.Effect<void, HostOperationError> =>
+}): Effect.Effect<void, HostOperationErrorAggregate> =>
   Effect.gen(function* () {
     const pendingExit = yield* Effect.exit(transport.rejectPendingRequestsForShutdown());
     const processExit = yield* Effect.exit(
@@ -133,7 +134,7 @@ export const createCodexExecutableProbe = ({
             toHostOperationError(cause, "codexExecutableProbe.buildCommand", { executablePath }),
         });
         const child = yield* Effect.try({
-          try: () =>
+          try: (): CodexChildProcess =>
             spawn(command.command, command.args, {
               cwd: process.cwd(),
               detached: shouldStartDetachedProcessGroup(platform),
@@ -141,7 +142,7 @@ export const createCodexExecutableProbe = ({
               stdio: ["pipe", "pipe", "pipe"],
               windowsHide: command.windowsHide,
               windowsVerbatimArguments: command.windowsVerbatimArguments,
-            }) as CodexChildProcess,
+            }),
           catch: (cause) =>
             toHostOperationError(cause, "codexExecutableProbe.spawn", { executablePath }),
         });

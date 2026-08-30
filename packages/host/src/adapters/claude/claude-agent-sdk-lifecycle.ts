@@ -1,13 +1,17 @@
 import type { AgentEvent } from "@openducktor/core";
 import type { ClaudeResultLifecycleOutcome } from "./claude-agent-sdk-result-lifecycle";
-import type { ClaudeSessionActivity } from "./claude-agent-sdk-types";
+import type {
+  ClaudeSessionActivity,
+  PendingApproval,
+  PendingQuestion,
+} from "./claude-agent-sdk-types";
 
 export type ClaudeLifecycleSession = {
   activeSdkUserTurnCount?: number;
   activity: ClaudeSessionActivity;
   externalSessionId: string;
-  pendingApprovals?: Map<string, unknown>;
-  pendingQuestions?: Map<string, unknown>;
+  pendingApprovals?: Map<string, PendingApproval>;
+  pendingQuestions?: Map<string, PendingQuestion>;
   sdkState?: "idle" | "requires_action" | "running";
   pendingUserTurnCount?: number;
 };
@@ -26,19 +30,14 @@ type ClaudeLifecycleEvent =
     };
 
 const hasPendingInput = (session: ClaudeLifecycleSession): boolean => {
-  const pendingApprovals = "pendingApprovals" in session ? session.pendingApprovals : undefined;
-  const pendingQuestions = "pendingQuestions" in session ? session.pendingQuestions : undefined;
-  return (
-    (pendingApprovals instanceof Map && pendingApprovals.size > 0) ||
-    (pendingQuestions instanceof Map && pendingQuestions.size > 0)
-  );
+  return (session.pendingApprovals?.size ?? 0) > 0 || (session.pendingQuestions?.size ?? 0) > 0;
 };
 
 const pendingUserTurnCount = (session: ClaudeLifecycleSession): number =>
-  typeof session.pendingUserTurnCount === "number" ? session.pendingUserTurnCount : 0;
+  session.pendingUserTurnCount ?? 0;
 
 const activeSdkUserTurnCount = (session: ClaudeLifecycleSession): number =>
-  typeof session.activeSdkUserTurnCount === "number" ? session.activeSdkUserTurnCount : 0;
+  session.activeSdkUserTurnCount ?? 0;
 
 const emitSessionIdle = ({ emit, session, timestamp }: ClaudeLifecycleInput): void => {
   if (session.activity === "idle") {

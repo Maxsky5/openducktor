@@ -38,17 +38,18 @@ const createExecutableProbes = (
     kind: RuntimeKind,
     executablePath: string,
   ) => Effect.Effect<void, RuntimeExecutableProbeError> = () => Effect.void,
-): RuntimeExecutableProbesByKind => ({
-  claude: {
-    probeExecutable: (executablePath) => probeExecutable("claude", executablePath),
-  },
-  codex: {
-    probeExecutable: (executablePath) => probeExecutable("codex", executablePath),
-  },
-  opencode: {
-    probeExecutable: (executablePath) => probeExecutable("opencode", executablePath),
-  },
-});
+) =>
+  ({
+    claude: {
+      probeExecutable: (executablePath) => probeExecutable("claude", executablePath),
+    },
+    codex: {
+      probeExecutable: (executablePath) => probeExecutable("codex", executablePath),
+    },
+    opencode: {
+      probeExecutable: (executablePath) => probeExecutable("opencode", executablePath),
+    },
+  }) satisfies RuntimeExecutableProbesByKind;
 
 const createProbe = (
   systemCommands: SystemCommandPort,

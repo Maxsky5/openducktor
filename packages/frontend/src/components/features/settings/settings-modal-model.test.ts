@@ -261,7 +261,7 @@ describe("settings-modal-model", () => {
   });
 
   test("clears prompt override by removing only the stored value", () => {
-    const overrides: RepoPromptOverrides = {
+    const overrides = {
       "kickoff.spec_initial": {
         template: "custom",
         baseVersion: 2,
@@ -272,7 +272,7 @@ describe("settings-modal-model", () => {
         baseVersion: 3,
         enabled: true,
       },
-    };
+    } satisfies RepoPromptOverrides;
 
     const unchanged = clearPromptOverride(overrides, "kickoff.qa_review");
     expect(unchanged).toBe(overrides);
@@ -301,7 +301,7 @@ describe("settings-modal-model", () => {
   });
 
   test("validates unsupported placeholders in prompt overrides", () => {
-    const overrides: RepoPromptOverrides = {
+    const overrides = {
       "kickoff.spec_initial": {
         template: "Good {{task.id}}",
         baseVersion: 1,
@@ -313,7 +313,7 @@ describe("settings-modal-model", () => {
         baseVersion: 1,
         enabled: true,
       },
-    };
+    } satisfies RepoPromptOverrides;
 
     expect(buildPromptOverrideValidationErrors(overrides)).toEqual({
       "kickoff.build_pull_request_generation":
@@ -322,13 +322,13 @@ describe("settings-modal-model", () => {
   });
 
   test("validates required placeholders in human-review kickoff overrides", () => {
-    const overrides: RepoPromptOverrides = {
+    const overrides = {
       "kickoff.build_after_human_request_changes": {
         template: "Review {{task.id}} before editing.",
         baseVersion: 3,
         enabled: true,
       },
-    };
+    } satisfies RepoPromptOverrides;
 
     expect(buildPromptOverrideValidationErrors(overrides)).toEqual({
       "kickoff.build_after_human_request_changes":
@@ -337,7 +337,7 @@ describe("settings-modal-model", () => {
   });
 
   test("ignores validation errors in disabled prompt overrides", () => {
-    const overrides: RepoPromptOverrides = {
+    const overrides = {
       "kickoff.build_pull_request_generation": {
         template: "Publish the pull request.",
         baseVersion: 4,
@@ -348,7 +348,7 @@ describe("settings-modal-model", () => {
         baseVersion: 1,
         enabled: false,
       },
-    };
+    } satisfies RepoPromptOverrides;
 
     expect(buildPromptOverrideValidationErrors(overrides)).toEqual({});
   });
@@ -417,13 +417,13 @@ describe("settings-modal-model", () => {
       enabled: false,
     });
 
-    const enabledOverrides: RepoPromptOverrides = {
+    const enabledOverrides = {
       "kickoff.spec_initial": {
         template: "old",
         baseVersion: 2,
         enabled: true,
       },
-    };
+    } satisfies RepoPromptOverrides;
     const updated = updatePromptOverrideTemplate(
       enabledOverrides,
       "kickoff.spec_initial",

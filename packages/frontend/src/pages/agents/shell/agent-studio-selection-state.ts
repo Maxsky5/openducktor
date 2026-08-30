@@ -102,8 +102,12 @@ export const toAgentStudioSessionlessRoleSelection = ({
 
 export const buildAgentStudioSelectionQueryUpdateFromState = (
   selection: AgentStudioSelectionState,
-): AgentStudioQueryUpdate => ({
-  [AGENT_STUDIO_QUERY_KEYS.task]: selection.taskId || undefined,
-  [AGENT_STUDIO_QUERY_KEYS.session]: agentStudioSelectionSessionExternalId(selection) ?? undefined,
-  [AGENT_STUDIO_QUERY_KEYS.agent]: selection.hasExplicitRoleSelection ? selection.role : undefined,
-});
+) =>
+  ({
+    [AGENT_STUDIO_QUERY_KEYS.task]: selection.taskId || undefined,
+    [AGENT_STUDIO_QUERY_KEYS.session]:
+      agentStudioSelectionSessionExternalId(selection) ?? undefined,
+    [AGENT_STUDIO_QUERY_KEYS.agent]: selection.hasExplicitRoleSelection
+      ? selection.role
+      : undefined,
+  }) satisfies AgentStudioQueryUpdate;

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   type AgentSessionControlSummary,
-  type RepoConfig,
   RUNTIME_DESCRIPTORS_BY_KIND,
+  repoConfigSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type {
@@ -11,13 +11,10 @@ import type {
 } from "../../application/runtimes/claude-agent-sdk-service";
 import type { ClaudeWorkspaceWorkingDirectoryDependencies } from "../../application/runtimes/claude-workspace-runtime";
 import { HostOperationError } from "../../effect/host-errors";
-import type {
-  AgentSessionLiveAdapterChange,
-  AgentSessionRuntimeAdapterPort,
-} from "../../ports/agent-session-live-adapter-port";
+import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import { AsyncInputQueue } from "../claude/claude-agent-sdk-queue";
-import type { ClaudeSessionContext, ClaudeSessionStore } from "../claude/claude-agent-sdk-types";
+import type { ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 import {
   createClaudeAgentSdkEventHub,
   createClaudeLiveSessionAdapterPreparer,
@@ -44,10 +41,15 @@ const workingDirectoryDependencies = {
   },
   workspaceSettingsService: {
     getRepoConfigByRepoPath: () =>
-      Effect.succeed({
-        workspaceId: "repo",
-        worktreeBasePath: "/worktrees/repo",
-      } as RepoConfig),
+      Effect.succeed(
+        repoConfigSchema.parse({
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          defaultRuntimeKind: "claude",
+          worktreeBasePath: "/worktrees/repo",
+        }),
+      ),
   },
 };
 
@@ -112,6 +114,11 @@ const deferred = <Value>() => {
   return { promise, resolve };
 };
 
+type MutationBarrier = {
+  entered: ReturnType<typeof deferred<void>>;
+  release: ReturnType<typeof deferred<void>>;
+};
+
 const createHarness = async (
   workingDirectoryDependenciesOverride: ClaudeWorkspaceWorkingDirectoryDependencies = workingDirectoryDependencies,
 ) => {
@@ -137,12 +144,7 @@ const createHarness = async (
   let stopSessionsForRuntimeImpl: ClaudeAgentSdkService["stopSessionsForRuntime"] = () =>
     Effect.void;
   let failNextMutationAfterApply = false;
-  let mutationBarrier:
-    | {
-        entered: ReturnType<typeof deferred<void>>;
-        release: ReturnType<typeof deferred<void>>;
-      }
-    | undefined;
+  let mutationBarrier: MutationBarrier | undefined;
   startSessionImpl = () => {
     eventHub.emit(session, {
       type: "session_started",
@@ -186,7 +188,7 @@ const createHarness = async (
     stopSessionsForRuntime: (runtimeId: string) => stopSessionsForRuntimeImpl(runtimeId),
     releaseSession: (input: Parameters<ClaudeAgentSdkService["releaseSession"]>[0]) =>
       releaseSessionImpl(input),
-  } as unknown as ClaudeAgentSdkService;
+  } satisfies Parameters<typeof createClaudeLiveSessionAdapterPreparer>[0]["service"];
   const liveSessionLifecycle: Pick<RuntimeLiveSessionLifecyclePort, "runAdapterMutation"> = {
     runAdapterMutation: (mutation) => {
       const barrier = mutationBarrier;
@@ -222,16 +224,14 @@ const createHarness = async (
     service,
     sessionStore: {
       get: (externalSessionId) =>
-        externalSessionId === session.externalSessionId
-          ? (session as unknown as ReturnType<ClaudeSessionStore["get"]>)
-          : undefined,
-    } as ClaudeSessionStore,
+        externalSessionId === session.externalSessionId ? session : undefined,
+    },
     workingDirectoryDependencies: workingDirectoryDependenciesOverride,
   });
   const prepared = await Effect.runPromise(prepare(runtime));
   await Effect.runPromise(prepared.startForwarding());
   return {
-    adapter: prepared.adapter as AgentSessionRuntimeAdapterPort,
+    adapter: prepared.adapter,
     changes,
     eventHub,
     setStartSession: (implementation: ClaudeAgentSdkService["startSession"]) => {

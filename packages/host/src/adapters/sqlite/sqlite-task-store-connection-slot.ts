@@ -1,5 +1,5 @@
 import { Effect, Fiber } from "effect";
-import type { HostOperationError } from "../../effect/host-errors";
+import type { HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
 import type {
   ManagedSqliteTaskStoreConnection,
@@ -13,7 +13,7 @@ export type SqliteTaskStoreConnectionSlot = {
   readonly run: <A, E>(
     use: (session: TaskStoreSession) => Effect.Effect<A, E>,
   ) => Effect.Effect<A, E | TaskStoreError>;
-  readonly shutdown: () => Effect.Effect<void, HostOperationError>;
+  readonly shutdown: () => Effect.Effect<void, HostOperationErrorAggregate>;
 };
 
 export const createSqliteTaskStoreConnectionSlot = ({
@@ -22,11 +22,11 @@ export const createSqliteTaskStoreConnectionSlot = ({
   openConnection,
 }: {
   databasePath: string;
-  onBackgroundFailure: (failure: HostOperationError) => Effect.Effect<void, never>;
+  onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   openConnection: OpenSqliteTaskStoreConnection;
 }): SqliteTaskStoreConnectionSlot => {
   const operationSemaphore = Effect.unsafeMakeSemaphore(1);
-  let closeFailure: HostOperationError | null = null;
+  let closeFailure: HostOperationErrorAggregate | null = null;
   let connection: ManagedSqliteTaskStoreConnection | null = null;
   let idleClose: Fiber.RuntimeFiber<void, never> | null = null;
   let idleGeneration = 0;
@@ -44,7 +44,7 @@ export const createSqliteTaskStoreConnectionSlot = ({
   const closeCurrent = () =>
     Effect.gen(function* () {
       if (closeFailure) {
-        return yield* closeFailure;
+        return yield* Effect.fail(closeFailure);
       }
       if (!connection) return;
 
@@ -52,7 +52,7 @@ export const createSqliteTaskStoreConnectionSlot = ({
       const result = yield* Effect.either(current.release);
       if (result._tag === "Left") {
         closeFailure = result.left;
-        return yield* result.left;
+        return yield* Effect.fail(result.left);
       }
       connection = null;
     });
@@ -84,7 +84,7 @@ export const createSqliteTaskStoreConnectionSlot = ({
         Effect.gen(function* () {
           yield* stopIdleClose();
           if (closeFailure) {
-            return yield* closeFailure;
+            return yield* Effect.fail(closeFailure);
           }
           if (!connection) {
             connection = yield* openConnection(databasePath);

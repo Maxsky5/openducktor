@@ -62,7 +62,7 @@ const terminalExitsEqual = (
 
 type TerminalSummaryComparator = (left: TerminalSummary, right: TerminalSummary) => boolean;
 
-const terminalSummaryComparators: Record<keyof TerminalSummary, TerminalSummaryComparator> = {
+const terminalSummaryComparators = {
   terminalId: (left, right) => left.terminalId === right.terminalId,
   label: (left, right) => left.label === right.label,
   context: (left, right) => terminalContextsEqual(left.context, right.context),
@@ -70,9 +70,11 @@ const terminalSummaryComparators: Record<keyof TerminalSummary, TerminalSummaryC
   createdAt: (left, right) => left.createdAt === right.createdAt,
   lifecycle: (left, right) => left.lifecycle === right.lifecycle,
   exit: (left, right) => terminalExitsEqual(left.exit, right.exit),
-};
+} satisfies Record<keyof TerminalSummary, TerminalSummaryComparator>;
 
-const terminalSummaryFieldComparators = Object.values(terminalSummaryComparators);
+const terminalSummaryFieldComparators = Object.values<TerminalSummaryComparator>(
+  terminalSummaryComparators,
+);
 
 const terminalSummariesEqual = (left: TerminalSummary, right: TerminalSummary): boolean =>
   terminalSummaryFieldComparators.every((compare) => compare(left, right));

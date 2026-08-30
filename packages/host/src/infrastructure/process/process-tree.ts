@@ -1,6 +1,12 @@
-import { type ChildProcess, execFile } from "node:child_process";
+import { execFile } from "node:child_process";
+import type { EventEmitter } from "node:events";
 import { Effect } from "effect";
-import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
+import { z } from "zod";
+import {
+  HostOperationError,
+  type HostOperationErrorAggregate,
+  toHostOperationError,
+} from "../../effect/host-errors";
 
 export type ProcessTreePlatform = NodeJS.Platform;
 export type KillProcess = (pid: number, signal?: NodeJS.Signals | 0) => boolean;
@@ -21,7 +27,9 @@ export type InspectProcessTreeDependencies = {
   runCommand: ProcessCommandRunner;
 };
 
-export type ProcessTreeInspector = (pid: number) => Effect.Effect<boolean, HostOperationError>;
+export type ProcessTreeInspector = (
+  pid: number,
+) => Effect.Effect<boolean, HostOperationErrorAggregate>;
 
 type SignalProcessTreeDependencies = {
   platform: ProcessTreePlatform;
@@ -40,14 +48,14 @@ export type TerminateProcessTreeInput = {
   pid: number;
   label: string;
   isClosed: () => boolean;
-  waitForExit: (timeoutMs: number) => Effect.Effect<boolean, HostOperationError>;
+  waitForExit: (timeoutMs: number) => Effect.Effect<boolean, HostOperationErrorAggregate>;
   stopTimeoutMs: number;
   signalDependencies?: SignalProcessTreeDependencies;
 };
 
 export type ProcessTreeTerminator = (
   input: TerminateProcessTreeInput,
-) => Effect.Effect<void, HostOperationError>;
+) => Effect.Effect<void, HostOperationErrorAggregate>;
 
 export type ObservedStateSubscription = (listener: () => void) => () => void;
 
@@ -114,16 +122,20 @@ const runProcessCommand: ProcessCommandRunner = (command, args) =>
       args,
       { encoding: "buffer", windowsHide: true },
       (error, stdout, stderr) => {
-        const status =
-          error && "code" in error && typeof error.code === "number" ? error.code : error ? 1 : 0;
-        resume(
-          Effect.succeed({
-            status,
-            stdout: Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout),
-            stderr: Buffer.isBuffer(stderr) ? stderr : Buffer.from(stderr),
-            ...(error ? { error } : {}),
-          }),
-        );
+        let status = 0;
+        if (error) {
+          const parsedCode = z.number().safeParse(error.code);
+          status = parsedCode.success ? parsedCode.data : 1;
+        }
+        const result: ProcessCommandResult = {
+          status,
+          stdout: Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout),
+          stderr: Buffer.isBuffer(stderr) ? stderr : Buffer.from(stderr),
+        };
+        if (error) {
+          result.error = error;
+        }
+        resume(Effect.succeed(result));
       },
     );
     const abort = (): void => {
@@ -139,7 +151,7 @@ export const processTreeHasChildren = (
     platform: process.platform,
     runCommand: runProcessCommand,
   },
-): Effect.Effect<boolean, HostOperationError> =>
+): Effect.Effect<boolean, HostOperationErrorAggregate> =>
   Effect.gen(function* () {
     yield* Effect.try({
       try: () => assertValidPid(pid, "process tree"),
@@ -158,18 +170,20 @@ export const processTreeHasChildren = (
         : ["-Ao", "ppid="],
     );
     if (result.error || result.status !== 0) {
+      const fields = {
+        message: `Failed to inspect child processes for process ${pid}.`,
+        operation: "process-tree.inspect",
+        details: {
+          pid,
+          platform,
+          status: result.status,
+          stderr: result.stderr.toString("utf8").trim(),
+        },
+      };
       return yield* Effect.fail(
-        new HostOperationError({
-          message: `Failed to inspect child processes for process ${pid}.`,
-          operation: "process-tree.inspect",
-          details: {
-            pid,
-            platform,
-            status: result.status,
-            stderr: result.stderr.toString("utf8").trim(),
-          },
-          ...(result.error ? { cause: result.error } : {}),
-        }),
+        result.error
+          ? new HostOperationError({ ...fields, cause: result.error })
+          : new HostOperationError(fields),
       );
     }
     if (platform === "win32") return result.stdout.toString("utf8").trim().length > 0;
@@ -179,8 +193,8 @@ export const processTreeHasChildren = (
       .some((parentPid) => Number(parentPid) === pid);
   });
 
-const isAlreadyExitedError = (error: unknown): boolean =>
-  error instanceof Error && "code" in error && error.code === "ESRCH";
+const isAlreadyExitedError = (cause: unknown): boolean =>
+  cause instanceof Error && "code" in cause && cause.code === "ESRCH";
 
 const assertValidPid = (pid: number, label: string): void => {
   if (!Number.isInteger(pid) || pid <= 0) {
@@ -195,7 +209,7 @@ const assertValidPid = (pid: number, label: string): void => {
 const inspectProcessTreeSignalTargets = (
   pid: number,
   dependencies: SignalProcessTreeDependencies,
-): Effect.Effect<ProcessTreeSignalTargets, HostOperationError> =>
+): Effect.Effect<ProcessTreeSignalTargets, HostOperationErrorAggregate> =>
   Effect.gen(function* () {
     if (dependencies.platform === "win32") {
       return { pid, platform: dependencies.platform, processGroupIds: [] };
@@ -203,18 +217,20 @@ const inspectProcessTreeSignalTargets = (
 
     const result = yield* dependencies.runCommand("ps", ["-Ao", "pid=,ppid=,pgid="]);
     if (result.error || result.status !== 0) {
+      const fields = {
+        message: `Failed to inspect Unix process groups for process ${pid}.`,
+        operation: "process-tree.stop",
+        details: {
+          pid,
+          platform: dependencies.platform,
+          status: result.status,
+          stderr: result.stderr.toString("utf8").trim(),
+        },
+      };
       return yield* Effect.fail(
-        new HostOperationError({
-          message: `Failed to inspect Unix process groups for process ${pid}.`,
-          operation: "process-tree.stop",
-          details: {
-            pid,
-            platform: dependencies.platform,
-            status: result.status,
-            stderr: result.stderr.toString("utf8").trim(),
-          },
-          ...(result.error ? { cause: result.error } : {}),
-        }),
+        result.error
+          ? new HostOperationError({ ...fields, cause: result.error })
+          : new HostOperationError(fields),
       );
     }
 
@@ -257,7 +273,7 @@ const signalProcessTree = (
   targets: ProcessTreeSignalTargets,
   signal: NodeJS.Signals,
   dependencies: SignalProcessTreeDependencies = defaultSignalProcessTreeDependencies(),
-): Effect.Effect<void, HostOperationError> =>
+): Effect.Effect<void, HostOperationErrorAggregate> =>
   Effect.gen(function* () {
     const { pid, processGroupIds } = targets;
     const { platform, kill, runCommand, isAlive } = dependencies;
@@ -279,9 +295,9 @@ const signalProcessTree = (
         try: () => {
           try {
             kill(-processGroupId, signal);
-          } catch (error) {
-            if (isAlreadyExitedError(error) || !isAlive(-processGroupId)) return;
-            throw error;
+          } catch (cause) {
+            if (isAlreadyExitedError(cause) || !isAlive(-processGroupId)) return;
+            throw cause;
           }
         },
         catch: (cause) =>
@@ -349,7 +365,7 @@ const waitForProcessTreeExit = (
   dependencies: SignalProcessTreeDependencies,
   waitForExit: TerminateProcessTreeInput["waitForExit"],
   timeoutMs: number,
-): Effect.Effect<boolean, HostOperationError> =>
+): Effect.Effect<boolean, HostOperationErrorAggregate> =>
   Effect.all([waitForExit(timeoutMs), waitForSignalTargetsExit(targets, dependencies, timeoutMs)], {
     concurrency: "unbounded",
   }).pipe(Effect.map(([ownerClosed, targetsClosed]) => ownerClosed && targetsClosed));
@@ -361,7 +377,7 @@ export const terminateProcessTree = ({
   waitForExit,
   stopTimeoutMs,
   signalDependencies,
-}: TerminateProcessTreeInput): Effect.Effect<void, HostOperationError> =>
+}: TerminateProcessTreeInput): Effect.Effect<void, HostOperationErrorAggregate> =>
   Effect.gen(function* () {
     yield* Effect.try({
       try: () => assertValidPid(pid, label),
@@ -394,7 +410,7 @@ export const terminateProcessTree = ({
   });
 
 export const waitForChildProcessClose = (
-  child: Pick<ChildProcess, "once" | "off">,
+  child: Pick<EventEmitter, "once" | "off">,
   isClosed: () => boolean,
   timeoutMs: number,
 ): Effect.Effect<boolean> =>
