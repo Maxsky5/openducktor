@@ -27,6 +27,11 @@ export type PendingInputActionDependencies = {
 
 type PendingInputActionTarget = AgentSessionIdentity & Partial<Pick<AgentSessionState, "repoPath">>;
 
+type ResolvedPendingInputRuntimeSession = {
+  responseSession: AgentSessionIdentity & Pick<AgentSessionState, "repoPath">;
+  turnContextSession: AgentSessionState | null;
+};
+
 const markTurnUserAnchorIfMissing = (
   dependencies: Pick<
     PendingInputActionDependencies,
@@ -49,7 +54,7 @@ const resolvePendingInputRuntimeSession = ({
   readSessionSnapshot: ReadSessionSnapshot;
   currentSession: PendingInputActionTarget;
   request: AgentApprovalRequest | AgentQuestionRequest;
-}) => {
+}): ResolvedPendingInputRuntimeSession => {
   const { responseSession, sessions } = resolveAgentPendingInputParticipants(
     currentSession,
     request,
@@ -59,8 +64,7 @@ const resolvePendingInputRuntimeSession = ({
     loadedResponseSession ??
     sessions.map((session) => readSessionSnapshot(session)).find((session) => session !== null) ??
     null;
-  const repoPath =
-    loadedResponseSession?.repoPath ?? contextSession?.repoPath ?? currentSession.repoPath;
+  const repoPath = contextSession?.repoPath ?? currentSession.repoPath;
   if (!repoPath) {
     throw new Error(
       `Cannot reply to pending input for session '${responseSession.externalSessionId}' because its repository context is unavailable.`,
@@ -80,9 +84,6 @@ const resolvePendingInputRuntimeSession = ({
             contextSession.sessionAssociation,
         }
       : null,
-  } satisfies {
-    responseSession: AgentSessionIdentity & Pick<AgentSessionState, "repoPath">;
-    turnContextSession: AgentSessionState | null;
   };
 };
 

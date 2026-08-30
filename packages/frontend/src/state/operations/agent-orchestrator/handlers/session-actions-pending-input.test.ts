@@ -5,7 +5,11 @@ import type {
 } from "@openducktor/contracts";
 import type { PolicyBoundSessionRef } from "@openducktor/core";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
+import type {
+  AgentApprovalRequest,
+  AgentQuestionRequest,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import {
   buildSession,
   createSessionActions,
@@ -62,6 +66,33 @@ const policyBoundSessionRef = (
   workingDirectory,
   runtimePolicy: { kind: "opencode" },
 });
+
+type PendingInputActionHarness = {
+  actions: ReturnType<typeof createSessionActions>;
+  approvalReplies: AgentSessionLiveReplyApprovalInput[];
+  questionReplies: AgentSessionLiveReplyQuestionInput[];
+};
+
+const createPendingInputActionHarness = (
+  sessions: AgentSessionState[] = [],
+): PendingInputActionHarness => {
+  const approvalReplies: AgentSessionLiveReplyApprovalInput[] = [];
+  const questionReplies: AgentSessionLiveReplyQuestionInput[] = [];
+  const actions = createSessionActions({
+    workspaceRepoPath: "/active/repository",
+    sessionsRef: createSessionsRef(sessions),
+    liveSessionHost: {
+      agentSessionLiveReplyApproval: async (input) => {
+        approvalReplies.push(input);
+      },
+      agentSessionLiveReplyQuestion: async (input) => {
+        questionReplies.push(input);
+      },
+    },
+  });
+
+  return { actions, approvalReplies, questionReplies };
+};
 
 describe("agent-orchestrator/handlers/session-actions pending input", () => {
   test("routes an approval through the generic host without mutating the live projection locally", async () => {
@@ -125,17 +156,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
   });
 
   test("fails closed when an approval target has no recorded repository context", async () => {
-    let hostCalls = 0;
-    const actions = createSessionActions({
-      workspaceRepoPath: "/active/repository",
-      sessionsRef: createSessionsRef(),
-      liveSessionHost: {
-        agentSessionLiveReplyApproval: async () => {
-          hostCalls += 1;
-        },
-        agentSessionLiveReplyQuestion: async () => {},
-      },
-    });
+    const { actions, approvalReplies } = createPendingInputActionHarness();
 
     await expect(
       actions.replyAgentApproval(
@@ -150,7 +171,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     ).rejects.toThrow(
       "Cannot reply to pending input for session 'missing-session' because its repository context is unavailable.",
     );
-    expect(hostCalls).toBe(0);
+    expect(approvalReplies).toHaveLength(0);
   });
 
   test("routes a UI-shaped repository approval through the session repository", async () => {
@@ -160,22 +181,11 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       repoPath: "/session/repository",
       pendingApprovals: [request],
     });
-    const sessionsRef = createSessionsRef([session]);
-    const replies: AgentSessionLiveReplyApprovalInput[] = [];
-    const actions = createSessionActions({
-      workspaceRepoPath: "/active/repository",
-      sessionsRef,
-      liveSessionHost: {
-        agentSessionLiveReplyApproval: async (input) => {
-          replies.push(input);
-        },
-        agentSessionLiveReplyQuestion: async () => {},
-      },
-    });
+    const { actions, approvalReplies } = createPendingInputActionHarness([session]);
 
     await actions.replyAgentApproval(toAgentSessionIdentity(session), request, "approve_once");
 
-    expect(replies[0]?.repoPath).toBe("/session/repository");
+    expect(approvalReplies[0]?.repoPath).toBe("/session/repository");
   });
 
   test("routes a mirrored subagent approval to its response session", async () => {
@@ -254,18 +264,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       sessionAssociation: { kind: "repository" },
       pendingApprovals: [request],
     });
-    const sessionsRef = createSessionsRef([parentSession]);
-    const replies: AgentSessionLiveReplyApprovalInput[] = [];
-    const actions = createSessionActions({
-      workspaceRepoPath: "/active/repository",
-      sessionsRef,
-      liveSessionHost: {
-        agentSessionLiveReplyApproval: async (input) => {
-          replies.push(input);
-        },
-        agentSessionLiveReplyQuestion: async () => {},
-      },
-    });
+    const { actions, approvalReplies } = createPendingInputActionHarness([parentSession]);
 
     await actions.replyAgentApproval(
       toAgentSessionIdentity(parentSession),
@@ -273,7 +272,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       "approve_once",
     );
 
-    expect(replies[0]).toMatchObject({
+    expect(approvalReplies[0]).toMatchObject({
       repoPath: "/claude/session/repository",
       externalSessionId: "claude-child",
       runtimeKind: "claude",
@@ -347,22 +346,11 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       repoPath: "/session/repository",
       pendingQuestions: [request],
     });
-    const sessionsRef = createSessionsRef([session]);
-    const replies: AgentSessionLiveReplyQuestionInput[] = [];
-    const actions = createSessionActions({
-      workspaceRepoPath: "/active/repository",
-      sessionsRef,
-      liveSessionHost: {
-        agentSessionLiveReplyApproval: async () => {},
-        agentSessionLiveReplyQuestion: async (input) => {
-          replies.push(input);
-        },
-      },
-    });
+    const { actions, questionReplies } = createPendingInputActionHarness([session]);
 
     await actions.answerAgentQuestion(toAgentSessionIdentity(session), request, [["yes"]]);
 
-    expect(replies[0]?.repoPath).toBe("/session/repository");
+    expect(questionReplies[0]?.repoPath).toBe("/session/repository");
   });
 
   test("routes a mirrored subagent question to its response session", async () => {
@@ -437,22 +425,14 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       sessionAssociation: { kind: "repository" },
       pendingQuestions: [request],
     });
-    const sessionsRef = createSessionsRef([parentSession, childSession]);
-    const replies: AgentSessionLiveReplyQuestionInput[] = [];
-    const actions = createSessionActions({
-      workspaceRepoPath: "/active/repository",
-      sessionsRef,
-      liveSessionHost: {
-        agentSessionLiveReplyApproval: async () => {},
-        agentSessionLiveReplyQuestion: async (input) => {
-          replies.push(input);
-        },
-      },
-    });
+    const { actions, questionReplies } = createPendingInputActionHarness([
+      parentSession,
+      childSession,
+    ]);
 
     await actions.answerAgentQuestion(toAgentSessionIdentity(parentSession), request, [["yes"]]);
 
-    expect(replies[0]).toMatchObject({
+    expect(questionReplies[0]).toMatchObject({
       repoPath: "/claude/session/repository",
       externalSessionId: "claude-child",
       runtimeKind: "claude",
