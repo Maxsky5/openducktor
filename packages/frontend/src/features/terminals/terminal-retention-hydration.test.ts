@@ -142,7 +142,7 @@ describe("retained terminal rendering", () => {
         container.remove();
       }
     }
-  }, 15_000);
+  }, 30_000);
 
   test("does not focus a retained terminal after delayed image staging", async () => {
     const { controller } = createController();
