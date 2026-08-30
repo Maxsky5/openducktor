@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { RepoConfig, RuntimeCheck } from "@openducktor/contracts";
+import type { GitProviderConfig, RepoConfig, RuntimeCheck } from "@openducktor/contracts";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -58,6 +58,13 @@ const baseRepoConfig: RepoConfig = {
   promptOverrides: {},
   agentDefaults: {},
 };
+
+const createGitlabProvider = (): GitProviderConfig => ({
+  id: "gitlab",
+  enabled: true,
+  autoDetected: false,
+  repository: { host: "gitlab.com", owner: "acme", name: "widget" },
+});
 
 describe("settings git sections", () => {
   test("renders global GitHub CLI and auth readiness", () => {
@@ -257,22 +264,14 @@ describe("settings git sections", () => {
     const onUpdateSelectedRepoConfig = mock((updater: (current: RepoConfig) => RepoConfig) =>
       updater(baseRepoConfig),
     );
+    const gitlabProvider = createGitlabProvider();
     const rendered = render(
       createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: {
           ...baseRepoConfig,
           git: {
-            provider: {
-              id: "gitlab",
-              enabled: true,
-              autoDetected: false,
-              repository: {
-                host: "gitlab.com",
-                owner: "acme",
-                name: "widget",
-              },
-            },
+            provider: gitlabProvider,
           },
         },
         runtimeCheck: authenticatedRuntimeCheck,
@@ -333,15 +332,11 @@ describe("settings git sections", () => {
         await Promise.resolve();
       });
 
+      const gitlabProvider = createGitlabProvider();
       repoConfig = {
         ...repoConfig,
         git: {
-          provider: {
-            id: "gitlab",
-            enabled: true,
-            autoDetected: false,
-            repository: { host: "gitlab.com", owner: "acme", name: "widget" },
-          },
+          provider: gitlabProvider,
         },
       };
       rendered.rerender(createElement(RepositoryGitSection, props()));
@@ -352,12 +347,7 @@ describe("settings git sections", () => {
         await Promise.resolve();
       });
 
-      expect(repoConfig.git.provider).toEqual({
-        id: "gitlab",
-        enabled: true,
-        autoDetected: false,
-        repository: { host: "gitlab.com", owner: "acme", name: "widget" },
-      });
+      expect(repoConfig.git.provider).toBe(gitlabProvider);
     } finally {
       rendered.unmount();
     }

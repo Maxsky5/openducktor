@@ -103,23 +103,33 @@ const EMPTY_GITHUB_CONFIG = {
   repository: undefined,
 } as const;
 
-const buildGithubConfig = (
-  repoConfig: RepoConfig,
-  overrides: Partial<Omit<GitProviderConfig, "id">>,
-): GitProviderConfig => {
-  const github = selectGitProviderConfig(repoConfig.git, GITHUB_PROVIDER_DESCRIPTOR.id);
-  return {
-    enabled: github?.enabled ?? false,
-    autoDetected: github?.autoDetected ?? false,
-    repository: github?.repository,
-    ...overrides,
-    id: GITHUB_PROVIDER_DESCRIPTOR.id,
-  };
-};
-
 const hasNonGithubProvider = (repoConfig: RepoConfig | null): boolean => {
   const provider = repoConfig?.git.provider;
   return provider !== undefined && provider.id !== GITHUB_PROVIDER_DESCRIPTOR.id;
+};
+
+const updateGithubProviderConfig = (
+  repoConfig: RepoConfig,
+  overrides: Partial<Omit<GitProviderConfig, "id">>,
+): RepoConfig => {
+  if (hasNonGithubProvider(repoConfig)) {
+    return repoConfig;
+  }
+
+  const github = selectGitProviderConfig(repoConfig.git, GITHUB_PROVIDER_DESCRIPTOR.id);
+  return {
+    ...repoConfig,
+    git: {
+      ...repoConfig.git,
+      provider: {
+        enabled: github?.enabled ?? false,
+        autoDetected: github?.autoDetected ?? false,
+        repository: github?.repository,
+        ...overrides,
+        id: GITHUB_PROVIDER_DESCRIPTOR.id,
+      },
+    },
+  };
 };
 
 const trimRepositoryDraft = (draft: GithubRepositoryDraft): GithubRepositoryDraft => ({
@@ -358,23 +368,12 @@ export function useRepositoryGitSectionModel({
     (nextDraft: GithubRepositoryDraft): void => {
       const trimmedDraft = trimRepositoryDraft(nextDraft);
 
-      onUpdateSelectedRepoConfig((repoConfig) => {
-        if (hasNonGithubProvider(repoConfig)) {
-          return repoConfig;
-        }
-        return {
-          ...repoConfig,
-          git: {
-            ...repoConfig.git,
-            provider: buildGithubConfig(repoConfig, {
-              repository:
-                trimmedDraft.host && trimmedDraft.owner && trimmedDraft.name
-                  ? trimmedDraft
-                  : undefined,
-            }),
-          },
-        };
-      });
+      onUpdateSelectedRepoConfig((repoConfig) =>
+        updateGithubProviderConfig(repoConfig, {
+          repository:
+            trimmedDraft.host && trimmedDraft.owner && trimmedDraft.name ? trimmedDraft : undefined,
+        }),
+      );
     },
     [onUpdateSelectedRepoConfig],
   );
@@ -404,18 +403,9 @@ export function useRepositoryGitSectionModel({
 
   const handleGithubEnabledChange = useCallback(
     (checked: boolean): void => {
-      onUpdateSelectedRepoConfig((repoConfig) => {
-        if (hasNonGithubProvider(repoConfig)) {
-          return repoConfig;
-        }
-        return {
-          ...repoConfig,
-          git: {
-            ...repoConfig.git,
-            provider: buildGithubConfig(repoConfig, { enabled: checked }),
-          },
-        };
-      });
+      onUpdateSelectedRepoConfig((repoConfig) =>
+        updateGithubProviderConfig(repoConfig, { enabled: checked }),
+      );
     },
     [onUpdateSelectedRepoConfig],
   );
