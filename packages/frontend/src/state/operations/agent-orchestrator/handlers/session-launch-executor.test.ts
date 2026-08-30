@@ -727,6 +727,7 @@ describe("buildLaunchedSessionState", () => {
 
     const state = buildLaunchedSessionState({ launch, summary });
 
+    expect(state.repoPath).toBe(REPO_PATH);
     expect(state.status).toBe("starting");
     expect(state.historyLoadState).toBe("loaded");
   });

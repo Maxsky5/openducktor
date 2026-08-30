@@ -210,6 +210,7 @@ describe("agent-orchestrator-public-operations", () => {
     const loadedSession: AgentSessionState = {
       externalSessionId: SESSION_IDENTITY.externalSessionId,
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      repoPath: "/repo-a",
       status: "idle",
       runtimeStatusMessage: null,
       startedAt: "2026-06-12T08:00:00.000Z",

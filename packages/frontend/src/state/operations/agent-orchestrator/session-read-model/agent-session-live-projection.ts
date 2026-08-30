@@ -246,6 +246,7 @@ const applyDirectSnapshot = (
   if (isTerminalSessionStatus(current.status)) {
     return {
       ...current,
+      repoPath: snapshot.ref.repoPath,
       sessionAssociation,
       livePresence: "present",
       selectedModel,
@@ -266,6 +267,7 @@ const applyDirectSnapshot = (
 
   return {
     ...current,
+    repoPath: snapshot.ref.repoPath,
     sessionAssociation,
     title: snapshot.title,
     selectedModel,
@@ -284,6 +286,7 @@ const createLiveOnlySession = (snapshot: AgentSessionLiveSnapshot): AgentSession
   return applyDirectSnapshot(
     {
       ...identity,
+      repoPath: snapshot.ref.repoPath,
       title: snapshot.title,
       sessionAssociation: snapshot.sessionAssociation,
       status: "idle",

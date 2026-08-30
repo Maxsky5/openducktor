@@ -586,14 +586,21 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
   test("does not call task persistence or task refresh for a repository session", async () => {
     const adapter = new OpencodeSdkAdapter();
-    adapter.stopSession = async () => {};
+    const stopTargets: SessionRef[] = [];
+    adapter.stopSession = async (target) => {
+      stopTargets.push(target);
+    };
     const taskCalls: string[] = [];
     const sessionsRef = createSessionsRef([
-      buildSession({ sessionAssociation: { kind: "repository" } }),
+      buildSession({
+        sessionAssociation: { kind: "repository" },
+        repoPath: "/tmp/session-repository",
+      }),
     ]);
     const actions = createSessionActions({
       adapter,
       sessionsRef,
+      workspaceRepoPath: "/tmp/active-workspace",
       persistSessionRecord: async () => {
         taskCalls.push("persist");
       },
@@ -608,6 +615,14 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     await actions.stopAgentSession(getSession(sessionsRef));
 
     expect(getSession(sessionsRef)?.status).toBe("stopped");
+    expect(stopTargets).toEqual([
+      {
+        repoPath: "/tmp/session-repository",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+        externalSessionId: "session-1",
+      },
+    ]);
     expect(taskCalls).toEqual([]);
   });
 
@@ -697,7 +712,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     expect(taskCalls).toEqual(["persist"]);
   });
 
-  test("fails fast when stopping without an active workspace", async () => {
+  test("stops from the recorded session repository without an active workspace", async () => {
     const adapter = new OpencodeSdkAdapter();
     const stopTargets: SessionRef[] = [];
     adapter.stopSession = async (target) => {
@@ -732,13 +747,18 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       },
     });
 
-    await expect(actions.stopAgentSession(getSession(sessionsRef))).rejects.toThrow(
-      "Active workspace repo path is unavailable.",
-    );
+    await actions.stopAgentSession(getSession(sessionsRef));
 
-    expect(stopTargets).toEqual([]);
-    expect(invalidationCalls).toEqual([]);
-    expect(refreshTaskDataCalls).toEqual([]);
+    expect(stopTargets).toEqual([
+      {
+        externalSessionId: "session-1",
+        repoPath: "/tmp/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+      },
+    ]);
+    expect(invalidationCalls).toEqual([{ repoPath: "/tmp/repo", taskId: "task-1" }]);
+    expect(refreshTaskDataCalls).toEqual(["/tmp/repo"]);
     expect(loadSourceSessionCalls).toBe(0);
   });
 

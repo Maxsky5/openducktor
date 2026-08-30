@@ -4,7 +4,6 @@ import { HostInvokeError } from "@openducktor/host-client";
 import type { MutableRefObject } from "react";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
-import { createRepoStaleGuard } from "../support/core";
 import type { ReadSessionSnapshot } from "../support/session-invariants";
 import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
 import { resolveRuntimeSessionContextRef } from "../support/session-runtime-policy";
@@ -253,24 +252,26 @@ const createLoadSessionHistoryWithPolicy = ({
   policy: SessionHistoryLoadPolicy;
 }): ((sessionIdentity: AgentSessionIdentity) => Promise<AgentSessionState | null>) => {
   return async (sessionIdentity: AgentSessionIdentity): Promise<AgentSessionState | null> => {
-    if (!workspaceRepoPath) {
-      throw new Error("Cannot load agent session history without an active workspace.");
-    }
-
-    const repoPath = workspaceRepoPath;
-    const isStaleRepoOperation = createRepoStaleGuard({
-      repoPath,
-      repoEpochRef,
-      currentWorkspaceRepoPathRef,
-    });
-    if (isStaleRepoOperation()) {
-      return null;
-    }
-
-    if (!readSessionSnapshot(sessionIdentity)) {
+    const session = readSessionSnapshot(sessionIdentity);
+    if (!session) {
       throw new Error(
         `Cannot load history for unknown session '${sessionIdentity.externalSessionId}'.`,
       );
+    }
+    const repoPath = session.repoPath;
+    const workspaceRepoPathAtStart = workspaceRepoPath;
+    const repoEpochAtStart = repoEpochRef.current;
+    const isStaleRepoOperation = (): boolean => {
+      const currentSession = readSessionSnapshot(sessionIdentity);
+      return (
+        repoEpochRef.current !== repoEpochAtStart ||
+        currentWorkspaceRepoPathRef.current !== workspaceRepoPathAtStart ||
+        currentSession === null ||
+        currentSession.repoPath !== repoPath
+      );
+    };
+    if (isStaleRepoOperation()) {
+      return null;
     }
 
     const input: Parameters<typeof loadSessionHistoryIntoStoreWithPolicy>[0] = {

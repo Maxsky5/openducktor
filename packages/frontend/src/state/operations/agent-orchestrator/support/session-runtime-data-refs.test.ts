@@ -33,6 +33,7 @@ const sessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   pendingQuestions: [],
   selectedModel: null,
   ...overrides,
+  repoPath: overrides.repoPath ?? "/repo",
 });
 const identityTarget = (identity = sessionIdentity()) => ({
   identity,

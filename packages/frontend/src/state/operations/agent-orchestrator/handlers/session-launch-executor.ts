@@ -132,6 +132,7 @@ export const buildLaunchedSessionState = ({
     externalSessionId: summary.externalSessionId,
     sessionAssociation: launch.sessionAssociation,
     runtimeKind: summary.runtimeKind,
+    repoPath: launch.repoPath,
     status: launchedSessionStatus(launch, summary),
     runtimeStatusMessage: null,
     startedAt: summary.startedAt,

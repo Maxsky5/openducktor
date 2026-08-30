@@ -98,6 +98,7 @@ const BASE_AGENT_SESSION_FIXTURE: AgentSessionState = {
   externalSessionId: TEST_EXTERNAL_SESSION_IDS.default,
   sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
   runtimeKind: "opencode",
+  repoPath: "/tmp/repo",
   status: "idle",
   runtimeStatusMessage: null,
   startedAt: "2026-02-22T08:00:00.000Z",

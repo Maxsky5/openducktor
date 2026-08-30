@@ -192,6 +192,7 @@ describe("agent session live projection", () => {
     expect(getAgentSession(sessions, identity("repository-thread"))?.sessionAssociation).toEqual({
       kind: "repository",
     });
+    expect(getAgentSession(sessions, identity("repository-thread"))?.repoPath).toBe(repoPath);
     expect(getAgentSession(sessions, identity("unbound-thread"))?.sessionAssociation).toEqual({
       kind: "unbound",
     });

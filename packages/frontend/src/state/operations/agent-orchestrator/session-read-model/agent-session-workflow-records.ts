@@ -60,11 +60,13 @@ export const pruneVanishedWorkflowSessions = ({
 };
 
 export const applyWorkflowSessionRecords = ({
+  repoPath,
   projected,
   records: workflowRecords,
   associationEvidence,
   existingSelectedModelSource = "record",
 }: {
+  repoPath: string;
   projected: AgentSessionCollection;
   records: LoadedWorkflowSessionRecords;
   associationEvidence: AgentSessionCollection;
@@ -75,7 +77,10 @@ export const applyWorkflowSessionRecords = ({
   for (const persistedRecord of workflowRecords.records) {
     const identity = toPersistedSessionIdentity(persistedRecord.record);
     const currentSession = getAgentSession(collection, identity);
-    const persistedInput: Parameters<typeof toPersistedSessionView>[0] = { ...persistedRecord };
+    const persistedInput: Parameters<typeof toPersistedSessionView>[0] = {
+      ...persistedRecord,
+      repoPath,
+    };
     if (currentSession) {
       persistedInput.current = currentSession;
     } else {

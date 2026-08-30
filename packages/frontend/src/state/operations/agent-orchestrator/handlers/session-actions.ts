@@ -153,7 +153,6 @@ export const createAgentSessionActions = ({
   });
 
   const stopAgentSession = createStopAgentSession({
-    workspaceRepoPath,
     adapter,
     readSessionSnapshot,
     updateSession,
@@ -171,7 +170,6 @@ export const createAgentSessionActions = ({
   });
 
   const modelActions = createSessionModelActions({
-    workspaceRepoPath,
     adapter,
     readSessionSnapshot,
     updateSession,

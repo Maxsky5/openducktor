@@ -5,7 +5,7 @@ import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import type { UpdateSession } from "../events/session-event-types";
 import { now } from "../support/core";
 import { appendSessionMessage } from "../support/messages";
-import { type ReadSessionSnapshot, requireWorkspaceRepoPath } from "../support/session-invariants";
+import type { ReadSessionSnapshot } from "../support/session-invariants";
 import {
   buildUserStoppedNoticeMessage,
   USER_STOPPED_NOTICE,
@@ -14,7 +14,6 @@ import { requireSessionAssociation, toRuntimeSessionRef } from "../support/sessi
 import type { CommitStoppedSession } from "./workflow-session-operation-policy";
 
 export type StopAgentSessionDependencies = {
-  workspaceRepoPath: string | null;
   adapter: Pick<AgentEnginePort, "stopSession">;
   readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
@@ -38,7 +37,6 @@ const appendUserStoppedNotice = (
   );
 
 export const createStopAgentSession = ({
-  workspaceRepoPath,
   adapter,
   readSessionSnapshot,
   updateSession,
@@ -52,7 +50,7 @@ export const createStopAgentSession = ({
     }
     const externalSessionId = session.externalSessionId;
     requireSessionAssociation(session, "stop");
-    let stopRepoPath: string | null = null;
+    const stopRepoPath = session.repoPath;
 
     updateSession(session, (current) => ({
       ...current,
@@ -60,8 +58,6 @@ export const createStopAgentSession = ({
     }));
 
     try {
-      stopRepoPath = requireWorkspaceRepoPath(workspaceRepoPath);
-
       await adapter.stopSession(toRuntimeSessionRef(stopRepoPath, session));
     } catch (error) {
       updateSession(session, (current) => ({

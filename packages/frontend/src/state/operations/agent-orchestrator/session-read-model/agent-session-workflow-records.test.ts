@@ -82,6 +82,7 @@ const projectAndApplyRecords = ({
   records: LoadedWorkflowSessionRecords;
 }) =>
   applyWorkflowSessionRecords({
+    repoPath,
     projected: buildAgentSessionLiveCollection({ current, snapshots }),
     records: loadedRecords,
     associationEvidence: current,
@@ -95,6 +96,7 @@ const applyRecordsOnly = ({
   records: LoadedWorkflowSessionRecords;
 }) =>
   applyWorkflowSessionRecords({
+    repoPath,
     projected,
     records: loadedRecords,
     associationEvidence: projected,
@@ -174,6 +176,7 @@ describe("agent session workflow records", () => {
 
     expect(() =>
       applyWorkflowSessionRecords({
+        repoPath,
         projected,
         records: loadedRecords({ taskId: "task-1", record: record("thread-1") }),
         associationEvidence: current,
@@ -201,6 +204,7 @@ describe("agent session workflow records", () => {
     const projected = buildAgentSessionLiveCollection({ current, snapshots: [] });
 
     const sessions = applyWorkflowSessionRecords({
+      repoPath,
       projected,
       records: loadedRecords({ taskId: "task-1", record: record("thread-1") }),
       associationEvidence: current,
@@ -423,6 +427,7 @@ describe("agent session workflow records", () => {
     expect(getAgentSession(projected, identity("live-thread"))?.livePresence).toBe("present");
 
     const afterSnapshotApply = applyWorkflowSessionRecords({
+      repoPath,
       projected,
       records: loadedRecords(),
       associationEvidence: projected,
@@ -559,6 +564,7 @@ describe("agent session workflow records", () => {
 
     // Snapshot and refresh commits keep applying saved fields (main parity).
     const fullApply = applyWorkflowSessionRecords({
+      repoPath,
       projected: withUserModel,
       records: {
         loadedTaskIds: new Set(["task-1"]),
@@ -619,6 +625,7 @@ describe("agent session workflow records", () => {
       title: "Launching",
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       runtimeKind: "codex",
+      repoPath,
       workingDirectory,
       status: "idle",
       runtimeStatusMessage: null,

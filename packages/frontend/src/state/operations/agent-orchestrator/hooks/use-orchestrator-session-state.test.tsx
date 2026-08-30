@@ -42,6 +42,7 @@ const createSessionFixture = (): AgentSessionState => ({
   runtimeKind: "opencode",
   externalSessionId: "external-1",
   sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+  repoPath: "/tmp/repo-a",
   status: "idle",
   runtimeStatusMessage: null,
   startedAt: "2026-03-01T09:00:00.000Z",

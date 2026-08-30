@@ -12,6 +12,7 @@ const session = (externalSessionId: string): AgentSessionState => ({
   externalSessionId,
   sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   runtimeKind: "codex",
+  repoPath: "/repo",
   workingDirectory: "/repo/worktree",
   status: "idle",
   runtimeStatusMessage: null,

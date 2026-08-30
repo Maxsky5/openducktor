@@ -123,6 +123,7 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
     const sessionsRef = createSessionsRef([
       buildSession({
         sessionAssociation: { kind: "repository" },
+        repoPath: "/tmp/session-repository",
         workingDirectory: "/tmp/repo/repository-chat",
       }),
     ]);
@@ -130,6 +131,7 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
+      workspaceRepoPath: "/tmp/active-workspace",
       persistSessionRecord: async () => {
         persistenceCalls += 1;
       },
@@ -144,7 +146,7 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
     expect(modelCalls).toEqual([
       {
         externalSessionId: "session-1",
-        repoPath: "/tmp/repo",
+        repoPath: "/tmp/session-repository",
         runtimeKind: "opencode",
         workingDirectory: "/tmp/repo/repository-chat",
         model: {

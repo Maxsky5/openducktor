@@ -146,12 +146,15 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
         buildSession({
           status: "idle",
           sessionAssociation: { kind: "repository" },
+          repoPath: "/tmp/session-repository",
           workingDirectory: "/tmp/repo/repository-chat",
         }),
       ]);
       const actions = createSessionActions({
         adapter,
         sessionsRef,
+        workspaceRepoPath: "/tmp/active-workspace",
+        currentWorkspaceRepoPathRef: { current: "/tmp/active-workspace" },
         taskRef: { current: [] },
         ensureExistingSessionRuntime: async () => {
           throw new Error("repository sends must not ensure a workflow runtime");
@@ -175,7 +178,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
 
         expect(sendInputs).toHaveLength(1);
         expect(sendInputs[0]).toMatchObject({
-          repoPath: "/tmp/repo",
+          repoPath: "/tmp/session-repository",
           runtimeKind: "opencode",
           workingDirectory: "/tmp/repo/repository-chat",
           externalSessionId: "session-1",

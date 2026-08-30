@@ -301,6 +301,37 @@ describe("session history loader", () => {
     ]);
   });
 
+  test("loads repository history from the recorded session repository", async () => {
+    const repositorySession = Object.assign(createSession(), {
+      repoPath: "/session-repository",
+      sessionAssociation: { kind: "repository" as const },
+    });
+    const harness = createHistoryLoadHarness(repositorySession);
+    let historyRepoPath: string | undefined;
+    const loadAgentSessionHistory = createLoadAgentSessionHistory({
+      workspaceRepoPath: "/active-workspace",
+      adapter: {
+        loadSessionHistory: async (input) => {
+          historyRepoPath = input.repoPath;
+          return [];
+        },
+      },
+      repoEpochRef: { current: 0 },
+      currentWorkspaceRepoPathRef: { current: "/active-workspace" },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      loadSystemPromptContext: createWorkflowSessionHistoryPromptPolicy({
+        workspaceId: "workspace-1",
+        taskRef: { current: [] },
+        loadRepoPromptOverrides: async (): Promise<RepoPromptOverrides> => ({}),
+      }),
+    });
+
+    await loadAgentSessionHistory(sessionTarget);
+
+    expect(historyRepoPath).toBe("/session-repository");
+  });
+
   test("rejects history loading for an unbound session without repository context", async () => {
     const unboundSession = {
       ...createSession(),

@@ -198,6 +198,7 @@ export const useRepoSessionReadModel = ({
       try {
         commitSessionCollection((current) => ({
           collection: applyWorkflowSessionRecords({
+            repoPath,
             projected: current,
             records: toLoadedWorkflowSessionRecords(records),
             associationEvidence: current,
@@ -544,6 +545,7 @@ export const useRepoSessionReadModel = ({
       const workflowRecords = readLoadedWorkflowRecords();
       return workflowRecords
         ? applyWorkflowSessionRecords({
+            repoPath,
             projected,
             records: workflowRecords,
             associationEvidence,
