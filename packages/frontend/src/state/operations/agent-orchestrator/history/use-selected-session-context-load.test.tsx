@@ -16,6 +16,7 @@ const session = (externalSessionId: string): AgentSessionState => ({
   status: "idle",
   runtimeStatusMessage: null,
   startedAt: "2026-07-16T08:00:00.000Z",
+  livePresence: "unobserved",
   historyLoadState: "not_requested",
   messages: createSessionMessagesState(externalSessionId),
   contextUsage: null,

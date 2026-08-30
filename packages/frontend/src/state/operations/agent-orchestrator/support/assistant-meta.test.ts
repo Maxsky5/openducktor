@@ -11,6 +11,7 @@ const sessionFixture: AgentSessionState = {
   runtimeStatusMessage: null,
   startedAt: "2026-02-22T08:00:00.000Z",
   workingDirectory: "/tmp/repo/worktree",
+  livePresence: "unobserved",
   historyLoadState: "not_requested",
   messages: createSessionMessagesState("external-1"),
   pendingApprovals: [],

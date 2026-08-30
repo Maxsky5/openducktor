@@ -281,13 +281,13 @@ describe("agent session live projection", () => {
         snapshot("absent-later-thread"),
       ],
     });
-    expect(getAgentSession(initial, identity("live-thread"))?.liveReported).toBe(true);
+    expect(getAgentSession(initial, identity("live-thread"))?.livePresence).toBe("present");
 
     // A reconnect snapshot without the workflow session clears its flag,
     // in the same commit that settles it.
     const reconnectedWithoutIt = build({ current: initial, snapshots: [] });
-    expect(getAgentSession(reconnectedWithoutIt, identity("live-thread"))?.liveReported).toBe(
-      false,
+    expect(getAgentSession(reconnectedWithoutIt, identity("live-thread"))?.livePresence).toBe(
+      "absent",
     );
 
     // A later upsert restores it; an explicit removal clears it again.
@@ -295,12 +295,12 @@ describe("agent session live projection", () => {
       type: "session_upsert",
       session: snapshot("live-thread", { sessionAssociation: workflowAssociation() }),
     });
-    expect(getAgentSession(upserted, identity("live-thread"))?.liveReported).toBe(true);
+    expect(getAgentSession(upserted, identity("live-thread"))?.livePresence).toBe("present");
     const removed = delta(upserted, {
       type: "session_removed",
       ref: snapshot("live-thread").ref,
     });
-    expect(getAgentSession(removed, identity("live-thread"))?.liveReported).toBe(false);
+    expect(getAgentSession(removed, identity("live-thread"))?.livePresence).toBe("absent");
   });
 
   test("preserves a live child's loaded transcript across an authoritative snapshot refresh", () => {

@@ -242,10 +242,8 @@ export const verifyLiveTerminalPtyNaturalExitCleanup = async (
       5_000,
       "Timed out waiting for PTY natural-exit cleanup.",
     );
-    // Descendant teardown is asynchronous relative to the exit event, so give
-    // the kill a bounded window before declaring a survivor.
-    const cleanupDeadline = Date.now() + 2_000;
-    while (Date.now() < cleanupDeadline && processIsAlive(childPid)) {
+    const descendantCleanupDeadline = Date.now() + 2_000;
+    while (Date.now() < descendantCleanupDeadline && processIsAlive(childPid)) {
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
     if (processIsAlive(childPid)) {

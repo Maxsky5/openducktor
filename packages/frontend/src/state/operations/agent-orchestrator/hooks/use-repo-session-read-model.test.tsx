@@ -385,7 +385,7 @@ describe("useRepoSessionReadModel", () => {
       });
       await state.harness.waitFor(() => state.getStoredSession(historicalIdentity) === null);
       expect(state.getSession()).not.toBeNull();
-      expect(state.getSession()?.liveReported).toBe(true);
+      expect(state.getSession()?.livePresence).toBe("present");
 
       // The runtime withdraws live evidence; no further query update is needed.
       await state.harness.run(() => {
@@ -417,7 +417,7 @@ describe("useRepoSessionReadModel", () => {
     try {
       await state.harness.mount();
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
-      expect(state.getSession()?.liveReported).toBe(true);
+      expect(state.getSession()?.livePresence).toBe("present");
 
       // Same-repo task-set change while task 2 hydration is still pending.
       const threadTwo = { ...record, externalSessionId: "thread-two", role: "qa" as const };
@@ -429,7 +429,7 @@ describe("useRepoSessionReadModel", () => {
         state.emit({ type: "session_removed", ref: snapshot().ref });
       });
       expect(state.getSession()).not.toBeNull();
-      expect(state.getSession()?.liveReported).toBe(false);
+      expect(state.getSession()?.livePresence).toBe("absent");
 
       // Task 2 finishes hydrating; its owner set cannot prove anything about
       // the task-1 session either.

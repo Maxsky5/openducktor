@@ -190,8 +190,7 @@ export type AgentSessionState = {
   workingDirectory: string;
   /** Live-only parent link used to project descendant pending input to active ancestors. */
   liveParentExternalSessionId?: string | undefined;
-  /** Whether the live runtime stream currently reports this session; absence never proves a durable record vanished. */
-  liveReported?: boolean | undefined;
+  livePresence: "unobserved" | "present" | "absent";
   historyLoadState: AgentSessionHistoryLoadState;
   historyLoadFailure?: SessionHistoryFailure | null;
   messages: AgentSessionMessages;

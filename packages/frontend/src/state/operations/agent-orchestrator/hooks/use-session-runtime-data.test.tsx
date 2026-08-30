@@ -56,6 +56,7 @@ const sessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
     status: "idle",
     runtimeStatusMessage: null,
     startedAt: "2026-06-12T08:00:00.000Z",
+    livePresence: "unobserved",
     historyLoadState: "loaded",
     messages: createSessionMessagesState(identity.externalSessionId),
     contextUsage: null,

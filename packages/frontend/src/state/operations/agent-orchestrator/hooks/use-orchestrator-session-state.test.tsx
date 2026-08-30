@@ -46,6 +46,7 @@ const createSessionFixture = (): AgentSessionState => ({
   runtimeStatusMessage: null,
   startedAt: "2026-03-01T09:00:00.000Z",
   workingDirectory: "/tmp/repo-a",
+  livePresence: "unobserved",
   historyLoadState: "not_requested",
   messages: createSessionMessagesState("external-1"),
   pendingApprovals: [],

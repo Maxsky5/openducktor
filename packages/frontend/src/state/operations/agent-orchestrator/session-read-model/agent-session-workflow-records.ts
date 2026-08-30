@@ -34,9 +34,7 @@ const pruneRecordlessWorkflowSessions = (
     const recordDisappeared =
       loadedTaskIds.has(session.sessionAssociation.taskId) &&
       session.status !== "starting" &&
-      // Only sessions known to be unreported can be pruned. An unset flag
-      // belongs to a fresh launch whose live evidence has not arrived yet.
-      session.liveReported === false &&
+      session.livePresence === "absent" &&
       !persistedKeys.has(agentSessionIdentityKey(session));
     if (recordDisappeared) {
       collection = removeAgentSession(collection, session);

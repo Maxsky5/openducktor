@@ -208,7 +208,7 @@ describe("agent session workflow records", () => {
 
     expect(getAgentSession(sessions, identity("thread-1"))).toMatchObject({
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-      liveReported: false,
+      livePresence: "absent",
       pendingApprovals: [],
     });
   });
@@ -420,14 +420,16 @@ describe("agent session workflow records", () => {
         }),
       ],
     });
-    expect(getAgentSession(projected, identity("live-thread"))?.liveReported).toBe(true);
+    expect(getAgentSession(projected, identity("live-thread"))?.livePresence).toBe("present");
 
     const afterSnapshotApply = applyWorkflowSessionRecords({
       projected,
       records: loadedRecords(),
       associationEvidence: projected,
     });
-    expect(getAgentSession(afterSnapshotApply, identity("live-thread"))?.liveReported).toBe(true);
+    expect(getAgentSession(afterSnapshotApply, identity("live-thread"))?.livePresence).toBe(
+      "present",
+    );
 
     const afterTaskRefresh = applyRecordsOnly({
       projected,
@@ -450,7 +452,7 @@ describe("agent session workflow records", () => {
       current: projected,
       envelope: { type: "session_removed", ref: snapshot("live-thread").ref },
     });
-    expect(getAgentSession(removed, identity("live-thread"))?.liveReported).toBe(false);
+    expect(getAgentSession(removed, identity("live-thread"))?.livePresence).toBe("absent");
 
     const afterTaskRefresh = applyRecordsOnly({
       projected: removed,
@@ -593,7 +595,9 @@ describe("agent session workflow records", () => {
       projected: withRecord,
       records: { loadedTaskIds: new Set(["task-1"]), records: [] },
     });
-    expect(getAgentSession(refreshedWhileLive, identity("live-thread"))?.liveReported).toBe(true);
+    expect(getAgentSession(refreshedWhileLive, identity("live-thread"))?.livePresence).toBe(
+      "present",
+    );
 
     // The runtime withdraws live evidence; applying that delta against
     // the already-loaded records must finish the deletion without another query.
@@ -601,7 +605,7 @@ describe("agent session workflow records", () => {
       current: refreshedWhileLive,
       envelope: { type: "session_removed", ref: snapshot("live-thread").ref },
     });
-    expect(getAgentSession(removed, identity("live-thread"))?.liveReported).toBe(false);
+    expect(getAgentSession(removed, identity("live-thread"))?.livePresence).toBe("absent");
     const afterRemovalApply = applyRecordsOnly({
       projected: removed,
       records: { loadedTaskIds: new Set(["task-1"]), records: [] },
@@ -609,7 +613,7 @@ describe("agent session workflow records", () => {
     expect(getAgentSession(afterRemovalApply, identity("live-thread"))).toBeNull();
   });
 
-  test("protects a locally launched session that has never been live-reported", () => {
+  test("protects a locally launched session before live observation", () => {
     const launched = {
       externalSessionId: "launching-thread",
       title: "Launching",
@@ -619,6 +623,7 @@ describe("agent session workflow records", () => {
       status: "idle",
       runtimeStatusMessage: null,
       startedAt: "2026-07-16T08:00:00.000Z",
+      livePresence: "unobserved",
       historyLoadState: "not_requested",
       messages: createSessionMessagesState("launching-thread"),
       contextUsage: null,
@@ -628,9 +633,6 @@ describe("agent session workflow records", () => {
     } as const satisfies AgentSessionState;
     const projected = replaceAgentSession(emptyAgentSessionCollection(), launched);
 
-    // Any unrelated delta applies loaded records; the launch has not
-    // landed a record yet and no runtime report arrived, so nothing
-    // proves deletion.
     const refreshed = applyRecordsOnly({
       projected,
       records: { loadedTaskIds: new Set(["task-1"]), records: [] },

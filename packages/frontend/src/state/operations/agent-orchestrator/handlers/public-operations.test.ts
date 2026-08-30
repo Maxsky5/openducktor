@@ -215,6 +215,7 @@ describe("agent-orchestrator-public-operations", () => {
       startedAt: "2026-06-12T08:00:00.000Z",
       runtimeKind: SESSION_IDENTITY.runtimeKind,
       workingDirectory: SESSION_IDENTITY.workingDirectory,
+      livePresence: "unobserved",
       historyLoadState: "loaded",
       messages: createSessionMessagesState(SESSION_IDENTITY.externalSessionId),
       contextUsage: null,
