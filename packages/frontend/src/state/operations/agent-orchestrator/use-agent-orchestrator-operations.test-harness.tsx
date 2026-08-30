@@ -166,7 +166,7 @@ const createDefaultActiveWorkspace = (activeRepo: string | null) =>
         defaultQaProvider: null,
         defaultQaModel: null,
         defaultQaVariant: null,
-        git: { providers: {} },
+        git: {},
         hooks: { preStart: [], postComplete: [] },
         isActive: true,
         hasConfig: true,

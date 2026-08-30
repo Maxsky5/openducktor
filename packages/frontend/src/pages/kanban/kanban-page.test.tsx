@@ -386,9 +386,7 @@ function createRepoConfigFixture(promptOverrides: RepoPromptOverrides = {}): Rep
     worktreeBasePath: undefined,
     branchPrefix: "codex/",
     defaultTargetBranch: { remote: "origin", branch: "main" },
-    git: {
-      providers: {},
-    },
+    git: {},
     hooks: {
       preStart: [],
       postComplete: [],

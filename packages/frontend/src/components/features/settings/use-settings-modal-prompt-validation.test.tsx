@@ -32,9 +32,7 @@ const createSnapshot = (): SettingsSnapshot =>
         worktreeBasePath: "/tmp/a",
         branchPrefix: "obp",
         defaultTargetBranch: { remote: "origin", branch: "main" },
-        git: {
-          providers: {},
-        },
+        git: {},
         hooks: { preStart: [], postComplete: [] },
         devServers: [],
         worktreeCopyPaths: [],
@@ -55,9 +53,7 @@ const createSnapshot = (): SettingsSnapshot =>
         worktreeBasePath: "/tmp/b",
         branchPrefix: "obp",
         defaultTargetBranch: { remote: "origin", branch: "main" },
-        git: {
-          providers: {},
-        },
+        git: {},
         hooks: { preStart: [], postComplete: [] },
         devServers: [],
         worktreeCopyPaths: [],

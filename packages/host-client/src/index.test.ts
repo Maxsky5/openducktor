@@ -1073,9 +1073,7 @@ describe("HostClient", () => {
               defaultRuntimeKind: "opencode",
               branchPrefix: "obp",
               defaultTargetBranch: { remote: "origin", branch: "main" },
-              git: {
-                providers: {},
-              },
+              git: {},
               hooks: { preStart: [], postComplete: [] },
               worktreeCopyPaths: [],
               promptOverrides: {},
@@ -1140,9 +1138,7 @@ describe("HostClient", () => {
           defaultRuntimeKind: "opencode",
           branchPrefix: "obp",
           defaultTargetBranch: { remote: "origin", branch: "main" },
-          git: {
-            providers: {},
-          },
+          git: {},
           devServers: [],
           hooks: { preStart: [], postComplete: [] },
           worktreeCopyPaths: [],
@@ -1179,9 +1175,7 @@ describe("HostClient", () => {
                 defaultRuntimeKind: "opencode",
                 branchPrefix: "obp",
                 defaultTargetBranch: { remote: "origin", branch: "main" },
-                git: {
-                  providers: {},
-                },
+                git: {},
                 devServers: [],
                 hooks: { preStart: [], postComplete: [] },
                 worktreeCopyPaths: [],

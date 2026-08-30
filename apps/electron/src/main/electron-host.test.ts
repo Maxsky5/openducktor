@@ -83,7 +83,7 @@ const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   defaultRuntimeKind: "opencode",
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
-  git: { providers: {} },
+  git: {},
   hooks: { preStart: [], postComplete: [] },
   devServers: [],
   worktreeCopyPaths: [],
@@ -1533,16 +1533,15 @@ describe("createElectronHostCommandRouter", () => {
           workspaces: {
             repo: repoConfig({
               git: {
-                providers: {
-                  github: {
-                    enabled: true,
-                    repository: {
-                      host: "github.com",
-                      owner: "openai",
-                      name: "openducktor",
-                    },
-                    autoDetected: false,
+                provider: {
+                  id: "github",
+                  enabled: true,
+                  repository: {
+                    host: "github.com",
+                    owner: "openai",
+                    name: "openducktor",
                   },
+                  autoDetected: false,
                 },
               },
             }),
@@ -1585,16 +1584,15 @@ describe("createElectronHostCommandRouter", () => {
           workspaces: {
             repo: repoConfig({
               git: {
-                providers: {
-                  github: {
-                    enabled: true,
-                    repository: {
-                      host: "github.com",
-                      owner: "openai",
-                      name: "openducktor",
-                    },
-                    autoDetected: false,
+                provider: {
+                  id: "github",
+                  enabled: true,
+                  repository: {
+                    host: "github.com",
+                    owner: "openai",
+                    name: "openducktor",
                   },
+                  autoDetected: false,
                 },
               },
             }),
@@ -1677,16 +1675,15 @@ describe("createElectronHostCommandRouter", () => {
           workspaces: {
             repo: repoConfig({
               git: {
-                providers: {
-                  github: {
-                    enabled: true,
-                    repository: {
-                      host: "github.com",
-                      owner: "openai",
-                      name: "openducktor",
-                    },
-                    autoDetected: false,
+                provider: {
+                  id: "github",
+                  enabled: true,
+                  repository: {
+                    host: "github.com",
+                    owner: "openai",
+                    name: "openducktor",
                   },
+                  autoDetected: false,
                 },
               },
             }),
@@ -1751,16 +1748,15 @@ describe("createElectronHostCommandRouter", () => {
           workspaces: {
             repo: repoConfig({
               git: {
-                providers: {
-                  github: {
-                    enabled: true,
-                    repository: {
-                      host: "github.com",
-                      owner: "openai",
-                      name: "openducktor",
-                    },
-                    autoDetected: false,
+                provider: {
+                  id: "github",
+                  enabled: true,
+                  repository: {
+                    host: "github.com",
+                    owner: "openai",
+                    name: "openducktor",
                   },
+                  autoDetected: false,
                 },
               },
             }),

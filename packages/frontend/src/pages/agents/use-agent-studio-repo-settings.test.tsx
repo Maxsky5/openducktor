@@ -20,7 +20,7 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   worktreeBasePath: "/worktrees",
   branchPrefix: "codex/",
   defaultTargetBranch: { remote: "origin", branch: "main" },
-  git: { providers: {} },
+  git: {},
   hooks: { preStart: [], postComplete: [] },
   devServers: [],
   worktreeCopyPaths: [],
@@ -100,8 +100,10 @@ describe("useAgentStudioRepoSettings", () => {
     const hostClient = createRepoConfigHost(async () =>
       createRepoConfig({
         git: {
-          providers: {
-            github: { enabled, autoDetected: false },
+          provider: {
+            id: "github",
+            enabled,
+            autoDetected: false,
           },
         },
       }),

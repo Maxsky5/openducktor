@@ -250,12 +250,11 @@ describe("createTaskService approval context", () => {
         repoPath: "/repo",
         hooks: { preStart: [], postComplete: [] },
         git: {
-          providers: {
-            github: {
-              enabled: true,
-              repository: { host: "github.com", owner: "openai", name: "openducktor" },
-              autoDetected: false,
-            },
+          provider: {
+            id: "github",
+            enabled: true,
+            repository: { host: "github.com", owner: "openai", name: "openducktor" },
+            autoDetected: false,
           },
         },
       }),

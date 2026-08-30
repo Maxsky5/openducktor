@@ -40,6 +40,33 @@ export type KnownGitProviderId = z.infer<typeof knownGitProviderIdSchema>;
 export const gitProviderIdSchema = z.string().trim().min(1);
 export type GitProviderId = z.infer<typeof gitProviderIdSchema>;
 
+export const gitProviderCapabilitiesSchema = z
+  .object({
+    supportsPullRequests: z.boolean(),
+    supportsPullRequestReview: z.boolean(),
+  })
+  .strict()
+  .superRefine((capabilities, context) => {
+    if (capabilities.supportsPullRequestReview && !capabilities.supportsPullRequests) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Pull Request review support requires Pull Request support.",
+        path: ["supportsPullRequestReview"],
+      });
+    }
+  });
+export type GitProviderCapabilities = z.infer<typeof gitProviderCapabilitiesSchema>;
+
+export const gitProviderDescriptorSchema = z
+  .object({
+    id: gitProviderIdSchema,
+    label: z.string().trim().min(1),
+    description: z.string().trim().min(1),
+    capabilities: gitProviderCapabilitiesSchema,
+  })
+  .strict();
+export type GitProviderDescriptor = z.infer<typeof gitProviderDescriptorSchema>;
+
 export const gitMergeMethodSchema = z.enum(["merge_commit", "squash", "rebase"]);
 export type GitMergeMethod = z.infer<typeof gitMergeMethodSchema>;
 
@@ -68,24 +95,24 @@ export const gitTargetBranchSchema = z.object({
 });
 export type GitTargetBranch = z.infer<typeof gitTargetBranchSchema>;
 
-export const gitProviderConfigSchema = z.object({
-  enabled: z.boolean().default(false),
-  repository: z.preprocess(
-    (value) => (value === null ? undefined : value),
-    gitProviderRepositorySchema.optional(),
-  ),
-  autoDetected: z.boolean().default(false),
-});
+export const gitProviderConfigSchema = z
+  .object({
+    id: gitProviderIdSchema,
+    enabled: z.boolean().default(false),
+    repository: z.preprocess(
+      (value) => (value === null ? undefined : value),
+      gitProviderRepositorySchema.optional(),
+    ),
+    autoDetected: z.boolean().default(false),
+  })
+  .strict();
 export type GitProviderConfig = z.infer<typeof gitProviderConfigSchema>;
 
-export const repoGitProviderConfigsSchema = z
-  .record(z.string(), gitProviderConfigSchema)
-  .default({});
-export type RepoGitProviderConfigs = z.infer<typeof repoGitProviderConfigsSchema>;
-
-export const repoGitConfigSchema = z.object({
-  providers: repoGitProviderConfigsSchema,
-});
+export const repoGitConfigSchema = z
+  .object({
+    provider: gitProviderConfigSchema.optional(),
+  })
+  .strict();
 export type RepoGitConfig = z.infer<typeof repoGitConfigSchema>;
 
 export const globalGitConfigSchema = z.object({

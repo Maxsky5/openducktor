@@ -20,10 +20,7 @@ const makeRepoConfig = (): RepoConfig =>
     repoPath: "/repo",
     defaultRuntimeKind: "opencode",
     git: {
-      providers: {
-        github: { enabled: true },
-        gitlab: { enabled: true },
-      },
+      provider: { id: "github", enabled: true },
     },
   });
 

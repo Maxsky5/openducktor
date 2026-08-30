@@ -15,7 +15,7 @@ const repoConfig: RepoConfig = {
   defaultRuntimeKind: "opencode",
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
-  git: { providers: {} },
+  git: {},
   hooks: { preStart: [], postComplete: [] },
   devServers: [{ id: "web", name: "Web", command: "bun run dev" }],
   worktreeCopyPaths: [],

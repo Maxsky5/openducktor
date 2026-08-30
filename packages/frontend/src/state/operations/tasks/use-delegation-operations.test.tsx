@@ -34,7 +34,7 @@ describe("useDelegationOperations", () => {
       defaultRuntimeKind: "opencode",
       branchPrefix: "obp",
       defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: { providers: {} },
+      git: {},
       hooks: { preStart: [], postComplete: [] },
       devServers: [],
       worktreeCopyPaths: [],

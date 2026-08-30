@@ -17,7 +17,7 @@ export type LoadedGlobalConfig = GlobalConfig;
 export const createDefaultGlobalConfig = (): LoadedGlobalConfig =>
   globalConfigSchema.parse({ version: 3 });
 
-const migratePersistedConfig = (payload: PersistedConfigObject) => {
+const migrateReusablePrompts = (payload: PersistedConfigObject) => {
   const chat = payload.chat;
   const customPrompts = chat && isPersistedConfigObject(chat) ? chat.customPrompts : undefined;
   if (payload.reusablePrompts !== undefined || !Array.isArray(customPrompts)) {
@@ -29,6 +29,60 @@ const migratePersistedConfig = (payload: PersistedConfigObject) => {
     reusablePrompts: customPrompts,
   };
 };
+
+const migrateRepositoryGitConfig = (payload: PersistedConfigObject) => {
+  const workspaces = payload.workspaces;
+  if (!workspaces || !isPersistedConfigObject(workspaces)) {
+    return payload;
+  }
+
+  const migratedWorkspaces = Object.fromEntries(
+    Object.entries(workspaces).map(([workspaceId, workspace]) => {
+      if (!isPersistedConfigObject(workspace)) {
+        return [workspaceId, workspace];
+      }
+      const git = workspace.git;
+      if (!git || !isPersistedConfigObject(git) || git.providers === undefined) {
+        return [workspaceId, workspace];
+      }
+      const providers = git.providers;
+      if (!isPersistedConfigObject(providers)) {
+        return [workspaceId, workspace];
+      }
+      const entries = Object.entries(providers);
+      if (entries.length > 1) {
+        throw new HostValidationError({
+          message: `Repository "${workspaceId}" has ${entries.length} legacy Git providers; only one provider can be configured.`,
+        });
+      }
+      const { providers: _legacyProviders, ...canonicalGit } = git;
+      if (entries.length === 0) {
+        return [workspaceId, { ...workspace, git: canonicalGit }];
+      }
+      if (canonicalGit.provider !== undefined) {
+        throw new HostValidationError({
+          message: `Repository "${workspaceId}" contains both canonical and legacy Git provider configuration.`,
+        });
+      }
+      const entry = entries[0];
+      if (!entry) {
+        throw new HostValidationError({
+          message: `Repository "${workspaceId}" legacy Git provider configuration could not be migrated.`,
+        });
+      }
+      const [providerId, providerConfig] = entry;
+      const provider = isPersistedConfigObject(providerConfig)
+        ? { ...providerConfig, id: providerId }
+        : providerConfig;
+      return [workspaceId, { ...workspace, git: { ...canonicalGit, provider } }];
+    }),
+  );
+
+  return { ...payload, workspaces: migratedWorkspaces };
+};
+
+const migratePersistedConfig = (payload: PersistedConfigObject) =>
+  migrateRepositoryGitConfig(migrateReusablePrompts(payload));
 
 const parseSupportedConfigObject = (
   payload: JSONType,

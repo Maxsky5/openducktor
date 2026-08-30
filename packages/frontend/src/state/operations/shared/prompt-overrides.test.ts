@@ -15,9 +15,7 @@ const createRepoConfig = (): RepoConfig => ({
     remote: "origin",
     branch: "main",
   },
-  git: {
-    providers: {},
-  },
+  git: {},
   hooks: { preStart: [], postComplete: [] },
   devServers: [],
   promptOverrides: {

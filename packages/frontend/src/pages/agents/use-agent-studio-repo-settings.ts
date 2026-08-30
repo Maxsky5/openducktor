@@ -20,7 +20,8 @@ export function useAgentStudioRepoSettings(args: {
     enabled: activeWorkspaceId !== null,
     select: (config) => ({
       repoSettings: toRepoSettingsInput(config),
-      githubIntegrationEnabled: config.git.providers.github?.enabled === true,
+      githubIntegrationEnabled:
+        config.git.provider?.id === "github" && config.git.provider.enabled === true,
     }),
   });
   const repoSettings =

@@ -296,9 +296,7 @@ const settingsSnapshot = (repoPaths: string[]): SettingsSnapshot =>
           defaultRuntimeKind: "opencode",
           branchPrefix: "odt",
           defaultTargetBranch: { remote: "origin", branch: "main" },
-          git: {
-            providers: {},
-          },
+          git: {},
           hooks: {
             preStart: [],
             postComplete: [],

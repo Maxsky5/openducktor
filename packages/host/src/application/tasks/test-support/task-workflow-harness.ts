@@ -345,7 +345,7 @@ const createBuildWorkspaceSettingsService = (
           defaultRuntimeKind: "opencode",
           branchPrefix: "odt",
           defaultTargetBranch: { remote: "origin", branch: "main" },
-          git: { providers: {} },
+          git: {},
           devServers: [],
           worktreeCopyPaths: [],
           promptOverrides: {},

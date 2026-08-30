@@ -95,13 +95,18 @@ const EMPTY_GITHUB_CONFIG = {
 
 const buildGithubConfig = (
   repoConfig: RepoConfig,
-  overrides: Partial<NonNullable<RepoConfig["git"]["providers"]["github"]>>,
-): NonNullable<RepoConfig["git"]["providers"]["github"]> => ({
-  enabled: repoConfig.git.providers.github?.enabled ?? false,
-  autoDetected: repoConfig.git.providers.github?.autoDetected ?? false,
-  repository: repoConfig.git.providers.github?.repository,
-  ...overrides,
-});
+  overrides: Partial<NonNullable<RepoConfig["git"]["provider"]>>,
+): NonNullable<RepoConfig["git"]["provider"]> => {
+  const provider = repoConfig.git.provider;
+  const github = provider?.id === "github" ? provider : undefined;
+  return {
+    id: "github",
+    enabled: github?.enabled ?? false,
+    autoDetected: github?.autoDetected ?? false,
+    repository: github?.repository,
+    ...overrides,
+  };
+};
 
 const trimRepositoryDraft = (draft: GithubRepositoryDraft): GithubRepositoryDraft => ({
   host: draft.host.trim(),
@@ -231,7 +236,9 @@ export function useRepositoryGitSectionModel({
   selectedRepoConfig,
   selectedRepoPath,
 }: UseRepositoryGitSectionModelArgs): UseRepositoryGitSectionModelResult {
-  const initialGithubRepository = selectedRepoConfig?.git.providers.github?.repository;
+  const initialProvider = selectedRepoConfig?.git.provider;
+  const initialGithubRepository =
+    initialProvider?.id === "github" ? initialProvider.repository : undefined;
   const initialHasRepositoryCoordinates = Boolean(
     initialGithubRepository?.host && initialGithubRepository.owner && initialGithubRepository.name,
   );
@@ -252,7 +259,8 @@ export function useRepositoryGitSectionModel({
     createRepositoryGitSectionState,
   );
 
-  const github = selectedRepoConfig?.git.providers.github ?? EMPTY_GITHUB_CONFIG;
+  const configuredProvider = selectedRepoConfig?.git.provider;
+  const github = configuredProvider?.id === "github" ? configuredProvider : EMPTY_GITHUB_CONFIG;
   const githubEnabled = github.enabled ?? false;
   const hasGithubCli = runtimeCheck?.ghOk ?? false;
   const githubHost = github.repository?.host ?? "github.com";
@@ -313,15 +321,12 @@ export function useRepositoryGitSectionModel({
         ...repoConfig,
         git: {
           ...repoConfig.git,
-          providers: {
-            ...repoConfig.git.providers,
-            github: buildGithubConfig(repoConfig, {
-              repository:
-                trimmedDraft.host && trimmedDraft.owner && trimmedDraft.name
-                  ? trimmedDraft
-                  : undefined,
-            }),
-          },
+          provider: buildGithubConfig(repoConfig, {
+            repository:
+              trimmedDraft.host && trimmedDraft.owner && trimmedDraft.name
+                ? trimmedDraft
+                : undefined,
+          }),
         },
       }));
     },
@@ -357,10 +362,7 @@ export function useRepositoryGitSectionModel({
         ...repoConfig,
         git: {
           ...repoConfig.git,
-          providers: {
-            ...repoConfig.git.providers,
-            github: buildGithubConfig(repoConfig, { enabled: checked }),
-          },
+          provider: buildGithubConfig(repoConfig, { enabled: checked }),
         },
       }));
     },

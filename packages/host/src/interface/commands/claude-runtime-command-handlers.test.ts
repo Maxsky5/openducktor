@@ -71,7 +71,7 @@ const claudeCommandDependencies: Parameters<typeof createClaudeRuntimeCommandHan
         defaultRuntimeKind: "claude",
         branchPrefix: "odt/",
         defaultTargetBranch: { remote: "origin", branch: "main" },
-        git: { providers: {} },
+        git: {},
         hooks: { preStart: [], postComplete: [] },
         devServers: [],
         promptOverrides: {},

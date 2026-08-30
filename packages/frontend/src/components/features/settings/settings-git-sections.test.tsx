@@ -38,15 +38,14 @@ const baseRepoConfig: RepoConfig = {
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {
-    providers: {
-      github: {
-        enabled: true,
-        autoDetected: true,
-        repository: {
-          host: "github.com",
-          owner: "openai",
-          name: "openducktor",
-        },
+    provider: {
+      id: "github",
+      enabled: true,
+      autoDetected: true,
+      repository: {
+        host: "github.com",
+        owner: "openai",
+        name: "openducktor",
       },
     },
   },
@@ -111,15 +110,14 @@ describe("settings git sections", () => {
         selectedRepoConfig: {
           ...baseRepoConfig,
           git: {
-            providers: {
-              github: {
-                enabled: true,
-                autoDetected: false,
-                repository: {
-                  host: "github.mycorp.com",
-                  owner: "openai",
-                  name: "openducktor",
-                },
+            provider: {
+              id: "github",
+              enabled: true,
+              autoDetected: false,
+              repository: {
+                host: "github.mycorp.com",
+                owner: "openai",
+                name: "openducktor",
               },
             },
           },
@@ -146,15 +144,14 @@ describe("settings git sections", () => {
       const [repoConfig, setRepoConfig] = useState<RepoConfig>({
         ...baseRepoConfig,
         git: {
-          providers: {
-            github: {
-              enabled: true,
-              autoDetected: false,
-              repository: {
-                host: "github.com",
-                owner: "openai",
-                name: "openducktor",
-              },
+          provider: {
+            id: "github",
+            enabled: true,
+            autoDetected: false,
+            repository: {
+              host: "github.com",
+              owner: "openai",
+              name: "openducktor",
             },
           },
         },
@@ -195,15 +192,14 @@ describe("settings git sections", () => {
     let repoConfig: RepoConfig = {
       ...baseRepoConfig,
       git: {
-        providers: {
-          github: {
-            enabled: true,
-            autoDetected: false,
-            repository: {
-              host: "github.com",
-              owner: "before-click",
-              name: "before-click",
-            },
+        provider: {
+          id: "github",
+          enabled: true,
+          autoDetected: false,
+          repository: {
+            host: "github.com",
+            owner: "before-click",
+            name: "before-click",
           },
         },
       },
@@ -234,7 +230,7 @@ describe("settings git sections", () => {
     );
 
     try {
-      expect(repoConfig.git.providers.github?.repository).toEqual({
+      expect(repoConfig.git.provider?.repository).toEqual({
         host: "github.com",
         owner: "before-click",
         name: "before-click",
@@ -245,7 +241,7 @@ describe("settings git sections", () => {
         fireEvent.click(screen.getByRole("button", { name: /detect from origin/i }));
       });
 
-      expect(repoConfig.git.providers.github?.repository).toEqual({
+      expect(repoConfig.git.provider?.repository).toEqual({
         host: "github.com",
         owner: "acme",
         name: "widget",
@@ -260,12 +256,11 @@ describe("settings git sections", () => {
     let repoConfig: RepoConfig = {
       ...baseRepoConfig,
       git: {
-        providers: {
-          github: {
-            enabled: true,
-            autoDetected: false,
-            repository: undefined,
-          },
+        provider: {
+          id: "github",
+          enabled: true,
+          autoDetected: false,
+          repository: undefined,
         },
       },
     };
@@ -313,7 +308,7 @@ describe("settings git sections", () => {
         await Promise.resolve();
       });
 
-      expect(repoConfig.git.providers.github?.repository).toEqual({
+      expect(repoConfig.git.provider?.repository).toEqual({
         host: "github.com",
         owner: "manual-owner",
         name: "manual-repo",
@@ -335,12 +330,11 @@ describe("settings git sections", () => {
       const [repoConfig, setRepoConfig] = useState<RepoConfig>({
         ...baseRepoConfig,
         git: {
-          providers: {
-            github: {
-              enabled: true,
-              autoDetected: false,
-              repository: undefined,
-            },
+          provider: {
+            id: "github",
+            enabled: true,
+            autoDetected: false,
+            repository: undefined,
           },
         },
       });
@@ -423,12 +417,11 @@ describe("settings git sections", () => {
             selectedRepoConfig: {
               ...baseRepoConfig,
               git: {
-                providers: {
-                  github: {
-                    enabled: true,
-                    autoDetected: false,
-                    repository: undefined,
-                  },
+                provider: {
+                  id: "github",
+                  enabled: true,
+                  autoDetected: false,
+                  repository: undefined,
                 },
               },
             },

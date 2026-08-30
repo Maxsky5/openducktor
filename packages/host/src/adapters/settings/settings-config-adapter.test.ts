@@ -137,4 +137,55 @@ describe("settings config adapter initialization", () => {
       expect(calls).toBe(0);
     });
   });
+
+  test("round trips a legacy GitHub provider through only the canonical provider shape", async () => {
+    await withTempConfig(async (configPath) => {
+      await writeFile(
+        configPath,
+        JSON.stringify({
+          version: 3,
+          workspaces: {
+            repo: {
+              workspaceId: "repo",
+              workspaceName: "Repo",
+              repoPath: "/repo",
+              defaultRuntimeKind: "opencode",
+              git: {
+                providers: {
+                  github: {
+                    enabled: true,
+                    autoDetected: true,
+                    repository: {
+                      host: "github.example.com",
+                      owner: "open-ducktor",
+                      name: "desktop",
+                    },
+                  },
+                },
+              },
+            },
+          },
+        }),
+      );
+      const adapter = createSettingsConfigAdapter({ configPath });
+
+      const config = await Effect.runPromise(adapter.readConfig());
+      if (!config) throw new Error("Expected persisted config");
+      await Effect.runPromise(adapter.writeConfig(config));
+
+      expect(config.workspaces.repo?.git.provider).toEqual({
+        id: "github",
+        enabled: true,
+        autoDetected: true,
+        repository: {
+          host: "github.example.com",
+          owner: "open-ducktor",
+          name: "desktop",
+        },
+      });
+      const persisted = JSON.parse(await readFile(configPath, "utf8"));
+      expect(persisted.workspaces.repo.git).toEqual(config.workspaces.repo?.git);
+      expect(persisted.workspaces.repo.git).not.toHaveProperty("providers");
+    });
+  });
 });

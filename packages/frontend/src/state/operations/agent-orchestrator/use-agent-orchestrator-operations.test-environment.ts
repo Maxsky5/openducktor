@@ -23,7 +23,7 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
     defaultRuntimeKind: "opencode",
     branchPrefix: "odt",
     defaultTargetBranch: { remote: "origin", branch: "main" },
-    git: { providers: {} },
+    git: {},
     hooks: { preStart: [], postComplete: [] },
     devServers: [],
     worktreeCopyPaths: [],

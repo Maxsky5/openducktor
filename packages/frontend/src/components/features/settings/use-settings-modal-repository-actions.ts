@@ -27,23 +27,22 @@ export const useSettingsModalRepositoryActions = ({
     }
 
     updateSelectedRepoConfig((repoConfig) => {
-      const currentGithub = repoConfig.git.providers.github ?? {
-        enabled: false,
-        autoDetected: false,
-      };
+      const currentProvider = repoConfig.git.provider;
+      const currentGithub =
+        currentProvider?.id === "github"
+          ? currentProvider
+          : { id: "github" as const, enabled: false, autoDetected: false };
       const hasExistingRepository = Boolean(currentGithub.repository);
 
       return {
         ...repoConfig,
         git: {
           ...repoConfig.git,
-          providers: {
-            ...repoConfig.git.providers,
-            github: {
-              enabled: hasExistingRepository ? currentGithub.enabled : true,
-              autoDetected: true,
-              repository: detected,
-            },
+          provider: {
+            id: "github",
+            enabled: hasExistingRepository ? currentGithub.enabled : true,
+            autoDetected: true,
+            repository: detected,
           },
         },
       };

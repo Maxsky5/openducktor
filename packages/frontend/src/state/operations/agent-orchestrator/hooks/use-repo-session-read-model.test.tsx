@@ -34,7 +34,7 @@ const createReadOnlyRepoConfig = (): RepoConfig => ({
   defaultRuntimeKind: "codex",
   branchPrefix: "odt/",
   defaultTargetBranch: { remote: "origin", branch: "main" },
-  git: { providers: {} },
+  git: {},
   hooks: { preStart: [], postComplete: [] },
   devServers: [],
   promptOverrides: {
