@@ -1,3 +1,4 @@
+import { CODEX_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { PolicyBoundSessionRef, SessionRef } from "@openducktor/core";
 import { agentSessionRefsEqual } from "@openducktor/core";
 import type { CodexLocalSessionState } from "./codex-local-session-state";
@@ -97,7 +98,8 @@ export class CodexContextUsageLoader {
 
   async loadLive(input: CodexLiveSessionLocator): Promise<CodexSessionContextUsage | null> {
     const session = this.retainedLiveSession(input);
-    if (session.summary.sessionAssociation.kind === "unbound") {
+    const sessionScope = session.summary.sessionAssociation;
+    if (sessionScope.kind === "unbound") {
       throw new Error(
         `Cannot load Codex session context usage because session '${input.externalSessionId}' has no session context.`,
       );
@@ -106,11 +108,12 @@ export class CodexContextUsageLoader {
       input.runtimeId,
       input.externalSessionId,
     );
-    if (retained) {
+    const targetSession = this.deps.localSessions.get(input.externalSessionId);
+    if (retained && targetSession?.model) {
       return retained;
     }
     const sessionPolicy = resolveCodexSessionScopePolicy(
-      session.summary.sessionAssociation,
+      sessionScope,
       session.runtimePolicy,
       "load Codex session context usage",
     );
@@ -133,7 +136,7 @@ export class CodexContextUsageLoader {
           input.runtimeId,
           input.externalSessionId,
           async () => {
-            await this.wait(
+            const response = await this.wait(
               guard,
               this.deps.runtimeClients.clientForRuntime(input.runtimeId).threadResume({
                 ...codexTransportPolicy(sessionPolicy.runtimePolicy),
@@ -144,6 +147,27 @@ export class CodexContextUsageLoader {
               }),
             );
             this.assertActive(guard);
+            const recoveredSession = sessionStateFromExistingThread(
+              {
+                ...targetRef,
+                runtimeKind: CODEX_RUNTIME_DESCRIPTOR.kind,
+                sessionScope,
+                runtimePolicy: {
+                  kind: CODEX_RUNTIME_DESCRIPTOR.kind,
+                  policy: sessionPolicy.runtimePolicy,
+                },
+              },
+              input.runtimeId,
+              targetSession?.model,
+              response,
+            );
+            const currentSession = this.deps.localSessions.get(input.externalSessionId);
+            if (!currentSession) {
+              recoveredSession.contextOwnerThreadId = session.threadId;
+              this.deps.localSessions.remember(recoveredSession);
+            } else if (!currentSession.model && recoveredSession.model) {
+              currentSession.model = recoveredSession.model;
+            }
             this.deps.clearThreadInventory(input.runtimeId);
           },
         ),

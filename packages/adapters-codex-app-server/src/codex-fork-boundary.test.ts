@@ -156,10 +156,18 @@ describe("resolveCodexForkBoundary", () => {
     );
   });
 
-  test("fails rather than guessing when a declared fork shares no known parent turn", () => {
-    expect(() => resolveCodexForkBoundary(childThreadRead(), new Set(["other-turn"]))).toThrow(
-      "shares no parent turn ids",
-    );
+  test("places the boundary first when Codex omits inherited model context from history", () => {
+    const response = childThreadRead({
+      turns: [{ id: "child-turn", startedAt: 25, status: "completed", items: [] }],
+    });
+
+    expect(resolveCodexForkBoundary(response, new Set(["parent-turn"]))).toEqual({
+      childThreadId: "child-thread",
+      parentThreadId: "parent-thread",
+      beforeTurnId: "child-turn",
+      beforeTurnIndex: 0,
+      timestamp: "1970-01-01T00:00:25.000Z",
+    });
   });
 });
 

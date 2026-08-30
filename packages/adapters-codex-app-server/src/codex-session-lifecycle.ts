@@ -1,3 +1,4 @@
+import { CODEX_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
   AgentSessionAssociation,
@@ -21,6 +22,7 @@ import {
 } from "./codex-app-server-threads";
 import { codexSessionRef } from "./codex-session-ref";
 import { resolveCodexSessionScopePolicy } from "./codex-session-scope-policy";
+import { CODEX_MODEL_PROVIDER_ID } from "./model-catalog";
 import type {
   CodexSessionState,
   CodexThreadForkResult,
@@ -201,6 +203,16 @@ export const sessionStateFromExistingThread = (
   response: CodexThreadResumeResult,
 ): CodexSessionState => {
   const session = sessionStateFromThreadResumeResponse(input, runtimeId, model, response);
+  if (!model) {
+    session.model = {
+      runtimeKind: CODEX_RUNTIME_DESCRIPTOR.kind,
+      providerId: CODEX_MODEL_PROVIDER_ID,
+      modelId: response.model,
+    };
+    if (response.reasoningEffort !== null) {
+      session.model.variant = response.reasoningEffort;
+    }
+  }
   delete session.liveStatus;
   return session;
 };

@@ -772,9 +772,10 @@ export class CodexAppServerAdapter
         );
       }
     }
-    this.contextUsageLoader.cancelSession(input);
     if (session) {
-      this.localSessions.release(input.externalSessionId);
+      this.releaseSessionTree(session);
+    } else {
+      this.contextUsageLoader.cancelSession(input);
     }
   }
 
@@ -974,6 +975,9 @@ export class CodexAppServerAdapter
     if (route) {
       snapshot.parentExternalSessionId = route.parentExternalSessionId;
     }
+    if (session.model) {
+      snapshot.model = session.model;
+    }
     return agentSessionLiveSnapshotSchema.parse(snapshot);
   }
 
@@ -1123,8 +1127,32 @@ export class CodexAppServerAdapter
       );
     }
 
-    this.contextUsageLoader.cancelSession(input);
-    this.localSessions.release(input.externalSessionId);
+    this.releaseSessionTree(session);
+  }
+
+  private releaseSessionTree(session: CodexSessionState): void {
+    const descendants = this.subagents.descendantRoutesForParent(
+      session.threadId,
+      session.runtimeId,
+      (route) => {
+        const child = this.localSessions.get(route.childExternalSessionId);
+        return (
+          !child ||
+          (child.runtimeId === session.runtimeId && child.contextOwnerThreadId !== undefined)
+        );
+      },
+    );
+    for (const route of descendants.toReversed()) {
+      this.contextUsageLoader.cancelSession({
+        ...codexSessionRef(session),
+        externalSessionId: route.childExternalSessionId,
+      });
+      if (this.localSessions.has(route.childExternalSessionId)) {
+        this.localSessions.release(route.childExternalSessionId);
+      }
+    }
+    this.contextUsageLoader.cancelSession(codexSessionRef(session));
+    this.localSessions.release(session.threadId);
   }
 
   private runtimeSnapshotReaderDeps() {

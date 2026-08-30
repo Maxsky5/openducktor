@@ -10,16 +10,13 @@ import type {
 import { CODEX_MODEL_CATALOG_TTL_MS } from "./codex-app-server-shared";
 import type { CodexAppServerClient, CodexModelListResponse } from "./types";
 
+export const CODEX_MODEL_PROVIDER_ID = "codex";
+
 export const requireModelSelection = (
   model: AgentModelSelection | undefined,
 ): AgentModelSelection => {
   if (!model) {
-    throw new Error("Codex App Server requires a model selection with a reasoning effort variant.");
-  }
-  if (!model.variant) {
-    throw new Error(
-      `Codex model '${model.providerId}/${model.modelId}' requires a reasoning effort variant.`,
-    );
+    throw new Error("Codex App Server requires a model selection.");
   }
   return model;
 };
@@ -37,17 +34,17 @@ const validateModelSelection = (
     );
   }
   const supportedEfforts = record.supportedReasoningEfforts.map((effort) => effort.reasoningEffort);
-  if (!supportedEfforts.includes(model.variant ?? "")) {
+  if (model.variant !== undefined && !supportedEfforts.includes(model.variant)) {
     throw new Error(
       `Codex model '${model.providerId}/${model.modelId}' does not support reasoning effort '${model.variant}'.`,
     );
   }
 };
 
-export const toTransportModelSelection = (model: AgentModelSelection) => ({
-  model: model.modelId,
-  effort: codexAppServerReasoningEffortSchema.parse(model.variant),
-});
+export const toTransportModelSelection = (model: AgentModelSelection) =>
+  model.variant === undefined
+    ? { model: model.modelId }
+    : { model: model.modelId, effort: codexAppServerReasoningEffortSchema.parse(model.variant) };
 
 const toAttachmentSupport = (inputModalities: string[]): AgentModelAttachmentSupport => {
   return {
@@ -62,7 +59,7 @@ export const toCatalog = (response: CodexModelListResponse): AgentModelCatalog =
   runtime: CODEX_RUNTIME_DESCRIPTOR,
   models: response.data.map((model) => ({
     id: model.id,
-    providerId: "codex",
+    providerId: CODEX_MODEL_PROVIDER_ID,
     providerName: "Codex",
     modelId: model.model,
     modelName: model.displayName,
@@ -71,7 +68,7 @@ export const toCatalog = (response: CodexModelListResponse): AgentModelCatalog =
   })),
   defaultModelsByProvider: response.data.some((model) => model.isDefault)
     ? {
-        codex:
+        [CODEX_MODEL_PROVIDER_ID]:
           response.data.find((model) => model.isDefault)?.model ?? response.data[0]?.model ?? "",
       }
     : {},

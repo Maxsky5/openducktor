@@ -217,7 +217,6 @@ export const createOpenCodeLiveSessionState = ({
 
   const retainControlSummary = (
     summary: AgentSessionControlSummary,
-    parentExternalSessionId?: string,
   ): AgentSessionLiveAdapterChange[] => {
     if (summary.runtimeKind !== "opencode") {
       throw new HostValidationError({
@@ -235,8 +234,7 @@ export const createOpenCodeLiveSessionState = ({
     const previous = sessionsByRef.get(refKey(ref));
     const runtimeActivity =
       summary.status === "starting" || summary.status === "running" ? "running" : "idle";
-    const retainedParentExternalSessionId =
-      parentExternalSessionId ?? previous?.snapshot.parentExternalSessionId;
+    const retainedParentExternalSessionId = previous?.snapshot.parentExternalSessionId;
     const pendingApprovals = previous?.snapshot.pendingApprovals ?? [];
     const pendingQuestions = previous?.snapshot.pendingQuestions ?? [];
     const snapshotInput: AgentSessionLiveSnapshotInput = {

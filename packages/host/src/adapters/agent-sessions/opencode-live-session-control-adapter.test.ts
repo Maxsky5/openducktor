@@ -13,6 +13,84 @@ import {
 } from "./opencode-live-session-adapter.test-support";
 
 describe("OpenCode live session controls", () => {
+  test("publishes workflow forks without a subagent parent", async () => {
+    const harness = createRuntimeHarness();
+    const publishedChanges: AgentSessionLiveAdapterChange[] = [];
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle(publishedChanges),
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+    try {
+      await Effect.runPromise(
+        prepared.adapter.forkSession({
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+          sessionScope: controlSummary.sessionAssociation,
+          systemPrompt: "Build it",
+          parentExternalSessionId: "planner-session",
+        }),
+      );
+
+      expect(harness.controlCalls).toContainEqual({
+        operation: "fork",
+        input: expect.objectContaining({ parentExternalSessionId: "planner-session" }),
+      });
+      const snapshots = await Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo"));
+      const fork = snapshots.find(
+        (snapshot) => snapshot.ref.externalSessionId === "controlled-session",
+      );
+      if (!fork) {
+        throw new Error("Expected a retained workflow fork.");
+      }
+      expect(fork).toMatchObject({ sessionAssociation: controlSummary.sessionAssociation });
+      expect(fork.parentExternalSessionId).toBeUndefined();
+      expect(publishedChanges).toContainEqual({ type: "session_upsert", snapshot: fork });
+    } finally {
+      await Effect.runPromise(prepared.adapter.releaseRuntime());
+    }
+  });
+
+  test("preserves runtime-reported subagent ancestry when resuming a child", async () => {
+    const harness = createRuntimeHarness();
+    harness.setSources([
+      nativeSource({
+        externalSessionId: "controlled-session",
+        parentExternalSessionId: "builder-session",
+        sessionAssociation: controlSummary.sessionAssociation,
+      }),
+    ]);
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle([]),
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+    try {
+      await Effect.runPromise(
+        prepared.adapter.resumeSession({
+          ...ref,
+          externalSessionId: "controlled-session",
+          sessionScope: controlSummary.sessionAssociation,
+        }),
+      );
+      await expect(
+        Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo")),
+      ).resolves.toEqual([
+        expect.objectContaining({
+          parentExternalSessionId: "builder-session",
+          sessionAssociation: controlSummary.sessionAssociation,
+        }),
+      ]);
+    } finally {
+      await Effect.runPromise(prepared.adapter.releaseRuntime());
+    }
+  });
+
   test("delegates controls while the host projection remains the only session authority", async () => {
     const harness = createRuntimeHarness();
     const publishedChanges: AgentSessionLiveAdapterChange[] = [];

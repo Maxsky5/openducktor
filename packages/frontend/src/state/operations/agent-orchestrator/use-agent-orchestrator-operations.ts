@@ -324,6 +324,7 @@ export function useAgentOrchestratorOperations({
           if (!workspaceRepoPath) {
             throw new Error("Cannot load agent session context without an active workspace.");
           }
+          const previousContextUsage = sessionStore.getSessionSnapshot(session)?.contextUsage;
           const contextUsage = await loadAgentSessionContextFromQuery(
             queryClient,
             {
@@ -333,10 +334,12 @@ export function useAgentOrchestratorOperations({
             liveSessionHostPort.agentSessionLiveLoadContext,
           );
           if (contextUsage) {
-            sessionStore.updateSession(session, (current) => ({
-              ...current,
-              contextUsage: toContextUsage(contextUsage),
-            }));
+            sessionStore.updateSession(session, (current) => {
+              if (current.contextUsage !== previousContextUsage) {
+                return current;
+              }
+              return { ...current, contextUsage: toContextUsage(contextUsage) };
+            });
           }
         },
       }),

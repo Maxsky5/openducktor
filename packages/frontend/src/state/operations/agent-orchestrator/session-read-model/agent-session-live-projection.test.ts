@@ -8,6 +8,10 @@ import {
   replaceAgentSession,
 } from "@/state/agent-session-collection";
 import type { AgentSessionIdentity, AgentSessionRuntimeTarget } from "@/types/agent-orchestrator";
+import {
+  createAgentActivitySnapshot,
+  createEmptyAgentActivitySnapshot,
+} from "@/state/agent-session-snapshots";
 import { createSessionMessagesState } from "../support/messages";
 import {
   applyAgentSessionLiveDelta,
@@ -67,6 +71,112 @@ const delta = (
 ) => applyAgentSessionLiveDelta({ current, envelope });
 
 describe("agent session live projection", () => {
+  test("preserves context identity for unrelated live updates", () => {
+    const original = snapshot("thread-1", {
+      contextUsage: { totalTokens: 6_086, contextWindow: 258_400 },
+    });
+    const current = build({ snapshots: [original] });
+    const contextUsage = getAgentSession(current, identity("thread-1"))?.contextUsage;
+    const updated = delta(current, {
+      type: "session_upsert",
+      session: {
+        ...original,
+        title: "Renamed",
+        contextUsage: { totalTokens: 6_086, contextWindow: 258_400 },
+      },
+    });
+    expect(getAgentSession(updated, identity("thread-1"))?.contextUsage).toBe(contextUsage);
+    expect(getAgentSession(updated, identity("thread-1"))?.title).toBe("Renamed");
+  });
+
+  test.each(["stopped", "error"] as const)(
+    "keeps last-known context for %s sessions until a measurement arrives",
+    (status) => {
+      const original = snapshot("thread-1", { contextUsage: { totalTokens: 6_086 } });
+      const loaded = build({ snapshots: [original] });
+      const session = getAgentSession(loaded, identity("thread-1"));
+      if (!session) {
+        throw new Error("Expected projected session.");
+      }
+      const terminal = replaceAgentSession(loaded, { ...session, status });
+      const unknown = delta(terminal, {
+        type: "session_upsert",
+        session: { ...original, contextUsage: null },
+      });
+      expect(getAgentSession(unknown, identity("thread-1"))?.contextUsage).toEqual({
+        totalTokens: 6_086,
+      });
+      const zero = delta(unknown, {
+        type: "session_upsert",
+        session: { ...original, contextUsage: { totalTokens: 0 } },
+      });
+      expect(getAgentSession(zero, identity("thread-1"))?.contextUsage).toEqual({ totalTokens: 0 });
+    },
+  );
+
+  test.each(["snapshot", "delta"] as const)(
+    "keeps workflow-bound subagents under their parent after a %s",
+    (delivery) => {
+      const association = workflowAssociation();
+      const snapshots = [
+        snapshot("parent", { sessionAssociation: association, activity: "running" }),
+        snapshot("child-1", {
+          sessionAssociation: association,
+          parentExternalSessionId: "parent",
+          pendingQuestions: [{ requestId: "child-question", questions: [] }],
+        }),
+        snapshot("child-2", {
+          sessionAssociation: association,
+          parentExternalSessionId: "parent",
+        }),
+      ];
+      let collection = build({
+        snapshots: delivery === "snapshot" ? snapshots : [],
+      });
+      if (delivery === "delta") {
+        for (const session of snapshots) {
+          collection = delta(collection, { type: "session_upsert", session });
+        }
+      }
+      const activity = createAgentActivitySnapshot({
+        collection,
+        previous: createEmptyAgentActivitySnapshot(repoPath),
+        workspaceRepoPath: repoPath,
+      });
+
+      expect(activity.sessions.map((session) => session.externalSessionId)).toEqual(["parent"]);
+      expect(activity.sessions[0]?.pendingQuestionCount).toBe(1);
+      expect(getAgentSession(collection, identity("child-1"))?.pendingQuestions).toHaveLength(1);
+      expect(getAgentSession(collection, identity("parent"))?.pendingQuestions[0]).toMatchObject({
+        requestId: "child-question",
+        responseSession: { ...identity("child-1"), sessionAssociation: association },
+      });
+      const removed = delta(collection, {
+        type: "session_removed",
+        ref: snapshot("child-1").ref,
+      });
+      const afterRemoval = createAgentActivitySnapshot({
+        collection: removed,
+        previous: activity,
+        workspaceRepoPath: repoPath,
+      });
+      expect(afterRemoval.sessions.map((session) => session.externalSessionId)).toEqual(["parent"]);
+      expect(afterRemoval.sessions[0]?.pendingQuestionCount).toBe(0);
+      const reconnected = build({
+        current: removed,
+        snapshots: [],
+      });
+      const afterReconnect = createAgentActivitySnapshot({
+        collection: reconnected,
+        previous: afterRemoval,
+        workspaceRepoPath: repoPath,
+      });
+      expect(afterReconnect.sessions.map((session) => session.externalSessionId)).toEqual([
+        "parent",
+      ]);
+    },
+  );
+
   test("carries workflow, repository, and unbound associations from one mixed snapshot", () => {
     const sessions = build({
       snapshots: [
@@ -387,7 +497,7 @@ describe("agent session live projection", () => {
 
     expect(getAgentSession(removed, identity("child-thread"))).toMatchObject({
       status: "idle",
-      liveParentExternalSessionId: undefined,
+      liveParentExternalSessionId: "parent-thread",
       historyLoadState: "loaded",
       messages: {
         items: [
@@ -689,12 +799,23 @@ describe("agent session live projection", () => {
       if (!current) {
         throw new Error("Expected projected session.");
       }
-      const terminal = replaceAgentSession(removed, { ...current, status: terminalStatus });
+      const terminal = replaceAgentSession(removed, {
+        ...current,
+        status: terminalStatus,
+        contextUsage: { totalTokens: 6_086, contextWindow: 258_400 },
+      });
 
       const afterIdle = delta(terminal, {
         type: "session_upsert",
         session: snapshot("thread-1", {
           activity: "idle",
+          contextUsage: { totalTokens: 222_747, contextWindow: 258_400 },
+          model: {
+            runtimeKind: "codex",
+            providerId: "codex",
+            modelId: "gpt-5.4",
+            variant: "high",
+          },
           pendingApprovals: [
             {
               requestId: "stale-approval",
@@ -708,6 +829,13 @@ describe("agent session live projection", () => {
       expect(getAgentSession(afterIdle, identity("thread-1"))).toEqual(
         expect.objectContaining({
           status: terminalStatus,
+          contextUsage: { totalTokens: 222_747, contextWindow: 258_400 },
+          selectedModel: {
+            runtimeKind: "codex",
+            providerId: "codex",
+            modelId: "gpt-5.4",
+            variant: "high",
+          },
           pendingApprovals: [],
           pendingQuestions: [],
         }),

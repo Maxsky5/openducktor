@@ -81,11 +81,6 @@ export const resolveCodexForkBoundary = (
       );
     }
   }
-  if (turnIds.length > 0 && beforeTurnIndex === 0 && parentTurnIds.size > 0) {
-    throw new Error(
-      `Codex child thread '${childThreadId}' declares fork parent '${parentThreadId}' but shares no parent turn ids.`,
-    );
-  }
   const firstChildOwnedTurn = turns[beforeTurnIndex];
   const threadCreatedAt = "createdAt" in thread ? thread.createdAt : undefined;
   const timestamp = firstChildOwnedTurn

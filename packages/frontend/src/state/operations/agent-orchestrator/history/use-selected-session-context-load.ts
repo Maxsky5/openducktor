@@ -14,7 +14,11 @@ const missingContextTarget = ({
   session: AgentSessionState | null;
   repoReadinessState: RepoRuntimeReadinessState;
 }): AgentSessionContextLoadTarget | null => {
-  if (session === null || session.contextUsage != null || repoReadinessState !== "ready") {
+  if (session === null || repoReadinessState !== "ready") {
+    return null;
+  }
+  const needsCodexModel = session.runtimeKind === "codex" && session.selectedModel === null;
+  if (session.contextUsage != null && !needsCodexModel) {
     return null;
   }
   const identity = toAgentSessionIdentity(session);

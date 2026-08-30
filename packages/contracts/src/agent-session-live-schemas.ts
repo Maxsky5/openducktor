@@ -10,6 +10,7 @@ import {
 } from "./agent-session-event-schemas";
 import { agentSessionQuestionItemSchema } from "./agent-session-pending-schemas";
 import {
+  agentModelSelectionSchema,
   agentSessionAssociationSchema,
   agentSessionLiveRefSchema,
   agentSessionScopeSchema,
@@ -104,6 +105,7 @@ export const agentSessionLiveSnapshotSchema = z
     pendingApprovals: z.array(agentSessionLivePendingApprovalRequestSchema),
     pendingQuestions: z.array(agentSessionLivePendingQuestionRequestSchema),
     contextUsage: agentSessionContextUsageSchema.nullable(),
+    model: agentModelSelectionSchema.optional(),
   })
   .strict();
 export type AgentSessionLiveSnapshot = z.infer<typeof agentSessionLiveSnapshotSchema>;
