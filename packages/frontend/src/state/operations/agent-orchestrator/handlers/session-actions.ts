@@ -161,7 +161,6 @@ export const createAgentSessionActions = ({
   });
 
   const pendingInputActions = createPendingInputActions({
-    workspaceRepoPath,
     liveSessionHost,
     readSessionSnapshot,
     turnMetadata: sessionTurnState.metadata,

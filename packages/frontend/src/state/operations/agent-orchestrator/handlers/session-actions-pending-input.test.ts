@@ -4,6 +4,7 @@ import type {
   AgentSessionLiveReplyQuestionInput,
 } from "@openducktor/contracts";
 import type { PolicyBoundSessionRef } from "@openducktor/core";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import {
   buildSession,
@@ -123,6 +124,60 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     });
   });
 
+  test("fails closed when an approval target has no recorded repository context", async () => {
+    let hostCalls = 0;
+    const actions = createSessionActions({
+      workspaceRepoPath: "/active/repository",
+      sessionsRef: createSessionsRef(),
+      liveSessionHost: {
+        agentSessionLiveReplyApproval: async () => {
+          hostCalls += 1;
+        },
+        agentSessionLiveReplyQuestion: async () => {},
+      },
+    });
+
+    await expect(
+      actions.replyAgentApproval(
+        {
+          externalSessionId: "missing-session",
+          runtimeKind: "opencode",
+          workingDirectory: "/missing/session",
+        },
+        approvalRequest("perm-missing"),
+        "approve_once",
+      ),
+    ).rejects.toThrow(
+      "Cannot reply to pending input for session 'missing-session' because its repository context is unavailable.",
+    );
+    expect(hostCalls).toBe(0);
+  });
+
+  test("routes a UI-shaped repository approval through the session repository", async () => {
+    const request = approvalRequest("perm-repository");
+    const session = buildSession({
+      sessionAssociation: { kind: "repository" },
+      repoPath: "/session/repository",
+      pendingApprovals: [request],
+    });
+    const sessionsRef = createSessionsRef([session]);
+    const replies: AgentSessionLiveReplyApprovalInput[] = [];
+    const actions = createSessionActions({
+      workspaceRepoPath: "/active/repository",
+      sessionsRef,
+      liveSessionHost: {
+        agentSessionLiveReplyApproval: async (input) => {
+          replies.push(input);
+        },
+        agentSessionLiveReplyQuestion: async () => {},
+      },
+    });
+
+    await actions.replyAgentApproval(toAgentSessionIdentity(session), request, "approve_once");
+
+    expect(replies[0]?.repoPath).toBe("/session/repository");
+  });
+
   test("routes a mirrored subagent approval to its response session", async () => {
     const childSession = {
       externalSessionId: "session-child",
@@ -167,6 +222,63 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     expect(replies[0]?.externalSessionId).toBe("session-child");
     expect(getSession(sessionsRef, "session-parent").pendingApprovals).toEqual([request]);
     expect(getSession(sessionsRef, "session-child").pendingApprovals).toEqual([request]);
+  });
+
+  test("routes a UI-shaped Claude subagent approval through the loaded parent repository", async () => {
+    const childSession = buildSession({
+      externalSessionId: "claude-child",
+      runtimeKind: "claude",
+      repoPath: "/claude/session/repository",
+      workingDirectory: "/claude/session/repository",
+      sessionAssociation: { kind: "repository" },
+    });
+    const request: AgentApprovalRequest = {
+      ...approvalRequest("perm-claude-child"),
+      responseSession: {
+        externalSessionId: childSession.externalSessionId,
+        runtimeKind: childSession.runtimeKind,
+        workingDirectory: childSession.workingDirectory,
+        sessionAssociation: childSession.sessionAssociation,
+      },
+      source: {
+        kind: "subagent",
+        parentExternalSessionId: "claude-parent",
+        childExternalSessionId: childSession.externalSessionId,
+      },
+    };
+    const parentSession = buildSession({
+      externalSessionId: "claude-parent",
+      runtimeKind: "claude",
+      repoPath: "/claude/session/repository",
+      workingDirectory: "/claude/session/repository",
+      sessionAssociation: { kind: "repository" },
+      pendingApprovals: [request],
+    });
+    const sessionsRef = createSessionsRef([parentSession]);
+    const replies: AgentSessionLiveReplyApprovalInput[] = [];
+    const actions = createSessionActions({
+      workspaceRepoPath: "/active/repository",
+      sessionsRef,
+      liveSessionHost: {
+        agentSessionLiveReplyApproval: async (input) => {
+          replies.push(input);
+        },
+        agentSessionLiveReplyQuestion: async () => {},
+      },
+    });
+
+    await actions.replyAgentApproval(
+      toAgentSessionIdentity(parentSession),
+      request,
+      "approve_once",
+    );
+
+    expect(replies[0]).toMatchObject({
+      repoPath: "/claude/session/repository",
+      externalSessionId: "claude-child",
+      runtimeKind: "claude",
+      workingDirectory: "/claude/session/repository",
+    });
   });
 
   test("routes a question through the generic host without annotating transcript state locally", async () => {
@@ -228,6 +340,31 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     });
   });
 
+  test("routes a UI-shaped repository question through the session repository", async () => {
+    const request = questionRequest("question-repository");
+    const session = buildSession({
+      sessionAssociation: { kind: "repository" },
+      repoPath: "/session/repository",
+      pendingQuestions: [request],
+    });
+    const sessionsRef = createSessionsRef([session]);
+    const replies: AgentSessionLiveReplyQuestionInput[] = [];
+    const actions = createSessionActions({
+      workspaceRepoPath: "/active/repository",
+      sessionsRef,
+      liveSessionHost: {
+        agentSessionLiveReplyApproval: async () => {},
+        agentSessionLiveReplyQuestion: async (input) => {
+          replies.push(input);
+        },
+      },
+    });
+
+    await actions.answerAgentQuestion(toAgentSessionIdentity(session), request, [["yes"]]);
+
+    expect(replies[0]?.repoPath).toBe("/session/repository");
+  });
+
   test("routes a mirrored subagent question to its response session", async () => {
     const childSession = {
       externalSessionId: "session-child",
@@ -268,6 +405,59 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     expect(replies[0]?.externalSessionId).toBe("session-child");
     expect(getSession(sessionsRef, "session-parent").pendingQuestions).toEqual([request]);
     expect(getSession(sessionsRef, "session-child").pendingQuestions).toEqual([request]);
+  });
+
+  test("routes a UI-shaped Claude subagent question through the child repository", async () => {
+    const childSession = buildSession({
+      externalSessionId: "claude-child",
+      runtimeKind: "claude",
+      repoPath: "/claude/session/repository",
+      workingDirectory: "/claude/session/repository",
+      sessionAssociation: { kind: "repository" },
+    });
+    const request: AgentQuestionRequest = {
+      ...questionRequest("question-claude-child"),
+      responseSession: {
+        externalSessionId: childSession.externalSessionId,
+        runtimeKind: childSession.runtimeKind,
+        workingDirectory: childSession.workingDirectory,
+        sessionAssociation: childSession.sessionAssociation,
+      },
+      source: {
+        kind: "subagent",
+        parentExternalSessionId: "claude-parent",
+        childExternalSessionId: childSession.externalSessionId,
+      },
+    };
+    const parentSession = buildSession({
+      externalSessionId: "claude-parent",
+      runtimeKind: "claude",
+      repoPath: "/claude/session/repository",
+      workingDirectory: "/claude/session/repository",
+      sessionAssociation: { kind: "repository" },
+      pendingQuestions: [request],
+    });
+    const sessionsRef = createSessionsRef([parentSession, childSession]);
+    const replies: AgentSessionLiveReplyQuestionInput[] = [];
+    const actions = createSessionActions({
+      workspaceRepoPath: "/active/repository",
+      sessionsRef,
+      liveSessionHost: {
+        agentSessionLiveReplyApproval: async () => {},
+        agentSessionLiveReplyQuestion: async (input) => {
+          replies.push(input);
+        },
+      },
+    });
+
+    await actions.answerAgentQuestion(toAgentSessionIdentity(parentSession), request, [["yes"]]);
+
+    expect(replies[0]).toMatchObject({
+      repoPath: "/claude/session/repository",
+      externalSessionId: "claude-child",
+      runtimeKind: "claude",
+      workingDirectory: "/claude/session/repository",
+    });
   });
 
   test("keeps pending input committed when the host reply fails", async () => {
