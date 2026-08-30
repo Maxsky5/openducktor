@@ -146,7 +146,7 @@ describe("createRuntimeTaskActivityGuard", () => {
     expect(stopCalls).toEqual([]);
     expect(probeCalls).toHaveLength(2);
   });
-  test("ignores unsupported runtime probes and sessions without an external id", async () => {
+  test("blocks session counts when a runtime cannot probe activity", async () => {
     const stopCalls: string[] = [];
     const guard = createRuntimeTaskActivityGuard({
       runtimeRegistry: registry({ probeSupported: false, stopCalls }),
@@ -163,7 +163,26 @@ describe("createRuntimeTaskActivityGuard", () => {
           ],
         }),
       ),
-    ).resolves.toEqual({ liveSessionCount: 0 });
+    ).rejects.toThrow(
+      "Runtime opencode cannot check session external-build-session before task cleanup.",
+    );
+    expect(stopCalls).toEqual([]);
+  });
+  test("blocks session stops when a runtime cannot probe activity", async () => {
+    const stopCalls: string[] = [];
+    const guard = createRuntimeTaskActivityGuard({
+      runtimeRegistry: registry({ probeSupported: false, stopCalls }),
+    });
+    await expect(
+      Effect.runPromise(
+        guard.stopLiveSessions({
+          repoPath: "/repo",
+          taskSessions: [{ taskId: "task-1", sessions: [session()] }],
+        }),
+      ),
+    ).rejects.toThrow(
+      "Runtime opencode cannot check session external-build-session before task cleanup.",
+    );
     expect(stopCalls).toEqual([]);
   });
   test("probes sessions by durable runtime context", async () => {

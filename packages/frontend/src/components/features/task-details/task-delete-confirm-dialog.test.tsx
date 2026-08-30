@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { render, screen } from "@testing-library/react";
 import {
   formatActiveSessionStopMessage,
+  formatActiveSessionStopLoadingMessage,
   formatManagedSessionCleanupLoadingMessage,
   formatManagedSessionCleanupMessage,
   formatUnknownManagedSessionCleanupMessage,
@@ -12,6 +13,7 @@ const renderDialog = (
   terminalCount: number,
   activeSessionCount: number | null = 0,
   activeSessionCountError: string | null = null,
+  isLoadingStopImpact = false,
 ) =>
   render(
     <TaskDeleteConfirmDialog
@@ -24,6 +26,7 @@ const renderDialog = (
       impact={{
         hasSubtasks: false,
         isLoading: false,
+        isLoadingStopImpact,
         hasManagedSessionCleanup: false,
         managedWorktreeCount: 0,
         terminalCount,
@@ -126,5 +129,23 @@ describe("TaskDeleteConfirmDialog", () => {
   test("uses operation-specific loading wording", () => {
     expect(formatManagedSessionCleanupLoadingMessage("close")).toContain("before closing");
     expect(formatManagedSessionCleanupLoadingMessage("reset")).toContain("before reset");
+  });
+
+  test("describes session probing separately from worktree loading", () => {
+    expect(formatActiveSessionStopLoadingMessage("delete")).toBe(
+      "Checking active agent sessions before deletion.",
+    );
+  });
+
+  test("shows session-specific copy while the host stop preview is loading", () => {
+    const rendered = renderDialog(0, null, null, true);
+
+    expect(screen.getByText("Checking active agent sessions before deletion.")).toBeDefined();
+    expect(screen.queryByText(/Checking linked task worktree cleanup impact/)).toBeNull();
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Checking..." }).disabled).toBe(
+      true,
+    );
+
+    rendered.unmount();
   });
 });

@@ -15,6 +15,7 @@ describe("TaskCloseConfirmDialog", () => {
         onConfirm={() => {}}
         taskId="TASK-1"
         isLoadingImpact
+        isLoadingStopImpact={false}
         hasManagedSessionCleanup={false}
         managedWorktreeCount={0}
         terminalCount={0}
@@ -54,6 +55,7 @@ describe("TaskCloseConfirmDialog", () => {
         onConfirm={() => {}}
         taskId="TASK-2"
         isLoadingImpact={false}
+        isLoadingStopImpact={false}
         hasManagedSessionCleanup={false}
         managedWorktreeCount={0}
         terminalCount={2}
@@ -87,6 +89,7 @@ describe("TaskCloseConfirmDialog", () => {
         onConfirm={() => {}}
         taskId="TASK-3"
         isLoadingImpact={false}
+        isLoadingStopImpact={false}
         hasManagedSessionCleanup={false}
         managedWorktreeCount={0}
         terminalCount={0}

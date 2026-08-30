@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  formatActiveSessionStopLoadingMessage,
   formatManagedSessionCleanupLoadingMessage,
   formatManagedSessionCleanupMessage,
   formatUnknownManagedSessionCleanupMessage,
@@ -24,6 +25,7 @@ type TaskResetConfirmDialogProps = {
   onConfirm: () => void;
   taskId: string;
   isLoadingImpact: boolean;
+  isLoadingStopImpact: boolean;
   hasManagedSessionCleanup: boolean;
   managedWorktreeCount: number;
   terminalCount: number;
@@ -41,6 +43,7 @@ export function TaskResetConfirmDialog({
   onConfirm,
   taskId,
   isLoadingImpact,
+  isLoadingStopImpact,
   hasManagedSessionCleanup,
   managedWorktreeCount,
   terminalCount,
@@ -50,6 +53,14 @@ export function TaskResetConfirmDialog({
   isResetPending,
   resetError,
 }: TaskResetConfirmDialogProps): ReactElement {
+  const isImpactLoading = isLoadingImpact || isLoadingStopImpact;
+  let confirmLabel = "Reset task";
+  if (isResetPending) {
+    confirmLabel = "Resetting...";
+  } else if (isImpactLoading) {
+    confirmLabel = "Checking...";
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
@@ -79,6 +90,7 @@ export function TaskResetConfirmDialog({
               error={activeSessionCountError}
               operation="reset"
             />
+            {isLoadingStopImpact ? <p>{formatActiveSessionStopLoadingMessage("reset")}</p> : null}
             {isLoadingImpact ? (
               <p>{formatManagedSessionCleanupLoadingMessage("reset")}</p>
             ) : impactError ? (
@@ -110,16 +122,16 @@ export function TaskResetConfirmDialog({
             type="button"
             variant="destructive"
             className="w-[132px] justify-center disabled:bg-destructive/80 disabled:text-destructive-foreground disabled:opacity-100"
-            disabled={isResetPending || isLoadingImpact || activeSessionCountError !== null}
-            aria-busy={isResetPending || isLoadingImpact}
+            disabled={isResetPending || isImpactLoading || activeSessionCountError !== null}
+            aria-busy={isResetPending || isImpactLoading}
             onClick={onConfirm}
           >
-            {isResetPending || isLoadingImpact ? (
+            {isResetPending || isImpactLoading ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
               <RotateCcw className="size-4" />
             )}
-            {isResetPending ? "Resetting..." : isLoadingImpact ? "Checking..." : "Reset task"}
+            {confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

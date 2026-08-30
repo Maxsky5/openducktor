@@ -35,8 +35,8 @@ export function TaskResetImplementationModal({
     return null;
   }
 
-  const isBusy =
-    model.isSubmitting || model.isLoadingImpact || model.activeSessionCountError !== null;
+  const isBusy = model.isSubmitting || model.isLoadingImpact;
+  const isConfirmBlocked = isBusy || model.activeSessionCountError !== null;
   const confirmLabel = model.isSubmitting
     ? "Resetting implementation…"
     : model.isLoadingImpact
@@ -116,7 +116,7 @@ export function TaskResetImplementationModal({
             type="button"
             variant="destructive"
             className="w-full sm:w-auto"
-            disabled={isBusy}
+            disabled={isConfirmBlocked}
             aria-busy={isBusy}
             onClick={model.onConfirm}
           >

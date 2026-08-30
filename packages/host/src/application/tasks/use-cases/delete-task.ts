@@ -15,6 +15,7 @@ import {
   collectTaskDeleteTargets,
   managedWorktreeBaseForRepoConfig,
   runTaskLocalCleanup,
+  selectWorkflowCleanupSessionRecords,
   type TaskSessionRecords,
   taskHasSessionsForRoles,
   workflowCleanupSessionRoles,
@@ -120,7 +121,10 @@ export const createTaskDeleteUseCase = ({
         }
         const { stoppedSessionCount } = yield* taskActivityGuard.stopLiveSessions({
           repoPath: effectiveRepoPath,
-          taskSessions: targetTaskSessions,
+          taskSessions: targetTaskSessions.map(({ taskId: targetTaskId, sessions }) => ({
+            taskId: targetTaskId,
+            sessions: selectWorkflowCleanupSessionRecords(sessions),
+          })),
         });
         recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
       }

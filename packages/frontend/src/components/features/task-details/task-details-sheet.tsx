@@ -221,6 +221,7 @@ export function TaskDetailsSheet({
           impact={{
             hasSubtasks: viewModel.subtasks.length > 0,
             isLoading: viewModel.isLoadingDeleteImpact,
+            isLoadingStopImpact: viewModel.isLoadingDeleteStopImpact,
             hasManagedSessionCleanup: viewModel.hasManagedDeleteSessionCleanup,
             managedWorktreeCount: viewModel.deleteManagedWorktreeCount,
             terminalCount: viewModel.deleteTerminalCount,
@@ -243,6 +244,7 @@ export function TaskDetailsSheet({
           onConfirm={viewModel.confirmReset}
           taskId={viewModel.taskId}
           isLoadingImpact={viewModel.isLoadingResetImpact}
+          isLoadingStopImpact={viewModel.isLoadingResetStopImpact}
           hasManagedSessionCleanup={viewModel.hasManagedResetSessionCleanup}
           managedWorktreeCount={viewModel.resetManagedWorktreeCount}
           terminalCount={viewModel.resetTerminalCount}
@@ -262,6 +264,7 @@ export function TaskDetailsSheet({
           onConfirm={viewModel.confirmClose}
           taskId={viewModel.taskId}
           isLoadingImpact={viewModel.isLoadingCloseImpact}
+          isLoadingStopImpact={viewModel.isLoadingCloseStopImpact}
           hasManagedSessionCleanup={viewModel.hasManagedCloseSessionCleanup}
           managedWorktreeCount={viewModel.closeManagedWorktreeCount}
           terminalCount={viewModel.closeTerminalCount}

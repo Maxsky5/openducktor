@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
 import { documentQueryKeys } from "@/state/queries/documents";
+import { taskStopImpactQueryKeys } from "@/state/queries/task-stop-impact";
 import {
   type AgentSessionReadPort,
   refreshAgentSessionListQuery,
@@ -39,7 +40,11 @@ export function useTaskResetOperations({
     async (taskId: string): Promise<void> => {
       const repoPath = requireActiveRepo(activeRepoPath);
       try {
-        await hostPort.taskResetImplementation(repoPath, taskId);
+        try {
+          await hostPort.taskResetImplementation(repoPath, taskId);
+        } finally {
+          await invalidateTaskStopImpact(queryClient, repoPath);
+        }
       } catch (error) {
         notificationPort.error("Failed to reset implementation", {
           description: errorMessage(error),
@@ -76,7 +81,11 @@ export function useTaskResetOperations({
     async (taskId: string): Promise<void> => {
       const repoPath = requireActiveRepo(activeRepoPath);
       try {
-        await hostPort.taskReset(repoPath, taskId);
+        try {
+          await hostPort.taskReset(repoPath, taskId);
+        } finally {
+          await invalidateTaskStopImpact(queryClient, repoPath);
+        }
       } catch (error) {
         notificationPort.error("Failed to reset task", { description: errorMessage(error) });
         throw error;
@@ -130,6 +139,9 @@ const refreshTaskAfterReset = async (
     throw new AggregateError(errors, `Post-reset metadata refreshes failed: ${details}`);
   }
 };
+
+const invalidateTaskStopImpact = (queryClient: QueryClient, repoPath: string): Promise<void> =>
+  queryClient.invalidateQueries({ queryKey: taskStopImpactQueryKeys.repo(repoPath) });
 
 const invalidateTaskWorkflowQueries = async (
   queryClient: QueryClient,

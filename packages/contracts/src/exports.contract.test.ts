@@ -245,6 +245,9 @@ import type {
   TaskSessionBootstrap,
   TaskStatus,
   TaskStoreCheck,
+  TaskStopImpact,
+  TaskStopImpactOperation,
+  TaskStopImpactRequest,
   TaskUpdatePatch,
   TaskWorktreeSummary,
   TerminalClientMessage,
@@ -920,6 +923,9 @@ type ExportedTypeContract = {
   RuntimeInstanceSummaryRole: RuntimeInstanceSummaryRole;
   BuildSessionBootstrap: BuildSessionBootstrap;
   TaskSessionBootstrap: TaskSessionBootstrap;
+  TaskStopImpact: TaskStopImpact;
+  TaskStopImpactOperation: TaskStopImpactOperation;
+  TaskStopImpactRequest: TaskStopImpactRequest;
   ChatDiffHeight: ChatDiffHeight;
   ChatDiffIndicators: ChatDiffIndicators;
   ChatDiffStyle: ChatDiffStyle;

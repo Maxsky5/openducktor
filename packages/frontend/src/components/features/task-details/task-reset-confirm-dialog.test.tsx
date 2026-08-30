@@ -12,6 +12,7 @@ describe("TaskResetConfirmDialog", () => {
         onConfirm={() => {}}
         taskId="TASK-123"
         isLoadingImpact={false}
+        isLoadingStopImpact={false}
         hasManagedSessionCleanup
         managedWorktreeCount={2}
         terminalCount={2}
@@ -44,6 +45,7 @@ describe("TaskResetConfirmDialog", () => {
         onConfirm={() => {}}
         taskId="TASK-123"
         isLoadingImpact
+        isLoadingStopImpact={false}
         hasManagedSessionCleanup={false}
         managedWorktreeCount={0}
         terminalCount={0}
@@ -69,6 +71,7 @@ describe("TaskResetConfirmDialog", () => {
         onConfirm={() => {}}
         taskId="TASK-123"
         isLoadingImpact={false}
+        isLoadingStopImpact={false}
         hasManagedSessionCleanup={false}
         managedWorktreeCount={0}
         terminalCount={0}

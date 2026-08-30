@@ -100,6 +100,12 @@ describe("TaskResetImplementationModal", () => {
     expect(
       screen.getByRole<HTMLButtonElement>("button", { name: "Reset implementation" }).disabled,
     ).toBe(true);
+    expect(
+      screen
+        .getByRole<HTMLButtonElement>("button", { name: "Reset implementation" })
+        .getAttribute("aria-busy"),
+    ).toBe("false");
+    expect(document.body.innerHTML).not.toContain("lucide-loader-circle");
   });
 
   test("does not claim retention when only legacy worktrees exist", () => {

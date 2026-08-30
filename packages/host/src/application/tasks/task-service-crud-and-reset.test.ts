@@ -83,6 +83,30 @@ const metadataWithSessions = (
   plan: { markdown: "" },
   agentSessions,
 });
+const createResetTaskStore = (
+  sessions: ReturnType<typeof createAgentSessionRecord>[],
+  overrides: Partial<TaskStorePort> = {},
+): TaskStorePort => ({
+  listTasks: () => Effect.succeed([task({ id: "task-1", status: "human_review" })]),
+  getTaskMetadata: () => Effect.succeed(metadataWithSessions(sessions)),
+  clearWorkflowDocuments: () => Effect.succeed(true),
+  clearAgentSessionsByRoles: () => Effect.succeed(true),
+  setPullRequest: () => Effect.succeed(true),
+  setDirectMerge: () => Effect.succeed(true),
+  transitionTask: () => Effect.succeed(task({ id: "task-1", status: "open" })),
+  ...overrides,
+});
+const createCleanupTaskServiceInput = (taskStore: TaskStorePort) => ({
+  devServerService: createDirectMergeDevServerService([]),
+  gitPort: createDirectMergeGitPort({ calls: [], branches: { "/repo": [] } }),
+  settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+  taskStore,
+  workspaceSettingsService: createBuildWorkspaceSettingsService({
+    workspaceId: "repo",
+    repoPath: "/repo",
+    hooks: { preStart: [], postComplete: [] },
+  }),
+});
 describe("createTaskService task mutations and reset", () => {
   test("reports committed task asset cleanup failures as mutation progress", async () => {
     const createdTaskId = "task-2";
@@ -1209,6 +1233,58 @@ describe("createTaskService task mutations and reset", () => {
       "task_delete requires runtime session activity checks for tasks with workflow sessions.",
     );
   });
+  test("aborts delete before destructive work when stopping live sessions fails", async () => {
+    let deleted = false;
+    const taskStore: TaskStorePort = {
+      listTasks: () => Effect.succeed([task({ id: "task-1" })]),
+      getTaskMetadata: () => Effect.succeed(metadataWithSessions([createAgentSessionRecord()])),
+      deleteTask: () =>
+        Effect.sync(() => {
+          deleted = true;
+          return true;
+        }),
+    };
+    const taskActivityGuard: TaskActivityGuardPort = {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      stopLiveSessions: () =>
+        Effect.fail(
+          new HostOperationError({ operation: "test.stop", message: "runtime stop failed" }),
+        ),
+    };
+
+    await expect(
+      Effect.runPromise(
+        createTaskService({
+          ...createCleanupTaskServiceInput(taskStore),
+          taskActivityGuard,
+        }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
+      ),
+    ).rejects.toThrow("runtime stop failed");
+    expect(deleted).toBe(false);
+  });
+  test("reports stopped sessions when delete fails after the stop step", async () => {
+    const taskStore: TaskStorePort = {
+      listTasks: () => Effect.succeed([task({ id: "task-1" })]),
+      getTaskMetadata: () => Effect.succeed(metadataWithSessions([createAgentSessionRecord()])),
+      deleteTask: () =>
+        Effect.fail(
+          new HostOperationError({ operation: "test.delete", message: "task store delete failed" }),
+        ),
+    };
+    const taskActivityGuard: TaskActivityGuardPort = {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      stopLiveSessions: () => Effect.succeed({ stoppedSessionCount: 2 }),
+    };
+
+    await expect(
+      Effect.runPromise(
+        createTaskService({
+          ...createCleanupTaskServiceInput(taskStore),
+          taskActivityGuard,
+        }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
+      ),
+    ).rejects.toThrow(/Delete cleanup already completed: Stopped 2 live agent sessions,/);
+  });
   test("resets implementation after activity guard and cleans task state", async () => {
     const calls: unknown[] = [];
     const currentSessions = [
@@ -1795,6 +1871,68 @@ describe("createTaskService task mutations and reset", () => {
       },
     ]);
   });
+  test("fails fast when task reset needs live activity checks but no guard is configured", async () => {
+    const taskStore = createResetTaskStore([createAgentSessionRecord()]);
+
+    await expect(
+      Effect.runPromise(
+        createTaskService(createCleanupTaskServiceInput(taskStore)).resetTask({
+          repoPath: "/repo",
+          taskId: "task-1",
+        }),
+      ),
+    ).rejects.toThrow(
+      "task_reset requires runtime session activity checks for tasks with spec, planner, build, or QA sessions.",
+    );
+  });
+  test("aborts task reset before destructive work when stopping live sessions fails", async () => {
+    let workflowDocumentsCleared = false;
+    const taskStore = createResetTaskStore([createAgentSessionRecord()], {
+      clearWorkflowDocuments: () =>
+        Effect.sync(() => {
+          workflowDocumentsCleared = true;
+          return true;
+        }),
+    });
+    const taskActivityGuard: TaskActivityGuardPort = {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      stopLiveSessions: () =>
+        Effect.fail(
+          new HostOperationError({ operation: "test.stop", message: "runtime stop failed" }),
+        ),
+    };
+
+    await expect(
+      Effect.runPromise(
+        createTaskService({
+          ...createCleanupTaskServiceInput(taskStore),
+          taskActivityGuard,
+        }).resetTask({ repoPath: "/repo", taskId: "task-1" }),
+      ),
+    ).rejects.toThrow("runtime stop failed");
+    expect(workflowDocumentsCleared).toBe(false);
+  });
+  test("reports stopped sessions when task reset fails after the stop step", async () => {
+    const taskStore = createResetTaskStore([createAgentSessionRecord()], {
+      clearWorkflowDocuments: () =>
+        Effect.fail(
+          new HostOperationError({ operation: "test.clear", message: "document clear failed" }),
+        ),
+    });
+    const taskActivityGuard: TaskActivityGuardPort = {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      stopLiveSessions: () => Effect.succeed({ stoppedSessionCount: 2 }),
+    };
+
+    await expect(
+      Effect.runPromise(
+        createTaskService({
+          ...createCleanupTaskServiceInput(taskStore),
+          taskActivityGuard,
+        }).resetTask({ repoPath: "/repo", taskId: "task-1" }),
+      ),
+    ).rejects.toThrow(/Reset cleanup already completed: Stopped 2 live agent sessions,/);
+  });
   test("reports implementation reset failures after the first store clear as partial progress", async () => {
     const failure = new HostOperationError({
       operation: "task-store.clear-qa-reports",
@@ -1803,7 +1941,7 @@ describe("createTaskService task mutations and reset", () => {
     let sessionsCleared = false;
     const taskStore: TaskStorePort = {
       listTasks: () => Effect.succeed([task({ status: "blocked" })]),
-      getTaskMetadata: () => Effect.succeed(metadataWithSessions([])),
+      getTaskMetadata: () => Effect.succeed(metadataWithSessions([createAgentSessionRecord()])),
       clearAgentSessionsByRoles: () =>
         Effect.sync(() => {
           sessionsCleared = true;
@@ -1815,6 +1953,10 @@ describe("createTaskService task mutations and reset", () => {
       devServerService: createDirectMergeDevServerService([]),
       gitPort: createDirectMergeGitPort({ calls: [], branches: { "/repo": [] } }),
       settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+      taskActivityGuard: {
+        countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+        stopLiveSessions: () => Effect.succeed({ stoppedSessionCount: 2 }),
+      },
       taskStore,
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
@@ -1834,6 +1976,8 @@ describe("createTaskService task mutations and reset", () => {
     expect(result.operation).toBe("reset-implementation");
     expect(result.changes).toEqual({ taskIds: ["task-1"], removedTaskIds: [] });
     expect(result.failure.message).toContain("clear QA reports failed");
+    expect(result.failure.message).toContain("Stopped 2 live agent sessions,");
+    expect(result.failure.message).not.toContain("records..");
     expect(result.failure.message).toContain("Cleared Builder and QA session records.");
     expect(result.failure).toMatchObject({ cause: failure });
   });

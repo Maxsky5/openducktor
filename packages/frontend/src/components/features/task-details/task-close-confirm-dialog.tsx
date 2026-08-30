@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  formatActiveSessionStopLoadingMessage,
   formatManagedSessionCleanupLoadingMessage,
   formatManagedSessionCleanupMessage,
   formatUnknownManagedSessionCleanupMessage,
@@ -24,6 +25,7 @@ type TaskCloseConfirmDialogProps = {
   onConfirm: () => void;
   taskId: string;
   isLoadingImpact: boolean;
+  isLoadingStopImpact: boolean;
   hasManagedSessionCleanup: boolean;
   managedWorktreeCount: number;
   terminalCount: number;
@@ -41,6 +43,7 @@ export function TaskCloseConfirmDialog({
   onConfirm,
   taskId,
   isLoadingImpact,
+  isLoadingStopImpact,
   hasManagedSessionCleanup,
   managedWorktreeCount,
   terminalCount,
@@ -50,6 +53,14 @@ export function TaskCloseConfirmDialog({
   isClosePending,
   closeError,
 }: TaskCloseConfirmDialogProps): ReactElement {
+  const isImpactLoading = isLoadingImpact || isLoadingStopImpact;
+  let confirmLabel = "Close task";
+  if (isClosePending) {
+    confirmLabel = "Closing...";
+  } else if (isImpactLoading) {
+    confirmLabel = "Checking...";
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
@@ -75,6 +86,7 @@ export function TaskCloseConfirmDialog({
               error={activeSessionCountError}
               operation="close"
             />
+            {isLoadingStopImpact ? <p>{formatActiveSessionStopLoadingMessage("close")}</p> : null}
             {isLoadingImpact ? (
               <p>{formatManagedSessionCleanupLoadingMessage("close")}</p>
             ) : impactError ? (
@@ -100,16 +112,16 @@ export function TaskCloseConfirmDialog({
           <Button
             type="button"
             variant="warning"
-            disabled={isClosePending || isLoadingImpact || activeSessionCountError !== null}
-            aria-busy={isClosePending || isLoadingImpact}
+            disabled={isClosePending || isImpactLoading || activeSessionCountError !== null}
+            aria-busy={isClosePending || isImpactLoading}
             onClick={onConfirm}
           >
-            {isClosePending || isLoadingImpact ? (
+            {isClosePending || isImpactLoading ? (
               <Loader2 className="animate-spin" data-icon="inline-start" />
             ) : (
               <CircleCheckBig data-icon="inline-start" />
             )}
-            {isClosePending ? "Closing..." : isLoadingImpact ? "Checking..." : "Close task"}
+            {confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -53,7 +53,7 @@ const selectStopCandidates = (
   operation: TaskStopImpactOperation,
   sessions: AgentSessionRecord[],
 ): AgentSessionRecord[] => {
-  if (operation === "reset_task" || operation === "close") {
+  if (operation === "reset_task" || operation === "close" || operation === "delete") {
     return selectWorkflowCleanupSessionRecords(sessions);
   }
   return sessions;

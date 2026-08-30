@@ -18,7 +18,7 @@ export const recordStoppedAgentSessionCount = (
 ): void => {
   if (stoppedSessionCount > 0) {
     progress.completedSteps.push(
-      `Stopped ${stoppedSessionCount} live agent session${stoppedSessionCount === 1 ? "" : "s"}.`,
+      `Stopped ${stoppedSessionCount} live agent session${stoppedSessionCount === 1 ? "" : "s"}`,
     );
   }
 };
@@ -59,7 +59,8 @@ export const appendTaskCleanupProgress = <E>(
     );
   }
   if (completedSteps.length > 0) {
-    progress.push(`${labels.label} cleanup already completed: ${completedSteps.join(", ")}.`);
+    const completedStepList = completedSteps.map((step) => step.replace(/\.$/, "")).join(", ");
+    progress.push(`${labels.label} cleanup already completed: ${completedStepList}.`);
   }
   if (progress.length === 0) {
     return error;

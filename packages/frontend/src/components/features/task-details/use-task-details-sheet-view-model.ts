@@ -46,6 +46,7 @@ type TaskDetailsSheetViewModel = {
   isDeletePending: boolean;
   deleteError: string | null;
   isLoadingDeleteImpact: boolean;
+  isLoadingDeleteStopImpact: boolean;
   hasManagedDeleteSessionCleanup: boolean;
   deleteManagedWorktreeCount: number;
   deleteImpactError: string | null;
@@ -53,6 +54,7 @@ type TaskDetailsSheetViewModel = {
   deleteActiveSessionCount: number | null;
   deleteActiveSessionCountError: string | null;
   isLoadingResetImpact: boolean;
+  isLoadingResetStopImpact: boolean;
   hasManagedResetSessionCleanup: boolean;
   resetManagedWorktreeCount: number;
   resetImpactError: string | null;
@@ -66,6 +68,7 @@ type TaskDetailsSheetViewModel = {
   isClosePending: boolean;
   closeError: string | null;
   isLoadingCloseImpact: boolean;
+  isLoadingCloseStopImpact: boolean;
   hasManagedCloseSessionCleanup: boolean;
   closeManagedWorktreeCount: number;
   closeImpactError: string | null;
@@ -318,14 +321,16 @@ export function useTaskDetailsSheetViewModel({
     isDeleteDialogOpen,
     isDeletePending,
     deleteError,
-    isLoadingDeleteImpact: isLoadingDeleteImpact || deleteStopImpact.isLoading,
+    isLoadingDeleteImpact,
+    isLoadingDeleteStopImpact: deleteStopImpact.isLoading,
     hasManagedDeleteSessionCleanup,
     deleteManagedWorktreeCount,
     deleteImpactError,
     deleteTerminalCount,
     deleteActiveSessionCount: deleteStopImpact.stoppableSessionCount,
     deleteActiveSessionCountError: deleteStopImpact.error,
-    isLoadingResetImpact: isLoadingSingleTaskCleanupImpact || resetStopImpact.isLoading,
+    isLoadingResetImpact: isLoadingSingleTaskCleanupImpact,
+    isLoadingResetStopImpact: resetStopImpact.isLoading,
     hasManagedResetSessionCleanup: hasManagedSingleTaskCleanup,
     resetManagedWorktreeCount: singleTaskCleanupWorktreeCount,
     resetImpactError: singleTaskCleanupImpactError,
@@ -338,7 +343,8 @@ export function useTaskDetailsSheetViewModel({
     isCloseDialogOpen,
     isClosePending,
     closeError,
-    isLoadingCloseImpact: isLoadingSingleTaskCleanupImpact || closeStopImpact.isLoading,
+    isLoadingCloseImpact: isLoadingSingleTaskCleanupImpact,
+    isLoadingCloseStopImpact: closeStopImpact.isLoading,
     hasManagedCloseSessionCleanup: hasManagedSingleTaskCleanup,
     closeManagedWorktreeCount: singleTaskCleanupWorktreeCount,
     closeImpactError: singleTaskCleanupImpactError,

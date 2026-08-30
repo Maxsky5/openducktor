@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  formatActiveSessionStopLoadingMessage,
   formatManagedSessionCleanupLoadingMessage,
   formatManagedSessionCleanupMessage,
   formatUnknownManagedSessionCleanupMessage,
@@ -27,6 +28,7 @@ type TaskDeleteConfirmDialogProps = {
   impact: {
     hasSubtasks: boolean;
     isLoading: boolean;
+    isLoadingStopImpact: boolean;
     hasManagedSessionCleanup: boolean;
     managedWorktreeCount: number;
     terminalCount: number;
@@ -50,6 +52,14 @@ export function TaskDeleteConfirmDialog({
   impact,
   deletion,
 }: TaskDeleteConfirmDialogProps): ReactElement {
+  const isImpactLoading = impact.isLoading || impact.isLoadingStopImpact;
+  let confirmLabel = "Delete";
+  if (deletion.isPending) {
+    confirmLabel = "Deleting...";
+  } else if (isImpactLoading) {
+    confirmLabel = "Checking...";
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
@@ -81,6 +91,9 @@ export function TaskDeleteConfirmDialog({
               error={impact.activeSessionCountError}
               operation="delete"
             />
+            {impact.isLoadingStopImpact ? (
+              <p>{formatActiveSessionStopLoadingMessage("delete")}</p>
+            ) : null}
             {impact.isLoading ? (
               <p>{formatManagedSessionCleanupLoadingMessage("delete")}</p>
             ) : impact.error ? (
@@ -108,17 +121,17 @@ export function TaskDeleteConfirmDialog({
             variant="destructive"
             className="w-[132px] justify-center disabled:bg-rose-400 disabled:text-rose-50 disabled:opacity-100"
             disabled={
-              deletion.isPending || impact.isLoading || impact.activeSessionCountError !== null
+              deletion.isPending || isImpactLoading || impact.activeSessionCountError !== null
             }
-            aria-busy={deletion.isPending || impact.isLoading}
+            aria-busy={deletion.isPending || isImpactLoading}
             onClick={onConfirm}
           >
-            {deletion.isPending || impact.isLoading ? (
+            {deletion.isPending || isImpactLoading ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
               <Trash2 className="size-4" />
             )}
-            {deletion.isPending ? "Deleting..." : impact.isLoading ? "Checking..." : "Delete"}
+            {confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

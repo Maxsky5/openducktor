@@ -31,15 +31,26 @@ const collectLiveSessions = (
       if (!externalSessionId) {
         continue;
       }
-      // If a runtime cannot check a session, cleanup must not wait on it.
-      // An offline runtime would otherwise block delete and reset.
       const probe = yield* runtimeRegistry.probeSessionStatus({
         runtimeKind: session.runtimeKind.trim(),
         repoPath,
         externalSessionId,
         workingDirectory: session.workingDirectory,
       });
-      if (probe.supported && probe.hasLiveSession) {
+      if (!probe.supported) {
+        return yield* Effect.fail(
+          new HostOperationError({
+            operation: "runtimeTaskActivityGuard.probeSessionStatus",
+            message: `Runtime ${session.runtimeKind} cannot check session ${externalSessionId} before task cleanup.`,
+            details: {
+              externalSessionId,
+              role: session.role,
+              runtimeKind: session.runtimeKind,
+            },
+          }),
+        );
+      }
+      if (probe.hasLiveSession) {
         liveSessions.push({
           externalSessionId,
           role: session.role.trim(),
@@ -67,7 +78,9 @@ const collectTaskLiveSessions = (
           (error) =>
             new HostOperationError({
               operation: input.operation,
-              message: `Failed checking live runtime state before ${input.failureContext} (${task.taskId})`,
+              message: `Failed checking live runtime state before ${input.failureContext} (${task.taskId}): ${
+                error instanceof Error ? error.message : String(error)
+              }`,
               cause: error,
             }),
         ),

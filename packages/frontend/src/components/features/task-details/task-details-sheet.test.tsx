@@ -195,7 +195,8 @@ describe("TaskDetailsSheet", () => {
       await harness.mount();
       await harness.run((viewModel) => viewModel.openDeleteDialog());
 
-      expect(harness.getLatest().isLoadingDeleteImpact).toBe(true);
+      expect(harness.getLatest().isLoadingDeleteImpact).toBe(false);
+      expect(harness.getLatest().isLoadingDeleteStopImpact).toBe(true);
 
       taskStopImpactHookMock.mockImplementation(
         (_args: { taskIds: string[]; operation: string; enabled: boolean }) => ({
@@ -205,7 +206,7 @@ describe("TaskDetailsSheet", () => {
         }),
       );
       await harness.update({ ...harnessOptions });
-      expect(harness.getLatest().isLoadingDeleteImpact).toBe(false);
+      expect(harness.getLatest().isLoadingDeleteStopImpact).toBe(false);
       expect(harness.getLatest().deleteActiveSessionCount).toBe(0);
     } finally {
       await harness.unmount();

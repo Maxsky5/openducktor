@@ -5,8 +5,9 @@ import { normalizeAgentSessionTaskIds } from "./agent-sessions";
 
 export type TaskStopImpactReadPort = Pick<typeof host, "taskStopImpactGet">;
 
-const taskStopImpactQueryKeys = {
+export const taskStopImpactQueryKeys = {
   all: ["task-stop-impact"] as const,
+  repo: (repoPath: string) => [...taskStopImpactQueryKeys.all, "get", repoPath] as const,
   get: (repoPath: string, normalizedTaskIds: string[], operation: TaskStopImpactOperation) =>
     [...taskStopImpactQueryKeys.all, "get", repoPath, normalizedTaskIds, operation] as const,
 };
