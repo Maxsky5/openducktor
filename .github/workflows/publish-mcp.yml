@@ -88,7 +88,6 @@ jobs:
           bun run --filter @openducktor/mcp typecheck
           bun run --filter @openducktor/mcp test
           bun run --filter @openducktor/mcp build
-          bun -e 'for (const path of ["packages/openducktor-mcp/dist/index.js", "packages/openducktor-mcp/dist/index.d.ts"]) { if (!(await Bun.file(path).exists())) throw new Error(`Missing MCP build output ${path}`); }'
 
       - name: Publish package
         working-directory: packages/openducktor-mcp

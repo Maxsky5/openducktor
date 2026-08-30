@@ -24,7 +24,7 @@ export const buildMcpPackage = async (): Promise<void> => {
   });
   await markExecutable(outputPath);
   await runCommand({
-    command: ["bunx", "tsc", "--build", "tsconfig.json", "--force"],
+    command: ["bunx", "tsc", "-p", "tsconfig.json", "--emitDeclarationOnly"],
     cwd: packageRoot,
     label: "MCP package declaration build",
   });

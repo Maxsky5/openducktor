@@ -50,6 +50,7 @@ Core tooling:
 Notes:
 
 - Task data is stored in an OpenDucktor-managed SQLite database. No external task-store CLI is required for normal development.
+- VS Code recommends Microsoft's `TypeScript 7` extension and enables its native language service through the tracked `.vscode` settings. Other editors must use a TypeScript 7-aware language server instead of the removed `tsserver` protocol.
 - OpenDucktor resolves `opencode` from `PATH` first, then falls back to `~/.opencode/bin/opencode`.
 - You can override the OpenCode binary path with `OPENDUCKTOR_OPENCODE_BINARY`.
 - Claude support uses an external Claude Code installation and its existing authentication. You can
