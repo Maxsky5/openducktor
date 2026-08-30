@@ -96,6 +96,32 @@ describe("catalog-and-mcp listAvailableSlashCommands", () => {
     expect(catalog.commands.map((command) => command.id)).toEqual(["system:compact", "review"]);
   });
 
+  test("accepts nullable metadata and lazy templates from the runtime", async () => {
+    const catalog = await listAvailableSlashCommands(
+      () => ({
+        command: {
+          list: async () => ({
+            data: [
+              {
+                name: "review",
+                description: null,
+                agent: null,
+                model: null,
+                source: null,
+                template: {},
+                subtask: null,
+                hints: [],
+              },
+            ],
+          }),
+        },
+      }),
+      { runtimeEndpoint: "http://127.0.0.1:1234", workingDirectory: "/repo" },
+    );
+
+    expect(catalog.commands.map((command) => command.id)).toEqual(["system:compact", "review"]);
+  });
+
   test("fails when the slash command payload is not an array", async () => {
     await expect(
       listAvailableSlashCommands(() => ({ command: { list: async () => ({ data: {} }) } }), {

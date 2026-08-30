@@ -79,14 +79,10 @@ export type ParsedOpencodeAgent = z.infer<typeof opencodeAgentSchema>;
 export const opencodeAgentListPayloadSchema = z.array(opencodeAgentSchema);
 
 const opencodeSlashCommandSchema = z.object({
-  agent: z.string().optional(),
-  description: z.string().optional(),
+  description: z.string().nullish(),
   hints: z.array(z.string()),
-  model: z.string().optional(),
   name: z.string(),
-  source: z.enum(["command", "mcp", "skill"]).optional(),
-  subtask: z.boolean().optional(),
-  template: z.string(),
+  source: z.enum(["command", "mcp", "skill"]).nullish(),
 });
 
 export const opencodeSlashCommandListPayloadSchema = z.array(opencodeSlashCommandSchema);
