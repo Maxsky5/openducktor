@@ -12,11 +12,16 @@ describe("global config", () => {
 
     expect(config.version).toBe(3);
     expect(config.agentRuntimes.opencode).toEqual({ enabled: false, executablePath: "" });
+    expect(config.autopilot.alwaysStartQaReviewsFresh).toBe(false);
   });
 
   test("parses current and legacy versions through distinct entry points", () => {
-    expect(parsePersistedGlobalConfig({ version: 3 }).version).toBe(3);
-    expect(parsePersistedGlobalConfigV2({ version: 2 }).version).toBe(2);
+    expect(parsePersistedGlobalConfig({ version: 3 }).autopilot.alwaysStartQaReviewsFresh).toBe(
+      false,
+    );
+    expect(parsePersistedGlobalConfigV2({ version: 2 }).autopilot.alwaysStartQaReviewsFresh).toBe(
+      false,
+    );
     expect(() => parsePersistedGlobalConfig({ version: 2 })).toThrow(
       "Unsupported config version 2. Expected 3.",
     );
@@ -171,6 +176,10 @@ describe("global config", () => {
         codex: { enabled: true },
         claude: { enabled: true },
       },
+      autopilot: {
+        alwaysStartQaReviewsFresh: true,
+        rules: [],
+      },
     });
 
     const upgraded = upgradePersistedGlobalConfigV2(legacy, {
@@ -189,5 +198,6 @@ describe("global config", () => {
       enabled: true,
       executablePath: "/tools/claude",
     });
+    expect(upgraded.autopilot.alwaysStartQaReviewsFresh).toBe(true);
   });
 });

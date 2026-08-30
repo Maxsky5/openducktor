@@ -5,6 +5,7 @@ import {
   AUTOPILOT_EVENT_IDS,
   agentModelFavoriteKey,
   agentModelFavoritesSchema,
+  autopilotSettingsSchema,
   appearanceSettingsSchema,
   appPlatformSchema,
   CHAT_DIFF_HEIGHT_VALUES,
@@ -14,6 +15,7 @@ import {
   CHAT_LINE_OVERFLOW_VALUES,
   chatSettingsSchema,
   codexRuntimeConfigSchema,
+  createDefaultAutopilotSettings,
   DEFAULT_AGENT_RUNTIMES,
   DEFAULT_APPEARANCE_SETTINGS,
   DEFAULT_CHAT_SETTINGS,
@@ -67,7 +69,9 @@ describe("config-schemas", () => {
     expect(current.agentRuntimes.opencode.executablePath).toBe("");
     expect(current.agentRuntimes.codex.executablePath).toBe("");
     expect(current.agentRuntimes.claude.executablePath).toBe("");
+    expect(current.autopilot.alwaysStartQaReviewsFresh).toBe(false);
     expect(legacy.agentRuntimes.opencode).toEqual({ enabled: true });
+    expect(legacy.autopilot.alwaysStartQaReviewsFresh).toBe(false);
     expect(globalConfigSchema.safeParse(legacy).success).toBe(false);
   });
 
@@ -853,9 +857,48 @@ describe("config-schemas", () => {
 
     expect(parsed.autopilot.rules.map((rule) => rule.eventId)).toEqual([...AUTOPILOT_EVENT_IDS]);
     expect(parsed.autopilot.rules.every((rule) => rule.actionIds.length === 0)).toBe(true);
+    expect(parsed.autopilot.alwaysStartQaReviewsFresh).toBe(false);
+  });
+
+  test("preserves explicit Autopilot fresh QA settings through snapshot save validation", () => {
+    const snapshot = settingsSnapshotSchema.parse({
+      theme: "light",
+      git: { defaultMergeMethod: "merge_commit" },
+      workspaces: {},
+      globalPromptOverrides: {},
+      autopilot: {
+        alwaysStartQaReviewsFresh: true,
+        rules: [],
+      },
+    });
+
+    const saveInput = settingsSnapshotSaveInputSchema.parse({
+      git: snapshot.git,
+      general: snapshot.general,
+      appearance: snapshot.appearance,
+      chat: snapshot.chat,
+      reusablePrompts: snapshot.reusablePrompts,
+      kanban: snapshot.kanban,
+      autopilot: snapshot.autopilot,
+      agentRuntimes: snapshot.agentRuntimes,
+      agentModelFavorites: snapshot.agentModelFavorites,
+      workspaces: snapshot.workspaces,
+      globalPromptOverrides: snapshot.globalPromptOverrides,
+    });
+
+    expect(saveInput.autopilot.alwaysStartQaReviewsFresh).toBe(true);
+    expect(autopilotSettingsSchema.parse({ rules: [] }).alwaysStartQaReviewsFresh).toBe(false);
+    expect(
+      autopilotSettingsSchema.parse({ alwaysStartQaReviewsFresh: false, rules: [] })
+        .alwaysStartQaReviewsFresh,
+    ).toBe(false);
+    expect(
+      autopilotSettingsSchema.safeParse({ alwaysStartQaReviewsFresh: "true", rules: [] }).success,
+    ).toBe(false);
   });
 
   test("creates a fresh autopilot default for each parse", () => {
+    expect(createDefaultAutopilotSettings().alwaysStartQaReviewsFresh).toBe(false);
     const first = settingsSnapshotSchema.parse({
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },

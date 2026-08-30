@@ -86,6 +86,7 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
                 activeWorkspace,
                 task: observedEvent.task,
                 actionId,
+                alwaysStartQaReviewsFresh: autopilotSettings.alwaysStartQaReviewsFresh,
                 queryClient,
                 loadTaskSessionRecords: (repoPath, taskId) =>
                   loadAgentSessionListFromQuery(queryClient, repoPath, taskId, {

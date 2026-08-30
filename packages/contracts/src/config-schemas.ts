@@ -522,7 +522,10 @@ export const autopilotRuleSchema = z.object({
 });
 export type AutopilotRule = z.infer<typeof autopilotRuleSchema>;
 
-const normalizeAutopilotSettings = (value: { rules: AutopilotRule[] }) => {
+const normalizeAutopilotSettings = (value: {
+  alwaysStartQaReviewsFresh: boolean;
+  rules: AutopilotRule[];
+}) => {
   const rulesByEvent = new Map<AutopilotEventId, AutopilotRule>();
   for (const rule of value.rules) {
     const existing = rulesByEvent.get(rule.eventId);
@@ -533,6 +536,7 @@ const normalizeAutopilotSettings = (value: { rules: AutopilotRule[] }) => {
   }
 
   return {
+    alwaysStartQaReviewsFresh: value.alwaysStartQaReviewsFresh,
     rules: AUTOPILOT_EVENT_IDS.map(
       (eventId): AutopilotRule =>
         rulesByEvent.get(eventId) ?? {
@@ -545,13 +549,14 @@ const normalizeAutopilotSettings = (value: { rules: AutopilotRule[] }) => {
 
 export const autopilotSettingsSchema = z
   .object({
+    alwaysStartQaReviewsFresh: z.boolean().default(false),
     rules: z.array(autopilotRuleSchema).default([]),
   })
   .transform(normalizeAutopilotSettings);
 export type AutopilotSettings = z.infer<typeof autopilotSettingsSchema>;
 
 export const createDefaultAutopilotSettings = (): AutopilotSettings =>
-  normalizeAutopilotSettings({ rules: [] });
+  normalizeAutopilotSettings({ alwaysStartQaReviewsFresh: false, rules: [] });
 
 const themeValueSchema = z.enum(["light", "dark"]);
 

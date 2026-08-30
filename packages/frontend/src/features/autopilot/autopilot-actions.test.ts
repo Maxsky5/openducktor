@@ -12,17 +12,20 @@ import {
   detectAutopilotEvents,
   shouldAdvanceAutopilotBaseline,
 } from "@/features/autopilot/autopilot-events";
+import type { RunSessionStartWorkflow } from "@/features/session-start";
 import type { SessionStartWorkflowResult } from "@/features/session-start/session-start-workflow";
 import { MISSING_BUILD_TARGET_ERROR } from "@/lib/session-start-errors";
 import { repoConfigQueryOptions, workspaceQueryKeys } from "@/state/queries/workspace";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 
-const runSessionStartWorkflowMock = mock(async (): Promise<SessionStartWorkflowResult> => ({
-  externalSessionId: "session-new",
-  runtimeKind: "opencode" as const,
-  workingDirectory: "/repo/worktrees/session-new",
-  postStartActionError: null,
-}));
+const runSessionStartWorkflowMock = mock(
+  async (_input: Parameters<RunSessionStartWorkflow>[0]): Promise<SessionStartWorkflowResult> => ({
+    externalSessionId: "session-new",
+    runtimeKind: "opencode" as const,
+    workingDirectory: "/repo/worktrees/session-new",
+    postStartActionError: null,
+  }),
+);
 
 const createBuilderSessionRecord = (
   overrides: Partial<AgentSessionRecord> = {},
@@ -111,6 +114,7 @@ const createExecuteArgs = (task: TaskCard) => {
       workspaceName: "Repo",
     },
     task,
+    alwaysStartQaReviewsFresh: false,
     queryClient: createQueryClient(),
     loadTaskSessionRecords,
     loadRepoRuntimeCatalog: mock(async (): Promise<AgentModelCatalog> => ({
@@ -389,6 +393,114 @@ describe("autopilot feature helpers", () => {
           },
         }),
       }),
+    );
+  });
+
+  test("starts fresh QA without a source when the fresh-session setting is enabled", async () => {
+    const args = createExecuteArgs(createTask({ id: "TASK-QA-FRESH", status: "ai_review" }));
+    args.loadTaskSessionRecords.mockResolvedValue([
+      createBuilderSessionRecord({
+        externalSessionId: "qa-session-existing",
+        role: "qa",
+        workingDirectory: "/tmp/repo/current-worktree",
+      }),
+    ]);
+    args.resolveTaskWorktree.mockResolvedValue({
+      workingDirectory: "/tmp/repo/current-worktree",
+    });
+
+    await executeAutopilotAction({
+      ...args,
+      actionId: "startQa",
+      alwaysStartQaReviewsFresh: true,
+    });
+
+    expect(args.loadTaskSessionRecords).not.toHaveBeenCalled();
+    expect(runSessionStartWorkflowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          taskId: "TASK-QA-FRESH",
+          role: "qa",
+          launchActionId: "qa_review",
+          postStartAction: "kickoff",
+          targetWorkingDirectory: "/tmp/repo/current-worktree",
+        }),
+        decision: expect.objectContaining({
+          startMode: "fresh",
+          selectedModel: expect.objectContaining({
+            runtimeKind: "opencode",
+            providerId: "openai",
+            modelId: "gpt-5",
+            variant: "high",
+          }),
+        }),
+      }),
+    );
+    expect(runSessionStartWorkflowMock.mock.calls[0]?.[0].decision).not.toHaveProperty(
+      "sourceSession",
+    );
+  });
+
+  test("forces a fresh decision for each enabled QA invocation", async () => {
+    const args = createExecuteArgs(createTask({ id: "TASK-QA-REPEAT", status: "ai_review" }));
+    args.resolveTaskWorktree.mockResolvedValue({
+      workingDirectory: "/tmp/repo/current-worktree",
+    });
+
+    await executeAutopilotAction({ ...args, actionId: "startQa", alwaysStartQaReviewsFresh: true });
+    await executeAutopilotAction({ ...args, actionId: "startQa", alwaysStartQaReviewsFresh: true });
+
+    expect(runSessionStartWorkflowMock).toHaveBeenCalledTimes(2);
+    expect(
+      runSessionStartWorkflowMock.mock.calls.every(
+        ([input]) => input.decision.startMode === "fresh" && !("sourceSession" in input.decision),
+      ),
+    ).toBe(true);
+  });
+
+  test("does not reuse an old QA session when fresh model resolution fails", async () => {
+    const args = createExecuteArgs(createTask({ id: "TASK-QA-FAIL", status: "ai_review" }));
+    args.loadTaskSessionRecords.mockResolvedValue([
+      createBuilderSessionRecord({
+        externalSessionId: "qa-session-existing",
+        role: "qa",
+        workingDirectory: "/tmp/repo/current-worktree",
+      }),
+    ]);
+    args.resolveTaskWorktree.mockResolvedValue({
+      workingDirectory: "/tmp/repo/current-worktree",
+    });
+    args.loadRepoRuntimeCatalog.mockRejectedValue(new Error("catalog failed"));
+
+    await expect(
+      executeAutopilotAction({
+        ...args,
+        actionId: "startQa",
+        alwaysStartQaReviewsFresh: true,
+      }),
+    ).rejects.toThrow("catalog failed");
+
+    expect(args.loadTaskSessionRecords).not.toHaveBeenCalled();
+    expect(runSessionStartWorkflowMock).not.toHaveBeenCalled();
+  });
+
+  test("does not force fresh starts for non-QA actions", async () => {
+    const args = createExecuteArgs(createTask({ id: "TASK-BUILD", status: "in_progress" }));
+    args.loadTaskSessionRecords.mockResolvedValue([
+      createBuilderSessionRecord({ workingDirectory: "/tmp/repo/current-worktree" }),
+    ]);
+    args.resolveTaskWorktree.mockResolvedValue({
+      workingDirectory: "/tmp/repo/current-worktree",
+    });
+
+    await executeAutopilotAction({
+      ...args,
+      actionId: "startReviewQaFeedbacks",
+      alwaysStartQaReviewsFresh: true,
+    });
+
+    expect(runSessionStartWorkflowMock).toHaveBeenCalledWith(
+      expect.objectContaining({ decision: expect.objectContaining({ startMode: "reuse" }) }),
     );
   });
 

@@ -1128,6 +1128,7 @@ describe("HostClient", () => {
         doneVisibleDays: 1,
       },
       autopilot: {
+        alwaysStartQaReviewsFresh: false,
         rules: [],
       },
       workspaces: {
@@ -1165,6 +1166,7 @@ describe("HostClient", () => {
               doneVisibleDays: 1,
             },
             autopilot: {
+              alwaysStartQaReviewsFresh: false,
               rules: [],
             },
             workspaces: {

@@ -101,6 +101,7 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   reusablePrompts: [],
   kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
   autopilot: {
+    alwaysStartQaReviewsFresh: false,
     rules: [
       { eventId: "taskProgressedToSpecReady", actionIds: [] },
       { eventId: "taskProgressedToReadyForDev", actionIds: [] },

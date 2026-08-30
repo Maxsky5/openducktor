@@ -169,6 +169,7 @@ export const createSettingsSnapshotFixture = (
       ...kanban,
     },
     autopilot: {
+      alwaysStartQaReviewsFresh: false,
       rules: [],
     },
     agentRuntimes: DEFAULT_AGENT_RUNTIMES,
