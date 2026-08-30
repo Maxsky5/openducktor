@@ -11,9 +11,7 @@ const pierreDiffViewerModule = await import("@/components/features/agents/pierre
 type RestorableSpy = { mockRestore(): void };
 let pierreViewerSpies: RestorableSpy[] = [];
 
-const preloaderMock = mock(({ filePath }: { patch: string; filePath: string }) => (
-  <div data-testid="pierre-diff-preloader">{filePath}</div>
-));
+const preloaderMock = mock((_props: { patch: string; filePath: string }) => null);
 
 type DiffViewerMockProps = {
   patch: string;
