@@ -14,6 +14,8 @@ TypeScript 7 defaults `types` to an empty array. The MCP config declares `node` 
 
 The MCP declaration review emitted the package once with TypeScript 5.9.3 and once with TypeScript 7.0.2, then compared every generated `.d.ts` file. All files were byte-identical except `odt-task-store.d.ts`. Its diff only reordered object properties and union members; it added or removed no API member or union value. No tracked snapshot or release check depends on declaration order.
 
+The MCP clean build keeps composite build state inside `dist`, checks the full JavaScript and declaration artifact set, and removes the build metadata before packaging. Its build regression test runs this clean build twice so stale state cannot hide missing declarations.
+
 The browser terminal transport copies each outgoing `Uint8Array` with `frame.slice()` before `WebSocket.send`. This creates an `ArrayBuffer`-backed view at the browser boundary and leaves incoming `ArrayBuffer` frames unchanged.
 
 ## Verification Baseline
