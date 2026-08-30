@@ -1,4 +1,10 @@
-import type { GitProviderRepository, RepoConfig, RuntimeCheck } from "@openducktor/contracts";
+import {
+  GITHUB_PROVIDER_DESCRIPTOR,
+  selectGitProviderConfig,
+  type GitProviderRepository,
+  type RepoConfig,
+  type RuntimeCheck,
+} from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 
 type UseRepositoryGitSectionModelArgs = {
@@ -97,10 +103,9 @@ const buildGithubConfig = (
   repoConfig: RepoConfig,
   overrides: Partial<NonNullable<RepoConfig["git"]["provider"]>>,
 ): NonNullable<RepoConfig["git"]["provider"]> => {
-  const provider = repoConfig.git.provider;
-  const github = provider?.id === "github" ? provider : undefined;
+  const github = selectGitProviderConfig(repoConfig.git, GITHUB_PROVIDER_DESCRIPTOR.id);
   return {
-    id: "github",
+    id: GITHUB_PROVIDER_DESCRIPTOR.id,
     enabled: github?.enabled ?? false,
     autoDetected: github?.autoDetected ?? false,
     repository: github?.repository,
@@ -236,9 +241,10 @@ export function useRepositoryGitSectionModel({
   selectedRepoConfig,
   selectedRepoPath,
 }: UseRepositoryGitSectionModelArgs): UseRepositoryGitSectionModelResult {
-  const initialProvider = selectedRepoConfig?.git.provider;
-  const initialGithubRepository =
-    initialProvider?.id === "github" ? initialProvider.repository : undefined;
+  const initialGithubRepository = selectGitProviderConfig(
+    selectedRepoConfig?.git,
+    GITHUB_PROVIDER_DESCRIPTOR.id,
+  )?.repository;
   const initialHasRepositoryCoordinates = Boolean(
     initialGithubRepository?.host && initialGithubRepository.owner && initialGithubRepository.name,
   );
@@ -259,8 +265,9 @@ export function useRepositoryGitSectionModel({
     createRepositoryGitSectionState,
   );
 
-  const configuredProvider = selectedRepoConfig?.git.provider;
-  const github = configuredProvider?.id === "github" ? configuredProvider : EMPTY_GITHUB_CONFIG;
+  const github =
+    selectGitProviderConfig(selectedRepoConfig?.git, GITHUB_PROVIDER_DESCRIPTOR.id) ??
+    EMPTY_GITHUB_CONFIG;
   const githubEnabled = github.enabled ?? false;
   const hasGithubCli = runtimeCheck?.ghOk ?? false;
   const githubHost = github.repository?.host ?? "github.com";

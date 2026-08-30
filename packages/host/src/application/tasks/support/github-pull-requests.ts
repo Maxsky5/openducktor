@@ -1,8 +1,9 @@
-import type {
-  GitProviderRepository,
-  PullRequest,
-  RepoConfig,
-  TaskApprovalContext,
+import {
+  selectGitProviderConfig,
+  type GitProviderRepository,
+  type PullRequest,
+  type RepoConfig,
+  type TaskApprovalContext,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { checkoutBranch } from "../../../domain/task";
@@ -92,8 +93,7 @@ export const githubProviderStatus = (
   repoConfig: RepoConfig,
 ) =>
   Effect.gen(function* () {
-    const providerConfig = repoConfig.git.provider;
-    const githubConfig = providerConfig?.id === GITHUB_PROVIDER_ID ? providerConfig : undefined;
+    const githubConfig = selectGitProviderConfig(repoConfig.git, GITHUB_PROVIDER_ID);
     if (!githubConfig?.enabled) {
       return {
         providerId: GITHUB_PROVIDER_ID,
@@ -268,8 +268,7 @@ export const requireGithubPullRequestReadRepository = (
   repoConfig: RepoConfig,
 ) =>
   Effect.gen(function* () {
-    const providerConfig = repoConfig.git.provider;
-    const githubConfig = providerConfig?.id === GITHUB_PROVIDER_ID ? providerConfig : undefined;
+    const githubConfig = selectGitProviderConfig(repoConfig.git, GITHUB_PROVIDER_ID);
     if (!githubConfig?.enabled) {
       return yield* Effect.fail(
         new HostValidationError({
@@ -394,8 +393,7 @@ export const githubPullRequestSyncPolicy = (
   repoConfig: RepoConfig,
 ) =>
   Effect.gen(function* () {
-    const providerConfig = repoConfig.git.provider;
-    const githubConfig = providerConfig?.id === GITHUB_PROVIDER_ID ? providerConfig : undefined;
+    const githubConfig = selectGitProviderConfig(repoConfig.git, GITHUB_PROVIDER_ID);
     const githubCommandResult =
       githubConfig?.enabled === true
         ? yield* Effect.either(resolveGithubCommandDependencies(dependencies))

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { GITHUB_PROVIDER_DESCRIPTOR, selectGitProviderConfig } from "@openducktor/contracts";
 import type { host } from "@/state/operations/host";
 import { repoConfigQueryOptions, toRepoSettingsInput } from "@/state/queries/workspace";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -21,7 +22,7 @@ export function useAgentStudioRepoSettings(args: {
     select: (config) => ({
       repoSettings: toRepoSettingsInput(config),
       githubIntegrationEnabled:
-        config.git.provider?.id === "github" && config.git.provider.enabled === true,
+        selectGitProviderConfig(config.git, GITHUB_PROVIDER_DESCRIPTOR.id)?.enabled === true,
     }),
   });
   const repoSettings =

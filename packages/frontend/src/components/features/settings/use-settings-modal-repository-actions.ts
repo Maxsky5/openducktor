@@ -1,4 +1,10 @@
-import type { GitProviderRepository, RepoConfig } from "@openducktor/contracts";
+import {
+  GITHUB_PROVIDER_DESCRIPTOR,
+  selectGitProviderConfig,
+  type GitProviderConfig,
+  type GitProviderRepository,
+  type RepoConfig,
+} from "@openducktor/contracts";
 import { useCallback } from "react";
 
 type UseSettingsModalRepositoryActionsArgs = {
@@ -27,11 +33,14 @@ export const useSettingsModalRepositoryActions = ({
     }
 
     updateSelectedRepoConfig((repoConfig) => {
-      const currentProvider = repoConfig.git.provider;
-      const currentGithub =
-        currentProvider?.id === "github"
-          ? currentProvider
-          : { id: "github" as const, enabled: false, autoDetected: false };
+      const currentGithub: GitProviderConfig = selectGitProviderConfig(
+        repoConfig.git,
+        GITHUB_PROVIDER_DESCRIPTOR.id,
+      ) ?? {
+        id: GITHUB_PROVIDER_DESCRIPTOR.id,
+        enabled: false,
+        autoDetected: false,
+      };
       const hasExistingRepository = Boolean(currentGithub.repository);
 
       return {
@@ -39,7 +48,7 @@ export const useSettingsModalRepositoryActions = ({
         git: {
           ...repoConfig.git,
           provider: {
-            id: "github",
+            id: GITHUB_PROVIDER_DESCRIPTOR.id,
             enabled: hasExistingRepository ? currentGithub.enabled : true,
             autoDetected: true,
             repository: detected,
