@@ -34,8 +34,12 @@ export default function MarkdownRendererRich({
   const componentInput: Parameters<typeof createTaskDescriptionComponents>[0] = {
     components: premiumComponents,
   };
-  if (resolveTaskAssetSrc) componentInput.resolveTaskAssetSrc = resolveTaskAssetSrc;
-  if (taskAssetContext) componentInput.taskAssetContext = taskAssetContext;
+  if (resolveTaskAssetSrc) {
+    componentInput.resolveTaskAssetSrc = resolveTaskAssetSrc;
+  }
+  if (taskAssetContext) {
+    componentInput.taskAssetContext = taskAssetContext;
+  }
   return (
     <Markdown
       remarkPlugins={[remarkGfm]}

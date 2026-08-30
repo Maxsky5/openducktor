@@ -280,7 +280,9 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
       Accept: "application/json",
       "Content-Type": "application/json",
     };
-    if (this.appToken) headers["x-openducktor-app-token"] = this.appToken;
+    if (this.appToken) {
+      headers["x-openducktor-app-token"] = this.appToken;
+    }
     const response = await this.fetchBridge(
       url.toString(),
       {

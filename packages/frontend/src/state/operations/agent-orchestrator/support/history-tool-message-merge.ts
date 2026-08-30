@@ -81,7 +81,9 @@ const preserveCurrentToolWithLoadedIdentity = (
     messageId: scopedId.messageId,
     partId: loadedMessage.meta.partId,
   };
-  if (canonicalCallId) idInput.callId = canonicalCallId;
+  if (canonicalCallId) {
+    idInput.callId = canonicalCallId;
+  }
   const canonicalId = toToolMessageId(idInput);
 
   return {

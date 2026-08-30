@@ -663,7 +663,9 @@ export const runLauncherEffect = (
       packageRoot: options.packageRoot,
       workspaceMode: options.workspaceMode,
     };
-    if (options.workspaceRoot) runtimeDistributionInput.workspaceRoot = options.workspaceRoot;
+    if (options.workspaceRoot) {
+      runtimeDistributionInput.workspaceRoot = options.workspaceRoot;
+    }
     const runtimeDistribution =
       yield* resolveWebRuntimeDistributionEffect(runtimeDistributionInput);
     const providedToolPaths = yield* resolveWebProvidedToolPathsEffect();

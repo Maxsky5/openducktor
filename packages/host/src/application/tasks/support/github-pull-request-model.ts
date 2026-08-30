@@ -103,8 +103,12 @@ const normalizeGithubPullRequest = (response: GithubPullResponse): ResolvedPullR
     updatedAt: response.updated_at,
     lastSyncedAt: new Date().toISOString(),
   };
-  if (mergedAt !== undefined) recordInput.mergedAt = mergedAt;
-  if (closedAt !== undefined) recordInput.closedAt = closedAt;
+  if (mergedAt !== undefined) {
+    recordInput.mergedAt = mergedAt;
+  }
+  if (closedAt !== undefined) {
+    recordInput.closedAt = closedAt;
+  }
   return {
     record: pullRequestSchema.parse(recordInput),
     sourceBranch: response.head.ref,

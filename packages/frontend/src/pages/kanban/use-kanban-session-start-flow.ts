@@ -205,7 +205,9 @@ export function useKanbanSessionStartFlow({
             humanRequestChangesTask,
             openSessionInAgentStudio,
           };
-          if (setTaskTargetBranch) input.setTaskTargetBranch = setTaskTargetBranch;
+          if (setTaskTargetBranch) {
+            input.setTaskTargetBranch = setTaskTargetBranch;
+          }
           const session = await startKanbanSessionFlow(input);
           return session;
         },
@@ -374,7 +376,9 @@ export function useKanbanSessionStartFlow({
             message: request.message,
             beforeStartAction: request.beforeStartAction,
           };
-          if (request.initialStartMode) input.initialStartMode = request.initialStartMode;
+          if (request.initialStartMode) {
+            input.initialStartMode = request.initialStartMode;
+          }
           if (request.initialSourceSession !== undefined) {
             input.initialSourceSession = request.initialSourceSession;
           }

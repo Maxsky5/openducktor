@@ -120,8 +120,12 @@ export const decodeClaudeToolUseBlock = ({
     callId,
     toolName,
   };
-  if (input) toolUse.input = input;
-  if (metadata) toolUse.metadata = metadata;
+  if (input) {
+    toolUse.input = input;
+  }
+  if (metadata) {
+    toolUse.metadata = metadata;
+  }
   return toolUse;
 };
 
@@ -144,7 +148,9 @@ export const createClaudeRunningToolPart = ({
     status: "running",
     startedAtMs,
   };
-  if (toolUse.metadata) part.metadata = toolUse.metadata;
+  if (toolUse.metadata) {
+    part.metadata = toolUse.metadata;
+  }
   if (toolUse.input) {
     part.input = parseClaudeCanonicalJsonObject(toolUse.input, "claudeToolInput");
     const preview = previewInput(toolUse.input);
@@ -171,7 +177,9 @@ export const createClaudePendingToolPart = ({
     ...toolPartPresentation(toolUse.toolName),
     status: "pending",
   };
-  if (toolUse.metadata) part.metadata = toolUse.metadata;
+  if (toolUse.metadata) {
+    part.metadata = toolUse.metadata;
+  }
   return part;
 };
 
@@ -270,6 +278,8 @@ export const decodeClaudeToolResultValue = (
     raw: record,
     text: claudeToolResultContentText(record),
   };
-  if (toolName) result.toolName = toolName;
+  if (toolName) {
+    result.toolName = toolName;
+  }
   return result;
 };

@@ -47,7 +47,9 @@ export function toAgentSessionSummary(session: AgentSessionState): AgentSessionS
     pendingApprovalCount: session.pendingApprovals.length,
     pendingQuestionCount: session.pendingQuestions.length,
   };
-  if (session.title) summary.title = session.title;
+  if (session.title) {
+    summary.title = session.title;
+  }
   return summary;
 }
 

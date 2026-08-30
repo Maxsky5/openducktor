@@ -41,7 +41,9 @@ const toAgentProfileOptionsWithSelectedFallback = (
       label: fallbackAgent,
       description: "Current session profile",
     };
-    if (fallbackAgentColor) option.accentColor = fallbackAgentColor;
+    if (fallbackAgentColor) {
+      option.accentColor = fallbackAgentColor;
+    }
     return [option];
   }
   return [];

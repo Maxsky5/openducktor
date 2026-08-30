@@ -185,9 +185,15 @@ export const emitClaudePermissionDeniedToolPart = ({
     text: permission.message,
     tool: toolName,
   };
-  if (input) completedToolInput.input = input;
-  if (permission.metadata) completedToolInput.metadata = permission.metadata;
-  if (startedAtMs !== undefined) completedToolInput.startedAtMs = startedAtMs;
+  if (input) {
+    completedToolInput.input = input;
+  }
+  if (permission.metadata) {
+    completedToolInput.metadata = permission.metadata;
+  }
+  if (startedAtMs !== undefined) {
+    completedToolInput.startedAtMs = startedAtMs;
+  }
   emit({
     type: "assistant_part",
     externalSessionId: session.externalSessionId,
@@ -257,6 +263,8 @@ const emitSuccessfulResultText = ({
     messageId,
     message: text,
   };
-  if (resultModel) assistantMessage.model = resultModel;
+  if (resultModel) {
+    assistantMessage.model = resultModel;
+  }
   emit(assistantMessage);
 };

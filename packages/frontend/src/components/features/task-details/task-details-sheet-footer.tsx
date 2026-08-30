@@ -33,9 +33,15 @@ export function TaskDetailsSheetFooter({
   onDeleteSelect,
 }: TaskDetailsSheetFooterProps): ReactElement {
   const actionOptions: Parameters<typeof resolveTaskCardActions>[1] = { hasActiveSession };
-  if (includeActions) actionOptions.include = includeActions;
-  if (activeSessionRole) actionOptions.activeSessionRole = activeSessionRole;
-  if (historicalSessionRoles) actionOptions.historicalSessionRoles = historicalSessionRoles;
+  if (includeActions) {
+    actionOptions.include = includeActions;
+  }
+  if (activeSessionRole) {
+    actionOptions.activeSessionRole = activeSessionRole;
+  }
+  if (historicalSessionRoles) {
+    actionOptions.historicalSessionRoles = historicalSessionRoles;
+  }
   const hasWorkflowAction = Boolean(
     includeActions && onWorkflowAction
       ? resolveTaskCardActions(task, actionOptions).allActions.length > 0

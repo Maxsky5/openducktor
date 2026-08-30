@@ -163,7 +163,9 @@ const toPersistedAttachment = (
     name: attachment.name,
     kind: attachment.kind,
   };
-  if (attachment.mime) persistedAttachment.mime = attachment.mime;
+  if (attachment.mime) {
+    persistedAttachment.mime = attachment.mime;
+  }
   return persistedAttachment;
 };
 
@@ -220,7 +222,9 @@ const parseAttachment = (
     name: value.name,
     kind: value.kind,
   };
-  if (value.mime) metadata.mime = value.mime;
+  if (value.mime) {
+    metadata.mime = value.mime;
+  }
   const attachment = buildComposerAttachmentFromPath(value.path, metadata);
   return attachment ? { ...attachment, id: value.id } : null;
 };

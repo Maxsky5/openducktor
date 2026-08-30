@@ -558,9 +558,15 @@ const buildSubagentStreamPart = (input: {
     messageId: input.messageId,
     partId: input.partId,
   };
-  if (input.externalSessionId) correlationInput.externalSessionId = input.externalSessionId;
-  if (input.agent) correlationInput.agent = input.agent;
-  if (input.prompt) correlationInput.prompt = input.prompt;
+  if (input.externalSessionId) {
+    correlationInput.externalSessionId = input.externalSessionId;
+  }
+  if (input.agent) {
+    correlationInput.agent = input.agent;
+  }
+  if (input.prompt) {
+    correlationInput.prompt = input.prompt;
+  }
   const correlationKey = resolveSubagentCorrelationKey(correlationInput);
 
   const result: SubagentStreamPart = {
@@ -570,15 +576,33 @@ const buildSubagentStreamPart = (input: {
     correlationKey,
     status: input.status,
   };
-  if (input.agent) result.agent = input.agent;
-  if (input.prompt) result.prompt = input.prompt;
-  if (input.description) result.description = input.description;
-  if (input.error) result.error = input.error;
-  if (input.externalSessionId) result.externalSessionId = input.externalSessionId;
-  if (input.executionMode) result.executionMode = input.executionMode;
-  if (input.metadata) result.metadata = input.metadata;
-  if (input.startedAtMs !== undefined) result.startedAtMs = input.startedAtMs;
-  if (input.endedAtMs !== undefined) result.endedAtMs = input.endedAtMs;
+  if (input.agent) {
+    result.agent = input.agent;
+  }
+  if (input.prompt) {
+    result.prompt = input.prompt;
+  }
+  if (input.description) {
+    result.description = input.description;
+  }
+  if (input.error) {
+    result.error = input.error;
+  }
+  if (input.externalSessionId) {
+    result.externalSessionId = input.externalSessionId;
+  }
+  if (input.executionMode) {
+    result.executionMode = input.executionMode;
+  }
+  if (input.metadata) {
+    result.metadata = input.metadata;
+  }
+  if (input.startedAtMs !== undefined) {
+    result.startedAtMs = input.startedAtMs;
+  }
+  if (input.endedAtMs !== undefined) {
+    result.endedAtMs = input.endedAtMs;
+  }
   return result;
 };
 
@@ -650,7 +674,9 @@ const buildSubagentFromToolPart = (
     tool: part.tool,
     rawInput,
   };
-  if (metadata) previewInput.metadata = metadata;
+  if (metadata) {
+    previewInput.metadata = metadata;
+  }
   const preview = deriveToolPreview(previewInput);
   const description =
     resolveSubagentDescription(input, output, metadata) ?? (error ? (prompt ?? preview) : preview);
@@ -661,19 +687,33 @@ const buildSubagentFromToolPart = (
     status,
   };
   const executionMode = resolveSubagentExecutionMode(metadata, input, output);
-  if (executionMode) subagentInput.executionMode = executionMode;
+  if (executionMode) {
+    subagentInput.executionMode = executionMode;
+  }
   if (mappedTiming.startedAtMs !== undefined) {
     subagentInput.startedAtMs = mappedTiming.startedAtMs;
   }
   if (mappedTiming.endedAtMs !== undefined) {
     subagentInput.endedAtMs = mappedTiming.endedAtMs;
   }
-  if (agent) subagentInput.agent = agent;
-  if (prompt) subagentInput.prompt = prompt;
-  if (description) subagentInput.description = description;
-  if (error) subagentInput.error = error;
-  if (externalSessionId) subagentInput.externalSessionId = externalSessionId;
-  if (metadata) subagentInput.metadata = metadata;
+  if (agent) {
+    subagentInput.agent = agent;
+  }
+  if (prompt) {
+    subagentInput.prompt = prompt;
+  }
+  if (description) {
+    subagentInput.description = description;
+  }
+  if (error) {
+    subagentInput.error = error;
+  }
+  if (externalSessionId) {
+    subagentInput.externalSessionId = externalSessionId;
+  }
+  if (metadata) {
+    subagentInput.metadata = metadata;
+  }
   return buildSubagentStreamPart(subagentInput);
 };
 
@@ -693,7 +733,9 @@ const buildToolStreamPart = (
     tool: part.tool,
     rawInput: toolState.input,
   };
-  if (metadata) previewInput.metadata = metadata;
+  if (metadata) {
+    previewInput.metadata = metadata;
+  }
   const preview = deriveToolPreview(previewInput);
   const base: ToolStreamPart = {
     kind: "tool",
@@ -706,16 +748,24 @@ const buildToolStreamPart = (
     ...fileEditPayload,
     ...timing,
   };
-  if (input) base.input = input;
-  if (preview) base.preview = preview;
-  if (metadata) base.metadata = metadata;
+  if (input) {
+    base.input = input;
+  }
+  if (preview) {
+    base.preview = preview;
+  }
+  if (metadata) {
+    base.metadata = metadata;
+  }
 
   if (status === "pending") {
     return base;
   }
   if (status === "running") {
     const title = "title" in toolState ? toDisplayText(toolState.title) : undefined;
-    if (title) base.title = title;
+    if (title) {
+      base.title = title;
+    }
     return base;
   }
 
@@ -742,8 +792,12 @@ const buildToolStreamPart = (
   }
 
   const title = "title" in toolState ? toDisplayText(toolState.title) : undefined;
-  if (output) base.output = output;
-  if (title) base.title = title;
+  if (output) {
+    base.output = output;
+  }
+  if (title) {
+    base.title = title;
+  }
   return base;
 };
 
@@ -757,7 +811,9 @@ export const mapPartToAgentStreamPart = (part: ParsedOpencodePart): AgentStreamP
         text: part.text,
         completed: Boolean(part.time?.end),
       };
-      if (part.synthetic !== undefined) textPart.synthetic = part.synthetic;
+      if (part.synthetic !== undefined) {
+        textPart.synthetic = part.synthetic;
+      }
       return textPart;
     case "reasoning":
       return {
@@ -812,8 +868,12 @@ export const mapPartToAgentStreamPart = (part: ParsedOpencodePart): AgentStreamP
     }
     case "subtask": {
       const subtaskMetadataSource: JsonObject = {};
-      if (part.model) subtaskMetadataSource.model = part.model;
-      if (part.command) subtaskMetadataSource.command = part.command;
+      if (part.model) {
+        subtaskMetadataSource.model = part.model;
+      }
+      if (part.command) {
+        subtaskMetadataSource.command = part.command;
+      }
       const subtaskMetadata = normalizeMetadata(subtaskMetadataSource);
 
       const subtaskInput: Parameters<typeof buildSubagentStreamPart>[0] = {
@@ -824,7 +884,9 @@ export const mapPartToAgentStreamPart = (part: ParsedOpencodePart): AgentStreamP
         prompt: part.prompt,
         description: part.description,
       };
-      if (subtaskMetadata) subtaskInput.metadata = subtaskMetadata;
+      if (subtaskMetadata) {
+        subtaskInput.metadata = subtaskMetadata;
+      }
       return buildSubagentStreamPart(subtaskInput);
     }
     case "file":

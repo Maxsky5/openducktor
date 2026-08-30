@@ -192,8 +192,12 @@ const normalizeSelectedLineRange = (selectedLines: SelectedLineRange): SelectedL
     endSide: SelectionSide | undefined,
   ): SelectedLineRange => {
     const normalizedRange: SelectedLineRange = { ...range };
-    if (startSide) normalizedRange.side = startSide;
-    if (endSide) normalizedRange.endSide = endSide;
+    if (startSide) {
+      normalizedRange.side = startSide;
+    }
+    if (endSide) {
+      normalizedRange.endSide = endSide;
+    }
     return normalizedRange;
   };
 

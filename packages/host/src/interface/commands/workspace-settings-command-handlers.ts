@@ -144,7 +144,9 @@ export const createWorkspaceSettingsCommandHandlers = (
         ),
         repoPath: requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath"),
       };
-      if (defaultRuntimeKind) input.defaultRuntimeKind = defaultRuntimeKind;
+      if (defaultRuntimeKind) {
+        input.defaultRuntimeKind = defaultRuntimeKind;
+      }
       return workspaceSettingsService.addWorkspace(input);
     },
     workspace_select: (args) =>

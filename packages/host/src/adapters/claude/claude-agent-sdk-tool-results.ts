@@ -115,8 +115,12 @@ export const handleClaudeUserToolResultMessage = ({
       state: session.todosById,
       tool,
     };
-    if (input) completedResultInput.input = input;
-    if (startedAtMs !== undefined) completedResultInput.startedAtMs = startedAtMs;
+    if (input) {
+      completedResultInput.input = input;
+    }
+    if (startedAtMs !== undefined) {
+      completedResultInput.startedAtMs = startedAtMs;
+    }
     const { part, todos } = projectClaudeCompletedToolResult(completedResultInput);
     emit({
       type: "assistant_part",
@@ -142,7 +146,9 @@ export const handleClaudeUserToolResultMessage = ({
         timestamp,
         toolUseId: result.toolUseId,
       };
-      if (input) subagentResultInput.input = input;
+      if (input) {
+        subagentResultInput.input = input;
+      }
       emitClaudeAgentToolResultSubagentPart(subagentResultInput);
     } else if (tool === "TaskStop") {
       emitClaudeTaskStopSubagentPart({

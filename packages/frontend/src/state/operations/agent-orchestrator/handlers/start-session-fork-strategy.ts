@@ -114,7 +114,9 @@ export const executeForkStart = async ({
       systemPrompt,
       parentExternalSessionId: sourceSession.externalSessionId,
     };
-    if (selectedModel) forkInput.model = selectedModel;
+    if (selectedModel) {
+      forkInput.model = selectedModel;
+    }
     const summary = await deps.runtime.adapter.forkSession(forkInput);
 
     const startedCtx = {

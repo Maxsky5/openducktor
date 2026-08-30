@@ -44,6 +44,8 @@ export const toAgentStudioTranscriptSession = ({
     runtimeStatusMessage: loadedSession.runtimeStatusMessage,
     messages: toSessionMessagesState(loadedSession),
   };
-  if (loadedSession.title) transcriptSession.title = loadedSession.title;
+  if (loadedSession.title) {
+    transcriptSession.title = loadedSession.title;
+  }
   return transcriptSession;
 };

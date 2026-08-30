@@ -220,7 +220,9 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
       hostUrl,
       ...workspaceIdInputMode,
     };
-    if (resolvedHostToken) options.hostToken = resolvedHostToken;
+    if (resolvedHostToken) {
+      options.hostToken = resolvedHostToken;
+    }
     return options;
   }
 
@@ -229,6 +231,8 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
     hostUrl,
     ...workspaceIdInputMode,
   };
-  if (resolvedHostToken) options.hostToken = resolvedHostToken;
+  if (resolvedHostToken) {
+    options.hostToken = resolvedHostToken;
+  }
   return options;
 };

@@ -122,7 +122,9 @@ export function useAgentChatSurfaceModel({
 
   return useMemo(() => {
     const surface: AgentChatSurfaceModel = { chatSettings, thread: threadModel };
-    if (composerModel) surface.composer = composerModel;
+    if (composerModel) {
+      surface.composer = composerModel;
+    }
     return surface;
   }, [chatSettings, composerModel, threadModel]);
 }

@@ -42,16 +42,36 @@ const opencodeAgentSchema = opencodeAgentWireSchema.transform((agent): Agent => 
     options: agent.options,
     permission: agent.permission,
   };
-  if (agent.color != null) parsedAgent.color = agent.color;
-  if (agent.description != null) parsedAgent.description = agent.description;
-  if (agent.hidden != null) parsedAgent.hidden = agent.hidden;
-  if (agent.model != null) parsedAgent.model = agent.model;
-  if (agent.native != null) parsedAgent.native = agent.native;
-  if (agent.prompt != null) parsedAgent.prompt = agent.prompt;
-  if (agent.steps != null) parsedAgent.steps = agent.steps;
-  if (agent.temperature != null) parsedAgent.temperature = agent.temperature;
-  if (agent.topP != null) parsedAgent.topP = agent.topP;
-  if (agent.variant != null) parsedAgent.variant = agent.variant;
+  if (agent.color != null) {
+    parsedAgent.color = agent.color;
+  }
+  if (agent.description != null) {
+    parsedAgent.description = agent.description;
+  }
+  if (agent.hidden != null) {
+    parsedAgent.hidden = agent.hidden;
+  }
+  if (agent.model != null) {
+    parsedAgent.model = agent.model;
+  }
+  if (agent.native != null) {
+    parsedAgent.native = agent.native;
+  }
+  if (agent.prompt != null) {
+    parsedAgent.prompt = agent.prompt;
+  }
+  if (agent.steps != null) {
+    parsedAgent.steps = agent.steps;
+  }
+  if (agent.temperature != null) {
+    parsedAgent.temperature = agent.temperature;
+  }
+  if (agent.topP != null) {
+    parsedAgent.topP = agent.topP;
+  }
+  if (agent.variant != null) {
+    parsedAgent.variant = agent.variant;
+  }
   return parsedAgent;
 });
 export type ParsedOpencodeAgent = z.infer<typeof opencodeAgentSchema>;

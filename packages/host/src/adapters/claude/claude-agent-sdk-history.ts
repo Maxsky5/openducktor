@@ -334,7 +334,9 @@ export const toClaudeHistoryMessages = (
           timestamp,
           toolUseId: part.callId,
         };
-        if (input) subagentResult.input = input;
+        if (input) {
+          subagentResult.input = input;
+        }
         emitClaudeAgentToolResultSubagentPart(subagentResult);
         return [
           part,

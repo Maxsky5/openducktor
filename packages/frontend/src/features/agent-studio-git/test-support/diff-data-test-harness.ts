@@ -136,7 +136,9 @@ export const toWorktreeStatusSummary = (status: GitWorktreeStatus): GitWorktreeS
     upstreamAheadBehind: status.upstreamAheadBehind,
     snapshot: status.snapshot,
   };
-  if (status.gitConflict) summary.gitConflict = status.gitConflict;
+  if (status.gitConflict) {
+    summary.gitConflict = status.gitConflict;
+  }
   return summary;
 };
 

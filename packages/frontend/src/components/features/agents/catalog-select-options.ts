@@ -33,8 +33,12 @@ export const toPrimaryAgentOptions = (catalog: AgentModelCatalog | null): Combob
       value,
       label,
     };
-    if (entry.description) option.description = entry.description;
-    if (accentColor) option.accentColor = accentColor;
+    if (entry.description) {
+      option.description = entry.description;
+    }
+    if (accentColor) {
+      option.accentColor = accentColor;
+    }
     return option;
   });
 };
@@ -57,7 +61,9 @@ export const toModelOptions = (catalog: AgentModelCatalog | null): ComboboxOptio
       description: entry.modelId,
       searchKeywords,
     };
-    if (contextWindowLabel) option.secondaryLabel = contextWindowLabel;
+    if (contextWindowLabel) {
+      option.secondaryLabel = contextWindowLabel;
+    }
     return option;
   });
 };
@@ -83,7 +89,9 @@ export const toModelGroupsByProvider = (catalog: AgentModelCatalog | null): Comb
       description: model.modelId,
       searchKeywords,
     };
-    if (contextWindowLabel) option.secondaryLabel = contextWindowLabel;
+    if (contextWindowLabel) {
+      option.secondaryLabel = contextWindowLabel;
+    }
     options.push(option);
     grouped.set(label, options);
   }

@@ -28,8 +28,12 @@ export const roleDefaultSelectionFor = (
     providerId: roleDefault.providerId,
     modelId: roleDefault.modelId,
   };
-  if (roleDefault.variant) selection.variant = roleDefault.variant;
-  if (roleDefault.profileId) selection.profileId = roleDefault.profileId;
+  if (roleDefault.variant) {
+    selection.variant = roleDefault.variant;
+  }
+  if (roleDefault.profileId) {
+    selection.profileId = roleDefault.profileId;
+  }
   return selection;
 };
 

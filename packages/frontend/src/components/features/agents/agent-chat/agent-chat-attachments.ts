@@ -148,7 +148,9 @@ export const readAttachmentFileName = (input: {
   }
 
   const classificationInput: Parameters<typeof classifyAttachment>[0] = { name: input.name };
-  if (input.mime) classificationInput.mime = input.mime;
+  if (input.mime) {
+    classificationInput.mime = input.mime;
+  }
   return buildGeneratedAttachmentName(
     input.kind ?? classifyAttachment(classificationInput),
     input.mime,
@@ -184,7 +186,9 @@ export const buildComposerAttachmentFromFile = (file: File): AgentChatComposerAt
     kind,
     file: normalizedFile,
   };
-  if (mime) attachment.mime = mime;
+  if (mime) {
+    attachment.mime = mime;
+  }
   return createComposerAttachment(attachment);
 };
 
@@ -194,7 +198,9 @@ export const buildComposerAttachmentFromPath = (
 ): AgentChatComposerAttachment | null => {
   const name = metadata?.name ?? readAttachmentNameFromPath(path);
   const classificationInput: Parameters<typeof classifyAttachment>[0] = { name };
-  if (metadata?.mime) classificationInput.mime = metadata.mime;
+  if (metadata?.mime) {
+    classificationInput.mime = metadata.mime;
+  }
   const kind = metadata?.kind ?? classifyAttachment(classificationInput);
   if (!kind) {
     return null;
@@ -206,7 +212,9 @@ export const buildComposerAttachmentFromPath = (
     kind,
     path,
   };
-  if (mime) attachment.mime = mime;
+  if (mime) {
+    attachment.mime = mime;
+  }
   return createComposerAttachment(attachment);
 };
 

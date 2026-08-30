@@ -230,7 +230,9 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
       ...sessionRef,
       limit: SESSION_HISTORY_LOAD_LIMIT,
     };
-    if (systemPromptContext) historyInput.systemPromptContext = systemPromptContext;
+    if (systemPromptContext) {
+      historyInput.systemPromptContext = systemPromptContext;
+    }
     const history = await adapter.loadSessionHistory(historyInput);
     if (isStaleRepoOperation()) {
       return finishStaleHistoryLoad();
@@ -330,7 +332,9 @@ const createLoadSessionHistoryWithPolicy = ({
         }),
       isStaleRepoOperation,
     };
-    if (loadSettingsSnapshot) input.loadSettingsSnapshot = loadSettingsSnapshot;
+    if (loadSettingsSnapshot) {
+      input.loadSettingsSnapshot = loadSettingsSnapshot;
+    }
     return loadSessionHistoryIntoStoreWithPolicy(input);
   };
 };

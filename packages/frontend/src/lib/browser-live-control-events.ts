@@ -32,7 +32,9 @@ export function browserLiveControlEvent(
     __openducktorBrowserLive: true,
     kind,
   };
-  if (detail !== undefined) event.message = detail;
+  if (detail !== undefined) {
+    event.message = detail;
+  }
   return event;
 }
 

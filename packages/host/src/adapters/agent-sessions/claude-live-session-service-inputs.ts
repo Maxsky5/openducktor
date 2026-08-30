@@ -69,7 +69,9 @@ export const toClaudeLoadContextInput = (
     externalSessionId: input.externalSessionId,
     ...CLAUDE_RUNTIME_POLICY_BINDING,
   };
-  if (input.sessionScope !== undefined) result.sessionScope = input.sessionScope;
+  if (input.sessionScope !== undefined) {
+    result.sessionScope = input.sessionScope;
+  }
   return result;
 };
 
@@ -84,7 +86,9 @@ export const toClaudeReplyApprovalInput = (
     outcome: input.outcome,
     ...CLAUDE_RUNTIME_POLICY_BINDING,
   };
-  if (input.message !== undefined) result.message = input.message;
+  if (input.message !== undefined) {
+    result.message = input.message;
+  }
   return result;
 };
 
@@ -109,7 +113,9 @@ export const toClaudeStartInput = (
     systemPrompt: input.systemPrompt,
     ...CLAUDE_RUNTIME_POLICY_BINDING,
   };
-  if (input.model !== undefined) result.model = input.model;
+  if (input.model !== undefined) {
+    result.model = input.model;
+  }
   return result;
 };
 
@@ -123,8 +129,12 @@ export const toClaudeResumeInput = (
     sessionScope: input.sessionScope,
     ...CLAUDE_RUNTIME_POLICY_BINDING,
   };
-  if (input.model !== undefined) result.model = input.model;
-  if (input.systemPrompt !== undefined) result.systemPrompt = input.systemPrompt;
+  if (input.model !== undefined) {
+    result.model = input.model;
+  }
+  if (input.systemPrompt !== undefined) {
+    result.systemPrompt = input.systemPrompt;
+  }
   return result;
 };
 
@@ -137,7 +147,9 @@ export const toClaudeForkInput = (input: AgentSessionControlForkInput): ForkAgen
     parentExternalSessionId: input.parentExternalSessionId,
     ...CLAUDE_RUNTIME_POLICY_BINDING,
   };
-  if (input.model !== undefined) result.model = input.model;
+  if (input.model !== undefined) {
+    result.model = input.model;
+  }
   if (input.runtimeHistoryAnchor !== undefined) {
     result.runtimeHistoryAnchor = input.runtimeHistoryAnchor;
   }
@@ -154,7 +166,9 @@ const toClaudeUserMessagePart = (part: AgentSessionUserMessagePart): AgentUserMe
     name: part.attachment.name,
     kind: part.attachment.kind,
   };
-  if (part.attachment.mime !== undefined) attachment.mime = part.attachment.mime;
+  if (part.attachment.mime !== undefined) {
+    attachment.mime = part.attachment.mime;
+  }
   return {
     kind: "attachment",
     attachment,
@@ -172,8 +186,12 @@ export const toClaudeSendInput = (
     parts: input.parts.map(toClaudeUserMessagePart),
     ...CLAUDE_RUNTIME_POLICY_BINDING,
   };
-  if (input.model !== undefined) result.model = input.model;
-  if (input.systemPrompt !== undefined) result.systemPrompt = input.systemPrompt;
+  if (input.model !== undefined) {
+    result.model = input.model;
+  }
+  if (input.systemPrompt !== undefined) {
+    result.systemPrompt = input.systemPrompt;
+  }
   return result;
 };
 
@@ -189,6 +207,8 @@ export const toClaudeRuntimeUserMessageEvent = (
     parts: event.parts,
     state: event.state,
   };
-  if (event.model !== undefined) result.model = event.model;
+  if (event.model !== undefined) {
+    result.model = event.model;
+  }
   return result;
 };

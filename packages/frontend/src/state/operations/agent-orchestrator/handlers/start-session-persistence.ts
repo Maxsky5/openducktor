@@ -39,7 +39,9 @@ export const registerStartedSession = async ({
     selectedModel,
     systemPrompt,
   };
-  if (initialMessages) initialSessionInput.initialMessages = initialMessages;
+  if (initialMessages) {
+    initialSessionInput.initialMessages = initialMessages;
+  }
   const initialSession = buildInitialSession(initialSessionInput);
 
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
@@ -71,7 +73,9 @@ export const registerStartedSession = async ({
       session: deps.session,
       runtime: deps.runtime,
     };
-    if (runtimeInfo.bootstrap) rollbackInput.bootstrap = runtimeInfo.bootstrap;
+    if (runtimeInfo.bootstrap) {
+      rollbackInput.bootstrap = runtimeInfo.bootstrap;
+    }
     await rollbackStartedSessionAfterPersistenceFailure(rollbackInput);
   }
 

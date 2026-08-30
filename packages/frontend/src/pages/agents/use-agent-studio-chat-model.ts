@@ -388,7 +388,9 @@ export function useAgentStudioChatModel({
       onSelectAgent: modelSelection.onSelectAgent,
       onSelectVariant: modelSelection.onSelectVariant,
     };
-    if (pendingSendItems) config.pendingSendItems = pendingSendItems;
+    if (pendingSendItems) {
+      config.pendingSendItems = pendingSendItems;
+    }
     return config;
   }, [
     chatContextUsage,

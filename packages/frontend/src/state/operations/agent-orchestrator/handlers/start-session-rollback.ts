@@ -121,7 +121,9 @@ export const rollbackStartedSessionAfterPersistenceFailure = async ({
     runtime,
     stopReason: "start-session-stop-after-persist-failure",
   };
-  if (bootstrap) input.bootstrap = bootstrap;
+  if (bootstrap) {
+    input.bootstrap = bootstrap;
+  }
   return rollbackRegisteredStartedSession(input);
 };
 

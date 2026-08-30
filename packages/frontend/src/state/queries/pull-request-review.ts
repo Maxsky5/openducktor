@@ -36,7 +36,9 @@ export const pullRequestReviewContextQueryOptions = (
       const request: Parameters<PullRequestReviewQueryHost["pullRequestReviewContextGet"]>[0] = {
         repoPath: input.repoPath,
       };
-      if (input.taskId) request.taskId = input.taskId;
+      if (input.taskId) {
+        request.taskId = input.taskId;
+      }
       return hostClient.pullRequestReviewContextGet(request);
     },
     staleTime: PULL_REQUEST_REVIEW_STALE_TIME_MS,

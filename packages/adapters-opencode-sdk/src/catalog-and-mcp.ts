@@ -118,10 +118,18 @@ export const listAvailableModels = async (
         label: agent.name,
         mode: agent.mode,
       };
-      if (agent.description) profile.description = agent.description;
-      if (agent.hidden !== undefined) profile.hidden = agent.hidden;
-      if (agent.native !== undefined) profile.native = agent.native;
-      if (resolvedColor !== undefined) profile.color = resolvedColor;
+      if (agent.description) {
+        profile.description = agent.description;
+      }
+      if (agent.hidden !== undefined) {
+        profile.hidden = agent.hidden;
+      }
+      if (agent.native !== undefined) {
+        profile.native = agent.native;
+      }
+      if (resolvedColor !== undefined) {
+        profile.color = resolvedColor;
+      }
       return profile;
     })
     .sort((a, b) => a.label.localeCompare(b.label));
@@ -157,7 +165,9 @@ export const listAvailableSubagents = async (
           name: trimmedName,
           label: trimmedName,
         };
-        if (trimmedDescription) subagent.description = trimmedDescription;
+        if (trimmedDescription) {
+          subagent.description = trimmedDescription;
+        }
         return subagent;
       })
       .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
@@ -197,8 +207,12 @@ export const listAvailableSlashCommands = async (
           title: command.name,
           hints: command.hints,
         };
-        if (command.description) entry.description = command.description;
-        if (command.source) entry.source = command.source;
+        if (command.description) {
+          entry.description = command.description;
+        }
+        if (command.source) {
+          entry.source = command.source;
+        }
         return [entry];
       })
       .flat()

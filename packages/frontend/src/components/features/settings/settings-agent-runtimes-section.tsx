@@ -167,8 +167,12 @@ const codexConfigWithDefaults = (config: CodexRuntimeConfig): CodexRuntimeConfig
 
 const removeUndefinedFields = (override: CodexRoleOverride): Partial<CodexPolicyFields> => {
   const fields: Partial<CodexPolicyFields> = {};
-  if (override.sandboxMode !== undefined) fields.sandboxMode = override.sandboxMode;
-  if (override.approvalPolicy !== undefined) fields.approvalPolicy = override.approvalPolicy;
+  if (override.sandboxMode !== undefined) {
+    fields.sandboxMode = override.sandboxMode;
+  }
+  if (override.approvalPolicy !== undefined) {
+    fields.approvalPolicy = override.approvalPolicy;
+  }
   if (override.approvalsReviewer !== undefined) {
     fields.approvalsReviewer = override.approvalsReviewer;
   }

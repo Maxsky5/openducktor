@@ -107,8 +107,12 @@ const readRuntimeEnsureFailureEnvelope = (
   const failure: RuntimeEnsureFailureEnvelope = {
     failureKind: value.failureKind,
   };
-  if (value.message !== undefined) failure.message = value.message;
-  if (value.error !== undefined) failure.error = value.error;
+  if (value.message !== undefined) {
+    failure.message = value.message;
+  }
+  if (value.error !== undefined) {
+    failure.error = value.error;
+  }
   return failure;
 };
 
@@ -128,7 +132,9 @@ const extractRuntimeEnsureFailure = (cause: unknown): NormalizedRuntimeEnsureFai
       message: cause.message,
       failureKind: cause.failureKind,
     };
-    if (cause.cause !== undefined) failure.cause = cause.cause;
+    if (cause.cause !== undefined) {
+      failure.cause = cause.cause;
+    }
     return failure;
   }
 
@@ -150,7 +156,9 @@ const extractRuntimeEnsureFailure = (cause: unknown): NormalizedRuntimeEnsureFai
     message,
     failureKind: failureEnvelope.failureKind,
   };
-  if (cause !== undefined) failure.cause = cause;
+  if (cause !== undefined) {
+    failure.cause = cause;
+  }
   return failure;
 };
 
@@ -299,7 +307,9 @@ const taskSessionBootstrapPrepare = async (
     role,
     runtimeKind,
   };
-  if (targetWorkingDirectory) args.targetWorkingDirectory = targetWorkingDirectory;
+  if (targetWorkingDirectory) {
+    args.targetWorkingDirectory = targetWorkingDirectory;
+  }
   return invokeFn("task_session_bootstrap_prepare", args, taskSessionBootstrapSchema);
 };
 

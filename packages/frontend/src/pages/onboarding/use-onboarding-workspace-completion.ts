@@ -25,7 +25,9 @@ export const useOnboardingWorkspaceCompletion = ({
         (kind) => settingsSnapshot.agentRuntimes[kind].enabled,
       );
       const workspaceInput: Parameters<typeof addWorkspace>[0] = { ...input };
-      if (defaultRuntimeKind) workspaceInput.defaultRuntimeKind = defaultRuntimeKind;
+      if (defaultRuntimeKind) {
+        workspaceInput.defaultRuntimeKind = defaultRuntimeKind;
+      }
       await addWorkspace(workspaceInput);
       setCompletionRepoPath(input.repoPath);
 

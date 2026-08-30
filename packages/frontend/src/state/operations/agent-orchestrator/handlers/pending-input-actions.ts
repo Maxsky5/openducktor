@@ -114,7 +114,9 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
         requestId: request.requestId,
         outcome,
       };
-    if (message) input.message = message;
+    if (message) {
+      input.message = message;
+    }
     await dependencies.liveSessionHost.agentSessionLiveReplyApproval(input);
   };
 

@@ -36,8 +36,12 @@ export const pickDefaultVisibleSelectionForCatalog = (
     providerId: defaultModel.providerId,
     modelId: defaultModel.modelId,
   };
-  if (variant) selection.variant = variant;
-  if (profileId) selection.profileId = profileId;
+  if (variant) {
+    selection.variant = variant;
+  }
+  if (profileId) {
+    selection.profileId = profileId;
+  }
   return selection;
 };
 
@@ -73,8 +77,12 @@ export const coerceVisibleSelectionToCatalog = (
     providerId: model.providerId,
     modelId: model.modelId,
   };
-  if (variant) normalizedSelection.variant = variant;
-  if (profileId) normalizedSelection.profileId = profileId;
+  if (variant) {
+    normalizedSelection.variant = variant;
+  }
+  if (profileId) {
+    normalizedSelection.profileId = profileId;
+  }
   return normalizedSelection;
 };
 
@@ -284,8 +292,12 @@ export const resolveModelSelectionForModelChange = ({
     providerId: model.providerId,
     modelId: model.modelId,
   };
-  if (variant) selection.variant = variant;
-  if (profileId) selection.profileId = profileId;
+  if (variant) {
+    selection.variant = variant;
+  }
+  if (profileId) {
+    selection.profileId = profileId;
+  }
   return selection;
 };
 
@@ -312,6 +324,8 @@ export const resolveModelSelectionForVariantChange = ({
   const normalizedVariant = normalizeCatalogVariant(model, variant);
   const { variant: _currentVariant, ...selectionWithoutVariant } = currentSelection;
   const nextSelection: AgentModelSelection = { ...selectionWithoutVariant };
-  if (normalizedVariant) nextSelection.variant = normalizedVariant;
+  if (normalizedVariant) {
+    nextSelection.variant = normalizedVariant;
+  }
   return nextSelection;
 };

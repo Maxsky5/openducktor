@@ -165,7 +165,9 @@ export const createTaskAssetAwareCreate =
           message: "Failed to create the task with its description assets.",
           assetIds: Array.from(referencedAssetIds),
         };
-        if (createdTaskId) errorInput.taskId = createdTaskId;
+        if (createdTaskId) {
+          errorInput.taskId = createdTaskId;
+        }
         const error = asTaskAssetError(errorInput);
         if (!createdTaskId) {
           return Effect.fail(error);

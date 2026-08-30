@@ -11,6 +11,11 @@ import type {
 import type { ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 import type { ClaudeAgentSdkEventHub } from "./claude-live-session-event-hub";
 
+export type ClaudeRuntimeInstance = RuntimeInstanceSummary & {
+  readonly kind: "claude";
+  readonly runtimeRoute: { readonly type: "host_service"; readonly identity: string };
+};
+
 export type PreparedClaudeLiveSessionAdapter = Omit<
   PreparedRuntimeLiveSessionAdapter,
   "adapter"

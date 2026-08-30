@@ -22,7 +22,9 @@ export const stageLocalAttachmentFile = async (file: File): Promise<string> => {
     name: file.name,
     base64Data: bufferToBase64(buffer),
   };
-  if (file.type.trim().length > 0) input.mime = file.type;
+  if (file.type.trim().length > 0) {
+    input.mime = file.type;
+  }
   const staged = await hostClient.workspaceStageLocalAttachment(input);
   return staged.path;
 };

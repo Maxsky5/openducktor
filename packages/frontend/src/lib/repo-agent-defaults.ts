@@ -67,7 +67,11 @@ export const normalizeRepoAgentDefaultForSave = (
     providerId,
     modelId,
   };
-  if (variant) selection.variant = variant;
-  if (profileId) selection.profileId = profileId;
+  if (variant) {
+    selection.variant = variant;
+  }
+  if (profileId) {
+    selection.profileId = profileId;
+  }
   return selection;
 };

@@ -121,7 +121,9 @@ export function useGitConflictResolution({
           description: taskContext.task.description,
         };
       }
-      if (conflict.currentBranch) git.currentBranch = conflict.currentBranch;
+      if (conflict.currentBranch) {
+        git.currentBranch = conflict.currentBranch;
+      }
       const message = buildGitConflictResolutionPrompt(taskContext.taskId, promptContext);
 
       const session = await startConflictResolutionSession({

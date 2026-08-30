@@ -32,7 +32,9 @@ const toAgentSessionSummary = (
     startedAt: summary.startedAt,
     status: summary.status,
   };
-  if (summary.title !== undefined) session.title = summary.title;
+  if (summary.title !== undefined) {
+    session.title = summary.title;
+  }
   return session;
 };
 
@@ -41,15 +43,23 @@ const toAcceptedAgentUserMessage = (
 ): AcceptedAgentUserMessage => {
   const { model, sessionRef, ...message } = event;
   const acceptedMessage: AcceptedAgentUserMessage = { ...message };
-  if (sessionRef) acceptedMessage.sessionRef = sessionRef;
+  if (sessionRef) {
+    acceptedMessage.sessionRef = sessionRef;
+  }
   if (model) {
     const acceptedModel: NonNullable<AcceptedAgentUserMessage["model"]> = {
       providerId: model.providerId,
       modelId: model.modelId,
     };
-    if (model.runtimeKind !== undefined) acceptedModel.runtimeKind = model.runtimeKind;
-    if (model.variant !== undefined) acceptedModel.variant = model.variant;
-    if (model.profileId !== undefined) acceptedModel.profileId = model.profileId;
+    if (model.runtimeKind !== undefined) {
+      acceptedModel.runtimeKind = model.runtimeKind;
+    }
+    if (model.variant !== undefined) {
+      acceptedModel.variant = model.variant;
+    }
+    if (model.profileId !== undefined) {
+      acceptedModel.profileId = model.profileId;
+    }
     acceptedMessage.model = acceptedModel;
   }
   return acceptedMessage;

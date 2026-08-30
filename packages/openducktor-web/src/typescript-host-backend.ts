@@ -215,8 +215,12 @@ const errorResponse = (
   failure?: HostInvokeFailure,
 ): Response => {
   const payload: HostErrorPayloadInput = { error: message, message };
-  if (failureKind) payload.failureKind = failureKind;
-  if (failure) payload.failure = failure;
+  if (failureKind) {
+    payload.failureKind = failureKind;
+  }
+  if (failure) {
+    payload.failure = failure;
+  }
   return jsonResponse(hostErrorResponseSchema.parse(payload), { status }, corsHeaders);
 };
 
@@ -301,8 +305,12 @@ const hostCommandFailureToWebError = (command: string, cause: unknown): WebHostR
   const details = readCauseStructuredDetails(cause);
   const hostInvokeFailure = hostInvokeFailureFromError(cause);
   const errorDetails: WebHostCommandErrorDetails = { command };
-  if (details) errorDetails.hostDetails = details;
-  if (hostInvokeFailure) errorDetails.hostInvokeFailure = hostInvokeFailure;
+  if (details) {
+    errorDetails.hostDetails = details;
+  }
+  if (hostInvokeFailure) {
+    errorDetails.hostInvokeFailure = hostInvokeFailure;
+  }
   const input = {
     message: errorMessage(cause),
     status: 500,
@@ -670,7 +678,9 @@ const routeCorsRequest = ({
       validateAppSessionCookie: (sessionRequest, expectedToken) =>
         validateAppSessionCookie(sessionRequest, expectedToken, appSessionCookieName),
     };
-    if (taskEventLeaseManager) taskEventContext.taskEventLeaseManager = taskEventLeaseManager;
+    if (taskEventLeaseManager) {
+      taskEventContext.taskEventLeaseManager = taskEventLeaseManager;
+    }
     const taskEventResponse = yield* routeTaskEventHttpRequest(taskEventContext);
     if (taskEventResponse) {
       return taskEventResponse;
@@ -808,7 +818,9 @@ export const handleTypescriptHostBackendRequest = ({
       beginShutdown,
       stop,
     };
-    if (taskEventLeaseManager) routeInput.taskEventLeaseManager = taskEventLeaseManager;
+    if (taskEventLeaseManager) {
+      routeInput.taskEventLeaseManager = taskEventLeaseManager;
+    }
     return yield* routeCorsRequest(routeInput).pipe(
       Effect.catchAll((error) => Effect.succeed(webHostRequestErrorResponse(error, corsHeaders))),
     );
@@ -879,8 +891,12 @@ export const startTypescriptHostBackendEffect = ({
       runtimeDistribution,
       terminalPty: createBunPtyPort(),
     };
-    if (processEnv) routerInput.processEnv = processEnv;
-    if (providedToolPaths) routerInput.providedToolPaths = providedToolPaths;
+    if (processEnv) {
+      routerInput.processEnv = processEnv;
+    }
+    if (providedToolPaths) {
+      routerInput.providedToolPaths = providedToolPaths;
+    }
     const hostCommandRouter: EffectNodeHostCommandRouter =
       createNodeEffectHostCommandRouter(routerInput);
     const taskEventLeaseManager = createTaskEventLeaseManager({

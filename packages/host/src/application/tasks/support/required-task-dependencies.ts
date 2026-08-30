@@ -41,12 +41,10 @@ export const requireDependencies = <A>(
             cause,
           }),
   });
-type GithubCommandDependencyInput = {
+type GithubRepositoryDependencyInput = {
+  gitPort?: GitPort;
   systemCommands?: SystemCommandPort;
   toolDiscovery?: ToolDiscoveryPort;
-};
-type GithubRepositoryDependencyInput = GithubCommandDependencyInput & {
-  gitPort?: GitPort;
 };
 export type TaskGithubDependencies = {
   command: GithubCommandDependencies | undefined;
@@ -242,7 +240,9 @@ export const requireMergedTaskCleanupDependencies = (
     taskWorktreeService,
     terminalService,
   };
-  if (worktreeFiles) dependencies.worktreeFiles = worktreeFiles;
+  if (worktreeFiles) {
+    dependencies.worktreeFiles = worktreeFiles;
+  }
   return dependencies;
 };
 export const requireDirectMergeDependencies = ({
@@ -343,7 +343,9 @@ export const requireLinkMergedPullRequestDependencies = (
     terminalService,
     workspaceSettingsService,
   };
-  if (worktreeFiles) dependencies.worktreeFiles = worktreeFiles;
+  if (worktreeFiles) {
+    dependencies.worktreeFiles = worktreeFiles;
+  }
   return dependencies;
 };
 export const requireApprovalContextDependencies = ({

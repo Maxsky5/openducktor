@@ -60,7 +60,9 @@ export const createClaudeRuntimeComposition = ({
     sessionStore,
     toolDiscovery,
   };
-  if (processEnv) agentSdkServiceInput.processEnv = processEnv;
+  if (processEnv) {
+    agentSdkServiceInput.processEnv = processEnv;
+  }
   const agentSdkService = createClaudeAgentSdkService(agentSdkServiceInput);
   const prepareLiveSessionAdapter = createClaudeLiveSessionAdapterPreparer({
     eventHub,

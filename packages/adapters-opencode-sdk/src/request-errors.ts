@@ -181,10 +181,18 @@ const extractRequestFailure = (
       failureKind: cause.failureKind,
       hasPrefixedMessage: true,
     };
-    if (cause.status !== undefined) failure.status = cause.status;
-    if (cause.statusText !== undefined) failure.statusText = cause.statusText;
-    if (cause.code !== undefined) failure.code = cause.code;
-    if (cause.cause !== undefined) failure.cause = cause.cause;
+    if (cause.status !== undefined) {
+      failure.status = cause.status;
+    }
+    if (cause.statusText !== undefined) {
+      failure.statusText = cause.statusText;
+    }
+    if (cause.code !== undefined) {
+      failure.code = cause.code;
+    }
+    if (cause.cause !== undefined) {
+      failure.cause = cause.cause;
+    }
     return failure;
   }
 
@@ -207,10 +215,18 @@ const extractRequestFailure = (
         }),
       hasPrefixedMessage: true,
     };
-    if (resolvedStatus !== undefined) failure.status = resolvedStatus;
-    if (resolvedStatusText !== undefined) failure.statusText = resolvedStatusText;
-    if (code !== undefined) failure.code = code;
-    if (cause.cause !== undefined) failure.cause = cause.cause;
+    if (resolvedStatus !== undefined) {
+      failure.status = resolvedStatus;
+    }
+    if (resolvedStatusText !== undefined) {
+      failure.statusText = resolvedStatusText;
+    }
+    if (code !== undefined) {
+      failure.code = code;
+    }
+    if (cause.cause !== undefined) {
+      failure.cause = cause.cause;
+    }
     return failure;
   }
 
@@ -227,10 +243,18 @@ const extractRequestFailure = (
     }),
     hasPrefixedMessage: false,
   };
-  if (resolvedStatus !== undefined) failure.status = resolvedStatus;
-  if (resolvedStatusText !== undefined) failure.statusText = resolvedStatusText;
-  if (code !== undefined) failure.code = code;
-  if (cause instanceof Error) failure.cause = cause;
+  if (resolvedStatus !== undefined) {
+    failure.status = resolvedStatus;
+  }
+  if (resolvedStatusText !== undefined) {
+    failure.statusText = resolvedStatusText;
+  }
+  if (code !== undefined) {
+    failure.code = code;
+  }
+  if (cause instanceof Error) {
+    failure.cause = cause;
+  }
   return failure;
 };
 
@@ -241,13 +265,25 @@ export const toOpenCodeRequestError = (
 ): OpenCodeRequestError => {
   const failure = extractRequestFailure(action, cause, response);
   const messageFailure: OpenCodeRequestMessageFailure = { message: failure.message };
-  if (failure.status !== undefined) messageFailure.status = failure.status;
-  if (failure.statusText !== undefined) messageFailure.statusText = failure.statusText;
-  if (failure.code !== undefined) messageFailure.code = failure.code;
+  if (failure.status !== undefined) {
+    messageFailure.status = failure.status;
+  }
+  if (failure.statusText !== undefined) {
+    messageFailure.statusText = failure.statusText;
+  }
+  if (failure.code !== undefined) {
+    messageFailure.code = failure.code;
+  }
   const errorInit: OpenCodeRequestErrorInit = { failureKind: failure.failureKind };
-  if (failure.status !== undefined) errorInit.status = failure.status;
-  if (failure.statusText !== undefined) errorInit.statusText = failure.statusText;
-  if (failure.code !== undefined) errorInit.code = failure.code;
+  if (failure.status !== undefined) {
+    errorInit.status = failure.status;
+  }
+  if (failure.statusText !== undefined) {
+    errorInit.statusText = failure.statusText;
+  }
+  if (failure.code !== undefined) {
+    errorInit.code = failure.code;
+  }
 
   return new OpenCodeRequestError(
     failure.hasPrefixedMessage

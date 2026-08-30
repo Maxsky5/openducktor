@@ -54,7 +54,9 @@ const invalidateRepoTaskDataQueries = (
     queryKey: taskQueryKeys.repoDataPrefix(repoPath),
     exact: false,
   };
-  if (options?.refetchType) filters.refetchType = options.refetchType;
+  if (options?.refetchType) {
+    filters.refetchType = options.refetchType;
+  }
   return queryClient.invalidateQueries(filters);
 };
 

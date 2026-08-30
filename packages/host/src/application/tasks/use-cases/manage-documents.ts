@@ -123,9 +123,15 @@ export const createTaskDocumentUseCases = ({
       const result: TaskMetadataDocument = {
         markdown: metadata.qaReport.markdown,
       };
-      if (metadata.qaReport.updatedAt !== undefined) result.updatedAt = metadata.qaReport.updatedAt;
-      if (metadata.qaReport.revision !== undefined) result.revision = metadata.qaReport.revision;
-      if (metadata.qaReport.error !== undefined) result.error = metadata.qaReport.error;
+      if (metadata.qaReport.updatedAt !== undefined) {
+        result.updatedAt = metadata.qaReport.updatedAt;
+      }
+      if (metadata.qaReport.revision !== undefined) {
+        result.revision = metadata.qaReport.revision;
+      }
+      if (metadata.qaReport.error !== undefined) {
+        result.error = metadata.qaReport.error;
+      }
       return result;
     });
   },

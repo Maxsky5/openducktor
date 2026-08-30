@@ -180,14 +180,24 @@ const trimParagraphTokenStart = (token: MarkdownToken) => {
   const inlineTokens = Array.isArray(token.tokens) ? [...token.tokens] : undefined;
   if (inlineTokens?.[0]) {
     const firstToken: MarkdownToken = { ...inlineTokens[0] };
-    if (inlineTokens[0].raw !== undefined) firstToken.raw = inlineTokens[0].raw.trimStart();
-    if (inlineTokens[0].text !== undefined) firstToken.text = inlineTokens[0].text.trimStart();
+    if (inlineTokens[0].raw !== undefined) {
+      firstToken.raw = inlineTokens[0].raw.trimStart();
+    }
+    if (inlineTokens[0].text !== undefined) {
+      firstToken.text = inlineTokens[0].text.trimStart();
+    }
     inlineTokens[0] = firstToken;
   }
   const trimmedToken: MarkdownToken = { ...token };
-  if (token.raw !== undefined) trimmedToken.raw = token.raw.trimStart();
-  if (token.text !== undefined) trimmedToken.text = token.text.trimStart();
-  if (inlineTokens !== undefined) trimmedToken.tokens = inlineTokens;
+  if (token.raw !== undefined) {
+    trimmedToken.raw = token.raw.trimStart();
+  }
+  if (token.text !== undefined) {
+    trimmedToken.text = token.text.trimStart();
+  }
+  if (inlineTokens !== undefined) {
+    trimmedToken.tokens = inlineTokens;
+  }
   return trimmedToken;
 };
 

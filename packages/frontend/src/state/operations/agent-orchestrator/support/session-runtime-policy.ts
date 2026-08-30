@@ -46,7 +46,9 @@ export const resolveAgentSessionRuntimePolicy = async ({
     runtimeKind,
     snapshot,
   };
-  if (sessionScope !== undefined) input.sessionScope = sessionScope;
+  if (sessionScope !== undefined) {
+    input.sessionScope = sessionScope;
+  }
   return resolveAgentSessionRuntimePolicyFromSnapshot(input);
 };
 
@@ -92,6 +94,8 @@ export const resolveRuntimeSessionContextRef = async (
       runtimePolicy,
     ),
   };
-  if (sessionScope) sessionRef.sessionScope = sessionScope;
+  if (sessionScope) {
+    sessionRef.sessionScope = sessionScope;
+  }
   return sessionRef;
 };

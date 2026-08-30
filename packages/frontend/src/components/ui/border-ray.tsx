@@ -215,7 +215,9 @@ export function BorderRay({
     "--odt-border-ray-length": `${rayGeometry.rayLength}px`,
     "--odt-border-ray-stroke-width": `${Math.max(strokeWidth, 0.5)}`,
   };
-  if (color) rayStyle["--odt-border-ray-color"] = color;
+  if (color) {
+    rayStyle["--odt-border-ray-color"] = color;
+  }
 
   return (
     <svg

@@ -320,7 +320,9 @@ export function WorkspaceStage({
     onCancel: workspaceCreation.closePicker,
     onConfirm: workspaceCreation.confirmRepo,
   };
-  if (workspaceCreation.repoPath) folderPickerInput.initialPath = workspaceCreation.repoPath;
+  if (workspaceCreation.repoPath) {
+    folderPickerInput.initialPath = workspaceCreation.repoPath;
+  }
   const folderPicker = useInlineFolderPickerController(folderPickerInput);
 
   return (

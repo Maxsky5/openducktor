@@ -49,7 +49,9 @@ export const buildInitialSession = ({
     pendingQuestions: [],
     selectedModel,
   };
-  if (startedCtx.summary.title) session.title = startedCtx.summary.title;
+  if (startedCtx.summary.title) {
+    session.title = startedCtx.summary.title;
+  }
   return session;
 };
 

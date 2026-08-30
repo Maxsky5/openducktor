@@ -177,7 +177,9 @@ export const buildAgentStudioQuickActions = (params: {
       postStartAction: "kickoff",
       disabled: disabledReason !== null,
     };
-    if (disabledReason) option.disabledReason = disabledReason;
+    if (disabledReason) {
+      option.disabledReason = disabledReason;
+    }
     if ("requiresHumanFeedback" in definition && definition.requiresHumanFeedback) {
       option.requiresHumanFeedback = true;
     }
@@ -198,7 +200,9 @@ export const buildAgentStudioQuickActions = (params: {
       postStartAction: "kickoff",
       disabled: disabledReason !== null,
     };
-    if (disabledReason) option.disabledReason = disabledReason;
+    if (disabledReason) {
+      option.disabledReason = disabledReason;
+    }
     return option;
   };
 
@@ -242,7 +246,9 @@ export const buildAgentStudioQuickActions = (params: {
       postStartAction: "kickoff",
       disabled: pullRequestDisabledReason !== null,
     };
-    if (pullRequestDisabledReason) option.disabledReason = pullRequestDisabledReason;
+    if (pullRequestDisabledReason) {
+      option.disabledReason = pullRequestDisabledReason;
+    }
     if (hasBuilderSource) {
       option.initialStartMode = getSessionLaunchAction(
         "build_pull_request_generation",

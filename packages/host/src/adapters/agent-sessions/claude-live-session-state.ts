@@ -8,7 +8,6 @@ import {
   agentSessionLiveSnapshotSchema,
   agentSessionTranscriptEventSchema,
   isAgentSessionTranscriptEventType,
-  type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
 import type {
@@ -17,11 +16,7 @@ import type {
 } from "../../ports/agent-session-live-adapter-port";
 import { isClaudeSubagentTranscriptTarget } from "../claude/claude-agent-sdk-subagent-transcripts";
 import type { ClaudeAgentSdkEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
-
-type ClaudeRuntimeInstance = RuntimeInstanceSummary & {
-  readonly kind: "claude";
-  readonly runtimeRoute: { readonly type: "host_service"; readonly identity: string };
-};
+import type { ClaudeRuntimeInstance } from "./claude-live-session-adapter-contract";
 
 type LoadedContextResult = AgentSessionLiveAdapterMutation<AgentSessionContextUsage | null>;
 
@@ -73,13 +68,27 @@ const toApprovalRequest = (
     requestType: event.requestType,
     title: event.title,
   };
-  if (event.summary !== undefined) request.summary = event.summary;
-  if (event.details !== undefined) request.details = event.details;
-  if (event.affectedPaths !== undefined) request.affectedPaths = event.affectedPaths;
-  if (event.command !== undefined) request.command = event.command;
-  if (event.action !== undefined) request.action = event.action;
-  if (event.tool !== undefined) request.tool = event.tool;
-  if (event.mutation !== undefined) request.mutation = event.mutation;
+  if (event.summary !== undefined) {
+    request.summary = event.summary;
+  }
+  if (event.details !== undefined) {
+    request.details = event.details;
+  }
+  if (event.affectedPaths !== undefined) {
+    request.affectedPaths = event.affectedPaths;
+  }
+  if (event.command !== undefined) {
+    request.command = event.command;
+  }
+  if (event.action !== undefined) {
+    request.action = event.action;
+  }
+  if (event.tool !== undefined) {
+    request.tool = event.tool;
+  }
+  if (event.mutation !== undefined) {
+    request.mutation = event.mutation;
+  }
   if (event.supportedReplyOutcomes !== undefined) {
     request.supportedReplyOutcomes = event.supportedReplyOutcomes;
   }

@@ -161,7 +161,9 @@ export class HostTaskClient {
 
   async tasksList(repoPath: string, doneVisibleDays?: number): Promise<TaskCard[]> {
     const args: TasksListArgs = { repoPath };
-    if (doneVisibleDays !== undefined) args.doneVisibleDays = doneVisibleDays;
+    if (doneVisibleDays !== undefined) {
+      args.doneVisibleDays = doneVisibleDays;
+    }
     return this.invokeFn("tasks_list", args, arrayResultSchema(taskCardSchema, "tasks_list"));
   }
 
@@ -178,7 +180,9 @@ export class HostTaskClient {
       repoPath,
       input: createInput,
     };
-    if (assetIntent) args.descriptionAssets = assetIntent;
+    if (assetIntent) {
+      args.descriptionAssets = assetIntent;
+    }
     return this.invokeFn("task_create", args, taskCardSchema);
   }
 
@@ -200,7 +204,9 @@ export class HostTaskClient {
       taskId,
       patch: updatePatch,
     };
-    if (assetIntent) args.descriptionAssets = assetIntent;
+    if (assetIntent) {
+      args.descriptionAssets = assetIntent;
+    }
     const payload = await this.invokeFn("task_update", args, taskCardSchema);
     this.invalidateTaskMetadata(repoPath, taskId);
     return payload;
@@ -270,7 +276,9 @@ export class HostTaskClient {
       taskId,
       status,
     };
-    if (reason !== undefined) args.reason = reason;
+    if (reason !== undefined) {
+      args.reason = reason;
+    }
     return this.invokeFn("task_transition", args, taskCardSchema);
   }
 
@@ -307,7 +315,9 @@ export class HostTaskClient {
     const planInput: SetPlanPayloadInput = {
       markdown: input.markdown,
     };
-    if (input.subtasks !== undefined) planInput.subtasks = input.subtasks;
+    if (input.subtasks !== undefined) {
+      planInput.subtasks = input.subtasks;
+    }
     const payload = await this.invokeFn(
       "set_plan",
       { repoPath, taskId: input.taskId, input: planInput },

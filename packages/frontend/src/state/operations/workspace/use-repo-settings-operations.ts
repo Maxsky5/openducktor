@@ -101,10 +101,18 @@ export function useRepoSettingsOperations({
         devServers: input.devServers,
       });
       const agentDefaults: RepoAgentDefaults = {};
-      if (specDefault) agentDefaults.spec = specDefault;
-      if (plannerDefault) agentDefaults.planner = plannerDefault;
-      if (buildDefault) agentDefaults.build = buildDefault;
-      if (qaDefault) agentDefaults.qa = qaDefault;
+      if (specDefault) {
+        agentDefaults.spec = specDefault;
+      }
+      if (plannerDefault) {
+        agentDefaults.planner = plannerDefault;
+      }
+      if (buildDefault) {
+        agentDefaults.build = buildDefault;
+      }
+      if (qaDefault) {
+        agentDefaults.qa = qaDefault;
+      }
 
       const workspace = await host.workspaceSaveRepoSettings(workspaceId, {
         defaultRuntimeKind: input.defaultRuntimeKind,

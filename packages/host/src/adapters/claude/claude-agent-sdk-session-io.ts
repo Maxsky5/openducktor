@@ -19,6 +19,12 @@ import {
   assertClaudeSessionModelUpdateSupported,
   assertSupportedClaudeLiveEffort,
 } from "./claude-agent-sdk-session-model";
+import {
+  canFlushQueuedClaudeUserMessage,
+  canPushSdkUserMessageNow,
+  canRestoreClaudeSessionModelAfterQueuedTurns,
+  hasActiveSdkUserTurn,
+} from "./claude-agent-sdk-session-queue-policy";
 import { toClaudeDisplayParts } from "./claude-agent-sdk-session-shape";
 import type {
   ClaudeAcceptedUserMessage,
@@ -29,28 +35,7 @@ import type {
 } from "./claude-agent-sdk-types";
 import { modelSelection, textFromContentBlocks } from "./claude-agent-sdk-utils";
 
-const hasActiveSdkUserTurn = (session: ClaudeSession): boolean =>
-  session.activeSdkUserTurnCount > 0;
-
-const canFlushQueuedClaudeUserMessage = (session: ClaudeSession): boolean =>
-  session.activity !== "stopped" &&
-  session.queuedSdkMessages.length > 0 &&
-  !hasActiveSdkUserTurn(session) &&
-  session.sdkState !== "running";
-
-const canPushSdkUserMessageNow = (session: ClaudeSession): boolean =>
-  !hasActiveSdkUserTurn(session) &&
-  session.queuedSdkMessages.length === 0 &&
-  session.sdkState !== "running" &&
-  session.modelAfterQueuedTurns === undefined;
-
 const isClaudeSessionStopped = (session: ClaudeSession): boolean => session.activity === "stopped";
-
-const canRestoreClaudeSessionModelAfterQueuedTurns = (session: ClaudeSession): boolean =>
-  session.modelAfterQueuedTurns !== undefined &&
-  !hasActiveSdkUserTurn(session) &&
-  session.queuedSdkMessages.length === 0 &&
-  session.sdkState === "idle";
 
 const assertClaudeSessionAcceptingMessages = (session: ClaudeSession): void => {
   if (session.activity !== "stopped") {
@@ -306,8 +291,12 @@ export const sendClaudeUserMessage = async (input: {
     text: message,
     timestamp,
   };
-  if (isManualCompaction) acceptedMessage.isManualCompaction = true;
-  if (messageInput.model) acceptedMessage.model = messageInput.model;
+  if (isManualCompaction) {
+    acceptedMessage.isManualCompaction = true;
+  }
+  if (messageInput.model) {
+    acceptedMessage.model = messageInput.model;
+  }
   session.acceptedUserMessages.push(acceptedMessage);
   session.pendingUserTurnCount = previousPendingUserTurnCount + 1;
   session.activity = "running";
@@ -364,7 +353,9 @@ export const sendClaudeUserMessage = async (input: {
     parts: displayParts,
     state: canSendImmediately ? "read" : "queued",
   };
-  if (messageInput.model) acceptedEvent.model = messageInput.model;
+  if (messageInput.model) {
+    acceptedEvent.model = messageInput.model;
+  }
   return acceptedEvent;
 };
 
@@ -439,7 +430,9 @@ export const flushQueuedClaudeUserMessage = (input: {
           parts: acceptedMessage.parts,
           state: "read",
         };
-        if (acceptedMessage.model) acceptedEvent.model = acceptedMessage.model;
+        if (acceptedMessage.model) {
+          acceptedEvent.model = acceptedMessage.model;
+        }
         emit(session, acceptedEvent);
       }
       emit(session, {

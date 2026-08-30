@@ -72,10 +72,18 @@ export const toContextUsage = (
     const input: z.input<typeof agentSessionContextUsageSchema> = {
       totalTokens: contextUsage.totalTokens,
     };
-    if (model?.providerId) input.providerId = model.providerId;
-    if (model?.modelId) input.modelId = model.modelId;
-    if (model?.variant) input.variant = model.variant;
-    if (model?.profileId) input.profileId = model.profileId;
+    if (model?.providerId) {
+      input.providerId = model.providerId;
+    }
+    if (model?.modelId) {
+      input.modelId = model.modelId;
+    }
+    if (model?.variant) {
+      input.variant = model.variant;
+    }
+    if (model?.profileId) {
+      input.profileId = model.profileId;
+    }
     return agentSessionContextUsageSchema.parse(input);
   } catch (cause) {
     throw new HostValidationError({

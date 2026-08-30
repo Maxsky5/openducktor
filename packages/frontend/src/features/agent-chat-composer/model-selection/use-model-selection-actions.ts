@@ -108,7 +108,9 @@ export const useModelSelectionActions = ({
         : model.variants;
       const { variant: _defaultVariant, ...selectionWithoutVariant } = modelSelection;
       const nextSelection: AgentModelSelection = { ...selectionWithoutVariant };
-      if (variants[0]) nextSelection.variant = variants[0];
+      if (variants[0]) {
+        nextSelection.variant = variants[0];
+      }
       applySelection(nextSelection);
     },
     [applySelection, loadedSessionIdentity, selectedModelSelection],

@@ -93,8 +93,12 @@ const toAgentModelSelection = (
     providerId: selection.providerId,
     modelId: selection.modelId,
   };
-  if (selection.variant) normalizedSelection.variant = selection.variant;
-  if (selection.profileId) normalizedSelection.profileId = selection.profileId;
+  if (selection.variant) {
+    normalizedSelection.variant = selection.variant;
+  }
+  if (selection.profileId) {
+    normalizedSelection.profileId = selection.profileId;
+  }
   return normalizedSelection;
 };
 

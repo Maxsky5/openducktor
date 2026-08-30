@@ -32,7 +32,9 @@ const parseListTreeInput = (
       "rootPath",
     ),
   };
-  if (targetBranch) input.targetBranch = targetBranch;
+  if (targetBranch) {
+    input.targetBranch = targetBranch;
+  }
   return input;
 };
 

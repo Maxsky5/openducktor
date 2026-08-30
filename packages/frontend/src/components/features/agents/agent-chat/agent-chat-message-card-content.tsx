@@ -56,7 +56,9 @@ const toTranscriptAttachment = (
     name: attachment.name,
     kind: attachment.kind,
   };
-  if (attachment.mime !== undefined) reference.mime = attachment.mime;
+  if (attachment.mime !== undefined) {
+    reference.mime = attachment.mime;
+  }
   if (attachment.localPreviewAvailable !== undefined) {
     reference.localPreviewAvailable = attachment.localPreviewAvailable;
   }

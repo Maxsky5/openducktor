@@ -46,7 +46,9 @@ const sessionHistoryFailureNotice = ({
     description: failure.summary,
     details: sessionHistoryFailureDetails(failure),
   };
-  if (action) notice.action = action;
+  if (action) {
+    notice.action = action;
+  }
   return notice;
 };
 
@@ -66,7 +68,9 @@ export const deriveAgentChatReadiness = ({
       description:
         runtimeReadiness.message ?? "Runtime readiness is blocked without an error message.",
     };
-    if (runtimeBlockedAction) notice.action = runtimeBlockedAction;
+    if (runtimeBlockedAction) {
+      notice.action = runtimeBlockedAction;
+    }
     transcriptNotice = notice;
   } else if (transcriptState.kind === "runtime_waiting") {
     transcriptNotice = {
@@ -107,7 +111,9 @@ export const deriveAgentChatReadiness = ({
         title: "Failed to load session",
         description: transcriptState.message,
       };
-      if (failedTranscriptAction) notice.action = failedTranscriptAction;
+      if (failedTranscriptAction) {
+        notice.action = failedTranscriptAction;
+      }
       transcriptNotice = notice;
     }
   }

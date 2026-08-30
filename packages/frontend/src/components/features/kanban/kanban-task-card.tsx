@@ -357,7 +357,9 @@ function TaskActions({
     hasActiveSession,
     historicalSessionRoles,
   };
-  if (activeSessionRole) actionOptions.activeSessionRole = activeSessionRole;
+  if (activeSessionRole) {
+    actionOptions.activeSessionRole = activeSessionRole;
+  }
   const workflowActions = resolveTaskCardActions(task, actionOptions);
 
   if (workflowActions.allActions.length === 0) {

@@ -29,7 +29,9 @@ const bindStartInput = (
     systemPrompt: input.systemPrompt,
     ...openCodeRuntimePolicy,
   };
-  if (input.model !== undefined) boundInput.model = input.model;
+  if (input.model !== undefined) {
+    boundInput.model = input.model;
+  }
   return boundInput;
 };
 
@@ -44,8 +46,12 @@ const bindResumeInput = (
     sessionScope: input.sessionScope,
     ...openCodeRuntimePolicy,
   };
-  if (input.model !== undefined) boundInput.model = input.model;
-  if (input.systemPrompt !== undefined) boundInput.systemPrompt = input.systemPrompt;
+  if (input.model !== undefined) {
+    boundInput.model = input.model;
+  }
+  if (input.systemPrompt !== undefined) {
+    boundInput.systemPrompt = input.systemPrompt;
+  }
   return boundInput;
 };
 
@@ -61,7 +67,9 @@ const bindForkInput = (
     parentExternalSessionId: input.parentExternalSessionId,
     ...openCodeRuntimePolicy,
   };
-  if (input.model !== undefined) boundInput.model = input.model;
+  if (input.model !== undefined) {
+    boundInput.model = input.model;
+  }
   if (input.runtimeHistoryAnchor !== undefined) {
     boundInput.runtimeHistoryAnchor = input.runtimeHistoryAnchor;
   }
@@ -99,8 +107,12 @@ const bindSendInput = (
     parts: input.parts.map(bindMessagePart),
     ...openCodeRuntimePolicy,
   };
-  if (input.model !== undefined) boundInput.model = input.model;
-  if (input.systemPrompt !== undefined) boundInput.systemPrompt = input.systemPrompt;
+  if (input.model !== undefined) {
+    boundInput.model = input.model;
+  }
+  if (input.systemPrompt !== undefined) {
+    boundInput.systemPrompt = input.systemPrompt;
+  }
   return boundInput;
 };
 

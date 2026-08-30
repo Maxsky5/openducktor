@@ -155,7 +155,9 @@ const normalizeSubagentReferencePart = (
     kind: "subagent_reference",
     subagent,
   };
-  if (part.source) displayPart.sourceText = part.source;
+  if (part.source) {
+    displayPart.sourceText = part.source;
+  }
   return displayPart;
 };
 
@@ -316,8 +318,12 @@ export const readMessageModelSelection = (
     providerId,
     modelId,
   };
-  if (variant?.trim()) selection.variant = variant;
-  if (info.agent.trim()) selection.profileId = info.agent;
+  if (variant?.trim()) {
+    selection.variant = variant;
+  }
+  if (info.agent.trim()) {
+    selection.profileId = info.agent;
+  }
   return selection;
 };
 

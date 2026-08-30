@@ -75,7 +75,9 @@ const semanticTree: (node: MarkdownJsonContent) => JSONContent = ({
   ...node
 }) => {
   const semanticNode: JSONContent = { ...node };
-  if (content !== undefined) semanticNode.content = content.map(semanticTree);
+  if (content !== undefined) {
+    semanticNode.content = content.map(semanticTree);
+  }
   return semanticNode;
 };
 

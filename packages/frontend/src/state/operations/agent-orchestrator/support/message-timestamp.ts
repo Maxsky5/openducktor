@@ -10,7 +10,9 @@ export const preferredMessageTimestamp = (
     return { timestamp: alternative.timestamp };
   }
   const timestamp: MessageTimestamp = { timestamp: preferred.timestamp };
-  if (preferred.timestampIsApproximate) timestamp.timestampIsApproximate = true;
+  if (preferred.timestampIsApproximate) {
+    timestamp.timestampIsApproximate = true;
+  }
   return timestamp;
 };
 

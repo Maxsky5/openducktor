@@ -59,7 +59,9 @@ export const directoryListingQueryOptions = (
   let listDirectoryInput: string | FilesystemListDirectoryInput | undefined = path;
   if (includeFiles) {
     const input: FilesystemListDirectoryInput = { includeFiles: true };
-    if (path) input.path = path;
+    if (path) {
+      input.path = path;
+    }
     listDirectoryInput = input;
   }
   return queryOptions({
@@ -79,7 +81,9 @@ export const workspaceFileTreeQueryOptions = (
     queryKey: filesystemQueryKeys.tree(rootPath, targetBranch),
     queryFn: (): Promise<WorkspaceFileTree> => {
       const input: Parameters<FilesystemQueryHost["filesystemListTree"]>[0] = { rootPath };
-      if (targetBranch) input.targetBranch = targetBranch;
+      if (targetBranch) {
+        input.targetBranch = targetBranch;
+      }
       return hostClient.filesystemListTree(input);
     },
     staleTime: DIRECTORY_LISTING_STALE_TIME_MS,

@@ -170,11 +170,15 @@ export function useAgentChatComposerModel({
       scrollToBottomOnSendRef,
       syncBottomAfterComposerLayoutRef,
     };
-    if (composer.pendingSendItems) model.pendingSendItems = composer.pendingSendItems;
+    if (composer.pendingSendItems) {
+      model.pendingSendItems = composer.pendingSendItems;
+    }
     if (composer.selectedModelDescriptor !== undefined) {
       model.selectedModelDescriptor = composer.selectedModelDescriptor;
     }
-    if (composer.supportsProfiles !== undefined) model.supportsProfiles = composer.supportsProfiles;
+    if (composer.supportsProfiles !== undefined) {
+      model.supportsProfiles = composer.supportsProfiles;
+    }
     return model;
   }, [
     composer,

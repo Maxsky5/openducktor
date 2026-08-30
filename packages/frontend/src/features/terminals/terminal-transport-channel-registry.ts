@@ -72,7 +72,9 @@ export const createTerminalTransportChannelRegistry = () => {
         return { lastListenerRemoved: false, wasClosing: false };
       }
       const wasClosing = channel.isClosing;
-      if (!channel.operationQueue) channel.discardQueuedOperations = false;
+      if (!channel.operationQueue) {
+        channel.discardQueuedOperations = false;
+      }
       forgetIfUnused(terminalId, channel);
       return { lastListenerRemoved: true, wasClosing };
     },
@@ -95,7 +97,9 @@ export const createTerminalTransportChannelRegistry = () => {
       const clearCompletedOperation = (): void => {
         if (channel.operationQueue !== pending) return;
         channel.operationQueue = null;
-        if (channel.listeners.size === 0) channel.discardQueuedOperations = false;
+        if (channel.listeners.size === 0) {
+          channel.discardQueuedOperations = false;
+        }
         forgetIfUnused(terminalId, channel);
       };
       void pending.then(clearCompletedOperation, clearCompletedOperation);

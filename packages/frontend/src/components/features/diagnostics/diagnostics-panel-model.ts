@@ -504,7 +504,9 @@ export const buildDiagnosticsPanelModel = (
             availabilityVerb: "are",
           }),
   };
-  if (!runtimeCheck) cliToolsSection.emptyMessage = "CLI checks are loading...";
+  if (!runtimeCheck) {
+    cliToolsSection.emptyMessage = "CLI checks are loading...";
+  }
 
   const runtimeSections = runtimeEntries.flatMap(({ definition, runtimeHealth }) => {
     const runtimeSection: DiagnosticsSectionModel = {
@@ -547,7 +549,9 @@ export const buildDiagnosticsPanelModel = (
     rows: workspaceRepoPath ? buildRepoStoreRows(taskStoreCheck) : [],
     errors: buildRepoStoreErrors(taskStoreCheck, taskStoreCheckFailureKind),
   };
-  if (!workspaceRepoPath) taskStoreSection.emptyMessage = "Select a repository first.";
+  if (!workspaceRepoPath) {
+    taskStoreSection.emptyMessage = "Select a repository first.";
+  }
 
   return {
     repoName,

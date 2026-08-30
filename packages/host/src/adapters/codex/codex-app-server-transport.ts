@@ -446,8 +446,12 @@ export const createCodexAppServerTransport = (
           jsonrpc: "2.0",
           id: requestId,
         };
-        if (result !== undefined) response.result = result;
-        if (error !== undefined) response.error = error;
+        if (result !== undefined) {
+          response.result = result;
+        }
+        if (error !== undefined) {
+          response.error = error;
+        }
         yield* sendMessage(response);
       });
     },

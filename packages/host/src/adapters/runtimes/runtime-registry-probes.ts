@@ -297,7 +297,9 @@ const fetchOpenCodeJson = (
           workingDirectory,
           url: url.toString(),
         };
-        if (isTimeoutError(cause)) details.failureKind = "timeout";
+        if (isTimeoutError(cause)) {
+          details.failureKind = "timeout";
+        }
         return toHostOperationError(
           cause,
           `runtimeRegistry.fetchOpenCodeJson.${operation}`,
@@ -318,7 +320,9 @@ const fetchOpenCodeJson = (
         path: routePath,
         workingDirectory,
       };
-      if (timedOut) details.failureKind = "timeout";
+      if (timedOut) {
+        details.failureKind = "timeout";
+      }
       return yield* Effect.fail(
         new HostOperationError({
           operation: `runtimeRegistry.fetchOpenCodeJson.${operation}`,

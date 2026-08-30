@@ -24,10 +24,7 @@ import { createGitService } from "../../application/git/git-service";
 import { createGithubRepositoryDetectionService } from "../../application/git/github-repository-detection-service";
 import { createOdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import { createPullRequestReviewService } from "../../application/pull-requests/pull-request-review-service";
-import {
-  type CodexAppServerService,
-  createCodexAppServerService,
-} from "../../application/runtimes/codex-app-server-service";
+import { createCodexAppServerService } from "../../application/runtimes/codex-app-server-service";
 import { createRuntimeDefinitionsService } from "../../application/runtimes/runtime-definitions-service";
 import { createRuntimeOrchestratorService } from "../../application/runtimes/runtime-orchestrator-service";
 import { readSavedRuntimeExecutablePath } from "../../application/runtimes/saved-runtime-executable";
@@ -120,8 +117,7 @@ export const createNodeEffectHostCommandRouter = (
     toolDiscovery,
     worktreeFiles,
   } = createNodeHostDefaultPorts(input);
-  const codexAppServerService: CodexAppServerService =
-    createCodexAppServerService(effectiveCodexAppServer);
+  const codexAppServerService = createCodexAppServerService(effectiveCodexAppServer);
   const liveSessionAdapterRegistry = createLiveSessionAdapterRegistry();
   const agentSessionLiveStateService = createAgentSessionLiveStateService({
     adapterRegistry: liveSessionAdapterRegistry,
@@ -153,7 +149,9 @@ export const createNodeEffectHostCommandRouter = (
     processEnv,
     workspaceSettingsService,
   };
-  if (configuredTaskStore) taskAssetServiceInput.configuredTaskStore = configuredTaskStore;
+  if (configuredTaskStore) {
+    taskAssetServiceInput.configuredTaskStore = configuredTaskStore;
+  }
   const assets = createNodeTaskAssetServices(taskAssetServiceInput);
   const { startupSweep, taskAssetReadService, taskAssetStagingService, taskStore } = assets;
   const systemDiagnosticsService = createSystemDiagnosticsService({
@@ -275,7 +273,9 @@ export const createNodeEffectHostCommandRouter = (
     taskWorktreeService,
     workspaceSettingsService,
   };
-  if (eventBus) devServerServiceInput.eventBus = eventBus;
+  if (eventBus) {
+    devServerServiceInput.eventBus = eventBus;
+  }
   const devServerService = createDevServerService(devServerServiceInput);
   const taskActivityGuard = createRuntimeTaskActivityGuard({
     runtimeRegistry: effectiveRuntimeRegistry,

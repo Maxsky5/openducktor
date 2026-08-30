@@ -166,7 +166,9 @@ export function useAgentStudioSessionActions({
     humanRequestChangesTask,
     scheduleQueryUpdate,
   };
-  if (setTaskTargetBranch) sessionStartInput.setTaskTargetBranch = setTaskTargetBranch;
+  if (setTaskTargetBranch) {
+    sessionStartInput.setTaskTargetBranch = setTaskTargetBranch;
+  }
 
   const {
     isStarting,

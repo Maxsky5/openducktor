@@ -66,7 +66,9 @@ export const ensureDraftAgentDefault = (
     variant: value?.variant ?? "",
     profileId: value?.profileId ?? "",
   };
-  if (value?.runtimeKind) draft.runtimeKind = value.runtimeKind;
+  if (value?.runtimeKind) {
+    draft.runtimeKind = value.runtimeKind;
+  }
   return draft;
 };
 

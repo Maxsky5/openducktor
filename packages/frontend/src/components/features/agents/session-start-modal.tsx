@@ -438,7 +438,9 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     startMode: selectedStartMode,
     sourceSessionOptionValue: requiresExistingSession ? selectedSourceSessionValue : null,
   };
-  if (showTargetBranchSelector) confirmInput.targetBranch = selectedTargetBranch;
+  if (showTargetBranchSelector) {
+    confirmInput.targetBranch = selectedTargetBranch;
+  }
   const handleConfirm = (): void => {
     if (confirmDisabled) {
       return;

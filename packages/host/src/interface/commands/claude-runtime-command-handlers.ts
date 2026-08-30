@@ -151,12 +151,18 @@ export const createClaudeRuntimeCommandHandlers = (
               externalSessionId: input.externalSessionId,
               runtimePolicy: input.runtimePolicy,
             };
-            if (input.sessionScope) historyInput.sessionScope = input.sessionScope;
-            if (input.model) historyInput.model = input.model;
+            if (input.sessionScope) {
+              historyInput.sessionScope = input.sessionScope;
+            }
+            if (input.model) {
+              historyInput.model = input.model;
+            }
             if (input.systemPromptContext) {
               historyInput.systemPromptContext = input.systemPromptContext;
             }
-            if (input.limit !== undefined) historyInput.limit = input.limit;
+            if (input.limit !== undefined) {
+              historyInput.limit = input.limit;
+            }
             return runtimeService.loadSessionHistory(historyInput);
           }),
         ),
@@ -172,8 +178,12 @@ export const createClaudeRuntimeCommandHandlers = (
           externalSessionId: input.externalSessionId,
           runtimePolicy: input.runtimePolicy,
         };
-        if (input.model) todosInput.model = input.model;
-        if (input.sessionScope) todosInput.sessionScope = input.sessionScope;
+        if (input.model) {
+          todosInput.model = input.model;
+        }
+        if (input.sessionScope) {
+          todosInput.sessionScope = input.sessionScope;
+        }
         return requireClaudeRuntimeWorkingDirectory(runtimeRegistry, dependencies, input).pipe(
           Effect.flatMap(() => runtimeService.loadSessionTodos(todosInput)),
         );

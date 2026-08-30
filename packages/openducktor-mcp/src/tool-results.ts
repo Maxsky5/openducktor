@@ -111,7 +111,9 @@ export const toToolResult = (payload: JsonValue): ToolResult => {
       },
     ],
   };
-  if (isStructuredToolPayload(payload)) result.structuredContent = payload;
+  if (isStructuredToolPayload(payload)) {
+    result.structuredContent = payload;
+  }
   return result;
 };
 
@@ -149,8 +151,12 @@ export const toToolError = (cause: unknown): ToolResult => {
     code,
     message,
   };
-  if (cause instanceof OdtToolError && cause.details) error.details = cause.details;
-  if (issues) error.issues = issues;
+  if (cause instanceof OdtToolError && cause.details) {
+    error.details = cause.details;
+  }
+  if (issues) {
+    error.issues = issues;
+  }
   const errorPayload: OdtToolErrorPayload = {
     ok: false,
     error,

@@ -148,9 +148,15 @@ export const parseGitPushBranchInput = (input: HostCommandArgs): GitPushBranchIn
     branch,
     remote,
   };
-  if (workingDir) result.workingDir = workingDir;
-  if (setUpstream !== undefined) result.setUpstream = setUpstream;
-  if (forceWithLease !== undefined) result.forceWithLease = forceWithLease;
+  if (workingDir) {
+    result.workingDir = workingDir;
+  }
+  if (setUpstream !== undefined) {
+    result.setUpstream = setUpstream;
+  }
+  if (forceWithLease !== undefined) {
+    result.forceWithLease = forceWithLease;
+  }
   return result;
 };
 
@@ -197,8 +203,12 @@ export const parseGitDiffInput = (input: HostCommandArgs): GitDiffInput => {
   );
 
   const result: GitDiffInput = { repoPath };
-  if (targetBranch) result.targetBranch = targetBranch;
-  if (workingDir) result.workingDir = workingDir;
+  if (targetBranch) {
+    result.targetBranch = targetBranch;
+  }
+  if (workingDir) {
+    result.workingDir = workingDir;
+  }
   return result;
 };
 
@@ -232,7 +242,9 @@ export const parseGitWorktreeStatusInput = (input: HostCommandArgs): GitWorktree
     targetBranch,
     diffScope: diffScope.data,
   };
-  if (workingDir) result.workingDir = workingDir;
+  if (workingDir) {
+    result.workingDir = workingDir;
+  }
   return result;
 };
 

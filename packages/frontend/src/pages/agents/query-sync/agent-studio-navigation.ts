@@ -219,9 +219,15 @@ export const parsePersistedContext = (raw: string): PersistedAgentStudioContext 
     AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.sessionExternalId,
   );
   const persistedContext: PersistedAgentStudioContext = {};
-  if (taskId) persistedContext.taskId = taskId;
-  if (role) persistedContext.role = role;
-  if (sessionExternalId) persistedContext.sessionExternalId = sessionExternalId;
+  if (taskId) {
+    persistedContext.taskId = taskId;
+  }
+  if (role) {
+    persistedContext.role = role;
+  }
+  if (sessionExternalId) {
+    persistedContext.sessionExternalId = sessionExternalId;
+  }
   return persistedContext;
 };
 

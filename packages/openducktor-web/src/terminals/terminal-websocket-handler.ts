@@ -83,7 +83,9 @@ const sendProtocolError = (
     type: "protocol_error",
     failure,
   };
-  if (terminalId) message.terminalId = terminalId;
+  if (terminalId) {
+    message.terminalId = terminalId;
+  }
   sendMessage(socket, message);
 };
 

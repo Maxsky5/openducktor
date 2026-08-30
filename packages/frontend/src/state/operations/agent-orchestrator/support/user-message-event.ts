@@ -8,11 +8,21 @@ const toUserMessageMeta = (event: AcceptedAgentUserMessage) => {
     kind: "user",
     state: event.state,
   };
-  if (model?.providerId) meta.providerId = model.providerId;
-  if (model?.modelId) meta.modelId = model.modelId;
-  if (model?.variant) meta.variant = model.variant;
-  if (model?.profileId) meta.profileId = model.profileId;
-  if (parts.length > 0) meta.parts = parts;
+  if (model?.providerId) {
+    meta.providerId = model.providerId;
+  }
+  if (model?.modelId) {
+    meta.modelId = model.modelId;
+  }
+  if (model?.variant) {
+    meta.variant = model.variant;
+  }
+  if (model?.profileId) {
+    meta.profileId = model.profileId;
+  }
+  if (parts.length > 0) {
+    meta.parts = parts;
+  }
   return meta;
 };
 

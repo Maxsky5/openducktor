@@ -138,13 +138,19 @@ export function TaskDetailsSheet({
     footerProps.includeActions = detailActions;
     footerProps.hasActiveSession = hasActiveSession;
     footerProps.onWorkflowAction = viewModel.runWorkflowAction;
-    if (activeSessionRole) footerProps.activeSessionRole = activeSessionRole;
+    if (activeSessionRole) {
+      footerProps.activeSessionRole = activeSessionRole;
+    }
     if (historicalSessionRoles.length > 0) {
       footerProps.historicalSessionRoles = historicalSessionRoles;
     }
   }
-  if (onEdit) footerProps.onEdit = onEdit;
-  if (onDelete) footerProps.onDeleteSelect = viewModel.openDeleteDialog;
+  if (onEdit) {
+    footerProps.onEdit = onEdit;
+  }
+  if (onDelete) {
+    footerProps.onDeleteSelect = viewModel.openDeleteDialog;
+  }
 
   return (
     <Sheet modal={false} open={open} onOpenChange={onOpenChange}>

@@ -138,7 +138,9 @@ export const useSettingsModalRuntimeValidation = ({
     };
     if (runtimeExecutableResults)
       validationInput.runtimeExecutableResults = runtimeExecutableResults;
-    if (checkingRuntimeKinds) validationInput.checkingRuntimeKinds = checkingRuntimeKinds;
+    if (checkingRuntimeKinds) {
+      validationInput.checkingRuntimeKinds = checkingRuntimeKinds;
+    }
     return buildRuntimeAvailabilityValidationState(validationInput);
   }, [checkingRuntimeKinds, runtimeDefinitions, runtimeExecutableResults, snapshotDraft]);
 };

@@ -331,8 +331,12 @@ const settleTerminalMessages = (
   },
 ) => {
   const settleOptions: Parameters<typeof settleDanglingTodoToolMessages>[2] = {};
-  if (options?.outcome) settleOptions.outcome = options.outcome;
-  if (options?.errorMessage) settleOptions.errorMessage = options.errorMessage;
+  if (options?.outcome) {
+    settleOptions.outcome = options.outcome;
+  }
+  if (options?.errorMessage) {
+    settleOptions.errorMessage = options.errorMessage;
+  }
   const settledMessages = settleDanglingTodoToolMessages(session, timestamp, settleOptions);
 
   if (!options?.appendUserStoppedNotice) {

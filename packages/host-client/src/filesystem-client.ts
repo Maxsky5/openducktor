@@ -37,7 +37,9 @@ const normalizeWorkspaceFileTreeInput = (
 ): WorkspaceFileTreeInput => {
   const parsed = workspaceFileTreeInputSchema.parse(input);
   const normalized: WorkspaceFileTreeInput = { rootPath: parsed.rootPath };
-  if (parsed.targetBranch !== undefined) normalized.targetBranch = parsed.targetBranch;
+  if (parsed.targetBranch !== undefined) {
+    normalized.targetBranch = parsed.targetBranch;
+  }
   return normalized;
 };
 
@@ -57,7 +59,9 @@ const filesystemListTree = async (
   const args: WorkspaceFileTreeInput = {
     rootPath: treeInput.rootPath,
   };
-  if (treeInput.targetBranch) args.targetBranch = treeInput.targetBranch;
+  if (treeInput.targetBranch) {
+    args.targetBranch = treeInput.targetBranch;
+  }
   return invokeFn("filesystem_list_tree", args, workspaceFileTreeSchema);
 };
 

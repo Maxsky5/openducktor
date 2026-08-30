@@ -102,7 +102,9 @@ const verifyBackendReadinessEffect = (
             [APP_TOKEN_HEADER]: appToken,
           },
         };
-        if (signal) init.signal = signal;
+        if (signal) {
+          init.signal = signal;
+        }
         return fetchImpl(`${backendUrl}/session`, init);
       },
       catch: (cause) =>

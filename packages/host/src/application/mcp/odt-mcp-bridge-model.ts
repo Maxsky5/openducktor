@@ -167,7 +167,9 @@ export const mapPublicTask = (task: TaskCard): PublicTask => {
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
   };
-  if (task.targetBranch) publicTask.targetBranch = task.targetBranch;
+  if (task.targetBranch) {
+    publicTask.targetBranch = task.targetBranch;
+  }
   return publicTask;
 };
 
@@ -209,7 +211,9 @@ export const latestDocument = (
     markdown: document.markdown,
     updatedAt: document.updatedAt ?? null,
   };
-  if (document.error) latest.error = document.error;
+  if (document.error) {
+    latest.error = document.error;
+  }
   return latest;
 };
 
@@ -222,7 +226,9 @@ export const latestQaReport = (
     updatedAt: qaReport.updatedAt ?? null,
     verdict: qaReport.verdict,
   };
-  if (qaReport.error) latest.error = qaReport.error;
+  if (qaReport.error) {
+    latest.error = qaReport.error;
+  }
   return latest;
 };
 

@@ -63,7 +63,9 @@ const buildRequestChangesSessionRequest = (
       note: feedback,
     },
   };
-  if (existingSessionOptions.length === 0) request.initialStartMode = "fresh";
+  if (existingSessionOptions.length === 0) {
+    request.initialStartMode = "fresh";
+  }
   if (latestBuilderSession) {
     request.initialSourceSession = toAgentSessionIdentity(latestBuilderSession);
   }

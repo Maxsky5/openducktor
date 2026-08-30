@@ -221,7 +221,9 @@ const mergeSameMessageId = (
       ...currentMessage.meta,
       ...loadedMessage.meta,
     };
-    if (parts) meta.parts = parts;
+    if (parts) {
+      meta.parts = parts;
+    }
     return applyPreferredMessageTimestamp(
       {
         ...loadedMessage,
@@ -239,7 +241,9 @@ const mergeSameMessageId = (
         ? { ...currentMessage.meta, ...loadedMessage.meta }
         : (loadedMessage.meta ?? currentMessage.meta);
     const mergedMessage: AgentChatMessage = { ...currentMessage, ...loadedMessage };
-    if (mergedMeta) mergedMessage.meta = mergedMeta;
+    if (mergedMeta) {
+      mergedMessage.meta = mergedMeta;
+    }
     return applyPreferredMessageTimestamp(mergedMessage, loadedMessage, currentMessage);
   }
 

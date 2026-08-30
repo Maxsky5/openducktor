@@ -89,8 +89,12 @@ export const createSessionTurnTiming = (): SessionTurnTiming => {
         });
       const userAnchorAtMs = currentTiming.userAnchorAtMs;
       const timing: Parameters<typeof resolveAssistantTurnDurationMs>[0] = { completedAtMs };
-      if (activityStartedAtMs !== undefined) timing.activityStartedAtMs = activityStartedAtMs;
-      if (userAnchorAtMs !== undefined) timing.userAnchorAtMs = userAnchorAtMs;
+      if (activityStartedAtMs !== undefined) {
+        timing.activityStartedAtMs = activityStartedAtMs;
+      }
+      if (userAnchorAtMs !== undefined) {
+        timing.userAnchorAtMs = userAnchorAtMs;
+      }
       if (previousAssistantCompletedAtMs !== undefined) {
         timing.previousAssistantCompletedAtMs = previousAssistantCompletedAtMs;
       }

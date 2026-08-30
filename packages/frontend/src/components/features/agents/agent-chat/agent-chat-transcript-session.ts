@@ -26,6 +26,8 @@ export const toAgentChatTranscriptSession = (
     runtimeStatusMessage: session.runtimeStatusMessage,
     messages: toSessionMessagesState(session),
   };
-  if (session.title) transcriptSession.title = session.title;
+  if (session.title) {
+    transcriptSession.title = session.title;
+  }
   return transcriptSession;
 };

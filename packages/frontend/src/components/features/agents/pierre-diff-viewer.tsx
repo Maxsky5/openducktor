@@ -470,9 +470,15 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
       nextOptions.onLineSelectionStart = handleLineSelectionChange;
       nextOptions.onLineSelectionChange = handleLineSelectionChange;
     }
-    if (handleLineSelectionEnd) nextOptions.onLineSelectionEnd = handleLineSelectionEnd;
-    if (handleGutterUtilityClick) nextOptions.onGutterUtilityClick = handleGutterUtilityClick;
-    if (enableHunkReset) nextOptions.unsafeCSS = HUNK_RESET_FLOATING_CSS;
+    if (handleLineSelectionEnd) {
+      nextOptions.onLineSelectionEnd = handleLineSelectionEnd;
+    }
+    if (handleGutterUtilityClick) {
+      nextOptions.onGutterUtilityClick = handleGutterUtilityClick;
+    }
+    if (enableHunkReset) {
+      nextOptions.unsafeCSS = HUNK_RESET_FLOATING_CSS;
+    }
     return nextOptions;
   }, [
     diffStyle,

@@ -213,7 +213,9 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
         ...runtimeSessionRef,
         parts: normalizedParts,
       };
-      if (readySession.selectedModel) sendInput.model = readySession.selectedModel;
+      if (readySession.selectedModel) {
+        sendInput.model = readySession.selectedModel;
+      }
       if (preparedSend.systemPrompt !== undefined) {
         sendInput.systemPrompt = preparedSend.systemPrompt;
       }

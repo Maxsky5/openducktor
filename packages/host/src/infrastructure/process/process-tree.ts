@@ -132,7 +132,9 @@ const runProcessCommand: ProcessCommandRunner = (command, args) =>
           stdout: Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout),
           stderr: Buffer.isBuffer(stderr) ? stderr : Buffer.from(stderr),
         };
-        if (error) result.error = error;
+        if (error) {
+          result.error = error;
+        }
         resume(Effect.succeed(result));
       },
     );

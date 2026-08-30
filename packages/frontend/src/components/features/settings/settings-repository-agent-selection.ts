@@ -22,8 +22,12 @@ export const resolveRepoAgentDefaultModelPickerSelection = ({
       providerId: currentValue.providerId,
       modelId: currentValue.modelId,
     };
-    if (currentValue.variant) currentSelection.variant = currentValue.variant;
-    if (currentValue.profileId) currentSelection.profileId = currentValue.profileId;
+    if (currentValue.variant) {
+      currentSelection.variant = currentValue.variant;
+    }
+    if (currentValue.profileId) {
+      currentSelection.profileId = currentValue.profileId;
+    }
   }
   const resolvedPair = resolveModelSelectionForPair({
     catalog: targetCatalog,

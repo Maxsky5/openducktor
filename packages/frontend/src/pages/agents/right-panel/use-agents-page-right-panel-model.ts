@@ -295,7 +295,9 @@ export function useAgentsPageRightPanelModel({
     refreshDiffData: diffData.refresh,
     isDiffDataLoading: diffData.isLoading,
   };
-  if (onResolveGitConflict) gitActionInput.onResolveGitConflict = onResolveGitConflict;
+  if (onResolveGitConflict) {
+    gitActionInput.onResolveGitConflict = onResolveGitConflict;
+  }
   const gitActions = useAgentStudioGitActions(gitActionInput);
   const gitConflictQuickActionContext = useMemo<AgentStudioGitConflictQuickActionContext | null>(
     () =>
@@ -337,7 +339,9 @@ export function useAgentsPageRightPanelModel({
       detectingPullRequestTaskId,
       onDetectPullRequest,
     };
-    if (setTaskTargetBranch) input.setTaskTargetBranch = setTaskTargetBranch;
+    if (setTaskTargetBranch) {
+      input.setTaskTargetBranch = setTaskTargetBranch;
+    }
     return buildAgentsPageDiffModel(input);
   }, [
     buildToolsSnapshot,

@@ -50,10 +50,18 @@ export const projectClaudeCompletedToolResult = ({
     tool,
   };
   const resolvedInput = todoPresentation?.input ?? input;
-  if (resolvedInput) completedToolInput.input = resolvedInput;
-  if (!todoPresentation && preview) completedToolInput.preview = preview;
-  if (metadata) completedToolInput.metadata = metadata;
-  if (startedAtMs !== undefined) completedToolInput.startedAtMs = startedAtMs;
+  if (resolvedInput) {
+    completedToolInput.input = resolvedInput;
+  }
+  if (!todoPresentation && preview) {
+    completedToolInput.preview = preview;
+  }
+  if (metadata) {
+    completedToolInput.metadata = metadata;
+  }
+  if (startedAtMs !== undefined) {
+    completedToolInput.startedAtMs = startedAtMs;
+  }
   return {
     todos,
     part: createClaudeCompletedToolPart(completedToolInput),

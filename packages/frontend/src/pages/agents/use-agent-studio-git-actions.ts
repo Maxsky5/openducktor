@@ -109,7 +109,9 @@ export function useAgentStudioGitActions({
     clearActionErrors,
     setRebaseError,
   };
-  if (onResolveGitConflict) conflictControllerInput.onResolveGitConflict = onResolveGitConflict;
+  if (onResolveGitConflict) {
+    conflictControllerInput.onResolveGitConflict = onResolveGitConflict;
+  }
 
   const {
     activeGitConflict,

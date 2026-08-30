@@ -338,8 +338,12 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
     loadRepoPromptOverrides,
     loadSettingsSnapshot,
   };
-  if (sessionStartGateRef) dependenciesInput.sessionStartGateRef = sessionStartGateRef;
-  if (readSessionSnapshot) dependenciesInput.readSessionSnapshot = readSessionSnapshot;
+  if (sessionStartGateRef) {
+    dependenciesInput.sessionStartGateRef = sessionStartGateRef;
+  }
+  if (readSessionSnapshot) {
+    dependenciesInput.readSessionSnapshot = readSessionSnapshot;
+  }
   const start = createStartAgentSession(toStartSessionDependencies(dependenciesInput));
 
   return {

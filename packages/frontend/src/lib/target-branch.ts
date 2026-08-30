@@ -43,7 +43,9 @@ export const normalizeTargetBranch = (
   }
 
   const targetBranch: GitTargetBranch = { branch: normalizedBranch };
-  if (normalizedRemote) targetBranch.remote = normalizedRemote;
+  if (normalizedRemote) {
+    targetBranch.remote = normalizedRemote;
+  }
   return targetBranch;
 };
 

@@ -27,7 +27,9 @@ const parsePullRequestReviewContextInput = (
       "repoPath",
     ),
   };
-  if (taskId) input.taskId = taskId;
+  if (taskId) {
+    input.taskId = taskId;
+  }
   return input;
 };
 

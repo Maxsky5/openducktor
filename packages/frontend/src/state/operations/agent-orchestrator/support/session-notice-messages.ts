@@ -49,7 +49,9 @@ export const buildSessionErrorNoticeMessage = (
       title: "Error",
     },
   };
-  if (id) input.id = id;
+  if (id) {
+    input.id = id;
+  }
   return buildSessionNoticeMessage(input);
 };
 
@@ -71,7 +73,9 @@ const buildSessionCompactionNoticeMessage = (
       compactionStatus: status,
     },
   };
-  if (id) input.id = id;
+  if (id) {
+    input.id = id;
+  }
   return buildSessionNoticeMessage(input);
 };
 

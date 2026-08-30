@@ -35,7 +35,9 @@ export const toBranchSelectorOptions = (
       secondaryLabel: branchSourceLabel(branch),
       searchKeywords: branch.name.split("/").filter(Boolean),
     };
-    if (branch.isCurrent) option.description = "current";
+    if (branch.isCurrent) {
+      option.description = "current";
+    }
     return option;
   });
 

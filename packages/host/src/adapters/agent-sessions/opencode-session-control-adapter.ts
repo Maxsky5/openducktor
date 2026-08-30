@@ -51,7 +51,9 @@ const toOpenCodeUserMessagePart = (part: AgentSessionUserMessagePart): AgentUser
     name: attachment.name,
     kind: attachment.kind,
   };
-  if (attachment.mime !== undefined) converted.mime = attachment.mime;
+  if (attachment.mime !== undefined) {
+    converted.mime = attachment.mime;
+  }
   return {
     kind: "attachment",
     attachment: converted,
@@ -112,7 +114,9 @@ export const createOpenCodeSessionControlAdapter = ({
         sessionScope: input.sessionScope,
         systemPrompt: input.systemPrompt,
       };
-      if (input.model) request.model = input.model;
+      if (input.model) {
+        request.model = input.model;
+      }
       return runControlSummary("opencode-live-session.start-session", () =>
         connection.startSession(request),
       );
@@ -124,8 +128,12 @@ export const createOpenCodeSessionControlAdapter = ({
         runtimePolicy: { kind: "opencode" },
         sessionScope: input.sessionScope,
       };
-      if (input.model) request.model = input.model;
-      if (input.systemPrompt) request.systemPrompt = input.systemPrompt;
+      if (input.model) {
+        request.model = input.model;
+      }
+      if (input.systemPrompt) {
+        request.systemPrompt = input.systemPrompt;
+      }
       return runControlSummary("opencode-live-session.resume-session", () =>
         connection.resumeSession(request),
       );
@@ -140,8 +148,12 @@ export const createOpenCodeSessionControlAdapter = ({
         systemPrompt: input.systemPrompt,
         parentExternalSessionId: input.parentExternalSessionId,
       };
-      if (input.runtimeHistoryAnchor) request.runtimeHistoryAnchor = input.runtimeHistoryAnchor;
-      if (input.model) request.model = input.model;
+      if (input.runtimeHistoryAnchor) {
+        request.runtimeHistoryAnchor = input.runtimeHistoryAnchor;
+      }
+      if (input.model) {
+        request.model = input.model;
+      }
       return runControlSummary(
         "opencode-live-session.fork-session",
         () => connection.forkSession(request),
@@ -157,8 +169,12 @@ export const createOpenCodeSessionControlAdapter = ({
         sessionScope: input.sessionScope,
         parts: input.parts.map(toOpenCodeUserMessagePart),
       };
-      if (input.model) request.model = input.model;
-      if (input.systemPrompt) request.systemPrompt = input.systemPrompt;
+      if (input.model) {
+        request.model = input.model;
+      }
+      if (input.systemPrompt) {
+        request.systemPrompt = input.systemPrompt;
+      }
       return serializeSessionSend(
         refKey(sessionRef),
         Effect.tryPromise({

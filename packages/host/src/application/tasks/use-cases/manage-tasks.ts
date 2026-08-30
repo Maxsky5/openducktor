@@ -52,7 +52,9 @@ export const createTaskCrudUseCases = ({
         repoPath,
         task: normalizedTask,
       };
-      if (descriptionAssets) createInput.descriptionAssets = descriptionAssets;
+      if (descriptionAssets) {
+        createInput.descriptionAssets = descriptionAssets;
+      }
       const created = yield* taskStore
         .createTask(createInput)
         .pipe(
@@ -85,7 +87,9 @@ export const createTaskCrudUseCases = ({
       }
       yield* validateParentRelationshipsForUpdateEffect(currentTasks, current, patch);
       const updateInput: Parameters<typeof taskStore.updateTask>[0] = { repoPath, taskId, patch };
-      if (descriptionAssets) updateInput.descriptionAssets = descriptionAssets;
+      if (descriptionAssets) {
+        updateInput.descriptionAssets = descriptionAssets;
+      }
       const updated = yield* taskStore
         .updateTask(updateInput)
         .pipe(

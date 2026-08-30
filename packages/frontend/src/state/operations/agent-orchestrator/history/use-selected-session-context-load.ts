@@ -44,7 +44,9 @@ export const useSelectedSessionContextLoad = ({
       return null;
     }
     const stableTarget: AgentSessionContextLoadTarget = { ...stableIdentity };
-    if (stableSessionScope) stableTarget.sessionScope = stableSessionScope;
+    if (stableSessionScope) {
+      stableTarget.sessionScope = stableSessionScope;
+    }
     return stableTarget;
   }, [stableIdentity, stableSessionScope]);
 

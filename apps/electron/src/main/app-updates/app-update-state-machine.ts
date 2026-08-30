@@ -48,8 +48,12 @@ export const createUpdateError = ({
     message,
     operation,
   };
-  if (causeName) error.causeName = causeName;
-  if (details !== undefined) error.details = details;
+  if (causeName) {
+    error.causeName = causeName;
+  }
+  if (details !== undefined) {
+    error.details = details;
+  }
   return error;
 };
 
@@ -103,9 +107,13 @@ export const markChecking = ({
     checkInitiator: initiator,
   };
   const availableVersion = availableVersionFromState(previousState);
-  if (availableVersion) state.availableVersion = availableVersion;
+  if (availableVersion) {
+    state.availableVersion = availableVersion;
+  }
   const checkedAt = checkedAtFromState(previousState);
-  if (checkedAt) state.checkedAt = checkedAt;
+  if (checkedAt) {
+    state.checkedAt = checkedAt;
+  }
   return state;
 };
 
@@ -127,7 +135,9 @@ export const markAvailable = ({
     checkedAt,
   };
   const checkInitiator = checkInitiatorFromState(previousState);
-  if (checkInitiator) state.checkInitiator = checkInitiator;
+  if (checkInitiator) {
+    state.checkInitiator = checkInitiator;
+  }
   return state;
 };
 
@@ -146,7 +156,9 @@ export const markUpToDate = ({
     checkedAt,
   };
   const checkInitiator = checkInitiatorFromState(previousState);
-  if (checkInitiator) state.checkInitiator = checkInitiator;
+  if (checkInitiator) {
+    state.checkInitiator = checkInitiator;
+  }
   return state;
 };
 
@@ -168,9 +180,13 @@ export const markDownloading = ({
     progressPercent: progressPercentFromState(previousState) ?? 0,
   };
   const checkInitiator = checkInitiatorFromState(previousState);
-  if (checkInitiator) state.checkInitiator = checkInitiator;
+  if (checkInitiator) {
+    state.checkInitiator = checkInitiator;
+  }
   const checkedAt = checkedAtFromState(previousState);
-  if (checkedAt) state.checkedAt = checkedAt;
+  if (checkedAt) {
+    state.checkedAt = checkedAt;
+  }
   return state;
 };
 
@@ -190,9 +206,13 @@ export const markDownloadProgress = ({
     progressPercent: clampProgressPercent(percent),
   };
   const checkInitiator = checkInitiatorFromState(previousState);
-  if (checkInitiator) state.checkInitiator = checkInitiator;
+  if (checkInitiator) {
+    state.checkInitiator = checkInitiator;
+  }
   const checkedAt = checkedAtFromState(previousState);
-  if (checkedAt) state.checkedAt = checkedAt;
+  if (checkedAt) {
+    state.checkedAt = checkedAt;
+  }
   return state;
 };
 
@@ -212,9 +232,13 @@ export const markDownloaded = ({
     progressPercent: 100,
   };
   const checkInitiator = checkInitiatorFromState(previousState);
-  if (checkInitiator) state.checkInitiator = checkInitiator;
+  if (checkInitiator) {
+    state.checkInitiator = checkInitiator;
+  }
   const checkedAt = checkedAtFromState(previousState);
-  if (checkedAt) state.checkedAt = checkedAt;
+  if (checkedAt) {
+    state.checkedAt = checkedAt;
+  }
   return state;
 };
 
@@ -271,9 +295,15 @@ export const markUpdateError = ({
     currentVersion,
     error: createUpdateError({ cause, code, message, operation }),
   };
-  if (resolvedAvailableVersion) state.availableVersion = resolvedAvailableVersion;
-  if (checkInitiator) state.checkInitiator = checkInitiator;
-  if (checkedAt) state.checkedAt = checkedAt;
+  if (resolvedAvailableVersion) {
+    state.availableVersion = resolvedAvailableVersion;
+  }
+  if (checkInitiator) {
+    state.checkInitiator = checkInitiator;
+  }
+  if (checkedAt) {
+    state.checkedAt = checkedAt;
+  }
   return state;
 };
 

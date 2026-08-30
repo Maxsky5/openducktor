@@ -25,7 +25,9 @@ export const pickDefaultSessionSelectionForCatalog = (
     providerId: model.providerId,
     modelId: model.modelId,
   };
-  if (variant) selection.variant = variant;
+  if (variant) {
+    selection.variant = variant;
+  }
   return selection;
 };
 
@@ -54,8 +56,12 @@ export const coerceSessionSelectionToCatalog = (
     providerId: model.providerId,
     modelId: model.modelId,
   };
-  if (variant) normalizedSelection.variant = variant;
-  if (profileId) normalizedSelection.profileId = profileId;
+  if (variant) {
+    normalizedSelection.variant = variant;
+  }
+  if (profileId) {
+    normalizedSelection.profileId = profileId;
+  }
   return normalizedSelection;
 };
 
@@ -70,8 +76,12 @@ export const normalizePersistedSelection = (
     providerId: selection.providerId,
     modelId: selection.modelId,
   };
-  if (selection.variant) normalizedSelection.variant = selection.variant;
-  if (selection.profileId) normalizedSelection.profileId = selection.profileId;
+  if (selection.variant) {
+    normalizedSelection.variant = selection.variant;
+  }
+  if (selection.profileId) {
+    normalizedSelection.profileId = selection.profileId;
+  }
   return normalizedSelection;
 };
 
@@ -93,8 +103,14 @@ export const mergeModelSelection = (
     providerId: override.providerId,
     modelId: override.modelId,
   };
-  if (runtimeKind) selection.runtimeKind = runtimeKind;
-  if (variant) selection.variant = variant;
-  if (profileId) selection.profileId = profileId;
+  if (runtimeKind) {
+    selection.runtimeKind = runtimeKind;
+  }
+  if (variant) {
+    selection.variant = variant;
+  }
+  if (profileId) {
+    selection.profileId = profileId;
+  }
   return selection;
 };

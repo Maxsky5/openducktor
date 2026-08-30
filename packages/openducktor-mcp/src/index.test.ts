@@ -259,8 +259,12 @@ const createTransport = async (
 ) => {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const context: Parameters<typeof createMcpServer>[0] = { hostUrl };
-  if (options.workspaceId) context.workspaceId = options.workspaceId;
-  if (options.forbidWorkspaceIdInput) context.forbidWorkspaceIdInput = true;
+  if (options.workspaceId) {
+    context.workspaceId = options.workspaceId;
+  }
+  if (options.forbidWorkspaceIdInput) {
+    context.forbidWorkspaceIdInput = true;
+  }
   const server = await createMcpServer(context, {
     allowedToolNames: parseAllowedToolNames(options.allowedTools),
   });

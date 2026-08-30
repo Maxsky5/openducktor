@@ -20,12 +20,24 @@ const makeSubagentMessage = (
     correlationKey: input.correlationKey,
     status: input.status,
   };
-  if (input.agent) meta.agent = input.agent;
-  if (input.prompt) meta.prompt = input.prompt;
-  if (input.description) meta.description = input.description;
-  if (input.externalSessionId) meta.externalSessionId = input.externalSessionId;
-  if (input.startedAtMs !== undefined) meta.startedAtMs = input.startedAtMs;
-  if (input.endedAtMs !== undefined) meta.endedAtMs = input.endedAtMs;
+  if (input.agent) {
+    meta.agent = input.agent;
+  }
+  if (input.prompt) {
+    meta.prompt = input.prompt;
+  }
+  if (input.description) {
+    meta.description = input.description;
+  }
+  if (input.externalSessionId) {
+    meta.externalSessionId = input.externalSessionId;
+  }
+  if (input.startedAtMs !== undefined) {
+    meta.startedAtMs = input.startedAtMs;
+  }
+  if (input.endedAtMs !== undefined) {
+    meta.endedAtMs = input.endedAtMs;
+  }
 
   return {
     id: `subagent:${input.correlationKey}`,

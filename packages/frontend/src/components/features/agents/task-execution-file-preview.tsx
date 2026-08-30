@@ -579,7 +579,9 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
         attachedEditor.focus({ lineNumber: "first-visible", preventScroll: true });
       },
     };
-    if (clipboard) options.clipboard = clipboard;
+    if (clipboard) {
+      options.clipboard = clipboard;
+    }
     return options;
   }, []);
 

@@ -60,7 +60,9 @@ export const startKanbanSessionFlow = async ({
     task,
     humanRequestChangesTask,
   };
-  if (setTaskTargetBranch) workflowInput.persistTaskTargetBranch = setTaskTargetBranch;
+  if (setTaskTargetBranch) {
+    workflowInput.persistTaskTargetBranch = setTaskTargetBranch;
+  }
   const workflow = await runSessionStartWorkflow(workflowInput);
   if (workflow.postStartActionError) {
     showPostStartActionError(effectivePostStartAction, workflow.postStartActionError);

@@ -85,8 +85,12 @@ export const createTaskApprovalContextUseCase = ({
           directMerge,
           providers,
         };
-        if (workingDirectory !== undefined) approvalContext.workingDirectory = workingDirectory;
-        if (metadata.pullRequest !== undefined) approvalContext.pullRequest = metadata.pullRequest;
+        if (workingDirectory !== undefined) {
+          approvalContext.workingDirectory = workingDirectory;
+        }
+        if (metadata.pullRequest !== undefined) {
+          approvalContext.pullRequest = metadata.pullRequest;
+        }
         return { outcome: "ready", approvalContext };
       }
 
@@ -160,7 +164,9 @@ export const createTaskApprovalContextUseCase = ({
         uncommittedFileCount: worktreeStatus.fileStatusCounts.total,
         providers,
       };
-      if (metadata.pullRequest !== undefined) approvalContext.pullRequest = metadata.pullRequest;
+      if (metadata.pullRequest !== undefined) {
+        approvalContext.pullRequest = metadata.pullRequest;
+      }
       if (suggestedSquashCommitMessage !== undefined) {
         approvalContext.suggestedSquashCommitMessage = suggestedSquashCommitMessage;
       }

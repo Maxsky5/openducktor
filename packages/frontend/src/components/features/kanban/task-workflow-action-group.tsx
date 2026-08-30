@@ -63,8 +63,12 @@ export function TaskWorkflowActionGroup({
 }: TaskWorkflowActionGroupProps): ReactElement | null {
   const [isMenuOpen, setMenuOpen] = useState(false);
   const resolveActionOptions: Parameters<typeof resolveTaskCardActions>[1] = { hasActiveSession };
-  if (activeSessionRole) resolveActionOptions.activeSessionRole = activeSessionRole;
-  if (historicalSessionRoles) resolveActionOptions.historicalSessionRoles = historicalSessionRoles;
+  if (activeSessionRole) {
+    resolveActionOptions.activeSessionRole = activeSessionRole;
+  }
+  if (historicalSessionRoles) {
+    resolveActionOptions.historicalSessionRoles = historicalSessionRoles;
+  }
   const { primaryAction, secondaryActions, allActions } = includeActions
     ? resolveTaskCardActions(task, { include: includeActions, ...resolveActionOptions })
     : resolveTaskCardActions(task, resolveActionOptions);

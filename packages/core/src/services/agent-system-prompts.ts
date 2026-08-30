@@ -692,7 +692,9 @@ const resolveTemplate = ({
     hasStaleOverride: Boolean(override && override.baseVersion !== definition.builtinVersion),
     content,
   };
-  if (override) resolved.overrideBaseVersion = override.baseVersion;
+  if (override) {
+    resolved.overrideBaseVersion = override.baseVersion;
+  }
   return resolved;
 };
 
@@ -717,9 +719,15 @@ const buildPromptFromTemplates = ({
     role,
     task,
   };
-  if (extraPlaceholders) placeholderInput.extraPlaceholders = extraPlaceholders;
-  if (pullRequestTarget) placeholderInput.pullRequestTarget = pullRequestTarget;
-  if (git) placeholderInput.git = git;
+  if (extraPlaceholders) {
+    placeholderInput.extraPlaceholders = extraPlaceholders;
+  }
+  if (pullRequestTarget) {
+    placeholderInput.pullRequestTarget = pullRequestTarget;
+  }
+  if (git) {
+    placeholderInput.git = git;
+  }
   const placeholderValues = buildPlaceholderValues(placeholderInput);
   const templates = templateIds.map((templateId) =>
     resolveTemplate({
@@ -777,8 +785,12 @@ export const buildAgentKickoffPromptBundle = (
     task: input.task,
     overrides: input.overrides,
   };
-  if (input.extraPlaceholders) promptInput.extraPlaceholders = input.extraPlaceholders;
-  if (pullRequestTarget) promptInput.pullRequestTarget = pullRequestTarget;
+  if (input.extraPlaceholders) {
+    promptInput.extraPlaceholders = input.extraPlaceholders;
+  }
+  if (pullRequestTarget) {
+    promptInput.pullRequestTarget = pullRequestTarget;
+  }
   return buildPromptFromTemplates(promptInput);
 };
 
@@ -826,7 +838,9 @@ export const buildAgentMessagePromptBundle = (
     task: input.task,
     overrides: input.overrides,
   };
-  if (input.git) promptInput.git = input.git;
+  if (input.git) {
+    promptInput.git = input.git;
+  }
   return buildPromptFromTemplates(promptInput);
 };
 

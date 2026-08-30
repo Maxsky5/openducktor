@@ -150,8 +150,12 @@ export const createCodexLiveSessionProjection = ({
         transcriptEvents,
         catalogInvalidated: mutation.catalogInvalidated,
       };
-      if (mutation.fault) normalized.fault = mutation.fault;
-      if (faultRef) normalized.faultRef = faultRef;
+      if (mutation.fault) {
+        normalized.fault = mutation.fault;
+      }
+      if (faultRef) {
+        normalized.faultRef = faultRef;
+      }
       return normalized;
     });
 

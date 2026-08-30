@@ -150,7 +150,9 @@ const emitCompletedSubagentAssistantMessage = (
     messageId: pending.messageId,
     message: pending.text,
   };
-  if (pending.model) message.model = pending.model;
+  if (pending.model) {
+    message.model = pending.model;
+  }
   emit(message);
   settleClaudeStreamedAssistantText({
     emit,
@@ -230,12 +232,24 @@ export const emitClaudeAgentToolResultSubagentPart = ({
   const sessionUrl = readStringProp(structuredResult, "sessionUrl");
   const totalTokens = z.number().safeParse(structuredResult.totalTokens);
   const canReadOutputFile = z.boolean().safeParse(structuredResult.canReadOutputFile);
-  if (resolvedModel) metadata.resolvedModel = resolvedModel;
-  if (totalDurationMs !== null) metadata.totalDurationMs = totalDurationMs;
-  if (totalTokens.success) metadata.totalTokens = totalTokens.data;
-  if (outputFile) metadata.outputFile = outputFile;
-  if (canReadOutputFile.success) metadata.canReadOutputFile = canReadOutputFile.data;
-  if (sessionUrl) metadata.sessionUrl = sessionUrl;
+  if (resolvedModel) {
+    metadata.resolvedModel = resolvedModel;
+  }
+  if (totalDurationMs !== null) {
+    metadata.totalDurationMs = totalDurationMs;
+  }
+  if (totalTokens.success) {
+    metadata.totalTokens = totalTokens.data;
+  }
+  if (outputFile) {
+    metadata.outputFile = outputFile;
+  }
+  if (canReadOutputFile.success) {
+    metadata.canReadOutputFile = canReadOutputFile.data;
+  }
+  if (sessionUrl) {
+    metadata.sessionUrl = sessionUrl;
+  }
   const messageId =
     session.toolMessageIdsByCallId.get(toolUseId) ??
     (taskId ? session.subagentMessageIdsByTaskId.get(taskId) : undefined) ??
@@ -247,12 +261,24 @@ export const emitClaudeAgentToolResultSubagentPart = ({
     messageId,
     metadata,
   };
-  if (agent) details.agent = agent;
-  if (prompt) details.prompt = prompt;
-  if (description) details.description = description;
-  if (error) details.error = error;
-  if (startedAtMs !== undefined) details.startedAtMs = startedAtMs;
-  if (status !== "running") details.endedAtMs = endedAtMs;
+  if (agent) {
+    details.agent = agent;
+  }
+  if (prompt) {
+    details.prompt = prompt;
+  }
+  if (description) {
+    details.description = description;
+  }
+  if (error) {
+    details.error = error;
+  }
+  if (startedAtMs !== undefined) {
+    details.startedAtMs = startedAtMs;
+  }
+  if (status !== "running") {
+    details.endedAtMs = endedAtMs;
+  }
   emitSubagentPart(emit, session, agentId, toolUseId, status, timestamp, details);
   if (status !== "running") {
     if (status === "completed") {
@@ -451,8 +477,12 @@ export const handleClaudeSubagentSystemMessage = ({
   const details: ClaudeSubagentPartDetails = {
     endedAtMs: timestampMs(timestamp),
   };
-  if (notificationError) details.error = notificationError;
-  if (message.output_file) details.metadata = { outputFile: message.output_file };
+  if (notificationError) {
+    details.error = notificationError;
+  }
+  if (message.output_file) {
+    details.metadata = { outputFile: message.output_file };
+  }
   const status =
     message.status === "failed"
       ? "error"

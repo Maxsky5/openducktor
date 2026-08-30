@@ -63,9 +63,15 @@ export const settleDanglingTodoToolMessages = (
       tool: meta.tool,
       status: updatedStatus,
     };
-    if (meta.title) contentInput.title = meta.title;
-    if (meta.output) contentInput.output = meta.output;
-    if (updatedStatus === "error") contentInput.error = errorText;
+    if (meta.title) {
+      contentInput.title = meta.title;
+    }
+    if (meta.output) {
+      contentInput.output = meta.output;
+    }
+    if (updatedStatus === "error") {
+      contentInput.error = errorText;
+    }
 
     return {
       ...message,

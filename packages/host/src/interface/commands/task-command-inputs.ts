@@ -209,7 +209,9 @@ export const parseCreateTaskInput = (input: HostCommandArgs): CreateTaskUseCaseI
     repoPath: readRequiredString(record, "repoPath"),
     task: parseCreateInput(taskCreateInputSchema.safeParse(record.input)),
   };
-  if (descriptionAssets) result.descriptionAssets = descriptionAssets;
+  if (descriptionAssets) {
+    result.descriptionAssets = descriptionAssets;
+  }
   return result;
 };
 
@@ -247,7 +249,9 @@ export const parseUpdateTaskInput = (input: HostCommandArgs): UpdateTaskInput =>
     taskId: readRequiredString(record, "taskId"),
     patch,
   };
-  if (descriptionAssets) result.descriptionAssets = descriptionAssets;
+  if (descriptionAssets) {
+    result.descriptionAssets = descriptionAssets;
+  }
   return result;
 };
 
@@ -344,7 +348,9 @@ export const parseTaskSessionBootstrapPrepareInput = (
     runtimeKind: readRequiredString(record, "runtimeKind"),
     role: parsedRole.data,
   };
-  if (targetWorkingDirectory) result.targetWorkingDirectory = targetWorkingDirectory;
+  if (targetWorkingDirectory) {
+    result.targetWorkingDirectory = targetWorkingDirectory;
+  }
   return result;
 };
 
@@ -432,7 +438,9 @@ export const parseBuildCompletedInput = (input: HostCommandArgs): BuildCompleted
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
   };
-  if (summary !== undefined) result.summary = summary;
+  if (summary !== undefined) {
+    result.summary = summary;
+  }
   return result;
 };
 
@@ -447,6 +455,8 @@ export const parseOptionalNoteInput = (
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
   };
-  if (note !== undefined) result.note = note;
+  if (note !== undefined) {
+    result.note = note;
+  }
   return result;
 };

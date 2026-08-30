@@ -20,7 +20,9 @@ export const toReusablePromptSlashCommand = (prompt: ReusablePrompt): AgentSlash
     source: "custom",
     hints: [],
   };
-  if (prompt.description.trim().length > 0) command.description = prompt.description;
+  if (prompt.description.trim().length > 0) {
+    command.description = prompt.description;
+  }
   return command;
 };
 

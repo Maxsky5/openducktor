@@ -87,7 +87,9 @@ export const toRuntimeSessionRefWithPolicy = (
     ...toRuntimeSessionRef(repoPath, session),
     ...toAgentRuntimePolicyBinding({ runtimeKind: session.runtimeKind, runtimePolicy }),
   };
-  if (session.selectedModel) sessionRef.model = session.selectedModel;
+  if (session.selectedModel) {
+    sessionRef.model = session.selectedModel;
+  }
   return sessionRef;
 };
 
