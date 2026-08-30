@@ -8,6 +8,10 @@ import {
   replaceAgentSession,
 } from "@/state/agent-session-collection";
 import type { AgentSessionIdentity, AgentSessionRuntimeTarget } from "@/types/agent-orchestrator";
+import {
+  createAgentActivitySnapshot,
+  createEmptyAgentActivitySnapshot,
+} from "@/state/agent-session-snapshots";
 import { createSessionMessagesState } from "../support/messages";
 import {
   applyAgentSessionLiveDelta,
@@ -67,6 +71,69 @@ const delta = (
 ) => applyAgentSessionLiveDelta({ current, envelope });
 
 describe("agent session live projection", () => {
+  test.each(["snapshot", "delta"] as const)(
+    "keeps workflow-bound subagents under their parent after a %s",
+    (delivery) => {
+      const association = workflowAssociation();
+      const snapshots = [
+        snapshot("parent", { sessionAssociation: association, activity: "running" }),
+        snapshot("child-1", {
+          sessionAssociation: association,
+          parentExternalSessionId: "parent",
+          pendingQuestions: [{ requestId: "child-question", questions: [] }],
+        }),
+        snapshot("child-2", {
+          sessionAssociation: association,
+          parentExternalSessionId: "parent",
+        }),
+      ];
+      let collection = build({
+        snapshots: delivery === "snapshot" ? snapshots : [],
+      });
+      if (delivery === "delta") {
+        for (const session of snapshots) {
+          collection = delta(collection, { type: "session_upsert", session });
+        }
+      }
+      const activity = createAgentActivitySnapshot({
+        collection,
+        previous: createEmptyAgentActivitySnapshot(repoPath),
+        workspaceRepoPath: repoPath,
+      });
+
+      expect(activity.sessions.map((session) => session.externalSessionId)).toEqual(["parent"]);
+      expect(activity.sessions[0]?.pendingQuestionCount).toBe(1);
+      expect(getAgentSession(collection, identity("child-1"))?.pendingQuestions).toHaveLength(1);
+      expect(getAgentSession(collection, identity("parent"))?.pendingQuestions[0]).toMatchObject({
+        requestId: "child-question",
+        responseSession: { ...identity("child-1"), sessionAssociation: association },
+      });
+      const removed = delta(collection, {
+        type: "session_removed",
+        ref: snapshot("child-1").ref,
+      });
+      const afterRemoval = createAgentActivitySnapshot({
+        collection: removed,
+        previous: activity,
+        workspaceRepoPath: repoPath,
+      });
+      expect(afterRemoval.sessions.map((session) => session.externalSessionId)).toEqual(["parent"]);
+      expect(afterRemoval.sessions[0]?.pendingQuestionCount).toBe(0);
+      const reconnected = build({
+        current: removed,
+        snapshots: [],
+      });
+      const afterReconnect = createAgentActivitySnapshot({
+        collection: reconnected,
+        previous: afterRemoval,
+        workspaceRepoPath: repoPath,
+      });
+      expect(afterReconnect.sessions.map((session) => session.externalSessionId)).toEqual([
+        "parent",
+      ]);
+    },
+  );
+
   test("carries workflow, repository, and unbound associations from one mixed snapshot", () => {
     const sessions = build({
       snapshots: [
@@ -387,7 +454,7 @@ describe("agent session live projection", () => {
 
     expect(getAgentSession(removed, identity("child-thread"))).toMatchObject({
       status: "idle",
-      liveParentExternalSessionId: undefined,
+      liveParentExternalSessionId: "parent-thread",
       historyLoadState: "loaded",
       messages: {
         items: [

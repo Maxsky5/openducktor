@@ -108,7 +108,7 @@ export const createAgentActivitySnapshot = ({
   );
   const sessions = listAgentSessions(collection).sort(sortByStartedAtDesc);
   const nextActivitySessions = sessions.flatMap((session): AgentSessionSummary[] => {
-    if (!isWorkflowAgentSession(session)) {
+    if (!isWorkflowAgentSession(session) || session.liveParentExternalSessionId !== undefined) {
       return [];
     }
     const nextSummary = toAgentSessionSummary(session);
