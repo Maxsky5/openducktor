@@ -1,5 +1,4 @@
 import {
-  selectGitProviderConfig,
   type GitProviderRepository,
   type PullRequest,
   type RepoConfig,
@@ -93,8 +92,8 @@ export const githubProviderStatus = (
   repoConfig: RepoConfig,
 ) =>
   Effect.gen(function* () {
-    const githubConfig = selectGitProviderConfig(repoConfig.git, GITHUB_PROVIDER_ID);
-    if (!githubConfig?.enabled) {
+    const githubConfig = repoConfig.git.provider;
+    if (githubConfig?.id !== GITHUB_PROVIDER_ID || !githubConfig.enabled) {
       return {
         providerId: GITHUB_PROVIDER_ID,
         enabled: false,
@@ -268,8 +267,8 @@ export const requireGithubPullRequestReadRepository = (
   repoConfig: RepoConfig,
 ) =>
   Effect.gen(function* () {
-    const githubConfig = selectGitProviderConfig(repoConfig.git, GITHUB_PROVIDER_ID);
-    if (!githubConfig?.enabled) {
+    const githubConfig = repoConfig.git.provider;
+    if (githubConfig?.id !== GITHUB_PROVIDER_ID || !githubConfig.enabled) {
       return yield* Effect.fail(
         new HostValidationError({
           field: "git.provider.enabled",
@@ -393,16 +392,16 @@ export const githubPullRequestSyncPolicy = (
   repoConfig: RepoConfig,
 ) =>
   Effect.gen(function* () {
-    const githubConfig = selectGitProviderConfig(repoConfig.git, GITHUB_PROVIDER_ID);
+    const githubConfig = repoConfig.git.provider;
     const githubCommandResult =
-      githubConfig?.enabled === true
+      githubConfig?.id === GITHUB_PROVIDER_ID && githubConfig.enabled === true
         ? yield* Effect.either(resolveGithubCommandDependencies(dependencies))
         : null;
     const policy: GithubPullRequestSyncPolicy = {
       providerId: GITHUB_PROVIDER_ID,
       available: githubCommandResult?._tag === "Right",
     };
-    if (githubConfig?.repository) {
+    if (githubConfig?.id === GITHUB_PROVIDER_ID && githubConfig.repository) {
       policy.repository = githubConfig.repository;
     }
     return policy;

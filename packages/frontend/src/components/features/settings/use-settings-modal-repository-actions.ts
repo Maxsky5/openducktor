@@ -1,6 +1,5 @@
 import {
   GITHUB_PROVIDER_DESCRIPTOR,
-  selectGitProviderConfig,
   type GitProviderConfig,
   type GitProviderRepository,
   type RepoConfig,
@@ -40,10 +39,7 @@ export const useSettingsModalRepositoryActions = ({
       ) {
         return repoConfig;
       }
-      const currentGithub: GitProviderConfig = selectGitProviderConfig(
-        repoConfig.git,
-        GITHUB_PROVIDER_DESCRIPTOR.id,
-      ) ?? {
+      const currentGithub: GitProviderConfig = configuredProvider ?? {
         id: GITHUB_PROVIDER_DESCRIPTOR.id,
         enabled: false,
         autoDetected: false,

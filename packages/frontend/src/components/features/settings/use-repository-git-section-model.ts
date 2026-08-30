@@ -1,6 +1,5 @@
 import {
   GITHUB_PROVIDER_DESCRIPTOR,
-  selectGitProviderConfig,
   type GitProviderConfig,
   type GitProviderRepository,
   type RepoConfig,
@@ -116,7 +115,7 @@ const updateGithubProviderConfig = (
     return repoConfig;
   }
 
-  const github = selectGitProviderConfig(repoConfig.git, GITHUB_PROVIDER_DESCRIPTOR.id);
+  const github = repoConfig.git.provider;
   return {
     ...repoConfig,
     git: {
@@ -263,10 +262,9 @@ export function useRepositoryGitSectionModel({
   selectedRepoConfig,
   selectedRepoPath,
 }: UseRepositoryGitSectionModelArgs): UseRepositoryGitSectionModelResult {
-  const initialGithubRepository = selectGitProviderConfig(
-    selectedRepoConfig?.git,
-    GITHUB_PROVIDER_DESCRIPTOR.id,
-  )?.repository;
+  const initialProvider = selectedRepoConfig?.git.provider;
+  const initialGithubRepository =
+    initialProvider?.id === GITHUB_PROVIDER_DESCRIPTOR.id ? initialProvider.repository : undefined;
   const initialHasRepositoryCoordinates = Boolean(
     initialGithubRepository?.host && initialGithubRepository.owner && initialGithubRepository.name,
   );
@@ -289,9 +287,11 @@ export function useRepositoryGitSectionModel({
     createRepositoryGitSectionState,
   );
 
+  const configuredProvider = selectedRepoConfig?.git.provider;
   const github =
-    selectGitProviderConfig(selectedRepoConfig?.git, GITHUB_PROVIDER_DESCRIPTOR.id) ??
-    EMPTY_GITHUB_CONFIG;
+    configuredProvider?.id === GITHUB_PROVIDER_DESCRIPTOR.id
+      ? configuredProvider
+      : EMPTY_GITHUB_CONFIG;
   const hasConfiguredNonGithubProvider = hasNonGithubProvider(selectedRepoConfig);
   const configuredProviderId = selectedRepoConfig?.git.provider?.id;
   const githubControlsDisabled = disabled || hasConfiguredNonGithubProvider;

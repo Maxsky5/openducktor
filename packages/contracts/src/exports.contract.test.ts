@@ -750,7 +750,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "softGuardrailsSchema",
   "settingsSnapshotSchema",
   "settingsSnapshotSaveInputSchema",
-  "selectGitProviderConfig",
   "specTemplateSections",
   "systemCheckSchema",
   "systemListOpenInToolsRequestSchema",
