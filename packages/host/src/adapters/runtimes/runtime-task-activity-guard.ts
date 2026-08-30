@@ -107,21 +107,25 @@ const stopLiveSessionRecords = (
           workingDirectory: session.workingDirectory,
         })
         .pipe(
-          Effect.mapError(
-            (cause) =>
-              new HostOperationError({
-                operation,
-                message: `Failed stopping live ${session.role} session ${session.externalSessionId}: ${
-                  cause instanceof Error ? cause.message : String(cause)
-                }`,
-                cause,
-                details: {
-                  externalSessionId: session.externalSessionId,
-                  role: session.role,
-                  runtimeKind: session.runtimeKind,
-                },
-              }),
-          ),
+          Effect.mapError((cause) => {
+            const completedStopMessage =
+              stoppedSessionCount > 0
+                ? ` after stopping ${stoppedSessionCount} earlier live agent session${stoppedSessionCount === 1 ? "" : "s"}`
+                : "";
+            return new HostOperationError({
+              operation,
+              message: `Failed stopping live ${session.role} session ${session.externalSessionId}${completedStopMessage}: ${
+                cause instanceof Error ? cause.message : String(cause)
+              }`,
+              cause,
+              details: {
+                externalSessionId: session.externalSessionId,
+                role: session.role,
+                runtimeKind: session.runtimeKind,
+                stoppedSessionCount,
+              },
+            });
+          }),
         );
       stoppedSessionCount += 1;
     }

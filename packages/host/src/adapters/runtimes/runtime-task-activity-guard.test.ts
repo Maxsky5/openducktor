@@ -13,12 +13,14 @@ const registry = ({
   stopCalls = [],
   probeSupported = true,
   stopError = null,
+  stopErrorSessionId = null,
 }: {
   liveSessions?: Set<string>;
   probeCalls?: unknown[];
   stopCalls?: string[];
   probeSupported?: boolean;
   stopError?: string | null;
+  stopErrorSessionId?: string | null;
 } = {}): RuntimeRegistryPort => ({
   ensureWorkspaceRuntime() {
     return Effect.tryPromise({
@@ -64,7 +66,7 @@ const registry = ({
   stopSession(input) {
     return Effect.tryPromise({
       try: async () => {
-        if (stopError) {
+        if (stopError && (!stopErrorSessionId || stopErrorSessionId === input.externalSessionId)) {
           throw new Error(stopError);
         }
         stopCalls.push(input.externalSessionId);
@@ -289,5 +291,36 @@ describe("createRuntimeTaskActivityGuard", () => {
     ).rejects.toThrow(
       "Failed stopping live build session external-build-session: runtime rejected abort",
     );
+  });
+  test("reports sessions stopped before a later stop failure", async () => {
+    const guard = createRuntimeTaskActivityGuard({
+      runtimeRegistry: registry({
+        liveSessions: new Set(["external-build-session", "external-qa-session"]),
+        stopError: "runtime rejected abort",
+        stopErrorSessionId: "external-qa-session",
+      }),
+    });
+
+    const error = await Effect.runPromise(
+      guard
+        .stopLiveSessions({
+          repoPath: "/repo",
+          taskSessions: [
+            {
+              taskId: "task-1",
+              sessions: [
+                session(),
+                session({ externalSessionId: "external-qa-session", role: "qa" }),
+              ],
+            },
+          ],
+        })
+        .pipe(Effect.flip),
+    );
+
+    expect(error.message).toContain(
+      "Failed stopping live qa session external-qa-session after stopping 1 earlier live agent session",
+    );
+    expect(error.details).toMatchObject({ stoppedSessionCount: 1 });
   });
 });
