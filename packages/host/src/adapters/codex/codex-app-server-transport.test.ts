@@ -42,12 +42,13 @@ const serverRequestEvent = (message: CodexAppServerProtocolMessage) =>
   });
 
 describe("createCodexAppServerTransport", () => {
-  test("preserves the Codex RPC error message and code", async () => {
+  test("preserves the Codex RPC error message, code, and diagnostic data", async () => {
     const child = createChild();
     const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
     const error = {
       code: -32600,
       message: "Cannot resume child: resume the parent first.",
+      data: { threadId: "child", parentThreadId: "parent" },
     };
     try {
       const failure = Effect.runPromise(
@@ -58,6 +59,30 @@ describe("createCodexAppServerTransport", () => {
         message: expect.stringContaining(error.message),
         cause: error,
       });
+    } finally {
+      await Effect.runPromise(transport.close());
+    }
+  });
+
+  test("rejects a malformed RPC error without closing the transport", async () => {
+    const child = createChild();
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
+    try {
+      const failure = Effect.runPromise(
+        Effect.flip(transport.request({ method: "thread/resume", params: { threadId: "child" } })),
+      );
+      child.stdout.write(`${JSON.stringify({ id: 1, error: { code: -32600 } })}\n`);
+      await expect(failure).resolves.toBeInstanceOf(HostValidationError);
+      await expect(failure).resolves.toMatchObject({
+        field: "error",
+        details: { runtimeId: "runtime-1", id: 1, method: "thread/resume" },
+      });
+
+      const nextResponse = Effect.runPromise(
+        transport.request({ method: "model/list", params: {} }),
+      );
+      child.stdout.write(`${JSON.stringify({ id: 2, result: { data: [], nextCursor: null } })}\n`);
+      await expect(nextResponse).resolves.toEqual({ data: [], nextCursor: null });
     } finally {
       await Effect.runPromise(transport.close());
     }

@@ -1,3 +1,4 @@
+import { CODEX_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { PolicyBoundSessionRef, SessionRef } from "@openducktor/core";
 import { agentSessionRefsEqual } from "@openducktor/core";
 import type { CodexLocalSessionState } from "./codex-local-session-state";
@@ -11,12 +12,7 @@ import { codexTransportPolicy } from "./codex-session-policy";
 import { codexSessionRef } from "./codex-session-ref";
 import { resolveCodexSessionScopePolicy } from "./codex-session-scope-policy";
 import type { CodexSubagentLinkState } from "./codex-subagent-link-state";
-import type {
-  CodexAppServerClient,
-  CodexLiveSessionLocator,
-  CodexSessionContextUsage,
-  CodexThreadResumeParams,
-} from "./types";
+import type { CodexLiveSessionLocator, CodexSessionContextUsage } from "./types";
 
 type ContextUsageLoadGuard = {
   refs: readonly SessionRef[];
@@ -70,7 +66,7 @@ export class CodexContextUsageLoader {
           async () => {
             const response = await this.wait(
               guard,
-              this.resumeThread(guard, runtime.client, {
+              runtime.client.threadResume({
                 ...codexTransportPolicy(policy),
                 config: sessionPolicy.threadConfig,
                 threadId: input.externalSessionId,
@@ -142,7 +138,7 @@ export class CodexContextUsageLoader {
           async () => {
             const response = await this.wait(
               guard,
-              this.resumeThread(guard, this.deps.runtimeClients.clientForRuntime(input.runtimeId), {
+              this.deps.runtimeClients.clientForRuntime(input.runtimeId).threadResume({
                 ...codexTransportPolicy(sessionPolicy.runtimePolicy),
                 config: sessionPolicy.threadConfig,
                 threadId: input.externalSessionId,
@@ -154,9 +150,12 @@ export class CodexContextUsageLoader {
             const recoveredSession = sessionStateFromExistingThread(
               {
                 ...targetRef,
-                runtimeKind: "codex",
+                runtimeKind: CODEX_RUNTIME_DESCRIPTOR.kind,
                 sessionScope,
-                runtimePolicy: { kind: "codex", policy: sessionPolicy.runtimePolicy },
+                runtimePolicy: {
+                  kind: CODEX_RUNTIME_DESCRIPTOR.kind,
+                  policy: sessionPolicy.runtimePolicy,
+                },
               },
               input.runtimeId,
               targetSession?.model,
@@ -188,47 +187,6 @@ export class CodexContextUsageLoader {
         );
       }
     }
-  }
-
-  private async resumeThread(
-    guard: ContextUsageLoadGuard,
-    client: CodexAppServerClient,
-    params: CodexThreadResumeParams,
-  ) {
-    const ancestors: string[] = [];
-    const visited = new Set([params.threadId]);
-    let { thread } = await this.wait(
-      guard,
-      client.threadRead({ threadId: params.threadId, includeTurns: false }),
-    );
-    this.assertActive(guard);
-    while (
-      thread.status.type === "notLoaded" &&
-      thread.canAcceptDirectInput !== true &&
-      thread.parentThreadId !== null
-    ) {
-      const parentId = thread.parentThreadId;
-      if (visited.has(parentId)) {
-        throw new Error(
-          `Cannot resume Codex thread '${params.threadId}': cyclic parent relationship at '${parentId}'.`,
-        );
-      }
-      visited.add(parentId);
-      const parent = await this.wait(
-        guard,
-        client.threadRead({ threadId: parentId, includeTurns: false }),
-      );
-      this.assertActive(guard);
-      thread = parent.thread;
-      if (thread.status.type === "notLoaded") {
-        ancestors.push(parentId);
-      }
-    }
-    for (const threadId of ancestors.reverse()) {
-      await this.wait(guard, client.threadResume({ threadId, excludeTurns: true }));
-      this.assertActive(guard);
-    }
-    return this.wait(guard, client.threadResume(params));
   }
 
   cancelRuntime(runtimeId: string): void {

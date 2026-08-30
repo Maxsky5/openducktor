@@ -10,6 +10,8 @@ import type {
 import { CODEX_MODEL_CATALOG_TTL_MS } from "./codex-app-server-shared";
 import type { CodexAppServerClient, CodexModelListResponse } from "./types";
 
+export const CODEX_MODEL_PROVIDER_ID = "codex";
+
 export const requireModelSelection = (
   model: AgentModelSelection | undefined,
 ): AgentModelSelection => {
@@ -62,7 +64,7 @@ export const toCatalog = (response: CodexModelListResponse): AgentModelCatalog =
   runtime: CODEX_RUNTIME_DESCRIPTOR,
   models: response.data.map((model) => ({
     id: model.id,
-    providerId: "codex",
+    providerId: CODEX_MODEL_PROVIDER_ID,
     providerName: "Codex",
     modelId: model.model,
     modelName: model.displayName,
@@ -71,7 +73,7 @@ export const toCatalog = (response: CodexModelListResponse): AgentModelCatalog =
   })),
   defaultModelsByProvider: response.data.some((model) => model.isDefault)
     ? {
-        codex:
+        [CODEX_MODEL_PROVIDER_ID]:
           response.data.find((model) => model.isDefault)?.model ?? response.data[0]?.model ?? "",
       }
     : {},

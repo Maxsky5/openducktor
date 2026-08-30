@@ -3,8 +3,6 @@ import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/core";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
-  codexThreadFixture,
-  codexThreadStartResultFixture,
   codexStartSessionInput,
   createDeferred,
   createHarness,
@@ -35,69 +33,6 @@ const blockResume = (transport: RecordingTransport) => {
 };
 
 describe("CodexContextUsageLoader", () => {
-  test.each([true, false])(
-    "loads only unloaded child owners before replay: parent loaded %s",
-    async (parentLoaded) => {
-      const runtimeStream = createRuntimeStreamSubscription();
-      const transport = new RecordingTransport("runtime-live", false);
-      const request = transport.request.bind(transport);
-      const loaded = new Set<string>(parentLoaded ? ["parent"] : []);
-      const resumed: string[] = [];
-      transport.request = async (input) => {
-        if (input.method === "thread/read") {
-          const id = input.params.threadId;
-          return {
-            thread: codexThreadFixture({
-              id,
-              parentThreadId: id === "child" ? "parent" : null,
-              canAcceptDirectInput: loaded.has(id) ? id !== "child" : null,
-              status: loaded.has(id) ? { type: "idle" } : { type: "notLoaded" },
-            }),
-          };
-        }
-        if (input.method === "thread/resume") {
-          const id = input.params.threadId;
-          if (id === "child" && !loaded.has("parent")) {
-            throw new Error("Cannot resume child: resume the parent first.");
-          }
-          resumed.push(id);
-          loaded.add(id);
-          const response = codexThreadStartResultFixture(id, "thread/resume");
-          if (id === "child") {
-            runtimeStream.emitNotification({
-              method: "thread/tokenUsage/updated",
-              params: {
-                threadId: id,
-                turnId: "child-turn",
-                tokenUsage: codexTokenUsageFixture(222_747, 258_400),
-              },
-            });
-            await flushCodexAdapterWork();
-            return { ...response, model: "gpt-5.4", reasoningEffort: "high" };
-          }
-          expect(input.params).toEqual({ threadId: "parent", excludeTurns: true });
-          return response;
-        }
-        return request(input);
-      };
-      const { adapter } = createHarness({
-        subscribeEvents: runtimeStream.subscribeEvents,
-        transportFactory: () => transport,
-      });
-      await expect(adapter.loadSessionContextUsage(codexSessionRef("child"))).resolves.toEqual({
-        totalTokens: 222_747,
-        contextWindow: 258_400,
-      });
-      expect(resumed).toEqual(parentLoaded ? ["child"] : ["parent", "child"]);
-      expect(adapter.listLiveSessionSnapshots("runtime-live")).toContainEqual(
-        expect.objectContaining({
-          ref: expect.objectContaining({ externalSessionId: "child" }),
-          model: { runtimeKind: "codex", providerId: "codex", modelId: "gpt-5.4", variant: "high" },
-        }),
-      );
-    },
-  );
-
   test("returns zero context for a fresh session without resuming its new thread", async () => {
     const { adapter, transports } = createHarness();
     await adapter.startSession(codexStartSessionInput());
@@ -113,53 +48,6 @@ describe("CodexContextUsageLoader", () => {
       expect.objectContaining({ method: "thread/resume" }),
     );
   });
-
-  test.each(["failure", "release"] as const)(
-    "does not resume a child after parent %s",
-    async (outcome) => {
-      const transport = new RecordingTransport("runtime-live", false);
-      const request = transport.request.bind(transport);
-      const parentStarted = createDeferred<void>();
-      const parentFinished = createDeferred<void>();
-      const resumed: string[] = [];
-      transport.request = async (input) => {
-        if (input.method === "thread/read") {
-          return {
-            thread: codexThreadFixture({
-              id: input.params.threadId,
-              parentThreadId: input.params.threadId === "child" ? "parent" : null,
-              canAcceptDirectInput: null,
-              status: { type: "notLoaded" },
-            }),
-          };
-        }
-        if (input.method === "thread/resume") {
-          resumed.push(input.params.threadId);
-          if (input.params.threadId === "parent") {
-            parentStarted.resolve(undefined);
-            await parentFinished.promise;
-            if (outcome === "failure") {
-              throw new Error("Parent could not restore its runtime configuration.");
-            }
-          }
-        }
-        return request(input);
-      };
-      const { adapter } = createHarness({ transportFactory: () => transport });
-      const loading = adapter.loadSessionContextUsage(codexSessionRef("child"));
-      await parentStarted.promise;
-      if (outcome === "release") {
-        adapter.releaseRuntime("runtime-live");
-      }
-      parentFinished.resolve(undefined);
-      await expect(loading).rejects.toThrow(
-        outcome === "failure" ? "Parent could not restore" : "was released",
-      );
-      await flushCodexAdapterWork();
-      expect(resumed).toEqual(["parent"]);
-      expect(adapter.listLiveSessionSnapshots("runtime-live")).toEqual([]);
-    },
-  );
 
   test("cancels cold loads for released sessions and runtimes without late retention", async () => {
     for (const release of ["session", "runtime"] as const) {
