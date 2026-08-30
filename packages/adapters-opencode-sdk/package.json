@@ -15,7 +15,7 @@
     "@openducktor/contracts": "workspace:*",
     "@openducktor/core": "workspace:*",
     "@openducktor/path-support": "workspace:*",
-    "undici": "^7.28.0",
+    "undici": "^8.10.0",
     "zod": "^4.4.3"
   }
 }
