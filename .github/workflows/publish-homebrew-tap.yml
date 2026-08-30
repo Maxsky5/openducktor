@@ -12,7 +12,7 @@ on:
         type: string
 
 env:
-  BUN_VERSION: 1.3.11
+  BUN_VERSION: 1.3.14
   DEFAULT_HOMEBREW_TAP_BRANCH: main
   DEFAULT_HOMEBREW_TAP_REPOSITORY: ${{ format('{0}/homebrew-openducktor', github.repository_owner) }}
 

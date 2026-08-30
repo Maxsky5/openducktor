@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { ChatSettings } from "@openducktor/contracts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { NamedExoticComponent, ReactElement } from "react";
+import type { ReactElement } from "react";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import type { FileEditData } from "./agent-chat-message-card-model";
 
@@ -11,10 +11,10 @@ const pierreDiffViewerModule = await import("@/components/features/agents/pierre
 type RestorableSpy = { mockRestore(): void };
 let pierreViewerSpies: RestorableSpy[] = [];
 
-const namedExoticMock = <Props,>(
-  component: (props: Props) => ReactElement | null,
-  original: NamedExoticComponent<Props>,
-): NamedExoticComponent<Props> => Object.assign(component, { $$typeof: original.$$typeof });
+const namedExoticMock = <MockComponent extends object, OriginalComponent extends object>(
+  component: MockComponent,
+  original: OriginalComponent,
+): MockComponent & OriginalComponent => Object.assign(component, original);
 
 const preloaderMock = mock(({ filePath }: { patch: string; filePath: string }) => (
   <div data-testid="pierre-diff-preloader">{filePath}</div>

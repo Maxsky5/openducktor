@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { act, type NamedExoticComponent, type ReactElement, useState } from "react";
+import { act, type ReactElement, useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
 
@@ -8,10 +8,10 @@ const pierreDiffViewerModule = await import("@/components/features/agents/pierre
 type RestorableSpy = { mockRestore(): void };
 let pierreViewerSpies: RestorableSpy[] = [];
 
-const namedExoticMock = <Props,>(
-  component: (props: Props) => ReactElement | null,
-  original: NamedExoticComponent<Props>,
-): NamedExoticComponent<Props> => Object.assign(component, { $$typeof: original.$$typeof });
+const namedExoticMock = <MockComponent extends object, OriginalComponent extends object>(
+  component: MockComponent,
+  original: OriginalComponent,
+): MockComponent & OriginalComponent => Object.assign(component, original);
 
 type FileDiffListComponent = (typeof import("./file-diff-list"))["FileDiffList"];
 

@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  BUN_VERSION: 1.3.11
+  BUN_VERSION: 1.3.14
   DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
 
 jobs:

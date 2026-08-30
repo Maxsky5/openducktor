@@ -22,7 +22,8 @@ class FakeWebSocket extends EventTarget implements WebSocket {
   onerror: ((this: WebSocket, event: Event) => void) | null = null;
   onmessage: ((this: WebSocket, event: MessageEvent) => void) | null = null;
   onopen: ((this: WebSocket, event: Event) => void) | null = null;
-  readyState = 0;
+  readyState: WebSocket["readyState"] = FakeWebSocket.CONNECTING;
+  readonly sentData: (string | ArrayBufferLike | Blob | ArrayBufferView)[] = [];
 
   readonly url: string;
   readonly protocol: string;
@@ -34,7 +35,9 @@ class FakeWebSocket extends EventTarget implements WebSocket {
     FakeWebSocket.instances.push(this);
   }
 
-  send(_data: string | ArrayBufferLike | Blob | ArrayBufferView): void {}
+  send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void {
+    this.sentData.push(data);
+  }
 
   close(_code?: number, _reason?: string): void {
     this.readyState = 3;
@@ -48,6 +51,10 @@ class FakeWebSocket extends EventTarget implements WebSocket {
   emitClose(code: number, reason: string): void {
     this.readyState = 3;
     this.dispatchEvent(Object.assign(new Event("close"), { code, reason }));
+  }
+
+  emitMessage(data: ArrayBuffer): void {
+    this.dispatchEvent(new MessageEvent("message", { data }));
   }
 }
 
@@ -77,6 +84,46 @@ afterEach(() => {
 });
 
 describe("createBrowserTerminalBridge", () => {
+  test("copies outgoing frames to an ArrayBuffer-backed view", async () => {
+    const bridge = createBrowserTerminalBridge();
+    const connecting = bridge.connect(
+      () => undefined,
+      () => undefined,
+      () => undefined,
+    );
+    const socket = await waitForSocket();
+    socket.emitOpen();
+    const connection = await connecting;
+    const frame = new Uint8Array(new SharedArrayBuffer(3));
+    frame.set([1, 2, 3]);
+
+    await connection.send(frame);
+
+    const sent = socket.sentData[0];
+    expect(sent).toBeInstanceOf(Uint8Array);
+    if (!(sent instanceof Uint8Array)) throw new Error("Expected a Uint8Array WebSocket frame.");
+    expect(sent).not.toBe(frame);
+    expect(sent.buffer).toBeInstanceOf(ArrayBuffer);
+    expect(Array.from(sent)).toEqual([1, 2, 3]);
+  });
+
+  test("forwards incoming ArrayBuffer frames", async () => {
+    const frames: Uint8Array[] = [];
+    const bridge = createBrowserTerminalBridge();
+    const connecting = bridge.connect(
+      (frame) => frames.push(frame),
+      () => undefined,
+      () => undefined,
+    );
+    const socket = await waitForSocket();
+    socket.emitOpen();
+    await connecting;
+
+    socket.emitMessage(Uint8Array.from([4, 5, 6]).buffer);
+
+    expect(frames.map((frame) => Array.from(frame))).toEqual([[4, 5, 6]]);
+  });
+
   test("reports an abnormal WebSocket close before marking the transport disconnected", async () => {
     const failures: TerminalFailure[] = [];
     const states: string[] = [];

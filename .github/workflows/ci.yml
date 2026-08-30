@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 env:
-  BUN_VERSION: 1.3.11
+  BUN_VERSION: 1.3.14
 
 jobs:
   react-doctor:
