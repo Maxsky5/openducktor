@@ -1,17 +1,12 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { act, type NamedExoticComponent, type ReactElement, useState } from "react";
+import { act, type ReactElement, useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
 
 const pierreDiffViewerModule = await import("@/components/features/agents/pierre-diff-viewer");
 type RestorableSpy = { mockRestore(): void };
 let pierreViewerSpies: RestorableSpy[] = [];
-
-const namedExoticMock = <Props,>(
-  component: (props: Props) => ReactElement | null,
-  original: NamedExoticComponent<Props>,
-): NamedExoticComponent<Props> => Object.assign(component, { $$typeof: original.$$typeof });
 
 type FileDiffListComponent = (typeof import("./file-diff-list"))["FileDiffList"];
 
@@ -131,13 +126,22 @@ beforeEach(async () => {
 
   pierreViewerSpies = [
     spyOn(pierreDiffViewerModule, "PierreDiffPreloader").mockImplementation(
-      namedExoticMock(preloaderMock, pierreDiffViewerModule.PierreDiffPreloader),
+      Object.assign(preloaderMock, {
+        $$typeof: pierreDiffViewerModule.PierreDiffPreloader.$$typeof,
+        type: pierreDiffViewerModule.PierreDiffPreloader.type,
+      }),
     ),
     spyOn(pierreDiffViewerModule, "PierreDiffViewer").mockImplementation(
-      namedExoticMock(viewerMock, pierreDiffViewerModule.PierreDiffViewer),
+      Object.assign(viewerMock, {
+        $$typeof: pierreDiffViewerModule.PierreDiffViewer.$$typeof,
+        type: pierreDiffViewerModule.PierreDiffViewer.type,
+      }),
     ),
     spyOn(pierreDiffViewerModule, "PierreFileViewer").mockImplementation(
-      namedExoticMock(fileViewerMock, pierreDiffViewerModule.PierreFileViewer),
+      Object.assign(fileViewerMock, {
+        $$typeof: pierreDiffViewerModule.PierreFileViewer.$$typeof,
+        type: pierreDiffViewerModule.PierreFileViewer.type,
+      }),
     ),
   ];
 

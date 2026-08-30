@@ -65,7 +65,7 @@ export const createBrowserTerminalBridge = (): TerminalBridge => ({
             if (socket.readyState !== WebSocket.OPEN) {
               throw new Error("Terminal WebSocket is disconnected.");
             }
-            socket.send(frame);
+            socket.send(frame.slice());
           },
           close: async () => {
             socket.close(1000, "Terminal renderer disconnected.");

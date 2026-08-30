@@ -1,4 +1,4 @@
-import { scheduleTask, type ScheduleTask } from "@/lib/scheduling";
+import { scheduleTask, type ScheduleTask } from "../lib/scheduling";
 
 const STARTUP_SPLASH_ID = "openducktor-startup";
 const STARTUP_SPLASH_STATUS_SELECTOR = "[data-odt-startup-status]";

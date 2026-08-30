@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { ChatSettings } from "@openducktor/contracts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { NamedExoticComponent, ReactElement } from "react";
+import type { ReactElement } from "react";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import type { FileEditData } from "./agent-chat-message-card-model";
 
@@ -10,11 +10,6 @@ let AgentChatSettingsProvider: typeof import("./agent-chat-settings-context").Ag
 const pierreDiffViewerModule = await import("@/components/features/agents/pierre-diff-viewer");
 type RestorableSpy = { mockRestore(): void };
 let pierreViewerSpies: RestorableSpy[] = [];
-
-const namedExoticMock = <Props,>(
-  component: (props: Props) => ReactElement | null,
-  original: NamedExoticComponent<Props>,
-): NamedExoticComponent<Props> => Object.assign(component, { $$typeof: original.$$typeof });
 
 const preloaderMock = mock(({ filePath }: { patch: string; filePath: string }) => (
   <div data-testid="pierre-diff-preloader">{filePath}</div>
@@ -128,16 +123,28 @@ beforeEach(async () => {
 
   pierreViewerSpies = [
     spyOn(pierreDiffViewerModule, "PierreDiffPreloader").mockImplementation(
-      namedExoticMock(preloaderMock, pierreDiffViewerModule.PierreDiffPreloader),
+      Object.assign(preloaderMock, {
+        $$typeof: pierreDiffViewerModule.PierreDiffPreloader.$$typeof,
+        type: pierreDiffViewerModule.PierreDiffPreloader.type,
+      }),
     ),
     spyOn(pierreDiffViewerModule, "PierrePreloadedDiffViewer").mockImplementation(
-      namedExoticMock(preloadedViewerMock, pierreDiffViewerModule.PierrePreloadedDiffViewer),
+      Object.assign(preloadedViewerMock, {
+        $$typeof: pierreDiffViewerModule.PierrePreloadedDiffViewer.$$typeof,
+        type: pierreDiffViewerModule.PierrePreloadedDiffViewer.type,
+      }),
     ),
     spyOn(pierreDiffViewerModule, "PierreDiffViewer").mockImplementation(
-      namedExoticMock(viewerMock, pierreDiffViewerModule.PierreDiffViewer),
+      Object.assign(viewerMock, {
+        $$typeof: pierreDiffViewerModule.PierreDiffViewer.$$typeof,
+        type: pierreDiffViewerModule.PierreDiffViewer.type,
+      }),
     ),
     spyOn(pierreDiffViewerModule, "PierreFileViewer").mockImplementation(
-      namedExoticMock(fileViewerMock, pierreDiffViewerModule.PierreFileViewer),
+      Object.assign(fileViewerMock, {
+        $$typeof: pierreDiffViewerModule.PierreFileViewer.$$typeof,
+        type: pierreDiffViewerModule.PierreFileViewer.type,
+      }),
     ),
   ];
 
