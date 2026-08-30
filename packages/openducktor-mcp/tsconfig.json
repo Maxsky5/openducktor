@@ -8,6 +8,7 @@
     "rootDir": "src",
     "outDir": "dist",
     "lib": ["ES2022"],
+    "types": ["node", "bun-types"],
     "resolveJsonModule": true
   },
   "include": ["src"],
