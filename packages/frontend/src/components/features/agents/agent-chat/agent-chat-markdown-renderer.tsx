@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { closeOpenStreamingCodeFence } from "./agent-chat-code-fence-healing";
 
 const MARKDOWN_PROSE_WRAPPING_CLASSES =
-  "prose-p:whitespace-pre-wrap prose-p:break-words prose-li:break-words prose-blockquote:break-words";
+  "prose-p:break-words prose-li:break-words prose-blockquote:break-words";
 
 type AgentChatMarkdownRendererProps = {
   markdown: string;
