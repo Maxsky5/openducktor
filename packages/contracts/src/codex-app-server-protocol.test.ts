@@ -128,6 +128,14 @@ describe("Codex app-server protocol", () => {
     ).toThrow();
   });
 
+  test("accepts additive metadata from newer app-server response versions", () => {
+    expect(
+      parseCodexAppServerRequestResult("turn/interrupt", {
+        newerRuntimeMetadata: { enabled: true },
+      }),
+    ).toEqual({});
+  });
+
   test("normalizes nullable Codex skill interface fields", () => {
     expect(
       parseCodexAppServerRequestResult("skills/list", {
@@ -832,7 +840,7 @@ describe("Codex app-server protocol", () => {
     ).toBe(false);
   });
 
-  test("represents Codex subagent thread metadata from the app-server protocol", () => {
+  test("represents Codex thread metadata across compatible app-server versions", () => {
     const thread = {
       id: "child-thread",
       extra: {},
@@ -936,6 +944,7 @@ describe("Codex app-server protocol", () => {
     } as const;
 
     expect(parseCodexAppServerRequestResult("thread/start", launchResult)).toEqual(launchResult);
+    expect(parseCodexAppServerRequestResult("thread/resume", launchResult)).toEqual(launchResult);
     const resumeResult = {
       ...launchResult,
       initialTurnsPage: { data: [], nextCursor: null, backwardsCursor: null },
@@ -943,6 +952,18 @@ describe("Codex app-server protocol", () => {
       itemsBackwardsCursor: null,
     };
     expect(parseCodexAppServerRequestResult("thread/resume", resumeResult)).toEqual(resumeResult);
+    expect(
+      parseCodexAppServerRequestResult("thread/resume", {
+        ...resumeResult,
+        newerRuntimeMetadata: { enabled: true },
+      }),
+    ).toEqual(resumeResult);
+    expect(() =>
+      parseCodexAppServerRequestResult("thread/resume", {
+        ...resumeResult,
+        turnsBackwardsCursor: 1,
+      }),
+    ).toThrow();
     expect(() =>
       parseCodexAppServerRequestResult("thread/start", {
         ...launchResult,

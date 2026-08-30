@@ -1,4 +1,3 @@
-import { z } from "zod";
 import {
   codexRuntimeStreamFault,
   parseCodexRuntimeStreamEvent,
@@ -36,9 +35,8 @@ export class CodexRuntimeEventSubscriptions {
         if (event.runtimeId !== runtimeId) {
           return;
         }
-        const message = z.json().safeParse(event.message);
         try {
-          const parsed = parseCodexRuntimeStreamEvent(z.json().parse(event));
+          const parsed = parseCodexRuntimeStreamEvent(event);
           if (parsed.kind !== "ignored_notification") {
             onEvent(parsed);
           }
@@ -46,7 +44,7 @@ export class CodexRuntimeEventSubscriptions {
           onEvent(
             codexRuntimeStreamFault({
               cause,
-              message: message.success ? message.data : undefined,
+              message: event.message,
               receivedAt: event.receivedAt,
               runtimeId: event.runtimeId,
               sourceKind: event.kind,

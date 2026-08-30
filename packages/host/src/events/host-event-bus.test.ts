@@ -4,7 +4,7 @@ import { createHostEventBus } from "./host-event-bus";
 const createBus = () => createHostEventBus({ report: () => {} });
 
 describe("createHostEventBus", () => {
-  test("publishes validated envelopes to subscribers for a checked host channel", () => {
+  test("publishes typed envelopes to subscribers for a checked host channel", () => {
     const bus = createBus();
     const envelopes: HostEventEnvelope[] = [];
 
@@ -45,31 +45,6 @@ describe("createHostEventBus", () => {
     expect(() => bus.subscribe("openducktor://task-event", () => {})).toThrow(
       "Unknown OpenDucktor host event channel: openducktor://task-event",
     );
-  });
-  test("keeps invalid publish channels as acceptance failures", () => {
-    const bus = createBus();
-
-    expect(() =>
-      bus.publish(JSON.parse('{"channel":"openducktor://missing-event","payload":{}}')),
-    ).toThrow("Invalid OpenDucktor host event envelope.");
-  });
-  test("rejects payloads that do not match their channel schema", () => {
-    const bus = createBus();
-
-    expect(() =>
-      bus.publish(
-        JSON.parse(
-          '{"channel":"openducktor://dev-server-event","payload":{"type":"not-a-dev-event"}}',
-        ),
-      ),
-    ).toThrow("Invalid OpenDucktor host event envelope.");
-    expect(() =>
-      bus.publish(
-        JSON.parse(
-          '{"channel":"openducktor://agent-session-live-event","payload":{"type":"snapshot","repoPath":"/repo"}}',
-        ),
-      ),
-    ).toThrow("Invalid OpenDucktor host event envelope.");
   });
   test("isolates listener failures and continues a snapshot delivery", () => {
     const failures: unknown[] = [];

@@ -22,7 +22,6 @@ import {
   type AgentSessionLiveSnapshot,
   type FileDiff,
   agentSessionContextUsageSchema,
-  agentSessionLiveEnvelopeSchema,
   agentSessionLiveLoadDiffResultSchema,
   agentSessionLiveReadResultSchema,
   agentSessionLiveRefSchema,
@@ -135,16 +134,9 @@ export const createAgentSessionLiveStateService = ({
 }: CreateAgentSessionLiveStateServiceInput): AgentSessionLiveStateService => {
   const associationRetention = createAgentSessionLiveAssociationRetention();
 
-  const validateEnvelope = (envelope: AgentSessionLiveEnvelope) =>
-    Effect.try({
-      try: () => agentSessionLiveEnvelopeSchema.parse(envelope),
-      catch: (cause) => toAgentSessionLiveEnvelopePublishError(cause, envelope.type),
-    });
-
   const publishEnvelopeResult = (envelope: AgentSessionLiveEnvelope) =>
     Effect.gen(function* () {
-      const validatedEnvelope = yield* validateEnvelope(envelope);
-      const retainedEnvelope = yield* associationRetention.retainEnvelope(validatedEnvelope);
+      const retainedEnvelope = yield* associationRetention.retainEnvelope(envelope);
       if (retainedEnvelope.type === "fault") {
         const faultLogResult = yield* Effect.either(
           faultLog(formatAgentSessionLiveFaultLog(retainedEnvelope)),

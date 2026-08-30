@@ -30,7 +30,7 @@ export {
 } from "./codex-app-server-request-schemas";
 export type * from "./codex-app-server-request-schemas";
 export {
-  codexAppServerRequestResultSchema,
+  codexAppServerRequestResultSchemaFor,
   parseCodexAppServerRequestResult,
 } from "./codex-app-server-result-schemas";
 export type * from "./codex-app-server-result-schemas";

@@ -2060,6 +2060,29 @@ describe("HostClient", () => {
     ]);
   });
 
+  test("preserves Codex history pages across the IPC boundary", async () => {
+    const historyPage = { data: [], nextCursor: null, backwardsCursor: null };
+    const { client } = createClient((command) => {
+      if (command === "codex_app_server_request") {
+        return historyPage;
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(
+      client.codexAppServerRequest("runtime-1", {
+        method: "thread/turns/list",
+        params: {
+          threadId: "thread-1",
+          cursor: null,
+          limit: 100,
+          sortDirection: "asc",
+          itemsView: "full",
+        },
+      }),
+    ).resolves.toEqual(historyPage);
+  });
+
   test("runtime and session ack commands reject malformed host payloads", async () => {
     const { client } = createClient((command) => {
       switch (command) {

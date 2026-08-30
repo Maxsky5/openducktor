@@ -2,7 +2,6 @@ import {
   type HostEventChannel,
   type HostEventEnvelope,
   parseHostEventChannel as parseContractHostEventChannel,
-  parseHostEventEnvelope as parseContractHostEventEnvelope,
 } from "@openducktor/contracts";
 import { HostValidationError } from "../effect/host-errors";
 
@@ -34,25 +33,12 @@ const parseHostEventChannel = (value: string): HostEventChannel => {
   }
 };
 
-const parseHostEventEnvelope = (value: HostEventEnvelope): HostEventEnvelope => {
-  try {
-    return parseContractHostEventEnvelope(value);
-  } catch (cause) {
-    throw new HostValidationError({
-      message: "Invalid OpenDucktor host event envelope.",
-      field: "event",
-      cause,
-    });
-  }
-};
-
 export const createHostEventBus = (reporter: HostEventDeliveryReporter): HostEventBusPort => {
   const listenersByChannel = new Map<HostEventChannel, Set<HostEventListener>>();
 
   return {
     publish(envelope) {
-      const validatedEnvelope = parseHostEventEnvelope(envelope);
-      const listeners = listenersByChannel.get(validatedEnvelope.channel);
+      const listeners = listenersByChannel.get(envelope.channel);
       if (!listeners) {
         return;
       }
@@ -60,9 +46,9 @@ export const createHostEventBus = (reporter: HostEventDeliveryReporter): HostEve
       // oxlint-disable-next-line unicorn/no-useless-spread -- listeners can unsubscribe during delivery
       for (const listener of [...listeners]) {
         try {
-          listener(validatedEnvelope);
+          listener(envelope);
         } catch (cause) {
-          reporter.report({ channel: validatedEnvelope.channel, cause });
+          reporter.report({ channel: envelope.channel, cause });
         }
       }
     },

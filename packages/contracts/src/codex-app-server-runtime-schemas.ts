@@ -277,7 +277,7 @@ export const codexAppServerRuntimeStreamEventSchema = z.discriminatedUnion("kind
     runtimeId: z.string(),
     kind: z.literal("notification"),
     receivedAt: receivedAtSchema,
-    message: codexAppServerServerNotificationSchema,
+    message: codexAppServerRuntimeNotificationSchema,
   }),
   z.object({
     runtimeId: z.string(),
@@ -323,6 +323,11 @@ export type CodexAppServerRuntimeNotificationRecord = z.infer<
 export type CodexAppServerRuntimeServerRequestRecord = z.infer<
   typeof codexAppServerRuntimeServerRequestRecordSchema
 >;
+
+export const isCodexAppServerConsumedRuntimeNotification = (
+  notification: CodexAppServerRuntimeNotification,
+): notification is CodexAppServerConsumedRuntimeNotification =>
+  consumedRuntimeNotificationMethods.has(notification.method);
 
 export const parseCodexAppServerRuntimeStreamEvent = (value: JSONType) =>
   codexAppServerRuntimeStreamEventSchema.parse(value);

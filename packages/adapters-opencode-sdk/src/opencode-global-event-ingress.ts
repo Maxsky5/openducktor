@@ -236,7 +236,7 @@ const opencodeIngressEventSchema = z.union([opencodeDirectEventSchema, ignoredDi
 
 const syncEventSchema = z.object({
   aggregateID: z.string(),
-  data: opencodeProtocolObjectSchema,
+  data: z.looseObject({}),
   id: z.string(),
   seq: z.number(),
   type: z.string(),
@@ -289,9 +289,9 @@ const describeIngressEvent = (event: IngressEventDescriptor | null): string => {
 export const parseOpencodeGlobalEventPayload = (
   value: OpencodeGlobalEventPayloadInput,
 ): ParsedOpencodeGlobalEventPayload => {
-  const descriptor = ingressEventDescriptorSchema.safeParse(value);
   const parsed = opencodeGlobalEventPayloadSchema.safeParse(value);
   if (!parsed.success) {
+    const descriptor = ingressEventDescriptorSchema.safeParse(value);
     throw new Error(
       `Invalid OpenCode global event payload (${describeIngressEvent(descriptor.success ? descriptor.data : null)}): ${formatIngressIssues(parsed.error.issues)}`,
     );
@@ -302,9 +302,9 @@ export const parseOpencodeGlobalEventPayload = (
 export const parseOpencodeDirectEvent = (
   value: ParsedOpencodeEvent | z.input<typeof opencodeDirectEventSchema>,
 ): ParsedOpencodeEvent => {
-  const descriptor = ingressEventDescriptorSchema.safeParse(value);
   const parsed = opencodeDirectEventSchema.safeParse(value);
   if (!parsed.success) {
+    const descriptor = ingressEventDescriptorSchema.safeParse(value);
     throw new Error(
       `Invalid OpenCode event (${describeIngressEvent(descriptor.success ? descriptor.data : null)}): ${formatIngressIssues(parsed.error.issues)}`,
     );
@@ -315,9 +315,9 @@ export const parseOpencodeDirectEvent = (
 export const parseOpencodeIngressEvent = (
   value: ParsedOpencodeIngressEvent | z.input<typeof opencodeIngressEventSchema>,
 ): ParsedOpencodeIngressEvent => {
-  const descriptor = ingressEventDescriptorSchema.safeParse(value);
   const parsed = opencodeIngressEventSchema.safeParse(value);
   if (!parsed.success) {
+    const descriptor = ingressEventDescriptorSchema.safeParse(value);
     throw new Error(
       `Invalid OpenCode event (${describeIngressEvent(descriptor.success ? descriptor.data : null)}): ${formatIngressIssues(parsed.error.issues)}`,
     );

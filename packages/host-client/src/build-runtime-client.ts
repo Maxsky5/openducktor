@@ -8,7 +8,7 @@ import {
   type CodexAppServerClientRequest,
   type CodexAppServerClientRequestMap,
   type CodexAppServerRequestMethod,
-  codexAppServerRequestResultSchema,
+  codexAppServerRequestResultSchemaFor,
   devServerGroupStateSchema,
   type FailureKind,
   type PullRequest,
@@ -20,7 +20,6 @@ import {
   type RuntimeExecutableCheckInput,
   type RuntimeInstanceSummary,
   type RuntimeKind,
-  parseCodexAppServerRequestResult,
   runtimeEnsureFailureSourceSchema,
   type RuntimeEnsureFailureSource,
   repoRuntimeHealthCheckSchema,
@@ -279,9 +278,9 @@ const codexAppServerRequest = async <Method extends CodexAppServerRequestMethod>
   const result = await invokeFn(
     "codex_app_server_request",
     { runtimeId, method: request.method, params: request.params },
-    codexAppServerRequestResultSchema,
+    codexAppServerRequestResultSchemaFor(request.method),
   );
-  return parseCodexAppServerRequestResult(request.method, result);
+  return result;
 };
 
 const buildStart = async (

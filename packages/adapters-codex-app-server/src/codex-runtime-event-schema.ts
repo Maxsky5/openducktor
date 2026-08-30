@@ -1,10 +1,10 @@
 import {
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
   codexAppServerConsumedRuntimeNotificationSchema,
-  codexAppServerUnconsumedRuntimeNotificationSchema,
+  codexAppServerRuntimeStreamEventSchema,
+  isCodexAppServerConsumedRuntimeNotification,
   parseCodexAppServerRuntimeNotificationRecord,
   parseCodexAppServerRuntimeServerRequestRecord,
-  parseCodexAppServerRuntimeStreamEvent,
   type CodexAppServerConsumedRuntimeNotification,
   type CodexAppServerRuntimeNotificationRecord,
   type CodexAppServerRuntimeServerRequest,
@@ -55,22 +55,34 @@ export const parseCodexRuntimeNotificationRecord = parseCodexAppServerRuntimeNot
 export const parseCodexRuntimeStreamEvent = (
   value: CodexAppServerJsonValue,
 ): CodexParsedRuntimeStreamEvent => {
-  const event = parseCodexAppServerRuntimeStreamEvent(value);
+  const parsedEvent = codexAppServerRuntimeStreamEventSchema.safeParse(value);
+  if (!parsedEvent.success) {
+    if (isPlainObject(value) && value.kind === "notification") {
+      const message = value.message;
+      if (isPlainObject(message)) {
+        const methodSchema = codexAppServerConsumedRuntimeNotificationSchema.options.find(
+          (option) => option.shape.method.value === message.method,
+        );
+        methodSchema?.parse(message);
+      }
+    }
+    throw parsedEvent.error;
+  }
+  const event = parsedEvent.data;
   if (event.kind === "server_request") {
     return event;
   }
-  const unconsumed = codexAppServerUnconsumedRuntimeNotificationSchema.safeParse(event.message);
-  if (unconsumed.success) {
+  if (!isCodexAppServerConsumedRuntimeNotification(event.message)) {
     return {
       runtimeId: event.runtimeId,
       kind: "ignored_notification",
       receivedAt: event.receivedAt,
-      message: unconsumed.data,
+      message: event.message,
     };
   }
   return {
     ...event,
-    message: codexAppServerConsumedRuntimeNotificationSchema.parse(event.message),
+    message: event.message,
   };
 };
 

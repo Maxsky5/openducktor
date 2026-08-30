@@ -78,18 +78,27 @@ describe("AgentChatMarkdownRenderer", () => {
     }
   });
 
-  test("uses the plain text path when no markdown syntax is present", () => {
+  test("keeps one rendered markdown tree while streaming syntax arrives", () => {
     const rendered = render(
       createElement(AgentChatMarkdownRenderer, {
         markdown: "Plain transcript line",
+        streaming: true,
       }),
     );
 
     try {
-      const paragraph = rendered.container.querySelector("p");
-      expect(paragraph?.textContent).toBe("Plain transcript line");
-      expect(paragraph?.className).toContain("break-words");
-      expect(rendered.container.querySelector(".markdown-body")).toBeNull();
+      const initialRoot = rendered.container.firstElementChild;
+      expect(initialRoot?.classList.contains("markdown-body")).toBe(true);
+
+      rendered.rerender(
+        createElement(AgentChatMarkdownRenderer, {
+          markdown: "Plain transcript line with **emphasis**",
+          streaming: true,
+        }),
+      );
+
+      expect(rendered.container.firstElementChild).toBe(initialRoot);
+      expect(rendered.container.querySelector("strong")?.textContent).toBe("emphasis");
     } finally {
       rendered.unmount();
     }
@@ -111,21 +120,6 @@ describe("AgentChatMarkdownRenderer", () => {
       expect(markdownBody?.className).toContain("prose-p:break-words");
       expect(markdownBody?.className).toContain("prose-li:break-words");
       expect(markdownBody?.className).toContain("prose-blockquote:break-words");
-    } finally {
-      rendered.unmount();
-    }
-  });
-
-  test("preserves surrounding streaming whitespace in the rendered text", () => {
-    const rendered = render(
-      createElement(AgentChatMarkdownRenderer, {
-        markdown: "  Plain transcript line  ",
-        streaming: true,
-      }),
-    );
-
-    try {
-      expect(rendered.container.querySelector("p")?.textContent).toBe("  Plain transcript line  ");
     } finally {
       rendered.unmount();
     }

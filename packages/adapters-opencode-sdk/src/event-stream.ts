@@ -12,10 +12,7 @@ import {
   type ProjectOpencodeAgentSessionEventInput,
   projectOpencodeAgentSessionEvent,
 } from "./opencode-agent-session-projection";
-import {
-  opencodeDirectEventSchema,
-  type ParsedOpencodeEvent as Event,
-} from "./opencode-global-event-ingress";
+import type { ParsedOpencodeEvent as Event } from "./opencode-global-event-ingress";
 import type { EventStreamSubscriber, OpencodeEventLogger } from "./types";
 import { z } from "zod";
 
@@ -79,14 +76,17 @@ const failureScopePayloadSchema = z.union([
   }),
 ]);
 
-const toDirectoryScopedEvent = (event: Event, directory: string): Event => {
-  return opencodeDirectEventSchema.parse({
+const toDirectoryScopedEvent = <ScopedEvent extends Event>(
+  event: ScopedEvent,
+  directory: string,
+): ScopedEvent => {
+  return {
     ...event,
     properties: {
       ...event.properties,
       directory,
     },
-  });
+  };
 };
 
 const readGlobalEventFailureScope = (

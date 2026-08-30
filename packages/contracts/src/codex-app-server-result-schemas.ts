@@ -51,9 +51,9 @@ const codexAppServerThreadLaunchResultSchema = z.object({
 });
 
 const codexAppServerThreadResumeResultSchema = codexAppServerThreadLaunchResultSchema.extend({
-  initialTurnsPage: codexAppServerTurnsPageSchema.nullable(),
-  turnsBackwardsCursor: z.string().nullable(),
-  itemsBackwardsCursor: z.string().nullable(),
+  initialTurnsPage: codexAppServerTurnsPageSchema.nullable().optional(),
+  turnsBackwardsCursor: z.string().nullable().optional(),
+  itemsBackwardsCursor: z.string().nullable().optional(),
 });
 
 const codexAppServerInitializeResponseSchema = z.object({
@@ -72,7 +72,7 @@ const codexAppServerThreadLoadedListResponseSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 const codexAppServerThreadReadResponseSchema = z.object({ thread: codexAppServerThreadSchema });
-const codexAppServerEmptyResponseSchema = z.object({}).strict();
+const codexAppServerEmptyResponseSchema = z.object({});
 const codexAppServerThreadTurnsListResponseSchema = z.object({
   backwardsCursor: z.string().nullable(),
   data: z.array(codexAppServerTurnSchema),
@@ -181,25 +181,11 @@ const codexAppServerRequestResultSchemas: CodexAppServerRequestResultSchemaMap =
   fuzzyFileSearch: codexAppServerFuzzyFileSearchResponseSchema,
 };
 
-export const codexAppServerRequestResultSchema = z.union([
-  codexAppServerRequestResultSchemas.initialize,
-  codexAppServerRequestResultSchemas["model/list"],
-  codexAppServerRequestResultSchemas["thread/fork"],
-  codexAppServerRequestResultSchemas["thread/list"],
-  codexAppServerRequestResultSchemas["thread/loaded/list"],
-  codexAppServerRequestResultSchemas["thread/read"],
-  codexAppServerRequestResultSchemas["thread/resume"],
-  codexAppServerRequestResultSchemas["thread/start"],
-  codexAppServerRequestResultSchemas["thread/name/set"],
-  codexAppServerRequestResultSchemas["thread/compact/start"],
-  codexAppServerRequestResultSchemas["thread/turns/list"],
-  codexAppServerRequestResultSchemas["skills/list"],
-  codexAppServerRequestResultSchemas["turn/start"],
-  codexAppServerRequestResultSchemas["turn/steer"],
-  codexAppServerRequestResultSchemas["turn/interrupt"],
-  codexAppServerRequestResultSchemas.gitDiffToRemote,
-  codexAppServerRequestResultSchemas.fuzzyFileSearch,
-]);
+export const codexAppServerRequestResultSchemaFor = <
+  Method extends keyof CodexAppServerRequestResultSchemaMap,
+>(
+  method: Method,
+): CodexAppServerRequestResultSchemaMap[Method] => codexAppServerRequestResultSchemas[method];
 
 export const parseCodexAppServerRequestResult = <
   Method extends keyof CodexAppServerRequestResultSchemaMap,
@@ -207,4 +193,4 @@ export const parseCodexAppServerRequestResult = <
   method: Method,
   value: JSONType | CodexAppServerRequestResultMap[keyof CodexAppServerRequestResultMap],
 ): CodexAppServerRequestResultMap[Method] =>
-  codexAppServerRequestResultSchemas[method].parse(value);
+  codexAppServerRequestResultSchemaFor(method).parse(value);

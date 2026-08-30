@@ -1,7 +1,6 @@
 import {
   type HostEventChannel,
   type HostEventEnvelope,
-  parseHostEventEnvelope,
   parseHostEventChannel,
 } from "@openducktor/contracts";
 import type { HostEventBusPort, HostEventListener, HostEventUnsubscribe } from "@openducktor/host";
@@ -106,20 +105,19 @@ export class BufferedHostEventBus implements HostEventBusPort {
   constructor(private readonly deliveryReporter: BufferedHostEventDeliveryReporter) {}
 
   publish(envelope: HostEventEnvelope): void {
-    const validatedEnvelope = parseHostEventEnvelope(envelope);
-    this.eventStream.emit(validatedEnvelope, (cause) =>
-      this.deliveryReporter.report({ channel: validatedEnvelope.channel, cause }),
+    this.eventStream.emit(envelope, (cause) =>
+      this.deliveryReporter.report({ channel: envelope.channel, cause }),
     );
-    const listeners = this.listenersByChannel.get(validatedEnvelope.channel);
+    const listeners = this.listenersByChannel.get(envelope.channel);
     if (!listeners) {
       return;
     }
     // oxlint-disable-next-line unicorn/no-useless-spread -- listeners can unsubscribe during delivery
     for (const listener of [...listeners]) {
       try {
-        listener(validatedEnvelope);
+        listener(envelope);
       } catch (cause) {
-        this.deliveryReporter.report({ channel: validatedEnvelope.channel, cause });
+        this.deliveryReporter.report({ channel: envelope.channel, cause });
       }
     }
   }

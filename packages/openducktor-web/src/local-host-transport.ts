@@ -64,7 +64,7 @@ const HOST_EVENT_STREAM_PATH = "events";
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const SESSION_PATH = "session";
 const INITIAL_SSE_READY_TIMEOUT_MS = 10_000;
-
+const eventSourceDataSchema = z.object({ data: z.string() });
 type BrowserSseChannel = {
   eventSource: EventSource;
   listeners: Map<number, BrowserSseListenerRegistration>;
@@ -241,6 +241,16 @@ export const createLocalHostClient = (): HostClient => createHostClient(createHt
 
 const parseHostEvent = (raw: string): HostEventEnvelope => parseHostEventEnvelope(JSON.parse(raw));
 
+const readEventSourceData = (event: Event, eventName: string): string => {
+  const parsed = eventSourceDataSchema.safeParse(event);
+  if (!parsed.success) {
+    throw new Error(`EventSource ${eventName} events must contain string data.`, {
+      cause: parsed.error,
+    });
+  }
+  return parsed.data.data;
+};
+
 const dispatchBrowserSseListeners = <Payload>(
   listeners: Iterable<(payload: Payload) => void>,
   payload: Payload,
@@ -310,11 +320,7 @@ const subscribeSseChannelEffect = (
         resolveReady = resolve;
       });
       const handleMessage: EventListener = (event) => {
-        const message = z.object({ data: z.string() }).safeParse(event);
-        if (!message.success) {
-          throw new Error("EventSource message events must contain string data.");
-        }
-        const hostEvent = parseHostEvent(message.data.data);
+        const hostEvent = parseHostEvent(readEventSourceData(event, "message"));
         for (const registration of listeners.values()) {
           if (registration.channel === hostEvent.channel) {
             registration.listener(hostEvent);
@@ -372,13 +378,10 @@ const subscribeSseChannelEffect = (
         hasReportedConnectionError = true;
       };
       const handleStreamWarning: EventListener = (event) => {
-        const warning = z.object({ data: z.string() }).safeParse(event);
-        if (!warning.success) {
-          throw new Error("EventSource stream-warning events must contain string data.");
-        }
+        const warning = readEventSourceData(event, "stream-warning");
         const warningPayload = browserLiveControlEvent(
           BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
-          warning.data.data,
+          warning,
         );
         const replayGapListeners = [...listeners.values()].flatMap((registration) =>
           registration.onReplayGap ? [registration.onReplayGap] : [],
@@ -388,10 +391,7 @@ const subscribeSseChannelEffect = (
           .map((registration) => (_message: string): void => {
             registration.listener(warningPayload);
           });
-        dispatchBrowserSseListeners(
-          [...replayGapListeners, ...controlListeners],
-          warning.data.data,
-        );
+        dispatchBrowserSseListeners([...replayGapListeners, ...controlListeners], warning);
       };
 
       eventSource.addEventListener("message", handleMessage);
