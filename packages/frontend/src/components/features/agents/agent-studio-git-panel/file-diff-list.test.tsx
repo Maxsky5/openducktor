@@ -17,9 +17,7 @@ const reactActEnvironmentGlobal: typeof globalThis & {
 } = globalThis;
 const previousActEnvironmentValue = reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT;
 
-const preloaderMock = mock(({ filePath }: { filePath: string }) => (
-  <div data-testid="pierre-diff-preloader">{filePath}</div>
-));
+const preloaderMock = mock((_props: { patch: string; filePath: string }) => null);
 
 const fileViewerMock = mock(
   ({ content, filePath }: { content: string; filePath: string; className?: string }) => (
@@ -128,19 +126,19 @@ beforeEach(async () => {
     spyOn(pierreDiffViewerModule, "PierreDiffPreloader").mockImplementation(
       Object.assign(preloaderMock, {
         $$typeof: pierreDiffViewerModule.PierreDiffPreloader.$$typeof,
-        type: pierreDiffViewerModule.PierreDiffPreloader.type,
+        type: preloaderMock,
       }),
     ),
     spyOn(pierreDiffViewerModule, "PierreDiffViewer").mockImplementation(
       Object.assign(viewerMock, {
         $$typeof: pierreDiffViewerModule.PierreDiffViewer.$$typeof,
-        type: pierreDiffViewerModule.PierreDiffViewer.type,
+        type: viewerMock,
       }),
     ),
     spyOn(pierreDiffViewerModule, "PierreFileViewer").mockImplementation(
       Object.assign(fileViewerMock, {
         $$typeof: pierreDiffViewerModule.PierreFileViewer.$$typeof,
-        type: pierreDiffViewerModule.PierreFileViewer.type,
+        type: fileViewerMock,
       }),
     ),
   ];
@@ -254,13 +252,15 @@ describe("FileDiffList", () => {
   test("keeps row expansion working while preload entries are mounted", () => {
     render(<FileDiffListHarness />);
 
-    expect(screen.getByTestId("pierre-diff-preloader").textContent).toBe("src/example.ts");
+    expect(preloaderMock.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({ filePath: "src/example.ts" }),
+    );
     expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Toggle diff for src/example.ts" }));
 
     expect(screen.getByTestId("pierre-diff-viewer").textContent).toBe("src/example.ts");
-    expect(screen.queryByTestId("pierre-diff-preloader")).toBeNull();
+    expect(preloaderMock).toHaveBeenCalledTimes(1);
   });
 
   test("keeps chat-only diff display props out of git panel rendering", () => {

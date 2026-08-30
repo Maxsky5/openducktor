@@ -4,9 +4,11 @@ import { canResetImplementationFromStatus } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
 import {
   appendImplementationResetCleanupProgress,
-  ensureNoActiveImplementationResetActivity,
+  collectImplementationResetSessionState,
   excludeCanonicalImplementationTargets,
+  requireImplementationResetActivityGuard as requireActivityGuard,
   resolveCanonicalImplementationResetTarget,
+  stopActiveImplementationResetActivity as stopActivity,
 } from "../support/implementation-reset-targets";
 import { requireDependencies } from "../support/required-task-dependencies";
 import {
@@ -16,8 +18,6 @@ import {
 import {
   collectRelatedTaskBranches,
   collectResetWorktreePaths,
-  collectSessionsUsingCanonicalWorktree,
-  createTaskCleanupProgressState,
   implementationSessionRoleNames,
   replaceTaskInList,
   resetImplementationRollbackStatus,
@@ -25,6 +25,7 @@ import {
 } from "../support/task-cleanup-support";
 import { enrichTask } from "../support/task-workflow-helpers";
 import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
+import { createTaskCleanupProgressState } from "../support/task-cleanup-progress";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 export const createTaskImplementationResetUseCase = ({
   devServerService,
@@ -82,24 +83,24 @@ export const createTaskImplementationResetUseCase = ({
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
-      const managedWorktreeBasePath = repoConfig.worktreeBasePath
-        ? dependencies.settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath)
-        : dependencies.settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId);
-      const canonicalWorktree = dependencies.settingsConfig.join(managedWorktreeBasePath, taskId);
-      const canonicalSessionState = yield* collectSessionsUsingCanonicalWorktree(
-        dependencies.gitPort,
-        dependencies.settingsConfig,
-        currentSessions,
+      const {
+        managedWorktreeBasePath,
         canonicalWorktree,
-      );
-      yield* ensureNoActiveImplementationResetActivity(
-        taskActivityGuard,
-        effectiveRepoPath,
+        sessionState: canonicalSessionState,
+      } = yield* collectImplementationResetSessionState(
+        dependencies,
+        repoConfig,
         taskId,
-        canonicalSessionState.guarded,
+        currentSessions,
       );
+      const activity = {
+        taskActivityGuard,
+        repoPath: effectiveRepoPath,
+        taskId,
+        sessions: canonicalSessionState.guarded,
+      };
+      yield* requireActivityGuard(activity);
       const branchPrefix = repoConfig.branchPrefix.trim() || DEFAULT_BRANCH_PREFIX;
-      const rollbackStatus = resetImplementationRollbackStatus(current);
       const worktreePaths = yield* collectResetWorktreePaths(
         dependencies,
         effectiveRepoPath,
@@ -131,6 +132,7 @@ export const createTaskImplementationResetUseCase = ({
         canonicalTarget,
       );
       const cleanupProgress = createTaskCleanupProgressState();
+      yield* stopActivity(activity, cleanupProgress);
       let taskStoreWriteCompleted = false;
       return yield* Effect.gen(function* () {
         yield* runTaskLocalCleanup({
@@ -180,7 +182,7 @@ export const createTaskImplementationResetUseCase = ({
         const updated = yield* taskStore.transitionTask({
           repoPath: effectiveRepoPath,
           taskId,
-          status: rollbackStatus,
+          status: resetImplementationRollbackStatus(current),
         });
         return enrichTask(updated, replaceTaskInList(currentTasks, updated));
       }).pipe(

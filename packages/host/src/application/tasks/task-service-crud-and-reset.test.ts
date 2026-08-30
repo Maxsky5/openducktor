@@ -83,6 +83,30 @@ const metadataWithSessions = (
   plan: { markdown: "" },
   agentSessions,
 });
+const createResetTaskStore = (
+  sessions: ReturnType<typeof createAgentSessionRecord>[],
+  overrides: Partial<TaskStorePort> = {},
+): TaskStorePort => ({
+  listTasks: () => Effect.succeed([task({ id: "task-1", status: "human_review" })]),
+  getTaskMetadata: () => Effect.succeed(metadataWithSessions(sessions)),
+  clearWorkflowDocuments: () => Effect.succeed(true),
+  clearAgentSessionsByRoles: () => Effect.succeed(true),
+  setPullRequest: () => Effect.succeed(true),
+  setDirectMerge: () => Effect.succeed(true),
+  transitionTask: () => Effect.succeed(task({ id: "task-1", status: "open" })),
+  ...overrides,
+});
+const createCleanupTaskServiceInput = (taskStore: TaskStorePort) => ({
+  devServerService: createDirectMergeDevServerService([]),
+  gitPort: createDirectMergeGitPort({ calls: [], branches: { "/repo": [] } }),
+  settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+  taskStore,
+  workspaceSettingsService: createBuildWorkspaceSettingsService({
+    workspaceId: "repo",
+    repoPath: "/repo",
+    hooks: { preStart: [], postComplete: [] },
+  }),
+});
 describe("createTaskService task mutations and reset", () => {
   test("reports committed task asset cleanup failures as mutation progress", async () => {
     const createdTaskId = "task-2";
@@ -779,23 +803,12 @@ describe("createTaskService task mutations and reset", () => {
       },
     };
     const taskActivityGuard: TaskActivityGuardPort = {
-      ensureNoActiveTaskDeleteRuns(input) {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      stopLiveSessions(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "activityGuard", input });
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      ensureNoActiveTaskResetActivity() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected reset activity guard");
+            return { stoppedSessionCount: 0 };
           },
           catch: (cause) =>
             new HostOperationError({
@@ -840,6 +853,8 @@ describe("createTaskService task mutations and reset", () => {
     });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo-alias" } },
+      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
+      { type: "listBranches", workingDir: "/repo" },
       {
         type: "activityGuard",
         input: {
@@ -850,8 +865,6 @@ describe("createTaskService task mutations and reset", () => {
           ],
         },
       },
-      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
-      { type: "listBranches", workingDir: "/repo" },
       { type: "stopDevServers", input: { repoPath: "/repo", taskId: "epic-1" } },
       { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
       {
@@ -962,23 +975,12 @@ describe("createTaskService task mutations and reset", () => {
       },
     };
     const taskActivityGuard: TaskActivityGuardPort = {
-      ensureNoActiveTaskDeleteRuns(input) {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      stopLiveSessions(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "activityGuard", input });
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      ensureNoActiveTaskResetActivity() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected reset activity guard");
+            return { stoppedSessionCount: 0 };
           },
           catch: (cause) =>
             new HostOperationError({
@@ -1019,6 +1021,7 @@ describe("createTaskService task mutations and reset", () => {
     ).resolves.toEqual({ ok: true, changes: { taskIds: ["task-1"], removedTaskIds: ["task-1"] } });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
+      { type: "listBranches", workingDir: "/repo" },
       {
         type: "activityGuard",
         input: {
@@ -1026,7 +1029,6 @@ describe("createTaskService task mutations and reset", () => {
           taskSessions: [{ taskId: "task-1", sessions: [session] }],
         },
       },
-      { type: "listBranches", workingDir: "/repo" },
       { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
       {
         type: "removeWorktree",
@@ -1064,13 +1066,12 @@ describe("createTaskService task mutations and reset", () => {
       },
     };
     const taskActivityGuard: TaskActivityGuardPort = {
-      ensureNoActiveTaskDeleteRuns(input) {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      stopLiveSessions(input) {
         return Effect.sync(() => {
           calls.push({ type: "activityGuard", input });
+          return { stoppedSessionCount: 0 };
         });
-      },
-      ensureNoActiveTaskResetActivity() {
-        return Effect.dieMessage("unexpected reset activity guard");
       },
     };
     await expect(
@@ -1107,6 +1108,7 @@ describe("createTaskService task mutations and reset", () => {
     ).rejects.toThrow("worktree removal race");
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
+      { type: "listBranches", workingDir: "/repo" },
       {
         type: "activityGuard",
         input: {
@@ -1114,7 +1116,6 @@ describe("createTaskService task mutations and reset", () => {
           taskSessions: [{ taskId: "task-1", sessions: [session] }],
         },
       },
-      { type: "listBranches", workingDir: "/repo" },
       { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
       {
         type: "removeWorktree",
@@ -1231,6 +1232,58 @@ describe("createTaskService task mutations and reset", () => {
     ).rejects.toThrow(
       "task_delete requires runtime session activity checks for tasks with workflow sessions.",
     );
+  });
+  test("aborts delete before destructive work when stopping live sessions fails", async () => {
+    let deleted = false;
+    const taskStore: TaskStorePort = {
+      listTasks: () => Effect.succeed([task({ id: "task-1" })]),
+      getTaskMetadata: () => Effect.succeed(metadataWithSessions([createAgentSessionRecord()])),
+      deleteTask: () =>
+        Effect.sync(() => {
+          deleted = true;
+          return true;
+        }),
+    };
+    const taskActivityGuard: TaskActivityGuardPort = {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      stopLiveSessions: () =>
+        Effect.fail(
+          new HostOperationError({ operation: "test.stop", message: "runtime stop failed" }),
+        ),
+    };
+
+    await expect(
+      Effect.runPromise(
+        createTaskService({
+          ...createCleanupTaskServiceInput(taskStore),
+          taskActivityGuard,
+        }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
+      ),
+    ).rejects.toThrow("runtime stop failed");
+    expect(deleted).toBe(false);
+  });
+  test("reports stopped sessions when delete fails after the stop step", async () => {
+    const taskStore: TaskStorePort = {
+      listTasks: () => Effect.succeed([task({ id: "task-1" })]),
+      getTaskMetadata: () => Effect.succeed(metadataWithSessions([createAgentSessionRecord()])),
+      deleteTask: () =>
+        Effect.fail(
+          new HostOperationError({ operation: "test.delete", message: "task store delete failed" }),
+        ),
+    };
+    const taskActivityGuard: TaskActivityGuardPort = {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      stopLiveSessions: () => Effect.succeed({ stoppedSessionCount: 2 }),
+    };
+
+    await expect(
+      Effect.runPromise(
+        createTaskService({
+          ...createCleanupTaskServiceInput(taskStore),
+          taskActivityGuard,
+        }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
+      ),
+    ).rejects.toThrow(/Delete cleanup already completed: Stopped 2 live agent sessions,/);
   });
   test("resets implementation after activity guard and cleans task state", async () => {
     const calls: unknown[] = [];
@@ -1438,23 +1491,12 @@ describe("createTaskService task mutations and reset", () => {
       },
     };
     const taskActivityGuard: TaskActivityGuardPort = {
-      ensureNoActiveTaskDeleteRuns() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected delete activity guard");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      ensureNoActiveTaskResetActivity(input) {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      stopLiveSessions(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "resetActivityGuard", input });
+            return { stoppedSessionCount: 0 };
           },
           catch: (cause) =>
             new HostOperationError({
@@ -1505,20 +1547,17 @@ describe("createTaskService task mutations and reset", () => {
     ).resolves.toMatchObject({ id: "task-1", status: "ready_for_dev" });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo-alias" } },
-      {
-        type: "resetActivityGuard",
-        input: {
-          repoPath: "/repo",
-          taskId: "task-1",
-          sessions: currentSessions,
-          operationLabel: "reset implementation",
-          sessionRoles: ["build", "qa"],
-        },
-      },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1-legacy" },
       { type: "listBranches", workingDir: "/repo" },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
+      {
+        type: "resetActivityGuard",
+        input: {
+          repoPath: "/repo",
+          taskSessions: [{ taskId: "task-1", sessions: currentSessions }],
+        },
+      },
       { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
       {
         type: "removeWorktree",
@@ -1749,23 +1788,12 @@ describe("createTaskService task mutations and reset", () => {
       },
     };
     const taskActivityGuard: TaskActivityGuardPort = {
-      ensureNoActiveTaskDeleteRuns() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected delete activity guard");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      ensureNoActiveTaskResetActivity(input) {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      stopLiveSessions(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "resetActivityGuard", input });
+            return { stoppedSessionCount: 0 };
           },
           catch: (cause) =>
             new HostOperationError({
@@ -1803,18 +1831,15 @@ describe("createTaskService task mutations and reset", () => {
     ).resolves.toMatchObject({ id: "task-1", status: "open" });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo-alias" } },
+      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
+      { type: "listBranches", workingDir: "/repo" },
       {
         type: "resetActivityGuard",
         input: {
           repoPath: "/repo",
-          taskId: "task-1",
-          sessions: currentSessions,
-          operationLabel: "reset task",
-          sessionRoles: ["spec", "planner", "build", "qa"],
+          taskSessions: [{ taskId: "task-1", sessions: currentSessions }],
         },
       },
-      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
-      { type: "listBranches", workingDir: "/repo" },
       { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
       {
         type: "removeWorktree",
@@ -1846,6 +1871,68 @@ describe("createTaskService task mutations and reset", () => {
       },
     ]);
   });
+  test("fails fast when task reset needs live activity checks but no guard is configured", async () => {
+    const taskStore = createResetTaskStore([createAgentSessionRecord()]);
+
+    await expect(
+      Effect.runPromise(
+        createTaskService(createCleanupTaskServiceInput(taskStore)).resetTask({
+          repoPath: "/repo",
+          taskId: "task-1",
+        }),
+      ),
+    ).rejects.toThrow(
+      "task_reset requires runtime session activity checks for tasks with spec, planner, build, or QA sessions.",
+    );
+  });
+  test("aborts task reset before destructive work when stopping live sessions fails", async () => {
+    let workflowDocumentsCleared = false;
+    const taskStore = createResetTaskStore([createAgentSessionRecord()], {
+      clearWorkflowDocuments: () =>
+        Effect.sync(() => {
+          workflowDocumentsCleared = true;
+          return true;
+        }),
+    });
+    const taskActivityGuard: TaskActivityGuardPort = {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      stopLiveSessions: () =>
+        Effect.fail(
+          new HostOperationError({ operation: "test.stop", message: "runtime stop failed" }),
+        ),
+    };
+
+    await expect(
+      Effect.runPromise(
+        createTaskService({
+          ...createCleanupTaskServiceInput(taskStore),
+          taskActivityGuard,
+        }).resetTask({ repoPath: "/repo", taskId: "task-1" }),
+      ),
+    ).rejects.toThrow("runtime stop failed");
+    expect(workflowDocumentsCleared).toBe(false);
+  });
+  test("reports stopped sessions when task reset fails after the stop step", async () => {
+    const taskStore = createResetTaskStore([createAgentSessionRecord()], {
+      clearWorkflowDocuments: () =>
+        Effect.fail(
+          new HostOperationError({ operation: "test.clear", message: "document clear failed" }),
+        ),
+    });
+    const taskActivityGuard: TaskActivityGuardPort = {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      stopLiveSessions: () => Effect.succeed({ stoppedSessionCount: 2 }),
+    };
+
+    await expect(
+      Effect.runPromise(
+        createTaskService({
+          ...createCleanupTaskServiceInput(taskStore),
+          taskActivityGuard,
+        }).resetTask({ repoPath: "/repo", taskId: "task-1" }),
+      ),
+    ).rejects.toThrow(/Reset cleanup already completed: Stopped 2 live agent sessions,/);
+  });
   test("reports implementation reset failures after the first store clear as partial progress", async () => {
     const failure = new HostOperationError({
       operation: "task-store.clear-qa-reports",
@@ -1854,7 +1941,7 @@ describe("createTaskService task mutations and reset", () => {
     let sessionsCleared = false;
     const taskStore: TaskStorePort = {
       listTasks: () => Effect.succeed([task({ status: "blocked" })]),
-      getTaskMetadata: () => Effect.succeed(metadataWithSessions([])),
+      getTaskMetadata: () => Effect.succeed(metadataWithSessions([createAgentSessionRecord()])),
       clearAgentSessionsByRoles: () =>
         Effect.sync(() => {
           sessionsCleared = true;
@@ -1866,6 +1953,10 @@ describe("createTaskService task mutations and reset", () => {
       devServerService: createDirectMergeDevServerService([]),
       gitPort: createDirectMergeGitPort({ calls: [], branches: { "/repo": [] } }),
       settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+      taskActivityGuard: {
+        countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+        stopLiveSessions: () => Effect.succeed({ stoppedSessionCount: 2 }),
+      },
       taskStore,
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
@@ -1885,6 +1976,8 @@ describe("createTaskService task mutations and reset", () => {
     expect(result.operation).toBe("reset-implementation");
     expect(result.changes).toEqual({ taskIds: ["task-1"], removedTaskIds: [] });
     expect(result.failure.message).toContain("clear QA reports failed");
+    expect(result.failure.message).toContain("Stopped 2 live agent sessions,");
+    expect(result.failure.message).not.toContain("records..");
     expect(result.failure.message).toContain("Cleared Builder and QA session records.");
     expect(result.failure).toMatchObject({ cause: failure });
   });

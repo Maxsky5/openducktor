@@ -113,6 +113,7 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     agentSessionDelete: taskClient.agentSessionDelete.bind(taskClient),
     agentSessionsListForTasks: taskClient.agentSessionsListForTasks.bind(taskClient),
     agentSessionUpsert: taskClient.agentSessionUpsert.bind(taskClient),
+    taskStopImpactGet: taskClient.taskStopImpactGet.bind(taskClient),
     terminalCreate: terminalClient.terminalCreate.bind(terminalClient),
     terminalList: terminalClient.terminalList.bind(terminalClient),
     terminalPreparePathInput: terminalClient.terminalPreparePathInput.bind(terminalClient),

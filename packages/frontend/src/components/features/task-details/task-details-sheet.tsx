@@ -221,9 +221,12 @@ export function TaskDetailsSheet({
           impact={{
             hasSubtasks: viewModel.subtasks.length > 0,
             isLoading: viewModel.isLoadingDeleteImpact,
+            isLoadingStopImpact: viewModel.isLoadingDeleteStopImpact,
             hasManagedSessionCleanup: viewModel.hasManagedDeleteSessionCleanup,
             managedWorktreeCount: viewModel.deleteManagedWorktreeCount,
             terminalCount: viewModel.deleteTerminalCount,
+            activeSessionCount: viewModel.deleteActiveSessionCount,
+            activeSessionCountError: viewModel.deleteActiveSessionCountError,
             error: viewModel.deleteImpactError,
           }}
           deletion={{
@@ -240,13 +243,17 @@ export function TaskDetailsSheet({
           onCancel={viewModel.closeResetDialog}
           onConfirm={viewModel.confirmReset}
           taskId={viewModel.taskId}
-          isLoadingImpact={viewModel.isLoadingResetImpact}
-          hasManagedSessionCleanup={viewModel.hasManagedResetSessionCleanup}
-          managedWorktreeCount={viewModel.resetManagedWorktreeCount}
-          terminalCount={viewModel.resetTerminalCount}
-          impactError={viewModel.resetImpactError}
-          isResetPending={viewModel.isResetPending}
-          resetError={viewModel.resetError}
+          impact={{
+            isLoading: viewModel.isLoadingResetImpact,
+            isLoadingStopImpact: viewModel.isLoadingResetStopImpact,
+            hasManagedSessionCleanup: viewModel.hasManagedResetSessionCleanup,
+            managedWorktreeCount: viewModel.resetManagedWorktreeCount,
+            terminalCount: viewModel.resetTerminalCount,
+            activeSessionCount: viewModel.resetActiveSessionCount,
+            activeSessionCountError: viewModel.resetActiveSessionCountError,
+            error: viewModel.resetImpactError,
+          }}
+          reset={{ isPending: viewModel.isResetPending, error: viewModel.resetError }}
         />
       ) : null}
 
@@ -257,13 +264,17 @@ export function TaskDetailsSheet({
           onCancel={viewModel.closeCloseDialog}
           onConfirm={viewModel.confirmClose}
           taskId={viewModel.taskId}
-          isLoadingImpact={viewModel.isLoadingCloseImpact}
-          hasManagedSessionCleanup={viewModel.hasManagedCloseSessionCleanup}
-          managedWorktreeCount={viewModel.closeManagedWorktreeCount}
-          terminalCount={viewModel.closeTerminalCount}
-          impactError={viewModel.closeImpactError}
-          isClosePending={viewModel.isClosePending}
-          closeError={viewModel.closeError}
+          impact={{
+            isLoading: viewModel.isLoadingCloseImpact,
+            isLoadingStopImpact: viewModel.isLoadingCloseStopImpact,
+            hasManagedSessionCleanup: viewModel.hasManagedCloseSessionCleanup,
+            managedWorktreeCount: viewModel.closeManagedWorktreeCount,
+            terminalCount: viewModel.closeTerminalCount,
+            activeSessionCount: viewModel.closeActiveSessionCount,
+            activeSessionCountError: viewModel.closeActiveSessionCountError,
+            error: viewModel.closeImpactError,
+          }}
+          closing={{ isPending: viewModel.isClosePending, error: viewModel.closeError }}
         />
       ) : null}
     </Sheet>

@@ -14,6 +14,7 @@ import {
   removeAgentSessionListQueries,
 } from "@/state/queries/agent-sessions";
 import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
+import { taskStopImpactQueryKeys } from "@/state/queries/task-stop-impact";
 import { host } from "../shared/host";
 import {
   createProductionTaskChatDraftCleanup,
@@ -100,6 +101,7 @@ const productionTaskMutationHostPort: TaskMutationCommandHostPort = {
 
 export type TaskMutationCommandCacheImpact = {
   removeDeletedTaskCaches: (repoPath: string, taskIds: string[]) => Promise<void>;
+  invalidateTaskStopImpact: (repoPath: string) => Promise<void>;
   invalidateTaskWorktree: (repoPath: string, taskId: string) => Promise<void>;
 };
 
@@ -183,7 +185,13 @@ export const createTaskMutationCommands = ({
           repoPath,
           workspaceId: activeWorkspaceId,
           taskIds: taskIdsToRemove,
-          mutation: () => hostPort.taskDelete(repoPath, taskId, deleteSubtasks),
+          mutation: async () => {
+            try {
+              await hostPort.taskDelete(repoPath, taskId, deleteSubtasks);
+            } finally {
+              await cacheImpact.invalidateTaskStopImpact(repoPath);
+            }
+          },
         });
       },
       successTitle: "Task deleted",
@@ -209,7 +217,11 @@ export const createTaskMutationCommands = ({
           workspaceId: activeWorkspaceId,
           taskIds: [taskId],
           mutation: async () => {
-            await hostPort.taskClose(repoPath, taskId);
+            try {
+              await hostPort.taskClose(repoPath, taskId);
+            } finally {
+              await cacheImpact.invalidateTaskStopImpact(repoPath);
+            }
             await cacheImpact.invalidateTaskWorktree(repoPath, taskId);
           },
         });
@@ -237,7 +249,13 @@ export const createTaskMutationCommands = ({
           repoPath,
           workspaceId: activeWorkspaceId,
           taskIds: [taskId],
-          mutation: () => hostPort.taskTransition(repoPath, taskId, status, reason),
+          mutation: async () => {
+            try {
+              await hostPort.taskTransition(repoPath, taskId, status, reason);
+            } finally {
+              await cacheImpact.invalidateTaskStopImpact(repoPath);
+            }
+          },
         });
       },
       successDescription: taskId,
@@ -303,6 +321,8 @@ export function useTaskMutationCommands({
     () => ({
       removeDeletedTaskCaches: (repoPath, taskIds) =>
         removeAgentSessionListQueries(queryClient, repoPath, taskIds),
+      invalidateTaskStopImpact: (repoPath) =>
+        queryClient.invalidateQueries({ queryKey: taskStopImpactQueryKeys.repo(repoPath) }),
       invalidateTaskWorktree: (repoPath, taskId) =>
         queryClient.invalidateQueries({
           queryKey: taskWorktreeQueryKeys.taskWorktree({ repoPath, taskId }),

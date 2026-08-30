@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { TaskStopImpactNotice } from "@/components/features/task-details/task-stop-impact-notice";
 import type { KanbanPageModels } from "./kanban-page-model-types";
 
 type ResetImplementationModalModel = KanbanPageModels["resetImplementationModal"];
@@ -35,6 +36,7 @@ export function TaskResetImplementationModal({
   }
 
   const isBusy = model.isSubmitting || model.isLoadingImpact;
+  const isConfirmBlocked = isBusy || model.activeSessionCountError !== null;
   const confirmLabel = model.isSubmitting
     ? "Resetting implementation…"
     : model.isLoadingImpact
@@ -66,6 +68,11 @@ export function TaskResetImplementationModal({
             <p className="font-medium">
               This action removes Builder and QA session history for this task.
             </p>
+            <TaskStopImpactNotice
+              count={model.activeSessionCount}
+              error={model.activeSessionCountError}
+              operation="reset"
+            />
             {model.hasCanonicalWorktree ? <p>{formatManagedCleanupMessage()}</p> : null}
             {model.legacyWorktreeCount > 0 ? (
               <p>{formatLegacyCleanupMessage(model.legacyWorktreeCount)}</p>
@@ -109,7 +116,7 @@ export function TaskResetImplementationModal({
             type="button"
             variant="destructive"
             className="w-full sm:w-auto"
-            disabled={isBusy}
+            disabled={isConfirmBlocked}
             aria-busy={isBusy}
             onClick={model.onConfirm}
           >

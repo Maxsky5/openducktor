@@ -6,6 +6,8 @@ import {
   taskCreateInputSchema,
   taskDirectMergeInputSchema,
   taskStatusSchema,
+  type TaskStopImpactRequest,
+  taskStopImpactRequestSchema,
   taskUpdatePatchSchema,
 } from "@openducktor/contracts";
 import { z } from "zod";
@@ -77,6 +79,18 @@ const readRequiredString = (record: CommandInputRecord, key: string, label: stri
 export const parseRepoPathInput = (input: HostCommandArgs, label: string): RepoPathInput => {
   const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), label);
   return { repoPath: readRequiredString(record, "repoPath") };
+};
+
+export const parseTaskStopImpactInput = (input: HostCommandArgs): TaskStopImpactRequest => {
+  const parsed = taskStopImpactRequestSchema.safeParse(input);
+  if (parsed.success) {
+    return parsed.data;
+  }
+
+  throw new HostValidationError({
+    message: `task_stop_impact_get input is invalid: ${parsed.error.message}`,
+    field: "input",
+  });
 };
 
 export const parseTaskIdInput = (input: HostCommandArgs, label: string): TaskIdInput => {

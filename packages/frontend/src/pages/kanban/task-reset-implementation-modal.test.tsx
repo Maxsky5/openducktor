@@ -11,6 +11,8 @@ const makeModel = (
   taskTitle: "Task One",
   targetStatusLabel: "Ready for Dev",
   isSubmitting: false,
+  activeSessionCount: 0,
+  activeSessionCountError: null,
   isLoadingImpact: false,
   hasCanonicalWorktree: true,
   hasManagedSessionCleanup: true,
@@ -57,6 +59,53 @@ describe("TaskResetImplementationModal", () => {
     render(<TaskResetImplementationModal model={{ ...makeModel(0), terminalCount: 2 }} />);
 
     expect(screen.getByText(/2 associated terminals will be terminated/i)).toBeDefined();
+  });
+
+  test("says how many active sessions will be stopped before the reset", () => {
+    render(<TaskResetImplementationModal model={{ ...makeModel(0), activeSessionCount: 2 }} />);
+
+    expect(
+      screen.getByText("2 active agent sessions will be stopped before the reset."),
+    ).toBeDefined();
+  });
+
+  test("hides session-stop copy when no active sessions exist", () => {
+    render(<TaskResetImplementationModal model={makeModel(0)} />);
+
+    expect(screen.queryByText(/active agent session/i)).toBeNull();
+  });
+
+  test("hides session-stop copy while the host preview is unavailable", () => {
+    render(<TaskResetImplementationModal model={{ ...makeModel(0), activeSessionCount: null }} />);
+
+    expect(screen.queryByText(/active agent session/i)).toBeNull();
+  });
+
+  test("shows the preview failure and keeps confirm disabled while it is unresolved", () => {
+    render(
+      <TaskResetImplementationModal
+        model={{
+          ...makeModel(0),
+          activeSessionCount: null,
+          activeSessionCountError: "host unavailable",
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        /Unable to check how many active sessions will be stopped: host unavailable/,
+      ),
+    ).toBeDefined();
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Reset implementation" }).disabled,
+    ).toBe(true);
+    expect(
+      screen
+        .getByRole<HTMLButtonElement>("button", { name: "Reset implementation" })
+        .getAttribute("aria-busy"),
+    ).toBe("false");
+    expect(document.body.innerHTML).not.toContain("lucide-loader-circle");
   });
 
   test("does not claim retention when only legacy worktrees exist", () => {

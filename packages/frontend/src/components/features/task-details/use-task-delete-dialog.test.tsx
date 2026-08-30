@@ -8,7 +8,6 @@ import { useTaskDeleteDialog } from "./use-task-delete-dialog";
 type HarnessProps = {
   sheetOpen: boolean;
   task: TaskCard | null;
-  hasSubtasks: boolean;
   onOpenChange: (open: boolean) => void;
   onDelete: ((taskId: string, options: { deleteSubtasks: boolean }) => Promise<void>) | undefined;
 };
@@ -49,7 +48,6 @@ describe("use-task-delete-dialog", () => {
       latest = useTaskDeleteDialog({
         sheetOpen: currentProps.sheetOpen,
         task: currentProps.task,
-        hasSubtasks: currentProps.hasSubtasks,
         onOpenChange: currentProps.onOpenChange,
         onDelete: currentProps.onDelete,
       });
@@ -94,7 +92,7 @@ describe("use-task-delete-dialog", () => {
     const onDelete = mock(async () => {});
     const task = makeTask("ODT-1");
 
-    await mount({ sheetOpen: true, task, hasSubtasks: true, onOpenChange, onDelete });
+    await mount({ sheetOpen: true, task, onOpenChange, onDelete });
 
     await run(() => latest?.openDeleteDialog());
     expect(latest?.isDeleteDialogOpen).toBe(true);
@@ -115,12 +113,12 @@ describe("use-task-delete-dialog", () => {
     });
     const task = makeTask("ODT-2");
 
-    await mount({ sheetOpen: true, task, hasSubtasks: false, onOpenChange, onDelete });
+    await mount({ sheetOpen: true, task, onOpenChange, onDelete });
 
     await run(() => latest?.openDeleteDialog());
     await run(() => latest?.confirmDelete());
 
-    expect(onDelete).toHaveBeenCalledWith("ODT-2", { deleteSubtasks: false });
+    expect(onDelete).toHaveBeenCalledWith("ODT-2", { deleteSubtasks: true });
     expect(onOpenChange).not.toHaveBeenCalled();
     expect(latest?.isDeleteDialogOpen).toBe(true);
     expect(latest?.deleteError).toBe("delete failed");
@@ -137,7 +135,7 @@ describe("use-task-delete-dialog", () => {
     );
     const task = makeTask("ODT-3");
 
-    await mount({ sheetOpen: true, task, hasSubtasks: true, onOpenChange, onDelete });
+    await mount({ sheetOpen: true, task, onOpenChange, onDelete });
     await run(() => latest?.openDeleteDialog());
 
     await act(async () => {
@@ -173,7 +171,6 @@ describe("use-task-delete-dialog", () => {
     const props: HarnessProps = {
       sheetOpen: true,
       task,
-      hasSubtasks: true,
       onOpenChange,
       onDelete,
     };
@@ -215,7 +212,6 @@ describe("use-task-delete-dialog", () => {
     const props: HarnessProps = {
       sheetOpen: true,
       task,
-      hasSubtasks: false,
       onOpenChange,
       onDelete,
     };
@@ -238,7 +234,7 @@ describe("use-task-delete-dialog", () => {
     const onOpenChange = mock(() => {});
     const task = makeTask("ODT-5");
 
-    await mount({ sheetOpen: true, task, hasSubtasks: false, onOpenChange, onDelete: undefined });
+    await mount({ sheetOpen: true, task, onOpenChange, onDelete: undefined });
 
     await run(() => latest?.openDeleteDialog());
     await run(() => latest?.confirmDelete());

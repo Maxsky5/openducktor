@@ -1,11 +1,20 @@
-import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord, RepoConfig, TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
+import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { TaskActivityGuardPort } from "../../../ports/task-activity-guard-port";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
-import { appendTaskCleanupProgress, type TaskCleanupProgressState } from "./task-cleanup-support";
+import {
+  appendTaskCleanupProgress,
+  recordStoppedAgentSessionCount,
+  type TaskCleanupProgressState,
+} from "./task-cleanup-progress";
+import {
+  collectSessionsUsingCanonicalWorktree,
+  managedWorktreeBaseForRepoConfig,
+} from "./task-cleanup-support";
 import { effectiveTargetBranchForTask, resolveBuildStartPoint } from "./task-worktree-cleanup";
 
 type CanonicalImplementationResetTarget = {
@@ -25,32 +34,68 @@ export const appendImplementationResetCleanupProgress = <E>(
     completedSteps: progress.completedSteps,
   });
 
-export const ensureNoActiveImplementationResetActivity = (
-  taskActivityGuard: TaskActivityGuardPort | undefined,
-  repoPath: string,
+// Reset and its preview must use the same worktree session list.
+export const collectImplementationResetSessionState = (
+  dependencies: { gitPort: GitPort; settingsConfig: SettingsConfigPort },
+  repoConfig: RepoConfig,
   taskId: string,
   sessions: AgentSessionRecord[],
-) => {
-  if (sessions.length === 0) return Effect.void;
-  if (!taskActivityGuard) {
-    return Effect.fail(
-      new HostDependencyError({
-        dependency: "taskActivityGuard",
-        operation: "task_reset_implementation",
-        message:
-          "task_reset_implementation requires runtime session activity checks for task sessions that may use the canonical worktree.",
-        details: { repoPath, taskId },
-      }),
+) =>
+  Effect.gen(function* () {
+    const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
+      dependencies.settingsConfig,
+      repoConfig,
     );
-  }
-  return taskActivityGuard.ensureNoActiveTaskResetActivity({
-    repoPath,
-    taskId,
-    sessions,
-    operationLabel: "reset implementation",
-    sessionRoles: [...new Set(sessions.map((session) => session.role.trim()))],
+    const canonicalWorktree = dependencies.settingsConfig.join(managedWorktreeBasePath, taskId);
+    return {
+      managedWorktreeBasePath,
+      canonicalWorktree,
+      sessionState: yield* collectSessionsUsingCanonicalWorktree(
+        dependencies.gitPort,
+        dependencies.settingsConfig,
+        sessions,
+        canonicalWorktree,
+      ),
+    };
   });
+
+type ImplementationResetActivity = {
+  taskActivityGuard: TaskActivityGuardPort | undefined;
+  repoPath: string;
+  taskId: string;
+  sessions: AgentSessionRecord[];
 };
+
+export const requireImplementationResetActivityGuard = (activity: ImplementationResetActivity) => {
+  if (activity.sessions.length === 0 || activity.taskActivityGuard) {
+    return Effect.succeed(activity.taskActivityGuard);
+  }
+  return Effect.fail(
+    new HostDependencyError({
+      dependency: "taskActivityGuard",
+      operation: "task_reset_implementation",
+      message:
+        "task_reset_implementation requires runtime session activity checks for task sessions that may use the canonical worktree.",
+      details: { repoPath: activity.repoPath, taskId: activity.taskId },
+    }),
+  );
+};
+
+export const stopActiveImplementationResetActivity = (
+  activity: ImplementationResetActivity,
+  progress: TaskCleanupProgressState,
+) =>
+  Effect.gen(function* () {
+    const activityGuard = yield* requireImplementationResetActivityGuard(activity);
+    if (!activityGuard) {
+      return;
+    }
+    const { stoppedSessionCount } = yield* activityGuard.stopLiveSessions({
+      repoPath: activity.repoPath,
+      taskSessions: [{ taskId: activity.taskId, sessions: activity.sessions }],
+    });
+    recordStoppedAgentSessionCount(progress, stoppedSessionCount);
+  });
 
 export const resolveCanonicalImplementationResetTarget = (
   gitPort: GitPort,

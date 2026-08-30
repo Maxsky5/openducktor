@@ -6,12 +6,16 @@ import { requireDependencies } from "../support/required-task-dependencies";
 import { requireTaskDeleteDependencies } from "../support/task-cleanup-dependencies";
 import {
   appendTaskCleanupProgress,
+  createTaskCleanupProgressState,
+  recordStoppedAgentSessionCount,
+} from "../support/task-cleanup-progress";
+import {
   collectDeleteWorktreePaths,
   collectRelatedTaskBranches,
   collectTaskDeleteTargets,
-  createTaskCleanupProgressState,
   managedWorktreeBaseForRepoConfig,
   runTaskLocalCleanup,
+  selectWorkflowCleanupSessionRecords,
   type TaskSessionRecords,
   taskHasSessionsForRoles,
   workflowCleanupSessionRoles,
@@ -98,28 +102,21 @@ export const createTaskDeleteUseCase = ({
           sessions: metadata.agentSessions,
         });
       }
-      if (
-        targetTaskSessions.some((entry) =>
-          taskHasSessionsForRoles(entry.sessions, workflowCleanupSessionRoles),
-        )
-      ) {
-        if (!taskActivityGuard) {
-          return yield* Effect.fail(
-            new HostDependencyError({
-              dependency: "taskActivityGuard",
-              operation: "task_delete",
-              message:
-                "task_delete requires runtime session activity checks for tasks with workflow sessions.",
-              details: { repoPath, taskId },
-            }),
-          );
-        }
-        yield* taskActivityGuard.ensureNoActiveTaskDeleteRuns({
-          repoPath: effectiveRepoPath,
-          taskSessions: targetTaskSessions,
-        });
+      const hasWorkflowSessions = targetTaskSessions.some((entry) =>
+        taskHasSessionsForRoles(entry.sessions, workflowCleanupSessionRoles),
+      );
+      const activityGuard = taskActivityGuard;
+      if (hasWorkflowSessions && !activityGuard) {
+        return yield* Effect.fail(
+          new HostDependencyError({
+            dependency: "taskActivityGuard",
+            operation: "task_delete",
+            message:
+              "task_delete requires runtime session activity checks for tasks with workflow sessions.",
+            details: { repoPath, taskId },
+          }),
+        );
       }
-
       const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
         dependencies.settingsConfig,
         repoConfig,
@@ -139,6 +136,16 @@ export const createTaskDeleteUseCase = ({
         targetTaskIds,
       );
       const cleanupProgress = createTaskCleanupProgressState();
+      if (hasWorkflowSessions && activityGuard) {
+        const { stoppedSessionCount } = yield* activityGuard.stopLiveSessions({
+          repoPath: effectiveRepoPath,
+          taskSessions: targetTaskSessions.map(({ taskId: targetTaskId, sessions }) => ({
+            taskId: targetTaskId,
+            sessions: selectWorkflowCleanupSessionRecords(sessions),
+          })),
+        });
+        recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
+      }
 
       return yield* Effect.gen(function* () {
         yield* runTaskLocalCleanup({

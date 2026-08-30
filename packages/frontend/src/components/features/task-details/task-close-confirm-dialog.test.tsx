@@ -14,13 +14,17 @@ describe("TaskCloseConfirmDialog", () => {
         onCancel={() => {}}
         onConfirm={() => {}}
         taskId="TASK-1"
-        isLoadingImpact
-        hasManagedSessionCleanup={false}
-        managedWorktreeCount={0}
-        terminalCount={0}
-        impactError={null}
-        isClosePending={false}
-        closeError={null}
+        impact={{
+          isLoading: true,
+          isLoadingStopImpact: false,
+          hasManagedSessionCleanup: false,
+          managedWorktreeCount: 0,
+          terminalCount: 0,
+          activeSessionCount: 0,
+          activeSessionCountError: null,
+          error: null,
+        }}
+        closing={{ isPending: false, error: null }}
       />,
     );
 
@@ -51,22 +55,63 @@ describe("TaskCloseConfirmDialog", () => {
         onCancel={() => {}}
         onConfirm={() => {}}
         taskId="TASK-2"
-        isLoadingImpact={false}
-        hasManagedSessionCleanup={false}
-        managedWorktreeCount={0}
-        terminalCount={2}
-        impactError="Could not preview cleanup"
-        isClosePending={false}
-        closeError="Close failed"
+        impact={{
+          isLoading: false,
+          isLoadingStopImpact: false,
+          hasManagedSessionCleanup: false,
+          managedWorktreeCount: 0,
+          terminalCount: 2,
+          activeSessionCount: 3,
+          activeSessionCountError: null,
+          error: "Could not preview cleanup",
+        }}
+        closing={{ isPending: false, error: "Close failed" }}
       />,
     );
 
     expect(screen.getByText("Could not preview cleanup")).toBeDefined();
     expect(screen.getByText("Close failed")).toBeDefined();
+    expect(
+      screen.getByText("3 active agent sessions will be stopped before closing."),
+    ).toBeDefined();
     expect(screen.getByRole<HTMLButtonElement>("button", { name: /Close task/i }).disabled).toBe(
       false,
     );
     expect(document.body.innerHTML).toContain("lucide-circle-check-big");
+
+    unmount();
+  });
+
+  test("shows the preview failure and keeps confirm disabled while it is unresolved", () => {
+    const { unmount } = render(
+      <TaskCloseConfirmDialog
+        open
+        onOpenChange={() => {}}
+        onCancel={() => {}}
+        onConfirm={() => {}}
+        taskId="TASK-3"
+        impact={{
+          isLoading: false,
+          isLoadingStopImpact: false,
+          hasManagedSessionCleanup: false,
+          managedWorktreeCount: 0,
+          terminalCount: 0,
+          activeSessionCount: null,
+          activeSessionCountError: "host unavailable",
+          error: null,
+        }}
+        closing={{ isPending: false, error: null }}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        /Unable to check how many active sessions will be stopped: host unavailable/,
+      ),
+    ).toBeDefined();
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: /Close task/i }).disabled).toBe(
+      true,
+    );
 
     unmount();
   });

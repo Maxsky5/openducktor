@@ -12,6 +12,8 @@ import {
   type TaskMetadataPayload,
   type TaskPullRequestDetectResult,
   type TaskSessionBootstrap,
+  type TaskStopImpact,
+  type TaskStopImpactRequest,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { TaskPolicyError } from "../../domain/task/task-policy-error";
@@ -44,6 +46,7 @@ import type {
   WorkspaceSettingsService,
 } from "../workspaces/workspace-settings-service";
 import { createTaskGithubDependencies } from "./support/required-task-dependencies";
+import { createTaskStopImpactUseCase } from "./use-cases/get-task-stop-impact";
 import type {
   AgentSessionDeleteInput,
   AgentSessionUpsertInput,
@@ -115,6 +118,7 @@ export type TaskServiceError =
 
 export type TaskService = {
   listTasks(input: ListTasksInput): Effect.Effect<TaskCard[], TaskServiceError>;
+  getTaskStopImpact(input: TaskStopImpactRequest): Effect.Effect<TaskStopImpact, TaskServiceError>;
   getTaskMetadata(input: TaskIdInput): Effect.Effect<TaskMetadataPayload, TaskServiceError>;
   agentSessionsList(input: TaskIdInput): Effect.Effect<AgentSessionRecord[], TaskServiceError>;
   agentSessionsListForTasks(
@@ -314,6 +318,7 @@ const createTaskServiceImplementation = (
   const taskSessionBootstrap = createTaskSessionBootstrapUseCase(useCaseInput);
   const service = {
     ...createTaskQueryUseCases(useCaseInput),
+    ...createTaskStopImpactUseCase(useCaseInput),
     ...createTaskApprovalContextUseCase(useCaseInput),
     ...createTaskPullRequestDetectionUseCase(useCaseInput),
     ...createTaskPullRequestManagementUseCases(useCaseInput),
@@ -403,6 +408,7 @@ const createTaskServiceImplementation = (
       mapTaskMutationProgressErrors(service.linkMergedPullRequest(input)),
     linkPullRequest: (input) => mapTaskServiceErrors(service.linkPullRequest(input)),
     listTasks: (input) => mapTaskServiceErrors(service.listTasks(input)),
+    getTaskStopImpact: (input) => mapTaskServiceErrors(service.getTaskStopImpact(input)),
     planGet: (input) => mapTaskServiceErrors(service.planGet(input)),
     qaApproved: (input) => mapTaskServiceErrors(service.qaApproved(input)),
     qaGetReport: (input) => mapTaskServiceErrors(service.qaGetReport(input)),

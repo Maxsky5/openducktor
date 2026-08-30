@@ -9,14 +9,17 @@ import {
 } from "../support/task-cleanup-dependencies";
 import {
   appendTaskCleanupProgress,
+  createTaskCleanupProgressState,
+  recordStoppedAgentSessionCount,
+} from "../support/task-cleanup-progress";
+import {
   collectRelatedTaskBranches,
   collectResetWorktreePaths,
-  createTaskCleanupProgressState,
   managedWorktreeBaseForRepoConfig,
   replaceTaskInList,
   runTaskLocalCleanup,
+  selectWorkflowCleanupSessionRecords,
   taskHasSessionsForRoles,
-  workflowCleanupSessionRoleNames,
   workflowCleanupSessionRoles,
 } from "../support/task-cleanup-support";
 import { enrichTask } from "../support/task-workflow-helpers";
@@ -80,27 +83,22 @@ export const createTaskFullResetUseCase = ({
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
-      if (taskHasSessionsForRoles(currentSessions, workflowCleanupSessionRoles)) {
-        if (!taskActivityGuard) {
-          return yield* Effect.fail(
-            new HostDependencyError({
-              dependency: "taskActivityGuard",
-              operation: "task_reset",
-              message:
-                "task_reset requires runtime session activity checks for tasks with spec, planner, build, or QA sessions.",
-              details: { repoPath, taskId },
-            }),
-          );
-        }
-        yield* taskActivityGuard.ensureNoActiveTaskResetActivity({
-          repoPath: effectiveRepoPath,
-          taskId,
-          sessions: currentSessions,
-          operationLabel: "reset task",
-          sessionRoles: [...workflowCleanupSessionRoleNames],
-        });
+      const hasWorkflowSessions = taskHasSessionsForRoles(
+        currentSessions,
+        workflowCleanupSessionRoles,
+      );
+      const activityGuard = taskActivityGuard;
+      if (hasWorkflowSessions && !activityGuard) {
+        return yield* Effect.fail(
+          new HostDependencyError({
+            dependency: "taskActivityGuard",
+            operation: "task_reset",
+            message:
+              "task_reset requires runtime session activity checks for tasks with spec, planner, build, or QA sessions.",
+            details: { repoPath, taskId },
+          }),
+        );
       }
-
       const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
         dependencies.settingsConfig,
         repoConfig,
@@ -123,6 +121,19 @@ export const createTaskFullResetUseCase = ({
         [taskId],
       );
       const cleanupProgress = createTaskCleanupProgressState();
+      if (hasWorkflowSessions && activityGuard) {
+        const { stoppedSessionCount } = yield* activityGuard.stopLiveSessions({
+          repoPath: effectiveRepoPath,
+          taskSessions: [
+            {
+              taskId,
+              sessions: selectWorkflowCleanupSessionRecords(currentSessions),
+            },
+          ],
+        });
+        recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
+      }
+
       let taskStoreWriteCompleted = false;
 
       return yield* Effect.gen(function* () {
@@ -146,7 +157,7 @@ export const createTaskFullResetUseCase = ({
         yield* storeDependencies.clearAgentSessionsByRoles({
           repoPath: effectiveRepoPath,
           taskId,
-          roles: [...workflowCleanupSessionRoleNames],
+          roles: [...workflowCleanupSessionRoles],
         });
         cleanupProgress.completedSteps.push("cleared linked agent sessions");
         yield* storeDependencies.setPullRequest({

@@ -3,9 +3,8 @@ import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useTaskCleanupImpact } from "@/components/features/task-details/use-task-cleanup-impact";
 import { errorMessage } from "@/lib/errors";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import { useTaskStopImpact } from "@/state/queries/use-task-stop-impact";
 import type { KanbanPageModels } from "./kanban-page-model-types";
-import { isActiveSessionUsingImplementationWorktree } from "./task-reset-session-guard";
 
 type ResetImplementationModalModel = KanbanPageModels["resetImplementationModal"];
 type ResetImplementationOptions = {
@@ -14,8 +13,6 @@ type ResetImplementationOptions = {
 
 type UseTaskResetFlowArgs = {
   tasks: TaskCard[];
-  sessions: AgentSessionSummary[];
-  taskWorktreeBasePath: string | null;
   resetTaskImplementation: (taskId: string) => Promise<void>;
   closeTaskDetails: () => void;
 };
@@ -32,8 +29,6 @@ const deriveRollbackLabel = (task: TaskCard): string => {
 
 export function useTaskResetFlow({
   tasks,
-  sessions,
-  taskWorktreeBasePath,
   resetTaskImplementation,
   closeTaskDetails,
 }: UseTaskResetFlowArgs) {
@@ -47,6 +42,15 @@ export function useTaskResetFlow({
     [taskId, tasks],
   );
   const open = task !== null;
+  const {
+    stoppableSessionCount: activeSessionCount,
+    isLoading: isLoadingStopImpact,
+    error: stopImpactError,
+  } = useTaskStopImpact({
+    taskIds: taskId ? [taskId] : [],
+    operation: "reset_implementation",
+    enabled: open,
+  });
   const {
     hasCanonicalWorktree,
     hasManagedSessionCleanup,
@@ -76,24 +80,12 @@ export function useTaskResetFlow({
         return false;
       }
 
-      const hasActiveSession = sessions.some(
-        (session) =>
-          session.taskId === nextTaskId &&
-          isActiveSessionUsingImplementationWorktree(session, taskWorktreeBasePath),
-      );
-      if (hasActiveSession) {
-        toast.error("Stop active work first", {
-          description: `A task session is still active for ${nextTaskId}. Stop the active session before resetting the implementation.`,
-        });
-        return false;
-      }
-
       setModalError(null);
       setTaskId(nextTaskId);
       setCloseDetailsAfterReset(options?.closeDetailsAfterReset ?? false);
       return true;
     },
-    [sessions, taskWorktreeBasePath, tasks],
+    [tasks],
   );
 
   const confirmReset = useCallback((): void => {
@@ -137,7 +129,9 @@ export function useTaskResetFlow({
       taskTitle: task.title,
       targetStatusLabel: deriveRollbackLabel(task),
       isSubmitting,
-      isLoadingImpact,
+      activeSessionCount,
+      activeSessionCountError: stopImpactError,
+      isLoadingImpact: isLoadingImpact || isLoadingStopImpact,
       hasCanonicalWorktree,
       hasManagedSessionCleanup,
       managedWorktreeCount,

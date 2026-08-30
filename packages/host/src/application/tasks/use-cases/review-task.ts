@@ -1,9 +1,7 @@
 import { Effect } from "effect";
 import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
-import {
-  createTaskCleanupProgressState,
-  runTaskRuntimeCleanup,
-} from "../support/task-cleanup-support";
+import { createTaskCleanupProgressState } from "../support/task-cleanup-progress";
+import { runTaskRuntimeCleanup } from "../support/task-cleanup-support";
 import { completeTaskClosure } from "../support/task-closure";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { enrichTask, recordQaOutcome, taskListWithCurrent } from "../support/task-workflow-helpers";

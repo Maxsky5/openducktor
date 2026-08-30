@@ -34,6 +34,7 @@ const createRunTaskMutation =
 
 const createCacheImpact = (): TaskMutationCommandCacheImpact => ({
   removeDeletedTaskCaches: async () => undefined,
+  invalidateTaskStopImpact: async () => undefined,
   invalidateTaskWorktree: async () => undefined,
 });
 
@@ -271,6 +272,7 @@ describe("createTaskMutationCommands", () => {
     const invalidateTaskWorktree = mock(async (repoPath: string, taskId: string) => {
       invalidatedWorktrees.push([repoPath, taskId]);
     });
+    const invalidateTaskStopImpact = mock(async () => undefined);
     const cleanupTaskIds: string[][] = [];
     const taskChatDraftCleanup: Pick<TaskChatDraftCleanup, "runMutation"> = {
       runMutation: async (input) => {
@@ -290,13 +292,14 @@ describe("createTaskMutationCommands", () => {
       runTaskMutation: createRunTaskMutation(received),
       hostPort: { ...createHostPort(), taskDelete },
       queryClient: createQueryClient(),
-      cacheImpact: { removeDeletedTaskCaches, invalidateTaskWorktree },
+      cacheImpact: { removeDeletedTaskCaches, invalidateTaskStopImpact, invalidateTaskWorktree },
       taskChatDraftCleanup,
     });
 
     await commands.deleteTask("parent", true);
 
     expect(taskDelete).toHaveBeenCalledWith("/repo", "parent", true);
+    expect(invalidateTaskStopImpact).toHaveBeenCalledWith("/repo");
     expect(cleanupTaskIds).toEqual([["parent", "child", "grandchild"]]);
     expect(received[0]?.refreshStrategy).toEqual({
       kind: "remove-task",
@@ -368,5 +371,27 @@ describe("createTaskMutationCommands", () => {
       { kind: "task", taskId: "task-2" },
       { kind: "task", taskId: "task-3" },
     ]);
+  });
+
+  test("invalidates stop impact after a failed close attempt", async () => {
+    const invalidateTaskStopImpact = mock(async () => undefined);
+    const commands = createTaskMutationCommands({
+      activeRepoPath: "/repo",
+      activeWorkspaceId: "workspace-1",
+      tasks: [],
+      runTaskMutation: createRunTaskMutation([]),
+      hostPort: {
+        ...createHostPort(),
+        taskClose: async () => {
+          throw new Error("close failed");
+        },
+      },
+      queryClient: createQueryClient(),
+      cacheImpact: { ...createCacheImpact(), invalidateTaskStopImpact },
+      taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
+    });
+
+    await expect(commands.closeTask("task-1")).rejects.toThrow("close failed");
+    expect(invalidateTaskStopImpact).toHaveBeenCalledWith("/repo");
   });
 });

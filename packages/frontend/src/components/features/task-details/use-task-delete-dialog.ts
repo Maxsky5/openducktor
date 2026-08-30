@@ -5,7 +5,6 @@ import { useTaskAsyncConfirmDialog } from "./use-task-async-confirm-dialog";
 type UseTaskDeleteDialogOptions = {
   sheetOpen: boolean;
   task: TaskCard | null;
-  hasSubtasks: boolean;
   onOpenChange: (open: boolean) => void;
   onDelete: ((taskId: string, options: { deleteSubtasks: boolean }) => Promise<void>) | undefined;
 };
@@ -13,7 +12,6 @@ type UseTaskDeleteDialogOptions = {
 export function useTaskDeleteDialog({
   sheetOpen,
   task,
-  hasSubtasks,
   onOpenChange,
   onDelete,
 }: UseTaskDeleteDialogOptions) {
@@ -22,8 +20,8 @@ export function useTaskDeleteDialog({
     if (task === null || onDelete === undefined) {
       return Promise.resolve();
     }
-    return onDelete(task.id, { deleteSubtasks: hasSubtasks });
-  }, [hasSubtasks, onDelete, task]);
+    return onDelete(task.id, { deleteSubtasks: true });
+  }, [onDelete, task]);
   const dialog = useTaskAsyncConfirmDialog({
     sheetOpen,
     scopeKey: task?.id ?? null,

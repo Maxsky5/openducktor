@@ -245,6 +245,9 @@ import type {
   TaskSessionBootstrap,
   TaskStatus,
   TaskStoreCheck,
+  TaskStopImpact,
+  TaskStopImpactOperation,
+  TaskStopImpactRequest,
   TaskUpdatePatch,
   TaskWorktreeSummary,
   TerminalClientMessage,
@@ -788,6 +791,9 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "qaReportVerdictSchema",
   "taskRequestedDocumentsSchema",
   "taskStatusSchema",
+  "taskStopImpactOperationSchema",
+  "taskStopImpactRequestSchema",
+  "taskStopImpactSchema",
   "taskSummarySchema",
   "taskUpdatePatchSchema",
   "taskWorktreeSummarySchema",
@@ -917,6 +923,9 @@ type ExportedTypeContract = {
   RuntimeInstanceSummaryRole: RuntimeInstanceSummaryRole;
   BuildSessionBootstrap: BuildSessionBootstrap;
   TaskSessionBootstrap: TaskSessionBootstrap;
+  TaskStopImpact: TaskStopImpact;
+  TaskStopImpactOperation: TaskStopImpactOperation;
+  TaskStopImpactRequest: TaskStopImpactRequest;
   ChatDiffHeight: ChatDiffHeight;
   ChatDiffIndicators: ChatDiffIndicators;
   ChatDiffStyle: ChatDiffStyle;

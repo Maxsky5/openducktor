@@ -304,6 +304,7 @@ describe("HostClient", () => {
       "qaRejected",
       "agentSessionsList",
       "agentSessionUpsert",
+      "taskStopImpactGet",
       "agentSessionLiveList",
       "agentSessionLiveLoadContext",
       "agentSessionLiveLoadDiff",
@@ -2011,6 +2012,25 @@ describe("HostClient", () => {
     });
 
     expect(await client.taskWorktreeGet("/repo", "task-1")).toBe(null);
+  });
+
+  test("task stop impact parses the previewed stoppable session count", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "task_stop_impact_get") {
+        return { stoppableSessionCount: 3 };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const impact = await client.taskStopImpactGet("/repo", ["task-1", "task-2"], "delete");
+
+    expect(impact).toEqual({ stoppableSessionCount: 3 });
+    expect(calls).toEqual([
+      {
+        command: "task_stop_impact_get",
+        args: { repoPath: "/repo", taskIds: ["task-1", "task-2"], operation: "delete" },
+      },
+    ]);
   });
 
   test("codex app-server requests use the expected IPC route", async () => {

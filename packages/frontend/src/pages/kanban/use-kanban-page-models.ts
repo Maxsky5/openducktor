@@ -280,8 +280,6 @@ export function useKanbanPageModels({
   );
   const { resetImplementationModal, openResetImplementation } = useTaskResetFlow({
     tasks: kanbanTasks,
-    sessions,
-    taskWorktreeBasePath: activeWorkspace?.effectiveWorktreeBasePath ?? null,
     resetTaskImplementation,
     closeTaskDetails: onCloseDetails,
   });
