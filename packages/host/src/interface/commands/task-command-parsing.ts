@@ -18,6 +18,7 @@ import { HostValidationError } from "../../effect/host-errors";
 import {
   commandInputStringSchema,
   type CommandInputRecord,
+  type HostCommandArgs,
   requireParsedRecord,
 } from "./command-inputs";
 
@@ -252,7 +253,7 @@ export const parseTaskDirectMergeInput = (
   );
 };
 
-export const parseTaskStopImpactInput = (value: unknown): TaskStopImpactRequest => {
+export const parseTaskStopImpactInput = (value: HostCommandArgs): TaskStopImpactRequest => {
   const parsed = taskStopImpactRequestSchema.safeParse(value);
   if (parsed.success) {
     return parsed.data;

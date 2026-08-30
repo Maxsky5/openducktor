@@ -32,13 +32,16 @@ export function useTaskStopImpact({
   const { activeWorkspace } = useWorkspaceState();
   const repoPath = activeWorkspace?.repoPath ?? null;
   const shouldRead = enabled && repoPath !== null && taskIds.length > 0;
+  const queryArgs: Parameters<typeof taskStopImpactQueryOptions>[0] = {
+    repoPath: repoPath ?? "",
+    taskIds,
+    operation,
+  };
+  if (readPort) {
+    queryArgs.readPort = readPort;
+  }
   const query = useQuery({
-    ...taskStopImpactQueryOptions({
-      repoPath: repoPath ?? "",
-      taskIds,
-      operation,
-      ...(readPort ? { readPort } : {}),
-    }),
+    ...taskStopImpactQueryOptions(queryArgs),
     enabled: shouldRead,
   });
   if (!shouldRead) {

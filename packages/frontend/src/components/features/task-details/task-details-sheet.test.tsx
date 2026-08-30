@@ -7,6 +7,7 @@ import {
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
+import type { TaskStopImpactState, useTaskStopImpact } from "@/state/queries/use-task-stop-impact";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 
@@ -154,13 +155,13 @@ describe("TaskDetailsSheet", () => {
   test("keeps delete confirm readiness tied to the authoritative stop-impact read", async () => {
     const { useTaskDetailsSheetViewModel } = await import("./use-task-details-sheet-view-model");
     const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1" });
+    const loadingStopImpact: TaskStopImpactState = {
+      stoppableSessionCount: null,
+      isLoading: true,
+      error: null,
+    };
     const taskStopImpactHookMock = mock(
-      (_args: { taskIds: string[]; operation: string; enabled: boolean }) =>
-        ({
-          stoppableSessionCount: null,
-          isLoading: true,
-          error: null,
-        }) as { stoppableSessionCount: number | null; isLoading: boolean; error: string | null },
+      (_args: Parameters<typeof useTaskStopImpact>[0]) => loadingStopImpact,
     );
     const harnessOptions = {
       activeWorkspace: {

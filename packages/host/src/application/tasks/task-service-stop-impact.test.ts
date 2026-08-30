@@ -1,16 +1,17 @@
 import { Effect } from "effect";
-import type { GitPort } from "../../ports/git-port";
 import { HostOperationError } from "../../effect/host-errors";
 import {
   createAgentSessionRecord,
   createBuildSettingsConfig,
   createBuildWorkspaceSettingsService,
+  createDirectMergeGitPort,
   createTaskService,
   type TaskActivityGuardPort,
   type TaskStorePort,
 } from "./test-support/task-workflow-harness";
 
 type TestSession = ReturnType<typeof createAgentSessionRecord>;
+type CountCall = { sessionIds: string[]; sessionRoles: string[] };
 
 const metadataWithSessions = (agentSessions: TestSession[]) => ({
   spec: { markdown: "" },
@@ -26,14 +27,9 @@ const createStopImpactTaskStore = (
   },
 });
 
-const createStopImpactGitPort = (): GitPort =>
-  ({
-    canonicalizePath: (path: string) => Effect.succeed(path),
-  }) as unknown as GitPort;
-
 const makeGuard = (
   liveSessions: Set<string>,
-  countCalls: Array<Record<string, unknown>> = [],
+  countCalls: CountCall[] = [],
 ): TaskActivityGuardPort => ({
   countLiveSessions(input) {
     return Effect.sync(() => {
@@ -63,18 +59,22 @@ const makeGuard = (
 const createService = (
   sessionsByTaskId: Record<string, TestSession[]>,
   guard?: TaskActivityGuardPort,
-) =>
-  createTaskService({
-    gitPort: createStopImpactGitPort(),
+) => {
+  const input = {
+    gitPort: createDirectMergeGitPort({ calls: [] }),
     settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-    ...(guard ? { taskActivityGuard: guard } : {}),
     taskStore: createStopImpactTaskStore(sessionsByTaskId),
     workspaceSettingsService: createBuildWorkspaceSettingsService({
       workspaceId: "repo",
       repoPath: "/repo",
       hooks: { preStart: [], postComplete: [] },
     }),
-  });
+  };
+  if (guard) {
+    return createTaskService({ ...input, taskActivityGuard: guard });
+  }
+  return createTaskService(input);
+};
 
 describe("getTaskStopImpact", () => {
   test("previews zero without probing when tasks have no agent sessions", async () => {

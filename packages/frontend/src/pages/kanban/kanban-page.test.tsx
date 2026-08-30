@@ -1612,9 +1612,10 @@ describe("KanbanPage session start modal flow", () => {
         renderer = await renderPage();
 
         await act(async () => {
-          (renderer!.getKanbanColumnProps().onResetImplementation as (taskId: string) => void)(
-            "TASK-123",
-          );
+          requireCallback(
+            renderer!.getKanbanColumnProps().onResetImplementation,
+            "reset implementation",
+          )("TASK-123");
           await Promise.resolve();
           await Promise.resolve();
         });

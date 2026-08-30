@@ -406,12 +406,11 @@ export class HostTaskClient {
     taskIds: string[],
     operation: TaskStopImpactOperation,
   ): Promise<TaskStopImpact> {
-    const payload = await this.invokeFn("task_stop_impact_get", {
-      repoPath,
-      taskIds,
-      operation,
-    });
-    return taskStopImpactSchema.parse(payload);
+    return this.invokeFn(
+      "task_stop_impact_get",
+      { repoPath, taskIds, operation },
+      taskStopImpactSchema,
+    );
   }
 
   async agentSessionsListForTasks(

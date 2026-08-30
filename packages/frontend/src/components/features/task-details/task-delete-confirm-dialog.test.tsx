@@ -83,9 +83,7 @@ describe("TaskDeleteConfirmDialog", () => {
         /Unable to check how many active sessions will be stopped: host unavailable/,
       ),
     ).toBeDefined();
-    expect((screen.getByRole("button", { name: "Delete" }) as HTMLButtonElement).disabled).toBe(
-      true,
-    );
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Delete" }).disabled).toBe(true);
 
     rendered.unmount();
   });

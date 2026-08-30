@@ -85,7 +85,7 @@ describe("TaskResetConfirmDialog", () => {
         /Unable to check how many active sessions will be stopped: host unavailable/,
       ),
     ).toBeDefined();
-    expect((screen.getByRole("button", { name: "Reset task" }) as HTMLButtonElement).disabled).toBe(
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Reset task" }).disabled).toBe(
       true,
     );
   });

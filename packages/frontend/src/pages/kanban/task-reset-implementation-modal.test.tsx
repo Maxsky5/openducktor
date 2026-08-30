@@ -98,7 +98,7 @@ describe("TaskResetImplementationModal", () => {
       ),
     ).toBeDefined();
     expect(
-      (screen.getByRole("button", { name: "Reset implementation" }) as HTMLButtonElement).disabled,
+      screen.getByRole<HTMLButtonElement>("button", { name: "Reset implementation" }).disabled,
     ).toBe(true);
   });
 
