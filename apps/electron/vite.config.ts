@@ -4,11 +4,11 @@ import { createOpenDucktorStartupSplashPlugin } from "@openducktor/frontend/star
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, searchForWorkspaceRoot } from "vite";
-import { runElectronSync } from "./src/effect/electron-boundary";
+import { runElectronSync } from "./src/effect/electron-boundary.ts";
 import {
   readPackageVersionEffect,
   resolveRendererDevPortEffect,
-} from "./src/effect/electron-config";
+} from "./src/effect/electron-config.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

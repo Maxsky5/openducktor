@@ -5,7 +5,7 @@ import {
   ElectronValidationError,
   type ElectronValidationErrorAggregate,
   errorMessage,
-} from "./electron-errors";
+} from "./electron-errors.ts";
 
 export const DEFAULT_RENDERER_DEV_PORT = 0;
 const packageVersionSchema = z.object({ version: z.string().trim().min(1) });

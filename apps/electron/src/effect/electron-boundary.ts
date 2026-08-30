@@ -1,5 +1,5 @@
 import { Effect, Exit } from "effect";
-import { causeToElectronBoundaryError } from "./electron-errors";
+import { causeToElectronBoundaryError } from "./electron-errors.ts";
 
 export const runElectronEffect = async <A, E extends Error>(
   effect: Effect.Effect<A, E>,
