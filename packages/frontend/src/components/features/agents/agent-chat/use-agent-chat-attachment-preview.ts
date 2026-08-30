@@ -7,10 +7,10 @@ export type AgentChatAttachmentPreviewTarget = {
   id: string;
   name: string;
   kind: AgentAttachmentReference["kind"];
-  mime?: string | undefined;
-  path?: string | undefined;
-  file?: File | undefined;
-  localPreviewAvailable?: boolean | undefined;
+  mime?: string;
+  path?: string;
+  file?: File;
+  localPreviewAvailable?: boolean;
 };
 
 export type AgentChatAttachmentPreviewState = {

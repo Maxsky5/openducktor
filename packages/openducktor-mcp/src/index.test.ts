@@ -7,18 +7,17 @@ import { z } from "zod";
 import type { RegisteredToolName } from "./listed-tool-schema";
 import { ODT_TOOL_SCHEMAS } from "./lib";
 import { createMcpServer } from "./mcp-server";
-import {
-  type JsonObject,
-  type JsonValue,
-  isJsonObject,
-  jsonValueSchema,
-  type OdtToolErrorPayload,
-  odtToolErrorPayloadSchema,
-} from "@openducktor/contracts";
+import { type OdtToolErrorPayload, odtToolErrorPayloadSchema } from "@openducktor/contracts";
+import { mcpToolPayloadSchema, type McpToolPayload } from "./tool-results";
+
+type McpToolObject = Record<string, McpToolPayload>;
+const mcpToolObjectSchema = z.record(z.string(), mcpToolPayloadSchema);
+const isMcpToolObject = (value: McpToolPayload): value is McpToolObject =>
+  mcpToolObjectSchema.safeParse(value).success;
 
 type RecordedRequest = {
   url: string;
-  body: JsonValue;
+  body: McpToolPayload;
 };
 
 const activeServers = new Set<ReturnType<typeof createServer>>();
@@ -44,7 +43,7 @@ const closeServer = async (server: ReturnType<typeof createServer>): Promise<voi
   });
 };
 
-const readJsonBody = async (request: IncomingMessage): Promise<JsonValue> => {
+const readJsonBody = async (request: IncomingMessage): Promise<McpToolPayload> => {
   const chunks: Buffer[] = [];
   for await (const chunk of request) {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -55,10 +54,10 @@ const readJsonBody = async (request: IncomingMessage): Promise<JsonValue> => {
     return {};
   }
 
-  return jsonValueSchema.parse(JSON.parse(body));
+  return mcpToolPayloadSchema.parse(JSON.parse(body));
 };
 
-const writeJson = (response: ServerResponse, payload: JsonValue, statusCode = 200): void => {
+const writeJson = (response: ServerResponse, payload: McpToolPayload, statusCode = 200): void => {
   response.statusCode = statusCode;
   response.setHeader("Access-Control-Allow-Origin", "*");
   response.setHeader("Content-Type", "application/json");
@@ -153,7 +152,7 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
     if (url === "/invoke/odt_read_task") {
       const body = await readJsonBody(request);
       requests.push({ url, body });
-      if (isJsonObject(body) && body.taskId === "missing-task") {
+      if (isMcpToolObject(body) && body.taskId === "missing-task") {
         writeJson(
           response,
           {
@@ -167,7 +166,7 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
         );
         return;
       }
-      if (isJsonObject(body) && body.taskId === "bad-response") {
+      if (isMcpToolObject(body) && body.taskId === "bad-response") {
         writeJson(response, { task: { id: "bad-response" } });
         return;
       }
@@ -285,10 +284,10 @@ const expectToolError = (result: CallToolResult): OdtToolErrorPayload["error"] =
   return payload.error;
 };
 
-const readToolInputProperties = (toolsResult: ListToolsResult, toolName: string): JsonObject => {
+const readToolInputProperties = (toolsResult: ListToolsResult, toolName: string): McpToolObject => {
   const tool = toolsResult.tools.find((entry) => entry.name === toolName);
   const parsed = z
-    .object({ properties: z.record(z.string(), jsonValueSchema) })
+    .object({ properties: z.record(z.string(), mcpToolPayloadSchema) })
     .safeParse(tool?.inputSchema);
   if (!parsed.success) {
     throw new Error(`Expected ${toolName} to expose input schema properties.`);

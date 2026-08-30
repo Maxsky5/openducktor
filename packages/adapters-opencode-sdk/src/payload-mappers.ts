@@ -7,8 +7,8 @@ import {
 } from "./opencode-ingress";
 
 type AssistantResponsePayload = {
-  info?: { id?: string | undefined } | undefined;
-  parts?: Array<{ messageID?: string | undefined }> | undefined;
+  info?: { id?: string };
+  parts?: Array<{ messageID?: string }>;
 };
 
 interface NormalizedModelInput {

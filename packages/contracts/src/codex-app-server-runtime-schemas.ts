@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z, type JSONType } from "zod";
 import { codexInt64Schema, codexUint64Schema } from "./codex-app-server-number-schemas";
 import {
   codexAppServerCommandExecutionRequestApprovalParamsSchema,
@@ -6,11 +6,14 @@ import {
   codexAppServerExecCommandApprovalParamsSchema,
   codexAppServerMcpServerElicitationRequestParamsSchema,
   codexAppServerPermissionsRequestApprovalParamsSchema,
+} from "./codex-app-server-permission-schemas";
+import {
   codexAppServerThreadItemSchema,
   codexAppServerThreadStatusSchema,
   codexAppServerTurnSchema,
-} from "./codex-app-server-protocol-schemas";
-import { jsonObjectSchema, jsonValueSchema, type JsonValue } from "./json-types";
+} from "./codex-app-server-thread-schemas";
+const codexAppServerJsonValueSchema = z.json();
+const codexAppServerJsonObjectSchema = z.record(z.string(), codexAppServerJsonValueSchema);
 const nonBlankStringSchema = z
   .string()
   .refine((value) => value.trim().length > 0, { error: "String must not be blank" });
@@ -21,7 +24,7 @@ const receivedAtSchema = z.string().refine((value) => Number.isFinite(Date.parse
 const notification = <Method extends string, Params extends z.ZodType>(
   method: Method,
   params: Params,
-) => z.object({ method: z.literal(method), params: params.and(jsonObjectSchema) });
+) => z.object({ method: z.literal(method), params: params.and(codexAppServerJsonObjectSchema) });
 const serverRequest = <Method extends string, Params extends z.ZodType>(
   method: Method,
   params: Params,
@@ -29,7 +32,7 @@ const serverRequest = <Method extends string, Params extends z.ZodType>(
   z.object({
     id: requestIdSchema,
     method: z.literal(method),
-    params: params.and(jsonObjectSchema),
+    params: params.and(codexAppServerJsonObjectSchema),
   });
 
 const threadTurnParamsSchema = z.object({ threadId: z.string(), turn: codexAppServerTurnSchema });
@@ -196,7 +199,7 @@ const codexAppServerUnconsumedNotificationMethodSchema = z
 
 export const codexAppServerUnconsumedRuntimeNotificationSchema = z.object({
   method: codexAppServerUnconsumedNotificationMethodSchema,
-  params: jsonValueSchema,
+  params: codexAppServerJsonValueSchema,
 });
 
 export const codexAppServerRuntimeNotificationSchema = z.union([
@@ -243,7 +246,7 @@ export const codexAppServerServerRequestSchema = z.discriminatedUnion("method", 
   serverRequest(
     "item/tool/call",
     z.object({
-      arguments: jsonValueSchema,
+      arguments: codexAppServerJsonValueSchema,
       callId: z.string(),
       namespace: z.string().nullable(),
       threadId: z.string(),
@@ -266,7 +269,7 @@ export const codexAppServerRuntimeServerRequestSchema = codexAppServerServerRequ
 
 export const codexAppServerServerNotificationSchema = z.object({
   method: nonBlankStringSchema,
-  params: jsonValueSchema,
+  params: codexAppServerJsonValueSchema,
 });
 
 export const codexAppServerRuntimeStreamEventSchema = z.discriminatedUnion("kind", [
@@ -286,7 +289,7 @@ export const codexAppServerRuntimeStreamEventSchema = z.discriminatedUnion("kind
 
 export const codexAppServerRuntimeNotificationRecordSchema = z.object({
   method: nonBlankStringSchema,
-  params: jsonObjectSchema.optional(),
+  params: codexAppServerJsonObjectSchema.optional(),
   receivedAt: receivedAtSchema,
 });
 const codexAppServerRuntimeNotificationPayloadSchema =
@@ -295,7 +298,7 @@ const codexAppServerRuntimeNotificationPayloadSchema =
 export const codexAppServerRuntimeServerRequestRecordSchema = z.object({
   id: requestIdSchema.optional(),
   method: nonBlankStringSchema,
-  params: jsonObjectSchema.optional(),
+  params: codexAppServerJsonObjectSchema.optional(),
 });
 
 export type CodexAppServerRuntimeNotification = z.infer<
@@ -321,11 +324,11 @@ export type CodexAppServerRuntimeServerRequestRecord = z.infer<
   typeof codexAppServerRuntimeServerRequestRecordSchema
 >;
 
-export const parseCodexAppServerRuntimeStreamEvent = (value: JsonValue) =>
+export const parseCodexAppServerRuntimeStreamEvent = (value: JSONType) =>
   codexAppServerRuntimeStreamEventSchema.parse(value);
 
 export const parseCodexAppServerRuntimeNotificationRecord = (
-  value: JsonValue,
+  value: JSONType,
   receivedAt?: string,
 ) => {
   const notification = codexAppServerRuntimeNotificationPayloadSchema.parse(value);
@@ -335,5 +338,5 @@ export const parseCodexAppServerRuntimeNotificationRecord = (
   });
 };
 
-export const parseCodexAppServerRuntimeServerRequestRecord = (value: JsonValue) =>
+export const parseCodexAppServerRuntimeServerRequestRecord = (value: JSONType) =>
   codexAppServerRuntimeServerRequestRecordSchema.parse(value);

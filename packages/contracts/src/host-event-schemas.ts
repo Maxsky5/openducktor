@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { agentSessionLiveEnvelopeSchema } from "./agent-session-live-schemas";
 import { devServerEventSchema } from "./dev-server-schemas";
-import { jsonValueSchema } from "./json-types";
+
+const runEventPayloadSchema = z.record(z.string(), z.json());
 
 export const HOST_EVENT_CHANNELS = [
   "openducktor://run-event",
@@ -15,7 +16,7 @@ export const hostEventEnvelopeSchema = z.discriminatedUnion("channel", [
   z
     .object({
       channel: z.literal("openducktor://run-event"),
-      payload: jsonValueSchema,
+      payload: runEventPayloadSchema,
     })
     .strict(),
   z

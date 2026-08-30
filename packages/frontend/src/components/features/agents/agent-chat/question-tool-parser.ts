@@ -1,4 +1,5 @@
-import { isJsonObject, jsonValueSchema, type JsonValue } from "@openducktor/contracts";
+import { agentToolDataSchema, type AgentToolData } from "@openducktor/contracts";
+import { z } from "zod";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { hasNonEmptyText } from "./tool-lifecycle";
 
@@ -7,7 +8,12 @@ export type QuestionToolDetail = {
   answers: string[];
 };
 
-const parseJsonIfPossible = (value: string | undefined): JsonValue | undefined => {
+type AgentToolValue = AgentToolData[string];
+
+const isAgentToolData = (value: AgentToolValue | undefined): value is AgentToolData =>
+  agentToolDataSchema.safeParse(value).success;
+
+const parseJsonIfPossible = (value: string | undefined): AgentToolValue | undefined => {
   if (!value || value.trim().length === 0) {
     return undefined;
   }
@@ -16,14 +22,14 @@ const parseJsonIfPossible = (value: string | undefined): JsonValue | undefined =
     return undefined;
   }
   try {
-    return jsonValueSchema.parse(JSON.parse(trimmed));
+    return z.json().parse(JSON.parse(trimmed));
   } catch {
     return undefined;
   }
 };
 
-const readQuestionPrompt = (value: JsonValue | undefined): string | null => {
-  if (value === undefined || !isJsonObject(value)) {
+const readQuestionPrompt = (value: AgentToolValue | undefined): string | null => {
+  if (!isAgentToolData(value)) {
     return null;
   }
   const candidates = [
@@ -42,7 +48,7 @@ const readQuestionPrompt = (value: JsonValue | undefined): string | null => {
   return null;
 };
 
-const normalizeAnswerValues = (value: JsonValue | undefined): string[] => {
+const normalizeAnswerValues = (value: AgentToolValue | undefined): string[] => {
   if (hasNonEmptyText(value)) {
     const trimmed = value.trim();
     return trimmed.length > 0 ? [trimmed] : [];
@@ -50,7 +56,7 @@ const normalizeAnswerValues = (value: JsonValue | undefined): string[] => {
   if (Array.isArray(value)) {
     return value.flatMap((entry) => normalizeAnswerValues(entry));
   }
-  if (value === undefined || !isJsonObject(value)) {
+  if (!isAgentToolData(value)) {
     return [];
   }
   return normalizeAnswerValues(
@@ -58,7 +64,7 @@ const normalizeAnswerValues = (value: JsonValue | undefined): string[] => {
   );
 };
 
-const collectQuestionDetails = (value: JsonValue | undefined): QuestionToolDetail[] => {
+const collectQuestionDetails = (value: AgentToolValue | undefined): QuestionToolDetail[] => {
   if (!Array.isArray(value)) {
     return [];
   }
@@ -67,7 +73,7 @@ const collectQuestionDetails = (value: JsonValue | undefined): QuestionToolDetai
     if (!prompt) {
       return details;
     }
-    if (!isJsonObject(entry)) {
+    if (!isAgentToolData(entry)) {
       return details;
     }
     const answers = normalizeAnswerValues(
@@ -81,11 +87,11 @@ const collectQuestionDetails = (value: JsonValue | undefined): QuestionToolDetai
   }, []);
 };
 
-const normalizeAnswerGroups = (value: JsonValue | undefined): string[][] => {
+const normalizeAnswerGroups = (value: AgentToolValue | undefined): string[][] => {
   if (Array.isArray(value)) {
     return value.map((entry) => normalizeAnswerValues(entry));
   }
-  if (value === undefined || !isJsonObject(value)) {
+  if (!isAgentToolData(value)) {
     return [];
   }
   const nested =
@@ -107,7 +113,7 @@ const normalizeAnswerGroups = (value: JsonValue | undefined): string[][] => {
   return normalizeAnswerGroups(nested);
 };
 
-const firstNonEmptyAnswerGroups = (candidates: Array<JsonValue | undefined>): string[][] => {
+const firstNonEmptyAnswerGroups = (candidates: Array<AgentToolValue | undefined>): string[][] => {
   for (const candidate of candidates) {
     const groups = normalizeAnswerGroups(candidate).reduce<string[][]>((nextGroups, entry) => {
       const answers = entry.filter((value) => value.trim().length > 0);
@@ -128,17 +134,19 @@ export const questionToolDetails = (meta: ToolMeta): QuestionToolDetail[] => {
     return [];
   }
 
-  const parsedInput = jsonValueSchema.safeParse(meta.input);
-  const parsedMetadata = jsonValueSchema.safeParse(meta.metadata);
+  const parsedInput = z.json().safeParse(meta.input);
+  const parsedMetadata = z.json().safeParse(meta.metadata);
   const inputRecord =
-    parsedInput.success && isJsonObject(parsedInput.data) ? parsedInput.data : undefined;
+    parsedInput.success && isAgentToolData(parsedInput.data) ? parsedInput.data : undefined;
   const metadataRecord =
-    parsedMetadata.success && isJsonObject(parsedMetadata.data) ? parsedMetadata.data : undefined;
+    parsedMetadata.success && isAgentToolData(parsedMetadata.data)
+      ? parsedMetadata.data
+      : undefined;
   const inputQuestions = collectQuestionDetails(inputRecord?.questions);
   const metadataQuestions = collectQuestionDetails(metadataRecord?.questions);
   const parsedOutput = parseJsonIfPossible(meta.output);
   const outputQuestions = collectQuestionDetails(
-    parsedOutput && isJsonObject(parsedOutput) ? parsedOutput.questions : undefined,
+    parsedOutput && isAgentToolData(parsedOutput) ? parsedOutput.questions : undefined,
   );
   const questions =
     inputQuestions.length > 0
@@ -151,7 +159,7 @@ export const questionToolDetails = (meta: ToolMeta): QuestionToolDetail[] => {
     return [];
   }
 
-  const outputRecord = parsedOutput && isJsonObject(parsedOutput) ? parsedOutput : undefined;
+  const outputRecord = parsedOutput && isAgentToolData(parsedOutput) ? parsedOutput : undefined;
   const answerGroups = firstNonEmptyAnswerGroups([
     outputRecord,
     outputRecord?.answers,

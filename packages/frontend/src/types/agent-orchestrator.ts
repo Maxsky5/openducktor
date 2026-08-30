@@ -2,9 +2,9 @@ import type {
   AgentSessionAssociation,
   AgentSessionLiveLoadContextInput,
   AgentSessionWorkflowScope,
+  AgentToolData,
   FileContent,
   FileDiff,
-  JsonObject,
   RuntimeKind,
   SessionHistoryFailure,
 } from "@openducktor/contracts";
@@ -34,14 +34,14 @@ export type AgentChatMessageMeta =
       preview?: string;
       title?: string;
       displayLabel?: string;
-      input?: JsonObject;
+      input?: AgentToolData;
       output?: string;
       error?: string;
       fileDiffs?: FileDiff[];
       fileContent?: FileContent[];
       /** @deprecated Use fileDiffs. Kept only for already-persisted transcript messages. */
       fileChanges?: FileDiff[];
-      metadata?: JsonObject;
+      metadata?: AgentToolData;
       startedAtMs?: number;
       endedAtMs?: number;
       observedStartedAtMs?: number;
@@ -91,7 +91,7 @@ export type AgentChatMessageMeta =
       error?: string;
       externalSessionId?: string;
       executionMode?: AgentSubagentExecutionMode;
-      metadata?: JsonObject;
+      metadata?: AgentToolData;
       startedAtMs?: number;
       endedAtMs?: number;
     }

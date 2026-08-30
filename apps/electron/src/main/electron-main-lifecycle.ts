@@ -78,8 +78,17 @@ const ensureStartupContinuesEffect = (
   if (!shouldContinueStartup || shouldContinueStartup()) {
     return Effect.void;
   }
+  if (details === undefined) {
+    return Effect.fail(
+      new ElectronLifecycleError<ElectronStartupPhaseDetails>({
+        operation,
+        message: "Electron startup stopped because host shutdown has started.",
+        reason: "shutdown-started",
+      }),
+    );
+  }
   return Effect.fail(
-    new ElectronLifecycleError({
+    new ElectronLifecycleError<ElectronStartupPhaseDetails>({
       operation,
       message: "Electron startup stopped because host shutdown has started.",
       reason: "shutdown-started",

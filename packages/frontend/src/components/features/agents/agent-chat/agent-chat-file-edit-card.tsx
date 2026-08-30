@@ -1,5 +1,4 @@
 import { ChevronDown, ChevronRight, FilePlus, FileText, FileX } from "lucide-react";
-import { hasOwnKey } from "@openducktor/contracts";
 import { memo, type ReactElement, useEffect, useRef, useState } from "react";
 import {
   PierreFileViewer,
@@ -18,12 +17,15 @@ const STATUS_CONFIG = {
   modified: { icon: FileText, color: "text-blue-400", badge: "M" },
   added: { icon: FilePlus, color: "text-green-400", badge: "A" },
   deleted: { icon: FileX, color: "text-red-400", badge: "D" },
-} satisfies Record<string, { icon: typeof FileText; color: string; badge: string }>;
+};
 
 type FileEditStatus = keyof typeof STATUS_CONFIG;
 
 function inferStatus(data: FileEditData): FileEditStatus {
-  if (data.kind === "content" && hasOwnKey(STATUS_CONFIG, data.changeType)) {
+  if (
+    data.kind === "content" &&
+    (data.changeType === "modified" || data.changeType === "added" || data.changeType === "deleted")
+  ) {
     return data.changeType;
   }
   if (data.deletions === 0 && data.additions > 0) {

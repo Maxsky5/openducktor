@@ -1,4 +1,4 @@
-import { isJsonObject, type JsonValue } from "@openducktor/contracts";
+import { agentToolDataSchema, type AgentToolData } from "@openducktor/contracts";
 import { toDisplayRelativePath } from "@openducktor/path-support";
 import { z } from "zod";
 
@@ -19,7 +19,9 @@ const DISPLAY_PATH_KEYS = new Set([
 ]);
 
 const stringValueSchema = z.string();
-const isStringValue = (value: JsonValue): value is string =>
+type AgentToolValue = AgentToolData[string];
+
+const isStringValue = (value: AgentToolValue): value is string =>
   stringValueSchema.safeParse(value).success;
 
 export const relativizeDisplayPath = (filePath: string, workingDirectory?: string | null): string =>
@@ -41,10 +43,10 @@ export const relativizeSearchSummary = (
 };
 
 export const relativizeDisplayPathsInValue = (
-  value: JsonValue,
+  value: AgentToolValue,
   workingDirectory?: string | null,
   key?: string,
-): JsonValue => {
+): AgentToolValue => {
   if (isStringValue(value)) {
     return key && DISPLAY_PATH_KEYS.has(key)
       ? relativizeDisplayPath(value, workingDirectory)
@@ -53,12 +55,13 @@ export const relativizeDisplayPathsInValue = (
   if (Array.isArray(value)) {
     return value.map((entry) => relativizeDisplayPathsInValue(entry, workingDirectory, key));
   }
-  if (!isJsonObject(value)) {
+  const objectValue = agentToolDataSchema.safeParse(value);
+  if (!objectValue.success) {
     return value;
   }
 
   return Object.fromEntries(
-    Object.entries(value).map(([entryKey, entryValue]) => [
+    Object.entries(objectValue.data).map(([entryKey, entryValue]) => [
       entryKey,
       relativizeDisplayPathsInValue(entryValue, workingDirectory, entryKey),
     ]),

@@ -1,6 +1,14 @@
-import { jsonObjectSchema, type JsonObject } from "@openducktor/contracts";
 import type { AgentStreamPart } from "@openducktor/core";
-import { type ClaudeFailureDetails, readStringProp } from "./claude-agent-sdk-utils";
+import {
+  claudeProtocolObjectSchema,
+  type ClaudeProtocolObject,
+} from "./claude-agent-sdk-ingress-schemas";
+import type { ClaudeHistoryTaskUpdatedPatch } from "./claude-agent-sdk-ingress-schemas";
+import {
+  type ClaudeFailureDetails,
+  type ClaudeTaskUpdatedPatch,
+  readStringProp,
+} from "./claude-agent-sdk-utils";
 import type { ClaudeDecodedToolResult, ClaudeDecodedToolUse } from "./claude-agent-sdk-tool-shapes";
 
 type SubagentStreamPart = Extract<AgentStreamPart, { kind: "subagent" }>;
@@ -13,7 +21,7 @@ type ClaudeTaskStatus =
   | "paused"
   | undefined;
 
-export type ClaudeAgentResult = JsonObject;
+export type ClaudeAgentResult = ClaudeProtocolObject;
 
 export const claudeSubagentStatusFromTaskStatus = (
   status: ClaudeTaskStatus,
@@ -36,11 +44,11 @@ export const isTerminalClaudeTaskStatus = (status: ClaudeTaskStatus): boolean =>
 export const readStructuredClaudeAgentResult = (
   raw: ClaudeDecodedToolResult["raw"],
 ): ClaudeAgentResult => {
-  const toolUseResult = jsonObjectSchema.safeParse(raw.toolUseResult);
+  const toolUseResult = claudeProtocolObjectSchema.safeParse(raw.toolUseResult);
   if (toolUseResult.success) {
     return toolUseResult.data;
   }
-  const structuredContent = jsonObjectSchema.safeParse(raw.structuredContent);
+  const structuredContent = claudeProtocolObjectSchema.safeParse(raw.structuredContent);
   if (structuredContent.success) {
     return structuredContent.data;
   }
@@ -110,7 +118,11 @@ export const readClaudeFailedTaskMessage = (
   );
 
 export const readClaudeFailedTaskReason = (
-  value: ClaudeAgentResult | ClaudeFailureDetails,
+  value:
+    | ClaudeAgentResult
+    | ClaudeFailureDetails
+    | ClaudeHistoryTaskUpdatedPatch
+    | ClaudeTaskUpdatedPatch,
 ): string | undefined =>
   firstClaudeTaskText(
     readStringProp(value, "error"),
@@ -127,7 +139,7 @@ export const readClaudeTaskStopTaskId = (
     return structuredTaskId;
   }
   try {
-    const parsed = jsonObjectSchema.safeParse(JSON.parse(resultText));
+    const parsed = claudeProtocolObjectSchema.safeParse(JSON.parse(resultText));
     return parsed.success ? readStringProp(parsed.data, "task_id") : undefined;
   } catch {
     return undefined;

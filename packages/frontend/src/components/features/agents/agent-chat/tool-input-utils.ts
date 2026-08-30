@@ -1,11 +1,14 @@
-import type { JsonObject, JsonValue } from "@openducktor/contracts";
+import type { AgentToolData } from "@openducktor/contracts";
 import { z } from "zod";
 
 const stringValueSchema = z.string();
-const isStringValue = (value: JsonValue | undefined): value is string =>
+const isStringValue = (value: AgentToolData[string] | undefined): value is string =>
   stringValueSchema.safeParse(value).success;
 
-export const readInputString = (input: JsonObject | undefined, keys: string[]): string | null => {
+export const readInputString = (
+  input: AgentToolData | undefined,
+  keys: string[],
+): string | null => {
   if (!input) {
     return null;
   }
@@ -18,7 +21,7 @@ export const readInputString = (input: JsonObject | undefined, keys: string[]): 
   return null;
 };
 
-export const extractPathFromInput = (input: JsonObject | undefined): string | null => {
+export const extractPathFromInput = (input: AgentToolData | undefined): string | null => {
   const candidate =
     input?.filePath ?? input?.file_path ?? input?.path ?? input?.file ?? input?.filename;
   if (isStringValue(candidate)) {

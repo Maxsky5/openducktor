@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { JsonValue } from "@openducktor/contracts";
+import type { JSONType } from "zod";
 import {
   configureBrowserRuntimeConfig,
   getBrowserAuthToken,
@@ -8,7 +8,7 @@ import {
 import { loadBrowserRuntimeConfig, RUNTIME_CONFIG_PATH } from "./runtime-config";
 import { createFetchFixture } from "./test-support";
 
-const response = (body: JsonValue, status = 200): Response =>
+const response = (body: JSONType, status = 200): Response =>
   new Response(JSON.stringify(body), {
     headers: { "content-type": "application/json" },
     status,

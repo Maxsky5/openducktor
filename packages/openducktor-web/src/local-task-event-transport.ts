@@ -1,6 +1,4 @@
 import {
-  type JsonValue,
-  jsonValueSchema,
   type TaskEventCursor,
   taskEventCursorSchema,
   taskEventStreamFrameSchema,
@@ -48,7 +46,9 @@ const taskEventSubscriptionSchema = z
   .strict();
 type TaskEventSubscriptionResponse = z.infer<typeof taskEventSubscriptionSchema>;
 
-const parseTaskEventSubscription = (value: JsonValue): TaskEventSubscriptionResponse => {
+const parseTaskEventSubscription = (
+  value: z.input<typeof taskEventSubscriptionSchema>,
+): TaskEventSubscriptionResponse => {
   const parsed = taskEventSubscriptionSchema.safeParse(value);
   if (!parsed.success) {
     throw new Error("Task event stream subscription response is invalid.");
@@ -101,7 +101,7 @@ export const subscribeLocalTaskEventStreamEffect = (
     }
     const created = yield* Effect.tryPromise({
       try: async () => {
-        return parseTaskEventSubscription(jsonValueSchema.parse(await createResponse.json()));
+        return parseTaskEventSubscription(await createResponse.json());
       },
       catch: (cause) =>
         new WebDependencyError({
@@ -207,9 +207,9 @@ export const subscribeLocalTaskEventStreamEffect = (
     };
     const handleFrame = (data: string): void => {
       if (closed) return;
-      let raw: JsonValue;
+      let raw: z.output<typeof taskEventStreamFrameSchema>;
       try {
-        raw = jsonValueSchema.parse(JSON.parse(data));
+        raw = taskEventStreamFrameSchema.parse(JSON.parse(data));
       } catch (cause) {
         const failure = new WebDependencyError({
           dependency: "task-event-stream",

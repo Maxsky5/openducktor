@@ -1,10 +1,12 @@
-import { z } from "zod";
+import { z, type JSONType } from "zod";
 import {
   codexUint32Schema,
   codexUint64Schema,
   codexUsizeSchema,
 } from "./codex-app-server-number-schemas";
-import { jsonObjectSchema, jsonValueSchema, type JsonValue } from "./json-types";
+
+const codexAppServerJsonValueSchema = z.json();
+const codexAppServerJsonObjectSchema = z.record(z.string(), codexAppServerJsonValueSchema);
 
 export const codexAppServerReasoningEffortSchema = z.string().min(1);
 
@@ -15,16 +17,21 @@ export type CodexAppServerRequestReasoningEffort = z.output<
 const nullableString = z.string().nullable().optional();
 const nullableBoolean = z.boolean().nullable().optional();
 const nullableUint32 = codexUint32Schema.nullable().optional();
-const approvalsReviewerSchema = z.enum(["auto_review", "guardian_subagent", "user"]);
+export const codexAppServerApprovalsReviewerSchema = z.enum([
+  "auto_review",
+  "guardian_subagent",
+  "user",
+]);
 const personalitySchema = z.enum(["friendly", "none", "pragmatic"]);
 const sortDirectionSchema = z.enum(["asc", "desc"]);
 const turnItemsViewSchema = z.enum(["notLoaded", "summary", "full"]);
+const sandboxModeSchema = z.enum(["danger-full-access", "read-only", "workspace-write"]);
 export const codexAppServerMultiAgentModeSchema = z.union([
   z.enum(["explicitRequestOnly", "proactive"]),
   z.strictObject({ custom: z.string() }),
 ]);
 
-const approvalPolicySchema = z.union([
+export const codexAppServerApprovalPolicySchema = z.union([
   z.enum(["never", "on-request", "untrusted"]),
   z.strictObject({
     granular: z.strictObject({
@@ -37,7 +44,7 @@ const approvalPolicySchema = z.union([
   }),
 ]);
 
-const sandboxPolicySchema = z.discriminatedUnion("type", [
+export const codexAppServerSandboxPolicySchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("dangerFullAccess") }),
   z.strictObject({
     type: z.literal("externalSandbox"),
@@ -194,7 +201,7 @@ export const codexAppServerResponseItemSchema = z.discriminatedUnion("type", [
     call_id: z.string().nullable(),
     status: z.string().optional(),
     execution: z.string(),
-    arguments: jsonValueSchema,
+    arguments: codexAppServerJsonValueSchema,
   }),
   z.strictObject({
     type: z.literal("function_call_output"),
@@ -224,7 +231,7 @@ export const codexAppServerResponseItemSchema = z.discriminatedUnion("type", [
     call_id: z.string().nullable(),
     status: z.string(),
     execution: z.string(),
-    tools: z.array(jsonValueSchema),
+    tools: z.array(codexAppServerJsonValueSchema),
   }),
   z.strictObject({
     type: z.literal("web_search_call"),
@@ -259,11 +266,11 @@ const threadConfigurationFields = {
   serviceTier: nullableString,
   cwd: nullableString,
   runtimeWorkspaceRoots: z.array(z.string()).nullable().optional(),
-  approvalPolicy: approvalPolicySchema.nullable().optional(),
-  approvalsReviewer: approvalsReviewerSchema.nullable().optional(),
-  sandbox: z.enum(["danger-full-access", "read-only", "workspace-write"]).nullable().optional(),
+  approvalPolicy: codexAppServerApprovalPolicySchema.nullable().optional(),
+  approvalsReviewer: codexAppServerApprovalsReviewerSchema.nullable().optional(),
+  sandbox: sandboxModeSchema.nullable().optional(),
   permissions: nullableString,
-  config: jsonObjectSchema.nullable().optional(),
+  config: codexAppServerJsonObjectSchema.nullable().optional(),
   baseInstructions: nullableString,
   developerInstructions: nullableString,
 };
@@ -277,12 +284,17 @@ const turnEnvironmentSchema = z.strictObject({
 const dynamicToolFunctionFields = {
   name: z.string(),
   description: z.string(),
-  inputSchema: jsonValueSchema,
+  inputSchema: codexAppServerJsonValueSchema,
   deferLoading: z.boolean().optional(),
 };
 
+const codexAppServerDynamicToolFunctionSpecSchema = z.strictObject(dynamicToolFunctionFields);
+const codexAppServerDynamicToolFunctionSchema = codexAppServerDynamicToolFunctionSpecSchema.extend({
+  type: z.literal("function"),
+});
+
 const dynamicToolSchema = z.discriminatedUnion("type", [
-  z.strictObject({ type: z.literal("function"), ...dynamicToolFunctionFields }),
+  codexAppServerDynamicToolFunctionSchema,
   z.strictObject({
     type: z.literal("namespace"),
     name: z.string(),
@@ -333,7 +345,7 @@ export const codexAppServerRequestParamsSchemas = {
         requestAttestation: z.boolean(),
         mcpServerOpenaiFormElicitation: z.boolean().optional(),
         optOutNotificationMethods: z.array(z.string()).nullable().optional(),
-        extensions: jsonObjectSchema.nullable().optional(),
+        extensions: codexAppServerJsonObjectSchema.nullable().optional(),
       })
       .nullable(),
   }),
@@ -441,16 +453,16 @@ export const codexAppServerRequestParamsSchemas = {
     environments: z.array(turnEnvironmentSchema).nullable().optional(),
     cwd: nullableString,
     runtimeWorkspaceRoots: z.array(z.string()).nullable().optional(),
-    approvalPolicy: approvalPolicySchema.nullable().optional(),
-    approvalsReviewer: approvalsReviewerSchema.nullable().optional(),
-    sandboxPolicy: sandboxPolicySchema.nullable().optional(),
+    approvalPolicy: codexAppServerApprovalPolicySchema.nullable().optional(),
+    approvalsReviewer: codexAppServerApprovalsReviewerSchema.nullable().optional(),
+    sandboxPolicy: codexAppServerSandboxPolicySchema.nullable().optional(),
     permissions: nullableString,
     model: nullableString,
     serviceTier: nullableString,
     effort: codexAppServerReasoningEffortSchema.nullable().optional(),
     summary: z.enum(["auto", "concise", "detailed", "none"]).nullable().optional(),
     personality: personalitySchema.nullable().optional(),
-    outputSchema: jsonValueSchema.nullable().optional(),
+    outputSchema: codexAppServerJsonValueSchema.nullable().optional(),
     collaborationMode: collaborationModeSchema.nullable().optional(),
     multiAgentMode: codexAppServerMultiAgentModeSchema.nullable().optional(),
   }),
@@ -547,6 +559,50 @@ export type CodexAppServerRequestParamsMap = {
     (typeof codexAppServerRequestParamsSchemas)[Method]
   >;
 };
+export type CodexAppServerReasoningEffort = CodexAppServerRequestReasoningEffort;
+export type CodexAppServerReasoningSummary = "auto" | "concise" | "detailed" | "none";
+export type CodexAppServerPersonality = z.output<typeof personalitySchema>;
+export type CodexAppServerSortDirection = z.output<typeof sortDirectionSchema>;
+export type CodexAppServerTurnItemsView = z.output<typeof turnItemsViewSchema>;
+export type CodexAppServerSandboxMode = z.output<typeof sandboxModeSchema>;
+export type CodexAppServerAskForApproval = z.output<typeof codexAppServerApprovalPolicySchema>;
+export type CodexAppServerApprovalsReviewer = z.output<
+  typeof codexAppServerApprovalsReviewerSchema
+>;
+export type CodexAppServerSandboxPolicy = z.output<typeof codexAppServerSandboxPolicySchema>;
+export type CodexAppServerMultiAgentMode = z.output<typeof codexAppServerMultiAgentModeSchema>;
+export type CodexAppServerTurnEnvironmentParams = z.output<typeof turnEnvironmentSchema>;
+export type CodexAppServerDynamicToolSpec = z.output<typeof dynamicToolSchema>;
+export type CodexAppServerDynamicToolFunctionSpec = z.output<
+  typeof codexAppServerDynamicToolFunctionSpecSchema
+>;
+export type CodexAppServerSelectedCapabilityRoot = z.output<typeof selectedCapabilityRootSchema>;
+export type CodexAppServerInitializeParams = CodexAppServerRequestParamsMap["initialize"];
+export type CodexAppServerClientInfo = CodexAppServerInitializeParams["clientInfo"];
+export type CodexAppServerInitializeCapabilities = Exclude<
+  CodexAppServerInitializeParams["capabilities"],
+  null
+>;
+export type CodexAppServerThreadStartParams = CodexAppServerRequestParamsMap["thread/start"];
+export type CodexAppServerThreadResumeParams = CodexAppServerRequestParamsMap["thread/resume"];
+export type CodexAppServerThreadForkParams = CodexAppServerRequestParamsMap["thread/fork"];
+export type CodexAppServerThreadSetNameParams = CodexAppServerRequestParamsMap["thread/name/set"];
+export type CodexAppServerThreadCompactStartParams =
+  CodexAppServerRequestParamsMap["thread/compact/start"];
+export type CodexAppServerThreadListParams = CodexAppServerRequestParamsMap["thread/list"];
+export type CodexAppServerThreadLoadedListParams =
+  CodexAppServerRequestParamsMap["thread/loaded/list"];
+export type CodexAppServerThreadReadParams = CodexAppServerRequestParamsMap["thread/read"];
+export type CodexAppServerThreadTurnsListParams =
+  CodexAppServerRequestParamsMap["thread/turns/list"];
+export type CodexAppServerSkillsListParams = CodexAppServerRequestParamsMap["skills/list"];
+export type CodexAppServerTurnStartParams = CodexAppServerRequestParamsMap["turn/start"];
+export type CodexAppServerUserInput = z.output<typeof codexAppServerUserInputSchema>;
+export type CodexAppServerTurnSteerParams = CodexAppServerRequestParamsMap["turn/steer"];
+export type CodexAppServerTurnInterruptParams = CodexAppServerRequestParamsMap["turn/interrupt"];
+export type CodexAppServerModelListParams = CodexAppServerRequestParamsMap["model/list"];
+export type CodexAppServerGitDiffToRemoteParams = CodexAppServerRequestParamsMap["gitDiffToRemote"];
+export type CodexAppServerFuzzyFileSearchParams = CodexAppServerRequestParamsMap["fuzzyFileSearch"];
 type CodexAppServerClientRequestSchemaMap = typeof codexAppServerRequestParamsSchemas;
 type CodexAppServerParsedClientRequestMap = {
   [Method in keyof CodexAppServerClientRequestSchemaMap]: {
@@ -570,10 +626,10 @@ export function parseCodexAppServerClientRequest(
   value: CodexAppServerClientRequestCandidate,
 ): CodexAppServerParsedClientRequest;
 export function parseCodexAppServerClientRequest(
-  value: JsonValue,
+  value: JSONType,
 ): CodexAppServerParsedClientRequest;
 export function parseCodexAppServerClientRequest(
-  value: JsonValue | CodexAppServerClientRequestCandidate,
+  value: JSONType | CodexAppServerClientRequestCandidate,
 ): CodexAppServerParsedClientRequest {
   return codexAppServerClientRequestSchema.parse(value);
 }

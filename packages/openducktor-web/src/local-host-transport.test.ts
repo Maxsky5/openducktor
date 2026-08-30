@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { AgentSessionLiveEnvelope, JsonValue } from "@openducktor/contracts";
+import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
 import { Effect } from "effect";
+import type { JSONType } from "zod";
 import { configureBrowserRuntimeConfig } from "./browser-config";
 import { WebDependencyError } from "./effect/web-errors";
 import { createFetchFixture } from "./test-support";
@@ -404,7 +405,7 @@ describe("local host SSE subscriptions", () => {
     const { unsubscribe: unsubscribeDevServer } = await devServerSubscription;
     const stopObservingLiveSessions = await liveSessionObservation;
 
-    const emitHostEvent = (channel: string, payload: JsonValue): void => {
+    const emitHostEvent = (channel: string, payload: JSONType): void => {
       FakeEventSource.instances[0]?.emit("message", JSON.stringify({ channel, payload }));
     };
     emitHostEvent("openducktor://run-event", { type: "run" });

@@ -1,4 +1,4 @@
-import type { JsonObject, JsonValue } from "@openducktor/contracts";
+import type { OpenCodeProtocolObject, OpenCodeProtocolValue } from "./guards";
 import type { AgentToolType } from "@openducktor/core";
 import { basenameForPath } from "@openducktor/path-support";
 import { z } from "zod";
@@ -16,7 +16,10 @@ const compactText = (value: string, maxLength = 160): string => {
   return `${normalized.slice(0, maxLength)}...`;
 };
 
-const readTrimmedString = (source: JsonObject | undefined, keys: string[]): string | null => {
+const readTrimmedString = (
+  source: OpenCodeProtocolObject | undefined,
+  keys: string[],
+): string | null => {
   if (!source) {
     return null;
   }
@@ -29,7 +32,7 @@ const readTrimmedString = (source: JsonObject | undefined, keys: string[]): stri
   return null;
 };
 
-const extractPathFromInput = (input: JsonObject | undefined): string | null => {
+const extractPathFromInput = (input: OpenCodeProtocolObject | undefined): string | null => {
   return readTrimmedString(input, ["filePath", "file_path", "path", "file", "filename"]);
 };
 
@@ -38,7 +41,10 @@ const extractBaseName = (value: string): string => {
   return lastSegment.replace(/\.[^.]+$/, "");
 };
 
-const summarizeSearchInput = (tool: string, input: JsonObject | undefined): string | null => {
+const summarizeSearchInput = (
+  tool: string,
+  input: OpenCodeProtocolObject | undefined,
+): string | null => {
   if (!input) {
     return null;
   }
@@ -69,7 +75,7 @@ const summarizeSearchInput = (tool: string, input: JsonObject | undefined): stri
   return null;
 };
 
-const countCollectionItems = (value: JsonValue | undefined): number | null => {
+const countCollectionItems = (value: OpenCodeProtocolValue | undefined): number | null => {
   if (Array.isArray(value)) {
     return value.length;
   }
@@ -100,7 +106,7 @@ const countCollectionItems = (value: JsonValue | undefined): number | null => {
   return null;
 };
 
-const summarizeTodoTool = (input: JsonObject | undefined): string | null => {
+const summarizeTodoTool = (input: OpenCodeProtocolObject | undefined): string | null => {
   const count = countCollectionItems(input?.todos ?? input?.items);
   if (count === null) {
     return null;
@@ -109,8 +115,8 @@ const summarizeTodoTool = (input: JsonObject | undefined): string | null => {
 };
 
 const summarizeQuestionTool = (
-  input: JsonObject | undefined,
-  metadata: JsonObject | undefined,
+  input: OpenCodeProtocolObject | undefined,
+  metadata: OpenCodeProtocolObject | undefined,
 ): string | null => {
   const sources = [input, metadata];
   for (const source of sources) {
@@ -133,8 +139,8 @@ const summarizeQuestionTool = (
 };
 
 const summarizeTaskTool = (
-  input: JsonObject | undefined,
-  metadata: JsonObject | undefined,
+  input: OpenCodeProtocolObject | undefined,
+  metadata: OpenCodeProtocolObject | undefined,
 ): string | null => {
   const summaryCount = countCollectionItems(metadata?.summary);
   if (summaryCount !== null) {
@@ -149,7 +155,7 @@ const summarizeTaskTool = (
   return readTrimmedString(input, ["agent", "description", "prompt"]);
 };
 
-const summarizeOdtReadTask = (input: JsonObject | undefined): string | null => {
+const summarizeOdtReadTask = (input: OpenCodeProtocolObject | undefined): string | null => {
   const taskId = readTrimmedString(input, ["taskId"]);
   if (taskId) {
     return taskId;
@@ -158,7 +164,10 @@ const summarizeOdtReadTask = (input: JsonObject | undefined): string | null => {
   return null;
 };
 
-const summarizeOdtMutation = (tool: string, input: JsonObject | undefined): string | null => {
+const summarizeOdtMutation = (
+  tool: string,
+  input: OpenCodeProtocolObject | undefined,
+): string | null => {
   if (tool === "odt_build_blocked") {
     return readTrimmedString(input, ["reason", "taskId"]);
   }
@@ -184,7 +193,7 @@ const summarizeOdtMutation = (tool: string, input: JsonObject | undefined): stri
   return readTrimmedString(input, ["taskId"]);
 };
 
-const summarizeSkillTool = (input: JsonObject | undefined): string | null => {
+const summarizeSkillTool = (input: OpenCodeProtocolObject | undefined): string | null => {
   const direct =
     readTrimmedString(input, ["name", "skillName", "skill", "id"]) ??
     readTrimmedString(z.record(z.string(), z.json()).safeParse(input?.skill).data, ["name", "id"]);
@@ -196,14 +205,20 @@ const summarizeSkillTool = (input: JsonObject | undefined): string | null => {
   return path ? extractBaseName(path) : null;
 };
 
-const summarizeWebTool = (tool: string, input: JsonObject | undefined): string | null => {
+const summarizeWebTool = (
+  tool: string,
+  input: OpenCodeProtocolObject | undefined,
+): string | null => {
   if (tool === "webfetch") {
     return readTrimmedString(input, ["url", "href"]);
   }
   return readTrimmedString(input, ["query", "q", "url"]);
 };
 
-const summarizeContextTool = (tool: string, input: JsonObject | undefined): string | null => {
+const summarizeContextTool = (
+  tool: string,
+  input: OpenCodeProtocolObject | undefined,
+): string | null => {
   if (tool === "context7_resolve-library-id") {
     return readTrimmedString(input, ["libraryName", "query"]);
   }
@@ -213,7 +228,7 @@ const summarizeContextTool = (tool: string, input: JsonObject | undefined): stri
   return null;
 };
 
-const summarizeGithubSearchTool = (input: JsonObject | undefined): string | null => {
+const summarizeGithubSearchTool = (input: OpenCodeProtocolObject | undefined): string | null => {
   const query = readTrimmedString(input, ["query"]);
   const repo = readTrimmedString(input, ["repo"]);
   if (query && repo) {
@@ -222,7 +237,7 @@ const summarizeGithubSearchTool = (input: JsonObject | undefined): string | null
   return query ?? repo;
 };
 
-const summarizeLspTool = (input: JsonObject | undefined): string | null => {
+const summarizeLspTool = (input: OpenCodeProtocolObject | undefined): string | null => {
   return (
     readTrimmedString(input, ["symbol", "name", "query"]) ??
     extractPathFromInput(input) ??
@@ -230,13 +245,13 @@ const summarizeLspTool = (input: JsonObject | undefined): string | null => {
   );
 };
 
-const summarizeSessionTool = (input: JsonObject | undefined): string | null => {
+const summarizeSessionTool = (input: OpenCodeProtocolObject | undefined): string | null => {
   return (
     readTrimmedString(input, ["sessionId", "query"]) ?? readTrimmedString(input, ["id", "name"])
   );
 };
 
-const summarizeGenericInput = (input: JsonObject | undefined): string | null => {
+const summarizeGenericInput = (input: OpenCodeProtocolObject | undefined): string | null => {
   return (
     readTrimmedString(input, ["url", "query", "pattern", "symbol", "libraryId", "libraryName"]) ??
     extractPathFromInput(input) ??
@@ -246,8 +261,8 @@ const summarizeGenericInput = (input: JsonObject | undefined): string | null => 
 
 export const deriveToolPreview = (input: {
   tool: string;
-  rawInput: JsonObject;
-  metadata?: JsonObject;
+  rawInput: OpenCodeProtocolObject;
+  metadata?: OpenCodeProtocolObject;
 }): string | undefined => {
   const strategy = resolveOpencodeToolStrategy(input.tool);
   const tool = strategy.canonicalName;

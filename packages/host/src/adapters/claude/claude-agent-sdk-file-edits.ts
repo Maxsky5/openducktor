@@ -1,8 +1,12 @@
-import { jsonObjectSchema, type FileDiff, type JsonObject } from "@openducktor/contracts";
+import type { FileDiff } from "@openducktor/contracts";
 import { countRenderableFileDiffLines, selectRenderableFileDiff } from "@openducktor/core";
 import { createTwoFilesPatch } from "diff";
 import { z } from "zod";
 import type { ClaudeDecodedToolResult, ClaudeDecodedToolUse } from "./claude-agent-sdk-tool-shapes";
+import {
+  claudeProtocolObjectSchema,
+  type ClaudeProtocolObject,
+} from "./claude-agent-sdk-ingress-schemas";
 import { readStringProp } from "./claude-agent-sdk-utils";
 
 type ClaudeFileEditPayload = {
@@ -22,17 +26,17 @@ const normalizeToolName = (tool: string): string => tool.trim().toLowerCase();
 export const isClaudeFileEditTool = (tool: string): boolean =>
   new Set(["edit", "multiedit", "notebookedit", "write"]).has(normalizeToolName(tool));
 
-const readRecordProp = (record: JsonObject, key: string): JsonObject | null => {
-  const parsed = jsonObjectSchema.safeParse(record[key]);
+const readRecordProp = (record: ClaudeProtocolObject, key: string): ClaudeProtocolObject | null => {
+  const parsed = claudeProtocolObjectSchema.safeParse(record[key]);
   return parsed.success ? parsed.data : null;
 };
 
-const readNumberProp = (record: JsonObject, key: string): number | undefined => {
+const readNumberProp = (record: ClaudeProtocolObject, key: string): number | undefined => {
   const parsed = z.number().finite().safeParse(record[key]);
   return parsed.success ? parsed.data : undefined;
 };
 
-const readStringValue = (record: JsonObject, key: string): string | undefined => {
+const readStringValue = (record: ClaudeProtocolObject, key: string): string | undefined => {
   const parsed = z.string().safeParse(record[key]);
   return parsed.success ? parsed.data : undefined;
 };
@@ -42,7 +46,7 @@ const diffHeaderPath = (file: string): string =>
 
 const structuredPatchRange = (start: number, lines: number): string => `${start},${lines}`;
 
-const readStructuredPatchHunk = (value: JsonObject[string]): string | null => {
+const readStructuredPatchHunk = (value: ClaudeProtocolObject[string]): string | null => {
   const parsed = structuredPatchHunkSchema.safeParse(value);
   if (!parsed.success) {
     return null;
@@ -59,7 +63,7 @@ const readStructuredPatchHunk = (value: JsonObject[string]): string | null => {
 };
 
 const readStructuredPatch = (
-  value: JsonObject[string] | undefined,
+  value: ClaudeProtocolObject[string] | undefined,
   file: string | undefined,
 ): string | null => {
   if (!Array.isArray(value)) {
@@ -93,7 +97,7 @@ const readInputFilePath = (input: ClaudeDecodedToolUse["input"]): string | undef
 };
 
 const readFilePath = (
-  record: JsonObject,
+  record: ClaudeProtocolObject,
   input: ClaudeDecodedToolUse["input"],
 ): string | undefined =>
   readStringProp(record, "file") ??
@@ -104,7 +108,7 @@ const readFilePath = (
   readInputFilePath(input);
 
 const readPatchFromRecord = (
-  record: JsonObject,
+  record: ClaudeProtocolObject,
   file: string | undefined,
   tool: string,
 ): string | null => {
@@ -128,7 +132,7 @@ const readPatchFromRecord = (
     if (structuredPatch) {
       return structuredPatch;
     }
-    const nestedRecord = jsonObjectSchema.safeParse(nested);
+    const nestedRecord = claudeProtocolObjectSchema.safeParse(nested);
     if (nestedRecord.success) {
       const nestedPatch =
         readStringProp(nestedRecord.data, "patch") ?? readStringProp(nestedRecord.data, "diff");
@@ -153,25 +157,27 @@ const readPatchFromRecord = (
   return null;
 };
 
-const readResultRecords = (raw: ClaudeDecodedToolResult["raw"]): JsonObject[] => {
-  const records: JsonObject[] = [raw];
+const readResultRecords = (raw: ClaudeDecodedToolResult["raw"]): ClaudeProtocolObject[] => {
+  const records: ClaudeProtocolObject[] = [raw];
   for (const key of ["structuredContent", "result", "output", "toolUseResult", "file"] as const) {
-    const value = jsonObjectSchema.safeParse(raw[key]);
+    const value = claudeProtocolObjectSchema.safeParse(raw[key]);
     if (value.success) {
       records.push(value.data);
     }
   }
   const content = raw.content;
-  const contentRecord = jsonObjectSchema.safeParse(content);
+  const contentRecord = claudeProtocolObjectSchema.safeParse(content);
   if (contentRecord.success) {
     records.push(contentRecord.data);
   }
   if (Array.isArray(content)) {
     for (const entry of content) {
-      const entryRecord = jsonObjectSchema.safeParse(entry);
+      const entryRecord = claudeProtocolObjectSchema.safeParse(entry);
       if (entryRecord.success) {
         records.push(entryRecord.data);
-        const structuredContent = jsonObjectSchema.safeParse(entryRecord.data.structuredContent);
+        const structuredContent = claudeProtocolObjectSchema.safeParse(
+          entryRecord.data.structuredContent,
+        );
         if (structuredContent.success) {
           records.push(structuredContent.data);
         }
@@ -181,9 +187,9 @@ const readResultRecords = (raw: ClaudeDecodedToolResult["raw"]): JsonObject[] =>
   return records;
 };
 
-const fileRecordsFromResult = (raw: ClaudeDecodedToolResult["raw"]): JsonObject[] => {
+const fileRecordsFromResult = (raw: ClaudeDecodedToolResult["raw"]): ClaudeProtocolObject[] => {
   const records = readResultRecords(raw);
-  const result: JsonObject[] = [];
+  const result: ClaudeProtocolObject[] = [];
   for (const record of records) {
     result.push(record);
     for (const key of ["files", "fileDiffs", "changes", "edits"] as const) {
@@ -193,7 +199,7 @@ const fileRecordsFromResult = (raw: ClaudeDecodedToolResult["raw"]): JsonObject[
       }
       result.push(
         ...files.flatMap((file) => {
-          const parsed = jsonObjectSchema.safeParse(file);
+          const parsed = claudeProtocolObjectSchema.safeParse(file);
           return parsed.success ? [parsed.data] : [];
         }),
       );
@@ -206,7 +212,7 @@ const fileRecordsFromResult = (raw: ClaudeDecodedToolResult["raw"]): JsonObject[
       if (Array.isArray(files)) {
         result.push(
           ...files.flatMap((file) => {
-            const parsed = jsonObjectSchema.safeParse(file);
+            const parsed = claudeProtocolObjectSchema.safeParse(file);
             return parsed.success ? [parsed.data] : [];
           }),
         );
@@ -222,7 +228,7 @@ const fileRecordsFromResult = (raw: ClaudeDecodedToolResult["raw"]): JsonObject[
 const changeTypeFromToolInput = (
   tool: string,
   input: ClaudeDecodedToolUse["input"],
-  record: JsonObject,
+  record: ClaudeProtocolObject,
 ): FileDiff["type"] => {
   if (normalizeToolName(tool) === "write") {
     return readStringProp(record, "type")?.toLowerCase() === "create" ? "added" : "modified";

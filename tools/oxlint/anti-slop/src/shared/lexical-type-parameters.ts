@@ -11,15 +11,22 @@ function isNode(value: unknown): value is ESTree.Node {
 	);
 }
 
+function hasProperty(
+	node: ESTree.Node,
+	key: string,
+): node is ESTree.Node & Readonly<Record<string, unknown>> {
+	return key in node;
+}
+
 function collectInferTypeParameterNames(
 	node: ESTree.Node,
 	visitorKeys: VisitorKeys,
 	names: Set<string>,
 ): void {
 	if (node.type === "TSInferType") names.add(node.typeParameter.name.name);
-	const record = node as unknown as Readonly<Record<string, unknown>>;
 	for (const key of visitorKeys[node.type] ?? []) {
-		const value = record[key];
+		if (!hasProperty(node, key)) continue;
+		const value = node[key];
 		if (isNode(value)) {
 			collectInferTypeParameterNames(value, visitorKeys, names);
 			continue;

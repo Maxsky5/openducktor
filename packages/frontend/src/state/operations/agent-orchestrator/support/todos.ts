@@ -1,9 +1,9 @@
 import {
   agentSessionTodoPayloadListSchema,
-  isJsonObject,
-  type JsonObject,
-  jsonValueSchema,
+  agentToolDataSchema,
+  type AgentToolData,
 } from "@openducktor/contracts";
+import { z } from "zod";
 import { type AgentSessionTodoItem, normalizeAgentSessionTodoList } from "@openducktor/core";
 
 export const parseTodosFromToolOutput = (
@@ -13,14 +13,15 @@ export const parseTodosFromToolOutput = (
     return null;
   }
   try {
-    const parsed = jsonValueSchema.parse(JSON.parse(output));
+    const parsed = z.json().parse(JSON.parse(output));
     if (Array.isArray(parsed)) {
       return normalizeAgentSessionTodoList(agentSessionTodoPayloadListSchema().parse(parsed));
     }
-    if (isJsonObject(parsed)) {
-      if (Array.isArray(parsed.todos)) {
+    const record = agentToolDataSchema.safeParse(parsed);
+    if (record.success) {
+      if (Array.isArray(record.data.todos)) {
         return normalizeAgentSessionTodoList(
-          agentSessionTodoPayloadListSchema().parse(parsed.todos),
+          agentSessionTodoPayloadListSchema().parse(record.data.todos),
         );
       }
     }
@@ -31,7 +32,7 @@ export const parseTodosFromToolOutput = (
 };
 
 export const parseTodosFromToolInput = (
-  input: JsonObject | undefined,
+  input: AgentToolData | undefined,
 ): AgentSessionTodoItem[] | null => {
   if (!input) {
     return null;

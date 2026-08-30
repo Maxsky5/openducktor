@@ -4,7 +4,10 @@ import {
   runtimeApprovalRequestTypeSchema,
   runtimeKindSchema,
 } from "./agent-runtime-schemas";
-import { agentSessionTranscriptEventSchema } from "./agent-session-event-schemas";
+import {
+  agentSessionTranscriptEventSchema,
+  agentToolDataSchema,
+} from "./agent-session-event-schemas";
 import { agentSessionQuestionItemSchema } from "./agent-session-pending-schemas";
 import {
   agentSessionAssociationSchema,
@@ -12,7 +15,6 @@ import {
   agentSessionScopeSchema,
 } from "./agent-session-schemas";
 import { slashCommandCatalogSchema } from "./slash-command-schemas";
-import { jsonObjectSchema } from "./json-types";
 import { fileDiffSchema } from "./git-schemas";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
@@ -69,7 +71,7 @@ export const agentSessionLivePendingApprovalRequestSchema = z
       .object({
         name: z.string(),
         title: z.string().optional(),
-        input: jsonObjectSchema.optional(),
+        input: agentToolDataSchema.optional(),
       })
       .strict()
       .optional(),

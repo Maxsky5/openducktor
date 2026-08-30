@@ -1,17 +1,17 @@
 import { FilePlus, FileText, FileX } from "lucide-react";
 import type { DiffScope } from "@/features/agent-studio-git";
 
-export const FILE_STATUS_ICON = {
-  modified: FileText,
-  added: FilePlus,
-  deleted: FileX,
-} satisfies Record<string, typeof FileText>;
+export const FILE_STATUS_ICON = new Map<string, typeof FileText>([
+  ["modified", FileText],
+  ["added", FilePlus],
+  ["deleted", FileX],
+]);
 
-export const FILE_STATUS_COLOR = {
-  modified: "text-blue-400",
-  added: "text-green-400",
-  deleted: "text-red-400",
-} satisfies Record<string, string>;
+export const FILE_STATUS_COLOR = new Map<string, string>([
+  ["modified", "text-blue-400"],
+  ["added", "text-green-400"],
+  ["deleted", "text-red-400"],
+]);
 
 export const DIFF_SCOPE_OPTIONS: Array<{
   scope: DiffScope;

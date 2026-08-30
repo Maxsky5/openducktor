@@ -1,10 +1,5 @@
 import type { CanUseTool, SDKMessage, SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
-import {
-  type JsonObject,
-  jsonObjectSchema,
-  type OdtToolName,
-  toClaudeOdtToolAliases,
-} from "@openducktor/contracts";
+import { type OdtToolName, toClaudeOdtToolAliases } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
   AgentPendingApprovalRequest,
@@ -17,6 +12,10 @@ import { isOdtMutationToolName, normalizeOdtToolName } from "@openducktor/core";
 import { Effect } from "effect";
 import { z } from "zod";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
+import {
+  type ClaudeProtocolObject,
+  claudeProtocolObjectSchema,
+} from "./claude-agent-sdk-ingress-schemas";
 import type {
   ClaudeAgentSdkServiceError,
   ClaudeSessionContext,
@@ -26,13 +25,13 @@ import type {
 type ClaudeAssistantSdkMessage = Extract<SDKMessage, { type: "assistant" }>["message"];
 type ClaudeAssistantContentBlock = ClaudeAssistantSdkMessage["content"][number];
 type ClaudeTaskNotification = Extract<SDKMessage, { subtype: "task_notification" }>;
-type ClaudeTaskUpdatedPatch = Extract<SDKMessage, { subtype: "task_updated" }>["patch"];
+export type ClaudeTaskUpdatedPatch = Extract<SDKMessage, { subtype: "task_updated" }>["patch"];
 export type ClaudeFailureDetails = {
-  readonly description?: string | undefined;
-  readonly error?: string | undefined;
-  readonly message?: string | undefined;
-  readonly reason?: string | undefined;
-  readonly summary?: string | undefined;
+  readonly description?: string;
+  readonly error?: string;
+  readonly message?: string;
+  readonly reason?: string;
+  readonly summary?: string;
 };
 type ClaudeStringPropertySource =
   | ClaudeAssistantContentBlock
@@ -40,7 +39,7 @@ type ClaudeStringPropertySource =
   | ClaudeTaskNotification
   | ClaudeTaskUpdatedPatch
   | ClaudeFailureDetails
-  | JsonObject
+  | ClaudeProtocolObject
   | Parameters<CanUseTool>[1]
   | undefined;
 
@@ -115,7 +114,7 @@ export const readStringProp = (
   value: ClaudeStringPropertySource,
   key: string,
 ): string | undefined => {
-  const parsed = jsonObjectSchema.safeParse(value);
+  const parsed = claudeProtocolObjectSchema.safeParse(value);
   return parsed.success ? readText(parsed.data[key]) : undefined;
 };
 

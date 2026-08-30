@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import {
-  parseCodexAppServerClientRequest,
-  parseCodexAppServerRequestResult,
-} from "./codex-app-server-protocol";
+import { parseCodexAppServerClientRequest } from "./codex-app-server-request-schemas";
+import { parseCodexAppServerRequestResult } from "./codex-app-server-result-schemas";
 
 describe("Codex app-server 0.149 experimental request schemas", () => {
   const fullExperimentalRequests = [

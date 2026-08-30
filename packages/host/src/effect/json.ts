@@ -1,3 +1,3 @@
-import { type JsonValue, jsonValueSchema } from "@openducktor/contracts";
+import { z, type JSONType } from "zod";
 
-export const parseJson = (payload: string): JsonValue => jsonValueSchema.parse(JSON.parse(payload));
+export const parseJson = (payload: string): JSONType => z.json().parse(JSON.parse(payload));

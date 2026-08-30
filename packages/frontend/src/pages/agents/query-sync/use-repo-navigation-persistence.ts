@@ -17,7 +17,7 @@ type UseRepoNavigationPersistenceArgs = {
   activeWorkspaceId: string | null;
   navigation: AgentStudioNavigationState;
   setNavigation: Dispatch<SetStateAction<AgentStudioNavigationState>>;
-  scheduleTask?: ScheduleTask | undefined;
+  scheduleTask?: ScheduleTask;
 };
 
 type UseRepoNavigationPersistenceResult = {

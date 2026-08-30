@@ -5,7 +5,7 @@ import type {
   OpencodeClient,
   SyncEventMessageRemoved,
 } from "@opencode-ai/sdk/v2/client";
-import type { JsonObject } from "@openducktor/contracts";
+import type { OpenCodeProtocolObject } from "./guards";
 import type { AgentEvent, AgentModelSelection, AgentUserMessagePart } from "@openducktor/core";
 import {
   isRelevantSubscriberEvent,
@@ -93,7 +93,7 @@ test("global event observation becomes ready only after the lazy SSE stream conn
               id: "event-server-connected",
               type: "server.connected",
               properties: {},
-            } satisfies JsonObject,
+            } satisfies OpenCodeProtocolObject,
           };
         })(),
       }),
@@ -232,7 +232,7 @@ test("does not emit removed pending assistant output when the session becomes id
           },
         ],
       },
-    } satisfies JsonObject,
+    } satisfies OpenCodeProtocolObject,
     {
       id: "event-message-removed-before-idle",
       type: "message.removed",
@@ -628,7 +628,7 @@ const makeMessagePartUpdatedEvent = (input: {
         end: input.end,
       }),
     },
-  }) satisfies JsonObject;
+  }) satisfies OpenCodeProtocolObject;
 
 const makeAssistantStepFinishPartUpdatedEvent = (input: {
   messageId: string;
@@ -648,7 +648,7 @@ const makeAssistantStepFinishPartUpdatedEvent = (input: {
         tokens: {},
       },
     },
-  }) satisfies JsonObject;
+  }) satisfies OpenCodeProtocolObject;
 
 const makeAssistantSubtaskPartUpdatedEvent = (input: {
   messageId: string;
@@ -670,7 +670,7 @@ const makeAssistantSubtaskPartUpdatedEvent = (input: {
         description: input.description,
       },
     },
-  }) satisfies JsonObject;
+  }) satisfies OpenCodeProtocolObject;
 
 const makeMessagePartDeltaEvent = (input: {
   messageId: string;
@@ -687,7 +687,7 @@ const makeMessagePartDeltaEvent = (input: {
       field: input.field,
       delta: input.delta,
     },
-  }) satisfies JsonObject;
+  }) satisfies OpenCodeProtocolObject;
 
 describe("event-stream", () => {
   test("does not project OpenCode compaction events as shared transcript notices", async () => {
@@ -703,15 +703,15 @@ describe("event-stream", () => {
             auto: false,
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       {
         type: "session.compacted",
         properties: { sessionID: "external-session-1" },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       {
         type: "session.compacted",
         properties: { sessionID: "external-session-1" },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
     ]);
 
     expect(
@@ -755,7 +755,7 @@ describe("event-stream", () => {
             auto: false,
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       makeAssistantMessageUpdatedEvent({
         messageId: "compact-summary-message",
         text: "Compacted session context",
@@ -817,7 +817,7 @@ describe("event-stream", () => {
             text: "Generate the PR",
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       {
         type: "message.updated",
         properties: {
@@ -834,7 +834,7 @@ describe("event-stream", () => {
             },
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -868,7 +868,7 @@ describe("event-stream", () => {
             },
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       {
         type: "message.part.updated",
         properties: {
@@ -880,7 +880,7 @@ describe("event-stream", () => {
             text: "Ship it",
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -921,7 +921,7 @@ describe("event-stream", () => {
             text: "New text",
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -957,7 +957,7 @@ describe("event-stream", () => {
             },
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       {
         type: "message.part.updated",
         properties: {
@@ -969,7 +969,7 @@ describe("event-stream", () => {
             text: slashEnvelope,
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       {
         type: "message.part.updated",
         properties: {
@@ -981,7 +981,7 @@ describe("event-stream", () => {
             text: "I just want to test the slash commands mechanism.\nReturn the arguments of this command: pouet",
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -1024,7 +1024,7 @@ describe("event-stream", () => {
             },
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -1075,7 +1075,7 @@ describe("event-stream", () => {
             },
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       makeUserMessageUpdatedEvent({
         messageId: "message-200",
         text: "Ship it",
@@ -1086,7 +1086,7 @@ describe("event-stream", () => {
         properties: {
           sessionID: "external-session-1",
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -1143,7 +1143,7 @@ describe("event-stream", () => {
             sessionID: "external-session-1",
             messageID: "message-pending",
           },
-        } satisfies JsonObject,
+        } satisfies OpenCodeProtocolObject,
       ],
       (session) => {
         session.pendingQueuedUserMessages.push({
@@ -1170,7 +1170,7 @@ describe("event-stream", () => {
             },
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       {
         type: "message.updated",
         properties: {
@@ -1184,7 +1184,7 @@ describe("event-stream", () => {
             },
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       {
         type: "message.part.updated",
         properties: {
@@ -1196,7 +1196,7 @@ describe("event-stream", () => {
             text: "Ship it",
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -1352,7 +1352,7 @@ describe("event-stream", () => {
               url: "https://files.example.invalid/uploaded-image",
             },
           },
-        } satisfies JsonObject,
+        } satisfies OpenCodeProtocolObject,
       ],
       (nextSessionRecord) => {
         nextSessionRecord.messageRoleById.set("msg-attachment-partial-1", "user");
@@ -1490,7 +1490,7 @@ describe("event-stream", () => {
             },
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       makeUserMessageUpdatedEvent({
         messageId: "msg-200",
         text: "Ship it",
@@ -1509,7 +1509,7 @@ describe("event-stream", () => {
             },
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -1646,7 +1646,7 @@ describe("event-stream", () => {
             },
           ],
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       makeSessionIdleEvent(),
     ]);
 
@@ -1703,7 +1703,7 @@ describe("event-stream", () => {
             },
           ],
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
     ]);
 
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
@@ -1740,7 +1740,7 @@ describe("event-stream", () => {
             time: { start: 1, end: 1 },
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       {
         type: "message.updated",
         properties: {
@@ -1763,7 +1763,7 @@ describe("event-stream", () => {
             finish: "stop",
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       makeSessionIdleEvent(),
     ]);
 
@@ -1802,7 +1802,7 @@ describe("event-stream", () => {
             time: { start: 1, end: 1 },
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       {
         type: "message.updated",
         properties: {
@@ -1824,7 +1824,7 @@ describe("event-stream", () => {
             },
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
     ]);
 
     expect(emitted.some((event) => event.type === "assistant_message")).toBe(false);
@@ -2190,7 +2190,7 @@ describe("event-stream", () => {
             text: "Late role text",
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       assistantRoleEvent("assistant-message-late-role-1"),
     ]);
 
@@ -2210,7 +2210,7 @@ describe("event-stream", () => {
           sessionID: "external-other-session",
           todos: [{ content: "ignored", status: "pending", priority: "medium" }],
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       {
         type: "todo.updated",
         properties: {
@@ -2223,7 +2223,7 @@ describe("event-stream", () => {
             },
           ],
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
     ]);
 
     const todoEvents = emitted.filter((event) => event.type === "session_todos_updated");
@@ -2249,14 +2249,14 @@ describe("event-stream", () => {
           directory: "/other",
           sessionID: "external-session-1",
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       {
         type: "session.idle",
         properties: {
           directory: "/repo",
           sessionID: "external-session-1",
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
     ]);
 
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
@@ -2274,14 +2274,14 @@ describe("event-stream", () => {
             sessionID: "external-other-session",
             todos: [{ content: "ignored", status: "pending", priority: "medium" }],
           },
-        } satisfies JsonObject,
+        } satisfies OpenCodeProtocolObject,
         {
           type: "todo.updated",
           properties: {
             sessionID: "external-session-1",
             todos: [{ content: "handled", status: "pending", priority: "medium" }],
           },
-        } satisfies JsonObject,
+        } satisfies OpenCodeProtocolObject,
       ],
       undefined,
       {
@@ -2312,7 +2312,7 @@ describe("event-stream", () => {
           sessionID: "external-child-session",
         },
       },
-    } satisfies JsonObject;
+    } satisfies OpenCodeProtocolObject;
     const parentSubscriber = {
       externalSessionId: "external-parent-session",
       input: makeSessionInput(),
@@ -2364,7 +2364,7 @@ describe("event-stream", () => {
           sessionID: "external-child-session",
           parentID: explicitParentSubscriber.externalSessionId,
         },
-      } satisfies JsonObject;
+      } satisfies OpenCodeProtocolObject;
 
       expect(
         isRelevantSubscriberEvent(confirmedParentSubscriber, event, {
@@ -2386,7 +2386,7 @@ describe("event-stream", () => {
         parentID: "external-parent-session",
         info: childSessionInfo("external-child-session"),
       },
-    } satisfies JsonObject;
+    } satisfies OpenCodeProtocolObject;
     const parentSubscriber = {
       externalSessionId: "external-parent-session",
       input: makeSessionInput(),
@@ -2472,7 +2472,7 @@ describe("event-stream", () => {
           field: "text",
           delta: " world",
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       {
         type: "message.part.updated",
         properties: {
@@ -2485,7 +2485,7 @@ describe("event-stream", () => {
             time: { start: 1, end: 2 },
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
     ]);
 
     const deltas = emitted.filter((event) => event.type === "assistant_delta");
@@ -2514,7 +2514,7 @@ describe("event-stream", () => {
           field: "text",
           delta: " world",
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       {
         type: "message.part.delta",
         properties: {
@@ -2524,7 +2524,7 @@ describe("event-stream", () => {
           field: "text",
           delta: "!",
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       {
         type: "message.part.updated",
         properties: {
@@ -2537,7 +2537,7 @@ describe("event-stream", () => {
             time: { start: 1, end: 2 },
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
     ]);
 
     const parts = emitted.filter((event) => event.type === "assistant_part");
@@ -2560,7 +2560,7 @@ describe("event-stream", () => {
           field: "text",
           delta: " world",
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       {
         type: "message.part.updated",
         properties: {
@@ -2573,7 +2573,7 @@ describe("event-stream", () => {
             time: { start: 1, end: 2 },
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
     ]);
 
     const knownPath = await runEventStream([
@@ -2590,7 +2590,7 @@ describe("event-stream", () => {
             time: { start: 1, end: 2 },
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       {
         type: "message.part.delta",
         properties: {
@@ -2600,7 +2600,7 @@ describe("event-stream", () => {
           field: "text",
           delta: " world",
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
     ]);
 
     const queuedParts = queuedPath.filter((event) => event.type === "assistant_part");
@@ -2631,7 +2631,7 @@ describe("event-stream", () => {
             sessionID: "external-session-1",
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       {
         type: "message.part.delta",
         properties: {
@@ -2639,7 +2639,7 @@ describe("event-stream", () => {
           messageID: "user-message-1",
           delta: "typing...",
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
     ]);
 
     expect(emitted.filter((event) => event.type === "assistant_delta")).toHaveLength(0);
@@ -2657,7 +2657,7 @@ describe("event-stream", () => {
           field: "reasoning_content",
           delta: "Hidden chain of thought",
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
     ]);
 
     const deltas = emitted.filter((event) => event.type === "assistant_delta");
@@ -2685,7 +2685,7 @@ describe("event-stream", () => {
             },
           ],
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
     ]);
 
     expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(0);
@@ -3086,7 +3086,7 @@ describe("event-stream", () => {
             },
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
     ]);
 
     const questionEvents = emitted.filter((event) => event.type === "question_required");
@@ -3197,7 +3197,7 @@ describe("event-stream", () => {
             },
           ],
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       {
         type: "question.replied",
         properties: {
@@ -3205,7 +3205,7 @@ describe("event-stream", () => {
           requestID: "question-child-1",
           answers: [["A"]],
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
     ]);
 
     expect(
@@ -3297,7 +3297,7 @@ describe("event-stream", () => {
           field: "text",
           delta: "stale ",
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       {
         type: "message.part.removed",
         properties: {
@@ -3305,7 +3305,7 @@ describe("event-stream", () => {
           messageID: "assistant-message-3",
           partID: "text-part-2",
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
       {
         type: "message.part.updated",
         properties: {
@@ -3318,7 +3318,7 @@ describe("event-stream", () => {
             time: { start: 1, end: 2 },
           },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
     ]);
 
     const parts = emitted.filter((event) => event.type === "assistant_part");
@@ -3342,7 +3342,7 @@ describe("event-stream", () => {
             messageID: "assistant-message-4",
             partID: "subtask-part-1",
           },
-        } satisfies JsonObject,
+        } satisfies OpenCodeProtocolObject,
       ],
       (record) => {
         record.pendingSubagentPartEmissionsByExternalSessionId.set("child-session-1", [
@@ -3364,7 +3364,7 @@ describe("event-stream", () => {
                   externalSessionId: "child-session-1",
                 },
               },
-            } satisfies JsonObject,
+            } satisfies OpenCodeProtocolObject,
           },
         ]);
       },
@@ -3385,7 +3385,7 @@ describe("event-stream", () => {
             messageID: "assistant-message-4",
             partID: "subtask-part-1",
           },
-        } satisfies JsonObject,
+        } satisfies OpenCodeProtocolObject,
       ],
       (record) => {
         record.subagentCorrelationKeyByPartId.set("subtask-part-1", correlationKey);
@@ -3425,7 +3425,7 @@ describe("event-stream", () => {
             messageID: "assistant-message-4",
             partID: "subtask-part-1",
           },
-        } satisfies JsonObject,
+        } satisfies OpenCodeProtocolObject,
       ],
       (record) => {
         record.pendingSubagentPartEmissionsByExternalSessionId.set(childExternalSessionId, [
@@ -3438,7 +3438,7 @@ describe("event-stream", () => {
               tool: "task",
               callID: "call-1",
               state: { status: "running", input: {} },
-            } satisfies JsonObject,
+            } satisfies OpenCodeProtocolObject,
           },
           {
             part: {
@@ -3449,7 +3449,7 @@ describe("event-stream", () => {
               tool: "task",
               callID: "call-2",
               state: { status: "running", input: {} },
-            } satisfies JsonObject,
+            } satisfies OpenCodeProtocolObject,
           },
         ]);
         record.pendingSubagentSessionsByExternalSessionId.set(childExternalSessionId, {
@@ -3485,7 +3485,7 @@ describe("event-stream", () => {
             sessionID: "external-session-1",
             error: { name: "MessageOutputLengthError", data: {} },
           },
-        } satisfies JsonObject,
+        } satisfies OpenCodeProtocolObject,
       ],
       (session) => {
         session.isAwaitingRuntimeTurnStart = true;
@@ -3517,7 +3517,7 @@ describe("event-stream", () => {
           sessionID: "external-session-1",
           error: { name: "UnknownError", data: { message: "Provider failed" } },
         },
-      } satisfies JsonObject,
+      } satisfies OpenCodeProtocolObject,
     ]);
 
     expect(emitted.filter((event) => event.type === "assistant_message")).toEqual([

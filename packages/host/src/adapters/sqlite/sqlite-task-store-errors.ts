@@ -34,7 +34,7 @@ export class SqliteTaskStoreDataError extends Data.TaggedError("SqliteTaskStoreD
   readonly message: string;
   readonly field?: string | undefined;
   readonly cause?: unknown | undefined;
-  readonly details?: Readonly<SqliteTaskStoreDataErrorDetails> | undefined;
+  readonly details?: Readonly<SqliteTaskStoreDataErrorDetails>;
 }> {}
 
 const isTaskStoreError = (cause: unknown): cause is TaskStoreError =>

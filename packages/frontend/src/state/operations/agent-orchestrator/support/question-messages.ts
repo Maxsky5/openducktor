@@ -1,4 +1,4 @@
-import type { JsonObject } from "@openducktor/contracts";
+import type { AgentToolData } from "@openducktor/contracts";
 import { z } from "zod";
 import { isQuestionToolName } from "@/lib/question-tools";
 import type { AgentQuestionRequest, AgentSessionState } from "@/types/agent-orchestrator";
@@ -9,7 +9,7 @@ type AnsweredQuestion = AgentQuestionRequest["questions"][number] & {
 };
 
 const stringValueSchema = z.string();
-const readMetadataRequestId = (metadata: JsonObject): string | null => {
+const readMetadataRequestId = (metadata: AgentToolData): string | null => {
   for (const key of ["requestId", "requestID", "questionRequestId"]) {
     const result = stringValueSchema.safeParse(metadata[key]);
     if (result.success) {

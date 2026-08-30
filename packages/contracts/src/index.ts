@@ -8,8 +8,35 @@ export * from "./agent-workflow-schemas";
 export * from "./app-update-schemas";
 export * from "./attachment-limits";
 export * from "./claude-runtime-command-contracts";
+export type * from "./codex-app-server-catalog-schemas";
+export {
+  codexAppServerCommandActionSchema,
+  codexAppServerCommandExecutionRequestApprovalParamsSchema,
+  codexAppServerCurrentTimeReadParamsSchema,
+  codexAppServerCurrentTimeReadResponseSchema,
+  codexAppServerExecCommandApprovalParamsSchema,
+  codexAppServerLegacyParsedCommandSchema,
+  codexAppServerMcpServerElicitationRequestParamsSchema,
+  codexAppServerPermissionsRequestApprovalParamsSchema,
+  codexAppServerRequestPermissionProfileSchema,
+} from "./codex-app-server-permission-schemas";
+export type * from "./codex-app-server-permission-schemas";
 export * from "./codex-app-server-protocol";
+export {
+  codexAppServerClientRequestSchema,
+  codexAppServerReasoningEffortSchema,
+  codexAppServerRequestParamsSchemas,
+  parseCodexAppServerClientRequest,
+} from "./codex-app-server-request-schemas";
+export type * from "./codex-app-server-request-schemas";
+export {
+  codexAppServerRequestResultSchema,
+  parseCodexAppServerRequestResult,
+} from "./codex-app-server-result-schemas";
+export type * from "./codex-app-server-result-schemas";
 export * from "./codex-app-server-runtime-schemas";
+export { codexAppServerTurnSchema } from "./codex-app-server-thread-schemas";
+export type * from "./codex-app-server-thread-schemas";
 export * from "./config-schemas";
 export * from "./dev-server-schemas";
 export * from "./development-instance";
@@ -20,7 +47,6 @@ export * from "./git-provider-repository";
 export * from "./git-schemas";
 export * from "./host-event-schemas";
 export * from "./host-invoke-failure-schemas";
-export * from "./json-types";
 export * from "./mcp-bridge-discovery";
 export * from "./metadata-schemas";
 export * from "./odt-mcp-schemas";
@@ -28,7 +54,6 @@ export * from "./odt-tool-names";
 export * from "./prompt-schemas";
 export * from "./pull-request-review-schemas";
 export * from "./run-schemas";
-export * from "./object-key";
 export * from "./runtime-descriptors";
 export * from "./session-history-failure-schemas";
 export * from "./session-schemas";

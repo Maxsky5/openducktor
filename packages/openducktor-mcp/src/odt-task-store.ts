@@ -28,7 +28,7 @@ export class OdtTaskStore {
 
   private resolveWorkspaceId(
     toolName: WorkspaceScopedToolName,
-    input: { workspaceId?: string | undefined },
+    input: Pick<ToolInput<WorkspaceScopedToolName>, "workspaceId">,
   ): string {
     const workspaceId = input.workspaceId ?? this.workspaceId;
     if (workspaceId) {

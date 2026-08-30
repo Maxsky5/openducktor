@@ -5,7 +5,6 @@ import type {
   SDKUserMessage,
   SlashCommand,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { JsonObject } from "@openducktor/contracts";
 import type {
   AgentEvent,
   AgentModelSelection,
@@ -33,6 +32,7 @@ import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { OpenDucktorMcpBridgeConnection } from "../mcp/openducktor-mcp-environment";
 import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
 import type { AsyncInputQueue } from "./claude-agent-sdk-queue";
+import type { ClaudeProtocolObject } from "./claude-agent-sdk-ingress-schemas";
 
 export type ClaudeMcpBridgeConnectionResolver = (
   repoPath: string,
@@ -52,7 +52,7 @@ export type CreateClaudeAgentSdkServiceInput = {
 };
 
 export type ClaudeAgentSdkEvent = AgentEvent;
-export type ClaudeToolInput = JsonObject;
+export type ClaudeToolInput = ClaudeProtocolObject;
 
 export type ClaudeAgentSdkEventEmitter = (
   session: ClaudeSessionContext,

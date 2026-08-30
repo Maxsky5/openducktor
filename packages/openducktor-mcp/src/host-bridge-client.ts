@@ -1,7 +1,5 @@
 import {
   type GetWorkspacesResult,
-  jsonValueSchema,
-  type JsonValue,
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_TOOL_SCHEMAS,
   type OdtHostBridgeReady,
@@ -12,7 +10,7 @@ import {
 } from "@openducktor/contracts";
 import { z } from "zod";
 import { normalizeBaseUrl } from "./path-utils";
-import { OdtToolError } from "./tool-results";
+import { mcpToolPayloadSchema, type McpToolPayload, OdtToolError } from "./tool-results";
 
 type ToolInput<Name extends OdtToolName> = z.infer<(typeof ODT_TOOL_SCHEMAS)[Name]>;
 type ToolOutput<Name extends OdtToolName> = z.infer<
@@ -91,7 +89,7 @@ const toIssueDetails = (
 
 const parseHostResponse = <Output>(
   schema: z.ZodType<Output>,
-  payload: JsonValue,
+  payload: McpToolPayload,
   command: string,
 ): Output => {
   const parsed = schema.safeParse(payload);
@@ -109,9 +107,9 @@ const parseHostResponse = <Output>(
 
 function parseToolResponse<Name extends OdtToolName>(
   command: Name,
-  payload: JsonValue,
+  payload: McpToolPayload,
 ): ToolOutput<Name>;
-function parseToolResponse(command: OdtToolName, payload: JsonValue) {
+function parseToolResponse(command: OdtToolName, payload: McpToolPayload) {
   switch (command) {
     case "odt_get_workspaces":
       return parseHostResponse(
@@ -312,9 +310,9 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
     }
   }
 
-  private async readResponsePayload(response: Response, action: string): Promise<JsonValue> {
+  private async readResponsePayload(response: Response, action: string): Promise<McpToolPayload> {
     try {
-      return jsonValueSchema.parse(await response.json());
+      return mcpToolPayloadSchema.parse(await response.json());
     } catch (error) {
       throw createBridgeJsonError(action, error);
     }

@@ -1,8 +1,5 @@
-import {
-  jsonObjectSchema,
-  type OdtToolErrorPayload,
-  odtToolErrorCodeSchema,
-} from "@openducktor/contracts";
+import { type OdtToolErrorPayload, odtToolErrorCodeSchema } from "@openducktor/contracts";
+import { z } from "zod";
 import type { OdtMcpBridgeError } from "../../application/mcp/odt-mcp-bridge-service";
 
 export const bridgeErrorPayload = (
@@ -14,7 +11,7 @@ export const bridgeErrorPayload = (
   const rawDetails = cause && "details" in cause ? cause.details : undefined;
 
   if (rawDetails !== undefined) {
-    const details = jsonObjectSchema.parse(rawDetails);
+    const details = z.record(z.string(), z.json()).parse(rawDetails);
     return {
       ok: false,
       error: { code, message, details },

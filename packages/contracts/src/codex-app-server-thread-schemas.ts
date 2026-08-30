@@ -11,7 +11,7 @@ import {
   codexAppServerReasoningEffortSchema,
   codexAppServerUserInputSchema,
 } from "./codex-app-server-request-schemas";
-import { jsonValueSchema } from "./json-types";
+const codexAppServerJsonValueSchema = z.json();
 
 export const codexAppServerThreadStatusSchema = z.discriminatedUnion("type", [
   z.object({
@@ -25,42 +25,53 @@ export const codexAppServerThreadStatusSchema = z.discriminatedUnion("type", [
 
 export type CodexAppServerThreadStatus = z.output<typeof codexAppServerThreadStatusSchema>;
 
+const codexAppServerSubAgentThreadSpawnSourceSchema = z.object({
+  parent_thread_id: z.string(),
+  depth: codexInt32Schema,
+  agent_path: z.string().nullable(),
+  agent_nickname: z.string().nullable(),
+  agent_role: z.string().nullable(),
+});
+
 const codexAppServerSubAgentSourceSchema = z.union([
   z.enum(["review", "compact", "memory_consolidation"]),
   z.object({ other: z.string() }),
-  z.object({
-    thread_spawn: z.object({
-      parent_thread_id: z.string(),
-      depth: codexInt32Schema,
-      agent_path: z.string().nullable(),
-      agent_nickname: z.string().nullable(),
-      agent_role: z.string().nullable(),
-    }),
-  }),
+  z.object({ thread_spawn: codexAppServerSubAgentThreadSpawnSourceSchema }),
 ]);
+
+export type CodexAppServerSubAgentThreadSpawnSource = z.output<
+  typeof codexAppServerSubAgentThreadSpawnSourceSchema
+>;
+export type CodexAppServerSubAgentSource = z.output<typeof codexAppServerSubAgentSourceSchema>;
 
 const codexAppServerSessionSourceSchema = z.union([
   z.enum(["appServer", "cli", "exec", "unknown", "vscode"]),
   z.object({ custom: z.string() }),
   z.object({ subAgent: codexAppServerSubAgentSourceSchema }),
 ]);
+export type CodexAppServerSessionSource = z.output<typeof codexAppServerSessionSourceSchema>;
 
 const codexAppServerThreadSectionAppearanceSchema = z.object({
   icon: z.string().nullable(),
   color: z.string().nullable(),
 });
+export type CodexAppServerThreadSectionAppearance = z.output<
+  typeof codexAppServerThreadSectionAppearanceSchema
+>;
 
 const codexAppServerThreadSectionSchema = z.object({
   id: z.string(),
   name: z.string(),
   appearance: codexAppServerThreadSectionAppearanceSchema.nullable(),
 });
+export type CodexAppServerThreadSection = z.output<typeof codexAppServerThreadSectionSchema>;
 
 const codexAppServerGitInfoSchema = z.object({
   sha: z.string().nullable(),
   branch: z.string().nullable(),
   originUrl: z.string().nullable(),
 });
+export type CodexAppServerGitInfo = z.output<typeof codexAppServerGitInfoSchema>;
 
 const codexAppServerMemoryCitationSchema = z.object({
   entries: z.array(
@@ -73,6 +84,8 @@ const codexAppServerMemoryCitationSchema = z.object({
   ),
   threadIds: z.array(z.string()),
 });
+export type CodexAppServerMemoryCitation = z.output<typeof codexAppServerMemoryCitationSchema>;
+export type CodexAppServerMemoryCitationEntry = CodexAppServerMemoryCitation["entries"][number];
 
 const codexAppServerFileUpdateChangeSchema = z.object({
   path: z.string(),
@@ -83,12 +96,17 @@ const codexAppServerFileUpdateChangeSchema = z.object({
   ]),
   diff: z.string(),
 });
+export type CodexAppServerFileUpdateChange = z.output<typeof codexAppServerFileUpdateChangeSchema>;
+export type CodexAppServerPatchChangeKind = CodexAppServerFileUpdateChange["kind"];
 
 const codexAppServerDynamicToolCallOutputContentItemSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("inputText"), text: z.string() }),
   z.object({ type: z.literal("inputImage"), imageUrl: z.string() }),
   z.object({ type: z.literal("inputAudio"), audioUrl: z.string() }),
 ]);
+export type CodexAppServerDynamicToolCallOutputContentItem = z.output<
+  typeof codexAppServerDynamicToolCallOutputContentItemSchema
+>;
 
 const codexAppServerWebSearchActionSchema = z.discriminatedUnion("type", [
   z.object({
@@ -104,6 +122,7 @@ const codexAppServerWebSearchActionSchema = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("other") }),
 ]);
+export type CodexAppServerWebSearchAction = z.output<typeof codexAppServerWebSearchActionSchema>;
 
 const codexAppServerCollabAgentStateSchema = z.object({
   status: z.enum([
@@ -117,6 +136,81 @@ const codexAppServerCollabAgentStateSchema = z.object({
   ]),
   message: z.string().nullable(),
 });
+export type CodexAppServerCollabAgentState = z.output<typeof codexAppServerCollabAgentStateSchema>;
+export type CodexAppServerCollabAgentStatus = CodexAppServerCollabAgentState["status"];
+
+const codexAppServerMcpToolCallThreadItemSchema = z.object({
+  type: z.literal("mcpToolCall"),
+  id: z.string(),
+  server: z.string(),
+  tool: z.string(),
+  status: z.enum(["inProgress", "completed", "failed"]),
+  arguments: codexAppServerJsonValueSchema,
+  appContext: z
+    .object({
+      connectorId: z.string(),
+      linkId: z.string().nullable(),
+      resourceUri: z.string().nullable(),
+      appName: z.string().nullable(),
+      actionName: z.string().nullable(),
+    })
+    .nullable(),
+  mcpAppResourceUri: z.string().optional(),
+  pluginId: z.string().nullable(),
+  readOnlyHint: z.boolean().nullable(),
+  result: z
+    .object({
+      content: z.array(codexAppServerJsonValueSchema),
+      structuredContent: codexAppServerJsonValueSchema.nullable(),
+      _meta: codexAppServerJsonValueSchema.nullable(),
+    })
+    .nullable(),
+  error: z.object({ message: z.string() }).nullable(),
+  durationMs: codexInt64Schema.nullable(),
+});
+type CodexAppServerMcpToolCallThreadItem = z.output<
+  typeof codexAppServerMcpToolCallThreadItemSchema
+>;
+export type CodexAppServerMcpToolCallAppContext = NonNullable<
+  CodexAppServerMcpToolCallThreadItem["appContext"]
+>;
+export type CodexAppServerMcpToolCallResult = NonNullable<
+  CodexAppServerMcpToolCallThreadItem["result"]
+>;
+
+const codexAppServerCollabAgentToolCallThreadItemSchema = z.object({
+  type: z.literal("collabAgentToolCall"),
+  id: z.string(),
+  tool: z.enum(["spawnAgent", "sendInput", "resumeAgent", "wait", "closeAgent"]),
+  status: z.enum(["inProgress", "completed", "failed"]),
+  senderThreadId: z.string(),
+  receiverThreadIds: z.array(z.string()),
+  prompt: z.string().nullable(),
+  model: z.string().nullable(),
+  reasoningEffort: codexAppServerReasoningEffortSchema.nullable(),
+  agentsStates: z.record(z.string(), codexAppServerCollabAgentStateSchema),
+});
+export type CodexAppServerCollabAgentToolCallThreadItem = z.output<
+  typeof codexAppServerCollabAgentToolCallThreadItemSchema
+>;
+export type CodexAppServerCollabAgentTool = CodexAppServerCollabAgentToolCallThreadItem["tool"];
+export type CodexAppServerCollabAgentToolCallStatus =
+  CodexAppServerCollabAgentToolCallThreadItem["status"];
+
+const codexAppServerSubAgentActivityThreadItemSchema = z.object({
+  type: z.literal("subAgentActivity"),
+  id: z.string(),
+  kind: z.enum(["started", "interacted", "interrupted"]),
+  agentThreadId: z.string(),
+  agentPath: z.string(),
+});
+export type CodexAppServerSubAgentActivityThreadItem = z.output<
+  typeof codexAppServerSubAgentActivityThreadItemSchema
+>;
+export type CodexAppServerSubAgentActivityKind = CodexAppServerSubAgentActivityThreadItem["kind"];
+export type CodexAppServerSubagentThreadItem =
+  | CodexAppServerCollabAgentToolCallThreadItem
+  | CodexAppServerSubAgentActivityThreadItem;
 
 export const codexAppServerThreadItemSchema = z.discriminatedUnion("type", [
   z.object({
@@ -165,71 +259,26 @@ export const codexAppServerThreadItemSchema = z.discriminatedUnion("type", [
     changes: z.array(codexAppServerFileUpdateChangeSchema),
     status: z.enum(["inProgress", "completed", "failed", "declined"]),
   }),
-  z.object({
-    type: z.literal("mcpToolCall"),
-    id: z.string(),
-    server: z.string(),
-    tool: z.string(),
-    status: z.enum(["inProgress", "completed", "failed"]),
-    arguments: jsonValueSchema,
-    appContext: z
-      .object({
-        connectorId: z.string(),
-        linkId: z.string().nullable(),
-        resourceUri: z.string().nullable(),
-        appName: z.string().nullable(),
-        actionName: z.string().nullable(),
-      })
-      .nullable(),
-    mcpAppResourceUri: z.string().optional(),
-    pluginId: z.string().nullable(),
-    readOnlyHint: z.boolean().nullable(),
-    result: z
-      .object({
-        content: z.array(jsonValueSchema),
-        structuredContent: jsonValueSchema.nullable(),
-        _meta: jsonValueSchema.nullable(),
-      })
-      .nullable(),
-    error: z.object({ message: z.string() }).nullable(),
-    durationMs: codexInt64Schema.nullable(),
-  }),
+  codexAppServerMcpToolCallThreadItemSchema,
   z.object({
     type: z.literal("dynamicToolCall"),
     id: z.string(),
     namespace: z.string().nullable(),
     tool: z.string(),
-    arguments: jsonValueSchema,
+    arguments: codexAppServerJsonValueSchema,
     status: z.enum(["inProgress", "completed", "failed"]),
     contentItems: z.array(codexAppServerDynamicToolCallOutputContentItemSchema).nullable(),
     success: z.boolean().nullable(),
     durationMs: codexInt64Schema.nullable(),
   }),
-  z.object({
-    type: z.literal("collabAgentToolCall"),
-    id: z.string(),
-    tool: z.enum(["spawnAgent", "sendInput", "resumeAgent", "wait", "closeAgent"]),
-    status: z.enum(["inProgress", "completed", "failed"]),
-    senderThreadId: z.string(),
-    receiverThreadIds: z.array(z.string()),
-    prompt: z.string().nullable(),
-    model: z.string().nullable(),
-    reasoningEffort: codexAppServerReasoningEffortSchema.nullable(),
-    agentsStates: z.record(z.string(), codexAppServerCollabAgentStateSchema),
-  }),
-  z.object({
-    type: z.literal("subAgentActivity"),
-    id: z.string(),
-    kind: z.enum(["started", "interacted", "interrupted"]),
-    agentThreadId: z.string(),
-    agentPath: z.string(),
-  }),
+  codexAppServerCollabAgentToolCallThreadItemSchema,
+  codexAppServerSubAgentActivityThreadItemSchema,
   z.object({
     type: z.literal("webSearch"),
     id: z.string(),
     query: z.string(),
     action: codexAppServerWebSearchActionSchema.nullable(),
-    results: z.array(jsonValueSchema).nullable(),
+    results: z.array(codexAppServerJsonValueSchema).nullable(),
   }),
   z.object({ type: z.literal("imageView"), id: z.string(), path: z.string() }),
   z.object({
@@ -259,6 +308,14 @@ export const codexAppServerThreadItemSchema = z.discriminatedUnion("type", [
 ]);
 
 export type CodexAppServerThreadItem = z.output<typeof codexAppServerThreadItemSchema>;
+export type CodexAppServerThreadActiveFlag = Extract<
+  CodexAppServerThreadStatus,
+  { type: "active" }
+>["activeFlags"][number];
+export type CodexAppServerHookPromptFragment = Extract<
+  CodexAppServerThreadItem,
+  { type: "hookPrompt" }
+>["fragments"][number];
 
 const codexAppServerCodexErrorInfoSchema = z.union([
   z.enum([
@@ -344,3 +401,6 @@ export const codexAppServerThreadSchema = z.object({
 });
 
 export type CodexAppServerThread = z.output<typeof codexAppServerThreadSchema>;
+export type CodexAppServerThreadExtra = Record<string, never>;
+export type CodexAppServerThreadSource = string;
+export type CodexAppServerThreadHistoryMode = "legacy" | "paginated";

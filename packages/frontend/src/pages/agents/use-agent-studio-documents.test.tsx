@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import type { JsonObject } from "@openducktor/contracts";
+import type { AgentToolData } from "@openducktor/contracts";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import {
@@ -146,7 +146,7 @@ const createCompletedToolMessage = ({
   id?: string;
   tool?: string;
   toolType?: import("@openducktor/core").AgentToolType;
-  input?: JsonObject;
+  input?: AgentToolData;
   output?: string;
   content?: string;
 } = {}): AgentMessage => {

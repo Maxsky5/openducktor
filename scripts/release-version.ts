@@ -2,7 +2,6 @@
 
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { jsonValueSchema } from "../packages/contracts/src/index";
 import { z } from "zod";
 
 const workspaceRoot = process.cwd();
@@ -19,7 +18,7 @@ const versionedPackageManifestSchema = z
   .object({
     version: z.string().optional(),
   })
-  .catchall(jsonValueSchema);
+  .catchall(z.json());
 
 function usage(): never {
   console.error("Usage: bun run scripts/release-version.ts <check|set> <version>");

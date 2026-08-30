@@ -13,14 +13,14 @@ import {
 import { fileContentSchema, fileDiffSchema } from "./git-schemas";
 
 type ZodSchemaFields = Parameters<typeof z.object>[0];
-import { jsonObjectSchema } from "./json-types";
 import { skillDescriptorSchema } from "./skill-schemas";
 import { slashCommandCatalogSchema } from "./slash-command-schemas";
 import { subagentDescriptorSchema } from "./subagent-schemas";
 
 const isoTimestampSchema = z.string().datetime({ offset: true });
 const finiteNonNegativeNumberSchema = z.number().finite().nonnegative();
-const metadataSchema = jsonObjectSchema;
+export const agentToolDataSchema = z.record(z.string(), z.json());
+export type AgentToolData = z.output<typeof agentToolDataSchema>;
 
 export const agentFileReferenceSchema = z
   .object({
@@ -154,13 +154,13 @@ const inferredAgentStreamPartSchema = z.discriminatedUnion("kind", [
       preview: z.string().optional(),
       title: z.string().optional(),
       displayLabel: z.string().optional(),
-      input: jsonObjectSchema.optional(),
+      input: agentToolDataSchema.optional(),
       output: z.string().optional(),
       error: z.string().optional(),
       fileDiffs: z.array(fileDiffSchema.strict()).optional(),
       fileContent: z.array(fileContentSchema.strict()).optional(),
       fileChanges: z.array(fileDiffSchema.strict()).optional(),
-      metadata: metadataSchema.optional(),
+      metadata: agentToolDataSchema.optional(),
       startedAtMs: finiteNonNegativeNumberSchema.optional(),
       endedAtMs: finiteNonNegativeNumberSchema.optional(),
     })
@@ -190,7 +190,7 @@ const inferredAgentStreamPartSchema = z.discriminatedUnion("kind", [
       error: z.string().optional(),
       externalSessionId: z.string().optional(),
       executionMode: runtimeSubagentExecutionModeSchema.optional(),
-      metadata: metadataSchema.optional(),
+      metadata: agentToolDataSchema.optional(),
       startedAtMs: finiteNonNegativeNumberSchema.optional(),
       endedAtMs: finiteNonNegativeNumberSchema.optional(),
     })
@@ -244,13 +244,13 @@ const transcriptPendingApprovalRequestFields = {
     .object({
       name: z.string(),
       title: z.string().optional(),
-      input: jsonObjectSchema.optional(),
+      input: agentToolDataSchema.optional(),
     })
     .strict()
     .optional(),
   mutation: z.enum(["mutating", "read_only", "unknown"]).optional(),
   supportedReplyOutcomes: z.array(runtimeApprovalReplyOutcomeSchema).optional(),
-  metadata: metadataSchema.optional(),
+  metadata: agentToolDataSchema.optional(),
 } satisfies ZodSchemaFields;
 const inferredTranscriptPendingApprovalRequestSchema = z
   .object(transcriptPendingApprovalRequestFields)

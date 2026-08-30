@@ -4,8 +4,8 @@ import {
   runtimeApprovalRequestTypeSchema,
   runtimeKindSchema,
 } from "./agent-runtime-schemas";
+import { agentToolDataSchema } from "./agent-session-event-schemas";
 import { agentRoleSchema } from "./agent-workflow-schemas";
-import { jsonObjectSchema } from "./json-types";
 
 type ZodSchemaFields = Parameters<typeof z.object>[0];
 
@@ -55,12 +55,12 @@ export const agentSessionApprovalRequestSchema = z.object({
     .object({
       name: z.string(),
       title: z.string().optional(),
-      input: jsonObjectSchema.optional(),
+      input: agentToolDataSchema.optional(),
     })
     .optional(),
   mutation: agentSessionApprovalMutationSchema.optional(),
   supportedReplyOutcomes: z.array(runtimeApprovalReplyOutcomeSchema).optional(),
-  metadata: jsonObjectSchema.optional(),
+  metadata: agentToolDataSchema.optional(),
 });
 export type AgentSessionApprovalRequest = z.infer<typeof agentSessionApprovalRequestSchema>;
 

@@ -1,4 +1,3 @@
-import { type JsonObject, type JsonValue, jsonValueSchema } from "@openducktor/contracts";
 import type { GlobalEvent, Session } from "@opencode-ai/sdk/v2/client";
 import { z } from "zod";
 import {
@@ -7,6 +6,11 @@ import {
   type ParsedOpencodeMessage,
   type ParsedOpencodePart,
 } from "./opencode-ingress";
+import {
+  type OpenCodeProtocolObject,
+  type OpenCodeProtocolValue,
+  opencodeProtocolValueSchema,
+} from "./guards";
 import {
   parseOpencodeDirectEvent,
   parseOpencodeGlobalEventPayload,
@@ -108,8 +112,8 @@ export const createOpencodeMessageInfoFixture = (info: OpencodeMessageInfoFixtur
   });
 };
 
-const serializeToolResult = (value: JsonValue): string => {
-  const parsed = jsonValueSchema.parse(value);
+const serializeToolResult = (value: OpenCodeProtocolValue): string => {
+  const parsed = opencodeProtocolValueSchema.parse(value);
   const text = z.string().safeParse(parsed);
   return text.success ? text.data : JSON.stringify(parsed);
 };
@@ -248,7 +252,7 @@ export type MalformedOpencodeControlEventFixture = {
     | "question.v2.rejected"
     | "question.v2.replied"
     | "session.status";
-  properties: JsonObject;
+  properties: OpenCodeProtocolObject;
 };
 
 type OptionalFixtureId<Event> = Event extends { id: string }
@@ -260,7 +264,7 @@ type IgnoredEventFixtureInput = OptionalFixtureId<
 type HeartbeatEventFixtureInput = {
   id?: string;
   type: "server.heartbeat";
-  properties: JsonObject;
+  properties: OpenCodeProtocolObject;
 };
 
 export type OpencodeMessageEventGroupFixture = {

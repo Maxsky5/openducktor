@@ -6,10 +6,6 @@ import {
   type HostInvokeFailure,
   hostErrorResponseSchema,
   hostInvokeFailureSchema,
-  isJsonObject,
-  jsonValueSchema,
-  type JsonObject,
-  type JsonValue,
   TERMINAL_PROTOCOL_SUBPROTOCOL,
 } from "@openducktor/contracts";
 import {
@@ -40,6 +36,7 @@ import { routeTaskAssetHttpRequest } from "./task-asset-http-server";
 import {
   routeTaskEventHttpRequest,
   TASK_EVENT_STREAM_TOKEN_HEADER,
+  type WebRequestBody,
   writeTaskFrameSseEvent,
 } from "./task-event-http-server";
 import { createTaskEventLeaseManager, type TaskEventLeaseManager } from "./task-event-leases";
@@ -306,7 +303,11 @@ const hostCommandFailureToWebError = (command: string, cause: unknown): WebHostR
   const hostInvokeFailure = hostInvokeFailureFromError(cause);
   const errorDetails: WebHostCommandErrorDetails = { command };
   if (details) {
-    errorDetails.hostDetails = details;
+    if (details.failureKind === undefined) {
+      errorDetails.hostDetails = {};
+    } else {
+      errorDetails.hostDetails = { failureKind: details.failureKind };
+    }
   }
   if (hostInvokeFailure) {
     errorDetails.hostInvokeFailure = hostInvokeFailure;
@@ -495,22 +496,25 @@ const webHostRequestErrorResponse = (
   );
 };
 
-const parseJsonObjectBody = (request: Request): Effect.Effect<JsonObject, WebHostRequestError> =>
+const webRequestBodySchema = z.record(z.string(), z.json());
+
+const parseJsonObjectBody = (
+  request: Request,
+): Effect.Effect<WebRequestBody, WebHostRequestError> =>
   Effect.gen(function* () {
-    const parsed: JsonValue = yield* Effect.tryPromise({
-      try: async () => {
-        return jsonValueSchema.parse(await request.json());
-      },
+    const parsed = yield* Effect.tryPromise({
+      try: async () => z.json().parse(await request.json()),
       catch: (error) =>
         new WebHostRequestError({
           message: error instanceof Error ? error.message : "Malformed JSON request body.",
           status: 400,
         }),
     });
-    if (!isJsonObject(parsed)) {
+    const body = webRequestBodySchema.safeParse(parsed);
+    if (!body.success) {
       return yield* rejectWebHostRequest("Command request body must be a JSON object.", 400);
     }
-    return parsed;
+    return body.data;
   });
 
 const parseLastEventId = (request: Request): Effect.Effect<number | null, WebHostRequestError> =>

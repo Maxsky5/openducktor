@@ -3,8 +3,8 @@ import { z } from "zod";
 import { runWebSyncBoundary, WebValidationError } from "./effect/web-errors";
 
 type BrowserEnvValues = {
-  VITE_ODT_BROWSER_AUTH_TOKEN?: string | undefined;
-  VITE_ODT_BROWSER_BACKEND_URL?: string | undefined;
+  VITE_ODT_BROWSER_AUTH_TOKEN?: string;
+  VITE_ODT_BROWSER_BACKEND_URL?: string;
 };
 type BrowserEnv = BrowserEnvValues | undefined;
 type BrowserEnvKey = keyof BrowserEnvValues;
@@ -25,14 +25,20 @@ const readBrowserEnv = (): BrowserEnv => {
   const viteAuthToken: unknown = import.meta.env.VITE_ODT_BROWSER_AUTH_TOKEN;
   const parsedBackendUrl = z.string().safeParse(viteBackendUrl);
   const parsedAuthToken = z.string().safeParse(viteAuthToken);
-  return {
-    VITE_ODT_BROWSER_BACKEND_URL:
-      (parsedBackendUrl.success ? parsedBackendUrl.data : undefined) ??
-      processEnv?.VITE_ODT_BROWSER_BACKEND_URL,
-    VITE_ODT_BROWSER_AUTH_TOKEN:
-      (parsedAuthToken.success ? parsedAuthToken.data : undefined) ??
-      processEnv?.VITE_ODT_BROWSER_AUTH_TOKEN,
-  };
+  const backendUrl =
+    (parsedBackendUrl.success ? parsedBackendUrl.data : undefined) ??
+    processEnv?.VITE_ODT_BROWSER_BACKEND_URL;
+  const authToken =
+    (parsedAuthToken.success ? parsedAuthToken.data : undefined) ??
+    processEnv?.VITE_ODT_BROWSER_AUTH_TOKEN;
+  const env: BrowserEnvValues = {};
+  if (backendUrl !== undefined) {
+    env.VITE_ODT_BROWSER_BACKEND_URL = backendUrl;
+  }
+  if (authToken !== undefined) {
+    env.VITE_ODT_BROWSER_AUTH_TOKEN = authToken;
+  }
+  return env;
 };
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);

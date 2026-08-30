@@ -14,7 +14,7 @@ type ElectronErrorContext<Details extends object> = {
   readonly operation: string;
   readonly arch?: string | undefined;
   readonly cause?: unknown | undefined;
-  readonly details?: Details | undefined;
+  readonly details?: Details;
   readonly path?: string | undefined;
   readonly platform?: string | undefined;
 };
@@ -61,14 +61,14 @@ export const toElectronOperationError = <Details extends object = never>(
   operation: string,
   details?: Details,
 ): ElectronOperationError<Details> | ElectronOperationErrorAggregate => {
-  return cause instanceof ElectronOperationError
-    ? cause
-    : new ElectronOperationError({
-        operation,
-        message: errorMessage(cause),
-        cause,
-        details,
-      });
+  if (cause instanceof ElectronOperationError) {
+    return cause;
+  }
+  const message = errorMessage(cause);
+  if (details === undefined) {
+    return new ElectronOperationError<Details>({ operation, message, cause });
+  }
+  return new ElectronOperationError<Details>({ operation, message, cause, details });
 };
 
 export const causeToElectronBoundaryError = <Failure>(

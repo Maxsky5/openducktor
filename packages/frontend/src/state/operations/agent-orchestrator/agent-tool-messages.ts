@@ -1,4 +1,5 @@
 import type { AgentSessionMessages } from "../../../types/agent-orchestrator";
+import type { AgentStreamPart } from "@openducktor/core";
 import { type SessionMessageOwner, updateSessionMessagesByRole } from "./support/messages";
 
 type ToolStatus = "pending" | "running" | "completed" | "error";
@@ -7,13 +8,12 @@ type ToolCompletionOutcome = "completed" | "error";
 export const isRunningToolStatus = (status: ToolStatus): boolean =>
   status === "pending" || status === "running";
 
-export const formatToolContent = (part: {
-  tool: string;
-  status: ToolStatus;
-  title?: string | undefined;
-  output?: string | undefined;
-  error?: string | undefined;
-}): string => {
+type ToolContentPart = Pick<
+  Extract<AgentStreamPart, { kind: "tool" }>,
+  "tool" | "status" | "title" | "output" | "error"
+>;
+
+export const formatToolContent = (part: ToolContentPart): string => {
   const title = part.title ? ` (${part.title})` : "";
   if (part.status === "completed") {
     return `Tool ${part.tool}${title} completed${part.output ? `\n\n${part.output}` : ""}`;

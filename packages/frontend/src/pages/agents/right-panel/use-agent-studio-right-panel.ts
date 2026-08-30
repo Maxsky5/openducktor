@@ -1,4 +1,3 @@
-import { jsonObjectSchema } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { z } from "zod";
@@ -44,7 +43,7 @@ const openByRoleSchema = z.object({
   build: z.boolean(),
   qa: z.boolean(),
 });
-const persistedRightPanelPayloadSchema = jsonObjectSchema;
+const persistedRightPanelPayloadSchema = z.record(z.string(), z.json());
 type PersistedRightPanelPayload = z.infer<typeof persistedRightPanelPayloadSchema>;
 
 const RIGHT_PANEL_ROLES: AgentRole[] = ["spec", "planner", "build", "qa"];

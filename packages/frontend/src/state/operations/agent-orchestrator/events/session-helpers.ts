@@ -1,4 +1,4 @@
-import { isJsonObject, type JsonObject, type JsonValue } from "@openducktor/contracts";
+import { agentToolDataSchema, type AgentToolData } from "@openducktor/contracts";
 import { z } from "zod";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
@@ -12,7 +12,7 @@ export const eventTimestampMs = (timestamp: string): number => {
 const stringValueSchema = z.string();
 const numberOrBooleanValueSchema = z.union([z.number(), z.boolean()]);
 
-const hasMeaningfulToolInputValue = (value: JsonValue): boolean => {
+const hasMeaningfulToolInputValue = (value: AgentToolData[string]): boolean => {
   const stringResult = stringValueSchema.safeParse(value);
   if (stringResult.success) {
     return stringResult.data.trim().length > 0;
@@ -23,13 +23,14 @@ const hasMeaningfulToolInputValue = (value: JsonValue): boolean => {
   if (Array.isArray(value)) {
     return value.some((entry) => hasMeaningfulToolInputValue(entry));
   }
-  if (!isJsonObject(value)) {
+  const objectValue = agentToolDataSchema.safeParse(value);
+  if (!objectValue.success) {
     return false;
   }
-  return Object.values(value).some((entry) => hasMeaningfulToolInputValue(entry));
+  return Object.values(objectValue.data).some((entry) => hasMeaningfulToolInputValue(entry));
 };
 
-export const hasMeaningfulToolInput = (input: JsonObject | undefined): boolean => {
+export const hasMeaningfulToolInput = (input: AgentToolData | undefined): boolean => {
   return input ? Object.values(input).some((value) => hasMeaningfulToolInputValue(value)) : false;
 };
 

@@ -1,6 +1,6 @@
 import type { GlobalEvent } from "@opencode-ai/sdk/v2/client";
-import { jsonObjectSchema } from "@openducktor/contracts";
 import { z } from "zod";
+import { opencodeProtocolObjectSchema } from "./guards";
 import {
   opencodeMessageErrorSchema,
   opencodeMessageInfoPayloadSchema,
@@ -80,7 +80,7 @@ export const opencodePermissionV2AskedEventSchema = eventSchema(
     action: z.string(),
     resources: z.array(z.string()),
     save: z.array(z.string()).optional(),
-    metadata: jsonObjectSchema.optional(),
+    metadata: opencodeProtocolObjectSchema.optional(),
     source: permissionV2SourceSchema.optional(),
   }),
 );
@@ -91,7 +91,7 @@ export const opencodePermissionAskedEventSchema = eventSchema(
     sessionID: z.string(),
     permission: z.string(),
     patterns: z.array(z.string()),
-    metadata: jsonObjectSchema,
+    metadata: opencodeProtocolObjectSchema,
     always: z.array(z.string()),
     tool: z.object({ messageID: z.string(), callID: z.string() }).optional(),
   }),
@@ -135,6 +135,9 @@ const questionAskedEventSchema = <Type extends "question.asked" | "question.v2.a
   );
 export const opencodeQuestionV2AskedEventSchema = questionAskedEventSchema("question.v2.asked");
 export const opencodeQuestionAskedEventSchema = questionAskedEventSchema("question.asked");
+export type ParsedOpencodeQuestionAskedProperties = z.output<
+  typeof opencodeQuestionAskedEventSchema
+>["properties"];
 
 const questionRepliedEventSchema = <Type extends "question.replied" | "question.v2.replied">(
   type: Type,
@@ -233,7 +236,7 @@ const opencodeIngressEventSchema = z.union([opencodeDirectEventSchema, ignoredDi
 
 const syncEventSchema = z.object({
   aggregateID: z.string(),
-  data: jsonObjectSchema,
+  data: opencodeProtocolObjectSchema,
   id: z.string(),
   seq: z.number(),
   type: z.string(),

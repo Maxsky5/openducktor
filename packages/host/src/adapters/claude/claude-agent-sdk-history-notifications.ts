@@ -12,11 +12,13 @@ export const toClaudeTaskNotificationMessage = (
   const message: ClaudeTaskNotificationMessage = {
     type: "system",
     subtype: "task_notification",
-    uuid: entry.uuid,
     session_id: readHistorySessionId(entry),
     task_id: notification.taskId,
     status: notification.status,
   };
+  if (entry.uuid) {
+    message.uuid = entry.uuid;
+  }
   if (notification.toolUseId) {
     message.tool_use_id = notification.toolUseId;
   }

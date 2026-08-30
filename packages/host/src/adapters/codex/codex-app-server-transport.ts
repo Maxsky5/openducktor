@@ -1,5 +1,5 @@
 import { createInterface } from "node:readline";
-import { jsonObjectSchema, type JsonObject } from "@openducktor/contracts";
+import { type CodexAppServerJsonObject } from "@openducktor/contracts";
 import { Effect, Exit } from "effect";
 import { z } from "zod";
 import {
@@ -39,6 +39,7 @@ import {
   writeJsonLine,
 } from "./codex-json-line-writer";
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
+const codexAppServerJsonObjectSchema = z.record(z.string(), z.json());
 export const createCodexAppServerTransport = (
   runtimeId: string,
   child: CodexChildProcess,
@@ -150,7 +151,7 @@ export const createCodexAppServerTransport = (
     cancelledSentRequests.set(id, timeout);
   };
 
-  const resolveResponse = (id: number, message: JsonObject): void => {
+  const resolveResponse = (id: number, message: CodexAppServerJsonObject): void => {
     const request = pending.get(id);
     if (!request) {
       if (forgetCancelledSentRequest(id)) {
@@ -242,7 +243,7 @@ export const createCodexAppServerTransport = (
     pending.clear();
   };
 
-  const handleMessage = (messageRecord: JsonObject): void => {
+  const handleMessage = (messageRecord: CodexAppServerJsonObject): void => {
     const parsedResponseId = z.number().safeParse(messageRecord.id);
     const responseId = parsedResponseId.success ? parsedResponseId.data : null;
     const parsedServerRequestId = z.union([z.number(), z.string()]).safeParse(messageRecord.id);
@@ -332,7 +333,7 @@ export const createCodexAppServerTransport = (
       return;
     }
     try {
-      const parsedMessage = jsonObjectSchema.safeParse(JSON.parse(trimmed));
+      const parsedMessage = codexAppServerJsonObjectSchema.safeParse(JSON.parse(trimmed));
       if (!parsedMessage.success) {
         failFast(
           new HostValidationError({

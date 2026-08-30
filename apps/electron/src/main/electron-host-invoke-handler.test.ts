@@ -1,9 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { IpcMainInvokeEvent } from "electron";
 import { registerElectronHostInvokeHandler } from "./electron-host-invoke-handler";
 
-// SAFETY: Electron supplies this unused event.
-const ipcMainInvokeEvent = {} as IpcMainInvokeEvent;
+const ipcMainInvokeEvent = {};
 
 const request = {
   command: "workspace_list",

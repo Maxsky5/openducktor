@@ -127,8 +127,6 @@ import type {
   HostEventPayload,
   HostEventWireEnvelope,
   IssueType,
-  JsonObject,
-  JsonValue,
   KanbanEmptyColumnDisplay,
   KanbanSettings,
   McpBridgeDiscoveryFile,
@@ -306,6 +304,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentRuntimeEnabledConfigSchema",
   "agentRuntimeEventSchema",
   "agentRuntimesSchema",
+  "agentToolDataSchema",
   "agentToolNameSchema",
   "agentToolNameValues",
   "buildSessionBootstrapSchema",
@@ -439,8 +438,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "codexAppServerMcpServerElicitationRequestParamsSchema",
   "codexAppServerPermissionsRequestApprovalParamsSchema",
   "codexAppServerRequestPermissionProfileSchema",
-  "jsonObjectSchema",
-  "jsonValueSchema",
   "isCodexAppServerFileMutationRequestMethod",
   "isCodexAppServerPermissionRequestMethod",
   "isManualSessionCompactionSlashCommand",
@@ -584,7 +581,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "resolveHorizontalScrollbarVisibility",
   "generalSettingsSchema",
   "globalConfigSchema",
-  "hasOwnKey",
   "persistedGlobalConfigV2Schema",
   "globalGitConfigSchema",
   "GetWorkspacesInputSchema",
@@ -810,7 +806,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "HOST_EVENT_CHANNELS",
   "hostEventEnvelopeSchema",
   "isHostEventChannel",
-  "isJsonObject",
   "parseHostEventChannel",
   "parseHostEventEnvelope",
   "hostInvokeFailureSchema",
@@ -998,8 +993,6 @@ type ExportedTypeContract = {
   KanbanEmptyColumnDisplay: KanbanEmptyColumnDisplay;
   KanbanSettings: KanbanSettings;
   IssueType: IssueType;
-  JsonObject: JsonObject;
-  JsonValue: JsonValue;
   McpBridgeDiscoveryFile: McpBridgeDiscoveryFile;
   PlanSubtaskInput: PlanSubtaskInput;
   PlanSubtaskIssueType: PlanSubtaskIssueType;

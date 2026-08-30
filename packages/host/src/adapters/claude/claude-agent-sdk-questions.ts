@@ -1,4 +1,3 @@
-import { isJsonObject, type JsonObject, type JsonValue } from "@openducktor/contracts";
 import type { OnUserDialog, UserDialogResult } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { z } from "zod";
@@ -8,7 +7,12 @@ import {
   claudeSubagentPendingInputRoute,
   emitClaudePendingInputEvent,
 } from "./claude-agent-sdk-pending-input-routing";
-import { parseClaudeCanonicalJsonObject } from "./claude-agent-sdk-ingress-schemas";
+import {
+  isClaudeProtocolObject,
+  parseClaudeCanonicalJsonObject,
+  type ClaudeProtocolObject,
+  type ClaudeProtocolValue,
+} from "./claude-agent-sdk-ingress-schemas";
 import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
 
 const CLAUDE_ASK_USER_QUESTION_TOOL_NAME = "AskUserQuestion";
@@ -53,18 +57,20 @@ const isClaudeAskUserQuestionDialogKind = (dialogKind: string): boolean =>
 const nonEmptyClaudeQuestionTextSchema = z.string().trim().min(1);
 const claudeQuestionPreviewSchema = z.string();
 
-const readString = (value: JsonValue | undefined): string | null => {
+const readString = (value: ClaudeProtocolValue | undefined): string | null => {
   const parsed = nonEmptyClaudeQuestionTextSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
 };
 
-const readOptions = (value: JsonValue | undefined): ClaudeAskUserQuestionOption[] | null => {
+const readOptions = (
+  value: ClaudeProtocolValue | undefined,
+): ClaudeAskUserQuestionOption[] | null => {
   if (!Array.isArray(value)) {
     return null;
   }
   const options: ClaudeAskUserQuestionOption[] = [];
   for (const option of value) {
-    if (!isJsonObject(option)) {
+    if (!isClaudeProtocolObject(option)) {
       return null;
     }
     const label = readString(option.label);
@@ -83,7 +89,7 @@ const readOptions = (value: JsonValue | undefined): ClaudeAskUserQuestionOption[
 };
 
 const parseClaudeAskUserQuestionInput = (
-  toolInput: JsonObject,
+  toolInput: ClaudeProtocolObject,
 ): ClaudeAskUserQuestionPayload | null => {
   const rawQuestions = toolInput.questions;
   if (!Array.isArray(rawQuestions) || rawQuestions.length === 0) {
@@ -94,7 +100,7 @@ const parseClaudeAskUserQuestionInput = (
   const eventQuestions: Question[] = [];
   const questionTexts = new Set<string>();
   for (const rawQuestion of rawQuestions) {
-    if (!isJsonObject(rawQuestion)) {
+    if (!isClaudeProtocolObject(rawQuestion)) {
       return null;
     }
     const question = readString(rawQuestion.question);
@@ -168,7 +174,7 @@ export const requestClaudeAskUserQuestion = async ({
   randomId: () => string;
   session: ClaudeSessionContext;
   signal: AbortSignal;
-  toolInput: JsonObject;
+  toolInput: ClaudeProtocolObject;
   toolUseID?: string | undefined;
   agentID?: string | undefined;
 }): Promise<ReturnType<typeof buildClaudeAskUserQuestionResult> | null> => {

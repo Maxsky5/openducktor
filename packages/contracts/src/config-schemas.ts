@@ -130,6 +130,7 @@ const codexRoleOverrideSchema = z
     commandNetworkAccess: z.boolean().optional(),
   })
   .strict();
+export type CodexRoleOverride = z.infer<typeof codexRoleOverrideSchema>;
 const codexRoleOverridesSchema = z.partialRecord(agentRoleSchema, codexRoleOverrideSchema);
 
 const persistedCodexRuntimeConfigV2Schema = persistedAgentRuntimeEnabledConfigV2Schema

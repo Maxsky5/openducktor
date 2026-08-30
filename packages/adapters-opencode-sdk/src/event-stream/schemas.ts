@@ -1,5 +1,8 @@
-import type { JsonObject } from "@openducktor/contracts";
-import type { ParsedOpencodeEvent as Event } from "../opencode-global-event-ingress";
+import type { OpenCodeProtocolObject } from "../guards";
+import type {
+  ParsedOpencodeEvent as Event,
+  ParsedOpencodeQuestionAskedProperties,
+} from "../opencode-global-event-ingress";
 import { z } from "zod";
 
 type BusyStatus = {
@@ -24,7 +27,7 @@ export type ParsedPermissionAsked = {
   permission: string;
   patterns: string[];
   save?: string[];
-  metadata?: JsonObject;
+  metadata?: OpenCodeProtocolObject;
 };
 
 type ParsedQuestionOption = {
@@ -55,16 +58,9 @@ export type ParsedSessionControlEvent =
       requestId: string;
     };
 
-const toParsedQuestionAsked = (properties: {
-  id: string;
-  questions: Array<{
-    header: string;
-    question: string;
-    options: ParsedQuestionOption[];
-    multiple?: boolean | undefined;
-    custom?: boolean | undefined;
-  }>;
-}): ParsedQuestionAsked => ({
+const toParsedQuestionAsked = (
+  properties: ParsedOpencodeQuestionAskedProperties,
+): ParsedQuestionAsked => ({
   requestId: properties.id,
   questions: properties.questions.map((question) => {
     const parsedQuestion: ParsedQuestion = {

@@ -1,6 +1,6 @@
 import type { Agent, Session } from "@opencode-ai/sdk/v2/client";
-import { jsonObjectSchema, jsonValueSchema } from "@openducktor/contracts";
 import { z } from "zod";
+import { opencodeProtocolObjectSchema, opencodeProtocolValueSchema } from "./guards";
 
 const formatIngressIssues = (issues: readonly z.core.$ZodIssue[]): string =>
   issues
@@ -26,7 +26,7 @@ const opencodeAgentWireSchema = z.object({
     .nullish(),
   name: z.string(),
   native: z.boolean().nullish(),
-  options: jsonObjectSchema,
+  options: opencodeProtocolObjectSchema,
   permission: z.array(permissionRuleSchema),
   prompt: z.string().nullish(),
   steps: z.number().nullish(),
@@ -137,11 +137,11 @@ const providerModelSchema = z.object({
   id: z.string(),
   limit: z.object({ context: z.number(), input: z.number().optional(), output: z.number() }),
   name: z.string(),
-  options: jsonObjectSchema,
+  options: opencodeProtocolObjectSchema,
   providerID: z.string(),
   release_date: z.string(),
   status: z.enum(["alpha", "beta", "deprecated", "active"]),
-  variants: z.record(z.string(), jsonObjectSchema).optional(),
+  variants: z.record(z.string(), opencodeProtocolObjectSchema).optional(),
 });
 export type ParsedOpencodeProviderModel = z.infer<typeof providerModelSchema>;
 
@@ -151,7 +151,7 @@ const providerSchema = z.object({
   key: z.string().optional(),
   models: z.record(z.string(), providerModelSchema),
   name: z.string(),
-  options: jsonObjectSchema,
+  options: opencodeProtocolObjectSchema,
   source: z.enum(["env", "config", "custom", "api"]),
 });
 
@@ -175,7 +175,7 @@ export const opencodeSessionDetailPayloadSchema = z.object({
   cost: z.number().optional(),
   directory: z.string(),
   id: z.string(),
-  metadata: jsonObjectSchema.optional(),
+  metadata: opencodeProtocolObjectSchema.optional(),
   model: z
     .object({
       id: z.string(),
@@ -284,7 +284,7 @@ const filePartSourceSchema = z.discriminatedUnion("type", [
 const textPartSchema = z.object({
   ...partEnvelopeSchema,
   ignored: z.boolean().optional(),
-  metadata: jsonObjectSchema.optional(),
+  metadata: opencodeProtocolObjectSchema.optional(),
   synthetic: z.boolean().optional(),
   text: z.string(),
   time: partTimeSchema.optional(),
@@ -303,7 +303,7 @@ const subtaskPartSchema = z.object({
 
 const reasoningPartSchema = z.object({
   ...partEnvelopeSchema,
-  metadata: jsonObjectSchema.optional(),
+  metadata: opencodeProtocolObjectSchema.optional(),
   text: z.string(),
   time: partTimeSchema,
   type: z.literal("reasoning"),
@@ -320,21 +320,21 @@ const filePartSchema = z.object({
 
 const toolStateSchema = z.discriminatedUnion("status", [
   z.object({
-    input: jsonObjectSchema,
+    input: opencodeProtocolObjectSchema,
     raw: z.string(),
     status: z.literal("pending"),
   }),
   z.object({
-    input: jsonObjectSchema,
-    metadata: jsonObjectSchema.optional(),
+    input: opencodeProtocolObjectSchema,
+    metadata: opencodeProtocolObjectSchema.optional(),
     status: z.literal("running"),
     time: z.object({ start: z.number() }),
     title: z.string().optional(),
   }),
   z.object({
     attachments: z.array(filePartSchema).optional(),
-    input: jsonObjectSchema,
-    metadata: jsonObjectSchema,
+    input: opencodeProtocolObjectSchema,
+    metadata: opencodeProtocolObjectSchema,
     output: z.string(),
     status: z.literal("completed"),
     time: z.object({
@@ -346,8 +346,8 @@ const toolStateSchema = z.discriminatedUnion("status", [
   }),
   z.object({
     error: z.string(),
-    input: jsonObjectSchema,
-    metadata: jsonObjectSchema.optional(),
+    input: opencodeProtocolObjectSchema,
+    metadata: opencodeProtocolObjectSchema.optional(),
     status: z.literal("error"),
     time: z.object({ end: z.number(), start: z.number() }),
   }),
@@ -356,7 +356,7 @@ const toolStateSchema = z.discriminatedUnion("status", [
 const toolPartSchema = z.object({
   ...partEnvelopeSchema,
   callID: z.string(),
-  metadata: jsonObjectSchema.optional(),
+  metadata: opencodeProtocolObjectSchema.optional(),
   state: toolStateSchema,
   tool: z.string(),
   type: z.literal("tool"),
@@ -459,7 +459,7 @@ export const opencodeMessageErrorSchema = z.discriminatedUnion("name", [
     data: z.object({ message: z.string(), ref: z.string().optional() }),
     name: z.literal("UnknownError"),
   }),
-  z.object({ data: jsonObjectSchema, name: z.literal("MessageOutputLengthError") }),
+  z.object({ data: opencodeProtocolObjectSchema, name: z.literal("MessageOutputLengthError") }),
   z.object({
     data: z.object({ message: z.string() }),
     name: z.literal("MessageAbortedError"),
@@ -486,7 +486,7 @@ const userMessageInfoSchema = z.object({
       z.object({ type: z.literal("text") }),
       z.object({
         retryCount: z.number().optional(),
-        schema: jsonObjectSchema,
+        schema: opencodeProtocolObjectSchema,
         type: z.literal("json_schema"),
       }),
     ])
@@ -524,7 +524,7 @@ const assistantMessageInfoSchema = z.object({
   providerID: z.string(),
   role: z.literal("assistant"),
   sessionID: z.string(),
-  structured: jsonValueSchema.optional(),
+  structured: opencodeProtocolValueSchema.optional(),
   summary: z.boolean().optional(),
   time: z.object({ created: z.number(), completed: z.number().optional() }),
   tokens: tokenUsageSchema,

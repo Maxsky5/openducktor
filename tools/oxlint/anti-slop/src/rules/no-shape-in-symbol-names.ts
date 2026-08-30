@@ -7,6 +7,15 @@ function containsForbiddenSymbolName(name: string): boolean {
   return name.toLowerCase().includes(FORBIDDEN_SYMBOL_NAME);
 }
 
+function isMemberPropertyAccess(node: ESTree.Node): boolean {
+  const parent = node.parent;
+  return (
+    parent?.type === "MemberExpression" &&
+    !parent.computed &&
+    parent.property === node
+  );
+}
+
 /** Ban the case-insensitive substring "shape" in every JavaScript and TypeScript symbol name. */
 export const noForbiddenTermInSymbolNamesRule = defineRule({
   meta: {
@@ -22,7 +31,9 @@ export const noForbiddenTermInSymbolNamesRule = defineRule({
   },
   createOnce(context) {
     const reportForbiddenSymbolName = (node: ESTree.Node & { name: string }) => {
-      if (!containsForbiddenSymbolName(node.name)) return;
+      if (isMemberPropertyAccess(node) || !containsForbiddenSymbolName(node.name)) {
+        return;
+      }
       context.report({
         node,
         messageId: "forbiddenSymbolName",

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { JsonValue } from "@openducktor/contracts";
+import type { OpenCodeProtocolValue } from "./guards";
 import { loadFileStatus, loadSessionDiff } from "./diff-ops";
 
 const originalFetch = globalThis.fetch;
@@ -12,7 +12,7 @@ const installFetch = (handler: (input: string | URL | Request) => Response | Pro
   globalThis.fetch = fetchImplementation;
 };
 
-const jsonResponse = (body: JsonValue): Response => {
+const jsonResponse = (body: OpenCodeProtocolValue): Response => {
   const encodedBody = JSON.stringify(body);
   if (encodedBody === undefined) {
     throw new Error("Test response body must be JSON serializable.");

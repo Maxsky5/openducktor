@@ -4,14 +4,21 @@ import type {
   SDKMessage,
   SessionStoreEntry,
 } from "@anthropic-ai/claude-agent-sdk";
-import { type JsonObject, jsonObjectSchema } from "@openducktor/contracts";
 import type { AgentStreamPart } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
-import { z } from "zod";
+import { z, type JSONType } from "zod";
+
+export type ClaudeProtocolValue = JSONType;
+export type ClaudeProtocolObject = Record<string, ClaudeProtocolValue>;
+export const claudeProtocolValueSchema = z.json();
+export const claudeProtocolObjectSchema = z.record(z.string(), claudeProtocolValueSchema);
+export const isClaudeProtocolObject = (
+  value: ClaudeProtocolValue | undefined,
+): value is ClaudeProtocolObject => claudeProtocolObjectSchema.safeParse(value).success;
 
 const claudeToolHookSchema = z.object({
   agent_id: z.string().min(1).optional(),
-  tool_input: jsonObjectSchema,
+  tool_input: claudeProtocolObjectSchema,
   tool_name: z.string().min(1),
   tool_use_id: z.string().min(1),
 });
@@ -21,10 +28,10 @@ const claudeContentSourceSchema = z.object({
 });
 
 const claudeContentBlockSchema = z.object({
-  arguments: jsonObjectSchema.optional(),
+  arguments: claudeProtocolObjectSchema.optional(),
   custom_tool_use_id: z.string().optional(),
   id: z.string().optional(),
-  input: jsonObjectSchema.optional(),
+  input: claudeProtocolObjectSchema.optional(),
   name: z.string().optional(),
   server_name: z.string().optional(),
   source: claudeContentSourceSchema.optional(),
@@ -32,7 +39,7 @@ const claudeContentBlockSchema = z.object({
   thinking: z.string().optional(),
   title: z.string().optional(),
   tool: z.string().optional(),
-  tool_input: jsonObjectSchema.optional(),
+  tool_input: claudeProtocolObjectSchema.optional(),
   tool_name: z.string().optional(),
   tool_use_id: z.string().optional(),
   type: z.string().min(1),
@@ -45,13 +52,13 @@ const claudeUserMessagePayloadSchema = z.object({
 });
 
 const claudeToolResultBlockSchema = z.union([
-  jsonObjectSchema.and(
+  claudeProtocolObjectSchema.and(
     z.object({
       tool_use_id: z.string().min(1),
       type: z.literal("tool_result"),
     }),
   ),
-  jsonObjectSchema.and(
+  claudeProtocolObjectSchema.and(
     z.object({
       tool_use_id: z.string().min(1),
       type: z.literal("mcp_tool_result"),
@@ -79,7 +86,7 @@ const claudeUserTurnOriginSchema = z.object({
   kind: z.string().min(1),
 });
 
-const claudeStructuredToolUseResultSchema = jsonObjectSchema.and(
+const claudeStructuredToolUseResultSchema = claudeProtocolObjectSchema.and(
   z.object({
     type: z
       .string()
@@ -251,6 +258,10 @@ export type ClaudePostToolUseIngress =
 export type ClaudeHistorySubagentSystemMessageIngress = z.output<
   typeof claudeHistorySubagentSystemMessageSchema
 >;
+export type ClaudeHistoryTaskUpdatedPatch = Extract<
+  ClaudeHistorySubagentSystemMessageIngress,
+  { subtype: "task_updated" }
+>["patch"];
 export type ClaudeToolResultIngress = {
   raw: z.output<typeof claudeToolResultBlockSchema>;
   structuredOutput?: z.output<typeof claudeStructuredToolUseResultSchema>;
@@ -320,16 +331,19 @@ export const parseClaudePostToolUseIngress = (value: HookInput): ClaudePostToolU
 
 export const parseClaudeFileEditToolResponse = (
   value: Extract<HookInput, { hook_event_name: "PostToolUse" }>["tool_response"],
-): JsonObject =>
-  parseClaudeIngress(jsonObjectSchema.safeParse(value), "claudeFileEditToolResponse");
+): ClaudeProtocolObject =>
+  parseClaudeIngress(claudeProtocolObjectSchema.safeParse(value), "claudeFileEditToolResponse");
 
 type ClaudeToolMetadata = NonNullable<Extract<AgentStreamPart, { kind: "tool" }>["metadata"]>;
-type ClaudeCanonicalJsonObjectInput = Parameters<CanUseTool>[1] | ClaudeToolMetadata | JsonObject;
+type ClaudeCanonicalJsonObjectInput =
+  | Parameters<CanUseTool>[1]
+  | ClaudeToolMetadata
+  | ClaudeProtocolObject;
 
 export const parseClaudeCanonicalJsonObject = (
   value: ClaudeCanonicalJsonObjectInput,
   field: string,
-): JsonObject => parseClaudeIngress(jsonObjectSchema.safeParse(value), field);
+): ClaudeProtocolObject => parseClaudeIngress(claudeProtocolObjectSchema.safeParse(value), field);
 
 export const parseClaudeUserToolResultIngress = (
   value: Extract<SDKMessage, { type: "user" }> | SessionStoreEntry,

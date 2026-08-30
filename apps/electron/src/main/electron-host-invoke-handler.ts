@@ -8,8 +8,9 @@ import {
 import type { IpcMain } from "electron";
 import type { z } from "zod";
 
+type ElectronHostInvokeHandler = Parameters<IpcMain["handle"]>[1];
 type ElectronIpcMainLike = {
-  handle(channel: string, listener: Parameters<IpcMain["handle"]>[1]): void;
+  handle(channel: string, listener: ElectronHostInvokeHandler): void;
 };
 
 type ElectronHostInvokeHandlerOptions = {

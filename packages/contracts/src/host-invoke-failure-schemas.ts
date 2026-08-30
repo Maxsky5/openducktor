@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { workspaceTextFileWriteFailureSchema } from "./filesystem-schemas";
-import { jsonValueSchema } from "./json-types";
 import { sessionHistoryFailureSchema } from "./session-history-failure-schemas";
 import { taskAssetFailureSchema } from "./task-asset-schemas";
 import { terminalFailureSchema } from "./terminal-schemas";
@@ -40,5 +39,5 @@ export const hostErrorResponseSchema = z
     failureKind: z.string().trim().min(1).optional(),
     message: z.string().trim().min(1).optional(),
   })
-  .catchall(jsonValueSchema);
+  .catchall(z.json());
 export type HostErrorResponse = z.infer<typeof hostErrorResponseSchema>;

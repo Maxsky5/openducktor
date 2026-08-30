@@ -1,4 +1,3 @@
-import { hasOwnKey } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import { getShellBridge, type HostBridge } from "./shell-bridge";
 
@@ -6,9 +5,12 @@ const hostClientOverrides = new Map<PropertyKey, { value: unknown; restoreValue:
 type HostClientValue = HostClient[keyof HostClient];
 const shellClientMethodBindings = new WeakMap<object, Map<PropertyKey, HostClientValue>>();
 
+const isHostClientKey = (client: HostClient, key: PropertyKey): key is keyof HostClient =>
+  Object.hasOwn(client, key);
+
 const readShellClientValue = (propertyKey: PropertyKey): HostClientValue | undefined => {
   const client = getShellBridge().client;
-  if (!hasOwnKey(client, propertyKey)) {
+  if (!isHostClientKey(client, propertyKey)) {
     return undefined;
   }
   const value = client[propertyKey];

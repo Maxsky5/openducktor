@@ -1,6 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import { hasOwnKey, LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
+import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
 import type { AgentUserMessagePart, AgentUserMessageSourceText } from "@openducktor/core";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { readText } from "./claude-agent-sdk-utils";
@@ -36,14 +36,17 @@ const SUPPORTED_CLAUDE_IMAGE_MIMES = new Set<string>([
 const SUPPORTED_CLAUDE_PDF_MIME = "application/pdf";
 type ClaudeSupportedImageMime = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 
-const MIME_BY_EXTENSION = {
-  ".gif": "image/gif",
-  ".jpeg": "image/jpeg",
-  ".jpg": "image/jpeg",
-  ".pdf": SUPPORTED_CLAUDE_PDF_MIME,
-  ".png": "image/png",
-  ".webp": "image/webp",
-} satisfies Record<string, ClaudeSupportedImageMime | typeof SUPPORTED_CLAUDE_PDF_MIME>;
+const MIME_BY_EXTENSION = new Map<
+  string,
+  ClaudeSupportedImageMime | typeof SUPPORTED_CLAUDE_PDF_MIME
+>([
+  [".gif", "image/gif"],
+  [".jpeg", "image/jpeg"],
+  [".jpg", "image/jpeg"],
+  [".pdf", SUPPORTED_CLAUDE_PDF_MIME],
+  [".png", "image/png"],
+  [".webp", "image/webp"],
+]);
 
 const WORDLIKE_TEXT_START_PATTERN = /[\p{L}\p{N}_]/u;
 
@@ -59,7 +62,7 @@ const attachmentMimeForPath = (
   path: string,
 ): ClaudeSupportedImageMime | typeof SUPPORTED_CLAUDE_PDF_MIME | undefined => {
   const extension = readExtension(path);
-  return hasOwnKey(MIME_BY_EXTENSION, extension) ? MIME_BY_EXTENSION[extension] : undefined;
+  return MIME_BY_EXTENSION.get(extension);
 };
 
 const inferClaudeAttachmentMime = (

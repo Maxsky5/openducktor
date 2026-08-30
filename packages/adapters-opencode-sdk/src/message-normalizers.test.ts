@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { JsonObject } from "@openducktor/contracts";
+import type { OpenCodeProtocolObject } from "./guards";
 import { createOpencodePartFixture } from "./opencode-protocol-test-fixtures";
 import type { ParsedOpencodePart } from "./opencode-ingress";
 import {
@@ -11,12 +11,12 @@ import {
   sanitizeAssistantMessage,
 } from "./message-normalizers";
 
-const parseOpencodeParts = (parts: JsonObject[]): ParsedOpencodePart[] =>
+const parseOpencodeParts = (parts: OpenCodeProtocolObject[]): ParsedOpencodePart[] =>
   parts.map(createOpencodePartFixture);
 
 describe("message-normalizers", () => {
   test("readTextFromParts joins only text parts", () => {
-    const parts: JsonObject[] = [
+    const parts: OpenCodeProtocolObject[] = [
       {
         id: "text-1",
         sessionID: "session-1",
@@ -44,7 +44,7 @@ describe("message-normalizers", () => {
   });
 
   test("normalizes user display parts by filtering synthetic text and preserving file refs", () => {
-    const parts: JsonObject[] = [
+    const parts: OpenCodeProtocolObject[] = [
       {
         id: "text-1",
         sessionID: "session-1",
@@ -103,7 +103,7 @@ describe("message-normalizers", () => {
   });
 
   test("rejects malformed source text payloads before normalizing file references", () => {
-    const parts: JsonObject[] = [
+    const parts: OpenCodeProtocolObject[] = [
       {
         id: "file-1",
         sessionID: "session-1",
@@ -128,7 +128,7 @@ describe("message-normalizers", () => {
   });
 
   test("normalizes OpenCode agent parts into subagent display parts", () => {
-    const parts: JsonObject[] = [
+    const parts: OpenCodeProtocolObject[] = [
       {
         id: "text-1",
         sessionID: "session-1",
@@ -172,7 +172,7 @@ describe("message-normalizers", () => {
   });
 
   test("keeps only the slash-command envelope text when OpenCode echoes instruction text separately", () => {
-    const parts: JsonObject[] = [
+    const parts: OpenCodeProtocolObject[] = [
       {
         id: "slash-envelope",
         sessionID: "session-1",
@@ -198,7 +198,7 @@ describe("message-normalizers", () => {
   });
 
   test("normalizes local multimodal file parts into attachment display parts", () => {
-    const parts: JsonObject[] = [
+    const parts: OpenCodeProtocolObject[] = [
       {
         id: "image-1",
         sessionID: "session-1",
@@ -282,7 +282,7 @@ describe("message-normalizers", () => {
   });
 
   test("keeps attachment echoes as attachments when runtime adds non-@ source text", () => {
-    const parts: JsonObject[] = [
+    const parts: OpenCodeProtocolObject[] = [
       {
         id: "pdf-runtime-echo",
         sessionID: "session-1",
@@ -318,7 +318,7 @@ describe("message-normalizers", () => {
   });
 
   test("preserves raw filesystem paths returned in attachment urls", () => {
-    const parts: JsonObject[] = [
+    const parts: OpenCodeProtocolObject[] = [
       {
         id: "image-raw-path",
         sessionID: "session-1",
@@ -364,7 +364,7 @@ describe("message-normalizers", () => {
   });
 
   test("falls back to source file path for attachments when the runtime omits a file url", () => {
-    const parts: JsonObject[] = [
+    const parts: OpenCodeProtocolObject[] = [
       {
         id: "image-source-path",
         sessionID: "session-1",
@@ -395,7 +395,7 @@ describe("message-normalizers", () => {
   });
 
   test("normalizes only supported media file attachments without inline source text", () => {
-    const parts: JsonObject[] = [
+    const parts: OpenCodeProtocolObject[] = [
       {
         id: "file-1",
         sessionID: "session-1",
@@ -677,7 +677,7 @@ describe("message-normalizers", () => {
   });
 
   test("extractMessageTotalTokens falls back to max part token total", () => {
-    const parts: JsonObject[] = [
+    const parts: OpenCodeProtocolObject[] = [
       {
         id: "part-1",
         sessionID: "session-1",

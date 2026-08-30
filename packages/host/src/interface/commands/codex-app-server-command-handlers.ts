@@ -1,5 +1,4 @@
 import {
-  jsonValueSchema,
   parseCodexAppServerClientRequest,
   parseCodexAppServerRequestResult,
   type CodexAppServerApprovalsReviewer,
@@ -9,7 +8,7 @@ import {
   type CodexAppServerSandboxPolicy,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { z } from "zod";
+import { z } from "zod";
 import type {
   CodexAppServerService,
   CodexAppServerServiceError,
@@ -266,7 +265,7 @@ const parseRequestInput = (args: HostCommandArgs): CodexAppServerRequestInput =>
     "runtimeId",
   );
   const method = requireCodexRequestMethod(commandInputStringSchema.safeParse(record.method));
-  const parsedParams = jsonValueSchema.safeParse(record.params);
+  const parsedParams = z.json().safeParse(record.params);
   if (!parsedParams.success) {
     throw new HostValidationError({
       message: "params must be JSON-serializable.",

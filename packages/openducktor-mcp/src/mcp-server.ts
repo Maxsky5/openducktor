@@ -1,6 +1,5 @@
 import { McpServer, type ToolCallback } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { jsonValueSchema } from "@openducktor/contracts";
 import type { z } from "zod";
 import packageJson from "../package.json" with { type: "json" };
 import {
@@ -17,6 +16,7 @@ import {
 import { OdtTaskStore } from "./odt-task-store";
 import { type OdtStoreContext, resolveStoreContext } from "./store-context";
 import {
+  mcpToolPayloadSchema,
   OdtToolError,
   type ToolResult,
   toTaskAssetsToolResult,
@@ -25,7 +25,7 @@ import {
 } from "./tool-results";
 
 type RegisteredToolInputSchema = (typeof ODT_TOOL_SCHEMAS)[RegisteredToolName];
-type ToolInput<InputSchema extends z.ZodObject> = z.output<InputSchema>;
+type ToolInput<InputSchema extends z.ZodObject> = Parameters<ToolCallback<InputSchema["shape"]>>[0];
 type ToolOutput<Name extends RegisteredToolName> = z.output<
   (typeof ODT_HOST_BRIDGE_RESPONSE_SCHEMAS)[Name]
 >;
@@ -48,7 +48,7 @@ type OdtToolDefinitions<Names extends readonly RegisteredToolName[]> = {
 type ToolDefinitionOptions<Name extends RegisteredToolName, InputSchema extends z.ZodObject> = {
   description: string;
   execute(store: OdtTaskStore, input: ToolInput<InputSchema>): Promise<ToolOutput<Name>>;
-  nativeResult?: ((payload: ToolOutput<Name>) => ToolResult) | undefined;
+  nativeResult?: (payload: ToolOutput<Name>) => ToolResult;
 };
 
 const WORKSPACE_SCOPED_TOOL_NAMES = new Set<RegisteredToolName>(ODT_WORKSPACE_SCOPED_TOOL_NAMES);
@@ -138,23 +138,20 @@ const registerOdtTool = <
       const payload = await definition.execute(store, input);
       return definition.nativeResult
         ? definition.nativeResult(payload)
-        : toToolResult(jsonValueSchema.parse(payload));
+        : toToolResult(mcpToolPayloadSchema.parse(payload));
     } catch (cause) {
       return toToolError(cause);
     }
   };
-  // SAFETY: The MCP SDK cannot preserve the generic Zod schema/callback relation.
-  const callback = execute as ToolCallback<InputSchema>;
-
   if (definition.nativeResult) {
     server.registerTool(
       name,
       {
         title: name,
         description: definition.description,
-        inputSchema,
+        inputSchema: inputSchema.shape,
       },
-      callback,
+      async (input: ToolInput<InputSchema>) => execute(input),
     );
     return;
   }
@@ -164,10 +161,10 @@ const registerOdtTool = <
     {
       title: name,
       description: definition.description,
-      inputSchema,
+      inputSchema: inputSchema.shape,
       outputSchema: ODT_HOST_BRIDGE_RESPONSE_SCHEMAS[name],
     },
-    callback,
+    async (input: ToolInput<InputSchema>) => execute(input),
   );
 };
 

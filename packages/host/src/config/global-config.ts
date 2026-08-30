@@ -1,22 +1,25 @@
 import {
   type GlobalConfig,
   globalConfigSchema,
-  isJsonObject,
-  type JsonObject,
-  type JsonValue,
   type PersistedGlobalConfigV2,
   persistedGlobalConfigV2Schema,
 } from "@openducktor/contracts";
+import { z, type JSONType } from "zod";
 import { HostValidationError } from "../effect/host-errors";
+
+type PersistedConfigObject = Record<string, JSONType>;
+const persistedConfigObjectSchema = z.record(z.string(), z.json());
+const isPersistedConfigObject = (value: JSONType | undefined): value is PersistedConfigObject =>
+  persistedConfigObjectSchema.safeParse(value).success;
 
 export type LoadedGlobalConfig = GlobalConfig;
 
 export const createDefaultGlobalConfig = (): LoadedGlobalConfig =>
   globalConfigSchema.parse({ version: 3 });
 
-const migratePersistedConfig = (payload: JsonObject) => {
+const migratePersistedConfig = (payload: PersistedConfigObject) => {
   const chat = payload.chat;
-  const customPrompts = chat && isJsonObject(chat) ? chat.customPrompts : undefined;
+  const customPrompts = chat && isPersistedConfigObject(chat) ? chat.customPrompts : undefined;
   if (payload.reusablePrompts !== undefined || !Array.isArray(customPrompts)) {
     return payload;
   }
@@ -27,8 +30,11 @@ const migratePersistedConfig = (payload: JsonObject) => {
   };
 };
 
-const parseSupportedConfigObject = (payload: JsonValue, expectedVersion: 2 | 3): JsonObject => {
-  if (!isJsonObject(payload)) {
+const parseSupportedConfigObject = (
+  payload: JSONType,
+  expectedVersion: 2 | 3,
+): PersistedConfigObject => {
+  if (!isPersistedConfigObject(payload)) {
     throw new HostValidationError({ message: "Config file must contain a JSON object." });
   }
 
@@ -41,7 +47,7 @@ const parseSupportedConfigObject = (payload: JsonValue, expectedVersion: 2 | 3):
   return payload;
 };
 
-export const parsePersistedGlobalConfig = (payload: JsonValue): LoadedGlobalConfig => {
+export const parsePersistedGlobalConfig = (payload: JSONType): LoadedGlobalConfig => {
   try {
     return globalConfigSchema.parse(migratePersistedConfig(parseSupportedConfigObject(payload, 3)));
   } catch (cause) {
@@ -52,7 +58,7 @@ export const parsePersistedGlobalConfig = (payload: JsonValue): LoadedGlobalConf
   }
 };
 
-export const parsePersistedGlobalConfigV2 = (payload: JsonValue): PersistedGlobalConfigV2 => {
+export const parsePersistedGlobalConfigV2 = (payload: JSONType): PersistedGlobalConfigV2 => {
   try {
     return persistedGlobalConfigV2Schema.parse(
       migratePersistedConfig(parseSupportedConfigObject(payload, 2)),
@@ -65,8 +71,8 @@ export const parsePersistedGlobalConfigV2 = (payload: JsonValue): PersistedGloba
   }
 };
 
-export const readPersistedGlobalConfigVersion = (payload: JsonValue): 2 | 3 => {
-  if (!isJsonObject(payload)) {
+export const readPersistedGlobalConfigVersion = (payload: JSONType): 2 | 3 => {
+  if (!isPersistedConfigObject(payload)) {
     throw new HostValidationError({ message: "Config file must contain a JSON object." });
   }
   const version = payload.version;

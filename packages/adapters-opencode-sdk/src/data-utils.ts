@@ -3,9 +3,9 @@ import { z } from "zod";
 const opencodeErrorSchema = z.object({ message: z.string() });
 
 export const unwrapData = <T>(
-  payload: { data?: T | null | undefined; error?: unknown },
+  payload: { data?: T | null; error?: unknown },
   action: string,
-): T => {
+): NonNullable<T> => {
   if (payload.data !== undefined && payload.data !== null) {
     return payload.data;
   }

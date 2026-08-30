@@ -2,7 +2,6 @@ import {
   type AgentSessionIdentity,
   type AgentSessionRecord,
   agentSessionRecordSchema,
-  jsonValueSchema,
   type PlanSubtaskInput,
   type PullRequest,
   type TaskCreateInput,
@@ -149,19 +148,17 @@ const agentSessionStringKeys: ReadonlyArray<
     "externalSessionId" | "role" | "startedAt" | "runtimeKind" | "workingDirectory"
   >
 > = ["externalSessionId", "role", "startedAt", "runtimeKind", "workingDirectory"];
-const normalizedAgentSessionInputSchema = z
-  .record(z.string(), jsonValueSchema)
-  .transform((record) => {
-    const normalized = { ...record };
-    for (const key of agentSessionStringKeys) {
-      const value = normalized[key];
-      const parsed = z.string().safeParse(value);
-      if (parsed.success) {
-        normalized[key] = parsed.data.trim();
-      }
+const normalizedAgentSessionInputSchema = z.record(z.string(), z.json()).transform((record) => {
+  const normalized = { ...record };
+  for (const key of agentSessionStringKeys) {
+    const value = normalized[key];
+    const parsed = z.string().safeParse(value);
+    if (parsed.success) {
+      normalized[key] = parsed.data.trim();
     }
-    return normalized;
-  });
+  }
+  return normalized;
+});
 
 export const normalizedAgentSessionRecordSchema = normalizedAgentSessionInputSchema.transform(
   (record, context) => {

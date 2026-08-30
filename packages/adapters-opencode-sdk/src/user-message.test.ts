@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { Part } from "@opencode-ai/sdk/v2";
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
-import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND, type JsonObject } from "@openducktor/contracts";
+import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
+import type { OpenCodeProtocolObject } from "./guards";
 import type { AgentEvent } from "@openducktor/core";
 import {
   buildQueuedSignature,
@@ -29,7 +30,7 @@ const installSlashCommandAdmission = (
   mock: ReturnType<typeof makeMockClient>,
   assistantMessageId?: string,
 ): void => {
-  const runtimeEvents = deferred<JsonObject[]>();
+  const runtimeEvents = deferred<OpenCodeProtocolObject[]>();
   Object.assign(mock.client.global, {
     event: async (options?: { signal?: AbortSignal }) => ({
       stream: (async function* () {
@@ -472,7 +473,7 @@ describe("OpencodeSdkAdapter user message", () => {
 
   test("sendUserMessage accepts a slash command when its user-message event arrives", async () => {
     const mock = makeMockClient({});
-    const runtimeEvent = deferred<JsonObject>();
+    const runtimeEvent = deferred<OpenCodeProtocolObject>();
     const commandStarted = deferred<{ messageID: string }>();
     const commandResponse = deferred<{ data?: unknown; error?: unknown }>();
     Object.assign(mock.client.global, {

@@ -1,15 +1,15 @@
 import { realpath } from "node:fs/promises";
 import { isAbsolute, relative } from "node:path";
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
-import { CLAUDE_RUNTIME_DESCRIPTOR, type JsonObject } from "@openducktor/contracts";
+import { CLAUDE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY, type AgentEvent } from "@openducktor/core";
-import { z } from "zod";
 import {
   normalizePathForComparison,
   pathStartsWith,
   resolveAgainstWorkingDirectory,
   toProjectRelativePath,
 } from "@openducktor/path-support";
+import { z } from "zod";
 import {
   claudePendingInputResolutionRoute,
   claudeSubagentPendingInputRoute,
@@ -19,7 +19,10 @@ import {
   isClaudeAskUserQuestionTool,
   requestClaudeAskUserQuestion,
 } from "./claude-agent-sdk-questions";
-import { parseClaudeCanonicalJsonObject } from "./claude-agent-sdk-ingress-schemas";
+import {
+  type ClaudeProtocolObject,
+  parseClaudeCanonicalJsonObject,
+} from "./claude-agent-sdk-ingress-schemas";
 import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
 import {
   canonicalOdtToolName,
@@ -42,7 +45,7 @@ export type ClaudeToolUseAuthorization =
   | {
       behavior: "allow";
       approval: "automatic" | "interactive" | "workflow_role";
-      toolInput: JsonObject;
+      toolInput: ClaudeProtocolObject;
     }
   | {
       behavior: "deny";
@@ -51,13 +54,16 @@ export type ClaudeToolUseAuthorization =
 
 type AuthorizeClaudeToolUseInput = {
   session: ClaudeSessionContext;
-  toolInput: JsonObject;
+  toolInput: ClaudeProtocolObject;
   toolName: string;
   blockedPath?: string;
   canonicalizePath?: (path: string) => Promise<string>;
 };
 
-const withAllowedToolInput = (result: PermissionResult, toolInput: JsonObject): PermissionResult =>
+const withAllowedToolInput = (
+  result: PermissionResult,
+  toolInput: ClaudeProtocolObject,
+): PermissionResult =>
   result.behavior === "allow"
     ? {
         ...result,
@@ -100,8 +106,8 @@ const rewriteSessionPath = (session: ClaudeSessionContext, value: string): strin
 const normalizeToolInputForSession = (
   session: ClaudeSessionContext,
   _toolName: string,
-  toolInput: JsonObject,
-): JsonObject => {
+  toolInput: ClaudeProtocolObject,
+): ClaudeProtocolObject => {
   const nextInput = { ...toolInput };
   let changed = false;
 
@@ -123,7 +129,7 @@ const normalizeToolInputForSession = (
 
 const readOnlyToolPathValues = (
   session: ClaudeSessionContext,
-  toolInput: JsonObject,
+  toolInput: ClaudeProtocolObject,
   blockedPath: string | undefined,
 ): string[] => {
   const paths: string[] = [];
@@ -175,7 +181,7 @@ const canonicalReadPathViolation = async (
 
 const findReadOnlyPathPolicyViolation = async (
   session: ClaudeSessionContext,
-  toolInput: JsonObject,
+  toolInput: ClaudeProtocolObject,
   blockedPath: string | undefined,
   canonicalizePath: (path: string) => Promise<string>,
 ): Promise<string | null> => {

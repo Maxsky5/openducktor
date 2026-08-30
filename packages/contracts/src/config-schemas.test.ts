@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { JSONType } from "zod";
 import {
   APP_PLATFORM_VALUES,
   AUTOPILOT_EVENT_IDS,
@@ -710,7 +711,7 @@ describe("config-schemas", () => {
   });
 
   test("rejects invalid explicit chat diff display values", () => {
-    const invalidCases: Array<[string, JsonObject]> = [
+    const invalidCases: Array<[string, Record<string, JSONType>]> = [
       ["diffStyle", { diffStyle: "side-by-side" }],
       ["diffIndicators", { diffIndicators: "glyphs" }],
       ["diffHeight", { diffHeight: "auto" }],

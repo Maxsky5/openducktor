@@ -100,13 +100,21 @@ const validationError = (
   field: string,
   message: string,
   details?: ElectronTaskStreamValidationErrorDetails,
-) =>
-  new ElectronValidationError<ElectronTaskStreamValidationErrorDetails>({
+) => {
+  if (details === undefined) {
+    return new ElectronValidationError<ElectronTaskStreamValidationErrorDetails>({
+      operation,
+      field,
+      message,
+    });
+  }
+  return new ElectronValidationError<ElectronTaskStreamValidationErrorDetails>({
     operation,
     field,
     message,
     details,
   });
+};
 
 const readTrustedSender = (event: ElectronTaskStreamEvent, operation: string) => {
   const { sender, senderFrame } = event;

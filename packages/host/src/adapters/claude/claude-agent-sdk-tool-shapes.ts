@@ -1,14 +1,12 @@
 import type { SDKMessage, SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
-import {
-  jsonObjectSchema,
-  jsonValueSchema,
-  type JsonObject,
-  type JsonValue,
-} from "@openducktor/contracts";
 import type { AgentStreamPart } from "@openducktor/core";
 import { z } from "zod";
 import {
+  claudeProtocolObjectSchema,
+  claudeProtocolValueSchema,
   type ClaudeContentBlockIngress,
+  type ClaudeProtocolObject,
+  type ClaudeProtocolValue,
   parseClaudeCanonicalJsonObject,
 } from "./claude-agent-sdk-ingress-schemas";
 import type { ClaudeToolInput } from "./claude-agent-sdk-types";
@@ -34,7 +32,7 @@ export type ClaudeDecodedToolUse = {
 
 export type ClaudeDecodedToolResult = {
   isError: boolean;
-  raw: JsonObject;
+  raw: ClaudeProtocolObject;
   text: string;
   toolName?: string;
   toolUseId: string;
@@ -43,20 +41,20 @@ export type ClaudeDecodedToolResult = {
 type ClaudeToolUseBlockType = "tool_use" | "mcp_tool_use" | "server_tool_use";
 
 const claudeToolUseFieldsSchema = z.object({
-  arguments: jsonValueSchema.optional(),
+  arguments: claudeProtocolValueSchema.optional(),
   custom_tool_use_id: z.string().optional(),
   id: z.string().optional(),
-  input: jsonValueSchema.optional(),
+  input: claudeProtocolValueSchema.optional(),
   name: z.string().optional(),
   server_name: z.string().optional(),
   tool: z.string().optional(),
-  tool_input: jsonValueSchema.optional(),
+  tool_input: claudeProtocolValueSchema.optional(),
   tool_name: z.string().optional(),
   tool_use_id: z.string().optional(),
   type: z.string().optional(),
 });
 const claudeToolResultFieldsSchema = z.object({
-  content: jsonValueSchema.optional(),
+  content: claudeProtocolValueSchema.optional(),
   custom_tool_use_id: z.string().optional(),
   error: z.string().optional(),
   id: z.string().optional(),
@@ -86,7 +84,7 @@ export const decodeClaudeToolUseBlock = ({
   fallbackMessageId: string;
   index: number;
 }): ClaudeDecodedToolUse | null => {
-  const parsedRecord = jsonObjectSchema.safeParse(block);
+  const parsedRecord = claudeProtocolObjectSchema.safeParse(block);
   if (!parsedRecord.success) {
     return null;
   }
@@ -107,7 +105,7 @@ export const decodeClaudeToolUseBlock = ({
     `${fallbackMessageId}:tool:${index}`;
   const toolName = candidate.name ?? candidate.tool_name ?? candidate.tool ?? "tool";
   const rawInput = candidate.input ?? candidate.tool_input ?? candidate.arguments;
-  const parsedInput = jsonObjectSchema.safeParse(rawInput);
+  const parsedInput = claudeProtocolObjectSchema.safeParse(rawInput);
   const input = parsedInput.success ? parsedInput.data : undefined;
   const metadata: ClaudeToolUseMetadata | undefined =
     blockType === "mcp_tool_use" || blockType === "server_tool_use" ? { blockType } : undefined;
@@ -188,7 +186,7 @@ export const timestampMs = (timestamp: string): number => {
   return Number.isNaN(parsed) ? Date.now() : parsed;
 };
 
-const stringifyToolResultContent = (value: JsonValue): string => {
+const stringifyToolResultContent = (value: ClaudeProtocolValue): string => {
   if (value === null) {
     return "";
   }
@@ -199,12 +197,12 @@ const stringifyToolResultContent = (value: JsonValue): string => {
   return JSON.stringify(value, null, 2);
 };
 
-const toolResultBlockText = (block: JsonValue): string => {
+const toolResultBlockText = (block: ClaudeProtocolValue): string => {
   const text = z.string().safeParse(block);
   if (text.success) {
     return text.data;
   }
-  const record = jsonObjectSchema.safeParse(block);
+  const record = claudeProtocolObjectSchema.safeParse(block);
   if (!record.success) {
     return stringifyToolResultContent(block);
   }
@@ -215,7 +213,7 @@ const toolResultBlockText = (block: JsonValue): string => {
   );
 };
 
-const claudeToolResultContentText = (value: JsonObject): string => {
+const claudeToolResultContentText = (value: ClaudeProtocolObject): string => {
   const text =
     readStringProp(value, "content") ??
     readStringProp(value, "text") ??
@@ -225,7 +223,7 @@ const claudeToolResultContentText = (value: JsonObject): string => {
     return text;
   }
   const content = value.content;
-  const parsedContent = jsonValueSchema.safeParse(content);
+  const parsedContent = claudeProtocolValueSchema.safeParse(content);
   if (parsedContent.success && Array.isArray(parsedContent.data)) {
     return parsedContent.data
       .map(toolResultBlockText)
@@ -243,7 +241,7 @@ export const decodeClaudeToolResultValue = (
   fallbackToolUseId: string | null,
   options: { allowNonToolResultType?: boolean } = {},
 ): ClaudeDecodedToolResult | null => {
-  const parsedRecord = jsonObjectSchema.safeParse(value);
+  const parsedRecord = claudeProtocolObjectSchema.safeParse(value);
   if (!parsedRecord.success) {
     return null;
   }

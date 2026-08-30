@@ -1,4 +1,4 @@
-import { hasOwnKey, LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
+import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
 import type { AgentAttachmentKind, AgentModelAttachmentSupport } from "@openducktor/core";
 import { basenameForPath } from "@openducktor/path-support";
 import {
@@ -6,74 +6,74 @@ import {
   createComposerAttachment,
 } from "./agent-chat-composer-draft";
 
-const ATTACHMENT_EXTENSION_KIND = {
-  ".avif": "image",
-  ".png": "image",
-  ".jpg": "image",
-  ".jpeg": "image",
-  ".gif": "image",
-  ".heic": "image",
-  ".heif": "image",
-  ".tif": "image",
-  ".tiff": "image",
-  ".webp": "image",
-  ".svg": "image",
-  ".bmp": "image",
-  ".mp3": "audio",
-  ".wav": "audio",
-  ".m4a": "audio",
-  ".aac": "audio",
-  ".ogg": "audio",
-  ".oga": "audio",
-  ".opus": "audio",
-  ".flac": "audio",
-  ".mp4": "video",
-  ".m4v": "video",
-  ".mov": "video",
-  ".webm": "video",
-  ".ogv": "video",
-  ".mkv": "video",
-  ".avi": "video",
-  ".pdf": "pdf",
-} satisfies Record<string, AgentAttachmentKind>;
+const ATTACHMENT_EXTENSION_KIND = new Map<string, AgentAttachmentKind>([
+  [".avif", "image"],
+  [".png", "image"],
+  [".jpg", "image"],
+  [".jpeg", "image"],
+  [".gif", "image"],
+  [".heic", "image"],
+  [".heif", "image"],
+  [".tif", "image"],
+  [".tiff", "image"],
+  [".webp", "image"],
+  [".svg", "image"],
+  [".bmp", "image"],
+  [".mp3", "audio"],
+  [".wav", "audio"],
+  [".m4a", "audio"],
+  [".aac", "audio"],
+  [".ogg", "audio"],
+  [".oga", "audio"],
+  [".opus", "audio"],
+  [".flac", "audio"],
+  [".mp4", "video"],
+  [".m4v", "video"],
+  [".mov", "video"],
+  [".webm", "video"],
+  [".ogv", "video"],
+  [".mkv", "video"],
+  [".avi", "video"],
+  [".pdf", "pdf"],
+]);
 
-const ATTACHMENT_EXTENSION_MIME = {
-  ".avif": "image/avif",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".heic": "image/heic",
-  ".heif": "image/heif",
-  ".tif": "image/tiff",
-  ".tiff": "image/tiff",
-  ".webp": "image/webp",
-  ".svg": "image/svg+xml",
-  ".bmp": "image/bmp",
-  ".mp3": "audio/mpeg",
-  ".wav": "audio/wav",
-  ".m4a": "audio/mp4",
-  ".aac": "audio/aac",
-  ".ogg": "audio/ogg",
-  ".oga": "audio/ogg",
-  ".opus": "audio/ogg",
-  ".flac": "audio/flac",
-  ".mp4": "video/mp4",
-  ".m4v": "video/x-m4v",
-  ".mov": "video/quicktime",
-  ".webm": "video/webm",
-  ".ogv": "video/ogg",
-  ".mkv": "video/x-matroska",
-  ".avi": "video/x-msvideo",
-  ".pdf": "application/pdf",
-} satisfies Record<string, string>;
+const ATTACHMENT_EXTENSION_MIME = new Map<string, string>([
+  [".avif", "image/avif"],
+  [".png", "image/png"],
+  [".jpg", "image/jpeg"],
+  [".jpeg", "image/jpeg"],
+  [".gif", "image/gif"],
+  [".heic", "image/heic"],
+  [".heif", "image/heif"],
+  [".tif", "image/tiff"],
+  [".tiff", "image/tiff"],
+  [".webp", "image/webp"],
+  [".svg", "image/svg+xml"],
+  [".bmp", "image/bmp"],
+  [".mp3", "audio/mpeg"],
+  [".wav", "audio/wav"],
+  [".m4a", "audio/mp4"],
+  [".aac", "audio/aac"],
+  [".ogg", "audio/ogg"],
+  [".oga", "audio/ogg"],
+  [".opus", "audio/ogg"],
+  [".flac", "audio/flac"],
+  [".mp4", "video/mp4"],
+  [".m4v", "video/x-m4v"],
+  [".mov", "video/quicktime"],
+  [".webm", "video/webm"],
+  [".ogv", "video/ogg"],
+  [".mkv", "video/x-matroska"],
+  [".avi", "video/x-msvideo"],
+  [".pdf", "application/pdf"],
+]);
 
-const ATTACHMENT_MIME_EXTENSION = Object.entries(ATTACHMENT_EXTENSION_MIME).reduce<
-  Record<string, string>
->((acc, [extension, mime]) => {
-  acc[mime] ??= extension;
-  return acc;
-}, {});
+const ATTACHMENT_MIME_EXTENSION = new Map<string, string>();
+for (const [extension, mime] of ATTACHMENT_EXTENSION_MIME) {
+  if (!ATTACHMENT_MIME_EXTENSION.has(mime)) {
+    ATTACHMENT_MIME_EXTENSION.set(mime, extension);
+  }
+}
 
 const ATTACHMENT_KIND_DEFAULT_NAME = {
   image: "pasted-image",
@@ -114,9 +114,7 @@ export const classifyAttachment = (input: {
   }
 
   const extension = readFileExtension(input.name);
-  return hasOwnKey(ATTACHMENT_EXTENSION_KIND, extension)
-    ? ATTACHMENT_EXTENSION_KIND[extension]
-    : null;
+  return ATTACHMENT_EXTENSION_KIND.get(extension) ?? null;
 };
 
 const inferAttachmentMime = (name: string, mime?: string): string | undefined => {
@@ -125,14 +123,12 @@ const inferAttachmentMime = (name: string, mime?: string): string | undefined =>
     return trimmedMime;
   }
   const extension = readFileExtension(name);
-  return hasOwnKey(ATTACHMENT_EXTENSION_MIME, extension)
-    ? ATTACHMENT_EXTENSION_MIME[extension]
-    : undefined;
+  return ATTACHMENT_EXTENSION_MIME.get(extension);
 };
 
 const buildGeneratedAttachmentName = (kind: AgentAttachmentKind | null, mime?: string): string => {
   const normalizedMime = mime?.trim().toLowerCase();
-  const extension = normalizedMime ? (ATTACHMENT_MIME_EXTENSION[normalizedMime] ?? "") : "";
+  const extension = normalizedMime ? (ATTACHMENT_MIME_EXTENSION.get(normalizedMime) ?? "") : "";
   const baseName = kind ? ATTACHMENT_KIND_DEFAULT_NAME[kind] : GENERIC_ATTACHMENT_DEFAULT_NAME;
 
   return `${baseName}${extension}`;
@@ -245,9 +241,7 @@ const readAttachmentValidationError = (
   }
 
   const extension = readFileExtension(attachment.name);
-  const inferredMime = hasOwnKey(ATTACHMENT_EXTENSION_MIME, extension)
-    ? ATTACHMENT_EXTENSION_MIME[extension]
-    : undefined;
+  const inferredMime = ATTACHMENT_EXTENSION_MIME.get(extension);
   if (inferredMime && supportedMimeTypes.includes(inferredMime)) {
     return null;
   }

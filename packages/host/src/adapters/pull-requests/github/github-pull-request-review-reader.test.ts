@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { JsonObject, JsonValue } from "@openducktor/contracts";
+import type { JSONType } from "zod";
+
+type GithubApiObject = Record<string, JSONType>;
 import { Effect } from "effect";
 import type { GithubCommandDependencies } from "../../../application/tasks/support/github-pull-requests";
 import { HostOperationError } from "../../../effect/host-errors";
@@ -51,18 +53,18 @@ const createDependencies = ({
   commandActivity?: { active: number; maxActive: number };
   commandDelayMs?: number;
   commands?: string[][];
-  pullRequestViewResponse?: JsonObject;
-  reviewThreadNodes?: JsonValue[];
-  reviewThreadResponse?: (args: string[]) => JsonValue;
+  pullRequestViewResponse?: GithubApiObject;
+  reviewThreadNodes?: JSONType[];
+  reviewThreadResponse?: (args: string[]) => JSONType;
   checksResponse?: {
     ok: boolean;
-    stdout: JsonValue;
+    stdout: JSONType;
     rawStdout?: string;
     stderr?: string;
     exitCode?: number | null;
   };
 } = {}): GithubCommandDependencies => {
-  const succeed = (stdout: JsonValue) =>
+  const succeed = (stdout: JSONType) =>
     Effect.gen(function* () {
       if (commandActivity) {
         commandActivity.active += 1;

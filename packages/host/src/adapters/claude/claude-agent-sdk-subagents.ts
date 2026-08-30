@@ -66,9 +66,9 @@ type ClaudeTaskNotificationMessage = Extract<
   { subtype: "task_notification" }
 >;
 export type ClaudeHistoryTaskNotificationMessage = {
-  output_file?: ClaudeTaskNotificationMessage["output_file"] | undefined;
-  summary?: ClaudeTaskNotificationMessage["summary"] | undefined;
-  uuid?: ClaudeTaskNotificationMessage["uuid"] | undefined;
+  output_file?: ClaudeTaskNotificationMessage["output_file"];
+  summary?: ClaudeTaskNotificationMessage["summary"];
+  uuid?: ClaudeTaskNotificationMessage["uuid"];
 } & Omit<ClaudeTaskNotificationMessage, "output_file" | "summary" | "uuid">;
 type ClaudeSubagentSystemMessage =
   | ClaudeSdkSubagentSystemMessageProjection

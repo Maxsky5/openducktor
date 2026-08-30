@@ -1,5 +1,5 @@
-import { isJsonObject, type JsonObject, type JsonValue } from "./json-types";
 import { describe, expect, test } from "bun:test";
+import { z, type JSONType } from "zod";
 import {
   pullRequestReviewActivitySchema,
   pullRequestReviewContextSchema,
@@ -22,20 +22,25 @@ const createActivityFields = () => ({
   isResolved: null,
 });
 
-const isJsonContainer = (value: JsonValue | undefined): value is JsonObject | JsonValue[] =>
-  Array.isArray(value) || isJsonObject(value);
+type ReviewFixtureObject = Record<string, JSONType>;
+
+const reviewFixtureObjectSchema = z.record(z.string(), z.json());
+const isReviewFixtureObject = (value: JSONType | undefined): value is ReviewFixtureObject =>
+  reviewFixtureObjectSchema.safeParse(value).success;
+const isJsonContainer = (value: JSONType | undefined): value is ReviewFixtureObject | JSONType[] =>
+  Array.isArray(value) || isReviewFixtureObject(value);
 
 const setJsonPath = (
-  root: JsonObject,
+  root: ReviewFixtureObject,
   path: readonly (number | string)[],
-  value: JsonValue,
+  value: JSONType,
 ): void => {
   const finalSegment = path.at(-1);
   if (finalSegment === undefined) {
     throw new Error("Expected a non-empty JSON path.");
   }
 
-  let current: JsonObject | JsonValue[] = root;
+  let current: ReviewFixtureObject | JSONType[] = root;
   for (const segment of path.slice(0, -1)) {
     const next = current[segment];
     if (!isJsonContainer(next)) {
@@ -235,7 +240,7 @@ describe("pullRequestReviewContextSchema", () => {
       ],
       reviewThreads: { openCount: 0 },
       refreshedAt: "2026-07-10T08:02:00Z",
-    } satisfies JsonObject;
+    } satisfies ReviewFixtureObject;
     setJsonPath(context, path, value);
 
     expect(() => pullRequestReviewContextSchema.parse(context)).toThrow();

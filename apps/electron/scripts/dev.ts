@@ -250,14 +250,24 @@ const runDevFileOperationEffect = (
     try: async () => {
       await action();
     },
-    catch: (cause) =>
-      new ElectronOperationError({
+    catch: (cause) => {
+      const message = errorMessage(cause);
+      if (details === undefined) {
+        return new ElectronOperationError<DevFileOperationDetails>({
+          operation,
+          message,
+          path: filePath,
+          cause,
+        });
+      }
+      return new ElectronOperationError<DevFileOperationDetails>({
         operation,
-        message: errorMessage(cause),
+        message,
         path: filePath,
         cause,
         details,
-      }),
+      });
+    },
   });
 
 const replacePlistStringEffect = (

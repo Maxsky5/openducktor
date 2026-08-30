@@ -1,12 +1,11 @@
 import {
   type GitProviderRepository,
-  type JsonValue,
   type PullRequest,
   pullRequestSchema,
 } from "@openducktor/contracts";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import { parseJson } from "../../../effect/json";
-import { z } from "zod";
+import { z, type JSONType } from "zod";
 
 export const GITHUB_PROVIDER_ID = "github";
 
@@ -69,7 +68,7 @@ export type GithubPullRequestSyncPolicy = {
   repository?: GitProviderRepository;
 };
 
-const parseGithubPullPayload = (value: JsonValue): GithubPullResponse => {
+const parseGithubPullPayload = (value: JSONType): GithubPullResponse => {
   const parsed = githubPullResponseSchema.safeParse(value);
   if (parsed.success) {
     return parsed.data;
@@ -117,7 +116,7 @@ const normalizeGithubPullRequest = (response: GithubPullResponse): ResolvedPullR
 };
 
 export const parseGithubPullListResponse = (payload: string): ResolvedPullRequest[] => {
-  let parsed: JsonValue;
+  let parsed: JSONType;
   try {
     parsed = parseJson(payload);
   } catch (cause) {
@@ -141,7 +140,7 @@ export const parseGithubPullListResponse = (payload: string): ResolvedPullReques
 };
 
 export const parseGithubPullResponse = (payload: string): ResolvedPullRequest => {
-  let parsed: JsonValue;
+  let parsed: JSONType;
   try {
     parsed = parseJson(payload);
   } catch (cause) {

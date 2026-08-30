@@ -97,13 +97,16 @@ const useHookHarness = ({ activeWorkspaceId, initialNavigation, scheduleTask }: 
     },
   );
 
+  const persistenceInput: Parameters<typeof useRepoNavigationPersistence>[0] = {
+    activeWorkspaceId,
+    navigation,
+    setNavigation,
+  };
+  if (scheduleTask !== undefined) {
+    persistenceInput.scheduleTask = scheduleTask;
+  }
   const { isRepoNavigationBoundaryPending, persistenceError, retryPersistenceRestore } =
-    useRepoNavigationPersistence({
-      activeWorkspaceId,
-      navigation,
-      setNavigation,
-      scheduleTask,
-    });
+    useRepoNavigationPersistence(persistenceInput);
 
   return {
     navigation,

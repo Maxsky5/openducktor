@@ -68,36 +68,57 @@ const invalidOverrideError = (
   variable: string,
   message: string,
   details?: ToolDiscoveryDetails,
-) =>
-  new HostValidationError({
+) => {
+  if (details === undefined) {
+    return new HostValidationError({
+      field: variable,
+      message: `Configured ${descriptor.displayName} override ${variable} ${message}`,
+    });
+  }
+  return new HostValidationError({
     field: variable,
     message: `Configured ${descriptor.displayName} override ${variable} ${message}`,
     details,
   });
+};
 
 const invalidProvidedToolPathError = (
   descriptor: ToolDiscoveryDescriptor,
   toolId: ToolDiscoveryId,
   message: string,
   details?: ToolDiscoveryDetails,
-) =>
-  new HostValidationError({
+) => {
+  if (details === undefined) {
+    return new HostValidationError({
+      field: `providedToolPaths.${toolId}`,
+      message: `Provided ${descriptor.displayName} path for ${toolId} ${message}`,
+    });
+  }
+  return new HostValidationError({
     field: `providedToolPaths.${toolId}`,
     message: `Provided ${descriptor.displayName} path for ${toolId} ${message}`,
     details,
   });
+};
 
 const invalidSavedToolPathError = (
   descriptor: ToolDiscoveryDescriptor,
   toolId: ToolDiscoveryId,
   message: string,
   details?: ToolDiscoveryDetails,
-) =>
-  new HostValidationError({
+) => {
+  if (details === undefined) {
+    return new HostValidationError({
+      field: `agentRuntimes.${toolId}.executablePath`,
+      message: `Saved ${descriptor.displayName} path ${message}`,
+    });
+  }
+  return new HostValidationError({
     field: `agentRuntimes.${toolId}.executablePath`,
     message: `Saved ${descriptor.displayName} path ${message}`,
     details,
   });
+};
 
 const resolveExplicitToolPathSource = ({
   context,

@@ -1,13 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import {
-  isJsonObject,
-  type JsonValue,
-  taskAssetIdSchema,
-  taskAssetRenderContextSchema,
-} from "@openducktor/contracts";
-import { z } from "zod";
+import { taskAssetIdSchema, taskAssetRenderContextSchema } from "@openducktor/contracts";
+import { z, type JSONType } from "zod";
 import { parseJson } from "../../effect/json";
 import type { TaskAssetQuarantine } from "../../ports/task-asset-file-port";
 
@@ -53,8 +48,8 @@ const quarantineManifestSchema = z
     }
   });
 
-const validateManifest = (value: JsonValue): QuarantineManifest => {
-  if (!isJsonObject(value)) {
+const validateManifest = (value: JSONType): QuarantineManifest => {
+  if (!z.record(z.string(), z.json()).safeParse(value).success) {
     throw new Error("Task asset quarantine manifest must be an object.");
   }
   const parsed = quarantineManifestSchema.safeParse(value);

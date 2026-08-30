@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { jsonValueSchema } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import type { CodexAppServerThreadItem, CodexAppServerJsonValue } from "@openducktor/contracts";
 import type { CodexSessionState, CodexTurnStartResult, CodexUserInput } from "./types";
@@ -77,7 +76,7 @@ export const parseCodexJsonObjectString = (
   }
 
   try {
-    const parsed = jsonValueSchema.safeParse(JSON.parse(text));
+    const parsed = z.json().safeParse(JSON.parse(text));
     return parsed.success && isPlainObject(parsed.data) ? parsed.data : null;
   } catch {
     return null;

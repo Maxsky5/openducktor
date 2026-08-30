@@ -5,7 +5,8 @@ import {
   codexUint64Schema,
   codexUsizeSchema,
 } from "./codex-app-server-number-schemas";
-import { jsonValueSchema } from "./json-types";
+
+const codexAppServerJsonValueSchema = z.json();
 
 export const codexAppServerCommandActionSchema = z.discriminatedUnion("type", [
   z.object({
@@ -197,7 +198,7 @@ export const codexAppServerMcpServerElicitationRequestParamsSchema = z.discrimin
     threadId: z.string(),
     turnId: z.string().nullable(),
     serverName: z.string(),
-    _meta: jsonValueSchema.nullable(),
+    _meta: codexAppServerJsonValueSchema.nullable(),
     message: z.string(),
     requestedSchema: codexAppServerMcpElicitationFormSchema,
   }),
@@ -206,16 +207,16 @@ export const codexAppServerMcpServerElicitationRequestParamsSchema = z.discrimin
     threadId: z.string(),
     turnId: z.string().nullable(),
     serverName: z.string(),
-    _meta: jsonValueSchema.nullable(),
+    _meta: codexAppServerJsonValueSchema.nullable(),
     message: z.string(),
-    requestedSchema: jsonValueSchema,
+    requestedSchema: codexAppServerJsonValueSchema,
   }),
   z.object({
     mode: z.literal("url"),
     threadId: z.string(),
     turnId: z.string().nullable(),
     serverName: z.string(),
-    _meta: jsonValueSchema.nullable(),
+    _meta: codexAppServerJsonValueSchema.nullable(),
     message: z.string(),
     url: z.string(),
     elicitationId: z.string(),

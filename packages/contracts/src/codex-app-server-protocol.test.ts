@@ -6,19 +6,9 @@ import {
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
   CODEX_APP_SERVER_SERVER_REQUEST_METHODS,
   type CodexAppServerClientRequest,
-  type CodexAppServerCollabAgentToolCallThreadItem,
-  type CodexAppServerSubAgentActivityThreadItem,
-  type CodexAppServerSubAgentSource,
-  type CodexAppServerSubAgentThreadSpawnSource,
-  type CodexAppServerThread,
-  type CodexAppServerSessionSource,
-  type CodexAppServerThreadSource,
-  type CodexAppServerThreadStartParams,
   isCodexAppServerCommandRequestMethod,
   isCodexAppServerFileMutationRequestMethod,
   isCodexAppServerPermissionRequestMethod,
-  parseCodexAppServerClientRequest,
-  parseCodexAppServerRequestResult,
 } from "./codex-app-server-protocol";
 import {
   codexAppServerCommandExecutionRequestApprovalParamsSchema,
@@ -27,15 +17,29 @@ import {
   codexAppServerMcpServerElicitationRequestParamsSchema,
   codexAppServerPermissionsRequestApprovalParamsSchema,
   codexAppServerRequestPermissionProfileSchema,
+} from "./codex-app-server-permission-schemas";
+import {
+  type CodexAppServerThreadStartParams,
+  parseCodexAppServerClientRequest,
+} from "./codex-app-server-request-schemas";
+import { parseCodexAppServerRequestResult } from "./codex-app-server-result-schemas";
+import {
+  type CodexAppServerCollabAgentToolCallThreadItem,
+  type CodexAppServerSessionSource,
+  type CodexAppServerSubAgentActivityThreadItem,
+  type CodexAppServerSubAgentSource,
+  type CodexAppServerSubAgentThreadSpawnSource,
+  type CodexAppServerThread,
+  type CodexAppServerThreadSource,
   codexAppServerThreadItemSchema,
   codexAppServerTurnSchema,
-} from "./codex-app-server-protocol-schemas";
+} from "./codex-app-server-thread-schemas";
 import {
   codexAppServerRuntimeNotificationSchema,
   codexAppServerRuntimeServerRequestSchema,
   codexAppServerServerRequestSchema,
 } from "./codex-app-server-runtime-schemas";
-import { jsonValueSchema } from "./json-types";
+import { z } from "zod";
 
 describe("Codex app-server protocol", () => {
   test("keeps free-form thread sources distinct from structured session sources", () => {
@@ -90,7 +94,7 @@ describe("Codex app-server protocol", () => {
       ],
     };
 
-    expect(jsonValueSchema.safeParse(request.params).success).toBe(true);
+    expect(z.json().safeParse(request.params).success).toBe(true);
     expect(parseCodexAppServerRequestResult(request.method, response)).toEqual(response);
   });
 
@@ -108,7 +112,7 @@ describe("Codex app-server protocol", () => {
       ],
     };
 
-    expect(jsonValueSchema.safeParse(invalidResponse).success).toBe(true);
+    expect(z.json().safeParse(invalidResponse).success).toBe(true);
     expect(() => parseCodexAppServerRequestResult("fuzzyFileSearch", invalidResponse)).toThrow();
     for (const score of [-1, 1.5, 4_294_967_296]) {
       expect(() =>

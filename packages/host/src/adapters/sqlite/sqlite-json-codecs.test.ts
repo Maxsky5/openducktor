@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { jsonValueSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { z } from "zod";
 import {
   createAgentSessionRecord,
   expectFailureTag,
@@ -10,7 +10,6 @@ import {
   encodeJson,
   labelsFromRow,
   normalizeLabels,
-  toValidatedJsonValue,
 } from "./sqlite-json-codecs";
 import { taskRowFixture } from "./sqlite-task-row-test-fixtures";
 
@@ -24,13 +23,9 @@ describe("SQLite JSON codecs", () => {
   });
 
   test("encodes only values accepted by the JSON boundary", () => {
-    expect(encodeJson(toValidatedJsonValue(jsonValueSchema.safeParse({ id: "task-1" })))).toBe(
-      '{"id":"task-1"}',
-    );
-    expect(() =>
-      toValidatedJsonValue(jsonValueSchema.safeParse({ optional: undefined })),
-    ).toThrow();
-    expect(() => toValidatedJsonValue(jsonValueSchema.safeParse(() => "not JSON"))).toThrow();
+    expect(encodeJson(z.json().parse({ id: "task-1" }))).toBe('{"id":"task-1"}');
+    expect(() => z.json().parse({ optional: undefined })).toThrow();
+    expect(() => z.json().parse(() => "not JSON")).toThrow();
   });
 
   test("rejects corrupted label JSON through the Effect error channel", async () => {

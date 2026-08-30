@@ -4,6 +4,7 @@ import {
   CODEX_APPROVALS_REVIEWER_VALUES,
   CODEX_SANDBOX_MODE_VALUES,
   type CodexPolicyFields,
+  type CodexRoleOverride,
   type CodexRuntimeConfig,
   DEFAULT_CODEX_RUNTIME_POLICY,
   type RuntimeCheck,
@@ -56,9 +57,6 @@ type AgentRuntimesSectionProps = {
 };
 
 type CodexPolicyField = keyof CodexPolicyFields;
-type CodexRoleOverride = {
-  [Field in CodexPolicyField]?: CodexPolicyFields[Field] | undefined;
-};
 type CodexPolicyValuesByField = {
   readonly [Field in CodexPolicyField]: readonly CodexPolicyFields[Field][];
 };

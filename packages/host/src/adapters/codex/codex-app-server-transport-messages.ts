@@ -1,8 +1,8 @@
 import {
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
   type CodexAppServerCurrentTimeReadResponse,
+  type CodexAppServerJsonObject,
   type CodexAppServerRequestId,
-  type JsonObject,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { z } from "zod";
@@ -70,17 +70,17 @@ export const respondToAutomaticServerRequest = (
 
 export function parseStreamMessage(
   runtimeId: string,
-  message: JsonObject,
+  message: CodexAppServerJsonObject,
   kind: "notification",
 ): CodexAppServerServerNotification;
 export function parseStreamMessage(
   runtimeId: string,
-  message: JsonObject,
+  message: CodexAppServerJsonObject,
   kind: "server_request",
 ): CodexAppServerServerRequest;
 export function parseStreamMessage(
   runtimeId: string,
-  message: JsonObject,
+  message: CodexAppServerJsonObject,
   kind: "notification" | "server_request",
 ): CodexAppServerProtocolMessage {
   const parsedMethod = z.string().safeParse(message.method);

@@ -10,9 +10,8 @@ import {
 } from "./claude-agent-sdk-test-messages";
 
 const timestamp = "2026-06-25T20:00:00.000Z";
-const readSdkState = (
-  session: ClaudeEventSession & { sdkState?: "idle" | "requires_action" | "running" | undefined },
-) => session.sdkState;
+const readSdkState = (session: Pick<ReturnType<typeof createEventTestSession>, "sdkState">) =>
+  session.sdkState;
 
 describe("Claude local slash commands", () => {
   test("projects persisted commands without Claude control messages", () => {
@@ -219,9 +218,7 @@ describe("Claude local slash commands", () => {
 
   test("reuses local command output identity and settles the matching result", () => {
     const events: AgentEvent[] = [];
-    const session: ClaudeEventSession & {
-      sdkState?: "idle" | "requires_action" | "running" | undefined;
-    } = createEventTestSession("running");
+    const session = createEventTestSession("running");
     session.activeSdkUserTurnCount = 1;
     session.pendingUserTurnCount = 1;
     session.sdkState = "running";

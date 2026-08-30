@@ -1,9 +1,5 @@
-import {
-  isJsonObject,
-  jsonValueSchema,
-  type JsonObject,
-  type JsonValue,
-} from "@openducktor/contracts";
+import { agentToolDataSchema, type AgentToolData } from "@openducktor/contracts";
+import { z } from "zod";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { extractAllFileEditData } from "./file-edit-tool";
 import { extractPathFromInput, readInputString } from "./tool-input-utils";
@@ -56,7 +52,10 @@ const PATH_DISPLAY_TOOL_NAMES = new Set([
   "look_at",
 ]);
 
-const summarizeSearchToolInput = (tool: string, input: JsonObject | undefined): string | null => {
+const summarizeSearchToolInput = (
+  tool: string,
+  input: AgentToolData | undefined,
+): string | null => {
   if (!input) {
     return null;
   }
@@ -93,11 +92,11 @@ const parseStructuredOutputSummary = (output: string): string | null => {
   }
 
   try {
-    const parsed = jsonValueSchema.parse(JSON.parse(trimmed));
-    if (!isJsonObject(parsed)) {
+    const parsed = agentToolDataSchema.safeParse(JSON.parse(trimmed));
+    if (!parsed.success) {
       return null;
     }
-    const record = parsed;
+    const record = parsed.data;
     if (hasNonEmptyText(record.message)) {
       return compactText(record.message, 160);
     }
@@ -112,14 +111,15 @@ const parseStructuredOutputSummary = (output: string): string | null => {
   }
 };
 
-const countTodos = (value: JsonValue): number | null => {
+const countTodos = (value: AgentToolData[string]): number | null => {
   if (Array.isArray(value)) {
     return value.length;
   }
-  if (!isJsonObject(value)) {
+  const parsed = agentToolDataSchema.safeParse(value);
+  if (!parsed.success) {
     return null;
   }
-  const record = value;
+  const record = parsed.data;
   if (Array.isArray(record.todos)) {
     return record.todos.length;
   }
@@ -129,7 +129,7 @@ const countTodos = (value: JsonValue): number | null => {
   return null;
 };
 
-const countTodosFromInput = (input: JsonObject | undefined): number | null => {
+const countTodosFromInput = (input: AgentToolData | undefined): number | null => {
   if (!input) {
     return null;
   }
@@ -141,7 +141,7 @@ const countTodosFromOutput = (output: string | undefined): number | null => {
     return null;
   }
   try {
-    const parsed = jsonValueSchema.parse(JSON.parse(output));
+    const parsed = z.json().parse(JSON.parse(output));
     return countTodos(parsed);
   } catch {
     return null;
@@ -162,7 +162,7 @@ const normalizeDisplaySummary = (
   return relativizeDisplayPath(summary, workingDirectory);
 };
 
-const extractTaskId = (input: JsonObject | undefined): string | null => {
+const extractTaskId = (input: AgentToolData | undefined): string | null => {
   const taskId = input?.taskId;
   return hasNonEmptyText(taskId) ? taskId.trim() : null;
 };

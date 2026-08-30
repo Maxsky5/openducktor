@@ -20,7 +20,7 @@ export type TaskPolicyErrorInput = {
 export class TaskPolicyError extends Data.TaggedError("TaskPolicyError")<{
   readonly code: TaskPolicyErrorCode;
   readonly message: string;
-  readonly details?: Readonly<TaskPolicyErrorDetails> | undefined;
+  readonly details?: Readonly<TaskPolicyErrorDetails>;
 }> {
   constructor({ code = "TASK_POLICY_ERROR", message, details }: TaskPolicyErrorInput) {
     super(details ? { code, message, details } : { code, message });

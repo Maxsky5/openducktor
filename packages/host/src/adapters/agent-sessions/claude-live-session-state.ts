@@ -9,7 +9,7 @@ import {
   agentSessionTranscriptEventSchema,
   isAgentSessionTranscriptEventType,
 } from "@openducktor/contracts";
-import type { AgentEvent } from "@openducktor/core";
+import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
 import type {
   AgentSessionLiveAdapterChange,
   AgentSessionLiveAdapterMutation,
@@ -116,9 +116,7 @@ const rootRef = (session: ClaudeSessionContext): AgentSessionLiveRef =>
   eventRef(session, { externalSessionId: session.externalSessionId });
 
 const subagentStartedAt = (
-  part: {
-    readonly startedAtMs?: number | undefined;
-  },
+  part: Pick<Extract<AgentStreamPart, { kind: "subagent" }>, "startedAtMs">,
   fallback: string,
 ): string => {
   if (part.startedAtMs === undefined) {

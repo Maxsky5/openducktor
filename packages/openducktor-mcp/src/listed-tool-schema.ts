@@ -4,16 +4,17 @@ import {
   ODT_TOOL_SCHEMAS,
   ODT_WORKSPACE_SCOPED_TOOL_NAMES,
 } from "./lib";
-import { jsonObjectSchema } from "@openducktor/contracts";
+
+const listedToolObjectSchema = z.record(z.string(), z.json());
 
 export type RegisteredToolName = keyof typeof ODT_TOOL_SCHEMAS;
 type ListedToolSchema = z.infer<typeof listedToolSchemaSchema>;
 
 const WORKSPACE_SCOPED_TOOL_NAMES = new Set<RegisteredToolName>(ODT_WORKSPACE_SCOPED_TOOL_NAMES);
 const listedToolSchemaSchema = z.intersection(
-  jsonObjectSchema,
+  listedToolObjectSchema,
   z.object({
-    properties: jsonObjectSchema.optional(),
+    properties: listedToolObjectSchema.optional(),
     required: z.array(z.string()).optional(),
   }),
 );

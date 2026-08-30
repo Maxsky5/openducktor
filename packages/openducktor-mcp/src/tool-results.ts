@@ -1,15 +1,17 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type {
-  JsonObject,
-  JsonValue,
   OdtToolErrorCode,
   OdtToolErrorIssue,
   OdtToolErrorPayload,
 } from "@openducktor/contracts";
-import { isJsonObject, readTaskAssetsResultSchema } from "@openducktor/contracts";
-import { z } from "zod";
+import { readTaskAssetsResultSchema } from "@openducktor/contracts";
+import { z, type JSONType } from "zod";
 
 export type ToolResult = CallToolResult;
+export type McpToolPayload = JSONType;
+
+export const mcpToolPayloadSchema = z.json();
+const structuredToolPayloadSchema = z.record(z.string(), mcpToolPayloadSchema);
 
 export type OdtToolErrorDetails = NonNullable<OdtToolErrorPayload["error"]["details"]>;
 
@@ -60,8 +62,10 @@ export const toErrorMessage = (cause: unknown): string => {
   return "Unknown error";
 };
 
-const isStructuredToolPayload = (payload: JsonValue): payload is JsonObject =>
-  isJsonObject(payload);
+const isStructuredToolPayload = (
+  payload: McpToolPayload,
+): payload is Record<string, McpToolPayload> =>
+  structuredToolPayloadSchema.safeParse(payload).success;
 
 const summarizeIssue = (issue: {
   path: readonly PropertyKey[];
@@ -102,7 +106,7 @@ const readOdtToolErrorIssues = (cause: unknown): ZodIssueSummary[] | undefined =
   return normalizeOdtToolErrorIssues(cause.issues);
 };
 
-export const toToolResult = (payload: JsonValue): ToolResult => {
+export const toToolResult = (payload: McpToolPayload): ToolResult => {
   const result: ToolResult = {
     content: [
       {

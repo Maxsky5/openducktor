@@ -1,5 +1,5 @@
 import type { SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
-import { hasOwnKey, jsonObjectSchema } from "@openducktor/contracts";
+import { claudeProtocolObjectSchema } from "./claude-agent-sdk-ingress-schemas";
 import { basename } from "node:path";
 import { z } from "zod";
 import {
@@ -69,16 +69,16 @@ type MutableAssistantHistoryMessage = Extract<AgentSessionHistoryMessage, { role
 
 const CLAUDE_HISTORY_ATTACHMENT_PATH_PREFIX = "claude-history://attachment/";
 
-const MIME_EXTENSIONS = {
-  "application/pdf": ".pdf",
-  "image/gif": ".gif",
-  "image/jpeg": ".jpg",
-  "image/png": ".png",
-  "image/webp": ".webp",
-} satisfies Record<string, string>;
+const MIME_EXTENSIONS = new Map<string, string>([
+  ["application/pdf", ".pdf"],
+  ["image/gif", ".gif"],
+  ["image/jpeg", ".jpg"],
+  ["image/png", ".png"],
+  ["image/webp", ".webp"],
+]);
 
 const extensionForMime = (mime: string | undefined): string =>
-  mime && hasOwnKey(MIME_EXTENSIONS, mime) ? MIME_EXTENSIONS[mime] : "";
+  (mime ? MIME_EXTENSIONS.get(mime) : undefined) ?? "";
 
 const claudeHistoryAttachmentPath = (messageId: string, index: number): string =>
   `${CLAUDE_HISTORY_ATTACHMENT_PATH_PREFIX}${encodeURIComponent(messageId)}/${index}`;
@@ -293,12 +293,12 @@ export const readHistoryToolResults = (message: ClaudeHistoryConversationMessage
   const messageRecord = message;
   const readTopLevelToolUseResult = (): ClaudeDecodedToolResult["raw"] | null => {
     const camelCaseToolUseResult = messageRecord.toolUseResult;
-    const camelCase = jsonObjectSchema.safeParse(camelCaseToolUseResult);
+    const camelCase = claudeProtocolObjectSchema.safeParse(camelCaseToolUseResult);
     if (camelCase.success) {
       return camelCase.data;
     }
     const snakeCaseToolUseResult = messageRecord.tool_use_result;
-    const snakeCase = jsonObjectSchema.safeParse(snakeCaseToolUseResult);
+    const snakeCase = claudeProtocolObjectSchema.safeParse(snakeCaseToolUseResult);
     return snakeCase.success ? snakeCase.data : null;
   };
   const mergeTopLevelToolUseResult = (result: ClaudeDecodedToolResult): ClaudeDecodedToolResult => {

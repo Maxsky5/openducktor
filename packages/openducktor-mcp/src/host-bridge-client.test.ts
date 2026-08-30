@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { jsonValueSchema, type JsonValue, ODT_TOOL_SCHEMAS } from "@openducktor/contracts";
+import { ODT_TOOL_SCHEMAS } from "@openducktor/contracts";
 import { z } from "zod";
 import { OdtHostBridgeClient } from "./host-bridge-client";
-import { OdtToolError } from "./tool-results";
+import { mcpToolPayloadSchema, type McpToolPayload, OdtToolError } from "./tool-results";
 
-const jsonResponse = (payload: JsonValue, init: ResponseInit = {}): Response =>
+const jsonResponse = (payload: McpToolPayload, init: ResponseInit = {}): Response =>
   new Response(JSON.stringify(payload), {
     headers: { "Content-Type": "application/json" },
     status: 200,
@@ -316,12 +316,12 @@ describe("OdtHostBridgeClient", () => {
   });
 
   test("getWorkspaces forwards a workspace-free request and validates the response", async () => {
-    const requests: Array<{ url: string; body: JsonValue }> = [];
+    const requests: Array<{ url: string; body: McpToolPayload }> = [];
     const fetchImpl: typeof fetch = async (input, init) => {
       const url = String(input);
       requests.push({
         url,
-        body: jsonValueSchema.parse(JSON.parse(String(init?.body ?? "{}"))),
+        body: mcpToolPayloadSchema.parse(JSON.parse(String(init?.body ?? "{}"))),
       });
       return jsonResponse({
         workspaces: [
@@ -365,12 +365,12 @@ describe("OdtHostBridgeClient", () => {
   });
 
   test("call forwards workspace-scoped payloads and validates the response", async () => {
-    const requests: Array<{ url: string; body: JsonValue }> = [];
+    const requests: Array<{ url: string; body: McpToolPayload }> = [];
     const fetchImpl: typeof fetch = async (input, init) => {
       const url = String(input);
       requests.push({
         url,
-        body: jsonValueSchema.parse(JSON.parse(String(init?.body ?? "{}"))),
+        body: mcpToolPayloadSchema.parse(JSON.parse(String(init?.body ?? "{}"))),
       });
       return jsonResponse(summaryPayload);
     };
@@ -392,12 +392,12 @@ describe("OdtHostBridgeClient", () => {
 
   test("call validates the private task asset bridge payload before MCP formatting", async () => {
     const assetId = "28cb7c3d-5ec4-47e8-bffe-090223eae3b7";
-    const requests: Array<{ url: string; body: JsonValue }> = [];
+    const requests: Array<{ url: string; body: McpToolPayload }> = [];
     const fetchImpl: typeof fetch = async (input, init) => {
       const url = String(input);
       requests.push({
         url,
-        body: jsonValueSchema.parse(JSON.parse(String(init?.body ?? "{}"))),
+        body: mcpToolPayloadSchema.parse(JSON.parse(String(init?.body ?? "{}"))),
       });
       return jsonResponse({
         assets: [
@@ -440,10 +440,10 @@ describe("OdtHostBridgeClient", () => {
   });
 
   test("odt_create_task and odt_search_tasks keep the flat public tool payload shape", async () => {
-    const requests: Array<{ url: string; body: JsonValue }> = [];
+    const requests: Array<{ url: string; body: McpToolPayload }> = [];
     const fetchImpl: typeof fetch = async (input, init) => {
       const url = String(input);
-      const body = jsonValueSchema.parse(JSON.parse(String(init?.body ?? "{}")));
+      const body = mcpToolPayloadSchema.parse(JSON.parse(String(init?.body ?? "{}")));
       requests.push({ url, body });
 
       if (url.endsWith("/invoke/odt_create_task")) {

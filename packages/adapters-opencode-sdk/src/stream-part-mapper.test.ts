@@ -1,6 +1,10 @@
-import { type JsonObject, type JsonValue, jsonValueSchema } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import { z } from "zod";
+import {
+  type OpenCodeProtocolObject,
+  type OpenCodeProtocolValue,
+  opencodeProtocolValueSchema,
+} from "./guards";
 import type { ParsedOpencodePart } from "./opencode-ingress";
 import { mapOpenCodeBackgroundTaskResultPart } from "./opencode-background-task-result";
 import { mapPartToAgentStreamPart } from "./stream-part-mapper";
@@ -8,11 +12,11 @@ import { mapPartToAgentStreamPart } from "./stream-part-mapper";
 type ToolPart = Extract<ParsedOpencodePart, { type: "tool" }>;
 type ToolState = ToolPart["state"];
 
-const serializeToolResult = (value: JsonValue | undefined): string => {
+const serializeToolResult = (value: OpenCodeProtocolValue | undefined): string => {
   if (value === undefined) {
     return "";
   }
-  const parsed = jsonValueSchema.parse(value);
+  const parsed = opencodeProtocolValueSchema.parse(value);
   const text = z.string().safeParse(parsed);
   return text.success ? text.data : JSON.stringify(parsed);
 };
@@ -32,11 +36,11 @@ const createToolPart = ({
   id: string;
   messageID?: string;
   status?: ToolState["status"];
-  input?: JsonObject;
-  output?: JsonValue;
+  input?: OpenCodeProtocolObject;
+  output?: OpenCodeProtocolValue;
   error?: string;
   title?: string;
-  metadata?: JsonObject;
+  metadata?: OpenCodeProtocolObject;
   time?: { start?: number; end?: number };
   tool?: string;
 }): ToolPart => {

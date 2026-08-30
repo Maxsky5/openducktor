@@ -1,4 +1,4 @@
-import { jsonValueSchema } from "@openducktor/contracts";
+import { z } from "zod";
 import {
   codexRuntimeStreamFault,
   parseCodexRuntimeStreamEvent,
@@ -36,9 +36,9 @@ export class CodexRuntimeEventSubscriptions {
         if (event.runtimeId !== runtimeId) {
           return;
         }
-        const message = jsonValueSchema.safeParse(event.message);
+        const message = z.json().safeParse(event.message);
         try {
-          const parsed = parseCodexRuntimeStreamEvent(jsonValueSchema.parse(event));
+          const parsed = parseCodexRuntimeStreamEvent(z.json().parse(event));
           if (parsed.kind !== "ignored_notification") {
             onEvent(parsed);
           }

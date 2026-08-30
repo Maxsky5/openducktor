@@ -18,7 +18,7 @@ import type {
   SyncEventSessionCreated,
 } from "@opencode-ai/sdk/v2/client";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
-import type { JsonObject } from "@openducktor/contracts";
+import type { OpenCodeProtocolObject } from "./guards";
 import type { AgentEvent } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { subscribeSessionToRuntimeEvents } from "./session-registry";
@@ -41,7 +41,7 @@ type RunEventStreamOptions = {
 
 type ParentAlias = "parentId" | "parent_id";
 type ParentAliasSessionInfo = Session & Partial<Record<ParentAlias, string>>;
-type ControlEventProperties = JsonObject;
+type ControlEventProperties = OpenCodeProtocolObject;
 
 export type MalformedControlEvent = MalformedOpencodeControlEventFixture;
 
@@ -181,7 +181,7 @@ export const permissionAskedEvent = (input: {
   sessionId?: string;
   permission?: string;
   patterns?: string[];
-  metadata?: JsonObject;
+  metadata?: OpenCodeProtocolObject;
   always?: string[];
   properties?: ControlEventProperties;
 }): EventPermissionAsked =>
@@ -205,7 +205,7 @@ export const permissionV2AskedEvent = (input: {
   action?: string;
   resources?: string[];
   save?: string[];
-  metadata?: JsonObject;
+  metadata?: OpenCodeProtocolObject;
   properties?: ControlEventProperties;
 }): EventPermissionV2Asked => {
   const properties: EventPermissionV2Asked["properties"] = {

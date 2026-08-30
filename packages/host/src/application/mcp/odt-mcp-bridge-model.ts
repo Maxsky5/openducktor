@@ -1,5 +1,4 @@
 import {
-  type JsonValue,
   type OdtPersistedDocument,
   type OdtToolName,
   type PublicTask,
@@ -11,7 +10,7 @@ import {
   type TaskSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { z } from "zod";
+import type { JSONType, z } from "zod";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 
 type ResponseParser<A> = Pick<z.ZodType<A>, "parse">;
@@ -258,7 +257,7 @@ export const createdSubtaskIds = (
 export const parseToolInput = <Output>(
   toolName: OdtToolName,
   schema: z.ZodType<Output>,
-  input: JsonValue,
+  input: JSONType,
 ) =>
   Effect.try({
     try: () => schema.parse(input),

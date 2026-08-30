@@ -2,7 +2,7 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeApprovalReplyOutcome,
 } from "@openducktor/contracts";
-import type { JsonObject } from "@openducktor/contracts";
+import type { OpenCodeProtocolObject } from "./guards";
 import { type AgentPendingApprovalRequest, classifyAgentApprovalMutation } from "@openducktor/core";
 import { z } from "zod";
 
@@ -12,7 +12,10 @@ const OPENCODE_APPROVAL_OUTCOMES = ["approve_once", "approve_session", "reject"]
 const OPENCODE_ODT_WORKFLOW_TOOL_ALIASES =
   OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical;
 
-const readOptionalString = (record: JsonObject | undefined, key: string): string | undefined => {
+const readOptionalString = (
+  record: OpenCodeProtocolObject | undefined,
+  key: string,
+): string | undefined => {
   const value = record?.[key];
   const parsed = z.string().safeParse(value);
   return parsed.success && parsed.data.trim().length > 0 ? parsed.data : undefined;
@@ -23,7 +26,7 @@ export type ParsedOpenCodePermissionRequest = {
   permission: string;
   patterns: string[];
   save?: string[];
-  metadata?: JsonObject;
+  metadata?: OpenCodeProtocolObject;
 };
 
 export const normalizeOpenCodeApprovalRequest = (
@@ -47,7 +50,7 @@ export const toAgentApprovalRequestFromOpenCodePermission = ({
   const summary = `OpenCode requested approval for ${permission}.`;
   const workingDirectory = readOptionalString(metadata, "workingDirectory");
 
-  const opencodeMetadata: JsonObject = { permission, patterns };
+  const opencodeMetadata: OpenCodeProtocolObject = { permission, patterns };
   if (save && save.length > 0) {
     opencodeMetadata.save = save;
   }

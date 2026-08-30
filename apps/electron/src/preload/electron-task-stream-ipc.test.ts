@@ -1,6 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { TaskEventStreamFrame } from "@openducktor/contracts";
-import type { IpcRendererEvent } from "electron";
 import {
   ELECTRON_TASK_STREAM_ACKNOWLEDGE_CHANNEL,
   ELECTRON_TASK_STREAM_FRAME_CHANNEL,
@@ -21,8 +20,7 @@ const frame: TaskEventStreamFrame = {
 };
 const subscriptionId = "22222222-2222-4222-8222-222222222222";
 const secondSubscriptionId = "33333333-3333-4333-8333-333333333333";
-// SAFETY: Electron supplies this unused event.
-const ipcRendererEvent = {} as IpcRendererEvent;
+const ipcRendererEvent = {};
 
 describe("Electron preload task stream API", () => {
   test("registers the frame listener before subscribe and delivers an early snapshot exactly once", async () => {

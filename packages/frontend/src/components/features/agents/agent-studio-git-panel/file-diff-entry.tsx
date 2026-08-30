@@ -1,4 +1,4 @@
-import { hasOwnKey, type FileDiff } from "@openducktor/contracts";
+import type { FileDiff } from "@openducktor/contracts";
 import type { DiffLineAnnotation, SelectedLineRange } from "@pierre/diffs";
 import {
   AlertTriangle,
@@ -269,12 +269,8 @@ function FileDiffEntry({
 }: FileDiffEntryProps): ReactElement {
   const { isConflicted, reserveConflictSlot, isExpanded } = viewState;
   const { canReset, isResetDisabled } = resetState;
-  const StatusIcon = hasOwnKey(FILE_STATUS_ICON, diff.type)
-    ? FILE_STATUS_ICON[diff.type]
-    : FileText;
-  const statusColor = hasOwnKey(FILE_STATUS_COLOR, diff.type)
-    ? FILE_STATUS_COLOR[diff.type]
-    : "text-muted-foreground";
+  const StatusIcon = FILE_STATUS_ICON.get(diff.type) ?? FileText;
+  const statusColor = FILE_STATUS_COLOR.get(diff.type) ?? "text-muted-foreground";
   const addDraft = useInlineCommentDraftStore((store) => store.addDraft);
   const updateDraft = useInlineCommentDraftStore((store) => store.updateDraft);
   const removeDraft = useInlineCommentDraftStore((store) => store.removeDraft);

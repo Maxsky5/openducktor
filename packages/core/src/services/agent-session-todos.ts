@@ -2,6 +2,7 @@ import {
   agentSessionTodoPrioritySchema,
   agentSessionTodoStatusSchema,
 } from "@openducktor/contracts";
+import type { AgentSessionTodoPayloadRecord } from "@openducktor/contracts";
 import type { AgentSessionTodoItem } from "../types/agent-orchestrator";
 
 const isAgentSessionTodoStatus = (value: string): value is AgentSessionTodoItem["status"] =>
@@ -10,13 +11,7 @@ const isAgentSessionTodoStatus = (value: string): value is AgentSessionTodoItem[
 const isAgentSessionTodoPriority = (value: string): value is AgentSessionTodoItem["priority"] =>
   agentSessionTodoPrioritySchema.safeParse(value).success;
 
-export type NormalizeAgentSessionTodoInput = {
-  id: string;
-  content: string;
-  status?: string | undefined;
-  priority?: string | undefined;
-  completed?: boolean | undefined;
-};
+export type NormalizeAgentSessionTodoInput = AgentSessionTodoPayloadRecord;
 
 export const normalizeAgentSessionTodoStatus = (
   value: string | undefined,

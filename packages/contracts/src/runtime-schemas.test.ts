@@ -1,8 +1,8 @@
 // @ts-expect-error
 import { describe, expect, test } from "bun:test";
+import { z, type JSONType } from "zod";
 import opencodeRuntimeDescriptorFixture from "../../../docs/contracts/opencode-runtime-descriptor.fixture.json";
 import runtimeDescriptorInvalidCasesFixture from "../../../docs/contracts/runtime-descriptor-invalid-cases.fixture.json";
-import { isJsonObject, type JsonObject, type JsonValue } from "./json-types";
 import {
   agentSessionApprovalRequestSchema,
   agentSessionRecordSchema,
@@ -81,18 +81,28 @@ type RuntimeDescriptorInvalidCase = {
   name: string;
   patch: Array<{
     path: string[];
-    value: JsonValue;
+    value: JSONType;
   }>;
 };
 
+type RuntimeDescriptorFixtureObject = Record<string, JSONType>;
+const runtimeDescriptorFixtureObjectSchema = z.record(z.string(), z.json());
+const isRuntimeDescriptorFixtureObject = (
+  value: JSONType | undefined,
+): value is RuntimeDescriptorFixtureObject =>
+  runtimeDescriptorFixtureObjectSchema.safeParse(value).success;
+
 const cloneJson = <T>(value: T): T => structuredClone(value);
 
-const applyJsonPatch = (target: JsonObject, patch: RuntimeDescriptorInvalidCase["patch"]): void => {
+const applyJsonPatch = (
+  target: RuntimeDescriptorFixtureObject,
+  patch: RuntimeDescriptorInvalidCase["patch"],
+): void => {
   for (const operation of patch) {
-    let current: JsonObject = target;
+    let current: RuntimeDescriptorFixtureObject = target;
     for (const segment of operation.path.slice(0, -1)) {
       const next = current[segment];
-      if (!isJsonObject(next)) {
+      if (!isRuntimeDescriptorFixtureObject(next)) {
         throw new Error(`Invalid fixture path segment: ${operation.path.join(".")}`);
       }
       current = next;
@@ -226,7 +236,9 @@ describe("runtime schemas", () => {
   test.each(invalidRuntimeDescriptorCases)(
     "shared invalid runtime descriptor fixture is rejected: $name",
     (fixtureCase) => {
-      const descriptor: JsonObject = cloneJson(opencodeRuntimeDescriptorFixture);
+      const descriptor: RuntimeDescriptorFixtureObject = cloneJson(
+        opencodeRuntimeDescriptorFixture,
+      );
       applyJsonPatch(descriptor, fixtureCase.patch);
 
       const result = runtimeDescriptorSchema.safeParse(descriptor);

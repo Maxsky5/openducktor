@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import { link, lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { type JsonValue, jsonValueSchema, taskAssetIdSchema } from "@openducktor/contracts";
-import { z } from "zod";
+import { taskAssetIdSchema } from "@openducktor/contracts";
+import { z, type JSONType } from "zod";
 import { HostValidationError } from "../../effect/host-errors";
 import { processIsAlive } from "../../infrastructure/process/process-tree";
 
@@ -19,7 +19,7 @@ const taskAssetFileOwnerSchema = z
 
 export type TaskAssetFileOwner = z.infer<typeof taskAssetFileOwnerSchema>;
 type TaskAssetFileOwnerInput =
-  | JsonValue
+  | JSONType
   | {
       version: number;
       instanceId: string | undefined;
@@ -166,9 +166,7 @@ export const createTaskAssetFileOwnership = (
       if (!hasErrorCode(cause, "EEXIST")) {
         throw cause;
       }
-      const existing = validateOwner(
-        jsonValueSchema.parse(JSON.parse(await readFile(marker, "utf8"))),
-      );
+      const existing = validateOwner(z.json().parse(JSON.parse(await readFile(marker, "utf8"))));
       if (
         existing.instanceId !== dependencies.owner.instanceId ||
         existing.processId !== dependencies.owner.processId ||
@@ -203,9 +201,7 @@ export const createTaskAssetFileOwnership = (
         throw new Error(`Unexpected task asset owner entry '${entry.name}'.`);
       }
       const owner = validateOwner(
-        jsonValueSchema.parse(
-          JSON.parse(await readFile(path.join(ownersRoot, entry.name), "utf8")),
-        ),
+        z.json().parse(JSON.parse(await readFile(path.join(ownersRoot, entry.name), "utf8"))),
       );
       if (owner.instanceId !== instanceId) {
         throw new Error("Task asset owner record ID does not match its filename.");

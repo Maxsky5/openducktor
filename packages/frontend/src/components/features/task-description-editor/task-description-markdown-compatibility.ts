@@ -4,7 +4,6 @@ import remarkParse from "remark-parse";
 import type { Root, RootContent } from "mdast";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
-import { hasOwnKey } from "@openducktor/contracts";
 import { normalizeTaskListBlockMath } from "@/components/ui/markdown-task-list-math";
 import { splitTaskDescriptionFrontMatter } from "./task-description-front-matter";
 
@@ -36,24 +35,23 @@ const SUPPORTED_MDAST_NODE_TYPES = new Set([
   "break",
 ]);
 
-const UNSUPPORTED_NODE_REASONS = {
-  html: "Raw HTML is available only in Markdown mode because Visual mode would remove it.",
-  definition:
+const UNSUPPORTED_NODE_REASONS = new Map<string, string>([
+  ["html", "Raw HTML is available only in Markdown mode because Visual mode would remove it."],
+  [
+    "definition",
     "Reference-style links and images are available only in Markdown mode. Change them to inline links to use Visual mode.",
-  linkReference:
+  ],
+  [
+    "linkReference",
     "Reference-style links are available only in Markdown mode. Change them to inline links to use Visual mode.",
-  imageReference:
+  ],
+  [
+    "imageReference",
     "Reference-style images are available only in Markdown mode. Change them to inline images to use Visual mode.",
-} satisfies Record<string, string>;
+  ],
+]);
 
-const sourceForNode = (
-  body: string,
-  node: {
-    position?:
-      | { start: { offset?: number | undefined }; end: { offset?: number | undefined } }
-      | undefined;
-  },
-): string => {
+const sourceForNode = (body: string, node: Root | RootContent): string => {
   const start = node.position?.start.offset;
   const end = node.position?.end.offset;
   return start === undefined || end === undefined ? "" : body.slice(start, end);
@@ -138,9 +136,7 @@ const findUnsupportedSyntax = (body: string): string | undefined => {
       return;
     }
 
-    reason = hasOwnKey(UNSUPPORTED_NODE_REASONS, node.type)
-      ? UNSUPPORTED_NODE_REASONS[node.type]
-      : undefined;
+    reason = UNSUPPORTED_NODE_REASONS.get(node.type);
     if (reason !== undefined) {
       return;
     }

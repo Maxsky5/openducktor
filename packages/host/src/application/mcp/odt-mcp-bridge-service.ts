@@ -19,9 +19,9 @@ import {
   type TaskDocumentsRead,
   type TaskSummary,
   type WorkspaceScopedOdtToolName,
-  type JsonValue,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import type { JSONType } from "zod";
 import {
   HostOperationError,
   type HostOperationErrorAggregate,
@@ -84,11 +84,11 @@ export type WorkspaceScopedOdtToolResult =
   | TaskSummary;
 
 export type OdtMcpBridgeService = {
-  ready(input?: JsonValue): Effect.Effect<OdtHostBridgeReady, OdtMcpBridgeError>;
-  getWorkspaces(input?: JsonValue): Effect.Effect<GetWorkspacesResult, OdtMcpBridgeError>;
+  ready(input?: JSONType): Effect.Effect<OdtHostBridgeReady, OdtMcpBridgeError>;
+  getWorkspaces(input?: JSONType): Effect.Effect<GetWorkspacesResult, OdtMcpBridgeError>;
   invoke(
     toolName: WorkspaceScopedOdtToolName,
-    input: JsonValue,
+    input: JSONType,
   ): Effect.Effect<WorkspaceScopedOdtToolResult, OdtMcpBridgeError>;
 };
 export type CreateOdtMcpBridgeServiceInput = {

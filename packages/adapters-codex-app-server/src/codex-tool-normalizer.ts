@@ -17,6 +17,7 @@ import {
   searchInputFromCommand,
 } from "./codex-app-server-shared";
 import type { CodexAppServerJsonValue } from "@openducktor/contracts";
+import type { CodexToolTimingFields } from "./codex-tool-timing";
 
 /**
  * Canonical boundary for raw Codex tool invocations.
@@ -72,7 +73,7 @@ export const toCodexToolQuestions = (
     return codexQuestion;
   });
 
-export type NormalizedCodexToolInvocation = {
+export type NormalizedCodexToolInvocation = CodexToolTimingFields & {
   messageId: string;
   partId: string;
   callId: string;
@@ -87,8 +88,6 @@ export type NormalizedCodexToolInvocation = {
   error?: string | null;
   fileDiffs?: FileDiff[];
   metadata?: CodexToolInvocationMetadata;
-  startedAtMs?: number | undefined;
-  endedAtMs?: number | undefined;
 };
 
 export const statusFromCodexStatus = (status: string | undefined): AgentToolStatus => {

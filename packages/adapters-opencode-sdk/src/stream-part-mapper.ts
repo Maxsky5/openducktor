@@ -1,26 +1,26 @@
-import {
-  type FileContent,
-  type FileDiff,
-  isJsonObject,
-  type JsonObject,
-  type JsonValue,
-  jsonObjectSchema,
-  jsonValueSchema,
-  odtToolErrorPayloadSchema,
-} from "@openducktor/contracts";
+import { type FileContent, type FileDiff, odtToolErrorPayloadSchema } from "@openducktor/contracts";
 import {
   type AgentStreamPart,
   countRenderableFileDiffLines,
   selectRenderableFileDiff,
 } from "@openducktor/core";
-import { asJsonObject, readBooleanProp, readNumberProp, readStringProp } from "./guards";
+import {
+  asJsonObject,
+  type OpenCodeProtocolObject,
+  type OpenCodeProtocolValue,
+  opencodeProtocolObjectSchema,
+  opencodeProtocolValueSchema,
+  readBooleanProp,
+  readNumberProp,
+  readStringProp,
+} from "./guards";
 import { toTokenTotal } from "./message-normalizers";
 import { deriveToolPreview, deriveToolType } from "./tool-preview";
 import { resolveOpencodeToolStrategy } from "./tool-strategy-catalog";
 import type { ParsedOpencodePart } from "./opencode-ingress";
 import { z } from "zod";
 
-const toDisplayText = (value: JsonValue | undefined): string | undefined => {
+const toDisplayText = (value: OpenCodeProtocolValue | undefined): string | undefined => {
   const stringValue = z.string().safeParse(value);
   if (stringValue.success) {
     const trimmed = stringValue.data.trim();
@@ -43,7 +43,9 @@ const toDisplayText = (value: JsonValue | undefined): string | undefined => {
   return JSON.stringify(value, null, 2);
 };
 
-const parseStructuredTextObject = (value: string | undefined): JsonObject | undefined => {
+const parseStructuredTextObject = (
+  value: string | undefined,
+): OpenCodeProtocolObject | undefined => {
   if (value === undefined) {
     return undefined;
   }
@@ -54,14 +56,16 @@ const parseStructuredTextObject = (value: string | undefined): JsonObject | unde
   }
 
   try {
-    const parsed = jsonValueSchema.safeParse(JSON.parse(trimmed));
-    return parsed.success && isJsonObject(parsed.data) ? parsed.data : undefined;
+    const parsed = opencodeProtocolValueSchema.safeParse(JSON.parse(trimmed));
+    return parsed.success ? asJsonObject(parsed.data) : undefined;
   } catch {
     return undefined;
   }
 };
 
-const outputTextFromMcpPayload = (value: JsonObject | undefined): string | undefined => {
+const outputTextFromMcpPayload = (
+  value: OpenCodeProtocolObject | undefined,
+): string | undefined => {
   const content = value?.content;
   if (!Array.isArray(content)) {
     return undefined;
@@ -87,7 +91,7 @@ const readToolOutputText = (value: string | undefined): string | undefined => to
 
 const MCP_TRANSPORT_ERROR_PREFIX = /^MCP error\s+-?\d+:/i;
 
-const readErrorValueMessage = (value: JsonValue | undefined): string | undefined => {
+const readErrorValueMessage = (value: OpenCodeProtocolValue | undefined): string | undefined => {
   const stringValue = z.string().safeParse(value);
   if (stringValue.success) {
     const trimmed = stringValue.data.trim();
@@ -102,9 +106,11 @@ const readErrorValueMessage = (value: JsonValue | undefined): string | undefined
   return readTrimmedString(record, ["message"]);
 };
 
-const readEnvelopeErrorMessage = (value: string | JsonObject | undefined): string | undefined => {
+const readEnvelopeErrorMessage = (
+  value: string | OpenCodeProtocolObject | undefined,
+): string | undefined => {
   const stringValue = z.string().safeParse(value);
-  const objectValue = jsonObjectSchema.safeParse(value);
+  const objectValue = opencodeProtocolObjectSchema.safeParse(value);
   const record = stringValue.success
     ? parseStructuredTextObject(stringValue.data)
     : objectValue.success
@@ -136,7 +142,7 @@ const readMcpTransportError = (value: string | undefined): string | undefined =>
   return MCP_TRANSPORT_ERROR_PREFIX.test(trimmed) ? trimmed : undefined;
 };
 
-const readMcpContentTextError = (value: JsonObject | undefined): string | undefined => {
+const readMcpContentTextError = (value: OpenCodeProtocolObject | undefined): string | undefined => {
   const text = outputTextFromMcpPayload(value);
   if (!text) {
     return undefined;
@@ -145,9 +151,11 @@ const readMcpContentTextError = (value: JsonObject | undefined): string | undefi
   return readEnvelopeErrorMessage(text) ?? readMcpTransportError(text);
 };
 
-const readStructuredToolError = (value: string | JsonObject | undefined): string | undefined => {
+const readStructuredToolError = (
+  value: string | OpenCodeProtocolObject | undefined,
+): string | undefined => {
   const stringValue = z.string().safeParse(value);
-  const objectValue = jsonObjectSchema.safeParse(value);
+  const objectValue = opencodeProtocolObjectSchema.safeParse(value);
   const record = stringValue.success
     ? parseStructuredTextObject(stringValue.data)
     : objectValue.success
@@ -163,11 +171,10 @@ const readStructuredToolError = (value: string | JsonObject | undefined): string
   const directError = record.error;
   const directErrorMessage = readErrorValueMessage(directError);
   const structuredContentValue = record.structuredContent;
-  const parsedStructuredContent = jsonValueSchema.safeParse(structuredContentValue);
-  const structuredContent =
-    parsedStructuredContent.success && isJsonObject(parsedStructuredContent.data)
-      ? parsedStructuredContent.data
-      : undefined;
+  const parsedStructuredContent = opencodeProtocolValueSchema.safeParse(structuredContentValue);
+  const structuredContent = parsedStructuredContent.success
+    ? asJsonObject(parsedStructuredContent.data)
+    : undefined;
   const structuredError = structuredContent?.error;
   const structuredErrorMessage = readErrorValueMessage(structuredError);
   const structuredOk = structuredContent?.ok;
@@ -196,11 +203,13 @@ const readStructuredToolError = (value: string | JsonObject | undefined): string
   return undefined;
 };
 
-const normalizeMetadata = (value: JsonObject | undefined): JsonObject | undefined => {
+const normalizeMetadata = (
+  value: OpenCodeProtocolObject | undefined,
+): OpenCodeProtocolObject | undefined => {
   return value && Object.keys(value).length > 0 ? value : undefined;
 };
 
-const normalizeFileDiffType = (value: JsonValue | undefined): FileDiff["type"] => {
+const normalizeFileDiffType = (value: OpenCodeProtocolValue | undefined): FileDiff["type"] => {
   const parsed = z.string().safeParse(value);
   if (!parsed.success) {
     return "modified";
@@ -215,7 +224,7 @@ const normalizeFileDiffType = (value: JsonValue | undefined): FileDiff["type"] =
   return "modified";
 };
 
-const readFileDiffPatch = (value: JsonObject): string | null => {
+const readFileDiffPatch = (value: OpenCodeProtocolObject): string | null => {
   const patch = readStringProp(value, ["patch"]);
   if (patch !== undefined) {
     return patch;
@@ -258,7 +267,9 @@ const normalizeToolMetadataFileDiff = (input: {
   };
 };
 
-const fileDiffFromToolFileMetadata = (value: JsonValue | undefined): FileDiff | null => {
+const fileDiffFromToolFileMetadata = (
+  value: OpenCodeProtocolValue | undefined,
+): FileDiff | null => {
   const record = asJsonObject(value);
   if (!record) {
     return null;
@@ -275,8 +286,8 @@ const fileDiffFromToolFileMetadata = (value: JsonValue | undefined): FileDiff | 
 };
 
 const fileDiffFromToolFileDiffMetadata = (
-  value: JsonValue | undefined,
-  input: JsonObject,
+  value: OpenCodeProtocolValue | undefined,
+  input: OpenCodeProtocolObject,
 ): FileDiff | null => {
   const record = asJsonObject(value);
   if (!record) {
@@ -296,7 +307,10 @@ const fileDiffFromToolFileDiffMetadata = (
   });
 };
 
-const fileDiffFromWriteMetadata = (metadata: JsonObject, input: JsonObject): FileDiff | null => {
+const fileDiffFromWriteMetadata = (
+  metadata: OpenCodeProtocolObject,
+  input: OpenCodeProtocolObject,
+): FileDiff | null => {
   const inputRecord = asJsonObject(input);
   const exists = readBooleanProp(metadata, ["exists"]);
   const file =
@@ -329,8 +343,8 @@ const fileDiffFromWriteMetadata = (metadata: JsonObject, input: JsonObject): Fil
 };
 
 const fileContentFromWriteMetadata = (
-  metadata: JsonObject,
-  input: JsonObject,
+  metadata: OpenCodeProtocolObject,
+  input: OpenCodeProtocolObject,
 ): FileContent | null => {
   const inputRecord = asJsonObject(input);
   const exists = readBooleanProp(metadata, ["exists"]);
@@ -360,7 +374,7 @@ type FileEditPayloadFields = {
 type ToolPart = Extract<ParsedOpencodePart, { type: "tool" }>;
 
 const readToolMetadataFileEditPayload = (
-  metadata: JsonObject | undefined,
+  metadata: OpenCodeProtocolObject | undefined,
   toolState: ToolPart["state"],
   tool: string,
 ): FileEditPayloadFields => {
@@ -425,7 +439,10 @@ const extractPartTiming = (toolState: ToolPart["state"]): PartTiming => {
 type ToolStreamPart = Extract<AgentStreamPart, { kind: "tool" }>;
 type SubagentStreamPart = Extract<AgentStreamPart, { kind: "subagent" }>;
 
-const readTrimmedString = (source: JsonObject | undefined, keys: string[]): string | undefined => {
+const readTrimmedString = (
+  source: OpenCodeProtocolObject | undefined,
+  keys: string[],
+): string | undefined => {
   const value = readStringProp(source, keys);
   if (!value) {
     return undefined;
@@ -435,7 +452,7 @@ const readTrimmedString = (source: JsonObject | undefined, keys: string[]): stri
 };
 
 const normalizeSubagentExecutionMode = (
-  value: JsonValue | undefined,
+  value: OpenCodeProtocolValue | undefined,
 ): SubagentStreamPart["executionMode"] => {
   const stringValue = z.string().safeParse(value);
   if (stringValue.success) {
@@ -454,7 +471,7 @@ const normalizeSubagentExecutionMode = (
 };
 
 const resolveSubagentExecutionMode = (
-  ...sources: (JsonValue | undefined)[]
+  ...sources: (OpenCodeProtocolValue | undefined)[]
 ): SubagentStreamPart["executionMode"] => {
   for (const source of sources) {
     const direct = normalizeSubagentExecutionMode(source);
@@ -485,10 +502,12 @@ const resolveSubagentExecutionMode = (
   return undefined;
 };
 
-const resolveBackgroundJobId = (metadata: JsonObject | undefined): string | undefined =>
+const resolveBackgroundJobId = (metadata: OpenCodeProtocolObject | undefined): string | undefined =>
   readTrimmedString(metadata, ["jobId", "jobID", "job_id"]);
 
-const isRunningBackgroundSubagentResult = (metadata: JsonObject | undefined): boolean => {
+const isRunningBackgroundSubagentResult = (
+  metadata: OpenCodeProtocolObject | undefined,
+): boolean => {
   // OpenCode keeps the parent tool part carrying background job metadata; the synthetic task result is the terminal child update.
   return (
     resolveSubagentExecutionMode(metadata) === "background" &&
@@ -502,7 +521,7 @@ const omitEndedTiming = (
   timing.startedAtMs !== undefined ? { startedAtMs: timing.startedAtMs } : {};
 
 const resolveSubagentExternalSessionId = (
-  ...sources: Array<JsonObject | undefined>
+  ...sources: Array<OpenCodeProtocolObject | undefined>
 ): string | undefined => {
   for (const source of sources) {
     const externalSessionId = readTrimmedString(source, [
@@ -550,7 +569,7 @@ const buildSubagentStreamPart = (input: {
   error?: string;
   externalSessionId?: string;
   executionMode?: SubagentStreamPart["executionMode"];
-  metadata?: JsonObject;
+  metadata?: OpenCodeProtocolObject;
   startedAtMs?: number;
   endedAtMs?: number;
 }): SubagentStreamPart => {
@@ -606,7 +625,9 @@ const buildSubagentStreamPart = (input: {
   return result;
 };
 
-const resolveSubagentAgent = (...sources: Array<JsonObject | undefined>): string | undefined => {
+const resolveSubagentAgent = (
+  ...sources: Array<OpenCodeProtocolObject | undefined>
+): string | undefined => {
   for (const source of sources) {
     const agent = readTrimmedString(source, ["agent", "name", "subagent_type", "subagentType"]);
     if (agent) {
@@ -617,7 +638,9 @@ const resolveSubagentAgent = (...sources: Array<JsonObject | undefined>): string
   return undefined;
 };
 
-const resolveSubagentPrompt = (...sources: Array<JsonObject | undefined>): string | undefined => {
+const resolveSubagentPrompt = (
+  ...sources: Array<OpenCodeProtocolObject | undefined>
+): string | undefined => {
   for (const source of sources) {
     const prompt = readTrimmedString(source, ["prompt", "message"]);
     if (prompt) {
@@ -629,7 +652,7 @@ const resolveSubagentPrompt = (...sources: Array<JsonObject | undefined>): strin
 };
 
 const resolveSubagentDescription = (
-  ...sources: Array<JsonObject | undefined>
+  ...sources: Array<OpenCodeProtocolObject | undefined>
 ): string | undefined => {
   for (const source of sources) {
     const description = readTrimmedString(source, ["description", "result", "message"]);
@@ -646,7 +669,7 @@ const buildSubagentFromToolPart = (
   toolState: ToolPart["state"],
   normalizedStatus: SubagentStreamPart["status"],
   timing: ReturnType<typeof extractPartTiming>,
-  metadata: JsonObject | undefined,
+  metadata: OpenCodeProtocolObject | undefined,
   structuredError: string | undefined,
 ): SubagentStreamPart => {
   const rawInput = toolState.input;
@@ -722,7 +745,7 @@ const buildToolStreamPart = (
   toolState: ToolPart["state"],
   status: ToolStreamPart["status"],
   timing: ReturnType<typeof extractPartTiming>,
-  metadata: JsonObject | undefined,
+  metadata: OpenCodeProtocolObject | undefined,
 ): ToolStreamPart => {
   const toolType = deriveToolType(part.tool);
   const input = toolState.input;
@@ -867,7 +890,7 @@ export const mapPartToAgentStreamPart = (part: ParsedOpencodePart): AgentStreamP
       return stepPart;
     }
     case "subtask": {
-      const subtaskMetadataSource: JsonObject = {};
+      const subtaskMetadataSource: OpenCodeProtocolObject = {};
       if (part.model) {
         subtaskMetadataSource.model = part.model;
       }

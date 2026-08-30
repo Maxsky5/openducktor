@@ -1,5 +1,4 @@
 import { Effect } from "effect";
-import { jsonValueSchema } from "@openducktor/contracts";
 import { z } from "zod";
 import { type BrowserRuntimeConfig, configureBrowserRuntimeConfig } from "./browser-config";
 import {
@@ -41,9 +40,7 @@ export const loadBrowserRuntimeConfigEffect = (
     }
 
     const config = yield* Effect.tryPromise({
-      try: async () => {
-        return jsonValueSchema.parse(await response.json());
-      },
+      try: async () => z.json().parse(await response.json()),
       catch: (cause) =>
         new WebValidationError({
           message: `OpenDucktor web runtime config from ${RUNTIME_CONFIG_PATH} is not valid JSON.`,

@@ -1,12 +1,6 @@
-import {
-  isJsonObject,
-  ODT_WORKFLOW_AGENT_TOOL_NAMES,
-  type JsonObject,
-  type JsonValue,
-  type RuntimeRoute,
-} from "@openducktor/contracts";
+import { ODT_WORKFLOW_AGENT_TOOL_NAMES, type RuntimeRoute } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { z } from "zod";
+import { z, type JSONType } from "zod";
 import {
   errorMessage,
   HostOperationError,
@@ -27,6 +21,10 @@ const MAX_ABORT_ERROR_BODY_BYTES = 64 * 1024;
 const CODEX_ODT_TOOL_IDS = [...ODT_WORKFLOW_AGENT_TOOL_NAMES];
 const TIMEOUT_RESPONSE_STATUSES = new Set([408, 504]);
 const toolIdsSchema = z.array(z.unknown());
+type RuntimeProbeObject = Record<string, JSONType>;
+const runtimeProbeObjectSchema = z.record(z.string(), z.json());
+const isRuntimeProbeObject = (value: JSONType | undefined): value is RuntimeProbeObject =>
+  runtimeProbeObjectSchema.safeParse(value).success;
 
 type RuntimeSessionRouteInput = {
   runtimeKind: string;
@@ -92,14 +90,15 @@ const mcpEndpoint = (endpoint: URL, routePath: string, workingDirectory: string)
   return url;
 };
 
-const isLiveSessionStatus = (value: JsonValue | undefined): boolean => {
-  if (!isJsonObject(value)) return false;
+const isLiveSessionStatus = (value: JSONType | undefined): boolean => {
+  if (!isRuntimeProbeObject(value)) return false;
   const status = value.type;
   return status === "busy" || status === "retry";
 };
 
-const requireObjectPayload = (value: JsonValue | null, context: string) => {
-  if (!isJsonObject(value)) {
+const requireObjectPayload = (value: JSONType | null, context: string) => {
+  const parsed = runtimeProbeObjectSchema.safeParse(value);
+  if (!parsed.success) {
     return Effect.fail(
       new HostValidationError({
         message: `${context} must be an object`,
@@ -107,10 +106,10 @@ const requireObjectPayload = (value: JsonValue | null, context: string) => {
       }),
     );
   }
-  return Effect.succeed(value);
+  return Effect.succeed(parsed.data);
 };
 
-const readStringProperty = (value: JsonObject, property: string): string | null => {
+const readStringProperty = (value: RuntimeProbeObject, property: string): string | null => {
   const parsed = z.string().safeParse(value[property]);
   if (!parsed.success) return null;
   const trimmed = parsed.data.trim();
@@ -126,7 +125,7 @@ const timeoutMcpProbeResult = (detail: string): RuntimeMcpStatusProbeResult => (
   failureKind: "timeout",
 });
 
-const parseToolIds = (payload: JsonValue | null) => {
+const parseToolIds = (payload: JSONType | null) => {
   const parsedPayload = toolIdsSchema.safeParse(payload);
   if (!parsedPayload.success) {
     return Effect.fail(
@@ -259,7 +258,7 @@ export const probeOpenCodeSessionStatus = ({
           details: { operation: "runtimeRegistry.parseSessionStatusResponse" },
         }),
     });
-    if (!isJsonObject(statuses)) {
+    if (!isRuntimeProbeObject(statuses)) {
       return yield* Effect.fail(
         new HostValidationError({
           message: "OpenCode session status response must be an object",

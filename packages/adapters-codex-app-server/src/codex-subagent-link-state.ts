@@ -4,6 +4,7 @@ import type {
   CodexAppServerSubAgentActivityKind,
 } from "@openducktor/contracts";
 import type { CodexSubAgentSourceMetadata, CodexThreadSnapshot } from "./codex-app-server-threads";
+import type { CodexToolTimingFields } from "./codex-tool-timing";
 
 type CodexSubagentPart = Extract<AgentStreamPart, { kind: "subagent" }>;
 
@@ -34,7 +35,7 @@ export const codexSubagentRouteEventFields = (
   };
 };
 
-export type CodexSubagentLinkInput = {
+export type CodexSubagentLinkInput = CodexToolTimingFields & {
   runtimeId?: string;
   parentThreadId: string;
   childThreadId?: string;
@@ -48,8 +49,6 @@ export type CodexSubagentLinkInput = {
   executionMode?: "background";
   preferItemCorrelationKey?: boolean;
   allowStatusRestart?: boolean;
-  startedAtMs?: number | undefined;
-  endedAtMs?: number | undefined;
 };
 
 type CodexSubagentLinkMetadata = {

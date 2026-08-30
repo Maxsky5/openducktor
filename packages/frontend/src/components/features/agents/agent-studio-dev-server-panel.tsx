@@ -103,8 +103,8 @@ function CompactStartButton({
     className?: string;
     onClick?: (() => void) | undefined;
     disabled?: boolean | undefined;
-    "aria-disabled"?: string | undefined;
-    "aria-describedby"?: string | undefined;
+    "aria-disabled"?: string;
+    "aria-describedby"?: string;
   }>;
   disabledReason: string | null;
   disabledReasonId: string;

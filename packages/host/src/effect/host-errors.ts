@@ -9,7 +9,7 @@ export class HostValidationError<Details extends object = never> extends Data.Ta
   readonly message: string;
   readonly field?: string | undefined;
   readonly cause?: unknown | undefined;
-  readonly details?: HostErrorDetails<Details> | undefined;
+  readonly details?: HostErrorDetails<Details>;
 }> {}
 
 class HostCommandError<Details extends object = never> extends Data.TaggedError(
@@ -17,7 +17,7 @@ class HostCommandError<Details extends object = never> extends Data.TaggedError(
 )<{
   readonly message: string;
   readonly command?: string | undefined;
-  readonly details?: HostErrorDetails<Details> | undefined;
+  readonly details?: HostErrorDetails<Details>;
 }> {}
 
 export class HostDependencyError<Details extends object = never> extends Data.TaggedError(
@@ -27,7 +27,7 @@ export class HostDependencyError<Details extends object = never> extends Data.Ta
   readonly dependency: string;
   readonly operation?: string | undefined;
   readonly cause?: unknown | undefined;
-  readonly details?: HostErrorDetails<Details> | undefined;
+  readonly details?: HostErrorDetails<Details>;
 }> {}
 
 export class HostOperationError<Details extends object = never> extends Data.TaggedError(
@@ -36,7 +36,7 @@ export class HostOperationError<Details extends object = never> extends Data.Tag
   readonly message: string;
   readonly operation: string;
   readonly cause?: unknown | undefined;
-  readonly details?: HostErrorDetails<Details> | undefined;
+  readonly details?: HostErrorDetails<Details>;
 }> {}
 
 export class HostResourceError<Details extends object = never> extends Data.TaggedError(
@@ -46,7 +46,7 @@ export class HostResourceError<Details extends object = never> extends Data.Tagg
   readonly resource: string;
   readonly operation?: string | undefined;
   readonly cause?: unknown | undefined;
-  readonly details?: HostErrorDetails<Details> | undefined;
+  readonly details?: HostErrorDetails<Details>;
 }> {}
 
 export class HostPathAccessError<Details extends object = never> extends Data.TaggedError(
@@ -56,7 +56,7 @@ export class HostPathAccessError<Details extends object = never> extends Data.Ta
   readonly path: string;
   readonly operation: string;
   readonly cause?: unknown | undefined;
-  readonly details?: HostErrorDetails<Details> | undefined;
+  readonly details?: HostErrorDetails<Details>;
 }> {}
 
 export class HostPathNotFoundError<Details extends object = never> extends Data.TaggedError(
@@ -66,7 +66,7 @@ export class HostPathNotFoundError<Details extends object = never> extends Data.
   readonly path: string;
   readonly operation: string;
   readonly cause?: unknown | undefined;
-  readonly details?: HostErrorDetails<Details> | undefined;
+  readonly details?: HostErrorDetails<Details>;
 }> {}
 
 export class HostInvariantError<Details extends object = never> extends Data.TaggedError(
@@ -74,7 +74,7 @@ export class HostInvariantError<Details extends object = never> extends Data.Tag
 )<{
   readonly message: string;
   readonly invariant: string;
-  readonly details?: HostErrorDetails<Details> | undefined;
+  readonly details?: HostErrorDetails<Details>;
 }> {}
 
 export type HostCommandErrorAggregate = HostCommandError<object>;
@@ -145,14 +145,13 @@ const toHostPathAccessError = <Details extends object>(
   operation: string,
   path: string,
   details?: HostErrorDetails<Details>,
-): HostPathAccessError<Details> =>
-  new HostPathAccessError({
-    operation,
-    path,
-    message: errorMessage(cause),
-    cause,
-    details,
-  });
+): HostPathAccessError<Details> => {
+  const message = errorMessage(cause);
+  if (details === undefined) {
+    return new HostPathAccessError({ operation, path, message, cause });
+  }
+  return new HostPathAccessError({ operation, path, message, cause, details });
+};
 
 export function toHostPathStatError(
   cause: unknown,
@@ -171,15 +170,14 @@ export function toHostPathStatError<Details extends object>(
   path: string,
   details?: HostErrorDetails<Details>,
 ): HostPathAccessError<Details> | HostPathNotFoundError<Details> {
-  return isPathNotFoundError(cause)
-    ? new HostPathNotFoundError({
-        operation,
-        path,
-        message: errorMessage(cause),
-        cause,
-        details,
-      })
-    : toHostPathAccessError(cause, operation, path, details);
+  if (!isPathNotFoundError(cause)) {
+    return toHostPathAccessError(cause, operation, path, details);
+  }
+  const message = errorMessage(cause);
+  if (details === undefined) {
+    return new HostPathNotFoundError({ operation, path, message, cause });
+  }
+  return new HostPathNotFoundError({ operation, path, message, cause, details });
 }
 
 export function toHostOperationError(
@@ -197,22 +195,20 @@ export function toHostOperationError<Details extends object>(
   details?: HostErrorDetails<Details>,
 ): HostOperationError<Details> | HostOperationErrorAggregate {
   if (isHostError(cause)) {
-    return cause instanceof HostOperationError
-      ? cause
-      : new HostOperationError({
-          operation,
-          message: cause.message,
-          cause,
-          details,
-        });
+    if (cause instanceof HostOperationError) {
+      return cause;
+    }
+    if (details === undefined) {
+      return new HostOperationError({ operation, message: cause.message, cause });
+    }
+    return new HostOperationError({ operation, message: cause.message, cause, details });
   }
 
-  return new HostOperationError({
-    operation,
-    message: errorMessage(cause),
-    cause,
-    details,
-  });
+  const message = errorMessage(cause);
+  if (details === undefined) {
+    return new HostOperationError({ operation, message, cause });
+  }
+  return new HostOperationError({ operation, message, cause, details });
 }
 
 export const causeToHostBoundaryError = <Failure>(

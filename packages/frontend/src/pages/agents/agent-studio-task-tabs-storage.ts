@@ -1,4 +1,4 @@
-import { jsonValueSchema, type TaskCard } from "@openducktor/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import { errorMessage } from "@/lib/errors";
 import { toTabsStorageKey } from "./query-sync/agent-studio-navigation";
 import { z } from "zod";
@@ -19,7 +19,7 @@ const DEFAULT_PERSISTED_TABS_STATE: PersistedTaskTabsState = {
 };
 
 const persistedTaskTabsObjectSchema = z.object({
-  tabs: z.array(jsonValueSchema),
+  tabs: z.array(z.json()),
   activeTaskId: z.string().nullable().optional(),
 });
 

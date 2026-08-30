@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { directMergeRecordSchema, gitTargetBranchSchema, pullRequestSchema } from "./git-schemas";
-import { jsonValueSchema } from "./json-types";
 import { agentSessionRecordSchema } from "./session-schemas";
 import { qaWorkflowVerdictSchema } from "./task-schemas";
 
@@ -51,8 +50,8 @@ const taskMetadataPayloadFields = {
 
 const taskMetadataPayloadBodySchema = z.object(taskMetadataPayloadFields);
 const legacyTaskDeliverySchema = z.object({
-  linkedPullRequest: jsonValueSchema.optional(),
-  directMerge: jsonValueSchema.optional(),
+  linkedPullRequest: z.json().optional(),
+  directMerge: z.json().optional(),
 });
 const legacyTaskMetadataPayloadSchema = z.object({
   ...taskMetadataPayloadFields,

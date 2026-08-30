@@ -1,30 +1,38 @@
-import { isJsonObject, type JsonObject, type JsonValue } from "@openducktor/contracts";
-import { z } from "zod";
+import { z, type JSONType } from "zod";
 
-export const asJsonObject = (value: JsonValue | undefined): JsonObject | undefined => {
-  return value !== undefined && isJsonObject(value) ? value : undefined;
+export type OpenCodeProtocolValue = JSONType;
+export type OpenCodeProtocolObject = Record<string, OpenCodeProtocolValue>;
+
+export const opencodeProtocolValueSchema = z.json();
+export const opencodeProtocolObjectSchema = z.record(z.string(), opencodeProtocolValueSchema);
+
+export const asJsonObject = (
+  value: OpenCodeProtocolValue | undefined,
+): OpenCodeProtocolObject | undefined => {
+  const parsed = opencodeProtocolObjectSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 };
 
 export const readRecordProp = (
-  source: JsonValue | undefined,
+  source: OpenCodeProtocolValue | undefined,
   key: string,
-): JsonObject | undefined => {
+): OpenCodeProtocolObject | undefined => {
   const record = asJsonObject(source);
   const value = record?.[key];
   return value === undefined ? undefined : asJsonObject(value);
 };
 
 export const readArrayProp = (
-  source: JsonValue | undefined,
+  source: OpenCodeProtocolValue | undefined,
   key: string,
-): JsonValue[] | undefined => {
+): OpenCodeProtocolValue[] | undefined => {
   const record = asJsonObject(source);
   const value = record?.[key];
   return Array.isArray(value) ? value : undefined;
 };
 
 export const readStringProp = (
-  source: JsonValue | undefined,
+  source: OpenCodeProtocolValue | undefined,
   keys: readonly string[],
 ): string | undefined => {
   const record = asJsonObject(source);
@@ -42,7 +50,7 @@ export const readStringProp = (
 };
 
 export const readNumberProp = (
-  source: JsonValue | undefined,
+  source: OpenCodeProtocolValue | undefined,
   keys: string[],
 ): number | undefined => {
   const record = asJsonObject(source);
@@ -60,7 +68,7 @@ export const readNumberProp = (
 };
 
 export const readBooleanProp = (
-  source: JsonValue | undefined,
+  source: OpenCodeProtocolValue | undefined,
   keys: string[],
 ): boolean | undefined => {
   const record = asJsonObject(source);
@@ -78,7 +86,7 @@ export const readBooleanProp = (
 };
 
 export const readStringArrayProp = (
-  source: JsonValue | undefined,
+  source: OpenCodeProtocolValue | undefined,
   key: string,
 ): string[] | undefined => {
   const record = asJsonObject(source);

@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { JsonObject } from "@openducktor/contracts";
+import type { AgentToolData } from "@openducktor/contracts";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
@@ -41,7 +41,7 @@ const toolTypeForFixture = (tool: string): import("@openducktor/core").AgentTool
   return "generic";
 };
 
-const createCompletedToolSession = (tool: string, id = tool, input?: JsonObject) => {
+const createCompletedToolSession = (tool: string, id = tool, input?: AgentToolData) => {
   const meta: Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "tool" }> = {
     kind: "tool",
     partId: `part-${id}`,

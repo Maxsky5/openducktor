@@ -1,6 +1,9 @@
 import type { ClaudeDecodedToolUse } from "./claude-agent-sdk-tool-shapes";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
-import { jsonObjectSchema, type JsonObject } from "@openducktor/contracts";
+import {
+  claudeProtocolObjectSchema,
+  type ClaudeProtocolObject,
+} from "./claude-agent-sdk-ingress-schemas";
 import type { ClaudeToolInput } from "./claude-agent-sdk-types";
 
 type ToolStreamEntry = {
@@ -34,14 +37,14 @@ const toolStreamStateFor = (session: ClaudeToolInputStreamSession): ToolStreamSt
 
 const tryParseJsonRecord = (json: string) => {
   try {
-    const parsed = jsonObjectSchema.safeParse(JSON.parse(json));
+    const parsed = claudeProtocolObjectSchema.safeParse(JSON.parse(json));
     return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }
 };
 
-const toolInputFingerprint = (input: JsonObject): string => JSON.stringify(input);
+const toolInputFingerprint = (input: ClaudeProtocolObject): string => JSON.stringify(input);
 
 export const rememberClaudeStreamToolStart = (
   session: ClaudeToolInputStreamSession,

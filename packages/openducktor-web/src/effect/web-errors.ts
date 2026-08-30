@@ -47,7 +47,7 @@ export type WebResourceErrorDetails =
 
 export type WebHostCommandErrorDetails = {
   command: string;
-  hostDetails?: { readonly failureKind?: FailureKind | undefined };
+  hostDetails?: { readonly failureKind?: FailureKind };
   hostInvokeFailure?: HostInvokeFailure;
 };
 
@@ -55,7 +55,7 @@ export class WebValidationError extends Data.TaggedError("WebValidationError")<{
   readonly message: string;
   readonly field?: string | undefined;
   readonly cause?: unknown | undefined;
-  readonly details?: Readonly<WebValidationErrorDetails> | undefined;
+  readonly details?: Readonly<WebValidationErrorDetails>;
 }> {}
 
 export class WebDependencyError extends Data.TaggedError("WebDependencyError")<{
@@ -63,14 +63,14 @@ export class WebDependencyError extends Data.TaggedError("WebDependencyError")<{
   readonly dependency: string;
   readonly operation?: string | undefined;
   readonly cause?: unknown | undefined;
-  readonly details?: Readonly<WebDependencyErrorDetails> | undefined;
+  readonly details?: Readonly<WebDependencyErrorDetails>;
 }> {}
 
 export class WebOperationError extends Data.TaggedError("WebOperationError")<{
   readonly message: string;
   readonly operation: string;
   readonly cause?: unknown | undefined;
-  readonly details?: Readonly<WebOperationErrorDetails> | undefined;
+  readonly details?: Readonly<WebOperationErrorDetails>;
 }> {}
 
 export class WebResourceError extends Data.TaggedError("WebResourceError")<{
@@ -78,7 +78,7 @@ export class WebResourceError extends Data.TaggedError("WebResourceError")<{
   readonly resource: string;
   readonly operation?: string | undefined;
   readonly cause?: unknown | undefined;
-  readonly details?: Readonly<WebResourceErrorDetails> | undefined;
+  readonly details?: Readonly<WebResourceErrorDetails>;
 }> {}
 
 export class WebHostRequestError extends Data.TaggedError("WebHostRequestError")<{
@@ -86,7 +86,7 @@ export class WebHostRequestError extends Data.TaggedError("WebHostRequestError")
   readonly status: number;
   readonly failureKind?: string | undefined;
   readonly cause?: unknown | undefined;
-  readonly details?: Readonly<WebHostCommandErrorDetails> | undefined;
+  readonly details?: Readonly<WebHostCommandErrorDetails>;
 }> {}
 
 export type WebError =
@@ -133,21 +133,11 @@ export const toWebOperationError = (
   if (cause instanceof WebOperationError) {
     return cause;
   }
-  if (isWebError(cause)) {
-    return new WebOperationError({
-      operation,
-      message: cause.message,
-      cause,
-      details,
-    });
+  const message = isWebError(cause) ? cause.message : errorMessage(cause);
+  if (details === undefined) {
+    return new WebOperationError({ operation, message, cause });
   }
-
-  return new WebOperationError({
-    operation,
-    message: errorMessage(cause),
-    cause,
-    details,
-  });
+  return new WebOperationError({ operation, message, cause, details });
 };
 
 export const causeToWebBoundaryError = <Failure>(

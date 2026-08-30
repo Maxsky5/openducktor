@@ -27,11 +27,12 @@ export type ParsedPatch = {
 const invalidPatch = <Details extends object>(
   message: string,
   details?: HostErrorDetails<Details>,
-): HostValidationError<Details> =>
-  new HostValidationError({
-    message,
-    details,
-  });
+): HostValidationError<Details> => {
+  if (details !== undefined) {
+    return new HostValidationError({ message, details });
+  }
+  return new HostValidationError({ message });
+};
 
 const parseHunkRange = (input: string) => {
   const trimmed = input.trim();
