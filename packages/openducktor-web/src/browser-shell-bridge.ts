@@ -1,5 +1,8 @@
-import { createDisabledAppUpdateBridge, type ShellBridge } from "@openducktor/frontend";
 import { getAppVersion } from "@openducktor/frontend/lib/app-version";
+import {
+  createDisabledAppUpdateBridge,
+  type ShellBridge,
+} from "@openducktor/frontend/lib/shell-bridge";
 import { Effect } from "effect";
 import { getBrowserBackendUrlEffect } from "./browser-config";
 import { validateExternalBrowserUrlEffect } from "./browser-url-validation";

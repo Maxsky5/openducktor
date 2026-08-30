@@ -33,3 +33,4 @@ This folder contains the project documentation for OpenDucktor's current archite
 - [mcp-runtime-security.md](mcp-runtime-security.md): current MCP transport and threat assumptions.
 - [dependency-hygiene.md](dependency-hygiene.md): dependency update and audit policy.
 - [release-process.md](release-process.md): Electron desktop, MCP, web package, Homebrew, version sync, and draft publishing steps.
+- [typescript-toolchain.md](typescript-toolchain.md): supported TypeScript and Bun versions, editor requirements, and TypeScript 7 migration evidence.
