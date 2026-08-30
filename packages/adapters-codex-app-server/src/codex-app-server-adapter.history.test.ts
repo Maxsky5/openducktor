@@ -221,6 +221,80 @@ describe("CodexAppServerAdapter history loading", () => {
     );
   });
 
+  test("loads child-only fork history with completed subagent activity", async () => {
+    const thread = {
+      id: "child-thread",
+      createdAt: 10,
+      historyMode: "paginated",
+      forkedFromId: "root-thread",
+      parentThreadId: "root-thread",
+      turns: [
+        {
+          id: "child-turn",
+          startedAt: 10,
+          status: "completed",
+          items: [
+            codexSubAgentActivityItemFixture({
+              id: "child-started-grandchild",
+              agentThreadId: "grandchild-thread",
+              kind: "started",
+            }),
+            codexSubAgentActivityItemFixture({
+              id: "child-completed-grandchild",
+              agentThreadId: "grandchild-thread",
+              kind: "completed",
+            }),
+            codexAgentMessageItemFixture({ id: "child-answer", text: "Review complete." }),
+          ],
+        },
+      ],
+    };
+    const transport: CodexJsonRpcTransport = {
+      async request(request: CodexJsonRpcRequest) {
+        if (request.method === "thread/read") {
+          return paginatedThreadReadResponse(thread);
+        }
+        if (request.method === "thread/turns/list") {
+          if (requestThreadId(request.params) === "root-thread") {
+            return paginatedTurnsResponse([{ id: "root-turn", status: "completed", items: [] }]);
+          }
+          return paginatedTurnsListResponse(thread);
+        }
+        throw new Error(`Unexpected method '${request.method}'.`);
+      },
+    };
+
+    const history = await createAdapterWithTransport(transport).loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "child-thread",
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+    });
+
+    expect(history.map((message) => message.messageId)).toEqual([
+      "codex-fork-boundary:child-thread",
+      "codex-subagent:child-thread:grandchild-thread",
+      "codex-subagent:child-thread:grandchild-thread",
+      "child-answer",
+    ]);
+    expect(
+      history.flatMap((message) => message.parts).filter((part) => part.kind === "subagent"),
+    ).toEqual([
+      expect.objectContaining({
+        correlationKey: "codex-subagent:child-thread:grandchild-thread",
+        externalSessionId: "grandchild-thread",
+        status: "running",
+      }),
+      expect.objectContaining({
+        correlationKey: "codex-subagent:child-thread:grandchild-thread",
+        externalSessionId: "grandchild-thread",
+        status: "completed",
+      }),
+    ]);
+    expect(history.at(-1)?.text).toBe("Review complete.");
+  });
+
   test("keeps stable paginated item ids while hydrating messages and tools", async () => {
     const turns = [
       {

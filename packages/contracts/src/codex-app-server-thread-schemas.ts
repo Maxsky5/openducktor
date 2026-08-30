@@ -200,7 +200,7 @@ export type CodexAppServerCollabAgentToolCallStatus =
 const codexAppServerSubAgentActivityThreadItemSchema = z.object({
   type: z.literal("subAgentActivity"),
   id: z.string(),
-  kind: z.enum(["started", "interacted", "interrupted"]),
+  kind: z.enum(["started", "interacted", "interrupted", "completed"]),
   agentThreadId: z.string(),
   agentPath: z.string(),
 });

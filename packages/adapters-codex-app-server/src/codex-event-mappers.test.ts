@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { codexAppServerRuntimeNotificationSchema } from "@openducktor/contracts";
 import { projectCodexCanonicalEvents } from "./codex-canonical-projector";
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
@@ -502,6 +503,56 @@ describe("Codex subagent event mapper", () => {
         status: "running",
         externalSessionId: "child-thread",
         startedAtMs: 1_778_284_801_000,
+      }),
+    ]);
+  });
+
+  test.each([
+    { startedAtMs: 1_000, expectedStatus: "completed" },
+    { startedAtMs: 3_000, expectedStatus: "running" },
+  ])("applies V2 completion only to the current run: %j", ({ startedAtMs, expectedStatus }) => {
+    const subagents = new CodexSubagentLinkState();
+    subagents.upsertLink({
+      parentThreadId: "parent-thread",
+      childThreadId: "child-thread",
+      itemId: "spawn-1",
+      status: "running",
+      startedAtMs,
+    });
+    const notification = codexAppServerRuntimeNotificationSchema.parse({
+      method: "item/completed",
+      params: {
+        threadId: "parent-thread",
+        turnId: "parent-turn",
+        completedAtMs: 2_000,
+        item: {
+          type: "subAgentActivity",
+          id: "child-completed",
+          agentThreadId: "child-thread",
+          agentPath: "/root/child",
+          kind: "completed",
+        },
+      },
+    });
+    if (notification.method !== "item/completed") {
+      throw new Error("Expected item/completed notification");
+    }
+    const pipeline = createCodexEventMapperPipeline(createCodexEventMappers(subagents));
+    const events = projectCodexCanonicalEvents(
+      pipeline.runLive(
+        {
+          kind: "item_completed",
+          item: { ...notification.params.item, completedAtMs: notification.params.completedAtMs },
+        },
+        { source: "live", threadId: "parent-thread", turnId: "parent-turn" },
+      ),
+    );
+
+    expect(projectedSubagents(events)).toEqual([
+      expect.objectContaining({
+        correlationKey: "codex-subagent:parent-thread:child-thread",
+        status: expectedStatus,
+        startedAtMs,
       }),
     ]);
   });
