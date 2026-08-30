@@ -297,36 +297,41 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
       onSessionCollectionChange?.(sessionsRef.current);
     });
 
-  const start = createStartAgentSession(
-    toStartSessionDependencies({
-      activeRepo,
-      workspaceId,
-      adapter: adapter as AgentEnginePort,
-      sessionsRef,
-      replaceSession,
-      removeSession,
-      taskRef,
-      repoEpochRef,
-      currentWorkspaceRepoPathRef,
-      clearSessionObservationState,
-      loadSourceSession,
-      loadAgentSessionHistory,
-      persistSessionRecord,
-       deleteSessionRecord,
-      canonicalizePath,
-      prepareTaskSessionStartupLease,
-      completeTaskSessionStartupLease,
-      abortTaskSessionStartupLease,
-      ensureRuntime,
-      loadTaskDocuments,
-      refreshTaskData,
-      sendAgentMessage,
-      loadRepoPromptOverrides,
-      loadSettingsSnapshot,
-      ...(sessionStartGateRef ? { sessionStartGateRef } : {}),
-       ...(readSessionSnapshot ? { readSessionSnapshot } : {}),
-     }),
-   );
+  const agentEngine =
+    adapter instanceof OpencodeSdkAdapter ? createOpenCodeAgentEngineTestAdapter(adapter) : adapter;
+  const dependenciesInput: Parameters<typeof toStartSessionDependencies>[0] = {
+    activeRepo,
+    workspaceId,
+    adapter: agentEngine,
+    sessionsRef,
+    replaceSession,
+    removeSession,
+    taskRef,
+    repoEpochRef,
+    currentWorkspaceRepoPathRef,
+    clearSessionObservationState,
+    loadSourceSession,
+    loadAgentSessionHistory,
+    persistSessionRecord,
+    deleteSessionRecord,
+    canonicalizePath,
+    prepareTaskSessionStartupLease,
+    completeTaskSessionStartupLease,
+    abortTaskSessionStartupLease,
+    ensureRuntime,
+    loadTaskDocuments,
+    refreshTaskData,
+    sendAgentMessage,
+    loadRepoPromptOverrides,
+    loadSettingsSnapshot,
+  };
+  if (sessionStartGateRef) {
+    dependenciesInput.sessionStartGateRef = sessionStartGateRef;
+  }
+  if (readSessionSnapshot) {
+    dependenciesInput.readSessionSnapshot = readSessionSnapshot;
+  }
+  const start = createStartAgentSession(toStartSessionDependencies(dependenciesInput));
 
   return {
     adapter,

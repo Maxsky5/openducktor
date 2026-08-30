@@ -10,11 +10,23 @@ import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orch
 import {
   buildLaunchedSessionState,
   createExecutePreparedSessionLaunch,
+  type PreparedSessionLaunchCommitInput,
   type SessionLaunchExecutorDependencies,
 } from "./session-launch-executor";
 import type { PreparedSessionLaunch } from "./prepared-session-launch";
 
 const REPO_PATH = "/tmp/repo";
+
+type ExecutorHarnessCalls = {
+  startSession: Array<[Parameters<AgentEnginePort["startSession"]>[0]]>;
+  resumeSession: Array<[Parameters<AgentEnginePort["resumeSession"]>[0]]>;
+  forkSession: Array<[Parameters<AgentEnginePort["forkSession"]>[0]]>;
+  stopSession: Array<[Parameters<AgentEnginePort["stopSession"]>[0]]>;
+  releaseSession: Array<[Parameters<AgentEnginePort["releaseSession"]>[0]]>;
+  loadSessionHistory: Array<[Parameters<AgentEnginePort["loadSessionHistory"]>[0]]>;
+  replaceSession: AgentSessionState[];
+  removeSession: AgentSessionIdentity[];
+};
 
 const summaryFor = (
   externalSessionId: string,
@@ -44,44 +56,41 @@ const createExecutorHarness = () => {
   const sessionsRef = { current: emptyAgentSessionCollection() };
   const repoEpochRef = { current: 1 };
   const currentWorkspaceRepoPathRef = { current: REPO_PATH };
-  const calls = {
-    startSession: [] as unknown[][],
-    resumeSession: [] as unknown[][],
-    forkSession: [] as unknown[][],
-    stopSession: [] as unknown[][],
-    releaseSession: [] as unknown[][],
-    loadSessionHistory: [] as unknown[][],
-    replaceSession: [] as AgentSessionState[],
-    removeSession: [] as AgentSessionIdentity[],
+  const calls: ExecutorHarnessCalls = {
+    startSession: [],
+    resumeSession: [],
+    forkSession: [],
+    stopSession: [],
+    releaseSession: [],
+    loadSessionHistory: [],
+    replaceSession: [],
+    removeSession: [],
   };
 
   const adapter = {
-    startSession: async (input: unknown) => {
+    startSession: async (input: Parameters<AgentEnginePort["startSession"]>[0]) => {
       calls.startSession.push([input]);
-      return summaryFromRuntimeInput(`started-${calls.startSession.length}`, input as never);
+      return summaryFromRuntimeInput(`started-${calls.startSession.length}`, input);
     },
-    resumeSession: async (input: unknown) => {
+    resumeSession: async (input: Parameters<AgentEnginePort["resumeSession"]>[0]) => {
       calls.resumeSession.push([input]);
-      return summaryFromRuntimeInput(
-        (input as { externalSessionId: string }).externalSessionId,
-        input as never,
-      );
+      return summaryFromRuntimeInput(input.externalSessionId, input);
     },
-    forkSession: async (input: unknown) => {
+    forkSession: async (input: Parameters<AgentEnginePort["forkSession"]>[0]) => {
       calls.forkSession.push([input]);
-      return summaryFromRuntimeInput(`forked-${calls.forkSession.length}`, input as never);
+      return summaryFromRuntimeInput(`forked-${calls.forkSession.length}`, input);
     },
-    stopSession: async (input: unknown) => {
+    stopSession: async (input: Parameters<AgentEnginePort["stopSession"]>[0]) => {
       calls.stopSession.push([input]);
     },
-    releaseSession: async (input: unknown) => {
+    releaseSession: async (input: Parameters<AgentEnginePort["releaseSession"]>[0]) => {
       calls.releaseSession.push([input]);
     },
-    loadSessionHistory: async (input: unknown) => {
+    loadSessionHistory: async (input: Parameters<AgentEnginePort["loadSessionHistory"]>[0]) => {
       calls.loadSessionHistory.push([input]);
       return [];
     },
-  } as unknown as AgentEnginePort;
+  } satisfies SessionLaunchExecutorDependencies["adapter"];
 
   const deps: SessionLaunchExecutorDependencies = {
     adapter,
@@ -235,6 +244,27 @@ describe("session-launch-executor", () => {
     );
     expect(harness.calls.releaseSession).toHaveLength(1);
     expect(harness.calls.stopSession).toHaveLength(0);
+  });
+
+  test("preserves the runtime-reported status when resuming a session", async () => {
+    const harness = createExecutorHarness();
+    const originalResume = harness.deps.adapter.resumeSession;
+    harness.deps.adapter.resumeSession = async (input) => ({
+      ...(await originalResume.call(harness.deps.adapter, input)),
+      status: "running",
+    });
+    const launch: PreparedSessionLaunch = {
+      mode: "resume",
+      repoPath: REPO_PATH,
+      runtimeKind: "codex",
+      workingDirectory: "/tmp/repo",
+      sessionAssociation: { kind: "repository" },
+      externalSessionId: "existing-session",
+    };
+
+    await harness.execute({ launch });
+
+    expect(harness.calls.replaceSession[0]?.status).toBe("running");
   });
 
   test("releases a resumed session when local registration fails", async () => {
@@ -486,6 +516,40 @@ describe("session-launch-executor", () => {
     expect(harness.calls.stopSession).toHaveLength(1);
   });
 
+  test("keeps the local registration when stale cleanup cannot stop the runtime", async () => {
+    const harness = createExecutorHarness();
+    const originalReplace = harness.deps.replaceSession;
+    harness.deps.replaceSession = (session) => {
+      originalReplace(session);
+      harness.repoEpochRef.current += 1;
+    };
+    harness.deps.adapter.stopSession = async () => {
+      throw new Error("runtime unavailable");
+    };
+
+    await expect(harness.execute({ launch: repositoryStartLaunch() })).rejects.toThrow(
+      "Failed to stop stale started session 'started-1': runtime unavailable",
+    );
+    expect(harness.calls.removeSession).toHaveLength(0);
+  });
+
+  test("keeps local removal failures visible after stale runtime cleanup", async () => {
+    const harness = createExecutorHarness();
+    const originalReplace = harness.deps.replaceSession;
+    harness.deps.replaceSession = (session) => {
+      originalReplace(session);
+      harness.repoEpochRef.current += 1;
+    };
+    harness.deps.removeSession = () => {
+      throw new Error("local removal failed");
+    };
+
+    await expect(harness.execute({ launch: repositoryStartLaunch() })).rejects.toThrow(
+      "was finalized but its local registration could not be removed: local removal failed",
+    );
+    expect(harness.calls.stopSession).toHaveLength(1);
+  });
+
   test("propagates runtime launch failures without registering a session", async () => {
     const harness = createExecutorHarness();
     harness.deps.adapter.startSession = async () => {
@@ -581,7 +645,7 @@ describe("session-launch-executor", () => {
 
   test("keeps commit ownership explicit and passes stale guard plus registered state", async () => {
     const harness = createExecutorHarness();
-    const commitInputs: unknown[] = [];
+    const commitInputs: PreparedSessionLaunchCommitInput[] = [];
 
     await harness.execute({
       launch: repositoryStartLaunch(),
@@ -591,11 +655,11 @@ describe("session-launch-executor", () => {
     });
 
     expect(commitInputs).toHaveLength(1);
-    const commitInput = commitInputs[0] as {
-      identity: AgentSessionIdentity;
-      sessionState: AgentSessionState;
-      isStaleOperation: () => boolean;
-    };
+    const commitInput = commitInputs[0];
+    expect(commitInput).toBeDefined();
+    if (!commitInput) {
+      throw new Error("Expected the launch commit callback to receive its input.");
+    }
     expect(commitInput.identity.externalSessionId).toBe("started-1");
     expect(commitInput.sessionState.sessionAssociation).toEqual({ kind: "repository" });
     expect(commitInput.isStaleOperation()).toBe(false);

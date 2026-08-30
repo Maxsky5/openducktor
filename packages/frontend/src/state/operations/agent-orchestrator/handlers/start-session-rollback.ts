@@ -102,6 +102,7 @@ export const rollbackRegisteredStartedSession = async ({
   stopReason,
   bootstrap,
   commitBootstrapOnDeleteFailure = true,
+  durableRecordExists = true,
 }: {
   message: string;
   cause: unknown;
@@ -112,6 +113,7 @@ export const rollbackRegisteredStartedSession = async ({
   stopReason: string;
   bootstrap?: SessionBootstrap;
   commitBootstrapOnDeleteFailure?: boolean;
+  durableRecordExists?: boolean;
 }): Promise<never> => {
   try {
     await runOrchestratorTask(
@@ -126,51 +128,53 @@ export const rollbackRegisteredStartedSession = async ({
     );
   }
 
-  try {
-    await session.deleteSessionRecord(startedCtx.taskId, identity);
-  } catch (error) {
-    session.clearSessionObservationState(identity);
-    let preserveFailed = false;
-    let preserveError: unknown;
-    if (bootstrap && commitBootstrapOnDeleteFailure) {
-      try {
-        await bootstrap.complete();
-      } catch (completionError) {
-        preserveFailed = true;
-        preserveError = completionError;
+  if (durableRecordExists) {
+    try {
+      await session.deleteSessionRecord(startedCtx.taskId, identity);
+    } catch (error) {
+      session.clearSessionObservationState(identity);
+      let preserveFailed = false;
+      let preserveError: unknown;
+      if (bootstrap && commitBootstrapOnDeleteFailure) {
+        try {
+          await bootstrap.complete();
+        } catch (completionError) {
+          preserveFailed = true;
+          preserveError = completionError;
+        }
       }
-    }
 
-    const progress = [
-      "The started session was stopped.",
-      `Failed to delete the durable session record: ${errorMessage(error)}.`,
-      "The stopped session remains registered locally and durably for recovery.",
-    ];
-    if (bootstrap) {
-      if (commitBootstrapOnDeleteFailure) {
-        progress.push(
-          describeRollbackStep(
-            preserveFailed,
-            preserveError,
-            "Failed to commit the task worktree bootstrap while preserving its resources",
-            "The task worktree bootstrap was committed to preserve its resources.",
-          ),
-        );
-      } else {
-        progress.push(
-          "The task worktree resources were left intact without retrying bootstrap completion.",
+      const progress = [
+        "The started session was stopped.",
+        `Failed to delete the durable session record: ${errorMessage(error)}.`,
+        "The stopped session remains registered locally and durably for recovery.",
+      ];
+      if (bootstrap) {
+        if (commitBootstrapOnDeleteFailure) {
+          progress.push(
+            describeRollbackStep(
+              preserveFailed,
+              preserveError,
+              "Failed to commit the task worktree bootstrap while preserving its resources",
+              "The task worktree bootstrap was committed to preserve its resources.",
+            ),
+          );
+        } else {
+          progress.push(
+            "The task worktree resources were left intact without retrying bootstrap completion.",
+          );
+        }
+      }
+
+      const rollbackMessage = `${message} ${progress.join(" ")}`;
+      if (bootstrap) {
+        throw new BootstrapFinalizationHandledError(
+          rollbackMessage,
+          cause instanceof Error ? { cause } : undefined,
         );
       }
+      throw new Error(rollbackMessage, cause instanceof Error ? { cause } : undefined);
     }
-
-    const rollbackMessage = `${message} ${progress.join(" ")}`;
-    if (bootstrap) {
-      throw new BootstrapFinalizationHandledError(
-        rollbackMessage,
-        cause instanceof Error ? { cause } : undefined,
-      );
-    }
-    throw new Error(rollbackMessage, cause instanceof Error ? { cause } : undefined);
   }
 
   session.clearSessionObservationState(identity);
@@ -187,10 +191,10 @@ export const rollbackRegisteredStartedSession = async ({
     }
   }
 
-  const progress = [
-    "The started session was stopped and removed locally.",
-    "The durable session record was deleted.",
-  ];
+  const progress = ["The started session was stopped and removed locally."];
+  if (durableRecordExists) {
+    progress.push("The durable session record was deleted.");
+  }
   if (bootstrap) {
     progress.push(
       describeRollbackStep(

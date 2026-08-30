@@ -24,6 +24,16 @@ import { STALE_START_ERROR } from "./start-session-constants";
 // enough history to render immediately without pulling an unbounded transcript.
 const FORK_START_HISTORY_LIMIT = 600;
 
+type SessionLaunchAdapter = Pick<
+  AgentEnginePort,
+  | "startSession"
+  | "resumeSession"
+  | "forkSession"
+  | "stopSession"
+  | "releaseSession"
+  | "loadSessionHistory"
+>;
+
 type LaunchedSessionStopTags = { repoPath: string; externalSessionId: string };
 
 const launchedSessionStopTags = (
@@ -32,7 +42,7 @@ const launchedSessionStopTags = (
 ): LaunchedSessionStopTags => ({ repoPath, externalSessionId: identity.externalSessionId });
 
 export type SessionLaunchExecutorDependencies = {
-  adapter: AgentEnginePort;
+  adapter: SessionLaunchAdapter;
   replaceSession: (session: AgentSessionState) => void;
   removeSession: (identity: AgentSessionIdentity) => void;
   loadSettingsSnapshot: LoadSettingsSnapshotForRuntimePolicy;
@@ -59,7 +69,7 @@ export type PreparedSessionLaunchResult = {
 };
 
 const callPreparedRuntimeLaunch = (
-  adapter: AgentEnginePort,
+  adapter: SessionLaunchAdapter,
   launch: PreparedSessionLaunch,
 ): Promise<AgentSessionSummary> => {
   const runtimeRef = {
@@ -69,26 +79,44 @@ const callPreparedRuntimeLaunch = (
     sessionScope: launch.sessionAssociation,
   };
   if (launch.mode === "resume") {
-    return adapter.resumeSession({
+    const input: Parameters<SessionLaunchAdapter["resumeSession"]>[0] = {
       ...runtimeRef,
       externalSessionId: launch.externalSessionId,
-      ...(launch.selectedModel ? { model: launch.selectedModel } : {}),
-      ...(launch.systemPrompt ? { systemPrompt: launch.systemPrompt } : {}),
-    });
+    };
+    if (launch.selectedModel) {
+      input.model = launch.selectedModel;
+    }
+    if (launch.systemPrompt) {
+      input.systemPrompt = launch.systemPrompt;
+    }
+    return adapter.resumeSession(input);
   }
   if (launch.mode === "fork") {
-    return adapter.forkSession({
+    const input: Parameters<SessionLaunchAdapter["forkSession"]>[0] = {
       ...runtimeRef,
       systemPrompt: launch.systemPrompt,
-      ...(launch.selectedModel ? { model: launch.selectedModel } : {}),
       parentExternalSessionId: launch.parentExternalSessionId,
-    });
+    };
+    if (launch.selectedModel) {
+      input.model = launch.selectedModel;
+    }
+    return adapter.forkSession(input);
   }
   return adapter.startSession({
     ...runtimeRef,
     systemPrompt: launch.systemPrompt,
     model: launch.selectedModel,
   });
+};
+
+const launchedSessionStatus = (
+  launch: PreparedSessionLaunch,
+  summary: AgentSessionSummary,
+): AgentSessionState["status"] => {
+  if (launch.mode === "resume") {
+    return summary.status;
+  }
+  return launch.holdForPostStartMessage ? "starting" : "idle";
 };
 
 export const buildLaunchedSessionState = ({
@@ -99,31 +127,36 @@ export const buildLaunchedSessionState = ({
   launch: PreparedSessionLaunch;
   summary: AgentSessionSummary;
   initialMessages?: AgentSessionState["messages"] | undefined;
-}): AgentSessionState => ({
-  externalSessionId: summary.externalSessionId,
-  ...(summary.title ? { title: summary.title } : {}),
-  sessionAssociation: launch.sessionAssociation,
-  runtimeKind: summary.runtimeKind,
-  status: launch.holdForPostStartMessage ? "starting" : "idle",
-  runtimeStatusMessage: null,
-  startedAt: summary.startedAt,
-  workingDirectory: summary.workingDirectory,
-  historyLoadState: launch.mode === "resume" ? "not_requested" : "loaded",
-  messages:
-    initialMessages ??
-    createSessionMessagesState(
-      summary.externalSessionId,
-      buildSessionHeaderMessages({
-        externalSessionId: summary.externalSessionId,
-        systemPrompt: launch.systemPrompt ?? "",
-        startedAt: summary.startedAt,
-      }),
-    ),
-  contextUsage: null,
-  pendingApprovals: [],
-  pendingQuestions: [],
-  selectedModel: launch.selectedModel ?? null,
-});
+}): AgentSessionState => {
+  const state: AgentSessionState = {
+    externalSessionId: summary.externalSessionId,
+    sessionAssociation: launch.sessionAssociation,
+    runtimeKind: summary.runtimeKind,
+    status: launchedSessionStatus(launch, summary),
+    runtimeStatusMessage: null,
+    startedAt: summary.startedAt,
+    workingDirectory: summary.workingDirectory,
+    historyLoadState: launch.mode === "resume" ? "not_requested" : "loaded",
+    messages:
+      initialMessages ??
+      createSessionMessagesState(
+        summary.externalSessionId,
+        buildSessionHeaderMessages({
+          externalSessionId: summary.externalSessionId,
+          systemPrompt: launch.systemPrompt ?? "",
+          startedAt: summary.startedAt,
+        }),
+      ),
+    contextUsage: null,
+    pendingApprovals: [],
+    pendingQuestions: [],
+    selectedModel: launch.selectedModel ?? null,
+  };
+  if (summary.title) {
+    state.title = summary.title;
+  }
+  return state;
+};
 
 const finalizeLaunchedSession = async ({
   adapter,
@@ -131,7 +164,7 @@ const finalizeLaunchedSession = async ({
   identity,
   mode,
 }: {
-  adapter: AgentEnginePort;
+  adapter: SessionLaunchAdapter;
   repoPath: string;
   identity: AgentSessionIdentity;
   mode: PreparedSessionLaunch["mode"];
@@ -152,7 +185,7 @@ const stopAfterFailedForkHistoryLoad = async ({
   mode,
 }: {
   error: unknown;
-  adapter: AgentEnginePort;
+  adapter: SessionLaunchAdapter;
   repoPath: string;
   identity: AgentSessionIdentity;
   mode: PreparedSessionLaunch["mode"];
@@ -185,7 +218,7 @@ const rollbackFailedRegistration = async ({
   mode,
 }: {
   cause: unknown;
-  adapter: AgentEnginePort;
+  adapter: SessionLaunchAdapter;
   repoPath: string;
   identity: AgentSessionIdentity;
   mode: PreparedSessionLaunch["mode"];
@@ -217,12 +250,14 @@ const stopLaunchedSessionOnStaleAndThrow = async ({
   repoPath,
   identity,
   mode,
+  removeSession,
 }: {
   reason: string;
-  adapter: AgentEnginePort;
+  adapter: SessionLaunchAdapter;
   repoPath: string;
   identity: AgentSessionIdentity;
   mode: PreparedSessionLaunch["mode"];
+  removeSession?: ((identity: AgentSessionIdentity) => void) | undefined;
 }): Promise<never> => {
   try {
     await runOrchestratorTask(
@@ -237,6 +272,16 @@ const stopLaunchedSessionOnStaleAndThrow = async ({
       `${STALE_START_ERROR} Failed to stop stale started session '${identity.externalSessionId}': ${errorMessage(error)}`,
       { cause: error },
     );
+  }
+  if (removeSession) {
+    try {
+      removeSession(identity);
+    } catch (error) {
+      throw new SessionLaunchStopError(
+        `${STALE_START_ERROR} The stale started session '${identity.externalSessionId}' was finalized but its local registration could not be removed: ${errorMessage(error)}`,
+        { cause: error },
+      );
+    }
   }
   throw new Error(STALE_START_ERROR);
 };
@@ -352,13 +397,13 @@ export const createExecutePreparedSessionLaunch = (deps: SessionLaunchExecutorDe
       });
     }
     if (isStaleOperation()) {
-      deps.removeSession(identity);
       await stopLaunchedSessionOnStaleAndThrow({
         reason: "start-session-stop-on-stale-after-local-registration",
         adapter: deps.adapter,
         repoPath: launch.repoPath,
         identity,
         mode: launch.mode,
+        removeSession: deps.removeSession,
       });
     }
 

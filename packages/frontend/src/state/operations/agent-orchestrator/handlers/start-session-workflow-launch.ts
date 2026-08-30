@@ -2,7 +2,7 @@ import { workflowAgentSessionScope } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { RuntimeInfo } from "../runtime/runtime";
+import type { EnsureRuntimeOptions, RuntimeInfo } from "../runtime/runtime";
 import { readFreshSessionRuntimeKind } from "../support/session-runtime-kind";
 import type { PreparedSessionLaunch } from "./prepared-session-launch";
 import type { PreparedSessionLaunchCommitInput } from "./session-launch-executor";
@@ -53,12 +53,21 @@ export const prepareWorkflowFreshLaunch = async ({
 
   const systemPrompt = await loadStartSystemPrompt({ ctx, taskCard, deps });
 
-  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- worktree bootstrap is a side effect; a stale repo or failed prompt must throw before it starts
-  const runtime = await deps.runtime.ensureRuntime(ctx.repoPath, ctx.taskId, ctx.role, {
+  const runtimeOptions: EnsureRuntimeOptions = {
     workspaceId: ctx.workspaceId,
-    ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : {}),
     runtimeKind: selectedModelRuntimeKind,
-  });
+  };
+  if (targetWorkingDirectory !== undefined) {
+    runtimeOptions.targetWorkingDirectory = targetWorkingDirectory;
+  }
+
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- worktree bootstrap is a side effect; a stale repo or failed prompt must throw before it starts
+  const runtime = await deps.runtime.ensureRuntime(
+    ctx.repoPath,
+    ctx.taskId,
+    ctx.role,
+    runtimeOptions,
+  );
   if (ctx.isStaleRepoOperation()) {
     try {
       await runtime.bootstrap?.abort();
@@ -86,12 +95,7 @@ export const prepareWorkflowFreshLaunch = async ({
   };
 };
 
-const readForkSourceRuntime = (
-  sourceSession: AgentSessionState,
-): {
-  runtimeKind: AgentSessionState["runtimeKind"];
-  workingDirectory: string;
-} => {
+const readForkSourceRuntime = (sourceSession: AgentSessionState) => {
   const sourceWorkingDirectory = normalizeWorkingDirectory(sourceSession.workingDirectory);
   if (!sourceWorkingDirectory) {
     throw new Error(
@@ -188,6 +192,24 @@ export const commitWorkflowSessionLaunch = async ({
 }): Promise<void> => {
   const startedCtx: StartedSessionContext = { ...ctx, summary };
 
+  if (isStaleOperation()) {
+    const cause = new Error(STALE_START_ERROR);
+    const rollbackInput: Parameters<typeof rollbackRegisteredStartedSession>[0] = {
+      message: STALE_START_ERROR,
+      cause,
+      startedCtx,
+      identity,
+      session: deps.session,
+      runtime: deps.runtime,
+      stopReason: "start-session-stop-on-stale-before-persist",
+      durableRecordExists: false,
+    };
+    if (bootstrap) {
+      rollbackInput.bootstrap = bootstrap;
+    }
+    await rollbackRegisteredStartedSession(rollbackInput);
+  }
+
   try {
     await persistInitialSession({
       initialSession: sessionState,
@@ -200,13 +222,16 @@ export const commitWorkflowSessionLaunch = async ({
       },
     });
   } catch (error) {
-    await rollbackStartedSessionAfterPersistenceFailure({
+    const rollbackInput: Parameters<typeof rollbackStartedSessionAfterPersistenceFailure>[0] = {
       error,
       startedCtx,
       session: deps.session,
       runtime: deps.runtime,
-      ...(bootstrap ? { bootstrap } : {}),
-    });
+    };
+    if (bootstrap) {
+      rollbackInput.bootstrap = bootstrap;
+    }
+    await rollbackStartedSessionAfterPersistenceFailure(rollbackInput);
   }
 
   let bootstrapCompletionAttempted = false;
@@ -222,7 +247,7 @@ export const commitWorkflowSessionLaunch = async ({
       throw new Error(STALE_START_ERROR);
     }
   } catch (cause) {
-    await rollbackRegisteredStartedSession({
+    const rollbackInput: Parameters<typeof rollbackRegisteredStartedSession>[0] = {
       message: cause instanceof Error ? cause.message : String(cause),
       cause,
       startedCtx,
@@ -230,12 +255,11 @@ export const commitWorkflowSessionLaunch = async ({
       session: deps.session,
       runtime: deps.runtime,
       stopReason: "start-session-stop-after-bootstrap-failure",
-      ...(bootstrap && !bootstrapCompleted
-        ? {
-            bootstrap,
-            commitBootstrapOnDeleteFailure: !bootstrapCompletionAttempted,
-          }
-        : {}),
-    });
+    };
+    if (bootstrap && !bootstrapCompleted) {
+      rollbackInput.bootstrap = bootstrap;
+      rollbackInput.commitBootstrapOnDeleteFailure = !bootstrapCompletionAttempted;
+    }
+    await rollbackRegisteredStartedSession(rollbackInput);
   }
 };

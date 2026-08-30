@@ -58,7 +58,9 @@ const workflowSourceSession = (): AgentSessionState => ({
 
 type Harness = {
   calls: {
-    ensureRuntime: unknown[][];
+    ensureRuntime: Array<
+      [Parameters<StartSessionExecutionDependencies["runtime"]["ensureRuntime"]>[3]]
+    >;
     prepareLease: string[];
     completeLease: string[];
     abortLease: string[];
@@ -81,16 +83,16 @@ const createHarness = (
     sourceSessions?: AgentSessionState[];
   } = {},
 ): Harness => {
-  const calls = {
-    ensureRuntime: [] as unknown[][],
-    prepareLease: [] as string[],
-    completeLease: [] as string[],
-    abortLease: [] as string[],
-    stopSession: [] as string[],
-    persistSessionRecord: [] as Array<{ taskId: string; record: AgentSessionRecord }>,
-    deleteSessionRecord: [] as string[],
-    clearObservation: [] as string[],
-    removeSession: [] as string[],
+  const calls: Harness["calls"] = {
+    ensureRuntime: [],
+    prepareLease: [],
+    completeLease: [],
+    abortLease: [],
+    stopSession: [],
+    persistSessionRecord: [],
+    deleteSessionRecord: [],
+    clearObservation: [],
+    removeSession: [],
     bootstrapComplete: 0,
     bootstrapAbort: 0,
   };
@@ -105,11 +107,13 @@ const createHarness = (
     },
   };
 
-  const adapter = {
+  const stopAdapter: Pick<AgentEnginePort, "stopSession"> = {
     stopSession: async (input: { externalSessionId: string }) => {
       calls.stopSession.push(input.externalSessionId);
     },
-  } as unknown as AgentEnginePort;
+  };
+  // SAFETY: workflow launch tests only exercise the stopSession method on this adapter seam.
+  const adapter = stopAdapter as AgentEnginePort;
 
   const deps: StartSessionExecutionDependencies = {
     session: {
@@ -508,6 +512,7 @@ describe("commitWorkflowSessionLaunch", () => {
       "Workspace changed while starting session.",
     );
     expect(harness.calls.stopSession).toEqual(["external-commit"]);
+    expect(harness.calls.persistSessionRecord).toHaveLength(1);
     expect(harness.calls.deleteSessionRecord).toEqual(["external-commit"]);
     expect(harness.calls.removeSession).toEqual(["external-commit"]);
     expect(harness.calls.bootstrapAbort).toBe(0);
@@ -521,7 +526,8 @@ describe("commitWorkflowSessionLaunch", () => {
       STALE_START_ERROR,
     );
     expect(harness.calls.stopSession).toEqual(["external-commit"]);
-    expect(harness.calls.deleteSessionRecord).toEqual(["external-commit"]);
+    expect(harness.calls.persistSessionRecord).toHaveLength(0);
+    expect(harness.calls.deleteSessionRecord).toHaveLength(0);
     expect(harness.calls.removeSession).toEqual(["external-commit"]);
     expect(harness.calls.bootstrapAbort).toBe(1);
     expect(harness.calls.bootstrapComplete).toBe(0);
