@@ -2,6 +2,7 @@ import type {
   AgentModelFavorite,
   GitProviderRepository,
   GlobalGitConfig,
+  RepoAgentDefaults,
   SettingsSnapshot,
   SettingsSnapshotSaveInput,
   WorkspaceRecord,
@@ -99,12 +100,11 @@ export function useRepoSettingsOperations({
         },
         devServers: input.devServers,
       });
-      const agentDefaults = {
-        ...(specDefault ? { spec: specDefault } : undefined),
-        ...(plannerDefault ? { planner: plannerDefault } : undefined),
-        ...(buildDefault ? { build: buildDefault } : undefined),
-        ...(qaDefault ? { qa: qaDefault } : undefined),
-      };
+      const agentDefaults: RepoAgentDefaults = {};
+      if (specDefault) agentDefaults.spec = specDefault;
+      if (plannerDefault) agentDefaults.planner = plannerDefault;
+      if (buildDefault) agentDefaults.build = buildDefault;
+      if (qaDefault) agentDefaults.qa = qaDefault;
 
       const workspace = await host.workspaceSaveRepoSettings(workspaceId, {
         defaultRuntimeKind: input.defaultRuntimeKind,

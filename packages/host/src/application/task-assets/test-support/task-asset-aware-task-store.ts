@@ -1,4 +1,5 @@
 import { afterEach } from "bun:test";
+import type { TaskAssetFailure } from "@openducktor/contracts";
 import { Cause, Effect, Exit } from "effect";
 import { createNodeTaskAssetFilePort } from "../../../adapters/node/filesystem-task-asset-file-port";
 import { createSqliteTaskAssetRegistry } from "../../../adapters/sqlite/sqlite-task-asset-registry";
@@ -47,17 +48,21 @@ export const injectedTaskAssetError = ({
   failedPhase: string;
   taskId?: string;
   assetIds?: string[];
-}) =>
-  new TaskAssetError({
+}) => {
+  const failure: TaskAssetFailure = {
     operation,
     code,
-    ...(taskId ? { taskId } : undefined),
     assetIds,
     failedPhase,
     durableState: "unchanged",
     retryAllowed: true,
     message: `Injected ${failedPhase} failure.`,
-  });
+  };
+  if (taskId) {
+    failure.taskId = taskId;
+  }
+  return new TaskAssetError(failure);
+};
 
 export const createTaskWithAsset = async (harness: Awaited<ReturnType<typeof createHarness>>) => {
   const staged = await Effect.runPromise(

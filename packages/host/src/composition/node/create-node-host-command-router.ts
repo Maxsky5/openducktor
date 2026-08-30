@@ -194,34 +194,39 @@ export const createNodeEffectHostCommandRouter = (
             }),
           ),
   });
-  const workspaceStarter = createRuntimeWorkspaceStarterDispatcher({
-    claude: claudeRuntime.workspaceStarter,
-    codex: createCodexWorkspaceRuntimeStarter({
-      toolDiscovery,
-      settingsConfig,
-      codexAppServer: effectiveCodexTransportRegistry,
+  const codexWorkspaceRuntimeStarterInput: Parameters<
+    typeof createCodexWorkspaceRuntimeStarter
+  >[0] = {
+    toolDiscovery,
+    settingsConfig,
+    codexAppServer: effectiveCodexTransportRegistry,
+    liveSessionLifecycle: agentSessionLiveStateService,
+    prepareLiveSessionAdapter: createCodexLiveSessionAdapterPreparer({
       liveSessionLifecycle: agentSessionLiveStateService,
-      prepareLiveSessionAdapter: createCodexLiveSessionAdapterPreparer({
-        liveSessionLifecycle: agentSessionLiveStateService,
-        codexAppServer: effectiveCodexAppServer,
-        onBackgroundFailure,
-        resolveRuntimePolicy: (scope) =>
-          loadGlobalConfig(settingsConfig).pipe(
-            Effect.map(({ agentRuntimes: { codex } }) =>
-              resolveCodexEffectivePolicy(codex, scope.kind === "workflow" ? scope.role : null),
-            ),
+      codexAppServer: effectiveCodexAppServer,
+      onBackgroundFailure,
+      resolveRuntimePolicy: (scope) =>
+        loadGlobalConfig(settingsConfig).pipe(
+          Effect.map(({ agentRuntimes: { codex } }) =>
+            resolveCodexEffectivePolicy(codex, scope.kind === "workflow" ? scope.role : null),
           ),
-      }),
-      processEnv,
-      runtimeDistribution,
-      ...(clientVersion ? { clientVersion } : undefined),
-      resolveMcpBridgeConnection: (runtimeInput) =>
-        resolveWorkspaceRuntimeMcpBridgeConnection(
-          resolvedMcpHostBridge,
-          "codex",
-          runtimeInput.repoPath,
         ),
     }),
+    processEnv,
+    runtimeDistribution,
+    resolveMcpBridgeConnection: (runtimeInput) =>
+      resolveWorkspaceRuntimeMcpBridgeConnection(
+        resolvedMcpHostBridge,
+        "codex",
+        runtimeInput.repoPath,
+      ),
+  };
+  if (clientVersion) {
+    codexWorkspaceRuntimeStarterInput.clientVersion = clientVersion;
+  }
+  const workspaceStarter = createRuntimeWorkspaceStarterDispatcher({
+    claude: claudeRuntime.workspaceStarter,
+    codex: createCodexWorkspaceRuntimeStarter(codexWorkspaceRuntimeStarterInput),
     opencode: createOpenCodeWorkspaceRuntimeStarter({
       toolDiscovery,
       settingsConfig,

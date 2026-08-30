@@ -4,7 +4,6 @@ import type {
   AgentSessionTodoPriority,
   AgentSessionTodoStatus,
   NormalizeAgentSessionTodoInput,
-  UnknownRecord,
 } from "./index";
 import * as core from "./index";
 
@@ -13,7 +12,6 @@ type TodoNormalizerTypeContract = {
   AgentSessionTodoPriority: AgentSessionTodoPriority;
   AgentSessionTodoStatus: AgentSessionTodoStatus;
   NormalizeAgentSessionTodoInput: NormalizeAgentSessionTodoInput;
-  UnknownRecord: UnknownRecord;
 };
 
 describe("core exports contract", () => {
@@ -22,11 +20,6 @@ describe("core exports contract", () => {
     expect(core.normalizeAgentSessionTodoList).toBeInstanceOf(Function);
     expect(core.normalizeAgentSessionTodoPriority).toBeInstanceOf(Function);
     expect(core.normalizeAgentSessionTodoStatus).toBeInstanceOf(Function);
-  });
-
-  test("re-exports shared record guards from the barrel", () => {
-    expect(core.isRecord).toBeInstanceOf(Function);
-    expect(core.isUnknownRecord).toBeInstanceOf(Function);
   });
 
   test("keeps todo normalizer type exports importable from the barrel", () => {

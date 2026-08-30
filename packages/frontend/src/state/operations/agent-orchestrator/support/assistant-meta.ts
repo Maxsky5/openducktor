@@ -21,19 +21,25 @@ export const toSessionContextUsage = (
   totalTokens: number | undefined,
   model?: AgentSessionState["selectedModel"],
 ): AgentSessionContextUsage | null => {
-  if (typeof totalTokens !== "number" || totalTokens <= 0) {
+  if (totalTokens === undefined || totalTokens <= 0) {
     return null;
   }
 
   const effectiveModel = mergeModelSelection(session.selectedModel, model ?? undefined);
-
-  return {
-    totalTokens,
-    ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : undefined),
-    ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : undefined),
-    ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : undefined),
-    ...(effectiveModel?.profileId ? { profileId: effectiveModel.profileId } : undefined),
-  };
+  const contextUsage: AgentSessionContextUsage = { totalTokens };
+  if (effectiveModel?.providerId) {
+    contextUsage.providerId = effectiveModel.providerId;
+  }
+  if (effectiveModel?.modelId) {
+    contextUsage.modelId = effectiveModel.modelId;
+  }
+  if (effectiveModel?.variant) {
+    contextUsage.variant = effectiveModel.variant;
+  }
+  if (effectiveModel?.profileId) {
+    contextUsage.profileId = effectiveModel.profileId;
+  }
+  return contextUsage;
 };
 
 export const createAssistantMessageMeta = ({
@@ -49,19 +55,38 @@ export const createAssistantMessageMeta = ({
   { kind: "assistant" }
 > => {
   const effectiveModel = mergeModelSelection(null, model ?? undefined);
-  return {
+  const meta: Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "assistant" }> = {
     kind: "assistant",
     isFinal,
-    ...(role ? { agentRole: role } : undefined),
-    ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : undefined),
-    ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : undefined),
-    ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : undefined),
-    ...(effectiveModel?.profileId ? { profileId: effectiveModel.profileId } : undefined),
-    ...(typeof durationMs === "number" ? { durationMs } : undefined),
-    ...(typeof totalTokens === "number" && totalTokens > 0 ? { totalTokens } : undefined),
-    ...(typeof contextWindow === "number" && contextWindow > 0 ? { contextWindow } : undefined),
-    ...(typeof outputLimit === "number" && outputLimit > 0 ? { outputLimit } : undefined),
   };
+  if (role) {
+    meta.agentRole = role;
+  }
+  if (effectiveModel?.providerId) {
+    meta.providerId = effectiveModel.providerId;
+  }
+  if (effectiveModel?.modelId) {
+    meta.modelId = effectiveModel.modelId;
+  }
+  if (effectiveModel?.variant) {
+    meta.variant = effectiveModel.variant;
+  }
+  if (effectiveModel?.profileId) {
+    meta.profileId = effectiveModel.profileId;
+  }
+  if (durationMs !== undefined) {
+    meta.durationMs = durationMs;
+  }
+  if (totalTokens !== undefined && totalTokens > 0) {
+    meta.totalTokens = totalTokens;
+  }
+  if (contextWindow !== undefined && contextWindow > 0) {
+    meta.contextWindow = contextWindow;
+  }
+  if (outputLimit !== undefined && outputLimit > 0) {
+    meta.outputLimit = outputLimit;
+  }
+  return meta;
 };
 
 export const toAssistantMessageMeta = (

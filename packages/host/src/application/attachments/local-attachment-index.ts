@@ -1,5 +1,12 @@
 import { Effect } from "effect";
-import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
+import {
+  errorMessage,
+  hasNestedNodeErrorCode,
+  HostOperationError,
+  type HostOperationErrorAggregate,
+  HostValidationError,
+  type HostValidationErrorAggregate,
+} from "../../effect/host-errors";
 import type { LocalAttachmentEntry, LocalAttachmentPort } from "../../ports/local-attachment-port";
 
 const uuidPrefixPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-/i;
@@ -21,22 +28,6 @@ export const readStagedAttachmentOriginalName = (entry: LocalAttachmentEntry): s
     return entry.fileName;
   }
   return entry.fileName.slice(uuidPrefixMatch[0].length);
-};
-
-const hasNestedNodeErrorCode = (cause: unknown, code: string): boolean => {
-  const visited = new Set<object>();
-  let current: unknown = cause;
-  while (typeof current === "object" && current !== null) {
-    if (visited.has(current)) {
-      return false;
-    }
-    visited.add(current);
-    if ("code" in current && current.code === code) {
-      return true;
-    }
-    current = "cause" in current ? current.cause : undefined;
-  }
-  return false;
 };
 
 const createNoStagedAttachmentMatchError = (displayName: string): HostValidationError =>
@@ -159,7 +150,10 @@ export const resolveIndexedStagedAttachment = (
   index: StagedAttachmentIndex,
   lookupToken: string,
   displayName: string,
-): Effect.Effect<IndexedStagedAttachment, HostOperationError | HostValidationError> =>
+): Effect.Effect<
+  IndexedStagedAttachment,
+  HostOperationErrorAggregate | HostValidationErrorAggregate
+> =>
   Effect.gen(function* () {
     const matches = index.byLookupToken.get(lookupToken);
     if (!matches || matches.length === 0) {

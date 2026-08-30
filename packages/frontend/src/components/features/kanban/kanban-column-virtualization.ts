@@ -18,6 +18,11 @@ type VirtualWindowEdgeOffsetsArgs = {
   totalHeight: number;
 };
 
+type VirtualWindowEdgeOffsets = {
+  topSpacerHeight: number;
+  bottomSpacerHeight: number;
+};
+
 type ResolveVirtualViewportWindowArgs = {
   laneTop: number;
   viewportTop: number;
@@ -94,22 +99,16 @@ export function getVirtualWindowEdgeOffsets({
   itemOffsets,
   itemHeights,
   totalHeight,
-}: VirtualWindowEdgeOffsetsArgs) {
+}: VirtualWindowEdgeOffsetsArgs): VirtualWindowEdgeOffsets {
   if (range.endIndex < range.startIndex || itemHeights.length === 0) {
-    return { topSpacerHeight: 0, bottomSpacerHeight: totalHeight } satisfies {
-      topSpacerHeight: number;
-      bottomSpacerHeight: number;
-    };
+    return { topSpacerHeight: 0, bottomSpacerHeight: totalHeight };
   }
 
   const topSpacerHeight = itemOffsets[range.startIndex] ?? 0;
   const visibleWindowEnd = (itemOffsets[range.endIndex] ?? 0) + (itemHeights[range.endIndex] ?? 0);
   const bottomSpacerHeight = Math.max(0, totalHeight - visibleWindowEnd);
 
-  return { topSpacerHeight, bottomSpacerHeight } satisfies {
-    topSpacerHeight: number;
-    bottomSpacerHeight: number;
-  };
+  return { topSpacerHeight, bottomSpacerHeight };
 }
 
 function findFirstIndexWithEndAfterStart(

@@ -217,9 +217,7 @@ describe("useAgentSessionApprovalActions", () => {
       await harness.run(async (state) => {
         await state.onReplyApproval("req-1", "reject");
       });
-      await harness.waitFor(
-        (state) => typeof state.approvalReplyErrorByRequestId["req-1"] === "string",
-      );
+      await harness.waitFor((state) => state.approvalReplyErrorByRequestId["req-1"] !== undefined);
 
       await harness.update({
         ...baseArgs,
@@ -246,9 +244,7 @@ describe("useAgentSessionApprovalActions", () => {
       await harness.run(async (state) => {
         await state.onReplyApproval("req-1", "reject");
       });
-      await harness.waitFor(
-        (state) => typeof state.approvalReplyErrorByRequestId["req-1"] === "string",
-      );
+      await harness.waitFor((state) => state.approvalReplyErrorByRequestId["req-1"] !== undefined);
 
       await harness.update({
         ...baseArgs,

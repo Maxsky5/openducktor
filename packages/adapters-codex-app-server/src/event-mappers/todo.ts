@@ -1,14 +1,17 @@
 import type { AgentSessionTodoItem, NormalizeAgentSessionTodoInput } from "@openducktor/core";
-import { jsonValueSchema, type CodexAppServerJsonValue } from "@openducktor/contracts";
+import type { CodexAppServerJsonValue } from "@openducktor/contracts";
 import { normalizeAgentSessionTodoList } from "@openducktor/core";
 import {
-  arrayFromUnknown,
+  arrayFromCodexJsonValue,
   codexNamespacedToolName,
   extractStringField,
   isPlainObject,
+  parseCodexJsonObjectString,
 } from "../codex-app-server-shared";
 import { codexItemTypeMatches } from "../codex-app-server-transcript";
 import type {
+  CodexCanonicalTodoUpdateEvent,
+  CodexCanonicalToolEvent,
   CodexCanonicalEvent,
   CodexMappingContext,
   CodexMappingResult,
@@ -29,14 +32,7 @@ type CodexPlanUpdatedPayload = Extract<
 type CodexJsonObject = Record<string, CodexAppServerJsonValue>;
 
 const parseJsonObject = (value: CodexAppServerJsonValue | undefined) => {
-  if (isPlainObject(value)) return value;
-  if (typeof value !== "string") return null;
-  try {
-    const parsed = jsonValueSchema.safeParse(JSON.parse(value));
-    return parsed.success && isPlainObject(parsed.data) ? parsed.data : null;
-  } catch {
-    return null;
-  }
+  return isPlainObject(value) ? value : parseCodexJsonObjectString(value);
 };
 
 export type CodexTodoUpdate = {
@@ -105,11 +101,11 @@ type CodexTodoItemSource =
   | { kind: "plan_text"; items: CodexPlanTextTodo[] };
 
 const codexTodoItemsFromPayload = (payload: CodexJsonObject): CodexTodoItemSource => {
-  const todo = arrayFromUnknown(payload.todo);
+  const todo = arrayFromCodexJsonValue(payload.todo);
   if (todo.length > 0) {
     return { kind: "structured", items: todo };
   }
-  const plan = arrayFromUnknown(payload.plan);
+  const plan = arrayFromCodexJsonValue(payload.plan);
   if (plan.length > 0) {
     return { kind: "structured", items: plan };
   }
@@ -133,10 +129,10 @@ const codexTodoToolInputFromPayload = (payload: CodexJsonObject) => {
     return null;
   }
   const explanation = extractStringField(payload, ["explanation"]);
-  return {
-    ...(explanation ? { explanation } : undefined),
-    todos,
-  };
+  if (!explanation) {
+    return { todos };
+  }
+  return { explanation, todos };
 };
 
 const codexTodoUpdateFromPayload = (payload: CodexJsonObject): CodexTodoUpdate | null => {
@@ -147,21 +143,30 @@ const codexTodoUpdateFromPayload = (payload: CodexJsonObject): CodexTodoUpdate |
   const todos = normalizeAgentSessionTodoList(
     source.kind === "plan_text"
       ? source.items
-      : source.items.filter(isPlainObject).map((item, index) => ({
-          id: extractStringField(item, ["id", "todoId", "todo_id"]) ?? `codex-todo:${index}`,
-          content: extractStringField(item, ["content", "text", "title", "step"]) ?? "",
-          ...(typeof item.status === "string" ? { status: item.status } : undefined),
-          ...(typeof item.priority === "string" ? { priority: item.priority } : undefined),
-        })),
+      : source.items.filter(isPlainObject).map((item, index) => {
+          const todo: NormalizeAgentSessionTodoInput = {
+            id: extractStringField(item, ["id", "todoId", "todo_id"]) ?? `codex-todo:${index}`,
+            content: extractStringField(item, ["content", "text", "title", "step"]) ?? "",
+          };
+          const status = extractStringField(item, ["status"]);
+          if (status !== null) {
+            todo.status = status;
+          }
+          const priority = extractStringField(item, ["priority"]);
+          if (priority !== null) {
+            todo.priority = priority;
+          }
+          return todo;
+        }),
   );
   if (todos.length === 0) {
     return null;
   }
   const explanation = extractStringField(payload, ["explanation"]);
-  return {
-    ...(explanation ? { explanation } : undefined),
-    todos,
-  };
+  if (!explanation) {
+    return { todos };
+  }
+  return { explanation, todos };
 };
 
 const codexTodoUpdateFromToolCall = (
@@ -186,31 +191,45 @@ const todoToolCanonicalEvents = (
     rawToolName: string;
   } & CodexToolTimingFields,
 ): CodexCanonicalEvent[] => [
-  {
-    kind: "tool",
-    source: ctx.source,
-    mapper: TODO_MAPPER_NAME,
-    threadId: ctx.threadId,
-    ...(ctx.turnId ? { turnId: ctx.turnId } : undefined),
-    ...(ctx.timestamp ? { timestamp: ctx.timestamp } : undefined),
-    invocation: {
-      ...ids,
-      status: "completed",
-      displayLabel: "todo",
-      input,
-      output: "Plan updated",
-      metadata: { codexTodoUpdate: true },
-    },
-  },
-  {
-    kind: "todo_update",
-    source: ctx.source,
-    mapper: TODO_MAPPER_NAME,
-    threadId: ctx.threadId,
-    ...(ctx.turnId ? { turnId: ctx.turnId } : undefined),
-    ...(ctx.timestamp ? { timestamp: ctx.timestamp } : undefined),
-    todos: update.todos,
-  },
+  (() => {
+    const toolEvent: CodexCanonicalToolEvent = {
+      kind: "tool",
+      source: ctx.source,
+      mapper: TODO_MAPPER_NAME,
+      threadId: ctx.threadId,
+      invocation: {
+        ...ids,
+        status: "completed",
+        displayLabel: "todo",
+        input,
+        output: "Plan updated",
+        metadata: { codexTodoUpdate: true },
+      },
+    };
+    if (ctx.turnId) {
+      toolEvent.turnId = ctx.turnId;
+    }
+    if (ctx.timestamp) {
+      toolEvent.timestamp = ctx.timestamp;
+    }
+    return toolEvent;
+  })(),
+  (() => {
+    const updateEvent: CodexCanonicalTodoUpdateEvent = {
+      kind: "todo_update",
+      source: ctx.source,
+      mapper: TODO_MAPPER_NAME,
+      threadId: ctx.threadId,
+      todos: update.todos,
+    };
+    if (ctx.turnId) {
+      updateEvent.turnId = ctx.turnId;
+    }
+    if (ctx.timestamp) {
+      updateEvent.timestamp = ctx.timestamp;
+    }
+    return updateEvent;
+  })(),
 ];
 
 const completedDynamicToolCallEvents = (

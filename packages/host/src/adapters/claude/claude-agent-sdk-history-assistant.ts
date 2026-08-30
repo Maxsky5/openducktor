@@ -1,10 +1,7 @@
-import {
-  isUnknownRecord,
-  type AgentSessionHistoryMessage,
-  type AgentStreamPart,
-} from "@openducktor/core";
+import type { AgentSessionHistoryMessage, AgentStreamPart } from "@openducktor/core";
 import { readHistoryAssistantModel } from "./claude-agent-sdk-history-entry";
 import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
+import { parseClaudeHistoryAssistantEntry } from "./claude-agent-sdk-ingress-schemas";
 import { isClaudeSyntheticAssistantMessage } from "./claude-agent-sdk-local-commands";
 import { finishReasonForClaudeStopReason } from "./claude-agent-sdk-result-lifecycle";
 import {
@@ -17,6 +14,7 @@ import {
   createClaudeAssistantTextPart,
   createClaudeFinishStepPart,
 } from "./claude-agent-sdk-transcript-parts";
+import type { ClaudeToolInput } from "./claude-agent-sdk-types";
 import { historyMessageText, readStringProp } from "./claude-agent-sdk-utils";
 
 export type MutableAssistantHistoryMessage = Extract<
@@ -64,7 +62,7 @@ export const moveNestedResultToEnd = (
 type ProjectClaudeHistoryAssistantMessageInput = {
   entry: ClaudeHistoryMessage;
   timestamp: string;
-  toolInputsByCallId: Map<string, Record<string, unknown>>;
+  toolInputsByCallId: Map<string, ClaudeToolInput>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
 };
@@ -72,20 +70,6 @@ type ProjectClaudeHistoryAssistantMessageInput = {
 type ClaudeHistoryAssistantProjection = {
   message: MutableAssistantHistoryMessage;
   stopReason: string | undefined;
-};
-
-const claudeAssistantResponseId = (entry: ClaudeHistoryMessage): string | undefined => {
-  return entry.type === "assistant" && isUnknownRecord(entry.message)
-    ? readStringProp(entry.message, "id")
-    : undefined;
-};
-
-const claudeAssistantContent = (entry: ClaudeHistoryMessage): unknown[] => {
-  return entry.type === "assistant" && isUnknownRecord(entry.message)
-    ? Array.isArray(entry.message.content)
-      ? entry.message.content
-      : []
-    : [];
 };
 
 export const projectClaudeHistoryAssistantMessage = ({
@@ -101,64 +85,58 @@ export const projectClaudeHistoryAssistantMessage = ({
   if (isClaudeSyntheticAssistantMessage(entry)) {
     return null;
   }
-  const responseId = claudeAssistantResponseId(entry);
-  const content = claudeAssistantContent(entry);
-  const text = historyMessageText(entry.message);
+  const assistantEntry = parseClaudeHistoryAssistantEntry(entry);
+  const responseId = readStringProp(assistantEntry.message, "id");
+  const content = assistantEntry.message.content;
+  const text = historyMessageText(assistantEntry.message);
   const parts: AgentStreamPart[] = [];
-  const stopReason = isUnknownRecord(entry.message)
-    ? readStringProp(entry.message, "stop_reason")
-    : undefined;
+  const stopReason = readStringProp(assistantEntry.message, "stop_reason");
   const messageId = responseId ?? entry.uuid;
   const preservesBlockOrder =
     stopReason === "tool_use" &&
     Array.isArray(content) &&
-    content.some((block) => isUnknownRecord(block) && readStringProp(block, "type") !== "text");
-  if (Array.isArray(content)) {
-    for (const [index, block] of content.entries()) {
-      if (!isUnknownRecord(block)) {
-        continue;
+    content.some((block) => readStringProp(block, "type") !== "text");
+  for (const [index, block] of content.entries()) {
+    const type = readStringProp(block, "type");
+    if (type === "text" && preservesBlockOrder) {
+      const blockText = readStringProp(block, "text");
+      if (blockText?.trim()) {
+        parts.push(
+          createClaudeAssistantTextPart({
+            messageId,
+            partId: `${messageId}:text:${index}`,
+            text: blockText,
+          }),
+        );
       }
-      const type = readStringProp(block, "type");
-      if (type === "text" && preservesBlockOrder) {
-        const blockText = readStringProp(block, "text");
-        if (blockText?.trim()) {
-          parts.push(
-            createClaudeAssistantTextPart({
-              messageId,
-              partId: `${messageId}:text:${index}`,
-              text: blockText,
-            }),
-          );
+      continue;
+    }
+    if (isClaudeToolUseBlockType(type)) {
+      const toolUse = decodeClaudeToolUseBlock({
+        block,
+        fallbackMessageId: entry.uuid,
+        index,
+      });
+      if (toolUse) {
+        parts.push(createClaudePendingToolPart({ messageId, toolUse }));
+        toolMessageIdsByCallId.set(toolUse.callId, messageId);
+        toolNamesByCallId.set(toolUse.callId, toolUse.toolName);
+        if (toolUse.input) {
+          toolInputsByCallId.set(toolUse.callId, toolUse.input);
         }
-        continue;
       }
-      if (isClaudeToolUseBlockType(type)) {
-        const toolUse = decodeClaudeToolUseBlock({
-          block,
-          fallbackMessageId: entry.uuid,
-          index,
-        });
-        if (toolUse) {
-          parts.push(createClaudePendingToolPart({ messageId, toolUse }));
-          toolMessageIdsByCallId.set(toolUse.callId, messageId);
-          toolNamesByCallId.set(toolUse.callId, toolUse.toolName);
-          if (toolUse.input) {
-            toolInputsByCallId.set(toolUse.callId, toolUse.input);
-          }
-        }
-        continue;
-      }
-      if (type === "thinking") {
-        const thinkingText = readStringProp(block, "thinking") ?? readStringProp(block, "text");
-        if (thinkingText) {
-          parts.push(
-            createClaudeAssistantReasoningPart({
-              messageId,
-              partId: `${messageId}:thinking:${index}`,
-              text: thinkingText,
-            }),
-          );
-        }
+      continue;
+    }
+    if (type === "thinking") {
+      const thinkingText = readStringProp(block, "thinking") ?? readStringProp(block, "text");
+      if (thinkingText) {
+        parts.push(
+          createClaudeAssistantReasoningPart({
+            messageId,
+            partId: `${messageId}:thinking:${index}`,
+            text: thinkingText,
+          }),
+        );
       }
     }
   }
@@ -172,8 +150,10 @@ export const projectClaudeHistoryAssistantMessage = ({
     timestamp,
     text,
     parts,
-    ...(model ? { model } : undefined),
   };
+  if (model) {
+    assistantMessage.model = model;
+  }
   if (text.trim().length > 0) {
     addClaudeHistoryFinishStep(assistantMessage, finishReasonForClaudeStopReason(stopReason));
   }

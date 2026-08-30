@@ -5,6 +5,7 @@ import {
 } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import { useCallback, useMemo } from "react";
+import { z } from "zod";
 import { host } from "../shared/host";
 
 type TaskDescriptionAssetHostPort = Pick<HostClient, "taskAssetStage" | "taskAssetDiscardStaged">;
@@ -14,8 +15,9 @@ export type TaskDescriptionAssetOperations = {
   discardStaged(workspaceId: string, assetIds: string[]): Promise<void>;
 };
 
+const fileReaderTextSchema = z.string();
 const isFileReaderText = (value: FileReader["result"]): value is string =>
-  typeof value === "string";
+  fileReaderTextSchema.safeParse(value).success;
 
 const fileToBase64 = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {

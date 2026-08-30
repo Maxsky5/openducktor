@@ -1,10 +1,8 @@
-import type {
-  CommitsAheadBehind,
-  GitWorktreeStatus,
-  GitWorktreeStatusSummary,
-} from "@openducktor/contracts";
+import type { GitWorktreeStatus, GitWorktreeStatusSummary } from "@openducktor/contracts";
 import type { GitConflict } from "../contracts";
 import type { ScopeSnapshot, ScopeSummaryFields } from "./diff-data-model";
+
+type UpstreamState = Pick<ScopeSummaryFields, "upstreamAheadBehind" | "upstreamStatus" | "error">;
 
 const toGitConflict = (
   conflict: GitWorktreeStatus["gitConflict"] | GitWorktreeStatusSummary["gitConflict"],
@@ -23,7 +21,9 @@ const toGitConflict = (
   };
 };
 
-const toUpstreamState = (upstreamAheadBehind: GitWorktreeStatus["upstreamAheadBehind"]) => {
+const toUpstreamState = (
+  upstreamAheadBehind: GitWorktreeStatus["upstreamAheadBehind"],
+): UpstreamState => {
   if (upstreamAheadBehind.outcome === "tracking") {
     return {
       upstreamAheadBehind: {
@@ -32,10 +32,6 @@ const toUpstreamState = (upstreamAheadBehind: GitWorktreeStatus["upstreamAheadBe
       },
       upstreamStatus: "tracking",
       error: null,
-    } satisfies {
-      upstreamAheadBehind: CommitsAheadBehind | null;
-      upstreamStatus: "tracking" | "untracked" | "error";
-      error: string | null;
     };
   }
 
@@ -47,10 +43,6 @@ const toUpstreamState = (upstreamAheadBehind: GitWorktreeStatus["upstreamAheadBe
       },
       upstreamStatus: "untracked",
       error: null,
-    } satisfies {
-      upstreamAheadBehind: CommitsAheadBehind | null;
-      upstreamStatus: "tracking" | "untracked" | "error";
-      error: string | null;
     };
   }
 
@@ -58,10 +50,6 @@ const toUpstreamState = (upstreamAheadBehind: GitWorktreeStatus["upstreamAheadBe
     upstreamAheadBehind: null,
     upstreamStatus: "error",
     error: `Upstream status unavailable: ${upstreamAheadBehind.message}`,
-  } satisfies {
-    upstreamAheadBehind: CommitsAheadBehind | null;
-    upstreamStatus: "tracking" | "untracked" | "error";
-    error: string | null;
   };
 };
 

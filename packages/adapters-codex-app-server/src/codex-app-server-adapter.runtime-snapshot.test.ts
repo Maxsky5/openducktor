@@ -9,7 +9,6 @@ import { AGENT_ROLE_TOOL_POLICY, type AgentEvent } from "@openducktor/core";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
-  codexLocalSessionsForTest,
   codexThreadFixture,
   codexThreadStartResultFixture,
   codexTurnFixture,
@@ -399,7 +398,6 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       }),
     });
 
-    expect(codexLocalSessionsForTest(adapter).has("thread-saved")).toBe(false);
     expect(transports.get("runtime-live")?.calls.map((call) => call.method)).toContain(
       "thread/loaded/list",
     );
@@ -442,7 +440,6 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       availability: "runtime",
       classification: "idle",
     });
-    expect(codexLocalSessionsForTest(adapter).has("thread-idle")).toBe(true);
   });
 
   test("keeps real pending input visible after a Codex idle history load", async () => {
@@ -539,7 +536,6 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       }),
     ).resolves.toBeNull();
-    expect(codexLocalSessionsForTest(adapter).has("thread-idle")).toBe(true);
 
     await flushCodexAdapterWork();
     expect(adapter.listLiveSessionSnapshots("runtime-live")).toContainEqual(
@@ -666,7 +662,6 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
 
     await observeSessionState(adapter, "thread-saved");
 
-    expect(codexLocalSessionsForTest(adapter).has("thread-saved")).toBe(true);
     expect(transports.get("runtime-live")?.calls.map((call) => call.method)).toContain(
       "thread/resume",
     );
@@ -758,8 +753,6 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
       }),
     ).rejects.toThrow(expectedMessage);
-
-    expect(codexLocalSessionsForTest(adapter).has("thread-idle")).toBe(false);
   });
 
   test("lists a completed unloaded child after reload", async () => {
@@ -857,8 +850,6 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         ],
       }),
     );
-    expect(codexLocalSessionsForTest(adapter).has("child-thread")).toBe(false);
-    expect(codexLocalSessionsForTest(adapter).has("grandchild-thread")).toBe(false);
   });
 
   test("replays mirrored pending input when subscribing an idle parent without a local session", async () => {

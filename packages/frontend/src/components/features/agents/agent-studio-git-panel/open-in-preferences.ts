@@ -13,7 +13,7 @@ const isSystemOpenInToolId = (value: string): value is SystemOpenInToolId =>
 const openInPreferencesStorageKey = (): string => toRightPanelStorageKey();
 
 export function readPreferredOpenInTool(): SystemOpenInToolId | null {
-  if (typeof globalThis.localStorage === "undefined") {
+  if (globalThis.localStorage === undefined) {
     return null;
   }
 
@@ -31,7 +31,7 @@ export function readPreferredOpenInTool(): SystemOpenInToolId | null {
     }
 
     const toolId = parsed.data.openInToolId;
-    if (typeof toolId !== "string" || !isSystemOpenInToolId(toolId)) {
+    if (toolId === undefined || !isSystemOpenInToolId(toolId)) {
       return null;
     }
 
@@ -46,7 +46,7 @@ export function readPreferredOpenInTool(): SystemOpenInToolId | null {
 }
 
 export function persistPreferredOpenInTool(toolId: SystemOpenInToolId): void {
-  if (typeof globalThis.localStorage === "undefined") {
+  if (globalThis.localStorage === undefined) {
     return;
   }
 

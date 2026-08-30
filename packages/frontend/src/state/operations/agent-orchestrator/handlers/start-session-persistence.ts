@@ -34,12 +34,13 @@ export const registerStartedSession = async ({
   deps: Pick<StartSessionExecutionDependencies, "session" | "runtime">;
   taskCard: TaskCard;
 }): Promise<Extract<StartOrReuseResult, { kind: "started" }>> => {
-  const initialSession = buildInitialSession({
+  const initialSessionInput: Parameters<typeof buildInitialSession>[0] = {
     startedCtx,
     selectedModel,
     systemPrompt,
-    ...(initialMessages ? { initialMessages } : undefined),
-  });
+  };
+  if (initialMessages) initialSessionInput.initialMessages = initialMessages;
+  const initialSession = buildInitialSession(initialSessionInput);
 
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
   deps.session.replaceSession(initialSession);
@@ -64,13 +65,14 @@ export const registerStartedSession = async ({
       },
     });
   } catch (error) {
-    await rollbackStartedSessionAfterPersistenceFailure({
+    const rollbackInput: Parameters<typeof rollbackStartedSessionAfterPersistenceFailure>[0] = {
       error,
       startedCtx,
       session: deps.session,
       runtime: deps.runtime,
-      ...(runtimeInfo.bootstrap ? { bootstrap: runtimeInfo.bootstrap } : undefined),
-    });
+    };
+    if (runtimeInfo.bootstrap) rollbackInput.bootstrap = runtimeInfo.bootstrap;
+    await rollbackStartedSessionAfterPersistenceFailure(rollbackInput);
   }
 
   return {

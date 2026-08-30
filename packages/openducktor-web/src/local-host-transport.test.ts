@@ -378,7 +378,12 @@ describe("local host SSE subscriptions", () => {
       subscribeLocalHostDevServerEvents,
       subscribeLocalHostRunEvents,
     } = await loadLocalHostTransport();
-    const fetchMock = mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    const fetchMock = mock(
+      async (url: string | URL | Request) =>
+        new Response(url.toString().includes("/invoke/") ? "null" : JSON.stringify({ ok: true }), {
+          status: 200,
+        }),
+    );
     globalThis.fetch = createFetchFixture(fetchMock);
     const runListener = mock(() => {});
     const devServerListener = mock(() => {});
@@ -494,7 +499,7 @@ describe("local host SSE subscriptions", () => {
           resolveSecondRefresh();
         }
       }
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      return new Response("null", { status: 200 });
     });
     globalThis.fetch = createFetchFixture(fetchMock);
     const listener = mock((_envelope: AgentSessionLiveEnvelope) => {});
@@ -612,7 +617,15 @@ describe("local host SSE subscriptions", () => {
   test("delivers replay gaps to every live-session observer when one listener fails", async () => {
     const { observeLocalHostAgentSessions } = await loadLocalHostTransport();
     globalThis.fetch = createFetchFixture(
-      mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
+      mock(
+        async (url: string | URL | Request) =>
+          new Response(
+            url.toString().includes("/invoke/") ? "null" : JSON.stringify({ ok: true }),
+            {
+              status: 200,
+            },
+          ),
+      ),
     );
     const throwingListener = mock((envelope: AgentSessionLiveEnvelope) => {
       if (envelope.type === "transcript_gap") {

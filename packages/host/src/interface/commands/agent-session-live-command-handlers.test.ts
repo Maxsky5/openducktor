@@ -3,6 +3,7 @@ import type {
   AgentSessionControlSendInput,
   AgentSessionControlStartInput,
   AgentSessionLiveEnvelope,
+  AgentSessionLiveLoadDiffInput,
   AgentSessionLiveSnapshot,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -45,6 +46,7 @@ const createHarness = async (resolveAttachment?: LocalAttachmentService["resolve
   const diffLoads: unknown[] = [];
   const starts: AgentSessionControlStartInput[] = [];
   const adapter: AgentSessionRuntimeAdapterPort = {
+    supportsSessionControl: true,
     binding: { runtimeId: "runtime-1", runtimeKind: "opencode", repoPath: "/repo" },
     matches: (ref) =>
       snapshots.some((snapshot) => snapshot.ref.externalSessionId === ref.externalSessionId),
@@ -155,9 +157,9 @@ describe("createAgentSessionLiveCommandHandlers", () => {
   test("routes live session diff reads to the owning adapter", async () => {
     const { diffLoads, router } = await createHarness();
     await Effect.runPromise(router.invoke("agent_session_control_start", { ...startInput }));
-    const input = {
+    const input: AgentSessionLiveLoadDiffInput = {
       repoPath: "/repo",
-      runtimeKind: "opencode" as const,
+      runtimeKind: "opencode",
       workingDirectory: "/repo/worktree",
       externalSessionId: "session-1",
       runtimeHistoryAnchor: "turn-1",

@@ -19,6 +19,20 @@ export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessi
     throw new Error(`Session '${session.externalSessionId}' is not a workflow session.`);
   }
   const runtimeKind = session.runtimeKind;
+  let selectedModel: AgentSessionRecord["selectedModel"] = null;
+  if (session.selectedModel) {
+    selectedModel = {
+      runtimeKind: readSelectedModelRuntimeKind(
+        `Session '${session.externalSessionId}'`,
+        runtimeKind,
+        session.selectedModel,
+      ),
+      providerId: session.selectedModel.providerId,
+      modelId: session.selectedModel.modelId,
+    };
+    if (session.selectedModel.variant) selectedModel.variant = session.selectedModel.variant;
+    if (session.selectedModel.profileId) selectedModel.profileId = session.selectedModel.profileId;
+  }
 
   return {
     externalSessionId: session.externalSessionId,
@@ -26,23 +40,7 @@ export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessi
     startedAt: session.startedAt,
     runtimeKind,
     workingDirectory: session.workingDirectory,
-    selectedModel: session.selectedModel
-      ? {
-          runtimeKind: readSelectedModelRuntimeKind(
-            `Session '${session.externalSessionId}'`,
-            runtimeKind,
-            session.selectedModel,
-          ),
-          providerId: session.selectedModel.providerId,
-          modelId: session.selectedModel.modelId,
-          ...(session.selectedModel.variant
-            ? { variant: session.selectedModel.variant }
-            : undefined),
-          ...(session.selectedModel.profileId
-            ? { profileId: session.selectedModel.profileId }
-            : undefined),
-        }
-      : null,
+    selectedModel,
   };
 };
 

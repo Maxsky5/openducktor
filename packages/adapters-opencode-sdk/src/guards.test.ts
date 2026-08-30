@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { asUnknownRecord, readStringArrayProp } from "./guards";
+import { asJsonObject, readStringArrayProp } from "./guards";
 
 describe("guards", () => {
   test("readStringArrayProp returns a copied string array for valid input", () => {
@@ -17,17 +17,16 @@ describe("guards", () => {
     expect(result).toBeUndefined();
   });
 
-  test("asUnknownRecord rejects non-record values", () => {
-    expect(asUnknownRecord(new Date())).toBeUndefined();
-    expect(asUnknownRecord([])).toBeUndefined();
-    expect(asUnknownRecord(null)).toBeUndefined();
+  test("asJsonObject rejects non-record values", () => {
+    expect(asJsonObject("not an object")).toBeUndefined();
+    expect(asJsonObject([])).toBeUndefined();
+    expect(asJsonObject(null)).toBeUndefined();
   });
 
-  test("asUnknownRecord preserves producer-declared unknown values", () => {
-    const callback = () => undefined;
-    expect(asUnknownRecord({ callback, nested: { value: undefined } })).toEqual({
-      callback,
-      nested: { value: undefined },
+  test("asJsonObject preserves producer-declared JSON values", () => {
+    expect(asJsonObject({ enabled: true, nested: { value: null } })).toEqual({
+      enabled: true,
+      nested: { value: null },
     });
   });
 });

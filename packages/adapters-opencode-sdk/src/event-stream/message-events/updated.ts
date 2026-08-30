@@ -38,23 +38,24 @@ export const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRunt
   const parentId = info.role === "assistant" ? info.parentID : undefined;
   const existingMetadata = session.messageMetadataById.get(messageId);
   session.messageRoleById.set(messageId, role);
-  updateMessageMetadata(runtime, messageId, {
+  const metadataUpdates: Parameters<typeof updateMessageMetadata>[2] = {
     timestamp: messageTimestamp,
-    ...(messageModel
-      ? { model: messageModel }
-      : existingMetadata?.model
-        ? { model: existingMetadata.model }
-        : {}),
-    ...(parentId
-      ? { parentId }
-      : existingMetadata?.parentId
-        ? { parentId: existingMetadata.parentId }
-        : {}),
-    ...(existingMetadata?.text ? { text: existingMetadata.text } : undefined),
-    ...(existingMetadata?.displayParts
-      ? { displayParts: existingMetadata.displayParts }
-      : undefined),
-  });
+  };
+  const model = messageModel ?? existingMetadata?.model;
+  if (model) {
+    metadataUpdates.model = model;
+  }
+  const resolvedParentId = parentId ?? existingMetadata?.parentId;
+  if (resolvedParentId) {
+    metadataUpdates.parentId = resolvedParentId;
+  }
+  if (existingMetadata?.text) {
+    metadataUpdates.text = existingMetadata.text;
+  }
+  if (existingMetadata?.displayParts) {
+    metadataUpdates.displayParts = existingMetadata.displayParts;
+  }
+  updateMessageMetadata(runtime, messageId, metadataUpdates);
 
   const isAssistantRole = isAssistantMessage(runtime, messageId, role);
   const assistantMessageHasStopSignal = isAssistantRole
@@ -76,11 +77,14 @@ export const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRunt
   }
 
   if (role === "user") {
-    return handleUserMessageUpdated(runtime, {
+    const userMessageInput: Parameters<typeof handleUserMessageUpdated>[1] = {
       messageId,
       messageTimestamp,
-      ...(messageModel ? { messageModel } : undefined),
-    });
+    };
+    if (messageModel) {
+      userMessageInput.messageModel = messageModel;
+    }
+    return handleUserMessageUpdated(runtime, userMessageInput);
   }
 
   if (!isAssistantRole) {

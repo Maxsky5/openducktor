@@ -17,11 +17,22 @@ type ElectronHostEventIpcRenderer = {
   on(channel: string, listener: ElectronHostEventListener): void;
 };
 
-export const subscribeElectronHostEvent = <Channel extends HostEventChannel>(
+type ElectronHostEventSubscription = {
+  [Channel in HostEventChannel]: readonly [
+    channel: Channel,
+    listener: (payload: HostEventPayload<Channel>) => void,
+  ];
+}[HostEventChannel];
+
+export function subscribeElectronHostEvent<Channel extends HostEventChannel>(
   ipcRenderer: ElectronHostEventIpcRenderer,
   channel: Channel,
   listener: (payload: HostEventPayload<Channel>) => void,
-): (() => void) => {
+): () => void;
+export function subscribeElectronHostEvent(
+  ipcRenderer: ElectronHostEventIpcRenderer,
+  ...subscription: ElectronHostEventSubscription
+): () => void {
   const handleEvent: ElectronHostEventListener = (_event, envelope) => {
     const parsed = hostEventEnvelopeSchema.safeParse(envelope);
     if (!parsed.success) {
@@ -30,12 +41,17 @@ export const subscribeElectronHostEvent = <Channel extends HostEventChannel>(
       });
       return;
     }
-    if (parsed.data.channel === channel) {
-      // SAFETY: The channel equality pairs this envelope branch with the requested listener.
-      listener(parsed.data.payload as HostEventPayload<Channel>);
+    if (parsed.data.channel === "openducktor://run-event") {
+      if (subscription[0] === parsed.data.channel) subscription[1](parsed.data.payload);
+      return;
     }
+    if (parsed.data.channel === "openducktor://dev-server-event") {
+      if (subscription[0] === parsed.data.channel) subscription[1](parsed.data.payload);
+      return;
+    }
+    if (subscription[0] === parsed.data.channel) subscription[1](parsed.data.payload);
   };
 
   ipcRenderer.on(ELECTRON_HOST_EVENT_CHANNEL, handleEvent);
   return () => ipcRenderer.off(ELECTRON_HOST_EVENT_CHANNEL, handleEvent);
-};
+}

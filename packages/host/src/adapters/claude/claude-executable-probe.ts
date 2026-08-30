@@ -6,6 +6,7 @@ import {
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
+import { z } from "zod";
 import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
 import {
   RuntimeExecutableIncompatibleError,
@@ -14,6 +15,13 @@ import {
 import { useRuntimeProbeResource } from "../runtimes/runtime-executable-probe-lifecycle";
 
 const DEFAULT_INITIALIZATION_TIMEOUT_MS = 10_000;
+const claudeInitializationResponseSchema = z.object({
+  agents: z.array(z.unknown()),
+  available_output_styles: z.array(z.unknown()),
+  commands: z.array(z.unknown()),
+  models: z.array(z.unknown()),
+  output_style: z.string(),
+});
 
 type ClaudeProbeQuery = Pick<Query, "initializationResult" | "return">;
 type ClaudeQueryFactory = (input: {
@@ -22,20 +30,9 @@ type ClaudeQueryFactory = (input: {
 }) => ClaudeProbeQuery;
 
 const isClaudeInitializationResponse = (
-  response: unknown,
+  response: SDKControlInitializeResponse,
 ): response is SDKControlInitializeResponse =>
-  typeof response === "object" &&
-  response !== null &&
-  "commands" in response &&
-  Array.isArray(response.commands) &&
-  "agents" in response &&
-  Array.isArray(response.agents) &&
-  "output_style" in response &&
-  typeof response.output_style === "string" &&
-  "available_output_styles" in response &&
-  Array.isArray(response.available_output_styles) &&
-  "models" in response &&
-  Array.isArray(response.models);
+  claudeInitializationResponseSchema.safeParse(response).success;
 
 const createIdlePrompt = (signal: AbortSignal): AsyncIterable<SDKUserMessage> => ({
   [Symbol.asyncIterator]() {

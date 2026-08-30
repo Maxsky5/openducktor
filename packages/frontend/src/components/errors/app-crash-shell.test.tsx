@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { lazy, Suspense } from "react";
 import { ensurePromiseRejectionEventPolyfill } from "@/test-utils/promise-rejection-event-polyfill";
+import { z } from "zod";
 import { AppCrashShell } from "./app-crash-shell";
 
 ensurePromiseRejectionEventPolyfill();
@@ -529,9 +530,10 @@ describe("AppCrashShell", () => {
       sourceFilter: string,
     ): unknown[] {
       const calls: unknown[][] = errorMock.mock.calls;
-      const match = calls.find(
-        (args) => typeof args[0] === "string" && args[0].includes(sourceFilter),
-      );
+      const match = calls.find((args) => {
+        const firstArgument = z.string().safeParse(args[0]);
+        return firstArgument.success && firstArgument.data.includes(sourceFilter);
+      });
       if (!match) throw new Error(`No console.error call matching "${sourceFilter}"`);
       return match;
     }

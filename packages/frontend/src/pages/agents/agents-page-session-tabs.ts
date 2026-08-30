@@ -313,17 +313,18 @@ export const buildSessionCreateOptions = (params: {
     launchActionId: SessionLaunchActionId,
     description: string,
   ) => {
-    options.push({
+    const option: SessionCreateOption = {
       id: `${role}:${launchActionId}:message_first`,
       role,
       launchActionId,
       label: `Prepare ${params.roleLabelByRole[role]} session`,
       description,
       disabled: params.createSessionDisabled,
-      ...(params.createSessionDisabled
-        ? { disabledReason: "Wait for the current session to finish." }
-        : undefined),
-    });
+    };
+    if (params.createSessionDisabled) {
+      option.disabledReason = "Wait for the current session to finish.";
+    }
+    options.push(option);
   };
 
   if (params.roleEnabledByTask.spec) {

@@ -20,14 +20,14 @@ const createService = <Overrides extends Partial<TerminalCommandService>>(
 const invokeClose = (service: TerminalCommandService) => {
   const handler = createTerminalCommandHandlers(service).terminal_close;
   if (!handler) throw new Error("Expected the terminal_close handler.");
-  return Effect.runPromise(handler(closeInput, { command: "terminal_close", args: closeInput }));
+  return Effect.runPromise(handler(closeInput));
 };
 
 const invokePreparePathInput = (service: TerminalCommandService) => {
   const input = { terminalId: "terminal-1", paths: ["/tmp/image.png"] };
   const handler = createTerminalCommandHandlers(service).terminal_prepare_path_input;
   if (!handler) throw new Error("Expected the terminal_prepare_path_input handler.");
-  return Effect.runPromise(handler(input, { command: "terminal_prepare_path_input", args: input }));
+  return Effect.runPromise(handler(input));
 };
 
 describe("createTerminalCommandHandlers", () => {

@@ -9,6 +9,7 @@ import type {
 } from "@openducktor/contracts";
 import { canDownloadAppUpdate, canInstallAppUpdate } from "@openducktor/contracts";
 import { parse as parseYaml } from "yaml";
+import { z } from "zod";
 import { ElectronLifecycleError } from "../../effect/electron-errors";
 import { createElectronDetachedTaskOwner } from "../electron-main-task-owner";
 import {
@@ -85,6 +86,9 @@ const APP_UPDATE_PROGRESS_INTERVAL_MS = 500;
 const INITIAL_APP_UPDATE_CHECK_DELAY_MS = 1_000;
 export const DEFAULT_APP_UPDATE_BACKGROUND_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
 
+const nodeErrorSchema = z.object({ code: z.string() });
+const updateProviderConfigSchema = z.object({ provider: z.string() });
+
 const releaseVersionPattern =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+)(?:\.[0-9A-Za-z-]+)*)?$/;
 
@@ -106,7 +110,8 @@ const defaultReadUpdateConfig = async (path: string): Promise<string | null> => 
   try {
     return await readFile(path, "utf8");
   } catch (cause) {
-    if (typeof cause === "object" && cause !== null && "code" in cause && cause.code === "ENOENT") {
+    const parsedCause = nodeErrorSchema.safeParse(cause);
+    if (parsedCause.success && parsedCause.data.code === "ENOENT") {
       return null;
     }
     throw cause;
@@ -132,11 +137,8 @@ const isMacOsUpdateSignatureMismatch = (platform: NodeJS.Platform, cause: unknow
 };
 
 const readErrorCode = (cause: unknown): string | undefined => {
-  if (typeof cause !== "object" || cause === null || !("code" in cause)) {
-    return undefined;
-  }
-  const { code } = cause;
-  return typeof code === "string" ? code : undefined;
+  const parsedCause = nodeErrorSchema.safeParse(cause);
+  return parsedCause.success ? parsedCause.data.code : undefined;
 };
 
 const missingManifestPattern = /Cannot find (?:channel ")?(latest(?:-[a-z0-9]+)*\.ya?ml)/i;
@@ -202,13 +204,8 @@ const hasUpdateProviderConfig = (rawConfig: string | null): boolean => {
     return false;
   }
 
-  const parsedConfig: unknown = parseYaml(rawConfig);
-  if (typeof parsedConfig !== "object" || parsedConfig === null || Array.isArray(parsedConfig)) {
-    return false;
-  }
-
-  const provider = "provider" in parsedConfig ? parsedConfig.provider : undefined;
-  return typeof provider === "string" && provider.trim().length > 0;
+  const parsedConfig = updateProviderConfigSchema.safeParse(parseYaml(rawConfig));
+  return parsedConfig.success && parsedConfig.data.provider.trim().length > 0;
 };
 
 type DisabledAppUpdateState = Extract<AppUpdateState, { status: "disabled" }>;
@@ -344,25 +341,29 @@ export const createElectronAppUpdateService = ({
     message,
     operation,
   }: {
-    availableVersion?: string;
-    checkedAt?: string;
+    availableVersion: string | undefined;
+    checkedAt: string | undefined;
     code: AppUpdateErrorCode;
     cause?: unknown;
     message: string;
     operation: AppUpdateOperation;
-  }): AppUpdateState =>
-    publishState(
-      markUpdateError({
-        ...(availableVersion ? { availableVersion } : undefined),
-        ...(checkedAt ? { checkedAt } : undefined),
-        code,
-        cause,
-        currentVersion,
-        message,
-        operation,
-        previousState: state,
-      }),
-    );
+  }): AppUpdateState => {
+    const errorInput: Parameters<typeof markUpdateError>[0] = {
+      code,
+      cause,
+      currentVersion,
+      message,
+      operation,
+      previousState: state,
+    };
+    if (availableVersion) {
+      errorInput.availableVersion = availableVersion;
+    }
+    if (checkedAt) {
+      errorInput.checkedAt = checkedAt;
+    }
+    return publishState(markUpdateError(errorInput));
+  };
 
   const applyAvailable = (availableVersion: string, checkedAt: string = now()): AppUpdateState =>
     publishState(
@@ -505,8 +506,8 @@ export const createElectronAppUpdateService = ({
       return;
     }
     setErrorState({
-      ...(availableVersion ? { availableVersion } : undefined),
-      ...(checkedAt ? { checkedAt } : undefined),
+      availableVersion,
+      checkedAt,
       code: updateErrorCodeForOperation(operation),
       cause,
       message,
@@ -542,6 +543,8 @@ export const createElectronAppUpdateService = ({
         return false;
       }
       setErrorState({
+        availableVersion: undefined,
+        checkedAt: undefined,
         code: "updater_unavailable",
         cause,
         message: `Failed to read Electron update configuration at ${resolvedAppUpdateConfigPath}: ${errorMessage(
@@ -561,6 +564,8 @@ export const createElectronAppUpdateService = ({
       hasProviderConfig = hasUpdateProviderConfig(rawConfig);
     } catch (cause) {
       setErrorState({
+        availableVersion: undefined,
+        checkedAt: undefined,
         code: "updater_unavailable",
         cause,
         message: `Electron update feed configuration is invalid at ${resolvedAppUpdateConfigPath}: ${errorMessage(
@@ -596,6 +601,8 @@ export const createElectronAppUpdateService = ({
       return true;
     } catch (cause) {
       setErrorState({
+        availableVersion: undefined,
+        checkedAt: undefined,
         code: "updater_unavailable",
         cause,
         message: `Electron updater initialization failed: ${errorMessage(cause)}`,
@@ -675,6 +682,7 @@ export const createElectronAppUpdateService = ({
             return rejectDisposed("check");
           }
           setErrorState({
+            availableVersion: undefined,
             checkedAt: now(),
             code: "check_failed",
             cause,
@@ -782,8 +790,8 @@ export const createElectronAppUpdateService = ({
           clearDownloadProgressThrottle();
           const checkedAt = checkedAtFromState(state);
           setErrorState({
-            ...(availableVersion ? { availableVersion } : undefined),
-            ...(checkedAt ? { checkedAt } : undefined),
+            availableVersion,
+            checkedAt,
             code: "download_failed",
             cause,
             message: appUpdateErrorMessage("download", cause),

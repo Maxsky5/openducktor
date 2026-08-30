@@ -11,7 +11,6 @@ import {
   defaultSessionLaunchActionForRole,
   getSessionLaunchAction,
   getSessionLaunchActionsForRole,
-  isSessionLaunchActionId,
   SESSION_LAUNCH_ACTIONS,
   type SessionLaunchActionId,
 } from "./session-start-launch-options";
@@ -56,8 +55,6 @@ export const LAUNCH_ACTION_LABELS = {
   qa_review: SESSION_LAUNCH_ACTIONS.qa_review.label,
 } satisfies Record<SessionLaunchActionId, string>;
 
-export const isLaunchActionId = isSessionLaunchActionId;
-
 export const firstLaunchAction = (role: AgentRole): SessionLaunchActionId => {
   return defaultSessionLaunchActionForRole(role);
 };
@@ -68,17 +65,25 @@ export const kickoffPromptForTemplate = (
   taskId: string,
   options?: SessionStartKickoffPromptOptions,
 ): string => {
-  return buildAgentKickoffPrompt({
+  const promptInput: Parameters<typeof buildAgentKickoffPrompt>[0] = {
     role,
     templateId,
     task: {
       taskId,
       ...options?.task,
     },
-    ...(options?.extraPlaceholders ? { extraPlaceholders: options.extraPlaceholders } : undefined),
-    ...(options?.git ? { git: options.git } : undefined),
     overrides: options?.overrides ?? {},
-  });
+  };
+
+  if (options?.extraPlaceholders) {
+    promptInput.extraPlaceholders = options.extraPlaceholders;
+  }
+
+  if (options?.git) {
+    promptInput.git = options.git;
+  }
+
+  return buildAgentKickoffPrompt(promptInput);
 };
 
 export const kickoffPromptForLaunchAction = (
@@ -98,14 +103,19 @@ export const buildGitConflictResolutionPrompt = (
   taskId: string,
   options?: SessionMessagePromptOptions,
 ): string => {
-  return buildAgentMessagePrompt({
+  const promptInput: Parameters<typeof buildAgentMessagePrompt>[0] = {
     role: "build",
     templateId: "message.build_rebase_conflict_resolution",
     task: {
       taskId,
       ...options?.task,
     },
-    ...(options?.git ? { git: options.git } : undefined),
     overrides: options?.overrides ?? {},
-  });
+  };
+
+  if (options?.git) {
+    promptInput.git = options.git;
+  }
+
+  return buildAgentMessagePrompt(promptInput);
 };

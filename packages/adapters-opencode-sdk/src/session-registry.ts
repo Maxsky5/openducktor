@@ -2,7 +2,6 @@ import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentSessionSummary } from "@openducktor/core";
 import { formatAgentSessionTitle } from "@openducktor/core";
 import {
-  assertGlobalEventSupport,
   isRelevantSubscriberEvent,
   logStreamEvent,
   type OpencodeGlobalEventFailureScope,
@@ -182,7 +181,6 @@ const ensureRuntimeEventTransport = (input: {
   const streamClient = input.createClient({
     runtimeEndpoint: input.runtimeEndpoint,
   });
-  assertGlobalEventSupport(streamClient);
   const controller = new AbortController();
   let resolveReady: () => void = () => undefined;
   let rejectReady: (cause: unknown) => void = () => undefined;
@@ -200,9 +198,13 @@ const ensureRuntimeEventTransport = (input: {
       const parentExternalSessionId = readEventParentExternalSessionId(event);
       const scope: OpencodeGlobalEventFailureScope = {
         directory: readEventDirectory(event) ?? "",
-        ...(externalSessionId ? { externalSessionId } : undefined),
-        ...(parentExternalSessionId ? { parentExternalSessionId } : undefined),
       };
+      if (externalSessionId) {
+        scope.externalSessionId = externalSessionId;
+      }
+      if (parentExternalSessionId) {
+        scope.parentExternalSessionId = parentExternalSessionId;
+      }
       try {
         processRuntimeSessionLineage(streamRecord, event);
       } catch (error) {
@@ -224,12 +226,15 @@ const ensureRuntimeEventTransport = (input: {
                 childExternalSessionId,
               ),
           });
-          logStreamEvent({
+          const logInput: Parameters<typeof logStreamEvent>[0] = {
             subscriber,
             event,
             relevant,
-            ...(input.logEvent ? { logEvent: input.logEvent } : undefined),
-          });
+          };
+          if (input.logEvent) {
+            logInput.logEvent = input.logEvent;
+          }
+          logStreamEvent(logInput);
           if (!relevant) {
             continue;
           }
@@ -414,7 +419,7 @@ export const subscribeSessionToRuntimeEvents = (input: {
   emit: (externalSessionId: string, event: AgentEvent) => void;
   logEvent?: OpencodeEventLogger;
 }): void => {
-  const eventTransport = ensureRuntimeEventTransport({
+  const transportInput: Parameters<typeof ensureRuntimeEventTransport>[0] = {
     runtimeEventTransports: input.runtimeEventTransports,
     createClient: input.createClient,
     runtimeId: input.runtimeId,
@@ -422,8 +427,11 @@ export const subscribeSessionToRuntimeEvents = (input: {
     sessions: input.sessions,
     now: input.now,
     emit: input.emit,
-    ...(input.logEvent ? { logEvent: input.logEvent } : undefined),
-  });
+  };
+  if (input.logEvent) {
+    transportInput.logEvent = input.logEvent;
+  }
+  const eventTransport = ensureRuntimeEventTransport(transportInput);
   eventTransport.subscribers.set(input.externalSessionId, {
     externalSessionId: input.externalSessionId,
     input: input.sessionInput,
@@ -466,11 +474,13 @@ export const registerSession = (
     externalSessionId: input.externalSessionId,
     runtimeKind: input.sessionInput.runtimeKind,
     workingDirectory: input.sessionInput.workingDirectory,
-    ...(title ? { title } : undefined),
     sessionAssociation,
     startedAt: input.startedAt,
     status: startsActive ? "running" : "idle",
   };
+  if (title) {
+    summary.title = title;
+  }
 
   input.sessions.set(input.externalSessionId, {
     summary,
@@ -509,7 +519,7 @@ export const registerSession = (
 
   if (input.subscribeToEvents !== false) {
     try {
-      subscribeSessionToRuntimeEvents({
+      const subscriptionInput: Parameters<typeof subscribeSessionToRuntimeEvents>[0] = {
         sessions: input.sessions,
         runtimeEventTransports: input.runtimeEventTransports,
         createClient: input.createClient,
@@ -519,8 +529,11 @@ export const registerSession = (
         sessionInput: input.sessionInput,
         now: input.now,
         emit: input.emit,
-        ...(input.logEvent ? { logEvent: input.logEvent } : undefined),
-      });
+      };
+      if (input.logEvent) {
+        subscriptionInput.logEvent = input.logEvent;
+      }
+      subscribeSessionToRuntimeEvents(subscriptionInput);
     } catch (error) {
       input.sessions.delete(input.externalSessionId);
       throw error;

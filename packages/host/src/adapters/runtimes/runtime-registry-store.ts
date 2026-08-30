@@ -14,9 +14,14 @@ export type RuntimeRegistryStore = {
   get(runtimeId: string): RuntimeInstanceSummary | null;
   list(): RuntimeInstanceSummary[];
   listByRepo(input: { repoPath: string; runtimeKind?: string }): RuntimeInstanceSummary[];
-  findWorkspaceRuntime(
-    input: WorkspaceRuntimeLookupInput,
-  ): Effect.Effect<RuntimeInstanceSummary | null, HostOperationError>;
+  findWorkspaceRuntime(input: WorkspaceRuntimeLookupInput): Effect.Effect<
+    RuntimeInstanceSummary | null,
+    HostOperationError<{
+      repoPath: string;
+      runtimeIds: string[];
+      runtimeKind: string;
+    }>
+  >;
 };
 
 export const createRuntimeRegistryStore = (

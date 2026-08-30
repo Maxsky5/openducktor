@@ -16,7 +16,17 @@ export type ToolDiscoveryId = (typeof TOOL_DISCOVERY_IDS)[number];
 export const isToolDiscoveryId = (value: string): value is ToolDiscoveryId =>
   TOOL_DISCOVERY_IDS.some((toolId) => toolId === value);
 
-export type ToolDiscoveryError = HostDependencyError | HostValidationError;
+export type ToolDiscoveryDetails = {
+  readonly directories?: readonly string[];
+  readonly executablePath?: string;
+  readonly requiredSource?: boolean;
+  readonly resolvedOverride?: string;
+  readonly resolvedProvidedPath?: string;
+};
+
+export type ToolDiscoveryError =
+  | HostDependencyError<ToolDiscoveryDetails>
+  | HostValidationError<ToolDiscoveryDetails>;
 
 export type ToolDiscoverySourceCategory = Exclude<ToolExecutableSourceCategory, "unavailable">;
 

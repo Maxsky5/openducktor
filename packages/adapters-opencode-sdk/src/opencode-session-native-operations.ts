@@ -49,14 +49,11 @@ export const readLatestOpencodeContextUsage = async (
     return null;
   }
   const totalTokens = extractMessageTotalTokens(latestAssistant.info, latestAssistant.parts);
-  if (typeof totalTokens !== "number") {
+  if (totalTokens === undefined) {
     return null;
   }
   const model = readMessageModelSelection(latestAssistant.info);
-  return {
-    totalTokens,
-    ...(model ? { model } : undefined),
-  };
+  return model ? { totalTokens, model } : { totalTokens };
 };
 
 export const replyToOpencodeApproval = async (
@@ -67,12 +64,15 @@ export const replyToOpencodeApproval = async (
     runtimeEndpoint: context.runtimeEndpoint,
     workingDirectory: input.ref.workingDirectory,
   });
-  const response = await client.permission.reply({
+  const request: Parameters<typeof client.permission.reply>[0] = {
     directory: input.ref.workingDirectory,
     requestID: input.nativeRequestId,
     reply: toOpenCodePermissionReply(input.outcome),
-    ...(input.message ? { message: input.message } : undefined),
-  });
+  };
+  if (input.message) {
+    request.message = input.message;
+  }
+  const response = await client.permission.reply(request);
   if (response.error) {
     throw toOpenCodeRequestError("reply to permission request", response.error, response.response);
   }

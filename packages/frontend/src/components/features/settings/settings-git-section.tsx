@@ -1,4 +1,8 @@
-import type { GlobalGitConfig, RuntimeCheck } from "@openducktor/contracts";
+import {
+  gitMergeMethodSchema,
+  type GlobalGitConfig,
+  type RuntimeCheck,
+} from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -49,7 +53,6 @@ export function SettingsGitSection({
     ghAuthError,
   });
 
-  // SAFETY: The rendered control limits this value to the options represented by `GlobalGitConfig["defaultMergeMethod"]`.
   return (
     <div className="grid gap-4 p-4">
       <div className="space-y-2">
@@ -65,7 +68,7 @@ export function SettingsGitSection({
           value={git.defaultMergeMethod}
           onValueChange={(value) =>
             onUpdateGit(() => ({
-              defaultMergeMethod: value as GlobalGitConfig["defaultMergeMethod"],
+              defaultMergeMethod: gitMergeMethodSchema.parse(value),
             }))
           }
         >

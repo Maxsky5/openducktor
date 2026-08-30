@@ -7,13 +7,15 @@ import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { normalizePathForComparison } from "@openducktor/path-support";
 import { Effect } from "effect";
-import type { HostOperationError } from "../../effect/host-errors";
+import { z } from "zod";
+import type { HostOperationErrorAggregate } from "../../effect/host-errors";
 import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { buildClaudeAgentSdkOptions } from "./claude-agent-sdk-options";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import type {
   ClaudeSessionContext,
+  ClaudeToolInput,
   CreateClaudeAgentSdkServiceInput,
 } from "./claude-agent-sdk-types";
 
@@ -89,7 +91,7 @@ const deferred = <Value>() => {
 };
 
 const createServiceInput = (events?: {
-  backgroundFailures?: HostOperationError[];
+  backgroundFailures?: HostOperationErrorAggregate[];
   onBackgroundFailure?: () => void;
   resolvedBridgeRepoPaths?: string[];
 }): CreateClaudeAgentSdkServiceInput => ({
@@ -162,7 +164,7 @@ const preToolUseHook = async (
   options: Awaited<ReturnType<typeof buildClaudeAgentSdkOptions>>,
   input: {
     permissionMode: string;
-    toolInput: Record<string, unknown>;
+    toolInput: ClaudeToolInput;
     toolName: string;
   },
 ) => {
@@ -230,7 +232,7 @@ describe("buildClaudeAgentSdkOptions", () => {
       ODT_FORBID_WORKSPACE_ID_INPUT: "true",
       ODT_ALLOWED_TOOLS: expect.stringContaining("odt_read_task"),
     });
-    if (typeof workflowAllowedTools !== "string") {
+    if (!workflowAllowedTools) {
       throw new Error("Expected workflow ODT tool policy in the Claude MCP environment.");
     }
     expect(workflowAllowedTools.split(",")).not.toEqual(
@@ -238,7 +240,7 @@ describe("buildClaudeAgentSdkOptions", () => {
     );
     expect(openducktorEnv).not.toHaveProperty("ODT_HOST_TOKEN");
     const hostTokenFile = openducktorEnv?.ODT_HOST_TOKEN_FILE;
-    if (typeof hostTokenFile !== "string") {
+    if (!hostTokenFile) {
       throw new Error("Expected Claude MCP setup to create a host token file.");
     }
     expect(await readFile(hostTokenFile, "utf8")).toBe("bridge-secret-value");
@@ -251,13 +253,15 @@ describe("buildClaudeAgentSdkOptions", () => {
     expect(options).toHaveProperty("permissionMode");
     expect(options).not.toHaveProperty("allowedTools");
     expect(options.skills).toBe("all");
-    const systemPrompt = options.systemPrompt;
-    if (!systemPrompt || typeof systemPrompt !== "object" || Array.isArray(systemPrompt)) {
+    const systemPrompt = z
+      .object({ append: z.string(), preset: z.literal("claude_code") })
+      .safeParse(options.systemPrompt);
+    if (!systemPrompt.success) {
       throw new Error("Expected Claude Code's system prompt preset.");
     }
-    expect(systemPrompt.preset).toBe("claude_code");
-    expect(systemPrompt.append).toContain("Build");
-    expect(systemPrompt.append).toContain(
+    expect(systemPrompt.data.preset).toBe("claude_code");
+    expect(systemPrompt.data.append).toContain("Build");
+    expect(systemPrompt.data.append).toContain(
       "OpenDucktor starts this Claude Code session with cwd set to",
     );
     expect(options.onUserDialog).toBeInstanceOf(Function);
@@ -569,7 +573,7 @@ describe("buildClaudeAgentSdkOptions", () => {
 
   test("removes the session-scoped MCP token directory when the session is aborted", async () => {
     const cleanupCompleted = deferred<void>();
-    const backgroundFailures: HostOperationError[] = [];
+    const backgroundFailures: HostOperationErrorAggregate[] = [];
     const removeDirectory = rm;
     const removeSpy = spyOn(fsPromises, "rm").mockImplementation(async (path, options) => {
       await removeDirectory(path, options);
@@ -625,7 +629,7 @@ describe("buildClaudeAgentSdkOptions", () => {
 
   test("reports abort cleanup failures through the host background failure boundary", async () => {
     const cleanupError = new Error("cleanup denied");
-    const backgroundFailures: HostOperationError[] = [];
+    const backgroundFailures: HostOperationErrorAggregate[] = [];
     const backgroundFailureReported = deferred<void>();
     const removeDirectory = rm;
     const removeSpy = spyOn(fsPromises, "rm").mockImplementation(async (path, options) => {

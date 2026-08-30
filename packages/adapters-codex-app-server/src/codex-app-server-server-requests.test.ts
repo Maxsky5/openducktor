@@ -78,23 +78,30 @@ const mcpToolApprovalRequest = ({
   toolName: string;
   threadId?: string;
   includeToolTitle?: boolean;
-}): CodexServerRequestRecord => ({
-  id,
-  method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST,
-  params: {
-    threadId,
-    turnId: "turn-spec",
-    serverName,
-    mode: "form",
-    message: `Allow the ${serverName} MCP server to run tool "${toolName}"?`,
-    requestedSchema: { type: "object", properties: {} },
-    _meta: {
-      codex_approval_kind: "mcp_tool_call",
-      ...(includeToolTitle ? { tool_title: toolName } : undefined),
-      persist: ["session"],
+}): CodexServerRequestRecord => {
+  const meta = {
+    codex_approval_kind: "mcp_tool_call" as const,
+    persist: ["session"] as const,
+  };
+
+  if (includeToolTitle) {
+    meta.tool_title = toolName;
+  }
+
+  return {
+    id,
+    method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST,
+    params: {
+      threadId,
+      turnId: "turn-spec",
+      serverName,
+      mode: "form",
+      message: `Allow the ${serverName} MCP server to run tool "${toolName}"?`,
+      requestedSchema: { type: "object", properties: {} },
+      _meta: meta,
     },
-  },
-});
+  };
+};
 
 describe("handleCodexServerRequest", () => {
   test("allows Codex to replay a request after live delivery fails", async () => {

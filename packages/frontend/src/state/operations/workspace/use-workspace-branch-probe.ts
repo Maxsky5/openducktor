@@ -196,11 +196,7 @@ export function useWorkspaceBranchProbe({
   }, [probeExternalBranchChange, reportBranchProbeError, setBranchSyncDegraded]);
 
   useEffect(() => {
-    if (
-      !activeRepoPath ||
-      typeof globalThis.window === "undefined" ||
-      typeof globalThis.document === "undefined"
-    ) {
+    if (!activeRepoPath || globalThis.window === undefined || globalThis.document === undefined) {
       return;
     }
 

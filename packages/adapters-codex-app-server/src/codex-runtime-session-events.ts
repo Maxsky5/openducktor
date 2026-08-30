@@ -312,12 +312,10 @@ export class CodexRuntimeSessionEvents {
           return;
         }
         const retainedOwner = owner ?? this.runtimeStreamEventSessionOwner(event);
-        Object.assign(mutation, {
-          fault: this.errorMessage(error),
-          ...(retainedOwner
-            ? { faultRef: codexSessionRef(retainedOwner.targetSession) }
-            : undefined),
-        });
+        mutation.fault = this.errorMessage(error);
+        if (retainedOwner) {
+          mutation.faultRef = codexSessionRef(retainedOwner.targetSession);
+        }
         this.emitRuntimeStreamEventError(event, error, retainedOwner);
       }
       if (!this.runtimeStreamEventCanDeliver(event.runtimeId, generation, owner)) {
@@ -658,15 +656,20 @@ export class CodexRuntimeSessionEvents {
     }
     const { entry } = pending;
     const route = entry.route ?? this.deps.subagents.routeForChild(threadId, entry.runtimeId);
-    const eventBase = {
+    const eventBase: {
+      externalSessionId: string;
+      timestamp: string;
+      requestId: string;
+      requestInstanceId?: string;
+    } & ReturnType<typeof codexSubagentRouteEventFields> = {
       externalSessionId: threadId,
       timestamp: new Date().toISOString(),
       requestId: entry.request.requestId,
-      ...(entry.request.requestInstanceId
-        ? { requestInstanceId: entry.request.requestInstanceId }
-        : undefined),
       ...codexSubagentRouteEventFields(route),
     };
+    if (entry.request.requestInstanceId) {
+      eventBase.requestInstanceId = entry.request.requestInstanceId;
+    }
     const activeTurn =
       pending.kind === "approval"
         ? this.deps.pendingInput.resolveApproval(entry.request.requestId, entry.runtimeId)
@@ -674,10 +677,17 @@ export class CodexRuntimeSessionEvents {
     const type = pending.kind === "approval" ? "approval_resolved" : "question_resolved";
     const owner = this.resolveRuntimeStreamEventSessionOwner(threadId, runtimeId);
     if (owner) {
-      this.emitRoutedRequestEvent(owner.targetSession, {
-        ...eventBase,
-        type,
-      });
+      if (type === "approval_resolved") {
+        this.emitRoutedRequestEvent(owner.targetSession, {
+          ...eventBase,
+          type: "approval_resolved",
+        });
+      } else {
+        this.emitRoutedRequestEvent(owner.targetSession, {
+          ...eventBase,
+          type: "question_resolved",
+        });
+      }
     }
     if (activeTurn && !activeTurn.isTurnSettled()) {
       void this.continueTurnAfterPendingInput(activeTurn);

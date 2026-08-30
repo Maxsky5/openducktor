@@ -1,6 +1,10 @@
 import type { CodexAppServerThreadItem } from "@openducktor/contracts";
 import { codexItemTypeMatches, toStreamPart } from "../codex-app-server-transcript";
-import type { CodexMappingContext, CodexMappingResult } from "../codex-canonical-events";
+import type {
+  CodexCanonicalStreamPartEvent,
+  CodexMappingContext,
+  CodexMappingResult,
+} from "../codex-canonical-events";
 import { emptyCodexMappingResult } from "../codex-canonical-events";
 import type { CodexEventMapper } from "../codex-event-mapper";
 import { noCodexMapperState, type CodexTimedThreadItem } from "../codex-event-mapper";
@@ -18,15 +22,20 @@ const streamPartEvents = (
   handled: true,
   events: toStreamPart(item, messageId, timingOptions).map((part) => {
     const eventTimestamp = ctx.timestamp ?? timestamp;
-    return {
+    const event: CodexCanonicalStreamPartEvent = {
       kind: "stream_part",
       source: ctx.source,
       mapper: name,
       threadId: ctx.threadId,
-      ...(ctx.turnId ? { turnId: ctx.turnId } : undefined),
-      ...(eventTimestamp ? { timestamp: eventTimestamp } : undefined),
       part,
     };
+    if (ctx.turnId) {
+      event.turnId = ctx.turnId;
+    }
+    if (eventTimestamp) {
+      event.timestamp = eventTimestamp;
+    }
+    return event;
   }),
 });
 

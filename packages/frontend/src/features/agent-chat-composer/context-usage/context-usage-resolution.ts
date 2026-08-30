@@ -42,11 +42,18 @@ export const indexModelDescriptorsByProviderAndModel = (
 
 const pickPositiveNumber = (...values: Array<number | undefined>): number | undefined => {
   for (const value of values) {
-    if (typeof value === "number" && value > 0) {
+    if (value !== undefined && value > 0) {
       return value;
     }
   }
   return undefined;
+};
+
+export type ExtractLatestSessionContextUsageInput = {
+  liveContextUsage?: AgentSessionContextUsage | null;
+  modelDescriptorByKey: ReadonlyMap<string, CatalogModelDescriptor>;
+  fallbackContextWindow?: number;
+  fallbackOutputLimit?: number;
 };
 
 export const extractLatestSessionContextUsage = ({
@@ -54,12 +61,7 @@ export const extractLatestSessionContextUsage = ({
   modelDescriptorByKey,
   fallbackContextWindow,
   fallbackOutputLimit,
-}: {
-  liveContextUsage?: AgentSessionContextUsage | null;
-  modelDescriptorByKey: ReadonlyMap<string, CatalogModelDescriptor>;
-  fallbackContextWindow?: number;
-  fallbackOutputLimit?: number;
-}): AgentStudioContextUsage => {
+}: ExtractLatestSessionContextUsageInput): AgentStudioContextUsage => {
   if (!liveContextUsage || liveContextUsage.totalTokens <= 0) {
     return null;
   }
@@ -82,9 +84,12 @@ export const extractLatestSessionContextUsage = ({
     fallbackOutputLimit,
   );
 
-  return {
+  const contextUsage: NonNullable<AgentStudioContextUsage> = {
     totalTokens: liveContextUsage.totalTokens,
     contextWindow,
-    ...(outputLimit === undefined ? undefined : { outputLimit }),
   };
+  if (outputLimit !== undefined) {
+    contextUsage.outputLimit = outputLimit;
+  }
+  return contextUsage;
 };

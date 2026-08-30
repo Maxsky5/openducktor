@@ -1,84 +1,100 @@
 import { Cause, Chunk, Data, Option } from "effect";
+import { z } from "zod";
 
-export type HostErrorDetailValue =
-  | string
-  | number
-  | boolean
-  | null
-  | Error
-  | undefined
-  | ReadonlyArray<HostErrorDetailValue>
-  | { readonly [key: string]: HostErrorDetailValue };
+export type HostErrorDetails<Details extends object> = Readonly<Details>;
 
-export type HostErrorDetails = Readonly<Record<string, HostErrorDetailValue>>;
-
-export class HostValidationError extends Data.TaggedError("HostValidationError")<{
+export class HostValidationError<Details extends object = never> extends Data.TaggedError(
+  "HostValidationError",
+)<{
   readonly message: string;
   readonly field?: string | undefined;
   readonly cause?: unknown | undefined;
-  readonly details?: HostErrorDetails | undefined;
+  readonly details?: HostErrorDetails<Details> | undefined;
 }> {}
 
-class HostCommandError extends Data.TaggedError("HostCommandError")<{
+class HostCommandError<Details extends object = never> extends Data.TaggedError(
+  "HostCommandError",
+)<{
   readonly message: string;
   readonly command?: string | undefined;
-  readonly details?: HostErrorDetails | undefined;
+  readonly details?: HostErrorDetails<Details> | undefined;
 }> {}
 
-export class HostDependencyError extends Data.TaggedError("HostDependencyError")<{
+export class HostDependencyError<Details extends object = never> extends Data.TaggedError(
+  "HostDependencyError",
+)<{
   readonly message: string;
   readonly dependency: string;
   readonly operation?: string | undefined;
   readonly cause?: unknown | undefined;
-  readonly details?: HostErrorDetails | undefined;
+  readonly details?: HostErrorDetails<Details> | undefined;
 }> {}
 
-export class HostOperationError extends Data.TaggedError("HostOperationError")<{
+export class HostOperationError<Details extends object = never> extends Data.TaggedError(
+  "HostOperationError",
+)<{
   readonly message: string;
   readonly operation: string;
   readonly cause?: unknown | undefined;
-  readonly details?: HostErrorDetails | undefined;
+  readonly details?: HostErrorDetails<Details> | undefined;
 }> {}
 
-export class HostResourceError extends Data.TaggedError("HostResourceError")<{
+export class HostResourceError<Details extends object = never> extends Data.TaggedError(
+  "HostResourceError",
+)<{
   readonly message: string;
   readonly resource: string;
   readonly operation?: string | undefined;
   readonly cause?: unknown | undefined;
-  readonly details?: HostErrorDetails | undefined;
+  readonly details?: HostErrorDetails<Details> | undefined;
 }> {}
 
-export class HostPathAccessError extends Data.TaggedError("HostPathAccessError")<{
+export class HostPathAccessError<Details extends object = never> extends Data.TaggedError(
+  "HostPathAccessError",
+)<{
   readonly message: string;
   readonly path: string;
   readonly operation: string;
   readonly cause?: unknown | undefined;
-  readonly details?: HostErrorDetails | undefined;
+  readonly details?: HostErrorDetails<Details> | undefined;
 }> {}
 
-export class HostPathNotFoundError extends Data.TaggedError("HostPathNotFoundError")<{
+export class HostPathNotFoundError<Details extends object = never> extends Data.TaggedError(
+  "HostPathNotFoundError",
+)<{
   readonly message: string;
   readonly path: string;
   readonly operation: string;
   readonly cause?: unknown | undefined;
-  readonly details?: HostErrorDetails | undefined;
+  readonly details?: HostErrorDetails<Details> | undefined;
 }> {}
 
-export class HostInvariantError extends Data.TaggedError("HostInvariantError")<{
+export class HostInvariantError<Details extends object = never> extends Data.TaggedError(
+  "HostInvariantError",
+)<{
   readonly message: string;
   readonly invariant: string;
-  readonly details?: HostErrorDetails | undefined;
+  readonly details?: HostErrorDetails<Details> | undefined;
 }> {}
 
+export type HostCommandErrorAggregate = HostCommandError<object>;
+export type HostDependencyErrorAggregate = HostDependencyError<object>;
+export type HostInvariantErrorAggregate = HostInvariantError<object>;
+export type HostOperationErrorAggregate = HostOperationError<object>;
+export type HostPathAccessErrorAggregate = HostPathAccessError<object>;
+export type HostPathNotFoundErrorAggregate = HostPathNotFoundError<object>;
+export type HostResourceErrorAggregate = HostResourceError<object>;
+export type HostValidationErrorAggregate = HostValidationError<object>;
+
 export type HostError =
-  | HostCommandError
-  | HostDependencyError
-  | HostInvariantError
-  | HostOperationError
-  | HostPathAccessError
-  | HostPathNotFoundError
-  | HostResourceError
-  | HostValidationError;
+  | HostCommandErrorAggregate
+  | HostDependencyErrorAggregate
+  | HostInvariantErrorAggregate
+  | HostOperationErrorAggregate
+  | HostPathAccessErrorAggregate
+  | HostPathNotFoundErrorAggregate
+  | HostResourceErrorAggregate
+  | HostValidationErrorAggregate;
 
 export const isHostError = (cause: unknown): cause is HostError =>
   cause instanceof HostCommandError ||
@@ -93,20 +109,43 @@ export const isHostError = (cause: unknown): cause is HostError =>
 export const errorMessage = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
 
-const nodeErrorCode = (cause: unknown): string | null =>
-  typeof cause === "object" && cause !== null && "code" in cause && typeof cause.code === "string"
-    ? cause.code
-    : null;
+const nodeErrorCodeSchema = z.object({ code: z.string() });
+
+const nodeErrorCode = (cause: unknown): string | null => {
+  const parsed = nodeErrorCodeSchema.safeParse(cause);
+  return parsed.success ? parsed.data.code : null;
+};
+
+const nestedNodeErrorSchema = z
+  .object({ code: z.unknown().optional(), cause: z.unknown().optional() })
+  .passthrough();
+
+export const hasNestedNodeErrorCode = (cause: unknown, code: string): boolean => {
+  const visited = new Set<unknown>();
+  let current: unknown = cause;
+  while (!visited.has(current)) {
+    visited.add(current);
+    const parsed = nestedNodeErrorSchema.safeParse(current);
+    if (!parsed.success) {
+      return false;
+    }
+    if (parsed.data.code === code) {
+      return true;
+    }
+    current = parsed.data.cause;
+  }
+  return false;
+};
 
 const isPathNotFoundError = (cause: unknown): boolean =>
   nodeErrorCode(cause) === "ENOENT" || nodeErrorCode(cause) === "ENOTDIR";
 
-const toHostPathAccessError = (
+const toHostPathAccessError = <Details extends object>(
   cause: unknown,
   operation: string,
   path: string,
-  details?: HostErrorDetails,
-): HostPathAccessError =>
+  details?: HostErrorDetails<Details>,
+): HostPathAccessError<Details> =>
   new HostPathAccessError({
     operation,
     path,
@@ -115,13 +154,24 @@ const toHostPathAccessError = (
     details,
   });
 
-export const toHostPathStatError = (
+export function toHostPathStatError(
   cause: unknown,
   operation: string,
   path: string,
-  details?: HostErrorDetails,
-): HostPathAccessError | HostPathNotFoundError =>
-  isPathNotFoundError(cause)
+): HostPathAccessError<never> | HostPathNotFoundError<never>;
+export function toHostPathStatError<Details extends object>(
+  cause: unknown,
+  operation: string,
+  path: string,
+  details: HostErrorDetails<Details>,
+): HostPathAccessError<Details> | HostPathNotFoundError<Details>;
+export function toHostPathStatError<Details extends object>(
+  cause: unknown,
+  operation: string,
+  path: string,
+  details?: HostErrorDetails<Details>,
+): HostPathAccessError<Details> | HostPathNotFoundError<Details> {
+  return isPathNotFoundError(cause)
     ? new HostPathNotFoundError({
         operation,
         path,
@@ -130,12 +180,22 @@ export const toHostPathStatError = (
         details,
       })
     : toHostPathAccessError(cause, operation, path, details);
+}
 
-export const toHostOperationError = (
+export function toHostOperationError(
   cause: unknown,
   operation: string,
-  details?: HostErrorDetails,
-): HostOperationError => {
+): HostOperationError<never> | HostOperationErrorAggregate;
+export function toHostOperationError<Details extends object>(
+  cause: unknown,
+  operation: string,
+  details: HostErrorDetails<Details>,
+): HostOperationError<Details> | HostOperationErrorAggregate;
+export function toHostOperationError<Details extends object>(
+  cause: unknown,
+  operation: string,
+  details?: HostErrorDetails<Details>,
+): HostOperationError<Details> | HostOperationErrorAggregate {
   if (isHostError(cause)) {
     return cause instanceof HostOperationError
       ? cause
@@ -153,11 +213,11 @@ export const toHostOperationError = (
     cause,
     details,
   });
-};
+}
 
 export const causeToHostBoundaryError = <Failure>(
   cause: Cause.Cause<Failure>,
-): Failure | HostOperationError => {
+): Failure | HostOperationError<{ defect: true }> => {
   const firstFailure = Chunk.head(Cause.failures(cause));
   if (Option.isSome(firstFailure)) {
     return firstFailure.value;

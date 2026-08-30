@@ -1,8 +1,10 @@
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { getToolLifecyclePhase } from "./tool-lifecycle";
+import { z } from "zod";
 
+const timestampSchema = z.number().finite();
 const isFiniteTimestamp = (value: number | string | null | undefined): value is number =>
-  typeof value === "number" && Number.isFinite(value);
+  timestampSchema.safeParse(value).success;
 
 const parseFiniteTimestamp = (timestamp: string): number | null => {
   const parsed = Date.parse(timestamp);

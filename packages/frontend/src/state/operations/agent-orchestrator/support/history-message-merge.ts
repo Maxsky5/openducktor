@@ -217,11 +217,11 @@ const mergeSameMessageId = (
     currentMessage.meta?.kind === "user"
   ) {
     const parts = currentMessage.meta.parts ?? loadedMessage.meta.parts;
-    const meta = {
+    const meta: Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "user" }> = {
       ...currentMessage.meta,
       ...loadedMessage.meta,
-      ...(parts ? { parts } : undefined),
     };
+    if (parts) meta.parts = parts;
     return applyPreferredMessageTimestamp(
       {
         ...loadedMessage,
@@ -238,15 +238,9 @@ const mergeSameMessageId = (
       currentMessage.meta && loadedMessage.meta
         ? { ...currentMessage.meta, ...loadedMessage.meta }
         : (loadedMessage.meta ?? currentMessage.meta);
-    return applyPreferredMessageTimestamp(
-      {
-        ...currentMessage,
-        ...loadedMessage,
-        ...(mergedMeta ? { meta: mergedMeta } : undefined),
-      },
-      loadedMessage,
-      currentMessage,
-    );
+    const mergedMessage: AgentChatMessage = { ...currentMessage, ...loadedMessage };
+    if (mergedMeta) mergedMessage.meta = mergedMeta;
+    return applyPreferredMessageTimestamp(mergedMessage, loadedMessage, currentMessage);
   }
 
   if (isSubagentMessage(loadedMessage) && isSubagentMessage(currentMessage)) {

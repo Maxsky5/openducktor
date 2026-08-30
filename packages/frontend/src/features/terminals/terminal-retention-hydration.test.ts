@@ -10,7 +10,7 @@ import type {
   TerminalTransportController,
 } from "./terminal-transport-controller";
 
-if (typeof globalThis.document === "undefined") {
+if (globalThis.document === undefined) {
   GlobalRegistrator.register();
 }
 

@@ -1,4 +1,8 @@
-import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentChatMessage,
+  AgentChatMessageMeta,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import { toAssistantMessageMeta, toSessionContextUsage } from "../support/assistant-meta";
 import {
@@ -66,7 +70,7 @@ const resolveFinalAssistantSnapshot = ({
 }) => {
   const baseContextUsage = toSessionContextUsage(current, event.totalTokens, model ?? undefined);
   const nextContextUsage =
-    baseContextUsage && typeof event.contextWindow === "number"
+    baseContextUsage && event.contextWindow !== undefined
       ? { ...baseContextUsage, contextWindow: event.contextWindow }
       : baseContextUsage;
   const resolvedContextUsage = shouldPreserveContextUsage
@@ -81,10 +85,10 @@ const resolveFinalAssistantSnapshot = ({
       model ?? undefined,
     ),
   };
-  if (typeof resolvedContextUsage?.contextWindow === "number") {
+  if (resolvedContextUsage?.contextWindow !== undefined) {
     assistantMeta.contextWindow = resolvedContextUsage.contextWindow;
   }
-  if (typeof resolvedContextUsage?.outputLimit === "number") {
+  if (resolvedContextUsage?.outputLimit !== undefined) {
     assistantMeta.outputLimit = resolvedContextUsage.outputLimit;
   }
 
@@ -150,20 +154,21 @@ export const handleAssistantMessage = (
               message.meta.sourceMessageId === event.messageId,
           )
         : undefined;
-    const assistantMessage =
-      sourceTextMessage?.meta?.kind === "assistant"
-        ? {
-            ...nextSnapshot.assistantMessage,
-            id: sourceTextMessage.id,
-            meta: {
-              ...nextSnapshot.assistantMessage.meta,
-              sourceMessageId: event.messageId,
-              ...(sourceTextMessage.meta.partId
-                ? { partId: sourceTextMessage.meta.partId }
-                : undefined),
-            },
-          }
-        : nextSnapshot.assistantMessage;
+    let assistantMessage = nextSnapshot.assistantMessage;
+    if (sourceTextMessage?.meta?.kind === "assistant") {
+      const assistantMeta: Extract<AgentChatMessageMeta, { kind: "assistant" }> = {
+        ...nextSnapshot.assistantMessage.meta,
+        sourceMessageId: event.messageId,
+      };
+      if (sourceTextMessage.meta.partId) {
+        assistantMeta.partId = sourceTextMessage.meta.partId;
+      }
+      assistantMessage = {
+        ...nextSnapshot.assistantMessage,
+        id: sourceTextMessage.id,
+        meta: assistantMeta,
+      };
+    }
     return {
       ...current,
       pendingUserMessageStartedAt: undefined,
@@ -325,10 +330,10 @@ const settleTerminalMessages = (
     appendUserStoppedNotice?: boolean;
   },
 ) => {
-  const settledMessages = settleDanglingTodoToolMessages(session, timestamp, {
-    ...(options?.outcome ? { outcome: options.outcome } : undefined),
-    ...(options?.errorMessage ? { errorMessage: options.errorMessage } : undefined),
-  });
+  const settleOptions: Parameters<typeof settleDanglingTodoToolMessages>[2] = {};
+  if (options?.outcome) settleOptions.outcome = options.outcome;
+  if (options?.errorMessage) settleOptions.errorMessage = options.errorMessage;
+  const settledMessages = settleDanglingTodoToolMessages(session, timestamp, settleOptions);
 
   if (!options?.appendUserStoppedNotice) {
     return settledMessages;

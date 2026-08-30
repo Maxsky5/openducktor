@@ -97,16 +97,24 @@ const parsePendingQuestionInput = (value: QuestionRequest): OpenCodePendingQuest
 
 const normalizePendingQuestion = (
   input: OpenCodePendingQuestionInput,
-): AgentPendingQuestionRequest => ({
-  requestId: input.id,
-  questions: input.questions.map((question) => ({
-    header: question.header,
-    question: question.question,
-    options: question.options,
-    ...(question.multiple === undefined ? undefined : { multiple: question.multiple }),
-    ...(question.custom === undefined ? undefined : { custom: question.custom }),
-  })),
-});
+): AgentPendingQuestionRequest => {
+  const questions = input.questions.map((question) => {
+    const normalizedQuestion: AgentPendingQuestionRequest["questions"][number] = {
+      header: question.header,
+      question: question.question,
+      options: question.options,
+    };
+    if (question.multiple !== undefined) {
+      normalizedQuestion.multiple = question.multiple;
+    }
+    if (question.custom !== undefined) {
+      normalizedQuestion.custom = question.custom;
+    }
+    return normalizedQuestion;
+  });
+
+  return { requestId: input.id, questions };
+};
 
 export const listOpencodeLiveSessionPendingInput = async (
   createClient: ClientFactory,
@@ -161,12 +169,15 @@ export const replyApproval = async (
   session: SessionRecord,
   input: ReplyApprovalInput,
 ): Promise<void> => {
-  const response = await session.client.permission.reply({
+  const request: Parameters<typeof session.client.permission.reply>[0] = {
     directory: session.input.workingDirectory,
     requestID: input.requestId,
     reply: toOpenCodePermissionReply(input.outcome),
-    ...(input.message ? { message: input.message } : undefined),
-  });
+  };
+  if (input.message) {
+    request.message = input.message;
+  }
+  const response = await session.client.permission.reply(request);
   if (response.error) {
     throw toOpenCodeRequestError("reply to permission request", response.error, response.response);
   }

@@ -82,8 +82,11 @@ const freezeFrame = (frame: TaskEventStreamFrame): TaskEventStreamFrame =>
       })
     : Object.freeze({ ...frame, cursor: freezeCursor(frame.cursor) });
 
-const validationError = (message: string, field: string, details: HostErrorDetails) =>
-  new HostValidationError({ message, field, details });
+const validationError = <Details extends object>(
+  message: string,
+  field: string,
+  details: HostErrorDetails<Details>,
+) => new HostValidationError({ message, field, details });
 
 const jsonIssues = (
   issues: ReadonlyArray<{ code: string; message: string; path: readonly PropertyKey[] }>,

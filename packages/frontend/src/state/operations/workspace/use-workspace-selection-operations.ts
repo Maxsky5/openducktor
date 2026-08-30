@@ -294,14 +294,15 @@ export function useWorkspaceSelectionOperations({
         return;
       }
 
-      const workspace = await hostClient.workspaceAdd({
+      const workspaceInput: WorkspaceSelectionOperationsInput = {
         workspaceId: input.workspaceId,
         workspaceName: input.workspaceName,
         repoPath: normalizedRepoPath,
-        ...(input.defaultRuntimeKind
-          ? { defaultRuntimeKind: input.defaultRuntimeKind }
-          : undefined),
-      });
+      };
+      if (input.defaultRuntimeKind) {
+        workspaceInput.defaultRuntimeKind = input.defaultRuntimeKind;
+      }
+      const workspace = await hostClient.workspaceAdd(workspaceInput);
       applyWorkspaceRecord(workspace);
       await refreshWorkspaceCachesAfterMutation();
       toast.success("Repository added", {

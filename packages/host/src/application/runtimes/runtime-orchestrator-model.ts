@@ -12,7 +12,13 @@ import {
 } from "@openducktor/contracts";
 import { Clock, Effect } from "effect";
 import { hasSameAgentSessionIdentity } from "../../domain/agent-session-identity";
-import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
+import {
+  errorMessage,
+  HostOperationError,
+  type HostOperationErrorAggregate,
+  HostValidationError,
+  type HostValidationErrorAggregate,
+} from "../../effect/host-errors";
 import type { GitPort, GitPortError } from "../../ports/git-port";
 import type {
   RuntimeMcpStatusProbeInput,
@@ -24,8 +30,8 @@ import type { TaskReader, TaskStoreError } from "../../ports/task-repository-por
 import type { RuntimeDefinitionsService } from "./runtime-definitions-service";
 export type RuntimeOrchestratorError =
   | GitPortError
-  | HostOperationError
-  | HostValidationError
+  | HostOperationErrorAggregate
+  | HostValidationErrorAggregate
   | RuntimeRegistryError
   | TaskStoreError;
 

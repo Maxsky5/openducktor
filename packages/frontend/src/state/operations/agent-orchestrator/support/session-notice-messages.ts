@@ -38,9 +38,8 @@ export const buildSessionErrorNoticeMessage = (
   timestamp: string,
   message: string,
   id?: string,
-): AgentChatMessage =>
-  buildSessionNoticeMessage({
-    ...(id ? { id } : undefined),
+): AgentChatMessage => {
+  const input: Parameters<typeof buildSessionNoticeMessage>[0] = {
     timestamp,
     content: message,
     meta: {
@@ -49,7 +48,10 @@ export const buildSessionErrorNoticeMessage = (
       reason: "session_error",
       title: "Error",
     },
-  });
+  };
+  if (id) input.id = id;
+  return buildSessionNoticeMessage(input);
+};
 
 const buildSessionCompactionNoticeMessage = (
   timestamp: string,
@@ -57,9 +59,8 @@ const buildSessionCompactionNoticeMessage = (
   title: string,
   status: "running" | "completed",
   id?: string,
-): AgentChatMessage =>
-  buildSessionNoticeMessage({
-    ...(id ? { id } : undefined),
+): AgentChatMessage => {
+  const input: Parameters<typeof buildSessionNoticeMessage>[0] = {
     timestamp,
     content: message,
     meta: {
@@ -69,7 +70,10 @@ const buildSessionCompactionNoticeMessage = (
       title,
       compactionStatus: status,
     },
-  });
+  };
+  if (id) input.id = id;
+  return buildSessionNoticeMessage(input);
+};
 
 export const buildSessionCompactedNoticeMessage = (
   timestamp: string,

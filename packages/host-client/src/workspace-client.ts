@@ -15,8 +15,10 @@ import {
   type WorkspaceRepoSettingsInput,
   workspaceRecordSchema,
 } from "@openducktor/contracts";
+import type { HostCommandResult } from "@openducktor/host";
 import type { InvokeFn } from "./invoke-utils";
-import { parseArray } from "./invoke-utils";
+import { arrayResultSchema, voidResultSchema } from "./invoke-utils";
+import { z } from "zod";
 
 export type {
   WorkspaceRepoConfigInput,
@@ -24,32 +26,20 @@ export type {
   WorkspaceRepoSettingsInput,
 } from "@openducktor/contracts";
 
-export type StagedLocalAttachment = {
-  path: string;
-};
+export type StagedLocalAttachment = HostCommandResult<"workspace_stage_local_attachment">;
 
-export type ResolvedLocalAttachment = {
-  path: string;
-};
+export type ResolvedLocalAttachment = HostCommandResult<"workspace_resolve_local_attachment_path">;
 
-const parseStagedLocalAttachment = (payload: unknown): StagedLocalAttachment => {
-  if (!payload || typeof payload !== "object" || !("path" in payload)) {
-    throw new Error("Expected staged local attachment payload from host command");
-  }
-
-  const path = payload.path;
-  if (typeof path !== "string" || path.trim().length === 0) {
-    throw new Error("Expected non-empty 'path' in staged local attachment payload");
-  }
-
-  return { path };
-};
-
-const parseResolvedLocalAttachment = parseStagedLocalAttachment;
+const stagedLocalAttachmentSchema = z.object({
+  path: z.string().refine((path) => path.trim().length > 0),
+});
 
 const workspaceList = async (invokeFn: InvokeFn): Promise<WorkspaceRecord[]> => {
-  const payload = await invokeFn("workspace_list");
-  return parseArray(workspaceRecordSchema, payload, "workspace_list");
+  return invokeFn(
+    "workspace_list",
+    undefined,
+    arrayResultSchema(workspaceRecordSchema, "workspace_list"),
+  );
 };
 
 export type WorkspaceCreateInput = {
@@ -63,24 +53,25 @@ const workspaceAdd = async (
   invokeFn: InvokeFn,
   input: WorkspaceCreateInput,
 ): Promise<WorkspaceRecord> => {
-  const payload = await invokeFn("workspace_add", input);
-  return workspaceRecordSchema.parse(payload);
+  return invokeFn("workspace_add", input, workspaceRecordSchema);
 };
 
 const workspaceSelect = async (
   invokeFn: InvokeFn,
   workspaceId: string,
 ): Promise<WorkspaceRecord> => {
-  const payload = await invokeFn("workspace_select", { workspaceId });
-  return workspaceRecordSchema.parse(payload);
+  return invokeFn("workspace_select", { workspaceId }, workspaceRecordSchema);
 };
 
 const workspaceReorder = async (
   invokeFn: InvokeFn,
   workspaceOrder: string[],
 ): Promise<WorkspaceRecord[]> => {
-  const payload = await invokeFn("workspace_reorder", { workspaceOrder });
-  return parseArray(workspaceRecordSchema, payload, "workspace_reorder");
+  return invokeFn(
+    "workspace_reorder",
+    { workspaceOrder },
+    arrayResultSchema(workspaceRecordSchema, "workspace_reorder"),
+  );
 };
 
 const workspaceUpdateRepoConfig = async (
@@ -88,11 +79,7 @@ const workspaceUpdateRepoConfig = async (
   workspaceId: string,
   config: WorkspaceRepoConfigInput,
 ): Promise<WorkspaceRecord> => {
-  const payload = await invokeFn("workspace_update_repo_config", {
-    workspaceId,
-    config,
-  });
-  return workspaceRecordSchema.parse(payload);
+  return invokeFn("workspace_update_repo_config", { workspaceId, config }, workspaceRecordSchema);
 };
 
 const workspaceSaveRepoSettings = async (
@@ -100,11 +87,7 @@ const workspaceSaveRepoSettings = async (
   workspaceId: string,
   settings: WorkspaceRepoSettingsInput,
 ): Promise<WorkspaceRecord> => {
-  const payload = await invokeFn("workspace_save_repo_settings", {
-    workspaceId,
-    settings,
-  });
-  return workspaceRecordSchema.parse(payload);
+  return invokeFn("workspace_save_repo_settings", { workspaceId, settings }, workspaceRecordSchema);
 };
 
 const workspaceUpdateRepoHooks = async (
@@ -112,56 +95,58 @@ const workspaceUpdateRepoHooks = async (
   workspaceId: string,
   hooks: WorkspaceRepoHooksInput,
 ): Promise<WorkspaceRecord> => {
-  const payload = await invokeFn("workspace_update_repo_hooks", { workspaceId, hooks });
-  return workspaceRecordSchema.parse(payload);
+  return invokeFn("workspace_update_repo_hooks", { workspaceId, hooks }, workspaceRecordSchema);
 };
 
 const workspaceGetRepoConfig = async (
   invokeFn: InvokeFn,
   workspaceId: string,
 ): Promise<RepoConfig> => {
-  const payload = await invokeFn("workspace_get_repo_config", { workspaceId });
-  return repoConfigSchema.parse(payload);
+  return invokeFn("workspace_get_repo_config", { workspaceId }, repoConfigSchema);
 };
 
 const workspaceGetSettingsSnapshot = async (invokeFn: InvokeFn): Promise<SettingsSnapshot> => {
-  const payload = await invokeFn("workspace_get_settings_snapshot");
-  return settingsSnapshotSchema.parse(payload);
+  return invokeFn("workspace_get_settings_snapshot", undefined, settingsSnapshotSchema);
 };
 
 const workspaceSaveSettingsSnapshot = async (
   invokeFn: InvokeFn,
   snapshot: SettingsSnapshotSaveInput,
 ): Promise<WorkspaceRecord[]> => {
-  const payload = await invokeFn("workspace_save_settings_snapshot", { snapshot });
-  return parseArray(workspaceRecordSchema, payload, "workspace_save_settings_snapshot");
+  return invokeFn(
+    "workspace_save_settings_snapshot",
+    { snapshot },
+    arrayResultSchema(workspaceRecordSchema, "workspace_save_settings_snapshot"),
+  );
 };
 
 const workspaceUpdateAgentModelFavorites = async (
   invokeFn: InvokeFn,
   favorites: AgentModelFavorite[],
 ): Promise<SettingsSnapshot> => {
-  const payload = await invokeFn("workspace_update_agent_model_favorites", { favorites });
-  return settingsSnapshotSchema.parse(payload);
+  return invokeFn("workspace_update_agent_model_favorites", { favorites }, settingsSnapshotSchema);
 };
 
 const workspaceUpdateGlobalGitConfig = async (
   invokeFn: InvokeFn,
   git: GlobalGitConfig,
 ): Promise<void> => {
-  await invokeFn("workspace_update_global_git_config", { git });
+  await invokeFn("workspace_update_global_git_config", { git }, voidResultSchema);
 };
 
 const workspaceDetectGithubRepository = async (
   invokeFn: InvokeFn,
   repoPath: string,
 ): Promise<GitProviderRepository | null> => {
-  const payload = await invokeFn("workspace_detect_github_repository", { repoPath });
-  return payload === null ? null : gitProviderRepositorySchema.parse(payload);
+  return invokeFn(
+    "workspace_detect_github_repository",
+    { repoPath },
+    gitProviderRepositorySchema.nullable(),
+  );
 };
 
 const setTheme = async (invokeFn: InvokeFn, theme: string): Promise<void> => {
-  await invokeFn("set_theme", { theme });
+  await invokeFn("set_theme", { theme }, voidResultSchema);
 };
 
 const workspaceStageLocalAttachment = async (
@@ -172,8 +157,7 @@ const workspaceStageLocalAttachment = async (
     base64Data: string;
   },
 ): Promise<StagedLocalAttachment> => {
-  const payload = await invokeFn("workspace_stage_local_attachment", input);
-  return parseStagedLocalAttachment(payload);
+  return invokeFn("workspace_stage_local_attachment", input, stagedLocalAttachmentSchema);
 };
 
 const workspaceResolveLocalAttachmentPath = async (
@@ -182,8 +166,7 @@ const workspaceResolveLocalAttachmentPath = async (
     path: string;
   },
 ): Promise<ResolvedLocalAttachment> => {
-  const payload = await invokeFn("workspace_resolve_local_attachment_path", input);
-  return parseResolvedLocalAttachment(payload);
+  return invokeFn("workspace_resolve_local_attachment_path", input, stagedLocalAttachmentSchema);
 };
 
 export class HostWorkspaceClient {

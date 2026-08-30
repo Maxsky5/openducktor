@@ -62,11 +62,12 @@ export const normalizeRepoAgentDefaultForSave = (
   const variant = trimNonEmpty(entry.variant);
   const profileId = trimNonEmpty(entry.profileId);
 
-  return {
+  const selection: NormalizedRepoAgentDefault = {
     runtimeKind: entry.runtimeKind,
     providerId,
     modelId,
-    ...(variant ? { variant } : undefined),
-    ...(profileId ? { profileId } : undefined),
   };
+  if (variant) selection.variant = variant;
+  if (profileId) selection.profileId = profileId;
+  return selection;
 };

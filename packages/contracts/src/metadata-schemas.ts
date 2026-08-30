@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { directMergeRecordSchema, gitTargetBranchSchema, pullRequestSchema } from "./git-schemas";
+import { jsonValueSchema } from "./json-types";
 import { agentSessionRecordSchema } from "./session-schemas";
 import { qaWorkflowVerdictSchema } from "./task-schemas";
 
@@ -26,52 +27,47 @@ export const taskMetadataQaReportSchema = z.object({
 });
 export type TaskMetadataQaReport = z.infer<typeof taskMetadataQaReportSchema>;
 
-const unknownRecordSchema = z.record(z.string(), z.unknown());
-type UnknownRecord = z.infer<typeof unknownRecordSchema>;
-
-const normalizeLegacyTaskMetadataPayload = (value: unknown): UnknownRecord | null => {
-  const payload = unknownRecordSchema.safeParse(value);
-  if (!payload.success) {
-    return null;
-  }
-
-  const delivery = unknownRecordSchema.safeParse(payload.data.delivery);
-  if (!delivery.success) {
-    return payload.data;
-  }
-
-  const pullRequest = payload.data.pullRequest ?? delivery.data.linkedPullRequest;
-  const directMerge = payload.data.directMerge ?? delivery.data.directMerge;
-
-  return {
-    ...payload.data,
-    ...(pullRequest === undefined ? undefined : { pullRequest }),
-    ...(directMerge === undefined ? undefined : { directMerge }),
-  };
+const taskMetadataPayloadFields = {
+  spec: taskMetadataDocumentSchema,
+  plan: taskMetadataDocumentSchema,
+  targetBranch: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    gitTargetBranchSchema.optional(),
+  ),
+  qaReport: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    taskMetadataQaReportSchema.optional(),
+  ),
+  pullRequest: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    pullRequestSchema.optional(),
+  ),
+  directMerge: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    directMergeRecordSchema.optional(),
+  ),
+  agentSessions: z.array(agentSessionRecordSchema).default([]),
 };
 
-export const taskMetadataPayloadSchema = z.preprocess(
-  normalizeLegacyTaskMetadataPayload,
-  z.object({
-    spec: taskMetadataDocumentSchema,
-    plan: taskMetadataDocumentSchema,
-    targetBranch: z.preprocess(
-      (value) => (value === null ? undefined : value),
-      gitTargetBranchSchema.optional(),
-    ),
-    qaReport: z.preprocess(
-      (value) => (value === null ? undefined : value),
-      taskMetadataQaReportSchema.optional(),
-    ),
-    pullRequest: z.preprocess(
-      (value) => (value === null ? undefined : value),
-      pullRequestSchema.optional(),
-    ),
-    directMerge: z.preprocess(
-      (value) => (value === null ? undefined : value),
-      directMergeRecordSchema.optional(),
-    ),
-    agentSessions: z.array(agentSessionRecordSchema).default([]),
-  }),
-);
+const taskMetadataPayloadBodySchema = z.object(taskMetadataPayloadFields);
+const legacyTaskDeliverySchema = z.object({
+  linkedPullRequest: jsonValueSchema.optional(),
+  directMerge: jsonValueSchema.optional(),
+});
+const legacyTaskMetadataPayloadSchema = z.object({
+  ...taskMetadataPayloadFields,
+  delivery: legacyTaskDeliverySchema.optional(),
+});
+
+export const taskMetadataPayloadSchema = legacyTaskMetadataPayloadSchema
+  .transform(({ delivery, ...payload }): z.input<typeof taskMetadataPayloadBodySchema> => {
+    if (payload.pullRequest === undefined && delivery?.linkedPullRequest !== undefined) {
+      payload.pullRequest = pullRequestSchema.parse(delivery.linkedPullRequest);
+    }
+    if (payload.directMerge === undefined && delivery?.directMerge !== undefined) {
+      payload.directMerge = directMergeRecordSchema.parse(delivery.directMerge);
+    }
+    return payload;
+  })
+  .pipe(taskMetadataPayloadBodySchema);
 export type TaskMetadataPayload = z.infer<typeof taskMetadataPayloadSchema>;

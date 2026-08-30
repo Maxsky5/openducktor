@@ -39,6 +39,11 @@ export type TerminalOutputEvent =
 
 export type TerminalOutputEvents = TerminalOutputEvent[];
 
+type TerminalDeliveryResult = {
+  delivered: boolean;
+  events: TerminalOutputEvents;
+};
+
 export class TerminalOutputStateError extends Error {
   constructor(
     readonly code: "attachment_not_found" | "invalid_ack" | "invalid_replay_position",
@@ -230,19 +235,16 @@ export class TerminalSessionOutput {
     attachment: TerminalAttachment,
     message: TerminalServerMessage,
     payload: Uint8Array = EMPTY_PAYLOAD,
-  ) {
+  ): TerminalDeliveryResult {
     try {
       this.publishTo(attachment, message, payload);
-      return { delivered: true, events: [] } satisfies {
-        delivered: boolean;
-        events: TerminalOutputEvents;
-      };
+      return { delivered: true, events: [] };
     } catch {
       this.attachments.delete(attachment.attachmentId);
       return {
         delivered: false,
         events: this.attachments.size === 0 ? event("attachments_empty") : [],
-      } satisfies { delivered: boolean; events: TerminalOutputEvents };
+      };
     }
   }
 
@@ -258,20 +260,14 @@ export class TerminalSessionOutput {
     chunk: ReplayChunk,
     replay: boolean,
     handle: TerminalPtyHandle | null,
-  ) {
+  ): TerminalDeliveryResult {
     if (chunk.sequenceEnd <= attachment.deliveredSequence) {
-      return { delivered: true, events: [] } satisfies {
-        delivered: boolean;
-        events: TerminalOutputEvents;
-      };
+      return { delivered: true, events: [] };
     }
     const start = Math.max(chunk.sequenceStart, attachment.deliveredSequence);
     const payload = chunk.data.subarray(start - chunk.sequenceStart);
     if (attachment.pendingBytes + payload.byteLength > TERMINAL_LIMITS.pendingOutputBytes) {
-      return { delivered: false, events: this.requestPause(handle) } satisfies {
-        delivered: boolean;
-        events: TerminalOutputEvents;
-      };
+      return { delivered: false, events: this.requestPause(handle) };
     }
     const published = this.tryPublish(
       attachment,
@@ -285,18 +281,14 @@ export class TerminalSessionOutput {
       },
       payload,
     );
-    if (!published.delivered)
-      return published satisfies { delivered: boolean; events: TerminalOutputEvents };
+    if (!published.delivered) return published;
     attachment.deliveredSequence = chunk.sequenceEnd;
     attachment.pendingBytes = attachment.deliveredSequence - attachment.acknowledgedSequence;
     const pressure =
       attachment.pendingBytes >= TERMINAL_LIMITS.pendingOutputBytes
         ? this.requestPause(handle)
         : [];
-    return { delivered: true, events: mergeEvents(published.events, pressure) } satisfies {
-      delivered: boolean;
-      events: TerminalOutputEvents;
-    };
+    return { delivered: true, events: mergeEvents(published.events, pressure) };
   }
 
   private flush(

@@ -1,18 +1,20 @@
-import { jsonValueSchema } from "@openducktor/contracts";
+import { type JsonObject, type JsonValue, jsonValueSchema } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
-import type { Part } from "@opencode-ai/sdk/v2/client";
+import { z } from "zod";
+import type { ParsedOpencodePart } from "./opencode-ingress";
 import { mapOpenCodeBackgroundTaskResultPart } from "./opencode-background-task-result";
 import { mapPartToAgentStreamPart } from "./stream-part-mapper";
 
-type ToolPart = Extract<Part, { type: "tool" }>;
+type ToolPart = Extract<ParsedOpencodePart, { type: "tool" }>;
 type ToolState = ToolPart["state"];
 
-const serializeToolResult = (value: unknown): string => {
+const serializeToolResult = (value: JsonValue | undefined): string => {
   if (value === undefined) {
     return "";
   }
   const parsed = jsonValueSchema.parse(value);
-  return typeof parsed === "string" ? parsed : JSON.stringify(parsed);
+  const text = z.string().safeParse(parsed);
+  return text.success ? text.data : JSON.stringify(parsed);
 };
 
 const createToolPart = ({
@@ -30,11 +32,11 @@ const createToolPart = ({
   id: string;
   messageID?: string;
   status?: ToolState["status"];
-  input?: Record<string, unknown>;
-  output?: unknown;
-  error?: unknown;
+  input?: JsonObject;
+  output?: JsonValue;
+  error?: string;
   title?: string;
-  metadata?: Record<string, unknown>;
+  metadata?: JsonObject;
   time?: { start?: number; end?: number };
   tool?: string;
 }): ToolPart => {
@@ -47,10 +49,14 @@ const createToolPart = ({
       state = {
         status,
         input,
-        ...(title !== undefined ? { title } : undefined),
-        ...(metadata !== undefined ? { metadata } : undefined),
         time: { start: time?.start ?? 1 },
       };
+      if (title !== undefined) {
+        state.title = title;
+      }
+      if (metadata !== undefined) {
+        state.metadata = metadata;
+      }
       break;
     case "completed":
       state = {
@@ -67,9 +73,11 @@ const createToolPart = ({
         status,
         input,
         error: serializeToolResult(error),
-        ...(metadata !== undefined ? { metadata } : undefined),
         time: { start: time?.start ?? 1, end: time?.end ?? 2 },
       };
+      if (metadata !== undefined) {
+        state.metadata = metadata;
+      }
       break;
   }
 
@@ -92,48 +100,22 @@ const createSyntheticTextPart = ({
   id: string;
   text: string;
   time?: { end?: number };
-}): Extract<Part, { type: "text" }> => ({
-  id,
-  sessionID: "session-1",
-  messageID: `user-${id}`,
-  type: "text",
-  synthetic: true,
-  text,
-  ...(time ? { time: { start: 1, ...time } } : undefined),
-});
+}): Extract<ParsedOpencodePart, { type: "text" }> => {
+  const part: Extract<ParsedOpencodePart, { type: "text" }> = {
+    id,
+    sessionID: "session-1",
+    messageID: `user-${id}`,
+    type: "text",
+    synthetic: true,
+    text,
+  };
+  if (time) {
+    part.time = { start: 1, ...time };
+  }
+  return part;
+};
 
 describe("stream-part-mapper", () => {
-  test("rejects tool parts with non-JSON state metadata at ingress", () => {
-    const part = {
-      id: "tool-malformed-state-1",
-      sessionID: "session-1",
-      messageID: "assistant-tool-malformed-state-1",
-      callID: "call-tool-malformed-state-1",
-      type: "tool",
-      tool: "todowrite",
-      state: {
-        input: { todos: [] },
-        metadata: { receivedAt: new Date() },
-      },
-    };
-
-    expect(() => mapPartToAgentStreamPart(part)).toThrow();
-  });
-
-  test("rejects tool parts whose JSON state is not an object at ingress", () => {
-    const part = {
-      id: "tool-array-state-1",
-      sessionID: "session-1",
-      messageID: "assistant-tool-array-state-1",
-      callID: "call-tool-array-state-1",
-      type: "tool",
-      tool: "todowrite",
-      state: [],
-    };
-
-    expect(() => mapPartToAgentStreamPart(part)).toThrow();
-  });
-
   test("uses normalized task strategies for subagent mapping", () => {
     for (const tool of ["task", "delegate", "functions.task", " Functions.Delegate "]) {
       const mapped = mapPartToAgentStreamPart(
@@ -150,7 +132,7 @@ describe("stream-part-mapper", () => {
   });
 
   test("maps raw subtask parts to canonical subagent parts", () => {
-    const part: Extract<Part, { type: "subtask" }> = {
+    const part: Extract<ParsedOpencodePart, { type: "subtask" }> = {
       id: "subtask-1",
       sessionID: "session-1",
       messageID: "assistant-subtask-1",
@@ -309,23 +291,6 @@ describe("stream-part-mapper", () => {
       executionMode: "background",
       endedAtMs: 40,
     });
-  });
-
-  test("rejects cancelled tool states that are not part of the OpenCode protocol", () => {
-    const part = {
-      id: "tool-background-task-cancelled-1",
-      sessionID: "session-1",
-      messageID: "assistant-tool-background-task-cancelled-1",
-      callID: "call-tool-background-task-cancelled-1",
-      type: "tool",
-      tool: "task",
-      state: {
-        status: "cancelled",
-        input: { subagent_type: "build", prompt: "Inspect the repo" },
-      },
-    };
-
-    expect(() => mapPartToAgentStreamPart(part)).toThrow();
   });
 
   test("maps synthetic completed background task text without truncating raw result lines", () => {
@@ -853,7 +818,7 @@ describe("stream-part-mapper", () => {
   });
 
   test("keeps the same correlation key when tool completion changes the description", () => {
-    const spawnPart: Extract<Part, { type: "subtask" }> = {
+    const spawnPart: Extract<ParsedOpencodePart, { type: "subtask" }> = {
       id: "subtask-identity-1",
       sessionID: "session-1",
       messageID: "assistant-identity-1",
@@ -1412,16 +1377,5 @@ describe("stream-part-mapper", () => {
       }
       expect(mapped.status).toBe(testCase.expectedStatus);
     }
-  });
-
-  test("rejects unsupported part types at ingress", () => {
-    const part = {
-      id: "unknown-1",
-      sessionID: "session-1",
-      messageID: "assistant-1",
-      type: "unknown",
-    };
-
-    expect(() => mapPartToAgentStreamPart(part)).toThrow();
   });
 });

@@ -7,6 +7,7 @@ import {
   type TaskCard,
   type TaskMetadataDocument,
   type TaskMetadataPayload,
+  type TaskRequestedDocuments,
   type TaskSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -27,7 +28,10 @@ const sanitizeSlug = (value: string): string =>
 
 const formatTaskRef = (task: TaskCard): string => `${task.id} (${task.title})`;
 
-const ambiguousTaskError = (requested: string, matches: TaskCard[]): HostValidationError =>
+const ambiguousTaskError = (
+  requested: string,
+  matches: TaskCard[],
+): HostValidationError<{ taskId: string }> =>
   new HostValidationError({
     field: "taskId",
     message: `Task identifier "${requested}" is ambiguous. Use exact task id. Candidates: ${matches
@@ -150,19 +154,22 @@ const taskDocuments = (task: TaskCard): PublicTaskSummaryTask["documents"] => ({
   hasQaReport: Boolean(task.documentSummary.qaReport.has),
 });
 
-export const mapPublicTask = (task: TaskCard): PublicTask => ({
-  id: task.id,
-  title: task.title,
-  description: task.description ?? "",
-  status: task.status,
-  priority: task.priority,
-  issueType: task.issueType,
-  aiReviewEnabled: task.aiReviewEnabled,
-  labels: task.labels,
-  ...(task.targetBranch ? { targetBranch: task.targetBranch } : undefined),
-  createdAt: task.createdAt,
-  updatedAt: task.updatedAt,
-});
+export const mapPublicTask = (task: TaskCard): PublicTask => {
+  const publicTask: PublicTask = {
+    id: task.id,
+    title: task.title,
+    description: task.description ?? "",
+    status: task.status,
+    priority: task.priority,
+    issueType: task.issueType,
+    aiReviewEnabled: task.aiReviewEnabled,
+    labels: task.labels,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+  };
+  if (task.targetBranch) publicTask.targetBranch = task.targetBranch;
+  return publicTask;
+};
 
 export const mapTaskSummary = (task: TaskCard): TaskSummary => ({
   task: {
@@ -195,21 +202,29 @@ export const persistedDocument = (
   };
 };
 
-export const latestDocument = (document: TaskMetadataDocument) => ({
-  markdown: document.markdown,
-  updatedAt: document.updatedAt ?? null,
-  ...(document.error ? { error: document.error } : undefined),
-});
+export const latestDocument = (
+  document: TaskMetadataDocument,
+): NonNullable<TaskRequestedDocuments["spec"]> => {
+  const latest: NonNullable<TaskRequestedDocuments["spec"]> = {
+    markdown: document.markdown,
+    updatedAt: document.updatedAt ?? null,
+  };
+  if (document.error) latest.error = document.error;
+  return latest;
+};
 
-export const latestQaReport = (qaReport: TaskMetadataPayload["qaReport"]) =>
-  qaReport
-    ? {
-        markdown: qaReport.markdown,
-        updatedAt: qaReport.updatedAt ?? null,
-        verdict: qaReport.verdict,
-        ...(qaReport.error ? { error: qaReport.error } : undefined),
-      }
-    : undefined;
+export const latestQaReport = (
+  qaReport: TaskMetadataPayload["qaReport"],
+): TaskRequestedDocuments["latestQaReport"] => {
+  if (!qaReport) return undefined;
+  const latest: NonNullable<TaskRequestedDocuments["latestQaReport"]> = {
+    markdown: qaReport.markdown,
+    updatedAt: qaReport.updatedAt ?? null,
+    verdict: qaReport.verdict,
+  };
+  if (qaReport.error) latest.error = qaReport.error;
+  return latest;
+};
 
 export const activeStatuses = new Set([
   "open",
@@ -255,7 +270,7 @@ export const parseResponse = <A, O>(
   toolName: OdtToolName,
   parser: ResponseParser<A>,
   output: O,
-): Effect.Effect<A, HostValidationError> =>
+): Effect.Effect<A, HostValidationError<{ operation: string }>> =>
   Effect.try({
     try: () => parser.parse(output),
     catch: (cause) =>

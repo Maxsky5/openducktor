@@ -73,7 +73,7 @@ export type AgentSessionLiveAdapterBinding = {
 
 export type AgentSessionLiveAdapterScope = Pick<AgentSessionLiveRef, "repoPath" | "runtimeKind">;
 
-export type AgentSessionLiveAdapterPort = {
+type AgentSessionLiveAdapterBase = {
   readonly binding: AgentSessionLiveAdapterBinding;
   readonly matches: (ref: AgentSessionLiveRef) => boolean;
   readonly listRetainedSnapshots: (
@@ -120,8 +120,14 @@ export type AgentSessionControlAdapterPort = {
   ) => Effect.Effect<void, HostError>;
 };
 
-export type AgentSessionRuntimeAdapterPort = AgentSessionLiveAdapterPort &
-  AgentSessionControlAdapterPort;
+export type AgentSessionRuntimeAdapterPort = AgentSessionLiveAdapterBase &
+  AgentSessionControlAdapterPort & {
+    readonly supportsSessionControl: true;
+  };
+
+export type AgentSessionLiveAdapterPort =
+  | (AgentSessionLiveAdapterBase & { readonly supportsSessionControl: false })
+  | AgentSessionRuntimeAdapterPort;
 
 export type AgentSessionLiveAdapterRegistryPort = {
   readonly register: (adapter: AgentSessionLiveAdapterPort) => Effect.Effect<void, HostError>;

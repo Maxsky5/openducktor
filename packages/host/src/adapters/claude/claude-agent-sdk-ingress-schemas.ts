@@ -1,13 +1,13 @@
-import type { HookInput, SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
+import type {
+  CanUseTool,
+  HookInput,
+  SDKMessage,
+  SessionStoreEntry,
+} from "@anthropic-ai/claude-agent-sdk";
 import { type JsonObject, jsonObjectSchema } from "@openducktor/contracts";
-import type { UUID } from "node:crypto";
+import type { AgentStreamPart } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
 import { z } from "zod";
-
-const claudeUnknownValueSchema = z.unknown();
-
-const claudeUnknownRecordSchema = z.object({}).catchall(claudeUnknownValueSchema);
-const claudePlainUnknownRecordSchema = z.record(z.string(), claudeUnknownValueSchema);
 
 const claudeToolHookSchema = z.object({
   agent_id: z.string().min(1).optional(),
@@ -16,23 +16,47 @@ const claudeToolHookSchema = z.object({
   tool_use_id: z.string().min(1),
 });
 
-const claudeContentBlockSchema = claudeUnknownRecordSchema.extend({
+const claudeContentSourceSchema = z.object({
+  media_type: z.string().optional(),
+});
+
+const claudeContentBlockSchema = z.object({
+  arguments: jsonObjectSchema.optional(),
+  custom_tool_use_id: z.string().optional(),
+  id: z.string().optional(),
+  input: jsonObjectSchema.optional(),
+  name: z.string().optional(),
+  server_name: z.string().optional(),
+  source: claudeContentSourceSchema.optional(),
+  text: z.string().optional(),
+  thinking: z.string().optional(),
+  title: z.string().optional(),
+  tool: z.string().optional(),
+  tool_input: jsonObjectSchema.optional(),
+  tool_name: z.string().optional(),
+  tool_use_id: z.string().optional(),
   type: z.string().min(1),
 });
 
-const claudeUserMessagePayloadSchema = claudeUnknownRecordSchema.extend({
+export type ClaudeContentBlockIngress = z.output<typeof claudeContentBlockSchema>;
+
+const claudeUserMessagePayloadSchema = z.object({
   content: z.union([z.string(), z.array(claudeContentBlockSchema)]),
 });
 
-const claudeToolResultBlockSchema = z.discriminatedUnion("type", [
-  claudeUnknownRecordSchema.extend({
-    tool_use_id: z.string().min(1),
-    type: z.literal("tool_result"),
-  }),
-  claudeUnknownRecordSchema.extend({
-    tool_use_id: z.string().min(1),
-    type: z.literal("mcp_tool_result"),
-  }),
+const claudeToolResultBlockSchema = z.union([
+  jsonObjectSchema.and(
+    z.object({
+      tool_use_id: z.string().min(1),
+      type: z.literal("tool_result"),
+    }),
+  ),
+  jsonObjectSchema.and(
+    z.object({
+      tool_use_id: z.string().min(1),
+      type: z.literal("mcp_tool_result"),
+    }),
+  ),
 ]);
 
 const claudeNonToolResultContentBlockSchema = claudeContentBlockSchema.extend({
@@ -47,21 +71,23 @@ const claudeUserToolResultContentBlockSchema = z.union([
   claudeNonToolResultContentBlockSchema.transform((raw) => ({ kind: "content" as const, raw })),
 ]);
 
-const claudeUserToolResultMessagePayloadSchema = claudeUnknownRecordSchema.extend({
+const claudeUserToolResultMessagePayloadSchema = z.object({
   content: z.union([z.string(), z.array(claudeUserToolResultContentBlockSchema)]),
 });
 
-const claudeUserTurnOriginSchema = claudeUnknownRecordSchema.extend({
+const claudeUserTurnOriginSchema = z.object({
   kind: z.string().min(1),
 });
 
-const claudeStructuredToolUseResultSchema = claudeUnknownRecordSchema.extend({
-  type: z
-    .string()
-    .min(1)
-    .refine((type) => type !== "tool_result" && type !== "mcp_tool_result")
-    .optional(),
-});
+const claudeStructuredToolUseResultSchema = jsonObjectSchema.and(
+  z.object({
+    type: z
+      .string()
+      .min(1)
+      .refine((type) => type !== "tool_result" && type !== "mcp_tool_result")
+      .optional(),
+  }),
+);
 
 const claudeTopLevelToolUseResultSchema = z.union([
   claudeToolResultBlockSchema.transform((result) => ({ kind: "tool_result" as const, result })),
@@ -71,27 +97,26 @@ const claudeTopLevelToolUseResultSchema = z.union([
   })),
 ]);
 
-const claudeAssistantMessagePayloadSchema = claudeUnknownRecordSchema.extend({
+const claudeAssistantMessagePayloadSchema = z.object({
   content: z.array(claudeContentBlockSchema),
+  id: z.string().optional(),
+  model: z.string().optional(),
+  stop_reason: z.string().nullable().optional(),
 });
 
-const claudeHistoryConversationEntrySchema = claudeUnknownRecordSchema.extend({
+const claudeHistoryConversationEntrySchema = z.object({
   message: claudeUserMessagePayloadSchema,
 });
 
-const claudeHistoryAssistantEntrySchema = claudeUnknownRecordSchema.extend({
+const claudeHistoryAssistantEntrySchema = z.object({
   message: claudeAssistantMessagePayloadSchema,
 });
 
-const claudeHistoryAttachmentSchema = claudeUnknownRecordSchema.extend({
+const claudeHistoryAttachmentSchema = z.object({
   isMeta: z.boolean().optional(),
   prompt: z.string().optional(),
   timestamp: z.string().optional(),
   type: z.string().min(1),
-});
-
-const claudeHistoryAttachmentEntrySchema = claudeUnknownRecordSchema.extend({
-  attachment: claudeUnknownValueSchema,
 });
 
 const claudeMetaQueuedCommandAttachmentSchema = claudeHistoryAttachmentSchema.extend({
@@ -106,15 +131,10 @@ const claudeTaskUsageSchema = z.object({
   duration_ms: z.number(),
 });
 
-const uuidStringSchema = z.uuid();
-const claudeMessageUuidSchema = z.custom<UUID>(
-  (value) => uuidStringSchema.safeParse(value).success,
-);
-
 const claudeTaskMessageSchema = z.object({
   type: z.literal("system"),
   task_id: z.string(),
-  uuid: claudeMessageUuidSchema,
+  uuid: z.string(),
   session_id: z.string(),
 });
 
@@ -168,7 +188,7 @@ const claudeHistorySubagentSystemMessageSchema = z.discriminatedUnion("subtype",
   claudeTaskNotificationMessageSchema,
 ]);
 
-export const claudeHistoryStoreEntrySchema = claudeUnknownRecordSchema.extend({
+export const claudeHistoryStoreEntrySchema = z.object({
   timestamp: z.string().optional(),
   type: z.string().min(1),
   uuid: z.string().optional(),
@@ -181,7 +201,6 @@ export const claudePreToolUseIngressSchema = claudeToolHookSchema.extend({
 const claudePostToolUseSuccessIngressSchema = claudeToolHookSchema.extend({
   duration_ms: z.number().finite().nonnegative().optional(),
   hook_event_name: z.literal("PostToolUse"),
-  tool_response: claudeUnknownValueSchema,
 });
 
 const claudePostToolUseFailureIngressSchema = claudeToolHookSchema.extend({
@@ -195,12 +214,11 @@ export const claudePostToolUseIngressSchema = z.discriminatedUnion("hook_event_n
   claudePostToolUseFailureIngressSchema,
 ]);
 
-export const claudeUserToolResultIngressSchema = claudeUnknownRecordSchema.extend({
+export const claudeUserToolResultIngressSchema = z.object({
   message: claudeUserToolResultMessagePayloadSchema,
   origin: claudeUserTurnOriginSchema.optional(),
   parent_tool_use_id: z.string().min(1).nullable().optional(),
   shouldQuery: z.boolean().optional(),
-  tool_use_result: claudeUnknownValueSchema.optional(),
   type: z.literal("user"),
   uuid: z.string().optional(),
 });
@@ -225,7 +243,11 @@ const parseClaudeIngress = <Output>(
   });
 };
 
-export type ClaudePostToolUseIngress = z.output<typeof claudePostToolUseIngressSchema>;
+type ClaudePostToolUseSuccessIngress = z.output<typeof claudePostToolUseSuccessIngressSchema> &
+  Pick<Extract<HookInput, { hook_event_name: "PostToolUse" }>, "tool_response">;
+export type ClaudePostToolUseIngress =
+  | ClaudePostToolUseSuccessIngress
+  | z.output<typeof claudePostToolUseFailureIngressSchema>;
 export type ClaudeHistorySubagentSystemMessageIngress = z.output<
   typeof claudeHistorySubagentSystemMessageSchema
 >;
@@ -246,7 +268,7 @@ export const parseClaudeHistoryStoreEntry = (value: SessionStoreEntry) =>
   parseClaudeIngress(claudeHistoryStoreEntrySchema.safeParse(value), "claudeSessionHistoryEntry");
 
 export const parseClaudeHistorySubagentSystemMessageIngress = (
-  value: unknown,
+  value: SessionStoreEntry,
 ): ClaudeHistorySubagentSystemMessageIngress =>
   parseClaudeIngress(
     claudeHistorySubagentSystemMessageSchema.safeParse(value),
@@ -254,12 +276,12 @@ export const parseClaudeHistorySubagentSystemMessageIngress = (
   );
 
 export const parseClaudeHistoryConversationEntry = (
-  value: unknown,
+  value: SessionStoreEntry,
 ): z.output<typeof claudeHistoryConversationEntrySchema> =>
   parseClaudeIngress(claudeHistoryConversationEntrySchema.safeParse(value), "claudeHistoryMessage");
 
 export const parseClaudeHistoryAssistantEntry = (
-  value: unknown,
+  value: SessionStoreEntry,
 ): z.output<typeof claudeHistoryAssistantEntrySchema> =>
   parseClaudeIngress(
     claudeHistoryAssistantEntrySchema.safeParse(value),
@@ -267,20 +289,12 @@ export const parseClaudeHistoryAssistantEntry = (
   );
 
 export const parseClaudeHistoryAttachment = (
-  value: unknown,
+  value: SessionStoreEntry[string],
 ): z.output<typeof claudeHistoryAttachmentSchema> =>
   parseClaudeIngress(claudeHistoryAttachmentSchema.safeParse(value), "claudeHistoryAttachment");
 
-export const parseClaudeHistoryAttachmentEntry = (
-  value: unknown,
-): z.output<typeof claudeHistoryAttachmentEntrySchema> =>
-  parseClaudeIngress(
-    claudeHistoryAttachmentEntrySchema.safeParse(value),
-    "claudeHistoryAttachmentEntry",
-  );
-
 export const parseClaudeMetaQueuedCommandAttachment = (
-  value: unknown,
+  value: SessionStoreEntry[string],
 ): z.output<typeof claudeMetaQueuedCommandAttachmentSchema> =>
   parseClaudeIngress(
     claudeMetaQueuedCommandAttachmentSchema.safeParse(value),
@@ -290,18 +304,36 @@ export const parseClaudeMetaQueuedCommandAttachment = (
 export const parseClaudePreToolUseIngress = (value: HookInput) =>
   parseClaudeIngress(claudePreToolUseIngressSchema.safeParse(value), "claudePreToolUse");
 
-export const parseClaudePostToolUseIngress = (value: HookInput): ClaudePostToolUseIngress =>
-  parseClaudeIngress(claudePostToolUseIngressSchema.safeParse(value), "claudePostToolUse");
+export const parseClaudePostToolUseIngress = (value: HookInput): ClaudePostToolUseIngress => {
+  if (value.hook_event_name === "PostToolUse") {
+    const parsed = parseClaudeIngress(
+      claudePostToolUseSuccessIngressSchema.safeParse(value),
+      "claudePostToolUse",
+    );
+    return { ...parsed, tool_response: value.tool_response };
+  }
+  return parseClaudeIngress(
+    claudePostToolUseFailureIngressSchema.safeParse(value),
+    "claudePostToolUse",
+  );
+};
 
 export const parseClaudeFileEditToolResponse = (
-  value: unknown,
-): z.output<typeof claudePlainUnknownRecordSchema> =>
-  parseClaudeIngress(claudePlainUnknownRecordSchema.safeParse(value), "claudeFileEditToolResponse");
+  value: Extract<HookInput, { hook_event_name: "PostToolUse" }>["tool_response"],
+): JsonObject =>
+  parseClaudeIngress(jsonObjectSchema.safeParse(value), "claudeFileEditToolResponse");
 
-export const parseClaudeCanonicalJsonObject = (value: unknown, field: string): JsonObject =>
-  parseClaudeIngress(jsonObjectSchema.safeParse(value), field);
+type ClaudeToolMetadata = NonNullable<Extract<AgentStreamPart, { kind: "tool" }>["metadata"]>;
+type ClaudeCanonicalJsonObjectInput = Parameters<CanUseTool>[1] | ClaudeToolMetadata | JsonObject;
 
-export const parseClaudeUserToolResultIngress = (value: unknown): ClaudeUserToolResultIngress => {
+export const parseClaudeCanonicalJsonObject = (
+  value: ClaudeCanonicalJsonObjectInput,
+  field: string,
+): JsonObject => parseClaudeIngress(jsonObjectSchema.safeParse(value), field);
+
+export const parseClaudeUserToolResultIngress = (
+  value: Extract<SDKMessage, { type: "user" }> | SessionStoreEntry,
+): ClaudeUserToolResultIngress => {
   const message = parseClaudeIngress(
     claudeUserToolResultIngressSchema.safeParse(value),
     "claudeUserToolResult",
@@ -309,19 +341,21 @@ export const parseClaudeUserToolResultIngress = (value: unknown): ClaudeUserTool
   const contentToolResults = Array.isArray(message.message.content)
     ? message.message.content.flatMap((block) => (block.kind === "tool_result" ? [block.raw] : []))
     : [];
-  const normalizedMessage = {
+  const normalizedMessage: Omit<ClaudeUserToolResultIngress, "toolResults"> = {
     message: message.message,
     type: message.type,
-    ...(message.parent_tool_use_id === undefined
-      ? undefined
-      : { parent_tool_use_id: message.parent_tool_use_id }),
-    ...(message.shouldQuery === false || message.origin === undefined
-      ? undefined
-      : { turnOriginKind: message.origin.kind }),
-    ...(message.uuid === undefined ? undefined : { uuid: message.uuid }),
   };
+  if (message.parent_tool_use_id !== undefined) {
+    normalizedMessage.parent_tool_use_id = message.parent_tool_use_id;
+  }
+  if (message.shouldQuery !== false && message.origin !== undefined) {
+    normalizedMessage.turnOriginKind = message.origin.kind;
+  }
+  if (message.uuid !== undefined) {
+    normalizedMessage.uuid = message.uuid;
+  }
   const parsedTopLevelToolUseResult = claudeTopLevelToolUseResultSchema.safeParse(
-    message.tool_use_result,
+    value.tool_use_result,
   );
   const topLevelToolUseResult = parsedTopLevelToolUseResult.success
     ? parsedTopLevelToolUseResult.data

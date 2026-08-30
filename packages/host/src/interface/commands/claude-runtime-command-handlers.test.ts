@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { RUNTIME_DESCRIPTORS_BY_KIND, jsonValueSchema } from "@openducktor/contracts";
+import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
   AgentSkillCatalog,
@@ -329,9 +329,7 @@ describe("createClaudeRuntimeCommandHandlers", () => {
         workingDirectory: "/worktrees/repo/task-1",
       };
 
-      await expect(router.invoke(operation.command, { input })).resolves.toEqual(
-        jsonValueSchema.parse(operation.result),
-      );
+      await expect(router.invoke(operation.command, { input })).resolves.toEqual(operation.result);
       expect(loadCatalog).toHaveBeenCalledWith(input);
     }
   });
@@ -382,12 +380,9 @@ describe("createClaudeRuntimeCommandHandlers", () => {
   });
 
   test("rejects service output that violates the selected command contract", async () => {
-    // @ts-expect-error -- This case verifies runtime rejection of an invalid service result.
-    const invalidCatalog: AgentModelCatalog = { unrelated: true };
     const service = createClaudeCommandService({
-      listAvailableModels: () =>
-        // SAFETY: this test returns invalid adapter output to verify result validation.
-        Effect.succeed(invalidCatalog),
+      // @ts-expect-error -- The malformed service result must cross the typed test boundary.
+      listAvailableModels: () => Effect.succeed({ unrelated: true }),
     });
     const router = createHostCommandRouter({
       handlers: createHandlers(service, createLiveClaudeRuntimeRegistry()),

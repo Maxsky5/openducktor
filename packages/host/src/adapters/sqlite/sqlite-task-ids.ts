@@ -120,7 +120,13 @@ export function* taskIdCandidates(
   }
 }
 
-export const taskIdExhaustedError = (prefix: string): HostOperationError =>
+export const taskIdExhaustedError = (
+  prefix: string,
+): HostOperationError<{
+  maxHashLength: number;
+  nonceAttemptsPerLength: number;
+  prefix: string;
+}> =>
   new HostOperationError({
     operation: "sqliteTaskStore.nextTaskId",
     message: "Failed to generate a unique SQLite task id.",

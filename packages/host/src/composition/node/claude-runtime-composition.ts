@@ -11,7 +11,7 @@ import type { HostRuntimeDistribution } from "../../adapters/runtimes/runtime-di
 import type { ClaudeRuntimeSessionOperationsPort } from "../../adapters/runtimes/runtime-session-operations";
 import type { ClaudeAgentSdkService } from "../../application/runtimes/claude-agent-sdk-service";
 import type { ClaudeWorkspaceWorkingDirectoryDependencies } from "../../application/runtimes/claude-workspace-runtime";
-import type { HostOperationError } from "../../effect/host-errors";
+import type { HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { RuntimeExecutableProbePort } from "../../ports/runtime-executable-probe-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import type { RuntimeWorkspaceStarterPort } from "../../ports/runtime-registry-port";
@@ -28,7 +28,7 @@ export type ClaudeRuntimeComposition = {
 
 export type CreateClaudeRuntimeCompositionInput = {
   liveSessionLifecycle: RuntimeLiveSessionLifecyclePort;
-  onBackgroundFailure: (failure: HostOperationError) => Effect.Effect<void, never>;
+  onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   processEnv?: NodeJS.ProcessEnv;
   resolveMcpBridgeConnection: ClaudeMcpBridgeConnectionResolver;
   runtimeExecutableProbe: RuntimeExecutableProbePort;
@@ -51,16 +51,17 @@ export const createClaudeRuntimeComposition = ({
 }: CreateClaudeRuntimeCompositionInput): ClaudeRuntimeComposition => {
   const eventHub = createClaudeAgentSdkEventHub();
   const sessionStore = createClaudeAgentSdkSessionStore({ emit: eventHub.emit });
-  const agentSdkService = createClaudeAgentSdkService({
+  const agentSdkServiceInput: Parameters<typeof createClaudeAgentSdkService>[0] = {
     emit: eventHub.emit,
     onBackgroundFailure,
-    ...(processEnv ? { processEnv } : undefined),
     resolveMcpBridgeConnection,
     runtimeDistribution,
     settingsConfig,
     sessionStore,
     toolDiscovery,
-  });
+  };
+  if (processEnv) agentSdkServiceInput.processEnv = processEnv;
+  const agentSdkService = createClaudeAgentSdkService(agentSdkServiceInput);
   const prepareLiveSessionAdapter = createClaudeLiveSessionAdapterPreparer({
     eventHub,
     liveSessionLifecycle,

@@ -66,18 +66,18 @@ const createCodexWorkspaceRuntimeStarter = (input: CodexWorkspaceRuntimeStarterT
     releaseRuntime: () => Effect.succeed([]),
     runAdapterMutation: (mutation) => mutation.pipe(Effect.map((result) => result.value)),
   } satisfies RuntimeLiveSessionLifecyclePort;
-  const effectiveToolDiscovery =
-    toolDiscovery ??
-    createToolDiscoveryAdapter({
-      ...(processEnv === undefined ? undefined : { env: processEnv }),
-      systemCommands: systemCommands ?? createSystemCommands(),
-    });
-  return createEffectCodexWorkspaceRuntimeStarter({
+  const toolDiscoveryInput: Parameters<typeof createToolDiscoveryAdapter>[0] = {
+    systemCommands: systemCommands ?? createSystemCommands(),
+  };
+  if (processEnv !== undefined) {
+    toolDiscoveryInput.env = processEnv;
+  }
+  const effectiveToolDiscovery = toolDiscovery ?? createToolDiscoveryAdapter(toolDiscoveryInput);
+  const runtimeStarterInput: Parameters<typeof createEffectCodexWorkspaceRuntimeStarter>[0] = {
     runtimeDistribution: testRuntimeDistribution,
     toolDiscovery: effectiveToolDiscovery,
     settingsConfig:
       settingsConfig ?? createDiscoveredRuntimeSettingsConfig("codex", effectiveToolDiscovery),
-    ...(processEnv === undefined ? undefined : { processEnv }),
     liveSessionLifecycle: liveSessionLifecycle ?? defaultLiveSessionLifecycle,
     prepareLiveSessionAdapter:
       prepareLiveSessionAdapter ??
@@ -96,7 +96,11 @@ const createCodexWorkspaceRuntimeStarter = (input: CodexWorkspaceRuntimeStarterT
           discard: () => Effect.void,
         })),
     ...starterInput,
-  });
+  };
+  if (processEnv !== undefined) {
+    runtimeStarterInput.processEnv = processEnv;
+  }
+  return createEffectCodexWorkspaceRuntimeStarter(runtimeStarterInput);
 };
 const createCodexAppServerTransportRegistry = (
   ...args: Parameters<typeof createEffectCodexAppServerTransportRegistry>

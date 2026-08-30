@@ -22,7 +22,12 @@ import {
   type JsonValue,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  type HostOperationErrorAggregate,
+  HostValidationError,
+  type HostValidationErrorAggregate,
+} from "../../effect/host-errors";
 import type { TaskAssetReadService } from "../task-assets/task-asset-read-service";
 import type { TaskService, TaskServiceError } from "../tasks/task-service";
 import type {
@@ -58,8 +63,8 @@ const compareTaskSearchResults = (
 };
 
 export type OdtMcpBridgeError =
-  | HostOperationError
-  | HostValidationError
+  | HostOperationErrorAggregate
+  | HostValidationErrorAggregate
   | TaskServiceError
   | WorkspaceSettingsError;
 
@@ -377,15 +382,17 @@ export const createOdtMcpBridgeService = ({
             const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
             const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
             const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
-            const updated = yield* taskService.buildCompleted({
+            const completionInput: Parameters<TaskService["buildCompleted"]>[0] = {
               repoPath,
               taskId: task.id,
-              ...(parsed.summary === undefined ? undefined : { summary: parsed.summary }),
-            });
-            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_build_completed, {
+            };
+            if (parsed.summary !== undefined) completionInput.summary = parsed.summary;
+            const updated = yield* taskService.buildCompleted(completionInput);
+            const response: BuildCompletedResult = {
               task: mapPublicTask(updated),
-              ...(parsed.summary === undefined ? undefined : { summary: parsed.summary }),
-            });
+            };
+            if (parsed.summary !== undefined) response.summary = parsed.summary;
+            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_build_completed, response);
           }
           case "odt_set_pull_request": {
             const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);

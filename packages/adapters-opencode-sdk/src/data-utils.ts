@@ -3,7 +3,7 @@ import { z } from "zod";
 const opencodeErrorSchema = z.object({ message: z.string() });
 
 export const unwrapData = <T>(
-  payload: { data?: T | null | undefined; error?: { message?: string } | unknown },
+  payload: { data?: T | null | undefined; error?: unknown },
   action: string,
 ): T => {
   if (payload.data !== undefined && payload.data !== null) {

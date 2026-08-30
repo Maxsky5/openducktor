@@ -5,6 +5,7 @@ import type {
   AgentSessionRuntimeActivity,
   AgentSessionRuntimeSnapshotSource,
 } from "@openducktor/core";
+import type { SessionStatus } from "@opencode-ai/sdk/v2/client";
 import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import { parseOpencodeSessionListPayload, type ParsedOpencodeSession } from "./opencode-ingress";
@@ -104,7 +105,7 @@ const toOpencodeRuntimeActivity = (
 };
 
 const toOpencodeSessionStatusMap = (
-  payload: unknown,
+  payload: Record<string, SessionStatus>,
   directory: string,
 ): OpencodeSessionStatusMap => {
   const parsedPayload = opencodeSessionStatusMapSchema.safeParse(payload);
@@ -114,8 +115,8 @@ const toOpencodeSessionStatusMap = (
   return parsedPayload.data;
 };
 
-const normalizeSessionDirectory = (directory: unknown): string | undefined => {
-  if (typeof directory !== "string") {
+const normalizeSessionDirectory = (directory: string | undefined): string | undefined => {
+  if (directory === undefined) {
     return undefined;
   }
   let normalized = directory.trim();
@@ -335,10 +336,9 @@ export const listOpencodeRuntimeSnapshotSources = async ({
     const normalizedDirectory = requireSessionDirectory(session.directory, session.id);
     const directoryStatuses = statusesByDirectory.get(normalizedDirectory);
     const parentExternalSessionId = readParentExternalSessionId(session);
-    return {
+    const snapshot: OpencodeRuntimeSnapshotSource = {
       externalSessionId: session.id,
       sessionAssociation: { kind: "unbound" },
-      ...(parentExternalSessionId ? { parentExternalSessionId } : undefined),
       title: session.title,
       workingDirectory: normalizedDirectory,
       startedAt: toIsoFromEpoch(session.time?.created, now),
@@ -346,5 +346,9 @@ export const listOpencodeRuntimeSnapshotSources = async ({
       pendingApprovals: pendingInputBySession[session.id]?.approvals ?? [],
       pendingQuestions: pendingInputBySession[session.id]?.questions ?? [],
     };
+    if (parentExternalSessionId) {
+      snapshot.parentExternalSessionId = parentExternalSessionId;
+    }
+    return snapshot;
   });
 };

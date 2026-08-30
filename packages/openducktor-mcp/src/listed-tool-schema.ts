@@ -24,10 +24,10 @@ const removeWorkspaceId = (jsonSchema: ListedToolSchema): ListedToolSchema => {
   const nextSchema = {
     ...jsonSchema,
     properties,
-    ...(Array.isArray(jsonSchema.required)
-      ? { required: jsonSchema.required.filter((key) => key !== "workspaceId") }
-      : undefined),
   };
+  if (Array.isArray(jsonSchema.required)) {
+    nextSchema.required = jsonSchema.required.filter((key) => key !== "workspaceId");
+  }
   return listedToolSchemaSchema.parse(nextSchema);
 };
 

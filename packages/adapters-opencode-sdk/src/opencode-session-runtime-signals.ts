@@ -49,13 +49,13 @@ export const readMessageUpdatedContextSignal = (
     return null;
   }
   const model = readMessageModelSelection(info);
+  const contextUsage: OpencodeSessionContextUsage = model
+    ? { totalTokens, model }
+    : { totalTokens };
   return {
     type: "context_updated",
     externalSessionId,
-    contextUsage: {
-      totalTokens,
-      ...(model ? { model } : undefined),
-    },
+    contextUsage,
   };
 };
 

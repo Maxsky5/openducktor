@@ -1,7 +1,11 @@
 import type { FileDiff } from "@openducktor/contracts";
-import type { AgentToolType } from "@openducktor/core";
+import type {
+  AgentPendingQuestionRequest,
+  AgentStreamPart,
+  AgentToolType,
+} from "@openducktor/core";
 import {
-  arrayFromUnknown,
+  arrayFromCodexJsonValue,
   codexNamespacedToolName,
   extractStringField,
   isCodexApplyPatchTool,
@@ -13,7 +17,6 @@ import {
   searchInputFromCommand,
 } from "./codex-app-server-shared";
 import type { CodexAppServerJsonValue } from "@openducktor/contracts";
-import type { AgentPendingQuestionRequest } from "@openducktor/core";
 
 /**
  * Canonical boundary for raw Codex tool invocations.
@@ -51,16 +54,23 @@ export type CodexToolQuestion = {
 export const toCodexToolQuestions = (
   questions: AgentPendingQuestionRequest["questions"],
 ): CodexToolQuestion[] =>
-  questions.map((question) => ({
-    header: question.header,
-    question: question.question,
-    options: question.options.map((option) => ({
-      label: option.label,
-      description: option.description,
-    })),
-    ...(question.multiple === undefined ? undefined : { multiple: question.multiple }),
-    ...(question.custom === undefined ? undefined : { custom: question.custom }),
-  }));
+  questions.map((question) => {
+    const codexQuestion: CodexToolQuestion = {
+      header: question.header,
+      question: question.question,
+      options: question.options.map((option) => ({
+        label: option.label,
+        description: option.description,
+      })),
+    };
+    if (question.multiple !== undefined) {
+      codexQuestion.multiple = question.multiple;
+    }
+    if (question.custom !== undefined) {
+      codexQuestion.custom = question.custom;
+    }
+    return codexQuestion;
+  });
 
 export type NormalizedCodexToolInvocation = {
   messageId: string;
@@ -229,7 +239,7 @@ const canonicalCodexToolName = (rawToolName: string): string | null => {
 const questionPromptFromInput = (
   input: Record<string, CodexAppServerJsonValue>,
 ): string | undefined => {
-  const questions = arrayFromUnknown(input.questions).filter(isPlainObject);
+  const questions = arrayFromCodexJsonValue(input.questions).filter(isPlainObject);
   for (const question of questions) {
     const prompt = extractStringField(question, ["question", "prompt", "header", "title"]);
     if (prompt) {
@@ -271,6 +281,21 @@ const toolPreviewFromInput = (
 };
 
 type CodexToolInput = Record<string, CodexAppServerJsonValue>;
+type CodexReadCommandInput = {
+  command: string;
+  cwd?: string;
+  path?: string;
+};
+type CodexSearchCommandInput = {
+  command: string;
+  query?: string;
+  path?: string;
+  cwd?: string;
+};
+type CodexShellCommandInput = {
+  command: string;
+  cwd?: string;
+};
 
 const codexExecCommandInput = (input: CodexToolInput, tool: string) => {
   const command = extractStringField(input, ["cmd", "command"]);
@@ -279,22 +304,41 @@ const codexExecCommandInput = (input: CodexToolInput, tool: string) => {
     return Object.keys(input).length > 0 ? input : undefined;
   }
   if (tool === "read") {
-    return {
+    const commandInput: CodexReadCommandInput = {
       command,
-      ...(cwd ? { cwd } : undefined),
-      ...(readPathFromCommand(command) ? { path: readPathFromCommand(command) } : undefined),
     };
+    if (cwd) {
+      commandInput.cwd = cwd;
+    }
+    const path = readPathFromCommand(command);
+    if (path) {
+      commandInput.path = path;
+    }
+    return commandInput;
   }
   if (tool === "search") {
-    return {
-      ...searchInputFromCommand(command),
-      ...(cwd ? { cwd } : undefined),
+    const searchInput = searchInputFromCommand(command);
+    const commandInput: CodexSearchCommandInput = {
+      command: searchInput.command,
     };
+    if (searchInput.query !== undefined) {
+      commandInput.query = searchInput.query;
+    }
+    if (searchInput.path !== undefined) {
+      commandInput.path = searchInput.path;
+    }
+    if (cwd) {
+      commandInput.cwd = cwd;
+    }
+    return commandInput;
   }
-  return {
+  const commandInput: CodexShellCommandInput = {
     command,
-    ...(cwd ? { cwd } : undefined),
   };
+  if (cwd) {
+    commandInput.cwd = cwd;
+  }
+  return commandInput;
 };
 
 const normalizerInput = (
@@ -336,25 +380,43 @@ export const normalizeCodexToolInvocation = ({
   const resolvedError = error && error.trim().length > 0 ? error : null;
   const resolvedOutput = output && output.trim().length > 0 ? output : null;
   const resolvedPreview = preview ?? toolPreviewFromInput(toolType, resolvedInput);
-  return {
+  const metadataFields: NonNullable<Extract<AgentStreamPart, { kind: "tool" }>["metadata"]> = {
+    ...metadata,
+    rawToolName,
+  };
+  const normalizedTool: Extract<AgentStreamPart, { kind: "tool" }> = {
     kind: "tool",
     ...ids,
     tool,
     toolType,
     title: title ?? defaultTitle(tool),
-    ...(displayLabel ? { displayLabel } : undefined),
     status: resolvedError ? "error" : statusFromCodexStatus(status),
-    ...(resolvedInput ? { input: resolvedInput } : undefined),
-    ...(resolvedPreview ? { preview: resolvedPreview } : undefined),
-    ...(resolvedOutput ? { output: resolvedOutput } : undefined),
-    ...(resolvedError ? { error: resolvedError } : undefined),
-    ...(fileDiffs && fileDiffs.length > 0 ? { fileDiffs } : undefined),
-    metadata: {
-      ...metadata,
-      rawToolName,
-      ...(namespace ? { namespace } : undefined),
-    },
+    metadata: metadataFields,
   };
+
+  if (displayLabel) {
+    normalizedTool.displayLabel = displayLabel;
+  }
+  if (resolvedInput) {
+    normalizedTool.input = resolvedInput;
+  }
+  if (resolvedPreview) {
+    normalizedTool.preview = resolvedPreview;
+  }
+  if (resolvedOutput) {
+    normalizedTool.output = resolvedOutput;
+  }
+  if (resolvedError) {
+    normalizedTool.error = resolvedError;
+  }
+  if (fileDiffs && fileDiffs.length > 0) {
+    normalizedTool.fileDiffs = fileDiffs;
+  }
+  if (namespace) {
+    metadataFields.namespace = namespace;
+  }
+
+  return normalizedTool;
 };
 
 export const requireNormalizedCodexToolInvocation = (

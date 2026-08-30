@@ -1,5 +1,14 @@
 import { compare, prerelease, valid } from "semver";
+import { Effect } from "effect";
 import { z } from "zod";
+import { runElectronEffect } from "../../effect/electron-boundary";
+import {
+  ElectronOperationError,
+  type ElectronOperationErrorAggregate,
+  ElectronValidationError,
+  type ElectronValidationErrorAggregate,
+  errorMessage,
+} from "../../effect/electron-errors";
 
 export type GitHubRelease = {
   prerelease: boolean;
@@ -24,76 +33,128 @@ const apiHeaders = {
 
 const GITHUB_RELEASE_REQUEST_TIMEOUT_MS = 15_000;
 
-const githubReleasePayloadSchema = z.object({
-  prerelease: z.boolean(),
-  tag_name: z.string().min(1),
+const githubReleaseCandidateSchema = z.object({
+  prerelease: z.unknown().optional(),
+  tag_name: z.unknown().optional(),
 });
+const githubReleasePageSchema = z.array(z.unknown());
 
-const readRelease = (value: unknown): Omit<GitHubRelease, "version"> => {
-  const parsed = githubReleasePayloadSchema.safeParse(value);
-  if (!parsed.success) {
-    throw new Error(`GitHub release is invalid: ${parsed.error.message}`);
-  }
-  return {
-    prerelease: parsed.data.prerelease,
-    tagName: parsed.data.tag_name,
-  };
-};
-
-const parseRelease = (value: unknown): GitHubRelease => {
-  const release = readRelease(value);
-  const { tagName } = release;
-  const version = valid(tagName);
-  if (!version) {
-    throw new Error(`GitHub release ${tagName} is not a valid OpenDucktor version.`);
-  }
-  return {
-    ...release,
-    version,
-  };
-};
-
-const parseReleasePage = (value: unknown): GitHubRelease[] => {
-  if (!Array.isArray(value)) {
-    throw new Error("GitHub releases response is not an array.");
-  }
-  return value.flatMap((item) => {
-    const release = readRelease(item);
-    const version = valid(release.tagName);
-    return version ? [{ ...release, version }] : [];
+const invalidReleaseObject = (cause: z.ZodError): ElectronValidationError =>
+  new ElectronValidationError({
+    operation: "electron.update.parse-github-release",
+    message: "GitHub release is not an object.",
+    field: "release",
+    cause,
   });
+
+const readRelease = (
+  candidate: z.output<typeof githubReleaseCandidateSchema>,
+): Effect.Effect<Omit<GitHubRelease, "version">, ElectronValidationError> => {
+  const tagName = z.string().min(1).safeParse(candidate.tag_name);
+  if (!tagName.success) {
+    return Effect.fail(
+      new ElectronValidationError({
+        operation: "electron.update.parse-github-release",
+        message: "GitHub release has no tag_name.",
+        field: "tag_name",
+        cause: tagName.error,
+      }),
+    );
+  }
+  const prereleaseResult = z.boolean().safeParse(candidate.prerelease);
+  if (!prereleaseResult.success) {
+    return Effect.fail(
+      new ElectronValidationError({
+        operation: "electron.update.parse-github-release",
+        message: "GitHub release has no valid prerelease.",
+        field: "prerelease",
+        cause: prereleaseResult.error,
+      }),
+    );
+  }
+  return Effect.succeed({ prerelease: prereleaseResult.data, tagName: tagName.data });
 };
 
-const fetchReleaseJson = async <Result>(
+const parseRelease = (
+  candidate: z.output<typeof githubReleaseCandidateSchema>,
+): Effect.Effect<GitHubRelease, ElectronValidationErrorAggregate> =>
+  Effect.gen(function* () {
+    const release = yield* readRelease(candidate);
+    const { tagName } = release;
+    const version = valid(tagName);
+    if (!version) {
+      return yield* Effect.fail(
+        new ElectronValidationError({
+          operation: "electron.update.parse-github-release-version",
+          message: `GitHub release ${tagName} is not a valid OpenDucktor version.`,
+          field: "tag_name",
+          details: { tagName },
+        }),
+      );
+    }
+    return { ...release, version };
+  });
+
+const parseReleasePage = (
+  items: z.output<typeof githubReleasePageSchema>,
+): Effect.Effect<GitHubRelease[], ElectronValidationError> =>
+  Effect.gen(function* () {
+    const releases: GitHubRelease[] = [];
+    for (const item of items) {
+      const candidate = githubReleaseCandidateSchema.safeParse(item);
+      if (!candidate.success) {
+        return yield* Effect.fail(invalidReleaseObject(candidate.error));
+      }
+      const release = yield* readRelease(candidate.data);
+      const version = valid(release.tagName);
+      if (version) {
+        releases.push({ ...release, version });
+      }
+    }
+    return releases;
+  });
+
+const fetchReleaseJson = (
   fetch: typeof globalThis.fetch,
   url: string,
   description: string,
-  parse: (value: unknown) => Result,
-): Promise<{ response: Response; value: Result }> => {
+): Effect.Effect<{ response: Response; value: unknown }, ElectronOperationErrorAggregate> => {
   const controller = new AbortController();
-  const timeout = setTimeout(() => {
-    controller.abort();
-  }, GITHUB_RELEASE_REQUEST_TIMEOUT_MS);
-  let response: Response;
-  let value: unknown;
-  try {
-    response = await fetch(url, {
-      headers: apiHeaders,
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      throw new Error(`${description} returned HTTP ${response.status}.`);
-    }
-    value = await response.json();
-  } catch (cause) {
-    if (controller.signal.aborted) {
-      throw new Error(`${description} timed out.`, { cause });
-    }
-    throw cause;
-  } finally {
-    clearTimeout(timeout);
-  }
-  return { response, value: parse(value) };
+  return Effect.tryPromise({
+    try: async () => {
+      const timeout = setTimeout(() => {
+        controller.abort();
+      }, GITHUB_RELEASE_REQUEST_TIMEOUT_MS);
+      try {
+        const response = await fetch(url, {
+          headers: apiHeaders,
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new ElectronOperationError({
+            operation: "electron.update.fetch-github-release",
+            message: `${description} returned HTTP ${response.status}.`,
+            details: { status: response.status, url },
+          });
+        }
+        const value: unknown = await response.json();
+        return { response, value };
+      } finally {
+        clearTimeout(timeout);
+      }
+    },
+    catch: (cause) => {
+      if (cause instanceof ElectronOperationError) {
+        return cause;
+      }
+      return new ElectronOperationError({
+        operation: "electron.update.fetch-github-release",
+        message: controller.signal.aborted ? `${description} timed out.` : errorMessage(cause),
+        cause,
+        details: { url },
+      });
+    },
+  });
 };
 
 const hasNextPage = (response: Response): boolean =>
@@ -110,44 +171,70 @@ const matchesChannel = (release: GitHubRelease, channel: string): boolean => {
   return identifiers?.[0]?.toString() === channel;
 };
 
-const resolvePrerelease = async (
+const resolvePrerelease = (
   fetch: typeof globalThis.fetch,
   releasesUrl: string,
   channel: string,
-): Promise<GitHubRelease> => {
-  let page = 1;
-  let selected: GitHubRelease | undefined;
+): Effect.Effect<
+  GitHubRelease,
+  ElectronOperationErrorAggregate | ElectronValidationErrorAggregate
+> =>
+  Effect.gen(function* () {
+    let page = 1;
+    let selected: GitHubRelease | undefined;
 
-  while (true) {
-    const { response, value: releases } = await fetchReleaseJson(
-      fetch,
-      `${releasesUrl}?per_page=100&page=${page}`,
-      "GitHub releases request",
-      parseReleasePage,
-    );
-    for (const release of releases) {
-      if (
-        matchesChannel(release, channel) &&
-        (!selected || compare(release.version, selected.version) > 0)
-      ) {
-        selected = release;
+    while (true) {
+      const { response, value } = yield* fetchReleaseJson(
+        fetch,
+        `${releasesUrl}?per_page=100&page=${page}`,
+        "GitHub releases request",
+      );
+      const parsedPage = githubReleasePageSchema.safeParse(value);
+      if (!parsedPage.success) {
+        return yield* Effect.fail(
+          new ElectronValidationError({
+            operation: "electron.update.parse-github-releases",
+            message: "GitHub releases response is not an array.",
+            field: "releases",
+            cause: parsedPage.error,
+          }),
+        );
       }
+      const releases = yield* parseReleasePage(parsedPage.data);
+      for (const release of releases) {
+        if (
+          matchesChannel(release, channel) &&
+          (!selected || compare(release.version, selected.version) > 0)
+        ) {
+          selected = release;
+        }
+      }
+      if (!hasNextPage(response)) {
+        break;
+      }
+      page += 1;
     }
-    if (!hasNextPage(response)) {
-      break;
-    }
-    page += 1;
-  }
 
-  if (!selected) {
-    throw new Error(`GitHub has no ${channel} OpenDucktor release.`);
-  }
-  return selected;
-};
+    if (!selected) {
+      return yield* Effect.fail(
+        new ElectronOperationError({
+          operation: "electron.update.resolve-github-prerelease",
+          message: `GitHub has no ${channel} OpenDucktor release.`,
+          details: { channel },
+        }),
+      );
+    }
+    return selected;
+  });
 
 export const compareReleaseVersions = (left: string, right: string): number => {
   if (!valid(left) || !valid(right)) {
-    throw new Error(`Cannot compare invalid release versions ${left} and ${right}.`);
+    throw new ElectronValidationError({
+      operation: "electron.update.compare-release-versions",
+      message: `Cannot compare invalid release versions ${left} and ${right}.`,
+      field: "version",
+      details: { left, right },
+    });
   }
   return compare(left, right);
 };
@@ -159,20 +246,33 @@ export const createGitHubReleaseSource = ({
 }: GitHubReleaseSourceOptions): GitHubReleaseSource => {
   const releasesUrl = `https://api.github.com/repos/${owner}/${repo}/releases`;
   return {
-    resolve: async (channel) => {
-      if (channel !== null) {
-        return resolvePrerelease(fetch, releasesUrl, channel);
-      }
-      const { value: release } = await fetchReleaseJson(
-        fetch,
-        `${releasesUrl}/latest`,
-        "Latest GitHub release request",
-        parseRelease,
-      );
-      if (release.prerelease) {
-        throw new Error(`GitHub latest release ${release.tagName} is unexpectedly a prerelease.`);
-      }
-      return release;
-    },
+    resolve: (channel) =>
+      runElectronEffect(
+        channel !== null
+          ? resolvePrerelease(fetch, releasesUrl, channel)
+          : Effect.gen(function* () {
+              const { value } = yield* fetchReleaseJson(
+                fetch,
+                `${releasesUrl}/latest`,
+                "Latest GitHub release request",
+              );
+              const candidate = githubReleaseCandidateSchema.safeParse(value);
+              if (!candidate.success) {
+                return yield* Effect.fail(invalidReleaseObject(candidate.error));
+              }
+              const release = yield* parseRelease(candidate.data);
+              if (release.prerelease) {
+                return yield* Effect.fail(
+                  new ElectronValidationError({
+                    operation: "electron.update.validate-latest-github-release",
+                    message: `GitHub latest release ${release.tagName} is unexpectedly a prerelease.`,
+                    field: "prerelease",
+                    details: { tagName: release.tagName },
+                  }),
+                );
+              }
+              return release;
+            }),
+      ),
   };
 };

@@ -24,10 +24,14 @@ import type {
   Session as ElectronSession,
 } from "electron";
 import electron from "electron";
+import { z } from "zod";
 import { runElectronEffect } from "../effect/electron-boundary";
 import {
+  type ElectronError,
   ElectronLifecycleError,
+  type ElectronOperationErrorAggregate,
   ElectronOperationError,
+  type ElectronValidationErrorAggregate,
   ElectronValidationError,
   errorMessage,
   isElectronError,
@@ -99,6 +103,13 @@ const isDevelopment = Boolean(rendererDevUrl);
 const electronAppPlatform = appPlatformSchema.parse(process.platform);
 const distDirectory = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(distDirectory, "../../..");
+const externalUrlSchema = z.string();
+const resolvedLocalAttachmentSchema = z.object({ path: z.string() });
+const hostValidationErrorSchema = z.object({
+  _tag: z.literal("HostValidationError"),
+  field: z.string().optional(),
+  message: z.string(),
+});
 
 const reportElectronMainFailure = (cause: unknown): void => {
   process.stderr.write(`OpenDucktor Electron fatal boundary: ${errorMessage(cause)}\n`);
@@ -134,13 +145,7 @@ const isTaggedHostValidationError = (
   readonly field?: string;
   readonly message: string;
   readonly _tag: "HostValidationError";
-} =>
-  typeof cause === "object" &&
-  cause !== null &&
-  "_tag" in cause &&
-  cause._tag === "HostValidationError" &&
-  "message" in cause &&
-  typeof cause.message === "string";
+} => hostValidationErrorSchema.safeParse(cause).success;
 
 const shutdownController = createElectronMainShutdownController({
   disposeHost: (reason) => disposeActiveElectronRuntimeForShutdownEffect(reason),
@@ -199,7 +204,7 @@ const mapStartupPreparationError = (
   cause: unknown,
   operation: string,
   message: string,
-): ElectronLifecycleError | ElectronOperationError | ElectronValidationError =>
+): ElectronError =>
   isElectronError(cause)
     ? cause
     : new ElectronLifecycleError({
@@ -278,7 +283,7 @@ const resolveRuntimeDistributionEffect = (): Effect.Effect<
 
 const prepareElectronPreReadyRuntimeEffect = (): Effect.Effect<
   ElectronPreReadyRuntime,
-  ElectronLifecycleError | ElectronOperationError | ElectronValidationError
+  ElectronError
 > =>
   Effect.gen(function* () {
     const developmentInstanceClaim = yield* prepareElectronDevelopmentInstanceEffect({
@@ -356,18 +361,19 @@ const configureElectronDockIcon = (): void => {
   );
 };
 
-const validateExternalUrl = (url: unknown): string => {
-  if (typeof url !== "string") {
+const validateExternalUrl = (url: string): string => {
+  const parsedInput = externalUrlSchema.safeParse(url);
+  if (!parsedInput.success) {
     throw new ElectronValidationError({
       operation: "electron.ipc.open-external-url.validate",
       message: "OpenDucktor Electron can only open absolute http or https URLs.",
       field: "url",
-      details: { valueTag: Object.prototype.toString.call(url) },
+      cause: parsedInput.error,
     });
   }
   let parsedUrl: URL;
   try {
-    parsedUrl = new URL(url.trim());
+    parsedUrl = new URL(parsedInput.data.trim());
   } catch {
     throw new ElectronValidationError({
       operation: "electron.ipc.open-external-url.validate",
@@ -390,8 +396,8 @@ const validateExternalUrl = (url: unknown): string => {
 };
 
 const openExternalUrlEffect = (
-  url: unknown,
-): Effect.Effect<void, ElectronOperationError | ElectronValidationError> =>
+  url: string,
+): Effect.Effect<void, ElectronOperationErrorAggregate | ElectronValidationErrorAggregate> =>
   Effect.gen(function* () {
     const externalUrl = yield* Effect.try({
       try: () => validateExternalUrl(url),
@@ -403,7 +409,6 @@ const openExternalUrlEffect = (
               message: errorMessage(cause),
               field: "url",
               cause,
-              details: { valueTag: Object.prototype.toString.call(url) },
             }),
     });
     yield* Effect.tryPromise({
@@ -420,7 +425,7 @@ const openExternalUrlEffect = (
 
 const createMainWindowEffect = (
   rendererSession: ElectronSession,
-): Effect.Effect<ElectronBrowserWindow, ElectronOperationError> =>
+): Effect.Effect<ElectronBrowserWindow, ElectronOperationErrorAggregate> =>
   Effect.gen(function* () {
     const window = yield* Effect.try({
       try: () =>
@@ -576,12 +581,8 @@ const resolveLocalAttachmentPathForPreviewEffect = (
           });
         }),
       );
-    if (
-      typeof resolved !== "object" ||
-      resolved === null ||
-      !("path" in resolved) ||
-      typeof resolved.path !== "string"
-    ) {
+    const parsedResolved = resolvedLocalAttachmentSchema.safeParse(resolved);
+    if (!parsedResolved.success) {
       return yield* Effect.fail(
         new ElectronValidationError({
           operation: "electron.preview.resolve-host-path",
@@ -592,7 +593,7 @@ const resolveLocalAttachmentPathForPreviewEffect = (
       );
     }
 
-    return yield* readLocalAttachmentPreviewPathEffect(resolved.path).pipe(
+    return yield* readLocalAttachmentPreviewPathEffect(parsedResolved.data.path).pipe(
       Effect.mapError(
         (cause) =>
           new ElectronValidationError({
@@ -612,8 +613,9 @@ const resolveLocalAttachmentPathForPreview = (
 ): Promise<string> =>
   runElectronEffect(resolveLocalAttachmentPathForPreviewEffect(hostCommandRouter, filePath));
 
-const readElectronAppUpdateCheckInput = (input: unknown): ElectronAppUpdateCheckInput => {
-  const parsed = appUpdateCheckInputSchema.safeParse(input);
+const readElectronAppUpdateCheckInput = (
+  parsed: ReturnType<typeof appUpdateCheckInputSchema.safeParse>,
+): ElectronAppUpdateCheckInput => {
   if (parsed.success) {
     return parsed.data;
   }
@@ -696,11 +698,11 @@ const registerIpcHandlers = (
     },
   });
 
-  ipcMain.handle(ELECTRON_OPEN_EXTERNAL_URL_CHANNEL, async (_event, url: unknown) => {
+  ipcMain.handle(ELECTRON_OPEN_EXTERNAL_URL_CHANNEL, async (_event, url) => {
     await runElectronEffect(openExternalUrlEffect(url));
   });
 
-  ipcMain.handle(ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL, async (_event, filePath: unknown) => {
+  ipcMain.handle(ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL, async (_event, filePath) => {
     const resolvedPath = await resolveLocalAttachmentPathForPreview(
       hostCommandRouter,
       readLocalAttachmentPreviewPath(filePath),
@@ -712,10 +714,10 @@ const registerIpcHandlers = (
     readAppUpdateStateForIpc(appUpdateService.getState()),
   );
 
-  ipcMain.handle(ELECTRON_APP_UPDATE_CHECK_CHANNEL, async (_event, input: unknown) => {
+  ipcMain.handle(ELECTRON_APP_UPDATE_CHECK_CHANNEL, async (_event, input) => {
     let checkInput: ElectronAppUpdateCheckInput;
     try {
-      checkInput = readElectronAppUpdateCheckInput(input);
+      checkInput = readElectronAppUpdateCheckInput(appUpdateCheckInputSchema.safeParse(input));
     } catch (cause) {
       return readAppUpdateCommandResultForIpc(
         createRejectedAppUpdateCommandResult(appUpdateService, "check", cause),
@@ -842,10 +844,7 @@ const waitForElectronReadyEffect = (): Effect.Effect<void, ElectronLifecycleErro
 
 const configureElectronReadyRuntimeEffect = ({
   hostCommandRouter,
-}: ElectronPreReadyRuntime): Effect.Effect<
-  ElectronReadyRuntime,
-  ElectronLifecycleError | ElectronOperationError | ElectronValidationError
-> =>
+}: ElectronPreReadyRuntime): Effect.Effect<ElectronReadyRuntime, ElectronError> =>
   Effect.try({
     try: () => {
       const rendererSession = session.fromPartition(ELECTRON_RENDERER_SESSION_PARTITION);

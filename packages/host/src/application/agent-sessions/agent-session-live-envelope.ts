@@ -1,6 +1,23 @@
 import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
-import { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  type HostOperationErrorAggregate,
+  HostValidationError,
+  type HostValidationErrorAggregate,
+} from "../../effect/host-errors";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
+
+type AgentSessionLiveFaultEnvelope = Extract<AgentSessionLiveEnvelope, { type: "fault" }>;
+type AgentSessionLiveFaultRef = NonNullable<AgentSessionLiveFaultEnvelope["ref"]>;
+
+type AgentSessionLiveFaultLogPayload = {
+  repoPath: string;
+  message: string;
+  operation?: string;
+  runtimeKind?: AgentSessionLiveFaultRef["runtimeKind"];
+  workingDirectory?: AgentSessionLiveFaultRef["workingDirectory"];
+  externalSessionId?: AgentSessionLiveFaultRef["externalSessionId"];
+};
 
 export const toAgentSessionLiveEnvelope = (
   change: AgentSessionLiveAdapterChange,
@@ -13,12 +30,18 @@ export const toAgentSessionLiveEnvelope = (
     case "transcript_event":
       return { type: "transcript_event", event: change.event };
     case "catalog_invalidated":
+      if (!change.workingDirectory) {
+        return {
+          type: "catalog_invalidated",
+          scope: { repoPath: change.repoPath, runtimeKind: change.runtimeKind },
+        };
+      }
       return {
         type: "catalog_invalidated",
         scope: {
           repoPath: change.repoPath,
           runtimeKind: change.runtimeKind,
-          ...(change.workingDirectory ? { workingDirectory: change.workingDirectory } : undefined),
+          workingDirectory: change.workingDirectory,
         },
       };
     case "slash_command_catalog_updated":
@@ -32,36 +55,41 @@ export const toAgentSessionLiveEnvelope = (
         catalog: change.catalog,
       };
     case "fault":
-      return {
+      const envelope: AgentSessionLiveFaultEnvelope = {
         type: "fault",
         repoPath: change.repoPath,
         message: change.message,
-        ...(change.operation ? { operation: change.operation } : undefined),
-        ...(change.ref ? { ref: change.ref } : undefined),
       };
+      if (change.operation) {
+        envelope.operation = change.operation;
+      }
+      if (change.ref) {
+        envelope.ref = change.ref;
+      }
+      return envelope;
   }
 };
 
-export const formatAgentSessionLiveFaultLog = (
-  envelope: Extract<AgentSessionLiveEnvelope, { type: "fault" }>,
-): string =>
-  `agent-session-live.fault ${JSON.stringify({
+export const formatAgentSessionLiveFaultLog = (envelope: AgentSessionLiveFaultEnvelope): string => {
+  const payload: AgentSessionLiveFaultLogPayload = {
     repoPath: envelope.repoPath,
     message: envelope.message,
-    ...(envelope.operation ? { operation: envelope.operation } : undefined),
-    ...(envelope.ref
-      ? {
-          runtimeKind: envelope.ref.runtimeKind,
-          workingDirectory: envelope.ref.workingDirectory,
-          externalSessionId: envelope.ref.externalSessionId,
-        }
-      : undefined),
-  })}`;
+  };
+  if (envelope.operation) {
+    payload.operation = envelope.operation;
+  }
+  if (envelope.ref) {
+    payload.runtimeKind = envelope.ref.runtimeKind;
+    payload.workingDirectory = envelope.ref.workingDirectory;
+    payload.externalSessionId = envelope.ref.externalSessionId;
+  }
+  return `agent-session-live.fault ${JSON.stringify(payload)}`;
+};
 
 export const toAgentSessionLiveEnvelopePublishError = (
   cause: unknown,
   eventType: AgentSessionLiveEnvelope["type"],
-): HostOperationError | HostValidationError =>
+): HostOperationErrorAggregate | HostValidationErrorAggregate =>
   cause instanceof HostOperationError || cause instanceof HostValidationError
     ? cause
     : new HostOperationError({

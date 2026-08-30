@@ -9,7 +9,7 @@ interface CapturedOptionsContract {
   fontFamily?: string;
 }
 
-if (typeof globalThis.document === "undefined") {
+if (globalThis.document === undefined) {
   GlobalRegistrator.register();
 }
 

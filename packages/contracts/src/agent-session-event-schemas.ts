@@ -218,52 +218,54 @@ const agentSessionStatusSchema = z.discriminatedUnion("type", [
 ]);
 export type AgentTranscriptSessionStatus = z.infer<typeof agentSessionStatusSchema>;
 
+const transcriptPendingApprovalRequestFields = {
+  requestId: z.string(),
+  requestInstanceId: z.string().optional(),
+  requestType: runtimeApprovalRequestTypeSchema,
+  title: z.string(),
+  summary: z.string().optional(),
+  details: z.string().optional(),
+  affectedPaths: z.array(z.string()).optional(),
+  command: z
+    .object({
+      command: z.string(),
+      workingDirectory: z.string().optional(),
+    })
+    .strict()
+    .optional(),
+  action: z
+    .object({
+      name: z.string(),
+      description: z.string().optional(),
+    })
+    .strict()
+    .optional(),
+  tool: z
+    .object({
+      name: z.string(),
+      title: z.string().optional(),
+      input: jsonObjectSchema.optional(),
+    })
+    .strict()
+    .optional(),
+  mutation: z.enum(["mutating", "read_only", "unknown"]).optional(),
+  supportedReplyOutcomes: z.array(runtimeApprovalReplyOutcomeSchema).optional(),
+  metadata: metadataSchema.optional(),
+} satisfies ZodSchemaFields;
 const inferredTranscriptPendingApprovalRequestSchema = z
-  .object({
-    requestId: z.string(),
-    requestInstanceId: z.string().optional(),
-    requestType: runtimeApprovalRequestTypeSchema,
-    title: z.string(),
-    summary: z.string().optional(),
-    details: z.string().optional(),
-    affectedPaths: z.array(z.string()).optional(),
-    command: z
-      .object({
-        command: z.string(),
-        workingDirectory: z.string().optional(),
-      })
-      .strict()
-      .optional(),
-    action: z
-      .object({
-        name: z.string(),
-        description: z.string().optional(),
-      })
-      .strict()
-      .optional(),
-    tool: z
-      .object({
-        name: z.string(),
-        title: z.string().optional(),
-        input: jsonObjectSchema.optional(),
-      })
-      .strict()
-      .optional(),
-    mutation: z.enum(["mutating", "read_only", "unknown"]).optional(),
-    supportedReplyOutcomes: z.array(runtimeApprovalReplyOutcomeSchema).optional(),
-    metadata: metadataSchema.optional(),
-  })
+  .object(transcriptPendingApprovalRequestFields)
   .strict();
 export type AgentTranscriptPendingApprovalRequest = z.infer<
   typeof inferredTranscriptPendingApprovalRequestSchema
 >;
 
+const transcriptPendingQuestionRequestFields = {
+  requestId: z.string(),
+  requestInstanceId: z.string().optional(),
+  questions: z.array(agentSessionQuestionItemSchema),
+} satisfies ZodSchemaFields;
 const inferredTranscriptPendingQuestionRequestSchema = z
-  .object({
-    requestId: z.string(),
-    requestInstanceId: z.string().optional(),
-    questions: z.array(agentSessionQuestionItemSchema),
-  })
+  .object(transcriptPendingQuestionRequestFields)
   .strict();
 export type AgentTranscriptPendingQuestionRequest = z.infer<
   typeof inferredTranscriptPendingQuestionRequestSchema
@@ -344,7 +346,7 @@ const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
   }),
   transcriptEventSchema({
     type: z.literal("approval_required"),
-    ...inferredTranscriptPendingApprovalRequestSchema.shape,
+    ...transcriptPendingApprovalRequestFields,
     parentExternalSessionId: z.string().optional(),
     childExternalSessionId: z.string().optional(),
     subagentCorrelationKey: z.string().optional(),
@@ -359,7 +361,7 @@ const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
   }),
   transcriptEventSchema({
     type: z.literal("question_required"),
-    ...inferredTranscriptPendingQuestionRequestSchema.shape,
+    ...transcriptPendingQuestionRequestFields,
     parentExternalSessionId: z.string().optional(),
     childExternalSessionId: z.string().optional(),
     subagentCorrelationKey: z.string().optional(),

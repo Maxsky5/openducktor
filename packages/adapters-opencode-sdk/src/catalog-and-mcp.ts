@@ -90,15 +90,10 @@ const toFileSearchResult = (rawPath: string, workingDirectory: string): AgentFil
 };
 
 const toFileSearchResults = (
-  payload: unknown,
+  payload: string[],
   workingDirectory: string,
 ): AgentFileSearchResult[] => {
-  const paths = opencodeFileSearchPayloadSchema.safeParse(payload);
-  if (!paths.success) {
-    throw new Error("Invalid file search payload: expected an array of file paths.");
-  }
-
-  return paths.data.map((entry) => toFileSearchResult(entry, workingDirectory));
+  return payload.map((entry) => toFileSearchResult(entry, workingDirectory));
 };
 
 export const listAvailableModels = async (
@@ -118,15 +113,16 @@ export const listAvailableModels = async (
   const rawAgents = agentsData
     .map((agent) => {
       const resolvedColor = resolveAgentColor(agent.name, agent.color, agent.native);
-      return {
+      const profile: NonNullable<AgentModelCatalog["profiles"]>[number] & { label: string } = {
         id: agent.name,
         label: agent.name,
-        ...(agent.description ? { description: agent.description } : undefined),
         mode: agent.mode,
-        ...(agent.hidden !== undefined ? { hidden: agent.hidden } : undefined),
-        ...(agent.native !== undefined ? { native: agent.native } : undefined),
-        ...(resolvedColor !== undefined ? { color: resolvedColor } : undefined),
       };
+      if (agent.description) profile.description = agent.description;
+      if (agent.hidden !== undefined) profile.hidden = agent.hidden;
+      if (agent.native !== undefined) profile.native = agent.native;
+      if (resolvedColor !== undefined) profile.color = resolvedColor;
+      return profile;
     })
     .sort((a, b) => a.label.localeCompare(b.label));
 
@@ -154,12 +150,15 @@ export const listAvailableSubagents = async (
         }
 
         const trimmedDescription = agent.description?.trim();
-        return {
+        const subagent: NonNullable<AgentSubagentCatalog["subagents"]>[number] & {
+          label: string;
+        } = {
           id: trimmedName,
           name: trimmedName,
           label: trimmedName,
-          ...(trimmedDescription ? { description: trimmedDescription } : undefined),
         };
+        if (trimmedDescription) subagent.description = trimmedDescription;
+        return subagent;
       })
       .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
       .sort((left, right) => left.label.localeCompare(right.label));
@@ -192,16 +191,15 @@ export const listAvailableSlashCommands = async (
 
     const commands = payload
       .map((command) => {
-        return [
-          {
-            id: command.name,
-            trigger: command.name,
-            title: command.name,
-            ...(command.description ? { description: command.description } : undefined),
-            ...(command.source ? { source: command.source } : undefined),
-            hints: command.hints,
-          },
-        ];
+        const entry: AgentSlashCommandCatalog["commands"][number] = {
+          id: command.name,
+          trigger: command.name,
+          title: command.name,
+          hints: command.hints,
+        };
+        if (command.description) entry.description = command.description;
+        if (command.source) entry.source = command.source;
+        return [entry];
       })
       .flat()
       .sort((left, right) => left.trigger.localeCompare(right.trigger));
@@ -232,7 +230,13 @@ export const searchFiles = async (
       limit: FILE_SEARCH_LIMIT,
     });
 
-    return toFileSearchResults(unwrapData(payload, "search files"), input.workingDirectory);
+    const parsedPayload = opencodeFileSearchPayloadSchema.safeParse(
+      unwrapData(payload, "search files"),
+    );
+    if (!parsedPayload.success) {
+      throw new Error("Invalid file search payload: expected an array of file paths.");
+    }
+    return toFileSearchResults(parsedPayload.data, input.workingDirectory);
   } catch (error) {
     throw toOpenCodeRequestError("search files", error);
   }

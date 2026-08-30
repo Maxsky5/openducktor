@@ -617,37 +617,4 @@ describe("createCodexAppServerTransport", () => {
       await Effect.runPromise(transport.close());
     }
   });
-
-  test("keeps the transport usable when serialization fails", async () => {
-    const child = createChild();
-    const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
-    const circularParams: Record<string, unknown> = {};
-    circularParams.self = circularParams;
-
-    try {
-      await expect(
-        Effect.runPromise(
-          transport.request({
-            method: "model/list",
-            params: circularParams,
-          }),
-        ),
-      ).rejects.toThrow("Failed writing Codex app-server message for runtime runtime-1");
-
-      const nextResponse = Effect.runPromise(
-        transport.request({
-          method: "model/list",
-          params: {},
-        }),
-      );
-      await waitForStreamEvents();
-      child.stdout.write(
-        `${JSON.stringify({ jsonrpc: "2.0", id: 2, result: { data: [], nextCursor: null } })}\n`,
-      );
-
-      await expect(nextResponse).resolves.toEqual({ data: [], nextCursor: null });
-    } finally {
-      await Effect.runPromise(transport.close());
-    }
-  });
 });

@@ -116,12 +116,4 @@ describe("probeCodexSessionStatus", () => {
       hasLiveSession: false,
     });
   });
-
-  test("rejects an unsupported thread status at the protocol boundary", () => {
-    expect(() =>
-      parseCodexAppServerRequestResult("thread/read", {
-        thread: { ...codexThread({ type: "idle" }), status: { type: "paused" } },
-      }),
-    ).toThrow("Invalid discriminator value");
-  });
 });

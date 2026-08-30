@@ -47,7 +47,7 @@ describe("useAgentChatRowMotion", () => {
   });
 
   afterEach(() => {
-    if (typeof originalWindowDescriptor === "undefined") {
+    if (originalWindowDescriptor === undefined) {
       Reflect.deleteProperty(globalThis, "window");
     } else {
       Object.defineProperty(globalThis, "window", originalWindowDescriptor);

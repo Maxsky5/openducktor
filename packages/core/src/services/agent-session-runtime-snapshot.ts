@@ -71,18 +71,19 @@ export const toAgentSessionRuntimeSnapshot = (
   }
 
   const classification = classifyAgentSessionActivity(snapshot);
-  return {
+  const runtimeSnapshot: AgentSessionRuntimeSnapshot = {
     availability: "runtime",
     classification,
     ref,
-    ...(snapshot.parentExternalSessionId
-      ? { parentExternalSessionId: snapshot.parentExternalSessionId }
-      : undefined),
     title: snapshot.title,
     startedAt: snapshot.startedAt,
     pendingApprovals: snapshot.pendingApprovals,
     pendingQuestions: snapshot.pendingQuestions,
   };
+  if (snapshot.parentExternalSessionId) {
+    runtimeSnapshot.parentExternalSessionId = snapshot.parentExternalSessionId;
+  }
+  return runtimeSnapshot;
 };
 
 export const toMissingAgentSessionRuntimeSnapshot = (

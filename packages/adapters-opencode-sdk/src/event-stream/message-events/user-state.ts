@@ -18,16 +18,15 @@ export const takeQueuedUserSendMatch = (
     return null;
   }
 
-  const signature = buildQueuedDisplaySignature({
+  const signatureInput: Parameters<typeof buildQueuedDisplaySignature>[0] = {
     visible,
     parts,
-    ...(model ? { model } : undefined),
-  });
-  const attachmentIdentitySignature = buildQueuedDisplayAttachmentIdentitySignature({
-    visible,
-    parts,
-    ...(model ? { model } : undefined),
-  });
+  };
+  if (model) {
+    signatureInput.model = model;
+  }
+  const signature = buildQueuedDisplaySignature(signatureInput);
+  const attachmentIdentitySignature = buildQueuedDisplayAttachmentIdentitySignature(signatureInput);
   const modelFreeSignature = model ? buildQueuedDisplaySignature({ visible, parts }) : signature;
   const modelFreeAttachmentIdentitySignature = model
     ? buildQueuedDisplayAttachmentIdentitySignature({ visible, parts })

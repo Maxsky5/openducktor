@@ -1,5 +1,6 @@
 import type { ExternalTaskSyncEvent, SettingsSnapshot, TaskCard } from "@openducktor/contracts";
 import { isCancelledError, type QueryClient } from "@tanstack/react-query";
+import { z } from "zod";
 import { hostClient as host } from "@/lib/host-client";
 import { resolveLatestDocumentPayload } from "./document-utils";
 import { documentQueryKeys, type TaskDocument, type TaskDocumentSection } from "./documents";
@@ -39,25 +40,31 @@ const toEventChanges = (event: ExternalTaskSyncEvent) =>
     ? { taskIds: [event.taskId], removedTaskIds: [] }
     : { taskIds: event.taskIds, removedTaskIds: event.removedTaskIds };
 
-const cachedDocumentEntries = (queryClient: QueryClient, repoPath: string) =>
+type CachedDocumentEntry = {
+  queryKey: readonly unknown[];
+  section: TaskDocumentSection;
+  taskId: string;
+};
+
+const cachedDocumentEntries = (queryClient: QueryClient, repoPath: string): CachedDocumentEntry[] =>
   queryClient
     .getQueryCache()
     .findAll({ queryKey: documentQueryKeys.all, exact: false })
-    .flatMap((query) => {
+    .flatMap<CachedDocumentEntry>((query) => {
       const [scope, section, cachedRepoPath, taskId] = query.queryKey;
+      const taskIdResult = z.string().safeParse(taskId);
       if (
         scope !== documentQueryKeys.all[0] ||
         cachedRepoPath !== repoPath ||
-        typeof taskId !== "string"
+        !taskIdResult.success
       ) {
         return [];
       }
       if (section === "spec" || section === "plan") {
-        // SAFETY: The preceding runtime guard establishes `TaskDocumentSection` before this assertion.
-        return [{ queryKey: query.queryKey, section: section as TaskDocumentSection, taskId }];
+        return [{ queryKey: query.queryKey, section, taskId: taskIdResult.data }];
       }
       if (section === "qa-report") {
-        return [{ queryKey: query.queryKey, section: "qa" as const, taskId }];
+        return [{ queryKey: query.queryKey, section: "qa" as const, taskId: taskIdResult.data }];
       }
       return [];
     });
@@ -243,11 +250,12 @@ export const createTaskViewSync = ({
     const variants = queryClient
       .getQueryCache()
       .findAll({ queryKey: taskQueryKeys.repoDataPrefix(repoPath), exact: false })
-      .map((query) => query.queryKey[3])
-      .filter(
-        (days): days is number =>
-          typeof days === "number" && days >= 0 && days !== primaryDoneVisibleDays,
-      );
+      .flatMap((query) => {
+        const daysResult = z.number().nonnegative().safeParse(query.queryKey[3]);
+        return daysResult.success && daysResult.data !== primaryDoneVisibleDays
+          ? [daysResult.data]
+          : [];
+      });
     await Promise.all([...new Set(variants)].map((days) => fetchTasks(repoPath, days)));
   };
 
@@ -425,9 +433,10 @@ export const createTaskViewSync = ({
         .getQueryCache()
         .findAll({ queryKey: taskQueryKeys.all, exact: false });
       const repos = new Set(
-        taskQueries
-          .map((query) => query.queryKey[2])
-          .filter((repoPath): repoPath is string => typeof repoPath === "string"),
+        taskQueries.flatMap((query) => {
+          const repoPathResult = z.string().safeParse(query.queryKey[2]);
+          return repoPathResult.success ? [repoPathResult.data] : [];
+        }),
       );
       const inactiveRepos = [...repos].filter((repoPath) => repoPath !== activeRepoPath);
       const doneVisibleDays = activeRepoPath ? (await loadSettings()).kanban.doneVisibleDays : null;

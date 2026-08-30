@@ -1,6 +1,7 @@
 import type { QaReportVerdict, TaskMetadataDocument } from "@openducktor/contracts";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { Effect } from "effect";
+import { z } from "zod";
 import { requireTaskRow } from "./sqlite-task-queries";
 import {
   SqliteTaskStoreDataError,
@@ -39,14 +40,15 @@ const nextDocumentRevision = (
     if (revision === null) {
       return 1;
     }
-    if (typeof revision !== "number") {
+    const parsedRevision = z.number().safeParse(revision);
+    if (!parsedRevision.success) {
       return yield* new SqliteTaskStoreDataError({
         message: "SQLite task document revision must be a number.",
         field: "revision",
         details: { kind, taskId, value: revision },
       });
     }
-    return revision + 1;
+    return parsedRevision.data + 1;
   });
 
 export const insertDocument = (

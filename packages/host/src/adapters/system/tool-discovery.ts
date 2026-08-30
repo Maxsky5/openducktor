@@ -2,15 +2,12 @@ import { homedir } from "node:os";
 import { posix, win32 } from "node:path";
 import { normalizeUserPathInput } from "@openducktor/path-support";
 import { Deferred, Effect, FiberId } from "effect";
-import {
-  type HostErrorDetails,
-  HostDependencyError,
-  HostValidationError,
-} from "../../effect/host-errors";
+import { HostDependencyError, HostValidationError } from "../../effect/host-errors";
 import { isExecutableCommandFile } from "../../infrastructure/process/process-command-resolution";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type {
   ResolvedTool,
+  ToolDiscoveryDetails,
   ToolDiscoveryError,
   ToolDiscoveryId,
   ToolDiscoveryPort,
@@ -70,7 +67,7 @@ const invalidOverrideError = (
   descriptor: ToolDiscoveryDescriptor,
   variable: string,
   message: string,
-  details?: HostErrorDetails,
+  details?: ToolDiscoveryDetails,
 ) =>
   new HostValidationError({
     field: variable,
@@ -82,7 +79,7 @@ const invalidProvidedToolPathError = (
   descriptor: ToolDiscoveryDescriptor,
   toolId: ToolDiscoveryId,
   message: string,
-  details?: HostErrorDetails,
+  details?: ToolDiscoveryDetails,
 ) =>
   new HostValidationError({
     field: `providedToolPaths.${toolId}`,
@@ -94,7 +91,7 @@ const invalidSavedToolPathError = (
   descriptor: ToolDiscoveryDescriptor,
   toolId: ToolDiscoveryId,
   message: string,
-  details?: HostErrorDetails,
+  details?: ToolDiscoveryDetails,
 ) =>
   new HostValidationError({
     field: `agentRuntimes.${toolId}.executablePath`,
@@ -113,10 +110,13 @@ const resolveExplicitToolPathSource = ({
   systemCommands,
 }: {
   context: ToolDiscoveryContext;
-  detailKey: string;
+  detailKey: "executablePath" | "resolvedOverride" | "resolvedProvidedPath";
   displayLabel: string;
   env: NodeJS.ProcessEnv;
-  invalidError: (message: string, details?: HostErrorDetails) => HostValidationError;
+  invalidError: (
+    message: string,
+    details?: ToolDiscoveryDetails,
+  ) => HostValidationError<ToolDiscoveryDetails>;
   rawPath: string;
   sourceCategory: ToolDiscoverySourceCategory;
   systemCommands: SystemCommandPort;
@@ -133,25 +133,26 @@ const resolveExplicitToolPathSource = ({
       return { displayLabel, path: resolved, sourceCategory } satisfies ResolvedTool;
     }
 
+    let details: ToolDiscoveryDetails;
+    if (detailKey === "resolvedOverride") {
+      details = { resolvedOverride: resolvedPath };
+    } else if (detailKey === "resolvedProvidedPath") {
+      details = { resolvedProvidedPath: resolvedPath };
+    } else {
+      details = { executablePath: resolvedPath };
+    }
     return yield* Effect.fail(
-      invalidError(`points to a missing or non-executable file: ${resolvedPath}`, {
-        [detailKey]: resolvedPath,
-      }),
+      invalidError(`points to a missing or non-executable file: ${resolvedPath}`, details),
     );
   });
 
-const missingToolError = (
-  descriptor: ToolDiscoveryDescriptor,
-  checked: readonly string[],
-  details?: HostErrorDetails,
-) =>
-  new HostDependencyError({
+const missingToolError = (descriptor: ToolDiscoveryDescriptor, checked: readonly string[]) =>
+  new HostDependencyError<ToolDiscoveryDetails>({
     dependency: descriptor.command,
     operation: "toolDiscovery.discoverTool",
     message: `${descriptor.command} not found. Checked ${checked.join(
       ", ",
     )}. ${descriptor.installHint}`,
-    details,
   });
 
 const missingRequiredSourceError = (
@@ -160,7 +161,7 @@ const missingRequiredSourceError = (
   source: Extract<ToolDiscoverySource, { kind: "searchDirectories" }>,
   directories: readonly string[],
 ) =>
-  new HostDependencyError({
+  new HostDependencyError<ToolDiscoveryDetails>({
     dependency: descriptor.command,
     operation: "toolDiscovery.discoverTool",
     message:

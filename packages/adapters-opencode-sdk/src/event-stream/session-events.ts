@@ -237,11 +237,16 @@ const resolveSubagentInputRouting = (
       isEventScopedToRuntimeWorkingDirectory,
     );
 
-  return {
+  const routing: SubagentInputRouting = {
     childExternalSessionId,
-    ...(parentExternalSessionId ? { parentExternalSessionId } : undefined),
-    ...(subagentCorrelationKey ? { subagentCorrelationKey } : undefined),
   };
+  if (parentExternalSessionId) {
+    routing.parentExternalSessionId = parentExternalSessionId;
+  }
+  if (subagentCorrelationKey) {
+    routing.subagentCorrelationKey = subagentCorrelationKey;
+  }
+  return routing;
 };
 
 const handleSessionStatus = (
@@ -313,13 +318,23 @@ const handleQuestionAsked = (
     timestamp: runtime.now(),
     requestId: request.requestId,
     ...subagentRouting,
-    questions: request.questions.map((question) => ({
-      header: question.header,
-      question: question.question,
-      options: question.options,
-      ...(question.multiple !== undefined ? { multiple: question.multiple } : undefined),
-      ...(question.custom !== undefined ? { custom: question.custom } : undefined),
-    })),
+    questions: request.questions.map((question) => {
+      const mappedQuestion: Extract<
+        AgentEvent,
+        { type: "question_required" }
+      >["questions"][number] = {
+        header: question.header,
+        question: question.question,
+        options: question.options,
+      };
+      if (question.multiple !== undefined) {
+        mappedQuestion.multiple = question.multiple;
+      }
+      if (question.custom !== undefined) {
+        mappedQuestion.custom = question.custom;
+      }
+      return mappedQuestion;
+    }),
   };
   runtime.emit(runtime.externalSessionId, questionEvent);
   queueSubagentInputEvent(runtime, questionEvent);
@@ -449,7 +464,7 @@ const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime):
       runtime.session.pendingSubagentSessionsByExternalSessionId.size + 1,
   };
   const nextCreatedAtMs = createdAtMs ?? existingSessionBinding?.createdAtMs;
-  if (typeof nextCreatedAtMs === "number") {
+  if (nextCreatedAtMs !== undefined) {
     nextSessionBinding.createdAtMs = nextCreatedAtMs;
   }
   runtime.session.pendingSubagentSessionsByExternalSessionId.set(

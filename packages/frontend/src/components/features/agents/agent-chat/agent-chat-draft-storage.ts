@@ -157,13 +157,14 @@ const toPersistedAttachment = (
     return null;
   }
 
-  return {
+  const persistedAttachment: PersistedAgentChatDraftAttachment = {
     id: attachment.id,
     path: attachment.path,
     name: attachment.name,
     kind: attachment.kind,
-    ...(attachment.mime ? { mime: attachment.mime } : undefined),
   };
+  if (attachment.mime) persistedAttachment.mime = attachment.mime;
+  return persistedAttachment;
 };
 
 export const serializeAgentChatDraftPayload = ({
@@ -215,11 +216,12 @@ export const serializeAgentChatDraftPayload = ({
 const parseAttachment = (
   value: z.infer<typeof attachmentSchema>,
 ): AgentChatComposerAttachment | null => {
-  const attachment = buildComposerAttachmentFromPath(value.path, {
+  const metadata: NonNullable<Parameters<typeof buildComposerAttachmentFromPath>[1]> = {
     name: value.name,
     kind: value.kind,
-    ...(value.mime ? { mime: value.mime } : undefined),
-  });
+  };
+  if (value.mime) metadata.mime = value.mime;
+  const attachment = buildComposerAttachmentFromPath(value.path, metadata);
   return attachment ? { ...attachment, id: value.id } : null;
 };
 

@@ -1,6 +1,10 @@
 import type { RuntimeInstanceSummary } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  type HostOperationErrorAggregate,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import type { OpenCodeLiveSessionAdapterPreparer } from "../agent-sessions/opencode-live-session-adapter";
 
@@ -12,8 +16,8 @@ export const startOpenCodeLiveSessionState = (input: {
   isRuntimeClosed: () => boolean;
   closeDescription: () => string | null;
   markRegistered: () => void;
-  releaseLiveSessionState: Effect.Effect<void, HostOperationError>;
-}): Effect.Effect<void, HostOperationError> =>
+  releaseLiveSessionState: Effect.Effect<void, HostOperationErrorAggregate>;
+}): Effect.Effect<void, HostOperationErrorAggregate> =>
   Effect.gen(function* () {
     const prepared = yield* input.prepareLiveSessionAdapter(input.runtime).pipe(
       Effect.mapError((cause) =>

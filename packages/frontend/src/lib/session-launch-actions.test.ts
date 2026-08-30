@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   getSessionLaunchAction,
   isLaunchStartModeAllowed,
-  isSessionLaunchActionId,
   SESSION_LAUNCH_ACTIONS,
   sessionLaunchActionIds,
 } from "./session-launch-actions";
@@ -14,20 +13,6 @@ describe("session-launch-actions", () => {
     for (const id of sessionLaunchActionIds) {
       expect(getSessionLaunchAction(id).id).toBe(id);
     }
-  });
-
-  test("recognizes only configured launch action ids", () => {
-    for (const id of sessionLaunchActionIds) {
-      expect(isSessionLaunchActionId(id)).toBe(true);
-    }
-
-    expect(isSessionLaunchActionId(null)).toBe(false);
-    expect(isSessionLaunchActionId(undefined)).toBe(false);
-    expect(isSessionLaunchActionId("")).toBe(false);
-    expect(isSessionLaunchActionId("qa_review ")).toBe(false);
-    expect(isSessionLaunchActionId("unknown")).toBe(false);
-    expect(isSessionLaunchActionId(123)).toBe(false);
-    expect(isSessionLaunchActionId({})).toBe(false);
   });
 
   test("checks allowed start modes for each launch action", () => {

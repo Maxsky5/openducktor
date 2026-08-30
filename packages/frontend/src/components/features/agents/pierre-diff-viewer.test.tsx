@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import type { RenderDiffResult, RenderFileResult } from "@pierre/diffs";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import {
@@ -14,6 +15,27 @@ type WorkerPoolMock = PierreDiffViewerWorkerPool & {
   primeFileHighlightCache?: ReturnType<typeof mock>;
 };
 type CachedHighlight = ReturnType<PierreDiffViewerWorkerPool["getDiffResultCache"]>;
+type CachedFileHighlight = ReturnType<PierreDiffViewerWorkerPool["getFileResultCache"]>;
+
+const CACHED_DIFF_RESULT: RenderDiffResult = {
+  result: {
+    code: { additionLines: [], deletionLines: [] },
+    themeStyles: "",
+    baseThemeType: undefined,
+  },
+  options: {
+    theme: "one-light",
+    useTokenTransformer: false,
+    tokenizeMaxLineLength: 0,
+    lineDiffType: "none",
+    maxLineDiffLength: 0,
+  },
+};
+
+const CACHED_FILE_RESULT: RenderFileResult = {
+  result: { code: [], themeStyles: "", baseThemeType: undefined },
+  options: { theme: "one-light", useTokenTransformer: false, tokenizeMaxLineLength: 0 },
+};
 
 const createDefaultWorkerPoolMock = (): WorkerPoolMock => ({
   cleanUpTasks: mock(() => undefined),
@@ -224,7 +246,7 @@ describe("PierreDiffViewer", () => {
     expect(highlightDiffAST).toHaveBeenCalledTimes(1);
     expect(primeDiffHighlightCache).not.toHaveBeenCalled();
 
-    cachedHighlight = {};
+    cachedHighlight = CACHED_DIFF_RESULT;
     const [observer] = highlightDiffAST.mock.calls[0] ?? [];
     observer?.onHighlightSuccess();
     act(() => notifyStatsChanged?.());
@@ -276,7 +298,7 @@ describe("PierreDiffViewer", () => {
     const primeDiffHighlightCache = mock();
     workerPoolMock = {
       ...createDefaultWorkerPoolMock(),
-      getDiffResultCache: mock(() => ({})),
+      getDiffResultCache: mock(() => CACHED_DIFF_RESULT),
       isWorkingPool: mock(() => true),
       primeDiffHighlightCache,
       subscribeToStatChanges,
@@ -385,7 +407,7 @@ describe("PierreDiffViewer", () => {
 
   test("skips preloading when the worker already cached the parsed diff", async () => {
     const { PierreDiffPreloader } = pierreViewerModule;
-    const cachedHighlightResult = {};
+    const cachedHighlightResult = CACHED_DIFF_RESULT;
     const getDiffResultCache = mock(() => cachedHighlightResult);
     const primeDiffHighlightCache = mock();
     workerPoolMock = {
@@ -570,7 +592,7 @@ describe("PierreDiffViewer", () => {
     workerPoolMock = {
       ...createDefaultWorkerPoolMock(),
       getDiffResultCache: mock(() => undefined),
-      getFileResultCache: mock(() => ({})),
+      getFileResultCache: mock(() => CACHED_FILE_RESULT),
       isWorkingPool: mock(() => true),
       primeDiffHighlightCache: mock(),
       primeFileHighlightCache,
@@ -607,7 +629,7 @@ describe("PierreDiffViewer", () => {
 
   test("keeps cold file content hidden behind a skeleton until highlighting finishes", async () => {
     const { PierreFileViewer } = pierreViewerModule;
-    let cachedHighlight: CachedHighlight;
+    let cachedHighlight: CachedFileHighlight;
     let notifyStatsChanged: (() => void) | undefined;
     const getFileResultCache = mock(() => cachedHighlight);
     const primeFileHighlightCache = mock();
@@ -639,7 +661,7 @@ describe("PierreDiffViewer", () => {
     expect(highlightFileAST).toHaveBeenCalledTimes(1);
     expect(primeFileHighlightCache).not.toHaveBeenCalled();
 
-    cachedHighlight = {};
+    cachedHighlight = CACHED_FILE_RESULT;
     const [observer] = highlightFileAST.mock.calls[0] ?? [];
     observer?.onHighlightSuccess();
     act(() => notifyStatsChanged?.());
@@ -974,12 +996,18 @@ describe("getRenderableFileDiff", () => {
   });
 
   test("accepts only complete hunk reset annotation metadata", () => {
-    const { isHunkResetAnnotationMetadata } = pierreViewerModelModule;
+    const { hunkResetAnnotationMetadataSchema } = pierreViewerModelModule;
 
-    expect(isHunkResetAnnotationMetadata({ kind: "hunk-reset", hunkIndex: 0 })).toBe(true);
-    expect(isHunkResetAnnotationMetadata({ kind: "hunk-reset" })).toBe(false);
-    expect(isHunkResetAnnotationMetadata({ kind: "hunk-reset", hunkIndex: -1 })).toBe(false);
-    expect(isHunkResetAnnotationMetadata({ kind: "hunk-reset", hunkIndex: 1.5 })).toBe(false);
+    expect(
+      hunkResetAnnotationMetadataSchema.safeParse({ kind: "hunk-reset", hunkIndex: 0 }).success,
+    ).toBe(true);
+    expect(hunkResetAnnotationMetadataSchema.safeParse({ kind: "hunk-reset" }).success).toBe(false);
+    expect(
+      hunkResetAnnotationMetadataSchema.safeParse({ kind: "hunk-reset", hunkIndex: -1 }).success,
+    ).toBe(false);
+    expect(
+      hunkResetAnnotationMetadataSchema.safeParse({ kind: "hunk-reset", hunkIndex: 1.5 }).success,
+    ).toBe(false);
   });
 
   test("falls back to deletion lines for delete-only hunks", async () => {

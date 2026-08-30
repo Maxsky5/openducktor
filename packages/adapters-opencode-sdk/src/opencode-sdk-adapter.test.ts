@@ -7,6 +7,7 @@ import {
 } from "@openducktor/contracts";
 import type { AgentEvent, PolicyBoundSessionRef, RuntimeKind, SessionRef } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
+import { z } from "zod";
 import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./opencode-sdk-adapter";
 import { createOpencodeSessionFixture } from "./opencode-protocol-test-fixtures";
 import type { OpencodeSdkAdapterOptions, SessionRecord } from "./types";
@@ -757,30 +758,6 @@ describe("opencode-sdk-adapter", () => {
     expect(session.pendingSubagentInputEventsByExternalSessionId.get("child-b")).toEqual([
       { ...question, requestId: "request-1" },
     ]);
-  });
-
-  test("startSession fails fast when the sdk client lacks global event streaming", async () => {
-    const mock = makeMockClient();
-    const unsupportedClient = {
-      ...mock.client,
-      global: {},
-    } satisfies OpencodeClient;
-    const adapter = new OpencodeSdkAdapter({
-      createClient: () => unsupportedClient,
-      now: () => "2026-02-22T12:00:00.000Z",
-    });
-
-    await expect(
-      adapter.startSession({
-        repoPath: "/repo",
-        workingDirectory: "/repo",
-        runtimeKind: "opencode",
-        sessionScope: opencodeWorkflowScope("spec"),
-        runtimePolicy: opencodeRuntimePolicy,
-        systemPrompt: "system",
-      }),
-    ).rejects.toThrow("client.global.event()");
-    expect(adapter.sessionsForTest.has("external-session-1")).toBe(false);
   });
 
   test("checks same-directory MCP health before returning cached workflow tool selection", async () => {
@@ -1841,13 +1818,11 @@ describe("opencode-sdk-adapter", () => {
         },
         command: async (input?: ClientMethodInput<"session", "command">) => {
           commandCalls.push(input);
-          const messageID =
-            typeof input === "object" && input !== null && !Array.isArray(input)
-              ? input.messageID
-              : undefined;
-          if (typeof messageID !== "string") {
+          const parsedInput = z.object({ messageID: z.string() }).safeParse(input);
+          if (!parsedInput.success) {
             throw new Error("Expected slash command input to include messageID.");
           }
+          const messageID = parsedInput.data.messageID;
           commandStarted.resolve({ messageID });
           return { data: undefined, error: undefined };
         },

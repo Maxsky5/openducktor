@@ -3,6 +3,7 @@ import {
   taskEventCursorSchema,
   taskEventStreamSubscribeSchema,
   type TaskEventStreamFrame,
+  type JsonObject,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { errorMessage, WebHostRequestError } from "./effect/web-errors";
@@ -19,9 +20,7 @@ type TaskEventHttpServerContext = {
   appToken: string;
   controlToken: string;
   corsHeaders: HeadersInit;
-  parseJsonObjectBody: (
-    request: Request,
-  ) => Effect.Effect<Record<string, unknown>, WebHostRequestError>;
+  parseJsonObjectBody: (request: Request) => Effect.Effect<JsonObject, WebHostRequestError>;
   request: Request;
   requestTimeouts?: RequestTimeoutController | undefined;
   shutdownStarted: boolean;
@@ -122,7 +121,7 @@ const createTaskEventSseResponse = (
 };
 
 const parseTaskEventAckCursor = (
-  body: Record<string, unknown>,
+  body: JsonObject,
 ): Effect.Effect<ReturnType<typeof taskEventCursorSchema.parse>, WebHostRequestError> =>
   Effect.gen(function* () {
     if (Object.keys(body).length !== 1 || !("cursor" in body)) {

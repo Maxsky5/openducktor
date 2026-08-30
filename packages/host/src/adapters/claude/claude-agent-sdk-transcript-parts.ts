@@ -1,6 +1,8 @@
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
 import { readClaudeFileEditPayload } from "./claude-agent-sdk-file-edits";
 import { parseClaudeCanonicalJsonObject } from "./claude-agent-sdk-ingress-schemas";
+import type { ClaudeDecodedToolResult } from "./claude-agent-sdk-tool-shapes";
+import type { ClaudeToolInput } from "./claude-agent-sdk-types";
 import { previewInput, toolPartPresentation } from "./claude-agent-sdk-utils";
 
 type ClaudeTextPart = Extract<AgentStreamPart, { kind: "text" }>;
@@ -69,12 +71,12 @@ export const createClaudeCompletedToolPart = ({
 }: {
   callId: string;
   endedAtMs: number;
-  input?: Record<string, unknown>;
+  input?: ClaudeToolInput;
   isError: boolean;
   messageId: string;
-  metadata?: Record<string, unknown>;
+  metadata?: NonNullable<ClaudeToolPart["metadata"]>;
   preview?: string;
-  raw?: Record<string, unknown>;
+  raw?: ClaudeDecodedToolResult["raw"];
   startedAtMs?: number;
   text: string;
   tool: string;
@@ -94,13 +96,25 @@ export const createClaudeCompletedToolPart = ({
     tool,
     ...toolPartPresentation(tool),
     status: isError ? "error" : "completed",
-    ...(canonicalInput ? { input: canonicalInput } : undefined),
-    ...(resolvedPreview ? { preview: resolvedPreview } : undefined),
-    ...(canonicalMetadata ? { metadata: canonicalMetadata } : undefined),
-    ...(typeof startedAtMs === "number" ? { startedAtMs } : undefined),
     endedAtMs,
-    ...(isError ? { error: text } : { output: text }),
   };
+  if (canonicalInput) {
+    part.input = canonicalInput;
+  }
+  if (resolvedPreview) {
+    part.preview = resolvedPreview;
+  }
+  if (canonicalMetadata) {
+    part.metadata = canonicalMetadata;
+  }
+  if (startedAtMs !== undefined) {
+    part.startedAtMs = startedAtMs;
+  }
+  if (isError) {
+    part.error = text;
+  } else {
+    part.output = text;
+  }
   if (!isError && raw) {
     Object.assign(part, readClaudeFileEditPayload({ tool, input, raw }));
   }
@@ -123,9 +137,5 @@ export const claudeAssistantTextPartEvent = ({
   type: "assistant_part",
   externalSessionId,
   timestamp,
-  part: createClaudeAssistantTextPart({
-    messageId,
-    ...(partId ? { partId } : undefined),
-    text,
-  }),
+  part: createClaudeAssistantTextPart(partId ? { messageId, partId, text } : { messageId, text }),
 });

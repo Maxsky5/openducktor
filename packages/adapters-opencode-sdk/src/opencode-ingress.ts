@@ -1,7 +1,6 @@
-import type { Agent } from "@opencode-ai/sdk/v2/client";
+import type { Agent, Session } from "@opencode-ai/sdk/v2/client";
+import { jsonObjectSchema, jsonValueSchema } from "@openducktor/contracts";
 import { z } from "zod";
-
-const unknownRecordSchema = z.record(z.string(), z.unknown());
 
 const formatIngressIssues = (issues: readonly z.core.$ZodIssue[]): string =>
   issues
@@ -27,7 +26,7 @@ const opencodeAgentWireSchema = z.object({
     .nullish(),
   name: z.string(),
   native: z.boolean().nullish(),
-  options: unknownRecordSchema,
+  options: jsonObjectSchema,
   permission: z.array(permissionRuleSchema),
   prompt: z.string().nullish(),
   steps: z.number().nullish(),
@@ -36,28 +35,25 @@ const opencodeAgentWireSchema = z.object({
   variant: z.string().nullish(),
 });
 
-const opencodeAgentSchema = opencodeAgentWireSchema.transform((agent): Agent => ({
-  mode: agent.mode,
-  name: agent.name,
-  options: agent.options,
-  permission: agent.permission,
-  ...(agent.color !== null && agent.color !== undefined ? { color: agent.color } : undefined),
-  ...(agent.description !== null && agent.description !== undefined
-    ? { description: agent.description }
-    : undefined),
-  ...(agent.hidden !== null && agent.hidden !== undefined ? { hidden: agent.hidden } : undefined),
-  ...(agent.model !== null && agent.model !== undefined ? { model: agent.model } : undefined),
-  ...(agent.native !== null && agent.native !== undefined ? { native: agent.native } : undefined),
-  ...(agent.prompt !== null && agent.prompt !== undefined ? { prompt: agent.prompt } : undefined),
-  ...(agent.steps !== null && agent.steps !== undefined ? { steps: agent.steps } : undefined),
-  ...(agent.temperature !== null && agent.temperature !== undefined
-    ? { temperature: agent.temperature }
-    : undefined),
-  ...(agent.topP !== null && agent.topP !== undefined ? { topP: agent.topP } : undefined),
-  ...(agent.variant !== null && agent.variant !== undefined
-    ? { variant: agent.variant }
-    : undefined),
-}));
+const opencodeAgentSchema = opencodeAgentWireSchema.transform((agent): Agent => {
+  const parsedAgent: Agent = {
+    mode: agent.mode,
+    name: agent.name,
+    options: agent.options,
+    permission: agent.permission,
+  };
+  if (agent.color != null) parsedAgent.color = agent.color;
+  if (agent.description != null) parsedAgent.description = agent.description;
+  if (agent.hidden != null) parsedAgent.hidden = agent.hidden;
+  if (agent.model != null) parsedAgent.model = agent.model;
+  if (agent.native != null) parsedAgent.native = agent.native;
+  if (agent.prompt != null) parsedAgent.prompt = agent.prompt;
+  if (agent.steps != null) parsedAgent.steps = agent.steps;
+  if (agent.temperature != null) parsedAgent.temperature = agent.temperature;
+  if (agent.topP != null) parsedAgent.topP = agent.topP;
+  if (agent.variant != null) parsedAgent.variant = agent.variant;
+  return parsedAgent;
+});
 export type ParsedOpencodeAgent = z.infer<typeof opencodeAgentSchema>;
 
 export const opencodeAgentListPayloadSchema = z.array(opencodeAgentSchema);
@@ -121,11 +117,11 @@ const providerModelSchema = z.object({
   id: z.string(),
   limit: z.object({ context: z.number(), input: z.number().optional(), output: z.number() }),
   name: z.string(),
-  options: unknownRecordSchema,
+  options: jsonObjectSchema,
   providerID: z.string(),
   release_date: z.string(),
   status: z.enum(["alpha", "beta", "deprecated", "active"]),
-  variants: z.record(z.string(), unknownRecordSchema).optional(),
+  variants: z.record(z.string(), jsonObjectSchema).optional(),
 });
 export type ParsedOpencodeProviderModel = z.infer<typeof providerModelSchema>;
 
@@ -135,7 +131,7 @@ const providerSchema = z.object({
   key: z.string().optional(),
   models: z.record(z.string(), providerModelSchema),
   name: z.string(),
-  options: unknownRecordSchema,
+  options: jsonObjectSchema,
   source: z.enum(["env", "config", "custom", "api"]),
 });
 
@@ -159,7 +155,7 @@ export const opencodeSessionDetailPayloadSchema = z.object({
   cost: z.number().optional(),
   directory: z.string(),
   id: z.string(),
-  metadata: unknownRecordSchema.optional(),
+  metadata: jsonObjectSchema.optional(),
   model: z
     .object({
       id: z.string(),
@@ -211,7 +207,7 @@ export const opencodeSessionDetailPayloadSchema = z.object({
 export type ParsedOpencodeSession = z.output<typeof opencodeSessionDetailPayloadSchema>;
 export const opencodeSessionListPayloadSchema = z.array(opencodeSessionDetailPayloadSchema);
 
-export const parseOpencodeSessionListPayload = (value: unknown): ParsedOpencodeSession[] => {
+export const parseOpencodeSessionListPayload = (value: Session[]): ParsedOpencodeSession[] => {
   const parsed = opencodeSessionListPayloadSchema.safeParse(value);
   if (!parsed.success) {
     throw new Error(
@@ -268,7 +264,7 @@ const filePartSourceSchema = z.discriminatedUnion("type", [
 const textPartSchema = z.object({
   ...partEnvelopeSchema,
   ignored: z.boolean().optional(),
-  metadata: unknownRecordSchema.optional(),
+  metadata: jsonObjectSchema.optional(),
   synthetic: z.boolean().optional(),
   text: z.string(),
   time: partTimeSchema.optional(),
@@ -287,7 +283,7 @@ const subtaskPartSchema = z.object({
 
 const reasoningPartSchema = z.object({
   ...partEnvelopeSchema,
-  metadata: unknownRecordSchema.optional(),
+  metadata: jsonObjectSchema.optional(),
   text: z.string(),
   time: partTimeSchema,
   type: z.literal("reasoning"),
@@ -304,21 +300,21 @@ const filePartSchema = z.object({
 
 const toolStateSchema = z.discriminatedUnion("status", [
   z.object({
-    input: unknownRecordSchema,
+    input: jsonObjectSchema,
     raw: z.string(),
     status: z.literal("pending"),
   }),
   z.object({
-    input: unknownRecordSchema,
-    metadata: unknownRecordSchema.optional(),
+    input: jsonObjectSchema,
+    metadata: jsonObjectSchema.optional(),
     status: z.literal("running"),
     time: z.object({ start: z.number() }),
     title: z.string().optional(),
   }),
   z.object({
     attachments: z.array(filePartSchema).optional(),
-    input: unknownRecordSchema,
-    metadata: unknownRecordSchema,
+    input: jsonObjectSchema,
+    metadata: jsonObjectSchema,
     output: z.string(),
     status: z.literal("completed"),
     time: z.object({
@@ -330,8 +326,8 @@ const toolStateSchema = z.discriminatedUnion("status", [
   }),
   z.object({
     error: z.string(),
-    input: unknownRecordSchema,
-    metadata: unknownRecordSchema.optional(),
+    input: jsonObjectSchema,
+    metadata: jsonObjectSchema.optional(),
     status: z.literal("error"),
     time: z.object({ end: z.number(), start: z.number() }),
   }),
@@ -340,7 +336,7 @@ const toolStateSchema = z.discriminatedUnion("status", [
 const toolPartSchema = z.object({
   ...partEnvelopeSchema,
   callID: z.string(),
-  metadata: unknownRecordSchema.optional(),
+  metadata: jsonObjectSchema.optional(),
   state: toolStateSchema,
   tool: z.string(),
   type: z.literal("tool"),
@@ -443,7 +439,7 @@ export const opencodeMessageErrorSchema = z.discriminatedUnion("name", [
     data: z.object({ message: z.string(), ref: z.string().optional() }),
     name: z.literal("UnknownError"),
   }),
-  z.object({ data: unknownRecordSchema, name: z.literal("MessageOutputLengthError") }),
+  z.object({ data: jsonObjectSchema, name: z.literal("MessageOutputLengthError") }),
   z.object({
     data: z.object({ message: z.string() }),
     name: z.literal("MessageAbortedError"),
@@ -470,7 +466,7 @@ const userMessageInfoSchema = z.object({
       z.object({ type: z.literal("text") }),
       z.object({
         retryCount: z.number().optional(),
-        schema: unknownRecordSchema,
+        schema: jsonObjectSchema,
         type: z.literal("json_schema"),
       }),
     ])
@@ -508,7 +504,7 @@ const assistantMessageInfoSchema = z.object({
   providerID: z.string(),
   role: z.literal("assistant"),
   sessionID: z.string(),
-  structured: z.unknown().optional(),
+  structured: jsonValueSchema.optional(),
   summary: z.boolean().optional(),
   time: z.object({ created: z.number(), completed: z.number().optional() }),
   tokens: tokenUsageSchema,

@@ -12,9 +12,6 @@ const readShellClientValue = (propertyKey: PropertyKey): HostClientValue | undef
     return undefined;
   }
   const value = client[propertyKey];
-  if (typeof value !== "function") {
-    return value;
-  }
 
   let existingBindings = shellClientMethodBindings.get(client);
   if (!existingBindings) {
@@ -26,13 +23,12 @@ const readShellClientValue = (propertyKey: PropertyKey): HostClientValue | undef
     return existingBinding;
   }
 
-  // SAFETY: binding changes only the receiver; the HostClient method signature stays unchanged.
-  const boundValue = value.bind(client) as HostClientValue;
+  const boundValue = value.bind(client);
   existingBindings.set(propertyKey, boundValue);
   return boundValue;
 };
 
-// SAFETY: Every HostClient property read is forwarded to the schema-backed shell client after hasOwnKey validation; the proxy target stores no independent state.
+// SAFETY: The traps implement the HostClient surface while the empty target preserves the existing virtual proxy behavior.
 const hostClientProxy = new Proxy(
   {},
   {

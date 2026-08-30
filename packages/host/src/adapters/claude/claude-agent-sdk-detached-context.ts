@@ -8,13 +8,7 @@ import { INIT_TIMEOUT_MS, withTimeout } from "./claude-agent-sdk-utils";
 export type ClaudeContextUsageQueryFactory = (input: {
   prompt: AsyncIterable<SDKUserMessage>;
   options: Options;
-}) => {
-  close(): void;
-  getContextUsage(): Promise<
-    Pick<Awaited<ReturnType<Query["getContextUsage"]>>, "maxTokens" | "totalTokens">
-  >;
-  initializationResult(): Promise<object>;
-};
+}) => Pick<Query, "close" | "getContextUsage" | "initializationResult">;
 
 export const loadClaudeDetachedSessionContextUsage = async (input: {
   claudeExecutablePath: string;

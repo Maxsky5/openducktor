@@ -323,7 +323,7 @@ export function useSessionStartModalRunner({
 
   const confirmModal = useCallback(
     async (input?: Parameters<SessionStartModalModel["onConfirm"]>[0]) => {
-      if (!input || typeof input === "boolean") {
+      if (!input || input === true) {
         return;
       }
 

@@ -18,16 +18,17 @@ export const applyFinalAssistantTurnMetadata = (
   }
 
   const tokenUsageFields = tokenUsage ? codexTokenUsageHistoryFields(tokenUsage) : null;
-  return {
+  const nextMessage: AgentSessionHistoryMessage = {
     ...message,
-    ...(turnTiming ? { durationMs: turnTiming.durationMs } : undefined),
     ...tokenUsageFields,
-    ...(tokenUsageFields
-      ? {
-          parts: message.parts.map((part) =>
-            isStopFinishPart(part) ? { ...part, ...tokenUsageFields } : part,
-          ),
-        }
-      : undefined),
   };
+  if (turnTiming) {
+    nextMessage.durationMs = turnTiming.durationMs;
+  }
+  if (tokenUsageFields) {
+    nextMessage.parts = message.parts.map((part) =>
+      isStopFinishPart(part) ? { ...part, ...tokenUsageFields } : part,
+    );
+  }
+  return nextMessage;
 };

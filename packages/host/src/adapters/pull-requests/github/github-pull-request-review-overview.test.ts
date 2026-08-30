@@ -4,16 +4,13 @@ import type { GithubCommandDependencies } from "../../../application/tasks/suppo
 import { HostOperationError } from "../../../effect/host-errors";
 import { loadGithubPullRequestReviewOverview } from "./github-pull-request-review-overview";
 import { createGithubReviewTestDependencies } from "./github-pull-request-review.test-support";
-const isResponseFactory = <Response>(
-  value: Response | ((args: string[]) => Response),
-): value is (args: string[]) => Response => typeof value === "function";
 
 const createDependencies = <Response>({
   commands = [],
   response,
 }: {
   commands?: string[][];
-  response: Response | ((args: string[]) => Response);
+  response: (args: string[]) => Response;
 }): GithubCommandDependencies => {
   return createGithubReviewTestDependencies((_command, args) => {
     commands.push(args);
@@ -25,7 +22,7 @@ const createDependencies = <Response>({
         }),
       );
     }
-    const payload = isResponseFactory(response) ? response(args) : response;
+    const payload = response(args);
     return Effect.succeed({ ok: true, stdout: JSON.stringify(payload), stderr: "" });
   });
 };
@@ -79,30 +76,31 @@ describe("loadGithubPullRequestReviewOverview", () => {
         input(
           createDependencies({
             commands,
-            response: responsePage({
-              comments: [
-                {
-                  id: "comment-1",
-                  author: { login: "reviewer", avatarUrl: reviewerAvatarUrl },
-                  body: "Please check spacing.",
-                  url: "https://github.com/openai/openducktor/pull/42#issuecomment-1",
-                  createdAt: "2026-07-08T10:00:00Z",
-                  updatedAt: "2026-07-08T10:01:00Z",
-                },
-              ],
-              reviews: [
-                {
-                  id: "review-1",
-                  author: { login: "reviewer", avatarUrl: reviewerAvatarUrl },
-                  body: "Changes requested.",
-                  state: "CHANGES_REQUESTED",
-                  url: "https://github.com/openai/openducktor/pull/42#pullrequestreview-1",
-                  createdAt: "2026-07-08T10:02:00Z",
-                  submittedAt: "2026-07-08T10:03:00Z",
-                  updatedAt: "2026-07-08T10:04:00Z",
-                },
-              ],
-            }),
+            response: () =>
+              responsePage({
+                comments: [
+                  {
+                    id: "comment-1",
+                    author: { login: "reviewer", avatarUrl: reviewerAvatarUrl },
+                    body: "Please check spacing.",
+                    url: "https://github.com/openai/openducktor/pull/42#issuecomment-1",
+                    createdAt: "2026-07-08T10:00:00Z",
+                    updatedAt: "2026-07-08T10:01:00Z",
+                  },
+                ],
+                reviews: [
+                  {
+                    id: "review-1",
+                    author: { login: "reviewer", avatarUrl: reviewerAvatarUrl },
+                    body: "Changes requested.",
+                    state: "CHANGES_REQUESTED",
+                    url: "https://github.com/openai/openducktor/pull/42#pullrequestreview-1",
+                    createdAt: "2026-07-08T10:02:00Z",
+                    submittedAt: "2026-07-08T10:03:00Z",
+                    updatedAt: "2026-07-08T10:04:00Z",
+                  },
+                ],
+              }),
           }),
         ),
       ),
@@ -298,15 +296,16 @@ describe("loadGithubPullRequestReviewOverview", () => {
       loadGithubPullRequestReviewOverview(
         input(
           createDependencies({
-            response: responsePage({
-              comments: [],
-              reviews: [
-                { id: "approved", body: "", state: "APPROVED" },
-                { id: "changes", body: "   ", state: "CHANGES_REQUESTED" },
-                { id: "commented", body: "", state: "COMMENTED" },
-                { id: "dismissed", body: "", state: "DISMISSED" },
-              ],
-            }),
+            response: () =>
+              responsePage({
+                comments: [],
+                reviews: [
+                  { id: "approved", body: "", state: "APPROVED" },
+                  { id: "changes", body: "   ", state: "CHANGES_REQUESTED" },
+                  { id: "commented", body: "", state: "COMMENTED" },
+                  { id: "dismissed", body: "", state: "DISMISSED" },
+                ],
+              }),
           }),
         ),
       ),
@@ -332,13 +331,14 @@ describe("loadGithubPullRequestReviewOverview", () => {
       loadGithubPullRequestReviewOverview(
         input(
           createDependencies({
-            response: responsePage({
-              comments: [],
-              reviews: [
-                { id: "pending-empty", body: "", state: "PENDING" },
-                { id: "pending-draft", body: "Draft guidance", state: "PENDING" },
-              ],
-            }),
+            response: () =>
+              responsePage({
+                comments: [],
+                reviews: [
+                  { id: "pending-empty", body: "", state: "PENDING" },
+                  { id: "pending-draft", body: "Draft guidance", state: "PENDING" },
+                ],
+              }),
           }),
         ),
       ),
@@ -356,10 +356,11 @@ describe("loadGithubPullRequestReviewOverview", () => {
       loadGithubPullRequestReviewOverview(
         input(
           createDependencies({
-            response: responsePage({
-              comments: [],
-              reviews: [{ id: "review-invalid", body: "Review", state }],
-            }),
+            response: () =>
+              responsePage({
+                comments: [],
+                reviews: [{ id: "review-invalid", body: "Review", state }],
+              }),
           }),
         ),
       ).pipe(Effect.either),
@@ -378,10 +379,11 @@ describe("loadGithubPullRequestReviewOverview", () => {
       loadGithubPullRequestReviewOverview(
         input(
           createDependencies({
-            response: responsePage({
-              comments: [],
-              reviews: [{ id: "review-invalid", body: { text: "Review" }, state: "APPROVED" }],
-            }),
+            response: () =>
+              responsePage({
+                comments: [],
+                reviews: [{ id: "review-invalid", body: { text: "Review" }, state: "APPROVED" }],
+              }),
           }),
         ),
       ).pipe(Effect.either),
@@ -400,7 +402,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
       loadGithubPullRequestReviewOverview(
         input(
           createDependencies({
-            response: responsePage({ comments: [], reviews: [null] }),
+            response: () => responsePage({ comments: [], reviews: [null] }),
           }),
         ),
       ).pipe(Effect.either),
@@ -434,9 +436,9 @@ describe("loadGithubPullRequestReviewOverview", () => {
     };
 
     const result = await Effect.runPromise(
-      loadGithubPullRequestReviewOverview(input(createDependencies({ response: malformed }))).pipe(
-        Effect.either,
-      ),
+      loadGithubPullRequestReviewOverview(
+        input(createDependencies({ response: () => malformed })),
+      ).pipe(Effect.either),
     );
 
     expect(result._tag).toBe("Left");

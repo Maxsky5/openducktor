@@ -4,6 +4,7 @@ import {
 } from "@openducktor/contracts";
 import type { JsonObject } from "@openducktor/contracts";
 import { type AgentPendingApprovalRequest, classifyAgentApprovalMutation } from "@openducktor/core";
+import { z } from "zod";
 
 type OpenCodePermissionReply = "once" | "always" | "reject";
 
@@ -13,7 +14,8 @@ const OPENCODE_ODT_WORKFLOW_TOOL_ALIASES =
 
 const readOptionalString = (record: JsonObject | undefined, key: string): string | undefined => {
   const value = record?.[key];
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+  const parsed = z.string().safeParse(value);
+  return parsed.success && parsed.data.trim().length > 0 ? parsed.data : undefined;
 };
 
 export type ParsedOpenCodePermissionRequest = {
@@ -45,22 +47,20 @@ export const toAgentApprovalRequestFromOpenCodePermission = ({
   const summary = `OpenCode requested approval for ${permission}.`;
   const workingDirectory = readOptionalString(metadata, "workingDirectory");
 
-  return {
+  const opencodeMetadata: JsonObject = { permission, patterns };
+  if (save && save.length > 0) {
+    opencodeMetadata.save = save;
+  }
+  if (metadata) {
+    opencodeMetadata.metadata = metadata;
+  }
+
+  const approvalRequest: AgentPendingApprovalRequest = {
     requestId,
     requestType: toolName ? "runtime_tool" : "permission_grant",
     title,
     summary,
-    ...(patterns.length > 0 ? { affectedPaths: patterns } : undefined),
-    ...(command
-      ? {
-          command: {
-            command,
-            ...(workingDirectory ? { workingDirectory } : undefined),
-          },
-        }
-      : undefined),
     action: { name: permission },
-    ...(toolName ? { tool: { name: toolName } } : undefined),
     mutation: classifyAgentApprovalMutation({
       actionName: permission,
       toolName,
@@ -70,14 +70,19 @@ export const toAgentApprovalRequestFromOpenCodePermission = ({
     }),
     supportedReplyOutcomes: [...OPENCODE_APPROVAL_OUTCOMES],
     metadata: {
-      opencode: {
-        permission,
-        patterns,
-        ...(save && save.length > 0 ? { save } : undefined),
-        ...(metadata ? { metadata } : undefined),
-      },
+      opencode: opencodeMetadata,
     },
   };
+  if (patterns.length > 0) {
+    approvalRequest.affectedPaths = patterns;
+  }
+  if (command) {
+    approvalRequest.command = workingDirectory ? { command, workingDirectory } : { command };
+  }
+  if (toolName) {
+    approvalRequest.tool = { name: toolName };
+  }
+  return approvalRequest;
 };
 
 export const toOpenCodePermissionReply = (

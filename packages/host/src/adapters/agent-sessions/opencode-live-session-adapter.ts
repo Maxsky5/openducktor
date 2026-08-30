@@ -55,10 +55,10 @@ export type CreateOpenCodeLiveSessionAdapterPreparerInput = {
   readonly prepareRuntime?: PrepareOpencodeSessionRuntime;
 };
 
-const stateEffect = <Value>(
+const stateEffect = <Value, Details extends object>(
   operation: string,
   run: () => Value,
-  details: HostErrorDetails,
+  details: HostErrorDetails<Details>,
 ): Effect.Effect<Value, HostError> =>
   Effect.try({
     try: run,
@@ -293,6 +293,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
         );
 
       const adapter: AgentSessionRuntimeAdapterPort = {
+        supportsSessionControl: true,
         binding: {
           runtimeId: runtime.runtimeId,
           runtimeKind: runtime.kind,
@@ -355,13 +356,22 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
             ).pipe(
               Effect.flatMap((route) =>
                 Effect.tryPromise({
-                  try: () =>
-                    prepared.connection.replyApproval({
-                      ref: route.ref,
-                      nativeRequestId: route.nativeRequestId,
-                      outcome: input.outcome,
-                      ...(input.message ? { message: input.message } : undefined),
-                    }),
+                  try: () => {
+                    const request: Parameters<typeof prepared.connection.replyApproval>[0] =
+                      input.message
+                        ? {
+                            ref: route.ref,
+                            nativeRequestId: route.nativeRequestId,
+                            outcome: input.outcome,
+                            message: input.message,
+                          }
+                        : {
+                            ref: route.ref,
+                            nativeRequestId: route.nativeRequestId,
+                            outcome: input.outcome,
+                          };
+                    return prepared.connection.replyApproval(request);
+                  },
                   catch: (cause) =>
                     toHostOperationError(cause, "opencode-live-session.reply-approval", {
                       runtimeId: runtime.runtimeId,

@@ -158,14 +158,15 @@ export const createTaskAssetAwareCreate =
         ) {
           return Effect.fail(cause);
         }
-        const error = asTaskAssetError({
+        const errorInput: Parameters<typeof asTaskAssetError>[0] = {
           cause,
           operation: "create",
           phase: "create_task_with_assets",
           message: "Failed to create the task with its description assets.",
-          ...(createdTaskId ? { taskId: createdTaskId } : undefined),
           assetIds: Array.from(referencedAssetIds),
-        });
+        };
+        if (createdTaskId) errorInput.taskId = createdTaskId;
+        const error = asTaskAssetError(errorInput);
         if (!createdTaskId) {
           return Effect.fail(error);
         }

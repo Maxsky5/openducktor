@@ -6,13 +6,13 @@ import type {
   ReusablePrompt,
   SettingsSnapshot,
 } from "@openducktor/contracts";
-import type { Dispatch, SetStateAction } from "react";
 import { useCallback } from "react";
 import { ensureDraftAgentDefault } from "@/components/features/settings";
+import type { SettingsSnapshotDraftUpdater } from "./use-settings-modal-snapshot-state";
 
 type UseSettingsModalDraftActionsArgs = {
   selectedWorkspaceId: string | null;
-  setSnapshotDraft: Dispatch<SetStateAction<SettingsSnapshot | null>>;
+  setSnapshotDraft: (updater: SettingsSnapshotDraftUpdater) => void;
 };
 
 export type SettingsModalDraftActions = {

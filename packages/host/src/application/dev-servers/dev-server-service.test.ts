@@ -1,5 +1,6 @@
 import type { HostEventEnvelope, RepoConfig, TaskWorktreeSummary } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { z } from "zod";
 import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
 import type { HostEventBusPort } from "../../events/host-event-bus";
 import type {
@@ -116,7 +117,36 @@ const createProcessPort = () => {
   };
   return { handles, processPort, starts, stoppedPids };
 };
-const expectStartFailure = async (service: TestDevServerService): Promise<HostOperationError> => {
+const devServerStartFailureSchema = z.object({
+  message: z.string(),
+  details: z.object({
+    cleanupErrors: z.array(z.string()),
+    failedScripts: z.array(
+      z.object({
+        command: z.string(),
+        message: z.string(),
+        name: z.string(),
+        scriptId: z.string(),
+      }),
+    ),
+    repoPath: z.string(),
+    stoppedScripts: z.array(
+      z.object({
+        command: z.string(),
+        name: z.string(),
+        pid: z.number(),
+        repoPath: z.string(),
+        scriptId: z.string(),
+        taskId: z.string(),
+      }),
+    ),
+    taskId: z.string(),
+  }),
+});
+
+const expectStartFailure = async (
+  service: TestDevServerService,
+): Promise<z.output<typeof devServerStartFailureSchema>> => {
   const startResult = await Effect.runPromise(
     Effect.either(service.start({ repoPath: "/repo", taskId: "task-1" })),
   );
@@ -126,7 +156,7 @@ const expectStartFailure = async (service: TestDevServerService): Promise<HostOp
   if (!(startResult.left instanceof HostOperationError)) {
     throw new Error("Expected dev server start to fail with HostOperationError.");
   }
-  return startResult.left;
+  return devServerStartFailureSchema.parse(startResult.left);
 };
 describe("createDevServerService", () => {
   test("returns stopped state for configured dev server scripts", async () => {
@@ -314,17 +344,14 @@ describe("createDevServerService", () => {
     });
 
     const state = await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    const terminalChunkPayloadSchema = z.object({
+      type: z.literal("terminal_chunk"),
+      terminalChunk: z.object({ data: z.string(), sequence: z.number() }),
+    });
     const terminalChunks = events
-      .map((event) => event.payload)
-      .filter(
-        (payload): payload is { terminalChunk: { data: string; sequence: number }; type: string } =>
-          typeof payload === "object" &&
-          payload !== null &&
-          "type" in payload &&
-          payload.type === "terminal_chunk" &&
-          "terminalChunk" in payload,
-      )
-      .map((payload) => payload.terminalChunk);
+      .map((event) => terminalChunkPayloadSchema.safeParse(event.payload))
+      .filter((payload) => payload.success)
+      .map((payload) => payload.data.terminalChunk);
 
     expect(terminalChunks.map((chunk) => chunk.sequence)).toEqual([0, 1, 2]);
     expect(terminalChunks.map((chunk) => chunk.data)).toEqual([

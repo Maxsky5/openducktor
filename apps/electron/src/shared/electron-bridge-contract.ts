@@ -45,8 +45,7 @@ export const ELECTRON_TASK_STREAM_ACKNOWLEDGE_CHANNEL = "openducktor:task-stream
 export const ELECTRON_TASK_STREAM_UNSUBSCRIBE_CHANNEL = "openducktor:task-stream:unsubscribe";
 export const ELECTRON_WINDOW_TITLE_BAR_HEIGHT = 40;
 
-const ipcRecordSchema = z.custom<Record<string, unknown>>((value) => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+const ipcRecordSchema = z.record(z.string(), z.unknown()).refine((value) => {
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
 });
@@ -59,18 +58,8 @@ export const electronHostInvokeRequestSchema = ipcRecordSchema.and(
 );
 export type ElectronHostInvokeRequest = z.output<typeof electronHostInvokeRequestSchema>;
 
-const hostCommandResultSchema = z.custom<HostCommandResult>(
-  (value) =>
-    value === undefined ||
-    value === null ||
-    typeof value === "object" ||
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean",
-);
-
 const electronHostInvokeResultWireSchema = z.discriminatedUnion("ok", [
-  z.strictObject({ ok: z.literal(true), value: hostCommandResultSchema }),
+  z.strictObject({ ok: z.literal(true), value: z.unknown() }),
   z.strictObject({
     ok: z.literal(false),
     error: z.strictObject({
@@ -79,14 +68,20 @@ const electronHostInvokeResultWireSchema = z.discriminatedUnion("ok", [
     }),
   }),
 ]);
-export type ElectronHostInvokeResult = z.output<typeof electronHostInvokeResultWireSchema>;
+type ElectronHostInvokeFailureResult = Extract<
+  z.output<typeof electronHostInvokeResultWireSchema>,
+  { ok: false }
+>;
+export type ElectronHostInvokeWireResult = z.output<typeof electronHostInvokeResultWireSchema>;
+export type ElectronHostInvokeResult<Command extends HostCommandName = HostCommandName> =
+  | { ok: true; value: HostCommandResult<Command> }
+  | ElectronHostInvokeFailureResult;
 
 export const electronHostInvokeResponseSchema = z.discriminatedUnion("status", [
   z.strictObject({ status: z.literal("success"), payload: electronHostInvokeResultWireSchema }),
   z.strictObject({ status: z.literal("shutdown") }),
 ]);
-export type ElectronHostInvokeResponse = z.output<typeof electronHostInvokeResponseSchema>;
-export type ElectronHostInvokeWireResponse = z.input<typeof electronHostInvokeResponseSchema>;
+export type ElectronHostInvokeResponseEnvelope = z.output<typeof electronHostInvokeResponseSchema>;
 
 export type ElectronHostEventEnvelope = HostEventEnvelope;
 
@@ -160,8 +155,8 @@ export type OpenDucktorElectronApi = {
   platform: AppPlatform;
   invoke(
     command: HostCommandName,
-    args?: Record<string, unknown>,
-  ): Promise<ElectronHostInvokeResult>;
+    args?: ElectronHostInvokeRequest["args"],
+  ): Promise<ElectronHostInvokeWireResult>;
   subscribe<Channel extends HostEventChannel>(
     channel: Channel,
     listener: (payload: HostEventPayload<Channel>) => void,

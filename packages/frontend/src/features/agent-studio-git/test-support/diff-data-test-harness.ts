@@ -11,7 +11,7 @@ import {
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 
 enableReactActEnvironment();
-if (typeof globalThis.document === "undefined") {
+if (globalThis.document === undefined) {
   GlobalRegistrator.register();
 }
 
@@ -85,7 +85,14 @@ export const createDeferred = <T>() => {
   return { promise, resolve, reject };
 };
 
-const stableTestToken = <T>(value: T): string => {
+type WorktreeSnapshotTokenValue =
+  | Pick<
+      GitWorktreeStatus,
+      "currentBranch" | "fileStatuses" | "targetAheadBehind" | "upstreamAheadBehind"
+    >
+  | Pick<GitWorktreeStatus, "fileDiffs">;
+
+const stableTestToken = (value: WorktreeSnapshotTokenValue): string => {
   return `test:${JSON.stringify(value)}`;
 };
 
@@ -118,7 +125,7 @@ export const withSnapshotHashes = (
 export const toWorktreeStatusSummary = (status: GitWorktreeStatus): GitWorktreeStatusSummary => {
   const staged = status.fileStatuses.filter((fileStatus) => fileStatus.staged).length;
   const total = status.fileStatuses.length;
-  return {
+  const summary: GitWorktreeStatusSummary = {
     currentBranch: status.currentBranch,
     fileStatusCounts: {
       total,
@@ -127,9 +134,10 @@ export const toWorktreeStatusSummary = (status: GitWorktreeStatus): GitWorktreeS
     },
     targetAheadBehind: status.targetAheadBehind,
     upstreamAheadBehind: status.upstreamAheadBehind,
-    ...(status.gitConflict ? { gitConflict: status.gitConflict } : undefined),
     snapshot: status.snapshot,
   };
+  if (status.gitConflict) summary.gitConflict = status.gitConflict;
+  return summary;
 };
 
 const createDefaultWorktreeStatus = (

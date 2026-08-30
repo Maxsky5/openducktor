@@ -5,6 +5,7 @@ import type {
   SDKUserMessage,
   SlashCommand,
 } from "@anthropic-ai/claude-agent-sdk";
+import type { JsonObject } from "@openducktor/contracts";
 import type {
   AgentEvent,
   AgentModelSelection,
@@ -23,7 +24,10 @@ export type {
   ClaudeAgentSdkServiceError,
 } from "../../application/runtimes/claude-agent-sdk-service";
 
-import type { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import type {
+  HostOperationErrorAggregate,
+  HostValidationErrorAggregate,
+} from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { OpenDucktorMcpBridgeConnection } from "../mcp/openducktor-mcp-environment";
@@ -32,11 +36,11 @@ import type { AsyncInputQueue } from "./claude-agent-sdk-queue";
 
 export type ClaudeMcpBridgeConnectionResolver = (
   repoPath: string,
-) => Effect.Effect<OpenDucktorMcpBridgeConnection, HostOperationError>;
+) => Effect.Effect<OpenDucktorMcpBridgeConnection, HostOperationErrorAggregate>;
 
 export type CreateClaudeAgentSdkServiceInput = {
   emit?: (session: ClaudeSessionContext, event: ClaudeAgentSdkEvent) => void;
-  onBackgroundFailure: (failure: HostOperationError) => Effect.Effect<void, never>;
+  onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   processEnv?: NodeJS.ProcessEnv;
   resolveMcpBridgeConnection: ClaudeMcpBridgeConnectionResolver;
   runtimeDistribution: HostRuntimeDistribution;
@@ -48,6 +52,7 @@ export type CreateClaudeAgentSdkServiceInput = {
 };
 
 export type ClaudeAgentSdkEvent = AgentEvent;
+export type ClaudeToolInput = JsonObject;
 
 export type ClaudeAgentSdkEventEmitter = (
   session: ClaudeSessionContext,
@@ -129,7 +134,7 @@ export type ClaudeSession = {
   subagentAgentIdsByToolUseId?: Map<string, string>;
   subagentTaskIdsByToolUseId: Map<string, string>;
   toolEndedAtMsByCallId: Map<string, number>;
-  toolInputsByCallId: Map<string, Record<string, unknown>>;
+  toolInputsByCallId: Map<string, ClaudeToolInput>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
   toolStartedAtMsByCallId: Map<string, number>;
@@ -147,8 +152,10 @@ export type ClaudeSessionStore = {
   ): Effect.Effect<{ supported: boolean; hasLiveSession: boolean }, never>;
   set(session: ClaudeSession): void;
   subscribeClose(listener: (session: ClaudeSession) => void): () => void;
-  stopSession(input: SessionRef): Effect.Effect<void, HostOperationError | HostValidationError>;
-  stopSessionsForRuntime(runtimeId: string): Effect.Effect<void, HostOperationError>;
+  stopSession(
+    input: SessionRef,
+  ): Effect.Effect<void, HostOperationErrorAggregate | HostValidationErrorAggregate>;
+  stopSessionsForRuntime(runtimeId: string): Effect.Effect<void, HostOperationErrorAggregate>;
   values(): IterableIterator<ClaudeSession>;
 };
 

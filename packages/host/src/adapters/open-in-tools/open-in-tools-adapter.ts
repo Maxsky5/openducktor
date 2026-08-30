@@ -5,8 +5,9 @@ import type { SystemOpenInToolId, SystemOpenInToolInfo } from "@openducktor/cont
 import { Effect } from "effect";
 import {
   HostOperationError,
-  type HostPathAccessError,
-  type HostPathNotFoundError,
+  type HostOperationErrorAggregate,
+  type HostPathAccessErrorAggregate,
+  type HostPathNotFoundErrorAggregate,
   HostValidationError,
   toHostOperationError,
   toHostPathStatError,
@@ -26,17 +27,22 @@ import {
 
 export type CreateOpenInToolsAdapterInput = {
   platform?: NodeJS.Platform;
-  pathExists?: (inputPath: string) => Effect.Effect<boolean, HostPathAccessError>;
-  pathIsDirectory?: (inputPath: string) => Effect.Effect<boolean, HostPathAccessError>;
+  pathExists?: (inputPath: string) => Effect.Effect<boolean, HostPathAccessErrorAggregate>;
+  pathIsDirectory?: (inputPath: string) => Effect.Effect<boolean, HostPathAccessErrorAggregate>;
   homeDirectory?: () => string;
   realpathFn?: (
     inputPath: string,
-  ) => Effect.Effect<string, HostPathAccessError | HostPathNotFoundError>;
+  ) => Effect.Effect<string, HostPathAccessErrorAggregate | HostPathNotFoundErrorAggregate>;
   systemCommands?: Pick<SystemCommandPort, "resolveCommandPath" | "runCommandAllowFailure">;
   processEnv?: NodeJS.ProcessEnv;
 };
 
 type RunOpenInCommand = Pick<SystemCommandPort, "runCommandAllowFailure">["runCommandAllowFailure"];
+
+type OpenExternalUrlCommand = {
+  program: string;
+  args: string[];
+};
 
 const defaultPathExists = (inputPath: string) =>
   Effect.tryPromise({
@@ -82,14 +88,17 @@ const buildLaunchArgs = (
   return ["-a", appPath, directoryPath];
 };
 
-const buildOpenExternalUrlCommand = (platform: NodeJS.Platform, url: string) => {
+const buildOpenExternalUrlCommand = (
+  platform: NodeJS.Platform,
+  url: string,
+): OpenExternalUrlCommand => {
   switch (platform) {
     case "darwin":
-      return { program: "open", args: [url] } satisfies { program: string; args: string[] };
+      return { program: "open", args: [url] };
     case "linux":
-      return { program: "xdg-open", args: [url] } satisfies { program: string; args: string[] };
+      return { program: "xdg-open", args: [url] };
     case "win32":
-      return { program: "explorer.exe", args: [url] } satisfies { program: string; args: string[] };
+      return { program: "explorer.exe", args: [url] };
     default:
       throw new HostValidationError({
         message: `Opening external URLs is not supported on ${platform}.`,
@@ -218,7 +227,7 @@ export const createOpenInToolsAdapter = ({
     });
   const resolveDirectApplicationPathByName = (
     appName: string,
-  ): Effect.Effect<string | null, HostPathAccessError> =>
+  ): Effect.Effect<string | null, HostPathAccessErrorAggregate> =>
     Effect.gen(function* () {
       for (const candidate of candidateApplicationPaths(appName, homeDirectory)) {
         if (yield* pathExists(candidate)) {
@@ -230,7 +239,7 @@ export const createOpenInToolsAdapter = ({
     });
   const resolveApplicationPathWithSpotlight = (
     appName: string,
-  ): Effect.Effect<string | null, HostOperationError | HostPathAccessError> =>
+  ): Effect.Effect<string | null, HostOperationErrorAggregate | HostPathAccessErrorAggregate> =>
     Effect.gen(function* () {
       const bundleName = bundleNameForApp(appName);
       const output = yield* runRequiredOpenInCommand("mdfind", ["-name", bundleName]);
@@ -251,7 +260,7 @@ export const createOpenInToolsAdapter = ({
 
   const resolveApplicationPath = (
     metadata: MacOpenInToolMetadata,
-  ): Effect.Effect<string | null, HostOperationError | HostPathAccessError> =>
+  ): Effect.Effect<string | null, HostOperationErrorAggregate | HostPathAccessErrorAggregate> =>
     Effect.gen(function* () {
       for (const appName of metadata.appNames) {
         const appPath = yield* resolveDirectApplicationPathByName(appName);
@@ -273,7 +282,10 @@ export const createOpenInToolsAdapter = ({
   const buildToolInfo = (
     metadata: MacOpenInToolMetadata,
     appPath: string,
-  ): Effect.Effect<SystemOpenInToolInfo, HostOperationError | HostPathAccessError> =>
+  ): Effect.Effect<
+    SystemOpenInToolInfo,
+    HostOperationErrorAggregate | HostPathAccessErrorAggregate
+  > =>
     Effect.gen(function* () {
       const iconDataUrl = yield* resolveMacOsAppIconDataUrl({
         appLabel: metadata.label,
@@ -289,7 +301,10 @@ export const createOpenInToolsAdapter = ({
 
   const resolveDiscoveredTool = (
     metadata: MacOpenInToolMetadata,
-  ): Effect.Effect<SystemOpenInToolInfo | null, HostOperationError | HostPathAccessError> =>
+  ): Effect.Effect<
+    SystemOpenInToolInfo | null,
+    HostOperationErrorAggregate | HostPathAccessErrorAggregate
+  > =>
     Effect.gen(function* () {
       const appPath = yield* resolveApplicationPath(metadata);
       if (!appPath) {

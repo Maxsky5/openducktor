@@ -17,7 +17,7 @@ import { readStringProp } from "./claude-agent-sdk-utils";
 
 type ClaudePostToolUseSession = ClaudeEventSession & Pick<ClaudeSession, "toolEndedAtMsByCallId">;
 
-const hookResponseText = (response: Record<string, unknown>): string =>
+const hookResponseText = (response: ReturnType<typeof parseClaudeFileEditToolResponse>): string =>
   readStringProp(response, "message") ?? readStringProp(response, "content") ?? "";
 
 const emitFileEditResult = ({
@@ -38,17 +38,20 @@ const emitFileEditResult = ({
   const toolInput = input.tool_input;
   const startedAtMs = session.toolStartedAtMsByCallId.get(input.tool_use_id);
   const endedAtMs = session.toolEndedAtMsByCallId.get(input.tool_use_id) ?? timestampMs(timestamp);
-  const part = createClaudeCompletedToolPart({
+  const completedToolInput: Parameters<typeof createClaudeCompletedToolPart>[0] = {
     callId: input.tool_use_id,
     endedAtMs,
+    input: toolInput,
     isError: false,
     messageId: session.toolMessageIdsByCallId.get(input.tool_use_id) ?? input.tool_use_id,
     raw: toolResponse,
     text: hookResponseText(toolResponse),
     tool: input.tool_name,
-    ...(toolInput ? { input: toolInput } : undefined),
-    ...(typeof startedAtMs === "number" ? { startedAtMs } : undefined),
-  });
+  };
+  if (startedAtMs !== undefined) {
+    completedToolInput.startedAtMs = startedAtMs;
+  }
+  const part = createClaudeCompletedToolPart(completedToolInput);
   if (!part.fileDiffs) {
     return;
   }

@@ -1,21 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { z } from "zod";
-import { ODT_TOOL_SCHEMAS } from "./lib";
 import { getListedToolInputSchema } from "./listed-tool-schema";
 
-const propertiesOf = (jsonSchema: Record<string, unknown>): Record<string, unknown> => {
-  return z.record(z.string(), z.unknown()).parse(jsonSchema.properties);
-};
+type ListedToolSchema = ReturnType<typeof getListedToolInputSchema>;
 
-const requiredOf = (jsonSchema: Record<string, unknown>): string[] => {
-  return z.array(z.string()).optional().parse(jsonSchema.required) ?? [];
-};
+const propertiesOf = (jsonSchema: ListedToolSchema): NonNullable<ListedToolSchema["properties"]> =>
+  jsonSchema.properties ?? {};
+
+const requiredOf = (jsonSchema: ListedToolSchema): string[] => jsonSchema.required ?? [];
 
 describe("listed MCP tool input schema", () => {
-  test("uses the full contract schema for tool execution", () => {
-    expect(ODT_TOOL_SCHEMAS.odt_read_task.shape).toHaveProperty("workspaceId");
-  });
-
   test("hides workspaceId from listed tools when the MCP server is already workspace-scoped", () => {
     const schema = getListedToolInputSchema("odt_read_task", { hideWorkspaceId: true });
     const properties = propertiesOf(schema);

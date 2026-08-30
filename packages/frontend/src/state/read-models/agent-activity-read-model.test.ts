@@ -13,19 +13,24 @@ const buildSession = (
     startedAt?: string;
     activityState?: AgentSessionSummary["activityState"];
   } = {},
-): AgentSessionSummary => ({
-  externalSessionId: overrides.externalSessionId ?? "session-1",
-  ...(overrides.title ? { title: overrides.title } : undefined),
-  runtimeKind: overrides.runtimeKind ?? "opencode",
-  workingDirectory: overrides.workingDirectory ?? "/repo/worktree",
-  taskId: overrides.taskId ?? "task-1",
-  role: overrides.role ?? ("spec" as const),
-  startedAt: overrides.startedAt ?? "2026-02-26T09:00:00.000Z",
-  activityState: overrides.activityState ?? "idle",
-  pendingApprovalCount: 0,
-  pendingQuestionCount: 0,
-  selectedModel: null,
-});
+): AgentSessionSummary => {
+  const session: AgentSessionSummary = {
+    externalSessionId: overrides.externalSessionId ?? "session-1",
+    runtimeKind: overrides.runtimeKind ?? "opencode",
+    workingDirectory: overrides.workingDirectory ?? "/repo/worktree",
+    taskId: overrides.taskId ?? "task-1",
+    role: overrides.role ?? "spec",
+    startedAt: overrides.startedAt ?? "2026-02-26T09:00:00.000Z",
+    activityState: overrides.activityState ?? "idle",
+    pendingApprovalCount: 0,
+    pendingQuestionCount: 0,
+    selectedModel: null,
+  };
+  if (overrides.title) {
+    session.title = overrides.title;
+  }
+  return session;
+};
 
 describe("summarizeAgentActivity", () => {
   test("counts active sessions from published activity state", () => {

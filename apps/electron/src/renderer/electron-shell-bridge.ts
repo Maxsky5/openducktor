@@ -44,10 +44,10 @@ const subscribeElectronEvent =
 
 export const createElectronShellBridge = (): ShellBridge => {
   const electronApi = getElectronApi();
-  const client = createHostClient(async (command, args) => {
+  const client = createHostClient(async (command, args, resultSchema) => {
     const response = await electronApi.invoke(command, args);
     if (response.ok) {
-      return response.value;
+      return resultSchema.parse(response.value);
     }
     const failure = response.error.failure
       ? hostInvokeFailureSchema.parse(response.error.failure)

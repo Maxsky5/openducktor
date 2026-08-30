@@ -9,8 +9,6 @@ import {
 } from "./opencode-ingress";
 import { isConsumedOpencodeEventType, isKnownOpencodeEventType } from "./opencode-event-policy";
 
-const unknownRecordSchema = z.record(z.string(), z.unknown());
-
 const eventSchema = <Type extends string, Properties extends z.ZodType>(
   type: Type,
   properties: Properties,
@@ -235,7 +233,7 @@ const opencodeIngressEventSchema = z.union([opencodeDirectEventSchema, ignoredDi
 
 const syncEventSchema = z.object({
   aggregateID: z.string(),
-  data: unknownRecordSchema,
+  data: jsonObjectSchema,
   id: z.string(),
   seq: z.number(),
   type: z.string(),
@@ -263,6 +261,10 @@ export type OpencodeGlobalEventPayload =
 export type ParsedOpencodeEvent = z.output<typeof opencodeDirectEventSchema>;
 export type ParsedOpencodeIngressEvent = z.output<typeof opencodeIngressEventSchema>;
 export type ParsedOpencodeGlobalEventPayload = z.output<typeof opencodeGlobalEventPayloadSchema>;
+export type OpencodeGlobalEventPayloadInput =
+  | GlobalEvent["payload"]
+  | ParsedOpencodeGlobalEventPayload
+  | z.input<typeof opencodeGlobalEventPayloadSchema>;
 
 const formatIngressIssues = (issues: readonly z.core.$ZodIssue[]): string =>
   issues
@@ -282,7 +284,7 @@ const describeIngressEvent = (event: IngressEventDescriptor | null): string => {
 };
 
 export const parseOpencodeGlobalEventPayload = (
-  value: unknown,
+  value: OpencodeGlobalEventPayloadInput,
 ): ParsedOpencodeGlobalEventPayload => {
   const descriptor = ingressEventDescriptorSchema.safeParse(value);
   const parsed = opencodeGlobalEventPayloadSchema.safeParse(value);
@@ -294,7 +296,9 @@ export const parseOpencodeGlobalEventPayload = (
   return parsed.data;
 };
 
-export const parseOpencodeDirectEvent = (value: unknown): ParsedOpencodeEvent => {
+export const parseOpencodeDirectEvent = (
+  value: ParsedOpencodeEvent | z.input<typeof opencodeDirectEventSchema>,
+): ParsedOpencodeEvent => {
   const descriptor = ingressEventDescriptorSchema.safeParse(value);
   const parsed = opencodeDirectEventSchema.safeParse(value);
   if (!parsed.success) {
@@ -305,7 +309,9 @@ export const parseOpencodeDirectEvent = (value: unknown): ParsedOpencodeEvent =>
   return parsed.data;
 };
 
-export const parseOpencodeIngressEvent = (value: unknown): ParsedOpencodeIngressEvent => {
+export const parseOpencodeIngressEvent = (
+  value: ParsedOpencodeIngressEvent | z.input<typeof opencodeIngressEventSchema>,
+): ParsedOpencodeIngressEvent => {
   const descriptor = ingressEventDescriptorSchema.safeParse(value);
   const parsed = opencodeIngressEventSchema.safeParse(value);
   if (!parsed.success) {

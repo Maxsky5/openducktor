@@ -69,7 +69,6 @@ const parseCanonicalRendererMarkdown = (body: string) => {
 const canonicalRendererSemanticTree = (
   body: string,
 ): ReturnType<typeof parseCanonicalRendererMarkdown> => {
-  // SAFETY: serialization removes only positional fields and preserves the Markdown tree contract.
   return JSON.parse(
     JSON.stringify(parseCanonicalRendererMarkdown(body), (key, nestedValue) => {
       if (key === "position" || key === "spread") {
@@ -77,7 +76,7 @@ const canonicalRendererSemanticTree = (
       }
       return nestedValue;
     }),
-  ) as ReturnType<typeof parseCanonicalRendererMarkdown>;
+  );
 };
 
 export type MarkdownMathSemantic = {

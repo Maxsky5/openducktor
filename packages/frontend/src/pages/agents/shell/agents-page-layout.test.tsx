@@ -62,7 +62,7 @@ describe("AgentsPageWorkspacePanes", () => {
 describe("AgentsPageWorkspace terminal visibility", () => {
   test("keeps the selected file draft mounted across responsive layout changes", () => {
     let isNarrow = false;
-    const listeners = new Set<EventListenerOrEventListenerObject>();
+    const listeners = new Set<EventListener>();
     const mediaQueryList = {
       get matches() {
         return isNarrow;
@@ -71,10 +71,10 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       onchange: null,
       addListener: () => undefined,
       removeListener: () => undefined,
-      addEventListener: (_type: string, listener: EventListenerOrEventListenerObject) => {
+      addEventListener: (_type: string, listener: EventListener) => {
         listeners.add(listener);
       },
-      removeEventListener: (_type: string, listener: EventListenerOrEventListenerObject) => {
+      removeEventListener: (_type: string, listener: EventListener) => {
         listeners.delete(listener);
       },
       dispatchEvent: () => true,
@@ -126,8 +126,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
     act(() => {
       const event = new Event("change");
       for (const listener of listeners) {
-        if (typeof listener === "function") listener(event);
-        else listener.handleEvent(event);
+        listener(event);
       }
     });
 

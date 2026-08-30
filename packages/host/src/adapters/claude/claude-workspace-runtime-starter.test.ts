@@ -10,7 +10,7 @@ import {
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
-import type { ClaudeLiveSessionAdapterPreparer } from "../agent-sessions/claude-live-session-adapter";
+import type { ClaudeLiveSessionAdapterPreparer } from "../agent-sessions/claude-live-session-adapter-contract";
 import { createClaudeWorkspaceRuntimeStarter } from "./claude-workspace-runtime-starter";
 
 const createStartInput = () => ({
@@ -91,6 +91,7 @@ const createLiveSessionDependencies = ({
   const calls = { discarded: 0, forwarded: 0, registered: 0, released: 0 };
   let remainingReleaseFailures = releaseFailures;
   const adapter: AgentSessionLiveAdapterPort = {
+    supportsSessionControl: false,
     binding: { runtimeId: "runtime-1", runtimeKind: "claude", repoPath: "/repo" },
     matches: () => false,
     listRetainedSnapshots: () => Effect.succeed([]),

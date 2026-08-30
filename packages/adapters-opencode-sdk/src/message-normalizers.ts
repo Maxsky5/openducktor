@@ -7,11 +7,7 @@ import type {
 import { basenameForPath } from "@openducktor/path-support";
 import { detectAgentFileReferenceKind } from "./file-reference-utils";
 import { buildOpenCodeVisibleText } from "./opencode-user-message-encoding";
-import {
-  opencodeMessageInfoPayloadSchema,
-  opencodePartPayloadSchema,
-  type ParsedOpencodePart,
-} from "./opencode-ingress";
+import type { ParsedOpencodeMessage, ParsedOpencodePart } from "./opencode-ingress";
 
 const AUTO_SLASH_COMMAND_OPEN = "<auto-slash-command>";
 const AUTO_SLASH_COMMAND_CLOSE = "</auto-slash-command>";
@@ -155,11 +151,12 @@ const normalizeSubagentReferencePart = (
     name,
     label: name,
   };
-  return {
+  const displayPart: AgentUserMessageDisplayPart = {
     kind: "subagent_reference",
     subagent,
-    ...(part.source ? { sourceText: part.source } : undefined),
   };
+  if (part.source) displayPart.sourceText = part.source;
+  return displayPart;
 };
 
 const isAutoSlashCommandEnvelopeText = (text: string): boolean => {
@@ -306,34 +303,25 @@ export const readVisibleUserTextFromDisplayParts = (
 
 export const sanitizeAssistantMessage = (rawMessage: string): string => rawMessage.trim();
 
-export const readMessageModelSelection = (info: unknown): AgentModelSelection | undefined => {
-  const parsed = opencodeMessageInfoPayloadSchema.safeParse(info);
-  if (!parsed.success) {
-    return undefined;
-  }
-  const message = parsed.data;
-  const providerId = message.role === "user" ? message.model.providerID : message.providerID;
-  const modelId = message.role === "user" ? message.model.modelID : message.modelID;
-  const variant = message.role === "user" ? message.model.variant : message.variant;
+type MessageInfoInput = ParsedOpencodeMessage["info"];
 
-  return {
+export const readMessageModelSelection = (
+  info: MessageInfoInput,
+): AgentModelSelection | undefined => {
+  const providerId = info.role === "user" ? info.model.providerID : info.providerID;
+  const modelId = info.role === "user" ? info.model.modelID : info.modelID;
+  const variant = info.role === "user" ? info.model.variant : info.variant;
+
+  const selection: AgentModelSelection = {
     providerId,
     modelId,
-    ...(variant?.trim() ? { variant } : undefined),
-    ...(message.agent.trim() ? { profileId: message.agent } : undefined),
   };
+  if (variant?.trim()) selection.variant = variant;
+  if (info.agent.trim()) selection.profileId = info.agent;
+  return selection;
 };
 
-type TokenBreakdown = {
-  input: number;
-  output: number;
-  reasoning: number;
-  total?: number | undefined;
-  cache: {
-    read: number;
-    write: number;
-  };
-};
+type TokenBreakdown = Extract<ParsedOpencodePart, { type: "step-finish" }>["tokens"];
 
 const toFiniteNumber = (value: number | undefined): number | null => {
   if (value === undefined || Number.isNaN(value) || !Number.isFinite(value)) {
@@ -351,29 +339,17 @@ const sumTokenBreakdown = (breakdown: TokenBreakdown): number => {
   return Math.max(0, input + output + reasoning + cacheRead + cacheWrite);
 };
 
-export const toTokenTotal = (value: TokenBreakdown | number | undefined): number | undefined => {
-  if (typeof value === "number") {
-    const direct = toFiniteNumber(value);
-    return direct === null ? undefined : Math.max(0, direct);
-  }
-  if (!value) {
-    return undefined;
-  }
-  const explicitTotal = toFiniteNumber(value.total);
-  if (explicitTotal !== null && explicitTotal > 0) {
-    return explicitTotal;
-  }
+export const toTokenTotal = (value: TokenBreakdown): number | undefined => {
   const summed = sumTokenBreakdown(value);
   return summed > 0 ? summed : undefined;
 };
 
 export const extractMessageTotalTokens = (
-  info: unknown,
-  parts: readonly unknown[],
+  info: MessageInfoInput,
+  parts: readonly ParsedOpencodePart[],
 ): number | undefined => {
-  const parsedInfo = opencodeMessageInfoPayloadSchema.safeParse(info);
-  if (parsedInfo.success && parsedInfo.data.role === "assistant") {
-    const infoTokens = toTokenTotal(parsedInfo.data.tokens);
+  if (info.role === "assistant") {
+    const infoTokens = toTokenTotal(info.tokens);
     if (infoTokens !== undefined) {
       return infoTokens;
     }
@@ -381,11 +357,10 @@ export const extractMessageTotalTokens = (
 
   let maxPartTokens = 0;
   for (const part of parts) {
-    const parsedPart = opencodePartPayloadSchema.safeParse(part);
-    if (!parsedPart.success || parsedPart.data.type !== "step-finish") {
+    if (part.type !== "step-finish") {
       continue;
     }
-    const partTokens = toTokenTotal(parsedPart.data.tokens);
+    const partTokens = toTokenTotal(part.tokens);
     if (partTokens !== undefined && partTokens > maxPartTokens) {
       maxPartTokens = partTokens;
     }

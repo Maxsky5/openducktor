@@ -1,5 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
+import { z } from "zod";
 import { hostClient as host } from "@/lib/host-client";
 
 const TASK_DATA_STALE_TIME_MS = 30_000;
@@ -49,11 +50,12 @@ const invalidateRepoTaskDataQueries = (
     refetchType?: "active" | "inactive" | "all" | "none";
   },
 ) => {
-  return queryClient.invalidateQueries({
+  const filters: Parameters<QueryClient["invalidateQueries"]>[0] = {
     queryKey: taskQueryKeys.repoDataPrefix(repoPath),
     exact: false,
-    ...(options?.refetchType ? { refetchType: options.refetchType } : undefined),
-  });
+  };
+  if (options?.refetchType) filters.refetchType = options.refetchType;
+  return queryClient.invalidateQueries(filters);
 };
 
 export const refetchActiveKanbanQueries = (
@@ -78,15 +80,14 @@ const cachedKanbanQueryKeysForRepo = (
     })
     .reduce<Array<ReturnType<typeof taskQueryKeys.repoData>>>((keys, query) => {
       const queryKey = query.queryKey;
+      const doneVisibleDaysResult = z.number().nonnegative().safeParse(queryKey[3]);
       if (
         queryKey[0] === taskQueryKeys.all[0] &&
         queryKey[1] === "repo-data" &&
         queryKey[2] === repoPath &&
-        typeof queryKey[3] === "number" &&
-        queryKey[3] >= 0
+        doneVisibleDaysResult.success
       ) {
-        // SAFETY: The preceding runtime guard establishes `ReturnType<typeof taskQueryKeys.repoData>` before this assertion.
-        keys.push(queryKey as ReturnType<typeof taskQueryKeys.repoData>);
+        keys.push(taskQueryKeys.repoData(repoPath, doneVisibleDaysResult.data));
       }
       return keys;
     }, []);
@@ -101,12 +102,10 @@ export const refreshCachedKanbanQueries = async (
   );
   const force = options?.force ?? true;
   await Promise.all(
-    cachedQueryKeys.map(([, , , doneVisibleDays]) =>
-      queryClient.fetchQuery({
-        ...repoTaskDataQueryOptions(repoPath, doneVisibleDays),
-        ...(force ? { staleTime: 0 } : undefined),
-      }),
-    ),
+    cachedQueryKeys.map(([, , , doneVisibleDays]) => {
+      const query = repoTaskDataQueryOptions(repoPath, doneVisibleDays);
+      return queryClient.fetchQuery(force ? { ...query, staleTime: 0 } : query);
+    }),
   );
 };
 

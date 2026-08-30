@@ -12,7 +12,7 @@ import {
   DEV_SERVER_EMPTY_REASON,
 } from "./agent-studio-dev-server-panel";
 
-if (typeof globalThis.document === "undefined") {
+if (globalThis.document === undefined) {
   GlobalRegistrator.register();
 }
 

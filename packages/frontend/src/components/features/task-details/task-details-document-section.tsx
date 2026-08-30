@@ -61,20 +61,7 @@ export const TaskDetailsDocumentSection = memo(
             icon={icon}
             updatedAt={updatedAt}
             defaultExpanded={defaultExpanded}
-            headerAction={
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7 shrink-0"
-                aria-label={`Open ${title} in fullscreen`}
-                data-testid={`expand-${title.toLowerCase().replace(/\s+/g, "-")}`}
-                onClick={openModal}
-              >
-                <Expand className="size-3.5" />
-              </Button>
-            }
-          >
-            {({ isExpanded }) => (
+            renderChildren={({ isExpanded }) => (
               <Suspense
                 fallback={
                   <div className="space-y-2 rounded-lg border border-border bg-muted p-3">
@@ -94,7 +81,19 @@ export const TaskDetailsDocumentSection = memo(
                 />
               </Suspense>
             )}
-          </TaskDetailsCollapsibleCard>
+            headerAction={
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 shrink-0"
+                aria-label={`Open ${title} in fullscreen`}
+                data-testid={`expand-${title.toLowerCase().replace(/\s+/g, "-")}`}
+                onClick={openModal}
+              >
+                <Expand className="size-3.5" />
+              </Button>
+            }
+          />
         ) : (
           <TaskDetailsCollapsibleCard
             title={title}

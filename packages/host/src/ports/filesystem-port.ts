@@ -1,5 +1,8 @@
 import { Context, Data, type Effect } from "effect";
-import type { HostOperationError, HostPathAccessError } from "../effect/host-errors";
+import type {
+  HostOperationErrorAggregate,
+  HostPathAccessErrorAggregate,
+} from "../effect/host-errors";
 
 export type FilesystemDirectoryEntry = {
   name: string;
@@ -36,9 +39,14 @@ export class FilesystemFileOperationError extends Data.TaggedError("FilesystemFi
 }> {}
 export type FilesystemPort = {
   homeDirectory(): string | null;
-  canonicalize(path: string): Effect.Effect<string, HostOperationError>;
-  readDirectory(path: string): Effect.Effect<FilesystemDirectoryEntry[], HostOperationError>;
-  readFileBytes(path: string, maxBytes: number): Effect.Effect<Uint8Array, HostOperationError>;
+  canonicalize(path: string): Effect.Effect<string, HostOperationErrorAggregate>;
+  readDirectory(
+    path: string,
+  ): Effect.Effect<FilesystemDirectoryEntry[], HostOperationErrorAggregate>;
+  readFileBytes(
+    path: string,
+    maxBytes: number,
+  ): Effect.Effect<Uint8Array, HostOperationErrorAggregate>;
   readFileSnapshot(
     path: string,
     maxBytes: number,
@@ -53,8 +61,8 @@ export type FilesystemPort = {
   stat(
     path: string,
     options?: FilesystemStatOptions,
-  ): Effect.Effect<FilesystemStats, HostOperationError>;
-  exists(path: string): Effect.Effect<boolean, HostPathAccessError>;
+  ): Effect.Effect<FilesystemStats, HostOperationErrorAggregate>;
+  exists(path: string): Effect.Effect<boolean, HostPathAccessErrorAggregate>;
   join(...paths: string[]): string;
   relative(from: string, to: string): string;
   parent(path: string): string | null;

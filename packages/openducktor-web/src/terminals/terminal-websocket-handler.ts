@@ -77,13 +77,15 @@ const sendProtocolError = (
   socket: TerminalServerSocket,
   failure: TerminalFailure,
   terminalId?: string,
-): void =>
-  sendMessage(socket, {
+): void => {
+  const message: TerminalServerMessage = {
     version: TERMINAL_PROTOCOL_VERSION,
     type: "protocol_error",
-    ...(terminalId ? { terminalId } : undefined),
     failure,
-  });
+  };
+  if (terminalId) message.terminalId = terminalId;
+  sendMessage(socket, message);
+};
 
 const getClientSession = (socket: TerminalServerSocket): TerminalClientSession => {
   const existing = socket.data.clientSession;
@@ -98,7 +100,7 @@ const getClientSession = (socket: TerminalServerSocket): TerminalClientSession =
 };
 
 const runClientMessage = (socket: TerminalServerSocket, raw: string | Buffer): void => {
-  if (typeof raw === "string") {
+  if (!Buffer.isBuffer(raw)) {
     sendProtocolError(socket, {
       code: "protocol_error",
       message: "Terminal WebSocket messages must be binary.",

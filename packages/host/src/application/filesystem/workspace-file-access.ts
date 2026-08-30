@@ -4,16 +4,14 @@ import type { FilesystemPort } from "../../ports/filesystem-port";
 import type { GitPort } from "../../ports/git-port";
 import { isContainedPath } from "./workspace-files-paths";
 
-export const workspaceFileValidationError = (
+export const workspaceFileValidationError = <Details extends object>(
   cause: unknown,
   message: string,
-  details?: HostErrorDetails,
-): HostValidationError =>
-  new HostValidationError({
-    message,
-    cause,
-    ...(details ? { details } : undefined),
-  });
+  details?: HostErrorDetails<Details>,
+): HostValidationError<Details> =>
+  details
+    ? new HostValidationError({ message, cause, details })
+    : new HostValidationError({ message, cause });
 
 export class WorkspaceFileAccessError extends Data.TaggedError("WorkspaceFileAccessError")<{
   readonly code: "path_escape" | "unavailable_file";

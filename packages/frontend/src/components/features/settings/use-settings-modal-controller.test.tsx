@@ -205,20 +205,20 @@ const createHookHarness = (
   );
 
   const harness = createSharedHookHarness(
-    ({ isOpen, shouldLoad }: { isOpen: boolean; shouldLoad: boolean }) =>
-      useSettingsModalController({
+    ({ isOpen, shouldLoad }: { isOpen: boolean; shouldLoad: boolean }) => {
+      const hookInput: Parameters<typeof useSettingsModalController>[0] = {
         open: isOpen,
         shouldLoadCatalog: shouldLoad,
         onRuntimeAvailabilityError: () => {},
-        ...(options && "requiredRepoPath" in options
-          ? {
-              workspaceSelectionPolicy: {
-                kind: "required" as const,
-                repoPath: options.requiredRepoPath ?? null,
-              },
-            }
-          : undefined),
-      }),
+      };
+      if (options && "requiredRepoPath" in options) {
+        hookInput.workspaceSelectionPolicy = {
+          kind: "required",
+          repoPath: options.requiredRepoPath ?? null,
+        };
+      }
+      return useSettingsModalController(hookInput);
+    },
     {
       isOpen: open,
       shouldLoad: shouldLoadCatalog,
@@ -555,7 +555,7 @@ describe("useSettingsModalController", () => {
           initialValidationByKind[kind].reject(new Error("Executable validation failed"));
         }
       });
-      await harness.waitFor((state) => typeof state.runtimeExecutablesError === "string");
+      await harness.waitFor((state) => state.runtimeExecutablesError !== null);
       await harness.run(async () => {
         await Promise.resolve();
         await Promise.resolve();

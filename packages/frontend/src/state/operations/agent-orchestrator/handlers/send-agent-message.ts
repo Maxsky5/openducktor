@@ -209,24 +209,28 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
 
     try {
       const runtimeSessionRef = toWorkflowSessionRef(preparedSend.repoPath, readySession);
-      const acceptedUserMessage = await dependencies.adapter.sendUserMessage({
+      const sendInput: Parameters<typeof dependencies.adapter.sendUserMessage>[0] = {
         ...runtimeSessionRef,
         parts: normalizedParts,
-        ...(readySession.selectedModel ? { model: readySession.selectedModel } : undefined),
-        ...(preparedSend.systemPrompt !== undefined
-          ? { systemPrompt: preparedSend.systemPrompt }
-          : undefined),
-      });
+      };
+      if (readySession.selectedModel) sendInput.model = readySession.selectedModel;
+      if (preparedSend.systemPrompt !== undefined) {
+        sendInput.systemPrompt = preparedSend.systemPrompt;
+      }
+      const acceptedUserMessage = await dependencies.adapter.sendUserMessage(sendInput);
       if (!isManualCompactionSend) {
         upsertAcceptedUserMessage(readySession, acceptedUserMessage, dependencies.updateSession);
       }
     } catch (error) {
-      dependencies.updateSession(readySession, (current) => ({
-        ...current,
-        status: isBusyQueuedSend ? current.status : "error",
-        ...(!isBusyQueuedSend ? { runtimeStatusMessage: null } : undefined),
-        pendingUserMessageStartedAt: undefined,
-      }));
+      dependencies.updateSession(readySession, (current) => {
+        if (isBusyQueuedSend) return { ...current, pendingUserMessageStartedAt: undefined };
+        return {
+          ...current,
+          status: "error",
+          runtimeStatusMessage: null,
+          pendingUserMessageStartedAt: undefined,
+        };
+      });
       appendSendFailureNotice(
         readySession,
         errorMessage(error),

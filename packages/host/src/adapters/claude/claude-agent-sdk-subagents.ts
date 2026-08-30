@@ -1,4 +1,5 @@
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
+import { z } from "zod";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
 import type { ClaudeHistorySubagentSystemMessageIngress } from "./claude-agent-sdk-ingress-schemas";
 import type { ClaudeSdkSubagentSystemMessageProjection } from "./claude-agent-sdk-message-projection";
@@ -16,7 +17,11 @@ import {
   resolveClaudeSubagentToolUseId,
 } from "./claude-agent-sdk-subagent-results";
 import { claudeSubagentExternalSessionId } from "./claude-agent-sdk-subagent-transcripts";
-import { timestampMs } from "./claude-agent-sdk-tool-shapes";
+import {
+  type ClaudeDecodedToolResult,
+  type ClaudeDecodedToolUse,
+  timestampMs,
+} from "./claude-agent-sdk-tool-shapes";
 import {
   isClaudeSubagentTaskRetracted,
   isClaudeToolUseRetracted,
@@ -24,6 +29,23 @@ import {
 } from "./claude-agent-sdk-transcript-correlation";
 import { settleClaudeStreamedAssistantText } from "./claude-agent-sdk-transcript-retractions";
 import { readStringProp } from "./claude-agent-sdk-utils";
+
+type ClaudeSubagentPart = Extract<AgentStreamPart, { kind: "subagent" }>;
+type ClaudeSubagentPartDetails = Partial<
+  Pick<
+    ClaudeSubagentPart,
+    | "agent"
+    | "description"
+    | "endedAtMs"
+    | "error"
+    | "executionMode"
+    | "externalSessionId"
+    | "messageId"
+    | "metadata"
+    | "prompt"
+    | "startedAtMs"
+  >
+>;
 
 type ClaudeSubagentSession = {
   activeBackgroundSubagentTaskIds?: Set<string>;
@@ -35,7 +57,7 @@ type ClaudeSubagentSession = {
   subagentMessageIdsByTaskId: Map<string, string>;
   subagentAgentIdsByToolUseId?: Map<string, string>;
   subagentTaskIdsByToolUseId: Map<string, string>;
-  toolInputsByCallId: Map<string, Record<string, unknown>>;
+  toolInputsByCallId: Map<string, NonNullable<ClaudeDecodedToolUse["input"]>>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
 };
@@ -44,18 +66,10 @@ type ClaudeTaskNotificationMessage = Extract<
   { subtype: "task_notification" }
 >;
 export type ClaudeHistoryTaskNotificationMessage = {
-  type: "system";
-  subtype: "task_notification";
-  task_id: string;
-  tool_use_id?: string | undefined;
-  status: "completed" | "failed" | "stopped";
-  output_file?: string | undefined;
-  summary?: string | undefined;
-  usage?: ClaudeTaskNotificationMessage["usage"] | undefined;
-  skip_transcript?: boolean | undefined;
-  uuid: string;
-  session_id: string;
-};
+  output_file?: ClaudeTaskNotificationMessage["output_file"] | undefined;
+  summary?: ClaudeTaskNotificationMessage["summary"] | undefined;
+  uuid?: ClaudeTaskNotificationMessage["uuid"] | undefined;
+} & Omit<ClaudeTaskNotificationMessage, "output_file" | "summary" | "uuid">;
 type ClaudeSubagentSystemMessage =
   | ClaudeSdkSubagentSystemMessageProjection
   | ClaudeHistorySubagentSystemMessageIngress
@@ -92,9 +106,9 @@ const emitSubagentPart = (
   session: ClaudeSubagentSession,
   agentId: string,
   toolUseId: string | undefined,
-  status: Extract<AgentStreamPart, { kind: "subagent" }>["status"],
+  status: ClaudeSubagentPart["status"],
   timestamp: string,
-  details: Partial<Extract<AgentStreamPart, { kind: "subagent" }>>,
+  details: ClaudeSubagentPartDetails,
 ): void => {
   const correlationKey = toolUseId ?? agentId;
   const messageId =
@@ -157,9 +171,9 @@ export const emitClaudeAgentToolResultSubagentPart = ({
   toolUseId,
 }: {
   emit: (event: AgentEvent) => void;
-  input?: Record<string, unknown>;
+  input?: ClaudeDecodedToolUse["input"];
   isError: boolean;
-  resultRaw: Record<string, unknown>;
+  resultRaw: ClaudeDecodedToolResult["raw"];
   resultText: string;
   session: ClaudeSubagentSession;
   timestamp: string;
@@ -203,53 +217,43 @@ export const emitClaudeAgentToolResultSubagentPart = ({
         ) ?? `Claude subagent ${agentId} failed.`)
       : undefined;
   const endedAtMs = timestampMs(timestamp);
-  const totalDurationMs =
-    typeof structuredResult.totalDurationMs === "number" ? structuredResult.totalDurationMs : null;
+  const parsedTotalDurationMs = z.number().safeParse(structuredResult.totalDurationMs);
+  const totalDurationMs = parsedTotalDurationMs.success ? parsedTotalDurationMs.data : null;
   const startedAtMs =
     totalDurationMs === null ? undefined : Math.max(0, endedAtMs - totalDurationMs);
+  const metadata: NonNullable<ClaudeSubagentPart["metadata"]> = {
+    agentId,
+    sourceToolUseId: toolUseId,
+  };
   const resolvedModel = readStringProp(structuredResult, "resolvedModel");
   const outputFile = readStringProp(structuredResult, "outputFile");
   const sessionUrl = readStringProp(structuredResult, "sessionUrl");
-  const metadata = {
-    agentId,
-    sourceToolUseId: toolUseId,
-    ...(resolvedModel ? { resolvedModel } : undefined),
-    ...(totalDurationMs !== null ? { totalDurationMs } : undefined),
-    ...(typeof structuredResult.totalTokens === "number"
-      ? { totalTokens: structuredResult.totalTokens }
-      : undefined),
-    ...(outputFile ? { outputFile } : undefined),
-    ...(typeof structuredResult.canReadOutputFile === "boolean"
-      ? { canReadOutputFile: structuredResult.canReadOutputFile }
-      : undefined),
-    ...(sessionUrl ? { sessionUrl } : undefined),
-  };
+  const totalTokens = z.number().safeParse(structuredResult.totalTokens);
+  const canReadOutputFile = z.boolean().safeParse(structuredResult.canReadOutputFile);
+  if (resolvedModel) metadata.resolvedModel = resolvedModel;
+  if (totalDurationMs !== null) metadata.totalDurationMs = totalDurationMs;
+  if (totalTokens.success) metadata.totalTokens = totalTokens.data;
+  if (outputFile) metadata.outputFile = outputFile;
+  if (canReadOutputFile.success) metadata.canReadOutputFile = canReadOutputFile.data;
+  if (sessionUrl) metadata.sessionUrl = sessionUrl;
   const messageId =
     session.toolMessageIdsByCallId.get(toolUseId) ??
     (taskId ? session.subagentMessageIdsByTaskId.get(taskId) : undefined) ??
     session.externalSessionId;
 
-  emit({
-    type: "assistant_part",
-    externalSessionId: session.externalSessionId,
-    timestamp,
-    part: {
-      kind: "subagent",
-      messageId,
-      partId: `claude-subagent:${toolUseId}`,
-      correlationKey: toolUseId,
-      status,
-      externalSessionId,
-      executionMode,
-      ...(agent ? { agent } : undefined),
-      ...(prompt ? { prompt } : undefined),
-      ...(description ? { description } : undefined),
-      ...(error ? { error } : undefined),
-      ...(typeof startedAtMs === "number" ? { startedAtMs } : undefined),
-      ...(status === "running" ? undefined : { endedAtMs }),
-      metadata,
-    },
-  });
+  const details: ClaudeSubagentPartDetails = {
+    executionMode,
+    externalSessionId,
+    messageId,
+    metadata,
+  };
+  if (agent) details.agent = agent;
+  if (prompt) details.prompt = prompt;
+  if (description) details.description = description;
+  if (error) details.error = error;
+  if (startedAtMs !== undefined) details.startedAtMs = startedAtMs;
+  if (status !== "running") details.endedAtMs = endedAtMs;
+  emitSubagentPart(emit, session, agentId, toolUseId, status, timestamp, details);
   if (status !== "running") {
     if (status === "completed") {
       emitCompletedSubagentAssistantMessage(emit, session, toolUseId, timestamp);
@@ -266,7 +270,7 @@ export const emitClaudeTaskStopSubagentPart = ({
   timestamp,
 }: {
   emit: (event: AgentEvent) => void;
-  resultRaw: Record<string, unknown>;
+  resultRaw: ClaudeDecodedToolResult["raw"];
   resultText: string;
   session: ClaudeSubagentSession;
   timestamp: string;
@@ -348,7 +352,7 @@ export const handleClaudeSubagentSystemMessage = ({
     session.activeBackgroundSubagentTaskIds ??= new Set();
     session.activeBackgroundSubagentTaskIds.add(message.task_id);
     const launchInput = toolUseId ? session.toolInputsByCallId.get(toolUseId) : undefined;
-    const details: Partial<Extract<AgentStreamPart, { kind: "subagent" }>> = {
+    const details: ClaudeSubagentPartDetails = {
       description: readStringProp(launchInput, "description") ?? message.description,
       executionMode: "background",
       startedAtMs: timestampMs(timestamp),
@@ -370,7 +374,7 @@ export const handleClaudeSubagentSystemMessage = ({
     if (shouldSuppressSubagentTask(session, message.task_id)) {
       return;
     }
-    const details: Partial<Extract<AgentStreamPart, { kind: "subagent" }>> = {};
+    const details: ClaudeSubagentPartDetails = {};
     if (message.subagent_type) {
       details.agent = message.subagent_type;
     }
@@ -392,7 +396,7 @@ export const handleClaudeSubagentSystemMessage = ({
     if (shouldSuppressSubagentTask(session, message.task_id)) {
       return;
     }
-    const details: Partial<Extract<AgentStreamPart, { kind: "subagent" }>> = {};
+    const details: ClaudeSubagentPartDetails = {};
     const { patch } = message;
     const error =
       patch.error ??
@@ -444,7 +448,7 @@ export const handleClaudeSubagentSystemMessage = ({
   const agentId =
     (resolvedToolUseId ? session.subagentAgentIdsByToolUseId?.get(resolvedToolUseId) : undefined) ??
     message.task_id;
-  const details: Partial<Extract<AgentStreamPart, { kind: "subagent" }>> = {
+  const details: ClaudeSubagentPartDetails = {
     endedAtMs: timestampMs(timestamp),
   };
   if (notificationError) details.error = notificationError;

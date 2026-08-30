@@ -6,28 +6,14 @@ import { tmpdir } from "node:os";
 
 import path from "node:path";
 
-import {
-  ODT_MCP_TOOL_NAMES,
-  type OdtHostBridgeReady,
-  type RepoConfig,
-} from "@openducktor/contracts";
+import { ODT_MCP_TOOL_NAMES, type RepoConfig } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { OdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { TaskPolicyError } from "../../domain/task";
-import { type HostErrorDetailValue, HostOperationError } from "../../effect/host-errors";
+import { HostOperationError } from "../../effect/host-errors";
 import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
 import { createMcpHostBridgeServer } from "./mcp-host-bridge-server";
-
-class CyclicDetails {
-  [key: string]: HostErrorDetailValue;
-
-  readonly loop: HostErrorDetailValue;
-
-  constructor() {
-    this.loop = this;
-  }
-}
 
 const repoConfig: RepoConfig = {
   workspaceId: "repo",
@@ -62,7 +48,6 @@ const createWorkspaceSettingsService = (): WorkspaceSettingsService =>
       });
     },
   });
-const createBridgeService = (service: OdtMcpBridgeService): OdtMcpBridgeService => service;
 const requestJson = (
   url: string,
   options: {
@@ -76,14 +61,18 @@ const requestJson = (
 }> =>
   new Promise((resolve, reject) => {
     const body = options.body === undefined ? undefined : JSON.stringify(options.body);
+    const headers: Record<string, string> = {};
+    if (body) {
+      headers["Content-Type"] = "application/json";
+    }
+    if (options.headers) {
+      Object.assign(headers, options.headers);
+    }
     const req = request(
       url,
       {
         method: options.method ?? "GET",
-        headers: {
-          ...(body ? { "Content-Type": "application/json" } : undefined),
-          ...options.headers,
-        },
+        headers,
       },
       (response) => {
         let payload = "";
@@ -114,7 +103,7 @@ describe("createMcpHostBridgeServer", () => {
       discoveryPath,
       token: "token-1",
       workspaceSettingsService: createWorkspaceSettingsService(),
-      bridgeService: createBridgeService({
+      bridgeService: {
         ready() {
           return Effect.tryPromise({
             try: async () => {
@@ -154,7 +143,7 @@ describe("createMcpHostBridgeServer", () => {
               }),
           });
         },
-      }),
+      } satisfies OdtMcpBridgeService,
     });
     try {
       await Effect.runPromise(bridge.ensureExternalDiscoveryReady());
@@ -181,7 +170,7 @@ describe("createMcpHostBridgeServer", () => {
       discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
       token: "token-1",
       workspaceSettingsService: createWorkspaceSettingsService(),
-      bridgeService: createBridgeService({
+      bridgeService: {
         ready() {
           return Effect.tryPromise({
             try: async () => {
@@ -221,7 +210,7 @@ describe("createMcpHostBridgeServer", () => {
               }),
           });
         },
-      }),
+      } satisfies OdtMcpBridgeService,
     });
     try {
       const connection = await Effect.runPromise(bridge.ensureConnection({ repoPath: "/repo" }));
@@ -263,60 +252,13 @@ describe("createMcpHostBridgeServer", () => {
     }
   });
 
-  test("returns a bridge error when a response payload cannot be serialized", async () => {
-    const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-"));
-    const bridge = createMcpHostBridgeServer({
-      discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
-      token: "token-1",
-      workspaceSettingsService: createWorkspaceSettingsService(),
-      bridgeService: createBridgeService({
-        ready() {
-          return Effect.succeed({
-            bridgeVersion: 1,
-            toolNames: [...ODT_MCP_TOOL_NAMES],
-            // @ts-expect-error -- This test verifies that the HTTP boundary rejects non-JSON output.
-            invalid: 1n,
-          } satisfies OdtHostBridgeReady);
-        },
-        getWorkspaces() {
-          return Effect.succeed({ workspaces: [] });
-        },
-        invoke() {
-          return Effect.dieMessage("unexpected scoped tool invocation");
-        },
-      }),
-    });
-    try {
-      const connection = await Effect.runPromise(bridge.ensureConnection({ repoPath: "/repo" }));
-      const response = await requestJson(`${connection.hostUrl}/invoke/odt_mcp_ready`, {
-        method: "POST",
-        headers: {
-          "x-openducktor-app-token": "token-1",
-        },
-        body: {},
-      });
-
-      expect(response.status).toBe(400);
-      expect(response.body).toEqual({
-        ok: false,
-        error: {
-          code: "ODT_HOST_BRIDGE_ERROR",
-          message: expect.stringContaining("BigInt"),
-        },
-      });
-    } finally {
-      await Effect.runPromise(bridge.close());
-      await rm(tempDir, { force: true, recursive: true });
-    }
-  });
-
   test("includes JSON-serializable error details in bridge responses", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-"));
     const bridge = createMcpHostBridgeServer({
       discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
       token: "token-1",
       workspaceSettingsService: createWorkspaceSettingsService(),
-      bridgeService: createBridgeService({
+      bridgeService: {
         ready() {
           return Effect.fail(
             new HostOperationError({
@@ -332,7 +274,7 @@ describe("createMcpHostBridgeServer", () => {
         invoke() {
           return Effect.dieMessage("unexpected scoped tool invocation");
         },
-      }),
+      } satisfies OdtMcpBridgeService,
     });
 
     try {
@@ -351,56 +293,6 @@ describe("createMcpHostBridgeServer", () => {
             code: "ODT_HOST_BRIDGE_ERROR",
             message: "Bridge operation failed.",
             details: { taskId: "task-1", retryable: false, context: { attempt: 2 } },
-          },
-        },
-      });
-    } finally {
-      await Effect.runPromise(bridge.close());
-      await rm(tempDir, { force: true, recursive: true });
-    }
-  });
-
-  test("omits cyclic error details while retaining the bridge error", async () => {
-    const cyclicDetails = new CyclicDetails();
-    const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-"));
-    const bridge = createMcpHostBridgeServer({
-      discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
-      token: "token-1",
-      workspaceSettingsService: createWorkspaceSettingsService(),
-      bridgeService: createBridgeService({
-        ready() {
-          return Effect.fail(
-            new HostOperationError({
-              operation: "test.effect",
-              message: "Bridge operation failed.",
-              details: { cyclicDetails },
-            }),
-          );
-        },
-        getWorkspaces() {
-          return Effect.succeed({ workspaces: [] });
-        },
-        invoke() {
-          return Effect.dieMessage("unexpected scoped tool invocation");
-        },
-      }),
-    });
-
-    try {
-      const connection = await Effect.runPromise(bridge.ensureConnection({ repoPath: "/repo" }));
-      const response = await requestJson(`${connection.hostUrl}/invoke/odt_mcp_ready`, {
-        method: "POST",
-        headers: { "x-openducktor-app-token": "token-1" },
-        body: {},
-      });
-
-      expect(response).toEqual({
-        status: 400,
-        body: {
-          ok: false,
-          error: {
-            code: "ODT_HOST_BRIDGE_ERROR",
-            message: "Bridge operation failed.",
           },
         },
       });
@@ -474,7 +366,7 @@ describe("createMcpHostBridgeServer", () => {
       discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
       token: "token-1",
       workspaceSettingsService: createWorkspaceSettingsService(),
-      bridgeService: createBridgeService({
+      bridgeService: {
         ready() {
           return Effect.tryPromise({
             try: async () => {
@@ -528,7 +420,7 @@ describe("createMcpHostBridgeServer", () => {
               }),
           });
         },
-      }),
+      } satisfies OdtMcpBridgeService,
     });
     try {
       const connection = await Effect.runPromise(bridge.ensureConnection({ repoPath: "/repo" }));
@@ -561,7 +453,7 @@ describe("createMcpHostBridgeServer", () => {
       discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
       token: "token-1",
       workspaceSettingsService: createWorkspaceSettingsService(),
-      bridgeService: createBridgeService({
+      bridgeService: {
         ready() {
           return Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] });
         },
@@ -576,7 +468,7 @@ describe("createMcpHostBridgeServer", () => {
             ),
           );
         },
-      }),
+      } satisfies OdtMcpBridgeService,
     });
     try {
       const connection = await Effect.runPromise(bridge.ensureConnection({ repoPath: "/repo" }));

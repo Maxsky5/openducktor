@@ -8,6 +8,7 @@ import {
   type CodexAppServerClientRequest,
   type CodexAppServerClientRequestMap,
   type CodexAppServerRequestMethod,
+  codexAppServerRequestResultSchema,
   devServerGroupStateSchema,
   type FailureKind,
   type PullRequest,
@@ -47,8 +48,14 @@ import {
   taskWorktreeSummarySchema,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
-import { parseArray, parseOkResult } from "./invoke-utils";
+import { arrayResultSchema, booleanResultSchema, okResultSchema } from "./invoke-utils";
 import type { TaskMetadataCache } from "./task-metadata-cache";
+import { z } from "zod";
+
+const invalidStartupLeaseId = "task_session_startup_lease_prepare returned an invalid lease id.";
+const startupLeaseIdSchema = z
+  .string(invalidStartupLeaseId)
+  .refine((leaseId) => leaseId.trim().length > 0, invalidStartupLeaseId);
 
 type CodexAppServerClientRequestFor<Method extends CodexAppServerRequestMethod> = Extract<
   CodexAppServerClientRequest,
@@ -64,6 +71,14 @@ type RuntimeEnsureErrorInit = {
 type NormalizedRuntimeEnsureFailure = RuntimeEnsureErrorInit & {
   message: string;
   cause?: unknown;
+};
+
+type TaskSessionBootstrapPrepareArgs = {
+  repoPath: string;
+  taskId: string;
+  role: AgentRole;
+  runtimeKind: RuntimeKind;
+  targetWorkingDirectory?: string;
 };
 
 class RuntimeEnsureError extends Error {
@@ -89,11 +104,12 @@ const readRuntimeEnsureFailureEnvelope = (
     return null;
   }
 
-  return {
+  const failure: RuntimeEnsureFailureEnvelope = {
     failureKind: value.failureKind,
-    ...(value.message !== undefined ? { message: value.message } : undefined),
-    ...(value.error !== undefined ? { error: value.error } : undefined),
   };
+  if (value.message !== undefined) failure.message = value.message;
+  if (value.error !== undefined) failure.error = value.error;
+  return failure;
 };
 
 const buildRuntimeEnsureFailureSources = (cause: unknown): RuntimeEnsureFailureSource[] => {
@@ -108,11 +124,12 @@ const buildRuntimeEnsureFailureSources = (cause: unknown): RuntimeEnsureFailureS
 
 const extractRuntimeEnsureFailure = (cause: unknown): NormalizedRuntimeEnsureFailure | null => {
   if (cause instanceof RuntimeEnsureError) {
-    return {
+    const failure: NormalizedRuntimeEnsureFailure = {
       message: cause.message,
       failureKind: cause.failureKind,
-      ...(cause.cause !== undefined ? { cause: cause.cause } : undefined),
     };
+    if (cause.cause !== undefined) failure.cause = cause.cause;
+    return failure;
   }
 
   const sources = buildRuntimeEnsureFailureSources(cause);
@@ -129,11 +146,12 @@ const extractRuntimeEnsureFailure = (cause: unknown): NormalizedRuntimeEnsureFai
     (cause instanceof Error && cause.message.trim().length > 0 ? cause.message : undefined) ??
     "Failed to ensure runtime.";
 
-  return {
+  const failure: NormalizedRuntimeEnsureFailure = {
     message,
     failureKind: failureEnvelope.failureKind,
-    ...(cause !== undefined ? { cause } : undefined),
   };
+  if (cause !== undefined) failure.cause = cause;
+  return failure;
 };
 
 const toRuntimeEnsureError = (cause: unknown): RuntimeEnsureError | null => {
@@ -150,18 +168,15 @@ const toRuntimeEnsureError = (cause: unknown): RuntimeEnsureError | null => {
 };
 
 const systemCheck = async (invokeFn: InvokeFn, repoPath: string): Promise<SystemCheck> => {
-  const payload = await invokeFn("system_check", { repoPath });
-  return systemCheckSchema.parse(payload);
+  return invokeFn("system_check", { repoPath }, systemCheckSchema);
 };
 
 const runtimeCheck = async (invokeFn: InvokeFn, force = false): Promise<RuntimeCheck> => {
-  const payload = await invokeFn("runtime_check", { force });
-  return runtimeCheckSchema.parse(payload);
+  return invokeFn("runtime_check", { force }, runtimeCheckSchema);
 };
 
 const taskStoreCheck = async (invokeFn: InvokeFn, repoPath: string): Promise<TaskStoreCheck> => {
-  const payload = await invokeFn("task_store_check", { repoPath });
-  return taskStoreCheckSchema.parse(payload);
+  return invokeFn("task_store_check", { repoPath }, taskStoreCheckSchema);
 };
 
 const runtimeList = async (
@@ -169,13 +184,19 @@ const runtimeList = async (
   repoPath: string | undefined,
   runtimeKind: RuntimeKind,
 ): Promise<RuntimeInstanceSummary[]> => {
-  const payload = await invokeFn("runtime_list", { repoPath, runtimeKind });
-  return parseArray(runtimeInstanceSummarySchema, payload, "runtime_list");
+  return invokeFn(
+    "runtime_list",
+    { repoPath, runtimeKind },
+    arrayResultSchema(runtimeInstanceSummarySchema, "runtime_list"),
+  );
 };
 
 const runtimeDefinitionsList = async (invokeFn: InvokeFn): Promise<RuntimeDescriptor[]> => {
-  const payload = await invokeFn("runtime_definitions_list", {});
-  return parseArray(runtimeDescriptorSchema, payload, "runtime_definitions_list");
+  return invokeFn(
+    "runtime_definitions_list",
+    {},
+    arrayResultSchema(runtimeDescriptorSchema, "runtime_definitions_list"),
+  );
 };
 
 const runtimeExecutablesCheck = async (
@@ -183,8 +204,7 @@ const runtimeExecutablesCheck = async (
   input: RuntimeExecutableCheckInput,
 ): Promise<RuntimeExecutableCheck> => {
   const parsedInput = runtimeExecutableCheckInputSchema.parse(input);
-  const payload = await invokeFn("runtime_executables_check", parsedInput);
-  return runtimeExecutableCheckSchema.parse(payload);
+  return invokeFn("runtime_executables_check", parsedInput, runtimeExecutableCheckSchema);
 };
 
 const taskWorktreeGet = async (
@@ -192,18 +212,11 @@ const taskWorktreeGet = async (
   repoPath: string,
   taskId: string,
 ): Promise<TaskWorktreeSummary | null> => {
-  const payload = await invokeFn("task_worktree_get", {
-    repoPath,
-    taskId,
-  });
-  return taskWorktreeSummarySchema.nullable().parse(payload);
+  return invokeFn("task_worktree_get", { repoPath, taskId }, taskWorktreeSummarySchema.nullable());
 };
 
 const runtimeStop = async (invokeFn: InvokeFn, runtimeId: string): Promise<{ ok: boolean }> => {
-  const payload = await invokeFn("runtime_stop", {
-    runtimeId,
-  });
-  return parseOkResult(payload, "runtime_stop");
+  return invokeFn("runtime_stop", { runtimeId }, okResultSchema("runtime_stop"));
 };
 
 const runtimeEnsure = async (
@@ -212,11 +225,11 @@ const runtimeEnsure = async (
   runtimeKind: RuntimeKind,
 ): Promise<RuntimeInstanceSummary> => {
   try {
-    const payload = await invokeFn("runtime_ensure", {
-      repoPath,
-      runtimeKind,
-    });
-    return runtimeInstanceSummarySchema.parse(payload);
+    return await invokeFn(
+      "runtime_ensure",
+      { repoPath, runtimeKind },
+      runtimeInstanceSummarySchema,
+    );
   } catch (error) {
     throw toRuntimeEnsureError(error) ?? error;
   }
@@ -227,11 +240,7 @@ const runtimeRequire = async (
   repoPath: string,
   runtimeKind: RuntimeKind,
 ): Promise<RuntimeInstanceSummary> => {
-  const payload = await invokeFn("runtime_require", {
-    repoPath,
-    runtimeKind,
-  });
-  return runtimeInstanceSummarySchema.parse(payload);
+  return invokeFn("runtime_require", { repoPath, runtimeKind }, runtimeInstanceSummarySchema);
 };
 
 const repoRuntimeHealth = async (
@@ -239,11 +248,7 @@ const repoRuntimeHealth = async (
   repoPath: string,
   runtimeKind: RuntimeKind,
 ): Promise<RepoRuntimeHealthCheck> => {
-  const payload = await invokeFn("repo_runtime_health", {
-    repoPath,
-    runtimeKind,
-  });
-  return repoRuntimeHealthCheckSchema.parse(payload);
+  return invokeFn("repo_runtime_health", { repoPath, runtimeKind }, repoRuntimeHealthCheckSchema);
 };
 
 const repoRuntimeHealthStatus = async (
@@ -251,11 +256,11 @@ const repoRuntimeHealthStatus = async (
   repoPath: string,
   runtimeKind: RuntimeKind,
 ): Promise<RepoRuntimeHealthCheck> => {
-  const payload = await invokeFn("repo_runtime_health_status", {
-    repoPath,
-    runtimeKind,
-  });
-  return repoRuntimeHealthCheckSchema.parse(payload);
+  return invokeFn(
+    "repo_runtime_health_status",
+    { repoPath, runtimeKind },
+    repoRuntimeHealthCheckSchema,
+  );
 };
 
 const codexAppServerRequest = async <Method extends CodexAppServerRequestMethod>(
@@ -263,12 +268,12 @@ const codexAppServerRequest = async <Method extends CodexAppServerRequestMethod>
   runtimeId: string,
   request: CodexAppServerClientRequestFor<Method>,
 ): Promise<CodexAppServerClientRequestMap[Method]["result"]> => {
-  const response = await invokeFn("codex_app_server_request", {
-    runtimeId,
-    method: request.method,
-    params: request.params,
-  });
-  return parseCodexAppServerRequestResult(request.method, response);
+  const result = await invokeFn(
+    "codex_app_server_request",
+    { runtimeId, method: request.method, params: request.params },
+    codexAppServerRequestResultSchema,
+  );
+  return parseCodexAppServerRequestResult(request.method, result);
 };
 
 const buildStart = async (
@@ -277,8 +282,7 @@ const buildStart = async (
   taskId: string,
   runtimeKind: RuntimeKind,
 ): Promise<BuildSessionBootstrap> => {
-  const payload = await invokeFn("build_start", { repoPath, taskId, runtimeKind });
-  return buildSessionBootstrapSchema.parse(payload);
+  return invokeFn("build_start", { repoPath, taskId, runtimeKind }, buildSessionBootstrapSchema);
 };
 
 const taskSessionBootstrapPrepare = async (
@@ -289,14 +293,14 @@ const taskSessionBootstrapPrepare = async (
   runtimeKind: RuntimeKind,
   targetWorkingDirectory?: string,
 ): Promise<TaskSessionBootstrap> => {
-  const payload = await invokeFn("task_session_bootstrap_prepare", {
+  const args: TaskSessionBootstrapPrepareArgs = {
     repoPath,
     taskId,
     role,
     runtimeKind,
-    ...(targetWorkingDirectory ? { targetWorkingDirectory } : undefined),
-  });
-  return taskSessionBootstrapSchema.parse(payload);
+  };
+  if (targetWorkingDirectory) args.targetWorkingDirectory = targetWorkingDirectory;
+  return invokeFn("task_session_bootstrap_prepare", args, taskSessionBootstrapSchema);
 };
 
 const finalizeTaskSessionBootstrap = async (
@@ -306,7 +310,7 @@ const finalizeTaskSessionBootstrap = async (
   taskId: string,
   bootstrapId: string,
 ): Promise<void> => {
-  await invokeFn(command, { repoPath, taskId, bootstrapId });
+  await invokeFn(command, { repoPath, taskId, bootstrapId }, booleanResultSchema);
 };
 
 const taskSessionStartupLeasePrepare = async (
@@ -315,11 +319,11 @@ const taskSessionStartupLeasePrepare = async (
   taskId: string,
   role: AgentRole,
 ): Promise<string> => {
-  const payload = await invokeFn("task_session_startup_lease_prepare", { repoPath, taskId, role });
-  if (typeof payload !== "string" || !payload.trim()) {
-    throw new Error("task_session_startup_lease_prepare returned an invalid lease id.");
-  }
-  return payload;
+  return invokeFn(
+    "task_session_startup_lease_prepare",
+    { repoPath, taskId, role },
+    startupLeaseIdSchema,
+  );
 };
 
 const finalizeTaskSessionStartupLease = async (
@@ -329,7 +333,7 @@ const finalizeTaskSessionStartupLease = async (
   taskId: string,
   leaseId: string,
 ): Promise<void> => {
-  await invokeFn(command, { repoPath, taskId, leaseId });
+  await invokeFn(command, { repoPath, taskId, leaseId }, booleanResultSchema);
 };
 
 const devServerGetState = async (
@@ -337,8 +341,7 @@ const devServerGetState = async (
   repoPath: string,
   taskId: string,
 ): Promise<DevServerGroupState> => {
-  const payload = await invokeFn("dev_server_get_state", { repoPath, taskId });
-  return devServerGroupStateSchema.parse(payload);
+  return invokeFn("dev_server_get_state", { repoPath, taskId }, devServerGroupStateSchema);
 };
 
 const devServerStart = async (
@@ -346,8 +349,7 @@ const devServerStart = async (
   repoPath: string,
   taskId: string,
 ): Promise<DevServerGroupState> => {
-  const payload = await invokeFn("dev_server_start", { repoPath, taskId });
-  return devServerGroupStateSchema.parse(payload);
+  return invokeFn("dev_server_start", { repoPath, taskId }, devServerGroupStateSchema);
 };
 
 const devServerStop = async (
@@ -355,8 +357,7 @@ const devServerStop = async (
   repoPath: string,
   taskId: string,
 ): Promise<DevServerGroupState> => {
-  const payload = await invokeFn("dev_server_stop", { repoPath, taskId });
-  return devServerGroupStateSchema.parse(payload);
+  return invokeFn("dev_server_stop", { repoPath, taskId }, devServerGroupStateSchema);
 };
 
 const devServerRestart = async (
@@ -364,8 +365,7 @@ const devServerRestart = async (
   repoPath: string,
   taskId: string,
 ): Promise<DevServerGroupState> => {
-  const payload = await invokeFn("dev_server_restart", { repoPath, taskId });
-  return devServerGroupStateSchema.parse(payload);
+  return invokeFn("dev_server_restart", { repoPath, taskId }, devServerGroupStateSchema);
 };
 
 const buildBlocked = async (
@@ -374,12 +374,7 @@ const buildBlocked = async (
   taskId: string,
   reason: string,
 ): Promise<TaskCard> => {
-  const payload = await invokeFn("build_blocked", {
-    repoPath,
-    taskId,
-    reason,
-  });
-  return taskCardSchema.parse(payload);
+  return invokeFn("build_blocked", { repoPath, taskId, reason }, taskCardSchema);
 };
 
 const buildResumed = async (
@@ -387,11 +382,7 @@ const buildResumed = async (
   repoPath: string,
   taskId: string,
 ): Promise<TaskCard> => {
-  const payload = await invokeFn("build_resumed", {
-    repoPath,
-    taskId,
-  });
-  return taskCardSchema.parse(payload);
+  return invokeFn("build_resumed", { repoPath, taskId }, taskCardSchema);
 };
 
 const buildCompleted = async (
@@ -400,12 +391,7 @@ const buildCompleted = async (
   taskId: string,
   summary?: string,
 ): Promise<TaskCard> => {
-  const payload = await invokeFn("build_completed", {
-    repoPath,
-    taskId,
-    input: { summary },
-  });
-  return taskCardSchema.parse(payload);
+  return invokeFn("build_completed", { repoPath, taskId, input: { summary } }, taskCardSchema);
 };
 
 const humanRequestChanges = async (
@@ -414,12 +400,7 @@ const humanRequestChanges = async (
   taskId: string,
   note?: string,
 ): Promise<TaskCard> => {
-  const payload = await invokeFn("human_request_changes", {
-    repoPath,
-    taskId,
-    note,
-  });
-  return taskCardSchema.parse(payload);
+  return invokeFn("human_request_changes", { repoPath, taskId, note }, taskCardSchema);
 };
 
 const humanApprove = async (
@@ -427,11 +408,7 @@ const humanApprove = async (
   repoPath: string,
   taskId: string,
 ): Promise<TaskCard> => {
-  const payload = await invokeFn("human_approve", {
-    repoPath,
-    taskId,
-  });
-  return taskCardSchema.parse(payload);
+  return invokeFn("human_approve", { repoPath, taskId }, taskCardSchema);
 };
 
 const taskApprovalContextGet = async (
@@ -439,11 +416,11 @@ const taskApprovalContextGet = async (
   repoPath: string,
   taskId: string,
 ): Promise<TaskApprovalContextLoadResult> => {
-  const payload = await invokeFn("task_approval_context_get", {
-    repoPath,
-    taskId,
-  });
-  return taskApprovalContextLoadResultSchema.parse(payload);
+  return invokeFn(
+    "task_approval_context_get",
+    { repoPath, taskId },
+    taskApprovalContextLoadResultSchema,
+  );
 };
 
 const taskDirectMerge = async (
@@ -453,12 +430,11 @@ const taskDirectMerge = async (
   input: TaskDirectMergeInput,
 ): Promise<TaskDirectMergeResult> => {
   const parsedInput = taskDirectMergeInputSchema.parse(input);
-  const payload = await invokeFn("task_direct_merge", {
-    repoPath,
-    taskId,
-    input: parsedInput,
-  });
-  return taskDirectMergeResultSchema.parse(payload);
+  return invokeFn(
+    "task_direct_merge",
+    { repoPath, taskId, input: parsedInput },
+    taskDirectMergeResultSchema,
+  );
 };
 
 const taskDirectMergeComplete = async (
@@ -466,11 +442,7 @@ const taskDirectMergeComplete = async (
   repoPath: string,
   taskId: string,
 ): Promise<TaskCard> => {
-  const payload = await invokeFn("task_direct_merge_complete", {
-    repoPath,
-    taskId,
-  });
-  return taskCardSchema.parse(payload);
+  return invokeFn("task_direct_merge_complete", { repoPath, taskId }, taskCardSchema);
 };
 
 const taskPullRequestUpsert = async (
@@ -480,12 +452,11 @@ const taskPullRequestUpsert = async (
   title: string,
   body: string,
 ) => {
-  const payload = await invokeFn("task_pull_request_upsert", {
-    repoPath,
-    taskId,
-    input: { title, body },
-  });
-  return pullRequestSchema.parse(payload);
+  return invokeFn(
+    "task_pull_request_upsert",
+    { repoPath, taskId, input: { title, body } },
+    pullRequestSchema,
+  );
 };
 
 const taskPullRequestUnlink = async (
@@ -493,13 +464,20 @@ const taskPullRequestUnlink = async (
   repoPath: string,
   taskId: string,
 ): Promise<{ ok: boolean }> => {
-  const payload = await invokeFn("task_pull_request_unlink", { repoPath, taskId });
-  return parseOkResult(payload, "task_pull_request_unlink");
+  const payload = await invokeFn(
+    "task_pull_request_unlink",
+    { repoPath, taskId },
+    booleanResultSchema,
+  );
+  return okResultSchema("task_pull_request_unlink").parse(payload);
 };
 
 const taskPullRequestDetect = async (invokeFn: InvokeFn, repoPath: string, taskId: string) => {
-  const payload = await invokeFn("task_pull_request_detect", { repoPath, taskId });
-  return taskPullRequestDetectResultSchema.parse(payload);
+  return invokeFn(
+    "task_pull_request_detect",
+    { repoPath, taskId },
+    taskPullRequestDetectResultSchema,
+  );
 };
 
 const taskPullRequestLinkMerged = async (
@@ -508,30 +486,29 @@ const taskPullRequestLinkMerged = async (
   taskId: string,
   pullRequest: PullRequest,
 ) => {
-  const payload = await invokeFn("task_pull_request_link_merged", {
-    repoPath,
-    taskId,
-    pullRequest,
-  });
-  return taskCardSchema.parse(payload);
+  return invokeFn(
+    "task_pull_request_link_merged",
+    { repoPath, taskId, pullRequest },
+    taskCardSchema,
+  );
 };
 
 const repoPullRequestSync = async (
   invokeFn: InvokeFn,
   repoPath: string,
 ): Promise<{ ok: boolean }> => {
-  const payload = await invokeFn("repo_pull_request_sync", { repoPath });
-  return parseOkResult(payload, "repo_pull_request_sync");
+  return invokeFn("repo_pull_request_sync", { repoPath }, okResultSchema("repo_pull_request_sync"));
 };
 
 const agentSessionStop = async (
   invokeFn: InvokeFn,
   target: AgentSessionStopTarget,
 ): Promise<{ ok: boolean }> => {
-  const payload = await invokeFn("agent_session_stop", {
-    request: agentSessionStopTargetSchema.parse(target),
-  });
-  return parseOkResult(payload, "agent_session_stop");
+  return invokeFn(
+    "agent_session_stop",
+    { request: agentSessionStopTargetSchema.parse(target) },
+    okResultSchema("agent_session_stop"),
+  );
 };
 
 export class HostAgentClient {

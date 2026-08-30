@@ -227,9 +227,7 @@ export function Combobox({
   const shouldWrapOptionLabels = wrapLabels || wrapOptionLabels === true;
   const searchTerms = useMemo(() => normalizeSearchTerms(searchQuery), [searchQuery]);
   const portalContainer =
-    open &&
-    typeof globalThis.document !== "undefined" &&
-    document.activeElement instanceof HTMLElement
+    open && globalThis.document !== undefined && document.activeElement instanceof HTMLElement
       ? document.activeElement.closest<HTMLElement>("[data-slot='dialog-content']")
       : null;
 

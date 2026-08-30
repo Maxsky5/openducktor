@@ -17,7 +17,6 @@ import {
   resolveHostReleasePlatform,
 } from "./electron-release-targets";
 import {
-  ELECTRON_SIDECAR_IDS,
   type ElectronSidecarId,
   electronSidecarDisplayName,
   electronSidecarExecutableName,
@@ -53,13 +52,12 @@ export const resolveElectronSidecarBuildPlan = ({
   workspaceRoot,
 }: ResolveElectronSidecarBuildPlanInput): ElectronSidecarBuildPlan => {
   const outputDirectory = join(electronPackageDirectory, "build", "sidecars");
-  // SAFETY: ELECTRON_SIDECAR_IDS is the complete ElectronSidecarId tuple, and each Object.fromEntries pair uses its typed id as the key.
-  const outputPaths = Object.fromEntries(
-    ELECTRON_SIDECAR_IDS.map((sidecarId) => [
-      sidecarId,
-      join(outputDirectory, electronSidecarExecutableName(sidecarId, platform)),
-    ]),
-  ) as Record<ElectronSidecarId, string>;
+  const outputPaths = {
+    "openducktor-mcp": join(
+      outputDirectory,
+      electronSidecarExecutableName("openducktor-mcp", platform),
+    ),
+  } satisfies Record<ElectronSidecarId, string>;
 
   return {
     entrypoint: join(workspaceRoot, "packages", "openducktor-mcp", "src", "index.ts"),

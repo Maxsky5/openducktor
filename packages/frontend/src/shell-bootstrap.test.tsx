@@ -7,7 +7,7 @@ import { createDisabledAppUpdateBridge, type ShellBridge } from "./lib/shell-bri
 import { runOpenDucktorShellBootstrap } from "./shell-bootstrap-workflow";
 import { createHostClientFixture } from "./test-utils/focused-fixture";
 
-if (typeof globalThis.document === "undefined") {
+if (globalThis.document === undefined) {
   GlobalRegistrator.register();
 }
 

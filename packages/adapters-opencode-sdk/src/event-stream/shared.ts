@@ -11,6 +11,7 @@ import {
   markStreamTurnIdle,
 } from "../session-activity";
 import type { SessionInput, SessionRecord } from "../types";
+import { z } from "zod";
 
 export type PendingPartDelta = {
   field: string;
@@ -246,21 +247,24 @@ export const applyDeltaToPart = (
 ): ParsedOpencodePart | null => {
   const normalizedField = normalizePartDeltaField(field);
   const existing = Object.getOwnPropertyDescriptor(part, normalizedField)?.value;
-  if (existing !== undefined && typeof existing !== "string") {
+  const existingText = z.string().safeParse(existing);
+  if (existing !== undefined && !existingText.success) {
     return null;
   }
 
   return opencodePartPayloadSchema.parse({
     ...part,
-    [normalizedField]: `${typeof existing === "string" ? existing : ""}${delta}`,
+    [normalizedField]: `${existingText.success ? existingText.data : ""}${delta}`,
   });
 };
 
 export const readEventSessionId = (event: Event): string | undefined => {
   const properties = event.properties;
-  return "sessionID" in properties && typeof properties.sessionID === "string"
-    ? properties.sessionID
-    : undefined;
+  if (!("sessionID" in properties)) {
+    return undefined;
+  }
+  const sessionId = z.string().safeParse(properties.sessionID);
+  return sessionId.success ? sessionId.data : undefined;
 };
 
 export const readSessionLifecycleEvent = (event: Event): SessionLifecycleEvent | undefined => {

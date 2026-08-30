@@ -13,8 +13,8 @@ type PendingInputFixture = {
 const registerApproval = (
   pendingInput: CodexPendingInputState,
   fixture: PendingInputFixture = {},
-) =>
-  pendingInput.addApproval({
+) => {
+  const entry = {
     runtimeId: fixture.runtimeId ?? "runtime-1",
     threadId: fixture.threadId ?? "thread-1",
     nativeRequest: {
@@ -26,14 +26,20 @@ const registerApproval = (
       requestType: "permission_grant",
       title: "Approve read",
     },
-    ...(fixture.route ? { route: fixture.route } : undefined),
-  });
+  };
+
+  if (fixture.route) {
+    entry.route = fixture.route;
+  }
+
+  return pendingInput.addApproval(entry);
+};
 
 const registerQuestion = (
   pendingInput: CodexPendingInputState,
   fixture: PendingInputFixture = {},
-) =>
-  pendingInput.addQuestion({
+) => {
+  const entry = {
     runtimeId: fixture.runtimeId ?? "runtime-1",
     threadId: fixture.threadId ?? "thread-1",
     nativeRequest: {
@@ -46,19 +52,32 @@ const registerQuestion = (
     },
     questionIds: ["question-item-1"],
     input: { questions: [{ header: "Confirm", question: "Proceed?", options: [] }] },
-    ...(fixture.route ? { route: fixture.route } : undefined),
-  });
+  };
+
+  if (fixture.route) {
+    entry.route = fixture.route;
+  }
+
+  return pendingInput.addQuestion(entry);
+};
 
 const route = (
   parentExternalSessionId = "parent-thread",
   childExternalSessionId = "child-thread",
   runtimeId?: string,
-): CodexSubagentRoute => ({
-  ...(runtimeId ? { runtimeId } : undefined),
-  parentExternalSessionId,
-  childExternalSessionId,
-  subagentCorrelationKey: `codex-subagent:${parentExternalSessionId}:${childExternalSessionId}`,
-});
+): CodexSubagentRoute => {
+  const subagentRoute = {
+    parentExternalSessionId,
+    childExternalSessionId,
+    subagentCorrelationKey: `codex-subagent:${parentExternalSessionId}:${childExternalSessionId}`,
+  };
+
+  if (runtimeId) {
+    subagentRoute.runtimeId = runtimeId;
+  }
+
+  return subagentRoute;
+};
 
 describe("CodexPendingInputState", () => {
   test("indexes opaque pending approvals and questions by owning session", () => {

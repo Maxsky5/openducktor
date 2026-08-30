@@ -1,3 +1,4 @@
+import type { TaskApprovalContext } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   canonicalTargetBranch,
@@ -72,25 +73,21 @@ export const createTaskApprovalContextUseCase = ({
             ? cleanupTarget
             : undefined;
 
-        return {
-          outcome: "ready",
-          approvalContext: {
-            taskId,
-            taskStatus: current.status,
-            ...(workingDirectory !== undefined ? { workingDirectory } : undefined),
-            sourceBranch: directMerge.sourceBranch,
-            targetBranch,
-            publishTarget: publishTargetFromTargetBranch(targetBranch),
-            defaultMergeMethod,
-            hasUncommittedChanges: false,
-            uncommittedFileCount: 0,
-            ...(metadata.pullRequest !== undefined
-              ? { pullRequest: metadata.pullRequest }
-              : undefined),
-            directMerge,
-            providers,
-          },
+        const approvalContext: TaskApprovalContext = {
+          taskId,
+          taskStatus: current.status,
+          sourceBranch: directMerge.sourceBranch,
+          targetBranch,
+          publishTarget: publishTargetFromTargetBranch(targetBranch),
+          defaultMergeMethod,
+          hasUncommittedChanges: false,
+          uncommittedFileCount: 0,
+          directMerge,
+          providers,
         };
+        if (workingDirectory !== undefined) approvalContext.workingDirectory = workingDirectory;
+        if (metadata.pullRequest !== undefined) approvalContext.pullRequest = metadata.pullRequest;
+        return { outcome: "ready", approvalContext };
       }
 
       const taskWorktree = yield* dependencies.taskWorktreeService.getTaskWorktree({
@@ -151,27 +148,23 @@ export const createTaskApprovalContextUseCase = ({
         targetRef,
       );
 
-      return {
-        outcome: "ready",
-        approvalContext: {
-          taskId,
-          taskStatus: current.status,
-          workingDirectory: taskWorktree.workingDirectory,
-          sourceBranch,
-          targetBranch,
-          publishTarget,
-          defaultMergeMethod,
-          hasUncommittedChanges: worktreeStatus.fileStatusCounts.total > 0,
-          uncommittedFileCount: worktreeStatus.fileStatusCounts.total,
-          ...(metadata.pullRequest !== undefined
-            ? { pullRequest: metadata.pullRequest }
-            : undefined),
-          providers,
-          ...(suggestedSquashCommitMessage !== undefined
-            ? { suggestedSquashCommitMessage }
-            : undefined),
-        },
+      const approvalContext: TaskApprovalContext = {
+        taskId,
+        taskStatus: current.status,
+        workingDirectory: taskWorktree.workingDirectory,
+        sourceBranch,
+        targetBranch,
+        publishTarget,
+        defaultMergeMethod,
+        hasUncommittedChanges: worktreeStatus.fileStatusCounts.total > 0,
+        uncommittedFileCount: worktreeStatus.fileStatusCounts.total,
+        providers,
       };
+      if (metadata.pullRequest !== undefined) approvalContext.pullRequest = metadata.pullRequest;
+      if (suggestedSquashCommitMessage !== undefined) {
+        approvalContext.suggestedSquashCommitMessage = suggestedSquashCommitMessage;
+      }
+      return { outcome: "ready", approvalContext };
     });
   },
 });

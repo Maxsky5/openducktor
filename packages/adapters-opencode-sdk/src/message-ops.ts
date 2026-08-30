@@ -47,6 +47,17 @@ type HistoryStreamPartNormalizationState = {
   pendingBackgroundTaskResultsByExternalSessionId: Map<string, MappedSubagentPart[]>;
 };
 
+type NormalizedHistoryEntry = {
+  entry: ParsedOpencodeMessage;
+  timestamp: string;
+  text: string;
+  totalTokens?: number;
+  model?: ReturnType<typeof readMessageModelSelection>;
+  parentId?: string;
+  displayParts?: AgentUserMessageDisplayPart[];
+  rawParts: ParsedOpencodePart[];
+};
+
 const CHILD_SESSION_START_TOLERANCE_MS = 5_000;
 
 const buildSubagentSignature = (part: MappedSubagentPart): string | undefined => {
@@ -69,11 +80,11 @@ const buildPartScopedSubagentCorrelationKey = (
 const readChildSessionCreatedAt = (session: Session): number | undefined => session.time?.created;
 
 const toChildSessionLink = (session: Session): ChildSessionLink | null => {
-  if (typeof session.id !== "string" || session.id.trim().length === 0) {
+  if (session.id.trim().length === 0) {
     return null;
   }
   const createdAtMs = readChildSessionCreatedAt(session);
-  if (typeof createdAtMs !== "number") {
+  if (createdAtMs === undefined) {
     return null;
   }
 
@@ -105,7 +116,7 @@ const takeChildSessionLinkForSubagentPart = (
   part: MappedSubagentPart,
 ): ChildSessionLink | undefined => {
   const startedAtMs = part.startedAtMs;
-  if (part.externalSessionId || typeof startedAtMs !== "number") {
+  if (part.externalSessionId || startedAtMs === undefined) {
     return undefined;
   }
 
@@ -355,11 +366,14 @@ export const loadSessionHistory = async (
     runtimeEndpoint: input.runtimeEndpoint,
     workingDirectory: input.workingDirectory,
   });
-  const response = await client.session.messages({
+  const messagesRequest: Parameters<typeof client.session.messages>[0] = {
     sessionID: input.externalSessionId,
     directory: input.workingDirectory,
-    ...(typeof input.limit === "number" ? { limit: input.limit } : undefined),
-  });
+  };
+  if (input.limit !== undefined) {
+    messagesRequest.limit = input.limit;
+  }
+  const response = await client.session.messages(messagesRequest);
   const data = opencodeSessionMessagesPayloadSchema.parse(
     unwrapData(response, "load session messages"),
   );
@@ -395,16 +409,25 @@ export const loadSessionHistory = async (
       const model = readMessageModelSelection(info);
       const parentId = info.role === "assistant" ? info.parentID : undefined;
 
-      return {
+      const normalizedEntry: NormalizedHistoryEntry = {
         entry,
         timestamp,
         text,
-        ...(typeof totalTokens === "number" ? { totalTokens } : undefined),
-        ...(model ? { model } : undefined),
-        ...(parentId ? { parentId } : undefined),
-        ...(entry.info.role === "user" ? { displayParts } : undefined),
         rawParts: entry.parts,
       };
+      if (totalTokens !== undefined) {
+        normalizedEntry.totalTokens = totalTokens;
+      }
+      if (model) {
+        normalizedEntry.model = model;
+      }
+      if (parentId) {
+        normalizedEntry.parentId = parentId;
+      }
+      if (entry.info.role === "user") {
+        normalizedEntry.displayParts = displayParts;
+      }
+      return normalizedEntry;
     })
     .sort((a, b) => {
       const aTime = Date.parse(a.timestamp);
@@ -454,28 +477,36 @@ export const loadSessionHistory = async (
     }
 
     if (item.entry.info.role === "assistant") {
-      history.push({
+      const assistantMessage: AgentSessionHistoryMessage = {
         messageId: item.entry.info.id,
         role: "assistant",
         timestamp: item.timestamp,
         text: item.text,
-        ...(typeof item.totalTokens === "number" ? { totalTokens: item.totalTokens } : undefined),
-        ...(item.model ? { model: item.model } : undefined),
         parts: item.parts,
-      });
+      };
+      if (item.totalTokens !== undefined) {
+        assistantMessage.totalTokens = item.totalTokens;
+      }
+      if (item.model) {
+        assistantMessage.model = item.model;
+      }
+      history.push(assistantMessage);
       continue;
     }
 
-    history.push({
+    const userMessage: AgentSessionHistoryMessage = {
       messageId: item.entry.info.id,
       role: "user",
       timestamp: item.timestamp,
       text: item.text,
       displayParts: item.displayParts ?? [],
       state: pendingAssistantIndex >= 0 && index > pendingAssistantIndex ? "queued" : "read",
-      ...(item.model ? { model: item.model } : undefined),
       parts: item.parts,
-    });
+    };
+    if (item.model) {
+      userMessage.model = item.model;
+    }
+    history.push(userMessage);
   }
 
   return history;
@@ -495,10 +526,13 @@ export const loadSessionTodos = async (
       runtimeEndpoint: input.runtimeEndpoint,
       workingDirectory: input.workingDirectory,
     });
-    const response = await client.session.todo({
+    const todoRequest: Parameters<typeof client.session.todo>[0] = {
       sessionID: input.externalSessionId,
-      ...(trimmedWorkingDirectory.length > 0 ? { directory: trimmedWorkingDirectory } : undefined),
-    });
+    };
+    if (trimmedWorkingDirectory.length > 0) {
+      todoRequest.directory = trimmedWorkingDirectory;
+    }
+    const response = await client.session.todo(todoRequest);
     if (response.data === undefined || response.data === null) {
       throw toOpenCodeRequestError("load session todos", response.error, response.response);
     }

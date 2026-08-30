@@ -1,4 +1,3 @@
-export * from "./guards";
 export * from "./ports/agent-engine";
 export * from "./services/agent-file-references";
 export * from "./services/agent-session-ref-key";

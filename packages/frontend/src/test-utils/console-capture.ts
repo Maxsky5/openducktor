@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 type ConsoleMethod = "debug" | "error" | "info" | "log" | "warn";
 type ConsoleArguments = Parameters<Console["log"]>;
 
@@ -7,6 +9,8 @@ type WritableStreamName = "stderr" | "stdout";
 
 type WritableStreamWrite = (typeof process.stdout)["write"];
 type WriteCallback = (error?: Error | null) => void;
+
+const writeCallbackSchema = z.function();
 
 export const withCapturedConsole = async <Result>(
   method: ConsoleMethod,
@@ -80,8 +84,8 @@ export const withCapturedOutputStreams = async <Result>(
       callback?: WriteCallback,
     ): boolean {
       chunksByStream[streamName].push(String(chunk));
-      const writeCallback =
-        typeof encodingOrCallback === "function" ? encodingOrCallback : callback;
+      const parsedWriteCallback = writeCallbackSchema.safeParse(encodingOrCallback);
+      const writeCallback = parsedWriteCallback.success ? parsedWriteCallback.data : callback;
       writeCallback?.();
       return true;
     }

@@ -42,10 +42,9 @@ export const normalizeTargetBranch = (
     normalizedBranch = normalizedBranch.slice(normalizedRemote.length + 1);
   }
 
-  return {
-    ...(normalizedRemote ? { remote: normalizedRemote } : undefined),
-    branch: normalizedBranch,
-  };
+  const targetBranch: GitTargetBranch = { branch: normalizedBranch };
+  if (normalizedRemote) targetBranch.remote = normalizedRemote;
+  return targetBranch;
 };
 
 export const effectiveTaskTargetBranch = (

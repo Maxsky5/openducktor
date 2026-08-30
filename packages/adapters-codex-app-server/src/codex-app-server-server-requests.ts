@@ -22,7 +22,10 @@ import {
   type CodexSubagentRoute,
   codexSubagentRouteEventFields,
 } from "./codex-subagent-link-state";
-import { requireNormalizedCodexToolInvocation } from "./codex-tool-normalizer";
+import {
+  requireNormalizedCodexToolInvocation,
+  toCodexToolQuestions,
+} from "./codex-tool-normalizer";
 import type {
   CodexServerRequestRecord,
   CodexServerRequestResponder,
@@ -137,13 +140,16 @@ const resolveRequestRouteContext = (
     );
   }
   const policySession = parentSession ?? ownerSession ?? session;
-  return {
+  const routeContext: RequestRouteContext = {
     ownerThreadId,
-    ...(ownerSession ? { ownerSession } : undefined),
     policySession,
     runtimeId: ownerSession?.runtimeId ?? policySession.runtimeId,
     route,
   };
+  if (ownerSession) {
+    routeContext.ownerSession = ownerSession;
+  }
+  return routeContext;
 };
 
 const emitPendingEvent = (
@@ -218,7 +224,7 @@ export const handleCodexServerRequest = async (
     }
   };
 
-  if (typeof rawRequest.method !== "string" || rawRequest.method.trim().length === 0) {
+  if (rawRequest.method.trim().length === 0) {
     throw new Error("Codex app-server server request is missing method.");
   }
 
@@ -297,13 +303,16 @@ export const handleCodexServerRequest = async (
     let registeredRequestId: string | null = null;
     runWhileHandled(
       () => {
-        const registration = context.pendingInput.addApproval({
+        const approvalInput: Parameters<typeof context.pendingInput.addApproval>[0] = {
           runtimeId: routeContext.runtimeId,
           threadId: routeContext.ownerThreadId,
           nativeRequest: rawRequest,
           request: mcpElicitationApproval,
-          ...(routeContext.route ? { route: routeContext.route } : undefined),
-        });
+        };
+        if (routeContext.route) {
+          approvalInput.route = routeContext.route;
+        }
+        const registration = context.pendingInput.addApproval(approvalInput);
         if (!registration.isNew) {
           return;
         }
@@ -339,21 +348,23 @@ export const handleCodexServerRequest = async (
     if (activeTurn && context.bindActiveTurnId(activeTurn, parsed.turnId, requestReceivedAtMs)) {
       context.flushQueuedUserMessagesLater(activeTurn);
     }
-    const questionInput = {
-      questions: parsed.request.questions,
-    };
+    const questions = toCodexToolQuestions(parsed.request.questions);
+    const questionInput = { questions };
     let registeredRequestId: string | null = null;
     runWhileHandled(
       () => {
-        const registration = context.pendingInput.addQuestion({
+        const questionEntry: Parameters<typeof context.pendingInput.addQuestion>[0] = {
           runtimeId: routeContext.runtimeId,
           threadId: routeContext.ownerThreadId,
           nativeRequest: rawRequest,
           request: parsed.request,
           questionIds: parsed.questionIds,
           input: questionInput,
-          ...(routeContext.route ? { route: routeContext.route } : undefined),
-        });
+        };
+        if (routeContext.route) {
+          questionEntry.route = routeContext.route;
+        }
+        const registration = context.pendingInput.addQuestion(questionEntry);
         if (!registration.isNew) {
           return;
         }
@@ -387,7 +398,7 @@ export const handleCodexServerRequest = async (
               input: questionInput,
               metadata: {
                 codexServerRequest: true,
-                questions: parsed.request.questions,
+                questions,
               },
             }),
           },
@@ -433,13 +444,16 @@ export const handleCodexServerRequest = async (
     let registeredRequestId: string | null = null;
     runWhileHandled(
       () => {
-        const registration = context.pendingInput.addApproval({
+        const approvalInput: Parameters<typeof context.pendingInput.addApproval>[0] = {
           runtimeId: routeContext.runtimeId,
           threadId: routeContext.ownerThreadId,
           nativeRequest: rawRequest,
           request: parsedApproval,
-          ...(routeContext.route ? { route: routeContext.route } : undefined),
-        });
+        };
+        if (routeContext.route) {
+          approvalInput.route = routeContext.route;
+        }
+        const registration = context.pendingInput.addApproval(approvalInput);
         if (!registration.isNew) {
           return;
         }

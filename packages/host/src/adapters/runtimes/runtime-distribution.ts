@@ -5,13 +5,7 @@ import {
   type ToolDiscoveryId,
 } from "../../ports/tool-discovery-port";
 
-declare const hostRuntimeDistributionBrand: unique symbol;
-
-type HostRuntimeDistributionBrand = {
-  readonly [hostRuntimeDistributionBrand]: true;
-};
-
-export type SourceRuntimeDistribution = HostRuntimeDistributionBrand & {
+export type SourceRuntimeDistribution = {
   mode: "source";
   workspaceRoot: string;
 };
@@ -29,7 +23,7 @@ export type ToolScriptMcpLauncher = {
 
 export type ArtifactMcpLauncher = ExecutableMcpLauncher | ToolScriptMcpLauncher;
 
-export type ArtifactRuntimeDistribution = HostRuntimeDistributionBrand & {
+export type ArtifactRuntimeDistribution = {
   mode: "artifact";
   mcpLauncher: ArtifactMcpLauncher;
   bundledToolBinDirs?: Partial<Record<ToolDiscoveryId, string>>;
@@ -60,12 +54,12 @@ const assertToolDiscoveryId = (value: string, field: string): ToolDiscoveryId =>
   return toolId;
 };
 
-// SAFETY: This is the sole SourceRuntimeDistribution constructor, and assertNonEmpty validates its only data field before applying the private brand.
-export const createSourceRuntimeDistribution = (workspaceRoot: string): SourceRuntimeDistribution =>
-  ({
-    mode: "source",
-    workspaceRoot: assertNonEmpty(workspaceRoot, "workspaceRoot"),
-  }) as SourceRuntimeDistribution;
+export const createSourceRuntimeDistribution = (
+  workspaceRoot: string,
+): SourceRuntimeDistribution => ({
+  mode: "source",
+  workspaceRoot: assertNonEmpty(workspaceRoot, "workspaceRoot"),
+});
 
 const unsupportedArtifactMcpLauncher = (launcher: { kind?: unknown }): never => {
   const kind = launcher.kind;
@@ -119,14 +113,11 @@ export const createArtifactRuntimeDistribution = ({
   mcpLauncher: ArtifactMcpLauncher;
 }): ArtifactRuntimeDistribution => {
   const normalizedBundledToolBinDirs = createBundledToolBinDirs(bundledToolBinDirs);
-  // SAFETY: This is the sole ArtifactRuntimeDistribution constructor; the launcher and every optional tool directory are validated before applying the private brand.
-  return {
+  const distribution = {
     mode: "artifact",
     mcpLauncher: createArtifactMcpLauncher(mcpLauncher),
-    ...(normalizedBundledToolBinDirs === undefined
-      ? undefined
-      : {
-          bundledToolBinDirs: normalizedBundledToolBinDirs,
-        }),
-  } as ArtifactRuntimeDistribution;
+  } satisfies ArtifactRuntimeDistribution;
+  return normalizedBundledToolBinDirs === undefined
+    ? distribution
+    : { ...distribution, bundledToolBinDirs: normalizedBundledToolBinDirs };
 };

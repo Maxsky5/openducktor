@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { GitConflict } from "@/features/agent-studio-git";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
@@ -41,7 +42,9 @@ const sessionIdentity = (
   workingDirectory,
 });
 
-const createConflict = (overrides: Record<string, unknown> = {}) => ({
+type GitConflictOverrides = Partial<GitConflict>;
+
+const createConflict = (overrides: GitConflictOverrides = {}) => ({
   operation: "rebase" as const,
   currentBranch: "feature/task-1",
   targetBranch: "origin/main",
@@ -227,7 +230,7 @@ describe("useGitConflictResolution", () => {
       await harness.mount();
 
       await expect(
-        harness.getLatest().handleResolveGitConflict(createConflict({ workingDir: undefined }), {
+        harness.getLatest().handleResolveGitConflict(createConflict({ workingDir: null }), {
           taskId: "task-1",
           task: createTaskCardFixture({ id: "task-1", title: "Resolve rebase conflict" }),
           builderSessions: [],

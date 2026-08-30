@@ -1,11 +1,43 @@
 import { describe, expect, test } from "bun:test";
+import type { JsonObject, JsonValue } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { GithubCommandDependencies } from "../../../application/tasks/support/github-pull-requests";
 import { HostOperationError } from "../../../effect/host-errors";
 import { createGithubPullRequestReviewReader } from "./github-pull-request-review-reader";
 import { createGithubReviewTestDependencies } from "./github-pull-request-review.test-support";
 
-type SerializableTestValue = object | string | number | boolean | null | undefined;
+type PullRequestActorFixture = {
+  login: string;
+  avatarUrl?: string;
+};
+
+type PullRequestReviewFixture = {
+  id: string;
+  author: PullRequestActorFixture;
+  body: string;
+  state: string;
+  url?: string;
+  createdAt?: string;
+  submittedAt?: string;
+  updatedAt?: string;
+};
+
+type PullRequestViewFixture = {
+  number: number;
+  title: string;
+  url: string;
+  state: string;
+  isDraft: boolean;
+  comments: Array<{
+    id: string;
+    author: PullRequestActorFixture;
+    body: string;
+    url: string;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  reviews: PullRequestReviewFixture[];
+};
 
 const createDependencies = ({
   commandActivity,
@@ -19,18 +51,18 @@ const createDependencies = ({
   commandActivity?: { active: number; maxActive: number };
   commandDelayMs?: number;
   commands?: string[][];
-  pullRequestViewResponse?: object;
-  reviewThreadNodes?: SerializableTestValue[];
-  reviewThreadResponse?: (args: string[]) => SerializableTestValue;
+  pullRequestViewResponse?: JsonObject;
+  reviewThreadNodes?: JsonValue[];
+  reviewThreadResponse?: (args: string[]) => JsonValue;
   checksResponse?: {
     ok: boolean;
-    stdout: SerializableTestValue;
+    stdout: JsonValue;
     rawStdout?: string;
     stderr?: string;
     exitCode?: number | null;
   };
 } = {}): GithubCommandDependencies => {
-  const succeed = <Payload>(stdout: Payload) =>
+  const succeed = (stdout: JsonValue) =>
     Effect.gen(function* () {
       if (commandActivity) {
         commandActivity.active += 1;
@@ -126,7 +158,7 @@ const createDependencies = ({
 
 const reviewerAvatarUrl = "https://avatars.githubusercontent.com/u/1?v=4";
 
-const defaultPullRequestViewResponse = () => ({
+const defaultPullRequestViewResponse = (): PullRequestViewFixture => ({
   number: 42,
   title: "Rework panel",
   url: "https://github.com/openai/openducktor/pull/42",
@@ -447,9 +479,7 @@ describe("createGithubPullRequestReviewReader", () => {
 
   test("uses the full review history", async () => {
     const provider = createGithubPullRequestReviewReader();
-    const pullRequestViewResponse: {
-      reviews: unknown[];
-    } = defaultPullRequestViewResponse();
+    const pullRequestViewResponse = defaultPullRequestViewResponse();
     pullRequestViewResponse.reviews.push({
       id: "review-2",
       author: { login: "reviewer" },
@@ -484,10 +514,7 @@ describe("createGithubPullRequestReviewReader", () => {
   test("omits a bodyless commented review when its inline comments are loaded separately", async () => {
     const provider = createGithubPullRequestReviewReader();
     const commands: string[][] = [];
-    const pullRequestViewResponse: Omit<
-      ReturnType<typeof defaultPullRequestViewResponse>,
-      "reviews"
-    > & { reviews: unknown[] } = defaultPullRequestViewResponse();
+    const pullRequestViewResponse = defaultPullRequestViewResponse();
     pullRequestViewResponse.reviews.push(
       {
         id: "review-inline-only",

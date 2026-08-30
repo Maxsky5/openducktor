@@ -206,17 +206,22 @@ const normalizeHookArgs = ({
   activeRepo,
   setActiveRepo,
   ...rest
-}: LegacyHookArgs): HookArgs => ({
-  activeWorkspace: activeWorkspace ?? (activeRepo ? createActiveWorkspace(activeRepo) : null),
-  setActiveWorkspace:
-    setActiveWorkspace ??
-    ((workspace) => {
-      setActiveRepo?.(workspace?.repoPath ?? null);
-    }),
-  clearTaskData: rest.clearTaskData ?? (() => {}),
-  clearActiveTaskStoreCheck: rest.clearActiveTaskStoreCheck ?? (() => {}),
-  ...(rest.hostClient === undefined ? undefined : { hostClient: rest.hostClient }),
-});
+}: LegacyHookArgs): HookArgs => {
+  const args: HookArgs = {
+    activeWorkspace: activeWorkspace ?? (activeRepo ? createActiveWorkspace(activeRepo) : null),
+    setActiveWorkspace:
+      setActiveWorkspace ??
+      ((workspace) => {
+        setActiveRepo?.(workspace?.repoPath ?? null);
+      }),
+    clearTaskData: rest.clearTaskData ?? (() => {}),
+    clearActiveTaskStoreCheck: rest.clearActiveTaskStoreCheck ?? (() => {}),
+  };
+  if (rest.hostClient !== undefined) {
+    args.hostClient = rest.hostClient;
+  }
+  return args;
+};
 
 const createHookHarness = (initialArgs: LegacyHookArgs) => {
   let latest: ReturnType<typeof useWorkspaceOperations> | null = null;

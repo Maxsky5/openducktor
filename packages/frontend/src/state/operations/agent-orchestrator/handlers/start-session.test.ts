@@ -574,9 +574,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       startedAt: "2026-02-22T08:00:00.000Z",
     });
     adapter.stopSession = async (sessionRef) => {
-      stoppedSessionIds.push(
-        typeof sessionRef === "string" ? sessionRef : sessionRef.externalSessionId,
-      );
+      stoppedSessionIds.push(sessionRef.externalSessionId);
     };
 
     const { start } = createStartSessionTestHarness({

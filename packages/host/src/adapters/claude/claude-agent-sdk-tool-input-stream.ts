@@ -1,7 +1,7 @@
 import type { ClaudeDecodedToolUse } from "./claude-agent-sdk-tool-shapes";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
-import { isUnknownRecord } from "@openducktor/core";
-import { jsonValueSchema } from "@openducktor/contracts";
+import { jsonObjectSchema, type JsonObject } from "@openducktor/contracts";
+import type { ClaudeToolInput } from "./claude-agent-sdk-types";
 
 type ToolStreamEntry = {
   blockIndex: number;
@@ -32,25 +32,16 @@ const toolStreamStateFor = (session: ClaudeToolInputStreamSession): ToolStreamSt
   return state;
 };
 
-type ParsedToolInput = Record<string, unknown>;
-
 const tryParseJsonRecord = (json: string) => {
   try {
-    // SAFETY: JSON.parse returns JSON-compatible data for the supplied text.
-    const parsed = jsonValueSchema.parse(JSON.parse(json));
-    return isUnknownRecord(parsed) ? parsed : null;
+    const parsed = jsonObjectSchema.safeParse(JSON.parse(json));
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }
 };
 
-const toolInputFingerprint = (input: ParsedToolInput): string => {
-  try {
-    return JSON.stringify(input);
-  } catch {
-    return Object.keys(input).sort().join("\u001f");
-  }
-};
+const toolInputFingerprint = (input: JsonObject): string => JSON.stringify(input);
 
 export const rememberClaudeStreamToolStart = (
   session: ClaudeToolInputStreamSession,
@@ -61,10 +52,10 @@ export const rememberClaudeStreamToolStart = (
     blockIndex,
     partialInputJson: "",
     toolUse,
-    ...(toolUse.input
-      ? { lastEmittedInputFingerprint: toolInputFingerprint(toolUse.input) }
-      : undefined),
   };
+  if (toolUse.input) {
+    entry.lastEmittedInputFingerprint = toolInputFingerprint(toolUse.input);
+  }
   const state = toolStreamStateFor(session);
   state.toolsByBlockIndex.set(blockIndex, entry);
   state.toolsByCallId.set(toolUse.callId, entry);
@@ -102,7 +93,7 @@ export const appendClaudeStreamToolInputJson = (
 export const consumeClaudeStreamEmittedToolInput = (
   session: ClaudeToolInputStreamSession,
   callId: string,
-  input: Record<string, unknown>,
+  input: ClaudeToolInput,
 ): boolean => {
   const state = toolStreamStateFor(session);
   const entry = state.toolsByCallId.get(callId);

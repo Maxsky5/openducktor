@@ -4,8 +4,11 @@ import type { FileDiff, FileStatus } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   HostOperationError,
+  type HostOperationErrorAggregate,
   HostResourceError,
+  type HostResourceErrorAggregate,
   HostValidationError,
+  type HostValidationErrorAggregate,
   toHostOperationError,
 } from "../../effect/host-errors";
 import {
@@ -26,7 +29,10 @@ const gitResourceError = (
 ): HostResourceError => new HostResourceError({ message, operation, resource });
 const gitValidationError = (message: string, field: string): HostValidationError =>
   new HostValidationError({ message, field });
-type GitDiffError = HostOperationError | HostResourceError | HostValidationError;
+type GitDiffError =
+  | HostOperationErrorAggregate
+  | HostResourceErrorAggregate
+  | HostValidationErrorAggregate;
 const emptyTreeSha1 = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 const emptyTreeSha256 = "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321";
 const normalizeNumstatFilePath = (file: string): string => {
@@ -389,7 +395,7 @@ export const loadDiffPayload = (
 const emptyTreeOid = (
   runner: GitCommandRunner,
   workingDirectory: string,
-): Effect.Effect<string, HostOperationError | HostValidationError> =>
+): Effect.Effect<string, HostOperationErrorAggregate | HostValidationErrorAggregate> =>
   Effect.gen(function* () {
     const objectFormat = (yield* runGit(runner, workingDirectory, [
       "rev-parse",

@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
-import { createEventTestSession as createSession } from "./claude-agent-sdk-events.test-support";
+import {
+  claudeAcceptedUserMessageFixture,
+  createEventTestSession as createSession,
+} from "./claude-agent-sdk-events.test-support";
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 
 describe("handleClaudeSdkMessage result deduplication", () => {
@@ -120,8 +123,16 @@ describe("handleClaudeSdkMessage result deduplication", () => {
     const events: AgentEvent[] = [];
     const session = createSession("running");
     session.acceptedUserMessages.push(
-      { messageId: "user-1", text: "First", timestamp: "2026-06-25T19:59:00.000Z" },
-      { messageId: "user-2", text: "Second", timestamp: "2026-06-25T19:59:30.000Z" },
+      claudeAcceptedUserMessageFixture({
+        messageId: "user-1",
+        text: "First",
+        timestamp: "2026-06-25T19:59:00.000Z",
+      }),
+      claudeAcceptedUserMessageFixture({
+        messageId: "user-2",
+        text: "Second",
+        timestamp: "2026-06-25T19:59:30.000Z",
+      }),
     );
     session.pendingUserTurnCount = 2;
     const commonInput = {

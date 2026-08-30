@@ -19,8 +19,6 @@ const agentSessionControlWorkingDirectoryFields = {
   workingDirectory: nonEmptyStringSchema,
 };
 
-const agentSessionControlRefFields = agentSessionLiveRefSchema.shape;
-
 const fileReferenceSchema = z
   .object({
     id: nonEmptyStringSchema,
@@ -85,9 +83,8 @@ export const agentSessionControlStartInputSchema = z
   .strict();
 export type AgentSessionControlStartInput = z.infer<typeof agentSessionControlStartInputSchema>;
 
-export const agentSessionControlResumeInputSchema = z
-  .object({
-    ...agentSessionControlRefFields,
+export const agentSessionControlResumeInputSchema = agentSessionLiveRefSchema
+  .extend({
     sessionScope: agentSessionScopeSchema,
     model: agentModelSelectionSchema.optional(),
     systemPrompt: z.string().optional(),
@@ -107,9 +104,8 @@ export const agentSessionControlForkInputSchema = z
   .strict();
 export type AgentSessionControlForkInput = z.infer<typeof agentSessionControlForkInputSchema>;
 
-export const agentSessionControlSendInputSchema = z
-  .object({
-    ...agentSessionControlRefFields,
+export const agentSessionControlSendInputSchema = agentSessionLiveRefSchema
+  .extend({
     sessionScope: agentSessionScopeSchema,
     parts: z.array(agentSessionUserMessagePartSchema).min(1),
     model: agentModelSelectionSchema.optional(),
@@ -129,9 +125,8 @@ export const agentSessionControlSendInputSchema = z
   });
 export type AgentSessionControlSendInput = z.infer<typeof agentSessionControlSendInputSchema>;
 
-export const agentSessionControlUpdateModelInputSchema = z
-  .object({
-    ...agentSessionControlRefFields,
+export const agentSessionControlUpdateModelInputSchema = agentSessionLiveRefSchema
+  .extend({
     model: agentModelSelectionSchema.nullable(),
   })
   .strict();

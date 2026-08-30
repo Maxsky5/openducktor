@@ -1,6 +1,7 @@
-import { isJsonObject, type JsonObject } from "@openducktor/contracts";
+import { isJsonObject, type JsonObject, type JsonValue } from "@openducktor/contracts";
 import type { OnUserDialog, UserDialogResult } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
+import { z } from "zod";
 import { HostValidationError } from "../../effect/host-errors";
 import {
   claudePendingInputResolutionRoute,
@@ -49,10 +50,15 @@ const isClaudeAskUserQuestionDialogKind = (dialogKind: string): boolean =>
     (candidate) => candidate.toLowerCase() === dialogKind.trim().toLowerCase(),
   );
 
-const readString = (value: unknown): string | null =>
-  typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+const nonEmptyClaudeQuestionTextSchema = z.string().trim().min(1);
+const claudeQuestionPreviewSchema = z.string();
 
-const readOptions = (value: unknown): ClaudeAskUserQuestionOption[] | null => {
+const readString = (value: JsonValue | undefined): string | null => {
+  const parsed = nonEmptyClaudeQuestionTextSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+};
+
+const readOptions = (value: JsonValue | undefined): ClaudeAskUserQuestionOption[] | null => {
   if (!Array.isArray(value)) {
     return null;
   }
@@ -66,12 +72,12 @@ const readOptions = (value: unknown): ClaudeAskUserQuestionOption[] | null => {
     if (!label || !description) {
       return null;
     }
-    const preview = typeof option.preview === "string" ? option.preview : undefined;
-    options.push({
-      label,
-      description,
-      ...(preview ? { preview } : undefined),
-    });
+    const parsedPreview = claudeQuestionPreviewSchema.safeParse(option.preview);
+    const questionOption: ClaudeAskUserQuestionOption = { label, description };
+    if (parsedPreview.success && parsedPreview.data.length > 0) {
+      questionOption.preview = parsedPreview.data;
+    }
+    options.push(questionOption);
   }
   return options;
 };

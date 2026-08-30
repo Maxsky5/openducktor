@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
+import { z } from "zod";
 import { HostOperationError } from "../../effect/host-errors";
 import {
   createBuildSettingsConfig,
@@ -920,11 +921,12 @@ describe("createTaskService build start worktree handling", () => {
         },
       ]),
     );
+    const callTypeSchema = z.object({ type: z.string() }).passthrough();
     expect(
-      calls.some(
-        (call) =>
-          typeof call === "object" && call !== null && "type" in call && call.type === "transition",
-      ),
+      calls.some((call) => {
+        const parsed = callTypeSchema.safeParse(call);
+        return parsed.success && parsed.data.type === "transition";
+      }),
     ).toBe(false);
   });
 
@@ -1061,11 +1063,7 @@ describe("createTaskService build start worktree handling", () => {
     expect(laterSessionBootstrap.workingDirectory).toBe(worktreePath);
     expect(
       calls.filter(
-        (call) =>
-          typeof call === "object" &&
-          call !== null &&
-          "type" in call &&
-          call.type === "createWorktree",
+        (call) => z.object({ type: z.literal("createWorktree") }).safeParse(call).success,
       ),
     ).toHaveLength(2);
     await Effect.runPromise(
@@ -1124,13 +1122,13 @@ describe("createTaskService build start worktree handling", () => {
     ).rejects.toThrow("worktree create failed");
 
     expect(
-      calls.filter(
-        (call) =>
-          typeof call === "object" &&
-          call !== null &&
-          "type" in call &&
-          ["deleteReference", "removeWorktree", "deleteLocalBranch"].includes(String(call.type)),
-      ),
+      calls.filter((call) => {
+        const parsed = z.object({ type: z.string() }).safeParse(call);
+        return (
+          parsed.success &&
+          ["deleteReference", "removeWorktree", "deleteLocalBranch"].includes(parsed.data.type)
+        );
+      }),
     ).toEqual([]);
   });
 

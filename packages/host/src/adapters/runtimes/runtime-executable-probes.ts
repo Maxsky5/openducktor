@@ -9,12 +9,17 @@ export const createRuntimeExecutableProbes = ({
 }: {
   clientVersion?: string;
   processEnv?: NodeJS.ProcessEnv;
-} = {}) =>
-  ({
+} = {}): RuntimeExecutableProbesByKind => {
+  const codexInput: Parameters<typeof createCodexExecutableProbe>[0] = {};
+  if (clientVersion) {
+    codexInput.clientVersion = clientVersion;
+  }
+  if (processEnv) {
+    codexInput.processEnv = processEnv;
+  }
+  return {
     claude: createClaudeExecutableProbe(processEnv ? { processEnv } : {}),
-    codex: createCodexExecutableProbe({
-      ...(clientVersion ? { clientVersion } : undefined),
-      ...(processEnv ? { processEnv } : undefined),
-    }),
+    codex: createCodexExecutableProbe(codexInput),
     opencode: createOpenCodeExecutableProbe(processEnv ? { processEnv } : {}),
-  }) satisfies RuntimeExecutableProbesByKind;
+  };
+};

@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { z } from "zod";
 import { TaskPolicyError } from "../../domain/task";
 import { HostOperationError } from "../../effect/host-errors";
 import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
@@ -1255,15 +1256,10 @@ describe("createTaskService pull requests", () => {
         ]),
       }),
     );
-    const resolvedGhChecks = calls.filter(
-      (call) =>
-        typeof call === "object" &&
-        call !== null &&
-        "type" in call &&
-        call.type === "resolveCommand" &&
-        "command" in call &&
-        call.command === "gh",
-    );
+    const resolvedGhCheckSchema = z
+      .object({ type: z.literal("resolveCommand"), command: z.literal("gh") })
+      .passthrough();
+    const resolvedGhChecks = calls.filter((call) => resolvedGhCheckSchema.safeParse(call).success);
     expect(resolvedGhChecks).toHaveLength(1);
     expect(calls).toContainEqual({
       type: "setPullRequest",

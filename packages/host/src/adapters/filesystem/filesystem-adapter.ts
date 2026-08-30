@@ -3,6 +3,7 @@ import { access, lstat, open, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
+import { z } from "zod";
 import { toHostOperationError, toHostPathStatError } from "../../effect/host-errors";
 import {
   type FilesystemDirectoryEntry,
@@ -16,10 +17,11 @@ import { conditionallyReplaceOpenFile } from "./conditional-file-replace";
 const revisionForFile = (bytes: Uint8Array, identity: { dev: number; ino: number }): string =>
   `sha256:${createHash("sha256").update(bytes).digest("hex")}:file:${identity.dev}:${identity.ino}`;
 
-const nodeErrorCode = (cause: unknown): string | null =>
-  typeof cause === "object" && cause !== null && "code" in cause && typeof cause.code === "string"
-    ? cause.code
-    : null;
+const nodeErrorSchema = z.object({ code: z.string() }).passthrough();
+const nodeErrorCode = (cause: unknown): string | null => {
+  const parsed = nodeErrorSchema.safeParse(cause);
+  return parsed.success ? parsed.data.code : null;
+};
 
 const fileOperationError = (
   cause: unknown,

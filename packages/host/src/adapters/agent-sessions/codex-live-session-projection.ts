@@ -28,6 +28,16 @@ type QueuedMutation = {
   readonly reject: (cause: unknown) => void;
 };
 
+type NormalizedCodexLiveSessionMutation = Pick<
+  CodexLiveSessionMutation,
+  "catalogInvalidated" | "fault" | "faultRef"
+> & {
+  readonly snapshots: AgentSessionLiveSnapshot[];
+  readonly transcriptEvents: Array<z.output<typeof agentSessionTranscriptEventSchema>>;
+};
+
+type OperationValidationDetails = { readonly operation: string };
+
 const refKey = (ref: AgentSessionLiveRef): string =>
   [ref.repoPath, ref.runtimeKind, ref.workingDirectory, ref.externalSessionId].join("\u0000");
 
@@ -41,11 +51,11 @@ const parseProjectionValue = <Schema extends z.ZodType, Input>(
   schema: Schema,
   value: Input,
   operation: string,
-): Effect.Effect<z.output<Schema>, HostValidationError> =>
+): Effect.Effect<z.output<Schema>, HostValidationError<OperationValidationDetails>> =>
   Effect.try({
     try: () => schema.parse(value),
     catch: (cause) =>
-      new HostValidationError({
+      new HostValidationError<OperationValidationDetails>({
         message: cause instanceof Error ? cause.message : String(cause),
         cause,
         details: { operation },
@@ -135,13 +145,14 @@ export const createCodexLiveSessionProjection = ({
         ),
       );
       const faultRef = mutation.faultRef ? yield* normalizeFaultRef(mutation.faultRef) : undefined;
-      return {
+      const normalized: NormalizedCodexLiveSessionMutation = {
         snapshots,
         transcriptEvents,
         catalogInvalidated: mutation.catalogInvalidated,
-        ...(mutation.fault ? { fault: mutation.fault } : undefined),
-        ...(faultRef ? { faultRef } : undefined),
       };
+      if (mutation.fault) normalized.fault = mutation.fault;
+      if (faultRef) normalized.faultRef = faultRef;
+      return normalized;
     });
 
   const applyMutation = (mutation: CodexLiveSessionMutation): Effect.Effect<void, HostError> =>
@@ -180,13 +191,13 @@ export const createCodexLiveSessionProjection = ({
               });
             }
             if (normalized.fault) {
-              changes.push({
+              const fault = {
                 type: "fault",
                 repoPath: runtime.repoPath,
                 operation: "codex-live-session.process-event",
                 message: normalized.fault,
-                ...(normalized.faultRef ? { ref: normalized.faultRef } : undefined),
-              });
+              } satisfies AgentSessionLiveAdapterChange;
+              changes.push(normalized.faultRef ? { ...fault, ref: normalized.faultRef } : fault);
             }
             return { value: undefined, changes };
           }),

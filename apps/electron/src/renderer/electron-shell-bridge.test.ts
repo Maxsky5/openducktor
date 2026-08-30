@@ -58,7 +58,7 @@ const createElectronApi = () => {
   return {
     electronApi: {
       platform: "darwin",
-      invoke: mock(async () => ({ ok: true as const, value: {} })),
+      invoke: mock(async () => ({ ok: true as const, value: undefined })),
       subscribe: mock(() => unsubscribe),
       appUpdates: {
         getState: mock(async () => ({ status: "idle", currentVersion: "0.4.2" })),

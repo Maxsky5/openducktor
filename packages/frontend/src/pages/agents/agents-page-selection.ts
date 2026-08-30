@@ -33,6 +33,12 @@ export type CompletionTimestamp = {
   timestamp: number;
 };
 
+type AgentStudioViewSessionSelection = {
+  role: AgentRole;
+  sessionIdentity: AgentSessionIdentity | null;
+  sessionSummary: AgentSessionSummary | null;
+};
+
 export const parseTimestamp = (value: string | null | undefined): number | null => {
   if (!value) {
     return null;
@@ -345,17 +351,13 @@ export const resolveAgentStudioViewSessionSelection = ({
   selectedTask: TaskCard | null;
   sessionlessRole: AgentRole;
   keepExplicitRoleSessionless?: boolean;
-}) => {
+}): AgentStudioViewSessionSelection => {
   if (sessionIdentity) {
     const matchingCandidate = findViewSessionCandidateByIdentity(sessionSummaries, sessionIdentity);
     return {
       role: matchingCandidate?.role ?? roleFromQuery,
       sessionIdentity,
       sessionSummary: matchingCandidate,
-    } satisfies {
-      role: AgentRole;
-      sessionIdentity: AgentSessionIdentity | null;
-      sessionSummary: AgentSessionSummary | null;
     };
   }
 
@@ -368,10 +370,6 @@ export const resolveAgentStudioViewSessionSelection = ({
       role: roleFromQuery,
       sessionIdentity: null,
       sessionSummary: null,
-    } satisfies {
-      role: AgentRole;
-      sessionIdentity: AgentSessionIdentity | null;
-      sessionSummary: AgentSessionSummary | null;
     };
   }
   const selection = resolveAgentStudioSessionSelection({
@@ -389,10 +387,6 @@ export const resolveAgentStudioViewSessionSelection = ({
       ? toAgentSessionIdentity(selection.sessionSummary)
       : null,
     sessionSummary: selection.sessionSummary,
-  } satisfies {
-    role: AgentRole;
-    sessionIdentity: AgentSessionIdentity | null;
-    sessionSummary: AgentSessionSummary | null;
   };
 };
 

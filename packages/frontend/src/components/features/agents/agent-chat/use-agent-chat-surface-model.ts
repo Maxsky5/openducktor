@@ -120,12 +120,9 @@ export function useAgentChatSurfaceModel({
     syncBottomAfterComposerLayoutRef,
   });
 
-  return useMemo(
-    () => ({
-      chatSettings,
-      thread: threadModel,
-      ...(composerModel ? { composer: composerModel } : undefined),
-    }),
-    [chatSettings, composerModel, threadModel],
-  );
+  return useMemo(() => {
+    const surface: AgentChatSurfaceModel = { chatSettings, thread: threadModel };
+    if (composerModel) surface.composer = composerModel;
+    return surface;
+  }, [chatSettings, composerModel, threadModel]);
 }

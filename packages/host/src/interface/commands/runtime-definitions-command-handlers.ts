@@ -1,9 +1,10 @@
 import { Effect } from "effect";
 import type { RuntimeDefinitionsService } from "../../application/runtimes/runtime-definitions-service";
 import { HostValidationError } from "../../effect/host-errors";
-import { defineHostCommandHandlers } from "../router/host-command-router";
+import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
+import type { HostCommandArgs } from "./command-inputs";
 
-const requireNoArgs = (command: string, args: Record<string, unknown> | undefined): void => {
+const requireNoArgs = (command: string, args: HostCommandArgs): void => {
   if (args !== undefined && Object.keys(args).length > 0) {
     throw new HostValidationError({
       message: `${command} does not accept arguments.`,
@@ -16,7 +17,7 @@ const requireNoArgs = (command: string, args: Record<string, unknown> | undefine
 export const createRuntimeDefinitionsCommandHandlers = (
   runtimeDefinitionsService: RuntimeDefinitionsService,
 ) =>
-  defineHostCommandHandlers({
+  ({
     runtime_definitions_list: (args) =>
       Effect.try({
         try: () => {
@@ -31,4 +32,4 @@ export const createRuntimeDefinitionsCommandHandlers = (
                 field: "args",
               }),
       }),
-  });
+  }) satisfies HostCommandHandlerDefinitions;

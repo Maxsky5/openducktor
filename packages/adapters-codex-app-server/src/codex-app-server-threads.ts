@@ -32,15 +32,20 @@ export const toSessionSummary = (input: {
   title?: string;
   sessionAssociation: AgentSessionAssociation;
   status: AgentSessionSummary["status"];
-}): AgentSessionSummary => ({
-  externalSessionId: input.externalSessionId,
-  runtimeKind: "codex",
-  workingDirectory: input.workingDirectory,
-  ...(input.title ? { title: input.title } : undefined),
-  sessionAssociation: input.sessionAssociation,
-  startedAt: input.startedAt,
-  status: input.status,
-});
+}): AgentSessionSummary => {
+  const summary: AgentSessionSummary = {
+    externalSessionId: input.externalSessionId,
+    runtimeKind: "codex",
+    workingDirectory: input.workingDirectory,
+    sessionAssociation: input.sessionAssociation,
+    startedAt: input.startedAt,
+    status: input.status,
+  };
+  if (input.title) {
+    summary.title = input.title;
+  }
+  return summary;
+};
 
 export type CodexThreadStatusSnapshot = {
   classification: import("@openducktor/core").AgentSessionActivity;
@@ -66,6 +71,15 @@ export type CodexSubAgentSourceMetadata = {
   agentNickname: string | null;
   agentRole: string | null;
 };
+
+type CodexSubAgentSessionSource = Exclude<
+  CodexAppServerSessionSource,
+  "appServer" | "cli" | "exec" | "unknown" | "vscode" | { custom: string } | null | undefined
+>;
+type CodexThreadSpawnSubAgentSource = Exclude<
+  CodexSubAgentSessionSource["subAgent"],
+  "review" | "compact" | "memory_consolidation" | { other: string }
+>;
 
 const codexTimestampFromSeconds = (value: number): string => new Date(value * 1000).toISOString();
 
@@ -128,18 +142,12 @@ const codexThreadSnapshot = (thread: CodexAppServerThread): CodexThreadSnapshot 
 const codexSubAgentSourceMetadata = (
   source: CodexAppServerSessionSource | null | undefined,
 ): CodexSubAgentSourceMetadata | null => {
-  if (!source || typeof source === "string" || !("subAgent" in source)) {
+  const subAgentSource = codexSubAgentSource(source);
+  if (!subAgentSource) {
     return null;
   }
-  const subAgent = source.subAgent;
-  if (typeof subAgent === "string" || "other" in subAgent) {
-    return null;
-  }
-  if (!("thread_spawn" in subAgent)) {
-    return null;
-  }
-  const threadSpawn = subAgent.thread_spawn;
-  if (!threadSpawn.parent_thread_id || !Number.isFinite(threadSpawn.depth)) {
+  const threadSpawn = codexSubAgentThreadSpawnSource(subAgentSource);
+  if (!threadSpawn) {
     return null;
   }
   return {
@@ -149,6 +157,44 @@ const codexSubAgentSourceMetadata = (
     agentNickname: threadSpawn.agent_nickname,
     agentRole: threadSpawn.agent_role,
   };
+};
+
+const codexSubAgentSource = (
+  source: CodexAppServerSessionSource | null | undefined,
+): CodexSubAgentSessionSource | null => {
+  switch (source) {
+    case null:
+    case undefined:
+    case "appServer":
+    case "cli":
+    case "exec":
+    case "unknown":
+    case "vscode":
+      return null;
+    default:
+      break;
+  }
+  if ("custom" in source) {
+    return null;
+  }
+  return source;
+};
+
+const codexSubAgentThreadSpawnSource = (
+  source: CodexSubAgentSessionSource,
+): CodexThreadSpawnSubAgentSource["thread_spawn"] | null => {
+  switch (source.subAgent) {
+    case "review":
+    case "compact":
+    case "memory_consolidation":
+      return null;
+    default:
+      break;
+  }
+  if ("other" in source.subAgent) {
+    return null;
+  }
+  return source.subAgent.thread_spawn;
 };
 
 export const codexThreadList = (

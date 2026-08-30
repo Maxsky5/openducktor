@@ -1,6 +1,6 @@
 import {
-  jsonValueSchema,
   parseCodexAppServerRequestResult,
+  type CodexAppServerClientRequestMap,
   type CodexAppServerThread,
   type CodexAppServerThreadTurnsListResponse,
 } from "@openducktor/contracts";
@@ -10,15 +10,15 @@ import type {
 } from "../../ports/codex-app-server-port";
 
 export const parseLoadedThreadListResponse = (
-  value: unknown,
+  value: CodexAppServerClientRequestMap["thread/loaded/list"]["result"],
 ): CodexAppServerLoadedThreadListResponse => {
-  const payload = jsonValueSchema.parse(value);
-  return parseCodexAppServerRequestResult("thread/loaded/list", payload);
+  return parseCodexAppServerRequestResult("thread/loaded/list", value);
 };
 
-export const parseThreadListResponse = (value: unknown): CodexAppServerThreadListResponse => {
-  const payload = jsonValueSchema.parse(value);
-  const response = parseCodexAppServerRequestResult("thread/list", payload);
+export const parseThreadListResponse = (
+  value: CodexAppServerClientRequestMap["thread/list"]["result"],
+): CodexAppServerThreadListResponse => {
+  const response = parseCodexAppServerRequestResult("thread/list", value);
   return {
     data: response.data.map(({ id, cwd, status }) => ({ id, cwd, status: status.type })),
     nextCursor: response.nextCursor,
@@ -26,14 +26,14 @@ export const parseThreadListResponse = (value: unknown): CodexAppServerThreadLis
   };
 };
 
-export const parseThreadReadResponse = (value: unknown): CodexAppServerThread => {
-  const payload = jsonValueSchema.parse(value);
-  return parseCodexAppServerRequestResult("thread/read", payload).thread;
+export const parseThreadReadResponse = (
+  value: CodexAppServerClientRequestMap["thread/read"]["result"],
+): CodexAppServerThread => {
+  return parseCodexAppServerRequestResult("thread/read", value).thread;
 };
 
 export const parseThreadTurnsListResponse = (
-  value: unknown,
+  value: CodexAppServerClientRequestMap["thread/turns/list"]["result"],
 ): CodexAppServerThreadTurnsListResponse => {
-  const payload = jsonValueSchema.parse(value);
-  return parseCodexAppServerRequestResult("thread/turns/list", payload);
+  return parseCodexAppServerRequestResult("thread/turns/list", value);
 };

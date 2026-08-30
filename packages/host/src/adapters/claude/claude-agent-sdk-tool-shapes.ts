@@ -1,7 +1,17 @@
-import { jsonValueSchema } from "@openducktor/contracts";
-import type { JsonValue } from "@openducktor/contracts";
-import { isUnknownRecord, type AgentStreamPart } from "@openducktor/core";
-import { parseClaudeCanonicalJsonObject } from "./claude-agent-sdk-ingress-schemas";
+import type { SDKMessage, SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
+import {
+  jsonObjectSchema,
+  jsonValueSchema,
+  type JsonObject,
+  type JsonValue,
+} from "@openducktor/contracts";
+import type { AgentStreamPart } from "@openducktor/core";
+import { z } from "zod";
+import {
+  type ClaudeContentBlockIngress,
+  parseClaudeCanonicalJsonObject,
+} from "./claude-agent-sdk-ingress-schemas";
+import type { ClaudeToolInput } from "./claude-agent-sdk-types";
 import { previewInput, readStringProp, toolPartPresentation } from "./claude-agent-sdk-utils";
 
 type ClaudeToolUseMetadata =
@@ -17,20 +27,48 @@ type ClaudeToolUseMetadata =
 export type ClaudeDecodedToolUse = {
   blockType: string;
   callId: string;
-  input?: Record<string, unknown>;
+  input?: ClaudeToolInput;
   metadata?: ClaudeToolUseMetadata;
   toolName: string;
 };
 
 export type ClaudeDecodedToolResult = {
   isError: boolean;
-  raw: Record<string, unknown>;
+  raw: JsonObject;
   text: string;
   toolName?: string;
   toolUseId: string;
 };
 
 type ClaudeToolUseBlockType = "tool_use" | "mcp_tool_use" | "server_tool_use";
+
+const claudeToolUseFieldsSchema = z.object({
+  arguments: jsonValueSchema.optional(),
+  custom_tool_use_id: z.string().optional(),
+  id: z.string().optional(),
+  input: jsonValueSchema.optional(),
+  name: z.string().optional(),
+  server_name: z.string().optional(),
+  tool: z.string().optional(),
+  tool_input: jsonValueSchema.optional(),
+  tool_name: z.string().optional(),
+  tool_use_id: z.string().optional(),
+  type: z.string().optional(),
+});
+const claudeToolResultFieldsSchema = z.object({
+  content: jsonValueSchema.optional(),
+  custom_tool_use_id: z.string().optional(),
+  error: z.string().optional(),
+  id: z.string().optional(),
+  isError: z.boolean().optional(),
+  is_error: z.boolean().optional(),
+  message: z.string().optional(),
+  name: z.string().optional(),
+  text: z.string().optional(),
+  tool_name: z.string().optional(),
+  tool_use_id: z.string().optional(),
+  type: z.string().optional(),
+});
 
 export const isClaudeToolUseBlockType = (
   type: string | undefined,
@@ -42,43 +80,49 @@ export const decodeClaudeToolUseBlock = ({
   fallbackMessageId,
   index,
 }: {
-  block: Record<string, unknown>;
+  block:
+    | ClaudeContentBlockIngress
+    | Extract<SDKMessage, { type: "assistant" }>["message"]["content"][number];
   fallbackMessageId: string;
   index: number;
 }): ClaudeDecodedToolUse | null => {
-  const blockType = readStringProp(block, "type");
+  const parsedRecord = jsonObjectSchema.safeParse(block);
+  if (!parsedRecord.success) {
+    return null;
+  }
+  const parsedFields = claudeToolUseFieldsSchema.safeParse(parsedRecord.data);
+  if (!parsedFields.success) {
+    return null;
+  }
+  const candidate = parsedFields.data;
+  const blockType = candidate.type;
   if (!isClaudeToolUseBlockType(blockType)) {
     return null;
   }
 
   const callId =
-    readStringProp(block, "id") ??
-    readStringProp(block, "tool_use_id") ??
-    readStringProp(block, "custom_tool_use_id") ??
+    candidate.id ??
+    candidate.tool_use_id ??
+    candidate.custom_tool_use_id ??
     `${fallbackMessageId}:tool:${index}`;
-  const toolName =
-    readStringProp(block, "name") ??
-    readStringProp(block, "tool_name") ??
-    readStringProp(block, "tool") ??
-    "tool";
-  const rawInput = block.input ?? block.tool_input ?? block.arguments;
-  const input = isUnknownRecord(rawInput) ? rawInput : undefined;
-  const serverName = readStringProp(block, "server_name");
-  const metadata =
-    blockType === "mcp_tool_use" || blockType === "server_tool_use"
-      ? {
-          blockType,
-          ...(serverName ? { serverName } : undefined),
-        }
-      : undefined;
+  const toolName = candidate.name ?? candidate.tool_name ?? candidate.tool ?? "tool";
+  const rawInput = candidate.input ?? candidate.tool_input ?? candidate.arguments;
+  const parsedInput = jsonObjectSchema.safeParse(rawInput);
+  const input = parsedInput.success ? parsedInput.data : undefined;
+  const metadata: ClaudeToolUseMetadata | undefined =
+    blockType === "mcp_tool_use" || blockType === "server_tool_use" ? { blockType } : undefined;
+  if (metadata && candidate.server_name) {
+    metadata.serverName = candidate.server_name;
+  }
 
-  return {
+  const toolUse: ClaudeDecodedToolUse = {
     blockType,
     callId,
     toolName,
-    ...(input ? { input } : undefined),
-    ...(metadata ? { metadata } : undefined),
   };
+  if (input) toolUse.input = input;
+  if (metadata) toolUse.metadata = metadata;
+  return toolUse;
 };
 
 export const createClaudeRunningToolPart = ({
@@ -99,8 +143,8 @@ export const createClaudeRunningToolPart = ({
     ...toolPartPresentation(toolUse.toolName),
     status: "running",
     startedAtMs,
-    ...(toolUse.metadata ? { metadata: toolUse.metadata } : undefined),
   };
+  if (toolUse.metadata) part.metadata = toolUse.metadata;
   if (toolUse.input) {
     part.input = parseClaudeCanonicalJsonObject(toolUse.input, "claudeToolInput");
     const preview = previewInput(toolUse.input);
@@ -117,54 +161,53 @@ export const createClaudePendingToolPart = ({
 }: {
   messageId: string;
   toolUse: ClaudeDecodedToolUse;
-}): Extract<AgentStreamPart, { kind: "tool" }> => ({
-  kind: "tool",
-  messageId,
-  partId: toolUse.callId,
-  callId: toolUse.callId,
-  tool: toolUse.toolName,
-  ...toolPartPresentation(toolUse.toolName),
-  status: "pending",
-  ...(toolUse.metadata ? { metadata: toolUse.metadata } : undefined),
-});
+}): Extract<AgentStreamPart, { kind: "tool" }> => {
+  const part: Extract<AgentStreamPart, { kind: "tool" }> = {
+    kind: "tool",
+    messageId,
+    partId: toolUse.callId,
+    callId: toolUse.callId,
+    tool: toolUse.toolName,
+    ...toolPartPresentation(toolUse.toolName),
+    status: "pending",
+  };
+  if (toolUse.metadata) part.metadata = toolUse.metadata;
+  return part;
+};
 
 export const timestampMs = (timestamp: string): number => {
   const parsed = Date.parse(timestamp);
   return Number.isNaN(parsed) ? Date.now() : parsed;
 };
 
-const stringifyToolResultContent = (value: JsonValue | undefined): string => {
-  if (value === undefined) {
-    return "";
-  }
+const stringifyToolResultContent = (value: JsonValue): string => {
   if (value === null) {
     return "";
   }
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
+  const primitive = z.union([z.number(), z.boolean()]).safeParse(value);
+  if (primitive.success) {
+    return String(primitive.data);
   }
   return JSON.stringify(value, null, 2);
 };
 
-const toolResultBlockText = (block: unknown): string => {
-  if (block === undefined) {
+const toolResultBlockText = (block: JsonValue): string => {
+  const text = z.string().safeParse(block);
+  if (text.success) {
+    return text.data;
+  }
+  const record = jsonObjectSchema.safeParse(block);
+  if (!record.success) {
     return stringifyToolResultContent(block);
   }
-  const parsed = jsonValueSchema.parse(block);
-  if (typeof parsed === "string") {
-    return parsed;
-  }
-  if (!isUnknownRecord(parsed)) {
-    return stringifyToolResultContent(parsed);
-  }
   return (
-    readStringProp(parsed, "text") ??
-    readStringProp(parsed, "message") ??
-    stringifyToolResultContent(parsed)
+    readStringProp(record.data, "text") ??
+    readStringProp(record.data, "message") ??
+    stringifyToolResultContent(record.data)
   );
 };
 
-const claudeToolResultContentText = (value: Record<string, unknown>): string => {
+const claudeToolResultContentText = (value: JsonObject): string => {
   const text =
     readStringProp(value, "content") ??
     readStringProp(value, "text") ??
@@ -174,28 +217,35 @@ const claudeToolResultContentText = (value: Record<string, unknown>): string => 
     return text;
   }
   const content = value.content;
-  if (Array.isArray(content)) {
-    return content
+  const parsedContent = jsonValueSchema.safeParse(content);
+  if (parsedContent.success && Array.isArray(parsedContent.data)) {
+    return parsedContent.data
       .map(toolResultBlockText)
       .filter((entry) => entry.length > 0)
       .join("\n");
   }
-  if (content !== undefined && content !== null) {
-    return stringifyToolResultContent(jsonValueSchema.parse(content));
+  if (parsedContent.success && parsedContent.data !== null) {
+    return stringifyToolResultContent(parsedContent.data);
   }
   return "";
 };
 
 export const decodeClaudeToolResultValue = (
-  value: unknown,
+  value: SessionStoreEntry[string],
   fallbackToolUseId: string | null,
   options: { allowNonToolResultType?: boolean } = {},
 ): ClaudeDecodedToolResult | null => {
-  if (!isUnknownRecord(value)) {
+  const parsedRecord = jsonObjectSchema.safeParse(value);
+  if (!parsedRecord.success) {
     return null;
   }
-  const record = value;
-  const type = readStringProp(record, "type");
+  const parsedFields = claudeToolResultFieldsSchema.safeParse(parsedRecord.data);
+  if (!parsedFields.success) {
+    return null;
+  }
+  const record = parsedRecord.data;
+  const fields = parsedFields.data;
+  const type = fields.type;
   if (
     type &&
     type !== "tool_result" &&
@@ -212,13 +262,14 @@ export const decodeClaudeToolResultValue = (
   if (!toolUseId) {
     return null;
   }
-  const isErrorValue = record.is_error ?? record.isError;
-  const toolName = readStringProp(record, "tool_name") ?? readStringProp(record, "name");
-  return {
+  const isErrorValue = fields.is_error ?? fields.isError;
+  const toolName = fields.tool_name ?? fields.name;
+  const result: ClaudeDecodedToolResult = {
     toolUseId,
-    ...(toolName ? { toolName } : undefined),
     isError: isErrorValue === true,
     raw: record,
     text: claudeToolResultContentText(record),
   };
+  if (toolName) result.toolName = toolName;
+  return result;
 };

@@ -22,17 +22,17 @@ import type {
 } from "@openducktor/contracts";
 import { Context, type Effect } from "effect";
 import type {
-  HostOperationError,
-  HostPathAccessError,
-  HostResourceError,
-  HostValidationError,
+  HostOperationErrorAggregate,
+  HostPathAccessErrorAggregate,
+  HostResourceErrorAggregate,
+  HostValidationErrorAggregate,
 } from "../effect/host-errors";
 
 export type GitPortError =
-  | HostOperationError
-  | HostPathAccessError
-  | HostResourceError
-  | HostValidationError;
+  | HostOperationErrorAggregate
+  | HostPathAccessErrorAggregate
+  | HostResourceErrorAggregate
+  | HostValidationErrorAggregate;
 
 export type GitRemote = {
   name: string;
@@ -92,7 +92,7 @@ export type GitBranchUpstreamSetup = {
   createdTrackingRef: string | null;
 };
 export type GitPort = {
-  canonicalizePath(path: string): Effect.Effect<string, HostOperationError>;
+  canonicalizePath(path: string): Effect.Effect<string, HostOperationErrorAggregate>;
   isGitRepository(path: string): Effect.Effect<boolean, GitPortError>;
   getRepositoryRoot(workingDirectory: string): Effect.Effect<string, GitPortError>;
   shareGitCommonDirectory(

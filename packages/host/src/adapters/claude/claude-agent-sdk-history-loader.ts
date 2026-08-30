@@ -1,10 +1,10 @@
 import { getSubagentMessages, type SessionMessage } from "@anthropic-ai/claude-agent-sdk";
 import {
   AGENT_SESSION_SYSTEM_PROMPT_PREFIX,
-  isUnknownRecord,
   type AgentSessionHistoryMessage,
   type LoadAgentSessionHistoryInput,
 } from "@openducktor/core";
+import { z } from "zod";
 import { errorMessage, HostOperationError } from "../../effect/host-errors";
 import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import { isLiveFinalAssistantStopReason } from "./claude-agent-sdk-history-assistant";
@@ -20,6 +20,18 @@ import {
 } from "./claude-agent-sdk-subagent-transcripts";
 import { readStringProp } from "./claude-agent-sdk-utils";
 
+const claudeSubagentAssistantMessageSchema = z.looseObject({
+  content: z
+    .array(
+      z.looseObject({
+        text: z.string().optional(),
+        type: z.string().optional(),
+      }),
+    )
+    .optional(),
+  stop_reason: z.string().nullable().optional(),
+});
+
 export type ClaudeLiveHistoryContext = {
   source: "fresh" | "persisted";
   userMessages: readonly ClaudeLiveUserMessage[];
@@ -29,30 +41,27 @@ export const isClaudeSubagentTranscriptComplete = (
   messages: readonly SessionMessage[],
 ): boolean => {
   const lastMessage = messages.at(-1);
-  const lastMessageValue = lastMessage ? lastMessage.message : undefined;
+  if (lastMessage?.type !== "assistant") {
+    return false;
+  }
+  const assistantMessage = claudeSubagentAssistantMessageSchema.safeParse(lastMessage.message);
   return (
-    lastMessage?.type === "assistant" &&
-    isUnknownRecord(lastMessageValue) &&
-    isLiveFinalAssistantStopReason(readStringProp(lastMessageValue, "stop_reason"))
+    assistantMessage.success &&
+    isLiveFinalAssistantStopReason(assistantMessage.data.stop_reason ?? undefined)
   );
 };
 
 const hasClaudeSubagentFinalText = (messages: readonly SessionMessage[]): boolean => {
   const lastMessage = messages.at(-1);
-  const lastMessageValue = lastMessage ? lastMessage.message : undefined;
-  if (lastMessage?.type !== "assistant" || !isUnknownRecord(lastMessageValue)) {
+  if (lastMessage?.type !== "assistant") {
     return false;
   }
-  const content = lastMessageValue.content;
-  return (
-    Array.isArray(content) &&
-    content.some(
-      (block) =>
-        isUnknownRecord(block) &&
-        readStringProp(block, "type") === "text" &&
-        Boolean(readStringProp(block, "text")?.trim()),
-    )
-  );
+  const assistantMessage = claudeSubagentAssistantMessageSchema.safeParse(lastMessage.message);
+  if (!assistantMessage.success) {
+    return false;
+  }
+  const content = assistantMessage.data.content;
+  return content?.some((block) => block.type === "text" && Boolean(block.text?.trim())) === true;
 };
 
 export const reconciledClaudeSubagentStatus = (
@@ -91,15 +100,18 @@ const reconcileClaudeSubagentStatuses = async (
         continue;
       }
       const previous = latestStatusBySessionId.get(part.externalSessionId);
-      const agentId = isUnknownRecord(part.metadata)
-        ? readStringProp(part.metadata, "agentId")
-        : undefined;
+      const agentId = part.metadata ? readStringProp(part.metadata, "agentId") : undefined;
       const resolvedAgentId = agentId ?? previous?.agentId;
-      latestStatusBySessionId.set(part.externalSessionId, {
+      const latestStatus: NonNullable<ReturnType<typeof latestStatusBySessionId.get>> = {
         status: part.status,
-        ...(resolvedAgentId ? { agentId: resolvedAgentId } : undefined),
-        ...(part.executionMode ? { executionMode: part.executionMode } : undefined),
-      });
+      };
+      if (resolvedAgentId) {
+        latestStatus.agentId = resolvedAgentId;
+      }
+      if (part.executionMode) {
+        latestStatus.executionMode = part.executionMode;
+      }
+      latestStatusBySessionId.set(part.externalSessionId, latestStatus);
     }
   }
   const runningAgents = [...latestStatusBySessionId.values()].flatMap(
@@ -150,11 +162,7 @@ const reconcileClaudeSubagentStatuses = async (
   }
   for (const message of history) {
     message.parts = message.parts.map((part) => {
-      if (
-        part.kind !== "subagent" ||
-        part.status !== "running" ||
-        !isUnknownRecord(part.metadata)
-      ) {
+      if (part.kind !== "subagent" || part.status !== "running" || !part.metadata) {
         return part;
       }
       const agentId = readStringProp(part.metadata, "agentId");

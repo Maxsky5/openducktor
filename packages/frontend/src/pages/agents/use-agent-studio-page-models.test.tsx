@@ -99,13 +99,8 @@ type CreateSessionOverrides = AgentSessionFixtureOverrides;
 
 const createSession = (
   externalSessionId = "external-1",
-  legacyExternalSessionIdOrOverrides: string | CreateSessionOverrides = {},
-  maybeOverrides: CreateSessionOverrides = {},
+  overrides: CreateSessionOverrides = {},
 ): AgentSessionState => {
-  const overrides =
-    typeof legacyExternalSessionIdOrOverrides === "string"
-      ? { ...maybeOverrides, externalSessionId: legacyExternalSessionIdOrOverrides }
-      : legacyExternalSessionIdOrOverrides;
   return createAgentSessionFixture({
     externalSessionId,
     status: "running",
@@ -622,7 +617,7 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("keeps transcript visible while waiting for runtime readiness", async () => {
-    const cachedSession = createSession("session-waiting", "external-waiting", {
+    const cachedSession = createSession("external-waiting", {
       messages: [
         {
           id: "assistant-cached",
@@ -749,7 +744,7 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("does not mark session history loading during background history load when transcript can render", async () => {
-    const cachedSession = createSession("session-history-loading", "external-history-loading", {
+    const cachedSession = createSession("external-history-loading", {
       messages: [
         {
           id: "assistant-cached",
@@ -783,7 +778,7 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("offers a user-triggered retry when visible session history is incomplete", async () => {
-    const loadedSession = createSession("session-history-failed", "external-history-failed", {
+    const loadedSession = createSession("external-history-failed", {
       messages: [
         {
           id: "assistant-cached",
@@ -826,7 +821,7 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("renders Planner subagent waiting-input state", async () => {
-    const plannerSession = createSession("session-planner", "external-planner", {
+    const plannerSession = createSession("external-planner", {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
       runtimeKind: "opencode",
       workingDirectory: "/repo",
@@ -850,7 +845,7 @@ describe("useAgentStudioPageModels", () => {
         },
       ],
     });
-    const childSession = createSession("session-child", "external-child", {
+    const childSession = createSession("external-child", {
       sessionAssociation: { kind: "workflow", taskId: "other-task", role: "spec" },
       pendingApprovals: [createPendingApproval("perm-child")],
     });
@@ -880,7 +875,7 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("marks session history loading while history load blocks transcript rendering", async () => {
-    const pendingSession = createSession("session-pending", "external-pending", {
+    const pendingSession = createSession("external-pending", {
       messages: [],
     });
     const harness = createHookHarness(
@@ -911,7 +906,7 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("selects role-specific sidebar document", async () => {
-    const specSession = createSession("session-spec", "external-spec", {
+    const specSession = createSession("external-spec", {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
     });
     const harness = createHookHarness(
@@ -934,7 +929,7 @@ describe("useAgentStudioPageModels", () => {
     );
     await harness.unmount();
 
-    const plannerSession = createSession("session-planner", "external-planner", {
+    const plannerSession = createSession("external-planner", {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
     });
     const plannerHarness = createHookHarness(
@@ -957,7 +952,7 @@ describe("useAgentStudioPageModels", () => {
     );
     await plannerHarness.unmount();
 
-    const qaSession = createSession("session-qa", "external-qa", {
+    const qaSession = createSession("external-qa", {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
     });
     const qaHarness = createHookHarness(
@@ -980,7 +975,7 @@ describe("useAgentStudioPageModels", () => {
     );
     await qaHarness.unmount();
 
-    const buildSession = createSession("session-build", "external-build", {
+    const buildSession = createSession("external-build", {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
     });
     const buildHarness = createHookHarness(
@@ -1003,7 +998,7 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("uses the resolved selected role to select the workspace document", async () => {
-    const plannerSession = createSession("session-1", "external-1", {
+    const plannerSession = createSession("external-1", {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
     });
     const harness = createHookHarness(
@@ -1029,7 +1024,7 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("keeps build workspace document selection aligned to the resolved selected role", async () => {
-    const buildSession = createSession("session-build", "external-build", {
+    const buildSession = createSession("external-build", {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
     });
     const harness = createHookHarness(
@@ -1053,7 +1048,7 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("keeps the header model stable across approval-only session changes", async () => {
-    const approvalSession = createSession("session-1", "external-1", {
+    const approvalSession = createSession("external-1", {
       status: "running",
       pendingApprovals: [
         {
@@ -1084,7 +1079,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
     const initialHeaderModel = harness.getLatest().agentStudioHeaderModel;
 
-    const approvalSessionWithoutRequests = createSession("session-1", "external-1", {
+    const approvalSessionWithoutRequests = createSession("external-1", {
       status: "running",
       pendingApprovals: [],
     });
@@ -1106,7 +1101,7 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("hides approval outcomes unsupported by the active runtime descriptor", async () => {
-    const approvalSession = createSession("session-approval", "external-approval", {
+    const approvalSession = createSession("external-approval", {
       runtimeKind: "opencode",
       status: "running",
       pendingApprovals: [
@@ -1215,7 +1210,7 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("keeps thread model stable for input-only composer updates", async () => {
-    const session = createSession("session-1", "external-1");
+    const session = createSession("external-1");
     const baseProps = createHookArgs({
       selectedSessionCore: {
         loadedSession: session,
@@ -1254,7 +1249,7 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("keeps draft persistence stable for equivalent session identity objects", async () => {
-    const session = createSession("session-1", "external-1");
+    const session = createSession("external-1");
     const selectedSessionIdentity = toAgentSessionIdentity(session);
     const selectedSessionCore = {
       loadedSession: session,
@@ -1286,7 +1281,7 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("keeps composer model stable for thread-only updates", async () => {
-    const session = createSession("session-1", "external-1");
+    const session = createSession("external-1");
     const baseProps = createHookArgs({
       selectedSessionCore: {
         loadedSession: session,
@@ -1316,7 +1311,7 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("updates chat settings when showThinkingMessages changes without rebuilding thread or composer", async () => {
-    const session = createSession("session-1", "external-1");
+    const session = createSession("external-1");
     const baseProps = createHookArgs({
       selectedSessionCore: {
         loadedSession: session,
@@ -1348,7 +1343,7 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("updates chat settings when file diff expansion default changes without rebuilding thread or composer", async () => {
-    const session = createSession("session-1", "external-1");
+    const session = createSession("external-1");
     const baseProps = createHookArgs({
       selectedSessionCore: {
         loadedSession: session,
@@ -1380,7 +1375,7 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("updates thread model for pending request maps without rebuilding composer", async () => {
-    const session = createSession("session-1", "external-1");
+    const session = createSession("external-1");
     const baseProps = createHookArgs({
       selectedSessionCore: {
         loadedSession: session,
@@ -1445,15 +1440,15 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("derives subagent pending approval counts from all live session summaries", async () => {
-    const parentSession = createSession("session-parent", "external-parent");
-    const childWithApproval = createSession("session-child-1", "external-child-1", {
+    const parentSession = createSession("external-parent");
+    const childWithApproval = createSession("external-child-1", {
       sessionAssociation: { kind: "workflow", taskId: "other-task", role: "spec" },
       pendingApprovals: [
         createPendingApproval("perm-1"),
         createPendingApproval("perm-2", "shell", ["git status"]),
       ],
     });
-    const childWithoutApproval = createSession("session-child-2", "external-child-2", {
+    const childWithoutApproval = createSession("external-child-2", {
       pendingApprovals: [],
     });
     const harness = createHookHarness(
@@ -1482,8 +1477,8 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("keys subagent pending approval counts by session identity", async () => {
-    const parentSession = createSession("session-parent", "external-parent");
-    const childWithApproval = createSession("session-child-internal", "session-child-runtime", {
+    const parentSession = createSession("external-parent");
+    const childWithApproval = createSession("session-child-runtime", {
       sessionAssociation: { kind: "workflow", taskId: "other-task", role: "spec" },
       pendingApprovals: [createPendingApproval("perm-1")],
     });
@@ -1510,9 +1505,9 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("derives subagent pending approval counts from child session summaries", async () => {
-    const parentSession = createSession("session-parent", "external-parent");
+    const parentSession = createSession("external-parent");
     const childSummary = toAgentSessionSummary(
-      createSession("internal-child-session", "external-child-session", {
+      createSession("external-child-session", {
         sessionAssociation: { kind: "workflow", taskId: "other-task", role: "spec" },
         pendingApprovals: [createPendingApproval("perm-1")],
       }),
@@ -1537,8 +1532,8 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("keeps subagent pending approval counts unchanged when unrelated sessions change", async () => {
-    const parentSession = createSession("session-parent", "external-parent");
-    const childWithApproval = createSession("session-child-1", "external-child-1", {
+    const parentSession = createSession("external-parent");
+    const childWithApproval = createSession("external-child-1", {
       sessionAssociation: { kind: "workflow", taskId: "other-task", role: "spec" },
       pendingApprovals: [createPendingApproval("perm-1")],
     });
@@ -1568,7 +1563,7 @@ describe("useAgentStudioPageModels", () => {
             toAgentSessionSummary(parentSession),
             toAgentSessionSummary(childWithApproval),
             toAgentSessionSummary(
-              createSession("session-child-2", "external-child-2", {
+              createSession("external-child-2", {
                 sessionAssociation: { kind: "workflow", taskId: "other-task", role: "spec" },
                 pendingApprovals: [],
               }),
@@ -1586,12 +1581,12 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("derives subagent pending question counts from all live session summaries", async () => {
-    const parentSession = createSession("session-parent", "external-parent");
-    const childWithQuestion = createSession("session-child-1", "external-child-1", {
+    const parentSession = createSession("external-parent");
+    const childWithQuestion = createSession("external-child-1", {
       sessionAssociation: { kind: "workflow", taskId: "other-task", role: "spec" },
       pendingQuestions: [createPendingQuestion("question-1"), createPendingQuestion("question-2")],
     });
-    const childWithoutQuestion = createSession("session-child-2", "external-child-2", {
+    const childWithoutQuestion = createSession("external-child-2", {
       pendingQuestions: [],
     });
     const harness = createHookHarness(
@@ -1620,9 +1615,9 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("derives subagent pending question counts from child session summaries", async () => {
-    const parentSession = createSession("session-parent", "external-parent");
+    const parentSession = createSession("external-parent");
     const childSummary = toAgentSessionSummary(
-      createSession("internal-child-session", "external-child-session", {
+      createSession("external-child-session", {
         sessionAssociation: { kind: "workflow", taskId: "other-task", role: "spec" },
         pendingQuestions: [createPendingQuestion("question-1")],
       }),
@@ -1649,8 +1644,8 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("keeps subagent pending question counts unchanged when unrelated sessions change", async () => {
-    const parentSession = createSession("session-parent", "external-parent");
-    const childWithQuestion = createSession("session-child-1", "external-child-1", {
+    const parentSession = createSession("external-parent");
+    const childWithQuestion = createSession("external-child-1", {
       sessionAssociation: { kind: "workflow", taskId: "other-task", role: "spec" },
       pendingQuestions: [createPendingQuestion("question-1")],
     });
@@ -1680,7 +1675,7 @@ describe("useAgentStudioPageModels", () => {
             toAgentSessionSummary(parentSession),
             toAgentSessionSummary(childWithQuestion),
             toAgentSessionSummary(
-              createSession("session-child-2", "external-child-2", {
+              createSession("external-child-2", {
                 sessionAssociation: { kind: "workflow", taskId: "other-task", role: "spec" },
                 pendingQuestions: [],
               }),
@@ -1698,7 +1693,7 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("keeps composer identity tied to selected session instead of loaded session state", async () => {
-    const initialSession = createSession("session-1", "external-1", {
+    const initialSession = createSession("external-1", {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       status: "running",
       workingDirectory: "/repo/selected-worktree",
@@ -1723,7 +1718,7 @@ describe("useAgentStudioPageModels", () => {
     const initialComposerModel = harness.getLatest().agentChatModel.composer;
     const selectedSessionKey = agentSessionIdentityKey(selectedSessionIdentity);
 
-    const sameSessionIdNewRef = createSession("session-1", "external-1", {
+    const sameSessionIdNewRef = createSession("external-1", {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       status: "running",
       workingDirectory: "/repo/stale-worktree",
@@ -1749,7 +1744,7 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("updates composer model when a running session starts waiting for input", async () => {
-    const initialSession = createSession("session-1", "external-1", {
+    const initialSession = createSession("external-1", {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       status: "running",
       pendingQuestions: [],
@@ -1773,7 +1768,7 @@ describe("useAgentStudioPageModels", () => {
     const initialComposerModel = harness.getLatest().agentChatModel.composer;
     expect(initialComposerModel.isWaitingInput).toBe(false);
 
-    const waitingSession = createSession("session-1", "external-1", {
+    const waitingSession = createSession("external-1", {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       status: "running",
       pendingQuestions: [
@@ -1860,7 +1855,7 @@ describe("useAgentStudioPageModels", () => {
         qa: { required: true, canSkip: false, available: false, completed: false },
       },
     });
-    const runningPlannerSession = createSession("session-plan", "external-plan", {
+    const runningPlannerSession = createSession("external-plan", {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
       status: "running",
     });

@@ -22,47 +22,50 @@ const bindStartInput = (
   input: Parameters<AgentEnginePort["startSession"]>[0],
 ): StartAgentSessionInput => {
   requireOpenCodeRuntime(input.runtimeKind);
-  return {
+  const boundInput: StartAgentSessionInput = {
     repoPath: input.repoPath,
     workingDirectory: input.workingDirectory,
     sessionScope: input.sessionScope,
     systemPrompt: input.systemPrompt,
-    ...(input.model === undefined ? undefined : { model: input.model }),
     ...openCodeRuntimePolicy,
   };
+  if (input.model !== undefined) boundInput.model = input.model;
+  return boundInput;
 };
 
 const bindResumeInput = (
   input: Parameters<AgentEnginePort["resumeSession"]>[0],
 ): ResumeAgentSessionInput => {
   requireOpenCodeRuntime(input.runtimeKind);
-  return {
+  const boundInput: ResumeAgentSessionInput = {
     repoPath: input.repoPath,
     workingDirectory: input.workingDirectory,
     externalSessionId: input.externalSessionId,
     sessionScope: input.sessionScope,
-    ...(input.model === undefined ? undefined : { model: input.model }),
-    ...(input.systemPrompt === undefined ? undefined : { systemPrompt: input.systemPrompt }),
     ...openCodeRuntimePolicy,
   };
+  if (input.model !== undefined) boundInput.model = input.model;
+  if (input.systemPrompt !== undefined) boundInput.systemPrompt = input.systemPrompt;
+  return boundInput;
 };
 
 const bindForkInput = (
   input: Parameters<AgentEnginePort["forkSession"]>[0],
 ): ForkAgentSessionInput => {
   requireOpenCodeRuntime(input.runtimeKind);
-  return {
+  const boundInput: ForkAgentSessionInput = {
     repoPath: input.repoPath,
     workingDirectory: input.workingDirectory,
     sessionScope: input.sessionScope,
     systemPrompt: input.systemPrompt,
     parentExternalSessionId: input.parentExternalSessionId,
-    ...(input.model === undefined ? undefined : { model: input.model }),
-    ...(input.runtimeHistoryAnchor === undefined
-      ? undefined
-      : { runtimeHistoryAnchor: input.runtimeHistoryAnchor }),
     ...openCodeRuntimePolicy,
   };
+  if (input.model !== undefined) boundInput.model = input.model;
+  if (input.runtimeHistoryAnchor !== undefined) {
+    boundInput.runtimeHistoryAnchor = input.runtimeHistoryAnchor;
+  }
+  return boundInput;
 };
 
 const bindMessagePart = (
@@ -71,32 +74,34 @@ const bindMessagePart = (
   if (part.kind !== "attachment") {
     return part;
   }
-  return {
+  const boundPart: Extract<SendAgentUserMessageInput["parts"][number], { kind: "attachment" }> = {
     kind: "attachment",
     attachment: {
       id: part.attachment.id,
       path: part.attachment.path,
       name: part.attachment.name,
       kind: part.attachment.kind,
-      ...(part.attachment.mime === undefined ? undefined : { mime: part.attachment.mime }),
     },
   };
+  if (part.attachment.mime !== undefined) boundPart.attachment.mime = part.attachment.mime;
+  return boundPart;
 };
 
 const bindSendInput = (
   input: Parameters<AgentEnginePort["sendUserMessage"]>[0],
 ): SendAgentUserMessageInput => {
   requireOpenCodeRuntime(input.runtimeKind);
-  return {
+  const boundInput: SendAgentUserMessageInput = {
     repoPath: input.repoPath,
     workingDirectory: input.workingDirectory,
     externalSessionId: input.externalSessionId,
     sessionScope: input.sessionScope,
     parts: input.parts.map(bindMessagePart),
-    ...(input.model === undefined ? undefined : { model: input.model }),
-    ...(input.systemPrompt === undefined ? undefined : { systemPrompt: input.systemPrompt }),
     ...openCodeRuntimePolicy,
   };
+  if (input.model !== undefined) boundInput.model = input.model;
+  if (input.systemPrompt !== undefined) boundInput.systemPrompt = input.systemPrompt;
+  return boundInput;
 };
 
 const validateOpenCodeInput = <Input extends { runtimeKind: string }>(input: Input): Input => {

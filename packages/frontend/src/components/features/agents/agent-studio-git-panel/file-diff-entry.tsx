@@ -17,6 +17,7 @@ import {
   useReducer,
   useRef,
 } from "react";
+import { z } from "zod";
 import type {
   PierreDiffSelection,
   PierreDiffStyle,
@@ -68,17 +69,10 @@ type GitDiffCommentAnnotationMetadata =
   | { kind: "new-comment-form" }
   | { kind: "comment"; commentId: string };
 
-const isGitDiffCommentAnnotationMetadata = (
-  value: unknown,
-): value is GitDiffCommentAnnotationMetadata => {
-  if (typeof value !== "object" || value === null || !("kind" in value)) {
-    return false;
-  }
-  if (value.kind === "new-comment-form") {
-    return true;
-  }
-  return value.kind === "comment" && "commentId" in value && typeof value.commentId === "string";
-};
+const gitDiffCommentAnnotationMetadataSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("new-comment-form") }),
+  z.object({ kind: z.literal("comment"), commentId: z.string() }),
+]);
 
 type FileDiffAnnotationState = {
   selectedLines: SelectedLineRange | null;
@@ -402,10 +396,11 @@ function FileDiffEntry({
   }, [fileComments, pendingSelection]);
   const renderAnnotation = useCallback(
     (annotation: DiffLineAnnotation<unknown>): ReactElement | null => {
-      if (!isGitDiffCommentAnnotationMetadata(annotation.metadata)) {
+      const metadataResult = gitDiffCommentAnnotationMetadataSchema.safeParse(annotation.metadata);
+      if (!metadataResult.success) {
         return null;
       }
-      const metadata = annotation.metadata;
+      const metadata = metadataResult.data;
       if (metadata.kind === "new-comment-form") {
         if (pendingSelection == null) {
           return null;

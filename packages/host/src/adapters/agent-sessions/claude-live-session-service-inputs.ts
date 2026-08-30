@@ -38,10 +38,19 @@ const CLAUDE_RUNTIME_POLICY_BINDING = {
 export const requireClaudePolicy = (
   runtimeKind: RuntimeKind,
   operation: string,
-): Effect.Effect<void, HostValidationError> => {
+): Effect.Effect<
+  void,
+  HostValidationError<{
+    readonly operation: string;
+    readonly runtimeKind: Exclude<RuntimeKind, "claude">;
+  }>
+> => {
   if (runtimeKind !== "claude") {
     return Effect.fail(
-      new HostValidationError({
+      new HostValidationError<{
+        readonly operation: string;
+        readonly runtimeKind: Exclude<RuntimeKind, "claude">;
+      }>({
         field: "runtimeKind",
         message: `Claude live-session control '${operation}' requires a Claude runtime.`,
         details: { operation, runtimeKind },
@@ -53,25 +62,31 @@ export const requireClaudePolicy = (
 
 export const toClaudeLoadContextInput = (
   input: AgentSessionLiveLoadContextInput,
-): LoadAgentSessionHistoryInput => ({
-  repoPath: input.repoPath,
-  workingDirectory: input.workingDirectory,
-  externalSessionId: input.externalSessionId,
-  ...CLAUDE_RUNTIME_POLICY_BINDING,
-  ...(input.sessionScope === undefined ? undefined : { sessionScope: input.sessionScope }),
-});
+): LoadAgentSessionHistoryInput => {
+  const result: LoadAgentSessionHistoryInput = {
+    repoPath: input.repoPath,
+    workingDirectory: input.workingDirectory,
+    externalSessionId: input.externalSessionId,
+    ...CLAUDE_RUNTIME_POLICY_BINDING,
+  };
+  if (input.sessionScope !== undefined) result.sessionScope = input.sessionScope;
+  return result;
+};
 
 export const toClaudeReplyApprovalInput = (
   input: AgentSessionLiveReplyApprovalInput,
-): ReplyApprovalInput => ({
-  repoPath: input.repoPath,
-  workingDirectory: input.workingDirectory,
-  externalSessionId: input.externalSessionId,
-  requestId: input.requestId,
-  outcome: input.outcome,
-  ...CLAUDE_RUNTIME_POLICY_BINDING,
-  ...(input.message === undefined ? undefined : { message: input.message }),
-});
+): ReplyApprovalInput => {
+  const result: ReplyApprovalInput = {
+    repoPath: input.repoPath,
+    workingDirectory: input.workingDirectory,
+    externalSessionId: input.externalSessionId,
+    requestId: input.requestId,
+    outcome: input.outcome,
+    ...CLAUDE_RUNTIME_POLICY_BINDING,
+  };
+  if (input.message !== undefined) result.message = input.message;
+  return result;
+};
 
 export const toClaudeReplyQuestionInput = (
   input: AgentSessionLiveReplyQuestionInput,
@@ -86,78 +101,94 @@ export const toClaudeReplyQuestionInput = (
 
 export const toClaudeStartInput = (
   input: AgentSessionControlStartInput,
-): StartAgentSessionInput => ({
-  repoPath: input.repoPath,
-  workingDirectory: input.workingDirectory,
-  sessionScope: input.sessionScope,
-  systemPrompt: input.systemPrompt,
-  ...CLAUDE_RUNTIME_POLICY_BINDING,
-  ...(input.model === undefined ? undefined : { model: input.model }),
-});
+): StartAgentSessionInput => {
+  const result: StartAgentSessionInput = {
+    repoPath: input.repoPath,
+    workingDirectory: input.workingDirectory,
+    sessionScope: input.sessionScope,
+    systemPrompt: input.systemPrompt,
+    ...CLAUDE_RUNTIME_POLICY_BINDING,
+  };
+  if (input.model !== undefined) result.model = input.model;
+  return result;
+};
 
 export const toClaudeResumeInput = (
   input: AgentSessionControlResumeInput,
-): ResumeAgentSessionInput => ({
-  repoPath: input.repoPath,
-  workingDirectory: input.workingDirectory,
-  externalSessionId: input.externalSessionId,
-  sessionScope: input.sessionScope,
-  ...CLAUDE_RUNTIME_POLICY_BINDING,
-  ...(input.model === undefined ? undefined : { model: input.model }),
-  ...(input.systemPrompt === undefined ? undefined : { systemPrompt: input.systemPrompt }),
-});
+): ResumeAgentSessionInput => {
+  const result: ResumeAgentSessionInput = {
+    repoPath: input.repoPath,
+    workingDirectory: input.workingDirectory,
+    externalSessionId: input.externalSessionId,
+    sessionScope: input.sessionScope,
+    ...CLAUDE_RUNTIME_POLICY_BINDING,
+  };
+  if (input.model !== undefined) result.model = input.model;
+  if (input.systemPrompt !== undefined) result.systemPrompt = input.systemPrompt;
+  return result;
+};
 
-export const toClaudeForkInput = (input: AgentSessionControlForkInput): ForkAgentSessionInput => ({
-  repoPath: input.repoPath,
-  workingDirectory: input.workingDirectory,
-  sessionScope: input.sessionScope,
-  systemPrompt: input.systemPrompt,
-  parentExternalSessionId: input.parentExternalSessionId,
-  ...CLAUDE_RUNTIME_POLICY_BINDING,
-  ...(input.model === undefined ? undefined : { model: input.model }),
-  ...(input.runtimeHistoryAnchor === undefined
-    ? undefined
-    : { runtimeHistoryAnchor: input.runtimeHistoryAnchor }),
-});
+export const toClaudeForkInput = (input: AgentSessionControlForkInput): ForkAgentSessionInput => {
+  const result: ForkAgentSessionInput = {
+    repoPath: input.repoPath,
+    workingDirectory: input.workingDirectory,
+    sessionScope: input.sessionScope,
+    systemPrompt: input.systemPrompt,
+    parentExternalSessionId: input.parentExternalSessionId,
+    ...CLAUDE_RUNTIME_POLICY_BINDING,
+  };
+  if (input.model !== undefined) result.model = input.model;
+  if (input.runtimeHistoryAnchor !== undefined) {
+    result.runtimeHistoryAnchor = input.runtimeHistoryAnchor;
+  }
+  return result;
+};
 
 const toClaudeUserMessagePart = (part: AgentSessionUserMessagePart): AgentUserMessagePart => {
   if (part.kind !== "attachment") {
     return part;
   }
+  const attachment: Extract<AgentUserMessagePart, { kind: "attachment" }>["attachment"] = {
+    id: part.attachment.id,
+    path: part.attachment.path,
+    name: part.attachment.name,
+    kind: part.attachment.kind,
+  };
+  if (part.attachment.mime !== undefined) attachment.mime = part.attachment.mime;
   return {
     kind: "attachment",
-    attachment: {
-      id: part.attachment.id,
-      path: part.attachment.path,
-      name: part.attachment.name,
-      kind: part.attachment.kind,
-      ...(part.attachment.mime === undefined ? undefined : { mime: part.attachment.mime }),
-    },
+    attachment,
   };
 };
 
 export const toClaudeSendInput = (
   input: AgentSessionControlSendInput,
-): SendAgentUserMessageInput => ({
-  repoPath: input.repoPath,
-  workingDirectory: input.workingDirectory,
-  externalSessionId: input.externalSessionId,
-  sessionScope: input.sessionScope,
-  parts: input.parts.map(toClaudeUserMessagePart),
-  ...CLAUDE_RUNTIME_POLICY_BINDING,
-  ...(input.model === undefined ? undefined : { model: input.model }),
-  ...(input.systemPrompt === undefined ? undefined : { systemPrompt: input.systemPrompt }),
-});
+): SendAgentUserMessageInput => {
+  const result: SendAgentUserMessageInput = {
+    repoPath: input.repoPath,
+    workingDirectory: input.workingDirectory,
+    externalSessionId: input.externalSessionId,
+    sessionScope: input.sessionScope,
+    parts: input.parts.map(toClaudeUserMessagePart),
+    ...CLAUDE_RUNTIME_POLICY_BINDING,
+  };
+  if (input.model !== undefined) result.model = input.model;
+  if (input.systemPrompt !== undefined) result.systemPrompt = input.systemPrompt;
+  return result;
+};
 
 export const toClaudeRuntimeUserMessageEvent = (
   event: AcceptedAgentUserMessage,
-): Extract<AgentEvent, { readonly type: "user_message" }> => ({
-  type: event.type,
-  externalSessionId: event.externalSessionId,
-  timestamp: event.timestamp,
-  messageId: event.messageId,
-  message: event.message,
-  parts: event.parts,
-  state: event.state,
-  ...(event.model === undefined ? undefined : { model: event.model }),
-});
+): Extract<AgentEvent, { readonly type: "user_message" }> => {
+  const result: Extract<AgentEvent, { readonly type: "user_message" }> = {
+    type: event.type,
+    externalSessionId: event.externalSessionId,
+    timestamp: event.timestamp,
+    messageId: event.messageId,
+    message: event.message,
+    parts: event.parts,
+    state: event.state,
+  };
+  if (event.model !== undefined) result.model = event.model;
+  return result;
+};

@@ -269,9 +269,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     });
     adapter.loadSessionHistory = async () => [];
     adapter.stopSession = async (sessionRef) => {
-      stoppedSessionIds.push(
-        typeof sessionRef === "string" ? sessionRef : sessionRef.externalSessionId,
-      );
+      stoppedSessionIds.push(sessionRef.externalSessionId);
     };
 
     const { start } = createStartSessionTestHarness({
@@ -330,9 +328,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     });
     adapter.loadSessionHistory = async () => [];
     adapter.stopSession = async (sessionRef) => {
-      stoppedSessionIds.push(
-        typeof sessionRef === "string" ? sessionRef : sessionRef.externalSessionId,
-      );
+      stoppedSessionIds.push(sessionRef.externalSessionId);
     };
 
     const { start } = createStartSessionTestHarness({
@@ -638,9 +634,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       throw new Error("history unavailable");
     };
     adapter.stopSession = async (sessionRef) => {
-      stoppedSessionIds.push(
-        typeof sessionRef === "string" ? sessionRef : sessionRef.externalSessionId,
-      );
+      stoppedSessionIds.push(sessionRef.externalSessionId);
     };
 
     const { start } = createStartSessionTestHarness({
@@ -776,9 +770,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       ];
     };
     adapter.stopSession = async (sessionRef) => {
-      stoppedSessionIds.push(
-        typeof sessionRef === "string" ? sessionRef : sessionRef.externalSessionId,
-      );
+      stoppedSessionIds.push(sessionRef.externalSessionId);
     };
 
     const { start } = createStartSessionTestHarness({

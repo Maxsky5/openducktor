@@ -5,12 +5,12 @@ import {
   type McpBridgeDiscoveryMode,
 } from "@openducktor/host";
 
-export type CreateElectronHostCommandRouterInput = Omit<
-  CreateNodeHostCommandRouterInput,
-  "mcpBridgeDiscoveryMode"
-> & {
-  isPackaged: boolean;
-};
+type ElectronHostCommandRouterInput<Input> = Input extends CreateNodeHostCommandRouterInput
+  ? Omit<Input, "mcpBridgeDiscoveryMode"> & { isPackaged: boolean }
+  : never;
+
+export type CreateElectronHostCommandRouterInput =
+  ElectronHostCommandRouterInput<CreateNodeHostCommandRouterInput>;
 
 export const resolveElectronMcpBridgeDiscoveryMode = (
   isPackaged: boolean,

@@ -29,24 +29,29 @@ const childLifecycleNotification = (
   error?: string,
   timestampSeconds?: number,
   childThreadId = "child-thread",
-): CodexNotificationRecord => ({
-  method,
-  receivedAt: "2026-07-10T12:00:04.000Z",
-  params: {
-    threadId: childThreadId,
-    turn: codexTurnFixture({
-      id: "child-turn",
-      items: [],
-      status,
-      ...(method === "turn/started"
-        ? { startedAt: timestampSeconds ?? 1_783_683_602 }
-        : { completedAt: timestampSeconds ?? 1_783_683_604 }),
-      ...(error
-        ? { error: { additionalDetails: null, codexErrorInfo: null, message: error } }
-        : undefined),
-    }),
-  },
-});
+): CodexNotificationRecord => {
+  const turn = codexTurnFixture({
+    id: "child-turn",
+    items: [],
+    status,
+  });
+  if (method === "turn/started") {
+    turn.startedAt = timestampSeconds ?? 1_783_683_602;
+  } else {
+    turn.completedAt = timestampSeconds ?? 1_783_683_604;
+  }
+  if (error) {
+    turn.error = { additionalDetails: null, codexErrorInfo: null, message: error };
+  }
+  return {
+    method,
+    receivedAt: "2026-07-10T12:00:04.000Z",
+    params: {
+      threadId: childThreadId,
+      turn,
+    },
+  };
+};
 
 const createHarness = () => {
   const parent = createSession("parent-thread");

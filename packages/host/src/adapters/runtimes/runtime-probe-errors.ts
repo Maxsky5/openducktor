@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 const TIMEOUT_ERROR_NAMES = new Set(["TimeoutError"]);
 const TIMEOUT_ERROR_CODES = new Set([
   "ABORT_ERR",
@@ -7,32 +9,35 @@ const TIMEOUT_ERROR_CODES = new Set([
   "UND_ERR_HEADERS_TIMEOUT",
 ]);
 
-interface RuntimeFailure {
-  cause?: unknown;
-  code?: unknown;
-  details?: unknown;
-  name?: unknown;
-}
+const runtimeFailureSchema = z
+  .object({
+    cause: z.unknown().optional(),
+    code: z.unknown().optional(),
+    details: z.unknown().optional(),
+    name: z.unknown().optional(),
+  })
+  .passthrough();
+type RuntimeFailure = z.output<typeof runtimeFailureSchema>;
+const failureDetailsSchema = z.object({ failureKind: z.string() }).passthrough();
 
 const isRuntimeFailure = (cause: unknown): cause is RuntimeFailure =>
-  typeof cause === "object" && cause !== null;
+  runtimeFailureSchema.safeParse(cause).success;
 
 const readStringField = (cause: unknown, field: "code" | "name"): string | null => {
   if (!isRuntimeFailure(cause)) return null;
-  const value = cause[field];
-  return typeof value === "string" ? value : null;
+  const parsed = z.string().safeParse(cause[field]);
+  return parsed.success ? parsed.data : null;
 };
 
 const readFailureKind = (cause: unknown): string | null => {
   if (!isRuntimeFailure(cause)) return null;
-  const { details } = cause;
-  if (typeof details !== "object" || details === null || !("failureKind" in details)) return null;
-  return typeof details.failureKind === "string" ? details.failureKind : null;
+  const parsed = failureDetailsSchema.safeParse(cause.details);
+  return parsed.success ? parsed.data.failureKind : null;
 };
 
 export const isTimeoutError = (cause: unknown): boolean => {
   const visited = new WeakSet<RuntimeFailure>();
-  let current = cause;
+  let current: unknown = cause;
   while (isRuntimeFailure(current)) {
     if (visited.has(current)) return false;
     visited.add(current);

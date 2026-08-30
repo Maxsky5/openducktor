@@ -1,18 +1,23 @@
 import { randomUUID } from "node:crypto";
+import {
+  parseCodexAppServerClientRequest,
+  parseCodexAppServerRequestResult,
+  type CodexAppServerClientRequestMap,
+  type CodexAppServerRequestMethod,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   HostInvariantError,
   HostResourceError,
+  type HostResourceErrorAggregate,
   HostValidationError,
 } from "../../effect/host-errors";
 import type {
   CodexAppServerPort,
-  CodexAppServerRequestInput,
   CodexAppServerRequestResult,
   CodexAppServerRespondInput,
 } from "../../ports/codex-app-server-port";
 import type { CodexAppServerClientRequest } from "../../ports/codex-app-server-protocol";
-import { jsonValueSchema, parseCodexAppServerClientRequest } from "@openducktor/contracts";
 import { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
 import type { CodexSessionHistoryPort } from "../../ports/codex-session-history-port";
 import {
@@ -22,7 +27,9 @@ import {
 } from "./codex-app-server-response-parsers";
 import type { CodexAppServerTransportError } from "./codex-app-server-transport-types";
 
-export type CodexAppServerTransportRegistryError = CodexAppServerTransportError | HostResourceError;
+export type CodexAppServerTransportRegistryError =
+  | CodexAppServerTransportError
+  | HostResourceErrorAggregate;
 
 export type CodexAppServerTransport = {
   request(
@@ -38,6 +45,13 @@ export type CodexAppServerTransportRegistry = CodexAppServerPort &
     registerTransport(runtimeId: string, transport: CodexAppServerTransport): void;
     unregisterTransport(runtimeId: string): void;
   };
+
+type CodexAppServerRequestInputFor<Method extends CodexAppServerRequestMethod> = {
+  runtimeId: string;
+  method: Method;
+  params: CodexAppServerClientRequestMap[Method]["params"];
+};
+
 export const createCodexAppServerTransportRegistry = (): CodexAppServerTransportRegistry => {
   const transports = new Map<string, CodexAppServerTransport>();
   const requireTransport = (runtimeId: string) =>
@@ -55,15 +69,20 @@ export const createCodexAppServerTransportRegistry = (): CodexAppServerTransport
       }
       return transport;
     });
-  const requestJson = (
-    input: CodexAppServerRequestInput,
-  ): Effect.Effect<CodexAppServerRequestResult, CodexAppServerTransportRegistryError> =>
+  const requestJson = <Method extends CodexAppServerRequestMethod>(
+    input: CodexAppServerRequestInputFor<Method>,
+  ): Effect.Effect<
+    CodexAppServerClientRequestMap[Method]["result"],
+    CodexAppServerTransportRegistryError
+  > =>
     Effect.gen(function* () {
       const transport = yield* requireTransport(input.runtimeId);
-      const request = parseCodexAppServerClientRequest(
-        jsonValueSchema.parse({ method: input.method, params: input.params }),
-      );
-      return yield* transport.request(request);
+      const request = parseCodexAppServerClientRequest({
+        method: input.method,
+        params: input.params,
+      });
+      const result = yield* transport.request(request);
+      return parseCodexAppServerRequestResult(input.method, result);
     });
 
   return {
@@ -162,11 +181,16 @@ export const createCodexAppServerTransportRegistry = (): CodexAppServerTransport
     respond({ runtimeId, requestId, result, error }) {
       return Effect.gen(function* () {
         const transport = yield* requireTransport(runtimeId);
-        yield* transport.respond({
-          requestId,
-          ...(result !== undefined ? { result } : undefined),
-          ...(error !== undefined ? { error } : undefined),
-        });
+        const response = { requestId };
+        if (result !== undefined && error !== undefined) {
+          yield* transport.respond({ ...response, result, error });
+        } else if (result !== undefined) {
+          yield* transport.respond({ ...response, result });
+        } else if (error !== undefined) {
+          yield* transport.respond({ ...response, error });
+        } else {
+          yield* transport.respond(response);
+        }
       });
     },
   };

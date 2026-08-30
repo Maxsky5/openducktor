@@ -1,3 +1,5 @@
+import { isJsonObject, type JsonObject, type JsonValue } from "@openducktor/contracts";
+import { z } from "zod";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import type { SessionLifecycleEventContext, SessionPart } from "./session-event-types";
@@ -7,23 +9,27 @@ export const eventTimestampMs = (timestamp: string): number => {
   return Number.isNaN(parsed) ? Date.now() : parsed;
 };
 
-const hasMeaningfulToolInputValue = (value: unknown): boolean => {
-  if (typeof value === "string") {
-    return value.trim().length > 0;
+const stringValueSchema = z.string();
+const numberOrBooleanValueSchema = z.union([z.number(), z.boolean()]);
+
+const hasMeaningfulToolInputValue = (value: JsonValue): boolean => {
+  const stringResult = stringValueSchema.safeParse(value);
+  if (stringResult.success) {
+    return stringResult.data.trim().length > 0;
   }
-  if (typeof value === "number" || typeof value === "boolean") {
+  if (numberOrBooleanValueSchema.safeParse(value).success) {
     return true;
   }
   if (Array.isArray(value)) {
     return value.some((entry) => hasMeaningfulToolInputValue(entry));
   }
-  if (!value || typeof value !== "object") {
+  if (!isJsonObject(value)) {
     return false;
   }
   return Object.values(value).some((entry) => hasMeaningfulToolInputValue(entry));
 };
 
-export const hasMeaningfulToolInput = (input: Record<string, unknown> | undefined): boolean => {
+export const hasMeaningfulToolInput = (input: JsonObject | undefined): boolean => {
   return input ? Object.values(input).some((value) => hasMeaningfulToolInputValue(value)) : false;
 };
 

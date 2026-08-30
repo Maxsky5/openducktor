@@ -3,16 +3,12 @@ import { Effect } from "effect";
 import { createServer, type ViteDevServer } from "vite";
 import {
   ElectronOperationError,
+  type ElectronOperationErrorAggregate,
   errorMessage,
   toElectronOperationError,
 } from "../effect/electron-errors";
 
 const RENDERER_DEV_HOST = "127.0.0.1";
-
-type ForceCloseableHttpServer = {
-  closeAllConnections?: () => void;
-  closeIdleConnections?: () => void;
-};
 
 export type ElectronDevRendererWatcher = {
   add(paths: string | readonly string[]): ElectronDevRendererWatcher;
@@ -37,33 +33,11 @@ export type ElectronRendererDevServer = {
   readonly watcher: ElectronDevRendererWatcher;
 };
 
-const callRendererConnectionCloseMethod = (
-  httpServer: ViteDevServer["httpServer"] | undefined,
-  method: keyof ForceCloseableHttpServer,
-): void => {
-  if (!httpServer || !(method in httpServer)) {
-    return;
-  }
-
-  if (
-    method === "closeIdleConnections" &&
-    "closeIdleConnections" in httpServer &&
-    typeof httpServer.closeIdleConnections === "function"
-  ) {
-    httpServer.closeIdleConnections();
-  }
-  if (
-    method === "closeAllConnections" &&
-    "closeAllConnections" in httpServer &&
-    typeof httpServer.closeAllConnections === "function"
-  ) {
-    httpServer.closeAllConnections();
-  }
-};
-
 const forceCloseRendererConnections = (server: ElectronDevRendererServerHandle): void => {
-  callRendererConnectionCloseMethod(server.httpServer, "closeIdleConnections");
-  callRendererConnectionCloseMethod(server.httpServer, "closeAllConnections");
+  const { httpServer } = server;
+  if (!httpServer) return;
+  if ("closeIdleConnections" in httpServer) httpServer.closeIdleConnections();
+  if ("closeAllConnections" in httpServer) httpServer.closeAllConnections();
 };
 
 export const closeRendererServerEffect = (
@@ -110,7 +84,7 @@ export const createElectronRendererDevServerEffect = ({
 }: {
   packageRoot: string;
   port: number;
-}): Effect.Effect<ElectronRendererDevServer, ElectronOperationError> =>
+}): Effect.Effect<ElectronRendererDevServer, ElectronOperationErrorAggregate> =>
   Effect.tryPromise({
     try: async () => {
       const server = await createServer({

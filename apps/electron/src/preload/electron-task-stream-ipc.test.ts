@@ -21,7 +21,7 @@ const frame: TaskEventStreamFrame = {
 };
 const subscriptionId = "22222222-2222-4222-8222-222222222222";
 const secondSubscriptionId = "33333333-3333-4333-8333-333333333333";
-// SAFETY: these tests only exercise payload routing; listeners never read the Electron event.
+// SAFETY: Electron supplies this unused event.
 const ipcRendererEvent = {} as IpcRendererEvent;
 
 describe("Electron preload task stream API", () => {

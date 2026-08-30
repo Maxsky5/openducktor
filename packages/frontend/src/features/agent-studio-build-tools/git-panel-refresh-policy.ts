@@ -1,8 +1,10 @@
 import type { AgentChatMessageMeta } from "@/types/agent-orchestrator";
+import { z } from "zod";
 
 export type ToolMessageMeta = Extract<NonNullable<AgentChatMessageMeta>, { kind: "tool" }>;
 
 const SHELL_TOOL_NAMES = new Set(["bash", "shell", "exec", "command"]);
+const stringValueSchema = z.string();
 
 const SHELL_COMMAND_PREFIX_PATTERN = String.raw`(?:^|[;&|\n({!]\s*)`;
 const SHELL_ENV_PREFIX_PATTERN = String.raw`(?:(?:[a-z_][a-z0-9_]*=\S+\s+)|(?:env\s+(?:[a-z_][a-z0-9_]*=\S+\s+)+))*`;
@@ -83,7 +85,8 @@ export const shouldRefreshGitPanelAfterToolCompletion = (meta: ToolMessageMeta):
     return true;
   }
 
-  const command = typeof meta.input?.command === "string" ? meta.input.command : "";
+  const commandResult = stringValueSchema.safeParse(meta.input?.command);
+  const command = commandResult.success ? commandResult.data : "";
   if (SHELL_TOOL_NAMES.has(toolName) || toolType === "bash") {
     return shouldRefreshGitPanelAfterShellCommand(command);
   }

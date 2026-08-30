@@ -20,14 +20,15 @@ type AgentChatReadiness = {
 
 const sessionHistoryFailureDetails = (
   failure: SessionHistoryFailure,
-): Array<{ label: string; value: string }> => [
-  { label: "Error", value: failure.detail },
-  ...(failure.method ? [{ label: "Method", value: failure.method }] : []),
-  ...(failure.pageCursor !== undefined
-    ? [{ label: "Page cursor", value: failure.pageCursor ?? "First page" }]
-    : []),
-  ...(failure.diagnosticId ? [{ label: "Diagnostic ID", value: failure.diagnosticId }] : []),
-];
+): Array<{ label: string; value: string }> => {
+  const details = [{ label: "Error", value: failure.detail }];
+  if (failure.method) details.push({ label: "Method", value: failure.method });
+  if (failure.pageCursor !== undefined) {
+    details.push({ label: "Page cursor", value: failure.pageCursor ?? "First page" });
+  }
+  if (failure.diagnosticId) details.push({ label: "Diagnostic ID", value: failure.diagnosticId });
+  return details;
+};
 
 const sessionHistoryFailureNotice = ({
   failure,
@@ -37,14 +38,17 @@ const sessionHistoryFailureNotice = ({
   failure: SessionHistoryFailure;
   hasTranscript: boolean;
   action?: AgentChatTranscriptNoticeAction | null | undefined;
-}): AgentChatTranscriptNotice => ({
-  kind: hasTranscript ? "session_history_warning" : "session_failed",
-  severity: "error",
-  title: hasTranscript ? "History may be incomplete" : "Couldn't load conversation history",
-  description: failure.summary,
-  details: sessionHistoryFailureDetails(failure),
-  ...(action ? { action } : undefined),
-});
+}): AgentChatTranscriptNotice => {
+  const notice: AgentChatTranscriptNotice = {
+    kind: hasTranscript ? "session_history_warning" : "session_failed",
+    severity: "error",
+    title: hasTranscript ? "History may be incomplete" : "Couldn't load conversation history",
+    description: failure.summary,
+    details: sessionHistoryFailureDetails(failure),
+  };
+  if (action) notice.action = action;
+  return notice;
+};
 
 export const deriveAgentChatReadiness = ({
   transcriptState,
@@ -55,14 +59,15 @@ export const deriveAgentChatReadiness = ({
   let transcriptNotice: AgentChatTranscriptNotice | null = null;
 
   if (transcriptState.kind === "runtime_waiting" && runtimeReadiness.state === "blocked") {
-    transcriptNotice = {
+    const notice: AgentChatTranscriptNotice = {
       kind: "runtime_blocked",
       severity: "error",
       title: "Runtime unavailable",
       description:
         runtimeReadiness.message ?? "Runtime readiness is blocked without an error message.",
-      ...(runtimeBlockedAction ? { action: runtimeBlockedAction } : undefined),
     };
+    if (runtimeBlockedAction) notice.action = runtimeBlockedAction;
+    transcriptNotice = notice;
   } else if (transcriptState.kind === "runtime_waiting") {
     transcriptNotice = {
       kind: "runtime_waiting",
@@ -89,19 +94,22 @@ export const deriveAgentChatReadiness = ({
       action: failedTranscriptAction,
     });
   } else if (transcriptState.kind === "failed") {
-    transcriptNotice = transcriptState.historyFailure
-      ? sessionHistoryFailureNotice({
-          failure: transcriptState.historyFailure,
-          hasTranscript: false,
-          action: failedTranscriptAction,
-        })
-      : {
-          kind: "session_failed",
-          severity: "error",
-          title: "Failed to load session",
-          description: transcriptState.message,
-          ...(failedTranscriptAction ? { action: failedTranscriptAction } : undefined),
-        };
+    if (transcriptState.historyFailure) {
+      transcriptNotice = sessionHistoryFailureNotice({
+        failure: transcriptState.historyFailure,
+        hasTranscript: false,
+        action: failedTranscriptAction,
+      });
+    } else {
+      const notice: AgentChatTranscriptNotice = {
+        kind: "session_failed",
+        severity: "error",
+        title: "Failed to load session",
+        description: transcriptState.message,
+      };
+      if (failedTranscriptAction) notice.action = failedTranscriptAction;
+      transcriptNotice = notice;
+    }
   }
 
   return {

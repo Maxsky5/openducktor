@@ -573,6 +573,31 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
     await expect(router.invoke("workspace_save_settings_snapshot")).rejects.toThrow(
       "workspace_save_settings_snapshot expects argument 'snapshot'.",
     );
+    await expect(
+      router.invoke("workspace_save_settings_snapshot", {
+        snapshot: {
+          git: { defaultMergeMethod: "merge_commit" },
+          general: { openAgentStudioTabOnBackgroundSessionStart: true },
+          appearance: { horizontalScrollbarVisibility: "auto" },
+          chat: {
+            showThinkingMessages: false,
+            expandFileDiffsByDefault: false,
+            diffStyle: "split",
+            diffIndicators: "bars",
+            diffHeight: "full",
+            lineOverflow: "wrap",
+            hunkSeparators: "metadata",
+          },
+          reusablePrompts: [],
+          kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
+          autopilot: { rules: [] },
+          agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+          agentModelFavorites: [],
+          workspaces: {},
+          globalPromptOverrides: {},
+        },
+      }),
+    ).rejects.toThrow("Invalid option");
     await expect(router.invoke("workspace_select")).rejects.toThrow(
       "workspace_select expects argument 'workspaceId'.",
     );

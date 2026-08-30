@@ -51,25 +51,26 @@ export const settleDanglingTodoToolMessages = (
 
     const errorText = options?.errorMessage?.trim() || meta.error || "Tool failed";
     const updatedStatus: ToolStatus = outcome === "error" ? "error" : "completed";
-    const updatedMeta = {
-      ...meta,
+    const updatedMeta = { ...meta, status: updatedStatus };
+    if (meta.endedAtMs === undefined && endedAtMs !== undefined) {
+      updatedMeta.endedAtMs = endedAtMs;
+    }
+    if (updatedStatus === "error") {
+      updatedMeta.error = errorText;
+    }
+
+    const contentInput: Parameters<typeof formatToolContent>[0] = {
+      tool: meta.tool,
       status: updatedStatus,
-      ...(typeof meta.endedAtMs !== "number" && typeof endedAtMs === "number"
-        ? { endedAtMs }
-        : undefined),
-      ...(updatedStatus === "error" ? { error: errorText } : undefined),
     };
+    if (meta.title) contentInput.title = meta.title;
+    if (meta.output) contentInput.output = meta.output;
+    if (updatedStatus === "error") contentInput.error = errorText;
 
     return {
       ...message,
       timestamp,
-      content: formatToolContent({
-        tool: meta.tool,
-        status: updatedStatus,
-        ...(meta.title ? { title: meta.title } : undefined),
-        ...(meta.output ? { output: meta.output } : undefined),
-        ...(updatedStatus === "error" ? { error: errorText } : undefined),
-      }),
+      content: formatToolContent(contentInput),
       meta: updatedMeta,
     };
   });

@@ -2,13 +2,16 @@ import { Effect, Exit } from "effect";
 import {
   causeToElectronBoundaryError,
   type ElectronError,
-  type ElectronErrorDetails,
   ElectronLifecycleError,
 } from "../effect/electron-errors";
 
+type ElectronStartupPhaseDetails = {
+  readonly phase: "configure-ready" | "create-window" | "initialize-host" | "register-activate";
+};
+
 type ElectronMainLifecycleLogger = {
-  error(message: string, cause?: unknown): Effect.Effect<void, unknown>;
-  info(message: string): Effect.Effect<void, unknown>;
+  error(message: string, cause?: unknown): Effect.Effect<void, Error>;
+  info(message: string): Effect.Effect<void, Error>;
 };
 
 const toLifecycleError = (cause: unknown, operation: string): Error =>
@@ -21,7 +24,7 @@ const toLifecycleError = (cause: unknown, operation: string): Error =>
       });
 
 const captureLoggingFailure = async (
-  operation: () => Effect.Effect<void, unknown>,
+  operation: () => Effect.Effect<void, Error>,
 ): Promise<Error | undefined> => {
   try {
     const result = await Effect.runPromise(Effect.either(operation()));
@@ -53,9 +56,7 @@ const lifecycleReportingFailure = ({
     operation,
     message,
     cause: failures[0],
-    details: {
-      failures: failures.map((failure) => (failure instanceof Error ? failure : String(failure))),
-    },
+    details: { failures },
   });
 };
 
@@ -72,8 +73,8 @@ export type ElectronMainStartupSteps<PreReady, Ready> = {
 const ensureStartupContinuesEffect = (
   shouldContinueStartup: (() => boolean) | undefined,
   operation: string,
-  details?: ElectronErrorDetails,
-): Effect.Effect<void, ElectronLifecycleError> => {
+  details?: ElectronStartupPhaseDetails,
+): Effect.Effect<void, ElectronLifecycleError<ElectronStartupPhaseDetails>> => {
   if (!shouldContinueStartup || shouldContinueStartup()) {
     return Effect.void;
   }

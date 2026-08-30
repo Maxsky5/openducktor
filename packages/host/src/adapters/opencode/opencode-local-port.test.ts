@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createTcpServer, type Server } from "node:net";
 import { Effect } from "effect";
+import { z } from "zod";
 import { isOpenCodeHealthy, pickFreePort } from "./opencode-local-port";
 
 const listen = (server: Server, port = 0): Promise<number> =>
@@ -10,12 +11,12 @@ const listen = (server: Server, port = 0): Promise<number> =>
     server.once("error", onError);
     server.listen(port, "127.0.0.1", () => {
       server.off("error", onError);
-      const address = server.address();
-      if (!address || typeof address === "string") {
+      const address = z.object({ port: z.number() }).safeParse(server.address());
+      if (!address.success) {
         reject(new Error("server did not expose a TCP address"));
         return;
       }
-      resolve(address.port);
+      resolve(address.data.port);
     });
   });
 

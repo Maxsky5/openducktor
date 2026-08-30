@@ -136,10 +136,12 @@ type DiscriminatedFixtureInput<Message extends ClaudeSdkFixtureMessage> =
       : Pick<Message, "type"> & Partial<Omit<Message, "type">>
     : never;
 
+type ClaudeModelUsageFixture = Record<string, Partial<ModelUsage>>;
+
 type ClaudeSdkResultMessageFixtureInput = ClaudeSdkResultMessage extends infer Message
   ? Message extends ClaudeSdkResultMessage
     ? Omit<DiscriminatedFixtureInput<Message>, "modelUsage" | "usage"> & {
-        modelUsage?: Record<string, Partial<ModelUsage>>;
+        modelUsage?: ClaudeModelUsageFixture;
         usage?: Partial<NonNullableUsage>;
       }
     : never
@@ -167,6 +169,10 @@ type ClaudeSdkFixtureOutput<Input extends ClaudeSdkMessageFixtureInput> = Input 
           : Input extends { type: "system"; subtype: infer Subtype }
             ? Extract<ClaudeSdkUsedSystemMessage, { subtype: Subtype }>
             : never;
+
+const isClaudeUserToolResultContentArray = (
+  content: string | readonly ClaudeUserToolResultContent[number][],
+): content is readonly ClaudeUserToolResultContent[number][] => Array.isArray(content);
 
 const completeClaudeAssistantContentBlock = (
   block: ClaudeAssistantContentBlockFixture,
@@ -219,9 +225,13 @@ const completeClaudeUserContentBlock = (
   if (block.type !== "tool_result") return block;
   const { content, ...toolResult } = block;
   if (content === undefined) return toolResult;
-  if (typeof content === "string") return { ...toolResult, content };
-  return { ...toolResult, content: [...content] };
+  if (!isClaudeUserToolResultContentArray(content)) return { ...toolResult, content };
+  return { ...toolResult, content: content.map((entry) => entry) };
 };
+
+const isClaudeUserContentBlockFixtureArray = (
+  content: string | readonly ClaudeUserContentBlockFixture[],
+): content is readonly ClaudeUserContentBlockFixture[] => Array.isArray(content);
 
 const completeClaudeStreamEvent = (
   event: ClaudeStreamEventFixture,
@@ -260,8 +270,8 @@ const completeClaudeResultUsage = (
 });
 
 const completeClaudeModelUsage = (
-  modelUsage: Record<string, Partial<ModelUsage>> | undefined,
-): Record<string, ModelUsage> =>
+  modelUsage: ClaudeModelUsageFixture | undefined,
+): ClaudeSdkResultMessage["modelUsage"] =>
   Object.fromEntries(
     Object.entries(modelUsage ?? {}).map(([model, usage]) => [
       model,
@@ -298,10 +308,9 @@ export function claudeSdkMessageFixture(
     };
   }
   if (message.type === "user") {
-    const content =
-      typeof message.message.content === "string"
-        ? message.message.content
-        : message.message.content.map(completeClaudeUserContentBlock);
+    const content = isClaudeUserContentBlockFixtureArray(message.message.content)
+      ? message.message.content.map(completeClaudeUserContentBlock)
+      : message.message.content;
     return {
       parent_tool_use_id: null,
       ...message,
@@ -436,11 +445,11 @@ export const claudeHistoryMessagesFixture = (
   messages: readonly ClaudeHistoryMessage[],
 ): ClaudeHistoryMessage[] => [...messages];
 
-type ClaudeSessionMessageFixture = {
+type ClaudeSessionMessageFixture = SessionStoreEntry & {
   readonly type: SessionMessage["type"];
   readonly uuid: string;
   readonly session_id?: string;
-  readonly message: unknown;
+  readonly message: SessionMessage["message"];
   readonly parent_tool_use_id?: string | null;
   readonly parent_agent_id?: string | null;
 };
@@ -456,7 +465,7 @@ export const claudeSessionMessageFixture = <Fixture extends ClaudeSessionMessage
 });
 
 export const claudeSessionMessageFixtures = (
-  messages: readonly (ClaudeSessionMessageFixture & Record<string, unknown>)[],
+  messages: readonly ClaudeSessionMessageFixture[],
 ): ClaudeHistoryConversationMessage[] => messages.map(claudeSessionMessageFixture);
 
 export const claudeHistoryMessageFixtures = (

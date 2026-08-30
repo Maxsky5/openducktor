@@ -17,7 +17,7 @@ import {
 } from "./use-agent-studio-dev-server-panel-test-fixtures";
 import { renderDevServerPanelHook } from "./use-agent-studio-dev-server-panel-test-harness";
 
-if (typeof globalThis.document === "undefined") {
+if (globalThis.document === undefined) {
   GlobalRegistrator.register();
 }
 

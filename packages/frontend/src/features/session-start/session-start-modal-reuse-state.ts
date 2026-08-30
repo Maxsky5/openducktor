@@ -24,6 +24,11 @@ type SourceSelection = {
   selectedModel: AgentModelSelection | null;
 };
 
+type SourceSelectionDraft = {
+  runtimeKind: RuntimeKind | null;
+  selection: AgentModelSelection | null;
+};
+
 const resolveSourceSelection = (
   options: SessionStartExistingSessionOption[],
   sourceSessionValue: string,
@@ -129,7 +134,7 @@ const buildSourceSelectionDraft = ({
   runtimeDefinitions: RuntimeDescriptor[];
   startMode: "reuse" | "fork";
   sourceSessionValue: string;
-}) => {
+}): SourceSelectionDraft => {
   const sourceSelection = resolveSourceSelection(options, sourceSessionValue);
   const runtimeKind = resolveRuntimeKindSelection({
     runtimeDefinitions: filterRuntimeDefinitionsForStartMode(runtimeDefinitions, startMode),
@@ -140,9 +145,6 @@ const buildSourceSelectionDraft = ({
     return {
       runtimeKind,
       selection: null,
-    } satisfies {
-      runtimeKind: RuntimeKind | null;
-      selection: AgentModelSelection | null;
     };
   }
 
@@ -156,9 +158,6 @@ const buildSourceSelectionDraft = ({
     selection: matchingCatalog
       ? coerceVisibleSelectionToCatalog(matchingCatalog, sourceModel)
       : sourceModel,
-  } satisfies {
-    runtimeKind: RuntimeKind | null;
-    selection: AgentModelSelection | null;
   };
 };
 

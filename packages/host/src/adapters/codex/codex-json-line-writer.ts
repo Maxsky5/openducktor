@@ -1,13 +1,30 @@
 import type { Writable } from "node:stream";
+import type {
+  CodexAppServerClientNotification,
+  CodexAppServerRequestId,
+  CodexAppServerRespondError,
+  CodexAppServerRespondResult,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
-import { type HostOperationError, toHostOperationError } from "../../effect/host-errors";
+import { type HostOperationErrorAggregate, toHostOperationError } from "../../effect/host-errors";
 
 const WRITE_OPERATION = "codexAppServerTransport.writeLine";
 
-export const writeJsonLine = <Payload>(
+export type CodexTransportResponseMessage = {
+  jsonrpc: "2.0";
+  id: CodexAppServerRequestId;
+  result?: CodexAppServerRespondResult;
+  error?: CodexAppServerRespondError;
+};
+
+export type CodexTransportNotifyMessage = {
+  jsonrpc: "2.0";
+} & CodexAppServerClientNotification;
+
+export const writeJsonLine = (
   stdin: Writable,
-  payload: Payload,
-): Effect.Effect<void, HostOperationError> =>
+  payload: CodexTransportResponseMessage | CodexTransportNotifyMessage,
+): Effect.Effect<void, HostOperationErrorAggregate> =>
   Effect.async((resume) => {
     let active = true;
     stdin.write(`${JSON.stringify(payload)}\n`, (error) => {

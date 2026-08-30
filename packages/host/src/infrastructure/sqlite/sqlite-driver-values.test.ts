@@ -1,22 +1,22 @@
 import { describe, expect, test } from "bun:test";
 
-import { isSqliteRow } from "./sqlite-driver-values";
+import { sqliteRowSchema } from "./sqlite-driver-values";
 
 class RowLikeValue {
   readonly label = "alpha";
 }
 
-describe("isSqliteRow", () => {
+describe("sqliteRowSchema", () => {
   test("accepts plain and null-prototype rows", () => {
-    expect(isSqliteRow({ label: "alpha", value: 7 })).toBe(true);
+    expect(sqliteRowSchema.safeParse({ label: "alpha", value: 7 }).success).toBe(true);
 
     const row = Object.assign(Object.create(null), { label: "alpha", value: 7 });
-    expect(isSqliteRow(row)).toBe(true);
+    expect(sqliteRowSchema.safeParse(row).success).toBe(true);
   });
 
   test("rejects objects that are not SQLite row records", () => {
-    expect(isSqliteRow(new Date())).toBe(false);
-    expect(isSqliteRow(new Uint8Array([1, 2]))).toBe(false);
-    expect(isSqliteRow(new RowLikeValue())).toBe(false);
+    expect(sqliteRowSchema.safeParse(new Date()).success).toBe(false);
+    expect(sqliteRowSchema.safeParse(new Uint8Array([1, 2])).success).toBe(false);
+    expect(sqliteRowSchema.safeParse(new RowLikeValue()).success).toBe(false);
   });
 });

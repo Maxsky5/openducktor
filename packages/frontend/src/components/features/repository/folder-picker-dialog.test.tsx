@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:
 import type { DirectoryListing, FilesystemListDirectoryInput } from "@openducktor/contracts";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
+import { z } from "zod";
 import { QueryProvider } from "@/lib/query-provider";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
@@ -22,8 +23,14 @@ const createListing = (overrides: Partial<DirectoryListing> = {}): DirectoryList
 });
 
 type ListDirectoryInput = string | FilesystemListDirectoryInput | undefined;
-const pathFromInput = (input: ListDirectoryInput): string | undefined =>
-  typeof input === "string" ? input : input?.path;
+const pathFromInput = (input: ListDirectoryInput): string | undefined => {
+  const stringInput = z.string().safeParse(input);
+  if (stringInput.success) {
+    return stringInput.data;
+  }
+  const objectInput = z.object({ path: z.string().optional() }).safeParse(input);
+  return objectInput.success ? objectInput.data.path : undefined;
+};
 const filesystemListDirectoryMock = mock(
   async (_input?: ListDirectoryInput): Promise<DirectoryListing> => createListing(),
 );
@@ -72,18 +79,21 @@ describe("FolderPickerDialog", () => {
       selectionMode: "directory" | "file";
     }>,
   ) => {
+    const dialogProps: Parameters<typeof FolderPickerDialog>[0] = {
+      open: true,
+      onOpenChange: () => {},
+      title: "Pick a folder",
+      description: "Browse the filesystem",
+      confirmLabel: "Select Folder",
+      onConfirm: props?.onConfirm ?? (async () => {}),
+      selectionMode: props?.selectionMode ?? "directory",
+    };
+    if (props?.initialPath) {
+      dialogProps.initialPath = props.initialPath;
+    }
     return render(
       <QueryProvider useIsolatedClient>
-        <FolderPickerDialog
-          open
-          onOpenChange={() => {}}
-          title="Pick a folder"
-          description="Browse the filesystem"
-          confirmLabel="Select Folder"
-          onConfirm={props?.onConfirm ?? (async () => {})}
-          selectionMode={props?.selectionMode ?? "directory"}
-          {...(props?.initialPath ? { initialPath: props.initialPath } : {})}
-        />
+        <FolderPickerDialog {...dialogProps} />
       </QueryProvider>,
     );
   };
@@ -153,7 +163,8 @@ describe("FolderPickerDialog", () => {
   test("selects a file and requests file entries only in file mode", async () => {
     const onConfirm = mock(async (_path: string) => {});
     filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {
-      expect(typeof input === "object" ? input.includeFiles : false).toBe(true);
+      const objectInput = z.object({ includeFiles: z.boolean().optional() }).safeParse(input);
+      expect(objectInput.success ? objectInput.data.includeFiles : false).toBe(true);
       return createListing({
         entries: [
           {

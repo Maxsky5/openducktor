@@ -45,7 +45,7 @@ export const useHorizontalSortableTabs = ({
   itemIds: string[];
   onReorder: (draggedId: string, targetId: string, position: HorizontalTabDropPosition) => void;
 }) => {
-  const PrimarySensor = typeof globalThis.PointerEvent === "function" ? PointerSensor : MouseSensor;
+  const PrimarySensor = globalThis.PointerEvent === undefined ? MouseSensor : PointerSensor;
   const sensors = useSensors(
     useSensor(PrimarySensor, {
       activationConstraint: { distance: 6 },

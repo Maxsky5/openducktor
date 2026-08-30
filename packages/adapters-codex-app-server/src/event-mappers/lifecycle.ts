@@ -1,8 +1,12 @@
 import { extractStringField } from "../codex-app-server-shared";
 import { codexItemTypeMatches, extractCodexTokenUsageTotals } from "../codex-app-server-transcript";
 import type {
+  CodexCanonicalAssistantDeltaEvent,
   CodexCanonicalSessionCompactedEvent,
   CodexCanonicalSessionCompactionStartedEvent,
+  CodexCanonicalSessionErrorEvent,
+  CodexCanonicalSessionIdleEvent,
+  CodexCanonicalStreamPartEvent,
   CodexMappingContext,
   CodexMappingResult,
 } from "../codex-canonical-events";
@@ -13,30 +17,52 @@ import { noCodexMapperState } from "../codex-event-mapper";
 const toSessionCompactedEvent = (
   ctx: CodexMappingContext,
   messageId?: string,
-): CodexCanonicalSessionCompactedEvent => ({
-  kind: "session_compacted",
-  source: ctx.source,
-  mapper: "compaction",
-  threadId: ctx.threadId,
-  ...(ctx.turnId ? { turnId: ctx.turnId } : undefined),
-  ...(ctx.timestamp ? { timestamp: ctx.timestamp } : undefined),
-  ...(messageId ? { messageId } : undefined),
-  message: "Session compacted.",
-});
+): CodexCanonicalSessionCompactedEvent => {
+  const event: CodexCanonicalSessionCompactedEvent = {
+    kind: "session_compacted",
+    source: ctx.source,
+    mapper: "compaction",
+    threadId: ctx.threadId,
+    message: "Session compacted.",
+  };
+
+  if (ctx.turnId) {
+    event.turnId = ctx.turnId;
+  }
+  if (ctx.timestamp) {
+    event.timestamp = ctx.timestamp;
+  }
+  if (messageId) {
+    event.messageId = messageId;
+  }
+
+  return event;
+};
 
 const toSessionCompactionStartedEvent = (
   ctx: CodexMappingContext,
   messageId?: string,
-): CodexCanonicalSessionCompactionStartedEvent => ({
-  kind: "session_compaction_started",
-  source: ctx.source,
-  mapper: "compaction",
-  threadId: ctx.threadId,
-  ...(ctx.turnId ? { turnId: ctx.turnId } : undefined),
-  ...(ctx.timestamp ? { timestamp: ctx.timestamp } : undefined),
-  ...(messageId ? { messageId } : undefined),
-  message: "Session compaction started.",
-});
+): CodexCanonicalSessionCompactionStartedEvent => {
+  const event: CodexCanonicalSessionCompactionStartedEvent = {
+    kind: "session_compaction_started",
+    source: ctx.source,
+    mapper: "compaction",
+    threadId: ctx.threadId,
+    message: "Session compaction started.",
+  };
+
+  if (ctx.turnId) {
+    event.turnId = ctx.turnId;
+  }
+  if (ctx.timestamp) {
+    event.timestamp = ctx.timestamp;
+  }
+  if (messageId) {
+    event.messageId = messageId;
+  }
+
+  return event;
+};
 
 export const lifecycleMapper: CodexEventMapper = {
   name: "lifecycle",
@@ -47,29 +73,36 @@ export const lifecycleMapper: CodexEventMapper = {
     }
     const { turn } = input.notification.params;
     const status = turn.status;
+    const events: CodexMappingResult["events"] = [];
+
+    if (status === "failed") {
+      const event: CodexCanonicalSessionErrorEvent = {
+        kind: "session_error",
+        source: ctx.source,
+        mapper: "lifecycle",
+        threadId: ctx.threadId,
+        message: turn.error?.message ?? "Codex turn failed.",
+      };
+      if (ctx.timestamp) {
+        event.timestamp = ctx.timestamp;
+      }
+      events.push(event);
+    }
+
+    const idleEvent: CodexCanonicalSessionIdleEvent = {
+      kind: "session_idle",
+      source: ctx.source,
+      mapper: "lifecycle",
+      threadId: ctx.threadId,
+    };
+    if (ctx.timestamp) {
+      idleEvent.timestamp = ctx.timestamp;
+    }
+    events.push(idleEvent);
+
     return {
       handled: true,
-      events: [
-        ...(status === "failed"
-          ? [
-              {
-                kind: "session_error" as const,
-                source: ctx.source,
-                mapper: "lifecycle",
-                threadId: ctx.threadId,
-                ...(ctx.timestamp ? { timestamp: ctx.timestamp } : undefined),
-                message: turn.error?.message ?? "Codex turn failed.",
-              },
-            ]
-          : []),
-        {
-          kind: "session_idle",
-          source: ctx.source,
-          mapper: "lifecycle",
-          threadId: ctx.threadId,
-          ...(ctx.timestamp ? { timestamp: ctx.timestamp } : undefined),
-        },
-      ],
+      events,
     };
   },
   fromThreadItem: emptyCodexMappingResult,
@@ -122,28 +155,32 @@ export const tokenUsageMapper: CodexEventMapper = {
       return emptyCodexMappingResult();
     }
     const messageId = ctx.turnId ?? ctx.threadId;
+    const part: Extract<CodexCanonicalStreamPartEvent["part"], { kind: "step" }> = {
+      kind: "step",
+      messageId,
+      partId: `${messageId}-token-usage`,
+      phase: "finish",
+      totalTokens: tokenUsage.totalTokens,
+    };
+    if (tokenUsage.contextWindow !== undefined) {
+      part.contextWindow = tokenUsage.contextWindow;
+    }
+    const event: CodexCanonicalStreamPartEvent = {
+      kind: "stream_part",
+      source: ctx.source,
+      mapper: "token_usage",
+      threadId: ctx.threadId,
+      part,
+    };
+    if (ctx.turnId) {
+      event.turnId = ctx.turnId;
+    }
+    if (ctx.timestamp) {
+      event.timestamp = ctx.timestamp;
+    }
     return {
       handled: true,
-      events: [
-        {
-          kind: "stream_part",
-          source: ctx.source,
-          mapper: "token_usage",
-          threadId: ctx.threadId,
-          ...(ctx.turnId ? { turnId: ctx.turnId } : undefined),
-          ...(ctx.timestamp ? { timestamp: ctx.timestamp } : undefined),
-          part: {
-            kind: "step",
-            messageId,
-            partId: `${messageId}-token-usage`,
-            phase: "finish",
-            totalTokens: tokenUsage.totalTokens,
-            ...(typeof tokenUsage.contextWindow === "number"
-              ? { contextWindow: tokenUsage.contextWindow }
-              : undefined),
-          },
-        },
-      ],
+      events: [event],
     };
   },
   fromThreadItem: emptyCodexMappingResult,
@@ -167,20 +204,23 @@ export const deltaMapper: CodexEventMapper = {
       return emptyCodexMappingResult();
     }
     const messageId = extractStringField(input.notification.params, ["itemId", "item_id"]);
+    const event: CodexCanonicalAssistantDeltaEvent = {
+      kind: "assistant_delta",
+      source: ctx.source,
+      mapper: "delta",
+      threadId: ctx.threadId,
+      channel: isText ? "text" : "reasoning",
+      delta,
+    };
+    if (ctx.timestamp) {
+      event.timestamp = ctx.timestamp;
+    }
+    if (messageId) {
+      event.messageId = messageId;
+    }
     return {
       handled: true,
-      events: [
-        {
-          kind: "assistant_delta",
-          source: ctx.source,
-          mapper: "delta",
-          threadId: ctx.threadId,
-          ...(ctx.timestamp ? { timestamp: ctx.timestamp } : undefined),
-          ...(messageId ? { messageId } : undefined),
-          channel: isText ? "text" : "reasoning",
-          delta,
-        },
-      ],
+      events: [event],
     };
   },
   fromThreadItem: emptyCodexMappingResult,

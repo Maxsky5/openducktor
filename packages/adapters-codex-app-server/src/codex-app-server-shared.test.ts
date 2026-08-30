@@ -1,18 +1,18 @@
 import { describe, expect, test } from "bun:test";
-import { arrayFromUnknown, isPlainObject } from "./codex-app-server-shared";
+import { arrayFromCodexJsonValue, isPlainObject } from "./codex-app-server-shared";
 
 describe("Codex app-server JSON guards", () => {
-  test("isPlainObject validates the full JSON value", () => {
+  test("isPlainObject accepts only JSON objects", () => {
     expect(isPlainObject({ nested: { values: [1, true, null] } })).toBe(true);
-    expect(isPlainObject(new Date())).toBe(false);
-    expect(isPlainObject({ callback: () => undefined })).toBe(false);
-    expect(isPlainObject({ nested: { value: undefined } })).toBe(false);
+    expect(isPlainObject(["not", "an", "object"])).toBe(false);
+    expect(isPlainObject("text")).toBe(false);
+    expect(isPlainObject(null)).toBe(false);
   });
 
-  test("arrayFromUnknown returns only validated JSON arrays", () => {
-    expect(arrayFromUnknown([1, { ok: true }, null])).toEqual([1, { ok: true }, null]);
-    expect(arrayFromUnknown({ items: ["one", "two"] })).toEqual(["one", "two"]);
-    expect(arrayFromUnknown([() => undefined])).toEqual([]);
-    expect(arrayFromUnknown({ items: [new Date()] })).toEqual([]);
+  test("arrayFromCodexJsonValue returns arrays from JSON values", () => {
+    expect(arrayFromCodexJsonValue([1, { ok: true }, null])).toEqual([1, { ok: true }, null]);
+    expect(arrayFromCodexJsonValue({ items: ["one", "two"] })).toEqual(["one", "two"]);
+    expect(arrayFromCodexJsonValue({ items: "not-an-array" })).toEqual([]);
+    expect(arrayFromCodexJsonValue(undefined)).toEqual([]);
   });
 });

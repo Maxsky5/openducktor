@@ -45,17 +45,26 @@ const buildSessionState = (
   runtimeId: string,
   model: AgentModelSelection | undefined,
   liveStatus?: CodexSessionState["liveStatus"],
-): CodexSessionState => ({
-  summary,
-  ...(model ? { model } : undefined),
-  systemPrompt: input.systemPrompt ?? "",
-  runtimeId,
-  repoPath: input.repoPath,
-  threadId: summary.externalSessionId,
-  workingDirectory: input.workingDirectory,
-  runtimePolicy: input.runtimePolicy,
-  ...(liveStatus ? { liveStatus } : undefined),
-});
+): CodexSessionState => {
+  const sessionState: CodexSessionState = {
+    summary,
+    systemPrompt: input.systemPrompt ?? "",
+    runtimeId,
+    repoPath: input.repoPath,
+    threadId: summary.externalSessionId,
+    workingDirectory: input.workingDirectory,
+    runtimePolicy: input.runtimePolicy,
+  };
+
+  if (model) {
+    sessionState.model = model;
+  }
+  if (liveStatus) {
+    sessionState.liveStatus = liveStatus;
+  }
+
+  return sessionState;
+};
 
 export const assertRuntimeContextCompatibleWithSession = (
   session: CodexSessionState,
@@ -82,11 +91,14 @@ const applyRuntimeContextToSession = (
   const sessionScope = input.sessionScope;
   if (sessionScope) {
     const policy = resolveCodexSessionScopePolicy(sessionScope, input.runtimePolicy, action);
-    session.summary = {
+    const summary: AgentSessionSummary = {
       ...session.summary,
-      ...(policy.kind === "repository" ? { title: policy.title } : undefined),
       sessionAssociation: sessionScope,
     };
+    if (policy.kind === "repository") {
+      summary.title = policy.title;
+    }
+    session.summary = summary;
   }
   session.runtimePolicy = input.runtimePolicy;
   if (input.systemPrompt !== undefined) {
@@ -201,7 +213,7 @@ export const preserveRuntimeContextForExistingThread = (
     return existingThreadSession;
   }
 
-  return {
+  const session: CodexSessionState = {
     ...existingThreadSession,
     summary: {
       ...existingThreadSession.summary,
@@ -210,10 +222,15 @@ export const preserveRuntimeContextForExistingThread = (
           ? current.summary.sessionAssociation
           : existingThreadSession.summary.sessionAssociation,
     },
-    ...(existingThreadSession.model || !current.model ? undefined : { model: current.model }),
     systemPrompt: existingThreadSession.systemPrompt || current.systemPrompt,
     runtimePolicy: existingThreadSession.runtimePolicy,
   };
+
+  if (!existingThreadSession.model && current.model) {
+    session.model = current.model;
+  }
+
+  return session;
 };
 
 const sessionStateFromThreadResumeResponse = (

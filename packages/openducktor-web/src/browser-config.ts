@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { z } from "zod";
 import { runWebSyncBoundary, WebValidationError } from "./effect/web-errors";
 
 type BrowserEnvValues = {
@@ -18,18 +19,19 @@ export const configureBrowserRuntimeConfig = (config: BrowserRuntimeConfig): voi
   browserRuntimeConfig = config;
 };
 
-const readStringEnvValue = (value: unknown): string | undefined =>
-  typeof value === "string" ? value : undefined;
-
 const readBrowserEnv = (): BrowserEnv => {
-  const processEnv = typeof globalThis.process === "undefined" ? undefined : process.env;
+  const processEnv = globalThis.process === undefined ? undefined : process.env;
   const viteBackendUrl: unknown = import.meta.env.VITE_ODT_BROWSER_BACKEND_URL;
   const viteAuthToken: unknown = import.meta.env.VITE_ODT_BROWSER_AUTH_TOKEN;
+  const parsedBackendUrl = z.string().safeParse(viteBackendUrl);
+  const parsedAuthToken = z.string().safeParse(viteAuthToken);
   return {
     VITE_ODT_BROWSER_BACKEND_URL:
-      readStringEnvValue(viteBackendUrl) ?? processEnv?.VITE_ODT_BROWSER_BACKEND_URL,
+      (parsedBackendUrl.success ? parsedBackendUrl.data : undefined) ??
+      processEnv?.VITE_ODT_BROWSER_BACKEND_URL,
     VITE_ODT_BROWSER_AUTH_TOKEN:
-      readStringEnvValue(viteAuthToken) ?? processEnv?.VITE_ODT_BROWSER_AUTH_TOKEN,
+      (parsedAuthToken.success ? parsedAuthToken.data : undefined) ??
+      processEnv?.VITE_ODT_BROWSER_AUTH_TOKEN,
   };
 };
 
@@ -37,10 +39,10 @@ const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 const OPAQUE_BROWSER_ORIGIN = "null";
 
 const isUsableBrowserOrigin = (origin: string | undefined): origin is string =>
-  typeof origin === "string" && origin.length > 0 && origin !== OPAQUE_BROWSER_ORIGIN;
+  origin !== undefined && origin.length > 0 && origin !== OPAQUE_BROWSER_ORIGIN;
 
 const readBrowserLocationOrigin = (): string | undefined => {
-  if (typeof globalThis.window === "undefined") {
+  if (globalThis.window === undefined) {
     return undefined;
   }
 

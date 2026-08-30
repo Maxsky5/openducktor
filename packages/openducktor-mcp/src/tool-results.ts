@@ -25,8 +25,8 @@ export class OdtToolError extends Error {
   readonly details: OdtToolErrorDetails | undefined;
   readonly issues: OdtToolErrorIssue[] | undefined;
 
-  constructor({ code, message, details, issues }: OdtToolErrorInput) {
-    super(message);
+  constructor({ code, message, details, issues }: OdtToolErrorInput, options?: ErrorOptions) {
+    super(message, options);
     this.name = "OdtToolError";
     this.code = code;
     this.details = details;
@@ -35,16 +35,27 @@ export class OdtToolError extends Error {
 }
 
 type ZodIssueSummary = OdtToolErrorIssue;
+const errorTextSchema = z.string();
+const errorPrimitiveSchema = z.union([
+  z.number(),
+  z.nan(),
+  z.literal(Infinity),
+  z.literal(-Infinity),
+  z.boolean(),
+]);
+const issuePathEntrySchema = z.union([z.string(), z.number()]);
 
 export const toErrorMessage = (cause: unknown): string => {
   if (cause instanceof Error && cause.message.trim().length > 0) {
     return cause.message;
   }
-  if (typeof cause === "string" && cause.trim().length > 0) {
-    return cause.trim();
+  const text = errorTextSchema.safeParse(cause);
+  if (text.success && text.data.trim().length > 0) {
+    return text.data.trim();
   }
-  if (typeof cause === "number" || typeof cause === "boolean") {
-    return String(cause);
+  const primitive = errorPrimitiveSchema.safeParse(cause);
+  if (primitive.success) {
+    return String(primitive.data);
   }
   return "Unknown error";
 };
@@ -57,8 +68,9 @@ const summarizeIssue = (issue: {
   message: string;
   code?: string;
 }): ZodIssueSummary => ({
-  path: issue.path.filter((entry): entry is string | number => {
-    return typeof entry === "string" || typeof entry === "number";
+  path: issue.path.flatMap((entry) => {
+    const parsed = issuePathEntrySchema.safeParse(entry);
+    return parsed.success ? [parsed.data] : [];
   }),
   message: issue.message,
   code: issue.code ?? "invalid_input",
@@ -91,18 +103,21 @@ const readOdtToolErrorIssues = (cause: unknown): ZodIssueSummary[] | undefined =
 };
 
 export const toToolResult = (payload: JsonValue): ToolResult => {
-  return {
+  const result: ToolResult = {
     content: [
       {
         type: "text",
         text: JSON.stringify(payload, null, 2),
       },
     ],
-    ...(isStructuredToolPayload(payload) ? { structuredContent: payload } : undefined),
   };
+  if (isStructuredToolPayload(payload)) result.structuredContent = payload;
+  return result;
 };
 
-export const toTaskAssetsToolResult = (payload: unknown): ToolResult => {
+export const toTaskAssetsToolResult = (
+  payload: z.input<typeof readTaskAssetsResultSchema>,
+): ToolResult => {
   const parsed = readTaskAssetsResultSchema.parse(payload);
   return {
     content: parsed.assets.flatMap((asset) => [
@@ -130,14 +145,15 @@ export const toToolError = (cause: unknown): ToolResult => {
       : zodIssues
         ? "ODT_TOOL_INPUT_INVALID"
         : "ODT_TOOL_EXECUTION_ERROR";
+  const error: OdtToolErrorPayload["error"] = {
+    code,
+    message,
+  };
+  if (cause instanceof OdtToolError && cause.details) error.details = cause.details;
+  if (issues) error.issues = issues;
   const errorPayload: OdtToolErrorPayload = {
     ok: false,
-    error: {
-      code,
-      message,
-      ...(cause instanceof OdtToolError && cause.details ? { details: cause.details } : undefined),
-      ...(issues ? { issues } : undefined),
-    },
+    error,
   };
   return {
     content: [

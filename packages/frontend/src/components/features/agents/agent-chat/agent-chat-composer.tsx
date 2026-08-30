@@ -203,7 +203,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
             <AgentContextUsageIndicator
               totalTokens={contextUsage.totalTokens}
               contextWindow={contextUsage.contextWindow}
-              {...(typeof contextUsage.outputLimit === "number"
+              {...(contextUsage.outputLimit !== undefined
                 ? { outputLimit: contextUsage.outputLimit }
                 : {})}
             />
@@ -463,7 +463,7 @@ function useAgentChatComposerFocus({
 
   const scheduleComposerFocus = useCallback(() => {
     const requestAnimationFrameFn = globalThis.requestAnimationFrame;
-    if (typeof requestAnimationFrameFn === "function") {
+    if (requestAnimationFrameFn !== undefined) {
       requestAnimationFrameFn(() => {
         focusComposerEditor();
       });
@@ -676,7 +676,7 @@ export function AgentChatComposer({
 
     const previousAttachmentLayoutKey = previousAttachmentLayoutKeyRef.current;
     previousAttachmentLayoutKeyRef.current = attachmentLayoutKey;
-    if (typeof previousAttachmentLayoutKey === "undefined") {
+    if (previousAttachmentLayoutKey === undefined) {
       return;
     }
 

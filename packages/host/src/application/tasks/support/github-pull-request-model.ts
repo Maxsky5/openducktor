@@ -1,6 +1,11 @@
-import type { GitProviderRepository, PullRequest } from "@openducktor/contracts";
-import { pullRequestSchema } from "@openducktor/contracts";
+import {
+  type GitProviderRepository,
+  type JsonValue,
+  type PullRequest,
+  pullRequestSchema,
+} from "@openducktor/contracts";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
+import { parseJson } from "../../../effect/json";
 import { z } from "zod";
 
 export const GITHUB_PROVIDER_ID = "github";
@@ -64,7 +69,7 @@ export type GithubPullRequestSyncPolicy = {
   repository?: GitProviderRepository;
 };
 
-const parseGithubPullPayload = (value: unknown): GithubPullResponse => {
+const parseGithubPullPayload = (value: JsonValue): GithubPullResponse => {
   const parsed = githubPullResponseSchema.safeParse(value);
   if (parsed.success) {
     return parsed.data;
@@ -89,27 +94,28 @@ const normalizeGithubPullRequest = (response: GithubPullResponse): ResolvedPullR
         : rawState === "open"
           ? "open"
           : "closed_unmerged";
+  const recordInput: z.input<typeof pullRequestSchema> = {
+    providerId: GITHUB_PROVIDER_ID,
+    number: response.number,
+    url: response.html_url,
+    state,
+    createdAt: response.created_at,
+    updatedAt: response.updated_at,
+    lastSyncedAt: new Date().toISOString(),
+  };
+  if (mergedAt !== undefined) recordInput.mergedAt = mergedAt;
+  if (closedAt !== undefined) recordInput.closedAt = closedAt;
   return {
-    record: pullRequestSchema.parse({
-      providerId: GITHUB_PROVIDER_ID,
-      number: response.number,
-      url: response.html_url,
-      state,
-      createdAt: response.created_at,
-      updatedAt: response.updated_at,
-      lastSyncedAt: new Date().toISOString(),
-      ...(mergedAt !== undefined ? { mergedAt } : undefined),
-      ...(closedAt !== undefined ? { closedAt } : undefined),
-    }),
+    record: pullRequestSchema.parse(recordInput),
     sourceBranch: response.head.ref,
     targetBranch: response.base.ref,
   };
 };
 
 export const parseGithubPullListResponse = (payload: string): ResolvedPullRequest[] => {
-  let parsed: unknown;
+  let parsed: JsonValue;
   try {
-    parsed = JSON.parse(payload);
+    parsed = parseJson(payload);
   } catch (cause) {
     throw new HostValidationError({
       field: "payload",
@@ -131,9 +137,9 @@ export const parseGithubPullListResponse = (payload: string): ResolvedPullReques
 };
 
 export const parseGithubPullResponse = (payload: string): ResolvedPullRequest => {
-  let parsed: unknown;
+  let parsed: JsonValue;
   try {
-    parsed = JSON.parse(payload);
+    parsed = parseJson(payload);
   } catch (cause) {
     throw new HostValidationError({
       field: "payload",

@@ -10,10 +10,12 @@ export const skippedQueryOptions = <TData>({
   queryKey,
   staleTime,
   refetchOnWindowFocus,
-}: SkippedQueryOptionsArgs) =>
-  queryOptions<TData, Error, TData, QueryKey>({
+}: SkippedQueryOptionsArgs) => {
+  const options: Parameters<typeof queryOptions<TData, Error, TData, QueryKey>>[0] = {
     queryKey,
     queryFn: skipToken,
     staleTime,
-    ...(refetchOnWindowFocus === undefined ? undefined : { refetchOnWindowFocus }),
-  });
+  };
+  if (refetchOnWindowFocus !== undefined) options.refetchOnWindowFocus = refetchOnWindowFocus;
+  return queryOptions<TData, Error, TData, QueryKey>(options);
+};

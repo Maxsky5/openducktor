@@ -70,7 +70,7 @@ export type CreateGitCliAdapterInput = (
 
 const parseMaterializedGitFilePaths = (
   output: string,
-): Effect.Effect<string[], HostOperationError> =>
+): Effect.Effect<string[], HostOperationError<{ entry: string }>> =>
   Effect.gen(function* () {
     const filePaths: string[] = [];
     for (const entry of output.split("\0")) {

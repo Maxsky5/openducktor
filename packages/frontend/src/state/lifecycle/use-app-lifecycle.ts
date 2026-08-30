@@ -5,7 +5,7 @@ import type {
   TaskStoreCheck,
 } from "@openducktor/contracts";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
@@ -70,16 +70,17 @@ export function useAppLifecycle({
     loadWorkspaceTasksRef.current = loadWorkspaceTasks;
   }, [activeWorkspace, loadWorkspaceTasks]);
 
-  const runtimeKindsKey = runtimeDefinitions.map((definition) => definition.kind).join(",");
+  const runtimeKinds = useMemo(
+    () => runtimeDefinitions.map((definition) => definition.kind),
+    [runtimeDefinitions],
+  );
 
   useEffect(() => {
     const repoPath = activeWorkspace?.repoPath ?? null;
-    if (!repoPath || runtimeKindsKey.length === 0) {
+    if (!repoPath || runtimeKinds.length === 0) {
       return;
     }
 
-    // SAFETY: runtimeKindsKey is built above only by joining RuntimeDescriptor.kind values.
-    const runtimeKinds = runtimeKindsKey.split(",") as RuntimeKind[];
     return startRepositoryRuntimes({
       repoPath,
       runtimeKinds,
@@ -89,7 +90,7 @@ export function useAppLifecycle({
       notifications: lifecycleNotifications,
       timers: lifecycleTimers,
     });
-  }, [activeWorkspace?.repoPath, refreshRepoRuntimeHealth, runtimeKindsKey, startRepoRuntime]);
+  }, [activeWorkspace?.repoPath, refreshRepoRuntimeHealth, runtimeKinds, startRepoRuntime]);
 
   useEffect(() => {
     const controller = taskStreamControllerFactory({

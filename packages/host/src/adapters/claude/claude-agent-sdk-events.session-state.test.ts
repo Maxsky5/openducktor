@@ -147,7 +147,19 @@ describe("handleClaudeSdkMessage session state and catalog events", () => {
   test("keeps the turn active when Claude requires pending approval input", () => {
     const events: AgentEvent[] = [];
     const session = createSession("running");
-    session.pendingApprovals.set("approval-1", {});
+    session.pendingApprovals.set("approval-1", {
+      event: {
+        type: "approval_required",
+        externalSessionId: "session-1",
+        timestamp: "2026-06-25T20:00:00.000Z",
+        requestId: "approval-1",
+        requestType: "runtime_tool",
+        title: "Approve tool",
+        tool: { name: "TestTool", input: {} },
+        mutation: "unknown",
+      },
+      resolve: () => {},
+    });
 
     handleClaudeSdkMessage({
       session,

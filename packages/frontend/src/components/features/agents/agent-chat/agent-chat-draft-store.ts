@@ -60,7 +60,7 @@ const getDraftStorage = (): DraftStorage => {
   if (storageOverride) {
     return storageOverride;
   }
-  if (typeof globalThis.localStorage === "undefined") {
+  if (globalThis.localStorage === undefined) {
     throw new Error("Chat draft persistence is unavailable because localStorage is missing.");
   }
   return globalThis.localStorage;
@@ -351,7 +351,8 @@ export const clearAgentChatDraft = (
   const key = toAgentChatDraftStorageKey(identity);
   const entry = draftEntries.get(key);
   if (
-    typeof options?.onlyIfVersion === "number" &&
+    options?.onlyIfVersion !== undefined &&
+    options.onlyIfVersion !== null &&
     entry &&
     entry.userVersion !== options.onlyIfVersion
   ) {

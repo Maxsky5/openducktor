@@ -147,12 +147,10 @@ export const readAttachmentFileName = (input: {
     return input.name;
   }
 
+  const classificationInput: Parameters<typeof classifyAttachment>[0] = { name: input.name };
+  if (input.mime) classificationInput.mime = input.mime;
   return buildGeneratedAttachmentName(
-    input.kind ??
-      classifyAttachment({
-        name: input.name,
-        ...(input.mime ? { mime: input.mime } : undefined),
-      }),
+    input.kind ?? classifyAttachment(classificationInput),
     input.mime,
   );
 };
@@ -181,12 +179,13 @@ export const buildComposerAttachmentFromFile = (file: File): AgentChatComposerAt
   const normalizedFile = normalizeAttachmentFile(file, kind);
   const mime = inferAttachmentMime(normalizedFile.name, normalizedFile.type);
 
-  return createComposerAttachment({
+  const attachment: Parameters<typeof createComposerAttachment>[0] = {
     name: normalizedFile.name,
     kind,
-    ...(mime ? { mime } : undefined),
     file: normalizedFile,
-  });
+  };
+  if (mime) attachment.mime = mime;
+  return createComposerAttachment(attachment);
 };
 
 export const buildComposerAttachmentFromPath = (
@@ -194,23 +193,21 @@ export const buildComposerAttachmentFromPath = (
   metadata?: Pick<AgentChatComposerAttachment, "kind" | "mime" | "name">,
 ): AgentChatComposerAttachment | null => {
   const name = metadata?.name ?? readAttachmentNameFromPath(path);
-  const kind =
-    metadata?.kind ??
-    classifyAttachment({
-      name,
-      ...(metadata?.mime ? { mime: metadata.mime } : undefined),
-    });
+  const classificationInput: Parameters<typeof classifyAttachment>[0] = { name };
+  if (metadata?.mime) classificationInput.mime = metadata.mime;
+  const kind = metadata?.kind ?? classifyAttachment(classificationInput);
   if (!kind) {
     return null;
   }
   const mime = inferAttachmentMime(name, metadata?.mime);
 
-  return createComposerAttachment({
+  const attachment: Parameters<typeof createComposerAttachment>[0] = {
     name,
     kind,
     path,
-    ...(mime ? { mime } : undefined),
-  });
+  };
+  if (mime) attachment.mime = mime;
+  return createComposerAttachment(attachment);
 };
 
 export const isPreviewableAttachmentKind = (kind: AgentAttachmentKind): boolean => {

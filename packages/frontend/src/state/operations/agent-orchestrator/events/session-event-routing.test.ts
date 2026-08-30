@@ -37,16 +37,21 @@ const userMessageEvent = ({
   message: string;
   messageId: string;
   sessionRef?: SessionRef;
-}): Extract<SessionEvent, { type: "user_message" }> => ({
-  type: "user_message",
-  externalSessionId: sessionRef?.externalSessionId ?? "session-1",
-  messageId,
-  timestamp: "2026-02-22T08:00:03.000Z",
-  message,
-  parts: [{ kind: "text", text: message }],
-  state: "read",
-  ...(sessionRef ? { sessionRef } : undefined),
-});
+}): Extract<SessionEvent, { type: "user_message" }> => {
+  const event: Extract<SessionEvent, { type: "user_message" }> = {
+    type: "user_message",
+    externalSessionId: sessionRef?.externalSessionId ?? "session-1",
+    messageId,
+    timestamp: "2026-02-22T08:00:03.000Z",
+    message,
+    parts: [{ kind: "text", text: message }],
+    state: "read",
+  };
+  if (sessionRef) {
+    event.sessionRef = sessionRef;
+  }
+  return event;
+};
 
 const assistantPartEvent = ({
   text,
@@ -58,19 +63,24 @@ const assistantPartEvent = ({
   messageId?: string;
   partId?: string;
   sessionRef?: SessionRef;
-}): Extract<SessionEvent, { type: "assistant_part" }> => ({
-  type: "assistant_part",
-  externalSessionId: sessionRef?.externalSessionId ?? "session-1",
-  timestamp: "2026-02-22T08:00:01.000Z",
-  ...(sessionRef ? { sessionRef } : undefined),
-  part: {
-    kind: "text",
-    messageId,
-    partId,
-    text,
-    completed: false,
-  },
-});
+}): Extract<SessionEvent, { type: "assistant_part" }> => {
+  const event: Extract<SessionEvent, { type: "assistant_part" }> = {
+    type: "assistant_part",
+    externalSessionId: sessionRef?.externalSessionId ?? "session-1",
+    timestamp: "2026-02-22T08:00:01.000Z",
+    part: {
+      kind: "text",
+      messageId,
+      partId,
+      text,
+      completed: false,
+    },
+  };
+  if (sessionRef) {
+    event.sessionRef = sessionRef;
+  }
+  return event;
+};
 
 const assistantMessageEvent = ({
   message,
@@ -80,14 +90,19 @@ const assistantMessageEvent = ({
   message: string;
   messageId?: string;
   sessionRef?: SessionRef;
-}): Extract<SessionEvent, { type: "assistant_message" }> => ({
-  type: "assistant_message",
-  externalSessionId: sessionRef?.externalSessionId ?? "session-1",
-  messageId,
-  timestamp: "2026-02-22T08:00:03.000Z",
-  message,
-  ...(sessionRef ? { sessionRef } : undefined),
-});
+}): Extract<SessionEvent, { type: "assistant_message" }> => {
+  const event: Extract<SessionEvent, { type: "assistant_message" }> = {
+    type: "assistant_message",
+    externalSessionId: sessionRef?.externalSessionId ?? "session-1",
+    messageId,
+    timestamp: "2026-02-22T08:00:03.000Z",
+    message,
+  };
+  if (sessionRef) {
+    event.sessionRef = sessionRef;
+  }
+  return event;
+};
 
 const createRoutingHarness = async ({
   eventBatchWindowMs,
@@ -130,18 +145,25 @@ const createRoutingHarness = async ({
   );
   const updateSession = createSessionUpdater(sessionsRef);
 
-  const unsubscribe = await listenToAgentSessionEvents({
+  const listenerInput: Parameters<typeof listenToAgentSessionEvents>[0] = {
     adapter,
     repoPath,
     externalSessionId: sessionRef?.externalSessionId ?? "session-1",
-    ...(sessionRef ? { sessionRef } : undefined),
     sessionsRef,
     updateSession,
-    ...(updateSessionTodos ? { updateSessionTodos } : undefined),
-    ...(eventBatchWindowMs !== undefined ? { eventBatchWindowMs } : undefined),
     resolveTurnDurationMs: () => undefined,
     clearTurnDuration: () => {},
-  });
+  };
+  if (sessionRef) {
+    listenerInput.sessionRef = sessionRef;
+  }
+  if (updateSessionTodos) {
+    listenerInput.updateSessionTodos = updateSessionTodos;
+  }
+  if (eventBatchWindowMs !== undefined) {
+    listenerInput.eventBatchWindowMs = eventBatchWindowMs;
+  }
+  const unsubscribe = await listenToAgentSessionEvents(listenerInput);
 
   const handleEvent = handlers[0];
   if (!handleEvent) {

@@ -3,6 +3,7 @@ import { access, mkdir, readFile, realpath, rename, writeFile } from "node:fs/pr
 import path from "node:path";
 import type { GlobalConfig, PersistedGlobalConfigV2 } from "@openducktor/contracts";
 import { Clock, Deferred, Effect, FiberId } from "effect";
+import { z } from "zod";
 import {
   type LoadedGlobalConfig,
   parsePersistedGlobalConfig,
@@ -20,6 +21,7 @@ import { parseJson } from "../../effect/json";
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
 
 const USER_SETTINGS_FILENAME = "config.json";
+const missingConfigFileErrorSchema = z.object({ code: z.literal("ENOENT") }).passthrough();
 
 const sanitizeRepoSlug = (input: string): string => {
   let slug = "";
@@ -184,12 +186,7 @@ export const createSettingsConfigAdapter = ({
             toHostOperationError(cause, "settingsConfig.readConfig", { path: resolvedConfigPath }),
         }).pipe(
           Effect.catchTag("HostOperationError", (error) => {
-            if (
-              typeof error.cause === "object" &&
-              error.cause !== null &&
-              "code" in error.cause &&
-              error.cause.code === "ENOENT"
-            ) {
+            if (missingConfigFileErrorSchema.safeParse(error.cause).success) {
               return Effect.succeed(null);
             }
 

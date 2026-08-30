@@ -2,6 +2,7 @@ import {
   type DirectoryListing,
   directoryListingSchema,
   type FilesystemListDirectoryInput,
+  filesystemListDirectoryInputSchema,
   type WorkspaceFileTree,
   type WorkspaceTextFileReadResult,
   type WorkspaceTextFileWriteInput,
@@ -11,23 +12,41 @@ import {
   workspaceTextFileWriteResultSchema,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
+import { z } from "zod";
 
 type WorkspaceFileTreeInput = {
   rootPath: string;
   targetBranch?: string | null;
 };
 
+const workspaceFileTreeInputSchema = z.union([
+  z.string().transform((rootPath): WorkspaceFileTreeInput => ({ rootPath })),
+  z.object({
+    rootPath: z.string(),
+    targetBranch: z.string().nullable().optional(),
+  }),
+]);
+const filesystemListDirectoryArgsSchema = z.union([
+  z.string().transform((path): FilesystemListDirectoryInput => ({ path })),
+  filesystemListDirectoryInputSchema,
+  z.undefined(),
+]);
+
 const normalizeWorkspaceFileTreeInput = (
   input: string | WorkspaceFileTreeInput,
-): WorkspaceFileTreeInput => (typeof input === "string" ? { rootPath: input } : input);
+): WorkspaceFileTreeInput => {
+  const parsed = workspaceFileTreeInputSchema.parse(input);
+  const normalized: WorkspaceFileTreeInput = { rootPath: parsed.rootPath };
+  if (parsed.targetBranch !== undefined) normalized.targetBranch = parsed.targetBranch;
+  return normalized;
+};
 
 const filesystemListDirectory = async (
   invokeFn: InvokeFn,
   input?: string | FilesystemListDirectoryInput,
 ): Promise<DirectoryListing> => {
-  const args = typeof input === "string" ? { path: input } : input;
-  const payload = await invokeFn("filesystem_list_directory", args);
-  return directoryListingSchema.parse(payload);
+  const args = filesystemListDirectoryArgsSchema.parse(input);
+  return invokeFn("filesystem_list_directory", args, directoryListingSchema);
 };
 
 const filesystemListTree = async (
@@ -35,27 +54,25 @@ const filesystemListTree = async (
   input: string | WorkspaceFileTreeInput,
 ): Promise<WorkspaceFileTree> => {
   const treeInput = normalizeWorkspaceFileTreeInput(input);
-  const payload = await invokeFn("filesystem_list_tree", {
+  const args: WorkspaceFileTreeInput = {
     rootPath: treeInput.rootPath,
-    ...(treeInput.targetBranch ? { targetBranch: treeInput.targetBranch } : undefined),
-  });
-  return workspaceFileTreeSchema.parse(payload);
+  };
+  if (treeInput.targetBranch) args.targetBranch = treeInput.targetBranch;
+  return invokeFn("filesystem_list_tree", args, workspaceFileTreeSchema);
 };
 
 const filesystemReadTextFile = async (
   invokeFn: InvokeFn,
   input: { rootPath: string; relativePath: string },
 ): Promise<WorkspaceTextFileReadResult> => {
-  const payload = await invokeFn("filesystem_read_text_file", input);
-  return workspaceTextFileReadResultSchema.parse(payload);
+  return invokeFn("filesystem_read_text_file", input, workspaceTextFileReadResultSchema);
 };
 
 const filesystemWriteTextFile = async (
   invokeFn: InvokeFn,
   input: WorkspaceTextFileWriteInput,
 ): Promise<WorkspaceTextFileWriteResult> => {
-  const payload = await invokeFn("filesystem_write_text_file", input);
-  return workspaceTextFileWriteResultSchema.parse(payload);
+  return invokeFn("filesystem_write_text_file", input, workspaceTextFileWriteResultSchema);
 };
 
 export class HostFilesystemClient {

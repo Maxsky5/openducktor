@@ -1,4 +1,4 @@
-import type { HookCallback } from "@anthropic-ai/claude-agent-sdk";
+import type { HookCallback, PreToolUseHookSpecificOutput } from "@anthropic-ai/claude-agent-sdk";
 import { findClaudeSubagentSessionByAgentId } from "./claude-agent-sdk-event-session";
 import { parseClaudePreToolUseIngress } from "./claude-agent-sdk-ingress-schemas";
 import { authorizeClaudeToolUse } from "./claude-agent-sdk-permissions";
@@ -40,13 +40,16 @@ export const createClaudePreToolUseHook = ({
     }
     const inputChanged = authorization.toolInput !== toolInput;
     if (authorization.approval === "workflow_role") {
+      const hookSpecificOutput: PreToolUseHookSpecificOutput = {
+        hookEventName: "PreToolUse",
+        permissionDecision: "allow",
+        permissionDecisionReason: "OpenDucktor auto-approved this tool for the workflow role.",
+      };
+      if (inputChanged) {
+        hookSpecificOutput.updatedInput = authorization.toolInput;
+      }
       return {
-        hookSpecificOutput: {
-          hookEventName: "PreToolUse",
-          permissionDecision: "allow",
-          permissionDecisionReason: "OpenDucktor auto-approved this tool for the workflow role.",
-          ...(inputChanged ? { updatedInput: authorization.toolInput } : undefined),
-        },
+        hookSpecificOutput,
       };
     }
     if (!inputChanged) {

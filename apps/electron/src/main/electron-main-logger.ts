@@ -33,9 +33,9 @@ export type ElectronMainLogger = {
   warn(message: string): Effect.Effect<void, OpenDucktorLogPersistenceError>;
 };
 
-type InitializeElectronMainLoggerOptions = {
+type InitializeElectronMainLoggerOptions<Failure> = {
   exitProcess(exitCode: number): never;
-  loggerEffect: Effect.Effect<ElectronMainLogger, unknown>;
+  loggerEffect: Effect.Effect<ElectronMainLogger, Failure>;
   reportFailure(cause: unknown): void;
 };
 
@@ -160,11 +160,11 @@ export const createElectronMainLogger = ({
     }),
   );
 
-export const initializeElectronMainLogger = async ({
+export const initializeElectronMainLogger = async <Failure>({
   exitProcess,
   loggerEffect,
   reportFailure,
-}: InitializeElectronMainLoggerOptions): Promise<ElectronMainLogger> => {
+}: InitializeElectronMainLoggerOptions<Failure>): Promise<ElectronMainLogger> => {
   const exit = await Effect.runPromiseExit(loggerEffect);
   if (Exit.isSuccess(exit)) {
     return exit.value;

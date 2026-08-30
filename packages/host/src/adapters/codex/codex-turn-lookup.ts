@@ -1,21 +1,25 @@
-import type { CodexAppServerTurn } from "@openducktor/contracts";
+import { parseCodexAppServerRequestResult, type CodexAppServerTurn } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import type { CodexAppServerError, CodexAppServerPort } from "../../ports/codex-app-server-port";
-import { parseThreadTurnsListResponse } from "./codex-app-server-response-parsers";
 
 type CodexTurnReaderPort = Pick<CodexAppServerPort, "request">;
+type CodexTurnParseErrorDetails = {
+  method: "thread/turns/list";
+  runtimeId: string;
+  threadId: string;
+};
 
 const isActiveCodexTurn = (turn: CodexAppServerTurn): boolean =>
   turn.id.length > 0 && turn.startedAt !== null && turn.completedAt === null;
 
 const parseCodexTurnCandidates = (
-  value: Parameters<typeof parseThreadTurnsListResponse>[0],
+  value: Parameters<typeof parseCodexAppServerRequestResult>[1],
   runtimeId: string,
   threadId: string,
-): Effect.Effect<CodexAppServerTurn[], HostValidationError> =>
+): Effect.Effect<CodexAppServerTurn[], HostValidationError<CodexTurnParseErrorDetails>> =>
   Effect.try({
-    try: () => parseThreadTurnsListResponse(value).data,
+    try: () => parseCodexAppServerRequestResult("thread/turns/list", value).data,
     catch: (cause) =>
       new HostValidationError({
         message: cause instanceof Error ? cause.message : String(cause),

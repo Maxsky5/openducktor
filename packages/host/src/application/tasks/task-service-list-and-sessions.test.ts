@@ -359,12 +359,9 @@ describe("createTaskService list and session reads", () => {
       await import("../../interface/commands/task-command-handlers");
     const service = createTaskService({ taskStore });
     const handlers = createTaskCommandHandlers(service);
-    expect(() =>
-      handlers.tasks_list?.(
-        { repoPath: "/repo", doneVisibleDays: -1 },
-        { command: "tasks_list", args: { repoPath: "/repo", doneVisibleDays: -1 } },
-      ),
-    ).toThrow("doneVisibleDays must be greater than or equal to 0.");
+    expect(() => handlers.tasks_list?.({ repoPath: "/repo", doneVisibleDays: -1 })).toThrow(
+      "doneVisibleDays must be greater than or equal to 0.",
+    );
   });
   test("loads task metadata through the task store", async () => {
     const calls: unknown[] = [];

@@ -20,7 +20,7 @@ import {
 } from "./use-agent-studio-build-tools-worktree-snapshot";
 
 enableReactActEnvironment();
-if (typeof globalThis.document === "undefined") {
+if (globalThis.document === undefined) {
   GlobalRegistrator.register();
 }
 

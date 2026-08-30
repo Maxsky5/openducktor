@@ -77,7 +77,10 @@ export const createProcessCommandLaunch = (
   };
 };
 
-const commandSyntaxError = (message: string, commandLine: string): HostValidationError =>
+const commandSyntaxError = (
+  message: string,
+  commandLine: string,
+): HostValidationError<{ command: string }> =>
   new HostValidationError({
     field: "command",
     message,

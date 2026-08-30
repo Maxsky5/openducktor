@@ -149,24 +149,41 @@ export const buildSessionStartModalRequest = ({
   const initialTargetBranch = request.initialTargetBranch ?? selectedTask?.targetBranch ?? null;
   const initialTargetBranchError =
     request.initialTargetBranchError ?? selectedTask?.targetBranchError ?? null;
-
-  return {
+  const modalRequest: SessionStartModalRunRequest = {
     source,
     taskId: request.taskId,
     role: request.role,
     launchActionId: request.launchActionId,
     postStartAction: request.postStartAction,
-    ...(requestedRuntimeKind ? { requestedRuntimeKind } : undefined),
     selectedModel,
     initialTargetBranch,
-    ...(initialTargetBranchError ? { initialTargetBranchError } : undefined),
-    ...(request.targetWorkingDirectory !== undefined
-      ? { targetWorkingDirectory: request.targetWorkingDirectory }
-      : undefined),
-    ...(request.initialStartMode ? { initialStartMode: request.initialStartMode } : undefined),
-    ...(existingSessionOptions.length > 0 ? { existingSessionOptions } : undefined),
-    ...(initialSourceSession !== undefined ? { initialSourceSession } : undefined),
   };
+
+  if (requestedRuntimeKind) {
+    modalRequest.requestedRuntimeKind = requestedRuntimeKind;
+  }
+
+  if (initialTargetBranchError) {
+    modalRequest.initialTargetBranchError = initialTargetBranchError;
+  }
+
+  if (request.targetWorkingDirectory !== undefined) {
+    modalRequest.targetWorkingDirectory = request.targetWorkingDirectory;
+  }
+
+  if (request.initialStartMode) {
+    modalRequest.initialStartMode = request.initialStartMode;
+  }
+
+  if (existingSessionOptions.length > 0) {
+    modalRequest.existingSessionOptions = existingSessionOptions;
+  }
+
+  if (initialSourceSession !== undefined) {
+    modalRequest.initialSourceSession = initialSourceSession;
+  }
+
+  return modalRequest;
 };
 
 export const executeSessionStartFromDecision = async ({
@@ -180,33 +197,60 @@ export const executeSessionStartFromDecision = async ({
   sendAgentMessage,
   humanRequestChangesTask,
 }: ExecuteSessionStartFromDecisionArgs): Promise<SessionStartWorkflowResult> => {
-  return startSessionWorkflow({
+  const intent: Parameters<typeof startSessionWorkflow>[0]["intent"] = {
+    taskId: request.taskId,
+    role: request.role,
+    launchActionId: request.launchActionId,
+    startMode: decision.startMode,
+    postStartAction: request.postStartAction,
+  };
+
+  if (decision.targetBranch) {
+    intent.targetBranch = decision.targetBranch;
+  }
+
+  if (request.targetWorkingDirectory !== undefined) {
+    intent.targetWorkingDirectory = request.targetWorkingDirectory;
+  }
+
+  if (request.holdForPostStartMessage) {
+    intent.holdForPostStartMessage = true;
+  }
+
+  if (request.message) {
+    intent.message = request.message;
+  }
+
+  if (request.beforeStartAction) {
+    intent.beforeStartAction = request.beforeStartAction;
+  }
+
+  if (decision.startMode === "reuse" || decision.startMode === "fork") {
+    intent.sourceSession = decision.sourceSession;
+  }
+
+  const workflowInput: Parameters<typeof startSessionWorkflow>[0] = {
     queryClient,
-    intent: {
-      taskId: request.taskId,
-      role: request.role,
-      launchActionId: request.launchActionId,
-      startMode: decision.startMode,
-      ...(decision.targetBranch ? { targetBranch: decision.targetBranch } : undefined),
-      postStartAction: request.postStartAction,
-      ...(request.targetWorkingDirectory !== undefined
-        ? { targetWorkingDirectory: request.targetWorkingDirectory }
-        : undefined),
-      ...(request.holdForPostStartMessage ? { holdForPostStartMessage: true } : undefined),
-      ...(request.message ? { message: request.message } : undefined),
-      ...(request.beforeStartAction ? { beforeStartAction: request.beforeStartAction } : undefined),
-      ...(decision.startMode === "reuse" || decision.startMode === "fork"
-        ? { sourceSession: decision.sourceSession }
-        : undefined),
-    },
+    intent,
     selection: decision.startMode === "reuse" ? null : decision.selectedModel,
     task,
     workspaceId,
-    ...(persistTaskTargetBranch ? { persistTaskTargetBranch } : undefined),
     startAgentSession,
-    ...(sendAgentMessage ? { sendAgentMessage } : undefined),
-    ...(humanRequestChangesTask ? { humanRequestChangesTask } : undefined),
-  });
+  };
+
+  if (persistTaskTargetBranch) {
+    workflowInput.persistTaskTargetBranch = persistTaskTargetBranch;
+  }
+
+  if (sendAgentMessage) {
+    workflowInput.sendAgentMessage = sendAgentMessage;
+  }
+
+  if (humanRequestChangesTask) {
+    workflowInput.humanRequestChangesTask = humanRequestChangesTask;
+  }
+
+  return startSessionWorkflow(workflowInput);
 };
 
 export const createSessionStartWorkflowRunner = ({
@@ -215,12 +259,18 @@ export const createSessionStartWorkflowRunner = ({
   startAgentSession,
   sendAgentMessage,
 }: CreateSessionStartWorkflowRunnerArgs): RunSessionStartWorkflow => {
-  return (input) =>
-    executeSessionStartFromDecision({
+  return (input) => {
+    const args: ExecuteSessionStartFromDecisionArgs = {
       ...input,
       queryClient,
       workspaceId,
       startAgentSession,
-      ...(sendAgentMessage ? { sendAgentMessage } : undefined),
-    });
+    };
+
+    if (sendAgentMessage) {
+      args.sendAgentMessage = sendAgentMessage;
+    }
+
+    return executeSessionStartFromDecision(args);
+  };
 };

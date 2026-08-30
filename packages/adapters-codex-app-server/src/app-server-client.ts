@@ -1,6 +1,7 @@
 import type {
   CodexAppServerClient,
   CodexAppServerFuzzyFileSearchParams,
+  CodexJsonRpcRequest,
   CodexJsonRpcTransport,
   CodexSkillsListParams,
   CodexThreadCompactStartParams,
@@ -13,20 +14,16 @@ import type {
   CodexTurnSteerParams,
 } from "./types";
 import {
-  parseCodexAppServerClientRequest,
   parseCodexAppServerRequestResult,
-  type CodexAppServerRequestMethod,
-  type CodexAppServerRequestParams,
+  type CodexAppServerClientRequestMap,
 } from "@openducktor/contracts";
 
-const requestCodex = async <Method extends CodexAppServerRequestMethod>(
+const requestCodex = async <Method extends CodexJsonRpcRequest["method"]>(
   transport: CodexJsonRpcTransport,
-  method: Method,
-  params: CodexAppServerRequestParams<Method>,
-) => {
-  const request = parseCodexAppServerClientRequest({ method, params });
+  request: Extract<CodexJsonRpcRequest, { method: Method }>,
+): Promise<CodexAppServerClientRequestMap[Method]["result"]> => {
   const result = await transport.request(request);
-  return parseCodexAppServerRequestResult(method, result);
+  return parseCodexAppServerRequestResult(request.method, result);
 };
 
 export const createCodexAppServerClient = (
@@ -34,52 +31,52 @@ export const createCodexAppServerClient = (
 ): CodexAppServerClient => {
   return {
     async initialize(params) {
-      await requestCodex(transport, "initialize", params);
+      await requestCodex(transport, { method: "initialize", params });
     },
     async modelList() {
-      return requestCodex(transport, "model/list", {});
+      return requestCodex(transport, { method: "model/list", params: {} });
     },
     async skillsList(params: CodexSkillsListParams) {
-      return requestCodex(transport, "skills/list", params);
+      return requestCodex(transport, { method: "skills/list", params });
     },
     async threadStart(params: CodexThreadStartParams) {
-      return requestCodex(transport, "thread/start", params);
+      return requestCodex(transport, { method: "thread/start", params });
     },
     async threadSetName(params: CodexThreadSetNameParams) {
-      return requestCodex(transport, "thread/name/set", params);
+      return requestCodex(transport, { method: "thread/name/set", params });
     },
     async threadCompactStart(params: CodexThreadCompactStartParams) {
-      return requestCodex(transport, "thread/compact/start", params);
+      return requestCodex(transport, { method: "thread/compact/start", params });
     },
     async threadResume(params: CodexThreadResumeParams) {
-      return requestCodex(transport, "thread/resume", params);
+      return requestCodex(transport, { method: "thread/resume", params });
     },
     async threadFork(params: CodexThreadForkParams) {
-      return requestCodex(transport, "thread/fork", params);
+      return requestCodex(transport, { method: "thread/fork", params });
     },
     async turnStart(params: CodexTurnStartParams) {
-      return requestCodex(transport, "turn/start", params);
+      return requestCodex(transport, { method: "turn/start", params });
     },
     async turnSteer(params: CodexTurnSteerParams) {
-      return requestCodex(transport, "turn/steer", params);
+      return requestCodex(transport, { method: "turn/steer", params });
     },
     async turnInterrupt(params: CodexTurnInterruptParams) {
-      return requestCodex(transport, "turn/interrupt", params);
+      return requestCodex(transport, { method: "turn/interrupt", params });
     },
     async fuzzyFileSearch(params: CodexAppServerFuzzyFileSearchParams) {
-      return requestCodex(transport, "fuzzyFileSearch", params);
+      return requestCodex(transport, { method: "fuzzyFileSearch", params });
     },
     async threadRead(params) {
-      return requestCodex(transport, "thread/read", params);
+      return requestCodex(transport, { method: "thread/read", params });
     },
     async threadList(params = {}) {
-      return requestCodex(transport, "thread/list", params);
+      return requestCodex(transport, { method: "thread/list", params });
     },
     async threadLoadedList(params = {}) {
-      return requestCodex(transport, "thread/loaded/list", params);
+      return requestCodex(transport, { method: "thread/loaded/list", params });
     },
     async threadTurnsList(params) {
-      return requestCodex(transport, "thread/turns/list", params);
+      return requestCodex(transport, { method: "thread/turns/list", params });
     },
   };
 };

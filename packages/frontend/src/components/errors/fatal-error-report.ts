@@ -1,3 +1,7 @@
+import { z } from "zod";
+
+const thrownStringSchema = z.string();
+
 export interface FatalErrorReport {
   title: string;
   message: string;
@@ -15,9 +19,10 @@ export interface FatalErrorReport {
  * available in every JS runtime (e.g. Bun).
  */
 function isPromiseRejectionLike(cause: unknown): cause is Event & { reason: unknown } {
+  const EventConstructor = globalThis.Event;
   return (
-    typeof Event !== "undefined" &&
-    cause instanceof Event &&
+    EventConstructor !== undefined &&
+    cause instanceof EventConstructor &&
     cause.type === "unhandledrejection" &&
     "reason" in cause
   );
@@ -33,23 +38,29 @@ export function buildFatalErrorReport(
     const inner = cause.error;
     const location = formatErrorLocation(cause);
     if (inner instanceof Error) {
-      return {
+      const report: FatalErrorReport = {
         title: inner.name || "Error",
         message: inner.message,
         stack: inner.stack,
-        ...(location ? { location } : undefined),
         source,
         timestamp,
       };
+      if (location) {
+        report.location = location;
+      }
+      return report;
     }
-    return {
+    const report: FatalErrorReport = {
       title: "Uncaught error",
       message: cause.message || String(inner ?? cause),
       stack: undefined,
-      ...(location ? { location } : undefined),
       source,
       timestamp,
     };
+    if (location) {
+      report.location = location;
+    }
+    return report;
   }
 
   if (isPromiseRejectionLike(cause)) {
@@ -63,9 +74,10 @@ export function buildFatalErrorReport(
         timestamp,
       };
     }
+    const parsedReason = thrownStringSchema.safeParse(reason);
     return {
       title: "Unhandled promise rejection",
-      message: typeof reason === "string" ? reason : safeStringify(reason),
+      message: parsedReason.success ? parsedReason.data : safeStringify(reason),
       stack: undefined,
       source,
       timestamp,
@@ -82,8 +94,9 @@ export function buildFatalErrorReport(
     };
   }
 
-  if (typeof cause === "string") {
-    return { title: "Error", message: cause, stack: undefined, source, timestamp };
+  const parsedCause = thrownStringSchema.safeParse(cause);
+  if (parsedCause.success) {
+    return { title: "Error", message: parsedCause.data, stack: undefined, source, timestamp };
   }
 
   return {
@@ -102,18 +115,30 @@ export function buildFatalErrorReport(
  * the **original raw thrown value / event** (so devtools can inspect the live
  * object), and an optional React component stack when available.
  */
+type FatalErrorContext = {
+  source: FatalErrorReport["source"];
+  timestamp: string;
+  rawValue: unknown;
+  location?: string;
+  componentStack?: string;
+};
+
 export function logFatalError(
   report: FatalErrorReport,
   cause: unknown,
   componentStack?: string,
 ): void {
-  const context = {
+  const context: FatalErrorContext = {
     source: report.source,
     timestamp: report.timestamp,
     rawValue: cause,
-    ...(report.location ? { location: report.location } : undefined),
-    ...(componentStack ? { componentStack } : undefined),
   };
+  if (report.location) {
+    context.location = report.location;
+  }
+  if (componentStack) {
+    context.componentStack = componentStack;
+  }
 
   console.error(
     `[AppCrashShell] Fatal error (${report.source}):`,
@@ -152,7 +177,7 @@ function formatErrorLocation(event: ErrorEvent): string | undefined {
 function safeStringify(cause: unknown): string {
   try {
     const json = JSON.stringify(cause);
-    return typeof json === "string" ? json : String(cause);
+    return json ?? String(cause);
   } catch {
     return String(cause);
   }

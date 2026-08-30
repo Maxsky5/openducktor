@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
-import { MARKDOWN_COMPONENTS } from "@/components/ui/markdown-renderer-components";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
 
@@ -58,15 +57,17 @@ describe("AgentChatMarkdownRenderer", () => {
     }
   });
 
-  test("keeps code blocks locally horizontally scrollable without app-hidden scrollbars", () => {
-    const Pre = MARKDOWN_COMPONENTS.document.pre;
-    if (typeof Pre !== "function") {
-      throw new Error("Expected document markdown code blocks to use a pre component");
-    }
-
-    const rendered = render(createElement(Pre, {}, createElement("code", {}, "const value = 1;")));
+  test("keeps code blocks locally horizontally scrollable without app-hidden scrollbars", async () => {
+    const rendered = render(
+      createElement(AgentChatMarkdownRenderer, {
+        markdown: "```ts\nconst value = 1;\n```",
+      }),
+    );
 
     try {
+      await waitFor(() => {
+        expect(rendered.container.querySelector("pre")).not.toBeNull();
+      });
       const codeBlock = rendered.container.querySelector("pre");
       expect(codeBlock).not.toBeNull();
       expect(codeBlock?.className).toContain("overflow-x-auto");

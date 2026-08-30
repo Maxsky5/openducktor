@@ -1,4 +1,4 @@
-import { isUnknownRecord, type AgentEvent } from "@openducktor/core";
+import type { AgentEvent } from "@openducktor/core";
 import {
   advanceStreamAssistantMessageIdentity,
   type ClaudeEventSession,
@@ -10,17 +10,6 @@ import type {
   ClaudeSdkModelRefusalFallbackMessageProjection,
   ClaudeSdkResultMessageProjection,
 } from "./claude-agent-sdk-message-projection";
-
-const readStringArrayProp = (value: unknown, key: string): string[] => {
-  if (!isUnknownRecord(value)) {
-    return [];
-  }
-  const candidate = value[key];
-  if (!Array.isArray(candidate)) {
-    return [];
-  }
-  return candidate.filter((item): item is string => typeof item === "string" && item.length > 0);
-};
 
 const emitTranscriptRetraction = ({
   emit,
@@ -95,7 +84,7 @@ export const emitSupersededTranscriptMessage = ({
     emit,
     session,
     timestamp,
-    messageIds: readStringArrayProp(message, "supersedes"),
+    messageIds: message.supersedes?.filter((messageId) => messageId.length > 0) ?? [],
   });
 };
 
@@ -110,10 +99,14 @@ export const emitRetractedTranscriptMessages = ({
   session: ClaudeEventSession;
   timestamp: string;
 }): void => {
+  const retractedMessageIds =
+    message.type === "system"
+      ? (message.retracted_message_uuids?.filter((messageId) => messageId.length > 0) ?? [])
+      : [];
   emitTranscriptRetraction({
     emit,
     session,
     timestamp,
-    messageIds: readStringArrayProp(message, "retracted_message_uuids"),
+    messageIds: retractedMessageIds,
   });
 };

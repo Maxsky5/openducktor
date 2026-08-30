@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { GitConflict } from "@/features/agent-studio-git";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import {
   createAgentSessionFixture,
@@ -59,7 +60,9 @@ const createSelectedSession = (
   ...overrides,
 });
 
-const createConflict = (overrides: Record<string, unknown> = {}) => ({
+type GitConflictOverrides = Partial<GitConflict>;
+
+const createConflict = (overrides: GitConflictOverrides = {}) => ({
   operation: "rebase" as const,
   currentBranch: "feature/task-1",
   targetBranch: "origin/main",
@@ -289,7 +292,7 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       await harness.mount();
 
       await expect(
-        harness.getLatest().handleResolveRebaseConflict(createConflict({ workingDir: undefined })),
+        harness.getLatest().handleResolveRebaseConflict(createConflict({ workingDir: null })),
       ).rejects.toThrow(
         'Cannot resolve a git conflict for task "task-1" because the conflicted working directory is missing.',
       );

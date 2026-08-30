@@ -19,22 +19,27 @@ const childThreadRead = ({
   forkedFromId?: string | null;
   parentThreadId?: string | null;
   turns?: Array<Pick<CodexAppServerTurn, "id" | "items" | "startedAt" | "status">>;
-} = {}) => ({
-  thread: codexThreadFixture({
+} = {}) => {
+  const thread = {
     id: "child-thread",
-    status: { type: "idle" },
+    status: { type: "idle" as const },
     forkedFromId,
-    ...(parentThreadId ? { parentThreadId } : undefined),
     createdAt: 25,
     turns: turns.map((turn) => ({
       completedAt: null,
       durationMs: null,
       error: null,
-      itemsView: "full",
+      itemsView: "full" as const,
       ...turn,
     })),
-  }),
-});
+  } satisfies Parameters<typeof codexThreadFixture>[0];
+
+  if (parentThreadId) {
+    thread.parentThreadId = parentThreadId;
+  }
+
+  return { thread: codexThreadFixture(thread) };
+};
 
 describe("resolveCodexForkBoundary", () => {
   test("keeps the boundary message id stable when the first child turn appears", () => {

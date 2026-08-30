@@ -75,6 +75,6 @@ describe("GitHub release source", () => {
       repo: "openducktor",
     });
 
-    await expect(source.resolve(null)).rejects.toThrow("GitHub release is invalid");
+    await expect(source.resolve(null)).rejects.toThrow("GitHub release has no valid prerelease.");
   });
 });

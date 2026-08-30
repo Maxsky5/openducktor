@@ -2,8 +2,10 @@ import { describe, expect, test } from "bun:test";
 import type {
   Event,
   EventSessionUpdated,
+  OpencodeClient,
   SyncEventMessageRemoved,
 } from "@opencode-ai/sdk/v2/client";
+import type { JsonObject } from "@openducktor/contracts";
 import type { AgentEvent, AgentModelSelection, AgentUserMessagePart } from "@openducktor/core";
 import {
   isRelevantSubscriberEvent,
@@ -48,11 +50,6 @@ import {
   buildQueuedRequestSignature,
 } from "./user-message-signatures";
 import {
-  createGlobalEventClientFixture,
-  createInvalidOpencodeEventFixture,
-  createInvalidOpencodePartFixture,
-} from "./test-fixture";
-import {
   createOpencodeMessageEventGroupFixture,
   createParsedOpencodeEventFixture,
   type OpencodePartFixtureInput,
@@ -85,23 +82,23 @@ test("global event observation becomes ready only after the lazy SSE stream conn
   const connected = new Promise<void>((resolve) => {
     connect = resolve;
   });
-  const client = createGlobalEventClientFixture({
+  const client = {
     global: {
       event: async () => ({
         stream: (async function* () {
           await connected;
           yield {
             directory: "/repo",
-            payload: createInvalidOpencodeEventFixture({
+            payload: {
               id: "event-server-connected",
               type: "server.connected",
               properties: {},
-            }),
+            } satisfies JsonObject,
           };
         })(),
       }),
     },
-  });
+  } satisfies Pick<OpencodeClient, "global">;
   const order: string[] = [];
   const observation = subscribeGlobalEvents({
     client,
@@ -215,7 +212,7 @@ test("projects direct and sync message removal events as Transcript retractions"
 
 test("does not emit removed pending assistant output when the session becomes idle", async () => {
   const emitted = await runEventStream([
-    createInvalidOpencodeEventFixture({
+    {
       type: "message.updated",
       properties: {
         info: {
@@ -235,7 +232,7 @@ test("does not emit removed pending assistant output when the session becomes id
           },
         ],
       },
-    }),
+    } satisfies JsonObject,
     {
       id: "event-message-removed-before-idle",
       type: "message.removed",
@@ -546,17 +543,24 @@ const makeAssistantMessageUpdatedEvent = (input: {
         ]
       : undefined);
 
-  return createOpencodeMessageEventGroupFixture({
+  const fixture: Parameters<typeof createOpencodeMessageEventGroupFixture>[0] = {
     info: {
       id: input.messageId,
       role: "assistant",
       sessionID: "external-session-1",
-      ...(input.finish ? { finish: input.finish } : undefined),
-      ...(input.completedAt !== undefined ? { time: { completed: input.completedAt } } : undefined),
       ...input.info,
     },
-    ...(parts ? { parts } : undefined),
-  });
+  };
+  if (input.finish) {
+    fixture.info.finish = input.finish;
+  }
+  if (input.completedAt !== undefined) {
+    fixture.info.time = { completed: input.completedAt };
+  }
+  if (parts) {
+    fixture.parts = parts;
+  }
+  return createOpencodeMessageEventGroupFixture(fixture);
 };
 
 const makeUserMessageUpdatedEvent = (input: {
@@ -582,19 +586,30 @@ const makeUserMessageUpdatedEvent = (input: {
             text: input.text,
           },
         ]);
-  return createOpencodeMessageEventGroupFixture({
+  const fixture: Parameters<typeof createOpencodeMessageEventGroupFixture>[0] = {
     info: {
       id: input.messageId,
       role: "user",
       sessionID: "external-session-1",
       time: { created: input.createdAt },
-      ...(input.agent ? { agent: input.agent } : undefined),
-      ...(input.modelID ? { modelID: input.modelID } : undefined),
-      ...(input.providerID ? { providerID: input.providerID } : undefined),
-      ...(input.variant ? { variant: input.variant } : undefined),
     },
-    ...(parts ? { parts } : undefined),
-  });
+  };
+  if (input.agent) {
+    fixture.info.agent = input.agent;
+  }
+  if (input.modelID) {
+    fixture.info.modelID = input.modelID;
+  }
+  if (input.providerID) {
+    fixture.info.providerID = input.providerID;
+  }
+  if (input.variant) {
+    fixture.info.variant = input.variant;
+  }
+  if (parts) {
+    fixture.parts = parts;
+  }
+  return createOpencodeMessageEventGroupFixture(fixture);
 };
 
 const makeMessagePartUpdatedEvent = (input: {
@@ -603,7 +618,7 @@ const makeMessagePartUpdatedEvent = (input: {
   text: string;
   end?: number;
 }): Event =>
-  createInvalidOpencodeEventFixture({
+  ({
     type: "message.part.updated",
     properties: {
       part: makeAssistantTextPart({
@@ -613,14 +628,14 @@ const makeMessagePartUpdatedEvent = (input: {
         end: input.end,
       }),
     },
-  });
+  }) satisfies JsonObject;
 
 const makeAssistantStepFinishPartUpdatedEvent = (input: {
   messageId: string;
   partId: string;
   reason?: string;
 }): Event =>
-  createInvalidOpencodeEventFixture({
+  ({
     type: "message.part.updated",
     properties: {
       part: {
@@ -633,7 +648,7 @@ const makeAssistantStepFinishPartUpdatedEvent = (input: {
         tokens: {},
       },
     },
-  });
+  }) satisfies JsonObject;
 
 const makeAssistantSubtaskPartUpdatedEvent = (input: {
   messageId: string;
@@ -642,7 +657,7 @@ const makeAssistantSubtaskPartUpdatedEvent = (input: {
   prompt: string;
   description: string;
 }): Event =>
-  createInvalidOpencodeEventFixture({
+  ({
     type: "message.part.updated",
     properties: {
       part: {
@@ -655,7 +670,7 @@ const makeAssistantSubtaskPartUpdatedEvent = (input: {
         description: input.description,
       },
     },
-  });
+  }) satisfies JsonObject;
 
 const makeMessagePartDeltaEvent = (input: {
   messageId: string;
@@ -663,7 +678,7 @@ const makeMessagePartDeltaEvent = (input: {
   field: string;
   delta: string;
 }): Event =>
-  createInvalidOpencodeEventFixture({
+  ({
     type: "message.part.delta",
     properties: {
       sessionID: "external-session-1",
@@ -672,12 +687,12 @@ const makeMessagePartDeltaEvent = (input: {
       field: input.field,
       delta: input.delta,
     },
-  });
+  }) satisfies JsonObject;
 
 describe("event-stream", () => {
   test("does not project OpenCode compaction events as shared transcript notices", async () => {
     const emitted = await runEventStream([
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.part.updated",
         properties: {
           part: {
@@ -688,15 +703,15 @@ describe("event-stream", () => {
             auto: false,
           },
         },
-      }),
-      createInvalidOpencodeEventFixture({
+      } satisfies JsonObject,
+      {
         type: "session.compacted",
         properties: { sessionID: "external-session-1" },
-      }),
-      createInvalidOpencodeEventFixture({
+      } satisfies JsonObject,
+      {
         type: "session.compacted",
         properties: { sessionID: "external-session-1" },
-      }),
+      } satisfies JsonObject,
     ]);
 
     expect(
@@ -729,7 +744,7 @@ describe("event-stream", () => {
 
   test("keeps the OpenCode compaction marker hidden without suppressing its assistant summary", async () => {
     const emitted = await runEventStream([
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.part.updated",
         properties: {
           part: {
@@ -740,7 +755,7 @@ describe("event-stream", () => {
             auto: false,
           },
         },
-      }),
+      } satisfies JsonObject,
       makeAssistantMessageUpdatedEvent({
         messageId: "compact-summary-message",
         text: "Compacted session context",
@@ -791,7 +806,7 @@ describe("event-stream", () => {
 
   test("emits user_message from stored user text parts when message.updated omits visible text", async () => {
     const emitted = await runEventStream([
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.part.updated",
         properties: {
           part: {
@@ -802,8 +817,8 @@ describe("event-stream", () => {
             text: "Generate the PR",
           },
         },
-      }),
-      createInvalidOpencodeEventFixture({
+      } satisfies JsonObject,
+      {
         type: "message.updated",
         properties: {
           info: {
@@ -819,7 +834,7 @@ describe("event-stream", () => {
             },
           },
         },
-      }),
+      } satisfies JsonObject,
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -837,7 +852,7 @@ describe("event-stream", () => {
 
   test("emits user_message when user text parts arrive after message.updated", async () => {
     const emitted = await runEventStream([
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.updated",
         properties: {
           info: {
@@ -853,8 +868,8 @@ describe("event-stream", () => {
             },
           },
         },
-      }),
-      createInvalidOpencodeEventFixture({
+      } satisfies JsonObject,
+      {
         type: "message.part.updated",
         properties: {
           part: {
@@ -865,7 +880,7 @@ describe("event-stream", () => {
             text: "Ship it",
           },
         },
-      }),
+      } satisfies JsonObject,
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -895,7 +910,7 @@ describe("event-stream", () => {
         text: "Old text",
         createdAt: Date.parse("2026-02-22T12:00:06.000Z"),
       }),
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.part.updated",
         properties: {
           part: {
@@ -906,7 +921,7 @@ describe("event-stream", () => {
             text: "New text",
           },
         },
-      }),
+      } satisfies JsonObject,
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -930,7 +945,7 @@ describe("event-stream", () => {
     const slashEnvelope = `<auto-slash-command>\n# /test-command Command\n\n**Description**: A command for testing slash commands\n\n**User Arguments**: pouet\n\n**Scope**: opencode\n\n---\n\n## Command Instructions\n\nI just want to test the slash commands mechanism.\nReturn the arguments of this command: pouet\n\n\n---\n\n## User Request\n\npouet\n</auto-slash-command>`;
 
     const emitted = await runEventStream([
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.updated",
         properties: {
           info: {
@@ -942,8 +957,8 @@ describe("event-stream", () => {
             },
           },
         },
-      }),
-      createInvalidOpencodeEventFixture({
+      } satisfies JsonObject,
+      {
         type: "message.part.updated",
         properties: {
           part: {
@@ -954,8 +969,8 @@ describe("event-stream", () => {
             text: slashEnvelope,
           },
         },
-      }),
-      createInvalidOpencodeEventFixture({
+      } satisfies JsonObject,
+      {
         type: "message.part.updated",
         properties: {
           part: {
@@ -966,7 +981,7 @@ describe("event-stream", () => {
             text: "I just want to test the slash commands mechanism.\nReturn the arguments of this command: pouet",
           },
         },
-      }),
+      } satisfies JsonObject,
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -987,7 +1002,7 @@ describe("event-stream", () => {
         text: "check @src/main.ts please",
         createdAt: Date.parse("2026-02-22T12:00:07.000Z"),
       }),
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.part.updated",
         properties: {
           part: {
@@ -1009,7 +1024,7 @@ describe("event-stream", () => {
             },
           },
         },
-      }),
+      } satisfies JsonObject,
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -1048,7 +1063,7 @@ describe("event-stream", () => {
 
   test("keeps queued follow-ups queued until the pending assistant clears", async () => {
     const emitted = await runEventStream([
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.updated",
         properties: {
           info: {
@@ -1060,18 +1075,18 @@ describe("event-stream", () => {
             },
           },
         },
-      }),
+      } satisfies JsonObject,
       makeUserMessageUpdatedEvent({
         messageId: "message-200",
         text: "Ship it",
         createdAt: Date.parse("2026-02-22T12:00:02.000Z"),
       }),
-      createInvalidOpencodeEventFixture({
+      {
         type: "session.idle",
         properties: {
           sessionID: "external-session-1",
         },
-      }),
+      } satisfies JsonObject,
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -1122,13 +1137,13 @@ describe("event-stream", () => {
   test("removes a queued send when OpenCode retracts it before the message echo", async () => {
     const { sessionRecord } = await runEventStreamWithSession(
       [
-        createInvalidOpencodeEventFixture({
+        {
           type: "message.removed",
           properties: {
             sessionID: "external-session-1",
             messageID: "message-pending",
           },
-        }),
+        } satisfies JsonObject,
       ],
       (session) => {
         session.pendingQueuedUserMessages.push({
@@ -1143,7 +1158,7 @@ describe("event-stream", () => {
 
   test("ignores unrelated status fields when deriving explicit user message state", async () => {
     const emitted = await runEventStream([
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.updated",
         properties: {
           info: {
@@ -1155,8 +1170,8 @@ describe("event-stream", () => {
             },
           },
         },
-      }),
-      createInvalidOpencodeEventFixture({
+      } satisfies JsonObject,
+      {
         type: "message.updated",
         properties: {
           info: {
@@ -1169,8 +1184,8 @@ describe("event-stream", () => {
             },
           },
         },
-      }),
-      createInvalidOpencodeEventFixture({
+      } satisfies JsonObject,
+      {
         type: "message.part.updated",
         properties: {
           part: {
@@ -1181,7 +1196,7 @@ describe("event-stream", () => {
             text: "Ship it",
           },
         },
-      }),
+      } satisfies JsonObject,
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -1324,7 +1339,7 @@ describe("event-stream", () => {
           text: "Describe what is in this screenshot",
           createdAt: Date.parse("2026-02-22T12:00:02.000Z"),
         }),
-        createInvalidOpencodeEventFixture({
+        {
           type: "message.part.updated",
           properties: {
             part: {
@@ -1337,7 +1352,7 @@ describe("event-stream", () => {
               url: "https://files.example.invalid/uploaded-image",
             },
           },
-        }),
+        } satisfies JsonObject,
       ],
       (nextSessionRecord) => {
         nextSessionRecord.messageRoleById.set("msg-attachment-partial-1", "user");
@@ -1463,7 +1478,7 @@ describe("event-stream", () => {
 
   test("reconciles queued follow-ups when a newer assistant becomes pending", async () => {
     const emitted = await runEventStream([
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.updated",
         properties: {
           info: {
@@ -1475,13 +1490,13 @@ describe("event-stream", () => {
             },
           },
         },
-      }),
+      } satisfies JsonObject,
       makeUserMessageUpdatedEvent({
         messageId: "msg-200",
         text: "Ship it",
         createdAt: Date.parse("2026-02-22T12:00:02.000Z"),
       }),
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.updated",
         properties: {
           info: {
@@ -1494,7 +1509,7 @@ describe("event-stream", () => {
             },
           },
         },
-      }),
+      } satisfies JsonObject,
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -1610,7 +1625,7 @@ describe("event-stream", () => {
 
   test("emits session_idle for stop-finished assistant turns without visible text", async () => {
     const emitted = await runEventStream([
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.updated",
         properties: {
           info: {
@@ -1631,7 +1646,7 @@ describe("event-stream", () => {
             },
           ],
         },
-      }),
+      } satisfies JsonObject,
       makeSessionIdleEvent(),
     ]);
 
@@ -1666,7 +1681,7 @@ describe("event-stream", () => {
 
   test("does not emit session_idle or final assistant_message when completion lacks a stop signal", async () => {
     const emitted = await runEventStream([
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.updated",
         properties: {
           info: {
@@ -1688,7 +1703,7 @@ describe("event-stream", () => {
             },
           ],
         },
-      }),
+      } satisfies JsonObject,
     ]);
 
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
@@ -1713,7 +1728,7 @@ describe("event-stream", () => {
 
   test("emits final assistant_message from known parts when terminal metadata arrives later", async () => {
     const emitted = await runEventStream([
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.part.updated",
         properties: {
           part: {
@@ -1725,8 +1740,8 @@ describe("event-stream", () => {
             time: { start: 1, end: 1 },
           },
         },
-      }),
-      createInvalidOpencodeEventFixture({
+      } satisfies JsonObject,
+      {
         type: "message.updated",
         properties: {
           info: {
@@ -1748,7 +1763,7 @@ describe("event-stream", () => {
             finish: "stop",
           },
         },
-      }),
+      } satisfies JsonObject,
       makeSessionIdleEvent(),
     ]);
 
@@ -1775,7 +1790,7 @@ describe("event-stream", () => {
 
   test("does not emit idle or final assistant_message from known parts without a stop signal", async () => {
     const emitted = await runEventStream([
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.part.updated",
         properties: {
           part: {
@@ -1787,8 +1802,8 @@ describe("event-stream", () => {
             time: { start: 1, end: 1 },
           },
         },
-      }),
-      createInvalidOpencodeEventFixture({
+      } satisfies JsonObject,
+      {
         type: "message.updated",
         properties: {
           info: {
@@ -1809,7 +1824,7 @@ describe("event-stream", () => {
             },
           },
         },
-      }),
+      } satisfies JsonObject,
     ]);
 
     expect(emitted.some((event) => event.type === "assistant_message")).toBe(false);
@@ -2164,7 +2179,7 @@ describe("event-stream", () => {
 
   test("replays known assistant parts when the assistant role becomes known later", async () => {
     const emitted = await runEventStream([
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.part.updated",
         properties: {
           part: {
@@ -2175,7 +2190,7 @@ describe("event-stream", () => {
             text: "Late role text",
           },
         },
-      }),
+      } satisfies JsonObject,
       assistantRoleEvent("assistant-message-late-role-1"),
     ]);
 
@@ -2189,14 +2204,14 @@ describe("event-stream", () => {
 
   test("normalizes todo.updated and ignores unrelated sessions", async () => {
     const { emitted } = await runEventStreamWithSession([
-      createInvalidOpencodeEventFixture({
+      {
         type: "todo.updated",
         properties: {
           sessionID: "external-other-session",
           todos: [{ content: "ignored", status: "pending", priority: "medium" }],
         },
-      }),
-      createInvalidOpencodeEventFixture({
+      } satisfies JsonObject,
+      {
         type: "todo.updated",
         properties: {
           sessionID: "external-session-1",
@@ -2208,7 +2223,7 @@ describe("event-stream", () => {
             },
           ],
         },
-      }),
+      } satisfies JsonObject,
     ]);
 
     const todoEvents = emitted.filter((event) => event.type === "session_todos_updated");
@@ -2228,20 +2243,20 @@ describe("event-stream", () => {
 
   test("routes directory-scoped global events only to matching working directories", async () => {
     const emitted = await runEventStream([
-      createInvalidOpencodeEventFixture({
+      {
         type: "session.idle",
         properties: {
           directory: "/other",
           sessionID: "external-session-1",
         },
-      }),
-      createInvalidOpencodeEventFixture({
+      } satisfies JsonObject,
+      {
         type: "session.idle",
         properties: {
           directory: "/repo",
           sessionID: "external-session-1",
         },
-      }),
+      } satisfies JsonObject,
     ]);
 
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
@@ -2253,20 +2268,20 @@ describe("event-stream", () => {
 
     await runEventStreamWithSession(
       [
-        createInvalidOpencodeEventFixture({
+        {
           type: "todo.updated",
           properties: {
             sessionID: "external-other-session",
             todos: [{ content: "ignored", status: "pending", priority: "medium" }],
           },
-        }),
-        createInvalidOpencodeEventFixture({
+        } satisfies JsonObject,
+        {
           type: "todo.updated",
           properties: {
             sessionID: "external-session-1",
             todos: [{ content: "handled", status: "pending", priority: "medium" }],
           },
-        }),
+        } satisfies JsonObject,
       ],
       undefined,
       {
@@ -2288,7 +2303,7 @@ describe("event-stream", () => {
       sessionId: "external-child-session",
       permission: "read",
     });
-    const childMessageEvent = createInvalidOpencodeEventFixture({
+    const childMessageEvent = {
       type: "message.updated",
       properties: {
         info: {
@@ -2297,7 +2312,7 @@ describe("event-stream", () => {
           sessionID: "external-child-session",
         },
       },
-    });
+    } satisfies JsonObject;
     const parentSubscriber = {
       externalSessionId: "external-parent-session",
       input: makeSessionInput(),
@@ -2343,13 +2358,13 @@ describe("event-stream", () => {
       "question.asked",
       "question.replied",
     ] as const) {
-      const event = createInvalidOpencodeEventFixture({
+      const event = {
         type: eventType,
         properties: {
           sessionID: "external-child-session",
           parentID: explicitParentSubscriber.externalSessionId,
         },
-      });
+      } satisfies JsonObject;
 
       expect(
         isRelevantSubscriberEvent(confirmedParentSubscriber, event, {
@@ -2365,13 +2380,13 @@ describe("event-stream", () => {
   });
 
   test("does not treat a top-level lifecycle parent id as authoritative", () => {
-    const childSessionCreatedEvent = createInvalidOpencodeEventFixture({
+    const childSessionCreatedEvent = {
       type: "session.created",
       properties: {
         parentID: "external-parent-session",
         info: childSessionInfo("external-child-session"),
       },
-    });
+    } satisfies JsonObject;
     const parentSubscriber = {
       externalSessionId: "external-parent-session",
       input: makeSessionInput(),
@@ -2448,7 +2463,7 @@ describe("event-stream", () => {
   test("applies queued part delta with append semantics", async () => {
     const emitted = await runEventStream([
       assistantRoleEvent("assistant-message-2"),
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
@@ -2457,8 +2472,8 @@ describe("event-stream", () => {
           field: "text",
           delta: " world",
         },
-      }),
-      createInvalidOpencodeEventFixture({
+      } satisfies JsonObject,
+      {
         type: "message.part.updated",
         properties: {
           part: {
@@ -2470,7 +2485,7 @@ describe("event-stream", () => {
             time: { start: 1, end: 2 },
           },
         },
-      }),
+      } satisfies JsonObject,
     ]);
 
     const deltas = emitted.filter((event) => event.type === "assistant_delta");
@@ -2490,7 +2505,7 @@ describe("event-stream", () => {
   test("replays queued deltas in FIFO order", async () => {
     const emitted = await runEventStream([
       assistantRoleEvent("assistant-message-fifo"),
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
@@ -2499,8 +2514,8 @@ describe("event-stream", () => {
           field: "text",
           delta: " world",
         },
-      }),
-      createInvalidOpencodeEventFixture({
+      } satisfies JsonObject,
+      {
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
@@ -2509,8 +2524,8 @@ describe("event-stream", () => {
           field: "text",
           delta: "!",
         },
-      }),
-      createInvalidOpencodeEventFixture({
+      } satisfies JsonObject,
+      {
         type: "message.part.updated",
         properties: {
           part: {
@@ -2522,7 +2537,7 @@ describe("event-stream", () => {
             time: { start: 1, end: 2 },
           },
         },
-      }),
+      } satisfies JsonObject,
     ]);
 
     const parts = emitted.filter((event) => event.type === "assistant_part");
@@ -2536,7 +2551,7 @@ describe("event-stream", () => {
   test("keeps known-part and queued-part delta application consistent", async () => {
     const queuedPath = await runEventStream([
       assistantRoleEvent("assistant-message-consistency"),
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
@@ -2545,8 +2560,8 @@ describe("event-stream", () => {
           field: "text",
           delta: " world",
         },
-      }),
-      createInvalidOpencodeEventFixture({
+      } satisfies JsonObject,
+      {
         type: "message.part.updated",
         properties: {
           part: {
@@ -2558,12 +2573,12 @@ describe("event-stream", () => {
             time: { start: 1, end: 2 },
           },
         },
-      }),
+      } satisfies JsonObject,
     ]);
 
     const knownPath = await runEventStream([
       assistantRoleEvent("assistant-message-consistency"),
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.part.updated",
         properties: {
           part: {
@@ -2575,8 +2590,8 @@ describe("event-stream", () => {
             time: { start: 1, end: 2 },
           },
         },
-      }),
-      createInvalidOpencodeEventFixture({
+      } satisfies JsonObject,
+      {
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
@@ -2585,7 +2600,7 @@ describe("event-stream", () => {
           field: "text",
           delta: " world",
         },
-      }),
+      } satisfies JsonObject,
     ]);
 
     const queuedParts = queuedPath.filter((event) => event.type === "assistant_part");
@@ -2607,7 +2622,7 @@ describe("event-stream", () => {
 
   test("suppresses assistant_delta when delta belongs to user message", async () => {
     const emitted = await runEventStream([
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.updated",
         properties: {
           info: {
@@ -2616,15 +2631,15 @@ describe("event-stream", () => {
             sessionID: "external-session-1",
           },
         },
-      }),
-      createInvalidOpencodeEventFixture({
+      } satisfies JsonObject,
+      {
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
           messageID: "user-message-1",
           delta: "typing...",
         },
-      }),
+      } satisfies JsonObject,
     ]);
 
     expect(emitted.filter((event) => event.type === "assistant_delta")).toHaveLength(0);
@@ -2633,7 +2648,7 @@ describe("event-stream", () => {
   test("queues exact reasoning deltas until their part arrives", async () => {
     const emitted = await runEventStream([
       assistantRoleEvent("assistant-message-reasoning"),
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
@@ -2642,7 +2657,7 @@ describe("event-stream", () => {
           field: "reasoning_content",
           delta: "Hidden chain of thought",
         },
-      }),
+      } satisfies JsonObject,
     ]);
 
     const deltas = emitted.filter((event) => event.type === "assistant_delta");
@@ -2651,7 +2666,7 @@ describe("event-stream", () => {
 
   test("suppresses non-assistant reasoning parts", async () => {
     const emitted = await runEventStream([
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.updated",
         properties: {
           info: {
@@ -2670,7 +2685,7 @@ describe("event-stream", () => {
             },
           ],
         },
-      }),
+      } satisfies JsonObject,
     ]);
 
     expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(0);
@@ -3048,7 +3063,7 @@ describe("event-stream", () => {
         sessionId: "external-child-session",
         properties: { info: { parentID: "external-session-1" } },
       }),
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.part.updated",
         properties: {
           part: {
@@ -3071,7 +3086,7 @@ describe("event-stream", () => {
             },
           },
         },
-      }),
+      } satisfies JsonObject,
     ]);
 
     const questionEvents = emitted.filter((event) => event.type === "question_required");
@@ -3169,7 +3184,7 @@ describe("event-stream", () => {
 
   test("removes a queued child question when OpenCode resolves it before correlation", async () => {
     const { sessionRecord } = await runEventStreamWithSession([
-      createInvalidOpencodeEventFixture({
+      {
         type: "question.asked",
         properties: {
           sessionID: "external-child-session",
@@ -3182,15 +3197,15 @@ describe("event-stream", () => {
             },
           ],
         },
-      }),
-      createInvalidOpencodeEventFixture({
+      } satisfies JsonObject,
+      {
         type: "question.replied",
         properties: {
           sessionID: "external-child-session",
           requestID: "question-child-1",
           answers: [["A"]],
         },
-      }),
+      } satisfies JsonObject,
     ]);
 
     expect(
@@ -3273,7 +3288,7 @@ describe("event-stream", () => {
   test("clears pending deltas when message part is removed", async () => {
     const emitted = await runEventStream([
       assistantRoleEvent("assistant-message-3"),
-      createInvalidOpencodeEventFixture({
+      {
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
@@ -3282,16 +3297,16 @@ describe("event-stream", () => {
           field: "text",
           delta: "stale ",
         },
-      }),
-      createInvalidOpencodeEventFixture({
+      } satisfies JsonObject,
+      {
         type: "message.part.removed",
         properties: {
           sessionID: "external-session-1",
           messageID: "assistant-message-3",
           partID: "text-part-2",
         },
-      }),
-      createInvalidOpencodeEventFixture({
+      } satisfies JsonObject,
+      {
         type: "message.part.updated",
         properties: {
           part: {
@@ -3303,7 +3318,7 @@ describe("event-stream", () => {
             time: { start: 1, end: 2 },
           },
         },
-      }),
+      } satisfies JsonObject,
     ]);
 
     const parts = emitted.filter((event) => event.type === "assistant_part");
@@ -3320,19 +3335,19 @@ describe("event-stream", () => {
   test("clears deferred pending subagent emissions when message part is removed", async () => {
     const { sessionRecord } = await runEventStreamWithSession(
       [
-        createInvalidOpencodeEventFixture({
+        {
           type: "message.part.removed",
           properties: {
             sessionID: "external-session-1",
             messageID: "assistant-message-4",
             partID: "subtask-part-1",
           },
-        }),
+        } satisfies JsonObject,
       ],
       (record) => {
         record.pendingSubagentPartEmissionsByExternalSessionId.set("child-session-1", [
           {
-            part: createInvalidOpencodePartFixture({
+            part: {
               id: "subtask-part-1",
               sessionID: "external-session-1",
               messageID: "assistant-message-4",
@@ -3349,7 +3364,7 @@ describe("event-stream", () => {
                   externalSessionId: "child-session-1",
                 },
               },
-            }),
+            } satisfies JsonObject,
           },
         ]);
       },
@@ -3363,14 +3378,14 @@ describe("event-stream", () => {
     const correlationKey = "part:assistant-message-4:subtask-part-1";
     const { sessionRecord } = await runEventStreamWithSession(
       [
-        createInvalidOpencodeEventFixture({
+        {
           type: "message.part.removed",
           properties: {
             sessionID: "external-session-1",
             messageID: "assistant-message-4",
             partID: "subtask-part-1",
           },
-        }),
+        } satisfies JsonObject,
       ],
       (record) => {
         record.subagentCorrelationKeyByPartId.set("subtask-part-1", correlationKey);
@@ -3403,19 +3418,19 @@ describe("event-stream", () => {
     const childExternalSessionId = "child-session-1";
     const { sessionRecord } = await runEventStreamWithSession(
       [
-        createInvalidOpencodeEventFixture({
+        {
           type: "message.part.removed",
           properties: {
             sessionID: "external-session-1",
             messageID: "assistant-message-4",
             partID: "subtask-part-1",
           },
-        }),
+        } satisfies JsonObject,
       ],
       (record) => {
         record.pendingSubagentPartEmissionsByExternalSessionId.set(childExternalSessionId, [
           {
-            part: createInvalidOpencodePartFixture({
+            part: {
               id: "subtask-part-1",
               sessionID: "external-session-1",
               messageID: "assistant-message-4",
@@ -3423,10 +3438,10 @@ describe("event-stream", () => {
               tool: "task",
               callID: "call-1",
               state: { status: "running", input: {} },
-            }),
+            } satisfies JsonObject,
           },
           {
-            part: createInvalidOpencodePartFixture({
+            part: {
               id: "subtask-part-2",
               sessionID: "external-session-1",
               messageID: "assistant-message-4",
@@ -3434,7 +3449,7 @@ describe("event-stream", () => {
               tool: "task",
               callID: "call-2",
               state: { status: "running", input: {} },
-            }),
+            } satisfies JsonObject,
           },
         ]);
         record.pendingSubagentSessionsByExternalSessionId.set(childExternalSessionId, {
@@ -3464,13 +3479,13 @@ describe("event-stream", () => {
   test("normalizes unknown session error payload", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession(
       [
-        createInvalidOpencodeEventFixture({
+        {
           type: "session.error",
           properties: {
             sessionID: "external-session-1",
             error: { name: "MessageOutputLengthError", data: {} },
           },
-        }),
+        } satisfies JsonObject,
       ],
       (session) => {
         session.isAwaitingRuntimeTurnStart = true;
@@ -3496,13 +3511,13 @@ describe("event-stream", () => {
         text: "Final output before error",
         partId: "text-error-1",
       }),
-      createInvalidOpencodeEventFixture({
+      {
         type: "session.error",
         properties: {
           sessionID: "external-session-1",
           error: { name: "UnknownError", data: { message: "Provider failed" } },
         },
-      }),
+      } satisfies JsonObject,
     ]);
 
     expect(emitted.filter((event) => event.type === "assistant_message")).toEqual([

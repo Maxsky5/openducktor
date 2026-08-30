@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { jsonObjectSchema } from "./json-types";
 
 export const appUpdateStatusValues = [
   "disabled",
@@ -50,7 +51,7 @@ export const appUpdateErrorSchema = z
     message: z.string().trim().min(1),
     operation: appUpdateOperationSchema,
     causeName: z.string().trim().min(1).optional(),
-    details: z.record(z.string(), z.unknown()).optional(),
+    details: jsonObjectSchema.optional(),
   })
   .strict();
 export type AppUpdateError = z.infer<typeof appUpdateErrorSchema>;

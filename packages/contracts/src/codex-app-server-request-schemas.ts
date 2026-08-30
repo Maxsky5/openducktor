@@ -4,7 +4,7 @@ import {
   codexUint64Schema,
   codexUsizeSchema,
 } from "./codex-app-server-number-schemas";
-import { jsonObjectSchema, jsonValueSchema } from "./json-types";
+import { jsonObjectSchema, jsonValueSchema, type JsonValue } from "./json-types";
 
 export const codexAppServerReasoningEffortSchema = z.string().min(1);
 
@@ -547,8 +547,33 @@ export type CodexAppServerRequestParamsMap = {
     (typeof codexAppServerRequestParamsSchemas)[Method]
   >;
 };
+type CodexAppServerClientRequestSchemaMap = typeof codexAppServerRequestParamsSchemas;
+type CodexAppServerParsedClientRequestMap = {
+  [Method in keyof CodexAppServerClientRequestSchemaMap]: {
+    method: Method;
+    params: z.output<CodexAppServerClientRequestSchemaMap[Method]>;
+  };
+};
+type CodexAppServerClientRequestCandidate = {
+  method: keyof CodexAppServerClientRequestSchemaMap;
+  params: CodexAppServerRequestParamsMap[keyof CodexAppServerRequestParamsMap];
+};
 export type CodexAppServerParsedClientRequest = z.output<typeof codexAppServerClientRequestSchema>;
 
-export const parseCodexAppServerClientRequest = (
-  value: unknown,
-): CodexAppServerParsedClientRequest => codexAppServerClientRequestSchema.parse(value);
+export function parseCodexAppServerClientRequest<
+  Method extends keyof CodexAppServerClientRequestSchemaMap,
+>(value: {
+  method: Method;
+  params: CodexAppServerRequestParamsMap[Method];
+}): CodexAppServerParsedClientRequestMap[Method];
+export function parseCodexAppServerClientRequest(
+  value: CodexAppServerClientRequestCandidate,
+): CodexAppServerParsedClientRequest;
+export function parseCodexAppServerClientRequest(
+  value: JsonValue,
+): CodexAppServerParsedClientRequest;
+export function parseCodexAppServerClientRequest(
+  value: JsonValue | CodexAppServerClientRequestCandidate,
+): CodexAppServerParsedClientRequest {
+  return codexAppServerClientRequestSchema.parse(value);
+}

@@ -16,7 +16,7 @@ const DEVELOPMENT_INSTANCE_CONFLICT_MESSAGE =
   "OpenDucktor Electron development is already running for this worktree.";
 
 type ElectronDevelopmentInstanceLogger = {
-  info(message: string): Effect.Effect<void, unknown>;
+  info(message: string): Effect.Effect<void, Error>;
 };
 
 type ClaimElectronDevelopmentInstanceOptions = {
@@ -116,14 +116,16 @@ export const prepareElectronDevelopmentInstanceEffect = ({
       profileKind,
       workspaceRoot,
     );
+    const identityOptions: Parameters<typeof configureElectronAppIdentity>[1] = {
+      appName,
+      profileKind,
+      processEnv,
+    };
+    if (developmentInstanceId) {
+      identityOptions.developmentInstanceId = developmentInstanceId;
+    }
     yield* Effect.try({
-      try: () =>
-        configureElectronAppIdentity(app, {
-          appName,
-          profileKind,
-          processEnv,
-          ...(developmentInstanceId ? { developmentInstanceId } : undefined),
-        }),
+      try: () => configureElectronAppIdentity(app, identityOptions),
       catch: (cause) =>
         isElectronError(cause)
           ? cause

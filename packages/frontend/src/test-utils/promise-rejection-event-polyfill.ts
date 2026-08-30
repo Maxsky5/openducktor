@@ -1,5 +1,5 @@
 export function ensurePromiseRejectionEventPolyfill(): void {
-  if (typeof globalThis.PromiseRejectionEvent !== "undefined") {
+  if (globalThis.PromiseRejectionEvent !== undefined) {
     return;
   }
 

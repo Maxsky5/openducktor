@@ -69,7 +69,7 @@ const toRuntimeSnapshot = (
     pendingApprovals,
     pendingQuestions,
   });
-  return {
+  const snapshot: AgentSessionRuntimeSnapshot = {
     availability: "runtime",
     classification,
     ref: {
@@ -78,7 +78,6 @@ const toRuntimeSnapshot = (
       runtimeKind: "codex",
       workingDirectory: session.workingDirectory,
     },
-    ...(parentExternalSessionId ? { parentExternalSessionId } : undefined),
     title:
       session.summary.title ??
       (sessionAssociation.kind === "workflow" ? `Codex ${sessionAssociation.role}` : "Codex"),
@@ -86,6 +85,10 @@ const toRuntimeSnapshot = (
     pendingApprovals,
     pendingQuestions,
   };
+  if (parentExternalSessionId) {
+    snapshot.parentExternalSessionId = parentExternalSessionId;
+  }
+  return snapshot;
 };
 
 export const toRuntimeSnapshotFromThread = (
@@ -99,7 +102,7 @@ export const toRuntimeSnapshotFromThread = (
   const parentExternalSessionId = thread.parentThreadId ?? thread.subAgentSource?.parentThreadId;
   const pendingApprovals = pendingInput.pendingApprovals ?? [];
   const pendingQuestions = pendingInput.pendingQuestions ?? [];
-  return {
+  const snapshot: AgentSessionRuntimeSnapshot = {
     availability: "runtime",
     classification: classifyAgentSessionActivity({
       runtimeActivity: thread.status.classification,
@@ -112,12 +115,15 @@ export const toRuntimeSnapshotFromThread = (
       runtimeKind: "codex",
       workingDirectory: thread.cwd,
     },
-    ...(parentExternalSessionId ? { parentExternalSessionId } : undefined),
     title: thread.title,
     startedAt: thread.startedAt,
     pendingApprovals,
     pendingQuestions,
   };
+  if (parentExternalSessionId) {
+    snapshot.parentExternalSessionId = parentExternalSessionId;
+  }
+  return snapshot;
 };
 
 const codexRuntimeSnapshotRef = (session: CodexSessionState): ReadSessionRuntimeSnapshotInput => ({

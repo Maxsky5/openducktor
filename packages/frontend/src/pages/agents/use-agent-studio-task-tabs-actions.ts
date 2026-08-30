@@ -5,7 +5,7 @@ type SetState<T> = Dispatch<SetStateAction<T>>;
 
 const focusTaskTabTrigger = (taskId: string): void => {
   globalThis.setTimeout(() => {
-    if (typeof globalThis.document === "undefined") {
+    if (globalThis.document === undefined) {
       return;
     }
 

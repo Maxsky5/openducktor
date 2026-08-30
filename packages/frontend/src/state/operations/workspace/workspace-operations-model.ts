@@ -1,4 +1,5 @@
 import type { GitCurrentBranch } from "@openducktor/contracts";
+import { z } from "zod";
 import { errorMessage } from "@/lib/errors";
 
 type ProbeBranchChangeParams = {
@@ -73,27 +74,34 @@ export const shouldSkipBranchSwitch = (
   branchName: string,
 ): boolean => activeBranch?.name === branchName && !activeBranch.detached;
 
-const toOptionalString = (value: unknown): string | null =>
-  typeof value === "string" && value.trim().length > 0 ? value : null;
+const structuredErrorHintFieldsSchema = z.object({
+  code: z.string().optional(),
+  kind: z.string().optional(),
+});
+const structuredErrorHintSchema = structuredErrorHintFieldsSchema.extend({
+  cause: structuredErrorHintFieldsSchema.optional(),
+});
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
+const toOptionalString = (value: string | undefined): string | null =>
+  value && value.trim().length > 0 ? value : null;
 
 const extractStructuredErrorHint = (cause: unknown): string | null => {
-  if (!isRecord(cause)) {
+  const result = structuredErrorHintSchema.safeParse(cause);
+  if (!result.success) {
     return null;
   }
+  const parsed = result.data;
 
-  const directHint = toOptionalString(cause.code) ?? toOptionalString(cause.kind);
+  const directHint = toOptionalString(parsed.code) ?? toOptionalString(parsed.kind);
   if (directHint) {
     return directHint;
   }
 
-  if (!isRecord(cause.cause)) {
+  if (!parsed.cause) {
     return null;
   }
 
-  return toOptionalString(cause.cause.code) ?? toOptionalString(cause.cause.kind);
+  return toOptionalString(parsed.cause.code) ?? toOptionalString(parsed.cause.kind);
 };
 
 const classifyBranchProbeErrorCode = (

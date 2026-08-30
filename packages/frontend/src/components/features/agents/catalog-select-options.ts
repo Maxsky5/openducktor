@@ -29,12 +29,13 @@ export const toPrimaryAgentOptions = (catalog: AgentModelCatalog | null): Combob
     const label = entry.label ?? entry.name ?? entry.id ?? "Unknown";
     const value = entry.id ?? entry.name ?? label;
     const accentColor = resolveAgentAccentColor(label, entry.color);
-    return {
+    const option: ComboboxOption = {
       value,
       label,
-      ...(entry.description ? { description: entry.description } : undefined),
-      ...(accentColor ? { accentColor } : undefined),
     };
+    if (entry.description) option.description = entry.description;
+    if (accentColor) option.accentColor = accentColor;
+    return option;
   });
 };
 
@@ -45,19 +46,19 @@ export const toModelOptions = (catalog: AgentModelCatalog | null): ComboboxOptio
 
   return catalog.models.map((entry) => {
     const contextWindowLabel = formatTokenCompact(entry.contextWindow);
-    return {
+    const searchKeywords = [entry.modelId, entry.providerId, entry.providerName];
+    if (contextWindowLabel) {
+      searchKeywords.push(contextWindowLabel, `${contextWindowLabel} context`);
+    }
+    searchKeywords.push(...entry.variants.map((variant) => `variant:${variant}`));
+    const option: ComboboxOption = {
       value: catalogModelOptionValue(entry),
       label: entry.modelName,
       description: entry.modelId,
-      ...(contextWindowLabel ? { secondaryLabel: contextWindowLabel } : undefined),
-      searchKeywords: [
-        entry.modelId,
-        entry.providerId,
-        entry.providerName,
-        ...(contextWindowLabel ? [contextWindowLabel, `${contextWindowLabel} context`] : []),
-        ...entry.variants.map((variant) => `variant:${variant}`),
-      ],
+      searchKeywords,
     };
+    if (contextWindowLabel) option.secondaryLabel = contextWindowLabel;
+    return option;
   });
 };
 
@@ -71,19 +72,19 @@ export const toModelGroupsByProvider = (catalog: AgentModelCatalog | null): Comb
     const label = model.providerName || model.providerId;
     const options = grouped.get(label) ?? [];
     const contextWindowLabel = formatTokenCompact(model.contextWindow);
-    options.push({
+    const searchKeywords = [model.modelId, model.providerId, model.providerName];
+    if (contextWindowLabel) {
+      searchKeywords.push(contextWindowLabel, `${contextWindowLabel} context`);
+    }
+    searchKeywords.push(...model.variants.map((variant) => `variant:${variant}`));
+    const option: ComboboxOption = {
       value: catalogModelOptionValue(model),
       label: model.modelName,
       description: model.modelId,
-      ...(contextWindowLabel ? { secondaryLabel: contextWindowLabel } : undefined),
-      searchKeywords: [
-        model.modelId,
-        model.providerId,
-        model.providerName,
-        ...(contextWindowLabel ? [contextWindowLabel, `${contextWindowLabel} context`] : []),
-        ...model.variants.map((variant) => `variant:${variant}`),
-      ],
-    });
+      searchKeywords,
+    };
+    if (contextWindowLabel) option.secondaryLabel = contextWindowLabel;
+    options.push(option);
     grouped.set(label, options);
   }
 

@@ -1,10 +1,12 @@
 import type { AgentModelSelection, AgentStreamPart } from "@openducktor/core";
 import {
-  arrayFromUnknown,
+  arrayFromCodexJsonValue,
   extractStringField,
   isCodexApplyPatchTool,
   isCodexContextualUserMessage,
+  parseCodexJsonObjectString,
   isPlainObject,
+  readCodexString,
   stringifyJsonValue,
 } from "./codex-app-server-shared";
 import { projectCodexCanonicalEvents } from "./codex-canonical-projector";
@@ -41,7 +43,6 @@ import {
 import { codexUserInputsFromItem } from "./codex-user-inputs";
 import { type CodexTodoUpdate, codexTodosFromThreadRead, todoMapper } from "./event-mappers";
 import {
-  jsonValueSchema,
   type CodexAppServerCommandAction,
   type CodexAppServerThreadItem,
   type CodexAppServerTurn,
@@ -89,6 +90,19 @@ export type CodexThreadReadItem = {
 export type CodexHistoryTokenUsageFields = {
   totalTokens: number;
   contextWindow?: number;
+};
+
+type CodexCommandActionInput = {
+  command: string;
+  cwd: string;
+  path?: string;
+  query?: string;
+  name?: string;
+};
+
+type CodexWebSearchFindInPageInput = {
+  pattern?: string;
+  url?: string;
 };
 
 export type { AgentToolStatus } from "./codex-tool-normalizer";
@@ -169,7 +183,7 @@ export const codexTurnItemsFromThreadRead = (
     const completedAtSeconds = turn.completedAt;
     const durationMs =
       turn.durationMs ??
-      (typeof startedAtSeconds === "number" && typeof completedAtSeconds === "number"
+      (startedAtSeconds !== null && completedAtSeconds !== null
         ? Math.max(0, (completedAtSeconds - startedAtSeconds) * 1000)
         : null);
     return items.map((item) => {
@@ -189,18 +203,21 @@ export const codexTurnItemsFromThreadRead = (
         codexTimestampFromSeconds(semanticTimestampSeconds ?? fallbackTimestampSeconds) ??
         null;
       const timestampIsApproximate = itemTimestamp === null && semanticTimestampSeconds === null;
-      return {
+      const threadReadItem: CodexThreadReadItem = {
         item,
         turnIndex,
         turnId,
         timestamp,
-        ...(timestampIsApproximate ? { timestampIsApproximate: true as const } : undefined),
         isFinalAgentMessage: itemIsFinalAgentMessage,
         turnTiming:
-          itemIsFinalAgentMessage && typeof durationMs === "number" && durationMs > 0
-            ? { durationMs }
-            : null,
+          itemIsFinalAgentMessage && durationMs !== null && durationMs > 0 ? { durationMs } : null,
       };
+
+      if (timestampIsApproximate) {
+        threadReadItem.timestampIsApproximate = true;
+      }
+
+      return threadReadItem;
     });
   });
 };
@@ -224,7 +241,7 @@ export const toHistoryMessage = (
     if (isCodexContextualUserMessage(item)) {
       return null;
     }
-    return {
+    const historyMessage: import("@openducktor/core").AgentSessionHistoryMessage = {
       messageId,
       role: "user",
       timestamp: messageTimestamp,
@@ -235,48 +252,81 @@ export const toHistoryMessage = (
           : [{ kind: "text", text }],
       state: "read",
       parts: toHistoryParts(item, messageId, text),
-      ...(model ? { model } : undefined),
     };
+
+    if (model) {
+      historyMessage.model = model;
+    }
+
+    return historyMessage;
   }
   if (item.type === "agentMessage") {
     const text = codexAgentMessageText(item);
-    return {
+    const partsOptions: Parameters<typeof toHistoryParts>[3] = {
+      includeTextFallback: false,
+    };
+    if (isFinalAgentMessage) {
+      partsOptions.isFinalAgentMessage = true;
+    }
+    if (tokenUsage) {
+      partsOptions.tokenUsage = tokenUsage;
+    }
+    const historyMessage: import("@openducktor/core").AgentSessionHistoryMessage = {
       messageId,
       role: "assistant",
       timestamp: messageTimestamp,
       text,
-      ...(isFinalAgentMessage && turnTiming ? { durationMs: turnTiming.durationMs } : undefined),
-      ...(isFinalAgentMessage && tokenUsage ? codexTokenUsageHistoryFields(tokenUsage) : undefined),
-      parts: toHistoryParts(item, messageId, text, {
-        ...(isFinalAgentMessage ? { isFinalAgentMessage } : undefined),
-        ...(tokenUsage ? { tokenUsage } : undefined),
-        includeTextFallback: false,
-      }),
-      ...(model ? { model } : undefined),
+      parts: toHistoryParts(item, messageId, text, partsOptions),
     };
+
+    if (isFinalAgentMessage && turnTiming) {
+      historyMessage.durationMs = turnTiming.durationMs;
+    }
+    if (isFinalAgentMessage && tokenUsage) {
+      const tokenUsageFields = codexTokenUsageHistoryFields(tokenUsage);
+      historyMessage.totalTokens = tokenUsageFields.totalTokens;
+      if (tokenUsageFields.contextWindow !== undefined) {
+        historyMessage.contextWindow = tokenUsageFields.contextWindow;
+      }
+    }
+    if (model) {
+      historyMessage.model = model;
+    }
+
+    return historyMessage;
   }
   const parts = toStreamPart(item, messageId);
   if (parts.length > 0) {
-    return {
+    const historyMessage: import("@openducktor/core").AgentSessionHistoryMessage = {
       messageId,
       role: "assistant",
       timestamp: messageTimestamp,
       text: "",
       parts,
-      ...(model ? { model } : undefined),
     };
+
+    if (model) {
+      historyMessage.model = model;
+    }
+
+    return historyMessage;
   }
   return null;
 };
 
 export const codexTokenUsageHistoryFields = (
   tokenUsage: CodexTokenUsageTotals,
-): CodexHistoryTokenUsageFields => ({
-  totalTokens: tokenUsage.totalTokens,
-  ...(typeof tokenUsage.contextWindow === "number"
-    ? { contextWindow: tokenUsage.contextWindow }
-    : undefined),
-});
+): CodexHistoryTokenUsageFields => {
+  const historyFields: CodexHistoryTokenUsageFields = {
+    totalTokens: tokenUsage.totalTokens,
+  };
+
+  if (tokenUsage.contextWindow !== undefined) {
+    historyFields.contextWindow = tokenUsage.contextWindow;
+  }
+
+  return historyFields;
+};
 
 const toHistoryParts = (
   item: CodexTimedThreadItem,
@@ -316,14 +366,25 @@ const toHistoryParts = (
 export const terminalHistoryPart = (
   messageId: string,
   tokenUsage?: CodexTokenUsageTotals | null,
-): import("@openducktor/core").AgentStreamPart => ({
-  kind: "step",
-  messageId,
-  partId: `${messageId}-finish`,
-  phase: "finish",
-  reason: "stop",
-  ...(tokenUsage ? codexTokenUsageHistoryFields(tokenUsage) : undefined),
-});
+): import("@openducktor/core").AgentStreamPart => {
+  const part: import("@openducktor/core").AgentStreamPart = {
+    kind: "step",
+    messageId,
+    partId: `${messageId}-finish`,
+    phase: "finish",
+    reason: "stop",
+  };
+
+  if (tokenUsage) {
+    const tokenUsageFields = codexTokenUsageHistoryFields(tokenUsage);
+    part.totalTokens = tokenUsageFields.totalTokens;
+    if (tokenUsageFields.contextWindow !== undefined) {
+      part.contextWindow = tokenUsageFields.contextWindow;
+    }
+  }
+
+  return part;
+};
 
 const commandActionToolName = (action: CodexAppServerCommandAction | undefined): string => {
   if (!action) {
@@ -353,48 +414,48 @@ const commandActionInput = (
     action.type === "read" ? action.path : action.type !== "unknown" ? action.path : null;
   const query = action.type === "search" ? action.query : null;
   const name = action.type === "read" ? action.name : null;
-  return {
+  const input: CodexCommandActionInput = {
     command: action.command,
     cwd,
-    ...(path ? { path } : undefined),
-    ...(query ? { query } : undefined),
-    ...(name ? { name } : undefined),
   };
+
+  if (path) {
+    input.path = path;
+  }
+  if (query) {
+    input.query = query;
+  }
+  if (name) {
+    input.name = name;
+  }
+
+  return input;
 };
 
 const codexObjectInput = (
   value: CodexAppServerJsonValue | undefined,
 ): Record<string, CodexAppServerJsonValue> | undefined => {
-  if (isPlainObject(value)) {
-    return value;
-  }
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  try {
-    const parsed = jsonValueSchema.safeParse(JSON.parse(value));
-    return parsed.success && isPlainObject(parsed.data) ? parsed.data : undefined;
-  } catch {
-    return undefined;
-  }
+  return isPlainObject(value) ? value : (parseCodexJsonObjectString(value) ?? undefined);
 };
 
 const codexToolResultText = (value: CodexAppServerJsonValue | undefined): string | null => {
   if (value === undefined || value === null) {
     return null;
   }
-  if (typeof value === "string") {
-    return value;
+  const textValue = readCodexString(value);
+  if (textValue !== null) {
+    return textValue;
   }
   const content = Array.isArray(value)
     ? value
     : isPlainObject(value)
-      ? arrayFromUnknown(value.content)
+      ? arrayFromCodexJsonValue(value.content)
       : [];
   const text = content
     .map((entry) => {
-      if (typeof entry === "string") {
-        return entry;
+      const entryText = readCodexString(entry);
+      if (entryText !== null) {
+        return entryText;
       }
       if (!isPlainObject(entry)) {
         return "";
@@ -428,10 +489,14 @@ const webSearchActionInput = (action: CodexAppServerWebSearchAction | null) => {
     if (!action.url && !action.pattern) {
       return undefined;
     }
-    return {
-      ...(action.pattern ? { pattern: action.pattern } : undefined),
-      ...(action.url ? { url: action.url } : undefined),
-    };
+    const input: CodexWebSearchFindInPageInput = {};
+    if (action.pattern) {
+      input.pattern = action.pattern;
+    }
+    if (action.url) {
+      input.url = action.url;
+    }
+    return input;
   }
 
   return undefined;
@@ -455,22 +520,35 @@ export const extractCodexTokenUsageTotals = (
   if (contextWindow != null && (!Number.isFinite(contextWindow) || contextWindow <= 0)) {
     return null;
   }
-  return {
+  const tokenUsage: CodexTokenUsageTotals = {
     totalTokens,
-    ...(contextWindow == null ? undefined : { contextWindow }),
   };
+  if (contextWindow != null) {
+    tokenUsage.contextWindow = contextWindow;
+  }
+  return tokenUsage;
 };
 
 const syntheticToolPart = ({
   metadata,
   ...part
-}: Extract<AgentStreamPart, { kind: "tool" }>): Extract<AgentStreamPart, { kind: "tool" }> => ({
-  ...part,
-  metadata: {
-    ...(isPlainObject(metadata) ? metadata : undefined),
-    syntheticCodexToolPart: true,
-  },
-});
+}: Extract<AgentStreamPart, { kind: "tool" }>): Extract<AgentStreamPart, { kind: "tool" }> => {
+  const syntheticPart: Extract<AgentStreamPart, { kind: "tool" }> = {
+    ...part,
+    metadata: {
+      syntheticCodexToolPart: true,
+    },
+  };
+
+  if (isPlainObject(metadata)) {
+    syntheticPart.metadata = {
+      ...metadata,
+      syntheticCodexToolPart: true,
+    };
+  }
+
+  return syntheticPart;
+};
 
 const normalizedCodexToolPart = (input: NormalizedCodexToolInvocation): AgentStreamPart[] => {
   const part = normalizeCodexToolInvocation(input);
@@ -561,7 +639,7 @@ const codexFileChangeStreamParts = (
   })();
   const diff = fileDiffsPatchOutput(fileDiffsResult.fileDiffs);
   const error = fileDiffsResult.error ?? codexFileChangeErrorFromItem(value);
-  return normalizedCodexToolPart({
+  const toolInvocation: NormalizedCodexToolInvocation = {
     messageId,
     partId,
     callId: partId,
@@ -569,10 +647,16 @@ const codexFileChangeStreamParts = (
     title: "File changes",
     status: error ? "error" : statusFromCodexStatus(value.status),
     preview: `${changes.length} file change${changes.length === 1 ? "" : "s"}`,
-    ...(!fileDiffsResult.error && diff ? { input: { patch: diff }, output: diff } : undefined),
     error,
     fileDiffs: fileDiffsResult.fileDiffs,
-  });
+  };
+
+  if (!fileDiffsResult.error && diff) {
+    toolInvocation.input = { patch: diff };
+    toolInvocation.output = diff;
+  }
+
+  return normalizedCodexToolPart(toolInvocation);
 };
 
 const codexMcpToolCallStreamParts = (
@@ -586,20 +670,25 @@ const codexMcpToolCallStreamParts = (
   const args = codexObjectInput(value.arguments);
   const error = codexMcpToolErrorFromResult(value);
   const output = codexToolResultText(value.result);
-  return normalizedCodexToolPart({
+  const toolInvocation: NormalizedCodexToolInvocation = {
     messageId,
     partId,
     callId: partId,
     rawToolName: codexNamespacedToolName(server, tool),
     status: error ? "error" : statusFromCodexStatus(value.status),
-    ...(args ? { input: args } : undefined),
     output: error ? null : output,
     error,
     ...codexToolTimingFields(value, timingOptions),
     metadata: {
       server,
     },
-  });
+  };
+
+  if (args) {
+    toolInvocation.input = args;
+  }
+
+  return normalizedCodexToolPart(toolInvocation);
 };
 
 const codexCollabAgentToolCallStreamParts = (
@@ -608,22 +697,25 @@ const codexCollabAgentToolCallStreamParts = (
   partId: string,
 ): AgentStreamPart[] => {
   const tool = value.tool;
-  return [
-    syntheticToolPart({
-      kind: "tool",
-      messageId,
-      partId,
-      callId: partId,
-      tool: `collab.${tool}`,
-      toolType: "generic",
-      title: `Collab ${tool}`,
-      status: statusFromCodexStatus(value.status),
-      ...(value.prompt ? { input: { prompt: value.prompt } } : undefined),
-      ...(value.receiverThreadIds.length > 0
-        ? { output: value.receiverThreadIds.join("\n") }
-        : undefined),
-    }),
-  ];
+  const part: Extract<AgentStreamPart, { kind: "tool" }> = {
+    kind: "tool",
+    messageId,
+    partId,
+    callId: partId,
+    tool: `collab.${tool}`,
+    toolType: "generic",
+    title: `Collab ${tool}`,
+    status: statusFromCodexStatus(value.status),
+  };
+
+  if (value.prompt) {
+    part.input = { prompt: value.prompt };
+  }
+  if (value.receiverThreadIds.length > 0) {
+    part.output = value.receiverThreadIds.join("\n");
+  }
+
+  return [syntheticToolPart(part)];
 };
 
 const codexDynamicToolCallStreamParts = (
@@ -656,18 +748,23 @@ const codexDynamicToolCallStreamParts = (
   const output = codexToolResultText(resultPayload);
   const error = codexDynamicToolErrorFromItem(value);
   const failed = value.success === false || error !== null || value.status === "failed";
-  return normalizedCodexToolPart({
+  const toolInvocation: NormalizedCodexToolInvocation = {
     messageId,
     partId,
     callId: partId,
     rawToolName: rawTool,
     status: failed ? "error" : statusFromCodexStatus(value.status),
-    ...(input ? { input } : undefined),
     output: failed ? null : patch ? patchOutput : output,
     error: error ?? (failed ? output : null),
     fileDiffs,
     ...codexToolTimingFields(value, timingOptions),
-  });
+  };
+
+  if (input) {
+    toolInvocation.input = input;
+  }
+
+  return normalizedCodexToolPart(toolInvocation);
 };
 
 const codexWebSearchStreamParts = (
@@ -678,17 +775,24 @@ const codexWebSearchStreamParts = (
 ): AgentStreamPart[] => {
   const input = webSearchInput(value);
   const output = stringifyJsonValue(value.results);
-  return normalizedCodexToolPart({
+  const toolInvocation: NormalizedCodexToolInvocation = {
     messageId,
     partId,
     callId: partId,
     rawToolName: "webSearch",
     status: "completed",
-    ...(input ? { input } : undefined),
-    ...(output ? { output } : undefined),
-    ...(input ? { preview: Object.values(input).join(" ") } : undefined),
     ...codexToolTimingFields(value, timingOptions),
-  });
+  };
+
+  if (input) {
+    toolInvocation.input = input;
+    toolInvocation.preview = Object.values(input).join(" ");
+  }
+  if (output) {
+    toolInvocation.output = output;
+  }
+
+  return normalizedCodexToolPart(toolInvocation);
 };
 
 export const toStreamPart = (

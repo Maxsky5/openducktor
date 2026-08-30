@@ -91,7 +91,7 @@ export class CodexModels {
     const cached = this.modelListByRuntimeId.get(runtimeId);
     if (
       cached?.value &&
-      typeof cached.fetchedAtMs === "number" &&
+      cached.fetchedAtMs !== undefined &&
       now - cached.fetchedAtMs < CODEX_MODEL_CATALOG_TTL_MS
     ) {
       return cached.value;
@@ -109,12 +109,12 @@ export class CodexModels {
         throw error;
       },
     );
-    this.modelListByRuntimeId.set(runtimeId, {
-      ...(cached?.value && typeof cached.fetchedAtMs === "number"
-        ? { value: cached.value, fetchedAtMs: cached.fetchedAtMs }
-        : undefined),
-      pending,
-    });
+    const nextCached: CachedCodexModelList = { pending };
+    if (cached?.value && cached.fetchedAtMs !== undefined) {
+      nextCached.value = cached.value;
+      nextCached.fetchedAtMs = cached.fetchedAtMs;
+    }
+    this.modelListByRuntimeId.set(runtimeId, nextCached);
     return pending;
   }
 

@@ -165,18 +165,18 @@ const codexConfigWithDefaults = (config: CodexRuntimeConfig): CodexRuntimeConfig
   roleOverrides: config.roleOverrides ?? {},
 });
 
-const removeUndefinedFields = (override: CodexRoleOverride): Partial<CodexPolicyFields> => ({
-  ...(override.sandboxMode === undefined ? undefined : { sandboxMode: override.sandboxMode }),
-  ...(override.approvalPolicy === undefined
-    ? undefined
-    : { approvalPolicy: override.approvalPolicy }),
-  ...(override.approvalsReviewer === undefined
-    ? undefined
-    : { approvalsReviewer: override.approvalsReviewer }),
-  ...(override.commandNetworkAccess === undefined
-    ? undefined
-    : { commandNetworkAccess: override.commandNetworkAccess }),
-});
+const removeUndefinedFields = (override: CodexRoleOverride): Partial<CodexPolicyFields> => {
+  const fields: Partial<CodexPolicyFields> = {};
+  if (override.sandboxMode !== undefined) fields.sandboxMode = override.sandboxMode;
+  if (override.approvalPolicy !== undefined) fields.approvalPolicy = override.approvalPolicy;
+  if (override.approvalsReviewer !== undefined) {
+    fields.approvalsReviewer = override.approvalsReviewer;
+  }
+  if (override.commandNetworkAccess !== undefined) {
+    fields.commandNetworkAccess = override.commandNetworkAccess;
+  }
+  return fields;
+};
 
 const policyValueDisplay = (value: string | boolean): PolicyValueDisplay => {
   const key = String(value);
@@ -347,11 +347,11 @@ function CodexSettings({
     value: CodexPolicyFields[Field] | undefined,
   ) =>
     onUpdate((current) => {
-      const draftRoleOverride = { ...current.roleOverrides[role] };
+      const draftRoleOverride: CodexRoleOverride = { ...current.roleOverrides[role] };
       if (value === undefined) {
         delete draftRoleOverride[field];
       } else {
-        Object.assign(draftRoleOverride, { [field]: value });
+        draftRoleOverride[field] = value;
       }
       const nextRoleOverride = removeUndefinedFields(draftRoleOverride);
       const nextRoleOverrides = { ...current.roleOverrides };
@@ -589,9 +589,7 @@ function RoleOverrideRows<Field extends CodexPolicyField>({
     <div className="divide-y divide-border rounded-md border border-border">
       {AGENT_ROLE_ORDER.map((role) => {
         const roleLabelId = `codex-${field}-${role}-override-label`;
-        const roleOverride: CodexRoleOverride | undefined = config.roleOverrides[role];
-        // SAFETY: CodexRoleOverride maps each Field to CodexPolicyFields[Field]; TypeScript widens optional generic indexed access to the union of all field values.
-        const overrideValue = roleOverride?.[field] as CodexPolicyFields[Field] | undefined;
+        const roleOverride = config.roleOverrides[role];
 
         return (
           <div
@@ -602,8 +600,9 @@ function RoleOverrideRows<Field extends CodexPolicyField>({
               {AGENT_ROLE_LABELS[role]}
             </Label>
             <RoleOverrideDropdown
-              value={overrideValue}
-              values={valuesForRole(field, role)}
+              field={field}
+              role={role}
+              roleOverride={roleOverride}
               disabled={disabled}
               labelId={roleLabelId}
               onChange={(value) => onOverrideChange(role, field, value)}
@@ -615,19 +614,23 @@ function RoleOverrideRows<Field extends CodexPolicyField>({
   );
 }
 
-function RoleOverrideDropdown<T extends string | boolean>({
-  value,
-  values,
+function RoleOverrideDropdown<Field extends CodexPolicyField>({
+  field,
+  role,
+  roleOverride,
   disabled,
   labelId,
   onChange,
 }: {
-  value: T | undefined;
-  values: readonly T[];
+  field: Field;
+  role: AgentRole;
+  roleOverride: CodexRoleOverride | undefined;
   disabled: boolean;
   labelId: string;
-  onChange: (value: T | undefined) => void;
+  onChange: (value: CodexPolicyFields[Field] | undefined) => void;
 }): ReactElement {
+  const value = roleOverride?.[field];
+  const values = valuesForRole(field, role);
   const options = [
     {
       value: INHERIT_ROLE_OVERRIDE_VALUE,

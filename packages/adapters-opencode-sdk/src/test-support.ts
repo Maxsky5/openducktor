@@ -7,6 +7,7 @@ import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./index";
 import type { ParsedOpencodeMessage } from "./opencode-ingress";
 import type { ParsedOpencodeGlobalEventPayload } from "./opencode-global-event-ingress";
 import { buildQueuedRequestSignature } from "./user-message-signatures";
+import { z } from "zod";
 import {
   createOpencodeEventFixtures,
   createOpencodeMessageInfoFixture,
@@ -506,11 +507,19 @@ export const makeMockClient = ({
           data:
             agentsResult?.mode === "api_error"
               ? undefined
-              : agentsResponse.map((agent) =>
-                  typeof agent === "object" && agent !== null
-                    ? { options: {}, permission: [], ...agent }
-                    : agent,
-                ),
+              : agentsResponse.map((agent) => {
+                  const parsed = z
+                    .object({
+                      color: z.string().optional(),
+                      description: z.string().optional(),
+                      hidden: z.boolean().optional(),
+                      mode: z.enum(["primary", "subagent"]),
+                      name: z.string(),
+                      native: z.boolean().optional(),
+                    })
+                    .safeParse(agent);
+                  return parsed.success ? { options: {}, permission: [], ...parsed.data } : agent;
+                }),
           error: agentsResult?.mode === "api_error" ? agentsResult.error : undefined,
         };
       },
@@ -557,11 +566,12 @@ export const makeMockClient = ({
             if (options?.signal?.aborted) {
               return;
             }
-            const properties = "properties" in rawEvent ? rawEvent.properties : undefined;
-            const directory =
-              properties && "directory" in properties && typeof properties.directory === "string"
-                ? properties.directory
-                : defaultRuntimeConnection.workingDirectory;
+            const properties = z
+              .object({ directory: z.string().optional() })
+              .safeParse("properties" in rawEvent ? rawEvent.properties : undefined);
+            const directory = properties.success
+              ? (properties.data.directory ?? defaultRuntimeConnection.workingDirectory)
+              : defaultRuntimeConnection.workingDirectory;
             for (const payload of createOpencodeEventFixtures(rawEvent, index)) {
               yield { directory, payload };
             }
@@ -593,15 +603,18 @@ export const startDefaultSession = async (
     profileId?: string;
   },
 ): Promise<void> => {
-  await adapter.startSession({
+  const input: Parameters<BaseOpencodeSdkAdapter["startSession"]>[0] = {
     repoPath: "/repo",
     workingDirectory: "/repo",
     runtimeKind: "opencode",
     sessionScope: workflowAgentSessionScope("task-1", role),
     runtimePolicy: { kind: "opencode" },
     systemPrompt: "system prompt",
-    ...(model ? { model } : undefined),
-  });
+  };
+  if (model) {
+    input.model = model;
+  }
+  await adapter.startSession(input);
 };
 
 export const defaultLoadSessionTodosInput = {

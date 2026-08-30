@@ -1,5 +1,3 @@
-import { jsonValueSchema } from "@openducktor/contracts";
-import { readNumberProp } from "../../guards";
 import { type ParsedOpencodeEvent as Event } from "../../opencode-global-event-ingress";
 import type { ParsedOpencodePart } from "../../opencode-ingress";
 import type { EventStreamRuntime } from "../shared";
@@ -17,22 +15,28 @@ const toIsoTimestamp = (timestampMs: number | undefined): string | undefined => 
   return Number.isNaN(timestamp.getTime()) ? undefined : timestamp.toISOString();
 };
 
-const readIsoTimestampFromTime = (time: unknown): string | undefined => {
-  const parsed = jsonValueSchema.safeParse(time);
-  if (!parsed.success) {
+type OpencodePartTime =
+  | NonNullable<Extract<ParsedOpencodePart, { type: "text" }>["time"]>
+  | Extract<ParsedOpencodePart, { type: "retry" }>["time"];
+
+const readIsoTimestampFromTime = (time: OpencodePartTime | undefined): string | undefined => {
+  if (time === undefined) {
     return undefined;
   }
-  if (typeof parsed.data === "number") {
-    return toIsoTimestamp(parsed.data);
+  if ("end" in time) {
+    return toIsoTimestamp(time.end);
   }
-  return toIsoTimestamp(readNumberProp(parsed.data, ["end", "completed", "updated", "created"]));
+  if ("created" in time) {
+    return toIsoTimestamp(time.created);
+  }
+  return undefined;
 };
 
 const readPartUpdatedTimestamp = (
   eventTime: number,
   part: ParsedOpencodePart,
 ): string | undefined => {
-  const eventTimestamp = readIsoTimestampFromTime(eventTime);
+  const eventTimestamp = toIsoTimestamp(eventTime);
   if (eventTimestamp) {
     return eventTimestamp;
   }

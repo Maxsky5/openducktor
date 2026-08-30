@@ -42,8 +42,7 @@ const toolStatusRank = (status: ToolStatus): number => {
   }
 };
 
-const trimToolCallId = (callId: string | undefined): string =>
-  typeof callId === "string" ? callId.trim() : "";
+const trimToolCallId = (callId: string | undefined): string => callId?.trim() ?? "";
 
 const shouldPreserveCurrentToolMessage = (
   loadedStatus: ToolStatus,
@@ -78,11 +77,12 @@ const preserveCurrentToolWithLoadedIdentity = (
   const loadedCallId = trimToolCallId(loadedMessage.meta.callId);
   const currentCallId = trimToolCallId(currentMessage.meta.callId);
   const canonicalCallId = loadedCallId || currentCallId;
-  const canonicalId = toToolMessageId({
+  const idInput: Parameters<typeof toToolMessageId>[0] = {
     messageId: scopedId.messageId,
     partId: loadedMessage.meta.partId,
-    ...(canonicalCallId ? { callId: canonicalCallId } : undefined),
-  });
+  };
+  if (canonicalCallId) idInput.callId = canonicalCallId;
+  const canonicalId = toToolMessageId(idInput);
 
   return {
     ...currentMessage,
@@ -110,21 +110,25 @@ export const mergeToolMessages = (
     );
   }
 
-  const nextMeta = {
-    ...loadedMessage.meta,
-    ...(loadedMessage.meta.observedStartedAtMs === undefined &&
+  const nextMeta: typeof loadedMessage.meta = { ...loadedMessage.meta };
+  if (
+    loadedMessage.meta.observedStartedAtMs === undefined &&
     currentMessage.meta.observedStartedAtMs !== undefined
-      ? { observedStartedAtMs: currentMessage.meta.observedStartedAtMs }
-      : undefined),
-    ...(loadedMessage.meta.observedEndedAtMs === undefined &&
+  ) {
+    nextMeta.observedStartedAtMs = currentMessage.meta.observedStartedAtMs;
+  }
+  if (
+    loadedMessage.meta.observedEndedAtMs === undefined &&
     currentMessage.meta.observedEndedAtMs !== undefined
-      ? { observedEndedAtMs: currentMessage.meta.observedEndedAtMs }
-      : undefined),
-    ...(loadedMessage.meta.inputReadyAtMs === undefined &&
+  ) {
+    nextMeta.observedEndedAtMs = currentMessage.meta.observedEndedAtMs;
+  }
+  if (
+    loadedMessage.meta.inputReadyAtMs === undefined &&
     currentMessage.meta.inputReadyAtMs !== undefined
-      ? { inputReadyAtMs: currentMessage.meta.inputReadyAtMs }
-      : undefined),
-  };
+  ) {
+    nextMeta.inputReadyAtMs = currentMessage.meta.inputReadyAtMs;
+  }
 
   return applyPreferredMessageTimestamp(
     {

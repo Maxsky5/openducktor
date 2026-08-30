@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { jsonValueSchema } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import type { CodexAppServerThreadItem, CodexAppServerJsonValue } from "@openducktor/contracts";
@@ -7,15 +8,17 @@ export const unsupported = (surface: string): never => {
   throw new Error(`Codex App Server adapter does not support ${surface}.`);
 };
 
-export const isPlainObject = (value: unknown): value is Record<string, CodexAppServerJsonValue> => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+const codexStringValueSchema = z.string();
+const codexFiniteNumberValueSchema = z.number().finite();
+
+export const isPlainObject = (
+  value: CodexAppServerJsonValue | undefined,
+): value is Record<string, CodexAppServerJsonValue> => {
+  if (value === undefined || value === null || Array.isArray(value)) {
     return false;
   }
   const prototype = Object.getPrototypeOf(value);
-  return (
-    (prototype === Object.prototype || prototype === null) &&
-    jsonValueSchema.safeParse(value).success
-  );
+  return prototype === Object.prototype || prototype === null;
 };
 
 export const CODEX_USER_INPUT_REQUEST_METHOD = "item/tool/requestUserInput";
@@ -42,6 +45,45 @@ export const MAX_CODEX_EVENT_BACKLOG_PER_SESSION = 500;
 export const MAX_CODEX_BUFFERED_THREAD_COUNT = 100;
 export const CODEX_MODEL_CATALOG_TTL_MS = 5 * 60_000;
 
+export const readCodexString = (value: CodexAppServerJsonValue | undefined): string | null => {
+  const parsed = codexStringValueSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+};
+
+export const readNonEmptyCodexString = (
+  value: CodexAppServerJsonValue | undefined,
+): string | null => {
+  const text = readCodexString(value);
+  if (text === null) {
+    return null;
+  }
+  const trimmed = text.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+export const readFiniteCodexNumber = (
+  value: CodexAppServerJsonValue | undefined,
+): number | null => {
+  const parsed = codexFiniteNumberValueSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+};
+
+export const parseCodexJsonObjectString = (
+  value: CodexAppServerJsonValue | undefined,
+): Record<string, CodexAppServerJsonValue> | null => {
+  const text = readCodexString(value);
+  if (text === null) {
+    return null;
+  }
+
+  try {
+    const parsed = jsonValueSchema.safeParse(JSON.parse(text));
+    return parsed.success && isPlainObject(parsed.data) ? parsed.data : null;
+  } catch {
+    return null;
+  }
+};
+
 export const trimOldestMapKeys = <Value>(map: Map<string, Value>, maxSize: number): void => {
   while (map.size > maxSize) {
     const oldestKey = map.keys().next().value;
@@ -52,15 +94,16 @@ export const trimOldestMapKeys = <Value>(map: Map<string, Value>, maxSize: numbe
   }
 };
 export const extractText = (value: CodexAppServerJsonValue | undefined): string | null => {
-  if (typeof value === "string") {
-    return value;
+  const text = readCodexString(value);
+  if (text !== null) {
+    return text;
   }
   if (!isPlainObject(value)) {
     return null;
   }
   for (const key of ["text", "message", "content", "summary", "delta"]) {
-    const candidate = value[key];
-    if (typeof candidate === "string" && candidate.trim().length > 0) {
+    const candidate = readNonEmptyCodexString(value[key]);
+    if (candidate !== null) {
       return candidate;
     }
   }
@@ -91,8 +134,8 @@ export const extractStringField = (
     return null;
   }
   for (const key of keys) {
-    const candidate = value[key];
-    if (typeof candidate === "string" && candidate.trim().length > 0) {
+    const candidate = readNonEmptyCodexString(value[key]);
+    if (candidate !== null) {
       return candidate;
     }
   }
@@ -107,50 +150,41 @@ export const extractNumberField = (
     return null;
   }
   for (const key of keys) {
-    const candidate = value[key];
-    if (typeof candidate === "number" && Number.isFinite(candidate)) {
+    const candidate = readFiniteCodexNumber(value[key]);
+    if (candidate !== null) {
       return candidate;
     }
   }
   return null;
 };
 
-export const arrayFromUnknown = (value: unknown): CodexAppServerJsonValue[] => {
-  const parsed = jsonValueSchema.safeParse(value);
-  if (!parsed.success) {
-    return [];
+export const arrayFromCodexJsonValue = (
+  value: CodexAppServerJsonValue | undefined,
+): CodexAppServerJsonValue[] => {
+  if (Array.isArray(value)) {
+    return value;
   }
-  if (Array.isArray(parsed.data)) {
-    return parsed.data;
-  }
-  if (!isPlainObject(parsed.data)) {
+  if (!isPlainObject(value)) {
     return [];
   }
   for (const key of ["messages", "items", "turns", "data"]) {
-    const candidate = parsed.data[key];
-    const parsedCandidate = jsonValueSchema.safeParse(candidate);
-    if (parsedCandidate.success && Array.isArray(parsedCandidate.data)) {
-      return parsedCandidate.data;
+    const candidate = value[key];
+    if (Array.isArray(candidate)) {
+      return candidate;
     }
   }
   return [];
 };
 
-export const stringifyJsonValue = (value: unknown): string | null => {
-  const parsed = jsonValueSchema.safeParse(value);
-  if (!parsed.success) {
-    if (value === undefined) {
-      return null;
-    }
-    throw new Error("Cannot stringify a non-JSON Codex value.");
-  }
-  if (parsed.data === null) {
+export const stringifyJsonValue = (value: CodexAppServerJsonValue | undefined): string | null => {
+  if (value === undefined || value === null) {
     return null;
   }
-  if (typeof parsed.data === "string") {
-    return parsed.data;
+  const text = readCodexString(value);
+  if (text !== null) {
+    return text;
   }
-  return JSON.stringify(parsed.data, null, 2);
+  return JSON.stringify(value, null, 2);
 };
 
 export const extractOptionalObject = (

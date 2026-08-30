@@ -4,7 +4,6 @@ import {
   codexSessionRef,
   codexSessionRuntimeRef,
   codexStartSessionInput,
-  codexLocalSessionsForTest,
   createDeferred,
   createHarness,
   createRuntimeStreamSubscription,
@@ -47,23 +46,6 @@ describe("CodexContextUsageLoader", () => {
     expect(transports.get("runtime-live")?.calls).not.toContainEqual(
       expect.objectContaining({ method: "thread/resume" }),
     );
-  });
-
-  test("rejects cached context usage for a retained unbound session", async () => {
-    const { adapter } = createHarness();
-    const started = await adapter.startSession(codexStartSessionInput());
-    const session = codexLocalSessionsForTest(adapter).get(started.externalSessionId);
-    if (!session) {
-      throw new Error("Expected the retained Codex session.");
-    }
-    session.summary.sessionAssociation = { kind: "unbound" };
-
-    await expect(
-      adapter.loadLiveSessionContextUsage({
-        runtimeId: "runtime-live",
-        externalSessionId: started.externalSessionId,
-      }),
-    ).rejects.toThrow("has no session context");
   });
 
   test("cancels cold loads for released sessions and runtimes without late retention", async () => {

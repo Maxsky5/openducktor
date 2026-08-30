@@ -111,9 +111,6 @@ describe("config-schemas", () => {
         git: { defaultMergeMethod: "merge_commit" },
       }).success,
     ).toBe(false);
-    expect(settingsSnapshotSaveInputSchema.shape.agentModelFavorites.description).toBe(
-      "Echo the current canonical favorites. Change favorites through the narrow favorites command.",
-    );
   });
 
   test("defaults missing agent model favorites and canonicalizes exact tuples", () => {

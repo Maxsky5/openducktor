@@ -1,4 +1,4 @@
-import { isUnknownRecord, type AgentEvent } from "@openducktor/core";
+import type { AgentEvent } from "@openducktor/core";
 import {
   type ClaudeEventSession,
   claudeSubagentEventSession,
@@ -7,7 +7,8 @@ import { readClaudeHistoryDisplayParts } from "./claude-agent-sdk-history-suppor
 import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 import { decodeClaudeToolResultValue } from "./claude-agent-sdk-tool-shapes";
 import { isClaudeHumanUserMessage } from "./claude-agent-sdk-user-messages";
-import { historyMessageText, readStringProp } from "./claude-agent-sdk-utils";
+import { historyMessageText } from "./claude-agent-sdk-utils";
+import { parseClaudeUserToolResultIngress } from "./claude-agent-sdk-ingress-schemas";
 import type {
   ClaudeSdkMessageProjection,
   ClaudeSdkUserMessageProjection,
@@ -39,20 +40,10 @@ const hasToolResultForParent = (
 
 const isClaudeToolResultUserMessage = (message: ClaudeSdkUserMessageProjection): boolean => {
   const content = message.message.content;
-  if (
-    Array.isArray(content) &&
-    content.some((block) => {
-      const contentBlock = block;
-      return (
-        isUnknownRecord(contentBlock) &&
-        (readStringProp(contentBlock, "type") === "tool_result" ||
-          readStringProp(contentBlock, "type") === "mcp_tool_result")
-      );
-    })
-  ) {
+  if (Array.isArray(content) && content.some((block) => block.type === "tool_result")) {
     return true;
   }
-  return isUnknownRecord(message.tool_use_result);
+  return parseClaudeUserToolResultIngress(message).toolResults.length > 0;
 };
 
 export const emitClaudeSubagentUserMessage = ({

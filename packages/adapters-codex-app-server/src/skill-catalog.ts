@@ -41,13 +41,18 @@ const toAgentSkillCatalogEntry = (
   const path = requireString(record.path, "path");
   const displayName = readOptionalString(record.interface?.displayName);
   const description = readOptionalString(record.description);
-  return {
+  const skill: AgentSkillCatalog["skills"][number] = {
     id: path,
     name,
     path,
-    ...(displayName ? { displayName } : undefined),
-    ...(description ? { description } : undefined),
   };
+  if (displayName) {
+    skill.displayName = displayName;
+  }
+  if (description) {
+    skill.description = description;
+  }
+  return skill;
 };
 
 export const toCodexSkillCatalog = (

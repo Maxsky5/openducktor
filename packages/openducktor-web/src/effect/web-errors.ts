@@ -1,22 +1,61 @@
 import { Cause, Data, Effect, Exit } from "effect";
+import type { FailureKind, HostInvokeFailure } from "@openducktor/contracts";
 
-export type WebErrorDetailValue =
-  | string
-  | number
-  | boolean
-  | null
-  | Error
-  | undefined
-  | ReadonlyArray<WebErrorDetailValue>
-  | { readonly [key: string]: WebErrorDetailValue };
+export type WebValidationErrorDetails =
+  | { readonly browserOrigin: string }
+  | { readonly mcpEntrypoint: string; readonly packageRoot: string }
+  | { readonly option: string | undefined }
+  | { readonly origin: string }
+  | { readonly path: string }
+  | { readonly raw: string }
+  | { readonly rawUrl: string }
+  | { readonly url: string }
+  | { readonly workspaceRoot: string };
 
-export type WebErrorDetails = Readonly<Record<string, WebErrorDetailValue>>;
+export type WebDependencyErrorDetails =
+  | { readonly args: readonly string[] }
+  | { readonly backendUrl: string }
+  | { readonly backendUrl: string; readonly status: number }
+  | { readonly command: string }
+  | { readonly command: string[]; readonly cwd: string }
+  | { readonly frontendPort: number }
+  | { readonly outputPath: string }
+  | { readonly path: string }
+  | { readonly path: string; readonly status: number }
+  | { readonly path: string; readonly timeoutMs: number }
+  | { readonly signal: number }
+  | { readonly signal: number; readonly timeoutMs: number }
+  | { readonly signal: string }
+  | { readonly sourceDirectory: string; readonly targetDirectory: string }
+  | { readonly status: number }
+  | { readonly timeoutMs: number }
+  | { readonly url: string };
+
+export type WebOperationErrorDetails =
+  | { readonly backendUrl: string }
+  | { readonly backendUrl: string; readonly exitCode: number }
+  | { readonly backendUrl: string; readonly timeoutMs: number }
+  | { readonly defect: boolean; readonly failureMessages: string[]; readonly interrupted: boolean }
+  | { readonly failureMessages: string[] }
+  | { readonly failures: readonly Error[] }
+  | { readonly hostExitCode: number }
+  | { readonly port: number };
+
+export type WebResourceErrorDetails =
+  | { readonly channel: string }
+  | { readonly indexPath: string; readonly staticRoot: string };
+
+export type WebHostCommandErrorDetails = {
+  command: string;
+  hostDetails?: { readonly failureKind?: FailureKind | undefined };
+  hostInvokeFailure?: HostInvokeFailure;
+};
 
 export class WebValidationError extends Data.TaggedError("WebValidationError")<{
   readonly message: string;
   readonly field?: string | undefined;
   readonly cause?: unknown | undefined;
-  readonly details?: WebErrorDetails | undefined;
+  readonly details?: Readonly<WebValidationErrorDetails> | undefined;
 }> {}
 
 export class WebDependencyError extends Data.TaggedError("WebDependencyError")<{
@@ -24,14 +63,14 @@ export class WebDependencyError extends Data.TaggedError("WebDependencyError")<{
   readonly dependency: string;
   readonly operation?: string | undefined;
   readonly cause?: unknown | undefined;
-  readonly details?: WebErrorDetails | undefined;
+  readonly details?: Readonly<WebDependencyErrorDetails> | undefined;
 }> {}
 
 export class WebOperationError extends Data.TaggedError("WebOperationError")<{
   readonly message: string;
   readonly operation: string;
   readonly cause?: unknown | undefined;
-  readonly details?: WebErrorDetails | undefined;
+  readonly details?: Readonly<WebOperationErrorDetails> | undefined;
 }> {}
 
 export class WebResourceError extends Data.TaggedError("WebResourceError")<{
@@ -39,7 +78,7 @@ export class WebResourceError extends Data.TaggedError("WebResourceError")<{
   readonly resource: string;
   readonly operation?: string | undefined;
   readonly cause?: unknown | undefined;
-  readonly details?: WebErrorDetails | undefined;
+  readonly details?: Readonly<WebResourceErrorDetails> | undefined;
 }> {}
 
 export class WebHostRequestError extends Data.TaggedError("WebHostRequestError")<{
@@ -47,7 +86,7 @@ export class WebHostRequestError extends Data.TaggedError("WebHostRequestError")
   readonly status: number;
   readonly failureKind?: string | undefined;
   readonly cause?: unknown | undefined;
-  readonly details?: WebErrorDetails | undefined;
+  readonly details?: Readonly<WebHostCommandErrorDetails> | undefined;
 }> {}
 
 export type WebError =
@@ -89,7 +128,7 @@ export const combineWebErrors = (
 export const toWebOperationError = (
   cause: unknown,
   operation: string,
-  details?: WebErrorDetails,
+  details?: Readonly<WebOperationErrorDetails>,
 ): WebOperationError => {
   if (cause instanceof WebOperationError) {
     return cause;

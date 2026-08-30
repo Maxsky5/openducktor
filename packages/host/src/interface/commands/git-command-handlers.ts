@@ -1,5 +1,5 @@
 import type { GitService } from "../../application/git/git-service";
-import { defineHostCommandHandlers } from "../router/host-command-router";
+import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
 import {
   parseGitAbortConflictInput,
   parseGitAheadBehindInput,
@@ -16,7 +16,7 @@ import {
 } from "./git-command-inputs";
 
 export const createGitCommandHandlers = (gitService: GitService) =>
-  defineHostCommandHandlers({
+  ({
     git_canonicalize_path: (args) => gitService.canonicalizePath(parseGitScopeInput(args)),
     git_abort_conflict: (args) => gitService.abortConflict(parseGitAbortConflictInput(args)),
     git_commit_all: (args) => gitService.commitAll(parseGitCommitAllInput(args)),
@@ -40,4 +40,4 @@ export const createGitCommandHandlers = (gitService: GitService) =>
     git_reset_worktree_selection: (args) =>
       gitService.resetWorktreeSelection(parseGitResetWorktreeSelectionInput(args)),
     git_switch_branch: (args) => gitService.switchBranch(parseGitSwitchBranchInput(args)),
-  });
+  }) satisfies HostCommandHandlerDefinitions;

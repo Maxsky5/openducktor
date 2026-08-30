@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { sql } from "drizzle-orm";
 import { Deferred, Effect, Fiber, TestClock, TestContext } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import { createSqliteTaskRepositoryContextManager } from "./sqlite-task-repository-context";
 import { openSqliteTaskStoreConnection } from "./sqlite-task-store-connection";
 
@@ -23,7 +23,7 @@ const createHarness = async () => {
 };
 
 const createCloseFailureHarness = async (
-  onBackgroundFailure: (failure: HostOperationError) => Effect.Effect<void, never> = () =>
+  onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never> = () =>
     Effect.void,
 ) => {
   const configDir = await mkdtemp(path.join(tmpdir(), "odt-sqlite-context-close-failure-"));
@@ -352,7 +352,7 @@ test("reports close failures from every retained database during disposal", asyn
 });
 
 test("reports an idle close failure and rejects later operations for that database", async () => {
-  const backgroundFailures: HostOperationError[] = [];
+  const backgroundFailures: HostOperationErrorAggregate[] = [];
   const manager = await createCloseFailureHarness((failure) =>
     Effect.sync(() => {
       backgroundFailures.push(failure);

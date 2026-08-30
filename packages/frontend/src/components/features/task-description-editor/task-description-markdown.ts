@@ -73,10 +73,11 @@ const semanticTree: (node: MarkdownJsonContent) => JSONContent = ({
   spread: _spread,
   content,
   ...node
-}) => ({
-  ...node,
-  ...(content === undefined ? undefined : { content: content.map(semanticTree) }),
-});
+}) => {
+  const semanticNode: JSONContent = { ...node };
+  if (content !== undefined) semanticNode.content = content.map(semanticTree);
+  return semanticNode;
+};
 
 const visualEditorMathSemantics = (tree: JSONContent): MarkdownMathSemantic[] => {
   const semantics: MarkdownMathSemantic[] = [];

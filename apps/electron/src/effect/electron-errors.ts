@@ -1,17 +1,5 @@
 import { Cause, Chunk, Data, Option } from "effect";
 
-export type ElectronErrorDetailValue =
-  | string
-  | number
-  | boolean
-  | null
-  | Error
-  | undefined
-  | ReadonlyArray<ElectronErrorDetailValue>
-  | { readonly [key: string]: ElectronErrorDetailValue };
-
-export type ElectronErrorDetails = Readonly<Record<string, ElectronErrorDetailValue>>;
-
 export const jsonIssues = (
   issues: ReadonlyArray<{ code: string; message: string; path: readonly PropertyKey[] }>,
 ): Array<{ code: string; message: string; path: string[] }> =>
@@ -21,36 +9,44 @@ export const jsonIssues = (
     path: issue.path.map(String),
   }));
 
-type ElectronErrorContext = {
+type ElectronErrorContext<Details extends object> = {
   readonly message: string;
   readonly operation: string;
   readonly arch?: string | undefined;
   readonly cause?: unknown | undefined;
-  readonly details?: ElectronErrorDetails | undefined;
+  readonly details?: Details | undefined;
   readonly path?: string | undefined;
   readonly platform?: string | undefined;
 };
 
-export class ElectronValidationError extends Data.TaggedError("ElectronValidationError")<
-  ElectronErrorContext & {
+export class ElectronValidationError<Details extends object = never> extends Data.TaggedError(
+  "ElectronValidationError",
+)<
+  ElectronErrorContext<Details> & {
     readonly field?: string | undefined;
   }
 > {}
 
-export class ElectronOperationError extends Data.TaggedError(
+export class ElectronOperationError<Details extends object = never> extends Data.TaggedError(
   "ElectronOperationError",
-)<ElectronErrorContext> {}
+)<ElectronErrorContext<Details>> {}
 
-export class ElectronLifecycleError extends Data.TaggedError("ElectronLifecycleError")<
-  ElectronErrorContext & {
+export class ElectronLifecycleError<Details extends object = never> extends Data.TaggedError(
+  "ElectronLifecycleError",
+)<
+  ElectronErrorContext<Details> & {
     readonly reason?: string | undefined;
   }
 > {}
 
+export type ElectronValidationErrorAggregate = ElectronValidationError<object>;
+export type ElectronOperationErrorAggregate = ElectronOperationError<object>;
+export type ElectronLifecycleErrorAggregate = ElectronLifecycleError<object>;
+
 export type ElectronError =
-  | ElectronLifecycleError
-  | ElectronOperationError
-  | ElectronValidationError;
+  | ElectronLifecycleErrorAggregate
+  | ElectronOperationErrorAggregate
+  | ElectronValidationErrorAggregate;
 
 export const isElectronError = (cause: unknown): cause is ElectronError =>
   cause instanceof ElectronLifecycleError ||
@@ -60,12 +56,12 @@ export const isElectronError = (cause: unknown): cause is ElectronError =>
 export const errorMessage = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
 
-export const toElectronOperationError = (
+export const toElectronOperationError = <Details extends object = never>(
   cause: unknown,
   operation: string,
-  details?: ElectronErrorDetails,
-): ElectronOperationError =>
-  cause instanceof ElectronOperationError
+  details?: Details,
+): ElectronOperationError<Details> | ElectronOperationErrorAggregate => {
+  return cause instanceof ElectronOperationError
     ? cause
     : new ElectronOperationError({
         operation,
@@ -73,10 +69,11 @@ export const toElectronOperationError = (
         cause,
         details,
       });
+};
 
 export const causeToElectronBoundaryError = <Failure>(
   cause: Cause.Cause<Failure>,
-): Failure | ElectronOperationError => {
+): Failure | ElectronOperationError<{ defect: true }> => {
   const firstFailure = Chunk.head(Cause.failures(cause));
   if (Option.isSome(firstFailure)) {
     return firstFailure.value;

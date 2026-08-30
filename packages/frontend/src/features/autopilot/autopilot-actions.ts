@@ -88,13 +88,14 @@ const toAgentModelSelection = (
     return null;
   }
 
-  return {
+  const normalizedSelection: AgentModelSelection = {
     runtimeKind: selection.runtimeKind,
     providerId: selection.providerId,
     modelId: selection.modelId,
-    ...(selection.variant ? { variant: selection.variant } : undefined),
-    ...(selection.profileId ? { profileId: selection.profileId } : undefined),
   };
+  if (selection.variant) normalizedSelection.variant = selection.variant;
+  if (selection.profileId) normalizedSelection.profileId = selection.profileId;
+  return normalizedSelection;
 };
 
 const resolveAutopilotSelection = async ({
@@ -290,29 +291,31 @@ export const executeAutopilotAction = async ({
     if (startResolution.kind === "skipped") {
       return startResolution;
     }
-    const selectedModel =
-      startResolution.startMode === "reuse"
-        ? null
-        : await resolveAutopilotSelection({
-            activeWorkspace,
-            role: action.role,
-            ...(startResolution.preferredSelection !== undefined
-              ? { preferredSelection: startResolution.preferredSelection }
-              : undefined),
-            queryClient,
-            loadRepoRuntimeCatalog,
-          });
-
-    const workflow = await runSessionStartWorkflow({
-      request: {
-        taskId: task.id,
+    let selectedModel: AgentModelSelection | null = null;
+    if (startResolution.startMode !== "reuse") {
+      const selectionInput: Parameters<typeof resolveAutopilotSelection>[0] = {
+        activeWorkspace,
         role: action.role,
-        launchActionId: action.launchActionId,
-        postStartAction: "kickoff",
-        ...(startResolution.targetWorkingDirectory !== undefined
-          ? { targetWorkingDirectory: startResolution.targetWorkingDirectory }
-          : undefined),
-      },
+        queryClient,
+        loadRepoRuntimeCatalog,
+      };
+      if (startResolution.preferredSelection !== undefined) {
+        selectionInput.preferredSelection = startResolution.preferredSelection;
+      }
+      selectedModel = await resolveAutopilotSelection(selectionInput);
+    }
+
+    const request: Parameters<typeof runSessionStartWorkflow>[0]["request"] = {
+      taskId: task.id,
+      role: action.role,
+      launchActionId: action.launchActionId,
+      postStartAction: "kickoff",
+    };
+    if (startResolution.targetWorkingDirectory !== undefined) {
+      request.targetWorkingDirectory = startResolution.targetWorkingDirectory;
+    }
+    const workflow = await runSessionStartWorkflow({
+      request,
       decision: toSessionStartDecision({
         resolution: startResolution,
         selectedModel,

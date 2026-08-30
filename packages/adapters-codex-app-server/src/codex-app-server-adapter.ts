@@ -2,6 +2,7 @@ import {
   type AgentSessionLivePendingApprovalRequest,
   type AgentSessionLivePendingQuestionRequest,
   type AgentSessionLiveSnapshot,
+  type CodexAppServerThreadResumeParams,
   agentSessionLiveSnapshotSchema,
   CODEX_RUNTIME_DESCRIPTOR,
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
@@ -55,7 +56,7 @@ import { requireCodexPendingRequestKey } from "./codex-app-server-approvals";
 import { codexApprovalResponseForRequest } from "./codex-app-server-requests";
 import { type ActiveCodexTurn, unsupported } from "./codex-app-server-shared";
 import { createCodexAcceptedUserMessage } from "./codex-app-server-streaming";
-import type { CodexThreadInventory } from "./codex-app-server-threads";
+import type { CodexThreadInventory, CodexThreadStatusSnapshot } from "./codex-app-server-threads";
 import { codexTodosFromThreadRead } from "./codex-app-server-transcript";
 import { CodexContextUsageLoader } from "./codex-context-usage-loader";
 import { fileDiffsFromUnifiedDiff } from "./codex-file-diffs";
@@ -125,49 +126,50 @@ export { createCodexAppServerClient } from "./app-server-client";
 
 const toLivePendingApproval = (
   request: AgentPendingApprovalRequest,
-): AgentSessionLivePendingApprovalRequest => ({
-  requestId: request.requestId,
-  requestType: request.requestType,
-  title: request.title,
-  ...(request.summary !== undefined ? { summary: request.summary } : undefined),
-  ...(request.details !== undefined ? { details: request.details } : undefined),
-  ...(request.affectedPaths !== undefined
-    ? { affectedPaths: [...request.affectedPaths] }
-    : undefined),
-  ...(request.command
-    ? {
-        command: {
-          command: request.command.command,
-          ...(request.command.workingDirectory !== undefined
-            ? { workingDirectory: request.command.workingDirectory }
-            : undefined),
-        },
-      }
-    : undefined),
-  ...(request.action
-    ? {
-        action: {
-          name: request.action.name,
-          ...(request.action.description !== undefined
-            ? { description: request.action.description }
-            : undefined),
-        },
-      }
-    : undefined),
-  ...(request.tool
-    ? {
-        tool: {
-          name: request.tool.name,
-          ...(request.tool.title !== undefined ? { title: request.tool.title } : undefined),
-          ...(request.tool.input !== undefined ? { input: request.tool.input } : undefined),
-        },
-      }
-    : undefined),
-  ...(request.mutation !== undefined ? { mutation: request.mutation } : undefined),
-  ...(request.supportedReplyOutcomes !== undefined
-    ? { supportedReplyOutcomes: [...request.supportedReplyOutcomes] }
-    : undefined),
-});
+): AgentSessionLivePendingApprovalRequest => {
+  const liveRequest: AgentSessionLivePendingApprovalRequest = {
+    requestId: request.requestId,
+    requestType: request.requestType,
+    title: request.title,
+  };
+  if (request.summary !== undefined) {
+    liveRequest.summary = request.summary;
+  }
+  if (request.details !== undefined) {
+    liveRequest.details = request.details;
+  }
+  if (request.affectedPaths !== undefined) {
+    liveRequest.affectedPaths = [...request.affectedPaths];
+  }
+  if (request.command) {
+    liveRequest.command = { command: request.command.command };
+    if (request.command.workingDirectory !== undefined) {
+      liveRequest.command.workingDirectory = request.command.workingDirectory;
+    }
+  }
+  if (request.action) {
+    liveRequest.action = { name: request.action.name };
+    if (request.action.description !== undefined) {
+      liveRequest.action.description = request.action.description;
+    }
+  }
+  if (request.tool) {
+    liveRequest.tool = { name: request.tool.name };
+    if (request.tool.title !== undefined) {
+      liveRequest.tool.title = request.tool.title;
+    }
+    if (request.tool.input !== undefined) {
+      liveRequest.tool.input = request.tool.input;
+    }
+  }
+  if (request.mutation !== undefined) {
+    liveRequest.mutation = request.mutation;
+  }
+  if (request.supportedReplyOutcomes !== undefined) {
+    liveRequest.supportedReplyOutcomes = [...request.supportedReplyOutcomes];
+  }
+  return liveRequest;
+};
 
 const toLivePendingQuestion = (
   request: AgentPendingQuestionRequest,
@@ -192,39 +194,59 @@ export class CodexAppServerAdapter
 
   constructor(private readonly options: CodexAppServerAdapterOptions) {
     this.runtimeClients = new CodexRuntimeClientResolver(options);
-    const runtimeEventSubscription = options.subscribeEvents
-      ? {
-          subscribeEvents: options.subscribeEvents,
-          onRuntimeEventQueueFailure: options.onRuntimeEventQueueFailure,
-        }
-      : {};
-    this.runtimeEvents = new CodexRuntimeSessionEvents({
-      ...runtimeEventSubscription,
+    const onLiveSessionMutation = options.onLiveSessionMutation;
+    const onCatalogInvalidated = options.onCatalogInvalidated;
+    const runtimeEventsDepsBase = {
       respondServerRequest: options.respondServerRequest,
-      ...(options.onLiveSessionMutation
-        ? {
-            onLiveSessionMutation: async (mutation) =>
-              options.onLiveSessionMutation?.({
-                ...mutation,
-                snapshots: this.listLiveSessionSnapshots(mutation.runtimeId),
-              }),
-          }
-        : undefined),
-      ...(options.onCatalogInvalidated
-        ? { onCatalogInvalidated: options.onCatalogInvalidated }
-        : undefined),
       sessions: {
-        get: (externalSessionId) => this.localSessions.get(externalSessionId),
+        get: (externalSessionId: string) => this.localSessions.get(externalSessionId),
         values: () => this.localSessions.values(),
       },
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       sessionEvents: this.sessionEvents,
       pendingInput: this.pendingInput,
       subagents: this.subagents,
-      updateThreadStatus: (runtimeId, threadId, status) =>
-        this.threadInventory.updateThreadStatus(runtimeId, threadId, status),
-      flushQueuedUserMessagesLater: (activeTurn) => this.flushQueuedUserMessagesLater(activeTurn),
-    });
+      updateThreadStatus: (
+        runtimeId: string,
+        threadId: string,
+        status: CodexThreadStatusSnapshot,
+      ) => this.threadInventory.updateThreadStatus(runtimeId, threadId, status),
+      flushQueuedUserMessagesLater: (activeTurn: ActiveCodexTurn) =>
+        this.flushQueuedUserMessagesLater(activeTurn),
+    };
+    if (options.subscribeEvents) {
+      const runtimeEventsDeps: ConstructorParameters<typeof CodexRuntimeSessionEvents>[0] = {
+        ...runtimeEventsDepsBase,
+        subscribeEvents: options.subscribeEvents,
+        onRuntimeEventQueueFailure: options.onRuntimeEventQueueFailure,
+      };
+      if (onLiveSessionMutation) {
+        runtimeEventsDeps.onLiveSessionMutation = async (mutation) =>
+          onLiveSessionMutation({
+            ...mutation,
+            snapshots: this.listLiveSessionSnapshots(mutation.runtimeId),
+          });
+      }
+      if (onCatalogInvalidated) {
+        runtimeEventsDeps.onCatalogInvalidated = onCatalogInvalidated;
+      }
+      this.runtimeEvents = new CodexRuntimeSessionEvents(runtimeEventsDeps);
+    } else {
+      const runtimeEventsDeps: ConstructorParameters<typeof CodexRuntimeSessionEvents>[0] = {
+        ...runtimeEventsDepsBase,
+      };
+      if (onLiveSessionMutation) {
+        runtimeEventsDeps.onLiveSessionMutation = async (mutation) =>
+          onLiveSessionMutation({
+            ...mutation,
+            snapshots: this.listLiveSessionSnapshots(mutation.runtimeId),
+          });
+      }
+      if (onCatalogInvalidated) {
+        runtimeEventsDeps.onCatalogInvalidated = onCatalogInvalidated;
+      }
+      this.runtimeEvents = new CodexRuntimeSessionEvents(runtimeEventsDeps);
+    }
     this.localSessions = new CodexLocalSessionState({
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       pendingInput: this.pendingInput,
@@ -384,15 +406,18 @@ export class CodexAppServerAdapter
         workingDirectory: input.workingDirectory,
       }),
     );
-    const response = await client.threadResume({
+    const threadResumeInput: CodexAppServerThreadResumeParams = {
       ...codexTransportPolicy(policy),
       config: sessionPolicy.threadConfig,
       threadId: input.externalSessionId,
       cwd: input.workingDirectory,
-      ...(input.systemPrompt ? { developerInstructions: input.systemPrompt } : undefined),
       excludeTurns: true,
       model: toTransportModelSelection(model).model,
-    });
+    };
+    if (input.systemPrompt) {
+      threadResumeInput.developerInstructions = input.systemPrompt;
+    }
+    const response = await client.threadResume(threadResumeInput);
     this.clearThreadInventory(runtimeId);
     const session = sessionStateFromThreadResume(input, runtimeId, model, response);
     if (sessionPolicy.kind === "repository") {
@@ -704,17 +729,20 @@ export class CodexAppServerAdapter
       "ensure Codex session state",
     );
     const policy = sessionPolicy.runtimePolicy;
-    const response = await client.threadResume({
+    const threadResumeInput: CodexAppServerThreadResumeParams = {
       ...codexTransportPolicy(policy),
       config: sessionPolicy.threadConfig,
       threadId: input.externalSessionId,
       cwd: input.workingDirectory,
-      ...("systemPrompt" in input && input.systemPrompt
-        ? { developerInstructions: input.systemPrompt }
-        : undefined),
       excludeTurns: true,
-      ...(model ? { model: toTransportModelSelection(model).model } : undefined),
-    });
+    };
+    if ("systemPrompt" in input && input.systemPrompt) {
+      threadResumeInput.developerInstructions = input.systemPrompt;
+    }
+    if (model) {
+      threadResumeInput.model = toTransportModelSelection(model).model;
+    }
+    const response = await client.threadResume(threadResumeInput);
     const session = sessionStateFromExistingThread(input, runtimeId, model, response);
     if (sessionPolicy.kind === "repository") {
       session.summary = { ...session.summary, title: sessionPolicy.title };
@@ -770,14 +798,18 @@ export class CodexAppServerAdapter
       { lookup: "reply to approval for", context: "reply to approval" },
       true,
     );
-    const reply = (boundSession: CodexSessionState) =>
-      this.replyLiveApproval({
+    const reply = (boundSession: CodexSessionState) => {
+      const approvalReply: CodexLiveApprovalReplyInput = {
         runtimeId: boundSession.runtimeId,
         externalSessionId: input.externalSessionId,
         requestId: input.requestId,
         outcome: input.outcome,
-        ...(input.message !== undefined ? { message: input.message } : undefined),
-      });
+      };
+      if (input.message !== undefined) {
+        approvalReply.message = input.message;
+      }
+      return this.replyLiveApproval(approvalReply);
+    };
     return session instanceof Promise ? session.then(reply) : reply(session);
   }
 
@@ -925,7 +957,7 @@ export class CodexAppServerAdapter
         ? "running"
         : "idle");
     const route = this.subagents.routeForChild(session.threadId, session.runtimeId);
-    return agentSessionLiveSnapshotSchema.parse({
+    const snapshot: AgentSessionLiveSnapshot = {
       ref: codexSessionRef(session),
       sessionAssociation: session.summary.sessionAssociation,
       activity: classifyAgentSessionActivity({
@@ -935,11 +967,14 @@ export class CodexAppServerAdapter
       }),
       title: session.summary.title ?? session.threadId,
       startedAt: session.summary.startedAt,
-      ...(route ? { parentExternalSessionId: route.parentExternalSessionId } : undefined),
       pendingApprovals,
       pendingQuestions,
       contextUsage: this.runtimeEvents.latestContextUsage(session.runtimeId, session.threadId),
-    });
+    };
+    if (route) {
+      snapshot.parentExternalSessionId = route.parentExternalSessionId;
+    }
+    return agentSessionLiveSnapshotSchema.parse(snapshot);
   }
 
   private toRoutedChildLiveSessionSnapshot(
@@ -1118,7 +1153,7 @@ export class CodexAppServerAdapter
   }
 
   private turnLifecycleContext(): CodexTurnLifecycleContext {
-    return {
+    const context: CodexTurnLifecycleContext = {
       sessions: this.localSessions,
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       clientForRuntime: (runtimeId) => this.runtimeClients.clientForRuntime(runtimeId),
@@ -1137,10 +1172,11 @@ export class CodexAppServerAdapter
         this.emitSessionEvent(externalSessionId, event),
       codexPolicyForSession: (session) =>
         requireCodexRuntimePolicy(session.runtimePolicy, "start Codex turn"),
-      ...(this.options.logSessionPolicy
-        ? { logSessionPolicy: this.options.logSessionPolicy }
-        : undefined),
     };
+    if (this.options.logSessionPolicy) {
+      context.logSessionPolicy = this.options.logSessionPolicy;
+    }
+    return context;
   }
 
   async loadSessionDiff(

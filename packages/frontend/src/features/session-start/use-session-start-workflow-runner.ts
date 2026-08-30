@@ -20,14 +20,17 @@ export function useSessionStartWorkflowRunner({
 }: UseSessionStartWorkflowRunnerArgs): RunSessionStartWorkflow {
   const queryClient = useQueryClient();
 
-  return useMemo(
-    () =>
-      createSessionStartWorkflowRunner({
-        queryClient,
-        workspaceId,
-        startAgentSession,
-        ...(sendAgentMessage ? { sendAgentMessage } : undefined),
-      }),
-    [queryClient, sendAgentMessage, startAgentSession, workspaceId],
-  );
+  return useMemo(() => {
+    const args: Parameters<typeof createSessionStartWorkflowRunner>[0] = {
+      queryClient,
+      workspaceId,
+      startAgentSession,
+    };
+
+    if (sendAgentMessage) {
+      args.sendAgentMessage = sendAgentMessage;
+    }
+
+    return createSessionStartWorkflowRunner(args);
+  }, [queryClient, sendAgentMessage, startAgentSession, workspaceId]);
 }

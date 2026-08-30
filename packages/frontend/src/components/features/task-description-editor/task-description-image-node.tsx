@@ -1,6 +1,7 @@
 import { parseTaskAssetUri } from "@openducktor/contracts";
 import { NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
 import { useContext, useEffect, useState } from "react";
+import { z } from "zod";
 import { Input } from "@/components/ui/input";
 import { errorMessage } from "@/lib/errors";
 import { getShellBridge } from "@/lib/shell-bridge";
@@ -24,7 +25,12 @@ export function TaskDescriptionImageNode({
   updateAttributes,
 }: TaskDescriptionImageNodeProps) {
   const { previews, renderContext } = useContext(TaskDescriptionImageContext);
-  const source = typeof node.attrs.src === "string" ? node.attrs.src : "";
+  const sourceResult = z.string().safeParse(node.attrs.src);
+  const altResult = z.string().safeParse(node.attrs.alt);
+  const titleResult = z.string().safeParse(node.attrs.title);
+  const source = sourceResult.success ? sourceResult.data : "";
+  const alt = altResult.success ? altResult.data : "";
+  const title = titleResult.success ? titleResult.data : undefined;
   const assetId = parseTaskAssetUri(source);
   const preview = assetId ? previews.get(assetId) : undefined;
   const workspaceId = renderContext?.workspaceId ?? null;
@@ -74,8 +80,8 @@ export function TaskDescriptionImageNode({
         {resolvedSource ? (
           <img
             src={resolvedSource}
-            alt={typeof node.attrs.alt === "string" ? node.attrs.alt : ""}
-            title={typeof node.attrs.title === "string" ? node.attrs.title : undefined}
+            alt={alt}
+            title={title}
             className="mx-auto max-h-96 max-w-full rounded object-contain"
             onError={() => {
               setResolvedSource(null);
@@ -90,13 +96,13 @@ export function TaskDescriptionImageNode({
         {selected ? (
           <figcaption className="mt-2 grid gap-2 sm:grid-cols-2">
             <Input
-              value={typeof node.attrs.alt === "string" ? node.attrs.alt : ""}
+              value={alt}
               aria-label="Image alt text"
               placeholder="Alt text"
               onChange={(event) => updateAttributes({ alt: event.currentTarget.value })}
             />
             <Input
-              value={typeof node.attrs.title === "string" ? node.attrs.title : ""}
+              value={title ?? ""}
               aria-label="Image title"
               placeholder="Optional title"
               onChange={(event) => updateAttributes({ title: event.currentTarget.value || null })}

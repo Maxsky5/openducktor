@@ -1,11 +1,10 @@
-import { jsonValueSchema } from "@openducktor/contracts";
 import {
   extractMessageTotalTokens,
   readMessageModelSelection,
   readTextFromParts,
   sanitizeAssistantMessage,
 } from "../../message-normalizers";
-import type { ParsedOpencodePart } from "../../opencode-ingress";
+import type { ParsedOpencodeMessage, ParsedOpencodePart } from "../../opencode-ingress";
 import {
   isAwaitingRuntimeTurnStart,
   isStreamTurnIdle,
@@ -54,7 +53,7 @@ export const emitAssistantPart = (
     return false;
   }
 
-  const mapped = mapPartToAgentStreamPart(jsonValueSchema.parse(part));
+  const mapped = mapPartToAgentStreamPart(part);
   if (!mapped) {
     return false;
   }
@@ -203,7 +202,7 @@ export const maybeEmitCompletedAssistantMessage = (
   input: {
     messageId: string;
     timestamp?: string;
-    info?: unknown;
+    info?: ParsedOpencodeMessage["info"];
     hasStopSignal?: boolean;
   },
 ): boolean => {
@@ -228,12 +227,17 @@ export const maybeEmitCompletedAssistantMessage = (
     hasTerminalStopSignalInParts(assistantParts, undefined);
   const timestamp = input.timestamp ?? existingMetadata?.timestamp ?? runtime.now();
 
-  updateMessageMetadata(runtime, input.messageId, {
+  const metadataUpdates: Parameters<typeof updateMessageMetadata>[2] = {
     timestamp,
-    ...(assistantModel ? { model: assistantModel } : undefined),
     hasStopSignal,
-    ...(totalTokens !== undefined ? { totalTokens } : undefined),
-  });
+  };
+  if (assistantModel) {
+    metadataUpdates.model = assistantModel;
+  }
+  if (totalTokens !== undefined) {
+    metadataUpdates.totalTokens = totalTokens;
+  }
+  updateMessageMetadata(runtime, input.messageId, metadataUpdates);
 
   if (!hasStopSignal || assistantParts.length === 0 || !isStreamTurnIdle(session)) {
     return false;
@@ -251,15 +255,20 @@ export const maybeEmitCompletedAssistantMessage = (
     return true;
   }
 
-  runtime.emit(runtime.externalSessionId, {
+  const event: Parameters<EventStreamRuntime["emit"]>[1] = {
     type: "assistant_message",
     externalSessionId: runtime.externalSessionId,
     timestamp,
     messageId: input.messageId,
     message: visible,
-    ...(typeof totalTokens === "number" ? { totalTokens } : undefined),
-    ...(assistantModel ? { model: assistantModel } : undefined),
-  });
+  };
+  if (totalTokens !== undefined) {
+    event.totalTokens = totalTokens;
+  }
+  if (assistantModel) {
+    event.model = assistantModel;
+  }
+  runtime.emit(runtime.externalSessionId, event);
   session.emittedAssistantMessageIds.add(input.messageId);
   session.pendingCompletedAssistantMessageIds.delete(input.messageId);
   return true;

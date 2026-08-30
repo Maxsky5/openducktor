@@ -6,6 +6,7 @@ import type {
   SelectionSide,
 } from "@pierre/diffs";
 import { getFiletypeFromFileName, getSingularPatch } from "@pierre/diffs";
+import { z } from "zod";
 import type {
   InlineCommentContextLine,
   InlineCommentSide,
@@ -29,17 +30,10 @@ export type HunkResetAnnotationMetadata = {
   hunkIndex: number;
 };
 
-export const isHunkResetAnnotationMetadata = (
-  value: unknown,
-): value is HunkResetAnnotationMetadata =>
-  typeof value === "object" &&
-  value !== null &&
-  "kind" in value &&
-  value.kind === "hunk-reset" &&
-  "hunkIndex" in value &&
-  typeof value.hunkIndex === "number" &&
-  Number.isInteger(value.hunkIndex) &&
-  value.hunkIndex >= 0;
+export const hunkResetAnnotationMetadataSchema = z.object({
+  kind: z.literal("hunk-reset"),
+  hunkIndex: z.number().int().nonnegative(),
+});
 
 type RenderableFileDiff = {
   fileDiff: FileDiffMetadata | null;
@@ -180,7 +174,7 @@ export const getRenderableFileDiff = (patch: string, filePath: string) => {
   renderableFileDiffCache.set(cacheKey, result);
   if (renderableFileDiffCache.size > MAX_RENDERABLE_DIFF_CACHE_ENTRIES) {
     const oldestKey = renderableFileDiffCache.keys().next().value;
-    if (typeof oldestKey === "string") {
+    if (oldestKey !== undefined) {
       renderableFileDiffCache.delete(oldestKey);
     }
   }
@@ -197,11 +191,10 @@ const normalizeSelectedLineRange = (selectedLines: SelectedLineRange): SelectedL
     startSide: SelectionSide | undefined,
     endSide: SelectionSide | undefined,
   ): SelectedLineRange => {
-    return {
-      ...range,
-      ...(startSide ? { side: startSide } : undefined),
-      ...(endSide ? { endSide } : undefined),
-    };
+    const normalizedRange: SelectedLineRange = { ...range };
+    if (startSide) normalizedRange.side = startSide;
+    if (endSide) normalizedRange.endSide = endSide;
+    return normalizedRange;
   };
 
   if (selectedLines.start < selectedLines.end) {

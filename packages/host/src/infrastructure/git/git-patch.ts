@@ -24,7 +24,10 @@ export type ParsedPatch = {
   renamePaths?: RenamePaths;
 };
 
-const invalidPatch = (message: string, details?: HostErrorDetails): HostValidationError =>
+const invalidPatch = <Details extends object>(
+  message: string,
+  details?: HostErrorDetails<Details>,
+): HostValidationError<Details> =>
   new HostValidationError({
     message,
     details,
@@ -141,11 +144,8 @@ export const parsePatchHunks = (patch: string): ParsedPatch => {
   }
 
   const renamePaths = parseRenamePaths(header) ?? parseRenamePathsFromDiffHeader(header);
-  return {
-    header,
-    hunks,
-    ...(renamePaths ? { renamePaths } : undefined),
-  };
+  const parsedPatch = { header, hunks };
+  return renamePaths ? { ...parsedPatch, renamePaths } : parsedPatch;
 };
 
 export const combinePatchHunk = (header: string, hunk: ParsedHunk): string =>

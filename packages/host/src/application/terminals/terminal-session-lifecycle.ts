@@ -21,14 +21,23 @@ export const terminalFailure = (
   message: string,
   terminalId?: string,
   cause?: unknown,
-): TerminalServiceError =>
-  new TerminalServiceError({
+): TerminalServiceError => {
+  const fields = {
     code,
     operation,
     message,
-    ...(terminalId ? { terminalId } : undefined),
-    ...(cause !== undefined ? { cause } : undefined),
-  });
+  };
+  if (terminalId && cause !== undefined) {
+    return new TerminalServiceError({ ...fields, terminalId, cause });
+  }
+  if (terminalId) {
+    return new TerminalServiceError({ ...fields, terminalId });
+  }
+  if (cause !== undefined) {
+    return new TerminalServiceError({ ...fields, cause });
+  }
+  return new TerminalServiceError(fields);
+};
 
 export const terminalOperationFailure = (
   cause: unknown,
@@ -65,22 +74,19 @@ export const createTerminalSessionLifecycle = ({
   };
 
   const emitLifecycle = (session: TerminalSession): void => {
-    applyStreamEvents(
-      session,
-      session.output.publish({
-        version: TERMINAL_PROTOCOL_VERSION,
-        type: "lifecycle",
-        terminalId: session.summary.terminalId,
-        lifecycle: session.summary.lifecycle,
-        ...(session.summary.exit
-          ? {
-              finalSequence: session.summary.exit.finalSequence,
-              exitCode: session.summary.exit.exitCode,
-              signal: session.summary.exit.signal,
-            }
-          : undefined),
-      }),
-    );
+    const exit = session.summary.exit;
+    const event: Parameters<TerminalSession["output"]["publish"]>[0] = {
+      version: TERMINAL_PROTOCOL_VERSION,
+      type: "lifecycle",
+      terminalId: session.summary.terminalId,
+      lifecycle: session.summary.lifecycle,
+    };
+    if (exit) {
+      event.finalSequence = exit.finalSequence;
+      event.exitCode = exit.exitCode;
+      event.signal = exit.signal;
+    }
+    applyStreamEvents(session, session.output.publish(event));
   };
 
   const handleFailure = (session: TerminalSession): void => {

@@ -3,7 +3,13 @@ import {
   LOCAL_ATTACHMENT_BYTE_LIMIT,
 } from "@openducktor/contracts";
 import { Deferred, Effect, FiberId } from "effect";
-import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
+import {
+  errorMessage,
+  HostOperationError,
+  type HostOperationErrorAggregate,
+  HostValidationError,
+  type HostValidationErrorAggregate,
+} from "../../effect/host-errors";
 import type { LocalAttachmentPort } from "../../ports/local-attachment-port";
 import {
   addIndexedStagedAttachment,
@@ -14,7 +20,9 @@ import {
   type StagedAttachmentIndex,
 } from "./local-attachment-index";
 
-export type LocalAttachmentServiceError = HostOperationError | HostValidationError;
+export type LocalAttachmentServiceError =
+  | HostOperationErrorAggregate
+  | HostValidationErrorAggregate;
 
 export type StagedLocalAttachment = {
   path: string;
@@ -45,7 +53,7 @@ type PendingStagedAttachment = {
 };
 type StagedAttachmentIndexFlight = {
   attachmentDirectory: string;
-  deferred: Deferred.Deferred<StagedAttachmentIndex, HostOperationError>;
+  deferred: Deferred.Deferred<StagedAttachmentIndex, HostOperationErrorAggregate>;
   pendingAttachments: PendingStagedAttachment[];
 };
 const makeStagedAttachmentIndexFlight = (
@@ -137,7 +145,7 @@ const isWithinDirectory = (
 };
 const completeIndexLoadFlight = (
   flight: StagedAttachmentIndexFlight,
-  loadIndex: Effect.Effect<StagedAttachmentIndex, HostOperationError>,
+  loadIndex: Effect.Effect<StagedAttachmentIndex, HostOperationErrorAggregate>,
   setLoadedIndex: (index: StagedAttachmentIndex) => void,
   clearFlight: (flight: StagedAttachmentIndexFlight) => void,
 ): Effect.Effect<void, never> =>
@@ -193,7 +201,7 @@ export const createLocalAttachmentService = (
   };
   const getStagedAttachmentIndex = (
     attachmentDirectory: string,
-  ): Effect.Effect<StagedAttachmentIndex, HostOperationError> =>
+  ): Effect.Effect<StagedAttachmentIndex, HostOperationErrorAggregate> =>
     Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
         const loadedIndex =

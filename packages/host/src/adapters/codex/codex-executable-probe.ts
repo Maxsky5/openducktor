@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Cause, Effect, Exit } from "effect";
 import {
   HostOperationError,
+  type HostOperationErrorAggregate,
   HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
@@ -79,7 +80,7 @@ const cleanupCodexProbe = ({
   processTreeTerminator: ProcessTreeTerminator;
   stopTimeoutMs: number;
   transport: CodexProbeTransport;
-}): Effect.Effect<void, HostOperationError> =>
+}): Effect.Effect<void, HostOperationErrorAggregate> =>
   Effect.gen(function* () {
     const pendingExit = yield* Effect.exit(transport.rejectPendingRequestsForShutdown());
     const processExit = yield* Effect.exit(

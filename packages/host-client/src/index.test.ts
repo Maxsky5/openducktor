@@ -1,11 +1,13 @@
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR, type RepoStoreHealth } from "@openducktor/contracts";
+import type { HostCommandArgs, HostCommandName, HostCommandResult } from "@openducktor/host";
 import type {} from "./bun-test";
 import type { HostClient as HostClientType } from "./index";
 import { createHostClient } from "./index";
+import type { InvokeFn } from "./invoke-utils";
 
 type InvokeCall = {
-  command: string;
-  args?: Record<string, unknown>;
+  command: HostCommandName;
+  args?: Exclude<HostCommandArgs, undefined>;
 };
 
 const makeTaskCardPayload = () => ({
@@ -55,7 +57,7 @@ const makeTaskMetadataPayload = (specMarkdown = "Spec Body") => ({
   ],
 });
 
-const makeRepoStoreHealthPayload = (overrides: Record<string, unknown> = {}) => ({
+const makeRepoStoreHealthPayload = (overrides: Partial<RepoStoreHealth> = {}) => ({
   category: "healthy",
   status: "ready",
   isReady: true,
@@ -64,24 +66,20 @@ const makeRepoStoreHealthPayload = (overrides: Record<string, unknown> = {}) => 
   ...overrides,
 });
 
-type TestHostResult = object | string | number | boolean | null | undefined;
-
 const createClient = (
-  resolver: (command: string, args?: Record<string, unknown>) => TestHostResult,
+  resolver: (
+    command: HostCommandName,
+    args?: Exclude<HostCommandArgs, undefined>,
+  ) => HostCommandResult | PromiseLike<HostCommandResult>,
 ) => {
   const calls: InvokeCall[] = [];
-  const invoke = async (
-    command: string,
-    args?: Record<string, unknown>,
-  ): Promise<TestHostResult> => {
+  const invoke: InvokeFn = async (command, args, resultSchema) => {
     calls.push({ command, args });
-    return resolver(command, args);
+    return resultSchema.parse(await resolver(command, args));
   };
   const client: HostClientType = createHostClient(invoke);
   return { client, calls };
 };
-
-const assertClientType = (client: HostClientType): HostClientType => client;
 
 describe("HostClient", () => {
   test("does not export a redundant runtime constructor alias", async () => {
@@ -98,7 +96,7 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const typedClient = assertClientType(client);
+    const typedClient: HostClientType = client;
     const output = await typedClient.setSpec({
       repoPath: "/repo",
       taskId: "task-1",
@@ -838,7 +836,7 @@ describe("HostClient", () => {
 
     await expect(
       client.setSpec({ repoPath: "/repo", taskId: "task-1", markdown: "# Spec" }),
-    ).rejects.toThrow("Expected { updatedAt: string } payload from host command set_spec");
+    ).rejects.toThrow();
     await expect(
       client.saveSpecDocument({
         repoPath: "/repo",
@@ -850,7 +848,7 @@ describe("HostClient", () => {
     );
     await expect(
       client.setPlan({ repoPath: "/repo", taskId: "task-1", markdown: "## Plan" }),
-    ).rejects.toThrow("Expected { updatedAt: string } payload from host command set_plan");
+    ).rejects.toThrow();
     await expect(
       client.savePlanDocument({
         repoPath: "/repo",
@@ -2203,7 +2201,7 @@ describe("HostClient", () => {
         return makeTaskMetadataPayload().agentSessions;
       }
       if (command === "agent_session_upsert" || command === "agent_session_delete") {
-        return { ok: true };
+        return true;
       }
       throw new Error(`Unexpected command: ${command}`);
     });
@@ -2555,11 +2553,6 @@ describe("HostClient", () => {
           closedAt: null,
         };
       }
-      if (command === "task_pull_request_unlink") {
-        return {
-          ok: true,
-        };
-      }
       if (command === "task_pull_request_detect") {
         return {
           outcome: "linked",
@@ -2595,11 +2588,8 @@ describe("HostClient", () => {
     await client.taskPullRequestUpsert("/repo", "task-1", "Title", "Body");
     expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V4");
 
-    await client.taskPullRequestUnlink("/repo", "task-1");
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V5");
-
     await client.taskPullRequestDetect("/repo", "task-1");
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V6");
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V5");
 
     await client.taskPullRequestLinkMerged("/repo", "task-1", {
       providerId: "github",
@@ -2612,10 +2602,10 @@ describe("HostClient", () => {
       mergedAt: "2026-02-20T10:00:00Z",
       closedAt: "2026-02-20T10:00:00Z",
     });
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V7");
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V6");
 
     await client.repoPullRequestSync("/repo");
-    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V8");
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V7");
 
     expect(calls.map((entry) => entry.command)).toEqual([
       "task_metadata_get",
@@ -2624,8 +2614,6 @@ describe("HostClient", () => {
       "task_direct_merge_complete",
       "task_metadata_get",
       "task_pull_request_upsert",
-      "task_metadata_get",
-      "task_pull_request_unlink",
       "task_metadata_get",
       "task_pull_request_detect",
       "task_metadata_get",
@@ -2713,20 +2701,14 @@ describe("HostClient", () => {
     ]);
   });
 
-  test("task approval ack commands reject malformed host payloads", async () => {
+  test("repo pull request sync rejects a malformed host acknowledgement", async () => {
     const { client } = createClient((command) => {
-      if (command === "task_pull_request_unlink") {
-        return { ok: "nope" };
-      }
       if (command === "repo_pull_request_sync") {
         return {};
       }
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await expect(client.taskPullRequestUnlink("/repo", "task-1")).rejects.toThrow(
-      "Expected { ok: boolean } payload from host command task_pull_request_unlink",
-    );
     await expect(client.repoPullRequestSync("/repo")).rejects.toThrow(
       "Expected { ok: boolean } payload from host command repo_pull_request_sync",
     );

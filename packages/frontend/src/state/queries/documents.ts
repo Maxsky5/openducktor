@@ -1,4 +1,5 @@
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
+import { z } from "zod";
 import type { TaskDocumentPayload } from "@/types/task-documents";
 import { host } from "../operations/host";
 import { resolveLatestDocumentPayload } from "./document-utils";
@@ -127,11 +128,12 @@ export const removeCachedTaskDocumentQueries = (
     exact: false,
   })) {
     const [scope, _section, cachedRepoPath, cachedTaskId] = query.queryKey;
+    const cachedTaskIdResult = z.string().safeParse(cachedTaskId);
     if (
       scope !== documentQueryKeys.all[0] ||
       cachedRepoPath !== repoPath ||
-      typeof cachedTaskId !== "string" ||
-      !taskIdSet.has(cachedTaskId)
+      !cachedTaskIdResult.success ||
+      !taskIdSet.has(cachedTaskIdResult.data)
     ) {
       continue;
     }
@@ -154,11 +156,12 @@ export const invalidateCachedTaskDocumentQueries = async (
     exact: false,
     predicate: (query) => {
       const [scope, _section, cachedRepoPath, cachedTaskId] = query.queryKey;
+      const cachedTaskIdResult = z.string().safeParse(cachedTaskId);
       return (
         scope === documentQueryKeys.all[0] &&
         cachedRepoPath === repoPath &&
-        typeof cachedTaskId === "string" &&
-        taskIdSet.has(cachedTaskId)
+        cachedTaskIdResult.success &&
+        taskIdSet.has(cachedTaskIdResult.data)
       );
     },
     refetchType: "none",

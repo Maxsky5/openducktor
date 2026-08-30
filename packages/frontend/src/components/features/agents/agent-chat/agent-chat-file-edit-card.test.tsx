@@ -156,7 +156,7 @@ afterEach(() => {
 });
 
 afterAll(() => {
-  if (typeof previousActEnvironmentValue === "undefined") {
+  if (previousActEnvironmentValue === undefined) {
     delete reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT;
   } else {
     reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT = previousActEnvironmentValue;

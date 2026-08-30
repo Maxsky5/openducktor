@@ -37,9 +37,8 @@ export function toAgentSessionSummary(session: AgentSessionState): AgentSessionS
     );
   }
 
-  return {
+  const summary: AgentSessionSummary = {
     ...toAgentSessionIdentity(session),
-    ...(session.title ? { title: session.title } : undefined),
     taskId: session.sessionAssociation.taskId,
     role: session.sessionAssociation.role,
     activityState: getAgentSessionActivityStateFromSession(session),
@@ -48,6 +47,8 @@ export function toAgentSessionSummary(session: AgentSessionState): AgentSessionS
     pendingApprovalCount: session.pendingApprovals.length,
     pendingQuestionCount: session.pendingQuestions.length,
   };
+  if (session.title) summary.title = session.title;
+  return summary;
 }
 
 const areSummariesEquivalent = (

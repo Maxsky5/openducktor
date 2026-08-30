@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { SDKControlGetContextUsageResponse } from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
-import type { HostOperationError } from "../../effect/host-errors";
+import type { HostOperationErrorAggregate } from "../../effect/host-errors";
 import {
   CLAUDE_CONTEXT_USAGE_TIMEOUT_MS,
   flushClaudeLiveContextUsageRefresh,
@@ -49,7 +49,7 @@ describe("Claude live context usage refresh", () => {
       maxTokens: number;
       totalTokens: number;
     }>();
-    const backgroundFailures: HostOperationError[] = [];
+    const backgroundFailures: HostOperationErrorAggregate[] = [];
     const publicationError = new Error("Claude live-session adapter was released.");
     const session = createClaudeSession({
       query: Object.assign(emptyClaudeQuery(), {

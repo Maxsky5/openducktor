@@ -422,6 +422,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       contextUsage: null,
     };
     const otherAdapter: AgentSessionLiveAdapterPort = {
+      supportsSessionControl: false,
       binding: { runtimeId: "runtime-2", runtimeKind: "opencode", repoPath: "/repo" },
       matches: (candidate) => candidate.externalSessionId === otherRef.externalSessionId,
       listRetainedSnapshots: (repoPath) =>

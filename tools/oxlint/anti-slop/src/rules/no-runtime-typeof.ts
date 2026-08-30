@@ -2,72 +2,66 @@ import { defineRule } from "@oxlint/plugins";
 
 import type { ESTree } from "@oxlint/plugins";
 
-type NoRuntimeTypeofOption = {
-  allowInTypeGuards?: boolean;
-};
+type RuntimeFunction = ESTree.ArrowFunctionExpression | ESTree.Function;
 
-const equalityOperators = new Set(["===", "!==", "==", "!="]);
-const runtimeTypeNames = new Set([
-  "bigint",
-  "boolean",
-  "function",
-  "number",
-  "object",
-  "string",
-  "symbol",
-  "undefined",
-]);
-
-function isRuntimeTypeName(node: ESTree.Expression): boolean {
-  return (
-    node.type === "Literal" && typeof node.value === "string" && runtimeTypeNames.has(node.value)
-  );
+function isRuntimeFunction(node: ESTree.Node): node is RuntimeFunction {
+	return (
+		node.type === "ArrowFunctionExpression" ||
+		node.type === "FunctionDeclaration" ||
+		node.type === "FunctionExpression"
+	);
 }
 
-function isNarrowingComparison(node: ESTree.UnaryExpression): boolean {
-  const parent = node.parent;
-  if (parent.type !== "BinaryExpression" || !equalityOperators.has(parent.operator)) return false;
-  if (parent.left === node) return isRuntimeTypeName(parent.right);
-  return (
-    parent.right === node &&
-    parent.left.type !== "PrivateIdentifier" &&
-    isRuntimeTypeName(parent.left)
-  );
+function isInsideTypeGuard(node: ESTree.Node): boolean {
+	let current: ESTree.Node | null = node.parent;
+	while (current !== null && current.type !== "Program") {
+		if (isRuntimeFunction(current)) {
+			return current.returnType?.typeAnnotation.type === "TSTypePredicate";
+		}
+		current = current.parent;
+	}
+	return false;
 }
 
-/** Disallow runtime type-name inspection while preserving idiomatic TypeScript narrowing. */
+/** Disallow runtime typeof checks that narrow unparsed values instead of decoding them. */
 export const noRuntimeTypeofRule = defineRule({
-  meta: {
-    type: "problem",
-    docs: {
-      description:
-        "Disallow runtime type-name inspection; direct primitive comparisons remain valid TypeScript narrowing.",
-    },
-    messages: {
-      runtimeTypeof:
-        "Do not use `typeof` as runtime type metadata. Compare it directly with a primitive type name for narrowing, or parse external input at its I/O boundary.",
-    },
-    schema: [
-      {
-        type: "object",
-        properties: {
-          allowInTypeGuards: { type: "boolean" },
-        },
-        additionalProperties: false,
-      },
-    ],
-    defaultOptions: [{ allowInTypeGuards: false }],
-  },
-  createOnce(context) {
-    return {
-      UnaryExpression(node) {
-        // SAFETY: The rule metadata schema validates this exact option before rule execution.
-        const option = context.options?.[0] as NoRuntimeTypeofOption | undefined;
-        const allowInTypeGuards = option?.allowInTypeGuards === true;
-        if (node.operator === "typeof" && (!allowInTypeGuards || !isNarrowingComparison(node))) {
-          context.report({ node, messageId: "runtimeTypeof" });
-        }
-      },
-    };
-  },
+	meta: {
+		type: "problem",
+		docs: {
+			description:
+				"Disallow runtime typeof checks; external values must be decoded into meaningful types at their I/O boundary.",
+		},
+		messages: {
+			runtimeTypeof:
+				"A `typeof` check narrows a representation without establishing its contract. Parse input at its I/O boundary, then branch on the domain value.",
+		},
+		schema: [
+			{
+				type: "object",
+				properties: {
+					allowInTypeGuards: { type: "boolean" },
+				},
+				additionalProperties: false,
+			},
+		],
+		defaultOptions: [{ allowInTypeGuards: false }],
+	},
+	createOnce(context) {
+		return {
+			UnaryExpression(node) {
+				const option = context.options?.[0];
+				const allowInTypeGuards =
+					typeof option === "object" &&
+					option !== null &&
+					!Array.isArray(option) &&
+					option.allowInTypeGuards === true;
+				if (
+					node.operator === "typeof" &&
+					(!allowInTypeGuards || !isInsideTypeGuard(node))
+				) {
+					context.report({ node, messageId: "runtimeTypeof" });
+				}
+			},
+		};
+	},
 });

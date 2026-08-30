@@ -146,7 +146,7 @@ export const createTaskAssetReadService = (input: {
     assetIds: string[],
   ): TaskAssetError => {
     const missingWorkspace = cause instanceof HostValidationError && cause.field === "workspaceId";
-    return new TaskAssetError({
+    const fields = {
       operation: "serve",
       code: missingWorkspace ? "validation" : "filesystem",
       taskId: context.taskId,
@@ -157,8 +157,8 @@ export const createTaskAssetReadService = (input: {
       message: missingWorkspace
         ? "Task assets were not found."
         : "Task asset workspace could not be read.",
-      ...(missingWorkspace ? undefined : { cause }),
-    });
+    } satisfies Omit<ConstructorParameters<typeof TaskAssetError>[0], "cause">;
+    return missingWorkspace ? new TaskAssetError(fields) : new TaskAssetError({ ...fields, cause });
   };
 
   const getRegisteredAsset = (repoPath: string, context: TaskAssetRenderContext) =>

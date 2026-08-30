@@ -1,11 +1,12 @@
-import { isUnknownRecord, type AgentModelSelection } from "@openducktor/core";
+import type { AgentModelSelection } from "@openducktor/core";
 import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
+import { parseClaudeHistoryAssistantEntry } from "./claude-agent-sdk-ingress-schemas";
 import { isClaudeSyntheticAssistantMessage } from "./claude-agent-sdk-local-commands";
 import { readStringProp } from "./claude-agent-sdk-utils";
 
 export const readHistoryTimestamp = (entry: ClaudeHistoryMessage, now: () => string): string => {
-  const timestamp = entry.timestamp;
-  if (typeof timestamp !== "string") {
+  const timestamp = readStringProp(entry, "timestamp");
+  if (timestamp === undefined) {
     return now();
   }
   return Number.isNaN(Date.parse(timestamp)) ? now() : timestamp;
@@ -17,10 +18,10 @@ export const readHistorySessionId = (entry: ClaudeHistoryMessage): string =>
 export const readHistoryAssistantModel = (
   entry: ClaudeHistoryMessage,
 ): AgentModelSelection | undefined => {
-  if (isClaudeSyntheticAssistantMessage(entry)) {
+  if (entry.type !== "assistant" || isClaudeSyntheticAssistantMessage(entry)) {
     return undefined;
   }
-  const model = isUnknownRecord(entry.message) ? readStringProp(entry.message, "model") : undefined;
+  const model = readStringProp(parseClaudeHistoryAssistantEntry(entry).message, "model");
   return model
     ? {
         providerId: "claude",
@@ -45,10 +46,10 @@ export const isNestedHistoryEntry = (entry: ClaudeHistoryMessage): boolean => {
       return false;
     }
   }
-  const subagentType = entry.subagent_type;
+  const subagentType = readStringProp(entry, "subagent_type");
   return (
     (entry.type === "assistant" && Boolean(entry.parent_tool_use_id)) ||
     entry.isSidechain === true ||
-    (typeof subagentType === "string" && subagentType.trim().length > 0)
+    subagentType !== undefined
   );
 };

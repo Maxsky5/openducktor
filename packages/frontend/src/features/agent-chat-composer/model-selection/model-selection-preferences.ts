@@ -208,10 +208,9 @@ const coerceLiveSessionRepairSelection = (
     return null;
   }
 
-  return {
-    ...selection,
-    ...(variant ? { variant } : undefined),
-  };
+  const repairedSelection: AgentModelSelection = { ...selection };
+  if (variant) repairedSelection.variant = variant;
+  return repairedSelection;
 };
 
 const resolveLoadedSessionSelection = ({

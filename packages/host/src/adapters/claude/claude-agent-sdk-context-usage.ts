@@ -184,14 +184,7 @@ export const flushClaudeLiveContextUsageRefresh = async (session: ClaudeSession)
 };
 
 const readStreamEventType = (message: ClaudeSdkMessageProjection): string | undefined =>
-  message.type === "stream_event" &&
-  "event" in message &&
-  message.event &&
-  typeof message.event === "object" &&
-  "type" in message.event &&
-  typeof message.event.type === "string"
-    ? message.event.type
-    : undefined;
+  message.type === "stream_event" ? message.event.type : undefined;
 
 export const shouldRefreshClaudeContextUsageForMessage = (
   message: ClaudeSdkMessageProjection,

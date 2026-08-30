@@ -47,6 +47,7 @@ const fakeAdapter = (input: {
 }): AgentSessionLiveAdapterPort => {
   const runtimeKind = input.runtimeKind ?? "codex";
   return {
+    supportsSessionControl: false,
     binding: { runtimeId: input.runtimeId, runtimeKind, repoPath: "/repo" },
     matches: (ref) =>
       input
@@ -1028,6 +1029,7 @@ describe("createAgentSessionLiveStateService", () => {
         runtimeKind: "opencode",
         snapshots: () => [],
       }),
+      supportsSessionControl: true,
       startSession: () => Effect.dieMessage("unexpected start"),
       resumeSession: (input) =>
         Effect.sync(() => {
@@ -1071,6 +1073,7 @@ describe("createAgentSessionLiveStateService", () => {
         runtimeId: "runtime-1",
         snapshots: () => [],
       }),
+      supportsSessionControl: true,
       startSession: () => Effect.dieMessage("unexpected start"),
       resumeSession: () => Effect.dieMessage("unexpected resume"),
       forkSession: () => Effect.dieMessage("unexpected fork"),

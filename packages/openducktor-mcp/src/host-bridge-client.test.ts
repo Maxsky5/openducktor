@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { ODT_TOOL_SCHEMAS } from "@openducktor/contracts";
+import { jsonValueSchema, type JsonValue, ODT_TOOL_SCHEMAS } from "@openducktor/contracts";
+import { z } from "zod";
 import { OdtHostBridgeClient } from "./host-bridge-client";
 import { OdtToolError } from "./tool-results";
 
-const jsonResponse = (payload: unknown, init: ResponseInit = {}): Response =>
+const jsonResponse = (payload: JsonValue, init: ResponseInit = {}): Response =>
   new Response(JSON.stringify(payload), {
     headers: { "Content-Type": "application/json" },
     status: 200,
@@ -44,11 +45,12 @@ describe("OdtHostBridgeClient", () => {
       body: string | undefined;
     }> = [];
     const fetchImpl: typeof fetch = async (input, init) => {
+      const body = z.string().safeParse(init?.body);
       requests.push({
         url: String(input),
         method: init?.method,
         headers: init?.headers,
-        body: typeof init?.body === "string" ? init.body : undefined,
+        body: body.success ? body.data : undefined,
       });
       return jsonResponse({
         bridgeVersion: 1,
@@ -145,10 +147,8 @@ describe("OdtHostBridgeClient", () => {
       }
       expect(error.code).toBe("ODT_HOST_BRIDGE_ERROR");
       expect(error.message).toContain("host odt_get_workspaces failed: fetch failed");
-      expect(error.details).toMatchObject({
-        action: "host odt_get_workspaces",
-        causeName: "TypeError",
-      });
+      expect(error.details).toEqual({ action: "host odt_get_workspaces" });
+      expect(error.cause).toBeInstanceOf(TypeError);
     }
   });
 
@@ -310,20 +310,18 @@ describe("OdtHostBridgeClient", () => {
       }
       expect(error.code).toBe("ODT_HOST_RESPONSE_INVALID");
       expect(error.message).toContain("Invalid JSON response from host odt_get_workspaces");
-      expect(error.details).toMatchObject({
-        action: "host odt_get_workspaces",
-        causeName: "SyntaxError",
-      });
+      expect(error.details).toEqual({ action: "host odt_get_workspaces" });
+      expect(error.cause).toBeInstanceOf(SyntaxError);
     }
   });
 
   test("getWorkspaces forwards a workspace-free request and validates the response", async () => {
-    const requests: Array<{ url: string; body: unknown }> = [];
+    const requests: Array<{ url: string; body: JsonValue }> = [];
     const fetchImpl: typeof fetch = async (input, init) => {
       const url = String(input);
       requests.push({
         url,
-        body: JSON.parse(String(init?.body ?? "{}")),
+        body: jsonValueSchema.parse(JSON.parse(String(init?.body ?? "{}"))),
       });
       return jsonResponse({
         workspaces: [
@@ -367,12 +365,12 @@ describe("OdtHostBridgeClient", () => {
   });
 
   test("call forwards workspace-scoped payloads and validates the response", async () => {
-    const requests: Array<{ url: string; body: unknown }> = [];
+    const requests: Array<{ url: string; body: JsonValue }> = [];
     const fetchImpl: typeof fetch = async (input, init) => {
       const url = String(input);
       requests.push({
         url,
-        body: JSON.parse(String(init?.body ?? "{}")),
+        body: jsonValueSchema.parse(JSON.parse(String(init?.body ?? "{}"))),
       });
       return jsonResponse(summaryPayload);
     };
@@ -394,12 +392,12 @@ describe("OdtHostBridgeClient", () => {
 
   test("call validates the private task asset bridge payload before MCP formatting", async () => {
     const assetId = "28cb7c3d-5ec4-47e8-bffe-090223eae3b7";
-    const requests: Array<{ url: string; body: unknown }> = [];
+    const requests: Array<{ url: string; body: JsonValue }> = [];
     const fetchImpl: typeof fetch = async (input, init) => {
       const url = String(input);
       requests.push({
         url,
-        body: JSON.parse(String(init?.body ?? "{}")),
+        body: jsonValueSchema.parse(JSON.parse(String(init?.body ?? "{}"))),
       });
       return jsonResponse({
         assets: [
@@ -442,10 +440,10 @@ describe("OdtHostBridgeClient", () => {
   });
 
   test("odt_create_task and odt_search_tasks keep the flat public tool payload shape", async () => {
-    const requests: Array<{ url: string; body: unknown }> = [];
+    const requests: Array<{ url: string; body: JsonValue }> = [];
     const fetchImpl: typeof fetch = async (input, init) => {
       const url = String(input);
-      const body = JSON.parse(String(init?.body ?? "{}"));
+      const body = jsonValueSchema.parse(JSON.parse(String(init?.body ?? "{}")));
       requests.push({ url, body });
 
       if (url.endsWith("/invoke/odt_create_task")) {

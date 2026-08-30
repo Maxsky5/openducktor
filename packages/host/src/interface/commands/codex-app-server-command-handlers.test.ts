@@ -1,9 +1,8 @@
 import type { CodexAppServerRequestInput } from "../../ports/codex-app-server-port";
 import { Effect } from "effect";
 import type { CodexAppServerService } from "../../application/runtimes/codex-app-server-service";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import {
-  jsonValueSchema,
   parseCodexAppServerRequestResult,
   type CodexAppServerClientRequestMap,
   type CodexAppServerRequestMethod,
@@ -77,7 +76,7 @@ const threadStartResult = (threadId = "thread-1") =>
 
 describe("createCodexAppServerCommandHandlers", () => {
   test("forwards thread compaction requests to the Codex service", async () => {
-    const requests: unknown[] = [];
+    const requests: CodexAppServerRequestInput[] = [];
     const service: CodexAppServerService = {
       request(input) {
         requests.push(input);
@@ -214,7 +213,7 @@ describe("createCodexAppServerCommandHandlers", () => {
       operation: "openducktor.logs.append",
       message: "log append failed",
     });
-    const reportedFailures: HostOperationError[] = [];
+    const reportedFailures: HostOperationErrorAggregate[] = [];
     const service: CodexAppServerService = {
       request: () => Effect.succeed(committedResult),
       listLoadedThreads: () => Effect.succeed({ data: [], nextCursor: null }),
@@ -240,7 +239,7 @@ describe("createCodexAppServerCommandHandlers", () => {
         method: "thread/start",
         params: { cwd: "/repo" },
       }),
-    ).resolves.toEqual(jsonValueSchema.parse(committedResult));
+    ).resolves.toEqual(committedResult);
     expect(reportedFailures).toEqual([
       expect.objectContaining({
         _tag: "HostOperationError",
@@ -251,16 +250,22 @@ describe("createCodexAppServerCommandHandlers", () => {
   });
 
   test("routes Codex app-server commands to the service", async () => {
-    const calls: Array<{
-      method: keyof CodexAppServerService;
-      input: CodexAppServerRequestInput | unknown;
-    }> = [];
+    type ServiceCall =
+      | { method: "request"; input: Parameters<CodexAppServerService["request"]>[0] }
+      | {
+          method: "listLoadedThreads";
+          input: Parameters<CodexAppServerService["listLoadedThreads"]>[0];
+        }
+      | {
+          method: "listThreads";
+          input: Parameters<CodexAppServerService["listThreads"]>[0];
+        };
+    const calls: ServiceCall[] = [];
     const service: CodexAppServerService = {
       request(input) {
         calls.push({ method: "request", input });
         if (input.method === "thread/name/set") {
-          const result: Record<string, never> = {};
-          return Effect.succeed(result);
+          return Effect.succeed(codexResult("thread/name/set", {}));
         }
         return Effect.succeed({ data: [], nextCursor: null });
       },
@@ -353,12 +358,12 @@ describe("createCodexAppServerCommandHandlers", () => {
   });
 
   test("routes thread turn pages through the validated history operation", async () => {
-    const calls: Array<{ method: string; input: unknown }> = [];
+    const calls: Array<{
+      method: "listThreadTurns";
+      input: Parameters<CodexAppServerService["listThreadTurns"]>[0];
+    }> = [];
     const service: CodexAppServerService = {
-      request(input) {
-        calls.push({ method: "request", input });
-        return Effect.succeed({ data: [], nextCursor: null });
-      },
+      request: () => Effect.succeed({ data: [], nextCursor: null }),
       listLoadedThreads: () => Effect.succeed({ data: [], nextCursor: null }),
       listThreads: () => Effect.succeed({ data: [], nextCursor: null, backwardsCursor: null }),
       listThreadTurns(input) {
@@ -423,24 +428,16 @@ describe("createCodexAppServerCommandHandlers", () => {
   });
 
   test("rejects malformed command inputs before calling the service", async () => {
-    const calls: unknown[] = [];
-    const nonJsonParams = { omitted: undefined } satisfies object;
-    const unexpectedCall = (input: CodexAppServerRequestInput | unknown) =>
-      Effect.sync(() => {
-        calls.push(input);
-      }).pipe(
-        Effect.flatMap(() =>
-          Effect.fail(
-            new HostOperationError({
-              operation: "test.effect",
-              message: "unexpected call",
-            }),
-          ),
-        ),
-      );
+    let requestCalled = false;
     const service: CodexAppServerService = {
-      request(input) {
-        return unexpectedCall(input);
+      request() {
+        requestCalled = true;
+        return Effect.fail(
+          new HostOperationError({
+            operation: "test.effect",
+            message: "unexpected call",
+          }),
+        );
       },
       listLoadedThreads() {
         return Effect.fail(
@@ -477,7 +474,7 @@ describe("createCodexAppServerCommandHandlers", () => {
       router.invoke("codex_app_server_request", {
         runtimeId: "runtime-1",
         method: "model/list",
-        params: nonJsonParams,
+        params: { omitted: undefined },
       }),
     ).rejects.toThrow("params must be JSON-serializable.");
     for (const params of [null, true, 1, "params", []]) {
@@ -489,6 +486,6 @@ describe("createCodexAppServerCommandHandlers", () => {
         }),
       ).rejects.toThrow("Invalid Codex app-server request params for method model/list");
     }
-    expect(calls).toEqual([]);
+    expect(requestCalled).toBe(false);
   });
 });

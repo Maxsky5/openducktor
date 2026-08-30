@@ -17,23 +17,30 @@ import {
 const codexMcpToolApprovalRequest = (
   persist: CodexAppServerJsonValue | undefined,
   includeToolTitle = true,
-) => ({
-  id: 7,
-  method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST,
-  params: {
-    threadId: "thread-1",
-    turnId: "turn-1",
-    serverName: "semble",
-    mode: "form" as const,
-    message: 'Allow the semble MCP server to run tool "search"?',
-    requestedSchema: { type: "object", properties: {} },
-    _meta: {
-      codex_approval_kind: "mcp_tool_call",
-      ...(includeToolTitle ? { tool_title: "search" } : undefined),
-      persist,
+) => {
+  const meta = {
+    codex_approval_kind: "mcp_tool_call" as const,
+    persist,
+  };
+
+  if (includeToolTitle) {
+    meta.tool_title = "search";
+  }
+
+  return {
+    id: 7,
+    method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST,
+    params: {
+      threadId: "thread-1",
+      turnId: "turn-1",
+      serverName: "semble",
+      mode: "form" as const,
+      message: 'Allow the semble MCP server to run tool "search"?',
+      requestedSchema: { type: "object", properties: {} },
+      _meta: meta,
     },
-  },
-});
+  };
+};
 
 describe("Codex App Server request parsing", () => {
   test("preserves string request ids from the Codex protocol", () => {

@@ -31,16 +31,17 @@ export default function MarkdownRendererRich({
   });
   const content = markdown.trim();
   if (!content) return null;
+  const componentInput: Parameters<typeof createTaskDescriptionComponents>[0] = {
+    components: premiumComponents,
+  };
+  if (resolveTaskAssetSrc) componentInput.resolveTaskAssetSrc = resolveTaskAssetSrc;
+  if (taskAssetContext) componentInput.taskAssetContext = taskAssetContext;
   return (
     <Markdown
       remarkPlugins={[remarkGfm]}
       skipHtml
       urlTransform={TASK_DESCRIPTION_URL_TRANSFORM}
-      components={createTaskDescriptionComponents({
-        components: premiumComponents,
-        ...(resolveTaskAssetSrc ? { resolveTaskAssetSrc } : undefined),
-        ...(taskAssetContext ? { taskAssetContext } : undefined),
-      })}
+      components={createTaskDescriptionComponents(componentInput)}
     >
       {content}
     </Markdown>

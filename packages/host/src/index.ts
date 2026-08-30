@@ -94,9 +94,11 @@ export {
 } from "./interface/commands/host-command-registry";
 export type {
   EffectHostCommandRouter,
+  HostCommandArgs,
   HostCommandResult,
   HostCommandRouter,
 } from "./interface/router/host-command-router";
+export type { HostCommandResultMap } from "./interface/router/host-command-contract-map";
 export { hostInvokeFailureFromError } from "./interface/router/host-invoke-failure";
 export type {
   AgentSessionLiveAdapterBinding,

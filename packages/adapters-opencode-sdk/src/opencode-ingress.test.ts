@@ -14,7 +14,6 @@ import {
   createOpencodeMessageInfoFixture,
   createOpencodePartFixture,
 } from "./opencode-protocol-test-fixtures";
-import { mapPartToAgentStreamPart } from "./stream-part-mapper";
 
 describe("OpenCode ingress schemas", () => {
   test("reduces explicitly ignored global events to their routing decision", () => {
@@ -49,8 +48,8 @@ describe("OpenCode ingress schemas", () => {
     ).toThrow("has no normalization decision");
   });
 
-  test("preserves producer-declared unknown provider and agent options", () => {
-    const loadedAt = new Date();
+  test("preserves producer-declared JSON provider and agent options", () => {
+    const loadedAt = { iso: "2026-08-30T12:00:00.000Z" };
     const providerCatalog = opencodeProviderCatalogPayloadSchema.parse({
       providers: [
         {
@@ -86,12 +85,12 @@ describe("OpenCode ingress schemas", () => {
       ],
       default: {},
     });
-    expect(providerCatalog.providers[0]?.models["gpt-5"]?.options.loadedAt).toBe(loadedAt);
+    expect(providerCatalog.providers[0]?.models["gpt-5"]?.options.loadedAt).toEqual(loadedAt);
 
     const agents = opencodeAgentListPayloadSchema.parse([
       { name: "build", mode: "primary", options: { loadedAt }, permission: [] },
     ]);
-    expect(agents[0]?.options.loadedAt).toBe(loadedAt);
+    expect(agents[0]?.options.loadedAt).toEqual(loadedAt);
   });
 
   test("treats null OpenCode agent optionals as absent", () => {
@@ -124,8 +123,8 @@ describe("OpenCode ingress schemas", () => {
     ]);
   });
 
-  test("preserves producer-declared unknown history and tool-part data", () => {
-    const receivedAt = new Date();
+  test("preserves producer-declared JSON history and tool-part data", () => {
+    const receivedAt = { iso: "2026-08-30T12:00:00.000Z" };
     const part = createOpencodePartFixture({
       id: "tool-1",
       sessionID: "session-1",
@@ -210,7 +209,6 @@ describe("OpenCode ingress schemas", () => {
 
     for (const part of malformedParts) {
       expect(opencodePartPayloadSchema.safeParse(part).success).toBe(false);
-      expect(() => mapPartToAgentStreamPart(part)).toThrow();
     }
   });
 

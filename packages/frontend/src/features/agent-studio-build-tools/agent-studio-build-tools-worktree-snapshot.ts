@@ -10,6 +10,11 @@ export type BuildToolsOpenInTarget = {
   disabledReason: string | null;
 };
 
+type QueriedBuildWorktreePathResult = {
+  path: string | null;
+  error: string | null;
+};
+
 export const resolveBuildToolsSelectedTaskId = ({
   viewTaskId,
   viewSelectedTaskId,
@@ -63,25 +68,22 @@ export const resolveQueriedBuildWorktreePath = ({
   repoPath: string;
   taskId: string;
   queriedWorkingDirectory: string | null;
-}) => {
+}): QueriedBuildWorktreePathResult => {
   if (!queriedWorkingDirectory || queriedWorkingDirectory.trim().length === 0) {
     return {
       path: null,
       error: buildWorktreeResolutionError(taskId, "Task worktree is not available."),
-    } satisfies { path: string | null; error: string | null };
+    };
   }
 
   if (!isNonRepoWorktreePath(repoPath, queriedWorkingDirectory)) {
     return {
       path: null,
       error: buildWorktreeResolutionError(taskId, "Task worktree resolved to the repository root."),
-    } satisfies { path: string | null; error: string | null };
+    };
   }
 
-  return { path: queriedWorkingDirectory, error: null } satisfies {
-    path: string | null;
-    error: string | null;
-  };
+  return { path: queriedWorkingDirectory, error: null };
 };
 
 export const buildQueryWorktreeError = (taskId: string, cause: unknown): string =>

@@ -1,9 +1,13 @@
 {
-  "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
-    "allowImportingTsExtensions": true,
+    "target": "ES2024",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
     "noEmit": true,
-    "rootDir": "src"
+    "skipLibCheck": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true
   },
   "include": ["src/**/*.ts"]
 }

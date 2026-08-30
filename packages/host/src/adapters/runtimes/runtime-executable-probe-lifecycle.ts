@@ -1,5 +1,5 @@
 import { Cause, Effect, Exit } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 
 export const useRuntimeProbeResource = <Resource, ProbeError>({
   acquire,
@@ -7,11 +7,11 @@ export const useRuntimeProbeResource = <Resource, ProbeError>({
   release,
   cleanupOperation,
 }: {
-  acquire: Effect.Effect<Resource, HostOperationError>;
+  acquire: Effect.Effect<Resource, HostOperationErrorAggregate>;
   probe: (resource: Resource) => Effect.Effect<void, ProbeError>;
-  release: (resource: Resource) => Effect.Effect<void, HostOperationError>;
+  release: (resource: Resource) => Effect.Effect<void, HostOperationErrorAggregate>;
   cleanupOperation: string;
-}): Effect.Effect<void, HostOperationError | ProbeError> =>
+}): Effect.Effect<void, HostOperationErrorAggregate | ProbeError> =>
   Effect.uninterruptibleMask((restore) =>
     Effect.gen(function* () {
       const resource = yield* acquire;

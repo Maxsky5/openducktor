@@ -3,8 +3,9 @@ import { randomUUID } from "node:crypto";
 import { link, lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { jsonValueSchema, taskAssetIdSchema } from "@openducktor/contracts";
+import { type JsonValue, jsonValueSchema, taskAssetIdSchema } from "@openducktor/contracts";
 import { z } from "zod";
+import { HostValidationError } from "../../effect/host-errors";
 import { processIsAlive } from "../../infrastructure/process/process-tree";
 
 const taskAssetFileOwnerSchema = z
@@ -17,6 +18,14 @@ const taskAssetFileOwnerSchema = z
   .strict();
 
 export type TaskAssetFileOwner = z.infer<typeof taskAssetFileOwnerSchema>;
+type TaskAssetFileOwnerInput =
+  | JsonValue
+  | {
+      version: number;
+      instanceId: string | undefined;
+      processId: number;
+      startedAtMs: number;
+    };
 
 export type TaskAssetFileOwnershipDependencies = {
   owner: TaskAssetFileOwner;
@@ -53,8 +62,12 @@ const readProcessStartedAtMs = async (processId: number): Promise<number> => {
   return startedAtMs;
 };
 
-const isMissing = (cause: unknown): boolean =>
-  typeof cause === "object" && cause !== null && "code" in cause && cause.code === "ENOENT";
+const nodeErrorSchema = z.object({ code: z.string() }).passthrough();
+const hasErrorCode = (cause: unknown, code: string): boolean => {
+  const parsed = nodeErrorSchema.safeParse(cause);
+  return parsed.success && parsed.data.code === code;
+};
+const isMissing = (cause: unknown): boolean => hasErrorCode(cause, "ENOENT");
 
 const existingStat = async (target: string) => {
   try {
@@ -67,10 +80,14 @@ const existingStat = async (target: string) => {
   }
 };
 
-const validateOwner = (value: unknown): TaskAssetFileOwner => {
+const validateOwner = (value: TaskAssetFileOwnerInput): TaskAssetFileOwner => {
   const result = taskAssetFileOwnerSchema.safeParse(value);
   if (!result.success) {
-    throw new Error("Task asset owner record is invalid.", { cause: result.error });
+    throw new HostValidationError({
+      field: "taskAssetOwner",
+      message: "Task asset owner record is invalid.",
+      cause: result.error,
+    });
   }
   return result.data;
 };
@@ -146,12 +163,7 @@ export const createTaskAssetFileOwnership = (
       });
       await link(publication, marker);
     } catch (cause) {
-      if (
-        typeof cause !== "object" ||
-        cause === null ||
-        !("code" in cause) ||
-        cause.code !== "EEXIST"
-      ) {
+      if (!hasErrorCode(cause, "EEXIST")) {
         throw cause;
       }
       const existing = validateOwner(

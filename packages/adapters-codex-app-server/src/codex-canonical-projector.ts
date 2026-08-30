@@ -23,7 +23,7 @@ const projectCodexCanonicalEvent = (event: CodexCanonicalEvent): AgentEvent => {
   }
 
   if (event.kind === "user_message") {
-    return {
+    const userMessage: AgentEvent = {
       type: "user_message",
       externalSessionId: event.threadId,
       timestamp,
@@ -31,34 +31,45 @@ const projectCodexCanonicalEvent = (event: CodexCanonicalEvent): AgentEvent => {
       message: event.message,
       parts: event.displayParts,
       state: event.state,
-      ...(event.model ? { model: event.model } : undefined),
     };
+    if (event.model) {
+      userMessage.model = event.model;
+    }
+    return userMessage;
   }
 
   if (event.kind === "assistant_message") {
-    return {
+    const assistantMessage: AgentEvent = {
       type: "assistant_message",
       externalSessionId: event.threadId,
       timestamp,
       messageId: event.messageId,
       message: event.message,
-      ...(typeof event.totalTokens === "number" ? { totalTokens: event.totalTokens } : undefined),
-      ...(typeof event.contextWindow === "number"
-        ? { contextWindow: event.contextWindow }
-        : undefined),
-      ...(event.model ? { model: event.model } : undefined),
     };
+    if (event.totalTokens !== undefined) {
+      assistantMessage.totalTokens = event.totalTokens;
+    }
+    if (event.contextWindow !== undefined) {
+      assistantMessage.contextWindow = event.contextWindow;
+    }
+    if (event.model) {
+      assistantMessage.model = event.model;
+    }
+    return assistantMessage;
   }
 
   if (event.kind === "assistant_delta") {
-    return {
+    const deltaEvent: AgentEvent = {
       type: "assistant_delta",
       externalSessionId: event.threadId,
       timestamp,
       channel: event.channel,
-      ...(event.messageId ? { messageId: event.messageId } : undefined),
       delta: event.delta,
     };
+    if (event.messageId) {
+      deltaEvent.messageId = event.messageId;
+    }
+    return deltaEvent;
   }
 
   if (event.kind === "session_error") {
@@ -79,23 +90,29 @@ const projectCodexCanonicalEvent = (event: CodexCanonicalEvent): AgentEvent => {
   }
 
   if (event.kind === "session_compaction_started") {
-    return {
+    const compactionStartedEvent: AgentEvent = {
       type: "session_compaction_started",
       externalSessionId: event.threadId,
       timestamp,
-      ...(event.messageId ? { messageId: event.messageId } : undefined),
       message: event.message,
     };
+    if (event.messageId) {
+      compactionStartedEvent.messageId = event.messageId;
+    }
+    return compactionStartedEvent;
   }
 
   if (event.kind === "session_compacted") {
-    return {
+    const compactedEvent: AgentEvent = {
       type: "session_compacted",
       externalSessionId: event.threadId,
       timestamp,
-      ...(event.messageId ? { messageId: event.messageId } : undefined),
       message: event.message,
     };
+    if (event.messageId) {
+      compactedEvent.messageId = event.messageId;
+    }
+    return compactedEvent;
   }
 
   return {

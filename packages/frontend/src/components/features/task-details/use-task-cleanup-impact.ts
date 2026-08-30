@@ -173,13 +173,14 @@ export function useTaskCleanupImpact(
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const queryRepoPath = workspaceRepoPath ?? "";
   const shouldLoadImpact = enabled && Boolean(workspaceRepoPath);
-  const sessionLists = useAgentSessionLists({
+  const sessionListInput: Parameters<typeof useAgentSessionLists>[0] = {
     repoPath: workspaceRepoPath,
     taskIds,
     enabled: shouldLoadImpact,
     queryClient,
-    ...(readPorts.agentSessions ? { readPort: readPorts.agentSessions } : undefined),
-  });
+  };
+  if (readPorts.agentSessions) sessionListInput.readPort = readPorts.agentSessions;
+  const sessionLists = useAgentSessionLists(sessionListInput);
   // Observe canonical per-task state without starting reads here; useAgentSessionLists owns session loading so cold gaps stay batched.
   const taskSessionObservers = useQueries(
     {
@@ -192,27 +193,27 @@ export function useTaskCleanupImpact(
   );
   const taskWorktreeQueries = useQueries(
     {
-      queries: taskIds.map((taskId) => ({
-        ...taskWorktreeQueryOptions({
+      queries: taskIds.map((taskId) => {
+        const input: Parameters<typeof taskWorktreeQueryOptions>[0] = {
           repoPath: queryRepoPath,
           taskId,
-          ...(readPorts.taskWorktrees ? { hostClient: readPorts.taskWorktrees } : undefined),
-        }),
-        enabled: shouldLoadImpact,
-      })),
+        };
+        if (readPorts.taskWorktrees) input.hostClient = readPorts.taskWorktrees;
+        return { ...taskWorktreeQueryOptions(input), enabled: shouldLoadImpact };
+      }),
     },
     queryClient,
   );
   const terminalQueries = useQueries(
     {
-      queries: taskIds.map((taskId) => ({
-        ...terminalListQueryOptions({
+      queries: taskIds.map((taskId) => {
+        const input: Parameters<typeof terminalListQueryOptions>[0] = {
           repoPath: queryRepoPath,
           taskId,
-          ...(readPorts.terminals ? { hostClient: readPorts.terminals } : undefined),
-        }),
-        enabled: shouldLoadImpact,
-      })),
+        };
+        if (readPorts.terminals) input.hostClient = readPorts.terminals;
+        return { ...terminalListQueryOptions(input), enabled: shouldLoadImpact };
+      }),
     },
     queryClient,
   );

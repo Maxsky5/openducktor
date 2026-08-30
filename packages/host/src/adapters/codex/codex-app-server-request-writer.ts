@@ -3,7 +3,12 @@ import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { CodexAppServerClientRequest } from "@openducktor/contracts";
 
-const createWriteError = (runtimeId: string, cause: unknown): HostOperationError =>
+type CodexAppServerWriteErrorDetails = { runtimeId: string };
+
+const createWriteError = (
+  runtimeId: string,
+  cause: unknown,
+): HostOperationError<CodexAppServerWriteErrorDetails> =>
   new HostOperationError({
     operation: "codexAppServerTransport.sendMessage",
     message: `Failed writing Codex app-server message for runtime ${runtimeId}`,
@@ -28,14 +33,17 @@ export const writeCodexAppServerRequestLine = ({
   payload,
   runtimeId,
   markWriteStarted,
-}: WriteCodexAppServerRequestInput): Effect.Effect<void, HostOperationError> =>
+}: WriteCodexAppServerRequestInput): Effect.Effect<
+  void,
+  HostOperationError<CodexAppServerWriteErrorDetails>
+> =>
   Effect.gen(function* () {
     const line = yield* Effect.try({
       try: () => `${JSON.stringify(payload)}\n`,
       catch: (cause) => createWriteError(runtimeId, cause),
     });
 
-    yield* Effect.async<void, HostOperationError>((resume) => {
+    yield* Effect.async<void, HostOperationError<CodexAppServerWriteErrorDetails>>((resume) => {
       let active = true;
       let writeReturned = false;
       let writeFailedSynchronously = false;

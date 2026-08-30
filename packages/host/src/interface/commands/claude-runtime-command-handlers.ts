@@ -9,12 +9,14 @@ import {
   requireClaudeWorkspaceWorkingDirectory,
   requireLiveClaudeWorkspaceRuntime,
 } from "../../application/runtimes/claude-workspace-runtime";
-import { type HostError, HostValidationError } from "../../effect/host-errors";
+import {
+  type HostError,
+  HostValidationError,
+  type HostValidationErrorAggregate,
+} from "../../effect/host-errors";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
-import type { HostCommandHandler, HostCommandResult } from "../router/host-command-router";
-import { defineHostCommandHandlers } from "../router/host-command-router";
-import { requireRecord } from "./command-inputs";
-import { jsonValueSchema } from "@openducktor/contracts";
+import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
+import { commandInputRecordSchema, type HostCommandArgs, requireRecord } from "./command-inputs";
 
 const requireClaudeRuntimeWorkingDirectory = (
   runtimeRegistry: RuntimeRegistryPort,
@@ -25,7 +27,10 @@ const requireClaudeRuntimeWorkingDirectory = (
     Effect.flatMap(() => requireClaudeWorkspaceWorkingDirectory(dependencies, input)),
   );
 
-const toClaudeCommandValidationError = (command: string, cause: unknown): HostValidationError => {
+const toClaudeCommandValidationError = (
+  command: string,
+  cause: unknown,
+): HostValidationErrorAggregate => {
   if (cause instanceof HostValidationError) {
     return cause;
   }
@@ -50,24 +55,32 @@ type ClaudeRuntimeCommandService = Pick<
   | "searchFiles"
 >;
 
-const createClaudeCommandHandler = <Input, Response extends HostCommandResult>(
+const createClaudeCommandHandler = <Input, Response>(
   service: ClaudeRuntimeCommandService,
   contract: ClaudeRuntimeCommandContract<Input, Response>,
-  invoke: (service: ClaudeRuntimeCommandService, input: Input) => Effect.Effect<unknown, HostError>,
-): HostCommandHandler => {
+  invoke: (
+    service: ClaudeRuntimeCommandService,
+    input: Input,
+  ) => Effect.Effect<Response, HostError>,
+) => {
   const command = contract.command;
-  return (args) =>
+  return (args: HostCommandArgs) =>
     Effect.gen(function* () {
       const input = yield* Effect.try({
         try: () => {
-          const envelope = requireRecord(args, `${command} args`);
-          return contract.inputSchema.parse(requireRecord(envelope.input, `${command} input`));
+          const envelope = requireRecord(
+            commandInputRecordSchema.safeParse(args),
+            `${command} args`,
+          );
+          return contract.inputSchema.parse(
+            requireRecord(commandInputRecordSchema.safeParse(envelope.input), `${command} input`),
+          );
         },
         catch: (cause) => toClaudeCommandValidationError(command, cause),
       });
       const output = yield* invoke(service, input);
       return yield* Effect.try({
-        try: () => contract.responseSchema.parse(jsonValueSchema.parse(output)),
+        try: () => contract.responseSchema.parse(output),
         catch: (cause) =>
           new HostValidationError({
             message: cause instanceof Error ? cause.message : String(cause),
@@ -84,7 +97,7 @@ export const createClaudeRuntimeCommandHandlers = (
   runtimeRegistry: RuntimeRegistryPort,
   dependencies: ClaudeWorkspaceWorkingDirectoryDependencies,
 ) =>
-  defineHostCommandHandlers({
+  ({
     [CLAUDE_RUNTIME_COMMAND_CONTRACTS.listModels.command]: createClaudeCommandHandler(
       service,
       CLAUDE_RUNTIME_COMMAND_CONTRACTS.listModels,
@@ -130,61 +143,61 @@ export const createClaudeRuntimeCommandHandlers = (
       CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionHistory,
       (runtimeService, input) =>
         requireClaudeRuntimeWorkingDirectory(runtimeRegistry, dependencies, input).pipe(
-          Effect.flatMap(() =>
-            runtimeService.loadSessionHistory({
+          Effect.flatMap(() => {
+            const historyInput: Parameters<typeof runtimeService.loadSessionHistory>[0] = {
               repoPath: input.repoPath,
               runtimeKind: input.runtimeKind,
               workingDirectory: input.workingDirectory,
               externalSessionId: input.externalSessionId,
               runtimePolicy: input.runtimePolicy,
-              ...(input.sessionScope ? { sessionScope: input.sessionScope } : undefined),
-              ...(input.model ? { model: input.model } : undefined),
-              ...(input.systemPromptContext
-                ? { systemPromptContext: input.systemPromptContext }
-                : undefined),
-              ...(input.limit !== undefined ? { limit: input.limit } : undefined),
-            }),
-          ),
+            };
+            if (input.sessionScope) historyInput.sessionScope = input.sessionScope;
+            if (input.model) historyInput.model = input.model;
+            if (input.systemPromptContext) {
+              historyInput.systemPromptContext = input.systemPromptContext;
+            }
+            if (input.limit !== undefined) historyInput.limit = input.limit;
+            return runtimeService.loadSessionHistory(historyInput);
+          }),
         ),
     ),
     [CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionTodos.command]: createClaudeCommandHandler(
       service,
       CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionTodos,
       (runtimeService, input) => {
-        const todosInput = {
+        const todosInput: Parameters<typeof runtimeService.loadSessionTodos>[0] = {
           repoPath: input.repoPath,
           runtimeKind: input.runtimeKind,
           workingDirectory: input.workingDirectory,
           externalSessionId: input.externalSessionId,
           runtimePolicy: input.runtimePolicy,
-          ...(input.model ? { model: input.model } : undefined),
         };
+        if (input.model) todosInput.model = input.model;
+        if (input.sessionScope) todosInput.sessionScope = input.sessionScope;
         return requireClaudeRuntimeWorkingDirectory(runtimeRegistry, dependencies, input).pipe(
-          Effect.flatMap(() =>
-            runtimeService.loadSessionTodos(
-              input.sessionScope ? { ...todosInput, sessionScope: input.sessionScope } : todosInput,
-            ),
-          ),
+          Effect.flatMap(() => runtimeService.loadSessionTodos(todosInput)),
         );
       },
     ),
     [CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionDiff.command]: createClaudeCommandHandler(
       service,
       CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionDiff,
-      (runtimeService, input) =>
-        runtimeService.loadSessionDiff({
+      (runtimeService, input) => {
+        const diffInput: Parameters<typeof runtimeService.loadSessionDiff>[0] = {
           repoPath: input.repoPath,
           runtimeKind: input.runtimeKind,
           workingDirectory: input.workingDirectory,
           externalSessionId: input.externalSessionId,
-          ...(input.runtimeHistoryAnchor
-            ? { runtimeHistoryAnchor: input.runtimeHistoryAnchor }
-            : undefined),
-        }),
+        };
+        if (input.runtimeHistoryAnchor) {
+          diffInput.runtimeHistoryAnchor = input.runtimeHistoryAnchor;
+        }
+        return runtimeService.loadSessionDiff(diffInput);
+      },
     ),
     [CLAUDE_RUNTIME_COMMAND_CONTRACTS.fileStatus.command]: createClaudeCommandHandler(
       service,
       CLAUDE_RUNTIME_COMMAND_CONTRACTS.fileStatus,
       (runtimeService, input) => runtimeService.loadFileStatus(input),
     ),
-  });
+  }) satisfies HostCommandHandlerDefinitions;

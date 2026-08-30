@@ -9,6 +9,7 @@ import {
   parseOpencodeIngressEvent,
   parseOpencodeGlobalEventPayload,
   type OpencodeGlobalEventPayload,
+  type OpencodeGlobalEventPayloadInput,
   type ParsedOpencodeEvent as Event,
 } from "./opencode-global-event-ingress";
 import {
@@ -90,7 +91,7 @@ const isKnownSyncEventType = (
   Object.hasOwn(NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE, value);
 
 export const normalizeOpencodeGlobalEventPayload = (
-  payload: unknown,
+  payload: OpencodeGlobalEventPayloadInput,
 ): OpencodeGlobalEventPayloadDecision => {
   const parsed = parseOpencodeGlobalEventPayload(payload);
   if ("kind" in parsed) {
@@ -199,16 +200,17 @@ const createEventStreamRuntime = (
     return null;
   }
 
-  return {
+  const runtime: EventStreamRuntime = {
     externalSessionId: input.externalSessionId,
     input: input.input,
     now: input.now,
     emit: input.emit,
     session,
-    ...(input.resolveSubagentSessionLink
-      ? { resolveSubagentSessionLink: input.resolveSubagentSessionLink }
-      : undefined),
   };
+  if (input.resolveSubagentSessionLink) {
+    runtime.resolveSubagentSessionLink = input.resolveSubagentSessionLink;
+  }
+  return runtime;
 };
 
 const requireHandled = (event: Event, handled: boolean): void => {

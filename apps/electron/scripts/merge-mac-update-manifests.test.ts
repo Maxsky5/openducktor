@@ -152,7 +152,7 @@ describe("merge mac update manifests", () => {
       );
 
       await expect(mergeMacUpdateManifests(assetsDirectory)).rejects.toThrow(
-        "latest-mac-arm64.yml is not a valid macOS update manifest: files.0.url:",
+        "latest-mac-arm64.yml contains an update file without a url.",
       );
     } finally {
       await rm(assetsDirectory, { force: true, recursive: true });

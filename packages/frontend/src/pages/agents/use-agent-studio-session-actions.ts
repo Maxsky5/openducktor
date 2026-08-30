@@ -146,17 +146,7 @@ export function useAgentStudioSessionActions({
     [agentStudioReady, isActiveTaskReady, selectedTask, taskId],
   );
   const canStartNewSession = canStartRole(role);
-
-  const {
-    isStarting,
-    sessionStartModal,
-    humanReviewFeedbackModal,
-    startSessionRequest,
-    startSession,
-    startLaunchKickoff,
-    handleCreateSession,
-    handleQuickAction,
-  } = useAgentStudioSessionStartFlow({
+  const sessionStartInput: Parameters<typeof useAgentStudioSessionStartFlow>[0] = {
     branches,
     favoriteState,
     taskId,
@@ -174,9 +164,20 @@ export function useAgentStudioSessionActions({
     workspaceRepoPath,
     runSessionStartWorkflow,
     humanRequestChangesTask,
-    ...(setTaskTargetBranch ? { setTaskTargetBranch } : undefined),
     scheduleQueryUpdate,
-  });
+  };
+  if (setTaskTargetBranch) sessionStartInput.setTaskTargetBranch = setTaskTargetBranch;
+
+  const {
+    isStarting,
+    sessionStartModal,
+    humanReviewFeedbackModal,
+    startSessionRequest,
+    startSession,
+    startLaunchKickoff,
+    handleCreateSession,
+    handleQuickAction,
+  } = useAgentStudioSessionStartFlow(sessionStartInput);
 
   const { isSending, onSend } = useAgentStudioSendAction({
     workspaceId: activeWorkspaceId,

@@ -31,22 +31,17 @@ describe("task asset command handlers", () => {
     const handlers = createTaskAssetCommandHandlers(service);
 
     await Effect.runPromise(
-      handlers.task_asset_stage?.(
-        {
-          workspaceId,
-          scope: "description",
-          originalName: "diagram.png",
-          declaredMediaType: "image/png",
-          bytesBase64: "YWJj",
-        },
-        { command: "task_asset_stage", args: undefined },
-      ) ?? Effect.die("missing stage handler"),
+      handlers.task_asset_stage?.({
+        workspaceId,
+        scope: "description",
+        originalName: "diagram.png",
+        declaredMediaType: "image/png",
+        bytesBase64: "YWJj",
+      }) ?? Effect.die("missing stage handler"),
     );
     await Effect.runPromise(
-      handlers.task_asset_discard_staged?.(
-        { workspaceId, assetIds: [assetId] },
-        { command: "task_asset_discard_staged", args: undefined },
-      ) ?? Effect.die("missing discard handler"),
+      handlers.task_asset_discard_staged?.({ workspaceId, assetIds: [assetId] }) ??
+        Effect.die("missing discard handler"),
     );
 
     expect(inputs).toEqual([
@@ -71,11 +66,8 @@ describe("task asset command handlers", () => {
     };
     const handler = createTaskAssetCommandHandlers(service).task_asset_stage;
 
-    expect(() =>
-      handler?.(
-        { workspaceId, scope: "description" },
-        { command: "task_asset_stage", args: undefined },
-      ),
-    ).toThrow("task_asset_stage input is invalid");
+    expect(() => handler?.({ workspaceId, scope: "description" })).toThrow(
+      "task_asset_stage input is invalid",
+    );
   });
 });

@@ -8,7 +8,7 @@ import {
   workspaceFileTreeSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostValidationError } from "../../effect/host-errors";
+import { HostValidationError, type HostValidationErrorAggregate } from "../../effect/host-errors";
 import type { FilesystemPort, FilesystemStats } from "../../ports/filesystem-port";
 import type { GitPort } from "../../ports/git-port";
 import {
@@ -26,11 +26,11 @@ export type WorkspaceFilesService = {
   listTree(input: {
     rootPath: string;
     targetBranch?: string;
-  }): Effect.Effect<WorkspaceFileTree, HostValidationError>;
+  }): Effect.Effect<WorkspaceFileTree, HostValidationErrorAggregate>;
   readTextFile(input: {
     rootPath: string;
     relativePath: string;
-  }): Effect.Effect<WorkspaceTextFileReadResult, HostValidationError>;
+  }): Effect.Effect<WorkspaceTextFileReadResult, HostValidationErrorAggregate>;
   writeTextFile(
     input: WorkspaceTextFileWriteInput,
   ): Effect.Effect<WorkspaceTextFileWriteResult, WorkspaceTextFileWriteError>;
@@ -66,7 +66,7 @@ const compareWorkspacePaths = (left: string, right: string): number => {
 
 const normalizeGitStatus = (
   status: string | null | undefined,
-): Effect.Effect<WorkspaceFileGitStatus | null, HostValidationError> => {
+): Effect.Effect<WorkspaceFileGitStatus | null, HostValidationError<{ status: string }>> => {
   if (!status) {
     return Effect.succeed(null);
   }
@@ -146,7 +146,10 @@ const statFile = (
   filesystem: FilesystemPort,
   canonicalRoot: string,
   relativePath: string,
-): Effect.Effect<FilesystemStats, HostValidationError> =>
+): Effect.Effect<
+  FilesystemStats,
+  HostValidationError<{ rootPath: string; relativePath: string }>
+> =>
   filesystem
     .stat(filesystem.join(canonicalRoot, relativePath), { followSymbolicLinks: false })
     .pipe(

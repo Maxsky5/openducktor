@@ -106,15 +106,16 @@ export const executeForkStart = async ({
     const runtimeKind = sourceRuntimeKind;
     const sessionScope = workflowAgentSessionScope(ctx.taskId, ctx.role);
 
-    const summary = await deps.runtime.adapter.forkSession({
+    const forkInput: Parameters<typeof deps.runtime.adapter.forkSession>[0] = {
       repoPath: ctx.repoPath,
       runtimeKind,
       workingDirectory,
       sessionScope,
       systemPrompt,
-      ...(selectedModel ? { model: selectedModel } : undefined),
       parentExternalSessionId: sourceSession.externalSessionId,
-    });
+    };
+    if (selectedModel) forkInput.model = selectedModel;
+    const summary = await deps.runtime.adapter.forkSession(forkInput);
 
     const startedCtx = {
       ...ctx,

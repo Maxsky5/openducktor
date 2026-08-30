@@ -12,12 +12,19 @@ const missingTaskDependency = (message: string): HostDependencyError =>
     message,
   });
 
+type TaskCleanupDependencies = {
+  devServerService: DevServerService;
+  gitPort: GitPort;
+  settingsConfig: SettingsConfigPort;
+  workspaceSettingsService: WorkspaceSettingsService;
+};
+
 export const requireTaskDeleteDependencies = (
   devServerService: DevServerService | undefined,
   gitPort: GitPort | undefined,
   settingsConfig: SettingsConfigPort | undefined,
   workspaceSettingsService: WorkspaceSettingsService | undefined,
-) => {
+): TaskCleanupDependencies => {
   if (!devServerService) {
     throw missingTaskDependency("Dev server service is required for task_delete.");
   }
@@ -31,12 +38,7 @@ export const requireTaskDeleteDependencies = (
     throw missingTaskDependency("Workspace settings service is required for task_delete.");
   }
 
-  return { devServerService, gitPort, settingsConfig, workspaceSettingsService } satisfies {
-    devServerService: DevServerService;
-    gitPort: GitPort;
-    settingsConfig: SettingsConfigPort;
-    workspaceSettingsService: WorkspaceSettingsService;
-  };
+  return { devServerService, gitPort, settingsConfig, workspaceSettingsService };
 };
 
 export const requireTaskCloseDependencies = (
@@ -44,7 +46,7 @@ export const requireTaskCloseDependencies = (
   gitPort: GitPort | undefined,
   settingsConfig: SettingsConfigPort | undefined,
   workspaceSettingsService: WorkspaceSettingsService | undefined,
-) => {
+): TaskCleanupDependencies => {
   if (!devServerService) {
     throw missingTaskDependency("Dev server service is required for task_close.");
   }
@@ -58,17 +60,7 @@ export const requireTaskCloseDependencies = (
     throw missingTaskDependency("Workspace settings service is required for task_close.");
   }
 
-  return {
-    devServerService,
-    gitPort,
-    settingsConfig,
-    workspaceSettingsService,
-  } satisfies {
-    devServerService: DevServerService;
-    gitPort: GitPort;
-    settingsConfig: SettingsConfigPort;
-    workspaceSettingsService: WorkspaceSettingsService;
-  };
+  return { devServerService, gitPort, settingsConfig, workspaceSettingsService };
 };
 
 export const requireTaskCloseWorktreeService = (

@@ -3,6 +3,7 @@ import path from "node:path";
 import { OPENDUCKTOR_DEV_INSTANCE_ENV } from "@openducktor/contracts";
 import type { McpBridgeDiscoveryMode } from "@openducktor/host";
 import { Effect } from "effect";
+import { z } from "zod";
 import {
   type BrowserRuntimeConfigState,
   createBrowserRuntimeConfigState,
@@ -344,7 +345,7 @@ const startViteServerEffect = (
         if (
           !httpServer ||
           !("closeAllConnections" in httpServer) ||
-          typeof httpServer.closeAllConnections !== "function"
+          httpServer.closeAllConnections === undefined
         ) {
           return yield* Effect.fail(
             new WebDependencyError({
@@ -390,8 +391,8 @@ const startViteServerEffect = (
             ),
           ),
         );
-        const address = httpServer.address();
-        if (!address || typeof address === "string") {
+        const address = z.object({ port: z.number() }).safeParse(httpServer.address());
+        if (!address.success) {
           return yield* preserveLauncherFailureAfterStop(
             new WebDependencyError({
               dependency: "vite",
@@ -406,7 +407,7 @@ const startViteServerEffect = (
         return {
           close,
           httpServer: server.httpServer,
-          port: address.port,
+          port: address.data.port,
         };
       }),
     );
@@ -658,11 +659,13 @@ export const runLauncherEffect = (
     const appToken = randomUUID();
     const runtimeConfigState = createBrowserRuntimeConfigState();
     const developmentInstanceId = options.workspaceMode ? options.developmentInstanceId : undefined;
-    const runtimeDistribution = yield* resolveWebRuntimeDistributionEffect({
+    const runtimeDistributionInput: Parameters<typeof resolveWebRuntimeDistributionEffect>[0] = {
       packageRoot: options.packageRoot,
       workspaceMode: options.workspaceMode,
-      ...(options.workspaceRoot ? { workspaceRoot: options.workspaceRoot } : undefined),
-    });
+    };
+    if (options.workspaceRoot) runtimeDistributionInput.workspaceRoot = options.workspaceRoot;
+    const runtimeDistribution =
+      yield* resolveWebRuntimeDistributionEffect(runtimeDistributionInput);
     const providedToolPaths = yield* resolveWebProvidedToolPathsEffect();
     const hostDiscoveryOptions = options.workspaceMode
       ? {

@@ -226,11 +226,12 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
       return finishStaleHistoryLoad();
     }
 
-    const history = await adapter.loadSessionHistory({
+    const historyInput: Parameters<typeof adapter.loadSessionHistory>[0] = {
       ...sessionRef,
-      ...(systemPromptContext ? { systemPromptContext } : undefined),
       limit: SESSION_HISTORY_LOAD_LIMIT,
-    });
+    };
+    if (systemPromptContext) historyInput.systemPromptContext = systemPromptContext;
+    const history = await adapter.loadSessionHistory(historyInput);
     if (isStaleRepoOperation()) {
       return finishStaleHistoryLoad();
     }
@@ -313,7 +314,7 @@ const createLoadSessionHistoryWithPolicy = ({
       );
     }
 
-    return loadSessionHistoryIntoStoreWithPolicy({
+    const input: Parameters<typeof loadSessionHistoryIntoStoreWithPolicy>[0] = {
       repoPath,
       adapter,
       readSessionSnapshot,
@@ -327,9 +328,10 @@ const createLoadSessionHistoryWithPolicy = ({
           session,
           loadRepoPromptOverrides,
         }),
-      ...(loadSettingsSnapshot ? { loadSettingsSnapshot } : undefined),
       isStaleRepoOperation,
-    });
+    };
+    if (loadSettingsSnapshot) input.loadSettingsSnapshot = loadSettingsSnapshot;
+    return loadSessionHistoryIntoStoreWithPolicy(input);
   };
 };
 

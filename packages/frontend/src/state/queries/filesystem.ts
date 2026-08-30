@@ -1,5 +1,6 @@
 import type {
   DirectoryListing,
+  FilesystemListDirectoryInput,
   WorkspaceFileTree,
   WorkspaceTextFileReadResult,
   WorkspaceTextFileWriteInput,
@@ -54,18 +55,20 @@ export const directoryListingQueryOptions = (
   path?: string,
   hostClient: FilesystemQueryHost = host,
   includeFiles = false,
-) =>
-  queryOptions({
+) => {
+  let listDirectoryInput: string | FilesystemListDirectoryInput | undefined = path;
+  if (includeFiles) {
+    const input: FilesystemListDirectoryInput = { includeFiles: true };
+    if (path) input.path = path;
+    listDirectoryInput = input;
+  }
+  return queryOptions({
     queryKey: filesystemQueryKeys.directory(path, includeFiles),
     queryFn: (): Promise<DirectoryListing> =>
-      includeFiles
-        ? hostClient.filesystemListDirectory({
-            ...(path ? { path } : undefined),
-            includeFiles: true,
-          })
-        : hostClient.filesystemListDirectory(path),
+      hostClient.filesystemListDirectory(listDirectoryInput),
     staleTime: DIRECTORY_LISTING_STALE_TIME_MS,
   });
+};
 
 export const workspaceFileTreeQueryOptions = (
   rootPath: string,
@@ -74,11 +77,11 @@ export const workspaceFileTreeQueryOptions = (
 ) =>
   queryOptions({
     queryKey: filesystemQueryKeys.tree(rootPath, targetBranch),
-    queryFn: (): Promise<WorkspaceFileTree> =>
-      hostClient.filesystemListTree({
-        rootPath,
-        ...(targetBranch ? { targetBranch } : undefined),
-      }),
+    queryFn: (): Promise<WorkspaceFileTree> => {
+      const input: Parameters<FilesystemQueryHost["filesystemListTree"]>[0] = { rootPath };
+      if (targetBranch) input.targetBranch = targetBranch;
+      return hostClient.filesystemListTree(input);
+    },
     staleTime: DIRECTORY_LISTING_STALE_TIME_MS,
   });
 

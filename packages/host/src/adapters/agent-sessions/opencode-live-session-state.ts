@@ -12,7 +12,11 @@ import {
   agentSessionLiveSnapshotSchema,
 } from "@openducktor/contracts";
 import { HostValidationError } from "../../effect/host-errors";
-import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
+import type { z } from "zod";
+import type {
+  AgentSessionLiveAdapterChange,
+  AgentSessionLiveAdapterMutation,
+} from "../../ports/agent-session-live-adapter-port";
 import type { OpenCodeRuntimeInstance } from "./opencode-live-session-normalization";
 import {
   refKey,
@@ -35,6 +39,8 @@ type CreateOpenCodeLiveSessionStateInput = {
   readonly nextOccurrenceId: () => string;
 };
 
+type LoadedContextResult = AgentSessionLiveAdapterMutation<AgentSessionContextUsage | null>;
+
 const snapshotsEqual = (left: AgentSessionLiveSnapshot, right: AgentSessionLiveSnapshot): boolean =>
   JSON.stringify(left) === JSON.stringify(right);
 
@@ -52,7 +58,12 @@ const classifyActivity = (input: {
   return input.runtimeActivity;
 };
 
-const parseSnapshot = (value: unknown, operation: string): AgentSessionLiveSnapshot => {
+type AgentSessionLiveSnapshotInput = z.input<typeof agentSessionLiveSnapshotSchema>;
+
+const parseSnapshot = (
+  value: AgentSessionLiveSnapshotInput,
+  operation: string,
+): AgentSessionLiveSnapshot => {
   const parsed = agentSessionLiveSnapshotSchema.safeParse(value);
   if (parsed.success) {
     return parsed.data;
@@ -103,26 +114,24 @@ export const createOpenCodeLiveSessionState = ({
     const pendingQuestions = source.pendingQuestions.map((request) =>
       pendingRequests.projectQuestion(ref, request, activeNativeKeys),
     );
-    return parseSnapshot(
-      {
-        ref,
-        sessionAssociation: source.sessionAssociation,
-        activity: classifyActivity({
-          runtimeActivity: source.runtimeActivity,
-          pendingApprovals,
-          pendingQuestions,
-        }),
-        title: source.title,
-        startedAt: source.startedAt,
-        ...(source.parentExternalSessionId
-          ? { parentExternalSessionId: source.parentExternalSessionId }
-          : undefined),
+    const snapshot: AgentSessionLiveSnapshotInput = {
+      ref,
+      sessionAssociation: source.sessionAssociation,
+      activity: classifyActivity({
+        runtimeActivity: source.runtimeActivity,
         pendingApprovals,
         pendingQuestions,
-        contextUsage: contextUsageBySessionId.get(source.externalSessionId) ?? null,
-      },
-      "opencode-live-session.normalize-snapshot",
-    );
+      }),
+      title: source.title,
+      startedAt: source.startedAt,
+      pendingApprovals,
+      pendingQuestions,
+      contextUsage: contextUsageBySessionId.get(source.externalSessionId) ?? null,
+    };
+    if (source.parentExternalSessionId) {
+      snapshot.parentExternalSessionId = source.parentExternalSessionId;
+    }
+    return parseSnapshot(snapshot, "opencode-live-session.normalize-snapshot");
   };
 
   const replaceSources = (
@@ -190,32 +199,20 @@ export const createOpenCodeLiveSessionState = ({
   const applyLoadedContext = (
     ref: AgentSessionLiveRef,
     usage: OpencodeSessionContextUsage | null,
-  ) => {
+  ): LoadedContextResult => {
     const retained = sessionsByRef.get(refKey(ref));
     if (retained?.snapshot.contextUsage) {
-      return { value: retained.snapshot.contextUsage, changes: [] } satisfies {
-        value: AgentSessionContextUsage | null;
-        changes: AgentSessionLiveAdapterChange[];
-      };
+      return { value: retained.snapshot.contextUsage, changes: [] };
     }
     if (!usage) {
-      return { value: null, changes: [] } satisfies {
-        value: AgentSessionContextUsage | null;
-        changes: AgentSessionLiveAdapterChange[];
-      };
+      return { value: null, changes: [] };
     }
     const contextUsage = toContextUsage(usage);
     if (!retained) {
-      return { value: contextUsage, changes: [] } satisfies {
-        value: AgentSessionContextUsage | null;
-        changes: AgentSessionLiveAdapterChange[];
-      };
+      return { value: contextUsage, changes: [] };
     }
     const changes = retainContext(ref.externalSessionId, usage);
-    return { value: contextUsage, changes } satisfies {
-      value: AgentSessionContextUsage | null;
-      changes: AgentSessionLiveAdapterChange[];
-    };
+    return { value: contextUsage, changes };
   };
 
   const retainControlSummary = (
@@ -242,29 +239,27 @@ export const createOpenCodeLiveSessionState = ({
       parentExternalSessionId ?? previous?.snapshot.parentExternalSessionId;
     const pendingApprovals = previous?.snapshot.pendingApprovals ?? [];
     const pendingQuestions = previous?.snapshot.pendingQuestions ?? [];
-    const snapshot = parseSnapshot(
-      {
-        ref,
-        sessionAssociation: summary.sessionAssociation,
-        activity: classifyActivity({
-          runtimeActivity,
-          pendingApprovals,
-          pendingQuestions,
-        }),
-        title: summary.title ?? previous?.snapshot.title ?? "OpenCode",
-        startedAt: summary.startedAt,
-        ...(retainedParentExternalSessionId
-          ? { parentExternalSessionId: retainedParentExternalSessionId }
-          : undefined),
+    const snapshotInput: AgentSessionLiveSnapshotInput = {
+      ref,
+      sessionAssociation: summary.sessionAssociation,
+      activity: classifyActivity({
+        runtimeActivity,
         pendingApprovals,
         pendingQuestions,
-        contextUsage:
-          contextUsageBySessionId.get(summary.externalSessionId) ??
-          previous?.snapshot.contextUsage ??
-          null,
-      },
-      "opencode-live-session.retain-control-summary",
-    );
+      }),
+      title: summary.title ?? previous?.snapshot.title ?? "OpenCode",
+      startedAt: summary.startedAt,
+      pendingApprovals,
+      pendingQuestions,
+      contextUsage:
+        contextUsageBySessionId.get(summary.externalSessionId) ??
+        previous?.snapshot.contextUsage ??
+        null,
+    };
+    if (retainedParentExternalSessionId) {
+      snapshotInput.parentExternalSessionId = retainedParentExternalSessionId;
+    }
+    const snapshot = parseSnapshot(snapshotInput, "opencode-live-session.retain-control-summary");
     sessionsByRef.set(refKey(ref), { snapshot, runtimeActivity });
     return previous && snapshotsEqual(previous.snapshot, snapshot)
       ? []

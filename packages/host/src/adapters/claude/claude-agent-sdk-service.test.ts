@@ -85,8 +85,7 @@ const createService = (session: ClaudeSession | null, emit?: ClaudeAgentSdkEvent
   if (session) {
     sessionStore.set(session);
   }
-  return createClaudeAgentSdkService({
-    ...(emit ? { emit } : undefined),
+  const serviceInput: Parameters<typeof createClaudeAgentSdkService>[0] = {
     now: () => "2026-06-25T20:00:00.000Z",
     onBackgroundFailure: () => Effect.void,
     resolveMcpBridgeConnection: () => {
@@ -106,7 +105,11 @@ const createService = (session: ClaudeSession | null, emit?: ClaudeAgentSdkEvent
       resolveToolPath: () => Effect.die("unused"),
       validateToolPath: () => Effect.die("unused"),
     },
-  });
+  };
+  if (emit) {
+    serviceInput.emit = emit;
+  }
+  return createClaudeAgentSdkService(serviceInput);
 };
 
 describe("createClaudeAgentSdkService", () => {

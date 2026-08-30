@@ -1,26 +1,18 @@
 import { createOpenDucktorStartupSplashPlugin } from "@openducktor/frontend/startup-splash/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
+import packageJson from "./package.json";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const frontendSrc = path.resolve(__dirname, "../frontend/src");
 
-function readPackageVersion(packageJsonPath = path.resolve(__dirname, "package.json")): string {
-  const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
-  if (typeof packageJson.version !== "string" || packageJson.version.length === 0) {
-    throw new Error(`Missing package version in ${packageJsonPath}`);
-  }
-  return packageJson.version;
-}
-
 export function resolveAppVersion(env: NodeJS.ProcessEnv = process.env): string {
   const versionOverride = env.ODT_APP_VERSION?.trim();
-  return versionOverride || readPackageVersion();
+  return versionOverride || packageJson.version;
 }
 
 export default defineConfig({

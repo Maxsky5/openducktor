@@ -246,14 +246,19 @@ export const resolveCodexEffectivePolicy = (
       : undefined;
   const sandboxMode = adjustmentReason ? "workspace-write" : policy.sandboxMode;
 
-  return {
+  const effectivePolicy: CodexEffectivePolicy = {
     ...policy,
     sandboxMode,
     approvalsReviewerApplies: policy.approvalPolicy !== "never",
     commandNetworkAccess:
       sandboxMode === "danger-full-access" ? false : policy.commandNetworkAccess,
-    ...(adjustmentReason ? { adjustmentReason } : undefined),
   };
+
+  if (adjustmentReason) {
+    effectivePolicy.adjustmentReason = adjustmentReason;
+  }
+
+  return effectivePolicy;
 };
 
 export const REUSABLE_PROMPT_ARGUMENTS_PLACEHOLDER = "$ARGUMENTS";
@@ -664,6 +669,12 @@ export const settingsSnapshotSchema = z.object({
 type ParsedSettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;
 export type SettingsSnapshot = ParsedSettingsSnapshot;
 
+const settingsSnapshotSaveAgentModelFavoritesSchema = agentModelFavoritesSchema
+  .removeDefault()
+  .describe(
+    "Echo the current canonical favorites. Change favorites through the narrow favorites command.",
+  );
+
 export const settingsSnapshotSaveInputSchema = z.object({
   git: globalGitConfigSchema,
   general: generalSettingsSchema,
@@ -673,11 +684,7 @@ export const settingsSnapshotSaveInputSchema = z.object({
   kanban: kanbanSettingsSchema,
   autopilot: autopilotSettingsSchema,
   agentRuntimes: agentRuntimesSchema.removeDefault(),
-  agentModelFavorites: agentModelFavoritesSchema
-    .removeDefault()
-    .describe(
-      "Echo the current canonical favorites. Change favorites through the narrow favorites command.",
-    ),
+  agentModelFavorites: settingsSnapshotSaveAgentModelFavoritesSchema,
   workspaces: z.record(workspaceIdSchema, repoConfigSchema),
   globalPromptOverrides: repoPromptOverridesSchema,
 });

@@ -302,14 +302,15 @@ export function useSessionStartModalState({
       return [];
     }
     const accentColor = resolveAgentAccentColor(fallbackProfileId);
-    return [
-      {
-        value: fallbackProfileId,
-        label: fallbackProfileId,
-        description: "Current default runtime profile",
-        ...(accentColor ? { accentColor } : undefined),
-      },
-    ];
+    const fallbackOption: ComboboxOption = {
+      value: fallbackProfileId,
+      label: fallbackProfileId,
+      description: "Current default runtime profile",
+    };
+    if (accentColor) {
+      fallbackOption.accentColor = accentColor;
+    }
+    return [fallbackOption];
   }, [catalog, visibleSelection?.profileId]);
 
   const variantOptions = useMemo<ComboboxOption[]>(() => {

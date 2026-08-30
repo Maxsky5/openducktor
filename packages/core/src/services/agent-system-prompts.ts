@@ -1,5 +1,6 @@
 import {
   agentPromptTemplateIdValues,
+  type AgentPromptPlaceholder,
   type AgentPromptTemplateId,
   type GitTargetBranch,
   type RepoPromptOverrides,
@@ -27,6 +28,12 @@ export type BuildAgentPromptInput = {
 };
 
 export type AgentKickoffTemplateId = Extract<AgentPromptTemplateId, `kickoff.${string}`>;
+
+type AgentPromptPlaceholderValues = Record<
+  Exclude<AgentPromptPlaceholder, "humanFeedback" | `git.${string}`>,
+  string
+> &
+  Partial<Record<Extract<AgentPromptPlaceholder, "humanFeedback" | `git.${string}`>, string>>;
 
 export type BuildAgentKickoffPromptInput = {
   role: AgentRole;
@@ -593,7 +600,7 @@ const buildPlaceholderValues = ({
     throw new Error('Prompt placeholder "humanFeedback" must not be empty.');
   }
 
-  return {
+  const values: AgentPromptPlaceholderValues = {
     role,
     "role.allowedTools": buildToolListPlaceholder(role),
     "task.id": task.taskId,
@@ -602,21 +609,18 @@ const buildPlaceholderValues = ({
     "task.status": compact(task.status),
     "task.qaRequired": task.qaRequired ? "true" : "false",
     "task.description": compact(task.description),
-    ...(humanFeedback
-      ? {
-          humanFeedback,
-        }
-      : undefined),
-    ...(git || pullRequestTarget
-      ? {
-          "git.operationLabel": compact(git?.operationLabel),
-          "git.currentBranch": compact(git?.currentBranch),
-          "git.targetBranch": targetBranchPlaceholder,
-          "git.conflictedFiles": compactList(git?.conflictedFiles),
-          "git.conflictOutput": compact(git?.conflictOutput),
-        }
-      : undefined),
-  } satisfies Record<string, string>;
+  };
+  if (humanFeedback) {
+    values.humanFeedback = humanFeedback;
+  }
+  if (git || pullRequestTarget) {
+    values["git.operationLabel"] = compact(git?.operationLabel);
+    values["git.currentBranch"] = compact(git?.currentBranch);
+    values["git.targetBranch"] = targetBranchPlaceholder;
+    values["git.conflictedFiles"] = compactList(git?.conflictedFiles);
+    values["git.conflictOutput"] = compact(git?.conflictOutput);
+  }
+  return values;
 };
 
 const collectPromptWarnings = (templates: ResolvedAgentPromptTemplate[]): AgentPromptWarning[] => {
@@ -680,15 +684,16 @@ const resolveTemplate = ({
     return value;
   });
 
-  return {
+  const resolved: ResolvedAgentPromptTemplate = {
     id: definition.id,
     purpose: definition.purpose,
     source,
     builtinVersion: definition.builtinVersion,
-    ...(override ? { overrideBaseVersion: override.baseVersion } : undefined),
     hasStaleOverride: Boolean(override && override.baseVersion !== definition.builtinVersion),
     content,
   };
+  if (override) resolved.overrideBaseVersion = override.baseVersion;
+  return resolved;
 };
 
 const buildPromptFromTemplates = ({
@@ -708,13 +713,14 @@ const buildPromptFromTemplates = ({
   git?: AgentPromptGitContext;
   overrides: RepoPromptOverrides | undefined;
 }): BuiltAgentPrompt => {
-  const placeholderValues = buildPlaceholderValues({
+  const placeholderInput: Parameters<typeof buildPlaceholderValues>[0] = {
     role,
     task,
-    ...(extraPlaceholders ? { extraPlaceholders } : undefined),
-    ...(pullRequestTarget ? { pullRequestTarget } : undefined),
-    ...(git ? { git } : undefined),
-  });
+  };
+  if (extraPlaceholders) placeholderInput.extraPlaceholders = extraPlaceholders;
+  if (pullRequestTarget) placeholderInput.pullRequestTarget = pullRequestTarget;
+  if (git) placeholderInput.git = git;
+  const placeholderValues = buildPlaceholderValues(placeholderInput);
   const templates = templateIds.map((templateId) =>
     resolveTemplate({
       templateId,
@@ -765,14 +771,15 @@ export const buildAgentKickoffPromptBundle = (
       ? resolvePullRequestTarget(input.git?.targetBranch)
       : undefined;
 
-  return buildPromptFromTemplates({
+  const promptInput: Parameters<typeof buildPromptFromTemplates>[0] = {
     templateIds: [input.templateId],
     role: input.role,
     task: input.task,
-    ...(input.extraPlaceholders ? { extraPlaceholders: input.extraPlaceholders } : undefined),
-    ...(pullRequestTarget ? { pullRequestTarget } : undefined),
     overrides: input.overrides,
-  });
+  };
+  if (input.extraPlaceholders) promptInput.extraPlaceholders = input.extraPlaceholders;
+  if (pullRequestTarget) promptInput.pullRequestTarget = pullRequestTarget;
+  return buildPromptFromTemplates(promptInput);
 };
 
 export const buildAgentKickoffPrompt = (input: BuildAgentKickoffPromptInput): string => {
@@ -813,13 +820,14 @@ export const buildAgentMessagePromptBundle = (
     }
   }
 
-  return buildPromptFromTemplates({
+  const promptInput: Parameters<typeof buildPromptFromTemplates>[0] = {
     templateIds: [input.templateId],
     role: input.role,
     task: input.task,
-    ...(input.git ? { git: input.git } : undefined),
     overrides: input.overrides,
-  });
+  };
+  if (input.git) promptInput.git = input.git;
+  return buildPromptFromTemplates(promptInput);
 };
 
 export const buildAgentMessagePrompt = (input: BuildAgentMessagePromptInput): string => {

@@ -11,7 +11,10 @@ import {
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
-import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
+import type {
+  AgentSessionLiveAdapterChange,
+  AgentSessionLiveAdapterMutation,
+} from "../../ports/agent-session-live-adapter-port";
 import { isClaudeSubagentTranscriptTarget } from "../claude/claude-agent-sdk-subagent-transcripts";
 import type { ClaudeAgentSdkEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 
@@ -19,6 +22,8 @@ type ClaudeRuntimeInstance = RuntimeInstanceSummary & {
   readonly kind: "claude";
   readonly runtimeRoute: { readonly type: "host_service"; readonly identity: string };
 };
+
+type LoadedContextResult = AgentSessionLiveAdapterMutation<AgentSessionContextUsage | null>;
 
 const refKey = (ref: AgentSessionLiveRef): string =>
   [ref.repoPath, ref.runtimeKind, ref.workingDirectory, ref.externalSessionId].join("\u0000");
@@ -107,7 +112,7 @@ const subagentStartedAt = (
   },
   fallback: string,
 ): string => {
-  if (typeof part.startedAtMs !== "number") {
+  if (part.startedAtMs === undefined) {
     return fallback;
   }
   const startedAt = new Date(part.startedAtMs);
@@ -401,38 +406,23 @@ export const createClaudeLiveSessionState = ({
       ref: AgentSessionLiveRef,
       contextUsage: AgentSessionContextUsage | null,
       expectedRevision: number,
-    ) => {
+    ): LoadedContextResult => {
       const snapshot = readSnapshot(ref);
       if ((contextRevisionsByRef.get(refKey(ref)) ?? 0) !== expectedRevision) {
-        return { value: snapshot?.contextUsage ?? contextUsage, changes: [] } satisfies {
-          value: AgentSessionContextUsage | null;
-          changes: AgentSessionLiveAdapterChange[];
-        };
+        return { value: snapshot?.contextUsage ?? contextUsage, changes: [] };
       }
       if (!contextUsage) {
-        return { value: snapshot?.contextUsage ?? null, changes: [] } satisfies {
-          value: AgentSessionContextUsage | null;
-          changes: AgentSessionLiveAdapterChange[];
-        };
+        return { value: snapshot?.contextUsage ?? null, changes: [] };
       }
       if (!snapshot) {
-        return { value: contextUsage, changes: [] } satisfies {
-          value: AgentSessionContextUsage | null;
-          changes: AgentSessionLiveAdapterChange[];
-        };
+        return { value: contextUsage, changes: [] };
       }
       if (JSON.stringify(snapshot.contextUsage) === JSON.stringify(contextUsage)) {
-        return { value: snapshot.contextUsage, changes: [] } satisfies {
-          value: AgentSessionContextUsage | null;
-          changes: AgentSessionLiveAdapterChange[];
-        };
+        return { value: snapshot.contextUsage, changes: [] };
       }
       return {
         value: contextUsage,
         changes: commitSnapshot({ ...snapshot, contextUsage }),
-      } satisfies {
-        value: AgentSessionContextUsage | null;
-        changes: AgentSessionLiveAdapterChange[];
       };
     },
     contextRevision: (ref: AgentSessionLiveRef): number =>

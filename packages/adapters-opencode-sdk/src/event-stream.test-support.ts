@@ -22,7 +22,6 @@ import type { JsonObject } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { subscribeSessionToRuntimeEvents } from "./session-registry";
-import { asUnknownRecord } from "./guards";
 import {
   createOpencodeEventFixtures,
   type MalformedOpencodeControlEventFixture,
@@ -34,6 +33,7 @@ import type {
   SessionInput,
   SessionRecord,
 } from "./types";
+import { z } from "zod";
 
 type RunEventStreamOptions = {
   logEvent?: OpencodeEventLogger;
@@ -41,7 +41,7 @@ type RunEventStreamOptions = {
 
 type ParentAlias = "parentId" | "parent_id";
 type ParentAliasSessionInfo = Session & Partial<Record<ParentAlias, string>>;
-type ControlEventProperties = Record<string, unknown>;
+type ControlEventProperties = JsonObject;
 
 export type MalformedControlEvent = MalformedOpencodeControlEventFixture;
 
@@ -62,19 +62,24 @@ export type UnsupportedRuntimeSourceSyncSessionCreatedEvent = Omit<
   };
 };
 
-export const childSessionInfo = (childSessionId: string, parentID?: string): Session => ({
-  id: childSessionId,
-  slug: childSessionId,
-  projectID: "project-1",
-  directory: "/repo",
-  ...(parentID ? { parentID } : undefined),
-  title: "Subagent",
-  version: "1.0.0",
-  time: {
-    created: Date.parse("2026-02-22T12:00:10.000Z"),
-    updated: Date.parse("2026-02-22T12:00:10.000Z"),
-  },
-});
+export const childSessionInfo = (childSessionId: string, parentID?: string): Session => {
+  const session: Session = {
+    id: childSessionId,
+    slug: childSessionId,
+    projectID: "project-1",
+    directory: "/repo",
+    title: "Subagent",
+    version: "1.0.0",
+    time: {
+      created: Date.parse("2026-02-22T12:00:10.000Z"),
+      updated: Date.parse("2026-02-22T12:00:10.000Z"),
+    },
+  };
+  if (parentID) {
+    session.parentID = parentID;
+  }
+  return session;
+};
 
 export const childSessionCreatedEvent = (
   childSessionId: string,
@@ -202,20 +207,28 @@ export const permissionV2AskedEvent = (input: {
   save?: string[];
   metadata?: JsonObject;
   properties?: ControlEventProperties;
-}): EventPermissionV2Asked =>
-  ({
+}): EventPermissionV2Asked => {
+  const properties: EventPermissionV2Asked["properties"] = {
+    id: input.requestId,
+    sessionID: input.sessionId ?? "external-session-1",
+    action: input.action ?? "edit",
+    resources: input.resources ?? ["src/**"],
+  };
+  if (input.save) {
+    properties.save = input.save;
+  }
+  if (input.metadata) {
+    properties.metadata = input.metadata;
+  }
+  if (input.properties) {
+    Object.assign(properties, input.properties);
+  }
+  return {
     id: `event-${input.requestId}`,
     type: "permission.v2.asked",
-    properties: {
-      id: input.requestId,
-      sessionID: input.sessionId ?? "external-session-1",
-      action: input.action ?? "edit",
-      resources: input.resources ?? ["src/**"],
-      ...(input.save ? { save: input.save } : undefined),
-      ...(input.metadata ? { metadata: input.metadata } : undefined),
-      ...input.properties,
-    },
-  }) satisfies EventPermissionV2Asked;
+    properties,
+  } satisfies EventPermissionV2Asked;
+};
 
 export const permissionRepliedEvent = (input: {
   requestId: string;
@@ -362,23 +375,29 @@ export const malformedControlEvent = (
 ): MalformedControlEvent => ({ id: `malformed-${type}`, type, properties });
 
 export const makeClientWithEvents = (events: TestGlobalEventPayload[]): OpencodeClient => {
-  const baseClient = createOpencodeClient({ baseUrl: "http://127.0.0.1:12345" });
-  const event = async () => {
-    async function* iterator() {
-      for (const [index, rawEvent] of events.entries()) {
-        const properties = "properties" in rawEvent ? asUnknownRecord(rawEvent.properties) : null;
-        const directoryValue = properties?.directory;
-        const directory = typeof directoryValue === "string" ? directoryValue : "/repo";
-        for (const payload of createOpencodeEventFixtures(rawEvent, index)) {
-          yield { directory, payload };
-        }
-      }
-    }
-    return { stream: iterator() };
-  };
-  // SAFETY: createOpencodeEventFixtures validates each raw payload before this deliberate malformed-ingress test stream yields it.
-  baseClient.global.event = event as OpencodeClient["global"]["event"];
-  return baseClient;
+  return createOpencodeClient({
+    baseUrl: "http://127.0.0.1:12345",
+    fetch: () => {
+      const streamedEvents = events.flatMap((rawEvent, index) => {
+        const properties = z
+          .object({ directory: z.string().optional() })
+          .safeParse("properties" in rawEvent ? rawEvent.properties : undefined);
+        const directory = properties.success ? (properties.data.directory ?? "/repo") : "/repo";
+        const payloads =
+          "type" in rawEvent && rawEvent.type === "sync"
+            ? [{ ...rawEvent, id: rawEvent.id ?? `test-event-${index}` }]
+            : createOpencodeEventFixtures(rawEvent, index);
+        return payloads.map((payload) => ({
+          directory,
+          payload,
+        }));
+      });
+      const body = streamedEvents.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("");
+      return Promise.resolve(
+        new Response(body, { headers: { "content-type": "text/event-stream" } }),
+      );
+    },
+  });
 };
 
 export const makeSessionInput = (): SessionInput => ({
@@ -444,7 +463,7 @@ export const runEventStreamWithSession = async (
 
   const sessions = new Map([[sessionRecord.externalSessionId, sessionRecord]]);
   const runtimeEventTransports = new Map<string, RuntimeEventTransportRecord>();
-  subscribeSessionToRuntimeEvents({
+  const subscription: Parameters<typeof subscribeSessionToRuntimeEvents>[0] = {
     sessions,
     runtimeEventTransports,
     createClient: () => client,
@@ -456,8 +475,11 @@ export const runEventStreamWithSession = async (
     emit: (_externalSessionId: string, event: AgentEvent) => {
       emitted.push(event);
     },
-    ...(options.logEvent ? { logEvent: options.logEvent } : undefined),
-  });
+  };
+  if (options.logEvent) {
+    subscription.logEvent = options.logEvent;
+  }
+  subscribeSessionToRuntimeEvents(subscription);
   const streamDone = runtimeEventTransports.get(sessionRecord.runtimeId)?.streamDone;
   if (!streamDone) {
     throw new Error("Expected OpenCode event transport to start.");

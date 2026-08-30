@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
-import { createEventTestSession as createSession } from "./claude-agent-sdk-events.test-support";
+import {
+  claudeAcceptedUserMessageFixture,
+  createEventTestSession as createSession,
+} from "./claude-agent-sdk-events.test-support";
 import {
   claudeSdkMessageFixture,
   claudeSdkMessageUuidFixture,
@@ -212,7 +215,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       const session = createSession("running");
       session.activeSdkUserTurnCount = 1;
       session.pendingUserTurnCount = 1;
-      session.acceptedUserMessages.push({});
+      session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
 
       handleClaudeSdkMessage({
         session,
@@ -323,7 +326,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
     session.activeBackgroundSubagentTaskIds = new Set(["task-1"]);
     session.activeSdkUserTurnCount = 1;
     session.pendingUserTurnCount = 1;
-    session.acceptedUserMessages.push({});
+    session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     const input = {
       session,
       modelSelection: (model: string) => ({
@@ -411,7 +414,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
     };
     session.activeSdkUserTurnCount = 1;
     session.pendingUserTurnCount = 1;
-    session.acceptedUserMessages.push({});
+    session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     const input = {
       session,
       modelSelection: (model: string) => ({
@@ -598,7 +601,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
   test("emits Claude partial text stream events as assistant deltas", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
-    session.acceptedUserMessages.push({});
+    session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     session.pendingUserTurnCount = 1;
 
     handleClaudeSdkMessage({
@@ -638,7 +641,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
   test("replaces streamed assistant text with the authoritative assistant message id", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
-    session.acceptedUserMessages.push({});
+    session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     session.pendingUserTurnCount = 1;
     const input = {
       session,
@@ -702,7 +705,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
   test("preserves whitespace-only Claude text deltas", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
-    session.acceptedUserMessages.push({});
+    session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     session.pendingUserTurnCount = 1;
     const input = {
       session,
@@ -743,7 +746,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
   test("uses distinct streamed assistant ids for multiple assistant messages in one turn", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
-    session.acceptedUserMessages.push({});
+    session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     session.pendingUserTurnCount = 1;
     const input = {
       session,
@@ -857,7 +860,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
   test("does not reuse streamed assistant ids when Claude omits message_start", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
-    session.acceptedUserMessages.push({});
+    session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     session.pendingUserTurnCount = 1;
     const input = {
       session,
@@ -953,7 +956,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
   test("finalizes multi-block streamed assistant text without leaving duplicate rows", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
-    session.acceptedUserMessages.push({});
+    session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     session.pendingUserTurnCount = 1;
     const input = {
       session,

@@ -458,12 +458,8 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
         persistedSessionRecord({
           runtimeKind: "opencode",
           externalSessionId: "persisted-build-ext",
-          taskId: "task-1",
           role: "build",
-          status: "idle",
           startedAt: "2026-02-22T08:20:00.000Z",
-          updatedAt: "2026-02-22T08:20:00.000Z",
-          runtimeId: "runtime-1",
           workingDirectory: "/tmp/repo/worktree",
         }),
       ];
@@ -567,32 +563,22 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
       persistedSessionRecord({
         runtimeKind: "opencode",
         externalSessionId: "external-2",
-        taskId: "task-1",
         role: "build",
         startedAt: "2026-02-22T08:20:00.000Z",
-        runtimeId: "runtime-1",
         workingDirectory: "/tmp/repo/worktree",
       }),
       persistedSessionRecord({
         runtimeKind: "opencode",
         externalSessionId: "external-1",
-        taskId: "task-1",
         role: "build",
-        status: "idle",
         startedAt: "2026-02-22T08:10:00.000Z",
-        updatedAt: "2026-02-22T08:10:00.000Z",
-        runtimeId: "runtime-1",
         workingDirectory: "/tmp/repo/worktree",
       }),
       persistedSessionRecord({
         runtimeKind: "opencode",
         externalSessionId: "external-build-newer",
-        taskId: "task-1",
         role: "build",
-        status: "idle",
         startedAt: "2026-02-22T08:30:00.000Z",
-        updatedAt: "2026-02-22T08:30:00.000Z",
-        runtimeId: "runtime-1",
         workingDirectory: "/tmp/repo/worktree",
       }),
     ]);
@@ -656,10 +642,8 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
       persistedSessionRecord({
         runtimeKind: "opencode",
         externalSessionId: "external-opencode",
-        taskId: "task-1",
         role: "build",
         startedAt: "2026-02-22T08:20:00.000Z",
-        runtimeId: "runtime-1",
         workingDirectory: "/tmp/repo/worktree",
         selectedModel: {
           runtimeKind: "opencode",

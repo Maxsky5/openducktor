@@ -1,4 +1,4 @@
-import type { CodexAppServerTurn } from "@openducktor/contracts";
+import type { CodexAppServerThreadListParams, CodexAppServerTurn } from "@openducktor/contracts";
 import {
   isCodexThreadNotLoadedError,
   isCodexUnmaterializedThreadError,
@@ -251,14 +251,15 @@ export class CodexThreadInventoryReader {
       pagedTurns = await this.fetchThreadTurns(client, threadId, "full");
     } catch (error) {
       if (isCodexUnmaterializedThreadError(error)) {
+        const thread: CodexThreadHistoryReadResponse["thread"] = {
+          id: threadId,
+          turns: [],
+        };
+        if (unmaterializedWorkingDirectory) {
+          thread.cwd = unmaterializedWorkingDirectory;
+        }
         return {
-          thread: {
-            id: threadId,
-            ...(unmaterializedWorkingDirectory
-              ? { cwd: unmaterializedWorkingDirectory }
-              : undefined),
-            turns: [],
-          },
+          thread,
         };
       }
       throw error;
@@ -326,17 +327,18 @@ export class CodexThreadInventoryReader {
       if (cursor) {
         seenCursors.add(cursor);
       }
-      const response = await client.threadList({
+      const threadListInput: CodexAppServerThreadListParams = {
         cursor,
         limit: 100,
         sourceKinds: ["cli", "vscode", "exec", "appServer", "subAgent", "unknown"],
-        ...(directories
-          ? {
-              ...(directories.length > 0 ? { cwd: [...directories] } : undefined),
-              useStateDbOnly: true,
-            }
-          : undefined),
-      });
+      };
+      if (directories) {
+        threadListInput.useStateDbOnly = true;
+        if (directories.length > 0) {
+          threadListInput.cwd = [...directories];
+        }
+      }
+      const response = await client.threadList(threadListInput);
       threads.push(...codexThreadList(response));
       cursor = response.nextCursor;
       if (cursor && seenCursors.has(cursor)) {

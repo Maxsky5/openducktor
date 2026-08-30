@@ -59,7 +59,7 @@ const cloneDefaultOpenByRole = (): Record<AgentRole, boolean> =>
   openByRoleSchema.parse(DEFAULT_OPEN_BY_ROLE);
 
 const readPersistedRightPanelPayload = (): PersistedRightPanelPayload | null => {
-  if (typeof globalThis.localStorage === "undefined") {
+  if (globalThis.localStorage === undefined) {
     return null;
   }
 
@@ -73,7 +73,7 @@ const readPersistedRightPanelPayload = (): PersistedRightPanelPayload | null => 
 };
 
 const readPersistedOpenByRole = (): Record<AgentRole, boolean> => {
-  if (typeof globalThis.localStorage === "undefined") {
+  if (globalThis.localStorage === undefined) {
     return cloneDefaultOpenByRole();
   }
 
@@ -83,8 +83,9 @@ const readPersistedOpenByRole = (): Record<AgentRole, boolean> => {
     if (parsed) {
       for (const role of RIGHT_PANEL_ROLES) {
         const value = parsed[role];
-        if (typeof value === "boolean") {
-          next[role] = value;
+        const valueResult = z.boolean().safeParse(value);
+        if (valueResult.success) {
+          next[role] = valueResult.data;
         }
       }
     }
@@ -184,7 +185,7 @@ export function useAgentStudioRightPanel({
   hasTaskContext = true,
 }: UseAgentStudioRightPanelInput): UseAgentStudioRightPanelState {
   const [isOpenByRole, setIsOpenByRole] = useState<Record<AgentRole, boolean>>(() => {
-    if (typeof globalThis.localStorage === "undefined") {
+    if (globalThis.localStorage === undefined) {
       return cloneDefaultOpenByRole();
     }
 
@@ -192,7 +193,7 @@ export function useAgentStudioRightPanel({
   });
 
   useEffect(() => {
-    if (typeof globalThis.localStorage === "undefined") {
+    if (globalThis.localStorage === undefined) {
       return;
     }
 

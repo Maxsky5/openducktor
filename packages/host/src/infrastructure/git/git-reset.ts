@@ -5,7 +5,9 @@ import { Effect } from "effect";
 import {
   HostOperationError,
   HostResourceError,
+  type HostResourceErrorAggregate,
   HostValidationError,
+  type HostValidationErrorAggregate,
   toHostOperationError,
 } from "../../effect/host-errors";
 import {
@@ -46,7 +48,7 @@ const findFileDiff = (fileDiffs: FileDiff[], filePath: string): FileDiff => {
 const findFileDiffEffect = (
   fileDiffs: FileDiff[],
   filePath: string,
-): Effect.Effect<FileDiff, HostResourceError> =>
+): Effect.Effect<FileDiff, HostResourceErrorAggregate> =>
   Effect.try({
     try: () => findFileDiff(fileDiffs, filePath),
     catch: (cause) =>
@@ -60,7 +62,7 @@ const findFileDiffEffect = (
   });
 const parsePatchHunksEffect = (
   patch: string,
-): Effect.Effect<ReturnType<typeof parsePatchHunks>, HostValidationError> =>
+): Effect.Effect<ReturnType<typeof parsePatchHunks>, HostValidationErrorAggregate> =>
   Effect.try({
     try: () => parsePatchHunks(patch),
     catch: (cause) =>
@@ -71,7 +73,7 @@ const parsePatchHunksEffect = (
 const findMatchingCachedHunkEffect = (
   cachedPatch: ReturnType<typeof parsePatchHunks>,
   selectedHunk: ReturnType<typeof parsePatchHunks>["hunks"][number],
-): Effect.Effect<ReturnType<typeof findMatchingCachedHunk>, HostValidationError> =>
+): Effect.Effect<ReturnType<typeof findMatchingCachedHunk>, HostValidationErrorAggregate> =>
   Effect.try({
     try: () => findMatchingCachedHunk(cachedPatch, selectedHunk),
     catch: (cause) =>

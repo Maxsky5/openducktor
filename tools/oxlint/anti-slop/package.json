@@ -4,10 +4,10 @@
   "type": "module",
   "scripts": {
     "build": "bun run typecheck",
-    "test": "node --experimental-strip-types --test src/rules/*.test.ts",
+    "test": "node --experimental-strip-types --test \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
+  "devDependencies": {
     "@oxlint/plugins": "1.78.0"
   }
 }

@@ -80,13 +80,13 @@ export type CodexAppServerThreadActiveFlag = Extract<
 export type CodexAppServerThreadSource = NonNullable<CodexAppServerThread["threadSource"]>;
 export type CodexAppServerThreadStartSource = "clear" | "startup";
 export type CodexAppServerSessionSource = CodexAppServerThread["source"];
-export type CodexAppServerSubAgentSource = Extract<
-  CodexAppServerSessionSource,
-  { subAgent: object }
+export type CodexAppServerSubAgentSource = Exclude<
+  Exclude<CodexAppServerSessionSource, "appServer" | "cli" | "exec" | "unknown" | "vscode">,
+  { custom: string }
 >["subAgent"];
-export type CodexAppServerSubAgentThreadSpawnSource = Extract<
-  CodexAppServerSubAgentSource,
-  { thread_spawn: object }
+export type CodexAppServerSubAgentThreadSpawnSource = Exclude<
+  Exclude<CodexAppServerSubAgentSource, "review" | "compact" | "memory_consolidation">,
+  { other: string }
 >["thread_spawn"];
 export type CodexAppServerCollabAgentToolCallThreadItem = Extract<
   CodexAppServerThreadItem,

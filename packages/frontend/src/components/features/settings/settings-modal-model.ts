@@ -1,5 +1,6 @@
 import {
   type AgentPromptTemplateId,
+  agentPromptTemplateIdValues,
   type RepoConfig,
   type RepoPromptOverrides,
   type RuntimeDescriptor,
@@ -59,13 +60,14 @@ export const ensureDraftAgentDefault = (
     | null
     | undefined,
 ): RepoAgentDefaultInput => {
-  return {
-    ...(value?.runtimeKind ? { runtimeKind: value.runtimeKind } : undefined),
+  const draft: RepoAgentDefaultInput = {
     providerId: value?.providerId ?? "",
     modelId: value?.modelId ?? "",
     variant: value?.variant ?? "",
     profileId: value?.profileId ?? "",
   };
+  if (value?.runtimeKind) draft.runtimeKind = value.runtimeKind;
+  return draft;
 };
 
 export const updateRoleDefault = (
@@ -263,13 +265,11 @@ const formatPlaceholders = (placeholders: string[]): string => {
   return placeholders.map((placeholder) => `{{${placeholder}}}`).join(", ");
 };
 
-// SAFETY: Object.entries reads this RepoPromptOverrides object, so each tuple keeps its indexed key and value types.
 export const buildPromptOverrideValidationErrors = (overrides: RepoPromptOverrides) => {
   const errors: PromptOverrideValidationErrors = {};
 
-  for (const [templateId, override] of Object.entries(overrides) as Array<
-    [AgentPromptTemplateId, RepoPromptOverrides[AgentPromptTemplateId]]
-  >) {
+  for (const templateId of agentPromptTemplateIdValues) {
+    const override = overrides[templateId];
     if (!override || override.enabled === false) {
       continue;
     }

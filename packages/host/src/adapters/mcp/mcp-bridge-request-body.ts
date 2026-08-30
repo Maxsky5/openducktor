@@ -1,7 +1,7 @@
 import type { JsonValue } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { IncomingMessage } from "node:http";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import { parseJson } from "../../effect/json";
 
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -11,12 +11,12 @@ const errorMessage = (cause: unknown): string =>
 
 export const readMcpBridgeRequestBody = (
   request: IncomingMessage,
-): Effect.Effect<JsonValue, HostOperationError> =>
-  Effect.async<JsonValue, HostOperationError>((resume, signal) => {
+): Effect.Effect<JsonValue, HostOperationErrorAggregate> =>
+  Effect.async<JsonValue, HostOperationErrorAggregate>((resume, signal) => {
     let body = "";
     let receivedBytes = 0;
     let settled = false;
-    const finish = (effect: Effect.Effect<JsonValue, HostOperationError>): void => {
+    const finish = (effect: Effect.Effect<JsonValue, HostOperationErrorAggregate>): void => {
       if (settled) {
         return;
       }
@@ -62,7 +62,6 @@ export const readMcpBridgeRequestBody = (
       }
       finish(
         Effect.try({
-          // SAFETY: parseJson decodes a JSON request body.
           try: () => parseJson(body),
           catch: (cause) =>
             new HostOperationError({

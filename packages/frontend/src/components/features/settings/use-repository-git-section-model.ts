@@ -167,12 +167,13 @@ const repositoryGitSectionReducer = (
       };
     }
     case "detection_failed": {
-      return {
+      const nextState: RepositoryGitSectionState = {
         ...state,
         detectionMessage: action.reason,
         isDetecting: false,
-        ...(action.manual ? { isManualConfigOpen: true } : undefined),
       };
+      if (action.manual) nextState.isManualConfigOpen = true;
+      return nextState;
     }
     case "detection_invalidated": {
       return {
@@ -183,13 +184,14 @@ const repositoryGitSectionReducer = (
       };
     }
     case "detection_missing": {
-      return {
+      const nextState: RepositoryGitSectionState = {
         ...state,
         detectionMessage:
           "No GitHub origin was detected for this repository. You can still configure it manually.",
         isDetecting: false,
-        ...(action.manual ? { isManualConfigOpen: true } : undefined),
       };
+      if (action.manual) nextState.isManualConfigOpen = true;
+      return nextState;
     }
     case "detection_started": {
       return {

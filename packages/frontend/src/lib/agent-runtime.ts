@@ -86,11 +86,14 @@ export const resolveRuntimeKindSelectionState = ({
   requestedRuntimeKind?: RuntimeKind | null;
 }): RuntimeKindSelectionResolution => {
   if (runtimeDefinitions.length === 0) {
-    return {
+    const resolution: Extract<RuntimeKindSelectionResolution, { status: "no-definitions" }> = {
       status: "no-definitions",
       runtimeKind: null,
-      ...(requestedRuntimeKind === undefined ? undefined : { requestedRuntimeKind }),
     };
+    if (requestedRuntimeKind !== undefined) {
+      resolution.requestedRuntimeKind = requestedRuntimeKind;
+    }
+    return resolution;
   }
 
   if (!requestedRuntimeKind) {
@@ -314,7 +317,9 @@ export const getRuntimeDescriptorLaunchConfigErrors = (
   });
 };
 
-export const validateRuntimeDefinitionForOpenDucktor = (runtimeDescriptor: unknown): string[] => {
+export const validateRuntimeDefinitionForOpenDucktor = (
+  runtimeDescriptor: RuntimeDescriptor,
+): string[] => {
   const descriptorParseResult = runtimeDescriptorSchema.safeParse(runtimeDescriptor);
   if (!descriptorParseResult.success) {
     // Intentionally stop after schema validation: capability policy checks assume a parsed

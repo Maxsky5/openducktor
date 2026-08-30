@@ -1,9 +1,9 @@
 import type { Readable, Writable } from "node:stream";
 import type { Effect } from "effect";
 import type {
-  HostOperationError,
-  HostResourceError,
-  HostValidationError,
+  HostOperationErrorAggregate,
+  HostResourceErrorAggregate,
+  HostValidationErrorAggregate,
 } from "../../effect/host-errors";
 import type { CodexAppServerStreamEvent } from "../../ports/codex-app-server-port";
 import type {
@@ -24,8 +24,8 @@ export type CodexChildProcess = {
   ): void;
 };
 
-export type CodexTransportBaseError = HostOperationError | HostResourceError;
-export type CodexAppServerTransportError = CodexTransportBaseError | HostValidationError;
+export type CodexTransportBaseError = HostOperationErrorAggregate | HostResourceErrorAggregate;
+export type CodexAppServerTransportError = CodexTransportBaseError | HostValidationErrorAggregate;
 
 export type CodexAppServerChildTransport = CodexAppServerTransport & {
   notify(

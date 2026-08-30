@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import type { JsonObject } from "@openducktor/contracts";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import {
@@ -145,25 +146,32 @@ const createCompletedToolMessage = ({
   id?: string;
   tool?: string;
   toolType?: import("@openducktor/core").AgentToolType;
-  input?: Record<string, unknown>;
+  input?: JsonObject;
   output?: string;
   content?: string;
-} = {}): AgentMessage => ({
-  id,
-  role: "tool",
-  content,
-  timestamp: "2026-02-22T08:10:00.000Z",
-  meta: {
+} = {}): AgentMessage => {
+  const meta: Extract<NonNullable<AgentMessage["meta"]>, { kind: "tool" }> = {
     kind: "tool",
     partId: `part-${id}`,
     callId: `call-${id}`,
     tool,
     toolType,
     status: "completed",
-    ...(input !== undefined ? { input } : undefined),
-    ...(output !== undefined ? { output } : undefined),
-  },
-});
+  };
+  if (input !== undefined) {
+    meta.input = input;
+  }
+  if (output !== undefined) {
+    meta.output = output;
+  }
+  return {
+    id,
+    role: "tool",
+    content,
+    timestamp: "2026-02-22T08:10:00.000Z",
+    meta,
+  };
+};
 
 beforeAll(async () => {
   ({ useAgentStudioDocuments } = await import("./use-agent-studio-documents"));

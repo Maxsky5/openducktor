@@ -22,6 +22,7 @@ export const createAgentSessionRuntimeAdapterTestDouble = <
   binding: AgentSessionLiveAdapterBinding,
   overrides: Overrides,
 ): AgentSessionRuntimeAdapterPort => ({
+  supportsSessionControl: true,
   binding,
   forkSession: unexpectedEffectCall("live session adapter", "forkSession"),
   listRetainedSnapshots: unexpectedEffectCall("live session adapter", "listRetainedSnapshots"),

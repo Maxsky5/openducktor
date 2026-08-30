@@ -69,13 +69,14 @@ const createOpenCodeWorkspaceRuntimeStarter = (input: OpenCodeWorkspaceRuntimeSt
     releaseRuntime: () => Effect.succeed([]),
     runAdapterMutation: (mutation) => Effect.map(mutation, (result) => result.value),
   };
-  const effectiveToolDiscovery =
-    toolDiscovery ??
-    createToolDiscoveryAdapter({
-      ...(processEnv === undefined ? undefined : { env: processEnv }),
-      systemCommands: systemCommands ?? createSystemCommands(),
-    });
-  return createEffectOpenCodeWorkspaceRuntimeStarter({
+  const toolDiscoveryInput: Parameters<typeof createToolDiscoveryAdapter>[0] = {
+    systemCommands: systemCommands ?? createSystemCommands(),
+  };
+  if (processEnv !== undefined) {
+    toolDiscoveryInput.env = processEnv;
+  }
+  const effectiveToolDiscovery = toolDiscovery ?? createToolDiscoveryAdapter(toolDiscoveryInput);
+  const runtimeStarterInput: Parameters<typeof createEffectOpenCodeWorkspaceRuntimeStarter>[0] = {
     runtimeDistribution: testRuntimeDistribution,
     toolDiscovery: effectiveToolDiscovery,
     settingsConfig:
@@ -85,6 +86,7 @@ const createOpenCodeWorkspaceRuntimeStarter = (input: OpenCodeWorkspaceRuntimeSt
       prepareLiveSessionAdapter ??
       ((runtime) => {
         const adapter: AgentSessionLiveAdapterPort = {
+          supportsSessionControl: false,
           binding: {
             runtimeId: runtime.runtimeId,
             runtimeKind: runtime.kind,
@@ -104,9 +106,12 @@ const createOpenCodeWorkspaceRuntimeStarter = (input: OpenCodeWorkspaceRuntimeSt
           discard: () => Effect.void,
         } satisfies PreparedRuntimeLiveSessionAdapter);
       }),
-    ...(processEnv === undefined ? undefined : { processEnv }),
     ...starterInput,
-  });
+  };
+  if (processEnv !== undefined) {
+    runtimeStarterInput.processEnv = processEnv;
+  }
+  return createEffectOpenCodeWorkspaceRuntimeStarter(runtimeStarterInput);
 };
 const createSystemCommands = (): SystemCommandPort => ({
   resolveCommandPath(command) {
@@ -283,6 +288,7 @@ if (exitAfterMs !== null) {
 };
 
 const createLiveAdapter = (runtime: RuntimeInstanceSummary): AgentSessionLiveAdapterPort => ({
+  supportsSessionControl: false,
   binding: {
     runtimeId: runtime.runtimeId,
     runtimeKind: runtime.kind,

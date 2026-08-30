@@ -1,7 +1,11 @@
 import { readFileSync } from "node:fs";
 import { Effect } from "effect";
 import { z } from "zod";
-import { ElectronValidationError, errorMessage } from "./electron-errors";
+import {
+  ElectronValidationError,
+  type ElectronValidationErrorAggregate,
+  errorMessage,
+} from "./electron-errors";
 
 export const DEFAULT_RENDERER_DEV_PORT = 0;
 const packageVersionSchema = z.object({ version: z.string().trim().min(1) });
@@ -9,7 +13,7 @@ const packageVersionSchema = z.object({ version: z.string().trim().min(1) });
 export const resolveRendererDevPortEffect = (
   rawPort: string | undefined,
   operation = "electron.config.resolve-renderer-dev-port",
-): Effect.Effect<number, ElectronValidationError> =>
+): Effect.Effect<number, ElectronValidationErrorAggregate> =>
   Effect.try({
     try: () => resolveRendererDevPort(rawPort, operation),
     catch: (cause) =>
@@ -56,7 +60,7 @@ export const resolveRendererDevPort = (
 
 export const readPackageVersionEffect = (
   packageJsonPath: string,
-): Effect.Effect<string, ElectronValidationError> =>
+): Effect.Effect<string, ElectronValidationErrorAggregate> =>
   Effect.try({
     try: () => readPackageVersion(packageJsonPath),
     catch: (cause) =>

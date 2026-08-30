@@ -7,7 +7,7 @@ const { GlobalRegistrator } = await import(
   frontendRequire.resolve("@happy-dom/global-registrator")
 );
 
-if (typeof globalThis.document === "undefined") {
+if (globalThis.document === undefined) {
   GlobalRegistrator.register();
 }
 

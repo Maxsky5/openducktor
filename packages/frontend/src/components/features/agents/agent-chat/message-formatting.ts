@@ -82,7 +82,7 @@ export const getAssistantFooterData = (
   const parts: string[] = [];
 
   const agentLabel = assistantMeta.profileId;
-  if (typeof agentLabel === "string" && agentLabel.trim().length > 0) {
+  if (agentLabel !== undefined && agentLabel.trim().length > 0) {
     parts.push(agentLabel.trim());
   }
 
@@ -90,9 +90,9 @@ export const getAssistantFooterData = (
   const modelLabel = assistantMeta.modelId;
   const catalogModel =
     modelCatalog &&
-    typeof providerLabel === "string" &&
+    providerLabel !== undefined &&
     providerLabel.trim().length > 0 &&
-    typeof modelLabel === "string" &&
+    modelLabel !== undefined &&
     modelLabel.trim().length > 0
       ? findCatalogModel(modelCatalog, {
           providerId: providerLabel.trim(),
@@ -102,7 +102,7 @@ export const getAssistantFooterData = (
   const displayedModelLabel = catalogModel?.modelName ?? modelLabel;
   const providerModelParts: string[] = [];
   for (const value of [providerLabel, displayedModelLabel]) {
-    if (typeof value === "string" && value.trim().length > 0) {
+    if (value !== undefined && value.trim().length > 0) {
       providerModelParts.push(value.trim());
     }
   }
@@ -112,7 +112,7 @@ export const getAssistantFooterData = (
   }
 
   const variantLabel = assistantMeta.variant;
-  if (typeof variantLabel === "string" && variantLabel.trim().length > 0) {
+  if (variantLabel !== undefined && variantLabel.trim().length > 0) {
     parts.push(variantLabel.trim());
   }
 

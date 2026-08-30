@@ -100,27 +100,29 @@ export function useGitConflictResolution({
       });
 
       const promptOverrides = await loadPromptOverrides(workspaceId);
-      const message = buildGitConflictResolutionPrompt(taskContext.taskId, {
+      const git: NonNullable<
+        NonNullable<Parameters<typeof buildGitConflictResolutionPrompt>[1]>["git"]
+      > = {
+        operationLabel: getGitConflictCopy(conflict.operation).operationLabel,
+        targetBranch: conflict.targetBranch,
+        conflictedFiles: conflict.conflictedFiles,
+        conflictOutput: conflict.output,
+      };
+      const promptContext: NonNullable<Parameters<typeof buildGitConflictResolutionPrompt>[1]> = {
         overrides: promptOverrides,
-        ...(taskContext.task
-          ? {
-              task: {
-                title: taskContext.task.title,
-                issueType: taskContext.task.issueType,
-                status: taskContext.task.status,
-                qaRequired: taskContext.task.aiReviewEnabled,
-                description: taskContext.task.description,
-              },
-            }
-          : undefined),
-        git: {
-          operationLabel: getGitConflictCopy(conflict.operation).operationLabel,
-          ...(conflict.currentBranch ? { currentBranch: conflict.currentBranch } : undefined),
-          targetBranch: conflict.targetBranch,
-          conflictedFiles: conflict.conflictedFiles,
-          conflictOutput: conflict.output,
-        },
-      });
+        git,
+      };
+      if (taskContext.task) {
+        promptContext.task = {
+          title: taskContext.task.title,
+          issueType: taskContext.task.issueType,
+          status: taskContext.task.status,
+          qaRequired: taskContext.task.aiReviewEnabled,
+          description: taskContext.task.description,
+        };
+      }
+      if (conflict.currentBranch) git.currentBranch = conflict.currentBranch;
+      const message = buildGitConflictResolutionPrompt(taskContext.taskId, promptContext);
 
       const session = await startConflictResolutionSession({
         taskId: taskContext.taskId,

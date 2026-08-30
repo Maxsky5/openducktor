@@ -1,6 +1,7 @@
 import {
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
   type CodexAppServerCommandExecutionApprovalDecision,
+  type CodexAppServerJsonValue,
   type CodexAppServerRequestId,
   codexAppServerMcpServerElicitationRequestParamsSchema,
   isCodexAppServerCommandRequestMethod,
@@ -17,8 +18,8 @@ import {
 } from "./codex-app-server-shared";
 import { classifyCodexCommandRequestMutation } from "./codex-command-approvals";
 import { classifyCodexPermissionRequestMutation } from "./codex-permission-approvals";
+import type { CodexToolQuestion } from "./codex-tool-normalizer";
 import type { CodexNotificationRecord, CodexServerRequestRecord } from "./types";
-import type { CodexAppServerJsonValue } from "@openducktor/contracts";
 
 export { codexApprovalResponseForRequest } from "./codex-approval-responses";
 export {
@@ -221,17 +222,18 @@ const commandApprovalFields = (
   }
   const command = extractCommandText(request);
   const workingDirectory = extractCommandWorkingDirectory(request);
-  return {
+  const fields: Pick<AgentPendingApprovalRequest, "action" | "command"> = {
     action: { name: hasNetworkApprovalContext(request) ? "Network access" : "Bash" },
-    ...(command
-      ? {
-          command: {
-            command,
-            ...(workingDirectory ? { workingDirectory } : undefined),
-          },
-        }
-      : undefined),
   };
+  if (command) {
+    fields.command = {
+      command,
+    };
+    if (workingDirectory) {
+      fields.command.workingDirectory = workingDirectory;
+    }
+  }
+  return fields;
 };
 
 const approvalContentFields = (
@@ -345,15 +347,13 @@ export const toMcpElicitationApprovalRequest = (
   const toolDescription = extractStringField(meta, [MCP_APPROVAL_TOOL_DESCRIPTION_KEY]);
   const toolParams = meta[MCP_APPROVAL_TOOL_PARAMS_KEY];
 
-  return {
+  const approval: McpElicitationApprovalProjection = {
     requestType: "runtime_tool",
     title: "MCP Tool Approval",
     summary: params.message,
-    ...(toolDescription ? { details: toolDescription } : undefined),
     tool: {
       name: toolName,
       title: toolTitle,
-      ...(isPlainObject(toolParams) ? { input: toolParams } : undefined),
     },
     mutation: "unknown",
     supportedReplyOutcomes: mcpToolApprovalSupportedReplyOutcomes(meta),
@@ -361,6 +361,13 @@ export const toMcpElicitationApprovalRequest = (
       serverName: params.serverName,
     },
   };
+  if (toolDescription) {
+    approval.details = toolDescription;
+  }
+  if (approval.tool && isPlainObject(toolParams)) {
+    approval.tool.input = toolParams;
+  }
+  return approval;
 };
 
 export const codexNotificationTurnId = (notification: CodexNotificationRecord): string | null => {
@@ -421,12 +428,15 @@ export const parseQuestionRequest = (request: CodexQuestionRequest) => {
 
   const questionIds = request.params.questions.map(({ id }) => id);
   const questions = request.params.questions.map((rawQuestion) => {
-    return {
+    const question: CodexToolQuestion = {
       header: rawQuestion.header,
       question: rawQuestion.question,
       options: rawQuestion.options ?? [],
-      ...(rawQuestion.isOther ? { custom: true } : undefined),
     };
+    if (rawQuestion.isOther) {
+      question.custom = true;
+    }
+    return question;
   });
 
   return {

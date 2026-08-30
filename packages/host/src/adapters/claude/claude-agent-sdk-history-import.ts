@@ -6,11 +6,11 @@ import {
   type SessionStoreEntry,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { LoadAgentSessionHistoryInput } from "@openducktor/core";
+import { z } from "zod";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import {
   parseClaudeHistoryAssistantEntry,
   parseClaudeHistoryAttachment,
-  parseClaudeHistoryAttachmentEntry,
   parseClaudeHistoryConversationEntry,
   parseClaudeHistoryStoreEntry,
   parseClaudeHistorySubagentSystemMessageIngress,
@@ -80,20 +80,28 @@ export type ClaudeHistoryEntryMetadata = {
   timestamp?: unknown;
 };
 
-const sessionStoreEntryValue = (entry: SessionStoreEntry) => parseClaudeHistoryStoreEntry(entry);
+const claudeHistoryStringSchema = z.string();
+
+const sessionStoreEntryValue = (entry: SessionStoreEntry): SessionStoreEntry => {
+  parseClaudeHistoryStoreEntry(entry);
+  return entry;
+};
 
 const isMainClaudeHistoryMessage = (entry: SessionStoreEntry): entry is ClaudeHistoryMessage => {
   const value = sessionStoreEntryValue(entry);
   if (entry.type === "queue-operation") {
-    return readStringProp(value, "operation") === "enqueue" && typeof entry.content === "string";
+    return (
+      readStringProp(value, "operation") === "enqueue" &&
+      claudeHistoryStringSchema.safeParse(entry.content).success
+    );
   }
   if (entry.type === "assistant" || entry.type === "user" || entry.type === "system") {
     const subtype = readStringProp(value, "subtype");
     if (entry.type === "system" && subtype === "model_refusal_fallback") {
-      return typeof entry.uuid === "string";
+      return claudeHistoryStringSchema.safeParse(entry.uuid).success;
     }
     if (entry.type === "system" && subtype === "compact_boundary") {
-      return typeof entry.uuid === "string";
+      return claudeHistoryStringSchema.safeParse(entry.uuid).success;
     }
     if (
       entry.type === "system" &&
@@ -109,14 +117,17 @@ const isMainClaudeHistoryMessage = (entry: SessionStoreEntry): entry is ClaudeHi
       entry.type === "system" &&
       (subtype === "local_command" || subtype === "local_command_output")
     ) {
-      return typeof entry.uuid === "string" && typeof entry.content === "string";
+      return (
+        claudeHistoryStringSchema.safeParse(entry.uuid).success &&
+        claudeHistoryStringSchema.safeParse(entry.content).success
+      );
     }
     if (entry.type === "assistant") {
       parseClaudeHistoryAssistantEntry(value);
     } else if (entry.type === "user") {
       parseClaudeHistoryConversationEntry(value);
     }
-    return typeof entry.uuid === "string" && "message" in entry;
+    return claudeHistoryStringSchema.safeParse(entry.uuid).success && "message" in entry;
   }
   return entry.type === "result";
 };
@@ -131,12 +142,11 @@ const readMetaQueuedPromptKey = (entry: SessionStoreEntry): string | null => {
   if (entry.type !== "attachment") {
     return null;
   }
-  const attachmentEntry = parseClaudeHistoryAttachmentEntry(value);
-  const attachment = parseClaudeHistoryAttachment(attachmentEntry.attachment);
+  const attachment = parseClaudeHistoryAttachment(value.attachment);
   if (attachment.type !== "queued_command" || attachment.isMeta !== true) {
     return null;
   }
-  const metaQueuedCommand = parseClaudeMetaQueuedCommandAttachment(attachmentEntry.attachment);
+  const metaQueuedCommand = parseClaudeMetaQueuedCommandAttachment(value.attachment);
   return queuedPromptKey(
     readStringProp(value, "timestamp") ?? metaQueuedCommand.timestamp,
     metaQueuedCommand.prompt,

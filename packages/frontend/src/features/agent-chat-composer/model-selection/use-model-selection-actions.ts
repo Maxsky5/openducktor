@@ -107,10 +107,9 @@ export const useModelSelectionActions = ({
         ? model.variants.filter((variant) => liveVariantSet.has(variant))
         : model.variants;
       const { variant: _defaultVariant, ...selectionWithoutVariant } = modelSelection;
-      applySelection({
-        ...selectionWithoutVariant,
-        ...(variants[0] ? { variant: variants[0] } : undefined),
-      });
+      const nextSelection: AgentModelSelection = { ...selectionWithoutVariant };
+      if (variants[0]) nextSelection.variant = variants[0];
+      applySelection(nextSelection);
     },
     [applySelection, loadedSessionIdentity, selectedModelSelection],
   );

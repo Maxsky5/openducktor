@@ -2,7 +2,7 @@
 import { describe, expect, test } from "bun:test";
 import opencodeRuntimeDescriptorFixture from "../../../docs/contracts/opencode-runtime-descriptor.fixture.json";
 import runtimeDescriptorInvalidCasesFixture from "../../../docs/contracts/runtime-descriptor-invalid-cases.fixture.json";
-import type { JsonObject, JsonValue } from "./json-types";
+import { isJsonObject, type JsonObject, type JsonValue } from "./json-types";
 import {
   agentSessionApprovalRequestSchema,
   agentSessionRecordSchema,
@@ -84,9 +84,6 @@ type RuntimeDescriptorInvalidCase = {
     value: JsonValue;
   }>;
 };
-
-const isJsonObject = (value: JsonValue): value is JsonObject =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 const cloneJson = <T>(value: T): T => structuredClone(value);
 

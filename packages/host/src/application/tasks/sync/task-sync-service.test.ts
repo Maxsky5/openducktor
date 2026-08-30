@@ -3,9 +3,7 @@ import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber, TestClock, TestContext } from "effect";
 import { HostOperationError } from "../../../effect/host-errors";
 import type { TaskEventStreamPort } from "../../../events/task-event-stream";
-import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
-import type { TaskService } from "../task-service";
 import { createTaskSyncService } from "./task-sync-service";
 
 type TaskSyncServiceTestInput = Omit<
@@ -46,12 +44,6 @@ const createEventBus = () => {
   };
   return { eventBus, events };
 };
-const createTaskServiceFake = (
-  service: Pick<TaskService, "repoPullRequestSyncDetailed">,
-): Pick<TaskService, "repoPullRequestSyncDetailed"> => service;
-const createWorkspaceSettingsServiceFake = (
-  service: Pick<WorkspaceSettingsService, "listWorkspaces">,
-): Pick<WorkspaceSettingsService, "listWorkspaces"> => service;
 describe("createTaskSyncService", () => {
   test("reports task publication acceptance failures without rejecting committed work", async () => {
     const reports: unknown[] = [];
@@ -67,12 +59,12 @@ describe("createTaskSyncService", () => {
             reports.push(failure);
           }),
       },
-      taskService: createTaskServiceFake({
+      taskService: {
         repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
-      }),
-      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+      },
+      workspaceSettingsService: {
         listWorkspaces: () => Effect.succeed([]),
-      }),
+      },
     });
 
     await expect(
@@ -99,12 +91,12 @@ describe("createTaskSyncService", () => {
             reports.push(failure);
           }),
       },
-      taskService: createTaskServiceFake({
+      taskService: {
         repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
-      }),
-      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+      },
+      workspaceSettingsService: {
         listWorkspaces: () => Effect.succeed([]),
-      }),
+      },
     });
     const changes = { taskIds: ["task-1", "task-1"], removedTaskIds: [] };
 
@@ -134,12 +126,12 @@ describe("createTaskSyncService", () => {
             reports.push(failure);
           }),
       },
-      taskService: createTaskServiceFake({
+      taskService: {
         repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
-      }),
-      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+      },
+      workspaceSettingsService: {
         listWorkspaces: () => Effect.succeed([]),
-      }),
+      },
     });
     const changes = { taskIds: ["task-1"], removedTaskIds: ["task-2"] };
 
@@ -169,12 +161,12 @@ describe("createTaskSyncService", () => {
             reports.push(failure);
           }),
       },
-      taskService: createTaskServiceFake({
+      taskService: {
         repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
-      }),
-      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+      },
+      workspaceSettingsService: {
         listWorkspaces: () => Effect.succeed([]),
-      }),
+      },
     });
     const changes = { taskIds: [], removedTaskIds: [] };
 
@@ -197,12 +189,12 @@ describe("createTaskSyncService", () => {
     const { eventBus, events } = createEventBus();
     const service = createTaskSyncServiceForTest({
       eventBus,
-      taskService: createTaskServiceFake({
+      taskService: {
         repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
-      }),
-      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+      },
+      workspaceSettingsService: {
         listWorkspaces: () => Effect.succeed([]),
-      }),
+      },
     });
     const changes = { taskIds: ["task-1", "task-2"], removedTaskIds: ["task-2"] };
 
@@ -227,12 +219,12 @@ describe("createTaskSyncService", () => {
             reports.push(failure);
           }),
       },
-      taskService: createTaskServiceFake({
+      taskService: {
         repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
-      }),
-      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+      },
+      workspaceSettingsService: {
         listWorkspaces: () => Effect.succeed([]),
-      }),
+      },
     });
 
     await expect(Effect.runPromise(service.syncRepoPullRequests("/repo"))).resolves.toEqual({
@@ -247,7 +239,7 @@ describe("createTaskSyncService", () => {
     const { eventBus, events } = createEventBus();
     const service = createTaskSyncServiceForTest({
       eventBus,
-      taskService: createTaskServiceFake({
+      taskService: {
         repoPullRequestSyncDetailed() {
           return Effect.tryPromise({
             try: async () => {
@@ -261,8 +253,8 @@ describe("createTaskSyncService", () => {
               }),
           });
         },
-      }),
-      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+      },
+      workspaceSettingsService: {
         listWorkspaces() {
           return Effect.tryPromise({
             try: async () => {
@@ -276,7 +268,7 @@ describe("createTaskSyncService", () => {
               }),
           });
         },
-      }),
+      },
     });
     await Effect.runPromise(service.publishExternalTaskCreated("/repo", "task-1"));
     expect(events).toHaveLength(1);
@@ -296,7 +288,7 @@ describe("createTaskSyncService", () => {
     const service = createTaskSyncServiceForTest({
       eventBus,
       intervalMs: 60000,
-      taskService: createTaskServiceFake({
+      taskService: {
         repoPullRequestSyncDetailed(input) {
           return Effect.tryPromise({
             try: async () => {
@@ -311,8 +303,8 @@ describe("createTaskSyncService", () => {
               }),
           });
         },
-      }),
-      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+      },
+      workspaceSettingsService: {
         listWorkspaces() {
           return Effect.tryPromise({
             try: async () => {
@@ -337,7 +329,7 @@ describe("createTaskSyncService", () => {
               }),
           });
         },
-      }),
+      },
     });
     await Effect.runPromise(service.syncActiveWorkspacePullRequests());
     expect(calls).toEqual([{ repoPath: "/repo" }]);
@@ -356,7 +348,7 @@ describe("createTaskSyncService", () => {
     });
     const service = createTaskSyncServiceForTest({
       eventBus,
-      taskService: createTaskServiceFake({
+      taskService: {
         repoPullRequestSyncDetailed() {
           return Effect.fail(
             new TaskMutationProgressFailure({
@@ -366,8 +358,8 @@ describe("createTaskSyncService", () => {
             }),
           );
         },
-      }),
-      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+      },
+      workspaceSettingsService: {
         listWorkspaces() {
           return Effect.succeed([
             {
@@ -382,7 +374,7 @@ describe("createTaskSyncService", () => {
             },
           ]);
         },
-      }),
+      },
     });
 
     await expect(
@@ -407,7 +399,7 @@ describe("createTaskSyncService", () => {
           throw publicationCause;
         },
       },
-      taskService: createTaskServiceFake({
+      taskService: {
         repoPullRequestSyncDetailed: () =>
           Effect.fail(
             new TaskMutationProgressFailure({
@@ -416,8 +408,8 @@ describe("createTaskSyncService", () => {
               failure: mutationFailure,
             }),
           ),
-      }),
-      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+      },
+      workspaceSettingsService: {
         listWorkspaces: () =>
           Effect.succeed([
             {
@@ -431,7 +423,7 @@ describe("createTaskSyncService", () => {
               effectiveWorktreeBasePath: null,
             },
           ]),
-      }),
+      },
     });
 
     await expect(
@@ -457,7 +449,7 @@ describe("createTaskSyncService", () => {
                 logCalls += 1;
               }).pipe(Effect.zipRight(Deferred.succeed(logged, undefined))),
           },
-          taskService: createTaskServiceFake({
+          taskService: {
             repoPullRequestSyncDetailed: () =>
               Effect.fail(
                 new TaskMutationProgressFailure({
@@ -466,8 +458,8 @@ describe("createTaskSyncService", () => {
                   failure: mutationFailure,
                 }),
               ),
-          }),
-          workspaceSettingsService: createWorkspaceSettingsServiceFake({
+          },
+          workspaceSettingsService: {
             listWorkspaces: () =>
               Effect.succeed([
                 {
@@ -481,7 +473,7 @@ describe("createTaskSyncService", () => {
                   effectiveWorktreeBasePath: null,
                 },
               ]),
-          }),
+          },
         });
         const loop = yield* service.startPullRequestSyncLoop();
         yield* TestClock.adjust(1);
@@ -500,7 +492,7 @@ describe("createTaskSyncService", () => {
     const service = createTaskSyncServiceForTest({
       eventBus,
       intervalMs: 60000,
-      taskService: createTaskServiceFake({
+      taskService: {
         repoPullRequestSyncDetailed(input) {
           return Effect.tryPromise({
             try: async () => {
@@ -515,8 +507,8 @@ describe("createTaskSyncService", () => {
               }),
           });
         },
-      }),
-      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+      },
+      workspaceSettingsService: {
         listWorkspaces() {
           return Effect.tryPromise({
             try: async () => {
@@ -530,7 +522,7 @@ describe("createTaskSyncService", () => {
               }),
           });
         },
-      }),
+      },
     });
     const loop = await Effect.runPromise(service.startPullRequestSyncLoop());
     await Effect.runPromise(loop.stop());
@@ -553,12 +545,12 @@ describe("createTaskSyncService", () => {
           },
           onBackgroundFailure: (failure) =>
             Deferred.succeed(failureReported, failure).pipe(Effect.asVoid),
-          taskService: createTaskServiceFake({
+          taskService: {
             repoPullRequestSyncDetailed() {
               return Effect.succeed({ ran: true, changedTaskIds: [] });
             },
-          }),
-          workspaceSettingsService: createWorkspaceSettingsServiceFake({
+          },
+          workspaceSettingsService: {
             listWorkspaces() {
               return Effect.fail(
                 new HostOperationError({
@@ -567,7 +559,7 @@ describe("createTaskSyncService", () => {
                 }),
               );
             },
-          }),
+          },
         });
 
         const loop = yield* service.startPullRequestSyncLoop();
@@ -610,12 +602,12 @@ describe("createTaskSyncService", () => {
               }),
           },
           onBackgroundFailure: () => Effect.void,
-          taskService: createTaskServiceFake({
+          taskService: {
             repoPullRequestSyncDetailed() {
               return Effect.succeed({ ran: true, changedTaskIds: [] });
             },
-          }),
-          workspaceSettingsService: createWorkspaceSettingsServiceFake({
+          },
+          workspaceSettingsService: {
             listWorkspaces() {
               return Effect.fail(
                 new HostOperationError({
@@ -624,7 +616,7 @@ describe("createTaskSyncService", () => {
                 }),
               );
             },
-          }),
+          },
         });
 
         const loop = yield* service.startPullRequestSyncLoop();
@@ -674,12 +666,12 @@ describe("createTaskSyncService", () => {
             Effect.sync(() => {
               reportedFailures.push(failure);
             }),
-          taskService: createTaskServiceFake({
+          taskService: {
             repoPullRequestSyncDetailed() {
               return Effect.succeed({ ran: true, changedTaskIds: [] });
             },
-          }),
-          workspaceSettingsService: createWorkspaceSettingsServiceFake({
+          },
+          workspaceSettingsService: {
             listWorkspaces() {
               return Effect.fail(
                 new HostOperationError({
@@ -688,7 +680,7 @@ describe("createTaskSyncService", () => {
                 }),
               );
             },
-          }),
+          },
         });
 
         const loop = yield* service.startPullRequestSyncLoop();
@@ -728,7 +720,7 @@ describe("createTaskSyncService", () => {
         const service = createTaskSyncServiceForTest({
           eventBus,
           intervalMs: 1,
-          taskService: createTaskServiceFake({
+          taskService: {
             repoPullRequestSyncDetailed() {
               return Effect.uninterruptible(
                 Effect.gen(function* () {
@@ -739,8 +731,8 @@ describe("createTaskSyncService", () => {
                 }),
               );
             },
-          }),
-          workspaceSettingsService: createWorkspaceSettingsServiceFake({
+          },
+          workspaceSettingsService: {
             listWorkspaces() {
               return Effect.succeed([
                 {
@@ -755,7 +747,7 @@ describe("createTaskSyncService", () => {
                 },
               ]);
             },
-          }),
+          },
         });
 
         const loop = yield* service.startPullRequestSyncLoop();

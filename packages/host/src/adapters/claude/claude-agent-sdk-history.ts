@@ -1,8 +1,5 @@
-import {
-  isUnknownRecord,
-  type AgentEvent,
-  type AgentSessionHistoryMessage,
-} from "@openducktor/core";
+import type { AgentEvent, AgentSessionHistoryMessage } from "@openducktor/core";
+import { z } from "zod";
 import { CLAUDE_COMPACTED_MESSAGE } from "./claude-agent-sdk-compaction";
 import {
   addClaudeHistoryFinishStep,
@@ -48,11 +45,13 @@ import {
   retractClaudeTodoToolResults,
 } from "./claude-agent-sdk-todos";
 import { retractClaudeTranscriptCorrelations } from "./claude-agent-sdk-transcript-correlation";
+import type { ClaudeToolInput } from "./claude-agent-sdk-types";
 import {
   readClaudeTurnOriginKind,
   shouldFinalizeClaudeTurn,
 } from "./claude-agent-sdk-user-messages";
-import { readStringProp } from "./claude-agent-sdk-utils";
+
+const claudeCompactMetadataSchema = z.object({ trigger: z.string().optional() });
 
 const removeClaudeHistoryFinishStep = (message: MutableAssistantHistoryMessage): void => {
   message.parts = message.parts.filter((part) => part.kind !== "step" || part.phase !== "finish");
@@ -78,7 +77,7 @@ export const toClaudeHistoryMessages = (
   const assistantMessagesByToolCallId = new Map<string, MutableAssistantHistoryMessage>();
   const toolMessageIdsByCallId = new Map<string, string>();
   const toolNamesByCallId = new Map<string, string>();
-  const toolInputsByCallId = new Map<string, Record<string, unknown>>();
+  const toolInputsByCallId = new Map<string, ClaudeToolInput>();
   const hiddenSubagentTaskIds = new Set<string>();
   const subagentMessageIdsByTaskId = new Map<string, string>();
   const subagentAgentIdsByToolUseId = new Map(options.subagentAgentIdsByToolUseId);
@@ -271,12 +270,11 @@ export const toClaudeHistoryMessages = (
       });
       if (pendingManualCompaction) {
         manualCompactionBoundaryReceived = true;
-      } else if (
-        isUnknownRecord(entryValue) &&
-        isUnknownRecord(entryValue.compact_metadata) &&
-        readStringProp(entryValue.compact_metadata, "trigger") === "manual"
-      ) {
-        unclaimedManualCompactionBoundary = true;
+      } else {
+        const parsedCompactMetadata = claudeCompactMetadataSchema.safeParse(entry.compact_metadata);
+        if (parsedCompactMetadata.success && parsedCompactMetadata.data.trigger === "manual") {
+          unclaimedManualCompactionBoundary = true;
+        }
       }
       continue;
     }

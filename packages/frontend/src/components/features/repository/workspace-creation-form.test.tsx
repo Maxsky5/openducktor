@@ -65,12 +65,15 @@ function ReadyInlineWorkspaceCreationForm({
     addWorkspace,
     initialPickerOpen: true,
   });
-  const folderPicker = useInlineFolderPickerController({
-    ...(workspaceCreation.repoPath ? { initialPath: workspaceCreation.repoPath } : undefined),
+  const folderPickerInput: Parameters<typeof useInlineFolderPickerController>[0] = {
     requireGitRepo: true,
     onCancel: workspaceCreation.closePicker,
     onConfirm: workspaceCreation.confirmRepo,
-  });
+  };
+  if (workspaceCreation.repoPath) {
+    folderPickerInput.initialPath = workspaceCreation.repoPath;
+  }
+  const folderPicker = useInlineFolderPickerController(folderPickerInput);
   return (
     <>
       <WorkspaceCreationFields
@@ -118,29 +121,30 @@ const renderForm = ({
   onSuccess?: () => void;
   duplicate?: boolean;
 }): void => {
+  const formProps: Parameters<typeof WorkspaceCreationForm>[0] = {
+    workspaces: duplicate
+      ? [
+          {
+            workspaceId: "existing",
+            workspaceName: "Existing",
+            repoPath: "/repo",
+            isActive: true,
+            hasConfig: true,
+            configuredWorktreeBasePath: null,
+            defaultWorktreeBasePath: "/worktrees",
+            effectiveWorktreeBasePath: "/worktrees",
+          },
+        ]
+      : [],
+    addWorkspace,
+  };
+  if (onSuccess) {
+    formProps.onSuccess = onSuccess;
+  }
   const view = render(
     <QueryProvider useIsolatedClient>
       <SeedFilesystemDirectory />
-      <WorkspaceCreationForm
-        workspaces={
-          duplicate
-            ? [
-                {
-                  workspaceId: "existing",
-                  workspaceName: "Existing",
-                  repoPath: "/repo",
-                  isActive: true,
-                  hasConfig: true,
-                  configuredWorktreeBasePath: null,
-                  defaultWorktreeBasePath: "/worktrees",
-                  effectiveWorktreeBasePath: "/worktrees",
-                },
-              ]
-            : []
-        }
-        addWorkspace={addWorkspace}
-        {...(onSuccess ? { onSuccess } : {})}
-      />
+      <WorkspaceCreationForm {...formProps} />
     </QueryProvider>,
   );
   mountedViews.add(view);

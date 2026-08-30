@@ -10,11 +10,18 @@ import {
 import {
   createParsedOpencodeEventFixture,
   createParsedOpencodeMessageEventGroupFixtures,
+  type DirectEventFixtureInput,
+  type OpencodePartFixtureInput,
 } from "./opencode-protocol-test-fixtures";
 
 type AssistantPartEvent = Extract<AgentEvent, { type: "assistant_part" }>;
 type SubagentPart = Extract<AssistantPartEvent["part"], { kind: "subagent" }>;
 type SubagentPartEvent = AssistantPartEvent & { part: SubagentPart };
+type SubagentIdentity = {
+  agent: string;
+  prompt: string;
+  externalSessionId?: string;
+};
 
 const readSubagentParts = (events: AgentEvent[]): SubagentPart[] =>
   events
@@ -82,11 +89,10 @@ const makeChildSessionCreatedEvent = (input: {
 }): Event => {
   const parentExternalSessionId = input.parentExternalSessionId ?? "external-session-1";
   const parentPlacement = input.parentPlacement ?? "info";
-  return createParsedOpencodeEventFixture({
+  const fixture: Extract<DirectEventFixtureInput, { type: "session.created" }> = {
     type: "session.created",
     properties: {
       sessionID: input.childSessionId,
-      ...(parentPlacement === "properties" ? { parentID: parentExternalSessionId } : undefined),
       info: {
         ...childSessionInfo(
           input.childSessionId,
@@ -98,30 +104,36 @@ const makeChildSessionCreatedEvent = (input: {
         },
       },
     },
-  });
+  };
+  if (parentPlacement === "properties") {
+    fixture.properties.parentID = parentExternalSessionId;
+  }
+  return createParsedOpencodeEventFixture(fixture);
 };
 
 const makeChildPermissionAskedEvent = (input: {
   childSessionId: string;
   parentExternalSessionId?: string;
   requestId?: string;
-}): Event =>
-  permissionAskedEvent({
+}): Event => {
+  const eventInput: Parameters<typeof permissionAskedEvent>[0] = {
     requestId: input.requestId ?? "permission-child-1",
     sessionId: input.childSessionId,
     permission: "read",
     patterns: ["omp.json"],
-    ...(input.parentExternalSessionId
-      ? { properties: { info: { parentID: input.parentExternalSessionId } } }
-      : undefined),
-  });
+  };
+  if (input.parentExternalSessionId) {
+    eventInput.properties = { info: { parentID: input.parentExternalSessionId } };
+  }
+  return permissionAskedEvent(eventInput);
+};
 
 const makeChildQuestionAskedEvent = (input: {
   childSessionId: string;
   parentExternalSessionId?: string;
   requestId?: string;
-}): Event =>
-  questionAskedEvent({
+}): Event => {
+  const eventInput: Parameters<typeof questionAskedEvent>[0] = {
     requestId: input.requestId ?? "question-child-1",
     sessionId: input.childSessionId,
     questions: [
@@ -131,10 +143,12 @@ const makeChildQuestionAskedEvent = (input: {
         options: [{ label: "Current file", description: "Inspect only the requested file" }],
       },
     ],
-    ...(input.parentExternalSessionId
-      ? { properties: { info: { parentID: input.parentExternalSessionId } } }
-      : undefined),
-  });
+  };
+  if (input.parentExternalSessionId) {
+    eventInput.properties = { info: { parentID: input.parentExternalSessionId } };
+  }
+  return questionAskedEvent(eventInput);
+};
 
 const makeSubagentToolPartUpdatedEvent = (input: {
   messageId: string;
@@ -146,11 +160,33 @@ const makeSubagentToolPartUpdatedEvent = (input: {
   result?: string;
   metadataOnly?: boolean;
 }): Event => {
-  const subagentIdentity = {
+  const subagentIdentity: SubagentIdentity = {
     agent: "build",
     prompt: "Inspect repo",
-    ...(input.childSessionId ? { externalSessionId: input.childSessionId } : undefined),
   };
+  if (input.childSessionId) {
+    subagentIdentity.externalSessionId = input.childSessionId;
+  }
+  const state: Extract<OpencodePartFixtureInput, { type: "tool" }>["state"] = {
+    status: input.status,
+  };
+  if (input.metadataOnly) {
+    state.metadata = subagentIdentity;
+  } else {
+    state.input =
+      input.tool === "task"
+        ? { subagent_type: "build", prompt: "Inspect repo", description: "Starting A" }
+        : { agent: "build", prompt: "Inspect repo" };
+    if (input.childSessionId) {
+      state.output = {
+        result: input.result ?? `Finished ${input.childSessionId}`,
+        externalSessionId: input.childSessionId,
+      };
+    }
+    if (input.tool === "task" && input.childSessionId) {
+      state.metadata = { externalSessionId: input.childSessionId };
+    }
+  }
   return createParsedOpencodeEventFixture({
     type: "message.part.updated",
     properties: {
@@ -161,26 +197,7 @@ const makeSubagentToolPartUpdatedEvent = (input: {
         callID: input.callId,
         type: "tool",
         tool: input.tool,
-        state: {
-          status: input.status,
-          ...(input.metadataOnly
-            ? { metadata: subagentIdentity }
-            : {
-                input:
-                  input.tool === "task"
-                    ? { subagent_type: "build", prompt: "Inspect repo", description: "Starting A" }
-                    : { agent: "build", prompt: "Inspect repo" },
-                output: input.childSessionId
-                  ? {
-                      result: input.result ?? `Finished ${input.childSessionId}`,
-                      externalSessionId: input.childSessionId,
-                    }
-                  : undefined,
-                ...(input.tool === "task" && input.childSessionId
-                  ? { metadata: { externalSessionId: input.childSessionId } }
-                  : undefined),
-              }),
-        },
+        state,
       },
     },
   });
@@ -280,39 +297,38 @@ const makeBackgroundTaskResultUserPartUpdatedEvent = (input: {
   eventTimestampMs?: number;
 }): Event => {
   const resultTag = input.state === "error" ? "task_error" : "task_result";
-  return createParsedOpencodeEventFixture({
+  const part: Extract<OpencodePartFixtureInput, { type: "text" }> = {
+    id: input.partId,
+    sessionID: "external-session-1",
+    messageID: input.messageId,
+    type: "text",
+    synthetic: true,
+    text: [
+      `<task id="${input.childSessionId}" state="${input.state}">`,
+      `<summary>${input.summary}</summary>`,
+      `<${resultTag}>`,
+      input.text,
+      `</${resultTag}>`,
+      "</task>",
+    ].join("\n"),
+  };
+  if (input.timestampMs !== undefined) {
+    part.time = {
+      start: input.timestampMs,
+      end: input.timestampMs,
+    };
+  }
+  const fixture: Extract<DirectEventFixtureInput, { type: "message.part.updated" }> = {
     type: "message.part.updated",
     properties: {
-      ...(input.eventTimestampMs !== undefined || input.timestampMs !== undefined
-        ? {
-            time: input.eventTimestampMs ?? input.timestampMs,
-          }
-        : undefined),
-      part: {
-        id: input.partId,
-        sessionID: "external-session-1",
-        messageID: input.messageId,
-        type: "text",
-        synthetic: true,
-        ...(input.timestampMs !== undefined
-          ? {
-              time: {
-                start: input.timestampMs,
-                end: input.timestampMs,
-              },
-            }
-          : undefined),
-        text: [
-          `<task id="${input.childSessionId}" state="${input.state}">`,
-          `<summary>${input.summary}</summary>`,
-          `<${resultTag}>`,
-          input.text,
-          `</${resultTag}>`,
-          "</task>",
-        ].join("\n"),
-      },
+      part,
     },
-  });
+  };
+  const eventTimestamp = input.eventTimestampMs ?? input.timestampMs;
+  if (eventTimestamp !== undefined) {
+    fixture.properties.time = eventTimestamp;
+  }
+  return createParsedOpencodeEventFixture(fixture);
 };
 
 describe("event-stream subagent correlation", () => {

@@ -5,6 +5,7 @@ import {
   runtimeKindSchema,
 } from "./agent-runtime-schemas";
 import { agentRoleSchema } from "./agent-workflow-schemas";
+import { jsonObjectSchema } from "./json-types";
 
 type ZodSchemaFields = Parameters<typeof z.object>[0];
 
@@ -18,27 +19,6 @@ const optionalFromNullable = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((value) => (value === null ? undefined : value), schema.optional());
 
 const nonEmptyStringSchema = z.string().trim().min(1);
-
-type AgentSessionMetadataValue =
-  | string
-  | number
-  | boolean
-  | null
-  | undefined
-  | AgentSessionMetadataValue[]
-  | { [key: string]: AgentSessionMetadataValue };
-
-const agentSessionMetadataValueSchema: z.ZodType<AgentSessionMetadataValue> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.null(),
-    z.undefined(),
-    z.array(agentSessionMetadataValueSchema),
-    z.record(z.string(), agentSessionMetadataValueSchema),
-  ]),
-);
 
 export const agentSessionModelSelectionSchema = z.object({
   runtimeKind: runtimeKindSchema,
@@ -75,12 +55,12 @@ export const agentSessionApprovalRequestSchema = z.object({
     .object({
       name: z.string(),
       title: z.string().optional(),
-      input: z.record(z.string(), z.unknown()).optional(),
+      input: jsonObjectSchema.optional(),
     })
     .optional(),
   mutation: agentSessionApprovalMutationSchema.optional(),
   supportedReplyOutcomes: z.array(runtimeApprovalReplyOutcomeSchema).optional(),
-  metadata: z.record(z.string(), agentSessionMetadataValueSchema).optional(),
+  metadata: jsonObjectSchema.optional(),
 });
 export type AgentSessionApprovalRequest = z.infer<typeof agentSessionApprovalRequestSchema>;
 

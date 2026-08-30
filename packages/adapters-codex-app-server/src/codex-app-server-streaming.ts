@@ -30,7 +30,7 @@ import {
   toStreamPart,
 } from "./codex-app-server-transcript";
 import { safeCodexTimestampFromMilliseconds } from "./codex-tool-timing";
-import type { CodexCanonicalEvent } from "./codex-canonical-events";
+import type { CodexCanonicalEvent, CodexMappingContext } from "./codex-canonical-events";
 import {
   latestTodosFromCanonicalEvents,
   projectCodexCanonicalEvents,
@@ -234,20 +234,23 @@ const emitFinalAgentMessage = (
   const itemId = item.id;
   const text = item.text;
   if (text) {
-    emitCodexSessionEvent(context, session.threadId, {
+    const event: Extract<AgentEvent, { type: "assistant_message" }> = {
       type: "assistant_message",
       externalSessionId: session.threadId,
       timestamp,
       messageId: itemId,
       message: text,
-      ...(tokenUsage?.totalTokens !== undefined
-        ? { totalTokens: tokenUsage.totalTokens }
-        : undefined),
-      ...(tokenUsage?.contextWindow !== undefined
-        ? { contextWindow: tokenUsage.contextWindow }
-        : undefined),
-      ...(model ? { model } : undefined),
-    });
+    };
+    if (tokenUsage?.totalTokens !== undefined) {
+      event.totalTokens = tokenUsage.totalTokens;
+    }
+    if (tokenUsage?.contextWindow !== undefined) {
+      event.contextWindow = tokenUsage.contextWindow;
+    }
+    if (model) {
+      event.model = model;
+    }
+    emitCodexSessionEvent(context, session.threadId, event);
   }
 };
 
@@ -259,16 +262,23 @@ export const createCodexAcceptedUserMessage = ({
   session: CodexSessionState;
   parts: AgentUserMessagePart[];
   model: AgentModelSelection | undefined;
-}): AcceptedAgentUserMessage => ({
-  type: "user_message",
-  externalSessionId: session.threadId,
-  timestamp: new Date().toISOString(),
-  messageId: createCodexAcceptedUserMessageId(),
-  message: serializeAgentUserMessagePartsToText(parts),
-  parts: toDisplayParts(parts),
-  state: "read",
-  ...(model ? { model } : undefined),
-});
+}): AcceptedAgentUserMessage => {
+  const event: AcceptedAgentUserMessage = {
+    type: "user_message",
+    externalSessionId: session.threadId,
+    timestamp: new Date().toISOString(),
+    messageId: createCodexAcceptedUserMessageId(),
+    message: serializeAgentUserMessagePartsToText(parts),
+    parts: toDisplayParts(parts),
+    state: "read",
+  };
+
+  if (model) {
+    event.model = model;
+  }
+
+  return event;
+};
 
 export const emitCodexUserMessage = (
   context: CodexStreamingContext,
@@ -345,7 +355,7 @@ const emitCompletedItem = (
     const model =
       modelForTurn(context, session, turnId) ??
       context.activeTurnsBySessionId.get(session.threadId)?.model;
-    emitCodexSessionEvent(context, session.threadId, {
+    const event: AcceptedAgentUserMessage = {
       type: "user_message",
       externalSessionId: session.threadId,
       timestamp,
@@ -353,8 +363,11 @@ const emitCompletedItem = (
       message,
       parts: codexUserInputsToDisplayParts(input, itemId),
       state: "read",
-      ...(model ? { model } : undefined),
-    });
+    };
+    if (model) {
+      event.model = model;
+    }
+    emitCodexSessionEvent(context, session.threadId, event);
     return;
   }
 
@@ -382,12 +395,15 @@ const emitCompletedItem = (
         const existing = context.completedAgentMessagesByTurnKey.get(turnKey);
         if (!existing || shouldReplaceCodexBufferedFinalAgentMessage(existing.item, item)) {
           const model = modelForTurn(context, session, turnId);
-          context.completedAgentMessagesByTurnKey.set(turnKey, {
+          const bufferedMessage: CompletedAgentMessage = {
             session,
             item,
             timestamp,
-            ...(model ? { model } : undefined),
-          });
+          };
+          if (model) {
+            bufferedMessage.model = model;
+          }
+          context.completedAgentMessagesByTurnKey.set(turnKey, bufferedMessage);
         }
       }
     }
@@ -397,13 +413,18 @@ const emitCompletedItem = (
   const completedItem = withRecordedStartedItemTimestamp(context, session, item);
   const canonicalEvents = context.eventMapperPipeline.runLive(
     { kind: "item_completed", item: completedItem },
-    {
-      source: "live",
-      runtimeId: session.runtimeId,
-      threadId: session.threadId,
-      ...(turnId ? { turnId } : undefined),
-      timestamp,
-    },
+    (() => {
+      const mappingContext: CodexMappingContext = {
+        source: "live",
+        runtimeId: session.runtimeId,
+        threadId: session.threadId,
+        timestamp,
+      };
+      if (turnId) {
+        mappingContext.turnId = turnId;
+      }
+      return mappingContext;
+    })(),
   );
   if (canonicalEvents.length > 0) {
     emitCanonicalEvents(context, withTurnModel(context, canonicalEvents, session, turnId));
@@ -697,13 +718,18 @@ export const handleCodexPendingNotifications = async (
     if (notification.method !== "turn/completed") {
       const canonicalEvents = context.eventMapperPipeline.runLive(
         { kind: "notification", notification },
-        {
-          source: "live",
-          runtimeId: session.runtimeId,
-          threadId: session.threadId,
-          ...(notificationTurnId ? { turnId: notificationTurnId } : undefined),
-          timestamp,
-        },
+        (() => {
+          const mappingContext: CodexMappingContext = {
+            source: "live",
+            runtimeId: session.runtimeId,
+            threadId: session.threadId,
+            timestamp,
+          };
+          if (notificationTurnId) {
+            mappingContext.turnId = notificationTurnId;
+          }
+          return mappingContext;
+        })(),
       );
       if (canonicalEvents.length > 0) {
         emitCanonicalEvents(
@@ -743,13 +769,18 @@ export const handleCodexPendingNotifications = async (
         context,
         context.eventMapperPipeline.runLive(
           { kind: "notification", notification },
-          {
-            source: "live",
-            runtimeId: session.runtimeId,
-            threadId: session.threadId,
-            ...(turnId ? { turnId } : undefined),
-            timestamp,
-          },
+          (() => {
+            const mappingContext: CodexMappingContext = {
+              source: "live",
+              runtimeId: session.runtimeId,
+              threadId: session.threadId,
+              timestamp,
+            };
+            if (turnId) {
+              mappingContext.turnId = turnId;
+            }
+            return mappingContext;
+          })(),
         ),
       );
       continue;

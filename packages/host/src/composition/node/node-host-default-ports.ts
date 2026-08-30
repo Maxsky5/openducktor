@@ -14,7 +14,10 @@ import { createRuntimeExecutableProbes } from "../../adapters/runtimes/runtime-e
 import { createRuntimeHealthProbe } from "../../adapters/runtimes/runtime-health-probe";
 import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
 import { createSystemCommandRunner } from "../../adapters/system/system-command-runner";
-import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
+import {
+  createToolDiscoveryAdapter,
+  type ToolDiscoveryPathOptions,
+} from "../../adapters/system/tool-discovery";
 import { createRuntimeConfigInitializer } from "../../application/runtimes/runtime-config-initializer";
 import { toHostOperationError } from "../../effect/host-errors";
 import { createProcessEnvironment } from "../../infrastructure/process/process-environment";
@@ -62,27 +65,40 @@ export type NodeHostDefaultPorts = {
   worktreeFiles: WorktreeFilePort;
 };
 
-export type CreateNodeHostDefaultPortsInput = {
+type CodexAppServer = CodexAppServerPort & CodexSessionHistoryPort;
+type CodexAppServerInput =
+  | {
+      codexAppServer?: undefined;
+      codexAppServerTransportRegistry?: CodexAppServerTransportRegistry;
+    }
+  | {
+      codexAppServer: CodexAppServer & CodexAppServerTransportRegistry;
+      codexAppServerTransportRegistry?: undefined;
+    }
+  | {
+      codexAppServer: CodexAppServer;
+      codexAppServerTransportRegistry: CodexAppServerTransportRegistry;
+    };
+
+export type CreateNodeHostDefaultPortsInput = CodexAppServerInput & {
   runtimeDistribution: HostRuntimeDistribution;
   terminalPty: TerminalPtyPort;
 } & Partial<{
-  codexAppServer: CodexAppServerPort & CodexSessionHistoryPort;
-  codexAppServerTransportRegistry: CodexAppServerTransportRegistry;
-  clientVersion: string;
-  devServerProcesses: DevServerProcessPort;
-  filesystem: FilesystemPort;
-  git: GitPort;
-  localAttachments: LocalAttachmentPort;
-  openInTools: OpenInToolsPort;
-  processEnv: NodeJS.ProcessEnv;
-  runtimeExecutableProbes: RuntimeExecutableProbesByKind;
-  runtimeHealth: RuntimeHealthPort;
-  settingsConfig: SettingsConfigPort;
-  systemCommands: SystemCommandPort;
-  toolDiscovery: ToolDiscoveryPort;
-  providedToolPaths: Partial<Record<ToolDiscoveryId, string>>;
-  worktreeFiles: WorktreeFilePort;
-}>;
+    clientVersion: string;
+    devServerProcesses: DevServerProcessPort;
+    filesystem: FilesystemPort;
+    git: GitPort;
+    localAttachments: LocalAttachmentPort;
+    openInTools: OpenInToolsPort;
+    processEnv: NodeJS.ProcessEnv;
+    runtimeExecutableProbes: RuntimeExecutableProbesByKind;
+    runtimeHealth: RuntimeHealthPort;
+    settingsConfig: SettingsConfigPort;
+    systemCommands: SystemCommandPort;
+    toolDiscovery: ToolDiscoveryPort;
+    providedToolPaths: Partial<Record<ToolDiscoveryId, string>>;
+    worktreeFiles: WorktreeFilePort;
+  }>;
 
 export class NodeHostDefaultPortsTag extends Context.Tag("@openducktor/host/NodeHostDefaultPorts")<
   NodeHostDefaultPortsTag,
@@ -104,14 +120,6 @@ export type NodeHostDefaultPortServices =
   | TerminalPtyPortTag
   | WorktreeFilePortTag;
 
-const isCodexAppServerTransportRegistry = (
-  value: CodexAppServerPort,
-): value is CodexAppServerPort & CodexAppServerTransportRegistry =>
-  "registerTransport" in value &&
-  typeof value.registerTransport === "function" &&
-  "unregisterTransport" in value &&
-  typeof value.unregisterTransport === "function";
-
 const makeNodeHostDefaultPorts = (
   input: CreateNodeHostDefaultPortsInput,
 ): Effect.Effect<NodeHostDefaultPorts> =>
@@ -122,22 +130,28 @@ const makeNodeHostDefaultPorts = (
       input.runtimeDistribution.mode === "artifact" && input.runtimeDistribution.bundledToolBinDirs
         ? input.runtimeDistribution.bundledToolBinDirs
         : undefined;
+    const toolDiscoveryOptions: ToolDiscoveryPathOptions = {};
+    if (input.providedToolPaths) {
+      toolDiscoveryOptions.providedToolPaths = input.providedToolPaths;
+    }
+    if (bundledToolBinDirs) {
+      toolDiscoveryOptions.bundledToolBinDirs = bundledToolBinDirs;
+    }
     const toolDiscovery =
       input.toolDiscovery ??
       createToolDiscoveryAdapter({
         env: processEnv,
-        options: {
-          ...(input.providedToolPaths ? { providedToolPaths: input.providedToolPaths } : undefined),
-          ...(bundledToolBinDirs ? { bundledToolBinDirs } : undefined),
-        },
+        options: toolDiscoveryOptions,
         systemCommands,
       });
+    const runtimeExecutableProbeInput: Parameters<typeof createRuntimeExecutableProbes>[0] = {
+      processEnv,
+    };
+    if (input.clientVersion) {
+      runtimeExecutableProbeInput.clientVersion = input.clientVersion;
+    }
     const runtimeExecutableProbes =
-      input.runtimeExecutableProbes ??
-      createRuntimeExecutableProbes({
-        ...(input.clientVersion ? { clientVersion: input.clientVersion } : undefined),
-        processEnv,
-      });
+      input.runtimeExecutableProbes ?? createRuntimeExecutableProbes(runtimeExecutableProbeInput);
     const runtimeHealth =
       input.runtimeHealth ??
       createRuntimeHealthProbe(systemCommands, toolDiscovery, runtimeExecutableProbes);
@@ -150,8 +164,7 @@ const makeNodeHostDefaultPorts = (
     const defaultCodexAppServer = createCodexAppServerTransportRegistry();
     const codexAppServer = input.codexAppServer ?? defaultCodexAppServer;
     const codexTransportRegistry =
-      input.codexAppServerTransportRegistry ??
-      (isCodexAppServerTransportRegistry(codexAppServer) ? codexAppServer : defaultCodexAppServer);
+      input.codexAppServerTransportRegistry ?? input.codexAppServer ?? defaultCodexAppServer;
 
     return {
       codexAppServer,

@@ -20,27 +20,40 @@ const createFileError = (input: {
   assetIds?: string[];
   taskId?: string;
   cause?: unknown;
-}): TaskAssetError =>
-  new TaskAssetError({
+}): TaskAssetError => {
+  const fields = {
     operation: input.operation,
     code: input.code,
-    ...(input.taskId ? { taskId: input.taskId } : undefined),
     assetIds: input.assetIds ?? [],
     failedPhase: input.phase,
     durableState: "unchanged",
     retryAllowed: true,
     message: input.message,
-    ...(input.cause === undefined ? undefined : { cause: input.cause }),
-  });
+  } satisfies Omit<ConstructorParameters<typeof TaskAssetError>[0], "taskId" | "cause">;
+  if (input.taskId && input.cause !== undefined) {
+    return new TaskAssetError({ ...fields, taskId: input.taskId, cause: input.cause });
+  }
+  if (input.taskId) {
+    return new TaskAssetError({ ...fields, taskId: input.taskId });
+  }
+  if (input.cause !== undefined) {
+    return new TaskAssetError({ ...fields, cause: input.cause });
+  }
+  return new TaskAssetError(fields);
+};
+
+const taskAssetTaskContextSchema = taskAssetRenderContextSchema.pick({
+  workspaceId: true,
+  taskId: true,
+});
 
 export const validateTaskAssetTaskContext = (
   workspaceId: string,
   taskId: string,
   operation: TaskAssetFileOperation,
 ): Effect.Effect<void, TaskAssetError> => {
-  const workspace = taskAssetRenderContextSchema.shape.workspaceId.safeParse(workspaceId);
-  const task = taskAssetRenderContextSchema.shape.taskId.safeParse(taskId);
-  if (!workspace.success || !task.success) {
+  const parsed = taskAssetTaskContextSchema.safeParse({ workspaceId, taskId });
+  if (!parsed.success) {
     return Effect.fail(
       createFileError({
         operation,
@@ -48,7 +61,7 @@ export const validateTaskAssetTaskContext = (
         phase: "validate_identifiers",
         message: "Task asset identifiers are invalid.",
         taskId,
-        cause: workspace.success ? task.error : workspace.error,
+        cause: parsed.error,
       }),
     );
   }

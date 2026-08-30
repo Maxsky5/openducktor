@@ -152,14 +152,19 @@ describe("CodexSubagentLinkState", () => {
   test("does not restart untimed failed or cancelled children", () => {
     for (const status of ["error", "cancelled"] as const) {
       const subagents = new CodexSubagentLinkState();
-      subagents.upsertLink({
+      const initialLink = {
         runtimeId: "runtime-1",
         parentThreadId: "parent-thread",
         childThreadId: "child-thread",
         itemId: "spawn-1",
         status,
-        ...(status === "error" ? { error: "First turn failed" } : undefined),
-      });
+      };
+
+      if (status === "error") {
+        initialLink.error = "First turn failed";
+      }
+
+      subagents.upsertLink(initialLink);
 
       const staleRunning = subagents.upsertLink({
         runtimeId: "runtime-1",
@@ -415,16 +420,25 @@ describe("CodexSubagentLinkState", () => {
 
   test("preserves the newest running start and terminal end timestamps", () => {
     const subagents = new CodexSubagentLinkState();
-    const update = (status: "running" | "completed", startedAtMs?: number, endedAtMs?: number) =>
-      subagents.upsertLink({
+    const update = (status: "running" | "completed", startedAtMs?: number, endedAtMs?: number) => {
+      const link = {
         runtimeId: "runtime-1",
         parentThreadId: "parent-thread",
         childThreadId: "child-thread",
         itemId: "spawn-1",
         status,
-        ...(startedAtMs !== undefined ? { startedAtMs } : undefined),
-        ...(endedAtMs !== undefined ? { endedAtMs } : undefined),
-      });
+      };
+
+      if (startedAtMs !== undefined) {
+        link.startedAtMs = startedAtMs;
+      }
+
+      if (endedAtMs !== undefined) {
+        link.endedAtMs = endedAtMs;
+      }
+
+      return subagents.upsertLink(link);
+    };
 
     update("running", 200);
     expect(update("running", 100)).toMatchObject({ startedAtMs: 200 });

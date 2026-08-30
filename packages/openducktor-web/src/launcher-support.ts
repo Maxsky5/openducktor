@@ -95,14 +95,16 @@ const verifyBackendReadinessEffect = (
     }
 
     const sessionResponse = yield* Effect.tryPromise({
-      try: () =>
-        fetchImpl(`${backendUrl}/session`, {
+      try: () => {
+        const init: RequestInit = {
           method: "POST",
           headers: {
             [APP_TOKEN_HEADER]: appToken,
           },
-          ...(signal ? { signal } : undefined),
-        }),
+        };
+        if (signal) init.signal = signal;
+        return fetchImpl(`${backendUrl}/session`, init);
+      },
       catch: (cause) =>
         new WebDependencyError({
           dependency: "typescript-host-backend",

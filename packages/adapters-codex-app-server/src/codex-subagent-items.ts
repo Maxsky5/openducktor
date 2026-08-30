@@ -6,7 +6,7 @@ import type {
 import type { AgentStreamPart, AgentSubagentStatus } from "@openducktor/core";
 import type { CodexMappingContext } from "./codex-canonical-events";
 import type { CodexTimedThreadItem } from "./codex-event-mapper";
-import type { CodexSubagentLinkState } from "./codex-subagent-link-state";
+import type { CodexSubagentLinkInput, CodexSubagentLinkState } from "./codex-subagent-link-state";
 import { codexToolTimingFields } from "./codex-tool-timing";
 
 type CodexCollabItem = Extract<CodexTimedThreadItem, { type: "collabAgentToolCall" }>;
@@ -125,15 +125,24 @@ const creationDescriptionForPrompt = (
   return `${text.slice(0, SUBAGENT_DESCRIPTION_MAX_LENGTH - 3).trimEnd()}...`;
 };
 
-const collabMetadata = (item: CodexCollabItem, parentThreadId: string, childThreadId?: string) => ({
-  codexSubagent: {
+const collabMetadata = (item: CodexCollabItem, parentThreadId: string, childThreadId?: string) => {
+  const codexSubagent: NonNullable<
+    NonNullable<CodexSubagentLinkInput["metadata"]>["codexSubagent"]
+  > = {
     source: item.type,
     itemId: item.id,
     tool: item.tool,
     parentThreadId,
-    ...(childThreadId ? { childThreadId } : undefined),
-  },
-});
+  };
+
+  if (childThreadId) {
+    codexSubagent.childThreadId = childThreadId;
+  }
+
+  return {
+    codexSubagent,
+  };
+};
 
 const activityMetadata = (item: CodexSubagentActivityItem, parentThreadId: string) => ({
   codexSubagent: {
@@ -160,36 +169,52 @@ const collabAgentParts = (
       });
     }
     const mapped = mapAggregateStatus(item.status, item.tool);
-    return [
-      linkState.upsertLink({
-        ...(ctx.runtimeId ? { runtimeId: ctx.runtimeId } : undefined),
-        parentThreadId: item.senderThreadId,
-        itemId: item.id,
-        status: mapped.status,
-        ...(item.prompt ? { prompt: item.prompt } : undefined),
-        ...(creationDescription ? { description: creationDescription } : undefined),
-        ...(mapped.error ? { error: mapped.error } : undefined),
-        metadata: collabMetadata(item, item.senderThreadId),
-      }),
-    ];
+    const link: CodexSubagentLinkInput = {
+      parentThreadId: item.senderThreadId,
+      itemId: item.id,
+      status: mapped.status,
+      metadata: collabMetadata(item, item.senderThreadId),
+    };
+    if (ctx.runtimeId) {
+      link.runtimeId = ctx.runtimeId;
+    }
+    if (item.prompt) {
+      link.prompt = item.prompt;
+    }
+    if (creationDescription) {
+      link.description = creationDescription;
+    }
+    if (mapped.error) {
+      link.error = mapped.error;
+    }
+    return [linkState.upsertLink(link)];
   }
 
   return [...new Set(item.receiverThreadIds)].map((childThreadId) => {
     const mapped = statusForChild(item, childThreadId);
-    return linkState.upsertLink({
-      ...(ctx.runtimeId ? { runtimeId: ctx.runtimeId } : undefined),
+    const link: CodexSubagentLinkInput = {
       parentThreadId: item.senderThreadId,
       childThreadId,
       itemId: item.id,
       status: mapped.status,
-      ...(item.prompt ? { prompt: item.prompt } : undefined),
-      ...(creationDescription ? { description: creationDescription } : undefined),
-      ...(mapped.error ? { error: mapped.error } : undefined),
       metadata: collabMetadata(item, item.senderThreadId, childThreadId),
       preferItemCorrelationKey: item.tool === "spawnAgent",
       allowStatusRestart: item.tool === "resumeAgent" && mapped.status === "running",
       ...codexToolTimingFields(item, { allowStartedAtOnly: mapped.status === "running" }),
-    });
+    };
+    if (ctx.runtimeId) {
+      link.runtimeId = ctx.runtimeId;
+    }
+    if (item.prompt) {
+      link.prompt = item.prompt;
+    }
+    if (creationDescription) {
+      link.description = creationDescription;
+    }
+    if (mapped.error) {
+      link.error = mapped.error;
+    }
+    return linkState.upsertLink(link);
   });
 };
 
@@ -210,16 +235,17 @@ const subagentActivityParts = (
     return [];
   }
   const runtimeId = route?.runtimeId ?? ctx.runtimeId;
-  return [
-    linkState.upsertLink({
-      ...(runtimeId ? { runtimeId } : undefined),
-      parentThreadId: sourceThreadId,
-      childThreadId: item.agentThreadId,
-      itemId: item.id,
-      status: "running",
-      metadata: activityMetadata(item, sourceThreadId),
-    }),
-  ];
+  const link: CodexSubagentLinkInput = {
+    parentThreadId: sourceThreadId,
+    childThreadId: item.agentThreadId,
+    itemId: item.id,
+    status: "running" as const,
+    metadata: activityMetadata(item, sourceThreadId),
+  };
+  if (runtimeId) {
+    link.runtimeId = runtimeId;
+  }
+  return [linkState.upsertLink(link)];
 };
 
 export const codexSubagentPartsFromItem = (

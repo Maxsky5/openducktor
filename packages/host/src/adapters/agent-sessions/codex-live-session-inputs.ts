@@ -6,11 +6,11 @@ export const toCodexUserMessagePart = (part: AgentSessionUserMessagePart): Agent
     return part;
   }
   const { mime, ...requiredAttachment } = part.attachment;
+  if (mime === undefined) {
+    return { kind: "attachment", attachment: requiredAttachment };
+  }
   return {
     kind: "attachment",
-    attachment: {
-      ...requiredAttachment,
-      ...(mime === undefined ? undefined : { mime }),
-    },
+    attachment: { ...requiredAttachment, mime },
   };
 };

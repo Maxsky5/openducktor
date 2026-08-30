@@ -10,6 +10,7 @@ import { File as PierreReactFile, FileDiff as PierreReactFileDiff } from "@pierr
 import { Undo2 } from "lucide-react";
 import {
   type CSSProperties,
+  type ComponentProps,
   memo,
   type ReactElement,
   useCallback,
@@ -25,7 +26,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PIERRE_HIGHLIGHT_LINE_LIMIT } from "@/lib/diff/pierre-config";
 import { cn } from "@/lib/utils";
 import {
-  isHunkResetAnnotationMetadata,
+  hunkResetAnnotationMetadataSchema,
   type PierreDiffSelection,
 } from "./pierre-diff-viewer-model";
 import {
@@ -449,8 +450,10 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
         : undefined,
     [enableGutterUtility, handleLineSelectionEnd],
   );
-  const options = useMemo(
-    () => ({
+  const options = useMemo<
+    NonNullable<ComponentProps<typeof PierreReactFileDiff>["options"]>
+  >(() => {
+    const nextOptions: NonNullable<ComponentProps<typeof PierreReactFileDiff>["options"]> = {
       theme: DIFF_THEME,
       themeType: theme,
       diffStyle,
@@ -462,32 +465,28 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
       tokenizeMaxLength: PIERRE_HIGHLIGHT_LINE_LIMIT,
       enableLineSelection,
       enableGutterUtility: handleGutterUtilityClick != null,
-      ...(handleLineSelectionChange
-        ? {
-            onLineSelectionStart: handleLineSelectionChange,
-            onLineSelectionChange: handleLineSelectionChange,
-          }
-        : undefined),
-      ...(handleLineSelectionEnd ? { onLineSelectionEnd: handleLineSelectionEnd } : undefined),
-      ...(handleGutterUtilityClick
-        ? { onGutterUtilityClick: handleGutterUtilityClick }
-        : undefined),
-      ...(enableHunkReset ? { unsafeCSS: HUNK_RESET_FLOATING_CSS } : undefined),
-    }),
-    [
-      diffStyle,
-      diffIndicators,
-      enableHunkReset,
-      enableLineSelection,
-      handleGutterUtilityClick,
-      handleLineSelectionChange,
-      handleLineSelectionEnd,
-      hunkSeparators,
-      lineOverflow,
-      lineDiffType,
-      theme,
-    ],
-  );
+    };
+    if (handleLineSelectionChange) {
+      nextOptions.onLineSelectionStart = handleLineSelectionChange;
+      nextOptions.onLineSelectionChange = handleLineSelectionChange;
+    }
+    if (handleLineSelectionEnd) nextOptions.onLineSelectionEnd = handleLineSelectionEnd;
+    if (handleGutterUtilityClick) nextOptions.onGutterUtilityClick = handleGutterUtilityClick;
+    if (enableHunkReset) nextOptions.unsafeCSS = HUNK_RESET_FLOATING_CSS;
+    return nextOptions;
+  }, [
+    diffStyle,
+    diffIndicators,
+    enableHunkReset,
+    enableLineSelection,
+    handleGutterUtilityClick,
+    handleLineSelectionChange,
+    handleLineSelectionEnd,
+    hunkSeparators,
+    lineOverflow,
+    lineDiffType,
+    theme,
+  ]);
   const renderedSelectedLines =
     transientSelectedLines !== undefined ? transientSelectedLines : selectedLines;
   const selectedLinesProps =
@@ -495,7 +494,8 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
   const handleRenderAnnotation = useCallback(
     (annotation: DiffLineAnnotation<unknown>) => {
       const metadata = annotation.metadata;
-      if (isHunkResetAnnotationMetadata(metadata)) {
+      const metadataResult = hunkResetAnnotationMetadataSchema.safeParse(metadata);
+      if (metadataResult.success) {
         return (
           <div className={HUNK_RESET_ANNOTATION_WRAPPER_CLASS_NAME}>
             <div
@@ -510,7 +510,7 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
                 title={`Reset hunk in ${filePath}`}
                 data-testid="agent-studio-git-reset-hunk-button"
                 disabled={isHunkResetDisabled}
-                onClick={() => onResetHunk?.(metadata.hunkIndex)}
+                onClick={() => onResetHunk?.(metadataResult.data.hunkIndex)}
               >
                 <Undo2 className="size-3.5" />
                 <span>Reset hunk</span>

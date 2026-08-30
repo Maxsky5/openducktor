@@ -1,5 +1,7 @@
-import { isUnknownRecord, type AgentSessionHistoryMessage } from "@openducktor/core";
+import type { SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
+import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
+import { parseClaudeHistoryConversationEntry } from "./claude-agent-sdk-ingress-schemas";
 import {
   type ClaudeLiveUserMessage,
   createLiveUserMessageResolver,
@@ -51,7 +53,7 @@ export const createClaudeHistoryInputProjector = (options: {
 
   const createUserMessage = (input: {
     fallbackMessageId: string;
-    message: unknown;
+    message: SessionStoreEntry["message"];
     text: string;
     timestamp: string;
   }): ClaudeVisibleHistoryMessage | undefined => {
@@ -66,16 +68,19 @@ export const createClaudeHistoryInputProjector = (options: {
     if (input.text.trim().length === 0 && displayParts.length === 0) {
       return undefined;
     }
-    return {
+    const message: ClaudeVisibleHistoryMessage = {
       messageId,
       role: "user",
       timestamp: input.timestamp,
       text: input.text,
       displayParts,
       state: liveUserMessage?.state ?? "read",
-      ...(liveUserMessage?.model ? { model: liveUserMessage.model } : undefined),
       parts: [],
     };
+    if (liveUserMessage?.model) {
+      message.model = liveUserMessage.model;
+    }
+    return message;
   };
 
   return (entry: ClaudeHistoryMessage, timestamp: string): ClaudeHistoryInputProjection => {
@@ -146,7 +151,7 @@ export const createClaudeHistoryInputProjector = (options: {
     }
 
     const promptId = readStringProp(entryValue, "promptId");
-    const isCompactSummary = isUnknownRecord(entry) && entry.isCompactSummary === true;
+    const isCompactSummary = entry.isCompactSummary === true;
     if (isCompactSummary) {
       if (promptId) {
         compactPromptIds.add(promptId);
@@ -157,7 +162,7 @@ export const createClaudeHistoryInputProjector = (options: {
       compactPromptIds.add(promptId);
     }
 
-    const entryMessage = isUnknownRecord(entryValue) ? entryValue.message : undefined;
+    const entryMessage = parseClaudeHistoryConversationEntry(entryValue).message;
     const rawText = historyMessageText(entryMessage);
     const command = readClaudeCommandEnvelope(rawText);
     if (promptId && compactPromptIds.has(promptId) && !command) {

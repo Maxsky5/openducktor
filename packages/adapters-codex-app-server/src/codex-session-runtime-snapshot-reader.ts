@@ -38,10 +38,9 @@ const toLocalRuntimeSnapshot = async (
     deps.runtimeClients.clientForRuntime(session.runtimeId),
     session.runtimeId,
   );
-  return toRefreshedRuntimeSnapshot({
+  const refreshInput: Parameters<typeof toRefreshedRuntimeSnapshot>[0] = {
     session,
     inventory,
-    ...(input ? { input } : undefined),
     pendingApprovals: deps.pendingInput.pendingApprovalsForSession(
       session.threadId,
       session.runtimeId,
@@ -51,7 +50,11 @@ const toLocalRuntimeSnapshot = async (
       session.runtimeId,
     ),
     hasActiveTurn: deps.hasActiveTurn(session.threadId),
-  });
+  };
+  if (input) {
+    refreshInput.input = input;
+  }
+  return toRefreshedRuntimeSnapshot(refreshInput);
 };
 
 const readRuntimeInventoryOnce = (

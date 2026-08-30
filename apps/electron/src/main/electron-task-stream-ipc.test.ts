@@ -130,7 +130,11 @@ const createHarness = (subscriptionIds = [subscriptionId]) => {
     reportDeliveryFailure,
     taskEventStream: stream,
   });
-  const invoke = (channel: string, event: ElectronTaskStreamEvent, value: unknown) => {
+  const invoke = (
+    channel: string,
+    event: ElectronTaskStreamEvent,
+    value: Parameters<ElectronTaskStreamIpcHandler>[1],
+  ) => {
     const handler = handlers.get(channel);
     if (!handler) throw new Error(`No handler registered for ${channel}.`);
     return handler(event, value);
@@ -290,7 +294,10 @@ describe("electron task stream IPC", () => {
   });
 
   test("cleans up exactly once on destroyed or render-process-gone", () => {
-    for (const lifecycleEvent of ["destroyed", "render-process-gone"] as const) {
+    for (const lifecycleEvent of ["destroyed", "render-process-gone"] satisfies readonly (
+      | "destroyed"
+      | "render-process-gone"
+    )[]) {
       const harness = createHarness();
       const owner = createSender(1);
       harness.invoke(ELECTRON_TASK_STREAM_SUBSCRIBE_CHANNEL, eventFor(owner), { cursor: null });
@@ -328,7 +335,7 @@ describe("electron task stream IPC", () => {
     const owner = createSender(1);
     harness.invoke(ELECTRON_TASK_STREAM_SUBSCRIBE_CHANNEL, eventFor(owner), { cursor: null });
 
-    // SAFETY: This negative test sends a deliberately malformed frame to the runtime validation boundary.
+    // SAFETY: This invalid producer payload exercises the outbound runtime guard.
     const malformedFrame = { type: "change" } as TaskEventStreamFrame;
     harness.sink()?.(malformedFrame);
 

@@ -1,13 +1,15 @@
 import {
-  jsonValueSchema,
   odtToolErrorPayloadSchema,
   type CodexAppServerThreadItem,
   type CodexAppServerJsonValue,
 } from "@openducktor/contracts";
 import {
-  arrayFromUnknown,
+  arrayFromCodexJsonValue,
   extractStringField,
   isPlainObject,
+  parseCodexJsonObjectString,
+  readCodexString,
+  readNonEmptyCodexString,
   stringifyJsonValue,
 } from "./codex-app-server-shared";
 
@@ -17,32 +19,22 @@ type CodexMcpToolCallItem = Extract<CodexAppServerThreadItem, { type: "mcpToolCa
 type CodexJsonObject = Record<string, CodexAppServerJsonValue>;
 
 const parseJsonObjectString = (value: CodexAppServerJsonValue | undefined) => {
-  if (typeof value !== "string") {
+  const text = readCodexString(value);
+  if (text === null) {
     return null;
   }
-  const trimmed = value.trim();
+  const trimmed = text.trim();
   if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
     return null;
   }
-
-  try {
-    const parsed = jsonValueSchema.safeParse(JSON.parse(trimmed));
-    return parsed.success && isPlainObject(parsed.data) ? parsed.data : null;
-  } catch {
-    return null;
-  }
+  return parseCodexJsonObjectString(trimmed);
 };
 
 const asRecord = (value: CodexAppServerJsonValue | undefined): CodexJsonObject | null =>
   isPlainObject(value) ? value : parseJsonObjectString(value);
 
-const nonEmptyString = (value: CodexAppServerJsonValue | undefined): string | null => {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-};
+const nonEmptyString = (value: CodexAppServerJsonValue | undefined): string | null =>
+  readNonEmptyCodexString(value);
 
 const errorMessageFromValue = (value: CodexAppServerJsonValue | undefined): string | null => {
   return nonEmptyString(value) ?? extractStringField(value, ["message"]);
@@ -53,13 +45,14 @@ const contentText = (value: CodexAppServerJsonValue | undefined): string | null 
   if (Array.isArray(value)) {
     content = value;
   } else if (isPlainObject(value)) {
-    content = arrayFromUnknown(value.content ?? value.contentItems ?? value.content_items);
+    content = arrayFromCodexJsonValue(value.content ?? value.contentItems ?? value.content_items);
   }
 
   const text = content
     .map((entry) => {
-      if (typeof entry === "string") {
-        return entry.trim();
+      const entryText = readCodexString(entry);
+      if (entryText !== null) {
+        return entryText.trim();
       }
       if (!isPlainObject(entry)) {
         return "";

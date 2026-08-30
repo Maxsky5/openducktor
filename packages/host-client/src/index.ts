@@ -15,236 +15,27 @@ import { TaskMetadataCache } from "./task-metadata-cache";
 import { HostTerminalClient } from "./terminal-client";
 
 export { HostInvokeError } from "./invoke-utils";
+export type { InvokeFn } from "./invoke-utils";
 export { HostTerminalClientError } from "./terminal-client";
 
 import { HostWorkspaceClient } from "./workspace-client";
 
-type MethodName<TClient extends object> = {
-  [TKey in keyof TClient]: TClient[TKey] extends (...args: infer _TArgs) => infer _TReturn
-    ? TKey
-    : never;
-}[keyof TClient];
-
-const WORKSPACE_METHODS = [
-  "workspaceList",
-  "workspaceAdd",
-  "workspaceSelect",
-  "workspaceReorder",
-  "workspaceUpdateRepoConfig",
-  "workspaceSaveRepoSettings",
-  "workspaceUpdateRepoHooks",
-  "workspaceGetRepoConfig",
-  "workspaceGetSettingsSnapshot",
-  "workspaceUpdateAgentModelFavorites",
-  "workspaceUpdateGlobalGitConfig",
-  "workspaceDetectGithubRepository",
-  "workspaceSaveSettingsSnapshot",
-  "workspaceStageLocalAttachment",
-  "workspaceResolveLocalAttachmentPath",
-  "setTheme",
-] as const satisfies readonly MethodName<HostWorkspaceClient>[];
-
-const FILESYSTEM_METHODS = [
-  "filesystemListDirectory",
-  "filesystemListTree",
-  "filesystemReadTextFile",
-  "filesystemWriteTextFile",
-] as const satisfies readonly MethodName<HostFilesystemClient>[];
-
-const PULL_REQUEST_REVIEW_METHODS = [
-  "pullRequestReviewContextGet",
-] as const satisfies readonly MethodName<HostPullRequestReviewClient>[];
-
-const SYSTEM_METHODS = [
-  "systemGetPlatform",
-  "systemListOpenInTools",
-  "systemOpenDirectoryInTool",
-] as const satisfies readonly MethodName<HostSystemClient>[];
-
-const TASK_METHODS = [
-  "tasksList",
-  "taskCreate",
-  "taskUpdate",
-  "taskAssetStage",
-  "taskAssetDiscardStaged",
-  "taskDelete",
-  "taskClose",
-  "taskResetImplementation",
-  "taskReset",
-  "taskTransition",
-  "specGet",
-  "setSpec",
-  "saveSpecDocument",
-  "setPlan",
-  "savePlanDocument",
-  "planGet",
-  "taskMetadataGet",
-  "taskMetadataGetFresh",
-  "reconcileExternalTaskSyncEvent",
-  "invalidateAllTaskMetadata",
-  "taskDocumentGet",
-  "taskDocumentGetFresh",
-  "qaGetReport",
-  "qaApproved",
-  "qaRejected",
-  "agentSessionsList",
-  "agentSessionDelete",
-  "agentSessionsListForTasks",
-  "agentSessionUpsert",
-] as const satisfies readonly MethodName<HostTaskClient>[];
-
-const TERMINAL_METHODS = [
-  "terminalCreate",
-  "terminalList",
-  "terminalPreparePathInput",
-  "terminalClose",
-] as const satisfies readonly MethodName<HostTerminalClient>[];
-
-const AGENT_METHODS = [
-  "systemCheck",
-  "runtimeCheck",
-  "runtimeExecutablesCheck",
-  "taskStoreCheck",
-  "runtimeDefinitionsList",
-  "runtimeList",
-  "taskWorktreeGet",
-  "runtimeStop",
-  "runtimeEnsure",
-  "runtimeRequire",
-  "repoRuntimeHealth",
-  "repoRuntimeHealthStatus",
-  "codexAppServerRequest",
-  "buildStart",
-  "taskSessionBootstrapPrepare",
-  "taskSessionBootstrapComplete",
-  "taskSessionBootstrapAbort",
-  "taskSessionStartupLeasePrepare",
-  "taskSessionStartupLeaseComplete",
-  "taskSessionStartupLeaseAbort",
-  "devServerGetState",
-  "devServerStart",
-  "devServerStop",
-  "devServerRestart",
-  "buildBlocked",
-  "buildResumed",
-  "buildCompleted",
-  "taskApprovalContextGet",
-  "taskDirectMerge",
-  "taskDirectMergeComplete",
-  "taskPullRequestUpsert",
-  "taskPullRequestUnlink",
-  "taskPullRequestDetect",
-  "taskPullRequestLinkMerged",
-  "repoPullRequestSync",
-  "humanRequestChanges",
-  "humanApprove",
-  "agentSessionStop",
-] as const satisfies readonly MethodName<HostAgentClient>[];
-
-const AGENT_SESSION_LIVE_METHODS = [
-  "agentSessionControlFork",
-  "agentSessionControlRelease",
-  "agentSessionControlResume",
-  "agentSessionControlSend",
-  "agentSessionControlStart",
-  "agentSessionControlStop",
-  "agentSessionControlUpdateModel",
-  "agentSessionLiveList",
-  "agentSessionLiveLoadContext",
-  "agentSessionLiveLoadDiff",
-  "agentSessionLiveRead",
-  "agentSessionLiveRefresh",
-  "agentSessionLiveReplyApproval",
-  "agentSessionLiveReplyQuestion",
-] as const satisfies readonly MethodName<HostAgentSessionLiveClient>[];
-
-const CLAUDE_RUNTIME_METHODS = [
-  "claudeRuntimeFileStatus",
-  "claudeRuntimeListModels",
-  "claudeRuntimeListSkills",
-  "claudeRuntimeListSlashCommands",
-  "claudeRuntimeListSubagents",
-  "claudeRuntimeLoadSessionDiff",
-  "claudeRuntimeLoadSessionHistory",
-  "claudeRuntimeLoadSessionTodos",
-  "claudeRuntimeSearchFiles",
-] as const satisfies readonly MethodName<HostClaudeRuntimeClient>[];
-
-const GIT_METHODS = [
-  "gitCanonicalizePath",
-  "gitGetBranches",
-  "gitGetCurrentBranch",
-  "gitSwitchBranch",
-  "gitCreateWorktree",
-  "gitRemoveWorktree",
-  "gitPushBranch",
-  "gitPullBranch",
-  "gitFetchRemote",
-  "gitCommitAll",
-  "gitRebaseBranch",
-  "gitRebaseAbort",
-  "gitAbortConflict",
-  "gitGetStatus",
-  "gitGetDiff",
-  "gitCommitsAheadBehind",
-  "gitGetWorktreeStatus",
-  "gitGetWorktreeStatusSummary",
-  "gitResetWorktreeSelection",
-] as const satisfies readonly MethodName<HostGitClient>[];
-
-type WorkspaceMethodName = (typeof WORKSPACE_METHODS)[number];
-type FilesystemMethodName = (typeof FILESYSTEM_METHODS)[number];
-type PullRequestReviewMethodName = (typeof PULL_REQUEST_REVIEW_METHODS)[number];
-type SystemMethodName = (typeof SYSTEM_METHODS)[number];
-type TaskMethodName = (typeof TASK_METHODS)[number];
-type TerminalMethodName = (typeof TERMINAL_METHODS)[number];
-type AgentMethodName = (typeof AGENT_METHODS)[number];
-type AgentSessionLiveMethodName = (typeof AGENT_SESSION_LIVE_METHODS)[number];
-type ClaudeRuntimeMethodName = (typeof CLAUDE_RUNTIME_METHODS)[number];
-type GitMethodName = (typeof GIT_METHODS)[number];
-
-type HostClientApi = Pick<HostWorkspaceClient, WorkspaceMethodName> &
-  Pick<HostFilesystemClient, FilesystemMethodName> &
-  Pick<HostPullRequestReviewClient, PullRequestReviewMethodName> &
-  Pick<HostSystemClient, SystemMethodName> &
-  Pick<HostTaskClient, TaskMethodName> &
-  Pick<HostTerminalClient, TerminalMethodName> &
-  Pick<HostAgentClient, AgentMethodName> &
-  Pick<HostAgentSessionLiveClient, AgentSessionLiveMethodName> &
-  Pick<HostClaudeRuntimeClient, ClaudeRuntimeMethodName> &
-  Pick<HostGitClient, GitMethodName>;
-
-type MethodDelegate<TClient extends object, TMethodName extends MethodName<TClient>> = Extract<
-  TClient[TMethodName],
-  (...args: never[]) => void
->;
-
-const bindDelegates = <
-  THost extends object,
-  TClient extends object,
-  TMethodName extends MethodName<TClient>,
->(
-  host: THost,
-  client: TClient,
-  methods: readonly TMethodName[],
-): void => {
-  for (const methodName of methods) {
-    const candidate = client[methodName];
-    if (typeof candidate !== "function") {
-      throw new Error(`Cannot delegate non-function member: ${String(methodName)}`);
-    }
-
-    // SAFETY: The preceding runtime guard establishes `MethodDelegate<TClient, TMethodName>` before this assertion.
-    const delegate = candidate.bind(client) as MethodDelegate<TClient, TMethodName>;
-
-    Object.defineProperty(host, methodName, {
-      configurable: true,
-      enumerable: false,
-      writable: true,
-      value: delegate,
-    });
-  }
+type PublicMethods<Client> = {
+  [
+    Key in keyof Client as Client[Key] extends (...args: infer _Args) => infer _Result ? Key : never
+  ]: Client[Key];
 };
+
+type HostClientApi = PublicMethods<HostWorkspaceClient> &
+  PublicMethods<HostFilesystemClient> &
+  PublicMethods<HostPullRequestReviewClient> &
+  PublicMethods<HostSystemClient> &
+  PublicMethods<HostTaskClient> &
+  PublicMethods<HostTerminalClient> &
+  PublicMethods<HostAgentClient> &
+  PublicMethods<HostAgentSessionLiveClient> &
+  PublicMethods<HostClaudeRuntimeClient> &
+  PublicMethods<HostGitClient>;
 
 export type HostClient = HostClientApi & PlannerTools;
 
@@ -260,20 +51,174 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
   const agentSessionLiveClient = new HostAgentSessionLiveClient(invokeFn);
   const claudeRuntimeClient = new HostClaudeRuntimeClient(invokeFn);
   const gitClient = new HostGitClient(invokeFn);
-  // SAFETY: HostClientApi is defined from the ten method-name tuples above, and every tuple is bound to its matching client before this object returns.
-  const hostClient = {} as HostClientApi;
-
-  bindDelegates(hostClient, workspaceClient, WORKSPACE_METHODS);
-  bindDelegates(hostClient, filesystemClient, FILESYSTEM_METHODS);
-  bindDelegates(hostClient, pullRequestReviewClient, PULL_REQUEST_REVIEW_METHODS);
-  bindDelegates(hostClient, systemClient, SYSTEM_METHODS);
-  bindDelegates(hostClient, taskClient, TASK_METHODS);
-  bindDelegates(hostClient, terminalClient, TERMINAL_METHODS);
-  bindDelegates(hostClient, agentClient, AGENT_METHODS);
-  bindDelegates(hostClient, agentSessionLiveClient, AGENT_SESSION_LIVE_METHODS);
-  bindDelegates(hostClient, claudeRuntimeClient, CLAUDE_RUNTIME_METHODS);
-  bindDelegates(hostClient, gitClient, GIT_METHODS);
-
+  const hostClient = {
+    workspaceList: workspaceClient.workspaceList.bind(workspaceClient),
+    workspaceAdd: workspaceClient.workspaceAdd.bind(workspaceClient),
+    workspaceSelect: workspaceClient.workspaceSelect.bind(workspaceClient),
+    workspaceReorder: workspaceClient.workspaceReorder.bind(workspaceClient),
+    workspaceUpdateRepoConfig: workspaceClient.workspaceUpdateRepoConfig.bind(workspaceClient),
+    workspaceSaveRepoSettings: workspaceClient.workspaceSaveRepoSettings.bind(workspaceClient),
+    workspaceUpdateRepoHooks: workspaceClient.workspaceUpdateRepoHooks.bind(workspaceClient),
+    workspaceGetRepoConfig: workspaceClient.workspaceGetRepoConfig.bind(workspaceClient),
+    workspaceGetSettingsSnapshot:
+      workspaceClient.workspaceGetSettingsSnapshot.bind(workspaceClient),
+    workspaceUpdateAgentModelFavorites:
+      workspaceClient.workspaceUpdateAgentModelFavorites.bind(workspaceClient),
+    workspaceUpdateGlobalGitConfig:
+      workspaceClient.workspaceUpdateGlobalGitConfig.bind(workspaceClient),
+    workspaceDetectGithubRepository:
+      workspaceClient.workspaceDetectGithubRepository.bind(workspaceClient),
+    workspaceSaveSettingsSnapshot:
+      workspaceClient.workspaceSaveSettingsSnapshot.bind(workspaceClient),
+    workspaceStageLocalAttachment:
+      workspaceClient.workspaceStageLocalAttachment.bind(workspaceClient),
+    workspaceResolveLocalAttachmentPath:
+      workspaceClient.workspaceResolveLocalAttachmentPath.bind(workspaceClient),
+    setTheme: workspaceClient.setTheme.bind(workspaceClient),
+    filesystemListDirectory: filesystemClient.filesystemListDirectory.bind(filesystemClient),
+    filesystemListTree: filesystemClient.filesystemListTree.bind(filesystemClient),
+    filesystemReadTextFile: filesystemClient.filesystemReadTextFile.bind(filesystemClient),
+    filesystemWriteTextFile: filesystemClient.filesystemWriteTextFile.bind(filesystemClient),
+    pullRequestReviewContextGet:
+      pullRequestReviewClient.pullRequestReviewContextGet.bind(pullRequestReviewClient),
+    systemGetPlatform: systemClient.systemGetPlatform.bind(systemClient),
+    systemListOpenInTools: systemClient.systemListOpenInTools.bind(systemClient),
+    systemOpenDirectoryInTool: systemClient.systemOpenDirectoryInTool.bind(systemClient),
+    tasksList: taskClient.tasksList.bind(taskClient),
+    taskCreate: taskClient.taskCreate.bind(taskClient),
+    taskUpdate: taskClient.taskUpdate.bind(taskClient),
+    taskAssetStage: taskClient.taskAssetStage.bind(taskClient),
+    taskAssetDiscardStaged: taskClient.taskAssetDiscardStaged.bind(taskClient),
+    taskDelete: taskClient.taskDelete.bind(taskClient),
+    taskClose: taskClient.taskClose.bind(taskClient),
+    taskResetImplementation: taskClient.taskResetImplementation.bind(taskClient),
+    taskReset: taskClient.taskReset.bind(taskClient),
+    taskTransition: taskClient.taskTransition.bind(taskClient),
+    specGet: taskClient.specGet.bind(taskClient),
+    setSpec: taskClient.setSpec.bind(taskClient),
+    saveSpecDocument: taskClient.saveSpecDocument.bind(taskClient),
+    setPlan: taskClient.setPlan.bind(taskClient),
+    savePlanDocument: taskClient.savePlanDocument.bind(taskClient),
+    planGet: taskClient.planGet.bind(taskClient),
+    taskMetadataGet: taskClient.taskMetadataGet.bind(taskClient),
+    taskMetadataGetFresh: taskClient.taskMetadataGetFresh.bind(taskClient),
+    reconcileExternalTaskSyncEvent: taskClient.reconcileExternalTaskSyncEvent.bind(taskClient),
+    invalidateAllTaskMetadata: taskClient.invalidateAllTaskMetadata.bind(taskClient),
+    taskDocumentGet: taskClient.taskDocumentGet.bind(taskClient),
+    taskDocumentGetFresh: taskClient.taskDocumentGetFresh.bind(taskClient),
+    qaGetReport: taskClient.qaGetReport.bind(taskClient),
+    qaApproved: taskClient.qaApproved.bind(taskClient),
+    qaRejected: taskClient.qaRejected.bind(taskClient),
+    agentSessionsList: taskClient.agentSessionsList.bind(taskClient),
+    agentSessionDelete: taskClient.agentSessionDelete.bind(taskClient),
+    agentSessionsListForTasks: taskClient.agentSessionsListForTasks.bind(taskClient),
+    agentSessionUpsert: taskClient.agentSessionUpsert.bind(taskClient),
+    terminalCreate: terminalClient.terminalCreate.bind(terminalClient),
+    terminalList: terminalClient.terminalList.bind(terminalClient),
+    terminalPreparePathInput: terminalClient.terminalPreparePathInput.bind(terminalClient),
+    terminalClose: terminalClient.terminalClose.bind(terminalClient),
+    systemCheck: agentClient.systemCheck.bind(agentClient),
+    runtimeCheck: agentClient.runtimeCheck.bind(agentClient),
+    runtimeExecutablesCheck: agentClient.runtimeExecutablesCheck.bind(agentClient),
+    taskStoreCheck: agentClient.taskStoreCheck.bind(agentClient),
+    runtimeDefinitionsList: agentClient.runtimeDefinitionsList.bind(agentClient),
+    runtimeList: agentClient.runtimeList.bind(agentClient),
+    taskWorktreeGet: agentClient.taskWorktreeGet.bind(agentClient),
+    runtimeStop: agentClient.runtimeStop.bind(agentClient),
+    runtimeEnsure: agentClient.runtimeEnsure.bind(agentClient),
+    runtimeRequire: agentClient.runtimeRequire.bind(agentClient),
+    repoRuntimeHealth: agentClient.repoRuntimeHealth.bind(agentClient),
+    repoRuntimeHealthStatus: agentClient.repoRuntimeHealthStatus.bind(agentClient),
+    codexAppServerRequest: agentClient.codexAppServerRequest.bind(agentClient),
+    buildStart: agentClient.buildStart.bind(agentClient),
+    taskSessionBootstrapPrepare: agentClient.taskSessionBootstrapPrepare.bind(agentClient),
+    taskSessionBootstrapComplete: agentClient.taskSessionBootstrapComplete.bind(agentClient),
+    taskSessionBootstrapAbort: agentClient.taskSessionBootstrapAbort.bind(agentClient),
+    taskSessionStartupLeasePrepare: agentClient.taskSessionStartupLeasePrepare.bind(agentClient),
+    taskSessionStartupLeaseComplete: agentClient.taskSessionStartupLeaseComplete.bind(agentClient),
+    taskSessionStartupLeaseAbort: agentClient.taskSessionStartupLeaseAbort.bind(agentClient),
+    devServerGetState: agentClient.devServerGetState.bind(agentClient),
+    devServerStart: agentClient.devServerStart.bind(agentClient),
+    devServerStop: agentClient.devServerStop.bind(agentClient),
+    devServerRestart: agentClient.devServerRestart.bind(agentClient),
+    buildBlocked: agentClient.buildBlocked.bind(agentClient),
+    buildResumed: agentClient.buildResumed.bind(agentClient),
+    buildCompleted: agentClient.buildCompleted.bind(agentClient),
+    taskApprovalContextGet: agentClient.taskApprovalContextGet.bind(agentClient),
+    taskDirectMerge: agentClient.taskDirectMerge.bind(agentClient),
+    taskDirectMergeComplete: agentClient.taskDirectMergeComplete.bind(agentClient),
+    taskPullRequestUpsert: agentClient.taskPullRequestUpsert.bind(agentClient),
+    taskPullRequestUnlink: agentClient.taskPullRequestUnlink.bind(agentClient),
+    taskPullRequestDetect: agentClient.taskPullRequestDetect.bind(agentClient),
+    taskPullRequestLinkMerged: agentClient.taskPullRequestLinkMerged.bind(agentClient),
+    repoPullRequestSync: agentClient.repoPullRequestSync.bind(agentClient),
+    humanRequestChanges: agentClient.humanRequestChanges.bind(agentClient),
+    humanApprove: agentClient.humanApprove.bind(agentClient),
+    agentSessionStop: agentClient.agentSessionStop.bind(agentClient),
+    agentSessionControlFork:
+      agentSessionLiveClient.agentSessionControlFork.bind(agentSessionLiveClient),
+    agentSessionControlRelease:
+      agentSessionLiveClient.agentSessionControlRelease.bind(agentSessionLiveClient),
+    agentSessionControlResume:
+      agentSessionLiveClient.agentSessionControlResume.bind(agentSessionLiveClient),
+    agentSessionControlSend:
+      agentSessionLiveClient.agentSessionControlSend.bind(agentSessionLiveClient),
+    agentSessionControlStart:
+      agentSessionLiveClient.agentSessionControlStart.bind(agentSessionLiveClient),
+    agentSessionControlStop:
+      agentSessionLiveClient.agentSessionControlStop.bind(agentSessionLiveClient),
+    agentSessionControlUpdateModel:
+      agentSessionLiveClient.agentSessionControlUpdateModel.bind(agentSessionLiveClient),
+    agentSessionLiveList: agentSessionLiveClient.agentSessionLiveList.bind(agentSessionLiveClient),
+    agentSessionLiveLoadContext:
+      agentSessionLiveClient.agentSessionLiveLoadContext.bind(agentSessionLiveClient),
+    agentSessionLiveLoadDiff:
+      agentSessionLiveClient.agentSessionLiveLoadDiff.bind(agentSessionLiveClient),
+    agentSessionLiveRead: agentSessionLiveClient.agentSessionLiveRead.bind(agentSessionLiveClient),
+    agentSessionLiveRefresh:
+      agentSessionLiveClient.agentSessionLiveRefresh.bind(agentSessionLiveClient),
+    agentSessionLiveReplyApproval:
+      agentSessionLiveClient.agentSessionLiveReplyApproval.bind(agentSessionLiveClient),
+    agentSessionLiveReplyQuestion:
+      agentSessionLiveClient.agentSessionLiveReplyQuestion.bind(agentSessionLiveClient),
+    claudeRuntimeFileStatus: claudeRuntimeClient.claudeRuntimeFileStatus.bind(claudeRuntimeClient),
+    claudeRuntimeListModels: claudeRuntimeClient.claudeRuntimeListModels.bind(claudeRuntimeClient),
+    claudeRuntimeListSkills: claudeRuntimeClient.claudeRuntimeListSkills.bind(claudeRuntimeClient),
+    claudeRuntimeListSlashCommands:
+      claudeRuntimeClient.claudeRuntimeListSlashCommands.bind(claudeRuntimeClient),
+    claudeRuntimeListSubagents:
+      claudeRuntimeClient.claudeRuntimeListSubagents.bind(claudeRuntimeClient),
+    claudeRuntimeLoadSessionDiff:
+      claudeRuntimeClient.claudeRuntimeLoadSessionDiff.bind(claudeRuntimeClient),
+    claudeRuntimeLoadSessionHistory:
+      claudeRuntimeClient.claudeRuntimeLoadSessionHistory.bind(claudeRuntimeClient),
+    claudeRuntimeLoadSessionTodos:
+      claudeRuntimeClient.claudeRuntimeLoadSessionTodos.bind(claudeRuntimeClient),
+    claudeRuntimeSearchFiles:
+      claudeRuntimeClient.claudeRuntimeSearchFiles.bind(claudeRuntimeClient),
+    gitCanonicalizePath: gitClient.gitCanonicalizePath.bind(gitClient),
+    gitGetBranches: gitClient.gitGetBranches.bind(gitClient),
+    gitGetCurrentBranch: gitClient.gitGetCurrentBranch.bind(gitClient),
+    gitSwitchBranch: gitClient.gitSwitchBranch.bind(gitClient),
+    gitCreateWorktree: gitClient.gitCreateWorktree.bind(gitClient),
+    gitRemoveWorktree: gitClient.gitRemoveWorktree.bind(gitClient),
+    gitPushBranch: gitClient.gitPushBranch.bind(gitClient),
+    gitPullBranch: gitClient.gitPullBranch.bind(gitClient),
+    gitFetchRemote: gitClient.gitFetchRemote.bind(gitClient),
+    gitCommitAll: gitClient.gitCommitAll.bind(gitClient),
+    gitRebaseBranch: gitClient.gitRebaseBranch.bind(gitClient),
+    gitRebaseAbort: gitClient.gitRebaseAbort.bind(gitClient),
+    gitAbortConflict: gitClient.gitAbortConflict.bind(gitClient),
+    gitGetStatus: gitClient.gitGetStatus.bind(gitClient),
+    gitGetDiff: gitClient.gitGetDiff.bind(gitClient),
+    gitCommitsAheadBehind: gitClient.gitCommitsAheadBehind.bind(gitClient),
+    gitGetWorktreeStatus: gitClient.gitGetWorktreeStatus.bind(gitClient),
+    gitGetWorktreeStatusSummary: gitClient.gitGetWorktreeStatusSummary.bind(gitClient),
+    gitResetWorktreeSelection: gitClient.gitResetWorktreeSelection.bind(gitClient),
+  } satisfies HostClientApi;
+  for (const methodName of Object.keys(hostClient)) {
+    Object.defineProperty(hostClient, methodName, { enumerable: false });
+  }
   return hostClient;
 };
 

@@ -1,15 +1,17 @@
 import { canonicalTargetBranch } from "@/lib/target-branch";
 import type { TaskApprovalModalModel } from "./kanban-page-model-types";
 
-export function getTaskApprovalModalHeader(model: TaskApprovalModalModel) {
+type TaskApprovalModalHeader = {
+  title: string;
+  description: string;
+};
+
+export function getTaskApprovalModalHeader(model: TaskApprovalModalModel): TaskApprovalModalHeader {
   if (model.stage === "missing_builder_worktree") {
     return {
       title: "Builder Worktree Missing",
       description:
         "The builder worktree for this task is no longer available. You can still complete the task or reset the implementation from here.",
-    } satisfies {
-      title: string;
-      description: string;
     };
   }
 
@@ -18,9 +20,6 @@ export function getTaskApprovalModalHeader(model: TaskApprovalModalModel) {
     return {
       title: "Publish And Mark Done",
       description: `The local merge is already applied. Push ${publishTargetLabel} to publish it, then move the task to Done.`,
-    } satisfies {
-      title: string;
-      description: string;
     };
   }
 
@@ -29,9 +28,6 @@ export function getTaskApprovalModalHeader(model: TaskApprovalModalModel) {
       title: "Complete Direct Merge",
       description:
         "The local merge is already applied. Finish the direct merge workflow to move the task to Done and clean up the builder workspace.",
-    } satisfies {
-      title: string;
-      description: string;
     };
   }
 
@@ -39,8 +35,5 @@ export function getTaskApprovalModalHeader(model: TaskApprovalModalModel) {
     title: "Approve Task",
     description:
       "Choose how to finish this task: merge it locally now, or create and update a pull request.",
-  } satisfies {
-    title: string;
-    description: string;
   };
 }

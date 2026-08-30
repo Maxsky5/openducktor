@@ -185,17 +185,25 @@ const buildPostStartMessage = async ({
     ? await loadEffectivePromptOverrides(workspaceId, queryClient)
     : undefined;
   const taskTargetBranch = intent.targetBranch ?? task?.targetBranch;
-  const promptContext = await resolveSessionStartKickoffPromptContext({
+  const promptContextInput: Parameters<typeof resolveSessionStartKickoffPromptContext>[0] = {
     templateId: kickoffTemplateId,
-    ...(intent.message === undefined ? undefined : { message: intent.message }),
-    ...(taskTargetBranch ? { taskTargetBranch } : undefined),
     loadRepoDefaultTargetBranch: async () => {
       if (!workspaceId) {
         return null;
       }
       return (await loadRepoConfigFromQuery(queryClient, workspaceId)).defaultTargetBranch;
     },
-  });
+  };
+
+  if (intent.message !== undefined) {
+    promptContextInput.message = intent.message;
+  }
+
+  if (taskTargetBranch) {
+    promptContextInput.taskTargetBranch = taskTargetBranch;
+  }
+
+  const promptContext = await resolveSessionStartKickoffPromptContext(promptContextInput);
 
   return kickoffPromptForTemplate(intent.role, kickoffTemplateId, intent.taskId, {
     overrides: promptOverrides ?? {},
@@ -252,11 +260,16 @@ export const startSessionWorkflow = async ({
   sendAgentMessage,
   humanRequestChangesTask,
 }: StartSessionWorkflowArgs): Promise<SessionStartWorkflowResult> => {
-  await runBeforeStartAction({
+  const beforeStartActionArgs: Parameters<typeof runBeforeStartAction>[0] = {
     intent,
     persistTaskTargetBranch,
-    ...(humanRequestChangesTask ? { humanRequestChangesTask } : undefined),
-  });
+  };
+
+  if (humanRequestChangesTask) {
+    beforeStartActionArgs.humanRequestChangesTask = humanRequestChangesTask;
+  }
+
+  await runBeforeStartAction(beforeStartActionArgs);
 
   const postStartMessageSender =
     intent.postStartAction === "none" ? null : requirePostStartMessageSender(sendAgentMessage);

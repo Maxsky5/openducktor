@@ -1,6 +1,7 @@
 import {
   directMergeRecordSchema,
   gitTargetBranchSchema,
+  jsonValueSchema,
   pullRequestSchema,
 } from "@openducktor/contracts";
 import { eq, inArray } from "drizzle-orm";
@@ -94,7 +95,9 @@ export const setDirectMergeRecord = (
         database
           .update(tasks)
           .set({
-            directMergeJson: encodeJson(toValidatedJsonValue(directMerge)),
+            directMergeJson: encodeJson(
+              toValidatedJsonValue(jsonValueSchema.safeParse(directMerge)),
+            ),
             pullRequestJson: null,
             updatedAt: input.updatedAt,
           })
@@ -132,7 +135,9 @@ export const setPullRequestRecord = (
           .update(tasks)
           .set({
             directMergeJson: null,
-            pullRequestJson: encodeJson(toValidatedJsonValue(pullRequest)),
+            pullRequestJson: encodeJson(
+              toValidatedJsonValue(jsonValueSchema.safeParse(pullRequest)),
+            ),
             updatedAt: input.updatedAt,
           })
           .where(eq(tasks.id, input.taskId)),
@@ -183,7 +188,9 @@ export const applyTaskPatch = (
         });
       }
       const targetBranch = parsed.data;
-      updates.targetBranchJson = encodeJson(toValidatedJsonValue(targetBranch));
+      updates.targetBranchJson = encodeJson(
+        toValidatedJsonValue(jsonValueSchema.safeParse(targetBranch)),
+      );
     }
     if (Object.keys(updates).length > 0) {
       yield* session.execute(

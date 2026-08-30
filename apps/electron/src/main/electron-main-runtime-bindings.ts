@@ -4,7 +4,15 @@ import { ElectronOperationError } from "../effect/electron-errors";
 import type { ElectronMainLogger } from "./electron-main-logger";
 import { runElectronMainTask } from "./electron-main-task-owner";
 
-class ElectronHostCommandLoggingError extends ElectronOperationError {}
+type ElectronHostCommandLoggingErrorDetails<Failure extends Error> = {
+  readonly command: string;
+  readonly commandFailure: Failure;
+  readonly persistenceFailure: Error;
+};
+
+class ElectronHostCommandLoggingError<Failure extends Error> extends ElectronOperationError<
+  ElectronHostCommandLoggingErrorDetails<Failure>
+> {}
 
 export const createElectronMainRuntimeBindings = (logger: ElectronMainLogger) => {
   const activeHostCommands = new Set<Promise<unknown>>();

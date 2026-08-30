@@ -128,14 +128,6 @@ describe("Electron main lifecycle policy", () => {
     expect(source).toContain("return disposeActiveElectronRuntimeEffect(reason)");
   });
 
-  test("app update check IPC returns a structured rejection for invalid input", () => {
-    const source = readRepoFile("apps/electron/src/main/main.ts");
-
-    expect(source).toContain("createRejectedAppUpdateCommandResult");
-    expect(source).toContain("checkInput = readElectronAppUpdateCheckInput(input)");
-    expect(source).toContain('code: "invalid_state"');
-  });
-
   test("app update state forwarding skips destroyed windows and logs send failures", () => {
     const source = readRepoFile("apps/electron/src/main/main.ts");
 

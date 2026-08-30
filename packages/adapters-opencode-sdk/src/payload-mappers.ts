@@ -24,14 +24,19 @@ export const normalizeModelInput = (
     return {};
   }
 
-  return {
+  const normalized: NormalizedModelInput = {
     model: {
       providerID: model.providerId,
       modelID: model.modelId,
     },
-    ...(model.variant ? { variant: model.variant } : undefined),
-    ...(model.profileId ? { agent: model.profileId } : undefined),
   };
+  if (model.variant) {
+    normalized.variant = model.variant;
+  }
+  if (model.profileId) {
+    normalized.agent = model.profileId;
+  }
+  return normalized;
 };
 
 export const resolveAssistantResponseMessageId = (

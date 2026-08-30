@@ -1,14 +1,12 @@
-import type { AgentPromptTemplateId, RepoPromptOverrides } from "@openducktor/contracts";
+import { agentPromptTemplateIdValues, type RepoPromptOverrides } from "@openducktor/contracts";
 
 const trimPromptTemplate = (template: string): string => template.trim();
 
-// SAFETY: Object.entries reads this RepoPromptOverrides object, so each tuple keeps its indexed key and value types.
 export const preparePromptOverridesForSave = (overrides: RepoPromptOverrides) => {
   const next: RepoPromptOverrides = {};
 
-  for (const [templateId, entry] of Object.entries(overrides) as Array<
-    [AgentPromptTemplateId, RepoPromptOverrides[AgentPromptTemplateId]]
-  >) {
+  for (const templateId of agentPromptTemplateIdValues) {
+    const entry = overrides[templateId];
     if (!entry) {
       continue;
     }

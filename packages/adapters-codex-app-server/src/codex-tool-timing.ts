@@ -51,8 +51,12 @@ export const codexToolTimingFields = (
   const canEmitStartedAtMs =
     startedAtMs !== null && (options.allowStartedAtOnly === true || endedAtMs !== null);
 
-  return {
-    ...(canEmitStartedAtMs ? { startedAtMs } : undefined),
-    ...(endedAtMs !== null ? { endedAtMs } : undefined),
-  };
+  const timing: CodexToolTimingFields = {};
+  if (canEmitStartedAtMs) {
+    timing.startedAtMs = startedAtMs;
+  }
+  if (endedAtMs !== null) {
+    timing.endedAtMs = endedAtMs;
+  }
+  return timing;
 };

@@ -1,6 +1,7 @@
 import {
   agentSessionTodoPayloadListSchema,
   isJsonObject,
+  type JsonObject,
   jsonValueSchema,
 } from "@openducktor/contracts";
 import { type AgentSessionTodoItem, normalizeAgentSessionTodoList } from "@openducktor/core";
@@ -30,7 +31,7 @@ export const parseTodosFromToolOutput = (
 };
 
 export const parseTodosFromToolInput = (
-  input: Record<string, unknown> | undefined,
+  input: JsonObject | undefined,
 ): AgentSessionTodoItem[] | null => {
   if (!input) {
     return null;

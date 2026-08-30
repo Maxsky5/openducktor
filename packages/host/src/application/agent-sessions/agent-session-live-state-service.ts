@@ -116,7 +116,7 @@ const parseAdapterOutput = <Schema extends z.ZodType, Input>(
   schema: Schema,
   value: Input,
   operation: string,
-): Effect.Effect<z.output<Schema>, HostValidationError> =>
+): Effect.Effect<z.output<Schema>, HostValidationError<{ operation: string }>> =>
   Effect.try({
     try: () => schema.parse(value),
     catch: (cause) =>

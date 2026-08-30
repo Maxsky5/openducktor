@@ -7,7 +7,12 @@ import type {
   GitRebaseBranchResult,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  type HostOperationErrorAggregate,
+  HostValidationError,
+  type HostValidationErrorAggregate,
+} from "../../effect/host-errors";
 import {
   combineOptionalOutput,
   type GitCommandRunner,
@@ -23,9 +28,12 @@ import {
 
 const gitOperationError = (message: string, operation: string): HostOperationError =>
   new HostOperationError({ message, operation });
-const gitValidationError = (message: string, operation: string): HostValidationError =>
+const gitValidationError = (
+  message: string,
+  operation: string,
+): HostValidationError<{ operation: string }> =>
   new HostValidationError({ message, details: { operation } });
-type GitBranchSyncError = HostOperationError | HostValidationError;
+type GitBranchSyncError = HostOperationErrorAggregate | HostValidationErrorAggregate;
 export const pullBranch = (
   runner: GitCommandRunner,
   workingDirectory: string,

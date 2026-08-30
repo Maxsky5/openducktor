@@ -11,7 +11,11 @@ import {
   type GithubCommandDependencies,
   runGithubCommand,
 } from "../../../application/tasks/support/github-pull-requests";
-import { errorMessage, HostValidationError } from "../../../effect/host-errors";
+import {
+  errorMessage,
+  HostValidationError,
+  type HostValidationErrorAggregate,
+} from "../../../effect/host-errors";
 import { parseGithubJson } from "./github-pull-request-review-payload";
 
 type GithubPullRequestReviewOverviewReadInput = {
@@ -312,7 +316,7 @@ const parseOverviewPage = (
 const runOverviewGraphql = (
   input: GithubPullRequestReviewOverviewReadInput,
   variables: readonly GithubGraphqlVariable[],
-): Effect.Effect<string, HostValidationError> =>
+): Effect.Effect<string, HostValidationError<{ pullRequestNumber: number }>> =>
   runGithubCommand(input.dependencies, input.repoPath, input.repository.host, [
     "api",
     "graphql",
@@ -333,7 +337,7 @@ const runOverviewGraphql = (
 
 export const loadGithubPullRequestReviewOverview = (
   input: GithubPullRequestReviewOverviewReadInput,
-): Effect.Effect<GithubPullRequestReviewOverview, HostValidationError> =>
+): Effect.Effect<GithubPullRequestReviewOverview, HostValidationErrorAggregate> =>
   Effect.gen(function* () {
     const comments: PullRequestReviewActivity[] = [];
     const reviews: PullRequestReviewActivity[] = [];

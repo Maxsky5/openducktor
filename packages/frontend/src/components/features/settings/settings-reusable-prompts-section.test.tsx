@@ -7,14 +7,14 @@ import { SettingsReusablePromptsSection } from "./settings-reusable-prompts-sect
 
 enableReactActEnvironment();
 
-const REUSABLE_PROMPTS: ReusablePrompt[] = [
-  {
-    id: "prompt-1",
-    name: "review",
-    description: "Review files",
-    content: "Review this:\n$ARGUMENTS",
-  },
-];
+const REUSABLE_PROMPT: ReusablePrompt = {
+  id: "prompt-1",
+  name: "review",
+  description: "Review files",
+  content: "Review this:\n$ARGUMENTS",
+};
+
+const REUSABLE_PROMPTS: ReusablePrompt[] = [REUSABLE_PROMPT];
 
 const SECOND_REUSABLE_PROMPT: ReusablePrompt = {
   id: "prompt-2",
@@ -22,6 +22,8 @@ const SECOND_REUSABLE_PROMPT: ReusablePrompt = {
   description: "Summarize files",
   content: "Summarize this:\n$ARGUMENTS",
 };
+
+type ReusablePromptsUpdater = (current: ReusablePrompt[]) => ReusablePrompt[];
 
 describe("SettingsReusablePromptsSection", () => {
   test("focuses the name field after adding a reusable prompt", () => {
@@ -54,7 +56,10 @@ describe("SettingsReusablePromptsSection", () => {
   });
 
   test("adds a reusable prompt draft", () => {
-    const onUpdateReusablePrompts = mock();
+    let promptUpdater: ReusablePromptsUpdater | undefined;
+    const onUpdateReusablePrompts = mock((updater: ReusablePromptsUpdater) => {
+      promptUpdater = updater;
+    });
     const renderer = render(
       createElement(SettingsReusablePromptsSection, {
         reusablePrompts: [],
@@ -70,18 +75,20 @@ describe("SettingsReusablePromptsSection", () => {
       fireEvent.click(screen.getByRole("button", { name: /add prompt/i }));
 
       expect(onUpdateReusablePrompts).toHaveBeenCalledTimes(1);
-      const updater = onUpdateReusablePrompts.mock.calls[0]?.[0];
-      if (typeof updater !== "function") {
+      if (promptUpdater === undefined) {
         throw new Error("Expected reusable prompt updater.");
       }
-      expect(updater([])).toMatchObject([{ name: "", description: "", content: "" }]);
+      expect(promptUpdater([])).toMatchObject([{ name: "", description: "", content: "" }]);
     } finally {
       renderer.unmount();
     }
   });
 
   test("updates and deletes an existing reusable prompt", () => {
-    const onUpdateReusablePrompts = mock();
+    const promptUpdaters: ReusablePromptsUpdater[] = [];
+    const onUpdateReusablePrompts = mock((updater: ReusablePromptsUpdater) => {
+      promptUpdaters.push(updater);
+    });
     const onSelectedReusablePromptIdChange = mock();
     const renderer = render(
       createElement(SettingsReusablePromptsSection, {
@@ -101,13 +108,12 @@ describe("SettingsReusablePromptsSection", () => {
       fireEvent.click(deleteButton);
 
       expect(onUpdateReusablePrompts).toHaveBeenCalledTimes(2);
-      const updateName = onUpdateReusablePrompts.mock.calls[0]?.[0];
-      const deletePrompt = onUpdateReusablePrompts.mock.calls[1]?.[0];
-      if (typeof updateName !== "function" || typeof deletePrompt !== "function") {
+      const [updateName, deletePrompt] = promptUpdaters;
+      if (updateName === undefined || deletePrompt === undefined) {
         throw new Error("Expected reusable prompt updater callbacks.");
       }
 
-      expect(updateName(REUSABLE_PROMPTS)).toEqual([{ ...REUSABLE_PROMPTS[0], name: "summarize" }]);
+      expect(updateName(REUSABLE_PROMPTS)).toEqual([{ ...REUSABLE_PROMPT, name: "summarize" }]);
       expect(deletePrompt(REUSABLE_PROMPTS)).toEqual([]);
       expect(onSelectedReusablePromptIdChange).toHaveBeenCalledWith(null);
     } finally {

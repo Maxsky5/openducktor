@@ -1,5 +1,6 @@
-import { jsonValueSchema } from "@openducktor/contracts";
+import { type JsonObject, type JsonValue, jsonValueSchema } from "@openducktor/contracts";
 import type { GlobalEvent, Session } from "@opencode-ai/sdk/v2/client";
+import { z } from "zod";
 import {
   opencodeMessageInfoPayloadSchema,
   opencodePartPayloadSchema,
@@ -9,6 +10,7 @@ import {
 import {
   parseOpencodeDirectEvent,
   parseOpencodeGlobalEventPayload,
+  type OpencodeGlobalEventPayloadInput,
   type ParsedOpencodeEvent,
   type ParsedOpencodeGlobalEventPayload,
 } from "./opencode-global-event-ingress";
@@ -69,13 +71,16 @@ export const createOpencodeMessageInfoFixture = (info: OpencodeMessageInfoFixtur
   if (info.role === "user") {
     const { model, modelID, providerID, time, variant, ...fields } = info;
     const selectedVariant = variant ?? model?.variant;
+    const selectedModel: UserMessageInfo["model"] = {
+      modelID: modelID ?? model?.modelID ?? "gpt-5",
+      providerID: providerID ?? model?.providerID ?? "openai",
+    };
+    if (selectedVariant) {
+      selectedModel.variant = selectedVariant;
+    }
     return opencodeMessageInfoPayloadSchema.parse({
       agent: "build",
-      model: {
-        modelID: modelID ?? model?.modelID ?? "gpt-5",
-        providerID: providerID ?? model?.providerID ?? "openai",
-        ...(selectedVariant ? { variant: selectedVariant } : undefined),
-      },
+      model: selectedModel,
       sessionID: "session-opencode-1",
       ...fields,
       time: { created: 1, ...time },
@@ -103,12 +108,10 @@ export const createOpencodeMessageInfoFixture = (info: OpencodeMessageInfoFixtur
   });
 };
 
-const serializeToolResult = (value: unknown): string => {
-  if (value === undefined) {
-    return "";
-  }
+const serializeToolResult = (value: JsonValue): string => {
   const parsed = jsonValueSchema.parse(value);
-  return typeof parsed === "string" ? parsed : JSON.stringify(parsed);
+  const text = z.string().safeParse(parsed);
+  return text.success ? text.data : JSON.stringify(parsed);
 };
 
 type PartialVariant<Variant, Discriminator extends keyof Variant> = Variant extends Variant
@@ -182,7 +185,7 @@ export const createOpencodePartFixture = (part: OpencodePartFixtureInput): Parse
           title: "",
           ...state,
           input,
-          output: serializeToolResult(state.output),
+          output: state.output === undefined ? "" : serializeToolResult(state.output),
           status,
         },
       });
@@ -192,7 +195,7 @@ export const createOpencodePartFixture = (part: OpencodePartFixtureInput): Parse
         state: {
           time: { end: 2, start: 1 },
           ...state,
-          error: serializeToolResult(state.error),
+          error: state.error === undefined ? "" : serializeToolResult(state.error),
           input,
           status,
         },
@@ -245,7 +248,7 @@ export type MalformedOpencodeControlEventFixture = {
     | "question.v2.rejected"
     | "question.v2.replied"
     | "session.status";
-  properties: Record<string, unknown>;
+  properties: JsonObject;
 };
 
 type OptionalFixtureId<Event> = Event extends { id: string }
@@ -257,7 +260,7 @@ type IgnoredEventFixtureInput = OptionalFixtureId<
 type HeartbeatEventFixtureInput = {
   id?: string;
   type: "server.heartbeat";
-  properties: Record<string, unknown>;
+  properties: JsonObject;
 };
 
 export type OpencodeMessageEventGroupFixture = {
@@ -280,15 +283,24 @@ export type OpencodeEventFixtureInput =
   | OpencodeMessageEventGroupFixture
   | SyncEventFixtureInput;
 
-export const createOpencodeEventFixtures = (
+type OpencodeEventFixtureOutput = OpencodeGlobalEventPayloadInput;
+
+export function createOpencodeEventFixtures(
+  event: DirectEventFixtureInput,
+  index: number,
+): ParsedOpencodeEvent[];
+export function createOpencodeEventFixtures(
+  event: OpencodeMessageEventGroupFixture,
+  index: number,
+): ParsedOpencodeEvent[];
+export function createOpencodeEventFixtures(
   event: OpencodeEventFixtureInput,
   index: number,
-): Array<
-  | HeartbeatEventFixtureInput
-  | IgnoredEventFixtureInput
-  | MalformedOpencodeControlEventFixture
-  | ParsedOpencodeGlobalEventPayload
-> => {
+): OpencodeEventFixtureOutput[];
+export function createOpencodeEventFixtures(
+  event: OpencodeEventFixtureInput,
+  index: number,
+): OpencodeEventFixtureOutput[] {
   if ("fixture" in event) {
     const messageInfo = createOpencodeMessageInfoFixture(event.info);
     const sessionID = event.sessionID ?? messageInfo.sessionID;
@@ -346,7 +358,7 @@ export const createOpencodeEventFixtures = (
   }
 
   return [{ ...event, id }];
-};
+}
 
 export const createParsedOpencodeMessageEventGroupFixtures = (
   input: Omit<OpencodeMessageEventGroupFixture, "fixture">,

@@ -4,8 +4,10 @@ import {
   type LoadAgentSessionHistoryInput,
 } from "@openducktor/core";
 import { applyFinalAssistantTurnMetadata } from "./codex-app-server-history";
+import type { CodexMappingContext } from "./codex-canonical-events";
 import { isCodexThreadNotLoadedError } from "./codex-app-server-shared";
 import { codexTurnItemsFromThreadRead, toHistoryMessage } from "./codex-app-server-transcript";
+import { type CodexThreadItemInput } from "./codex-event-mapper";
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import {
   type CodexForkBoundary,
@@ -119,20 +121,25 @@ const projectCodexThreadReadToHistory = ({
             ? forkBoundaryProjection.parentThreadId
             : input.externalSessionId;
         const turnModel = model;
-        const canonicalEvents = eventMapperPipeline.runThreadItem(
-          {
-            item,
-            index,
-            ...(timestamp ? { timestamp } : undefined),
-            ...(isFinalAgentMessage ? { isFinalAgentMessage } : undefined),
-          },
-          {
-            source: "thread_read",
-            runtimeId,
-            threadId: itemOwnerThreadId,
-            ...(timestamp ? { timestamp } : undefined),
-          },
-        );
+        const threadItemInput: CodexThreadItemInput = {
+          item,
+          index,
+        };
+        if (timestamp) {
+          threadItemInput.timestamp = timestamp;
+        }
+        if (isFinalAgentMessage) {
+          threadItemInput.isFinalAgentMessage = true;
+        }
+        const mappingContext: CodexMappingContext = {
+          source: "thread_read",
+          runtimeId,
+          threadId: itemOwnerThreadId,
+        };
+        if (timestamp) {
+          mappingContext.timestamp = timestamp;
+        }
+        const canonicalEvents = eventMapperPipeline.runThreadItem(threadItemInput, mappingContext);
         let history: AgentSessionHistoryMessage[];
         if (canonicalEvents.length > 0) {
           history = projectCodexCanonicalEventsToHistory(canonicalEvents, turnModel);

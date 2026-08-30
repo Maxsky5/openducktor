@@ -1,4 +1,5 @@
 import type { AgentStreamPart } from "@openducktor/core";
+import { z } from "zod";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 
 export type AssistantTurnTimingState = {
@@ -14,9 +15,9 @@ export type AssistantTurnDurationWindow = {
   completedAtMs: number;
 };
 
-const isFiniteTimestamp = (value: number | undefined): value is number => {
-  return typeof value === "number" && Number.isFinite(value);
-};
+const finiteTimestampSchema = z.number().finite();
+const isFiniteTimestamp = (value: number | undefined): value is number =>
+  finiteTimestampSchema.safeParse(value).success;
 
 export const mergeTurnActivityTimestamp = (
   currentTimestampMs: number | undefined,

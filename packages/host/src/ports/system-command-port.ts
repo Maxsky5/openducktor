@@ -1,5 +1,8 @@
 import { Context, type Effect } from "effect";
-import type { HostOperationError, HostPathAccessError } from "../effect/host-errors";
+import type {
+  HostOperationErrorAggregate,
+  HostPathAccessErrorAggregate,
+} from "../effect/host-errors";
 
 export type SystemCommandRunOptions = {
   cwd?: string;
@@ -23,17 +26,17 @@ export type SystemCommandPort = {
   resolveCommandPath(
     command: string,
     options?: SystemCommandResolveOptions,
-  ): Effect.Effect<string | null, HostPathAccessError>;
+  ): Effect.Effect<string | null, HostPathAccessErrorAggregate>;
   versionCommand(
     command: string,
     args: string[],
     options?: SystemCommandRunOptions,
-  ): Effect.Effect<string | null, HostPathAccessError>;
+  ): Effect.Effect<string | null, HostPathAccessErrorAggregate>;
   runCommandAllowFailure(
     command: string,
     args: string[],
     options?: SystemCommandRunOptions,
-  ): Effect.Effect<SystemCommandRunResult, HostOperationError>;
+  ): Effect.Effect<SystemCommandRunResult, HostOperationErrorAggregate>;
 };
 
 export class SystemCommandPortTag extends Context.Tag("@openducktor/host/SystemCommandPort")<

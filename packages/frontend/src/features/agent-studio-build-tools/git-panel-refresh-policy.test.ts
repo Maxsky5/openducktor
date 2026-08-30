@@ -1,20 +1,26 @@
 import { describe, expect, test } from "bun:test";
+import type { JsonObject } from "@openducktor/contracts";
 import type { ToolMessageMeta } from "./git-panel-refresh-policy";
 import { shouldRefreshGitPanelAfterToolCompletion } from "./git-panel-refresh-policy";
 
 const buildToolMeta = (
   tool: string,
   toolType: ToolMessageMeta["toolType"],
-  input?: Record<string, unknown>,
-): ToolMessageMeta => ({
-  kind: "tool",
-  partId: `part-${tool}`,
-  callId: `call-${tool}`,
-  tool,
-  toolType,
-  status: "completed",
-  ...(input ? { input } : undefined),
-});
+  input?: JsonObject,
+): ToolMessageMeta => {
+  const meta: ToolMessageMeta = {
+    kind: "tool",
+    partId: `part-${tool}`,
+    callId: `call-${tool}`,
+    tool,
+    toolType,
+    status: "completed",
+  };
+  if (input) {
+    meta.input = input;
+  }
+  return meta;
+};
 
 describe("shouldRefreshGitPanelAfterToolCompletion", () => {
   test("refreshes for known file-editing tools", () => {

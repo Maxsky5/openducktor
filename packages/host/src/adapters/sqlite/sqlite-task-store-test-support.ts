@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
+import { z } from "zod";
 import { resolveSqliteTaskStoreDatabasePath } from "../../infrastructure/sqlite/sqlite-task-store-path";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import { createSqliteTaskRepository } from "./sqlite-task-repository";
@@ -12,6 +13,10 @@ import {
 } from "./sqlite-task-repository-context";
 
 type BunSqliteStatement = ReturnType<Database["prepare"]>;
+const documentCountRowSchema = z.object({ count: z.number() });
+const tableNameRowSchema = z.object({ name: z.string() });
+const migrationRowSchema = z.object({ hash: z.string() });
+const taskColumnRowSchema = z.object({ name: z.string(), notnull: z.number() });
 
 const makeTempDirectory = async (): Promise<string> => {
   return mkdtemp(path.join(tmpdir(), "odt-sqlite-task-store-"));
@@ -95,12 +100,8 @@ export const readDocumentCount = (databasePath: string, taskId: string, kind: st
       "select count(*) as count from task_documents where task_id = ? and kind = ?",
       (statement) => statement.get(taskId, kind),
     );
-    return typeof row === "object" &&
-      row !== null &&
-      "count" in row &&
-      typeof row.count === "number"
-      ? row.count
-      : 0;
+    const parsed = documentCountRowSchema.safeParse(row);
+    return parsed.success ? parsed.data.count : 0;
   } finally {
     database.close();
   }
@@ -114,13 +115,10 @@ export const readTableNames = (databasePath: string): string[] => {
       "select name from sqlite_master where type = 'table'",
       (statement) => statement.all(),
     );
-    return rows
-      .map((row) =>
-        typeof row === "object" && row !== null && "name" in row && typeof row.name === "string"
-          ? row.name
-          : null,
-      )
-      .filter((name): name is string => name !== null);
+    return rows.flatMap((row) => {
+      const parsed = tableNameRowSchema.safeParse(row);
+      return parsed.success ? [parsed.data.name] : [];
+    });
   } finally {
     database.close();
   }
@@ -134,13 +132,10 @@ export const readDrizzleMigrationRows = (databasePath: string): Array<{ hash: st
       "select hash from __drizzle_migrations order by id",
       (statement) => statement.all(),
     );
-    return rows
-      .map((row) =>
-        typeof row === "object" && row !== null && "hash" in row && typeof row.hash === "string"
-          ? { hash: row.hash }
-          : null,
-      )
-      .filter((row): row is { hash: string } => row !== null);
+    return rows.flatMap((row) => {
+      const parsed = migrationRowSchema.safeParse(row);
+      return parsed.success ? [parsed.data] : [];
+    });
   } finally {
     database.close();
   }
@@ -153,21 +148,11 @@ export const readTaskColumnNullability = (
   const database = new Database(databasePath, { readonly: true });
   try {
     const rows = useStatement(database, "PRAGMA table_info(tasks)", (statement) => statement.all());
-    const column = rows.find(
-      (row) =>
-        typeof row === "object" &&
-        row !== null &&
-        "name" in row &&
-        row.name === columnName &&
-        "notnull" in row,
-    );
-    if (
-      typeof column === "object" &&
-      column !== null &&
-      "notnull" in column &&
-      typeof column.notnull === "number"
-    ) {
-      return column.notnull === 0;
+    for (const row of rows) {
+      const parsed = taskColumnRowSchema.safeParse(row);
+      if (parsed.success && parsed.data.name === columnName) {
+        return parsed.data.notnull === 0;
+      }
     }
     return undefined;
   } finally {

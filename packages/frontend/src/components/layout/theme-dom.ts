@@ -3,7 +3,7 @@ import type { Theme } from "@openducktor/contracts";
 const THEME_CLASS_NAMES = ["light", "dark"] as const;
 
 export const readDocumentTheme = (fallback: Theme): Theme => {
-  if (typeof globalThis.document === "undefined") {
+  if (globalThis.document === undefined) {
     return fallback;
   }
 
@@ -19,7 +19,7 @@ export const readDocumentTheme = (fallback: Theme): Theme => {
 };
 
 export const applyThemeToDocument = (theme: Theme): void => {
-  if (typeof globalThis.document === "undefined") {
+  if (globalThis.document === undefined) {
     return;
   }
 

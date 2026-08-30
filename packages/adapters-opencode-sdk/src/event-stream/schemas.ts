@@ -1,5 +1,6 @@
 import type { JsonObject } from "@openducktor/contracts";
 import type { ParsedOpencodeEvent as Event } from "../opencode-global-event-ingress";
+import { z } from "zod";
 
 type BusyStatus = {
   type: "busy";
@@ -65,13 +66,20 @@ const toParsedQuestionAsked = (properties: {
   }>;
 }): ParsedQuestionAsked => ({
   requestId: properties.id,
-  questions: properties.questions.map((question) => ({
-    header: question.header,
-    question: question.question,
-    options: question.options,
-    ...(question.multiple !== undefined ? { multiple: question.multiple } : undefined),
-    ...(question.custom !== undefined ? { custom: question.custom } : undefined),
-  })),
+  questions: properties.questions.map((question) => {
+    const parsedQuestion: ParsedQuestion = {
+      header: question.header,
+      question: question.question,
+      options: question.options,
+    };
+    if (question.multiple !== undefined) {
+      parsedQuestion.multiple = question.multiple;
+    }
+    if (question.custom !== undefined) {
+      parsedQuestion.custom = question.custom;
+    }
+    return parsedQuestion;
+  }),
 });
 
 export const parseSessionControlEvent = (event: Event): ParsedSessionControlEvent | undefined => {
@@ -93,15 +101,20 @@ export const parseSessionControlEvent = (event: Event): ParsedSessionControlEven
     }
     case "permission.v2.asked": {
       const properties = event.properties;
+      const request: ParsedPermissionAsked = {
+        requestId: properties.id,
+        permission: properties.action,
+        patterns: properties.resources,
+      };
+      if (properties.save) {
+        request.save = properties.save;
+      }
+      if (properties.metadata) {
+        request.metadata = properties.metadata;
+      }
       return {
         type: "permission_asked",
-        request: {
-          requestId: properties.id,
-          permission: properties.action,
-          patterns: properties.resources,
-          ...(properties.save ? { save: properties.save } : undefined),
-          ...(properties.metadata ? { metadata: properties.metadata } : undefined),
-        },
+        request,
       };
     }
     case "permission.asked": {
@@ -147,9 +160,13 @@ export const parseSessionControlEvent = (event: Event): ParsedSessionControlEven
 type OpencodeSessionError = Extract<Event, { type: "session.error" }>["properties"]["error"];
 
 export const readSessionErrorMessage = (error: OpencodeSessionError): string => {
-  if (!error || !("message" in error.data) || typeof error.data.message !== "string") {
+  if (!error || !("message" in error.data)) {
     return "Unknown session error";
   }
-  const message = error.data.message.trim();
+  const parsedMessage = z.string().safeParse(error.data.message);
+  if (!parsedMessage.success) {
+    return "Unknown session error";
+  }
+  const message = parsedMessage.data.trim();
   return message.length > 0 ? message : "Unknown session error";
 };

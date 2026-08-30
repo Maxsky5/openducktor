@@ -1,6 +1,6 @@
-import { isUnknownRecord } from "@openducktor/core";
-import { readStringProp } from "./claude-agent-sdk-utils";
 import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
+import { parseClaudeHistoryConversationEntry } from "./claude-agent-sdk-ingress-schemas";
+import { z } from "zod";
 
 export type ClaudeTaskNotification = {
   outputFile?: string;
@@ -15,6 +15,8 @@ export type ClaudeBackgroundAgentLaunch = {
   outputFile?: string;
   status: "async_launched";
 };
+
+const taskNotificationContentSchema = z.string();
 
 const readXmlElement = (xml: string, name: string): string | undefined => {
   const openingTag = `<${name}>`;
@@ -59,14 +61,12 @@ const readXmlElements = (xml: string, name: string): string[] => {
 export const readClaudeTaskNotifications = (
   entry: ClaudeHistoryMessage,
 ): ClaudeTaskNotification[] => {
-  if (
-    !isUnknownRecord(entry) ||
-    readStringProp(entry, "type") !== "user" ||
-    !isUnknownRecord(entry.message)
-  ) {
+  if (entry.type !== "user") {
     return [];
   }
-  const content = readStringProp(entry.message, "content")?.trim();
+  const messageContent = parseClaudeHistoryConversationEntry(entry).message.content;
+  const parsedContent = taskNotificationContentSchema.safeParse(messageContent);
+  const content = parsedContent.success ? parsedContent.data.trim() : undefined;
   if (!content?.startsWith("<task-notification>") || !content.endsWith("</task-notification>")) {
     return [];
   }
@@ -81,13 +81,19 @@ export const readClaudeTaskNotifications = (
   }
   const outputFile = readXmlElement(content, "output-file");
   const summary = readXmlElement(content, "summary");
-  return taskIds.map((taskId) => ({
-    taskId,
-    status,
-    ...(toolUseId ? { toolUseId } : undefined),
-    ...(outputFile ? { outputFile } : undefined),
-    ...(summary ? { summary } : undefined),
-  }));
+  return taskIds.map((taskId) => {
+    const notification: ClaudeTaskNotification = { taskId, status };
+    if (toolUseId) {
+      notification.toolUseId = toolUseId;
+    }
+    if (outputFile) {
+      notification.outputFile = outputFile;
+    }
+    if (summary) {
+      notification.summary = summary;
+    }
+    return notification;
+  });
 };
 
 export const readClaudeTaskNotification = (
@@ -108,9 +114,12 @@ export const readClaudeBackgroundAgentLaunch = (
   }
   const outputFileLine = lines.find((line) => line.startsWith("output_file: "));
   const outputFile = outputFileLine?.slice("output_file: ".length).trim();
-  return {
+  const launch: ClaudeBackgroundAgentLaunch = {
     agentId,
     status: "async_launched",
-    ...(outputFile ? { outputFile } : undefined),
   };
+  if (outputFile) {
+    launch.outputFile = outputFile;
+  }
+  return launch;
 };

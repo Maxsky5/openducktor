@@ -315,12 +315,13 @@ export function WorkspaceStage({
     disabled: isFinalizing,
     initialPickerOpen: true,
   });
-  const folderPicker = useInlineFolderPickerController({
-    ...(workspaceCreation.repoPath ? { initialPath: workspaceCreation.repoPath } : undefined),
+  const folderPickerInput: Parameters<typeof useInlineFolderPickerController>[0] = {
     requireGitRepo: true,
     onCancel: workspaceCreation.closePicker,
     onConfirm: workspaceCreation.confirmRepo,
-  });
+  };
+  if (workspaceCreation.repoPath) folderPickerInput.initialPath = workspaceCreation.repoPath;
+  const folderPicker = useInlineFolderPickerController(folderPickerInput);
 
   return (
     <Card className="overflow-hidden shadow-sm">

@@ -6,7 +6,7 @@ import { buildScript, buildState } from "./use-agent-studio-dev-server-panel-tes
 import { renderDevServerPanelHook } from "./use-agent-studio-dev-server-panel-test-harness";
 import { useAgentStudioDevServerTerminalBuffers } from "./use-agent-studio-dev-server-terminal-buffers";
 
-if (typeof globalThis.document === "undefined") {
+if (globalThis.document === undefined) {
   GlobalRegistrator.register();
 }
 

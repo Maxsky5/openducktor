@@ -1,4 +1,4 @@
-import { isUnknownRecord, type AgentModelSelection } from "@openducktor/core";
+import type { AgentModelSelection } from "@openducktor/core";
 import { toClaudeSlashCommandCatalog } from "./claude-agent-sdk-catalog";
 import { handleClaudeCompactionBoundary } from "./claude-agent-sdk-compaction";
 import {
@@ -193,24 +193,32 @@ export const handleClaudeSdkMessage = ({
       permissionSession = subagentSession;
     }
     const input = permissionSession.toolInputsByCallId.get(message.tool_use_id);
+    const permissionMetadata: NonNullable<
+      Parameters<typeof emitClaudePermissionDeniedToolPart>[0]["permission"]["metadata"]
+    > = { source: "permission_denied" };
+    const permission: Parameters<typeof emitClaudePermissionDeniedToolPart>[0]["permission"] = {
+      toolName: message.tool_name,
+      toolUseId: message.tool_use_id,
+      message: message.message,
+      metadata: permissionMetadata,
+    };
+    if (input) {
+      permission.input = input;
+    }
+    if (message.agent_id) {
+      permissionMetadata.agentId = message.agent_id;
+    }
+    if (message.decision_reason_type) {
+      permissionMetadata.decisionReasonType = message.decision_reason_type;
+    }
+    if (message.decision_reason) {
+      permissionMetadata.decisionReason = message.decision_reason;
+    }
     emitClaudePermissionDeniedToolPart({
       emit,
       session: permissionSession,
       timestamp,
-      permission: {
-        toolName: message.tool_name,
-        toolUseId: message.tool_use_id,
-        message: message.message,
-        ...(input ? { input } : undefined),
-        metadata: {
-          source: "permission_denied",
-          ...(message.agent_id ? { agentId: message.agent_id } : undefined),
-          ...(message.decision_reason_type
-            ? { decisionReasonType: message.decision_reason_type }
-            : undefined),
-          ...(message.decision_reason ? { decisionReason: message.decision_reason } : undefined),
-        },
-      },
+      permission,
     });
   }
 };
@@ -249,13 +257,11 @@ const handleAssistantMessage = ({
   emitSupersededTranscriptMessage({ emit, message, session, timestamp });
   const assistantModel = message.message.model ? modelSelection(message.message.model) : undefined;
   const assistantMessage = message.message;
-  const content = isUnknownRecord(assistantMessage) ? assistantMessage.content : undefined;
+  const content = assistantMessage.content;
   const text = textFromContentBlocks(content);
   const hasToolUse =
     Array.isArray(content) &&
-    content.some(
-      (block) => isUnknownRecord(block) && isClaudeToolUseBlockType(readStringProp(block, "type")),
-    );
+    content.some((block) => isClaudeToolUseBlockType(readStringProp(block, "type")));
   const stopReason = readStringProp(assistantMessage, "stop_reason");
   const isForwardedSubagentText = isClaudeSubagentTranscriptTarget(session.externalSessionId);
   const hasFinalStopReason = stopReason === "end_turn" || stopReason === "stop_sequence";
@@ -272,21 +278,21 @@ const handleAssistantMessage = ({
   const responseId = readStringProp(assistantMessage, "id");
   const assistantMessageId = responseId ?? message.uuid;
   if ((text.length > 0 || hasToolUse) && !isFinalAssistantText && !isPendingSubagentAssistantText) {
-    settleClaudeStreamedAssistantText({
+    const settleInput: Parameters<typeof settleClaudeStreamedAssistantText>[0] = {
       emit,
-      ...(responseId ? { preserveMessageId: responseId } : undefined),
       session,
       timestamp,
-    });
+    };
+    if (responseId) {
+      settleInput.preserveMessageId = responseId;
+    }
+    settleClaudeStreamedAssistantText(settleInput);
   }
   if (hasToolUse && text.length > 0) {
     rememberAssistantTextForCurrentTurn(session, text, assistantMessageId, assistantModel);
   }
   if (Array.isArray(content)) {
     for (const [index, block] of content.entries()) {
-      if (!isUnknownRecord(block)) {
-        continue;
-      }
       const type = readStringProp(block, "type");
       if (type === "text" && hasToolUse) {
         const blockText = readStringProp(block, "text");
@@ -347,25 +353,31 @@ const handleAssistantMessage = ({
     }
     if (isPendingSubagentAssistantText) {
       rememberAssistantTextForCurrentTurn(session, text, assistantMessageId, assistantModel);
-      session.pendingSubagentAssistantMessage = {
+      const pendingMessage: NonNullable<ClaudeEventSession["pendingSubagentAssistantMessage"]> = {
         messageId: assistantMessageId,
         text,
-        ...(assistantModel ? { model: assistantModel } : undefined),
       };
+      if (assistantModel) {
+        pendingMessage.model = assistantModel;
+      }
+      session.pendingSubagentAssistantMessage = pendingMessage;
       return;
     }
     if (isFinalAssistantText) {
       const messageId = assistantMessageId;
       delete session.pendingSubagentAssistantMessage;
       rememberAssistantTextForCurrentTurn(session, text, messageId, assistantModel, true);
-      emit({
+      const event: Extract<ClaudeAgentSdkEvent, { type: "assistant_message" }> = {
         type: "assistant_message",
         externalSessionId: session.externalSessionId,
         timestamp,
         messageId,
         message: text,
-        ...(assistantModel ? { model: assistantModel } : undefined),
-      });
+      };
+      if (assistantModel) {
+        event.model = assistantModel;
+      }
+      emit(event);
       settleClaudeStreamedAssistantText({
         emit,
         preserveMessageId: messageId,

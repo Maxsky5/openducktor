@@ -10,6 +10,7 @@ import { createMcpServer } from "./mcp-server";
 import {
   type JsonObject,
   type JsonValue,
+  isJsonObject,
   jsonValueSchema,
   type OdtToolErrorPayload,
   odtToolErrorPayloadSchema,
@@ -54,7 +55,6 @@ const readJsonBody = async (request: IncomingMessage): Promise<JsonValue> => {
     return {};
   }
 
-  // SAFETY: JSON.parse returns only JSON-compatible values for valid JSON input.
   return jsonValueSchema.parse(JSON.parse(body));
 };
 
@@ -153,7 +153,7 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
     if (url === "/invoke/odt_read_task") {
       const body = await readJsonBody(request);
       requests.push({ url, body });
-      if (typeof body === "object" && body !== null && body.taskId === "missing-task") {
+      if (isJsonObject(body) && body.taskId === "missing-task") {
         writeJson(
           response,
           {
@@ -167,7 +167,7 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
         );
         return;
       }
-      if (typeof body === "object" && body !== null && body.taskId === "bad-response") {
+      if (isJsonObject(body) && body.taskId === "bad-response") {
         writeJson(response, { task: { id: "bad-response" } });
         return;
       }
@@ -232,13 +232,13 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
     server.on("error", reject);
   });
 
-  const address = server.address();
-  if (!address || typeof address === "string") {
+  const address = z.object({ port: z.number() }).safeParse(server.address());
+  if (!address.success) {
     throw new Error("Mock bridge failed to bind to a TCP port.");
   }
 
   return {
-    url: `http://127.0.0.1:${address.port}`,
+    url: `http://127.0.0.1:${address.data.port}`,
     requests,
   };
 };
@@ -258,16 +258,12 @@ const createTransport = async (
   options: { workspaceId?: string; forbidWorkspaceIdInput?: boolean; allowedTools?: string } = {},
 ) => {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const server = await createMcpServer(
-    {
-      hostUrl,
-      ...(options.workspaceId ? { workspaceId: options.workspaceId } : undefined),
-      ...(options.forbidWorkspaceIdInput ? { forbidWorkspaceIdInput: true } : undefined),
-    },
-    {
-      allowedToolNames: parseAllowedToolNames(options.allowedTools),
-    },
-  );
+  const context: Parameters<typeof createMcpServer>[0] = { hostUrl };
+  if (options.workspaceId) context.workspaceId = options.workspaceId;
+  if (options.forbidWorkspaceIdInput) context.forbidWorkspaceIdInput = true;
+  const server = await createMcpServer(context, {
+    allowedToolNames: parseAllowedToolNames(options.allowedTools),
+  });
   activeMcpServers.add(server);
   await server.connect(serverTransport);
   return clientTransport;

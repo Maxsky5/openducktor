@@ -7,6 +7,7 @@ import {
   parseHostEventEnvelope,
   type TaskEventCursor,
 } from "@openducktor/contracts";
+import type { HostCommandArgs, HostCommandName } from "@openducktor/host";
 import type {
   DevServerEventListener,
   DevServerEventSubscription,
@@ -26,8 +27,10 @@ import {
   createHostClient,
   type HostClient,
   HostInvokeError,
+  type InvokeFn,
 } from "@openducktor/host-client";
 import { Effect } from "effect";
+import { z } from "zod";
 import { getBrowserAuthTokenEffect, getBrowserBackendUrlEffect } from "./browser-config";
 import {
   causeToWebBoundaryError,
@@ -180,10 +183,10 @@ export const ensureLocalHostSessionDedupedEffect = (): Effect.Effect<void, WebEr
           }),
   });
 
-const invokeLocalHostEffect = <T>(
-  command: string,
-  args?: Record<string, unknown>,
-): Effect.Effect<T, WebError | HostInvokeError> =>
+const invokeLocalHostEffect = <Command extends HostCommandName>(
+  command: Command,
+  args: Exclude<HostCommandArgs, undefined> | undefined,
+): Effect.Effect<unknown, WebError | HostInvokeError> =>
   Effect.gen(function* () {
     const baseUrl = (yield* getBrowserBackendUrlEffect()).replace(/\/$/, "");
     const appToken = yield* getBrowserAuthTokenEffect();
@@ -214,7 +217,10 @@ const invokeLocalHostEffect = <T>(
     }
 
     return yield* Effect.tryPromise({
-      try: () => response.json(),
+      try: async () => {
+        const payload: unknown = await response.json();
+        return payload;
+      },
       catch: (cause) =>
         new WebDependencyError({
           dependency: "local-web-host",
@@ -226,10 +232,10 @@ const invokeLocalHostEffect = <T>(
     });
   });
 
-const createHttpInvoke =
-  () =>
-  async <T>(command: string, args?: Record<string, unknown>): Promise<T> =>
-    runWebBoundary(invokeLocalHostEffect<T>(command, args));
+const createHttpInvoke = (): InvokeFn => async (command, args, resultSchema) => {
+  const payload = await runWebBoundary(invokeLocalHostEffect(command, args));
+  return resultSchema.parse(payload);
+};
 
 export const createLocalHostClient = (): HostClient => createHostClient(createHttpInvoke());
 
@@ -304,10 +310,11 @@ const subscribeSseChannelEffect = (
         resolveReady = resolve;
       });
       const handleMessage: EventListener = (event) => {
-        if (!("data" in event) || typeof event.data !== "string") {
+        const message = z.object({ data: z.string() }).safeParse(event);
+        if (!message.success) {
           throw new Error("EventSource message events must contain string data.");
         }
-        const hostEvent = parseHostEvent(event.data);
+        const hostEvent = parseHostEvent(message.data.data);
         for (const registration of listeners.values()) {
           if (registration.channel === hostEvent.channel) {
             registration.listener(hostEvent);
@@ -365,12 +372,13 @@ const subscribeSseChannelEffect = (
         hasReportedConnectionError = true;
       };
       const handleStreamWarning: EventListener = (event) => {
-        if (!("data" in event) || typeof event.data !== "string") {
+        const warning = z.object({ data: z.string() }).safeParse(event);
+        if (!warning.success) {
           throw new Error("EventSource stream-warning events must contain string data.");
         }
         const warningPayload = browserLiveControlEvent(
           BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
-          event.data,
+          warning.data.data,
         );
         const replayGapListeners = [...listeners.values()].flatMap((registration) =>
           registration.onReplayGap ? [registration.onReplayGap] : [],
@@ -380,7 +388,10 @@ const subscribeSseChannelEffect = (
           .map((registration) => (_message: string): void => {
             registration.listener(warningPayload);
           });
-        dispatchBrowserSseListeners([...replayGapListeners, ...controlListeners], event.data);
+        dispatchBrowserSseListeners(
+          [...replayGapListeners, ...controlListeners],
+          warning.data.data,
+        );
       };
 
       eventSource.addEventListener("message", handleMessage);

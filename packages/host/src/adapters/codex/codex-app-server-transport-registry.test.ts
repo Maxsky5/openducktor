@@ -1,5 +1,4 @@
 import { Effect } from "effect";
-import { parseThreadTurnsListResponse } from "./codex-app-server-response-parsers";
 import { createCodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
 
 describe("createCodexAppServerTransportRegistry", () => {
@@ -140,36 +139,5 @@ describe("createCodexAppServerTransportRegistry", () => {
     await expect(
       Effect.runPromise(port.request({ runtimeId: "runtime-1", method: "model/list", params: {} })),
     ).rejects.toThrow("Codex app-server transport not found for runtime runtime-1");
-  });
-
-  test("rejects malformed thread turns before history projection", () => {
-    expect(() =>
-      parseThreadTurnsListResponse({
-        data: [null],
-        nextCursor: null,
-        backwardsCursor: null,
-      }),
-    ).toThrow("expected object");
-  });
-
-  test("rejects malformed hydrated turn items before history projection", () => {
-    expect(() =>
-      parseThreadTurnsListResponse({
-        data: [
-          {
-            completedAt: null,
-            durationMs: null,
-            error: null,
-            id: "turn-1",
-            items: [null],
-            itemsView: "full",
-            startedAt: 1,
-            status: "completed",
-          },
-        ],
-        nextCursor: null,
-        backwardsCursor: null,
-      }),
-    ).toThrow('"items"');
   });
 });

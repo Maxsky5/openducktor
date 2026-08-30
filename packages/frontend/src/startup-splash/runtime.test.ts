@@ -3,7 +3,7 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { ScheduleTask } from "@/lib/scheduling";
 import { dismissOpenDucktorStartupSplash, showOpenDucktorStartupFailure } from "./runtime";
 
-if (typeof globalThis.document === "undefined") {
+if (globalThis.document === undefined) {
   GlobalRegistrator.register();
 }
 

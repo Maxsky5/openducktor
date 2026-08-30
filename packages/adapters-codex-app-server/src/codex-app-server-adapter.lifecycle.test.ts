@@ -5,7 +5,6 @@ import {
   codexSessionRef,
   codexSessionRuntimeRef,
   codexTurnFixture,
-  codexLocalSessionsForTest,
   codexUserMessageInput,
   createHarness,
   createRuntimeStreamSubscription,
@@ -734,7 +733,6 @@ describe("CodexAppServerAdapter lifecycle", () => {
 
     await adapter.releaseSession(codexSessionRef("thread-saved"));
 
-    expect(codexLocalSessionsForTest(adapter).has("thread-saved")).toBe(false);
     expect(transport?.calls).toHaveLength(callsBeforeRelease);
     unsubscribe();
   });
@@ -758,8 +756,6 @@ describe("CodexAppServerAdapter lifecycle", () => {
         workingDirectory: "/repo/worktrees/thread-start-runtime-live",
       }),
     ).rejects.toThrow("registered session belongs");
-
-    expect(codexLocalSessionsForTest(adapter).has("thread/start-runtime-live")).toBe(true);
   });
 
   test("rejects stop for an existing Codex session in another working directory", async () => {
@@ -781,8 +777,6 @@ describe("CodexAppServerAdapter lifecycle", () => {
         workingDirectory: "/repo/worktrees/thread-start-runtime-live",
       }),
     ).rejects.toThrow("registered session belongs");
-
-    expect(codexLocalSessionsForTest(adapter).has("thread/start-runtime-live")).toBe(true);
   });
 
   test("ignores release for unknown Codex sessions", async () => {
@@ -791,8 +785,6 @@ describe("CodexAppServerAdapter lifecycle", () => {
     await expect(
       adapter.releaseSession(codexSessionRef("missing-thread")),
     ).resolves.toBeUndefined();
-
-    expect(codexLocalSessionsForTest(adapter).has("missing-thread")).toBe(false);
   });
 
   test("rejects missing or unsupported model variants", async () => {

@@ -37,9 +37,8 @@ const createActivitySession = (
   if (!isWorkflowAgentSession(session)) {
     throw new Error("Activity session fixtures must be workflow sessions.");
   }
-  return {
+  const activitySession: AgentSessionSummary = {
     externalSessionId: session.externalSessionId,
-    ...(session.title ? { title: session.title } : undefined),
     taskId: session.sessionAssociation.taskId,
     role: session.sessionAssociation.role,
     activityState: getAgentSessionActivityStateFromSession(session),
@@ -50,6 +49,10 @@ const createActivitySession = (
     pendingApprovalCount: session.pendingApprovals.length,
     pendingQuestionCount: session.pendingQuestions.length,
   };
+  if (session.title) {
+    activitySession.title = session.title;
+  }
+  return activitySession;
 };
 
 const createActivityStore = (

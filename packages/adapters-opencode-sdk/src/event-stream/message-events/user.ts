@@ -23,11 +23,14 @@ const resolveUserMessageDisplay = (input: {
   runtime: EventStreamRuntime;
   model?: ReturnType<typeof readMessageModelSelection>;
 }) => {
-  const initialVisibleUserMessage = buildVisibleUserMessage({
+  const initialInput: Parameters<typeof buildVisibleUserMessage>[0] = {
     fallbackText: input.fallbackText,
     normalizedDisplayParts: input.normalizedDisplayParts,
-    ...(input.metadata ? { metadata: input.metadata } : undefined),
-  });
+  };
+  if (input.metadata) {
+    initialInput.metadata = input.metadata;
+  }
+  const initialVisibleUserMessage = buildVisibleUserMessage(initialInput);
   const matchedQueuedSend = takeQueuedUserSendMatch(
     input.runtime,
     initialVisibleUserMessage.visible,
@@ -43,12 +46,15 @@ const resolveUserMessageDisplay = (input: {
     };
   }
 
-  const finalVisibleUserMessage = buildVisibleUserMessage({
+  const finalInput: Parameters<typeof buildVisibleUserMessage>[0] = {
     fallbackText: input.fallbackText,
     normalizedDisplayParts: input.normalizedDisplayParts,
-    ...(input.metadata ? { metadata: input.metadata } : undefined),
     matchedQueuedSend,
-  });
+  };
+  if (input.metadata) {
+    finalInput.metadata = input.metadata;
+  }
+  const finalVisibleUserMessage = buildVisibleUserMessage(finalInput);
 
   return { ...finalVisibleUserMessage, matchedQueuedSend } satisfies {
     displayParts: AgentUserMessageDisplayPart[];
@@ -71,12 +77,15 @@ export const publishUserMessageReadStateChanges = (runtime: EventStreamRuntime):
     }
 
     const metadata = session.messageMetadataById.get(messageId);
-    emitKnownUserMessage(runtime, {
+    const messageInput: Parameters<typeof emitKnownUserMessage>[1] = {
       messageId,
       timestamp: metadata?.timestamp ?? runtime.now(),
       state: nextState,
-      ...(metadata?.model ? { model: metadata.model } : undefined),
-    });
+    };
+    if (metadata?.model) {
+      messageInput.model = metadata.model;
+    }
+    emitKnownUserMessage(runtime, messageInput);
   }
 };
 
@@ -98,29 +107,39 @@ export const handleUserMessageUpdated = (
   const currentMetadata = session.messageMetadataById.get(input.messageId);
   const normalizedDisplayParts = normalizeUserMessageDisplayParts(userParts);
   const fallbackText = currentMetadata?.text ?? "";
-  const { displayParts, matchedQueuedSend, visible } = resolveUserMessageDisplay({
+  const displayInput: Parameters<typeof resolveUserMessageDisplay>[0] = {
     fallbackText,
     normalizedDisplayParts,
     runtime,
-    ...(currentMetadata ? { metadata: currentMetadata } : undefined),
-    ...(input.messageModel ? { model: input.messageModel } : undefined),
-  });
+  };
+  if (currentMetadata) {
+    displayInput.metadata = currentMetadata;
+  }
+  if (input.messageModel) {
+    displayInput.model = input.messageModel;
+  }
+  const { displayParts, matchedQueuedSend, visible } = resolveUserMessageDisplay(displayInput);
   if (visible.trim().length === 0 && displayParts.length === 0) {
     return true;
   }
 
   const timestamp = currentMetadata?.timestamp ?? input.messageTimestamp;
-  persistUserMessageMetadata({
+  const metadataInput: Parameters<typeof persistUserMessageMetadata>[0] = {
     session,
     messageId: input.messageId,
     timestamp,
-    ...(currentMetadata ? { metadata: currentMetadata } : undefined),
-    ...(input.messageModel ? { model: input.messageModel } : undefined),
     visible,
     displayParts,
-  });
+  };
+  if (currentMetadata) {
+    metadataInput.metadata = currentMetadata;
+  }
+  if (input.messageModel) {
+    metadataInput.model = input.messageModel;
+  }
+  persistUserMessageMetadata(metadataInput);
 
-  return emitUserMessage(runtime, {
+  const messageInput: Parameters<typeof emitUserMessage>[1] = {
     messageId: input.messageId,
     timestamp,
     message: visible,
@@ -129,8 +148,11 @@ export const handleUserMessageUpdated = (
       messageId: input.messageId,
       matchedQueuedSend,
     }),
-    ...(input.messageModel ? { model: input.messageModel } : undefined),
-  });
+  };
+  if (input.messageModel) {
+    messageInput.model = input.messageModel;
+  }
+  return emitUserMessage(runtime, messageInput);
 };
 
 export const handleUserPartUpdated = (
@@ -149,25 +171,35 @@ export const handleUserPartUpdated = (
     });
   }
   const fallbackText = metadata?.text ?? "";
-  const { displayParts, matchedQueuedSend, visible } = resolveUserMessageDisplay({
+  const displayInput: Parameters<typeof resolveUserMessageDisplay>[0] = {
     fallbackText,
     normalizedDisplayParts,
     runtime,
-    ...(metadata ? { metadata } : undefined),
-    ...(metadata?.model ? { model: metadata.model } : undefined),
-  });
+  };
+  if (metadata) {
+    displayInput.metadata = metadata;
+  }
+  if (metadata?.model) {
+    displayInput.model = metadata.model;
+  }
+  const { displayParts, matchedQueuedSend, visible } = resolveUserMessageDisplay(displayInput);
   if (visible.trim().length > 0 || displayParts.length > 0) {
-    persistUserMessageMetadata({
+    const metadataInput: Parameters<typeof persistUserMessageMetadata>[0] = {
       session,
       messageId,
       timestamp: runtime.now(),
-      ...(metadata ? { metadata } : undefined),
-      ...(metadata?.model ? { model: metadata.model } : undefined),
       visible,
       displayParts,
-    });
+    };
+    if (metadata) {
+      metadataInput.metadata = metadata;
+    }
+    if (metadata?.model) {
+      metadataInput.model = metadata.model;
+    }
+    persistUserMessageMetadata(metadataInput);
   }
-  emitKnownUserMessage(runtime, {
+  const messageInput: Parameters<typeof emitKnownUserMessage>[1] = {
     messageId,
     timestamp: metadata?.timestamp ?? runtime.now(),
     visible,
@@ -176,6 +208,9 @@ export const handleUserPartUpdated = (
       messageId,
       matchedQueuedSend,
     }),
-    ...(metadata?.model ? { model: metadata.model } : undefined),
-  });
+  };
+  if (metadata?.model) {
+    messageInput.model = metadata.model;
+  }
+  emitKnownUserMessage(runtime, messageInput);
 };

@@ -1,5 +1,9 @@
 import { Effect } from "effect";
-import { errorMessage, HostDependencyError } from "../../../effect/host-errors";
+import {
+  errorMessage,
+  HostDependencyError,
+  type HostDependencyErrorAggregate,
+} from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../../ports/runtime-registry-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
@@ -23,7 +27,9 @@ const missingTaskDependency = (message: string): HostDependencyError =>
     dependency: "task dependency",
     message,
   });
-export const requireDependencies = <A>(resolve: () => A): Effect.Effect<A, HostDependencyError> =>
+export const requireDependencies = <A>(
+  resolve: () => A,
+): Effect.Effect<A, HostDependencyErrorAggregate> =>
   Effect.try({
     try: resolve,
     catch: (cause) =>

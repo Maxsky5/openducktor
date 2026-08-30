@@ -24,10 +24,16 @@ export class TerminalServiceError extends Data.TaggedError("TerminalServiceError
   readonly details?: TerminalFailureDetails;
 }> {}
 
-export const terminalServiceErrorToFailure = (error: TerminalServiceError): TerminalFailure => ({
-  code: error.code,
-  message: error.message,
-  ...(error.terminalId ? { terminalId: error.terminalId } : undefined),
-  ...(error.workingDir ? { workingDir: error.workingDir } : undefined),
-  ...(error.details ? { details: { ...error.details } } : undefined),
-});
+export const terminalServiceErrorToFailure = (error: TerminalServiceError): TerminalFailure => {
+  const failure: TerminalFailure = { code: error.code, message: error.message };
+  if (error.terminalId) {
+    failure.terminalId = error.terminalId;
+  }
+  if (error.workingDir) {
+    failure.workingDir = error.workingDir;
+  }
+  if (error.details) {
+    failure.details = { ...error.details };
+  }
+  return failure;
+};

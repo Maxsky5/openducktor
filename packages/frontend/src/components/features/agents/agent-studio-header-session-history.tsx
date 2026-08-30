@@ -72,7 +72,7 @@ export function SessionHistoryMenu({
             restoreTriggerFocusRef.current = false;
             event.preventDefault();
             const requestAnimationFrameFn = globalThis.requestAnimationFrame;
-            if (typeof requestAnimationFrameFn === "function") {
+            if (requestAnimationFrameFn !== undefined) {
               requestAnimationFrameFn(() => {
                 triggerRef.current?.focus();
               });

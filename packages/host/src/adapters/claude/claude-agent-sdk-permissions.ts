@@ -3,6 +3,7 @@ import { isAbsolute, relative } from "node:path";
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { CLAUDE_RUNTIME_DESCRIPTOR, type JsonObject } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY, type AgentEvent } from "@openducktor/core";
+import { z } from "zod";
 import {
   normalizePathForComparison,
   pathStartsWith,
@@ -77,6 +78,7 @@ const SESSION_PATH_INPUT_KEYS = [
   "notebook_path",
   "target_file",
 ] as const;
+const claudePathInputSchema = z.string().refine((value) => value.trim().length > 0);
 
 const rewriteSessionPath = (session: ClaudeSessionContext, value: string): string => {
   const { repoPath, workingDirectory } = session.input;
@@ -105,11 +107,12 @@ const normalizeToolInputForSession = (
 
   for (const key of SESSION_PATH_INPUT_KEYS) {
     const value = nextInput[key];
-    if (typeof value !== "string") {
+    const parsed = claudePathInputSchema.safeParse(value);
+    if (!parsed.success) {
       continue;
     }
-    const rewritten = rewriteSessionPath(session, value);
-    if (rewritten !== value) {
+    const rewritten = rewriteSessionPath(session, parsed.data);
+    if (rewritten !== parsed.data) {
       nextInput[key] = rewritten;
       changed = true;
     }
@@ -130,8 +133,9 @@ const readOnlyToolPathValues = (
 
   for (const key of SESSION_PATH_INPUT_KEYS) {
     const value = toolInput[key];
-    if (typeof value === "string" && value.trim().length > 0) {
-      paths.push(value);
+    const parsed = claudePathInputSchema.safeParse(value);
+    if (parsed.success) {
+      paths.push(parsed.data);
     }
   }
 
@@ -334,6 +338,19 @@ export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanU
       const blockedPath = options.blockedPath
         ? rewriteSessionPath(session, options.blockedPath)
         : undefined;
+      const tool: Extract<AgentEvent, { type: "approval_required" }>["tool"] = {
+        name: toolName,
+        input: canonicalToolInput,
+      };
+      if (options.displayName) {
+        tool.title = options.displayName;
+      }
+      const metadata: Extract<AgentEvent, { type: "approval_required" }>["metadata"] = {
+        runtime: "claude",
+      };
+      if (options.agentID) {
+        metadata.agentId = options.agentID;
+      }
       const event: Extract<AgentEvent, { type: "approval_required" }> = {
         type: "approval_required",
         externalSessionId: session.externalSessionId,
@@ -341,30 +358,27 @@ export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanU
         requestId,
         requestType: permissionRequestTypeForTool(toolName),
         title: options.title ?? options.displayName ?? `Approve ${toolName}`,
-        ...(options.description ? { summary: options.description } : undefined),
-        ...(options.decisionReason ? { details: options.decisionReason } : undefined),
-        ...(blockedPath ? { affectedPaths: [blockedPath] } : undefined),
-        ...(command
-          ? {
-              command: {
-                command,
-                workingDirectory: session.input.workingDirectory,
-              },
-            }
-          : undefined),
-        tool: {
-          name: toolName,
-          ...(options.displayName ? { title: options.displayName } : undefined),
-          input: canonicalToolInput,
-        },
+        tool,
         mutation,
         supportedReplyOutcomes: ["approve_once", "reject"],
-        metadata: {
-          runtime: "claude",
-          ...(options.agentID ? { agentId: options.agentID } : undefined),
-        },
+        metadata,
         ...claudeSubagentPendingInputRoute(session, options.agentID),
       };
+      if (options.description) {
+        event.summary = options.description;
+      }
+      if (options.decisionReason) {
+        event.details = options.decisionReason;
+      }
+      if (blockedPath) {
+        event.affectedPaths = [blockedPath];
+      }
+      if (command) {
+        event.command = {
+          command,
+          workingDirectory: session.input.workingDirectory,
+        };
+      }
       return new Promise<PermissionResult>((resolveResult, rejectResult) => {
         let requestPublished = false;
         const onAbort = () => {
@@ -418,13 +432,16 @@ export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanU
       });
     };
 
-    const authorization = authorizeClaudeToolUse({
+    const authorizationInput: Parameters<typeof authorizeClaudeToolUse>[0] = {
       session,
       toolName,
       toolInput: parseClaudeCanonicalJsonObject(toolInput, "claudeToolInput"),
-      ...(options.blockedPath ? { blockedPath: options.blockedPath } : undefined),
       canonicalizePath,
-    });
+    };
+    if (options.blockedPath) {
+      authorizationInput.blockedPath = options.blockedPath;
+    }
+    const authorization = authorizeClaudeToolUse(authorizationInput);
     return authorization instanceof Promise
       ? authorization.then(handleAuthorization)
       : handleAuthorization(authorization);

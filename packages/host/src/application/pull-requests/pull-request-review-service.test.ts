@@ -36,32 +36,37 @@ const makePullRequest = (providerId: GitProviderId): PullRequest => ({
   updatedAt: "2026-07-10T08:00:00.000Z",
 });
 
-const makeTask = (pullRequest: PullRequest | undefined): TaskCard => ({
-  id: "task-1",
-  title: "Task",
-  description: "",
-  status: "in_progress",
-  priority: 2,
-  issueType: "task",
-  aiReviewEnabled: true,
-  availableActions: [],
-  labels: [],
-  subtaskIds: [],
-  documentSummary: {
-    spec: { has: false },
-    plan: { has: false },
-    qaReport: { has: false, verdict: "not_reviewed" },
-  },
-  agentWorkflows: {
-    spec: { required: false, canSkip: true, available: true, completed: false },
-    planner: { required: false, canSkip: true, available: true, completed: false },
-    builder: { required: true, canSkip: false, available: true, completed: false },
-    qa: { required: false, canSkip: true, available: false, completed: false },
-  },
-  ...(pullRequest ? { pullRequest } : undefined),
-  createdAt: "2026-07-10T08:00:00.000Z",
-  updatedAt: "2026-07-10T08:00:00.000Z",
-});
+const makeTask = (pullRequest: PullRequest | undefined): TaskCard => {
+  const task: TaskCard = {
+    id: "task-1",
+    title: "Task",
+    description: "",
+    status: "in_progress",
+    priority: 2,
+    issueType: "task",
+    aiReviewEnabled: true,
+    availableActions: [],
+    labels: [],
+    subtaskIds: [],
+    documentSummary: {
+      spec: { has: false },
+      plan: { has: false },
+      qaReport: { has: false, verdict: "not_reviewed" },
+    },
+    agentWorkflows: {
+      spec: { required: false, canSkip: true, available: true, completed: false },
+      planner: { required: false, canSkip: true, available: true, completed: false },
+      builder: { required: true, canSkip: false, available: true, completed: false },
+      qa: { required: false, canSkip: true, available: false, completed: false },
+    },
+    createdAt: "2026-07-10T08:00:00.000Z",
+    updatedAt: "2026-07-10T08:00:00.000Z",
+  };
+  if (pullRequest) {
+    task.pullRequest = pullRequest;
+  }
+  return task;
+};
 
 const makeLoadedContext = (providerId: GitProviderId): PullRequestReviewContext => ({
   status: "loaded",

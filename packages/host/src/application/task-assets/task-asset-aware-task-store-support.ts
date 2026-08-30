@@ -37,31 +37,38 @@ export const asTaskAssetError = (input: {
     if (operationMatches && taskContextMatches) {
       return input.cause;
     }
-    return new TaskAssetError({
+    const fields = {
       operation: input.operation,
       code: input.cause.code,
-      ...(input.taskId || input.cause.taskId
-        ? { taskId: input.taskId ?? input.cause.taskId }
-        : undefined),
       assetIds: input.cause.assetIds,
       failedPhase: operationMatches ? input.cause.failedPhase : input.phase,
       durableState: input.cause.durableState,
       retryAllowed: input.cause.retryAllowed,
       message: input.cause.message,
-      ...(input.cause.cause !== undefined ? { cause: input.cause.cause } : undefined),
-    });
+    } satisfies Omit<ConstructorParameters<typeof TaskAssetError>[0], "taskId" | "cause">;
+    const taskId = input.taskId ?? input.cause.taskId;
+    if (taskId && input.cause.cause !== undefined) {
+      return new TaskAssetError({ ...fields, taskId, cause: input.cause.cause });
+    }
+    if (taskId) return new TaskAssetError({ ...fields, taskId });
+    if (input.cause.cause !== undefined) {
+      return new TaskAssetError({ ...fields, cause: input.cause.cause });
+    }
+    return new TaskAssetError(fields);
   }
-  return new TaskAssetError({
+  const fields = {
     operation: input.operation,
     code: input.code ?? "database",
-    ...(input.taskId ? { taskId: input.taskId } : undefined),
     assetIds: input.assetIds ?? [],
     failedPhase: input.phase,
     durableState: "unchanged",
     retryAllowed: true,
     message: input.message,
     cause: input.cause,
-  });
+  } satisfies Omit<ConstructorParameters<typeof TaskAssetError>[0], "taskId">;
+  return input.taskId
+    ? new TaskAssetError({ ...fields, taskId: input.taskId })
+    : new TaskAssetError(fields);
 };
 
 export const taskAssetPartialStateError = (input: {

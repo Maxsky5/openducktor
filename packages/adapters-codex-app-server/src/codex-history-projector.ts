@@ -11,7 +11,7 @@ export const projectCodexCanonicalEventsToHistory = (
     const timestamp = event.timestamp ?? new Date().toISOString();
     if (event.kind === "user_message") {
       const resolvedModel = event.model ?? model;
-      messages.push({
+      const message: AgentSessionHistoryMessage = {
         messageId: event.messageId,
         role: "user",
         timestamp,
@@ -19,24 +19,32 @@ export const projectCodexCanonicalEventsToHistory = (
         displayParts: event.displayParts,
         state: event.state,
         parts: [],
-        ...(resolvedModel ? { model: resolvedModel } : undefined),
-      });
+      };
+      if (resolvedModel) {
+        message.model = resolvedModel;
+      }
+      messages.push(message);
       continue;
     }
     if (event.kind === "assistant_message") {
       const resolvedModel = event.model ?? model;
-      messages.push({
+      const message: AgentSessionHistoryMessage = {
         messageId: event.messageId,
         role: "assistant",
         timestamp,
         text: event.message,
         parts: [],
-        ...(resolvedModel ? { model: resolvedModel } : undefined),
-        ...(typeof event.totalTokens === "number" ? { totalTokens: event.totalTokens } : undefined),
-        ...(typeof event.contextWindow === "number"
-          ? { contextWindow: event.contextWindow }
-          : undefined),
-      });
+      };
+      if (resolvedModel) {
+        message.model = resolvedModel;
+      }
+      if (event.totalTokens !== undefined) {
+        message.totalTokens = event.totalTokens;
+      }
+      if (event.contextWindow !== undefined) {
+        message.contextWindow = event.contextWindow;
+      }
+      messages.push(message);
       continue;
     }
     if (event.kind === "stream_part") {
@@ -44,27 +52,33 @@ export const projectCodexCanonicalEventsToHistory = (
       if (existing && existing.role === "assistant") {
         existing.parts.push(event.part);
       } else {
-        messages.push({
+        const message: AgentSessionHistoryMessage = {
           messageId: event.part.messageId,
           role: "assistant",
           timestamp,
           text: "",
           parts: [event.part],
-          ...(model ? { model } : undefined),
-        });
+        };
+        if (model) {
+          message.model = model;
+        }
+        messages.push(message);
       }
       continue;
     }
     if (event.kind === "tool") {
       const part = requireNormalizedCodexToolInvocation(event.invocation);
-      messages.push({
+      const message: AgentSessionHistoryMessage = {
         messageId: part.messageId,
         role: "assistant",
         timestamp,
         text: "",
         parts: [part],
-        ...(model ? { model } : undefined),
-      });
+      };
+      if (model) {
+        message.model = model;
+      }
+      messages.push(message);
       continue;
     }
     if (event.kind === "session_compacted") {

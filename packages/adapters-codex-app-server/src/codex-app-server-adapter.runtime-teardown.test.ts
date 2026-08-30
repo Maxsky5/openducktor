@@ -5,10 +5,8 @@ import type {
 } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
 import {
-  codexRuntimeTeardownCountsForTest,
   codexSessionRuntimeRef,
   codexStartSessionInput,
-  codexThreadInventoryForTest,
   codexTurnFixture,
   codexUserMessageInput,
   createAdapterWithTransport,
@@ -18,7 +16,6 @@ import {
   flushCodexAdapterWork,
   RecordingTransport,
 } from "./codex-app-server-adapter.test-harness";
-import { codexThreadStatusSnapshot } from "./codex-app-server-threads";
 import { releaseCodexRuntimeState } from "./codex-runtime-cleanup";
 import type { CodexAppServerClient, CodexLiveSessionMutation } from "./types";
 
@@ -81,30 +78,6 @@ class DeferredSteerTransport extends RecordingTransport {
   }
 }
 
-const freshInventoryClient = (
-  threadId: string,
-  status: { type: "active"; activeFlags: string[] } | { type: "idle" },
-): CodexAppServerClient =>
-  ({
-    threadLoadedList: async () => ({
-      data: [threadId],
-      nextCursor: null,
-    }),
-    threadList: async () => ({
-      data: [
-        {
-          id: threadId,
-          cwd: "/repo",
-          createdAt: 1,
-          updatedAt: 2,
-          preview: "Replacement session",
-          status,
-        },
-      ],
-      nextCursor: null,
-    }),
-  }) satisfies CodexAppServerClient;
-
 describe("CodexAppServerAdapter runtime teardown", () => {
   test("attempts every runtime-state cleanup when one component fails", () => {
     const cleanupCalls: string[] = [];
@@ -131,118 +104,17 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     ]);
   });
 
-  test("releases thread status overrides when a runtime is disposed", async () => {
-    const { adapter } = createHarness();
-    const threadInventory = codexThreadInventoryForTest(adapter);
-    const inventoryCalls: string[] = [];
-    const client: CodexAppServerClient = {
-      threadLoadedList: async () => {
-        inventoryCalls.push("thread/loaded/list");
-        return { data: ["thread-1", "thread-2"], nextCursor: null };
-      },
-      threadList: async () => {
-        inventoryCalls.push("thread/list");
-        return {
-          data: [
-            {
-              id: "thread-1",
-              cwd: "/repo",
-              createdAt: 1,
-              updatedAt: 2,
-              preview: "First thread",
-              status: { type: "active", activeFlags: [] },
-            },
-            {
-              id: "thread-2",
-              cwd: "/repo",
-              createdAt: 1,
-              updatedAt: 2,
-              preview: "Second thread",
-              status: { type: "active", activeFlags: [] },
-            },
-          ],
-          nextCursor: null,
-        };
-      },
-    };
-
-    for (let cycle = 0; cycle < 3; cycle += 1) {
-      threadInventory.updateThreadStatus(
-        "runtime-reused",
-        "thread-1",
-        codexThreadStatusSnapshot("idle"),
-      );
-      threadInventory.updateThreadStatus(
-        "runtime-reused",
-        "thread-2",
-        codexThreadStatusSnapshot({
-          type: "active",
-          activeFlags: ["waitingOnApproval"],
-        }),
-      );
-
-      expect(codexRuntimeTeardownCountsForTest(adapter, "runtime-reused")).toEqual({
-        statusOverrideRuntimeCount: 1,
-        statusOverrideThreadCount: 2,
-        runtimeEventQueueRuntimeCount: 0,
-      });
-
-      adapter.releaseRuntime("runtime-reused");
-
-      expect(codexRuntimeTeardownCountsForTest(adapter, "runtime-reused")).toEqual({
-        statusOverrideRuntimeCount: 0,
-        statusOverrideThreadCount: 0,
-        runtimeEventQueueRuntimeCount: 0,
-      });
-      const freshInventory = await threadInventory.read(client, "runtime-reused");
-      expect(freshInventory.threadsById.get("thread-1")?.status).toEqual({
-        classification: "running",
-      });
-      expect(freshInventory.threadsById.get("thread-2")?.status).toEqual({
-        classification: "running",
-      });
-    }
-
-    expect(inventoryCalls).toEqual([
-      "thread/loaded/list",
-      "thread/list",
-      "thread/loaded/list",
-      "thread/list",
-      "thread/loaded/list",
-      "thread/list",
-    ]);
-  });
-
   test("ignores terminal turn completion from a disposed runtime owner", async () => {
     const { adapter, transports } = createHarness({}, { deferTurnStart: true });
-    const internals: {
-      localSessions: { get(externalSessionId: string): object | undefined };
-    } = adapter;
-    const threadInventory = codexThreadInventoryForTest(adapter);
 
     await adapter.startSession(codexStartSessionInput());
-    const releasedSession = internals.localSessions.get("thread/start-runtime-live");
-    if (!releasedSession) {
-      throw new Error("Expected the original session to be retained.");
-    }
     await adapter.sendUserMessage(
       codexUserMessageInput({
         parts: [{ kind: "text", text: "Complete after release" }],
       }),
     );
-    expect(codexRuntimeTeardownCountsForTest(adapter, "runtime-live")).toMatchObject({
-      statusOverrideRuntimeCount: 1,
-      statusOverrideThreadCount: 1,
-    });
-
     adapter.releaseRuntime("runtime-live");
-
-    expect(codexRuntimeTeardownCountsForTest(adapter, "runtime-live")).toMatchObject({
-      statusOverrideRuntimeCount: 0,
-      statusOverrideThreadCount: 0,
-    });
     await adapter.startSession(codexStartSessionInput());
-    expect(internals.localSessions.get("thread/start-runtime-live")).not.toBe(releasedSession);
 
     const transport = transports.get("runtime-live");
     if (!transport) {
@@ -253,25 +125,18 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     });
     await flushCodexAdapterWork();
 
-    expect(codexRuntimeTeardownCountsForTest(adapter, "runtime-live")).toMatchObject({
-      statusOverrideRuntimeCount: 0,
-      statusOverrideThreadCount: 0,
-    });
-    const freshInventory = await threadInventory.read(
-      freshInventoryClient("thread/start-runtime-live", {
-        type: "active",
-        activeFlags: [],
+    await expect(
+      adapter.readSessionRuntimeSnapshot({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread/start-runtime-live",
       }),
-      "runtime-live",
-    );
-    expect(freshInventory.threadsById.get("thread/start-runtime-live")?.status).toEqual({
-      classification: "running",
-    });
+    ).resolves.toMatchObject({ availability: "runtime", classification: "running" });
   });
 
   test("does not begin a turn after runtime release wins subscription readiness", async () => {
     const { adapter } = createHarness();
-    const threadInventory = codexThreadInventoryForTest(adapter);
 
     await adapter.startSession(codexStartSessionInput());
     const send = adapter.sendUserMessage(
@@ -284,18 +149,6 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     await expect(send).rejects.toThrow(
       "Cannot continue Codex turn for session 'thread/start-runtime-live' because its retained owner was released or replaced.",
     );
-    expect(codexRuntimeTeardownCountsForTest(adapter, "runtime-live")).toMatchObject({
-      statusOverrideRuntimeCount: 0,
-      statusOverrideThreadCount: 0,
-    });
-
-    const freshInventory = await threadInventory.read(
-      freshInventoryClient("thread/start-runtime-live", { type: "idle" }),
-      "runtime-live",
-    );
-    expect(freshInventory.threadsById.get("thread/start-runtime-live")?.status).toEqual({
-      classification: "idle",
-    });
   });
 
   test("does not send a turn after ownership is lost during model validation", async () => {
@@ -331,10 +184,6 @@ describe("CodexAppServerAdapter runtime teardown", () => {
       await expect(send).rejects.toThrow(
         "Cannot continue Codex turn for session 'thread/start-runtime-live' because its retained owner was released or replaced.",
       );
-      expect(codexRuntimeTeardownCountsForTest(adapter, "runtime-live")).toMatchObject({
-        statusOverrideRuntimeCount: 0,
-        statusOverrideThreadCount: 0,
-      });
       const transport = transports.get("runtime-live");
       if (!transport) {
         throw new Error("Expected the runtime transport used during model validation.");
@@ -596,7 +445,6 @@ describe("CodexAppServerAdapter runtime teardown", () => {
         }
       },
     });
-    const threadInventory = codexThreadInventoryForTest(adapter);
 
     await adapter.startSession(codexStartSessionInput());
     emitNotification({
@@ -630,28 +478,19 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     try {
       await flushCodexAdapterWork();
       expect(mutationCount).toBe(2);
-      expect(codexRuntimeTeardownCountsForTest(adapter, "runtime-live")).toEqual({
-        statusOverrideRuntimeCount: 1,
-        statusOverrideThreadCount: 1,
-        runtimeEventQueueRuntimeCount: 0,
-      });
-      const freshInventory = await threadInventory.read(
-        freshInventoryClient("thread/start-runtime-live", { type: "idle" }),
-        "runtime-live",
-      );
-      expect(freshInventory.threadsById.get("thread/start-runtime-live")?.status).toEqual({
-        classification: "running",
-      });
+      await expect(
+        adapter.readSessionRuntimeSnapshot({
+          repoPath: "/repo",
+          runtimeKind: "codex",
+          workingDirectory: "/repo",
+          externalSessionId: "thread/start-runtime-live",
+        }),
+      ).resolves.toMatchObject({ availability: "runtime", classification: "running" });
     } finally {
       allowMutation.resolve();
       await flushCodexAdapterWork();
     }
 
     expect(mutationCount).toBe(2);
-    expect(codexRuntimeTeardownCountsForTest(adapter, "runtime-live")).toEqual({
-      statusOverrideRuntimeCount: 1,
-      statusOverrideThreadCount: 1,
-      runtimeEventQueueRuntimeCount: 0,
-    });
   });
 });

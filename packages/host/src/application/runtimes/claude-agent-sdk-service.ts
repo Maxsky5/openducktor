@@ -29,9 +29,12 @@ import type {
   UpdateAgentSessionModelInput,
 } from "@openducktor/core";
 import type { Effect } from "effect";
-import type { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import type {
+  HostOperationErrorAggregate,
+  HostValidationErrorAggregate,
+} from "../../effect/host-errors";
 
-export type ClaudeAgentSdkServiceError = HostOperationError | HostValidationError;
+export type ClaudeAgentSdkServiceError = HostOperationErrorAggregate | HostValidationErrorAggregate;
 
 export type ClaudePendingInputResolution = {
   readonly event: Extract<AgentEvent, { type: "approval_resolved" | "question_resolved" }>;
@@ -103,5 +106,5 @@ export type ClaudeAgentSdkService = {
   loadFileStatus(
     input: LoadAgentFileStatusInput,
   ): Effect.Effect<FileStatus[], ClaudeAgentSdkServiceError>;
-  stopSessionsForRuntime(runtimeId: string): Effect.Effect<void, HostOperationError>;
+  stopSessionsForRuntime(runtimeId: string): Effect.Effect<void, HostOperationErrorAggregate>;
 };

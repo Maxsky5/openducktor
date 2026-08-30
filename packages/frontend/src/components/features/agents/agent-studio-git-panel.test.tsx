@@ -1920,11 +1920,11 @@ describe("AgentStudioGitPanel", () => {
     );
 
     const fileNameNode = pathNode.findAll(
-      (node) => typeof node.type === "string" && node.children.includes("file-diff-entry.tsx"),
+      (node) => node.type === "span" && node.children.includes("file-diff-entry.tsx"),
     )[0];
     const dirNameNode = pathNode.findAll(
       (node) =>
-        typeof node.type === "string" &&
+        node.type === "span" &&
         node.children.includes(
           "packages/frontend/src/components/features/agents/agent-studio-git-panel",
         ),

@@ -5,7 +5,7 @@ import type {
   RepoConfig,
 } from "@openducktor/contracts";
 import type { Effect } from "effect";
-import type { HostValidationError } from "../effect/host-errors";
+import type { HostValidationErrorAggregate } from "../effect/host-errors";
 
 export type PullRequestReviewProviderInput = {
   repoConfig: RepoConfig;
@@ -16,5 +16,5 @@ export type PullRequestReviewProviderPort = {
   providerId: GitProviderId;
   readContext(
     input: PullRequestReviewProviderInput,
-  ): Effect.Effect<PullRequestReviewContext, HostValidationError>;
+  ): Effect.Effect<PullRequestReviewContext, HostValidationErrorAggregate>;
 };

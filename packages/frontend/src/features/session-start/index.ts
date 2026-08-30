@@ -25,7 +25,6 @@ export { sessionStartPostActionErrorTitle } from "./session-start-post-action-er
 export {
   buildGitConflictResolutionPrompt,
   firstLaunchAction,
-  isLaunchActionId,
   kickoffPromptForLaunchAction,
   kickoffPromptForTemplate,
   LAUNCH_ACTION_LABELS,

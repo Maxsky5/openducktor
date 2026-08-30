@@ -309,7 +309,7 @@ export function useRepoNavigationPersistence({
   ]);
 
   useEffect(() => {
-    if (typeof globalThis.window === "undefined" || typeof globalThis.document === "undefined") {
+    if (globalThis.window === undefined || globalThis.document === undefined) {
       return;
     }
 

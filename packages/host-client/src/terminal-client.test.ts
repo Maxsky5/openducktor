@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { HostCommandArgs, HostCommandName } from "@openducktor/host";
 import { HostInvokeError } from "./invoke-utils";
 import { HostTerminalClient, HostTerminalClientError } from "./terminal-client";
 
@@ -14,10 +15,13 @@ const summary = {
 
 describe("HostTerminalClient", () => {
   test("validates create request and response", async () => {
-    const calls: unknown[] = [];
-    const client = new HostTerminalClient(async (command, input) => {
+    const calls: Array<{
+      command: HostCommandName;
+      input: Exclude<HostCommandArgs, undefined> | undefined;
+    }> = [];
+    const client = new HostTerminalClient(async (command, input, resultSchema) => {
       calls.push({ command, input });
-      return { ref: { terminalId: "terminal-1" }, summary };
+      return resultSchema.parse({ ref: { terminalId: "terminal-1" }, summary });
     });
     await expect(
       client.terminalCreate({
@@ -37,10 +41,14 @@ describe("HostTerminalClient", () => {
   });
 
   test("validates list, path-input, and close payloads", async () => {
-    const client = new HostTerminalClient(async (command) => {
-      if (command === "terminal_list") return { hostInstanceId: "host-1", terminals: [summary] };
-      if (command === "terminal_prepare_path_input") return { text: "'/tmp/image.png'" };
-      if (command === "terminal_close") return { closed: true };
+    const client = new HostTerminalClient(async (command, _input, resultSchema) => {
+      if (command === "terminal_list") {
+        return resultSchema.parse({ hostInstanceId: "host-1", terminals: [summary] });
+      }
+      if (command === "terminal_prepare_path_input") {
+        return resultSchema.parse({ text: "'/tmp/image.png'" });
+      }
+      if (command === "terminal_close") return resultSchema.parse({ closed: true });
       throw new Error(`Unexpected ${command}`);
     });
     await expect(
@@ -58,10 +66,9 @@ describe("HostTerminalClient", () => {
   });
 
   test("preserves a typed close-confirmation outcome", async () => {
-    const client = new HostTerminalClient(async () => ({
-      closed: false,
-      confirmationRequired: true,
-    }));
+    const client = new HostTerminalClient(async (_command, _input, resultSchema) =>
+      resultSchema.parse({ closed: false, confirmationRequired: true }),
+    );
 
     await expect(
       client.terminalClose({ terminalId: "terminal-1", confirmTerminate: false }),
@@ -69,7 +76,9 @@ describe("HostTerminalClient", () => {
   });
 
   test("rejects malformed host responses", async () => {
-    const client = new HostTerminalClient(async () => ({ terminals: [] }));
+    const client = new HostTerminalClient(async (_command, _input, resultSchema) =>
+      resultSchema.parse({ terminals: [] }),
+    );
     await expect(client.terminalList({ filter: { kind: "all" } })).rejects.toThrow();
   });
 

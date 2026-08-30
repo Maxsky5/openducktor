@@ -47,18 +47,18 @@ const createLiveClientHarness = (
     nativeRequestId?: string;
     totalTokens?: number;
     pendingQuestion?: boolean;
-    listBarrier?: Promise<void> | (() => Promise<void>);
+    listBarrier?: () => Promise<void>;
     listError?: Error;
     onList?: () => void;
-    messagesBarrier?: Promise<void>;
+    messagesBarrier?: () => Promise<void>;
     onMessages?: () => void;
-    permissionListBarrier?: Promise<void> | (() => Promise<void>);
+    permissionListBarrier?: () => Promise<void>;
     onPermissionList?: () => void;
     onPermissionListSettled?: () => void;
-    questionListBarrier?: Promise<void> | (() => Promise<void>);
+    questionListBarrier?: () => Promise<void>;
     onQuestionList?: () => void;
     onQuestionListSettled?: () => void;
-    streamCloseBarrier?: Promise<void>;
+    streamCloseBarrier?: () => Promise<void>;
     initiallyConnected?: boolean;
   } = {},
 ): LiveClientHarness => {
@@ -96,11 +96,7 @@ const createLiveClientHarness = (
       list: async () => {
         callOrder.push("list");
         input.onList?.();
-        if (typeof input.listBarrier === "function") {
-          await input.listBarrier();
-        } else {
-          await input.listBarrier;
-        }
+        await input.listBarrier?.();
         if (input.listError) {
           throw input.listError;
         }
@@ -128,10 +124,10 @@ const createLiveClientHarness = (
       messages: async (request: SessionMessagesRequest) => {
         messageCalls.push(request);
         input.onMessages?.();
-        await input.messagesBarrier;
+        await input.messagesBarrier?.();
         return {
           data:
-            typeof input.totalTokens === "number"
+            input.totalTokens !== undefined
               ? [
                   {
                     info: createOpencodeMessageInfoFixture({
@@ -170,11 +166,7 @@ const createLiveClientHarness = (
             }))
           : [];
         input.onPermissionList?.();
-        if (typeof input.permissionListBarrier === "function") {
-          await input.permissionListBarrier();
-        } else {
-          await input.permissionListBarrier;
-        }
+        await input.permissionListBarrier?.();
         input.onPermissionListSettled?.();
         return { data, error: undefined };
       },
@@ -206,11 +198,7 @@ const createLiveClientHarness = (
             ]
           : [];
         input.onQuestionList?.();
-        if (typeof input.questionListBarrier === "function") {
-          await input.questionListBarrier();
-        } else {
-          await input.questionListBarrier;
-        }
+        await input.questionListBarrier?.();
         input.onQuestionListSettled?.();
         return { data, error: undefined };
       },
@@ -257,7 +245,7 @@ const createLiveClientHarness = (
               entry.consumed?.();
             }
           } finally {
-            await input.streamCloseBarrier;
+            await input.streamCloseBarrier?.();
           }
         }
         return { stream: events() };
@@ -428,7 +416,7 @@ describe("OpenCode session runtime connection", () => {
     });
     const harness = createLiveClientHarness({
       onList: reportListStarted,
-      listBarrier,
+      listBarrier: () => listBarrier,
     });
     const controller = new AbortController();
     const preparing = createPrepareRuntime(harness)({
@@ -589,7 +577,7 @@ describe("OpenCode session runtime connection", () => {
       releaseList = resolve;
     });
     const harness = createLiveClientHarness({
-      listBarrier: listGate,
+      listBarrier: () => listGate,
       onList: resolveListStarted,
     });
     const preparing = createPrepareRuntime(harness)(runtimeInput);
@@ -800,7 +788,7 @@ describe("OpenCode session runtime connection", () => {
       releaseList = resolve;
     });
     const retainedHarness = createLiveClientHarness({
-      listBarrier: listGate,
+      listBarrier: () => listGate,
       onList: resolveListStarted,
     });
     const preparing = createPrepareRuntime(retainedHarness)(runtimeInput);

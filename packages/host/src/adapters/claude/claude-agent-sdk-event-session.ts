@@ -1,10 +1,17 @@
 import type { AgentModelSelection } from "@openducktor/core";
 import { claudeSubagentExternalSessionId } from "./claude-agent-sdk-subagent-transcripts";
 import type { ClaudeTodoProjection, ClaudeTodoState } from "./claude-agent-sdk-todos";
-import type { ClaudeManualCompactionState, ClaudeSessionActivity } from "./claude-agent-sdk-types";
+import type {
+  ClaudeAcceptedUserMessage,
+  ClaudeManualCompactionState,
+  PendingApproval,
+  PendingQuestion,
+  ClaudeSessionActivity,
+  ClaudeToolInput,
+} from "./claude-agent-sdk-types";
 
 export type ClaudeEventSession = {
-  acceptedUserMessages?: readonly unknown[];
+  acceptedUserMessages?: readonly ClaudeAcceptedUserMessage[];
   activeBackgroundSubagentTaskIds?: Set<string>;
   activeManualCompaction?: ClaudeManualCompactionState;
   activeSdkUserTurnCount?: number;
@@ -12,8 +19,8 @@ export type ClaudeEventSession = {
   assistantTurnOriginKind?: string;
   externalSessionId: string;
   hiddenSubagentTaskIds?: Set<string>;
-  pendingApprovals?: Map<string, unknown>;
-  pendingQuestions?: Map<string, unknown>;
+  pendingApprovals?: Map<string, PendingApproval>;
+  pendingQuestions?: Map<string, PendingQuestion>;
   pendingUserTurnCount?: number;
   retractedSubagentTaskIds?: Set<string>;
   retractedToolUseIds?: Set<string>;
@@ -35,7 +42,7 @@ export type ClaudeEventSession = {
   todoProjection?: ClaudeTodoProjection;
   todosById: ClaudeTodoState;
   toolEndedAtMsByCallId?: Map<string, number>;
-  toolInputsByCallId: Map<string, Record<string, unknown>>;
+  toolInputsByCallId: Map<string, ClaudeToolInput>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
   toolStartedAtMsByCallId: Map<string, number>;
@@ -180,7 +187,7 @@ const acceptedUserTurnCount = (session: ClaudeEventSession): number => {
 };
 
 const pendingUserTurnCount = (session: ClaudeEventSession): number => {
-  return typeof session.pendingUserTurnCount === "number" ? session.pendingUserTurnCount : 0;
+  return session.pendingUserTurnCount ?? 0;
 };
 
 const activeAssistantTurnIndex = (session: ClaudeEventSession): number => {

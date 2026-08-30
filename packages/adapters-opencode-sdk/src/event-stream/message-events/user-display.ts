@@ -26,12 +26,16 @@ export const buildVisibleUserMessage = (input: {
   metadata?: SessionMessageMetadata;
   matchedQueuedSend?: QueuedUserMessageSend | null;
 }) => {
+  const preservedAttachmentInput: Parameters<typeof readPreservedAttachmentParts>[0] = {};
+  if (input.metadata) {
+    preservedAttachmentInput.metadata = input.metadata;
+  }
+  if (input.matchedQueuedSend) {
+    preservedAttachmentInput.matchedQueuedSend = input.matchedQueuedSend;
+  }
   const mergedDisplayParts = mergePreservedAttachmentDisplayParts(
     input.normalizedDisplayParts,
-    readPreservedAttachmentParts({
-      ...(input.metadata ? { metadata: input.metadata } : undefined),
-      ...(input.matchedQueuedSend ? { matchedQueuedSend: input.matchedQueuedSend } : undefined),
-    }),
+    readPreservedAttachmentParts(preservedAttachmentInput),
   );
   const displayParts = ensureVisibleUserTextDisplayParts(
     mergedDisplayParts.length > 0 ? mergedDisplayParts : (input.metadata?.displayParts ?? []),

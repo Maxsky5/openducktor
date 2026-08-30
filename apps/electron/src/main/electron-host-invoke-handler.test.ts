@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import type { IpcMainInvokeEvent } from "electron";
 import { registerElectronHostInvokeHandler } from "./electron-host-invoke-handler";
 
-// SAFETY: these tests only exercise request handling; handlers never read the event.
+// SAFETY: Electron supplies this unused event.
 const ipcMainInvokeEvent = {} as IpcMainInvokeEvent;
 
 const request = {
@@ -125,7 +125,7 @@ describe("Electron host invoke IPC handler", () => {
       "args",
       "Electron host invoke arguments must be an object when provided.",
     ],
-  ] as const)(
+  ] satisfies readonly (readonly [string, unknown, string, string])[])(
     "rejects %s without invoking the router",
     async (_case, invalidRequest, field, message) => {
       const invoke = mock(async () => []);

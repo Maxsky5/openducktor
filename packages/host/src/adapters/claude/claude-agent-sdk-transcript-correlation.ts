@@ -1,12 +1,14 @@
+import type { ClaudeToolInput } from "./claude-agent-sdk-types";
+
 export type ClaudeTranscriptCorrelationState = {
   hiddenSubagentTaskIds?: Set<string>;
   retractedSubagentTaskIds?: Set<string>;
   retractedToolUseIds?: Set<string>;
-  subagentEventSessionsByToolUseId?: Map<string, unknown>;
+  subagentEventSessionsByToolUseId?: Map<string, ClaudeTranscriptCorrelationState>;
   subagentMessageIdsByTaskId: Map<string, string>;
   subagentTaskIdsByToolUseId: Map<string, string>;
   toolEndedAtMsByCallId?: Map<string, number>;
-  toolInputsByCallId?: Map<string, Record<string, unknown>>;
+  toolInputsByCallId?: Map<string, ClaudeToolInput>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
   toolStartedAtMsByCallId?: Map<string, number>;

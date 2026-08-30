@@ -4,11 +4,21 @@ import { fileURLToPath } from "node:url";
 import { cleanDirectory, runCommand } from "@openducktor/build-tools";
 import { Effect } from "effect";
 import { runElectronEffect } from "../src/effect/electron-boundary";
-import { ElectronOperationError, errorMessage } from "../src/effect/electron-errors";
+import {
+  ElectronOperationError,
+  type ElectronOperationErrorAggregate,
+  errorMessage,
+} from "../src/effect/electron-errors";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(scriptDirectory, "..");
 const workspaceRoot = resolve(packageRoot, "../..");
+
+type CopySqliteMigrationsErrorDetails = { readonly targetDirectory: string };
+type ElectronBuildCommandErrorDetails = {
+  readonly command: readonly [string, ...string[]];
+  readonly label: string;
+};
 
 export type SqliteTaskStoreMigrationCopyPlan = {
   sourceDirectory: string;
@@ -35,7 +45,10 @@ export const copySqliteTaskStoreMigrations = ({
 export const copySqliteTaskStoreMigrationsEffect = ({
   sourceDirectory,
   targetDirectory,
-}: SqliteTaskStoreMigrationCopyPlan): Effect.Effect<void, ElectronOperationError> =>
+}: SqliteTaskStoreMigrationCopyPlan): Effect.Effect<
+  void,
+  ElectronOperationError<CopySqliteMigrationsErrorDetails>
+> =>
   Effect.tryPromise({
     try: () => cp(sourceDirectory, targetDirectory, { force: true, recursive: true }),
     catch: (cause) =>
@@ -51,7 +64,7 @@ export const copySqliteTaskStoreMigrationsEffect = ({
 const runBuildCommandEffect = (
   label: string,
   command: readonly [string, ...string[]],
-): Effect.Effect<void, ElectronOperationError> =>
+): Effect.Effect<void, ElectronOperationError<ElectronBuildCommandErrorDetails>> =>
   Effect.tryPromise({
     try: () => runCommand({ command, cwd: packageRoot, label }),
     catch: (cause) =>
@@ -59,11 +72,14 @@ const runBuildCommandEffect = (
         operation: "electron.build.run-command",
         message: errorMessage(cause),
         cause,
-        details: { command: [...command], label },
+        details: { command, label },
       }),
   });
 
-export const buildElectronPackageEffect = (): Effect.Effect<void, ElectronOperationError> =>
+export const buildElectronPackageEffect = (): Effect.Effect<
+  void,
+  ElectronOperationErrorAggregate
+> =>
   Effect.gen(function* () {
     yield* Effect.tryPromise({
       try: () => cleanDirectory(join(packageRoot, "dist")),

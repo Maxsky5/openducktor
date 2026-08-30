@@ -35,13 +35,16 @@ export const executeFreshStart = async ({
     runtimeKind: selectedModelRuntimeKind,
   };
 
-  const resolved = await resolveFreshStartRuntimeContext({
+  const runtimeInput: Parameters<typeof resolveFreshStartRuntimeContext>[0] = {
     ctx,
     requestedRuntimeKind: selectedModelRuntimeKind,
-    ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : undefined),
     taskCard,
     deps,
-  });
+  };
+  if (targetWorkingDirectory !== undefined) {
+    runtimeInput.targetWorkingDirectory = targetWorkingDirectory;
+  }
+  const resolved = await resolveFreshStartRuntimeContext(runtimeInput);
   try {
     const sessionScope = workflowAgentSessionScope(ctx.taskId, ctx.role);
 

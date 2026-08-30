@@ -59,7 +59,8 @@ const loadOneDarkTheme = async (): Promise<MarkdownSyntaxThemeLoadResult<PrismTh
       return { status: "loaded", theme: module.default } as const;
     })
     .catch((cause) => {
-      const error = cause instanceof Error ? cause : new Error(String(cause));
+      const error =
+        cause instanceof Error ? cause : new Error(String(cause ?? "Unknown theme loader error"));
       console.error("Failed to lazy-load Prism dark theme:", error);
       return { status: "failed", error } as const;
     })

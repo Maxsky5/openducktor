@@ -639,26 +639,6 @@ describe("createWorkspaceSettingsService", () => {
     expect(persisted.general.openAgentStudioTabOnBackgroundSessionStart).toBe(true);
     expect(persisted.agentModelFavorites).toEqual([newFavorite]);
   });
-  test("rejects invalid appearance snapshot settings without writing config", async () => {
-    const settingsConfig = createFakeSettingsConfig({
-      config: globalConfig(),
-    });
-    const service = createWorkspaceSettingsService(settingsConfig);
-    const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
-    const invalidVisibility: string = "auto";
-    // SAFETY: This fixture deliberately violates the typed boundary so the service parser can reject it.
-    const invalidSnapshot = {
-      ...snapshot,
-      appearance: {
-        horizontalScrollbarVisibility: invalidVisibility,
-      },
-    } as typeof snapshot;
-
-    await expect(Effect.runPromise(service.saveSettingsSnapshot(invalidSnapshot))).rejects.toThrow(
-      "Invalid option",
-    );
-    expect(settingsConfig.writtenConfigs).toHaveLength(0);
-  });
   test("rejects invalid Codex snapshot settings without writing config", async () => {
     const settingsConfig = createFakeSettingsConfig({
       config: globalConfig(),

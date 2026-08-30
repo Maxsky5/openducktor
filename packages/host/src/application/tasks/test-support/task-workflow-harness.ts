@@ -152,11 +152,17 @@ const createTaskService = (
     taskStore: TaskStorePort;
   },
 ) => {
-  const { taskActivityGuard, taskStore, toolDiscovery, ...rest } = input;
+  const {
+    taskActivityGuard,
+    taskStore,
+    toolDiscovery,
+    workspaceSettingsService: workspaceSettingsServiceInput,
+    ...rest
+  } = input;
   const workspaceSettingsService = createWorkspaceSettingsServicePort(
-    rest.workspaceSettingsService,
+    workspaceSettingsServiceInput,
   );
-  const taskServiceInput = {
+  const taskServiceInput: CreateTaskServiceInput = {
     ...rest,
     terminalService:
       rest.terminalService ??
@@ -166,10 +172,14 @@ const createTaskService = (
     toolDiscovery:
       toolDiscovery ??
       createToolDiscoveryAdapter({ systemCommands: rest.systemCommands ?? defaultSystemCommands }),
-    ...(workspaceSettingsService ? { workspaceSettingsService } : undefined),
-    ...(taskActivityGuard ? { taskActivityGuard } : undefined),
     taskStore: createTaskStorePort(taskStore),
-  } satisfies CreateTaskServiceInput;
+  };
+  if (workspaceSettingsService) {
+    taskServiceInput.workspaceSettingsService = workspaceSettingsService;
+  }
+  if (taskActivityGuard) {
+    taskServiceInput.taskActivityGuard = taskActivityGuard;
+  }
   return createRealTaskService(taskServiceInput);
 };
 const createTaskServiceWithMutationProgress = (
@@ -178,11 +188,17 @@ const createTaskServiceWithMutationProgress = (
     taskStore: TaskStorePort;
   },
 ) => {
-  const { taskActivityGuard, taskStore, toolDiscovery, ...rest } = input;
+  const {
+    taskActivityGuard,
+    taskStore,
+    toolDiscovery,
+    workspaceSettingsService: workspaceSettingsServiceInput,
+    ...rest
+  } = input;
   const workspaceSettingsService = createWorkspaceSettingsServicePort(
-    rest.workspaceSettingsService,
+    workspaceSettingsServiceInput,
   );
-  const taskServiceInput = {
+  const taskServiceInput: CreateTaskServiceInput = {
     ...rest,
     terminalService:
       rest.terminalService ??
@@ -192,10 +208,14 @@ const createTaskServiceWithMutationProgress = (
     toolDiscovery:
       toolDiscovery ??
       createToolDiscoveryAdapter({ systemCommands: rest.systemCommands ?? defaultSystemCommands }),
-    ...(workspaceSettingsService ? { workspaceSettingsService } : undefined),
-    ...(taskActivityGuard ? { taskActivityGuard } : undefined),
     taskStore: createTaskStorePort(taskStore),
-  } satisfies CreateTaskServiceInput;
+  };
+  if (workspaceSettingsService) {
+    taskServiceInput.workspaceSettingsService = workspaceSettingsService;
+  }
+  if (taskActivityGuard) {
+    taskServiceInput.taskActivityGuard = taskActivityGuard;
+  }
   return createRealTaskServiceWithMutationProgress(taskServiceInput);
 };
 const createAgentSessionTaskStore = (calls: unknown[]): TaskStorePort => ({

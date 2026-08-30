@@ -329,14 +329,19 @@ export const toClaudeSlashCommandCatalog = (
       .map((command) =>
         command.name === MANUAL_SESSION_COMPACTION_SLASH_COMMAND.trigger
           ? MANUAL_SESSION_COMPACTION_SLASH_COMMAND
-          : {
-              id: command.name,
-              trigger: command.name,
-              title: command.name,
-              ...(command.description ? { description: command.description } : undefined),
-              source: isClaudeSkillCommand(command) ? ("skill" as const) : ("command" as const),
-              hints: command.argumentHint ? [command.argumentHint] : [],
-            },
+          : (() => {
+              const item: ClaudeSlashCommandCatalog["commands"][number] = {
+                id: command.name,
+                trigger: command.name,
+                title: command.name,
+                source: isClaudeSkillCommand(command) ? ("skill" as const) : ("command" as const),
+                hints: command.argumentHint ? [command.argumentHint] : [],
+              };
+              if (command.description) {
+                item.description = command.description;
+              }
+              return item;
+            })(),
       )
       .sort((left, right) => left.trigger.localeCompare(right.trigger)),
   };
@@ -369,13 +374,18 @@ export const toClaudeSkillCatalog = (commands: SlashCommand[]): AgentSkillCatalo
 
   return skillCatalogSchema.parse({
     skills: [...skillsByName.values()]
-      .map((skill) => ({
-        id: skill.name,
-        name: skill.name,
-        path: skill.name,
-        title: skill.name,
-        ...(skill.description ? { description: skill.description } : undefined),
-      }))
+      .map((skill) => {
+        const item: AgentSkillCatalog["skills"][number] = {
+          id: skill.name,
+          name: skill.name,
+          path: skill.name,
+          title: skill.name,
+        };
+        if (skill.description) {
+          item.description = skill.description;
+        }
+        return item;
+      })
       .sort((left, right) => left.name.localeCompare(right.name)),
   });
 };
@@ -383,12 +393,17 @@ export const toClaudeSkillCatalog = (commands: SlashCommand[]): AgentSkillCatalo
 const toClaudeSubagentCatalog = (agents: AgentInfo[]): AgentSubagentCatalog => {
   return subagentCatalogSchema.parse({
     subagents: agents
-      .map((agent) => ({
-        id: agent.name,
-        name: agent.name,
-        label: agent.name,
-        ...(agent.description ? { description: agent.description } : undefined),
-      }))
+      .map((agent) => {
+        const item: AgentSubagentCatalog["subagents"][number] = {
+          id: agent.name,
+          name: agent.name,
+          label: agent.name,
+        };
+        if (agent.description) {
+          item.description = agent.description;
+        }
+        return item;
+      })
       .sort((left, right) => left.name.localeCompare(right.name)),
   });
 };

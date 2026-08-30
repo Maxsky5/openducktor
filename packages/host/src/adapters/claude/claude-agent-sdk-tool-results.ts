@@ -14,7 +14,12 @@ import {
   type ClaudeUserToolResultIngress,
   parseClaudeUserToolResultIngress,
 } from "./claude-agent-sdk-ingress-schemas";
-import { decodeClaudeToolResultValue, timestampMs } from "./claude-agent-sdk-tool-shapes";
+import {
+  type ClaudeDecodedToolResult,
+  type ClaudeDecodedToolUse,
+  decodeClaudeToolResultValue,
+  timestampMs,
+} from "./claude-agent-sdk-tool-shapes";
 import { isClaudeToolUseRetracted } from "./claude-agent-sdk-transcript-correlation";
 import { HostValidationError } from "../../effect/host-errors";
 import type { ClaudeSdkUserMessageProjection } from "./claude-agent-sdk-message-projection";
@@ -27,7 +32,7 @@ type ClaudeToolResultSession = {
   subagentAgentIdsByToolUseId?: Map<string, string>;
   subagentMessageIdsByTaskId: Map<string, string>;
   subagentTaskIdsByToolUseId: Map<string, string>;
-  toolInputsByCallId: Map<string, Record<string, unknown>>;
+  toolInputsByCallId: Map<string, NonNullable<ClaudeDecodedToolUse["input"]>>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
   toolEndedAtMsByCallId?: Map<string, number>;
@@ -35,8 +40,6 @@ type ClaudeToolResultSession = {
   todoProjection?: ClaudeTodoProjection;
   todosById: ClaudeTodoState;
 };
-
-type ClaudeDecodedToolResult = NonNullable<ReturnType<typeof decodeClaudeToolResultValue>>;
 
 const mergeTopLevelToolUseResult = (
   result: ClaudeDecodedToolResult,
@@ -102,18 +105,19 @@ export const handleClaudeUserToolResultMessage = ({
       state: session,
       tool,
     });
-    const { part, todos } = projectClaudeCompletedToolResult({
+    const completedResultInput: Parameters<typeof projectClaudeCompletedToolResult>[0] = {
       callId: result.toolUseId,
       endedAtMs,
-      ...(input ? { input } : undefined),
       isError: result.isError,
       messageId,
       raw: result.raw,
       resultText: result.text,
-      ...(typeof startedAtMs === "number" ? { startedAtMs } : undefined),
       state: session.todosById,
       tool,
-    });
+    };
+    if (input) completedResultInput.input = input;
+    if (startedAtMs !== undefined) completedResultInput.startedAtMs = startedAtMs;
+    const { part, todos } = projectClaudeCompletedToolResult(completedResultInput);
     emit({
       type: "assistant_part",
       externalSessionId: session.externalSessionId,
@@ -129,7 +133,7 @@ export const handleClaudeUserToolResultMessage = ({
       });
     }
     if (tool === "Agent") {
-      emitClaudeAgentToolResultSubagentPart({
+      const subagentResultInput: Parameters<typeof emitClaudeAgentToolResultSubagentPart>[0] = {
         emit,
         isError: result.isError,
         resultRaw: result.raw,
@@ -137,8 +141,9 @@ export const handleClaudeUserToolResultMessage = ({
         session,
         timestamp,
         toolUseId: result.toolUseId,
-        ...(input ? { input } : undefined),
-      });
+      };
+      if (input) subagentResultInput.input = input;
+      emitClaudeAgentToolResultSubagentPart(subagentResultInput);
     } else if (tool === "TaskStop") {
       emitClaudeTaskStopSubagentPart({
         emit,

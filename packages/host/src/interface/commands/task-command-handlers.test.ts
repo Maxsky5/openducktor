@@ -595,467 +595,209 @@ describe("createTaskCommandHandlers", () => {
       },
     });
     const handlers = createTaskCommandHandlers(service);
+    await expect(runHandler(handlers.tasks_list?.({ repoPath: "/repo" }))).resolves.toEqual([]);
     await expect(
       runHandler(
-        handlers.tasks_list?.(
-          { repoPath: "/repo" },
-          {
-            command: "tasks_list",
-            args: { repoPath: "/repo" },
-          },
-        ),
-      ),
-    ).resolves.toEqual([]);
-    await expect(
-      runHandler(
-        handlers.task_create?.(
-          {
-            repoPath: "/repo",
-            input: { title: "Task", issueType: "task", priority: 2, aiReviewEnabled: true },
-          },
-          {
-            command: "task_create",
-            args: {
-              repoPath: "/repo",
-              input: { title: "Task", issueType: "task", priority: 2, aiReviewEnabled: true },
-            },
-          },
-        ),
+        handlers.task_create?.({
+          repoPath: "/repo",
+          input: { title: "Task", issueType: "task", priority: 2, aiReviewEnabled: true },
+        }),
       ),
     ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.task_delete?.(
-          { repoPath: "/repo", taskId: "task-1", deleteSubtasks: true },
-          {
-            command: "task_delete",
-            args: { repoPath: "/repo", taskId: "task-1", deleteSubtasks: true },
-          },
-        ),
+        handlers.task_delete?.({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: true }),
       ),
     ).resolves.toEqual({ ok: true });
     await expect(
-      runHandler(
-        handlers.task_close?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "task_close",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
-      ),
+      runHandler(handlers.task_close?.({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toBeDefined();
+    await expect(
+      runHandler(handlers.task_reset_implementation?.({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toBeDefined();
+    await expect(
+      runHandler(handlers.task_reset?.({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toBeDefined();
+    await expect(
+      runHandler(handlers.task_metadata_get?.({ repoPath: "/repo", taskId: "task-1" })),
     ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.task_reset_implementation?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "task_reset_implementation",
-            args: { repoPath: "/repo", taskId: "task-1" },
+        handlers.agent_session_upsert?.({
+          repoPath: "/repo",
+          taskId: "task-1",
+          session: {
+            externalSessionId: "session-1",
+            role: "build",
+            startedAt: "2026-05-10T10:00:00.000Z",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/task-1",
+            selectedModel: null,
           },
-        ),
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(
-        handlers.task_reset?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "task_reset",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(
-        handlers.task_metadata_get?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "task_metadata_get",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(
-        handlers.agent_session_upsert?.(
-          {
-            repoPath: "/repo",
-            taskId: "task-1",
-            session: {
-              externalSessionId: "session-1",
-              role: "build",
-              startedAt: "2026-05-10T10:00:00.000Z",
-              runtimeKind: "opencode",
-              workingDirectory: "/repo/task-1",
-              selectedModel: null,
-            },
-          },
-          {
-            command: "agent_session_upsert",
-            args: {
-              repoPath: "/repo",
-              taskId: "task-1",
-              session: {
-                externalSessionId: "session-1",
-                role: "build",
-                startedAt: "2026-05-10T10:00:00.000Z",
-                runtimeKind: "opencode",
-                workingDirectory: "/repo/task-1",
-                selectedModel: null,
-              },
-            },
-          },
-        ),
+        }),
       ),
     ).resolves.toBe(true);
     await expect(
       runHandler(
-        handlers.agent_session_delete?.(
-          {
-            repoPath: "/repo",
-            taskId: "task-1",
-            identity: {
-              externalSessionId: "session-1",
-              runtimeKind: "opencode",
-              workingDirectory: "/repo/task-1",
-            },
+        handlers.agent_session_delete?.({
+          repoPath: "/repo",
+          taskId: "task-1",
+          identity: {
+            externalSessionId: "session-1",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/task-1",
           },
-          {
-            command: "agent_session_delete",
-            args: {
-              repoPath: "/repo",
-              taskId: "task-1",
-              identity: {
-                externalSessionId: "session-1",
-                runtimeKind: "opencode",
-                workingDirectory: "/repo/task-1",
-              },
-            },
-          },
-        ),
+        }),
       ),
     ).resolves.toBe(true);
     await expect(
-      runHandler(
-        handlers.agent_sessions_list?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "agent_sessions_list",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
-      ),
+      runHandler(handlers.agent_sessions_list?.({ repoPath: "/repo", taskId: "task-1" })),
     ).resolves.toEqual([]);
     await expect(
       runHandler(
-        handlers.agent_sessions_list_for_tasks?.(
-          { repoPath: "/repo", taskIds: ["task-2", "task-1", "task-2"] },
-          {
-            command: "agent_sessions_list_for_tasks",
-            args: { repoPath: "/repo", taskIds: ["task-2", "task-1", "task-2"] },
-          },
-        ),
+        handlers.agent_sessions_list_for_tasks?.({
+          repoPath: "/repo",
+          taskIds: ["task-2", "task-1", "task-2"],
+        }),
       ),
     ).resolves.toEqual([]);
     await expect(
-      runHandler(
-        handlers.task_approval_context_get?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "task_approval_context_get",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
-      ),
+      runHandler(handlers.task_approval_context_get?.({ repoPath: "/repo", taskId: "task-1" })),
     ).resolves.toBeDefined();
     await expect(
-      runHandler(
-        handlers.task_pull_request_detect?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "task_pull_request_detect",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
-      ),
+      runHandler(handlers.task_pull_request_detect?.({ repoPath: "/repo", taskId: "task-1" })),
     ).resolves.toBeDefined();
     await expect(
-      runHandler(
-        handlers.task_pull_request_unlink?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "task_pull_request_unlink",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
-      ),
+      runHandler(handlers.task_pull_request_unlink?.({ repoPath: "/repo", taskId: "task-1" })),
     ).resolves.toBe(true);
     await expect(
       runHandler(
-        handlers.task_pull_request_upsert?.(
-          { repoPath: "/repo", taskId: "task-1", input: { title: "PR", body: "Body" } },
-          {
-            command: "task_pull_request_upsert",
-            args: { repoPath: "/repo", taskId: "task-1", input: { title: "PR", body: "Body" } },
-          },
-        ),
+        handlers.task_pull_request_upsert?.({
+          repoPath: "/repo",
+          taskId: "task-1",
+          input: { title: "PR", body: "Body" },
+        }),
       ),
     ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.task_direct_merge?.(
-          { repoPath: "/repo", taskId: "task-1", input: { mergeMethod: "merge_commit" } },
-          {
-            command: "task_direct_merge",
-            args: { repoPath: "/repo", taskId: "task-1", input: { mergeMethod: "merge_commit" } },
+        handlers.task_direct_merge?.({
+          repoPath: "/repo",
+          taskId: "task-1",
+          input: { mergeMethod: "merge_commit" },
+        }),
+      ),
+    ).resolves.toBeDefined();
+    await expect(
+      runHandler(handlers.task_direct_merge_complete?.({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toBeDefined();
+    await expect(
+      runHandler(
+        handlers.task_pull_request_link_merged?.({
+          repoPath: "/repo",
+          taskId: "task-1",
+          pullRequest: {
+            providerId: "github",
+            number: 12,
+            url: "https://github.com/acme/repo/pull/12",
+            state: "merged",
+            createdAt: "2026-05-10T10:00:00.000Z",
+            updatedAt: "2026-05-10T11:00:00.000Z",
           },
-        ),
+        }),
       ),
     ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.task_direct_merge_complete?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "task_direct_merge_complete",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
+        handlers.task_transition?.({ repoPath: "/repo", taskId: "task-1", status: "in_progress" }),
       ),
     ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.task_pull_request_link_merged?.(
-          {
-            repoPath: "/repo",
-            taskId: "task-1",
-            pullRequest: {
-              providerId: "github",
-              number: 12,
-              url: "https://github.com/acme/repo/pull/12",
-              state: "merged",
-              createdAt: "2026-05-10T10:00:00.000Z",
-              updatedAt: "2026-05-10T11:00:00.000Z",
-            },
-          },
-          {
-            command: "task_pull_request_link_merged",
-            args: {
-              repoPath: "/repo",
-              taskId: "task-1",
-              pullRequest: {
-                providerId: "github",
-                number: 12,
-                url: "https://github.com/acme/repo/pull/12",
-                state: "merged",
-                createdAt: "2026-05-10T10:00:00.000Z",
-                updatedAt: "2026-05-10T11:00:00.000Z",
-              },
-            },
-          },
-        ),
+        handlers.build_blocked?.({ repoPath: "/repo", taskId: "task-1", reason: "Blocked" }),
       ),
     ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.task_transition?.(
-          { repoPath: "/repo", taskId: "task-1", status: "in_progress" },
-          {
-            command: "task_transition",
-            args: { repoPath: "/repo", taskId: "task-1", status: "in_progress" },
-          },
-        ),
+        handlers.build_start?.({ repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" }),
+      ),
+    ).resolves.toBeDefined();
+    await expect(
+      runHandler(handlers.build_resumed?.({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toBeDefined();
+    await expect(
+      runHandler(
+        handlers.build_completed?.({
+          repoPath: "/repo",
+          taskId: "task-1",
+          input: { summary: "Done" },
+        }),
       ),
     ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.build_blocked?.(
-          { repoPath: "/repo", taskId: "task-1", reason: "Blocked" },
-          {
-            command: "build_blocked",
-            args: { repoPath: "/repo", taskId: "task-1", reason: "Blocked" },
-          },
-        ),
+        handlers.task_update?.({ repoPath: "/repo", taskId: "task-1", patch: { title: "Task" } }),
       ),
     ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.build_start?.(
-          { repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" },
-          {
-            command: "build_start",
-            args: { repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" },
-          },
-        ),
+        handlers.qa_approved?.({
+          repoPath: "/repo",
+          taskId: "task-1",
+          reportMarkdown: "Looks good",
+        }),
       ),
     ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.build_resumed?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "build_resumed",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
+        handlers.qa_rejected?.({
+          repoPath: "/repo",
+          taskId: "task-1",
+          reportMarkdown: "Needs work",
+        }),
       ),
     ).resolves.toBeDefined();
     await expect(
-      runHandler(
-        handlers.build_completed?.(
-          { repoPath: "/repo", taskId: "task-1", input: { summary: "Done" } },
-          {
-            command: "build_completed",
-            args: { repoPath: "/repo", taskId: "task-1", input: { summary: "Done" } },
-          },
-        ),
-      ),
+      runHandler(handlers.qa_get_report?.({ repoPath: "/repo", taskId: "task-1" })),
     ).resolves.toBeDefined();
     await expect(
-      runHandler(
-        handlers.task_update?.(
-          { repoPath: "/repo", taskId: "task-1", patch: { title: "Task" } },
-          {
-            command: "task_update",
-            args: { repoPath: "/repo", taskId: "task-1", patch: { title: "Task" } },
-          },
-        ),
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(
-        handlers.qa_approved?.(
-          { repoPath: "/repo", taskId: "task-1", reportMarkdown: "Looks good" },
-          {
-            command: "qa_approved",
-            args: { repoPath: "/repo", taskId: "task-1", reportMarkdown: "Looks good" },
-          },
-        ),
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(
-        handlers.qa_rejected?.(
-          { repoPath: "/repo", taskId: "task-1", reportMarkdown: "Needs work" },
-          {
-            command: "qa_rejected",
-            args: { repoPath: "/repo", taskId: "task-1", reportMarkdown: "Needs work" },
-          },
-        ),
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(
-        handlers.qa_get_report?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "qa_get_report",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(
-        handlers.repo_pull_request_sync?.(
-          { repoPath: "/repo" },
-          {
-            command: "repo_pull_request_sync",
-            args: { repoPath: "/repo" },
-          },
-        ),
-      ),
+      runHandler(handlers.repo_pull_request_sync?.({ repoPath: "/repo" })),
     ).resolves.toEqual({ ok: true });
     await expect(
       runHandler(
-        handlers.human_request_changes?.(
-          { repoPath: "/repo", taskId: "task-1", note: "Please adjust" },
-          {
-            command: "human_request_changes",
-            args: { repoPath: "/repo", taskId: "task-1", note: "Please adjust" },
-          },
-        ),
+        handlers.human_request_changes?.({
+          repoPath: "/repo",
+          taskId: "task-1",
+          note: "Please adjust",
+        }),
       ),
     ).resolves.toBeDefined();
     await expect(
-      runHandler(
-        handlers.human_approve?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "human_approve",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
-      ),
+      runHandler(handlers.human_approve?.({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toBeDefined();
+    await expect(
+      runHandler(handlers.set_spec?.({ repoPath: "/repo", taskId: "task-1", markdown: "# Spec" })),
     ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.set_spec?.(
-          { repoPath: "/repo", taskId: "task-1", markdown: "# Spec" },
-          {
-            command: "set_spec",
-            args: { repoPath: "/repo", taskId: "task-1", markdown: "# Spec" },
-          },
-        ),
+        handlers.spec_save_document?.({ repoPath: "/repo", taskId: "task-1", markdown: "# Spec" }),
       ),
     ).resolves.toBeDefined();
     await expect(
-      runHandler(
-        handlers.spec_save_document?.(
-          { repoPath: "/repo", taskId: "task-1", markdown: "# Spec" },
-          {
-            command: "spec_save_document",
-            args: { repoPath: "/repo", taskId: "task-1", markdown: "# Spec" },
-          },
-        ),
-      ),
+      runHandler(handlers.spec_get?.({ repoPath: "/repo", taskId: "task-1" })),
     ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.spec_get?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "spec_get",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(
-        handlers.set_plan?.(
-          { repoPath: "/repo", taskId: "task-1", input: { markdown: "# Plan" } },
-          {
-            command: "set_plan",
-            args: { repoPath: "/repo", taskId: "task-1", input: { markdown: "# Plan" } },
-          },
-        ),
+        handlers.set_plan?.({ repoPath: "/repo", taskId: "task-1", input: { markdown: "# Plan" } }),
       ),
     ).resolves.toEqual({ markdown: "# Plan" });
     await expect(
       runHandler(
-        handlers.plan_save_document?.(
-          { repoPath: "/repo", taskId: "task-1", markdown: "# Plan" },
-          {
-            command: "plan_save_document",
-            args: { repoPath: "/repo", taskId: "task-1", markdown: "# Plan" },
-          },
-        ),
+        handlers.plan_save_document?.({ repoPath: "/repo", taskId: "task-1", markdown: "# Plan" }),
       ),
     ).resolves.toBeDefined();
     await expect(
-      runHandler(
-        handlers.plan_get?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "plan_get",
-            args: { repoPath: "/repo", taskId: "task-1" },
-          },
-        ),
-      ),
+      runHandler(handlers.plan_get?.({ repoPath: "/repo", taskId: "task-1" })),
     ).resolves.toBeDefined();
     expect(calls).toEqual([
       { command: "tasks_list", input: { repoPath: "/repo" } },

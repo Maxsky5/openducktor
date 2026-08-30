@@ -25,8 +25,8 @@ export const createClaudeLiveSessionEventCoordinator = ({
   let forwardingFailure: HostError | null = null;
   let released = false;
 
-  const runtimeReleasedError = (): HostOperationError =>
-    new HostOperationError({
+  const runtimeReleasedError = (): HostOperationError<{ readonly runtimeId: string }> =>
+    new HostOperationError<{ readonly runtimeId: string }>({
       operation: "claude-live-session.event-coordinator",
       message: `Claude runtime '${runtimeId}' is already released.`,
       details: { runtimeId },

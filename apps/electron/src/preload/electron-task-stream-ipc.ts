@@ -22,8 +22,24 @@ import {
 
 type ElectronIpcRendererLike = {
   invoke: IpcRenderer["invoke"];
-  off(channel: string, listener: (event: IpcRendererEvent, value: unknown) => void): void;
-  on(channel: string, listener: (event: IpcRendererEvent, value: unknown) => void): void;
+  off(
+    channel: string,
+    listener: (
+      event: IpcRendererEvent,
+      value:
+        | Parameters<typeof electronTaskStreamFrameEnvelopeSchema.parse>[0]
+        | Parameters<typeof electronTaskStreamTerminalFailureEnvelopeSchema.parse>[0],
+    ) => void,
+  ): void;
+  on(
+    channel: string,
+    listener: (
+      event: IpcRendererEvent,
+      value:
+        | Parameters<typeof electronTaskStreamFrameEnvelopeSchema.parse>[0]
+        | Parameters<typeof electronTaskStreamTerminalFailureEnvelopeSchema.parse>[0],
+    ) => void,
+  ): void;
 };
 
 export const createElectronTaskStreamApi = (
@@ -40,7 +56,10 @@ export const createElectronTaskStreamApi = (
     let closed = false;
     const bufferedFrames: ElectronTaskStreamFrameEnvelope[] = [];
     const bufferedTerminalFailures: ElectronTaskStreamTerminalFailureEnvelope[] = [];
-    const handleFrame = (_event: IpcRendererEvent, value: unknown): void => {
+    const handleFrame = (
+      _event: IpcRendererEvent,
+      value: Parameters<typeof electronTaskStreamFrameEnvelopeSchema.parse>[0],
+    ): void => {
       const envelope = electronTaskStreamFrameEnvelopeSchema.parse(value);
       if (closed) return;
       if (!established) {
@@ -60,7 +79,10 @@ export const createElectronTaskStreamApi = (
         });
       }
     };
-    const handleTerminalFailure = (_event: IpcRendererEvent, value: unknown): void => {
+    const handleTerminalFailure = (
+      _event: IpcRendererEvent,
+      value: Parameters<typeof electronTaskStreamTerminalFailureEnvelopeSchema.parse>[0],
+    ): void => {
       const envelope = electronTaskStreamTerminalFailureEnvelopeSchema.parse(value);
       if (closed) return;
       if (!established) {

@@ -25,7 +25,11 @@ import type {
 } from "@openducktor/core";
 import { Effect } from "effect";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
-import { type HostError, HostOperationError } from "../../effect/host-errors";
+import {
+  type HostError,
+  HostOperationError,
+  type HostOperationErrorAggregate,
+} from "../../effect/host-errors";
 import type {
   AgentSessionLiveAdapterChange,
   AgentSessionLiveAdapterMutation,
@@ -752,9 +756,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       operation: "test.live-session-lifecycle",
       message: "live session mutation delivery failed",
     });
-    const backgroundFailures: HostOperationError[] = [];
-    let resolveBackgroundFailure: (failure: HostOperationError) => void = () => undefined;
-    const backgroundFailure = new Promise<HostOperationError>((resolve) => {
+    const backgroundFailures: HostOperationErrorAggregate[] = [];
+    let resolveBackgroundFailure: (failure: HostOperationErrorAggregate) => void = () => undefined;
+    const backgroundFailure = new Promise<HostOperationErrorAggregate>((resolve) => {
       resolveBackgroundFailure = resolve;
     });
     const lifecycle = {

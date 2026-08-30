@@ -11,6 +11,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   useCallback,
 } from "react";
+import { z } from "zod";
 import { classifyAttachment } from "./agent-chat-attachments";
 import type { AgentChatComposerDraft, applyComposerDraftEdit } from "./agent-chat-composer-draft";
 import { handleComposerEditorKeyDown } from "./agent-chat-composer-editor-keydown";
@@ -327,14 +328,14 @@ export const useAgentChatComposerEditorEvents = ({
         sourceDraft,
         event.target,
       );
-      const inputType =
-        "inputType" in event.nativeEvent && typeof event.nativeEvent.inputType === "string"
-          ? event.nativeEvent.inputType
-          : null;
-      const data =
-        "data" in event.nativeEvent && typeof event.nativeEvent.data === "string"
-          ? event.nativeEvent.data
-          : null;
+      const inputTypeResult = z
+        .string()
+        .safeParse("inputType" in event.nativeEvent ? event.nativeEvent.inputType : null);
+      const dataResult = z
+        .string()
+        .safeParse("data" in event.nativeEvent ? event.nativeEvent.data : null);
+      const inputType = inputTypeResult.success ? inputTypeResult.data : null;
+      const data = dataResult.success ? dataResult.data : null;
       const selectionTarget = resolveSelectionTargetFromActiveSelection(
         sourceDraft,
         activeSelection,

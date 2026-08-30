@@ -14,11 +14,12 @@ import {
   type CodexEffectivePolicy,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
+import type { AgentRuntimePolicyBinding } from "@openducktor/core";
 import { Effect } from "effect";
 import type { z } from "zod";
 import {
   type HostError,
-  type HostOperationError,
+  type HostOperationErrorAggregate,
   HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
@@ -60,6 +61,15 @@ type CodexRuntimeInstance = RuntimeInstanceSummary & {
   readonly kind: "codex";
   readonly runtimeRoute: { readonly type: "stdio"; readonly identity: string };
 };
+
+type CodexRuntimeValidationDetails =
+  | { readonly runtimeId: string; readonly runtimeKind: RuntimeInstanceSummary["kind"] }
+  | { readonly runtimeId: string };
+
+type OperationValidationDetails = { readonly operation: string };
+
+const isCodexRuntimeInstance = (runtime: RuntimeInstanceSummary): runtime is CodexRuntimeInstance =>
+  runtime.kind === "codex" && runtime.runtimeRoute.type === "stdio";
 export type PreparedCodexLiveSessionAdapter = Omit<PreparedRuntimeLiveSessionAdapter, "adapter"> & {
   readonly adapter: AgentSessionRuntimeAdapterPort;
   readonly emitRuntimeEvent: (event: CodexAppServerStreamEvent) => void;
@@ -70,7 +80,9 @@ export type CodexLiveSessionAdapterPreparer = (
 export type CreateCodexLiveSessionAdapterPreparerInput = {
   readonly liveSessionLifecycle: Pick<RuntimeLiveSessionLifecyclePort, "runAdapterMutation">;
   readonly codexAppServer: CodexAppServerPort;
-  readonly onBackgroundFailure: (failure: HostOperationError) => Effect.Effect<void, never>;
+  readonly onBackgroundFailure: (
+    failure: HostOperationErrorAggregate,
+  ) => Effect.Effect<void, never>;
   readonly resolveRuntimePolicy: (
     scope: AgentSessionScope,
   ) => Effect.Effect<CodexEffectivePolicy, HostError>;
@@ -88,11 +100,11 @@ const parseOutput = <Schema extends z.ZodType, Input>(
   schema: Schema,
   value: Input,
   operation: string,
-): Effect.Effect<z.output<Schema>, HostValidationError> =>
+): Effect.Effect<z.output<Schema>, HostValidationError<OperationValidationDetails>> =>
   Effect.try({
     try: () => schema.parse(value),
     catch: (cause) =>
-      new HostValidationError({
+      new HostValidationError<OperationValidationDetails>({
         message: cause instanceof Error ? cause.message : String(cause),
         cause,
         details: { operation },
@@ -101,10 +113,10 @@ const parseOutput = <Schema extends z.ZodType, Input>(
 
 const requireRuntime = (
   runtime: RuntimeInstanceSummary,
-): Effect.Effect<CodexRuntimeInstance, HostValidationError> => {
-  if (runtime.kind !== "codex" || runtime.runtimeRoute.type !== "stdio") {
+): Effect.Effect<CodexRuntimeInstance, HostValidationError<CodexRuntimeValidationDetails>> => {
+  if (!isCodexRuntimeInstance(runtime)) {
     return Effect.fail(
-      new HostValidationError({
+      new HostValidationError<CodexRuntimeValidationDetails>({
         field: "runtime",
         message: `Codex live-session adapter requires a Codex stdio runtime, received '${runtime.kind}/${runtime.runtimeRoute.type}'.`,
         details: { runtimeId: runtime.runtimeId, runtimeKind: runtime.kind },
@@ -113,14 +125,14 @@ const requireRuntime = (
   }
   if (runtime.runtimeRoute.identity !== runtime.runtimeId) {
     return Effect.fail(
-      new HostValidationError({
+      new HostValidationError<CodexRuntimeValidationDetails>({
         field: "runtime.runtimeRoute.identity",
         message: `Codex runtime route identity '${runtime.runtimeRoute.identity}' does not match runtime '${runtime.runtimeId}'.`,
         details: { runtimeId: runtime.runtimeId },
       }),
     );
   }
-  return Effect.succeed({ ...runtime, kind: "codex", runtimeRoute: runtime.runtimeRoute });
+  return Effect.succeed(runtime);
 };
 
 const defaultCreateController = (options: CodexAppServerAdapterOptions): CodexSessionController =>
@@ -253,24 +265,26 @@ export const createCodexLiveSessionAdapterPreparer =
           );
         }
         return resolveRuntimePolicy(sessionScope).pipe(
-          Effect.map((policy) => ({
-            ...input,
-            runtimeKind: "codex" as const,
-            sessionScope,
-            runtimePolicy: { kind: "codex" as const, policy },
-          })),
+          Effect.map((policy) => {
+            const binding: Extract<AgentRuntimePolicyBinding, { runtimeKind: "codex" }> = {
+              runtimeKind: "codex",
+              runtimePolicy: { kind: "codex", policy },
+            };
+            return { ...input, ...binding, sessionScope };
+          }),
         );
       };
 
       const sessionError =
         (operation: string, externalSessionId: string) =>
-        (cause: unknown): HostOperationError =>
+        (cause: unknown): HostOperationErrorAggregate =>
           toHostOperationError(cause, operation, {
             runtimeId: runtime.runtimeId,
             externalSessionId,
           });
 
       const adapter: AgentSessionRuntimeAdapterPort = {
+        supportsSessionControl: true,
         binding: {
           runtimeId: runtime.runtimeId,
           runtimeKind: "codex",
@@ -331,32 +345,34 @@ export const createCodexLiveSessionAdapterPreparer =
             yield* refreshProjection();
             return normalized;
           }),
-        loadSessionDiff: (input) =>
-          Effect.tryPromise({
-            try: () =>
-              controller.loadSessionDiff({
-                repoPath: input.repoPath,
-                runtimeKind: input.runtimeKind,
-                workingDirectory: input.workingDirectory,
-                externalSessionId: input.externalSessionId,
-                ...(input.runtimeHistoryAnchor !== undefined
-                  ? { runtimeHistoryAnchor: input.runtimeHistoryAnchor }
-                  : undefined),
-              }),
+        loadSessionDiff: (input) => {
+          const request: Parameters<typeof controller.loadSessionDiff>[0] = {
+            repoPath: input.repoPath,
+            runtimeKind: input.runtimeKind,
+            workingDirectory: input.workingDirectory,
+            externalSessionId: input.externalSessionId,
+          };
+          if (input.runtimeHistoryAnchor !== undefined) {
+            request.runtimeHistoryAnchor = input.runtimeHistoryAnchor;
+          }
+          return Effect.tryPromise({
+            try: () => controller.loadSessionDiff(request),
             catch: sessionError("codex-live-session.load-diff", input.externalSessionId),
-          }),
-        replyApproval: (input) =>
-          Effect.tryPromise({
-            try: () =>
-              controller.replyLiveApproval({
-                runtimeId: runtime.runtimeId,
-                externalSessionId: input.externalSessionId,
-                requestId: input.requestId,
-                outcome: input.outcome,
-                ...(input.message !== undefined ? { message: input.message } : undefined),
-              }),
+          });
+        },
+        replyApproval: (input) => {
+          const request: Parameters<typeof controller.replyLiveApproval>[0] = {
+            runtimeId: runtime.runtimeId,
+            externalSessionId: input.externalSessionId,
+            requestId: input.requestId,
+            outcome: input.outcome,
+          };
+          if (input.message !== undefined) request.message = input.message;
+          return Effect.tryPromise({
+            try: () => controller.replyLiveApproval(request),
             catch: sessionError("codex-live-session.reply-approval", input.externalSessionId),
-          }).pipe(Effect.tap(() => refreshProjection())),
+          }).pipe(Effect.tap(() => refreshProjection()));
+        },
         replyQuestion: (input) =>
           Effect.tryPromise({
             try: () =>
@@ -377,11 +393,10 @@ export const createCodexLiveSessionAdapterPreparer =
           bindControlPolicy(input, "start-session").pipe(
             Effect.flatMap((boundInput) => {
               const { model, ...requiredInput } = boundInput;
+              const request: Parameters<typeof controller.startSession>[0] = requiredInput;
+              if (model !== undefined) request.model = model;
               return runControlSummary("codex-live-session.start-session", () =>
-                controller.startSession({
-                  ...requiredInput,
-                  ...(model !== undefined ? { model } : undefined),
-                }),
+                controller.startSession(request),
               );
             }),
           ),
@@ -389,12 +404,11 @@ export const createCodexLiveSessionAdapterPreparer =
           bindControlPolicy(input, "resume-session").pipe(
             Effect.flatMap((boundInput) => {
               const { model, systemPrompt, ...requiredInput } = boundInput;
+              const request: Parameters<typeof controller.resumeSession>[0] = requiredInput;
+              if (model !== undefined) request.model = model;
+              if (systemPrompt !== undefined) request.systemPrompt = systemPrompt;
               return runControlSummary("codex-live-session.resume-session", () =>
-                controller.resumeSession({
-                  ...requiredInput,
-                  ...(model !== undefined ? { model } : undefined),
-                  ...(systemPrompt !== undefined ? { systemPrompt } : undefined),
-                }),
+                controller.resumeSession(request),
               );
             }),
           ),
@@ -402,12 +416,13 @@ export const createCodexLiveSessionAdapterPreparer =
           bindControlPolicy(input, "fork-session").pipe(
             Effect.flatMap((boundInput) => {
               const { model, runtimeHistoryAnchor, ...requiredInput } = boundInput;
+              const request: Parameters<typeof controller.forkSession>[0] = requiredInput;
+              if (model !== undefined) request.model = model;
+              if (runtimeHistoryAnchor !== undefined) {
+                request.runtimeHistoryAnchor = runtimeHistoryAnchor;
+              }
               return runControlSummary("codex-live-session.fork-session", () =>
-                controller.forkSession({
-                  ...requiredInput,
-                  ...(model !== undefined ? { model } : undefined),
-                  ...(runtimeHistoryAnchor !== undefined ? { runtimeHistoryAnchor } : undefined),
-                }),
+                controller.forkSession(request),
               );
             }),
           ),
@@ -415,14 +430,14 @@ export const createCodexLiveSessionAdapterPreparer =
           bindControlPolicy(input, "send-user-message").pipe(
             Effect.flatMap((boundInput) => {
               const { model, parts, systemPrompt, ...requiredInput } = boundInput;
+              const request: Parameters<typeof controller.sendUserMessage>[0] = {
+                ...requiredInput,
+                parts: parts.map(toCodexUserMessagePart),
+              };
+              if (model !== undefined) request.model = model;
+              if (systemPrompt !== undefined) request.systemPrompt = systemPrompt;
               return Effect.tryPromise({
-                try: () =>
-                  controller.sendUserMessage({
-                    ...requiredInput,
-                    parts: parts.map(toCodexUserMessagePart),
-                    ...(model !== undefined ? { model } : undefined),
-                    ...(systemPrompt !== undefined ? { systemPrompt } : undefined),
-                  }),
+                try: () => controller.sendUserMessage(request),
                 catch: sessionError(
                   "codex-live-session.send-user-message",
                   input.externalSessionId,

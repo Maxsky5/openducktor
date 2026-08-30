@@ -1,4 +1,5 @@
-import { isJsonObject, type JsonValue } from "@openducktor/contracts";
+import { isJsonObject, jsonValueSchema, type JsonValue } from "@openducktor/contracts";
+import { z } from "zod";
 import { isRunningToolStatus } from "../agent-tool-messages";
 import {
   findLastToolSessionMessage,
@@ -14,6 +15,8 @@ export const normalizeToolInput = (
   }
   return Object.keys(input).length > 0 ? input : undefined;
 };
+
+const stringValueSchema = z.string();
 
 export const normalizeToolText = (value: string | undefined): string | undefined => {
   const trimmed = value?.trim();
@@ -86,17 +89,21 @@ export const normalizeSessionErrorMessage = (value: string): string => {
   }
 
   try {
-    const parsed: unknown = JSON.parse(withoutQuotes);
+    const parsed = jsonValueSchema.parse(JSON.parse(withoutQuotes));
     if (!isJsonObject(parsed)) {
       return withoutQuotes;
     }
     const record = parsed;
-    if (typeof record.message === "string" && record.message.trim().length > 0) {
-      return record.message.trim();
+    const messageResult = stringValueSchema.safeParse(record.message);
+    if (messageResult.success && messageResult.data.trim().length > 0) {
+      return messageResult.data.trim();
     }
     const nestedError = record.error;
-    if (isJsonObject(nestedError) && typeof nestedError.message === "string") {
-      return nestedError.message.trim();
+    if (isJsonObject(nestedError)) {
+      const nestedMessageResult = stringValueSchema.safeParse(nestedError.message);
+      if (nestedMessageResult.success) {
+        return nestedMessageResult.data.trim();
+      }
     }
     return withoutQuotes;
   } catch {

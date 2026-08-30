@@ -1,5 +1,9 @@
-import { isJsonObject } from "@openducktor/contracts";
-import { z } from "zod";
+import {
+  isJsonObject,
+  jsonValueSchema,
+  type JsonObject,
+  type JsonValue,
+} from "@openducktor/contracts";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { extractAllFileEditData } from "./file-edit-tool";
 import { extractPathFromInput, readInputString } from "./tool-input-utils";
@@ -52,10 +56,7 @@ const PATH_DISPLAY_TOOL_NAMES = new Set([
   "look_at",
 ]);
 
-const summarizeSearchToolInput = (
-  tool: string,
-  input: Record<string, unknown> | undefined,
-): string | null => {
+const summarizeSearchToolInput = (tool: string, input: JsonObject | undefined): string | null => {
   if (!input) {
     return null;
   }
@@ -92,16 +93,16 @@ const parseStructuredOutputSummary = (output: string): string | null => {
   }
 
   try {
-    const parsed: unknown = JSON.parse(trimmed);
+    const parsed = jsonValueSchema.parse(JSON.parse(trimmed));
     if (!isJsonObject(parsed)) {
       return null;
     }
     const record = parsed;
-    if (typeof record.message === "string" && record.message.trim().length > 0) {
+    if (hasNonEmptyText(record.message)) {
       return compactText(record.message, 160);
     }
 
-    if (typeof record.result === "string" && record.result.trim().length > 0) {
+    if (hasNonEmptyText(record.result)) {
       return compactText(record.result, 160);
     }
 
@@ -111,15 +112,14 @@ const parseStructuredOutputSummary = (output: string): string | null => {
   }
 };
 
-const countTodosFromUnknown = (value: unknown): number | null => {
+const countTodos = (value: JsonValue): number | null => {
   if (Array.isArray(value)) {
     return value.length;
   }
-  const parsed = z.record(z.string(), z.unknown()).safeParse(value);
-  if (!parsed.success) {
+  if (!isJsonObject(value)) {
     return null;
   }
-  const record = parsed.data;
+  const record = value;
   if (Array.isArray(record.todos)) {
     return record.todos.length;
   }
@@ -129,11 +129,11 @@ const countTodosFromUnknown = (value: unknown): number | null => {
   return null;
 };
 
-const countTodosFromInput = (input: Record<string, unknown> | undefined): number | null => {
+const countTodosFromInput = (input: JsonObject | undefined): number | null => {
   if (!input) {
     return null;
   }
-  return countTodosFromUnknown(input.todos ?? input.items ?? null);
+  return countTodos(input.todos ?? input.items ?? null);
 };
 
 const countTodosFromOutput = (output: string | undefined): number | null => {
@@ -141,8 +141,8 @@ const countTodosFromOutput = (output: string | undefined): number | null => {
     return null;
   }
   try {
-    const parsed: unknown = JSON.parse(output);
-    return countTodosFromUnknown(parsed);
+    const parsed = jsonValueSchema.parse(JSON.parse(output));
+    return countTodos(parsed);
   } catch {
     return null;
   }
@@ -162,9 +162,9 @@ const normalizeDisplaySummary = (
   return relativizeDisplayPath(summary, workingDirectory);
 };
 
-const extractTaskId = (input: Record<string, unknown> | undefined): string | null => {
+const extractTaskId = (input: JsonObject | undefined): string | null => {
   const taskId = input?.taskId;
-  return typeof taskId === "string" && taskId.trim().length > 0 ? taskId.trim() : null;
+  return hasNonEmptyText(taskId) ? taskId.trim() : null;
 };
 
 export const buildToolSummary = (
@@ -214,7 +214,7 @@ export const buildToolSummary = (
   }
 
   const command = meta.input?.command;
-  if (toolType === "bash" && typeof command === "string" && command.trim().length > 0) {
+  if (toolType === "bash" && hasNonEmptyText(command)) {
     return compactText(command, 120);
   }
 
@@ -222,7 +222,7 @@ export const buildToolSummary = (
     return "";
   }
 
-  if (typeof meta.preview === "string" && meta.preview.trim().length > 0) {
+  if (meta.preview !== undefined && meta.preview.trim().length > 0) {
     return compactText(normalizeDisplaySummary(lowerTool, meta.preview, workingDirectory), 160);
   }
 

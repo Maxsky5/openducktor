@@ -322,10 +322,15 @@ export class CodexPendingInputState {
           runtimeId,
         ),
       )
-      .map((entry) => ({
-        request: entry.request,
-        ...(entry.route ? { route: entry.route } : undefined),
-      }));
+      .map((entry) => {
+        const eventEntry: PendingApprovalEventEntry = {
+          request: entry.request,
+        };
+        if (entry.route) {
+          eventEntry.route = entry.route;
+        }
+        return eventEntry;
+      });
   }
 
   pendingQuestionsForSession(
@@ -355,10 +360,15 @@ export class CodexPendingInputState {
           runtimeId,
         ),
       )
-      .map((entry) => ({
-        request: entry.request,
-        ...(entry.route ? { route: entry.route } : undefined),
-      }));
+      .map((entry) => {
+        const eventEntry: PendingQuestionEventEntry = {
+          request: entry.request,
+        };
+        if (entry.route) {
+          eventEntry.route = entry.route;
+        }
+        return eventEntry;
+      });
   }
 
   applyRouteToPendingInput(route: CodexSubagentRoute): PendingInputRouteApplication {

@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
-import { createEventTestSession as createSession } from "./claude-agent-sdk-events.test-support";
+import {
+  claudeAcceptedUserMessageFixture,
+  createEventTestSession as createSession,
+} from "./claude-agent-sdk-events.test-support";
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 
 describe("handleClaudeSdkMessage result events", () => {
@@ -132,7 +135,9 @@ describe("handleClaudeSdkMessage result events", () => {
       ...createSession(),
       model: selectedNextModel,
     };
-    session.acceptedUserMessages.push({ model: acceptedTurnModel });
+    session.acceptedUserMessages.push(
+      claudeAcceptedUserMessageFixture({ model: acceptedTurnModel }),
+    );
     session.pendingUserTurnCount = 1;
     const input = {
       session,
@@ -198,7 +203,7 @@ describe("handleClaudeSdkMessage result events", () => {
   test("does not use the persistent SDK query duration as the visible turn duration", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
-    session.acceptedUserMessages.push({});
+    session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     session.pendingUserTurnCount = 1;
 
     handleClaudeSdkMessage({
@@ -236,7 +241,7 @@ describe("handleClaudeSdkMessage result events", () => {
   test("finalizes streamed assistant text with the stream id when the result carries the final text", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
-    session.acceptedUserMessages.push({});
+    session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     session.pendingUserTurnCount = 1;
     const commonInput = {
       session,
@@ -296,7 +301,7 @@ describe("handleClaudeSdkMessage result events", () => {
   test("finalizes multi-block streamed result text without keeping duplicate stream rows", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
-    session.acceptedUserMessages.push({});
+    session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     session.pendingUserTurnCount = 1;
     session.streamAssistantMessageIdsByBlockIndex.set(0, "claude-stream:session-1:1:1:0");
     session.streamAssistantMessageIdsByBlockIndex.set(1, "claude-stream:session-1:1:1:1");
@@ -343,7 +348,7 @@ describe("handleClaudeSdkMessage result events", () => {
   test("preserves a native response id shared by multiple streamed text blocks", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
-    session.acceptedUserMessages.push({});
+    session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     session.pendingUserTurnCount = 1;
     session.streamAssistantMessageIdsByBlockIndex.set(0, "native-response-1");
     session.streamAssistantMessageIdsByBlockIndex.set(1, "native-response-1");
@@ -386,7 +391,7 @@ describe("handleClaudeSdkMessage result events", () => {
   test("does not reuse stream ids after result-finalized text when Claude omits message_start", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
-    session.acceptedUserMessages.push({});
+    session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     session.pendingUserTurnCount = 1;
     const commonInput = {
       session,
@@ -428,7 +433,7 @@ describe("handleClaudeSdkMessage result events", () => {
       }),
     });
 
-    session.acceptedUserMessages.push({});
+    session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     session.pendingUserTurnCount = 1;
     handleClaudeSdkMessage({
       ...commonInput,
@@ -459,7 +464,7 @@ describe("handleClaudeSdkMessage result events", () => {
   test("keeps streamed intermediate tool-use text separate from final result text", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
-    session.acceptedUserMessages.push({});
+    session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     session.pendingUserTurnCount = 1;
     const commonInput = {
       session,

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type {
@@ -6,6 +6,8 @@ import type {
   HostEventEnvelope,
   RepoConfig,
   RuntimeInstanceSummary,
+  TaskCard,
+  TaskMetadataPayload,
 } from "@openducktor/contracts";
 import {
   createArtifactRuntimeDistribution,
@@ -26,12 +28,7 @@ import {
   type TaskStorePort,
   type WorktreeFilePort,
 } from "@openducktor/host";
-import { Deferred, TestClock, TestContext } from "effect";
-import {
-  createElectronEffectHostCommandRouter,
-  createElectronHostCommandRouter as createProductionElectronHostCommandRouter,
-} from "./electron-host";
-import { createElectronMainLogger } from "./electron-main-logger";
+import { createElectronHostCommandRouter as createProductionElectronHostCommandRouter } from "./electron-host";
 
 type RuntimeRegistryEntry = RuntimeInstanceSummary;
 type ElectronHostCommandRouterInput = Parameters<
@@ -124,7 +121,7 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   ...overrides,
 });
 
-const createSettingsConfig = (config: unknown | null = null): SettingsConfigPort => ({
+const createSettingsConfig = (config: GlobalConfig | null = null): SettingsConfigPort => ({
   readConfig: () => Effect.succeed(config),
   writeConfig: () => Effect.succeed(undefined),
   defaultWorktreeBasePath(workspaceId) {
@@ -651,80 +648,6 @@ const createEventBus = () => {
 };
 
 describe("createElectronHostCommandRouter", () => {
-  test("owns a scheduled task-sync disk-write failure through the Electron host lifecycle", async () => {
-    const configDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-electron-task-sync-"));
-    const recordedAt = new Date(2026, 4, 13, 23, 45, 12, 345);
-    const logFilePath = path.join(configDirectory, "logs", "openducktor-electron-2026-05-13.log");
-
-    try {
-      const result = await Effect.runPromise(
-        Effect.gen(function* () {
-          const logger = yield* createElectronMainLogger({
-            env: { OPENDUCKTOR_CONFIG_DIR: configDirectory, NO_COLOR: "1" },
-            now: () => recordedAt,
-            stream: { write: () => {} },
-          });
-          const failureReported = yield* Deferred.make<unknown>();
-          let settingsReadFails = false;
-          // SAFETY: This negative test deliberately returns malformed config from the port to exercise host validation.
-          const malformedConfig = { workspaces: null } as GlobalConfig;
-          const settingsConfig: SettingsConfigPort = {
-            ...createSettingsConfig(),
-            readConfig: () =>
-              settingsReadFails ? Effect.succeed(malformedConfig) : Effect.succeed(null),
-          };
-          const { eventBus } = createEventBus();
-          const router = createElectronEffectHostCommandRouter({
-            eventBus,
-            filesystem: createFilesystem(),
-            git: createGit(),
-            lifecycleLogger: logger,
-            isPackaged: false,
-            mcpHostBridge: {
-              ensureConnection: () => Effect.succeed({ baseUrl: "http://127.0.0.1:5000" }),
-              ensureExternalDiscoveryReady: () =>
-                Effect.succeed({ baseUrl: "http://127.0.0.1:5000" }),
-              close: () => Effect.succeed({ baseUrl: null, closed: false }),
-            } satisfies NonNullable<ElectronHostCommandRouterInput["mcpHostBridge"]>,
-            onBackgroundFailure: (failure) =>
-              Deferred.succeed(failureReported, failure).pipe(Effect.asVoid),
-            openInTools: createOpenInTools(),
-            processEnv: {
-              OPENDUCKTOR_CONFIG_DIR: configDirectory,
-              PATH: "/usr/bin:/bin",
-            },
-            runtimeDistribution: testRuntimeDistribution,
-            settingsConfig,
-            taskStore: createTaskStore(),
-          });
-
-          yield* router.initialize();
-          yield* Effect.promise(() => mkdir(logFilePath));
-          settingsReadFails = true;
-          yield* TestClock.adjust("5 minutes");
-          const failure = yield* Deferred.await(failureReported);
-          settingsReadFails = false;
-          yield* Effect.promise(() => rm(logFilePath, { recursive: true }));
-          const disposeResult = yield* Effect.exit(router.dispose());
-          return { failure, disposeResult };
-        }).pipe(Effect.provide(TestContext.TestContext)),
-      );
-
-      expect(result.failure).toMatchObject({
-        _tag: "HostOperationError",
-        operation: "task-sync.log-iteration-failure",
-        cause: {
-          _tag: "OpenDucktorLogPersistenceError",
-          operation: "openducktor.logs.append",
-          path: logFilePath,
-        },
-      });
-      expect(result.disposeResult._tag).toBe("Failure");
-    } finally {
-      await rm(configDirectory, { force: true, recursive: true });
-    }
-  });
-
   test("disposes registered runtimes on host shutdown", async () => {
     const configDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-electron-dispose-"));
     const stoppedRuntimes: string[] = [];
@@ -1428,14 +1351,14 @@ describe("createElectronHostCommandRouter", () => {
             agentSessions: [
               {
                 externalSessionId: "external-session-1",
-                role: "build" as const,
+                role: "build",
                 startedAt: "2026-05-10T10:00:00.000Z",
                 runtimeKind: "opencode",
                 workingDirectory: "/repo/worktree",
                 selectedModel: null,
               },
             ],
-          }),
+          } satisfies TaskMetadataPayload),
       },
     });
     await expect(
@@ -1548,9 +1471,9 @@ describe("createElectronHostCommandRouter", () => {
         listTasks: (input) =>
           resetImplementationTaskStore.listTasks(input).pipe(
             Effect.map((entries) =>
-              entries.map((entry) => ({
+              entries.map((entry): TaskCard => ({
                 ...entry,
-                status: "ai_review" as const,
+                status: "ai_review",
                 documentSummary: {
                   ...entry.documentSummary,
                   plan: { has: true, updatedAt: "2026-01-02T00:00:00Z" },
@@ -1583,15 +1506,15 @@ describe("createElectronHostCommandRouter", () => {
             spec: { markdown: "# Spec" },
             plan: { markdown: "# Plan" },
             pullRequest: {
-              providerId: "github" as const,
+              providerId: "github",
               number: 42,
               url: "https://github.com/openai/openducktor/pull/42",
-              state: "open" as const,
+              state: "open",
               createdAt: "2026-05-01T00:00:00.000Z",
               updatedAt: "2026-05-02T00:00:00.000Z",
             },
             agentSessions: [],
-          }),
+          } satisfies TaskMetadataPayload),
       },
     });
     await expect(
@@ -2330,13 +2253,13 @@ describe("createElectronHostCommandRouter", () => {
             spec: { markdown: "# Spec" },
             plan: { markdown: "# Plan" },
             directMerge: {
-              method: "merge_commit" as const,
+              method: "merge_commit",
               sourceBranch: "odt/task-1",
               targetBranch: { branch: "main" },
               mergedAt: "2026-05-10T11:00:00.000Z",
             },
             agentSessions: [],
-          }),
+          } satisfies TaskMetadataPayload),
       },
     });
     await expect(

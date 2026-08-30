@@ -9,15 +9,18 @@ import {
   systemOpenInToolInfoSchema,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
-import { parseArray, parseOkResult } from "./invoke-utils";
+import { arrayResultSchema, okResultSchema } from "./invoke-utils";
 
 const systemListOpenInTools = async (
   invokeFn: InvokeFn,
   forceRefresh = false,
 ): Promise<SystemOpenInToolInfo[]> => {
   const request = systemListOpenInToolsRequestSchema.parse({ forceRefresh });
-  const payload = await invokeFn("system_list_open_in_tools", request);
-  return parseArray(systemOpenInToolInfoSchema, payload, "system_list_open_in_tools");
+  return invokeFn(
+    "system_list_open_in_tools",
+    request,
+    arrayResultSchema(systemOpenInToolInfoSchema, "system_list_open_in_tools"),
+  );
 };
 
 const systemOpenDirectoryInTool = async (
@@ -29,13 +32,15 @@ const systemOpenDirectoryInTool = async (
     directoryPath,
     toolId,
   });
-  const payload = await invokeFn("system_open_directory_in_tool", request);
-  parseOkResult(payload, "system_open_directory_in_tool");
+  await invokeFn(
+    "system_open_directory_in_tool",
+    request,
+    okResultSchema("system_open_directory_in_tool"),
+  );
 };
 
 const systemGetPlatform = async (invokeFn: InvokeFn): Promise<AppPlatform> => {
-  const payload = await invokeFn("system_get_platform");
-  return appPlatformSchema.parse(payload);
+  return invokeFn("system_get_platform", undefined, appPlatformSchema);
 };
 
 export class HostSystemClient {

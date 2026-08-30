@@ -1,9 +1,3 @@
-import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
-
-type CommandFetch = NonNullable<
-  NonNullable<Parameters<OpencodeClient["session"]["command"]>[1]>["fetch"]
->;
-
 type CommandFetchRequest = (
   input: Parameters<typeof globalThis.fetch>[0],
   init?: Parameters<typeof globalThis.fetch>[1],
@@ -44,8 +38,11 @@ const loadNodeFetch = async (): Promise<CommandFetchRequest> => {
         referrer: sourceRequest.referrer,
         referrerPolicy: sourceRequest.referrerPolicy,
         signal: sourceRequest.signal,
-        ...(body ? { body, duplex: "half" } : undefined),
       };
+      if (body) {
+        requestInit.body = body;
+        requestInit.duplex = "half";
+      }
       request = new UndiciRequest(sourceRequest.url, requestInit);
     }
     const response = await fetch(request, { dispatcher });
@@ -66,8 +63,4 @@ const fetchOpenCodeCommandRequest: CommandFetchRequest = async (input, init) => 
   return (await nodeFetchPromise)(input, init);
 };
 
-export const fetchOpenCodeCommand = Object.assign(fetchOpenCodeCommandRequest, {
-  preconnect: () => {
-    throw new Error("OpenCode command fetch does not support preconnect requests.");
-  },
-}) satisfies CommandFetch;
+export const fetchOpenCodeCommand: CommandFetchRequest = fetchOpenCodeCommandRequest;

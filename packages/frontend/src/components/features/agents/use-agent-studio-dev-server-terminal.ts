@@ -124,7 +124,7 @@ const createResizeObserverCleanup = (
   container: HTMLElement,
   binding: TerminalBinding,
 ): (() => void) => {
-  if (typeof globalThis.ResizeObserver === "undefined") {
+  if (globalThis.ResizeObserver === undefined) {
     return () => {};
   }
 
@@ -141,7 +141,7 @@ const createThemeObserverCleanup = (
   container: HTMLElement,
   binding: TerminalBinding,
 ): (() => void) => {
-  if (typeof globalThis.MutationObserver === "undefined") {
+  if (globalThis.MutationObserver === undefined) {
     return () => {};
   }
 

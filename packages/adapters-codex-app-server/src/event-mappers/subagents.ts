@@ -1,5 +1,9 @@
 import { codexItemTypeMatches } from "../codex-app-server-transcript";
-import type { CodexMappingContext, CodexMappingResult } from "../codex-canonical-events";
+import type {
+  CodexCanonicalStreamPartEvent,
+  CodexMappingContext,
+  CodexMappingResult,
+} from "../codex-canonical-events";
 import { emptyCodexMappingResult } from "../codex-canonical-events";
 import type { CodexEventMapper, CodexTimedThreadItem } from "../codex-event-mapper";
 import { noCodexMapperState } from "../codex-event-mapper";
@@ -27,15 +31,22 @@ const subagentEvents = (
   const eventTimestamp = ctx.timestamp ?? timestamp;
   return {
     handled: true,
-    events: parts.map((part) => ({
-      kind: "stream_part",
-      source: ctx.source,
-      mapper: "subagent",
-      threadId: ctx.threadId,
-      ...(ctx.turnId ? { turnId: ctx.turnId } : undefined),
-      ...(eventTimestamp ? { timestamp: eventTimestamp } : undefined),
-      part,
-    })),
+    events: parts.map((part) => {
+      const event: CodexCanonicalStreamPartEvent = {
+        kind: "stream_part",
+        source: ctx.source,
+        mapper: "subagent",
+        threadId: ctx.threadId,
+        part,
+      };
+      if (ctx.turnId) {
+        event.turnId = ctx.turnId;
+      }
+      if (eventTimestamp) {
+        event.timestamp = eventTimestamp;
+      }
+      return event;
+    }),
   };
 };
 

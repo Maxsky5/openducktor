@@ -1,4 +1,4 @@
-import type { JsonObject, JsonValue } from "./json-types";
+import { isJsonObject, type JsonObject, type JsonValue } from "./json-types";
 import { describe, expect, test } from "bun:test";
 import {
   pullRequestReviewActivitySchema,
@@ -23,7 +23,7 @@ const createActivityFields = () => ({
 });
 
 const isJsonContainer = (value: JsonValue | undefined): value is JsonObject | JsonValue[] =>
-  Array.isArray(value) || (typeof value === "object" && value !== null);
+  Array.isArray(value) || isJsonObject(value);
 
 const setJsonPath = (
   root: JsonObject,

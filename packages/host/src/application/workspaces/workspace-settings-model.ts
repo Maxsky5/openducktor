@@ -21,7 +21,12 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createDefaultGlobalConfig, type LoadedGlobalConfig } from "../../config/global-config";
-import { HostInvariantError, HostValidationError } from "../../effect/host-errors";
+import {
+  HostInvariantError,
+  type HostInvariantErrorAggregate,
+  HostValidationError,
+  type HostValidationErrorAggregate,
+} from "../../effect/host-errors";
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
 
 type RepoConfigDraft = Pick<
@@ -30,7 +35,10 @@ type RepoConfigDraft = Pick<
 > &
   Partial<Omit<RepoConfig, "defaultRuntimeKind" | "repoPath" | "workspaceId" | "workspaceName">>;
 
-export type WorkspaceSettingsError = HostInvariantError | HostValidationError | SettingsConfigError;
+export type WorkspaceSettingsError =
+  | HostInvariantErrorAggregate
+  | HostValidationErrorAggregate
+  | SettingsConfigError;
 
 export type WorkspaceSettingsService = {
   listWorkspaces(): Effect.Effect<WorkspaceRecord[], WorkspaceSettingsError>;

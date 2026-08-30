@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent, AgentUserMessagePart } from "@openducktor/core";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
-import { createEventTestSession } from "./claude-agent-sdk-events.test-support";
+import {
+  claudeAcceptedUserMessageFixture,
+  createEventTestSession,
+} from "./claude-agent-sdk-events.test-support";
 import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import { toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
 import { sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
@@ -397,7 +400,7 @@ describe("Claude live and hydrated transcript parity", () => {
     const finalText = "Complete final answer";
     const liveEvents: AgentEvent[] = [];
     const liveSession = createEventTestSession();
-    liveSession.acceptedUserMessages.push({});
+    liveSession.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     liveSession.pendingUserTurnCount = 1;
     const emit = (event: AgentEvent) => liveEvents.push(event);
     const modelSelection = (model: string) => ({
@@ -717,7 +720,7 @@ describe("Claude live and hydrated transcript parity", () => {
     });
     const liveEvents: AgentEvent[] = [];
     const liveSession = createEventTestSession();
-    liveSession.acceptedUserMessages.push({});
+    liveSession.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     liveSession.pendingUserTurnCount = 1;
     const emit = (event: AgentEvent) => liveEvents.push(event);
     const modelSelection = (model: string) => ({
@@ -885,7 +888,7 @@ describe("Claude live and hydrated transcript parity", () => {
     });
     const liveEvents: AgentEvent[] = [];
     const liveSession = createEventTestSession();
-    liveSession.acceptedUserMessages.push({});
+    liveSession.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     liveSession.pendingUserTurnCount = 1;
 
     handleClaudeSdkMessage({
@@ -1508,7 +1511,7 @@ describe("Claude live and hydrated transcript parity", () => {
     });
     const liveEvents: AgentEvent[] = [];
     const liveSession = createEventTestSession();
-    liveSession.acceptedUserMessages.push({});
+    liveSession.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     liveSession.pendingUserTurnCount = 1;
     const emit = (event: AgentEvent) => liveEvents.push(event);
     const modelSelection = (model: string) => ({

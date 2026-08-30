@@ -147,9 +147,7 @@ const createInitialTranscriptModelCache = (
 };
 
 const now = (): number => {
-  return typeof globalThis.performance?.now === "function"
-    ? globalThis.performance.now()
-    : Date.now();
+  return globalThis.performance?.now !== undefined ? globalThis.performance.now() : Date.now();
 };
 
 type IncrementalTranscriptModelPlan = {

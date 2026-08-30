@@ -19,6 +19,7 @@ import {
   type ElectronTerminalEventEnvelope,
 } from "../../shared/electron-bridge-contract";
 import { z } from "zod";
+import type { IpcMain } from "electron";
 
 const MAX_CLIENT_ID_LENGTH = 128;
 
@@ -49,14 +50,7 @@ type ElectronTerminalLifecycleSender = ElectronTerminalSender & {
   once(event: "destroyed", listener: () => void): void;
 };
 
-type ElectronTerminalInvokeEvent = {
-  readonly sender: ElectronTerminalLifecycleSender;
-};
-
-export type ElectronTerminalIpcHandler = (
-  event: ElectronTerminalInvokeEvent,
-  request: unknown,
-) => Promise<void>;
+export type ElectronTerminalIpcHandler = Parameters<IpcMain["handle"]>[1];
 
 type ElectronTerminalIpcMain = {
   handle(
@@ -70,8 +64,9 @@ type RegisterElectronTerminalIpcInput = {
   terminalService: TerminalService;
 };
 
-const readElectronTerminalSendRequest = (request: unknown): ElectronTerminalSendRequest => {
-  const parsedRequest = electronTerminalSendRequestSchema.safeParse(request);
+const readElectronTerminalSendRequest = (
+  parsedRequest: z.ZodSafeParseResult<ElectronTerminalSendRequest>,
+): ElectronTerminalSendRequest => {
   if (parsedRequest.success) return parsedRequest.data;
   throw new ElectronValidationError({
     operation: "electron.terminal.request",
@@ -81,8 +76,9 @@ const readElectronTerminalSendRequest = (request: unknown): ElectronTerminalSend
   });
 };
 
-const readClientId = (clientId: unknown): Effect.Effect<string, ElectronValidationError> => {
-  const parsedClientId = electronTerminalClientIdSchema.safeParse(clientId);
+const readClientId = (
+  parsedClientId: z.ZodSafeParseResult<string>,
+): Effect.Effect<string, ElectronValidationError> => {
   return parsedClientId.success
     ? Effect.succeed(parsedClientId.data)
     : Effect.fail(
@@ -192,7 +188,9 @@ export const registerElectronTerminalIpc = ({
 
   ipcMain.handle(ELECTRON_TERMINAL_SEND_CHANNEL, async (event, request) => {
     bindTerminalSenderCleanup(event.sender);
-    const parsedRequest = readElectronTerminalSendRequest(request);
+    const parsedRequest = readElectronTerminalSendRequest(
+      electronTerminalSendRequestSchema.safeParse(request),
+    );
     await runElectronEffect(
       terminalIpc.handleFrame(event.sender, parsedRequest.clientId, parsedRequest.frame),
     );
@@ -200,7 +198,9 @@ export const registerElectronTerminalIpc = ({
 
   ipcMain.handle(ELECTRON_TERMINAL_DISCONNECT_CHANNEL, async (event, clientId) => {
     bindTerminalSenderCleanup(event.sender);
-    const parsedClientId = await runElectronEffect(readClientId(clientId));
+    const parsedClientId = await runElectronEffect(
+      readClientId(electronTerminalClientIdSchema.safeParse(clientId)),
+    );
     await runElectronEffect(terminalIpc.detachClient(event.sender.id, parsedClientId));
   });
 };

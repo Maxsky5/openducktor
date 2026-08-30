@@ -7,7 +7,10 @@ import {
 import { Effect } from "effect";
 import { z } from "zod";
 import { errorMessage } from "../../effect/host-errors";
-import { SqliteTaskStoreDataError } from "./sqlite-task-store-errors";
+import {
+  SqliteTaskStoreDataError,
+  type SqliteTaskStoreDataErrorDetails,
+} from "./sqlite-task-store-errors";
 import type { TaskRow } from "./sqlite-task-store-schema";
 
 type SafeParseResult<A> =
@@ -25,13 +28,18 @@ export const normalizeLabels = (labels: string[]): string[] =>
 
 export const encodeJson = (value: JsonValue): string => JSON.stringify(value);
 
-export const toValidatedJsonValue = <A>(value: A): JsonValue => jsonValueSchema.parse(value);
+export const toValidatedJsonValue = (result: z.ZodSafeParseResult<JsonValue>): JsonValue => {
+  if (result.success) {
+    return result.data;
+  }
+  throw result.error;
+};
 
 const parseWithSchema = <Input, Output>(
   parser: SafeParser<Input, Output>,
   value: Input,
   field: string,
-  details?: Readonly<Record<string, unknown>>,
+  details?: Readonly<SqliteTaskStoreDataErrorDetails>,
 ): Effect.Effect<Output, SqliteTaskStoreDataError> => {
   const parsed = parser.safeParse(value);
   if (parsed.success) {
@@ -50,14 +58,14 @@ export const decodeWithSchema = <A>(
   parser: SafeParser<JsonValue, A>,
   value: JsonValue,
   field: string,
-  details?: Readonly<Record<string, unknown>>,
+  details?: Readonly<SqliteTaskStoreDataErrorDetails>,
 ): Effect.Effect<A, SqliteTaskStoreDataError> => parseWithSchema(parser, value, field, details);
 
 export const validateWithSchema = <Input, Output>(
   parser: SafeParser<Input, Output>,
   value: Input,
   field: string,
-  details?: Readonly<Record<string, unknown>>,
+  details?: Readonly<SqliteTaskStoreDataErrorDetails>,
 ): Effect.Effect<Output, SqliteTaskStoreDataError> =>
   parseWithSchema(parser, value, field, details);
 

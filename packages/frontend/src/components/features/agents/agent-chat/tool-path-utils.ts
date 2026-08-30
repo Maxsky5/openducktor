@@ -1,5 +1,6 @@
 import { isJsonObject, type JsonValue } from "@openducktor/contracts";
 import { toDisplayRelativePath } from "@openducktor/path-support";
+import { z } from "zod";
 
 const DISPLAY_PATH_KEYS = new Set([
   "filePath",
@@ -16,6 +17,10 @@ const DISPLAY_PATH_KEYS = new Set([
   "workingDir",
   "workingDirectory",
 ]);
+
+const stringValueSchema = z.string();
+const isStringValue = (value: JsonValue): value is string =>
+  stringValueSchema.safeParse(value).success;
 
 export const relativizeDisplayPath = (filePath: string, workingDirectory?: string | null): string =>
   toDisplayRelativePath(filePath, workingDirectory);
@@ -40,7 +45,7 @@ export const relativizeDisplayPathsInValue = (
   workingDirectory?: string | null,
   key?: string,
 ): JsonValue => {
-  if (typeof value === "string") {
+  if (isStringValue(value)) {
     return key && DISPLAY_PATH_KEYS.has(key)
       ? relativizeDisplayPath(value, workingDirectory)
       : value;

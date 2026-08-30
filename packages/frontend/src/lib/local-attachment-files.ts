@@ -18,11 +18,12 @@ export const stageLocalAttachmentFile = async (file: File): Promise<string> => {
     throw new Error("Attachments must total 32 MiB or less.");
   }
   const buffer = await file.arrayBuffer();
-  const staged = await hostClient.workspaceStageLocalAttachment({
+  const input: Parameters<typeof hostClient.workspaceStageLocalAttachment>[0] = {
     name: file.name,
-    ...(file.type.trim().length > 0 ? { mime: file.type } : undefined),
     base64Data: bufferToBase64(buffer),
-  });
+  };
+  if (file.type.trim().length > 0) input.mime = file.type;
+  const staged = await hostClient.workspaceStageLocalAttachment(input);
   return staged.path;
 };
 

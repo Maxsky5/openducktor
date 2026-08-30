@@ -28,7 +28,9 @@ const getApprovalOutcomeButtonVariant = (
 const AFFECTED_PATH_CODE_CLASS_NAME =
   "rounded-md border border-border bg-background px-1.5 py-0.5 font-mono text-[0.85em] text-foreground";
 
-const formatToolInput = (input: Record<string, unknown>): string => JSON.stringify(input, null, 2);
+const formatToolInput = (
+  input: NonNullable<NonNullable<AgentApprovalRequest["tool"]>["input"]>,
+): string => JSON.stringify(input, null, 2);
 
 type AgentSessionApprovalCardProps = {
   request: AgentApprovalRequest;

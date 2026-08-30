@@ -92,23 +92,27 @@ const buildQueuedRequestSignatureWithAttachmentPathMode = (
         return [];
       }
 
-      return [
-        {
-          kind: "attachment" as const,
-          path: attachmentPathMode === "strict" ? part.attachment.path : "",
-          name: part.attachment.name,
-          attachmentKind: part.attachment.kind,
-          ...(part.attachment.mime ? { mime: part.attachment.mime } : undefined),
-        },
-      ];
+      const comparablePart: Extract<ComparableNonTextPart, { kind: "attachment" }> = {
+        kind: "attachment",
+        path: attachmentPathMode === "strict" ? part.attachment.path : "",
+        name: part.attachment.name,
+        attachmentKind: part.attachment.kind,
+      };
+      if (part.attachment.mime) {
+        comparablePart.mime = part.attachment.mime;
+      }
+      return [comparablePart];
     }),
   ];
 
-  return buildComparableSignature({
+  const signatureInput: Parameters<typeof buildComparableSignature>[0] = {
     visible: promptText.text,
     nonTextParts,
-    ...(model ? { model } : undefined),
-  });
+  };
+  if (model) {
+    signatureInput.model = model;
+  }
+  return buildComparableSignature(signatureInput);
 };
 
 export const buildQueuedDisplaySignature = (input: {
@@ -137,42 +141,48 @@ const buildQueuedDisplaySignatureWithAttachmentPathMode = (
 ): string => {
   const nonTextParts = input.parts.flatMap((part): ComparableNonTextPart[] => {
     if (part.kind === "file_reference") {
-      return [
-        {
-          kind: "file_reference",
-          path: part.file.path,
-          name: part.file.name,
-          ...(part.sourceText ? { sourceText: part.sourceText } : undefined),
-        },
-      ];
+      const comparablePart: Extract<ComparableNonTextPart, { kind: "file_reference" }> = {
+        kind: "file_reference",
+        path: part.file.path,
+        name: part.file.name,
+      };
+      if (part.sourceText) {
+        comparablePart.sourceText = part.sourceText;
+      }
+      return [comparablePart];
     }
     if (part.kind === "attachment") {
-      return [
-        {
-          kind: "attachment",
-          path: attachmentPathMode === "strict" ? part.attachment.path : "",
-          name: part.attachment.name,
-          attachmentKind: part.attachment.kind,
-          ...(part.attachment.mime ? { mime: part.attachment.mime } : undefined),
-        },
-      ];
+      const comparablePart: Extract<ComparableNonTextPart, { kind: "attachment" }> = {
+        kind: "attachment",
+        path: attachmentPathMode === "strict" ? part.attachment.path : "",
+        name: part.attachment.name,
+        attachmentKind: part.attachment.kind,
+      };
+      if (part.attachment.mime) {
+        comparablePart.mime = part.attachment.mime;
+      }
+      return [comparablePart];
     }
     if (part.kind === "subagent_reference") {
-      return [
-        {
-          kind: "subagent_reference",
-          id: part.subagent.id,
-          name: part.subagent.name,
-          ...(part.sourceText ? { sourceText: part.sourceText } : undefined),
-        },
-      ];
+      const comparablePart: Extract<ComparableNonTextPart, { kind: "subagent_reference" }> = {
+        kind: "subagent_reference",
+        id: part.subagent.id,
+        name: part.subagent.name,
+      };
+      if (part.sourceText) {
+        comparablePart.sourceText = part.sourceText;
+      }
+      return [comparablePart];
     }
     return [];
   });
 
-  return buildComparableSignature({
+  const signatureInput: Parameters<typeof buildComparableSignature>[0] = {
     visible: input.visible,
     nonTextParts,
-    ...(input.model ? { model: input.model } : undefined),
-  });
+  };
+  if (input.model) {
+    signatureInput.model = input.model;
+  }
+  return buildComparableSignature(signatureInput);
 };

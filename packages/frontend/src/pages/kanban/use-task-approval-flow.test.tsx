@@ -293,17 +293,24 @@ const createMissingBuilderWorktreeApprovalContextResult = (
 
 const createConflictDirectMergeResult = (
   overrides: { currentBranch?: string; workingDir?: string } = {},
-): Awaited<ReturnType<TaskDirectMerge>> => ({
-  outcome: "conflicts" as const,
-  conflict: {
-    operation: "direct_merge_merge_commit" as const,
-    ...(overrides.currentBranch ? { currentBranch: overrides.currentBranch } : undefined),
+): Awaited<ReturnType<TaskDirectMerge>> => {
+  const conflict: Extract<
+    Awaited<ReturnType<TaskDirectMerge>>,
+    { outcome: "conflicts" }
+  >["conflict"] = {
+    operation: "direct_merge_merge_commit",
     targetBranch: "main",
     conflictedFiles: ["src/app.ts"],
     output: "conflict output",
-    ...(overrides.workingDir ? { workingDir: overrides.workingDir } : undefined),
-  },
-});
+  };
+  if (overrides.currentBranch) {
+    conflict.currentBranch = overrides.currentBranch;
+  }
+  if (overrides.workingDir) {
+    conflict.workingDir = overrides.workingDir;
+  }
+  return { outcome: "conflicts", conflict };
+};
 
 const createUseTaskApprovalFlowArgs = (
   overrides: Partial<Parameters<typeof useTaskApprovalFlow>[0]>,

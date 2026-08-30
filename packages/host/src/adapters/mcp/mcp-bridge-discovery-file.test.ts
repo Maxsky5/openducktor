@@ -163,6 +163,7 @@ describe("MCP bridge discovery file", () => {
       await expect(
         Effect.runPromise(removeMcpBridgeDiscoveryFile(discoveryPath, discovery())),
       ).rejects.toThrow("JSON Parse error");
+      await expect(readFile(discoveryPath, "utf8")).resolves.toBe("{not-json");
     } finally {
       await rm(tempDir, { force: true, recursive: true });
     }

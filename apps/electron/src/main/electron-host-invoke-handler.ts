@@ -4,27 +4,25 @@ import {
   electronHostInvokeRequestSchema,
   type ElectronHostInvokeRequest,
   type ElectronHostInvokeResult,
-  type ElectronHostInvokeWireResponse,
 } from "../shared/electron-bridge-contract";
-import type { IpcMainInvokeEvent } from "electron";
+import type { IpcMain } from "electron";
+import type { z } from "zod";
 
 type ElectronIpcMainLike = {
-  handle(
-    channel: string,
-    listener: (
-      event: IpcMainInvokeEvent,
-      request: unknown,
-    ) => Promise<ElectronHostInvokeWireResponse>,
-  ): void;
+  handle(channel: string, listener: Parameters<IpcMain["handle"]>[1]): void;
 };
 
 type ElectronHostInvokeHandlerOptions = {
   isHostShutdownStarted(): boolean;
-  invoke(command: string, args?: Record<string, unknown>): Promise<ElectronHostInvokeResult>;
+  invoke(
+    command: string,
+    args?: ElectronHostInvokeRequest["args"],
+  ): Promise<ElectronHostInvokeResult>;
 };
 
-const readElectronHostInvokeRequest = (request: unknown): ElectronHostInvokeRequest => {
-  const parsedRequest = electronHostInvokeRequestSchema.safeParse(request);
+const readElectronHostInvokeRequest = (
+  parsedRequest: z.ZodSafeParseResult<ElectronHostInvokeRequest>,
+): ElectronHostInvokeRequest => {
   if (parsedRequest.success) return parsedRequest.data;
   let field = "request";
   let message = "Electron host invoke request must be an object.";
@@ -56,7 +54,9 @@ export const registerElectronHostInvokeHandler = (
       return { status: "shutdown" };
     }
 
-    const parsedRequest = readElectronHostInvokeRequest(request);
+    const parsedRequest = readElectronHostInvokeRequest(
+      electronHostInvokeRequestSchema.safeParse(request),
+    );
     return {
       status: "success",
       payload: await options.invoke(parsedRequest.command, parsedRequest.args),

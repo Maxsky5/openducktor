@@ -9,7 +9,7 @@ import {
   Wrench,
 } from "lucide-react";
 import type { ReactElement } from "react";
-import { jsonValueSchema } from "@openducktor/contracts";
+import type { JsonObject } from "@openducktor/contracts";
 import { cn } from "@/lib/utils";
 import { AgentChatFileEditCard } from "./agent-chat-file-edit-card";
 import {
@@ -93,15 +93,8 @@ const ToolJsonDetails = ({
   );
 };
 
-const formatToolInput = (
-  input: Record<string, unknown>,
-  workingDirectory?: string | null,
-): string => {
-  return JSON.stringify(
-    relativizeDisplayPathsInValue(jsonValueSchema.parse(input), workingDirectory),
-    null,
-    2,
-  );
+const formatToolInput = (input: JsonObject, workingDirectory?: string | null): string => {
+  return JSON.stringify(relativizeDisplayPathsInValue(input, workingDirectory), null, 2);
 };
 
 const workflowToolForegroundClassName = ({

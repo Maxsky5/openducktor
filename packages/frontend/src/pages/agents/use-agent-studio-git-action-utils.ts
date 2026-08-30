@@ -1,5 +1,6 @@
 import type { GitConflictOperation, GitDiffRefresh } from "@/features/agent-studio-git";
 import { getGitConflictCopy } from "@/features/git-conflict-resolution";
+import { z } from "zod";
 
 export type GitActionKind = "commit" | "push" | "rebase";
 
@@ -11,8 +12,9 @@ export const toErrorMessage = (cause: unknown, fallback: string): string => {
   if (cause instanceof Error && cause.message.trim().length > 0) {
     return cause.message;
   }
-  if (typeof cause === "string" && cause.trim().length > 0) {
-    return cause;
+  const stringCause = z.string().safeParse(cause);
+  if (stringCause.success && stringCause.data.trim().length > 0) {
+    return stringCause.data;
   }
   return fallback;
 };

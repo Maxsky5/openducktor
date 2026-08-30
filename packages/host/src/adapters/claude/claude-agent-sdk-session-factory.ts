@@ -62,9 +62,6 @@ export const createClaudeAgentSdkSession = async ({
     externalSessionId: sessionInput.externalSessionId,
     input,
     model: input.model,
-    ...(sessionInput.parentExternalSessionId
-      ? { parentExternalSessionId: sessionInput.parentExternalSessionId }
-      : undefined),
     pendingApprovals: new Map(),
     pendingQuestions: new Map(),
     queuedSdkMessages: [],
@@ -84,8 +81,17 @@ export const createClaudeAgentSdkSession = async ({
     toolStartedAtMsByCallId: new Map(),
     todosById: new Map(initialTodos.map((todo) => [todo.id, todo])),
   };
+  if (sessionInput.parentExternalSessionId) {
+    sessionContext.parentExternalSessionId = sessionInput.parentExternalSessionId;
+  }
   let sdkQuery: ReturnType<typeof query>;
   try {
+    const sessionOptions: CreateClaudeAgentSdkSessionInput["sessionInput"]["options"] & {
+      title?: string;
+    } = { ...sessionInput.options };
+    if (sessionInput.title) {
+      sessionOptions.title = sessionInput.title;
+    }
     const options = await buildClaudeAgentSdkOptions({
       input,
       session: sessionContext,
@@ -94,10 +100,7 @@ export const createClaudeAgentSdkSession = async ({
       randomId,
       resolvedDependencies,
       emit,
-      sessionOptions: {
-        ...sessionInput.options,
-        ...(sessionInput.title ? { title: sessionInput.title } : undefined),
-      },
+      sessionOptions,
     });
     sdkQuery = query({ prompt: queue, options });
   } catch (error) {

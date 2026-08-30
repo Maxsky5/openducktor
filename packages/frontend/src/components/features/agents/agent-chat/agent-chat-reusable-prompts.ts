@@ -12,14 +12,17 @@ import {
 
 const REUSABLE_PROMPT_COMMAND_ID_PREFIX = "reusable-prompt:";
 
-export const toReusablePromptSlashCommand = (prompt: ReusablePrompt): AgentSlashCommand => ({
-  id: `${REUSABLE_PROMPT_COMMAND_ID_PREFIX}${prompt.id}`,
-  trigger: prompt.name,
-  title: prompt.name,
-  ...(prompt.description.trim().length > 0 ? { description: prompt.description } : undefined),
-  source: "custom",
-  hints: [],
-});
+export const toReusablePromptSlashCommand = (prompt: ReusablePrompt): AgentSlashCommand => {
+  const command: AgentSlashCommand = {
+    id: `${REUSABLE_PROMPT_COMMAND_ID_PREFIX}${prompt.id}`,
+    trigger: prompt.name,
+    title: prompt.name,
+    source: "custom",
+    hints: [],
+  };
+  if (prompt.description.trim().length > 0) command.description = prompt.description;
+  return command;
+};
 
 const isReusablePromptSlashCommand = (command: AgentSlashCommand): boolean =>
   command.source === "custom" && command.id.startsWith(REUSABLE_PROMPT_COMMAND_ID_PREFIX);

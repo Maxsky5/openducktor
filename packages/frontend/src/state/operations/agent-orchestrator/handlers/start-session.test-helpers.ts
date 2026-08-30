@@ -61,14 +61,11 @@ export const createSessionsRef = (sessions: TestAgentSessionState[] = []) => ({
 });
 
 export const persistedSessionRecord = (
-  input: {
-    externalSessionId: string;
-    role: AgentSessionRecord["role"];
-    startedAt: string;
-    workingDirectory: string;
-    runtimeKind: AgentSessionRecord["runtimeKind"];
-    selectedModel?: AgentSessionRecord["selectedModel"];
-  } & Record<string, unknown>,
+  input: Pick<
+    AgentSessionRecord,
+    "externalSessionId" | "role" | "startedAt" | "workingDirectory" | "runtimeKind"
+  > &
+    Partial<Pick<AgentSessionRecord, "selectedModel">>,
 ): AgentSessionRecord => ({
   runtimeKind: input.runtimeKind,
   externalSessionId: input.externalSessionId,
@@ -314,37 +311,36 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
 
   const agentEngine =
     adapter instanceof OpencodeSdkAdapter ? createOpenCodeAgentEngineTestAdapter(adapter) : adapter;
-  const start = createStartAgentSession(
-    toStartSessionDependencies({
-      activeRepo,
-      workspaceId,
-      adapter: agentEngine,
-      sessionsRef,
-      replaceSession,
-      removeSession,
-      taskRef,
-      repoEpochRef,
-      currentWorkspaceRepoPathRef,
-      clearSessionObservationState,
-      loadSourceSession,
-      loadAgentSessionHistory,
-      persistSessionRecord,
-      deleteSessionRecord,
-      resolveTaskWorktree,
-      canonicalizePath,
-      prepareTaskSessionStartupLease,
-      completeTaskSessionStartupLease,
-      abortTaskSessionStartupLease,
-      ensureRuntime,
-      loadTaskDocuments,
-      refreshTaskData,
-      sendAgentMessage,
-      loadRepoPromptOverrides,
-      loadSettingsSnapshot,
-      ...(sessionStartGateRef ? { sessionStartGateRef } : undefined),
-      ...(readSessionSnapshot ? { readSessionSnapshot } : undefined),
-    }),
-  );
+  const dependenciesInput: Parameters<typeof toStartSessionDependencies>[0] = {
+    activeRepo,
+    workspaceId,
+    adapter: agentEngine,
+    sessionsRef,
+    replaceSession,
+    removeSession,
+    taskRef,
+    repoEpochRef,
+    currentWorkspaceRepoPathRef,
+    clearSessionObservationState,
+    loadSourceSession,
+    loadAgentSessionHistory,
+    persistSessionRecord,
+    deleteSessionRecord,
+    resolveTaskWorktree,
+    canonicalizePath,
+    prepareTaskSessionStartupLease,
+    completeTaskSessionStartupLease,
+    abortTaskSessionStartupLease,
+    ensureRuntime,
+    loadTaskDocuments,
+    refreshTaskData,
+    sendAgentMessage,
+    loadRepoPromptOverrides,
+    loadSettingsSnapshot,
+  };
+  if (sessionStartGateRef) dependenciesInput.sessionStartGateRef = sessionStartGateRef;
+  if (readSessionSnapshot) dependenciesInput.readSessionSnapshot = readSessionSnapshot;
+  const start = createStartAgentSession(toStartSessionDependencies(dependenciesInput));
 
   return {
     adapter,

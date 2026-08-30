@@ -65,10 +65,7 @@ export const hasTerminalStopSignalInParts = (
   }
 
   return parts.some(
-    (part) =>
-      part.type === "step-finish" &&
-      typeof part.reason === "string" &&
-      isTerminalStepFinishReason(part.reason),
+    (part) => part.type === "step-finish" && isTerminalStepFinishReason(part.reason),
   );
 };
 
@@ -110,15 +107,26 @@ export const updateMessageMetadata = (
   const totalTokens = updates.totalTokens ?? previous?.totalTokens;
   const displayParts = updates.displayParts ?? previous?.displayParts;
 
-  session.messageMetadataById.set(messageId, {
-    timestamp,
-    ...(model ? { model } : undefined),
-    ...(parentId ? { parentId } : undefined),
-    ...(text ? { text } : undefined),
-    ...(hasStopSignal !== undefined ? { hasStopSignal } : undefined),
-    ...(totalTokens !== undefined ? { totalTokens } : undefined),
-    ...(displayParts ? { displayParts } : undefined),
-  });
+  const metadata: SessionMessageMetadata = { timestamp };
+  if (model) {
+    metadata.model = model;
+  }
+  if (parentId) {
+    metadata.parentId = parentId;
+  }
+  if (text) {
+    metadata.text = text;
+  }
+  if (hasStopSignal !== undefined) {
+    metadata.hasStopSignal = hasStopSignal;
+  }
+  if (totalTokens !== undefined) {
+    metadata.totalTokens = totalTokens;
+  }
+  if (displayParts) {
+    metadata.displayParts = displayParts;
+  }
+  session.messageMetadataById.set(messageId, metadata);
 };
 
 export type MessageEventHandler = (event: Event, runtime: EventStreamRuntime) => boolean;

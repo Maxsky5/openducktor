@@ -10,6 +10,11 @@ type TerminalChannel = {
   discardQueuedOperations: boolean;
 };
 
+type RemoveTerminalListenerResult = {
+  lastListenerRemoved: boolean;
+  wasClosing: boolean;
+};
+
 export const createTerminalTransportChannelRegistry = () => {
   const channels = new Map<string, TerminalChannel>();
 
@@ -56,26 +61,20 @@ export const createTerminalTransportChannelRegistry = () => {
       channel.listeners.add(listener);
       return isFirstListener;
     },
-    removeListener(terminalId: string, listener: TerminalFrameListener) {
+    removeListener(
+      terminalId: string,
+      listener: TerminalFrameListener,
+    ): RemoveTerminalListenerResult {
       const channel = channels.get(terminalId);
-      if (!channel)
-        return { lastListenerRemoved: false, wasClosing: false } satisfies {
-          lastListenerRemoved: boolean;
-          wasClosing: boolean;
-        };
+      if (!channel) return { lastListenerRemoved: false, wasClosing: false };
       channel.listeners.delete(listener);
-      if (channel.listeners.size > 0)
-        return { lastListenerRemoved: false, wasClosing: false } satisfies {
-          lastListenerRemoved: boolean;
-          wasClosing: boolean;
-        };
+      if (channel.listeners.size > 0) {
+        return { lastListenerRemoved: false, wasClosing: false };
+      }
       const wasClosing = channel.isClosing;
       if (!channel.operationQueue) channel.discardQueuedOperations = false;
       forgetIfUnused(terminalId, channel);
-      return { lastListenerRemoved: true, wasClosing } satisfies {
-        lastListenerRemoved: boolean;
-        wasClosing: boolean;
-      };
+      return { lastListenerRemoved: true, wasClosing };
     },
     lastConsumedSequence(terminalId: string): number | null {
       return channels.get(terminalId)?.consumedSequence ?? null;

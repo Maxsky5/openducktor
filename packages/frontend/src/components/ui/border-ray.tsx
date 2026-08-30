@@ -132,7 +132,7 @@ export function BorderRay({
       updateFromHost(host);
     };
 
-    if (typeof globalThis.ResizeObserver === "undefined") {
+    if (globalThis.ResizeObserver === undefined) {
       window.addEventListener("resize", syncRect);
       return () => {
         window.removeEventListener("resize", syncRect);
@@ -203,7 +203,7 @@ export function BorderRay({
     rayLengthRatio,
   ]);
 
-  const rayStyle = {
+  const rayStyle: CSSProperties & BorderRayCssVariables = {
     position: "absolute",
     inset: 0,
     width: "100%",
@@ -214,8 +214,8 @@ export function BorderRay({
     "--odt-border-ray-perimeter": `${rayGeometry.perimeter}px`,
     "--odt-border-ray-length": `${rayGeometry.rayLength}px`,
     "--odt-border-ray-stroke-width": `${Math.max(strokeWidth, 0.5)}`,
-    ...(color ? { "--odt-border-ray-color": color } : undefined),
-  } satisfies CSSProperties & BorderRayCssVariables;
+  };
+  if (color) rayStyle["--odt-border-ray-color"] = color;
 
   return (
     <svg

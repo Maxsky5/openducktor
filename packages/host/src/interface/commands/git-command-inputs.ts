@@ -19,139 +19,199 @@ import type {
 } from "../../application/git/git-service-inputs";
 import { HostValidationError } from "../../effect/host-errors";
 import {
+  commandInputOptionalBooleanSchema,
+  commandInputOptionalStringSchema,
+  commandInputRecordSchema,
+  commandInputStringSchema,
+  type HostCommandArgs,
   optionalBoolean,
   optionalString,
   requireParsedRecord,
   requireString,
-  unknownRecordSchema,
 } from "./command-inputs";
 
-export const parseGitScopeInput = (input: unknown): GitScopeInput => {
-  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), "Git command input");
-  const repoPath = requireString(record.repoPath, "repoPath");
-  const workingDir = optionalString(record.workingDir, "workingDir");
+export const parseGitScopeInput = (input: HostCommandArgs): GitScopeInput => {
+  const record = requireParsedRecord(
+    commandInputRecordSchema.safeParse(input),
+    "Git command input",
+  );
+  const repoPath = requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath");
+  const workingDir = optionalString(
+    commandInputOptionalStringSchema.safeParse(record.workingDir),
+    "workingDir",
+  );
 
   return workingDir ? { repoPath, workingDir } : { repoPath };
 };
 
-export const parseGitAheadBehindInput = (input: unknown): GitAheadBehindInput => {
+export const parseGitAheadBehindInput = (input: HostCommandArgs): GitAheadBehindInput => {
   const record = requireParsedRecord(
-    unknownRecordSchema.safeParse(input),
+    commandInputRecordSchema.safeParse(input),
     "Git ahead/behind input",
   );
-  const repoPath = requireString(record.repoPath, "repoPath");
-  const targetBranch = requireString(record.targetBranch, "targetBranch");
-  const workingDir = optionalString(record.workingDir, "workingDir");
+  const repoPath = requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath");
+  const targetBranch = requireString(
+    commandInputStringSchema.safeParse(record.targetBranch),
+    "targetBranch",
+  );
+  const workingDir = optionalString(
+    commandInputOptionalStringSchema.safeParse(record.workingDir),
+    "workingDir",
+  );
 
   return workingDir ? { repoPath, targetBranch, workingDir } : { repoPath, targetBranch };
 };
 
-export const parseGitSwitchBranchInput = (input: unknown): GitSwitchBranchInput => {
+export const parseGitSwitchBranchInput = (input: HostCommandArgs): GitSwitchBranchInput => {
   const record = requireParsedRecord(
-    unknownRecordSchema.safeParse(input),
+    commandInputRecordSchema.safeParse(input),
     "Git switch branch input",
   );
   return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    branch: requireString(record.branch, "branch"),
-    create: optionalBoolean(record.create, "create") ?? false,
+    repoPath: requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath"),
+    branch: requireString(commandInputStringSchema.safeParse(record.branch), "branch"),
+    create:
+      optionalBoolean(commandInputOptionalBooleanSchema.safeParse(record.create), "create") ??
+      false,
   };
 };
 
-export const parseGitCreateWorktreeInput = (input: unknown): GitCreateWorktreeInput => {
+export const parseGitCreateWorktreeInput = (input: HostCommandArgs): GitCreateWorktreeInput => {
   const record = requireParsedRecord(
-    unknownRecordSchema.safeParse(input),
+    commandInputRecordSchema.safeParse(input),
     "Git create worktree input",
   );
   return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    worktreePath: requireString(record.worktreePath, "worktreePath"),
-    branch: requireString(record.branch, "branch"),
-    createBranch: optionalBoolean(record.createBranch, "createBranch") ?? false,
+    repoPath: requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath"),
+    worktreePath: requireString(
+      commandInputStringSchema.safeParse(record.worktreePath),
+      "worktreePath",
+    ),
+    branch: requireString(commandInputStringSchema.safeParse(record.branch), "branch"),
+    createBranch:
+      optionalBoolean(
+        commandInputOptionalBooleanSchema.safeParse(record.createBranch),
+        "createBranch",
+      ) ?? false,
   };
 };
 
-export const parseGitRemoveWorktreeInput = (input: unknown): GitRemoveWorktreeInput => {
+export const parseGitRemoveWorktreeInput = (input: HostCommandArgs): GitRemoveWorktreeInput => {
   const record = requireParsedRecord(
-    unknownRecordSchema.safeParse(input),
+    commandInputRecordSchema.safeParse(input),
     "Git remove worktree input",
   );
   return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    worktreePath: requireString(record.worktreePath, "worktreePath"),
-    force: optionalBoolean(record.force, "force") ?? false,
+    repoPath: requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath"),
+    worktreePath: requireString(
+      commandInputStringSchema.safeParse(record.worktreePath),
+      "worktreePath",
+    ),
+    force:
+      optionalBoolean(commandInputOptionalBooleanSchema.safeParse(record.force), "force") ?? false,
   };
 };
 
-export const parseGitCommitAllInput = (input: unknown): GitCommitAllInput => {
-  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), "Git commit input");
-  const repoPath = requireString(record.repoPath, "repoPath");
-  const message = requireString(record.message, "message");
-  const workingDir = optionalString(record.workingDir, "workingDir");
+export const parseGitCommitAllInput = (input: HostCommandArgs): GitCommitAllInput => {
+  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), "Git commit input");
+  const repoPath = requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath");
+  const message = requireString(commandInputStringSchema.safeParse(record.message), "message");
+  const workingDir = optionalString(
+    commandInputOptionalStringSchema.safeParse(record.workingDir),
+    "workingDir",
+  );
 
   return workingDir ? { repoPath, message, workingDir } : { repoPath, message };
 };
 
-export const parseGitPushBranchInput = (input: unknown): GitPushBranchInput => {
-  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), "Git push input");
-  const repoPath = requireString(record.repoPath, "repoPath");
-  const branch = requireString(record.branch, "branch");
-  const remote = optionalString(record.remote, "remote") ?? "origin";
-  const workingDir = optionalString(record.workingDir, "workingDir");
-  const setUpstream = optionalBoolean(record.setUpstream, "setUpstream");
-  const forceWithLease = optionalBoolean(record.forceWithLease, "forceWithLease");
+export const parseGitPushBranchInput = (input: HostCommandArgs): GitPushBranchInput => {
+  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), "Git push input");
+  const repoPath = requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath");
+  const branch = requireString(commandInputStringSchema.safeParse(record.branch), "branch");
+  const remote =
+    optionalString(commandInputOptionalStringSchema.safeParse(record.remote), "remote") ?? "origin";
+  const workingDir = optionalString(
+    commandInputOptionalStringSchema.safeParse(record.workingDir),
+    "workingDir",
+  );
+  const setUpstream = optionalBoolean(
+    commandInputOptionalBooleanSchema.safeParse(record.setUpstream),
+    "setUpstream",
+  );
+  const forceWithLease = optionalBoolean(
+    commandInputOptionalBooleanSchema.safeParse(record.forceWithLease),
+    "forceWithLease",
+  );
 
-  return {
+  const result: GitPushBranchInput = {
     repoPath,
     branch,
     remote,
-    ...(workingDir ? { workingDir } : undefined),
-    ...(setUpstream === undefined ? undefined : { setUpstream }),
-    ...(forceWithLease === undefined ? undefined : { forceWithLease }),
   };
+  if (workingDir) result.workingDir = workingDir;
+  if (setUpstream !== undefined) result.setUpstream = setUpstream;
+  if (forceWithLease !== undefined) result.forceWithLease = forceWithLease;
+  return result;
 };
 
-export const parseGitRebaseBranchInput = (input: unknown): GitRebaseBranchInput => {
-  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), "Git rebase input");
-  const repoPath = requireString(record.repoPath, "repoPath");
-  const targetBranch = requireString(record.targetBranch, "targetBranch");
-  const workingDir = optionalString(record.workingDir, "workingDir");
+export const parseGitRebaseBranchInput = (input: HostCommandArgs): GitRebaseBranchInput => {
+  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), "Git rebase input");
+  const repoPath = requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath");
+  const targetBranch = requireString(
+    commandInputStringSchema.safeParse(record.targetBranch),
+    "targetBranch",
+  );
+  const workingDir = optionalString(
+    commandInputOptionalStringSchema.safeParse(record.workingDir),
+    "workingDir",
+  );
 
   return workingDir ? { repoPath, targetBranch, workingDir } : { repoPath, targetBranch };
 };
 
-export const parseGitAbortConflictInput = (input: unknown): GitAbortConflictInput => {
+export const parseGitAbortConflictInput = (input: HostCommandArgs): GitAbortConflictInput => {
   const record = requireParsedRecord(
-    unknownRecordSchema.safeParse(input),
+    commandInputRecordSchema.safeParse(input),
     "Git conflict abort input",
   );
-  const repoPath = requireString(record.repoPath, "repoPath");
+  const repoPath = requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath");
   const operation = gitConflictOperationSchema.parse(record.operation);
-  const workingDir = optionalString(record.workingDir, "workingDir");
+  const workingDir = optionalString(
+    commandInputOptionalStringSchema.safeParse(record.workingDir),
+    "workingDir",
+  );
 
   return workingDir ? { repoPath, operation, workingDir } : { repoPath, operation };
 };
 
-export const parseGitDiffInput = (input: unknown): GitDiffInput => {
-  const record = requireParsedRecord(unknownRecordSchema.safeParse(input), "Git diff input");
-  const repoPath = requireString(record.repoPath, "repoPath");
-  const targetBranch = optionalString(record.targetBranch, "targetBranch");
-  const workingDir = optionalString(record.workingDir, "workingDir");
+export const parseGitDiffInput = (input: HostCommandArgs): GitDiffInput => {
+  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), "Git diff input");
+  const repoPath = requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath");
+  const targetBranch = optionalString(
+    commandInputOptionalStringSchema.safeParse(record.targetBranch),
+    "targetBranch",
+  );
+  const workingDir = optionalString(
+    commandInputOptionalStringSchema.safeParse(record.workingDir),
+    "workingDir",
+  );
 
-  return {
-    repoPath,
-    ...(targetBranch ? { targetBranch } : undefined),
-    ...(workingDir ? { workingDir } : undefined),
-  };
+  const result: GitDiffInput = { repoPath };
+  if (targetBranch) result.targetBranch = targetBranch;
+  if (workingDir) result.workingDir = workingDir;
+  return result;
 };
 
-export const parseGitWorktreeStatusInput = (input: unknown): GitWorktreeStatusInput => {
+export const parseGitWorktreeStatusInput = (input: HostCommandArgs): GitWorktreeStatusInput => {
   const record = requireParsedRecord(
-    unknownRecordSchema.safeParse(input),
+    commandInputRecordSchema.safeParse(input),
     "Git worktree status input",
   );
-  const repoPath = requireString(record.repoPath, "repoPath");
-  const targetBranch = requireString(record.targetBranch, "targetBranch");
+  const repoPath = requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath");
+  const targetBranch = requireString(
+    commandInputStringSchema.safeParse(record.targetBranch),
+    "targetBranch",
+  );
   const diffScopeValue =
     record.diffScope === undefined || record.diffScope === null ? "target" : record.diffScope;
   const diffScope = gitDiffScopeSchema.safeParse(diffScopeValue);
@@ -160,19 +220,22 @@ export const parseGitWorktreeStatusInput = (input: unknown): GitWorktreeStatusIn
       message: `diffScope must be either 'target' or 'uncommitted', got: ${String(diffScopeValue)}`,
       field: "diffScope",
       cause: diffScope.error,
-      details: { receivedValueTag: Object.prototype.toString.call(diffScopeValue) },
     });
   }
-  const workingDir = optionalString(record.workingDir, "workingDir");
+  const workingDir = optionalString(
+    commandInputOptionalStringSchema.safeParse(record.workingDir),
+    "workingDir",
+  );
 
-  return {
+  const result: GitWorktreeStatusInput = {
     repoPath,
     targetBranch,
     diffScope: diffScope.data,
-    ...(workingDir ? { workingDir } : undefined),
   };
+  if (workingDir) result.workingDir = workingDir;
+  return result;
 };
 
 export const parseGitResetWorktreeSelectionInput = (
-  input: unknown,
+  input: HostCommandArgs,
 ): GitResetWorktreeSelectionRequest => gitResetWorktreeSelectionRequestSchema.parse(input);

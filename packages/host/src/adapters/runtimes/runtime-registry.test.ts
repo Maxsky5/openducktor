@@ -9,7 +9,11 @@ import {
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  type HostOperationErrorAggregate,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import type { RuntimeWorkspaceHandle } from "../../ports/runtime-registry-port";
 import {
   type CreateRuntimeRegistryInput,
@@ -34,10 +38,13 @@ const createRuntimeRegistry = ({
   sessionOperations,
   ...input
 }: TestRuntimeRegistryInput = {}) => {
-  const sessionOperationInput: CreateRuntimeSessionOperationsInput = {
-    ...(codexAppServer ? { codexAppServer } : undefined),
-    ...(claudeAgentSdk ? { claudeAgentSdk } : undefined),
-  };
+  const sessionOperationInput: CreateRuntimeSessionOperationsInput = {};
+  if (codexAppServer) {
+    sessionOperationInput.codexAppServer = codexAppServer;
+  }
+  if (claudeAgentSdk) {
+    sessionOperationInput.claudeAgentSdk = claudeAgentSdk;
+  }
   return createEffectRuntimeRegistry({
     ...input,
     sessionOperations: sessionOperations ?? createRuntimeSessionOperations(sessionOperationInput),
@@ -128,7 +135,7 @@ const createClaudeRuntime = (
   });
 const createRuntimeHandle = (
   runtime: RuntimeInstanceSummary,
-  stop: () => Effect.Effect<void, HostOperationError> = () => Effect.succeed(undefined),
+  stop: () => Effect.Effect<void, HostOperationErrorAggregate> = () => Effect.succeed(undefined),
   isAlive = true,
   executablePath = "/tools/opencode",
 ): RuntimeWorkspaceHandle => ({
@@ -659,9 +666,14 @@ describe("createRuntimeRegistry", () => {
       workingDirectory: "/repo",
       descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
     };
-    const ensure = Effect.runPromise(registry.ensureWorkspaceRuntime(input)).then(
-      (runtime) => ({ type: "started" as const, runtime }),
-      () => ({ type: "cancelled" as const }),
+    type EnsureResult =
+      | { type: "started"; runtime: RuntimeInstanceSummary }
+      | { type: "cancelled" };
+    const ensure: Promise<EnsureResult> = Effect.runPromise(
+      registry.ensureWorkspaceRuntime(input),
+    ).then(
+      (runtime): EnsureResult => ({ type: "started", runtime }),
+      (): EnsureResult => ({ type: "cancelled" }),
     );
     await startEntered;
     const stopAllRuntimes = requireMethod(registry.stopAllRuntimes, "stopAllRuntimes");

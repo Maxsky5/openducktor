@@ -3,6 +3,9 @@ import {
   CodexSessionHistoryError,
   createLocalAttachmentAdapter,
   type EffectHostCommandRouter,
+  type HostCommandArgs,
+  type HostCommandName,
+  type HostCommandResult,
   TaskAssetError,
   type TaskAssetReadService,
   TerminalServiceError,
@@ -11,6 +14,7 @@ import type { HostEventEnvelope } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { WorkspaceTextFileWriteError } from "../../host/src/application/filesystem/workspace-text-file-service";
 import { HostOperationError } from "../../host/src/effect/host-errors";
+import type { HostCommandHandlerError } from "../../host/src/interface/router/host-command-router";
 import type { WebLogger } from "./logger";
 import { createTaskEventLeaseManager, type TaskEventLeaseManager } from "./task-event-leases";
 import {
@@ -50,7 +54,10 @@ const testLogger: WebLogger = {
   success: () => Effect.void,
 };
 
-type TestHostCommandInvoke = EffectHostCommandRouter["invoke"];
+type TestHostCommandInvoke = (
+  command: string,
+  args?: Exclude<HostCommandArgs, undefined>,
+) => Effect.Effect<HostCommandResult, HostCommandHandlerError>;
 
 const createDeferred = <Value = void>() => {
   let resolve: (value: Value | PromiseLike<Value>) => void = () => {};
@@ -79,11 +86,28 @@ const readImmediateStreamChunk = async (
 
 const createTestHostCommandRouter = (
   invoke: TestHostCommandInvoke = () => Effect.succeed(null),
-): EffectHostCommandRouter => ({
-  dispose: () => Effect.void,
-  initialize: () => Effect.void,
-  invoke,
-});
+): EffectHostCommandRouter => {
+  function invokeCommand<Command extends HostCommandName>(
+    command: Command,
+    args?: Exclude<HostCommandArgs, undefined>,
+  ): Effect.Effect<HostCommandResult<Command>, HostCommandHandlerError>;
+  function invokeCommand(
+    command: string,
+    args?: Exclude<HostCommandArgs, undefined>,
+  ): Effect.Effect<HostCommandResult, HostCommandHandlerError>;
+  function invokeCommand(
+    command: string,
+    args?: Exclude<HostCommandArgs, undefined>,
+  ): Effect.Effect<HostCommandResult, HostCommandHandlerError> {
+    return invoke(command, args);
+  }
+
+  return {
+    dispose: () => Effect.void,
+    initialize: () => Effect.void,
+    invoke: invokeCommand,
+  };
+};
 
 const missingTaskAssetReadService: TaskAssetReadService = {
   read: () => Effect.succeed(null),
@@ -108,26 +132,25 @@ const handleTestRequest = (
   options: TestRequestOptions = {},
 ): Promise<Response> => {
   const hostCommandRouter = options.hostCommandRouter ?? createTestHostCommandRouter();
-  return Effect.runPromise(
-    handleTypescriptHostBackendRequest({
-      allowedOrigins: new Set(),
-      appSessionCookieName: options.appSessionCookieName ?? APP_SESSION_COOKIE_NAME,
-      appToken: options.appToken ?? APP_TOKEN,
-      controlToken: options.controlToken ?? CONTROL_TOKEN,
-      eventBus: options.eventBus ?? new BufferedHostEventBus({ report: () => {} }),
-      hostCommandRouter,
-      ...(options.taskEventLeaseManager
-        ? { taskEventLeaseManager: options.taskEventLeaseManager }
-        : undefined),
-      taskAssetReadService: options.taskAssetReadService ?? missingTaskAssetReadService,
-      localAttachments: createLocalAttachmentAdapter(),
-      logger: testLogger,
-      request,
-      shutdownStarted: options.shutdownStarted ?? false,
-      beginShutdown: options.beginShutdown ?? (() => {}),
-      stop: options.stop ?? (async () => {}),
-    }),
-  );
+  const requestInput: Parameters<typeof handleTypescriptHostBackendRequest>[0] = {
+    allowedOrigins: new Set(),
+    appSessionCookieName: options.appSessionCookieName ?? APP_SESSION_COOKIE_NAME,
+    appToken: options.appToken ?? APP_TOKEN,
+    controlToken: options.controlToken ?? CONTROL_TOKEN,
+    eventBus: options.eventBus ?? new BufferedHostEventBus({ report: () => {} }),
+    hostCommandRouter,
+    taskAssetReadService: options.taskAssetReadService ?? missingTaskAssetReadService,
+    localAttachments: createLocalAttachmentAdapter(),
+    logger: testLogger,
+    request,
+    shutdownStarted: options.shutdownStarted ?? false,
+    beginShutdown: options.beginShutdown ?? (() => {}),
+    stop: options.stop ?? (async () => {}),
+  };
+  if (options.taskEventLeaseManager) {
+    requestInput.taskEventLeaseManager = options.taskEventLeaseManager;
+  }
+  return Effect.runPromise(handleTypescriptHostBackendRequest(requestInput));
 };
 
 describe("TypeScript web host backend", () => {
@@ -209,7 +232,7 @@ describe("TypeScript web host backend", () => {
 
   test("serializes successful host command results without changing their shape", async () => {
     const response = await handleTestRequest(
-      new Request("http://127.0.0.1/invoke/runtime_ensure", {
+      new Request("http://127.0.0.1/invoke/system_get_platform", {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -218,14 +241,12 @@ describe("TypeScript web host backend", () => {
         body: JSON.stringify({}),
       }),
       {
-        hostCommandRouter: createTestHostCommandRouter(() =>
-          Effect.succeed({ runtimeId: "runtime-1" }),
-        ),
+        hostCommandRouter: createTestHostCommandRouter(() => Effect.succeed("linux")),
       },
     );
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ runtimeId: "runtime-1" });
+    expect(await response.json()).toBe("linux");
   });
 
   test("preserves structured terminal failures in invoke error responses", async () => {

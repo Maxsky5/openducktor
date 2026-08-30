@@ -14,6 +14,7 @@ import { getListMarker, ListItem, OrderedList } from "@tiptap/extension-list";
 import { Mathematics } from "@tiptap/extension-mathematics";
 import { TableKit } from "@tiptap/extension-table";
 import TaskItem from "@tiptap/extension-task-item";
+import { z } from "zod";
 import TaskList from "@tiptap/extension-task-list";
 import { Markdown } from "@tiptap/markdown";
 import StarterKit from "@tiptap/starter-kit";
@@ -22,14 +23,13 @@ const requireMarkdownHook = <Hook>(
   extensionName: string,
   hookName: string,
   hook: Hook | undefined,
-): NonNullable<Hook> => {
-  if (typeof hook !== "function") {
+): Hook => {
+  if (hook === undefined) {
     throw new Error(
       `TipTap 3.30.0 ${extensionName}.${hookName} is required by the task-description Markdown dialect. Align all TipTap packages before starting the editor.`,
     );
   }
-  // SAFETY: The preceding runtime guard establishes `NonNullable<Hook>` before this assertion.
-  return hook as NonNullable<Hook>;
+  return hook;
 };
 
 const defaultListItemParseMarkdown = requireMarkdownHook(
@@ -179,20 +179,16 @@ const trimParagraphTokenStart = (token: MarkdownToken) => {
 
   const inlineTokens = Array.isArray(token.tokens) ? [...token.tokens] : undefined;
   if (inlineTokens?.[0]) {
-    inlineTokens[0] = {
-      ...inlineTokens[0],
-      ...(inlineTokens[0].raw === undefined ? undefined : { raw: inlineTokens[0].raw.trimStart() }),
-      ...(inlineTokens[0].text === undefined
-        ? undefined
-        : { text: inlineTokens[0].text.trimStart() }),
-    };
+    const firstToken: MarkdownToken = { ...inlineTokens[0] };
+    if (inlineTokens[0].raw !== undefined) firstToken.raw = inlineTokens[0].raw.trimStart();
+    if (inlineTokens[0].text !== undefined) firstToken.text = inlineTokens[0].text.trimStart();
+    inlineTokens[0] = firstToken;
   }
-  return {
-    ...token,
-    ...(token.raw === undefined ? undefined : { raw: token.raw.trimStart() }),
-    ...(token.text === undefined ? undefined : { text: token.text.trimStart() }),
-    ...(inlineTokens === undefined ? undefined : { tokens: inlineTokens }),
-  };
+  const trimmedToken: MarkdownToken = { ...token };
+  if (token.raw !== undefined) trimmedToken.raw = token.raw.trimStart();
+  if (token.text !== undefined) trimmedToken.text = token.text.trimStart();
+  if (inlineTokens !== undefined) trimmedToken.tokens = inlineTokens;
+  return trimmedToken;
 };
 
 const findTrailingTokens = (
@@ -359,7 +355,8 @@ const listItemPrefix = (context: RenderContext): string => {
   }
   const start = Number(context.meta?.parentAttrs?.start ?? 1);
   const rawType = context.meta?.parentAttrs?.type;
-  const type = typeof rawType === "string" ? rawType : undefined;
+  const typeResult = z.string().safeParse(rawType);
+  const type = typeResult.success ? typeResult.data : undefined;
   return getListMarker(type, start - 1 + context.index, ". ");
 };
 

@@ -45,15 +45,16 @@ type CreateOpenCodeSessionControlAdapterInput = {
 const toOpenCodeUserMessagePart = (part: AgentSessionUserMessagePart): AgentUserMessagePart => {
   if (part.kind !== "attachment") return part;
   const { attachment } = part;
+  const converted: Extract<AgentUserMessagePart, { kind: "attachment" }>["attachment"] = {
+    id: attachment.id,
+    path: attachment.path,
+    name: attachment.name,
+    kind: attachment.kind,
+  };
+  if (attachment.mime !== undefined) converted.mime = attachment.mime;
   return {
     kind: "attachment",
-    attachment: {
-      id: attachment.id,
-      path: attachment.path,
-      name: attachment.name,
-      kind: attachment.kind,
-      ...(attachment.mime === undefined ? undefined : { mime: attachment.mime }),
-    },
+    attachment: converted,
   };
 };
 
@@ -102,63 +103,66 @@ export const createOpenCodeSessionControlAdapter = ({
     );
 
   return {
-    startSession: (input) =>
-      runControlSummary("opencode-live-session.start-session", () =>
-        connection.startSession({
-          repoPath: input.repoPath,
-          runtimeKind: "opencode",
-          runtimePolicy: { kind: "opencode" },
-          workingDirectory: input.workingDirectory,
-          sessionScope: input.sessionScope,
-          systemPrompt: input.systemPrompt,
-          ...(input.model ? { model: input.model } : undefined),
-        }),
-      ),
-    resumeSession: (input) =>
-      runControlSummary("opencode-live-session.resume-session", () =>
-        connection.resumeSession({
-          ...toSessionRef(input),
-          runtimeKind: "opencode",
-          runtimePolicy: { kind: "opencode" },
-          sessionScope: input.sessionScope,
-          ...(input.model ? { model: input.model } : undefined),
-          ...(input.systemPrompt ? { systemPrompt: input.systemPrompt } : undefined),
-        }),
-      ),
-    forkSession: (input) =>
-      runControlSummary(
+    startSession: (input) => {
+      const request: Parameters<typeof connection.startSession>[0] = {
+        repoPath: input.repoPath,
+        runtimeKind: "opencode",
+        runtimePolicy: { kind: "opencode" },
+        workingDirectory: input.workingDirectory,
+        sessionScope: input.sessionScope,
+        systemPrompt: input.systemPrompt,
+      };
+      if (input.model) request.model = input.model;
+      return runControlSummary("opencode-live-session.start-session", () =>
+        connection.startSession(request),
+      );
+    },
+    resumeSession: (input) => {
+      const request: Parameters<typeof connection.resumeSession>[0] = {
+        ...toSessionRef(input),
+        runtimeKind: "opencode",
+        runtimePolicy: { kind: "opencode" },
+        sessionScope: input.sessionScope,
+      };
+      if (input.model) request.model = input.model;
+      if (input.systemPrompt) request.systemPrompt = input.systemPrompt;
+      return runControlSummary("opencode-live-session.resume-session", () =>
+        connection.resumeSession(request),
+      );
+    },
+    forkSession: (input) => {
+      const request: Parameters<typeof connection.forkSession>[0] = {
+        repoPath: input.repoPath,
+        runtimeKind: "opencode",
+        runtimePolicy: { kind: "opencode" },
+        workingDirectory: input.workingDirectory,
+        sessionScope: input.sessionScope,
+        systemPrompt: input.systemPrompt,
+        parentExternalSessionId: input.parentExternalSessionId,
+      };
+      if (input.runtimeHistoryAnchor) request.runtimeHistoryAnchor = input.runtimeHistoryAnchor;
+      if (input.model) request.model = input.model;
+      return runControlSummary(
         "opencode-live-session.fork-session",
-        () =>
-          connection.forkSession({
-            repoPath: input.repoPath,
-            runtimeKind: "opencode",
-            runtimePolicy: { kind: "opencode" },
-            workingDirectory: input.workingDirectory,
-            sessionScope: input.sessionScope,
-            systemPrompt: input.systemPrompt,
-            parentExternalSessionId: input.parentExternalSessionId,
-            ...(input.runtimeHistoryAnchor
-              ? { runtimeHistoryAnchor: input.runtimeHistoryAnchor }
-              : undefined),
-            ...(input.model ? { model: input.model } : undefined),
-          }),
+        () => connection.forkSession(request),
         input.parentExternalSessionId,
-      ),
+      );
+    },
     sendUserMessage: (input) => {
       const sessionRef = toSessionRef(input);
+      const request: Parameters<typeof connection.sendUserMessage>[0] = {
+        ...sessionRef,
+        runtimeKind: "opencode",
+        runtimePolicy: { kind: "opencode" },
+        sessionScope: input.sessionScope,
+        parts: input.parts.map(toOpenCodeUserMessagePart),
+      };
+      if (input.model) request.model = input.model;
+      if (input.systemPrompt) request.systemPrompt = input.systemPrompt;
       return serializeSessionSend(
         refKey(sessionRef),
         Effect.tryPromise({
-          try: () =>
-            connection.sendUserMessage({
-              ...sessionRef,
-              runtimeKind: "opencode",
-              runtimePolicy: { kind: "opencode" },
-              sessionScope: input.sessionScope,
-              parts: input.parts.map(toOpenCodeUserMessagePart),
-              ...(input.model ? { model: input.model } : undefined),
-              ...(input.systemPrompt ? { systemPrompt: input.systemPrompt } : undefined),
-            }),
+          try: () => connection.sendUserMessage(request),
           catch: (cause) =>
             toHostOperationError(cause, "opencode-live-session.send-user-message", {
               runtimeId: runtime.runtimeId,

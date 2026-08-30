@@ -48,7 +48,7 @@ const taskEventSubscriptionSchema = z
   .strict();
 type TaskEventSubscriptionResponse = z.infer<typeof taskEventSubscriptionSchema>;
 
-const parseTaskEventSubscription = (value: unknown): TaskEventSubscriptionResponse => {
+const parseTaskEventSubscription = (value: JsonValue): TaskEventSubscriptionResponse => {
   const parsed = taskEventSubscriptionSchema.safeParse(value);
   if (!parsed.success) {
     throw new Error("Task event stream subscription response is invalid.");
@@ -205,11 +205,11 @@ export const subscribeLocalTaskEventStreamEffect = (
         }),
       );
     };
-    const handleFrame = (event: MessageEvent<string>): void => {
+    const handleFrame = (data: string): void => {
       if (closed) return;
       let raw: JsonValue;
       try {
-        raw = jsonValueSchema.parse(JSON.parse(event.data));
+        raw = jsonValueSchema.parse(JSON.parse(data));
       } catch (cause) {
         const failure = new WebDependencyError({
           dependency: "task-event-stream",
@@ -239,7 +239,7 @@ export const subscribeLocalTaskEventStreamEffect = (
       markInitialReadiness();
     };
     const handleFrameEvent: EventListener = (event) => {
-      if (!(event instanceof MessageEvent) || typeof event.data !== "string") {
+      if (!(event instanceof MessageEvent)) {
         failSetupOrReportTerminalFailure(
           new WebDependencyError({
             dependency: "task-event-stream",
@@ -249,7 +249,18 @@ export const subscribeLocalTaskEventStreamEffect = (
         );
         return;
       }
-      handleFrame(event);
+      const data = z.string().safeParse(event.data);
+      if (!data.success) {
+        failSetupOrReportTerminalFailure(
+          new WebDependencyError({
+            dependency: "task-event-stream",
+            operation: "parse-frame",
+            message: "OpenDucktor task event stream received a non-text frame.",
+          }),
+        );
+        return;
+      }
+      handleFrame(data.data);
     };
     eventSource.addEventListener("task-frame", handleFrameEvent);
     eventSource.addEventListener("open", handleOpen);

@@ -177,18 +177,17 @@ const createHarness = () => {
   const latestResultRef: LatestResultRefContract = { current: null };
 
   const Harness = (props: HarnessProps): null => {
-    const result = useAgentChatWindow({
+    const hookInput: Parameters<typeof useAgentChatWindow>[0] = {
       ...props,
       turnAnchors: props.turnAnchors ?? buildAgentChatTurnAnchors(props.rows),
       isSessionWorking: props.isSessionWorking ?? false,
       messagesContainerRef,
       messagesContentRef,
-      ...(props.syncBottomAfterComposerLayoutRef
-        ? {
-            syncBottomAfterComposerLayoutRef: props.syncBottomAfterComposerLayoutRef,
-          }
-        : undefined),
-    });
+    };
+    if (props.syncBottomAfterComposerLayoutRef) {
+      hookInput.syncBottomAfterComposerLayoutRef = props.syncBottomAfterComposerLayoutRef;
+    }
+    const result = useAgentChatWindow(hookInput);
     latestResultRef.current = result;
     return null;
   };
@@ -267,18 +266,17 @@ const mountHarness = async (
   }
 
   const harness = createSharedHookHarness((nextProps: HarnessProps) => {
-    const result = useAgentChatWindow({
+    const hookInput: Parameters<typeof useAgentChatWindow>[0] = {
       ...nextProps,
       turnAnchors: nextProps.turnAnchors ?? buildAgentChatTurnAnchors(nextProps.rows),
       isSessionWorking: nextProps.isSessionWorking ?? false,
       messagesContainerRef,
       messagesContentRef,
-      ...(nextProps.syncBottomAfterComposerLayoutRef
-        ? {
-            syncBottomAfterComposerLayoutRef: nextProps.syncBottomAfterComposerLayoutRef,
-          }
-        : undefined),
-    });
+    };
+    if (nextProps.syncBottomAfterComposerLayoutRef) {
+      hookInput.syncBottomAfterComposerLayoutRef = nextProps.syncBottomAfterComposerLayoutRef;
+    }
+    const result = useAgentChatWindow(hookInput);
     latestResultRef.current = result;
     return result;
   }, props);

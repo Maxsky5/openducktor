@@ -9,31 +9,33 @@ export const preferredMessageTimestamp = (
   if (preferred.timestampIsApproximate && !alternative.timestampIsApproximate) {
     return { timestamp: alternative.timestamp };
   }
-  return {
-    timestamp: preferred.timestamp,
-    ...(preferred.timestampIsApproximate ? { timestampIsApproximate: true } : undefined),
-  };
+  const timestamp: MessageTimestamp = { timestamp: preferred.timestamp };
+  if (preferred.timestampIsApproximate) timestamp.timestampIsApproximate = true;
+  return timestamp;
 };
 
-export const applyMessageTimestamp = <T extends AgentChatMessage>(
-  message: T,
+export const applyMessageTimestamp = (
+  message: AgentChatMessage,
   timestamp: MessageTimestamp,
-): T => {
+): AgentChatMessage => {
   const { timestampIsApproximate: _discardedAccuracy, ...messageWithoutTimestampAccuracy } =
     message;
-  // SAFETY: The spread preserves every field of T and replaces only the two timestamp fields declared by AgentChatMessage.
-  return {
+  const timestampedMessage: AgentChatMessage = {
     ...messageWithoutTimestampAccuracy,
     timestamp: timestamp.timestamp,
-    ...(timestamp.timestampIsApproximate ? { timestampIsApproximate: true } : undefined),
-  } as T;
+  };
+  if (timestamp.timestampIsApproximate) {
+    timestampedMessage.timestampIsApproximate = true;
+  }
+  return timestampedMessage;
 };
 
-export const applyPreferredMessageTimestamp = <T extends AgentChatMessage>(
-  message: T,
+export const applyPreferredMessageTimestamp = (
+  message: AgentChatMessage,
   preferred: MessageTimestamp,
   alternative: MessageTimestamp,
-): T => applyMessageTimestamp(message, preferredMessageTimestamp(preferred, alternative));
+): AgentChatMessage =>
+  applyMessageTimestamp(message, preferredMessageTimestamp(preferred, alternative));
 
 export const haveSameMessageTimestamp = (
   left: MessageTimestamp,

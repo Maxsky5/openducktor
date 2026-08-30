@@ -34,16 +34,18 @@ const permissionsResponse = (
     permissions.network = profile.network;
   }
   if (profile.fileSystem) {
-    permissions.fileSystem = {
-      read: profile.fileSystem.read,
-      write: profile.fileSystem.write,
-      ...(profile.fileSystem.globScanMaxDepth !== undefined
-        ? { globScanMaxDepth: profile.fileSystem.globScanMaxDepth }
-        : undefined),
-      ...(profile.fileSystem.entries !== undefined
-        ? { entries: profile.fileSystem.entries }
-        : undefined),
-    };
+    const fileSystemPermissions: NonNullable<CodexAppServerGrantedPermissionProfile["fileSystem"]> =
+      {
+        read: profile.fileSystem.read,
+        write: profile.fileSystem.write,
+      };
+    if (profile.fileSystem.globScanMaxDepth !== undefined) {
+      fileSystemPermissions.globScanMaxDepth = profile.fileSystem.globScanMaxDepth;
+    }
+    if (profile.fileSystem.entries !== undefined) {
+      fileSystemPermissions.entries = profile.fileSystem.entries;
+    }
+    permissions.fileSystem = fileSystemPermissions;
   }
   return { permissions, scope: outcome === "approve_session" ? "session" : "turn" };
 };

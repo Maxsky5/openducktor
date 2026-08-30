@@ -5,7 +5,11 @@ import type {
   RuntimeKind,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { errorMessage, HostOperationError } from "../../effect/host-errors";
+import {
+  errorMessage,
+  HostOperationError,
+  type HostOperationErrorAggregate,
+} from "../../effect/host-errors";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import {
   discoverToolFresh,
@@ -17,7 +21,7 @@ import type { RuntimeDefinitionsService } from "./runtime-definitions-service";
 export type RuntimeExecutableCheckService = {
   check(
     input: RuntimeExecutableCheckInput,
-  ): Effect.Effect<RuntimeExecutableCheck, HostOperationError>;
+  ): Effect.Effect<RuntimeExecutableCheck, HostOperationErrorAggregate>;
 };
 
 const invalidRow = (

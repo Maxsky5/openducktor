@@ -1,37 +1,40 @@
-import type { FileDiff } from "@openducktor/contracts";
-import {
-  countRenderableFileDiffLines,
-  isUnknownRecord,
-  selectRenderableFileDiff,
-} from "@openducktor/core";
+import { jsonObjectSchema, type FileDiff, type JsonObject } from "@openducktor/contracts";
+import { countRenderableFileDiffLines, selectRenderableFileDiff } from "@openducktor/core";
 import { createTwoFilesPatch } from "diff";
+import { z } from "zod";
+import type { ClaudeDecodedToolResult, ClaudeDecodedToolUse } from "./claude-agent-sdk-tool-shapes";
 import { readStringProp } from "./claude-agent-sdk-utils";
 
 type ClaudeFileEditPayload = {
   fileDiffs?: FileDiff[];
 };
 
+const structuredPatchHunkSchema = z.looseObject({
+  lines: z.array(z.unknown()),
+  newLines: z.number().finite(),
+  newStart: z.number().finite(),
+  oldLines: z.number().finite(),
+  oldStart: z.number().finite(),
+});
+
 const normalizeToolName = (tool: string): string => tool.trim().toLowerCase();
 
 export const isClaudeFileEditTool = (tool: string): boolean =>
   new Set(["edit", "multiedit", "notebookedit", "write"]).has(normalizeToolName(tool));
 
-const readRecordProp = (
-  record: Record<string, unknown>,
-  key: string,
-): Record<string, unknown> | null => {
-  const value = record[key];
-  return isUnknownRecord(value) ? value : null;
+const readRecordProp = (record: JsonObject, key: string): JsonObject | null => {
+  const parsed = jsonObjectSchema.safeParse(record[key]);
+  return parsed.success ? parsed.data : null;
 };
 
-const readNumberProp = (record: Record<string, unknown>, key: string): number | undefined => {
-  const value = record[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+const readNumberProp = (record: JsonObject, key: string): number | undefined => {
+  const parsed = z.number().finite().safeParse(record[key]);
+  return parsed.success ? parsed.data : undefined;
 };
 
-const readStringValue = (record: Record<string, unknown>, key: string): string | undefined => {
-  const value = record[key];
-  return typeof value === "string" ? value : undefined;
+const readStringValue = (record: JsonObject, key: string): string | undefined => {
+  const parsed = z.string().safeParse(record[key]);
+  return parsed.success ? parsed.data : undefined;
 };
 
 const diffHeaderPath = (file: string): string =>
@@ -39,35 +42,26 @@ const diffHeaderPath = (file: string): string =>
 
 const structuredPatchRange = (start: number, lines: number): string => `${start},${lines}`;
 
-const readStructuredPatchHunk = (value: unknown): string | null => {
-  if (!isUnknownRecord(value)) {
+const readStructuredPatchHunk = (value: JsonObject[string]): string | null => {
+  const parsed = structuredPatchHunkSchema.safeParse(value);
+  if (!parsed.success) {
     return null;
   }
-  const record = value;
-  const oldStart = readNumberProp(record, "oldStart");
-  const oldLines = readNumberProp(record, "oldLines");
-  const newStart = readNumberProp(record, "newStart");
-  const newLines = readNumberProp(record, "newLines");
-  const lines = record.lines;
-  if (
-    oldStart === undefined ||
-    oldLines === undefined ||
-    newStart === undefined ||
-    newLines === undefined ||
-    !Array.isArray(lines)
-  ) {
-    return null;
-  }
-  const hunkLines = lines.filter(
-    (line): line is string => typeof line === "string" && line.length > 0,
-  );
+  const { oldStart, oldLines, newStart, newLines, lines } = parsed.data;
+  const hunkLines = lines.flatMap((line) => {
+    const text = z.string().safeParse(line);
+    return text.success && text.data.length > 0 ? [text.data] : [];
+  });
   return [
     `@@ -${structuredPatchRange(oldStart, oldLines)} +${structuredPatchRange(newStart, newLines)} @@`,
     ...hunkLines,
   ].join("\n");
 };
 
-const readStructuredPatch = (value: unknown, file: string | undefined): string | null => {
+const readStructuredPatch = (
+  value: JsonObject[string] | undefined,
+  file: string | undefined,
+): string | null => {
   if (!Array.isArray(value)) {
     return null;
   }
@@ -85,7 +79,7 @@ const readStructuredPatch = (value: unknown, file: string | undefined): string |
   ].join("\n");
 };
 
-const readInputFilePath = (input: Record<string, unknown> | undefined): string | undefined => {
+const readInputFilePath = (input: ClaudeDecodedToolUse["input"]): string | undefined => {
   if (!input) {
     return undefined;
   }
@@ -99,8 +93,8 @@ const readInputFilePath = (input: Record<string, unknown> | undefined): string |
 };
 
 const readFilePath = (
-  record: Record<string, unknown>,
-  input: Record<string, unknown> | undefined,
+  record: JsonObject,
+  input: ClaudeDecodedToolUse["input"],
 ): string | undefined =>
   readStringProp(record, "file") ??
   readStringProp(record, "file_path") ??
@@ -110,7 +104,7 @@ const readFilePath = (
   readInputFilePath(input);
 
 const readPatchFromRecord = (
-  record: Record<string, unknown>,
+  record: JsonObject,
   file: string | undefined,
   tool: string,
 ): string | null => {
@@ -126,15 +120,18 @@ const readPatchFromRecord = (
 
   for (const key of ["gitDiff", "structuredPatch", "fileDiff", "filediff"] as const) {
     const nested = record[key];
-    if (typeof nested === "string" && nested.trim().length > 0) {
-      return nested;
+    const nestedText = z.string().safeParse(nested);
+    if (nestedText.success && nestedText.data.trim().length > 0) {
+      return nestedText.data;
     }
     const structuredPatch = readStructuredPatch(nested, file);
     if (structuredPatch) {
       return structuredPatch;
     }
-    if (isUnknownRecord(nested)) {
-      const nestedPatch = readStringProp(nested, "patch") ?? readStringProp(nested, "diff");
+    const nestedRecord = jsonObjectSchema.safeParse(nested);
+    if (nestedRecord.success) {
+      const nestedPatch =
+        readStringProp(nestedRecord.data, "patch") ?? readStringProp(nestedRecord.data, "diff");
       if (nestedPatch) {
         return nestedPatch;
       }
@@ -156,25 +153,27 @@ const readPatchFromRecord = (
   return null;
 };
 
-const readResultRecords = (raw: Record<string, unknown>): Record<string, unknown>[] => {
-  const records = [raw];
+const readResultRecords = (raw: ClaudeDecodedToolResult["raw"]): JsonObject[] => {
+  const records: JsonObject[] = [raw];
   for (const key of ["structuredContent", "result", "output", "toolUseResult", "file"] as const) {
-    const value = raw[key];
-    if (isUnknownRecord(value)) {
-      records.push(value);
+    const value = jsonObjectSchema.safeParse(raw[key]);
+    if (value.success) {
+      records.push(value.data);
     }
   }
   const content = raw.content;
-  if (isUnknownRecord(content)) {
-    records.push(content);
+  const contentRecord = jsonObjectSchema.safeParse(content);
+  if (contentRecord.success) {
+    records.push(contentRecord.data);
   }
   if (Array.isArray(content)) {
     for (const entry of content) {
-      if (isUnknownRecord(entry)) {
-        records.push(entry);
-        const structuredContent = entry.structuredContent;
-        if (isUnknownRecord(structuredContent)) {
-          records.push(structuredContent);
+      const entryRecord = jsonObjectSchema.safeParse(entry);
+      if (entryRecord.success) {
+        records.push(entryRecord.data);
+        const structuredContent = jsonObjectSchema.safeParse(entryRecord.data.structuredContent);
+        if (structuredContent.success) {
+          records.push(structuredContent.data);
         }
       }
     }
@@ -182,9 +181,9 @@ const readResultRecords = (raw: Record<string, unknown>): Record<string, unknown
   return records;
 };
 
-const fileRecordsFromResult = (raw: Record<string, unknown>): Record<string, unknown>[] => {
+const fileRecordsFromResult = (raw: ClaudeDecodedToolResult["raw"]): JsonObject[] => {
   const records = readResultRecords(raw);
-  const result: Record<string, unknown>[] = [];
+  const result: JsonObject[] = [];
   for (const record of records) {
     result.push(record);
     for (const key of ["files", "fileDiffs", "changes", "edits"] as const) {
@@ -192,7 +191,12 @@ const fileRecordsFromResult = (raw: Record<string, unknown>): Record<string, unk
       if (!Array.isArray(files)) {
         continue;
       }
-      result.push(...files.filter(isUnknownRecord));
+      result.push(
+        ...files.flatMap((file) => {
+          const parsed = jsonObjectSchema.safeParse(file);
+          return parsed.success ? [parsed.data] : [];
+        }),
+      );
     }
     const gitDiff = readRecordProp(record, "gitDiff");
     const structuredPatch = readRecordProp(record, "structuredPatch");
@@ -200,7 +204,12 @@ const fileRecordsFromResult = (raw: Record<string, unknown>): Record<string, unk
       result.push(gitDiff);
       const files = gitDiff.files;
       if (Array.isArray(files)) {
-        result.push(...files.filter(isUnknownRecord));
+        result.push(
+          ...files.flatMap((file) => {
+            const parsed = jsonObjectSchema.safeParse(file);
+            return parsed.success ? [parsed.data] : [];
+          }),
+        );
       }
     }
     if (structuredPatch) {
@@ -212,14 +221,15 @@ const fileRecordsFromResult = (raw: Record<string, unknown>): Record<string, unk
 
 const changeTypeFromToolInput = (
   tool: string,
-  input: Record<string, unknown> | undefined,
-  record: Record<string, unknown>,
+  input: ClaudeDecodedToolUse["input"],
+  record: JsonObject,
 ): FileDiff["type"] => {
   if (normalizeToolName(tool) === "write") {
     return readStringProp(record, "type")?.toLowerCase() === "create" ? "added" : "modified";
   }
   const oldString = input?.old_string ?? input?.oldString;
-  return typeof oldString === "string" && oldString.length === 0 ? "added" : "modified";
+  const parsedOldString = z.string().safeParse(oldString);
+  return parsedOldString.success && parsedOldString.data.length === 0 ? "added" : "modified";
 };
 
 const normalizeClaudeFileDiff = ({
@@ -258,8 +268,8 @@ const readClaudeFileDiffs = ({
   raw,
   tool,
 }: {
-  input: Record<string, unknown> | undefined;
-  raw: Record<string, unknown>;
+  input: ClaudeDecodedToolUse["input"];
+  raw: ClaudeDecodedToolResult["raw"];
   tool: string;
 }): FileDiff[] => {
   const diffs: FileDiff[] = [];
@@ -299,8 +309,8 @@ export const readClaudeFileEditPayload = ({
   raw,
   tool,
 }: {
-  input: Record<string, unknown> | undefined;
-  raw: Record<string, unknown>;
+  input: ClaudeDecodedToolUse["input"];
+  raw: ClaudeDecodedToolResult["raw"];
   tool: string;
 }): ClaudeFileEditPayload => {
   if (!isClaudeFileEditTool(tool)) {

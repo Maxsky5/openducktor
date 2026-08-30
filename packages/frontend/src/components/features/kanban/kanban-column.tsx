@@ -152,7 +152,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
       }
     };
 
-    if (typeof globalThis.window === "undefined") {
+    if (globalThis.window === undefined) {
       reportHeight();
       return;
     }

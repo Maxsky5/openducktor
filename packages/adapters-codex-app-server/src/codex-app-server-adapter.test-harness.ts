@@ -4,7 +4,6 @@ import {
   type CodexAppServerProtocolMessage,
   type CodexAppServerRequestResult,
   type CodexAppServerThread,
-  type CodexAppServerThreadStatus,
   type CodexAppServerTurn,
   type CodexAppServerTurnStartResult,
   type CodexEffectivePolicy,
@@ -18,8 +17,6 @@ import type {
   StartAgentSessionInput,
 } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
-import { CodexLocalSessionState } from "./codex-local-session-state";
-import { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import type { CodexAppServerStreamEvent } from "./types";
 import {
   CodexAppServerAdapter,
@@ -27,7 +24,7 @@ import {
   type CodexJsonRpcRequest,
   type CodexJsonRpcTransport,
 } from "./index";
-import { isPlainObject } from "./codex-app-server-shared";
+import { extractStringField, isPlainObject } from "./codex-app-server-shared";
 
 export const makeRuntimeSummary = (runtimeId: string): RuntimeInstanceSummary => ({
   kind: "codex",
@@ -346,34 +343,38 @@ export const codexThreadFixture = (
 export const codexThreadStartResultFixture = (
   threadId: string,
   method: "thread/start" | "thread/resume" | "thread/fork" = "thread/start",
-) => ({
-  approvalPolicy: "on-request",
-  approvalsReviewer: "user",
-  activePermissionProfile: null,
-  cwd: "/repo",
-  instructionSources: [],
-  model: "gpt-5",
-  modelProvider: "openai",
-  multiAgentMode: "explicitRequestOnly",
-  reasoningEffort: "medium",
-  runtimeWorkspaceRoots: ["/repo"],
-  sandbox: {
-    type: "workspaceWrite",
-    excludeSlashTmp: false,
-    excludeTmpdirEnvVar: false,
-    networkAccess: false,
-    writableRoots: ["/repo"],
-  },
-  serviceTier: null,
-  thread: codexThreadFixture({ id: threadId, status: { type: "active", activeFlags: [] } }),
-  ...(method === "thread/resume"
-    ? {
-        initialTurnsPage: null,
-        turnsBackwardsCursor: null,
-        itemsBackwardsCursor: null,
-      }
-    : undefined),
-});
+) => {
+  const result = {
+    approvalPolicy: "on-request",
+    approvalsReviewer: "user",
+    activePermissionProfile: null,
+    cwd: "/repo",
+    instructionSources: [],
+    model: "gpt-5",
+    modelProvider: "openai",
+    multiAgentMode: "explicitRequestOnly",
+    reasoningEffort: "medium",
+    runtimeWorkspaceRoots: ["/repo"],
+    sandbox: {
+      type: "workspaceWrite",
+      excludeSlashTmp: false,
+      excludeTmpdirEnvVar: false,
+      networkAccess: false,
+      writableRoots: ["/repo"],
+    },
+    serviceTier: null,
+    thread: codexThreadFixture({ id: threadId, status: { type: "active", activeFlags: [] } }),
+  };
+  if (method === "thread/resume") {
+    return {
+      ...result,
+      initialTurnsPage: null,
+      turnsBackwardsCursor: null,
+      itemsBackwardsCursor: null,
+    };
+  }
+  return result;
+};
 
 export const requestThreadId = (params: { threadId: string }): string => params.threadId;
 
@@ -449,7 +450,7 @@ export class RecordingTransport implements CodexJsonRpcTransport {
           throw new Error("Invalid request: missing field `type`");
         }
         for (const part of params.input) {
-          if (!isPlainObject(part) || typeof part.type !== "string") {
+          if (!isPlainObject(part) || !extractStringField(part, ["type"])) {
             throw new Error("Invalid request: missing field `type`");
           }
         }
@@ -600,53 +601,6 @@ export const createHarness = (
     transportFactory,
     requireRepoRuntime,
     respondServerRequest,
-  };
-};
-
-export const codexThreadInventoryForTest = (
-  adapter: CodexAppServerAdapter,
-): CodexThreadInventoryReader => codexAdapterInternals(adapter).threadInventory;
-
-type CodexAdapterTestInternals = {
-  localSessions: CodexLocalSessionState;
-  runtimeEvents: {
-    runtimeEventProcessingByRuntimeId: Map<string, Promise<void>>;
-  };
-  threadInventory: CodexThreadInventoryReader;
-};
-
-const codexAdapterInternals = (adapter: CodexAppServerAdapter): CodexAdapterTestInternals => {
-  // SAFETY: CodexAppServerAdapter initializes these three private fields with the exact classes and map shown here; teardown tests only inspect their state.
-  return adapter as CodexAdapterTestInternals;
-};
-
-export const codexLocalSessionsForTest = (adapter: CodexAppServerAdapter): CodexLocalSessionState =>
-  codexAdapterInternals(adapter).localSessions;
-
-type CodexRuntimeTeardownCounts = {
-  statusOverrideRuntimeCount: number;
-  statusOverrideThreadCount: number;
-  runtimeEventQueueRuntimeCount: number;
-};
-
-export const codexRuntimeTeardownCountsForTest = (
-  adapter: CodexAppServerAdapter,
-  runtimeId: string,
-): CodexRuntimeTeardownCounts => {
-  const threadInventory = codexThreadInventoryForTest(adapter);
-  // SAFETY: CodexThreadInventoryReader declares this private field as Map<string, Map<string, CodexAppServerThreadStatus>>; the test reads only map sizes.
-  const statusOverridesByRuntimeId = (
-    threadInventory as {
-      statusOverridesByRuntimeId: Map<string, Map<string, CodexAppServerThreadStatus>>;
-    }
-  ).statusOverridesByRuntimeId;
-  const runtimeEventProcessingByRuntimeId =
-    codexAdapterInternals(adapter).runtimeEvents.runtimeEventProcessingByRuntimeId;
-
-  return {
-    statusOverrideRuntimeCount: statusOverridesByRuntimeId.size,
-    statusOverrideThreadCount: statusOverridesByRuntimeId.get(runtimeId)?.size ?? 0,
-    runtimeEventQueueRuntimeCount: runtimeEventProcessingByRuntimeId.size,
   };
 };
 

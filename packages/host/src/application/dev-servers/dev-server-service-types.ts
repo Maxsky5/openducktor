@@ -1,10 +1,10 @@
 import type { DevServerGroupState } from "@openducktor/contracts";
 import type { Effect } from "effect";
 import type {
-  HostDependencyError,
-  HostInvariantError,
-  HostOperationError,
-  HostValidationError,
+  HostDependencyErrorAggregate,
+  HostInvariantErrorAggregate,
+  HostOperationErrorAggregate,
+  HostValidationErrorAggregate,
 } from "../../effect/host-errors";
 import type { HostEventBusPort } from "../../events/host-event-bus";
 import type {
@@ -22,10 +22,10 @@ import type {
 
 export type DevServerServiceError =
   | DevServerProcessStartExitError
-  | HostDependencyError
-  | HostInvariantError
-  | HostOperationError
-  | HostValidationError
+  | HostDependencyErrorAggregate
+  | HostInvariantErrorAggregate
+  | HostOperationErrorAggregate
+  | HostValidationErrorAggregate
   | TaskWorktreeServiceError
   | WorkspaceSettingsError;
 

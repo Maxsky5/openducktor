@@ -253,7 +253,7 @@
     },
     "tools/oxlint/anti-slop": {
       "name": "@openducktor/anti-slop-oxlint",
-      "dependencies": {
+      "devDependencies": {
         "@oxlint/plugins": "1.78.0",
       },
     },

@@ -7,17 +7,26 @@ import {
   mcpBridgeDevelopmentDiscoveryPathSegments,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { z } from "zod";
 import { resolveDevelopmentInstanceIdFromEnvironment } from "../../config/development-instance";
 import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
-import { HostValidationError } from "../../effect/host-errors";
+import {
+  type HostOperationErrorAggregate,
+  HostValidationError,
+  type HostValidationErrorAggregate,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import { parseJson } from "../../effect/json";
 
 export type McpBridgeDiscoveryMode = "development" | "production";
 
 export type { McpBridgeDiscoveryFile } from "@openducktor/contracts";
 
-const isFsErrorCode = (cause: unknown, code: string): boolean =>
-  typeof cause === "object" && cause !== null && "code" in cause && cause.code === code;
+const fsErrorSchema = z.object({ code: z.string() }).passthrough();
+const isFsErrorCode = (cause: unknown, code: string): boolean => {
+  const parsed = fsErrorSchema.safeParse(cause);
+  return parsed.success && parsed.data.code === code;
+};
 
 export const resolveMcpBridgeDiscoveryPath = (
   mode: McpBridgeDiscoveryMode,
@@ -85,54 +94,83 @@ const discoveryMatches = (
   discovery.hostToken === expected.hostToken &&
   discovery.pid === expected.pid;
 
-const claimDiscoveryForRemoval = (discoveryPath: string): Effect.Effect<string | null, unknown> => {
+const discoveryFileOperation = <Value>(
+  operation: string,
+  discoveryPath: string,
+  run: () => Promise<Value>,
+): Effect.Effect<Value, HostOperationErrorAggregate> =>
+  Effect.tryPromise({
+    try: run,
+    catch: (cause) => toHostOperationError(cause, operation, { discoveryPath }),
+  });
+
+const claimDiscoveryForRemoval = (
+  discoveryPath: string,
+): Effect.Effect<string | null, HostOperationErrorAggregate> => {
   const claimedPath = discoveryClaimPath(discoveryPath);
-  return Effect.tryPromise({
-    try: () => rename(discoveryPath, claimedPath),
-    catch: (error) => error,
-  }).pipe(
-    Effect.as(claimedPath),
-    Effect.catchAll((error) =>
-      isFsErrorCode(error, "ENOENT") ? Effect.succeed(null) : Effect.fail(error),
-    ),
-  );
+  return discoveryFileOperation("mcpBridgeDiscovery.claim", discoveryPath, async () => {
+    try {
+      await rename(discoveryPath, claimedPath);
+      return claimedPath;
+    } catch (cause) {
+      if (isFsErrorCode(cause, "ENOENT")) {
+        return null;
+      }
+      throw cause;
+    }
+  });
 };
 export const writeMcpBridgeDiscoveryFile = (
   discoveryPath: string,
   discovery: McpBridgeDiscoveryFile,
-): Effect.Effect<void, unknown> =>
+): Effect.Effect<void, HostOperationErrorAggregate> =>
   Effect.gen(function* () {
-    yield* Effect.tryPromise(() => mkdir(path.dirname(discoveryPath), { recursive: true }));
+    yield* discoveryFileOperation("mcpBridgeDiscovery.mkdir", discoveryPath, () =>
+      mkdir(path.dirname(discoveryPath), { recursive: true }),
+    );
     const tempPath = path.join(
       path.dirname(discoveryPath),
       `.${path.basename(discoveryPath)}.${process.pid}.${process.hrtime.bigint()}.tmp`,
     );
-    yield* Effect.tryPromise(() =>
+    yield* discoveryFileOperation("mcpBridgeDiscovery.write", discoveryPath, () =>
       writeFile(tempPath, `${JSON.stringify(discovery, null, 2)}\n`, { mode: 0o600 }),
     );
-    yield* Effect.tryPromise(() => rename(tempPath, discoveryPath));
+    yield* discoveryFileOperation("mcpBridgeDiscovery.publish", discoveryPath, () =>
+      rename(tempPath, discoveryPath),
+    );
   });
 
 export const removeMcpBridgeDiscoveryFile = (
   discoveryPath: string,
   discovery: McpBridgeDiscoveryFile,
-): Effect.Effect<void, unknown> =>
+): Effect.Effect<void, HostOperationErrorAggregate | HostValidationErrorAggregate> =>
   Effect.gen(function* () {
     const claimedPath = yield* claimDiscoveryForRemoval(discoveryPath);
     if (claimedPath === null) {
       return;
     }
 
-    const current = yield* Effect.tryPromise({
-      try: () => readFile(claimedPath, "utf8"),
-      catch: (error) => error,
+    const current = yield* Effect.gen(function* () {
+      const payload = yield* discoveryFileOperation(
+        "mcpBridgeDiscovery.readClaim",
+        discoveryPath,
+        () => readFile(claimedPath, "utf8"),
+      );
+      return yield* Effect.try({
+        try: () => parseDiscoveryFile(payload, discoveryPath),
+        catch: (cause) =>
+          cause instanceof HostValidationError
+            ? cause
+            : toHostOperationError(cause, "mcpBridgeDiscovery.parse", { discoveryPath }),
+      });
     }).pipe(
-      Effect.map((payload) => parseDiscoveryFile(payload, discoveryPath)),
       Effect.tapError(() => restoreClaimedDiscoveryUnlessReplaced(discoveryPath, claimedPath)),
     );
 
     if (discoveryMatches(current, discovery)) {
-      yield* Effect.tryPromise(() => rm(claimedPath, { force: true }));
+      yield* discoveryFileOperation("mcpBridgeDiscovery.removeClaim", discoveryPath, () =>
+        rm(claimedPath, { force: true }),
+      );
       return;
     }
 
@@ -142,18 +180,25 @@ export const removeMcpBridgeDiscoveryFile = (
 const restoreClaimedDiscoveryUnlessReplaced = (
   discoveryPath: string,
   claimedPath: string,
-): Effect.Effect<void, unknown> =>
+): Effect.Effect<void, HostOperationErrorAggregate> =>
   Effect.gen(function* () {
-    const restore = Effect.tryPromise({
-      try: () => link(claimedPath, discoveryPath),
-      catch: (error) => error,
-    }).pipe(
-      Effect.catchAll((error) =>
-        isFsErrorCode(error, "EEXIST") ? Effect.void : Effect.fail(error),
-      ),
+    const restore = discoveryFileOperation(
+      "mcpBridgeDiscovery.restore",
+      discoveryPath,
+      async () => {
+        try {
+          await link(claimedPath, discoveryPath);
+        } catch (cause) {
+          if (!isFsErrorCode(cause, "EEXIST")) {
+            throw cause;
+          }
+        }
+      },
     );
     const restoreExit = yield* Effect.exit(restore);
-    yield* Effect.tryPromise(() => rm(claimedPath, { force: true }));
+    yield* discoveryFileOperation("mcpBridgeDiscovery.removeClaim", discoveryPath, () =>
+      rm(claimedPath, { force: true }),
+    );
     if (restoreExit._tag === "Failure") {
       return yield* Effect.failCause(restoreExit.cause);
     }

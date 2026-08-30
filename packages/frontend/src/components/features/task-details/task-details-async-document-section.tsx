@@ -123,7 +123,7 @@ export const TaskDetailsAsyncDocumentSection = memo(function TaskDetailsAsyncDoc
     statusLabel: hasDocument ? null : ("No document" as const),
     defaultExpanded,
     onExpandedChange: handleExpandedChange,
-    children,
+    renderChildren: children,
   };
 
   return (

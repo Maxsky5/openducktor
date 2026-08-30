@@ -1,57 +1,29 @@
 import {
-  isJsonObject,
-  jsonValueSchema,
-  type JsonObject,
+  jsonObjectSchema,
   type OdtToolErrorPayload,
   odtToolErrorCodeSchema,
 } from "@openducktor/contracts";
+import type { OdtMcpBridgeError } from "../../application/mcp/odt-mcp-bridge-service";
 
-type BridgeErrorPayload = OdtToolErrorPayload & Record<string, unknown>;
+export const bridgeErrorPayload = (
+  cause: OdtMcpBridgeError | null,
+  message: string,
+): OdtToolErrorPayload => {
+  const parsedCode = cause && "code" in cause ? odtToolErrorCodeSchema.safeParse(cause.code) : null;
+  const code = parsedCode?.success ? parsedCode.data : "ODT_HOST_BRIDGE_ERROR";
+  const rawDetails = cause && "details" in cause ? cause.details : undefined;
 
-type BridgeErrorSource = {
-  code?: unknown;
-  details?: unknown;
-};
-
-const isRecord = (cause: unknown): cause is BridgeErrorSource =>
-  typeof cause === "object" && cause !== null && !Array.isArray(cause);
-
-const parseDetails = (cause: unknown): JsonObject | undefined => {
-  if (!isRecord(cause)) {
-    return undefined;
-  }
-
-  try {
-    const parsed = jsonValueSchema.safeParse(cause.details);
-    return parsed.success && isJsonObject(parsed.data) ? parsed.data : undefined;
-  } catch {
-    return undefined;
-  }
-};
-
-export const bridgeErrorPayload = (cause: unknown, message: string): BridgeErrorPayload => {
-  const parsedCode = isRecord(cause)
-    ? odtToolErrorCodeSchema.safeParse(cause.code)
-    : { success: false as const };
-  const details = parseDetails(cause);
-
-  if (details) {
+  if (rawDetails !== undefined) {
+    const details = jsonObjectSchema.parse(rawDetails);
     return {
       ok: false,
-      error: {
-        code: parsedCode.success ? parsedCode.data : "ODT_HOST_BRIDGE_ERROR",
-        message,
-        details,
-      },
+      error: { code, message, details },
     };
   }
 
   return {
     ok: false,
-    error: {
-      code: parsedCode.success ? parsedCode.data : "ODT_HOST_BRIDGE_ERROR",
-      message,
-    },
+    error: { code, message },
   };
 };
 

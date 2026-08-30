@@ -22,13 +22,12 @@ import {
   runtimeSourceSyncChildSessionCreatedEvent,
   runtimeSourceSyncChildSessionCreatedEventWithParentAlias,
   syncChildSessionCreatedEvent,
+  type TestGlobalEventPayload,
 } from "./event-stream.test-support";
-import type { UnknownRecord } from "./guards";
 import { observeRuntimeEvents, registerSession, releaseSessionRuntime } from "./session-registry";
 import type { OpencodeEventLogger, RuntimeEventTransportRecord, SessionRecord } from "./types";
 import { waitForUserMessageAdmission } from "./user-message-admission";
 
-type GlobalEventPayload = UnknownRecord;
 type AssistantPartEvent = Extract<AgentEvent, { type: "assistant_part" }>;
 type SubagentPart = Extract<AssistantPartEvent["part"], { kind: "subagent" }>;
 type SubagentPartEvent = AssistantPartEvent & { part: SubagentPart };
@@ -293,7 +292,7 @@ const makeLiveClient = (): OpencodeClient => {
     id: "event-server-connected",
     type: "server.connected",
     properties: {},
-  } satisfies Extract<GlobalEventPayload, { type: "server.connected" }>;
+  } satisfies Extract<GlobalEvent["payload"], { type: "server.connected" }>;
 
   const baseClient = createOpencodeClient({ baseUrl: "http://127.0.0.1:12345" });
   return {
@@ -320,7 +319,7 @@ const makeLiveClient = (): OpencodeClient => {
 };
 
 const runRuntimeEventTransport = async (
-  events: GlobalEventPayload[],
+  events: TestGlobalEventPayload[],
   options?: {
     onTransport?: (transport: RuntimeEventTransportRecord) => void;
     externalSessionIds?: string[];
@@ -333,7 +332,7 @@ const runRuntimeEventTransport = async (
   const emitted: AgentEvent[] = [];
 
   for (const externalSessionId of options?.externalSessionIds ?? ["external-session-1"]) {
-    registerSession({
+    const registration: Parameters<typeof registerSession>[0] = {
       sessions,
       runtimeEventTransports,
       createClient: () => client,
@@ -349,8 +348,11 @@ const runRuntimeEventTransport = async (
       emit: (_externalSessionId, event) => {
         emitted.push(event);
       },
-      ...(options?.logEvent ? { logEvent: options.logEvent } : undefined),
-    });
+    };
+    if (options?.logEvent) {
+      registration.logEvent = options.logEvent;
+    }
+    registerSession(registration);
   }
 
   const transport = runtimeEventTransports.get("runtime-opencode-1");

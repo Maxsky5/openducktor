@@ -184,13 +184,18 @@ export function useAgentStudioSessionStartFlow({
         decision: ResolvedSessionStartDecision,
       ): Promise<SessionStartWorkflowResult | undefined> => {
         const execute = async (): Promise<SessionStartWorkflowResult> => {
-          const workflow = await runSessionStartWorkflow({
+          const workflowInput: Parameters<typeof runSessionStartWorkflow>[0] = {
             request,
             decision,
             task: request.taskId === taskId ? selectedTask : null,
-            ...(setTaskTargetBranch ? { persistTaskTargetBranch: setTaskTargetBranch } : undefined),
             humanRequestChangesTask,
-          });
+          };
+
+          if (setTaskTargetBranch) {
+            workflowInput.persistTaskTargetBranch = setTaskTargetBranch;
+          }
+
+          const workflow = await runSessionStartWorkflow(workflowInput);
           if (workflow.postStartActionError) {
             showPostStartActionError(request.postStartAction, workflow.postStartActionError);
           }
@@ -237,12 +242,17 @@ export function useAgentStudioSessionStartFlow({
 
   const runGatedSessionStartRequest = useCallback(
     (request: AgentStudioSessionStartRequest): Promise<SessionStartWorkflowResult | undefined> => {
-      const startKey = buildSessionStartKey({
+      const startKeyParams: Parameters<typeof buildSessionStartKey>[0] = {
         taskId: request.taskId,
         role: request.role,
         launchActionId: request.launchActionId,
-        ...(request.holdForPostStartMessage ? { holdForPostStartMessage: true } : undefined),
-      });
+      };
+
+      if (request.holdForPostStartMessage) {
+        startKeyParams.holdForPostStartMessage = true;
+      }
+
+      const startKey = buildSessionStartKey(startKeyParams);
       return sessionStartGate.run(startKey, () => runSessionStartRequest(request));
     },
     [runSessionStartRequest, sessionStartGate],
@@ -257,15 +267,20 @@ export function useAgentStudioSessionStartFlow({
         return undefined;
       }
 
-      return runGatedSessionStartRequest({
+      const request: AgentStudioSessionStartRequest = {
         taskId,
         role,
         launchActionId,
         postStartAction: params.postStartAction,
-        ...(params.holdForPostStartMessage ? { holdForPostStartMessage: true } : undefined),
         initialTargetBranch: selectedTask?.targetBranch ?? null,
         initialTargetBranchError: selectedTask?.targetBranchError ?? null,
-      });
+      };
+
+      if (params.holdForPostStartMessage) {
+        request.holdForPostStartMessage = true;
+      }
+
+      return runGatedSessionStartRequest(request);
     },
     [
       canStartRole,
@@ -282,10 +297,15 @@ export function useAgentStudioSessionStartFlow({
     async (options?: {
       holdForPostStartMessage?: boolean;
     }): Promise<SessionStartWorkflowResult | undefined> => {
-      return runSessionStart({
+      const params: Parameters<typeof runSessionStart>[0] = {
         postStartAction: "none",
-        ...(options?.holdForPostStartMessage ? { holdForPostStartMessage: true } : undefined),
-      });
+      };
+
+      if (options?.holdForPostStartMessage) {
+        params.holdForPostStartMessage = true;
+      }
+
+      return runSessionStart(params);
     },
     [runSessionStart],
   );
@@ -375,19 +395,26 @@ export function useAgentStudioSessionStartFlow({
         return;
       }
 
-      void runGatedSessionStartRequest({
+      const request: AgentStudioSessionStartRequest = {
         taskId,
         role: option.role,
         launchActionId: option.launchActionId,
         postStartAction: option.postStartAction,
-        ...(option.initialStartMode ? { initialStartMode: option.initialStartMode } : undefined),
-        ...(option.existingSessionOptions
-          ? { existingSessionOptions: option.existingSessionOptions }
-          : undefined),
-        ...(option.initialSourceSession !== undefined
-          ? { initialSourceSession: option.initialSourceSession }
-          : undefined),
-      });
+      };
+
+      if (option.initialStartMode) {
+        request.initialStartMode = option.initialStartMode;
+      }
+
+      if (option.existingSessionOptions) {
+        request.existingSessionOptions = option.existingSessionOptions;
+      }
+
+      if (option.initialSourceSession !== undefined) {
+        request.initialSourceSession = option.initialSourceSession;
+      }
+
+      void runGatedSessionStartRequest(request);
     },
     [canStartRole, isSessionWorking, openHumanReviewFeedback, runGatedSessionStartRequest, taskId],
   );

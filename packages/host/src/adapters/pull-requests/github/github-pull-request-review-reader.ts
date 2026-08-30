@@ -12,7 +12,11 @@ import { z } from "zod";
 import { combinedCommandOutput } from "../../../application/tasks/support/github-pull-request-model";
 import type { GithubCommandDependencies } from "../../../application/tasks/support/github-pull-requests";
 import { runGithubRepositoryCommandAllowFailure } from "../../../application/tasks/support/github-repository-command";
-import { errorMessage, HostValidationError } from "../../../effect/host-errors";
+import {
+  errorMessage,
+  HostValidationError,
+  type HostValidationErrorAggregate,
+} from "../../../effect/host-errors";
 import { loadGithubPullRequestReviewOverview } from "./github-pull-request-review-overview";
 import { parseGithubJson } from "./github-pull-request-review-payload";
 import { loadGithubReviewThreads } from "./github-pull-request-review-threads";
@@ -27,7 +31,7 @@ type GithubPullRequestReviewReadInput = {
 export type GithubPullRequestReviewReader = {
   read(
     input: GithubPullRequestReviewReadInput,
-  ): Effect.Effect<PullRequestReviewContext, HostValidationError>;
+  ): Effect.Effect<PullRequestReviewContext, HostValidationErrorAggregate>;
 };
 
 const isNoChecksReported = (result: {

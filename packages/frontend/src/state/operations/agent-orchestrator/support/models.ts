@@ -20,12 +20,13 @@ export const pickDefaultSessionSelectionForCatalog = (
     return null;
   }
 
-  return {
+  const selection: AgentModelSelection = {
     runtimeKind,
     providerId: model.providerId,
     modelId: model.modelId,
-    ...(variant ? { variant } : undefined),
   };
+  if (variant) selection.variant = variant;
+  return selection;
 };
 
 export const coerceSessionSelectionToCatalog = (
@@ -48,13 +49,14 @@ export const coerceSessionSelectionToCatalog = (
     return null;
   }
 
-  return {
+  const normalizedSelection: AgentModelSelection = {
     runtimeKind,
     providerId: model.providerId,
     modelId: model.modelId,
-    ...(variant ? { variant } : undefined),
-    ...(profileId ? { profileId } : undefined),
   };
+  if (variant) normalizedSelection.variant = variant;
+  if (profileId) normalizedSelection.profileId = profileId;
+  return normalizedSelection;
 };
 
 export const normalizePersistedSelection = (
@@ -63,13 +65,14 @@ export const normalizePersistedSelection = (
   if (!selection) {
     return null;
   }
-  return {
+  const normalizedSelection: AgentModelSelection = {
     runtimeKind: selection.runtimeKind,
     providerId: selection.providerId,
     modelId: selection.modelId,
-    ...(selection.variant ? { variant: selection.variant } : undefined),
-    ...(selection.profileId ? { profileId: selection.profileId } : undefined),
   };
+  if (selection.variant) normalizedSelection.variant = selection.variant;
+  if (selection.profileId) normalizedSelection.profileId = selection.profileId;
+  return normalizedSelection;
 };
 
 export const mergeModelSelection = (
@@ -86,11 +89,12 @@ export const mergeModelSelection = (
   const runtimeKind = override.runtimeKind ?? base.runtimeKind;
   const variant = override.variant ?? base.variant;
   const profileId = override.profileId ?? base.profileId;
-  return {
-    ...(runtimeKind ? { runtimeKind } : undefined),
+  const selection: AgentModelSelection = {
     providerId: override.providerId,
     modelId: override.modelId,
-    ...(variant ? { variant } : undefined),
-    ...(profileId ? { profileId } : undefined),
   };
+  if (runtimeKind) selection.runtimeKind = runtimeKind;
+  if (variant) selection.variant = variant;
+  if (profileId) selection.profileId = profileId;
+  return selection;
 };

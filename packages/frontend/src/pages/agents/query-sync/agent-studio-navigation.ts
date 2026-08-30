@@ -68,7 +68,7 @@ const isRole = (value: string | null): value is AgentRole =>
   value != null && AGENT_ROLE_SET.has(value);
 
 const readOptionalString = (value: string | null | undefined): string | undefined => {
-  if (typeof value !== "string") {
+  if (value === null || value === undefined) {
     return undefined;
   }
   const trimmed = value.trim();

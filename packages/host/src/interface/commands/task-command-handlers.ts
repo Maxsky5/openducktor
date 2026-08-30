@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import type { TaskService } from "../../application/tasks/task-service";
-import { defineHostCommandHandlers } from "../router/host-command-router";
+import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
 import {
   parseAgentSessionDeleteInput,
   parseAgentSessionUpsertInput,
@@ -29,7 +29,7 @@ import {
 } from "./task-command-inputs";
 
 export const createTaskCommandHandlers = (taskService: TaskService) =>
-  defineHostCommandHandlers({
+  ({
     agent_session_delete: (args) =>
       taskService.agentSessionDelete(parseAgentSessionDeleteInput(args)),
     agent_session_upsert: (args) =>
@@ -116,4 +116,4 @@ export const createTaskCommandHandlers = (taskService: TaskService) =>
         parseMarkdownDocumentInput(args, "spec_save_document input", "spec"),
       ),
     tasks_list: (args) => taskService.listTasks(parseListTasksInput(args)),
-  });
+  }) satisfies HostCommandHandlerDefinitions;

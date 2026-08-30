@@ -34,6 +34,10 @@ type LegacySubtaskHistoryPart = {
   description: string;
 };
 type SessionHistoryPart = HistoryPart | LegacySubtaskHistoryPart;
+type UserMessageMeta = Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "user" }>;
+type ToolMessageMeta = Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "tool" }>;
+type AssistantMessageMeta = Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "assistant" }>;
+type AssistantTurnDurationInput = Parameters<typeof resolveAssistantTurnDurationMs>[0];
 
 const userMessageMeta = (
   messageModel: AgentModelSelection | undefined,
@@ -41,15 +45,23 @@ const userMessageMeta = (
   parts: AgentUserMessageDisplayPart[] = [],
 ) => {
   const effectiveModel = mergeModelSelection(null, messageModel);
-  return {
-    kind: "user",
-    state,
-    ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : undefined),
-    ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : undefined),
-    ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : undefined),
-    ...(effectiveModel?.profileId ? { profileId: effectiveModel.profileId } : undefined),
-    ...(parts.length > 0 ? { parts } : undefined),
-  } satisfies Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "user" }>;
+  const meta: UserMessageMeta = { kind: "user", state };
+  if (effectiveModel?.providerId) {
+    meta.providerId = effectiveModel.providerId;
+  }
+  if (effectiveModel?.modelId) {
+    meta.modelId = effectiveModel.modelId;
+  }
+  if (effectiveModel?.variant) {
+    meta.variant = effectiveModel.variant;
+  }
+  if (effectiveModel?.profileId) {
+    meta.profileId = effectiveModel.profileId;
+  }
+  if (parts.length > 0) {
+    meta.parts = parts;
+  }
+  return meta;
 };
 
 const inheritTimestampAccuracy = (
@@ -88,6 +100,50 @@ const historyPartToChatMessage = (
       const input = normalizeToolInput(part.input);
       const output = normalizeToolText(part.output);
       const error = normalizeToolText(part.error);
+      const meta: ToolMessageMeta = {
+        kind: "tool",
+        partId: part.partId,
+        callId: part.callId,
+        tool: part.tool,
+        toolType: part.toolType,
+        status: part.status,
+      };
+      if (part.preview) {
+        meta.preview = part.preview;
+      }
+      if (part.title) {
+        meta.title = part.title;
+      }
+      if (part.displayLabel) {
+        meta.displayLabel = part.displayLabel;
+      }
+      if (input) {
+        meta.input = input;
+      }
+      if (output) {
+        meta.output = output;
+      }
+      if (error) {
+        meta.error = error;
+      }
+      if (part.fileDiffs) {
+        meta.fileDiffs = part.fileDiffs;
+      }
+      if (part.fileContent) {
+        meta.fileContent = part.fileContent;
+      }
+      if (part.fileChanges) {
+        meta.fileChanges = part.fileChanges;
+      }
+      if (part.metadata) {
+        meta.metadata = part.metadata;
+      }
+      if (part.startedAtMs !== undefined) {
+        meta.startedAtMs = part.startedAtMs;
+      }
+      if (part.endedAtMs !== undefined) {
+        meta.endedAtMs = part.endedAtMs;
+      }
       return inheritTimestampAccuracy(
         {
           id: toToolMessageId({
@@ -98,53 +154,49 @@ const historyPartToChatMessage = (
           role: "tool",
           content: formatToolContent(part),
           timestamp: message.timestamp,
-          meta: {
-            kind: "tool",
-            partId: part.partId,
-            callId: part.callId,
-            tool: part.tool,
-            toolType: part.toolType,
-            status: part.status,
-            ...(part.preview ? { preview: part.preview } : undefined),
-            ...(part.title ? { title: part.title } : undefined),
-            ...(part.displayLabel ? { displayLabel: part.displayLabel } : undefined),
-            ...(input ? { input } : undefined),
-            ...(output ? { output } : undefined),
-            ...(error ? { error } : undefined),
-            ...(part.fileDiffs ? { fileDiffs: part.fileDiffs } : undefined),
-            ...(part.fileContent ? { fileContent: part.fileContent } : undefined),
-            ...(part.fileChanges ? { fileChanges: part.fileChanges } : undefined),
-            ...(part.metadata ? { metadata: part.metadata } : undefined),
-            ...(typeof part.startedAtMs === "number"
-              ? { startedAtMs: part.startedAtMs }
-              : undefined),
-            ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : undefined),
-          },
+          meta,
         },
         message,
       );
     }
     case "subagent": {
+      const meta: Parameters<typeof createSubagentMessage>[0]["meta"] = {
+        kind: "subagent",
+        partId: part.partId,
+        correlationKey: part.correlationKey,
+        status: part.status,
+      };
+      if (part.agent) {
+        meta.agent = part.agent;
+      }
+      if (part.prompt) {
+        meta.prompt = part.prompt;
+      }
+      if (part.description) {
+        meta.description = part.description;
+      }
+      if (part.error) {
+        meta.error = part.error;
+      }
+      if (part.externalSessionId) {
+        meta.externalSessionId = part.externalSessionId;
+      }
+      if (part.executionMode) {
+        meta.executionMode = part.executionMode;
+      }
+      if (part.metadata) {
+        meta.metadata = part.metadata;
+      }
+      if (part.startedAtMs !== undefined) {
+        meta.startedAtMs = part.startedAtMs;
+      }
+      if (part.endedAtMs !== undefined) {
+        meta.endedAtMs = part.endedAtMs;
+      }
       return inheritTimestampAccuracy(
         createSubagentMessage({
           timestamp: message.timestamp,
-          meta: {
-            kind: "subagent",
-            partId: part.partId,
-            correlationKey: part.correlationKey,
-            status: part.status,
-            ...(part.agent ? { agent: part.agent } : undefined),
-            ...(part.prompt ? { prompt: part.prompt } : undefined),
-            ...(part.description ? { description: part.description } : undefined),
-            ...(part.error ? { error: part.error } : undefined),
-            ...(part.externalSessionId ? { externalSessionId: part.externalSessionId } : undefined),
-            ...(part.executionMode ? { executionMode: part.executionMode } : undefined),
-            ...(part.metadata ? { metadata: part.metadata } : undefined),
-            ...(typeof part.startedAtMs === "number"
-              ? { startedAtMs: part.startedAtMs }
-              : undefined),
-            ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : undefined),
-          },
+          meta,
         }),
         message,
       );
@@ -242,18 +294,24 @@ export const historyToChatMessages = (
             readAssistantActivityStartedAtMsFromParts(message.parts, completedAtMs),
           )
         : undefined;
-    const assistantDurationMs =
-      isFinalAssistantMessage && !Number.isNaN(completedAtMs)
-        ? (message.durationMs ??
-          resolveAssistantTurnDurationMs({
-            completedAtMs,
-            ...(typeof activityStartedAtMs === "number" ? { activityStartedAtMs } : undefined),
-            ...(typeof userAnchorAtMs === "number" ? { userAnchorAtMs } : undefined),
-            ...(typeof previousAssistantCompletedAtMs === "number"
-              ? { previousAssistantCompletedAtMs }
-              : undefined),
-          }))
-        : undefined;
+    let assistantDurationMs: number | undefined;
+    if (isFinalAssistantMessage && !Number.isNaN(completedAtMs)) {
+      if (message.durationMs !== undefined) {
+        assistantDurationMs = message.durationMs;
+      } else {
+        const durationInput: AssistantTurnDurationInput = { completedAtMs };
+        if (activityStartedAtMs !== undefined) {
+          durationInput.activityStartedAtMs = activityStartedAtMs;
+        }
+        if (userAnchorAtMs !== undefined) {
+          durationInput.userAnchorAtMs = userAnchorAtMs;
+        }
+        if (previousAssistantCompletedAtMs !== undefined) {
+          durationInput.previousAssistantCompletedAtMs = previousAssistantCompletedAtMs;
+        }
+        assistantDurationMs = resolveAssistantTurnDurationMs(durationInput);
+      }
+    }
     const assistantMeta =
       message.role === "assistant"
         ? createAssistantMessageMeta({
@@ -269,15 +327,16 @@ export const historyToChatMessages = (
     if (lastAssistantTextMessageIndex !== undefined && assistantMeta) {
       const lastAssistantTextMessage = next[lastAssistantTextMessageIndex];
       if (lastAssistantTextMessage?.meta?.kind === "assistant") {
+        const nextMeta: AssistantMessageMeta = {
+          ...assistantMeta,
+          sourceMessageId: message.messageId,
+        };
+        if (lastAssistantTextMessage.meta.partId) {
+          nextMeta.partId = lastAssistantTextMessage.meta.partId;
+        }
         next[lastAssistantTextMessageIndex] = {
           ...lastAssistantTextMessage,
-          meta: {
-            ...assistantMeta,
-            sourceMessageId: message.messageId,
-            ...(lastAssistantTextMessage.meta.partId
-              ? { partId: lastAssistantTextMessage.meta.partId }
-              : undefined),
-          },
+          meta: nextMeta,
         };
       }
     }
@@ -324,9 +383,13 @@ export const historyToChatMessages = (
         role: message.role,
         content,
         timestamp: message.timestamp,
-        ...(message.timestampIsApproximate ? { timestampIsApproximate: true } : undefined),
-        ...(meta ? { meta } : undefined),
       };
+      if (message.timestampIsApproximate) {
+        primaryMessage.timestampIsApproximate = true;
+      }
+      if (meta) {
+        primaryMessage.meta = meta;
+      }
       next.push(primaryMessage);
     }
 

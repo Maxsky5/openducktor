@@ -1,17 +1,16 @@
 import type { AgentEvent } from "@openducktor/core";
 import { codexNotificationThreadId } from "./codex-app-server-requests";
-import {
-  extractStringField,
-  isPlainObject,
-  MAX_CODEX_BUFFERED_THREAD_COUNT,
-  trimOldestMapKeys,
-} from "./codex-app-server-shared";
+import { MAX_CODEX_BUFFERED_THREAD_COUNT, trimOldestMapKeys } from "./codex-app-server-shared";
 import type { CodexSessionLookup } from "./codex-local-session-state";
 import {
   type CodexSubagentLifecycleUpdate,
   codexSubagentLifecycleUpdateFromNotification,
 } from "./codex-subagent-lifecycle";
-import type { CodexSubagentLinkState, CodexSubagentRoute } from "./codex-subagent-link-state";
+import type {
+  CodexSubagentLinkInput,
+  CodexSubagentLinkState,
+  CodexSubagentRoute,
+} from "./codex-subagent-link-state";
 import type { CodexNotificationRecord, CodexSessionState } from "./types";
 
 type CodexSubagentLifecycleProjectorDeps = {
@@ -44,9 +43,10 @@ const isNewerLifecycleUpdate = (
 };
 
 const hasLifecycleStatus = (notification: CodexNotificationRecord): boolean => {
-  const params = isPlainObject(notification.params) ? notification.params : null;
-  const turn = params && isPlainObject(params.turn) ? params.turn : null;
-  return extractStringField(turn, ["status"]) !== null;
+  if (notification.method !== "turn/started" && notification.method !== "turn/completed") {
+    return false;
+  }
+  return notification.params.turn.status.length > 0;
 };
 
 export class CodexSubagentLifecycleProjector {
@@ -140,18 +140,23 @@ export class CodexSubagentLifecycleProjector {
       );
     }
     const previousStatus = this.deps.subagents.statusForChild(childThreadId, runtimeId);
-    const part = this.deps.subagents.upsertLink({
+    const linkInput: CodexSubagentLinkInput = {
       runtimeId,
       parentThreadId: route.parentExternalSessionId,
       childThreadId,
       itemId: childThreadId,
       status: update.status,
-      ...(update.error ? { error: update.error } : undefined),
       allowStatusRestart: update.allowStatusRestart,
-      ...(update.status === "running"
-        ? { startedAtMs: update.timestampMs }
-        : { endedAtMs: update.timestampMs }),
-    });
+    };
+    if (update.error) {
+      linkInput.error = update.error;
+    }
+    if (update.status === "running") {
+      linkInput.startedAtMs = update.timestampMs;
+    } else {
+      linkInput.endedAtMs = update.timestampMs;
+    }
+    const part = this.deps.subagents.upsertLink(linkInput);
     if (!parentSession) {
       return false;
     }

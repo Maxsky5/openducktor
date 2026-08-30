@@ -75,10 +75,7 @@ const queuePendingSubagentPartEmission = (
   runtime.session.subagentPartIdByExternalSessionId.set(externalSessionId, part.id);
   const pending =
     runtime.session.pendingSubagentPartEmissionsByExternalSessionId.get(externalSessionId) ?? [];
-  pending.push({
-    part,
-    ...(roleHint ? { roleHint } : undefined),
-  });
+  pending.push(roleHint ? { part, roleHint } : { part });
   runtime.session.pendingSubagentPartEmissionsByExternalSessionId.set(externalSessionId, pending);
 };
 
@@ -141,13 +138,13 @@ export const normalizeLiveSubagentCorrelation = (
       );
       removePendingSubagentCorrelationKey(runtime.session, existingCorrelationKey);
     }
-    return {
-      ...part,
-      correlationKey: existingCorrelationKey,
-      ...(effectiveExternalSessionId
-        ? { externalSessionId: effectiveExternalSessionId }
-        : undefined),
-    };
+    return effectiveExternalSessionId
+      ? {
+          ...part,
+          correlationKey: existingCorrelationKey,
+          externalSessionId: effectiveExternalSessionId,
+        }
+      : { ...part, correlationKey: existingCorrelationKey };
   }
 
   const signature = buildSubagentSignature(part);
@@ -177,11 +174,9 @@ export const normalizeLiveSubagentCorrelation = (
       removePendingSubagentCorrelationKey(runtime.session, correlationKey);
     }
 
-    return {
-      ...part,
-      correlationKey,
-      ...(linkedExternalSessionId ? { externalSessionId: linkedExternalSessionId } : undefined),
-    };
+    return linkedExternalSessionId
+      ? { ...part, correlationKey, externalSessionId: linkedExternalSessionId }
+      : { ...part, correlationKey };
   }
 
   const sessionCorrelationKey = effectiveExternalSessionId
@@ -192,7 +187,7 @@ export const normalizeLiveSubagentCorrelation = (
     : [];
   const pendingSessionId = effectiveExternalSessionId;
   const shouldDeferAmbiguousSessionBinding =
-    typeof pendingSessionId === "string" &&
+    pendingSessionId !== undefined &&
     pendingSessionId.length > 0 &&
     !sessionCorrelationKey &&
     pendingCorrelationKeys.length > 1;
@@ -222,11 +217,9 @@ export const normalizeLiveSubagentCorrelation = (
     removePendingSubagentCorrelationKey(runtime.session, correlationKey);
   }
 
-  return {
-    ...part,
-    correlationKey,
-    ...(effectiveExternalSessionId ? { externalSessionId: effectiveExternalSessionId } : undefined),
-  };
+  return effectiveExternalSessionId
+    ? { ...part, correlationKey, externalSessionId: effectiveExternalSessionId }
+    : { ...part, correlationKey };
 };
 
 export const removeSubagentCorrelationForPart = (

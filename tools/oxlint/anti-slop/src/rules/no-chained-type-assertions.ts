@@ -1,7 +1,5 @@
 import { defineRule } from "@oxlint/plugins";
 import type { ESTree } from "@oxlint/plugins";
-import { isConstAssertion } from "../shared/type-assertion.ts";
-import { unwrapTransparentExpression } from "../shared/transparent-expression.ts";
 
 type TypeAssertionExpression = ESTree.TSAsExpression | ESTree.TSTypeAssertion;
 
@@ -9,16 +7,28 @@ function isTypeAssertionExpression(node: ESTree.Node): node is TypeAssertionExpr
   return node.type === "TSAsExpression" || node.type === "TSTypeAssertion";
 }
 
+function unwrapParenthesizedExpression(expression: ESTree.Expression): ESTree.Expression {
+  let current = expression;
+  while (current.type === "ParenthesizedExpression") {
+    current = current.expression;
+  }
+  return current;
+}
+
+function isConstAssertion(node: TypeAssertionExpression): boolean {
+  const { typeAnnotation } = node;
+  return (
+    typeAnnotation.type === "TSTypeReference" &&
+    typeAnnotation.typeName.type === "Identifier" &&
+    typeAnnotation.typeName.name === "const"
+  );
+}
+
 function isOutermostAssertionInChain(node: TypeAssertionExpression): boolean {
   let current: ESTree.Expression = node;
   let parent = node.parent;
 
-  while (
-    (parent.type === "ParenthesizedExpression" ||
-      parent.type === "TSNonNullExpression" ||
-      parent.type === "TSSatisfiesExpression") &&
-    parent.expression === current
-  ) {
+  while (parent.type === "ParenthesizedExpression" && parent.expression === current) {
     current = parent;
     parent = parent.parent;
   }
@@ -34,7 +44,7 @@ function isForbiddenAssertionChain(node: TypeAssertionExpression): boolean {
   while (isTypeAssertionExpression(current)) {
     assertionCount += 1;
     hasNonConstAssertion ||= !isConstAssertion(current);
-    current = unwrapTransparentExpression(current.expression);
+    current = unwrapParenthesizedExpression(current.expression);
   }
 
   return assertionCount > 1 && hasNonConstAssertion;

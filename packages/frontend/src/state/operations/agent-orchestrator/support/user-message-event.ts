@@ -4,15 +4,16 @@ import type { AgentChatMessage } from "@/types/agent-orchestrator";
 const toUserMessageMeta = (event: AcceptedAgentUserMessage) => {
   const model = event.model;
   const parts = Array.isArray(event.parts) ? event.parts : [];
-  return {
-    kind: "user" as const,
+  const meta: Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "user" }> = {
+    kind: "user",
     state: event.state,
-    ...(model?.providerId ? { providerId: model.providerId } : undefined),
-    ...(model?.modelId ? { modelId: model.modelId } : undefined),
-    ...(model?.variant ? { variant: model.variant } : undefined),
-    ...(model?.profileId ? { profileId: model.profileId } : undefined),
-    ...(parts.length > 0 ? { parts } : undefined),
   };
+  if (model?.providerId) meta.providerId = model.providerId;
+  if (model?.modelId) meta.modelId = model.modelId;
+  if (model?.variant) meta.variant = model.variant;
+  if (model?.profileId) meta.profileId = model.profileId;
+  if (parts.length > 0) meta.parts = parts;
+  return meta;
 };
 
 export const toUserChatMessage = (

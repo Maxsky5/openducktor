@@ -139,7 +139,7 @@ export const createStartAgentSession = ({
           runtimeKind: startResult.runtimeInfo.runtimeKind,
           workingDirectory: startResult.runtimeInfo.workingDirectory,
         };
-        await rollbackRegisteredStartedSession({
+        const rollbackInput: Parameters<typeof rollbackRegisteredStartedSession>[0] = {
           message: cause instanceof Error ? cause.message : String(cause),
           cause,
           startedCtx: startResult.ctx,
@@ -147,13 +147,12 @@ export const createStartAgentSession = ({
           session,
           runtime,
           stopReason: "start-session-stop-after-bootstrap-failure",
-          ...(startResult.runtimeInfo.bootstrap && !bootstrapCompleted
-            ? {
-                bootstrap: startResult.runtimeInfo.bootstrap,
-                commitBootstrapOnDeleteFailure: !bootstrapCompletionAttempted,
-              }
-            : undefined),
-        });
+        };
+        if (startResult.runtimeInfo.bootstrap && !bootstrapCompleted) {
+          rollbackInput.bootstrap = startResult.runtimeInfo.bootstrap;
+          rollbackInput.commitBootstrapOnDeleteFailure = !bootstrapCompletionAttempted;
+        }
+        await rollbackRegisteredStartedSession(rollbackInput);
       }
 
       return {

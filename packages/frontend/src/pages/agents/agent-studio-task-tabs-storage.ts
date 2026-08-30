@@ -24,13 +24,11 @@ const persistedTaskTabsObjectSchema = z.object({
 });
 
 const normalizeTaskTabs = (entries: readonly unknown[]): string[] => {
-  return Array.from(
-    new Set(
-      entries.filter(
-        (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
-      ),
-    ),
-  );
+  const taskIds = entries.flatMap((entry) => {
+    const result = z.string().safeParse(entry);
+    return result.success && result.data.trim().length > 0 ? [result.data] : [];
+  });
+  return Array.from(new Set(taskIds));
 };
 
 export const parsePersistedTaskTabs = (raw: string | null): PersistedTaskTabsState => {

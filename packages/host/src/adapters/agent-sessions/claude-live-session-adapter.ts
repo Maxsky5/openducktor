@@ -8,17 +8,11 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { z } from "zod";
-import type {
-  ClaudeAgentSdkService,
-  ClaudePendingInputResolution,
-} from "../../application/runtimes/claude-agent-sdk-service";
-import {
-  type ClaudeWorkspaceWorkingDirectoryDependencies,
-  requireClaudeWorkspaceWorkingDirectory,
-} from "../../application/runtimes/claude-workspace-runtime";
+import type { ClaudePendingInputResolution } from "../../application/runtimes/claude-agent-sdk-service";
+import { requireClaudeWorkspaceWorkingDirectory } from "../../application/runtimes/claude-workspace-runtime";
 import {
   type HostError,
-  type HostOperationError,
+  type HostOperationErrorAggregate,
   HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
@@ -26,14 +20,14 @@ import type {
   AgentSessionLiveAdapterMutation,
   AgentSessionRuntimeAdapterPort,
 } from "../../ports/agent-session-live-adapter-port";
-import type {
-  PreparedRuntimeLiveSessionAdapter,
-  RuntimeLiveSessionLifecyclePort,
-} from "../../ports/runtime-live-session-lifecycle-port";
 import { parseClaudeTranscriptTarget } from "../claude/claude-agent-sdk-subagent-transcripts";
 import type { ClaudeAgentSdkEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
+import type {
+  ClaudeRuntimeSessionAdapterPreparer,
+  CreateClaudeLiveSessionAdapterPreparerInput,
+  PreparedClaudeLiveSessionAdapter,
+} from "./claude-live-session-adapter-contract";
 import { createClaudeLiveSessionEventCoordinator } from "./claude-live-session-event-coordinator";
-import type { ClaudeAgentSdkEventHub } from "./claude-live-session-event-hub";
 import {
   requireClaudePolicy,
   toClaudeForkInput,
@@ -49,56 +43,30 @@ import { createClaudeLiveSessionState } from "./claude-live-session-state";
 
 export type { ClaudeAgentSdkEventHub } from "./claude-live-session-event-hub";
 export { createClaudeAgentSdkEventHub } from "./claude-live-session-event-hub";
+export type {
+  ClaudeLiveSessionAdapterPreparer,
+  ClaudeRuntimeSessionAdapterPreparer,
+  CreateClaudeLiveSessionAdapterPreparerInput,
+  PreparedClaudeLiveSessionAdapter,
+} from "./claude-live-session-adapter-contract";
 
 type ClaudeRuntimeInstance = RuntimeInstanceSummary & {
   readonly kind: "claude";
   readonly runtimeRoute: { readonly type: "host_service"; readonly identity: string };
 };
 
-export type PreparedClaudeLiveSessionAdapter = Omit<
-  PreparedRuntimeLiveSessionAdapter,
-  "adapter"
-> & {
-  readonly adapter: AgentSessionRuntimeAdapterPort;
-};
+type ClaudeRuntimeValidationDetails =
+  | { readonly runtimeId: string; readonly runtimeKind: RuntimeKind }
+  | { readonly runtimeId: string };
 
-export type ClaudeLiveSessionAdapterPreparer = (
-  runtime: RuntimeInstanceSummary,
-) => Effect.Effect<PreparedRuntimeLiveSessionAdapter, HostError>;
-
-export type ClaudeRuntimeSessionAdapterPreparer = (
-  runtime: RuntimeInstanceSummary,
-) => Effect.Effect<PreparedClaudeLiveSessionAdapter, HostError>;
-
-export type CreateClaudeLiveSessionAdapterPreparerInput = {
-  readonly eventHub: ClaudeAgentSdkEventHub;
-  readonly liveSessionLifecycle: Pick<RuntimeLiveSessionLifecyclePort, "runAdapterMutation">;
-  readonly service: Pick<
-    ClaudeAgentSdkService,
-    | "forkSession"
-    | "loadSessionContextUsage"
-    | "prepareApprovalReply"
-    | "prepareQuestionReply"
-    | "releaseSession"
-    | "resumeSession"
-    | "sendUserMessage"
-    | "startSession"
-    | "stopSession"
-    | "stopSessionsForRuntime"
-    | "updateSessionModel"
-  >;
-  readonly sessionStore: {
-    get(externalSessionId: string): ClaudeSessionContext | undefined;
-  };
-  readonly workingDirectoryDependencies: ClaudeWorkspaceWorkingDirectoryDependencies;
-};
+type OperationValidationDetails = { readonly operation: string };
 
 const requireRuntime = (
   runtime: RuntimeInstanceSummary,
-): Effect.Effect<ClaudeRuntimeInstance, HostValidationError> => {
+): Effect.Effect<ClaudeRuntimeInstance, HostValidationError<ClaudeRuntimeValidationDetails>> => {
   if (runtime.kind !== "claude" || runtime.runtimeRoute.type !== "host_service") {
     return Effect.fail(
-      new HostValidationError({
+      new HostValidationError<ClaudeRuntimeValidationDetails>({
         field: "runtime",
         message: `Claude live-session adapter requires a Claude host-service runtime, received '${runtime.kind}/${runtime.runtimeRoute.type}'.`,
         details: { runtimeId: runtime.runtimeId, runtimeKind: runtime.kind },
@@ -107,7 +75,7 @@ const requireRuntime = (
   }
   if (runtime.runtimeRoute.identity !== runtime.runtimeId) {
     return Effect.fail(
-      new HostValidationError({
+      new HostValidationError<ClaudeRuntimeValidationDetails>({
         field: "runtime.runtimeRoute.identity",
         message: `Claude runtime route identity '${runtime.runtimeRoute.identity}' does not match runtime '${runtime.runtimeId}'.`,
         details: { runtimeId: runtime.runtimeId },
@@ -128,11 +96,11 @@ const parseOutput = <Schema extends z.ZodType, Input>(
   schema: Schema,
   value: Input,
   operation: string,
-): Effect.Effect<z.output<Schema>, HostValidationError> =>
+): Effect.Effect<z.output<Schema>, HostValidationError<OperationValidationDetails>> =>
   Effect.try({
     try: () => schema.parse(value),
     catch: (cause) =>
-      new HostValidationError({
+      new HostValidationError<OperationValidationDetails>({
         message: cause instanceof Error ? cause.message : String(cause),
         cause,
         details: { operation },
@@ -199,7 +167,7 @@ export const createClaudeLiveSessionAdapterPreparer =
 
       const sessionError =
         (operation: string, externalSessionId: string) =>
-        (cause: unknown): HostOperationError =>
+        (cause: unknown): HostOperationErrorAggregate =>
           toHostOperationError(cause, operation, {
             runtimeId: runtime.runtimeId,
             externalSessionId,
@@ -301,6 +269,7 @@ export const createClaudeLiveSessionAdapterPreparer =
         );
 
       const adapter: AgentSessionRuntimeAdapterPort = {
+        supportsSessionControl: true,
         binding: {
           runtimeId: runtime.runtimeId,
           runtimeKind: "claude",

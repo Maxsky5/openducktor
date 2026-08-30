@@ -8,6 +8,8 @@ import {
   type CodexAppServerClientRequest,
   type CodexAppServerCollabAgentToolCallThreadItem,
   type CodexAppServerSubAgentActivityThreadItem,
+  type CodexAppServerSubAgentSource,
+  type CodexAppServerSubAgentThreadSpawnSource,
   type CodexAppServerThread,
   type CodexAppServerSessionSource,
   type CodexAppServerThreadSource,
@@ -42,6 +44,27 @@ describe("Codex app-server protocol", () => {
 
     expect(threadSource).toBe("user-created-thread");
     expect(sessionSource).toEqual({ custom: "external-runtime" });
+  });
+
+  test("keeps subagent source aliases usable for the object variants", () => {
+    const otherSource: CodexAppServerSubAgentSource = { other: "agent-control" };
+    const threadSpawnSource: CodexAppServerSubAgentThreadSpawnSource = {
+      parent_thread_id: "parent-thread",
+      depth: 1,
+      agent_path: null,
+      agent_nickname: "reviewer",
+      agent_role: "review",
+    };
+    const sessionSource: CodexAppServerSessionSource = {
+      subAgent: { thread_spawn: threadSpawnSource },
+    };
+
+    expect(otherSource).toEqual({ other: "agent-control" });
+    expect(sessionSource).toEqual({
+      subAgent: {
+        thread_spawn: threadSpawnSource,
+      },
+    });
   });
 
   test("parses fuzzy file search results using the matching response schema", () => {

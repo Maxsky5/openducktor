@@ -1,29 +1,40 @@
+import { isJsonObject, type JsonObject, type JsonValue } from "@openducktor/contracts";
+import { z } from "zod";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 
 const TOOL_CANCELLED_PATTERN = /\b(cancel(?:ed|led)|aborted|stopped|interrupted|terminated)\b/i;
 
-const hasMeaningfulInputValue = (value: unknown): boolean => {
-  if (typeof value === "string") {
+const stringValueSchema = z.string();
+const numberOrBooleanValueSchema = z.union([z.number(), z.boolean()]);
+const isStringValue = (value: JsonValue): value is string =>
+  stringValueSchema.safeParse(value).success;
+
+const isNumberOrBooleanValue = (value: JsonValue): value is number | boolean =>
+  numberOrBooleanValueSchema.safeParse(value).success;
+
+const hasMeaningfulInputValue = (value: JsonValue): boolean => {
+  if (isStringValue(value)) {
     return value.trim().length > 0;
   }
-  if (typeof value === "number" || typeof value === "boolean") {
+  if (isNumberOrBooleanValue(value)) {
     return true;
   }
   if (Array.isArray(value)) {
     return value.some((entry) => hasMeaningfulInputValue(entry));
   }
-  if (!value || typeof value !== "object") {
+  if (!isJsonObject(value)) {
     return false;
   }
   return Object.values(value).some((entry) => hasMeaningfulInputValue(entry));
 };
 
-export const hasNonEmptyInput = (input: Record<string, unknown> | undefined): boolean => {
+export const hasNonEmptyInput = (input: JsonObject | undefined): boolean => {
   return input ? Object.values(input).some((value) => hasMeaningfulInputValue(value)) : false;
 };
 
-export const hasNonEmptyText = (value: unknown): value is string => {
-  return typeof value === "string" && value.trim().length > 0;
+export const hasNonEmptyText = (value: JsonValue | undefined): value is string => {
+  const result = stringValueSchema.safeParse(value);
+  return result.success && result.data.trim().length > 0;
 };
 
 export const isToolMessageFailure = (meta: ToolMeta): boolean => {

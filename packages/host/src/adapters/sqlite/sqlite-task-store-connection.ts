@@ -1,14 +1,18 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { Effect, Exit, Scope } from "effect";
-import { errorMessage, HostOperationError } from "../../effect/host-errors";
+import {
+  errorMessage,
+  HostOperationError,
+  type HostOperationErrorAggregate,
+} from "../../effect/host-errors";
 import { openSqliteDrizzleConnection } from "../../infrastructure/sqlite/sqlite-drizzle-client";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
 import { ensureSchema } from "./sqlite-task-store-migrations";
 import { type TaskStoreSession, taskStoreSchema } from "./sqlite-task-store-schema";
 
 export type ManagedSqliteTaskStoreConnection = {
-  release: Effect.Effect<void, HostOperationError>;
+  release: Effect.Effect<void, HostOperationErrorAggregate>;
   session: TaskStoreSession;
 };
 

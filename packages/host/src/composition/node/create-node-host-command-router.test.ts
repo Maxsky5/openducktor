@@ -2,10 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { mcpBridgeDiscoveryFileSchema } from "@openducktor/contracts";
 import { Cause, Effect } from "effect";
 import type { McpHostBridgeServer } from "../../adapters/mcp/mcp-host-bridge-server";
 import { createSourceRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
 import { HostOperationError } from "../../effect/host-errors";
+import { parseJson } from "../../effect/json";
 import type { HostEventBusPort } from "../../events/host-event-bus";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
@@ -87,9 +89,8 @@ const createRouter = (input: {
   logger: HostLifecycleLogger;
   onBackgroundFailure?: CreateNodeHostCommandRouterInput["onBackgroundFailure"];
   runtimeRegistry?: RuntimeRegistryPort;
-}) =>
-  createNodeEffectHostCommandRouter({
-    ...(input.eventBus ? { eventBus: input.eventBus } : undefined),
+}) => {
+  const routerInput: Parameters<typeof createNodeEffectHostCommandRouter>[0] = {
     lifecycleLogger: input.logger,
     mcpBridgeDiscoveryMode: "production",
     mcpHostBridge: createMcpHostBridge(),
@@ -99,7 +100,12 @@ const createRouter = (input: {
     runtimeRegistry: input.runtimeRegistry ?? createRuntimeRegistry(),
     taskStore: createTaskStoreTestDouble({}),
     terminalPty,
-  });
+  };
+  if (input.eventBus) {
+    routerInput.eventBus = input.eventBus;
+  }
+  return createNodeEffectHostCommandRouter(routerInput);
+};
 
 describe("createNodeEffectHostCommandRouter", () => {
   test("publishes development discovery from composition mode despite ambient channel", async () => {
@@ -124,16 +130,18 @@ describe("createNodeEffectHostCommandRouter", () => {
     try {
       await Effect.runPromise(router.initialize());
 
-      const payload: Record<string, unknown> = JSON.parse(
-        await readFile(
-          path.join(
-            configDir,
-            "runtime",
-            "dev-instances",
-            "browser-0123456789ab",
-            "mcp-bridge.json",
+      const payload = mcpBridgeDiscoveryFileSchema.parse(
+        parseJson(
+          await readFile(
+            path.join(
+              configDir,
+              "runtime",
+              "dev-instances",
+              "browser-0123456789ab",
+              "mcp-bridge.json",
+            ),
+            "utf8",
           ),
-          "utf8",
         ),
       );
       expect(payload).toEqual({

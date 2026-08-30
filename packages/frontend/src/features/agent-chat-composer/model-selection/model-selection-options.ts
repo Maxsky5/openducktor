@@ -36,14 +36,13 @@ const toAgentProfileOptionsWithSelectedFallback = (
   const fallbackAgent = selectedModelSelection?.profileId;
   const fallbackAgentColor = resolveAgentAccentColor(fallbackAgent);
   if (fallbackAgent && fallbackAgent.trim().length > 0) {
-    return [
-      {
-        value: fallbackAgent,
-        label: fallbackAgent,
-        description: "Current session profile",
-        ...(fallbackAgentColor ? { accentColor: fallbackAgentColor } : undefined),
-      },
-    ];
+    const option: ComboboxOption = {
+      value: fallbackAgent,
+      label: fallbackAgent,
+      description: "Current session profile",
+    };
+    if (fallbackAgentColor) option.accentColor = fallbackAgentColor;
+    return [option];
   }
   return [];
 };

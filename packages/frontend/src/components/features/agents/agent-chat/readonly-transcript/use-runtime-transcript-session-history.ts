@@ -82,12 +82,13 @@ export function useRuntimeTranscriptSessionHistory({
     ) {
       return null;
     }
-    return {
+    const stableTarget: AgentSessionTranscriptTarget = {
       externalSessionId: targetExternalSessionId,
       runtimeKind: targetRuntimeKind,
       workingDirectory: targetWorkingDirectory,
-      ...(targetSessionScope ? { sessionScope: targetSessionScope } : undefined),
     };
+    if (targetSessionScope) stableTarget.sessionScope = targetSessionScope;
+    return stableTarget;
   }, [targetExternalSessionId, targetRuntimeKind, targetSessionScope, targetWorkingDirectory]);
   let emptyReason: AgentSessionTranscriptEmptyReason | null = null;
   if (!isOpen) {

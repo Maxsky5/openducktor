@@ -1,7 +1,8 @@
 import { APP_PLATFORM_VALUES, appPlatformSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
-import { defineHostCommandHandlers } from "../router/host-command-router";
+import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
+import type { HostCommandArgs } from "./command-inputs";
 
 type PlatformSource = () => string;
 
@@ -12,8 +13,8 @@ const supportedPlatformsText =
 
 const noArgsValidationError = (
   command: string,
-  args: Record<string, unknown> | undefined,
-): HostValidationError | null => {
+  args: HostCommandArgs,
+): HostValidationError<{ command: string }> | null => {
   if (args && Object.keys(args).length > 0) {
     return new HostValidationError({
       message: `${command} does not accept arguments.`,
@@ -27,7 +28,7 @@ const noArgsValidationError = (
 export const createSystemPlatformCommandHandlers = (
   platformSource: PlatformSource = () => process.platform,
 ) =>
-  defineHostCommandHandlers({
+  ({
     system_get_platform: (args) =>
       Effect.gen(function* () {
         const argsError = noArgsValidationError("system_get_platform", args);
@@ -50,4 +51,4 @@ export const createSystemPlatformCommandHandlers = (
 
         return parsed.data;
       }),
-  });
+  }) satisfies HostCommandHandlerDefinitions;

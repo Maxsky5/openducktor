@@ -11,7 +11,6 @@ export class HostPullRequestReviewClient {
     repoPath: string;
     taskId?: string;
   }): Promise<PullRequestReviewContext> {
-    const payload = await this.invokeFn("pull_request_review_context_get", input);
-    return pullRequestReviewContextSchema.parse(payload);
+    return this.invokeFn("pull_request_review_context_get", input, pullRequestReviewContextSchema);
   }
 }

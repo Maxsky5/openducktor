@@ -24,11 +24,12 @@ import type {
   LocalAttachmentServiceError,
 } from "../../application/attachments/local-attachment-service";
 import { HostValidationError } from "../../effect/host-errors";
-import { defineHostCommandHandlers } from "../router/host-command-router";
+import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
+import type { HostCommandArgs } from "./command-inputs";
 
 const parseCommandInput = <Output>(
   schema: z.ZodType<Output>,
-  args: Record<string, unknown> | undefined,
+  args: HostCommandArgs,
   command: string,
 ) =>
   Effect.try({
@@ -71,7 +72,7 @@ export const createAgentSessionLiveCommandHandlers = (
   service: AgentSessionLiveStateService,
   attachmentResolver: LocalAttachmentResolver,
 ) =>
-  defineHostCommandHandlers({
+  ({
     agent_session_control_fork: (args) =>
       parseCommandInput(
         agentSessionControlForkInputSchema,
@@ -155,4 +156,4 @@ export const createAgentSessionLiveCommandHandlers = (
         args,
         "agent_session_live_reply_question",
       ).pipe(Effect.flatMap(service.replyQuestion)),
-  });
+  }) satisfies HostCommandHandlerDefinitions;

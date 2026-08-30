@@ -1,5 +1,4 @@
 import { Buffer } from "node:buffer";
-import { createRequire } from "node:module";
 import {
   type ProcessTreeInspector,
   type ProcessTreeTerminator,
@@ -12,41 +11,14 @@ import {
   waitForObservedState,
 } from "@openducktor/host";
 import { Effect } from "effect";
-import type * as NodePty from "node-pty";
+import { spawn } from "node-pty";
 
-type NodePtyProcess = {
-  readonly pid: number;
-  onData(listener: (data: string | Buffer) => void): { dispose(): void };
-  onExit(listener: (event: { exitCode: number; signal?: number }) => void): { dispose(): void };
-  write(data: string | Buffer): void;
-  resize(columns: number, rows: number): void;
-  pause(): void;
-  resume(): void;
-};
-
-type NodePtyModule = {
-  spawn(...args: Parameters<typeof NodePty.spawn>): NodePtyProcess;
-};
+type NodePtyModule = { readonly spawn: typeof spawn };
 
 type CreateNodePtyPortInput = {
   nodePty?: NodePtyModule;
   processTreeInspector?: ProcessTreeInspector;
   processTreeTerminator?: ProcessTreeTerminator;
-};
-
-const loadNodePty = (): NodePtyModule => {
-  const require = createRequire(import.meta.url);
-  const candidate: unknown = require("node-pty");
-  if (
-    typeof candidate !== "object" ||
-    candidate === null ||
-    !("spawn" in candidate) ||
-    typeof candidate.spawn !== "function"
-  ) {
-    throw new Error("The installed node-pty module does not export spawn().");
-  }
-  // SAFETY: The installed node-pty package defines spawn with NodePtyModule's signature, and the runtime guard above verifies that the CommonJS export exists and is callable.
-  return candidate as NodePtyModule;
 };
 
 const operation = (
@@ -65,7 +37,7 @@ const operation = (
   });
 
 export const createNodePtyPort = ({
-  nodePty = loadNodePty(),
+  nodePty = { spawn },
   processTreeInspector = processTreeHasChildren,
   processTreeTerminator = terminateProcessTree,
 }: CreateNodePtyPortInput = {}): TerminalPtyPort => ({

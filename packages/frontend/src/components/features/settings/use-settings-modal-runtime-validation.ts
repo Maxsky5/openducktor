@@ -132,11 +132,13 @@ export const useSettingsModalRuntimeValidation = ({
     if (!snapshotDraft) {
       return EMPTY_RUNTIME_AVAILABILITY_VALIDATION_STATE;
     }
-    return buildRuntimeAvailabilityValidationState({
+    const validationInput: Parameters<typeof buildRuntimeAvailabilityValidationState>[0] = {
       runtimeDefinitions,
       snapshotDraft,
-      ...(runtimeExecutableResults ? { runtimeExecutableResults } : undefined),
-      ...(checkingRuntimeKinds ? { checkingRuntimeKinds } : undefined),
-    });
+    };
+    if (runtimeExecutableResults)
+      validationInput.runtimeExecutableResults = runtimeExecutableResults;
+    if (checkingRuntimeKinds) validationInput.checkingRuntimeKinds = checkingRuntimeKinds;
+    return buildRuntimeAvailabilityValidationState(validationInput);
   }, [checkingRuntimeKinds, runtimeDefinitions, runtimeExecutableResults, snapshotDraft]);
 };
