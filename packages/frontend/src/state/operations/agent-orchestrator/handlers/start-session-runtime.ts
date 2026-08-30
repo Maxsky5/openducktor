@@ -1,12 +1,7 @@
-import type { RuntimeKind, TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { throwIfRepoStale } from "../support/core";
-import { loadSessionPromptContext } from "../support/session-prompt";
-import type {
-  FreshStartRuntimeContext,
-  StartSessionContext,
-  StartSessionExecutionDependencies,
-} from "./start-session.types";
+import { loadSessionPromptContext, type SessionPromptTask } from "../support/session-prompt";
+import type { StartSessionContext, StartSessionExecutionDependencies } from "./start-session.types";
 import { STALE_START_ERROR } from "./start-session-constants";
 
 export const loadStartSystemPrompt = async ({
@@ -15,7 +10,7 @@ export const loadStartSystemPrompt = async ({
   deps,
 }: {
   ctx: StartSessionContext;
-  taskCard: TaskCard;
+  taskCard: SessionPromptTask;
   deps: Pick<StartSessionExecutionDependencies, "model">;
 }): Promise<string> => {
   const { systemPrompt } = await loadSessionPromptContext({
@@ -27,56 +22,6 @@ export const loadStartSystemPrompt = async ({
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
   return systemPrompt;
-};
-
-export const resolveFreshStartRuntimeContext = async ({
-  ctx,
-  targetWorkingDirectory,
-  requestedRuntimeKind,
-  taskCard,
-  deps,
-}: {
-  ctx: StartSessionContext;
-  targetWorkingDirectory?: string | null;
-  requestedRuntimeKind: RuntimeKind;
-  taskCard: TaskCard;
-  deps: Pick<StartSessionExecutionDependencies, "runtime" | "model">;
-}): Promise<FreshStartRuntimeContext> => {
-  const systemPrompt = await loadStartSystemPrompt({
-    ctx,
-    taskCard,
-    deps,
-  });
-  const runtimeOptions: Parameters<typeof deps.runtime.ensureRuntime>[3] = {
-    workspaceId: ctx.workspaceId,
-    runtimeKind: requestedRuntimeKind,
-  };
-  if (targetWorkingDirectory !== undefined) {
-    runtimeOptions.targetWorkingDirectory = targetWorkingDirectory;
-  }
-  const runtime = await deps.runtime.ensureRuntime(
-    ctx.repoPath,
-    ctx.taskId,
-    ctx.role,
-    runtimeOptions,
-  );
-  if (ctx.isStaleRepoOperation()) {
-    try {
-      await runtime.bootstrap?.abort();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `${STALE_START_ERROR} Failed to roll back task worktree bootstrap: ${message}`,
-        error instanceof Error ? { cause: error } : undefined,
-      );
-    }
-    throw new Error(STALE_START_ERROR);
-  }
-
-  return {
-    runtime,
-    systemPrompt,
-  };
 };
 
 export const serializeSelectedModelKey = (

@@ -2,26 +2,19 @@ import { errorMessage } from "@/lib/errors";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { RuntimeInfo } from "../runtime/runtime";
 import { runOrchestratorTask } from "../support/async-side-effects";
+import { SessionLaunchStopError } from "./session-launch-errors";
 import type {
   RuntimeDependencies,
   SessionDependencies,
   SessionStartTags,
   StartedSessionContext,
 } from "./start-session.types";
-import { STALE_START_ERROR } from "./start-session-constants";
 
 const toStartedSessionIdentity = (startedCtx: StartedSessionContext): AgentSessionIdentity => ({
   externalSessionId: startedCtx.summary.externalSessionId,
   runtimeKind: startedCtx.summary.runtimeKind,
   workingDirectory: startedCtx.summary.workingDirectory,
 });
-
-const toStartedSessionStopTarget = (startedCtx: StartedSessionContext) => {
-  return {
-    ...toStartedSessionIdentity(startedCtx),
-    repoPath: startedCtx.repoPath,
-  };
-};
 
 const toStartedSessionTags = (startedCtx: StartedSessionContext): SessionStartTags => ({
   repoPath: startedCtx.repoPath,
@@ -30,7 +23,6 @@ const toStartedSessionTags = (startedCtx: StartedSessionContext): SessionStartTa
   externalSessionId: startedCtx.summary.externalSessionId,
 });
 
-class StartedSessionStopError extends Error {}
 class BootstrapFinalizationHandledError extends Error {}
 
 type SessionBootstrap = NonNullable<RuntimeInfo["bootstrap"]>;
@@ -55,7 +47,7 @@ export const rollbackBootstrapAfterStartFailure = async ({
   bootstrap: { abort: () => Promise<void> };
 }): Promise<never> => {
   if (
-    cause instanceof StartedSessionStopError ||
+    cause instanceof SessionLaunchStopError ||
     cause instanceof BootstrapFinalizationHandledError
   ) {
     throw cause;
@@ -69,33 +61,6 @@ export const rollbackBootstrapAfterStartFailure = async ({
     );
   }
   throw cause;
-};
-
-export const stopSessionOnStaleAndThrow = async ({
-  reason,
-  runtime,
-  startedCtx,
-}: {
-  reason: string;
-  runtime: RuntimeDependencies;
-  startedCtx: StartedSessionContext;
-}): Promise<never> => {
-  const tags = toStartedSessionTags(startedCtx);
-  try {
-    await runOrchestratorTask(
-      reason,
-      async () => runtime.adapter.stopSession(toStartedSessionStopTarget(startedCtx)),
-      {
-        tags,
-      },
-    );
-  } catch (error) {
-    throw new StartedSessionStopError(
-      `${STALE_START_ERROR} Failed to stop stale started session '${tags.externalSessionId}': ${errorMessage(error)}`,
-      { cause: error },
-    );
-  }
-  throw new Error(STALE_START_ERROR);
 };
 
 export const rollbackStartedSessionAfterPersistenceFailure = async ({
@@ -137,6 +102,7 @@ export const rollbackRegisteredStartedSession = async ({
   stopReason,
   bootstrap,
   commitBootstrapOnDeleteFailure = true,
+  durableRecordExists = true,
 }: {
   message: string;
   cause: unknown;
@@ -147,6 +113,7 @@ export const rollbackRegisteredStartedSession = async ({
   stopReason: string;
   bootstrap?: SessionBootstrap;
   commitBootstrapOnDeleteFailure?: boolean;
+  durableRecordExists?: boolean;
 }): Promise<never> => {
   try {
     await runOrchestratorTask(
@@ -155,57 +122,59 @@ export const rollbackRegisteredStartedSession = async ({
       { tags: toStartedSessionTags(startedCtx) },
     );
   } catch (stopError) {
-    throw new StartedSessionStopError(
+    throw new SessionLaunchStopError(
       `${message} Failed to stop the started session during rollback: ${errorMessage(stopError)}. Cleanup was not continued.`,
       { cause: stopError },
     );
   }
 
-  try {
-    await session.deleteSessionRecord(startedCtx.taskId, identity);
-  } catch (error) {
-    session.clearSessionObservationState(identity);
-    let preserveFailed = false;
-    let preserveError: unknown;
-    if (bootstrap && commitBootstrapOnDeleteFailure) {
-      try {
-        await bootstrap.complete();
-      } catch (completionError) {
-        preserveFailed = true;
-        preserveError = completionError;
+  if (durableRecordExists) {
+    try {
+      await session.deleteSessionRecord(startedCtx.taskId, identity);
+    } catch (error) {
+      session.clearSessionObservationState(identity);
+      let preserveFailed = false;
+      let preserveError: unknown;
+      if (bootstrap && commitBootstrapOnDeleteFailure) {
+        try {
+          await bootstrap.complete();
+        } catch (completionError) {
+          preserveFailed = true;
+          preserveError = completionError;
+        }
       }
-    }
 
-    const progress = [
-      "The started session was stopped.",
-      `Failed to delete the durable session record: ${errorMessage(error)}.`,
-      "The stopped session remains registered locally and durably for recovery.",
-    ];
-    if (bootstrap) {
-      if (commitBootstrapOnDeleteFailure) {
-        progress.push(
-          describeRollbackStep(
-            preserveFailed,
-            preserveError,
-            "Failed to commit the task worktree bootstrap while preserving its resources",
-            "The task worktree bootstrap was committed to preserve its resources.",
-          ),
-        );
-      } else {
-        progress.push(
-          "The task worktree resources were left intact without retrying bootstrap completion.",
+      const progress = [
+        "The started session was stopped.",
+        `Failed to delete the durable session record: ${errorMessage(error)}.`,
+        "The stopped session remains registered locally and durably for recovery.",
+      ];
+      if (bootstrap) {
+        if (commitBootstrapOnDeleteFailure) {
+          progress.push(
+            describeRollbackStep(
+              preserveFailed,
+              preserveError,
+              "Failed to commit the task worktree bootstrap while preserving its resources",
+              "The task worktree bootstrap was committed to preserve its resources.",
+            ),
+          );
+        } else {
+          progress.push(
+            "The task worktree resources were left intact without retrying bootstrap completion.",
+          );
+        }
+      }
+
+      const rollbackMessage = `${message} ${progress.join(" ")}`;
+      if (bootstrap) {
+        throw new BootstrapFinalizationHandledError(
+          rollbackMessage,
+          cause instanceof Error ? { cause } : undefined,
         );
       }
+      throw new Error(rollbackMessage, cause instanceof Error ? { cause } : undefined);
     }
-
-    const rollbackMessage = `${message} ${progress.join(" ")}`;
-    if (bootstrap) {
-      throw new BootstrapFinalizationHandledError(
-        rollbackMessage,
-        cause instanceof Error ? { cause } : undefined,
-      );
-    }
-    throw new Error(rollbackMessage, cause instanceof Error ? { cause } : undefined);
   }
 
   session.clearSessionObservationState(identity);
@@ -222,10 +191,10 @@ export const rollbackRegisteredStartedSession = async ({
     }
   }
 
-  const progress = [
-    "The started session was stopped and removed locally.",
-    "The durable session record was deleted.",
-  ];
+  const progress = ["The started session was stopped and removed locally."];
+  if (durableRecordExists) {
+    progress.push("The durable session record was deleted.");
+  }
   if (bootstrap) {
     progress.push(
       describeRollbackStep(
@@ -245,38 +214,4 @@ export const rollbackRegisteredStartedSession = async ({
     );
   }
   throw new Error(rollbackMessage, cause instanceof Error ? { cause } : undefined);
-};
-
-export const rollbackStartedSessionBeforeRegistration = async ({
-  error,
-  startedCtx,
-  runtime,
-  reason,
-}: {
-  error: unknown;
-  startedCtx: StartedSessionContext;
-  runtime: RuntimeDependencies;
-  reason: string;
-}): Promise<never> => {
-  const externalSessionId = startedCtx.summary.externalSessionId;
-
-  try {
-    await runOrchestratorTask(
-      reason,
-      async () => runtime.adapter.stopSession(toStartedSessionStopTarget(startedCtx)),
-      {
-        tags: toStartedSessionTags(startedCtx),
-      },
-    );
-  } catch (stopError) {
-    throw new StartedSessionStopError(
-      `Failed to initialize started session "${externalSessionId}": ${errorMessage(error)}. Failed to stop the started session during rollback: ${errorMessage(stopError)}`,
-      { cause: stopError },
-    );
-  }
-
-  throw new Error(
-    `Failed to initialize started session "${externalSessionId}": ${errorMessage(error)}. The started session was stopped before local registration.`,
-    error instanceof Error ? { cause: error } : undefined,
-  );
 };

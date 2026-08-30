@@ -1,4 +1,4 @@
-import type { RepoPromptOverrides, TaskCard, TaskWorktreeSummary } from "@openducktor/contracts";
+import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import type { SessionStartGate } from "@/features/session-start/session-start-gate";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
@@ -37,7 +37,6 @@ type SessionActionsDependencies = {
   prepareTaskSessionStartupLease: RuntimeDependencies["prepareTaskSessionStartupLease"];
   completeTaskSessionStartupLease: RuntimeDependencies["completeTaskSessionStartupLease"];
   abortTaskSessionStartupLease: RuntimeDependencies["abortTaskSessionStartupLease"];
-  resolveTaskWorktree: (repoPath: string, taskId: string) => Promise<TaskWorktreeSummary | null>;
   ensureRuntime: EnsureRuntime;
   ensureExistingSessionRuntime: EnsureExistingSessionRuntime;
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
@@ -69,7 +68,6 @@ export const createAgentSessionActions = ({
   prepareTaskSessionStartupLease,
   completeTaskSessionStartupLease,
   abortTaskSessionStartupLease,
-  resolveTaskWorktree,
   ensureRuntime,
   ensureExistingSessionRuntime,
   loadTaskDocuments,
@@ -128,7 +126,6 @@ export const createAgentSessionActions = ({
       prepareTaskSessionStartupLease,
       completeTaskSessionStartupLease,
       abortTaskSessionStartupLease,
-      resolveTaskWorktree,
       ensureRuntime,
     },
     task: {

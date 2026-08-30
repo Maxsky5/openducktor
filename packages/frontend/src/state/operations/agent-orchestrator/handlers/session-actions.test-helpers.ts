@@ -139,7 +139,6 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
     prepareTaskSessionStartupLease: async () => "lease-1",
     completeTaskSessionStartupLease: async () => {},
     abortTaskSessionStartupLease: async () => {},
-    resolveTaskWorktree: async () => null,
     ensureRuntime: async () => ({
       kind: "opencode",
       runtimeKind: "opencode",

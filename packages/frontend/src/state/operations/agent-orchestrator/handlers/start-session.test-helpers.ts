@@ -182,7 +182,6 @@ export type FlatStartSessionDependencies = Omit<
   > &
   Omit<
     StartSessionDependencies["runtime"],
-    | "resolveTaskWorktree"
     | "canonicalizePath"
     | "prepareTaskSessionStartupLease"
     | "completeTaskSessionStartupLease"
@@ -191,7 +190,6 @@ export type FlatStartSessionDependencies = Omit<
   Partial<
     Pick<
       StartSessionDependencies["runtime"],
-      | "resolveTaskWorktree"
       | "canonicalizePath"
       | "prepareTaskSessionStartupLease"
       | "completeTaskSessionStartupLease"
@@ -231,12 +229,6 @@ export const toStartSessionDependencies = (
         deps.prepareTaskSessionStartupLease ?? (async () => "lease-1"),
       completeTaskSessionStartupLease: deps.completeTaskSessionStartupLease ?? (async () => {}),
       abortTaskSessionStartupLease: deps.abortTaskSessionStartupLease ?? (async () => {}),
-      resolveTaskWorktree:
-        deps.resolveTaskWorktree ??
-        (async () => ({
-          workingDirectory: "/tmp/repo/worktree",
-          source: "active_build_run",
-        })),
       ensureRuntime: deps.ensureRuntime ?? ensureRuntimeWithKind,
     },
     task: {
@@ -278,10 +270,6 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
     loadAgentSessionHistory = async () => null,
     persistSessionRecord = async () => {},
     deleteSessionRecord = async () => {},
-    resolveTaskWorktree = async () => ({
-      workingDirectory: "/tmp/repo/worktree",
-      source: "active_build_run" as const,
-    }),
     canonicalizePath = async (path: string) => path,
     prepareTaskSessionStartupLease = async () => "lease-1",
     completeTaskSessionStartupLease = async () => {},
@@ -326,7 +314,6 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
     loadAgentSessionHistory,
     persistSessionRecord,
     deleteSessionRecord,
-    resolveTaskWorktree,
     canonicalizePath,
     prepareTaskSessionStartupLease,
     completeTaskSessionStartupLease,

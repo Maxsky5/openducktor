@@ -7,7 +7,6 @@ import { host } from "../../shared/host";
 import {
   BUILD_SELECTION,
   sessionFixture as baseSessionFixture,
-  continuationTarget,
   createAgentSessionCollection,
   createSessionsRef,
   createStartSessionTestHarness,
@@ -50,7 +49,6 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
           startedAt: "2026-02-22T08:10:00.000Z",
         }),
       ]),
-      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -97,7 +95,6 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
           startedAt: "2026-02-22T08:00:00.000Z",
         }),
       ]),
-      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -158,7 +155,6 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
         }),
       ]),
       taskRef: { current: [taskFixture] },
-      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/new-worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -203,7 +199,6 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
         }),
       ]),
       taskRef: { current: [taskFixture] },
-      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree/"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -255,7 +250,6 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
 
     const { start } = createStartSessionTestHarness({
       sessionsRef,
-      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -331,7 +325,6 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
         }),
       ]),
       taskRef: { current: [taskFixture] },
-      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -404,7 +397,6 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
         }),
       ]),
       taskRef: { current: [taskFixture] },
-      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",

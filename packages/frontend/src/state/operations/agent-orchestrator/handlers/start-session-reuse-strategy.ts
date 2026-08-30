@@ -3,12 +3,8 @@ import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orch
 import { throwIfRepoStale } from "../support/core";
 import { isWorkflowAgentSession } from "../support/workflow-session";
 import { hasLoadedSessionHistory } from "../transcript/session-transcript-content";
-import type {
-  StartAgentSessionInput,
-  StartOrReuseResult,
-  StartSessionContext,
-  StartSessionExecutionDependencies,
-} from "./start-session.types";
+import type { StartAgentSessionInput } from "./start-session.types";
+import type { StartSessionContext, StartSessionExecutionDependencies } from "./start-session.types";
 import { STALE_START_ERROR } from "./start-session-constants";
 import { resolveStartTask } from "./start-session-policies";
 
@@ -102,7 +98,7 @@ export const executeReuseStart = async ({
   ctx,
   input,
   deps,
-}: ReuseStrategyInput): Promise<Extract<StartOrReuseResult, { kind: "reused" }>> => {
+}: ReuseStrategyInput): Promise<AgentSessionIdentity> => {
   if (ctx.role === "qa") {
     resolveStartTask({ ctx, task: deps.task });
   }
@@ -113,8 +109,5 @@ export const executeReuseStart = async ({
     sourceSession: input.sourceSession,
   });
 
-  return {
-    kind: "reused",
-    session: toAgentSessionIdentity(loadedSession),
-  };
+  return toAgentSessionIdentity(loadedSession);
 };

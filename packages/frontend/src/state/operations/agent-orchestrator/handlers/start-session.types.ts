@@ -1,14 +1,9 @@
-import type {
-  AgentSessionRecord,
-  RepoPromptOverrides,
-  TaskCard,
-  TaskWorktreeSummary,
-} from "@openducktor/contracts";
+import type { AgentSessionRecord, RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentRole, AgentUserMessagePart } from "@openducktor/core";
 import type { SessionStartGate } from "@/features/session-start/session-start-gate";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { StartAgentSessionInput, StartAgentSessionResult } from "@/types/agent-session-start";
-import type { EnsureRuntime, RuntimeInfo, TaskDocuments } from "../runtime/runtime";
+import type { EnsureRuntime, TaskDocuments } from "../runtime/runtime";
 import type { LoadSourceSession } from "../session-read-model/source-session-loader";
 import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
 
@@ -43,7 +38,6 @@ export type RuntimeDependencies = {
     taskId: string,
     leaseId: string,
   ) => Promise<void>;
-  resolveTaskWorktree: (repoPath: string, taskId: string) => Promise<TaskWorktreeSummary | null>;
   adapter: AgentEnginePort;
   ensureRuntime: EnsureRuntime;
 };
@@ -102,20 +96,3 @@ export type StartSessionExecutionDependencies = Pick<
   StartSessionDependencies,
   "session" | "runtime" | "task" | "model"
 >;
-
-export type FreshStartRuntimeContext = {
-  runtime: RuntimeInfo;
-  systemPrompt: string;
-};
-
-export type StartOrReuseResult =
-  | {
-      kind: "reused";
-      session: AgentSessionIdentity;
-    }
-  | {
-      kind: "started";
-      runtimeInfo: RuntimeInfo;
-      taskCard: TaskCard;
-      ctx: StartedSessionContext;
-    };

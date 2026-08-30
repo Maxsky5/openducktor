@@ -8,7 +8,6 @@ import {
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { executeReuseStart } from "./start-session-reuse-strategy";
 import {
-  createBuildContinuationTargetFixture,
   createBuildSessionFixture,
   createRuntimeDependenciesFixture,
   createSessionDependenciesFixture,
@@ -73,21 +72,15 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
         },
         deps: {
           session: sessionDependencies,
-          runtime: createRuntimeDependenciesFixture({
-            resolveTaskWorktree: async () =>
-              createBuildContinuationTargetFixture("/tmp/repo/worktree"),
-          }),
+          runtime: createRuntimeDependenciesFixture({}),
           task: createTaskDependenciesFixture(),
           model: createModelDependenciesFixture(),
         },
       }),
     ).resolves.toMatchObject({
-      kind: "reused",
-      session: {
-        externalSessionId: "ext-build",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-      },
+      externalSessionId: "ext-build",
+      runtimeKind: "opencode",
+      workingDirectory: "/tmp/repo/worktree",
     });
     expect(loadCalls).toBe(1);
   });
@@ -114,18 +107,12 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
         },
         deps: {
           session: sessionDependencies,
-          runtime: createRuntimeDependenciesFixture({
-            resolveTaskWorktree: async () =>
-              createBuildContinuationTargetFixture("/tmp/repo/new-worktree"),
-          }),
+          runtime: createRuntimeDependenciesFixture({}),
           task: createTaskDependenciesFixture(),
           model: createModelDependenciesFixture(),
         },
       }),
-    ).resolves.toMatchObject({
-      kind: "reused",
-      session: { workingDirectory: "/tmp/repo/old-worktree" },
-    });
+    ).resolves.toMatchObject({ workingDirectory: "/tmp/repo/old-worktree" });
   });
 
   test("reuses a legacy qa session without resolving a current worktree", async () => {
@@ -150,17 +137,12 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
         },
         deps: {
           session: sessionDependencies,
-          runtime: createRuntimeDependenciesFixture({
-            resolveTaskWorktree: async () => null,
-          }),
+          runtime: createRuntimeDependenciesFixture({}),
           task: createQaAvailableTaskDependencies(),
           model: createModelDependenciesFixture(),
         },
       }),
-    ).resolves.toMatchObject({
-      kind: "reused",
-      session: { workingDirectory: "/tmp/repo/worktree" },
-    });
+    ).resolves.toMatchObject({ workingDirectory: "/tmp/repo/worktree" });
   });
 
   test("reuses qa at its recorded directory when the canonical target changed", async () => {
@@ -186,18 +168,12 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
         },
         deps: {
           session: sessionDependencies,
-          runtime: createRuntimeDependenciesFixture({
-            resolveTaskWorktree: async () =>
-              createBuildContinuationTargetFixture("/tmp/repo/new-worktree"),
-          }),
+          runtime: createRuntimeDependenciesFixture({}),
           task: createQaAvailableTaskDependencies(),
           model: createModelDependenciesFixture(),
         },
       }),
-    ).resolves.toMatchObject({
-      kind: "reused",
-      session: { workingDirectory: "/tmp/repo/old-worktree" },
-    });
+    ).resolves.toMatchObject({ workingDirectory: "/tmp/repo/old-worktree" });
   });
 
   test("rejects qa reuse when the task workflow does not allow qa", async () => {
