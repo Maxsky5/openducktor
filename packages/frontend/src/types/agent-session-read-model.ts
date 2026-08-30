@@ -34,7 +34,7 @@ export const readyAgentSessionReadModelLoadState = (
 export const failedAgentSessionReadModelLoadState = (
   workspaceRepoPath: string,
   message: string,
-  source: AgentSessionReadModelFailureSource = "live-stream",
+  source: AgentSessionReadModelFailureSource,
 ): AgentSessionReadModelLoadState => ({
   kind: "failed",
   workspaceRepoPath,

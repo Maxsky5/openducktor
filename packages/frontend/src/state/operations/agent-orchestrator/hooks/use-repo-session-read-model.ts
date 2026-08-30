@@ -196,6 +196,7 @@ export const useRepoSessionReadModel = ({
           collection: applyWorkflowSessionRecords({
             projected: current,
             records: toLoadedWorkflowSessionRecords(records),
+            associationEvidence: current,
           }),
           result: undefined,
         }));
@@ -388,6 +389,7 @@ export const useRepoSessionReadModel = ({
     // window created by demoting a stale-scope failure ends with this success.
     const liveMessage = liveStreamFailureRef.current;
     const staleFailureWasDemoted = demotedStaleFailureRef.current;
+    demotedStaleFailureRef.current = false;
     // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
     setSessionReadModelLoadState((currentLoadState) => {
       if (
@@ -396,7 +398,7 @@ export const useRepoSessionReadModel = ({
         currentLoadState.workspaceRepoPath === workspaceRepoPath
       ) {
         return liveMessage
-          ? failedAgentSessionReadModelLoadState(workspaceRepoPath, liveMessage)
+          ? failedAgentSessionReadModelLoadState(workspaceRepoPath, liveMessage, "live-stream")
           : readyAgentSessionReadModelLoadState(workspaceRepoPath);
       }
       if (
@@ -406,9 +408,8 @@ export const useRepoSessionReadModel = ({
       ) {
         // The stale-scope failure this window replaced resolved; an
         // unresolved live-stream failure still surfaces here.
-        demotedStaleFailureRef.current = false;
         return liveMessage
-          ? failedAgentSessionReadModelLoadState(workspaceRepoPath, liveMessage)
+          ? failedAgentSessionReadModelLoadState(workspaceRepoPath, liveMessage, "live-stream")
           : readyAgentSessionReadModelLoadState(workspaceRepoPath);
       }
       return currentLoadState;
@@ -525,10 +526,17 @@ export const useRepoSessionReadModel = ({
       return toLoadedWorkflowSessionRecords(current.records);
     };
     // Snapshot commits and task refreshes apply the full record pass.
-    const applyLoadedRecords = (projected: AgentSessionCollection): AgentSessionCollection => {
+    const applyLoadedRecords = (
+      projected: AgentSessionCollection,
+      associationEvidence: AgentSessionCollection,
+    ): AgentSessionCollection => {
       const workflowRecords = readLoadedWorkflowRecords();
       return workflowRecords
-        ? applyWorkflowSessionRecords({ projected, records: workflowRecords })
+        ? applyWorkflowSessionRecords({
+            projected,
+            records: workflowRecords,
+            associationEvidence,
+          })
         : projected;
     };
     // Ordered deltas only drop vanished workflow sessions. They never rewrite
@@ -564,7 +572,9 @@ export const useRepoSessionReadModel = ({
     const failObservation = (message: string): void => {
       if (!isStaleRepoOperation()) {
         liveStreamFailureRef.current = message;
-        setSessionReadModelLoadState(failedAgentSessionReadModelLoadState(repoPath, message));
+        setSessionReadModelLoadState(
+          failedAgentSessionReadModelLoadState(repoPath, message, "live-stream"),
+        );
       }
     };
     const applyPendingApprovalPolicy = (actions: PendingApprovalPolicyAction[]): void => {
@@ -598,14 +608,13 @@ export const useRepoSessionReadModel = ({
     const commitInitialSnapshot = (
       envelope: Extract<AgentSessionLiveEnvelope, { type: "snapshot" }>,
     ): void => {
-      commitProjected((current) =>
-        applyLoadedRecords(
-          buildAgentSessionLiveCollection({
-            current,
-            snapshots: envelope.sessions,
-          }),
-        ),
-      );
+      commitProjected((current) => {
+        const projected = buildAgentSessionLiveCollection({
+          current,
+          snapshots: envelope.sessions,
+        });
+        return applyLoadedRecords(projected, current);
+      });
       awaitingInitialSnapshot = false;
       if (isStaleRepoOperation()) {
         return;

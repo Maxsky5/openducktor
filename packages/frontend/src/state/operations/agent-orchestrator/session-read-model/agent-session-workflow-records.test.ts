@@ -84,6 +84,7 @@ const projectAndApplyRecords = ({
   applyWorkflowSessionRecords({
     projected: buildAgentSessionLiveCollection({ current, snapshots }),
     records: loadedRecords,
+    associationEvidence: current,
   });
 
 const applyRecordsOnly = ({
@@ -96,6 +97,7 @@ const applyRecordsOnly = ({
   applyWorkflowSessionRecords({
     projected,
     records: loadedRecords,
+    associationEvidence: projected,
   });
 
 describe("agent session workflow records", () => {
@@ -161,6 +163,54 @@ describe("agent session workflow records", () => {
     ).toThrow(
       "Cannot reconcile persisted session 'thread-1' because its registered repository scope does not match the incoming workflow scope for task 'task-1' and role 'build'.",
     );
+  });
+
+  test("preserves omitted repository scope as record-reconciliation evidence", () => {
+    const current = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      snapshots: [snapshot("thread-1", { sessionAssociation: { kind: "repository" } })],
+    });
+    const projected = buildAgentSessionLiveCollection({ current, snapshots: [] });
+
+    expect(() =>
+      applyWorkflowSessionRecords({
+        projected,
+        records: loadedRecords({ taskId: "task-1", record: record("thread-1") }),
+        associationEvidence: current,
+      }),
+    ).toThrow(
+      "Cannot reconcile persisted session 'thread-1' because its registered repository scope does not match the incoming workflow scope for task 'task-1' and role 'build'.",
+    );
+  });
+
+  test("uses omitted unbound scope as evidence without retaining stale live fields", () => {
+    const current = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      snapshots: [
+        snapshot("thread-1", {
+          pendingApprovals: [
+            {
+              requestId: "stale-approval",
+              requestType: "command_execution",
+              title: "Stale command",
+            },
+          ],
+        }),
+      ],
+    });
+    const projected = buildAgentSessionLiveCollection({ current, snapshots: [] });
+
+    const sessions = applyWorkflowSessionRecords({
+      projected,
+      records: loadedRecords({ taskId: "task-1", record: record("thread-1") }),
+      associationEvidence: current,
+    });
+
+    expect(getAgentSession(sessions, identity("thread-1"))).toMatchObject({
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      liveReported: false,
+      pendingApprovals: [],
+    });
   });
 
   test("keeps a matching workflow scope from persisted records", () => {
@@ -375,6 +425,7 @@ describe("agent session workflow records", () => {
     const afterSnapshotApply = applyWorkflowSessionRecords({
       projected,
       records: loadedRecords(),
+      associationEvidence: projected,
     });
     expect(getAgentSession(afterSnapshotApply, identity("live-thread"))?.liveReported).toBe(true);
 
@@ -518,6 +569,7 @@ describe("agent session workflow records", () => {
           },
         ],
       },
+      associationEvidence: withUserModel,
     });
     expect(getAgentSession(fullApply, identity("live-thread"))?.selectedModel).toMatchObject({
       providerId: "openai",

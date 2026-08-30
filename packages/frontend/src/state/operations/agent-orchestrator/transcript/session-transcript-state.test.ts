@@ -335,7 +335,11 @@ describe("read-model-bound transcript state", () => {
 
   test("surfaces selected-session read-model failures", () => {
     const transcriptState = derivePendingSelectedSessionTranscriptState({
-      readModelLoadState: failedAgentSessionReadModelLoadState("/tmp/repo", "Session read failed"),
+      readModelLoadState: failedAgentSessionReadModelLoadState(
+        "/tmp/repo",
+        "Session read failed",
+        "live-stream",
+      ),
       repoReadinessState: "checking",
     });
 
@@ -371,7 +375,11 @@ describe("read-model-bound transcript state", () => {
 
   test("surfaces sessionless task read-model failures", () => {
     const transcriptState = deriveSessionlessTaskTranscriptState({
-      readModelLoadState: failedAgentSessionReadModelLoadState("/tmp/repo", "Session list failed"),
+      readModelLoadState: failedAgentSessionReadModelLoadState(
+        "/tmp/repo",
+        "Session list failed",
+        "live-stream",
+      ),
       repoReadinessState: "ready",
     });
 

@@ -64,22 +64,27 @@ export const pruneVanishedWorkflowSessions = ({
 export const applyWorkflowSessionRecords = ({
   projected,
   records: workflowRecords,
+  associationEvidence,
 }: {
   projected: AgentSessionCollection;
   records: LoadedWorkflowSessionRecords;
+  associationEvidence: AgentSessionCollection;
 }): AgentSessionCollection => {
   const pruned = pruneRecordlessWorkflowSessions(projected, workflowRecords);
   let collection = pruned;
   for (const persistedRecord of workflowRecords.records) {
     const identity = toPersistedSessionIdentity(persistedRecord.record);
     const currentSession = getAgentSession(collection, identity);
-    collection = replaceAgentSession(
-      collection,
-      toPersistedSessionView({
-        ...persistedRecord,
-        ...(currentSession ? { current: currentSession } : {}),
-      }),
-    );
+    const persistedInput: Parameters<typeof toPersistedSessionView>[0] = { ...persistedRecord };
+    if (currentSession) {
+      persistedInput.current = currentSession;
+    } else {
+      const evidenceSession = getAgentSession(associationEvidence, identity);
+      if (evidenceSession) {
+        persistedInput.associationEvidence = evidenceSession.sessionAssociation;
+      }
+    }
+    collection = replaceAgentSession(collection, toPersistedSessionView(persistedInput));
   }
   return rebuildProjectedPendingInput(collection);
 };

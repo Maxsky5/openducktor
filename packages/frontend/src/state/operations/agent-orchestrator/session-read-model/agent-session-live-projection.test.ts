@@ -16,7 +16,7 @@ import {
 
 const repoPath = "/repo";
 const workingDirectory = "/repo/worktree";
-const workflowAssociation = { kind: "workflow", taskId: "task-1", role: "build" } as const;
+const workflowAssociation = () => ({ kind: "workflow", taskId: "task-1", role: "build" }) as const;
 
 const snapshot = (
   externalSessionId: string,
@@ -70,14 +70,14 @@ describe("agent session live projection", () => {
   test("carries workflow, repository, and unbound associations from one mixed snapshot", () => {
     const sessions = build({
       snapshots: [
-        snapshot("workflow-thread", { sessionAssociation: workflowAssociation }),
+        snapshot("workflow-thread", { sessionAssociation: workflowAssociation() }),
         snapshot("repository-thread", { sessionAssociation: { kind: "repository" } }),
         snapshot("unbound-thread"),
       ],
     });
 
     expect(getAgentSession(sessions, identity("workflow-thread"))?.sessionAssociation).toEqual(
-      workflowAssociation,
+      workflowAssociation(),
     );
     expect(getAgentSession(sessions, identity("repository-thread"))?.sessionAssociation).toEqual({
       kind: "repository",
@@ -100,7 +100,7 @@ describe("agent session live projection", () => {
         });
       const sessions = build({
         snapshots: [
-          runtimeSnapshot(`${runtimeKind}-wf`, workflowAssociation),
+          runtimeSnapshot(`${runtimeKind}-wf`, workflowAssociation()),
           runtimeSnapshot(`${runtimeKind}-repo`, { kind: "repository" }),
           runtimeSnapshot(`${runtimeKind}-unbound`, { kind: "unbound" }),
         ],
@@ -108,7 +108,7 @@ describe("agent session live projection", () => {
 
       expect(
         getAgentSession(sessions, identity(`${runtimeKind}-wf`, { runtimeKind })),
-      ).toMatchObject({ sessionAssociation: workflowAssociation });
+      ).toMatchObject({ sessionAssociation: workflowAssociation() });
       expect(
         getAgentSession(sessions, identity(`${runtimeKind}-repo`, { runtimeKind })),
       ).toMatchObject({ sessionAssociation: { kind: "repository" } });
@@ -120,18 +120,18 @@ describe("agent session live projection", () => {
 
   test("retains a workflow association when a reconnect snapshot is unbound", () => {
     const initial = build({
-      snapshots: [snapshot("thread-1", { sessionAssociation: workflowAssociation })],
+      snapshots: [snapshot("thread-1", { sessionAssociation: workflowAssociation() })],
     });
     const next = build({ current: initial, snapshots: [snapshot("thread-1")] });
 
     expect(getAgentSession(next, identity("thread-1"))?.sessionAssociation).toEqual(
-      workflowAssociation,
+      workflowAssociation(),
     );
   });
 
   test("rejects a conflicting live scope change", () => {
     const initial = build({
-      snapshots: [snapshot("thread-1", { sessionAssociation: workflowAssociation })],
+      snapshots: [snapshot("thread-1", { sessionAssociation: workflowAssociation() })],
     });
 
     expect(() =>
@@ -222,7 +222,7 @@ describe("agent session live projection", () => {
   test("treats a reconnect snapshot as authoritative when an unbound child disappeared", () => {
     const previous = build({
       snapshots: [
-        snapshot("parent-thread", { sessionAssociation: workflowAssociation }),
+        snapshot("parent-thread", { sessionAssociation: workflowAssociation() }),
         snapshot("child-thread", {
           parentExternalSessionId: "parent-thread",
           activity: "waiting_for_permission",
@@ -241,7 +241,7 @@ describe("agent session live projection", () => {
 
     const reconnected = build({
       current: previous,
-      snapshots: [snapshot("parent-thread", { sessionAssociation: workflowAssociation })],
+      snapshots: [snapshot("parent-thread", { sessionAssociation: workflowAssociation() })],
     });
 
     expect(getAgentSession(reconnected, identity("parent-thread"))?.pendingApprovals).toEqual([]);
@@ -252,7 +252,7 @@ describe("agent session live projection", () => {
     const initial = build({
       snapshots: [
         snapshot("starting-thread"),
-        snapshot("workflow-thread", { sessionAssociation: workflowAssociation }),
+        snapshot("workflow-thread", { sessionAssociation: workflowAssociation() }),
         snapshot("repository-thread", { sessionAssociation: { kind: "repository" } }),
         snapshot("unbound-thread"),
       ],
@@ -277,7 +277,7 @@ describe("agent session live projection", () => {
   test("commits the live-reported flag with the same projection that applies runtime evidence", () => {
     const initial = build({
       snapshots: [
-        snapshot("live-thread", { sessionAssociation: workflowAssociation }),
+        snapshot("live-thread", { sessionAssociation: workflowAssociation() }),
         snapshot("absent-later-thread"),
       ],
     });
@@ -293,7 +293,7 @@ describe("agent session live projection", () => {
     // A later upsert restores it; an explicit removal clears it again.
     const upserted = delta(reconnectedWithoutIt, {
       type: "session_upsert",
-      session: snapshot("live-thread", { sessionAssociation: workflowAssociation }),
+      session: snapshot("live-thread", { sessionAssociation: workflowAssociation() }),
     });
     expect(getAgentSession(upserted, identity("live-thread"))?.liveReported).toBe(true);
     const removed = delta(upserted, {
@@ -306,7 +306,7 @@ describe("agent session live projection", () => {
   test("preserves a live child's loaded transcript across an authoritative snapshot refresh", () => {
     const initial = build({
       snapshots: [
-        snapshot("parent-thread", { sessionAssociation: workflowAssociation }),
+        snapshot("parent-thread", { sessionAssociation: workflowAssociation() }),
         snapshot("child-thread", { parentExternalSessionId: "parent-thread" }),
       ],
     });
@@ -330,7 +330,7 @@ describe("agent session live projection", () => {
     const refreshed = build({
       current: withLoadedChild,
       snapshots: [
-        snapshot("parent-thread", { sessionAssociation: workflowAssociation }),
+        snapshot("parent-thread", { sessionAssociation: workflowAssociation() }),
         snapshot("child-thread", { parentExternalSessionId: "parent-thread" }),
       ],
     });
@@ -346,7 +346,7 @@ describe("agent session live projection", () => {
   test("settles a removed live child without dropping its transcript", () => {
     const initial = build({
       snapshots: [
-        snapshot("parent-thread", { sessionAssociation: workflowAssociation }),
+        snapshot("parent-thread", { sessionAssociation: workflowAssociation() }),
         snapshot("child-thread", {
           parentExternalSessionId: "parent-thread",
           activity: "running",
@@ -438,7 +438,7 @@ describe("agent session live projection", () => {
   test("mirrors a grandchild question to the root with the grandchild response session", () => {
     const sessions = build({
       snapshots: [
-        snapshot("root-thread", { sessionAssociation: workflowAssociation }),
+        snapshot("root-thread", { sessionAssociation: workflowAssociation() }),
         snapshot("child-thread", { parentExternalSessionId: "root-thread" }),
         snapshot("grandchild-thread", {
           parentExternalSessionId: "child-thread",
@@ -491,7 +491,7 @@ describe("agent session live projection", () => {
     };
     const initial = build({
       snapshots: [
-        snapshot("root-thread", { sessionAssociation: workflowAssociation }),
+        snapshot("root-thread", { sessionAssociation: workflowAssociation() }),
         snapshot("child-thread", { parentExternalSessionId: "root-thread" }),
         snapshot("grandchild-thread", {
           parentExternalSessionId: "child-thread",
@@ -520,7 +520,7 @@ describe("agent session live projection", () => {
   test("keeps sibling descendant pending requests isolated", () => {
     const sessions = build({
       snapshots: [
-        snapshot("root-thread", { sessionAssociation: workflowAssociation }),
+        snapshot("root-thread", { sessionAssociation: workflowAssociation() }),
         snapshot("child-a", { parentExternalSessionId: "root-thread" }),
         snapshot("child-b", { parentExternalSessionId: "root-thread" }),
         snapshot("grandchild-a", {
@@ -546,7 +546,7 @@ describe("agent session live projection", () => {
   test("retains one-hop pending input projection", () => {
     const sessions = build({
       snapshots: [
-        snapshot("root-thread", { sessionAssociation: workflowAssociation }),
+        snapshot("root-thread", { sessionAssociation: workflowAssociation() }),
         snapshot("child-thread", {
           parentExternalSessionId: "root-thread",
           pendingApprovals: [
@@ -592,7 +592,7 @@ describe("agent session live projection", () => {
 
   test("applies authoritative lifecycle status from a live upsert after reload", () => {
     const initial = build({
-      snapshots: [snapshot("thread-1", { sessionAssociation: workflowAssociation })],
+      snapshots: [snapshot("thread-1", { sessionAssociation: workflowAssociation() })],
     });
     const current = getAgentSession(initial, identity("thread-1"));
     if (!current) {
@@ -620,7 +620,7 @@ describe("agent session live projection", () => {
     };
     const loaded = build({
       snapshots: [
-        snapshot("thread-1", { ref: opencodeRef, sessionAssociation: workflowAssociation }),
+        snapshot("thread-1", { ref: opencodeRef, sessionAssociation: workflowAssociation() }),
       ],
     });
     const current = getAgentSession(loaded, identity("thread-1", { runtimeKind: "opencode" }));
@@ -634,7 +634,7 @@ describe("agent session live projection", () => {
     });
     const staleIdleSnapshot = snapshot("thread-1", {
       ref: opencodeRef,
-      sessionAssociation: workflowAssociation,
+      sessionAssociation: workflowAssociation(),
     });
 
     const afterIdleDelta = delta(afterAcceptedSend, {
@@ -679,7 +679,7 @@ describe("agent session live projection", () => {
     "does not resurrect a session after terminal %s activity",
     (terminalStatus) => {
       const loaded = build({
-        snapshots: [snapshot("thread-1", { sessionAssociation: workflowAssociation })],
+        snapshots: [snapshot("thread-1", { sessionAssociation: workflowAssociation() })],
       });
       const removed = delta(loaded, {
         type: "session_removed",
@@ -762,7 +762,7 @@ describe("agent session live projection", () => {
     });
 
     expect(getAgentSession(sessions, identity("claude-parent", claudeIdentity))).toMatchObject({
-      sessionAssociation: workflowAssociation,
+      sessionAssociation: workflowAssociation(),
     });
     expect(getAgentSession(sessions, identity("claude-subagent", claudeIdentity))).toMatchObject({
       liveParentExternalSessionId: "claude-parent",

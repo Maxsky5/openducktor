@@ -861,13 +861,13 @@ Files:
 - `state/operations/agent-orchestrator/session-read-model/task-session-records.ts`
 - `state/operations/agent-orchestrator/session-read-model/use-task-session-records.ts`
 - `state/operations/agent-orchestrator/hooks/use-repo-session-read-model.ts`
-- `state/operations/agent-orchestrator/session-read-model/agent-session-live-projection.ts`
+- `state/operations/agent-orchestrator/session-read-model/agent-session-workflow-records.ts`
 
 Owns:
 
 - reading durable task session records through per-task session-list queries
 - keeping per-task session-list query keys as the only frontend cache for persisted session records
-- projecting the ordered host snapshot against loaded durable records during repo reads
+- applying loaded durable records onto the projected live collection during repo reads
 - presenting task session history to Agent Studio, Kanban, task details, and autopilot
 
 Must not own:
