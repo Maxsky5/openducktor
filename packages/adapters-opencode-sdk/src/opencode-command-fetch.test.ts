@@ -37,7 +37,7 @@ test("executes an installed SDK slash command through the Node fetch bridge", as
     } finally {
       await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     }
-  `;
+    `;
   const child = Bun.spawn(
     [node!, "--experimental-strip-types", "--input-type=module", "-e", script],
     {
@@ -63,4 +63,4 @@ test("executes an installed SDK slash command through the Node fetch bridge", as
     command: "review",
     arguments: "latest changes",
   });
-});
+}, 5_000);
