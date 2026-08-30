@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
-import type { AcceptedAgentUserMessage, SendAgentUserMessageInput } from "@openducktor/core";
-import { serializeAgentUserMessagePartsToText } from "@openducktor/core";
+import type {
+  AcceptedAgentUserMessage,
+  AgentEnginePort,
+  AgentUserMessagePart,
+} from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
 import {
@@ -25,15 +28,29 @@ import {
 import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
 
 const acceptedUserMessage = (
-  input: SendAgentUserMessageInput,
+  input: Pick<
+    Parameters<AgentEnginePort["sendUserMessage"]>[0],
+    "externalSessionId" | "model" | "parts"
+  >,
   messageId = "accepted-user-message",
 ): AcceptedAgentUserMessage => {
+  const message = input.parts
+    .map((part) => {
+      if (part.kind === "text") {
+        return part.text;
+      }
+      if (part.kind === "slash_command") {
+        return `/${part.command.trigger}`;
+      }
+      return "";
+    })
+    .join("");
   const event: AcceptedAgentUserMessage = {
     type: "user_message",
     externalSessionId: input.externalSessionId,
     timestamp: "2026-02-22T08:00:01.000Z",
     messageId,
-    message: serializeAgentUserMessagePartsToText(input.parts),
+    message,
     parts: [],
     state: "read",
   };
@@ -42,6 +59,22 @@ const acceptedUserMessage = (
   }
   return event;
 };
+
+const repositorySendCases: Array<{ label: string; parts: AgentUserMessagePart[] }> = [
+  {
+    label: "text",
+    parts: [{ kind: "text", text: "hello repository" }],
+  },
+  {
+    label: "manual compaction",
+    parts: [
+      {
+        kind: "slash_command",
+        command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+      },
+    ],
+  },
+];
 
 describe("agent-orchestrator/handlers/session-actions send", () => {
   test("routes a normalized workflow control without loading runtime policy settings", async () => {
@@ -98,6 +131,157 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       adapter.sendUserMessage = originalSendUserMessage;
     }
   });
+
+  test.each(repositorySendCases)(
+    "routes repository $label without workflow side effects",
+    async ({ parts }) => {
+      const adapter = createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter());
+      const originalSendUserMessage = adapter.sendUserMessage;
+      const sendInputs: Parameters<typeof adapter.sendUserMessage>[0][] = [];
+      adapter.sendUserMessage = async (input) => {
+        sendInputs.push(input);
+        return acceptedUserMessage(input);
+      };
+      const sessionsRef = createSessionsRef([
+        buildSession({
+          status: "idle",
+          sessionAssociation: { kind: "repository" },
+          workingDirectory: "/tmp/repo/repository-chat",
+        }),
+      ]);
+      const actions = createSessionActions({
+        adapter,
+        sessionsRef,
+        taskRef: { current: [] },
+        ensureExistingSessionRuntime: async () => {
+          throw new Error("repository sends must not ensure a workflow runtime");
+        },
+        loadRepoPromptOverrides: async () => {
+          throw new Error("repository sends must not load workflow prompts");
+        },
+        persistSessionRecord: async () => {
+          throw new Error("repository sends must not persist task sessions");
+        },
+        refreshTaskData: async () => {
+          throw new Error("repository sends must not refresh task data");
+        },
+        invalidateSessionStopQueries: async () => {
+          throw new Error("repository sends must not invalidate task queries");
+        },
+      });
+
+      try {
+        await actions.sendAgentMessage(getSession(sessionsRef), parts);
+
+        expect(sendInputs).toHaveLength(1);
+        expect(sendInputs[0]).toMatchObject({
+          repoPath: "/tmp/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/tmp/repo/repository-chat",
+          externalSessionId: "session-1",
+          sessionScope: { kind: "repository" },
+        });
+        expect(sendInputs[0]).not.toHaveProperty("systemPrompt");
+      } finally {
+        adapter.sendUserMessage = originalSendUserMessage;
+      }
+    },
+  );
+
+  test("rejects sends to stopped sessions before runtime or workflow work", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    let sendCalls = 0;
+    adapter.sendUserMessage = async (input) => {
+      sendCalls += 1;
+      return acceptedUserMessage(input);
+    };
+    const sessionsRef = createSessionsRef([buildSession({ status: "stopped" })]);
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      ensureExistingSessionRuntime: async () => {
+        throw new Error("stopped sends must not prepare a runtime");
+      },
+    });
+
+    await expect(
+      actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]),
+    ).rejects.toThrow("Cannot send message to stopped session 'session-1'.");
+    expect(sendCalls).toBe(0);
+  });
+
+  test("rejects unbound sends with a clear context error", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    let sendCalls = 0;
+    adapter.sendUserMessage = async (input) => {
+      sendCalls += 1;
+      return acceptedUserMessage(input);
+    };
+    const sessionsRef = createSessionsRef([
+      buildSession({ status: "idle", sessionAssociation: { kind: "unbound" } }),
+    ]);
+    const actions = createSessionActions({ adapter, sessionsRef });
+
+    await expect(
+      actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]),
+    ).rejects.toThrow(
+      "Cannot send message for unbound session 'session-1'; repository or workflow context is required.",
+    );
+    expect(sendCalls).toBe(0);
+  });
+
+  test("rejects a missing association before calling the runtime", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    let sendCalls = 0;
+    adapter.sendUserMessage = async (input) => {
+      sendCalls += 1;
+      return acceptedUserMessage(input);
+    };
+    const malformedSession = buildSession({ status: "idle" });
+    Reflect.deleteProperty(malformedSession, "sessionAssociation");
+    const sessionsRef = createSessionsRef([malformedSession]);
+    const actions = createSessionActions({ adapter, sessionsRef });
+
+    await expect(
+      actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]),
+    ).rejects.toThrow(
+      "Cannot send message for session 'session-1' because its association is missing.",
+    );
+    expect(sendCalls).toBe(0);
+  });
+
+  test.each(["opencode", "codex", "claude"] as const)(
+    "uses the same repository send handler for %s",
+    async (runtimeKind) => {
+      const baseAdapter = createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter());
+      const sendInputs: Parameters<AgentEnginePort["sendUserMessage"]>[0][] = [];
+      const adapter: AgentEnginePort = {
+        ...baseAdapter,
+        sendUserMessage: async (input) => {
+          sendInputs.push(input);
+          return acceptedUserMessage(input);
+        },
+      };
+      const sessionsRef = createSessionsRef([
+        buildSession({
+          runtimeKind,
+          sessionAssociation: { kind: "repository" },
+          status: "idle",
+        }),
+      ]);
+      const actions = createSessionActions({ adapter, sessionsRef, taskRef: { current: [] } });
+
+      await actions.sendAgentMessage(getSession(sessionsRef), [
+        { kind: "text", text: "runtime-neutral send" },
+      ]);
+
+      expect(sendInputs).toHaveLength(1);
+      expect(sendInputs[0]).toMatchObject({
+        runtimeKind,
+        sessionScope: { kind: "repository" },
+      });
+    },
+  );
 
   test("does not store the Codex compaction send result as a user message", async () => {
     const adapter = new OpencodeSdkAdapter();

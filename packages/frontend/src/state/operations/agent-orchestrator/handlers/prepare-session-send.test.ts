@@ -55,7 +55,9 @@ describe("prepare session send", () => {
   test("ensures the session runtime and builds the durable session prompt", async () => {
     const { ensureExistingRuntimeCalls, prepareSend } = createPrepareSend();
 
-    const result = await prepareSend(buildWorkflowSession({ status: "idle" }));
+    const result = await prepareSend(buildWorkflowSession({ status: "idle" }), {
+      prepareWorkflowContext: true,
+    });
 
     expect(result.repoPath).toBe("/tmp/repo");
     expect(result.systemPrompt).toContain("Build login");
@@ -71,8 +73,10 @@ describe("prepare session send", () => {
       },
     });
 
-    await expect(prepareSend(buildWorkflowSession({ status: "idle" }))).rejects.toThrow(
-      "Workspace changed while preparing session send.",
-    );
+    await expect(
+      prepareSend(buildWorkflowSession({ status: "idle" }), {
+        prepareWorkflowContext: true,
+      }),
+    ).rejects.toThrow("Workspace changed while preparing session send.");
   });
 });

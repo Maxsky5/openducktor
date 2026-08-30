@@ -1,42 +1,32 @@
-import type { RepoPromptOverrides, SessionHistoryFailure, TaskCard } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentSessionHistorySystemPromptContext } from "@openducktor/core";
+import type { SessionHistoryFailure } from "@openducktor/contracts";
+import type { AgentEnginePort } from "@openducktor/core";
 import { HostInvokeError } from "@openducktor/host-client";
 import type { MutableRefObject } from "react";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
 import { createRepoStaleGuard } from "../support/core";
 import type { ReadSessionSnapshot } from "../support/session-invariants";
-import { loadSessionPromptContext } from "../support/session-prompt";
 import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
 import { resolveRuntimeSessionContextRef } from "../support/session-runtime-policy";
+import { requireBoundSessionAssociation } from "../support/session-runtime-ref";
 import {
   requestedSessionHistoryLoadPolicy,
   type SessionHistoryLoadPolicy,
   selectedSessionBaselineHistoryLoadPolicy,
   transcriptGapRecoveryHistoryLoadPolicy,
 } from "./session-history-load-policy";
+import type { LoadSessionHistorySystemPromptContext } from "./workflow-session-history-policy";
 
 export type SessionHistoryLoaderAdapter = Pick<AgentEnginePort, "loadSessionHistory">;
 
-type LoadSessionHistorySystemPromptContext = (
-  session: AgentSessionState,
-) => Promise<AgentSessionHistorySystemPromptContext | undefined>;
-
-type SessionHistoryPromptTarget = Pick<
-  AgentSessionState,
-  "externalSessionId" | "sessionAssociation" | "startedAt"
->;
-
 type CreateLoadAgentSessionHistoryArgs = {
   workspaceRepoPath: string | null;
-  workspaceId: string | null;
   adapter: SessionHistoryLoaderAdapter;
   repoEpochRef: MutableRefObject<number>;
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
-  taskRef: MutableRefObject<TaskCard[]>;
-  loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
+  loadSystemPromptContext: LoadSessionHistorySystemPromptContext;
   loadSettingsSnapshot?: LoadSettingsSnapshotForRuntimePolicy;
 };
 
@@ -110,42 +100,6 @@ const sessionHistoryFailureFromError = (cause: unknown): SessionHistoryFailure =
   };
 };
 
-const buildSessionHistorySystemPromptContext = async ({
-  workspaceId,
-  tasks,
-  session,
-  loadRepoPromptOverrides,
-}: {
-  workspaceId: string;
-  tasks: readonly TaskCard[];
-  session: SessionHistoryPromptTarget;
-  loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
-}): Promise<AgentSessionHistorySystemPromptContext | undefined> => {
-  if (session.sessionAssociation.kind !== "workflow") {
-    return undefined;
-  }
-
-  const { taskId, role } = session.sessionAssociation;
-  const task = tasks.find((task) => task.id === taskId);
-  if (!task) {
-    throw new Error(
-      `Cannot load history for '${session.externalSessionId}': task '${taskId}' is unavailable.`,
-    );
-  }
-
-  const { systemPrompt } = await loadSessionPromptContext({
-    workspaceId,
-    role,
-    task,
-    loadRepoPromptOverrides,
-  });
-
-  return {
-    systemPrompt,
-    startedAt: session.startedAt,
-  };
-};
-
 type LoadSessionHistoryIntoStoreArgs = {
   repoPath: string;
   adapter: SessionHistoryLoaderAdapter;
@@ -172,6 +126,11 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
 }): Promise<AgentSessionState | null> => {
   if (isStaleRepoOperation()) {
     return null;
+  }
+
+  const currentSession = readSessionSnapshot(identity);
+  if (currentSession) {
+    requireBoundSessionAssociation(currentSession, "load history");
   }
 
   const loadClaim = markSessionHistoryLoading({
@@ -282,21 +241,19 @@ export const reloadSessionHistoryIntoStore = async (
 
 const createLoadSessionHistoryWithPolicy = ({
   workspaceRepoPath,
-  workspaceId,
   adapter,
   repoEpochRef,
   currentWorkspaceRepoPathRef,
   readSessionSnapshot,
   updateSession,
-  taskRef,
-  loadRepoPromptOverrides,
+  loadSystemPromptContext,
   loadSettingsSnapshot,
   policy,
 }: CreateLoadAgentSessionHistoryArgs & {
   policy: SessionHistoryLoadPolicy;
 }): ((sessionIdentity: AgentSessionIdentity) => Promise<AgentSessionState | null>) => {
   return async (sessionIdentity: AgentSessionIdentity): Promise<AgentSessionState | null> => {
-    if (!workspaceRepoPath || !workspaceId) {
+    if (!workspaceRepoPath) {
       throw new Error("Cannot load agent session history without an active workspace.");
     }
 
@@ -323,13 +280,7 @@ const createLoadSessionHistoryWithPolicy = ({
       updateSession,
       identity: sessionIdentity,
       policy,
-      loadSystemPromptContext: (session) =>
-        buildSessionHistorySystemPromptContext({
-          workspaceId,
-          tasks: taskRef.current,
-          session,
-          loadRepoPromptOverrides,
-        }),
+      loadSystemPromptContext,
       isStaleRepoOperation,
     };
     if (loadSettingsSnapshot) {

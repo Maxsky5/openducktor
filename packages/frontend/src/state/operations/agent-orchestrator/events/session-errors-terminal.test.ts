@@ -462,7 +462,12 @@ describe("agent-orchestrator session errors and terminal state", () => {
       }),
     ]);
 
-    const updateSession = createSessionUpdater(sessionsRef);
+    const updateSessionOptions: Array<Parameters<SessionUpdateFn>[2]> = [];
+    const applySessionUpdate = createSessionUpdater(sessionsRef);
+    const updateSession: SessionUpdateFn = (identity, updater, options) => {
+      updateSessionOptions.push(options);
+      return applySessionUpdate(identity, updater);
+    };
 
     await listenToAgentSessionEvents({
       adapter,
@@ -505,6 +510,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
     expect(toolMessage.meta.error).toBe("Aborted");
     expect(findSession(sessionsRef, "session-1")?.status).toBe("stopped");
     expect(findSession(sessionsRef, "session-1")?.stopRequestedAt).toBeNull();
+    expect(updateSessionOptions).toEqual([undefined]);
     expect(
       getSessionMessages(sessionsRef).some((message) => message.content.includes("Session error:")),
     ).toBe(false);

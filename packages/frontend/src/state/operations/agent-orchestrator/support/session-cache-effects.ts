@@ -61,6 +61,7 @@ export const createSessionCacheEffects = ({
       await refreshAgentSessionListQuery(queryClient, repoPath, taskId, hostPort);
     } catch (error) {
       reportCacheRefreshFailure({ operation: "save", repoPath, taskId, error });
+      throw error;
     }
   };
 

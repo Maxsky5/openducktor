@@ -230,11 +230,15 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
         ],
       }),
     ]);
+    const persistenceOptions: Array<{ persist: true } | undefined> = [];
+    let persistSessionRecordCalls = 0;
 
     const updateSession = (
       identity: AgentSessionIdentity,
       updater: (current: AgentSessionState) => AgentSessionState,
+      options?: { persist: true },
     ) => {
+      persistenceOptions.push(options);
       const current = getAgentSession(sessionsRef.current, identity);
       if (!current) {
         return null;
@@ -290,6 +294,9 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       sessionsRef,
       taskRef: { current: [] },
       updateSession,
+      persistSessionRecord: async () => {
+        persistSessionRecordCalls += 1;
+      },
     });
 
     try {
@@ -315,6 +322,8 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       expect(toolMessage.meta.error).toBe("Session stopped at your request.");
       expect(getSession(sessionsRef)?.status).toBe("stopped");
       expect(getSession(sessionsRef)?.stopRequestedAt).toBeNull();
+      expect(persistenceOptions).not.toContainEqual({ persist: true });
+      expect(persistSessionRecordCalls).toBe(1);
     } finally {
       adapter.subscribeEvents = originalSubscribeEvents;
       adapter.stopSession = originalStopSession;
@@ -532,7 +541,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
   test("refreshes task-owned state after successful authoritative stop", async () => {
     const adapter = new OpencodeSdkAdapter();
-    let refreshTaskDataCalls = 0;
+    const refreshTaskDataCalls: Array<[string, string | string[] | undefined]> = [];
     let loadSourceSessionCalls = 0;
     let stopCalls = 0;
     const invalidationCalls: Array<{ repoPath: string; taskId: string; runtimeKind?: string }> = [];
@@ -555,8 +564,8 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
         loadSourceSessionCalls += 1;
         return null;
       },
-      refreshTaskData: async () => {
-        refreshTaskDataCalls += 1;
+      refreshTaskData: async (repoPath, taskIdOrIds) => {
+        refreshTaskDataCalls.push([repoPath, taskIdOrIds]);
       },
       invalidateSessionStopQueries: async (input) => {
         invalidationCalls.push(input);
@@ -565,7 +574,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
     await actions.stopAgentSession(getSession(sessionsRef));
     expect(stopCalls).toBe(1);
-    expect(refreshTaskDataCalls).toBe(1);
+    expect(refreshTaskDataCalls).toEqual([["/tmp/repo", "task-1"]]);
     expect(loadSourceSessionCalls).toBe(0);
     expect(invalidationCalls).toEqual([
       {
@@ -600,6 +609,92 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
     expect(getSession(sessionsRef)?.status).toBe("stopped");
     expect(taskCalls).toEqual([]);
+  });
+
+  test("stops an unbound live session without task side effects", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const stopTargets: SessionRef[] = [];
+    adapter.stopSession = async (target) => {
+      stopTargets.push(target);
+    };
+    const taskCalls: string[] = [];
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        sessionAssociation: { kind: "unbound" },
+        workingDirectory: "/tmp/repo/unbound-chat",
+      }),
+    ]);
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      persistSessionRecord: async () => {
+        taskCalls.push("persist");
+      },
+      refreshTaskData: async () => {
+        taskCalls.push("refresh");
+      },
+      invalidateSessionStopQueries: async () => {
+        taskCalls.push("invalidate");
+      },
+    });
+
+    await actions.stopAgentSession(getSession(sessionsRef));
+
+    expect(stopTargets).toEqual([
+      {
+        repoPath: "/tmp/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/unbound-chat",
+        externalSessionId: "session-1",
+      },
+    ]);
+    expect(getSession(sessionsRef).status).toBe("stopped");
+    expect(taskCalls).toEqual([]);
+  });
+
+  test("rejects a missing association before stopping the runtime", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    let stopCalls = 0;
+    adapter.stopSession = async () => {
+      stopCalls += 1;
+    };
+    const malformedSession = buildSession();
+    Reflect.deleteProperty(malformedSession, "sessionAssociation");
+    const sessionsRef = createSessionsRef([malformedSession]);
+    const actions = createSessionActions({ adapter, sessionsRef });
+
+    await expect(actions.stopAgentSession(getSession(sessionsRef))).rejects.toThrow(
+      "Cannot stop for session 'session-1' because its association is missing.",
+    );
+    expect(stopCalls).toBe(0);
+  });
+
+  test("reports workflow stop persistence failure without task invalidation", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    adapter.stopSession = async () => {};
+    const taskCalls: string[] = [];
+    const sessionsRef = createSessionsRef([buildSession()]);
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      persistSessionRecord: async () => {
+        taskCalls.push("persist");
+        throw new Error("stopped session persistence failed");
+      },
+      refreshTaskData: async () => {
+        taskCalls.push("refresh");
+      },
+      invalidateSessionStopQueries: async () => {
+        taskCalls.push("invalidate");
+      },
+    });
+
+    await expect(actions.stopAgentSession(getSession(sessionsRef))).rejects.toThrow(
+      "stopped session persistence failed",
+    );
+
+    expect(getSession(sessionsRef).status).toBe("stopped");
+    expect(taskCalls).toEqual(["persist"]);
   });
 
   test("fails fast when stopping without an active workspace", async () => {

@@ -22,6 +22,7 @@ import {
   loadSessionHistoryIntoStore,
   reloadSessionHistoryIntoStore,
 } from "./session-history-loader";
+import { createWorkflowSessionHistoryPromptPolicy } from "./workflow-session-history-policy";
 
 const taskFixture: TaskCard = {
   id: "task-1",
@@ -266,7 +267,6 @@ describe("session history loader", () => {
     let receivedSystemPrompt: string | undefined;
     const loadAgentSessionHistory = createLoadAgentSessionHistory({
       workspaceRepoPath: "/repo",
-      workspaceId: "workspace-1",
       adapter: {
         loadSessionHistory: async (input) => {
           receivedSystemPrompt = input.systemPromptContext?.systemPrompt;
@@ -285,8 +285,11 @@ describe("session history loader", () => {
       currentWorkspaceRepoPathRef: { current: "/repo" },
       readSessionSnapshot: harness.readSessionSnapshot,
       updateSession: harness.updateSession,
-      taskRef: { current: [taskFixture] },
-      loadRepoPromptOverrides: async (): Promise<RepoPromptOverrides> => ({}),
+      loadSystemPromptContext: createWorkflowSessionHistoryPromptPolicy({
+        workspaceId: "workspace-1",
+        taskRef: { current: [taskFixture] },
+        loadRepoPromptOverrides: async (): Promise<RepoPromptOverrides> => ({}),
+      }),
     });
 
     await loadAgentSessionHistory(sessionTarget);
@@ -298,56 +301,62 @@ describe("session history loader", () => {
     ]);
   });
 
-  test("loads history for an unbound session without workflow prompt context", async () => {
+  test("rejects history loading for an unbound session without repository context", async () => {
     const unboundSession = {
       ...createSession(),
       sessionAssociation: { kind: "unbound" as const },
     };
     const harness = createHistoryLoadHarness(unboundSession);
     const loadRepoPromptOverrides = mock(async (): Promise<RepoPromptOverrides> => ({}));
-    const loadSessionHistory = mock(async () => [
-      {
-        messageId: "history-1",
-        role: "assistant" as const,
-        timestamp: "2026-06-12T08:00:01.000Z",
-        text: "History can load without workflow role context.",
-        parts: [],
-      },
-    ]);
+    const loadSessionHistory = mock(async () => []);
     const loadAgentSessionHistory = createLoadAgentSessionHistory({
       workspaceRepoPath: "/repo",
-      workspaceId: "workspace-1",
       adapter: { loadSessionHistory },
       repoEpochRef: { current: 0 },
       currentWorkspaceRepoPathRef: { current: "/repo" },
       readSessionSnapshot: harness.readSessionSnapshot,
       updateSession: harness.updateSession,
-      taskRef: { current: [] },
-      loadRepoPromptOverrides,
+      loadSystemPromptContext: createWorkflowSessionHistoryPromptPolicy({
+        workspaceId: "workspace-1",
+        taskRef: { current: [] },
+        loadRepoPromptOverrides,
+      }),
     });
 
-    await loadAgentSessionHistory(sessionTarget);
+    await expect(loadAgentSessionHistory(sessionTarget)).rejects.toThrow(
+      "Cannot load history for unbound session 'external-1'; repository or workflow context is required.",
+    );
 
     expect(loadRepoPromptOverrides).not.toHaveBeenCalled();
-    expect(loadSessionHistory).toHaveBeenCalledWith({
-      repoPath: "/repo",
-      runtimeKind: "opencode",
-      workingDirectory: "/repo/worktree",
-      externalSessionId: "external-1",
-      runtimePolicy: { kind: "opencode" },
-      limit: 600,
-    });
-    expect(harness.session.historyLoadState).toBe("loaded");
-    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
-      "History can load without workflow role context.",
-    ]);
+    expect(loadSessionHistory).not.toHaveBeenCalled();
+    expect(harness.session.historyLoadState).toBe("not_requested");
+  });
+
+  test("rejects history loading when the session association is missing", async () => {
+    const malformedSession = createSession();
+    Reflect.deleteProperty(malformedSession, "sessionAssociation");
+    const harness = createHistoryLoadHarness(malformedSession);
+    const loadSessionHistory = mock(async () => []);
+
+    await expect(
+      loadSessionHistoryIntoStore({
+        repoPath: "/repo",
+        adapter: { loadSessionHistory },
+        readSessionSnapshot: harness.readSessionSnapshot,
+        updateSession: harness.updateSession,
+        identity: sessionTarget,
+        isStaleRepoOperation: () => false,
+      }),
+    ).rejects.toThrow(
+      "Cannot load history for session 'external-1' because its association is missing.",
+    );
+    expect(loadSessionHistory).not.toHaveBeenCalled();
   });
 
   test("fails selected history loading for an unknown session", async () => {
     const harness = createHistoryLoadHarness();
     const loadAgentSessionHistory = createLoadAgentSessionHistory({
       workspaceRepoPath: "/repo",
-      workspaceId: "workspace-1",
       adapter: {
         loadSessionHistory: async () => {
           throw new Error("History must not load for an unknown session.");
@@ -357,8 +366,11 @@ describe("session history loader", () => {
       currentWorkspaceRepoPathRef: { current: "/repo" },
       readSessionSnapshot: harness.readSessionSnapshot,
       updateSession: harness.updateSession,
-      taskRef: { current: [taskFixture] },
-      loadRepoPromptOverrides: async (): Promise<RepoPromptOverrides> => ({}),
+      loadSystemPromptContext: createWorkflowSessionHistoryPromptPolicy({
+        workspaceId: "workspace-1",
+        taskRef: { current: [taskFixture] },
+        loadRepoPromptOverrides: async (): Promise<RepoPromptOverrides> => ({}),
+      }),
     });
 
     await expect(
@@ -904,6 +916,7 @@ describe("session history loader", () => {
       sessionAssociation: { kind: "repository" },
     };
     const harness = createHistoryLoadHarness(repositorySession);
+    const loadRepoPromptOverrides = mock(async (): Promise<RepoPromptOverrides> => ({}));
     let historyInput:
       | Parameters<
           Parameters<typeof loadSessionHistoryIntoStore>[0]["adapter"]["loadSessionHistory"]
@@ -921,6 +934,11 @@ describe("session history loader", () => {
       readSessionSnapshot: harness.readSessionSnapshot,
       updateSession: harness.updateSession,
       identity: sessionTarget,
+      loadSystemPromptContext: createWorkflowSessionHistoryPromptPolicy({
+        workspaceId: "workspace-1",
+        taskRef: { current: [] },
+        loadRepoPromptOverrides,
+      }),
       isStaleRepoOperation: () => false,
     });
 
@@ -928,6 +946,7 @@ describe("session history loader", () => {
       externalSessionId: "external-1",
       sessionScope: { kind: "repository" },
     });
+    expect(loadRepoPromptOverrides).not.toHaveBeenCalled();
   });
 
   test("keeps the runtime-owned system prompt when history provides one", async () => {

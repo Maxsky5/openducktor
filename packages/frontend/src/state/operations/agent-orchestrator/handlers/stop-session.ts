@@ -1,4 +1,3 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
@@ -6,14 +5,13 @@ import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import type { UpdateSession } from "../events/session-event-types";
 import { now } from "../support/core";
 import { appendSessionMessage } from "../support/messages";
-import { toPersistedSessionRecord } from "../support/persistence";
 import { type ReadSessionSnapshot, requireWorkspaceRepoPath } from "../support/session-invariants";
 import {
   buildUserStoppedNoticeMessage,
   USER_STOPPED_NOTICE,
 } from "../support/session-notice-messages";
-import { toRuntimeSessionRef } from "../support/session-runtime-ref";
-import { isWorkflowAgentSession } from "../support/workflow-session";
+import { requireSessionAssociation, toRuntimeSessionRef } from "../support/session-runtime-ref";
+import type { CommitStoppedSession } from "./workflow-session-operation-policy";
 
 export type StopAgentSessionDependencies = {
   workspaceRepoPath: string | null;
@@ -21,9 +19,7 @@ export type StopAgentSessionDependencies = {
   readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
   clearSessionTurnState: (session: AgentSessionIdentity) => void;
-  persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
-  invalidateSessionStopQueries: (input: { repoPath: string; taskId: string }) => Promise<void>;
-  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
+  commitStoppedSession: CommitStoppedSession;
 };
 
 const appendUserStoppedNotice = (
@@ -47,9 +43,7 @@ export const createStopAgentSession = ({
   readSessionSnapshot,
   updateSession,
   clearSessionTurnState,
-  persistSessionRecord,
-  invalidateSessionStopQueries,
-  refreshTaskData,
+  commitStoppedSession,
 }: StopAgentSessionDependencies) => {
   return async (identity: AgentSessionIdentity): Promise<void> => {
     const session = readSessionSnapshot(identity);
@@ -57,6 +51,7 @@ export const createStopAgentSession = ({
       return;
     }
     const externalSessionId = session.externalSessionId;
+    requireSessionAssociation(session, "stop");
     let stopRepoPath: string | null = null;
 
     updateSession(session, (current) => ({
@@ -95,21 +90,8 @@ export const createStopAgentSession = ({
       };
     });
 
-    if (nextStoppedSession && isWorkflowAgentSession(nextStoppedSession)) {
-      await persistSessionRecord(
-        nextStoppedSession.sessionAssociation.taskId,
-        toPersistedSessionRecord(nextStoppedSession),
-      );
-    }
-
-    if (isWorkflowAgentSession(session)) {
-      await Promise.all([
-        invalidateSessionStopQueries({
-          repoPath: stopRepoPath,
-          taskId: session.sessionAssociation.taskId,
-        }),
-        refreshTaskData(stopRepoPath),
-      ]);
+    if (nextStoppedSession) {
+      await commitStoppedSession(nextStoppedSession, stopRepoPath);
     }
   };
 };
