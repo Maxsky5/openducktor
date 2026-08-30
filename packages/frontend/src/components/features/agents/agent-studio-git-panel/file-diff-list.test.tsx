@@ -8,11 +8,6 @@ const pierreDiffViewerModule = await import("@/components/features/agents/pierre
 type RestorableSpy = { mockRestore(): void };
 let pierreViewerSpies: RestorableSpy[] = [];
 
-const namedExoticMock = <MockComponent extends object, OriginalComponent extends object>(
-  component: MockComponent,
-  original: OriginalComponent,
-): MockComponent & OriginalComponent => Object.assign(component, original);
-
 type FileDiffListComponent = (typeof import("./file-diff-list"))["FileDiffList"];
 
 let FileDiffList: FileDiffListComponent;
@@ -131,13 +126,22 @@ beforeEach(async () => {
 
   pierreViewerSpies = [
     spyOn(pierreDiffViewerModule, "PierreDiffPreloader").mockImplementation(
-      namedExoticMock(preloaderMock, pierreDiffViewerModule.PierreDiffPreloader),
+      Object.assign(preloaderMock, {
+        $$typeof: pierreDiffViewerModule.PierreDiffPreloader.$$typeof,
+        type: pierreDiffViewerModule.PierreDiffPreloader.type,
+      }),
     ),
     spyOn(pierreDiffViewerModule, "PierreDiffViewer").mockImplementation(
-      namedExoticMock(viewerMock, pierreDiffViewerModule.PierreDiffViewer),
+      Object.assign(viewerMock, {
+        $$typeof: pierreDiffViewerModule.PierreDiffViewer.$$typeof,
+        type: pierreDiffViewerModule.PierreDiffViewer.type,
+      }),
     ),
     spyOn(pierreDiffViewerModule, "PierreFileViewer").mockImplementation(
-      namedExoticMock(fileViewerMock, pierreDiffViewerModule.PierreFileViewer),
+      Object.assign(fileViewerMock, {
+        $$typeof: pierreDiffViewerModule.PierreFileViewer.$$typeof,
+        type: pierreDiffViewerModule.PierreFileViewer.type,
+      }),
     ),
   ];
 

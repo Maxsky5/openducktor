@@ -11,11 +11,6 @@ const pierreDiffViewerModule = await import("@/components/features/agents/pierre
 type RestorableSpy = { mockRestore(): void };
 let pierreViewerSpies: RestorableSpy[] = [];
 
-const namedExoticMock = <MockComponent extends object, OriginalComponent extends object>(
-  component: MockComponent,
-  original: OriginalComponent,
-): MockComponent & OriginalComponent => Object.assign(component, original);
-
 const preloaderMock = mock(({ filePath }: { patch: string; filePath: string }) => (
   <div data-testid="pierre-diff-preloader">{filePath}</div>
 ));
@@ -128,16 +123,28 @@ beforeEach(async () => {
 
   pierreViewerSpies = [
     spyOn(pierreDiffViewerModule, "PierreDiffPreloader").mockImplementation(
-      namedExoticMock(preloaderMock, pierreDiffViewerModule.PierreDiffPreloader),
+      Object.assign(preloaderMock, {
+        $$typeof: pierreDiffViewerModule.PierreDiffPreloader.$$typeof,
+        type: pierreDiffViewerModule.PierreDiffPreloader.type,
+      }),
     ),
     spyOn(pierreDiffViewerModule, "PierrePreloadedDiffViewer").mockImplementation(
-      namedExoticMock(preloadedViewerMock, pierreDiffViewerModule.PierrePreloadedDiffViewer),
+      Object.assign(preloadedViewerMock, {
+        $$typeof: pierreDiffViewerModule.PierrePreloadedDiffViewer.$$typeof,
+        type: pierreDiffViewerModule.PierrePreloadedDiffViewer.type,
+      }),
     ),
     spyOn(pierreDiffViewerModule, "PierreDiffViewer").mockImplementation(
-      namedExoticMock(viewerMock, pierreDiffViewerModule.PierreDiffViewer),
+      Object.assign(viewerMock, {
+        $$typeof: pierreDiffViewerModule.PierreDiffViewer.$$typeof,
+        type: pierreDiffViewerModule.PierreDiffViewer.type,
+      }),
     ),
     spyOn(pierreDiffViewerModule, "PierreFileViewer").mockImplementation(
-      namedExoticMock(fileViewerMock, pierreDiffViewerModule.PierreFileViewer),
+      Object.assign(fileViewerMock, {
+        $$typeof: pierreDiffViewerModule.PierreFileViewer.$$typeof,
+        type: pierreDiffViewerModule.PierreFileViewer.type,
+      }),
     ),
   ];
 

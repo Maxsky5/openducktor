@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { fireEvent, render, waitFor } from "@testing-library/react";
-import { createElement, type ReactElement } from "react";
+import { afterEach, beforeEach, describe, expect, jest, mock, test } from "bun:test";
+import { fireEvent, render } from "@testing-library/react";
+import { act, createElement, type ReactElement } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { withMockedToast } from "@/test-utils/mock-toast";
@@ -43,25 +43,31 @@ describe("useCopyToClipboard", () => {
   });
 
   test("resets copied state after the configured delay", async () => {
-    await withMockedToast(async () => {
-      const rendered = render(createElement(ClipboardHookHarness, { resetDelayMs: 5 }));
+    jest.useFakeTimers();
+    try {
+      await withMockedToast(async () => {
+        const rendered = render(createElement(ClipboardHookHarness, { resetDelayMs: 5 }));
 
-      try {
-        const button = rendered.getByTestId("copy-harness");
-        expect(button.getAttribute("data-copied")).toBe("false");
-
-        fireEvent.click(button);
-
-        await waitFor(() => {
-          expect(button.getAttribute("data-copied")).toBe("true");
-        });
-
-        await waitFor(() => {
+        try {
+          const button = rendered.getByTestId("copy-harness");
           expect(button.getAttribute("data-copied")).toBe("false");
-        });
-      } finally {
-        rendered.unmount();
-      }
-    });
+
+          await act(async () => {
+            fireEvent.click(button);
+            await Promise.resolve();
+          });
+          expect(button.getAttribute("data-copied")).toBe("true");
+
+          act(() => {
+            jest.advanceTimersByTime(5);
+          });
+          expect(button.getAttribute("data-copied")).toBe("false");
+        } finally {
+          rendered.unmount();
+        }
+      });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
