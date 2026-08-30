@@ -1,9 +1,9 @@
 import {
   BROWSER_LIVE_RECONNECTED_EVENT_KIND,
   BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
-} from "@/lib/browser-live/constants";
+} from "./browser-live/constants";
 import type { DevServerEvent } from "@openducktor/contracts";
-import type { BrowserLiveControlEvent, BrowserLiveControlEventKind } from "@/types";
+import type { BrowserLiveControlEvent, BrowserLiveControlEventKind } from "../types";
 
 export function browserLiveControlEvent(
   kind: typeof BROWSER_LIVE_RECONNECTED_EVENT_KIND,
