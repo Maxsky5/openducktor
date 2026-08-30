@@ -91,6 +91,56 @@ describe("global config", () => {
     });
   });
 
+  test("migrates one legacy repository Git provider from version 2 config", () => {
+    const config = parsePersistedGlobalConfigV2({
+      version: 2,
+      workspaces: {
+        repo: {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          defaultRuntimeKind: "opencode",
+          git: {
+            providers: {
+              github: {
+                enabled: false,
+                autoDetected: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    expect(config.workspaces.repo?.git).toEqual({
+      provider: {
+        id: "github",
+        enabled: false,
+        autoDetected: true,
+      },
+    });
+  });
+
+  test("rejects canonical and legacy repository Git config together", () => {
+    expect(() =>
+      parsePersistedGlobalConfig({
+        version: 3,
+        workspaces: {
+          repo: {
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            defaultRuntimeKind: "opencode",
+            git: {
+              provider: { id: "github", enabled: true, autoDetected: false },
+              providers: {},
+            },
+          },
+        },
+      }),
+    ).toThrow('Repository "repo" contains both canonical and legacy Git provider configuration.');
+  });
+
   test("rejects legacy repository Git config with more than one provider", () => {
     expect(() =>
       parsePersistedGlobalConfig({

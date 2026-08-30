@@ -133,6 +133,28 @@ describe("useAgentStudioRepoSettings", () => {
     await harness.unmount();
   });
 
+  test("keeps GitHub integration disabled for another configured provider", async () => {
+    const hostClient = createRepoConfigHost(async () =>
+      createRepoConfig({
+        git: {
+          provider: {
+            id: "gitlab",
+            enabled: true,
+            autoDetected: false,
+          },
+        },
+      }),
+    );
+    const harness = createHookHarness({ activeWorkspaceId: "workspace-repo", hostClient });
+
+    await harness.mount();
+    await harness.waitFor((state) => state.repoSettings !== null);
+
+    expect(harness.getLatest().githubIntegrationEnabled).toBe(false);
+
+    await harness.unmount();
+  });
+
   test("resets settings when active repo becomes null", async () => {
     const hostClient = createRepoConfigHost();
     const harness = createHookHarness({

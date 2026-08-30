@@ -41,6 +41,11 @@ const migrateRepositoryGitConfig = (workspaceId: string, workspace: JSONType): J
   }
 
   const entries = Object.entries(providers);
+  if (Object.hasOwn(git, "provider")) {
+    throw new HostValidationError({
+      message: `Repository "${workspaceId}" contains both canonical and legacy Git provider configuration.`,
+    });
+  }
   if (entries.length > 1) {
     throw new HostValidationError({
       message: `Repository "${workspaceId}" has ${entries.length} legacy Git providers; only one provider can be configured.`,
@@ -48,11 +53,6 @@ const migrateRepositoryGitConfig = (workspaceId: string, workspace: JSONType): J
   }
   if (entries.length === 0) {
     return { ...workspace, git };
-  }
-  if (git.provider !== undefined) {
-    throw new HostValidationError({
-      message: `Repository "${workspaceId}" contains both canonical and legacy Git provider configuration.`,
-    });
   }
 
   const [providerId, config] = entries[0]!;

@@ -83,6 +83,8 @@ type UseRepositoryGitSectionModelResult = {
   githubReadinessMessage: string;
   githubReady: boolean;
   githubControlsDisabled: boolean;
+  configuredProviderId: string | undefined;
+  hasConfiguredNonGithubProvider: boolean;
   hasGithubCli: boolean;
   isDetecting: boolean;
   isManualConfigOpen: boolean;
@@ -92,6 +94,7 @@ type UseRepositoryGitSectionModelResult = {
   usesDefaultGithubHost: boolean;
   handleDetectFromOrigin: () => void;
   handleGithubEnabledChange: (checked: boolean) => void;
+  handleRemoveConfiguredProvider: () => void;
   handleRepositoryDraftFieldChange: (field: keyof GithubRepositoryDraft, value: string) => void;
   handleToggleManualEdit: () => void;
 };
@@ -410,6 +413,27 @@ export function useRepositoryGitSectionModel({
     [onUpdateSelectedRepoConfig],
   );
 
+  const handleRemoveConfiguredProvider = useCallback((): void => {
+    if (!hasConfiguredNonGithubProvider || configuredProviderId === undefined) {
+      return;
+    }
+
+    const providerId = configuredProviderId;
+    invalidateActiveDetection({ clearMessage: true });
+    onUpdateSelectedRepoConfig((repoConfig) => {
+      if (repoConfig.git.provider?.id !== providerId) {
+        return repoConfig;
+      }
+      const { provider: _provider, ...git } = repoConfig.git;
+      return { ...repoConfig, git };
+    });
+  }, [
+    configuredProviderId,
+    hasConfiguredNonGithubProvider,
+    invalidateActiveDetection,
+    onUpdateSelectedRepoConfig,
+  ]);
+
   const handleRepositoryDraftFieldChange = useCallback(
     (field: keyof GithubRepositoryDraft, value: string): void => {
       if (isDetecting) {
@@ -511,6 +535,7 @@ export function useRepositoryGitSectionModel({
 
   return {
     cliStatusLabel,
+    configuredProviderId,
     detectionMessage,
     githubEnabled,
     githubControlsDisabled,
@@ -518,6 +543,7 @@ export function useRepositoryGitSectionModel({
     githubReadinessLabel,
     githubReadinessMessage,
     githubReady,
+    hasConfiguredNonGithubProvider,
     hasGithubCli,
     isDetecting,
     isManualConfigOpen,
@@ -529,6 +555,7 @@ export function useRepositoryGitSectionModel({
       void runDetection(true);
     },
     handleGithubEnabledChange,
+    handleRemoveConfiguredProvider,
     handleRepositoryDraftFieldChange,
     handleToggleManualEdit: () => {
       dispatchSectionState({

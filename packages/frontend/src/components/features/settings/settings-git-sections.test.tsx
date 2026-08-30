@@ -259,27 +259,36 @@ describe("settings git sections", () => {
     }
   });
 
-  test("does not offer GitHub changes when another provider is configured", async () => {
+  test("allows removing another configured provider before configuring GitHub", async () => {
     const onDetectGithubRepository = mock(async () => null);
-    const onUpdateSelectedRepoConfig = mock((updater: (current: RepoConfig) => RepoConfig) =>
-      updater(baseRepoConfig),
-    );
     const gitlabProvider = createGitlabProvider();
-    const rendered = render(
-      createElement(RepositoryGitSection, {
-        selectedRepoPath: "/repo",
-        selectedRepoConfig: {
-          ...baseRepoConfig,
-          git: {
-            provider: gitlabProvider,
-          },
-        },
-        runtimeCheck: authenticatedRuntimeCheck,
-        disabled: false,
-        onDetectGithubRepository,
-        onUpdateSelectedRepoConfig,
-      }),
-    );
+    const initialRepoConfig: RepoConfig = {
+      ...baseRepoConfig,
+      git: {
+        provider: gitlabProvider,
+      },
+    };
+    const ControlledRepositoryGitSection = (): ReturnType<typeof createElement> => {
+      const [repoConfig, setRepoConfig] = useState(initialRepoConfig);
+      return createElement(
+        "div",
+        null,
+        createElement(
+          "output",
+          { "data-testid": "configured-provider-id" },
+          repoConfig.git.provider?.id ?? "none",
+        ),
+        createElement(RepositoryGitSection, {
+          selectedRepoPath: "/repo",
+          selectedRepoConfig: repoConfig,
+          runtimeCheck: authenticatedRuntimeCheck,
+          disabled: false,
+          onDetectGithubRepository,
+          onUpdateSelectedRepoConfig: setRepoConfig,
+        }),
+      );
+    };
+    const rendered = render(createElement(ControlledRepositoryGitSection));
 
     try {
       await act(async () => {
@@ -291,13 +300,16 @@ describe("settings git sections", () => {
         "Git provider gitlab is configured. Remove it before you configure GitHub.",
       );
       expect(onDetectGithubRepository).toHaveBeenCalledTimes(0);
-      expect(onUpdateSelectedRepoConfig).toHaveBeenCalledTimes(0);
-      expect(screen.getByRole("switch")).toHaveProperty("disabled", true);
-      expect(screen.getByRole("button", { name: /detect from origin/i })).toHaveProperty(
-        "disabled",
-        true,
-      );
-      expect(screen.getByRole("button", { name: /manual edit/i })).toHaveProperty("disabled", true);
+      expect(screen.queryByRole("switch")).toBeNull();
+      expect(screen.queryByRole("button", { name: /detect from origin/i })).toBeNull();
+      expect(rendered.container.querySelector("#repo-github-host")).toBeNull();
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: /remove provider/i }));
+      });
+
+      expect(screen.getByTestId("configured-provider-id").textContent).toBe("none");
+      expect(screen.getByRole("switch")).toBeTruthy();
     } finally {
       rendered.unmount();
     }
