@@ -84,7 +84,6 @@ export const createOpenCodeSessionControlAdapter = ({
   const runControlSummary = (
     operation: string,
     run: () => Promise<AgentSessionControlSummary>,
-    parentExternalSessionId?: string,
   ): Effect.Effect<AgentSessionControlSummary, HostError> =>
     serializeRuntime(
       Effect.tryPromise({
@@ -98,7 +97,7 @@ export const createOpenCodeSessionControlAdapter = ({
         Effect.flatMap((summary) =>
           commit(`${operation}.commit`, () => ({
             value: summary,
-            changes: state.retainControlSummary(summary, parentExternalSessionId),
+            changes: state.retainControlSummary(summary),
           })),
         ),
       ),
@@ -154,10 +153,8 @@ export const createOpenCodeSessionControlAdapter = ({
       if (input.model) {
         request.model = input.model;
       }
-      return runControlSummary(
-        "opencode-live-session.fork-session",
-        () => connection.forkSession(request),
-        input.parentExternalSessionId,
+      return runControlSummary("opencode-live-session.fork-session", () =>
+        connection.forkSession(request),
       );
     },
     sendUserMessage: (input) => {

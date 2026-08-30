@@ -1131,12 +1131,24 @@ export class CodexAppServerAdapter
   }
 
   private releaseSessionTree(session: CodexSessionState): void {
-    for (const child of this.localSessions.values()) {
-      if (
-        child.contextOwnerThreadId === session.threadId &&
-        child.runtimeId === session.runtimeId
-      ) {
-        this.releaseSessionTree(child);
+    const descendants = this.subagents.descendantRoutesForParent(
+      session.threadId,
+      session.runtimeId,
+      (route) => {
+        const child = this.localSessions.get(route.childExternalSessionId);
+        return (
+          !child ||
+          (child.runtimeId === session.runtimeId && child.contextOwnerThreadId !== undefined)
+        );
+      },
+    );
+    for (const route of descendants.toReversed()) {
+      this.contextUsageLoader.cancelSession({
+        ...codexSessionRef(session),
+        externalSessionId: route.childExternalSessionId,
+      });
+      if (this.localSessions.has(route.childExternalSessionId)) {
+        this.localSessions.release(route.childExternalSessionId);
       }
     }
     this.contextUsageLoader.cancelSession(codexSessionRef(session));

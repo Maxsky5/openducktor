@@ -210,9 +210,16 @@ describe("CodexContextUsageLoader", () => {
     }
   });
 
-  test.each(["release", "stop"] as const)(
-    "cleans up recovered descendants on parent %s",
-    async (action) => {
+  test.each([
+    ["release", "thread/start-runtime-live", "unretained"],
+    ["stop", "thread/start-runtime-live", "unretained"],
+    ["release", "child-thread", "before"],
+    ["stop", "child-thread", "before"],
+    ["release", "child-thread", "after"],
+    ["stop", "child-thread", "after"],
+  ] as const)(
+    "%s cleans up descendants of %s (child load order: %s)",
+    async (action, releasedThreadId, childLoadOrder) => {
       const runtimeStream = createRuntimeStreamSubscription();
       const { adapter, transports } = createHarness({
         subscribeEvents: runtimeStream.subscribeEvents,
@@ -234,15 +241,23 @@ describe("CodexContextUsageLoader", () => {
         itemId: "grandchild-thread",
         status: "running",
       });
-      runtimeStream.emitNotification({
-        method: "thread/tokenUsage/updated",
-        params: {
-          threadId: "grandchild-thread",
-          turnId: "grandchild-turn",
-          tokenUsage: codexTokenUsageFixture(6_086),
-        },
-      });
+      for (const threadId of ["child-thread", "grandchild-thread"]) {
+        runtimeStream.emitNotification({
+          method: "thread/tokenUsage/updated",
+          params: {
+            threadId,
+            turnId: `${threadId}-turn`,
+            tokenUsage: codexTokenUsageFixture(6_086),
+          },
+        });
+      }
       await flushCodexAdapterWork();
+      if (childLoadOrder === "before") {
+        await adapter.loadLiveSessionContextUsage({
+          runtimeId: "runtime-live",
+          externalSessionId: "child-thread",
+        });
+      }
 
       await expect(
         adapter.loadLiveSessionContextUsage({
@@ -250,6 +265,12 @@ describe("CodexContextUsageLoader", () => {
           externalSessionId: "grandchild-thread",
         }),
       ).resolves.toEqual({ totalTokens: 6_086, contextWindow: 200_000 });
+      if (childLoadOrder === "after") {
+        await adapter.loadLiveSessionContextUsage({
+          runtimeId: "runtime-live",
+          externalSessionId: "child-thread",
+        });
+      }
 
       expect(adapter.listLiveSessionSnapshots("runtime-live")).toContainEqual(
         expect.objectContaining({
@@ -291,15 +312,19 @@ describe("CodexContextUsageLoader", () => {
       await blocked.started.promise;
       const callCount = transport.calls.length;
       if (action === "release") {
-        await adapter.releaseSession(codexSessionRef());
+        await adapter.releaseSession(codexSessionRef(releasedThreadId));
       } else {
-        await adapter.stopSession(codexSessionRef());
+        await adapter.stopSession(codexSessionRef(releasedThreadId));
+      }
+      const remainingThreadIds = ["independent-thread"];
+      if (releasedThreadId === "child-thread") {
+        remainingThreadIds.unshift("thread/start-runtime-live");
       }
       expect(
         adapter
           .listLiveSessionSnapshots("runtime-live")
           .map((snapshot) => snapshot.ref.externalSessionId),
-      ).toEqual(["independent-thread"]);
+      ).toEqual(remainingThreadIds);
       expect(state.subagents.routeForChild("grandchild-thread", "runtime-live")).toBeNull();
       expect(transport.calls).toHaveLength(callCount);
       await expect(loading).rejects.toThrow("was released while loading context usage");
@@ -310,7 +335,68 @@ describe("CodexContextUsageLoader", () => {
         adapter
           .listLiveSessionSnapshots("runtime-live")
           .map((snapshot) => snapshot.ref.externalSessionId),
-      ).toEqual(["independent-thread"]);
+      ).toEqual(remainingThreadIds);
+    },
+  );
+
+  test.each(["release", "stop"] as const)(
+    "preserves an independently resumed child and its recovered descendants on root %s",
+    async (action) => {
+      const runtimeStream = createRuntimeStreamSubscription();
+      const { adapter } = createHarness({ subscribeEvents: runtimeStream.subscribeEvents });
+      await adapter.startSession(codexStartSessionInput());
+      for (const [parentThreadId, childThreadId] of [
+        ["thread/start-runtime-live", "child-thread"],
+        ["child-thread", "grandchild-thread"],
+      ] as const) {
+        adapter.subagents.upsertLink({
+          runtimeId: "runtime-live",
+          parentThreadId,
+          childThreadId,
+          itemId: childThreadId,
+          status: "running",
+        });
+      }
+      runtimeStream.emitNotification({
+        method: "thread/tokenUsage/updated",
+        params: {
+          threadId: "grandchild-thread",
+          turnId: "grandchild-turn",
+          tokenUsage: codexTokenUsageFixture(6_086),
+        },
+      });
+      await flushCodexAdapterWork();
+      await adapter.loadLiveSessionContextUsage({
+        runtimeId: "runtime-live",
+        externalSessionId: "grandchild-thread",
+      });
+      await adapter.resumeSession(codexSessionRuntimeRef("child-thread"));
+      const descendants = adapter
+        .listLiveSessionSnapshots("runtime-live")
+        .filter((snapshot) => snapshot.ref.externalSessionId !== "thread/start-runtime-live");
+
+      if (action === "release") {
+        await adapter.releaseSession(codexSessionRef());
+      } else {
+        await adapter.stopSession(codexSessionRef());
+      }
+
+      expect(adapter.listLiveSessionSnapshots("runtime-live")).toEqual(
+        descendants.map((snapshot) => {
+          if (snapshot.ref.externalSessionId === "child-thread") {
+            const { parentExternalSessionId: _parent, ...independent } = snapshot;
+            return independent;
+          }
+          return snapshot;
+        }),
+      );
+      expect(adapter.subagents.routeForChild("grandchild-thread", "runtime-live")).toMatchObject({
+        parentExternalSessionId: "child-thread",
+      });
+
+      await adapter.releaseSession(codexSessionRef("child-thread"));
+      expect(adapter.listLiveSessionSnapshots("runtime-live")).toEqual([]);
+      adapter.releaseRuntime("runtime-live");
     },
   );
 
