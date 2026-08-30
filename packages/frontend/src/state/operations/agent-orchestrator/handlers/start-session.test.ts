@@ -155,6 +155,61 @@ describe("agent-orchestrator/handlers/start-session", () => {
     );
   });
 
+  test("dedupes matching in-flight fresh starts without a start-attempt identity", async () => {
+    const startEntered = createDeferred<void>();
+    const releaseStart = createDeferred<void>();
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    let startCount = 0;
+    adapter.startSession = async (input) => {
+      startCount += 1;
+      startEntered.resolve();
+      await releaseStart.promise;
+      return {
+        runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
+        externalSessionId: "session-manual-fresh",
+        startedAt: "2026-08-31T10:00:00.000Z",
+        sessionAssociation: input.sessionScope,
+        status: "idle",
+      };
+    };
+    const { start } = createStartSessionTestHarness({
+      adapter,
+      taskRef: { current: [taskFixture] },
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeKind: "opencode",
+        runtimeId: "runtime-1",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+    });
+
+    try {
+      const firstStart = start({
+        taskId: "task-1",
+        role: "build",
+        startMode: "fresh",
+        selectedModel: BUILD_SELECTION,
+      });
+      await startEntered.promise;
+      const secondStart = start({
+        taskId: "task-1",
+        role: "build",
+        startMode: "fresh",
+        selectedModel: BUILD_SELECTION,
+      });
+      releaseStart.resolve();
+
+      const [firstSession, secondSession] = await Promise.all([firstStart, secondStart]);
+      expect(startCount).toBe(1);
+      expect(firstSession).toEqual(secondSession);
+    } finally {
+      releaseStart.resolve();
+      adapter.startSession = originalStartSession;
+    }
+  });
+
   test("does not dedupe in-flight starts across different roles", async () => {
     const startBuildDeferred = createDeferred<void>();
     const startedRoles: string[] = [];

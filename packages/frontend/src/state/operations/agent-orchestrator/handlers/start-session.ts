@@ -105,6 +105,9 @@ export const createStartAgentSession = ({
       selectedModelKey,
       messagePolicyKey,
     ];
+    if (input.startMode === "fresh" && input.startAttemptId) {
+      inFlightKeyParts.push(input.startAttemptId);
+    }
     const inFlightKey = inFlightKeyParts.join("::");
 
     return session.sessionStartGateRef.current.run(inFlightKey, async () => {

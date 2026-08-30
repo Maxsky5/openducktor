@@ -5,6 +5,7 @@ import type {
   TaskCard,
   WorkspaceRecord,
 } from "@openducktor/contracts";
+import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import { executeAutopilotAction } from "@/features/autopilot/autopilot-actions";
@@ -12,11 +13,25 @@ import {
   detectAutopilotEvents,
   shouldAdvanceAutopilotBaseline,
 } from "@/features/autopilot/autopilot-events";
-import type { RunSessionStartWorkflow } from "@/features/session-start";
+import {
+  createSessionStartWorkflowRunner,
+  type RunSessionStartWorkflow,
+} from "@/features/session-start";
+import { createSessionStartGate } from "@/features/session-start/session-start-gate";
 import type { SessionStartWorkflowResult } from "@/features/session-start/session-start-workflow";
 import { MISSING_BUILD_TARGET_ERROR } from "@/lib/session-start-errors";
-import { repoConfigQueryOptions, workspaceQueryKeys } from "@/state/queries/workspace";
-import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
+import { createStartSessionTestHarness } from "@/state/operations/agent-orchestrator/handlers/start-session.test-helpers";
+import {
+  repoConfigQueryOptions,
+  settingsSnapshotQueryOptions,
+  workspaceQueryKeys,
+} from "@/state/queries/workspace";
+import {
+  createDeferred,
+  createSettingsSnapshotFixture,
+  createTaskCardFixture,
+} from "@/test-utils/shared-test-fixtures";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 const runSessionStartWorkflowMock = mock(
   async (_input: Parameters<RunSessionStartWorkflow>[0]): Promise<SessionStartWorkflowResult> => ({
@@ -456,6 +471,98 @@ describe("autopilot feature helpers", () => {
         ([input]) => input.decision.startMode === "fresh" && !("sourceSession" in input.decision),
       ),
     ).toBe(true);
+  });
+
+  test("starts distinct sessions for overlapping enabled QA invocations", async () => {
+    const task = createTask({ id: "TASK-QA-OVERLAP", status: "ai_review" });
+    task.agentWorkflows.qa.available = true;
+    const args = createExecuteArgs(task);
+    args.resolveTaskWorktree.mockResolvedValue({
+      workingDirectory: "/tmp/repo/current-worktree",
+    });
+    args.queryClient.setQueryData(
+      settingsSnapshotQueryOptions().queryKey,
+      createSettingsSnapshotFixture(),
+    );
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    const bothGateCallsEntered = createDeferred<void>();
+    const releaseStarts = createDeferred<void>();
+    const realGate = createSessionStartGate<AgentSessionIdentity>();
+    let gateCallCount = 0;
+    let startCount = 0;
+    const kickoffSessionIds: string[] = [];
+
+    adapter.startSession = async (input) => {
+      startCount += 1;
+      const sessionNumber = startCount;
+      await releaseStarts.promise;
+      return {
+        runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
+        externalSessionId: `qa-session-${sessionNumber}`,
+        startedAt: `2026-08-31T10:00:0${sessionNumber}.000Z`,
+        sessionAssociation: input.sessionScope,
+        status: "idle",
+      };
+    };
+
+    const { start } = createStartSessionTestHarness({
+      adapter,
+      taskRef: { current: [task] },
+      sessionStartGateRef: {
+        current: {
+          run: (key, startSession) => {
+            gateCallCount += 1;
+            if (gateCallCount === 2) {
+              bothGateCallsEntered.resolve();
+            }
+            return realGate.run(key, startSession);
+          },
+          clear: () => realGate.clear(),
+        },
+      },
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeKind: "opencode",
+        runtimeId: "runtime-1",
+        workingDirectory: "/tmp/repo/current-worktree",
+      }),
+    });
+    const runSessionStartWorkflow = createSessionStartWorkflowRunner({
+      queryClient: args.queryClient,
+      workspaceId: "repo",
+      startAgentSession: start,
+      sendAgentMessage: async (session) => {
+        kickoffSessionIds.push(session.externalSessionId);
+      },
+    });
+
+    try {
+      const firstStart = executeAutopilotAction({
+        ...args,
+        runSessionStartWorkflow,
+        actionId: "startQa",
+        alwaysStartQaReviewsFresh: true,
+      });
+      const secondStart = executeAutopilotAction({
+        ...args,
+        runSessionStartWorkflow,
+        actionId: "startQa",
+        alwaysStartQaReviewsFresh: true,
+      });
+      await bothGateCallsEntered.promise;
+      releaseStarts.resolve();
+      await Promise.all([firstStart, secondStart]);
+
+      expect(startCount).toBe(2);
+      expect(kickoffSessionIds).toHaveLength(2);
+      expect(new Set(kickoffSessionIds)).toEqual(new Set(["qa-session-1", "qa-session-2"]));
+    } finally {
+      releaseStarts.resolve();
+      adapter.startSession = originalStartSession;
+    }
   });
 
   test("does not reuse an old QA session when fresh model resolution fails", async () => {

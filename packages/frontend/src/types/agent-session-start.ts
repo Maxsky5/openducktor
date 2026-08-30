@@ -14,6 +14,7 @@ export type StartAgentSessionInput =
       role: AgentRole;
       selectedModel: AgentModelSelection;
       startMode: "fresh";
+      startAttemptId?: string;
       holdForPostStartMessage?: boolean;
       targetWorkingDirectory?: string | null;
     }

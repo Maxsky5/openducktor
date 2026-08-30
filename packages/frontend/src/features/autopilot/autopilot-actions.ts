@@ -293,6 +293,7 @@ export const executeAutopilotAction = async ({
   runSessionStartWorkflow,
 }: ExecuteAutopilotActionArgs): Promise<AutopilotActionOutcome> => {
   const action = AUTOPILOT_ACTION_DEFINITIONS[actionId];
+  const forceFreshQa = action.id === "startQa" && alwaysStartQaReviewsFresh;
 
   try {
     const startResolution = await resolveAutopilotStart({
@@ -329,14 +330,18 @@ export const executeAutopilotAction = async ({
     if (startResolution.targetWorkingDirectory !== undefined) {
       request.targetWorkingDirectory = startResolution.targetWorkingDirectory;
     }
-    const workflow = await runSessionStartWorkflow({
+    const workflowInput: Parameters<typeof runSessionStartWorkflow>[0] = {
       request,
       decision: toSessionStartDecision({
         resolution: startResolution,
         selectedModel,
       }),
       task,
-    });
+    };
+    if (forceFreshQa) {
+      workflowInput.startAttemptId = crypto.randomUUID();
+    }
+    const workflow = await runSessionStartWorkflow(workflowInput);
 
     return {
       kind: "started",

@@ -9,7 +9,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
 import { loadRepoConfigFromQuery } from "@/state/queries/workspace";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import type { StartAgentSession } from "@/types/agent-session-start";
+import type { StartAgentSession, StartAgentSessionInput } from "@/types/agent-session-start";
 import type { SessionLaunchActionId } from "./session-start-launch-options";
 import { getSessionLaunchAction } from "./session-start-launch-options";
 import {
@@ -52,6 +52,7 @@ type StartSessionWorkflowArgs = {
   queryClient: QueryClient;
   intent: SessionStartWorkflowIntent;
   selection: AgentModelSelection | null;
+  startAttemptId?: string;
   task: TaskCard | null;
   workspaceId: string | null;
   persistTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
@@ -91,8 +92,10 @@ const startSessionFromIntent = ({
   selection,
   startAgentSession,
   holdForPostStartMessage,
+  startAttemptId,
 }: Pick<StartSessionWorkflowArgs, "intent" | "selection" | "startAgentSession"> & {
   holdForPostStartMessage: boolean;
+  startAttemptId: string | undefined;
 }): Promise<AgentSessionIdentity> => {
   if (intent.startMode === "reuse") {
     return startAgentSession({
@@ -114,13 +117,16 @@ const startSessionFromIntent = ({
     });
   }
 
-  const freshRequest = {
+  const freshRequest: Extract<StartAgentSessionInput, { startMode: "fresh" }> = {
     taskId: intent.taskId,
     role: intent.role,
     startMode: "fresh" as const,
     selectedModel: requireSelectedModel(selection, "fresh"),
     holdForPostStartMessage,
   };
+  if (startAttemptId) {
+    freshRequest.startAttemptId = startAttemptId;
+  }
 
   if (intent.targetWorkingDirectory !== undefined) {
     return startAgentSession({
@@ -253,6 +259,7 @@ export const startSessionWorkflow = async ({
   queryClient,
   intent,
   selection,
+  startAttemptId,
   task,
   workspaceId,
   persistTaskTargetBranch,
@@ -288,6 +295,7 @@ export const startSessionWorkflow = async ({
     selection,
     startAgentSession,
     holdForPostStartMessage: postStartMessage !== null || intent.holdForPostStartMessage === true,
+    startAttemptId,
   });
 
   if (intent.postStartAction === "none") {

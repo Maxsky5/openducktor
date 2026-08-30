@@ -56,6 +56,7 @@ type ExecuteSessionStartFromDecisionArgs = {
   queryClient: QueryClient;
   request: SessionStartFlowRequest;
   decision: ResolvedSessionStartDecision;
+  startAttemptId?: string;
   task: TaskCard | null;
   workspaceId: string | null;
   persistTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
@@ -190,6 +191,7 @@ export const executeSessionStartFromDecision = async ({
   queryClient,
   request,
   decision,
+  startAttemptId,
   task,
   workspaceId,
   persistTaskTargetBranch,
@@ -237,6 +239,10 @@ export const executeSessionStartFromDecision = async ({
     workspaceId,
     startAgentSession,
   };
+
+  if (startAttemptId) {
+    workflowInput.startAttemptId = startAttemptId;
+  }
 
   if (persistTaskTargetBranch) {
     workflowInput.persistTaskTargetBranch = persistTaskTargetBranch;
