@@ -630,7 +630,7 @@ describe("agent session workflow records", () => {
       pendingApprovals: [],
       pendingQuestions: [],
       selectedModel: null,
-    } as const satisfies AgentSessionState;
+    } satisfies AgentSessionState;
     const projected = replaceAgentSession(emptyAgentSessionCollection(), launched);
 
     const refreshed = applyRecordsOnly({

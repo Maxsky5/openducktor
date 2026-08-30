@@ -63,10 +63,12 @@ export const applyWorkflowSessionRecords = ({
   projected,
   records: workflowRecords,
   associationEvidence,
+  existingSelectedModelSource = "record",
 }: {
   projected: AgentSessionCollection;
   records: LoadedWorkflowSessionRecords;
   associationEvidence: AgentSessionCollection;
+  existingSelectedModelSource?: "record" | "current";
 }): AgentSessionCollection => {
   const pruned = pruneRecordlessWorkflowSessions(projected, workflowRecords);
   let collection = pruned;
@@ -82,7 +84,12 @@ export const applyWorkflowSessionRecords = ({
         persistedInput.associationEvidence = evidenceSession.sessionAssociation;
       }
     }
-    collection = replaceAgentSession(collection, toPersistedSessionView(persistedInput));
+    const persistedView = toPersistedSessionView(persistedInput);
+    const reconciledView =
+      currentSession && existingSelectedModelSource === "current"
+        ? { ...persistedView, selectedModel: currentSession.selectedModel }
+        : persistedView;
+    collection = replaceAgentSession(collection, reconciledView);
   }
   return rebuildProjectedPendingInput(collection);
 };

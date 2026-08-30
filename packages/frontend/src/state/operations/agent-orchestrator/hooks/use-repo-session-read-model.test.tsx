@@ -176,6 +176,7 @@ const createState = (
       listener(payload);
     },
     queryClient,
+    updateSession: sessionStore.updateSession,
   };
 };
 
@@ -284,6 +285,45 @@ describe("useRepoSessionReadModel", () => {
         taskId: "task-1",
         role: "build",
       });
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("preserves a fresher selected model across live snapshots", async () => {
+    const state = createState((emit) => {
+      emit({
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [snapshot()],
+      });
+    });
+    const selectedModel = {
+      runtimeKind: "codex",
+      providerId: "openai",
+      modelId: "gpt-5.2",
+    } as const;
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      await state.harness.run(() => {
+        const updated = state.updateSession(snapshot().ref, (current) => ({
+          ...current,
+          selectedModel,
+        }));
+        if (!updated) {
+          throw new Error("Expected the selected model to change.");
+        }
+      });
+      expect(state.getSession()?.selectedModel).toEqual(selectedModel);
+
+      await state.harness.run(() => {
+        state.emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      });
+
+      expect(state.getSession()?.selectedModel).toEqual(selectedModel);
     } finally {
       await state.harness.unmount();
     }
@@ -822,6 +862,48 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("waits for the initial live snapshot after task-record recovery", async () => {
+    const state = createState(() => undefined);
+    const recoveredRecord = { ...record, externalSessionId: "thread-after-recovery" };
+    const recoveredIdentity = {
+      externalSessionId: recoveredRecord.externalSessionId,
+      runtimeKind: recoveredRecord.runtimeKind,
+      workingDirectory: recoveredRecord.workingDirectory,
+    };
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor(() => state.observeAgentSessionLive.mock.calls.length === 1);
+      await expect(
+        state.queryClient.fetchQuery({
+          queryKey: agentSessionQueryKeys.list("/repo", "task-1"),
+          queryFn: async () => {
+            throw new Error("record read failed before snapshot");
+          },
+          staleTime: 0,
+          retry: false,
+        }),
+      ).rejects.toThrow("record read failed before snapshot");
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [
+          recoveredRecord,
+        ]);
+      });
+      await state.harness.waitFor(() => state.getStoredSession(recoveredIdentity) !== null);
+
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("loading");
+
+      await state.harness.run(() => {
+        state.emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
   test("resurfaces an unresolved live failure after a hydrating task set supersedes a stale one", async () => {
     const deferredB = createDeferred<TaskSessionRecordBatch>();
     const batchList = mock(() => deferredB.promise);
@@ -1062,6 +1144,45 @@ describe("useRepoSessionReadModel", () => {
       expect(batchList).toHaveBeenCalledWith("/repo", ["task-1"]);
       expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(2);
       expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+      expect(
+        state.queryClient.getQueryData<AgentSessionRecord[]>(
+          agentSessionQueryKeys.list("/repo", "task-1"),
+        ),
+      ).toEqual([]);
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("keeps forced record retry mode after a transient retry failure", async () => {
+    const batchList = mock(async () => {
+      if (batchList.mock.calls.length === 1) {
+        throw new Error("forced retry failed");
+      }
+      return [{ taskId: "task-1", agentSessions: [] }];
+    });
+    const state = createRepositoryConflictRetryState(batchList);
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [record]);
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      await state.harness.run(() => state.harness.getLatest().reloadSessionReadModel());
+      await state.harness.waitFor(
+        (value) =>
+          value.sessionReadModelLoadState.kind === "failed" &&
+          value.sessionReadModelLoadState.message.endsWith("forced retry failed"),
+      );
+
+      await state.harness.run(() => state.harness.getLatest().reloadSessionReadModel());
+      await state.harness.waitFor(() => batchList.mock.calls.length === 2);
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      expect(batchList).toHaveBeenCalledTimes(2);
       expect(
         state.queryClient.getQueryData<AgentSessionRecord[]>(
           agentSessionQueryKeys.list("/repo", "task-1"),

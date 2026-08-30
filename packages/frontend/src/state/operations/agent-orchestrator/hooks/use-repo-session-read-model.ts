@@ -136,6 +136,7 @@ export const useRepoSessionReadModel = ({
   // Marks a loading window created when a healthy snapshot clears a public
   // live failure before the current task-record scope finishes hydrating.
   const recoveredLiveFailureRef = useRef(false);
+  const initialLiveSnapshotReceivedRef = useRef(false);
   const taskIdsKey = taskIdsScopeKey(taskIds);
   const readReloadGeneration = useEffectEvent(() => reloadGeneration);
   const readCurrentTaskIdsKey = useEffectEvent(() => taskIdsKey);
@@ -396,6 +397,15 @@ export const useRepoSessionReadModel = ({
     const liveFailureWasRecovered = recoveredLiveFailureRef.current;
     demotedStaleFailureRef.current = false;
     recoveredLiveFailureRef.current = false;
+    const recoveredLoadState = (): AgentSessionReadModelLoadState => {
+      if (liveMessage) {
+        return failedAgentSessionReadModelLoadState(workspaceRepoPath, liveMessage, "live-stream");
+      }
+      if (!initialLiveSnapshotReceivedRef.current) {
+        return loadingAgentSessionReadModelLoadState(workspaceRepoPath);
+      }
+      return readyAgentSessionReadModelLoadState(workspaceRepoPath);
+    };
     // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
     setSessionReadModelLoadState((currentLoadState) => {
       if (
@@ -403,9 +413,7 @@ export const useRepoSessionReadModel = ({
         currentLoadState.source === "task-records" &&
         currentLoadState.workspaceRepoPath === workspaceRepoPath
       ) {
-        return liveMessage
-          ? failedAgentSessionReadModelLoadState(workspaceRepoPath, liveMessage, "live-stream")
-          : readyAgentSessionReadModelLoadState(workspaceRepoPath);
+        return recoveredLoadState();
       }
       if (
         currentLoadState.kind === "loading" &&
@@ -414,9 +422,7 @@ export const useRepoSessionReadModel = ({
       ) {
         // The failure this window replaced resolved; an unresolved live-stream
         // failure still surfaces here.
-        return liveMessage
-          ? failedAgentSessionReadModelLoadState(workspaceRepoPath, liveMessage, "live-stream")
-          : readyAgentSessionReadModelLoadState(workspaceRepoPath);
+        return recoveredLoadState();
       }
       return currentLoadState;
     });
@@ -443,7 +449,7 @@ export const useRepoSessionReadModel = ({
         kind: "failed",
         repoPath: recordRetryResult.repoPath,
         taskIdsKey: recordRetryResult.taskIdsKey,
-        failedAt: "load",
+        failedAt: "apply",
         message: recordRetryResult.message,
       };
       setSessionReadModelLoadState(
@@ -518,7 +524,6 @@ export const useRepoSessionReadModel = ({
     const effectReloadGeneration = reloadGeneration;
     let cancelled = false;
     let unsubscribe: (() => void) | null = null;
-    let awaitingInitialSnapshot = true;
     const readLoadedWorkflowRecords = (): LoadedWorkflowSessionRecords | null => {
       const current = taskRecordApplyRef.current;
       if (!current || current.repoPath !== repoPath || current.kind !== "ready") {
@@ -542,6 +547,7 @@ export const useRepoSessionReadModel = ({
             projected,
             records: workflowRecords,
             associationEvidence,
+            existingSelectedModelSource: "current",
           })
         : projected;
     };
@@ -621,7 +627,7 @@ export const useRepoSessionReadModel = ({
         });
         return applyLoadedRecords(projected, current);
       });
-      awaitingInitialSnapshot = false;
+      initialLiveSnapshotReceivedRef.current = true;
       if (isStaleRepoOperation()) {
         return;
       }
@@ -675,7 +681,7 @@ export const useRepoSessionReadModel = ({
         }
         return;
       }
-      if (awaitingInitialSnapshot) {
+      if (!initialLiveSnapshotReceivedRef.current) {
         failObservation(
           `Live-session observation delivered '${envelope.type}' before its initial snapshot.`,
         );
@@ -775,6 +781,7 @@ export const useRepoSessionReadModel = ({
     observedRepoPathRef.current = repoPath;
     demotedStaleFailureRef.current = false;
     recoveredLiveFailureRef.current = false;
+    initialLiveSnapshotReceivedRef.current = false;
     // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change, react-doctor/no-derived-state
     setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(repoPath));
     void observeLiveSessions({ repoPath }, (envelope) => {
@@ -808,6 +815,7 @@ export const useRepoSessionReadModel = ({
       liveStreamFailureRef.current = null;
       demotedStaleFailureRef.current = false;
       recoveredLiveFailureRef.current = false;
+      initialLiveSnapshotReceivedRef.current = false;
       unsubscribe?.();
     };
   }, [
