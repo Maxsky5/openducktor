@@ -195,13 +195,13 @@ const claudeHistorySubagentSystemMessageSchema = z.discriminatedUnion("subtype",
   claudeTaskNotificationMessageSchema,
 ]);
 
-export const claudeHistoryStoreEntrySchema = z.object({
+const claudeHistoryStoreEntrySchema = z.object({
   timestamp: z.string().optional(),
   type: z.string().min(1),
   uuid: z.string().optional(),
 });
 
-export const claudePreToolUseIngressSchema = claudeToolHookSchema.extend({
+const claudePreToolUseIngressSchema = claudeToolHookSchema.extend({
   hook_event_name: z.literal("PreToolUse"),
 });
 
@@ -216,12 +216,7 @@ const claudePostToolUseFailureIngressSchema = claudeToolHookSchema.extend({
   hook_event_name: z.literal("PostToolUseFailure"),
 });
 
-export const claudePostToolUseIngressSchema = z.discriminatedUnion("hook_event_name", [
-  claudePostToolUseSuccessIngressSchema,
-  claudePostToolUseFailureIngressSchema,
-]);
-
-export const claudeUserToolResultIngressSchema = z.object({
+const claudeUserToolResultIngressSchema = z.object({
   message: claudeUserToolResultMessagePayloadSchema,
   origin: claudeUserTurnOriginSchema.optional(),
   parent_tool_use_id: z.string().min(1).nullable().optional(),

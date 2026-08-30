@@ -1,5 +1,4 @@
-import type { HostInvokeFailure } from "@openducktor/contracts";
-import type { HostCommandArgs, HostCommandName, HostCommandResult } from "@openducktor/host";
+import type { HostCommandArgs, HostCommandName, HostInvokeFailure } from "@openducktor/contracts";
 import { z } from "zod";
 
 export class HostInvokeError extends Error {
@@ -16,9 +15,9 @@ export class HostInvokeError extends Error {
   }
 }
 
-export type InvokeFn = <Command extends HostCommandName, Result extends HostCommandResult<Command>>(
-  command: Command,
-  args: Exclude<HostCommandArgs, undefined> | undefined,
+export type InvokeFn = <Result>(
+  command: HostCommandName,
+  args: HostCommandArgs,
   resultSchema: z.ZodType<Result>,
 ) => Promise<Result>;
 

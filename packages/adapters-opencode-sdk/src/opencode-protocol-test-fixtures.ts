@@ -371,7 +371,7 @@ export const createParsedOpencodeMessageEventGroupFixtures = (
     parseOpencodeDirectEvent(fixture),
   );
 
-export const createParsedOpencodeEventFixtures = (
+const createParsedOpencodeEventFixtures = (
   event: DirectEventFixtureInput,
   index = 0,
 ): ParsedOpencodeEvent[] =>

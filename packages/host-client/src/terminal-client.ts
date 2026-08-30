@@ -17,7 +17,6 @@ import {
   terminalPreparePathInputRequestSchema,
   terminalPreparePathInputResponseSchema,
 } from "@openducktor/contracts";
-import type { HostCommandResult } from "@openducktor/host";
 import { HostInvokeError, type InvokeFn } from "./invoke-utils";
 import type { z } from "zod";
 
@@ -45,16 +44,13 @@ export class HostTerminalClient {
   constructor(private readonly invokeFn: InvokeFn) {}
 
   private async invoke<
+    Response,
     Command extends
       | "terminal_create"
       | "terminal_list"
       | "terminal_prepare_path_input"
       | "terminal_close",
-  >(
-    command: Command,
-    request: TerminalRequest,
-    schema: z.ZodType<HostCommandResult<Command>>,
-  ): Promise<HostCommandResult<Command>> {
+  >(command: Command, request: TerminalRequest, schema: z.ZodType<Response>): Promise<Response> {
     try {
       return await this.invokeFn(command, request, schema);
     } catch (cause) {

@@ -13,24 +13,6 @@ export const asJsonObject = (
   return parsed.success ? parsed.data : undefined;
 };
 
-export const readRecordProp = (
-  source: OpenCodeProtocolValue | undefined,
-  key: string,
-): OpenCodeProtocolObject | undefined => {
-  const record = asJsonObject(source);
-  const value = record?.[key];
-  return value === undefined ? undefined : asJsonObject(value);
-};
-
-export const readArrayProp = (
-  source: OpenCodeProtocolValue | undefined,
-  key: string,
-): OpenCodeProtocolValue[] | undefined => {
-  const record = asJsonObject(source);
-  const value = record?.[key];
-  return Array.isArray(value) ? value : undefined;
-};
-
 export const readStringProp = (
   source: OpenCodeProtocolValue | undefined,
   keys: readonly string[],

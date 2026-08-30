@@ -1,3 +1,8 @@
+import {
+  type HostCommandArgs as ContractHostCommandArgs,
+  type HostCommandInputRecord,
+  hostCommandInputRecordSchema,
+} from "@openducktor/contracts";
 import { z } from "zod";
 import { HostValidationError } from "../../effect/host-errors";
 
@@ -7,12 +12,12 @@ const invalidInput = (message: string, field?: string): HostValidationError =>
     field,
   });
 
-export const commandInputRecordSchema = z.record(z.string(), z.unknown());
+export const commandInputRecordSchema = hostCommandInputRecordSchema;
 export const commandInputStringSchema = z.string();
 export const commandInputOptionalStringSchema = z.union([z.string(), z.null(), z.undefined()]);
 export const commandInputOptionalBooleanSchema = z.union([z.boolean(), z.null(), z.undefined()]);
-export type CommandInputRecord = z.output<typeof commandInputRecordSchema>;
-export type HostCommandArgs = z.output<typeof commandInputRecordSchema> | undefined;
+export type CommandInputRecord = HostCommandInputRecord;
+export type HostCommandArgs = ContractHostCommandArgs;
 
 export const requireRecord = (
   result: z.ZodSafeParseResult<CommandInputRecord>,

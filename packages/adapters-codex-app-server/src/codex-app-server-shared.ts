@@ -8,7 +8,6 @@ export const unsupported = (surface: string): never => {
 };
 
 const codexStringValueSchema = z.string();
-const codexFiniteNumberValueSchema = z.number().finite();
 
 export const isPlainObject = (
   value: CodexAppServerJsonValue | undefined,
@@ -60,13 +59,6 @@ export const readNonEmptyCodexString = (
   return trimmed.length > 0 ? trimmed : null;
 };
 
-export const readFiniteCodexNumber = (
-  value: CodexAppServerJsonValue | undefined,
-): number | null => {
-  const parsed = codexFiniteNumberValueSchema.safeParse(value);
-  return parsed.success ? parsed.data : null;
-};
-
 export const parseCodexJsonObjectString = (
   value: CodexAppServerJsonValue | undefined,
 ): Record<string, CodexAppServerJsonValue> | null => {
@@ -92,23 +84,6 @@ export const trimOldestMapKeys = <Value>(map: Map<string, Value>, maxSize: numbe
     map.delete(oldestKey);
   }
 };
-export const extractText = (value: CodexAppServerJsonValue | undefined): string | null => {
-  const text = readCodexString(value);
-  if (text !== null) {
-    return text;
-  }
-  if (!isPlainObject(value)) {
-    return null;
-  }
-  for (const key of ["text", "message", "content", "summary", "delta"]) {
-    const candidate = readNonEmptyCodexString(value[key]);
-    if (candidate !== null) {
-      return candidate;
-    }
-  }
-  return null;
-};
-
 export const isCodexUnmaterializedThreadError = (cause: unknown): boolean => {
   const message = cause instanceof Error ? cause.message : String(cause);
   const inlineTurnsUnavailable =
@@ -134,22 +109,6 @@ export const extractStringField = (
   }
   for (const key of keys) {
     const candidate = readNonEmptyCodexString(value[key]);
-    if (candidate !== null) {
-      return candidate;
-    }
-  }
-  return null;
-};
-
-export const extractNumberField = (
-  value: CodexAppServerJsonValue | undefined,
-  keys: string[],
-): number | null => {
-  if (!isPlainObject(value)) {
-    return null;
-  }
-  for (const key of keys) {
-    const candidate = readFiniteCodexNumber(value[key]);
     if (candidate !== null) {
       return candidate;
     }
@@ -184,17 +143,6 @@ export const stringifyJsonValue = (value: CodexAppServerJsonValue | undefined): 
     return text;
   }
   return JSON.stringify(value, null, 2);
-};
-
-export const extractOptionalObject = (
-  value: CodexAppServerJsonValue | undefined,
-  key: string,
-): Record<string, CodexAppServerJsonValue> | undefined => {
-  if (!isPlainObject(value)) {
-    return undefined;
-  }
-  const candidate = value[key];
-  return isPlainObject(candidate) ? candidate : undefined;
 };
 
 const CODEX_CONTEXTUAL_USER_FRAGMENT_MARKERS = [

@@ -1,5 +1,9 @@
-import { OPENCODE_RUNTIME_DESCRIPTOR, type RepoStoreHealth } from "@openducktor/contracts";
-import type { HostCommandArgs, HostCommandName, HostCommandResult } from "@openducktor/host";
+import {
+  type HostCommandArgs,
+  type HostCommandName,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type RepoStoreHealth,
+} from "@openducktor/contracts";
 import type {} from "./bun-test";
 import type { HostClient as HostClientType } from "./index";
 import { createHostClient } from "./index";
@@ -9,6 +13,8 @@ type InvokeCall = {
   command: HostCommandName;
   args?: Exclude<HostCommandArgs, undefined>;
 };
+
+type HostClientResult = Awaited<ReturnType<HostClientType[keyof HostClientType]>>;
 
 const makeTaskCardPayload = () => ({
   id: "task-1",
@@ -70,7 +76,7 @@ const createClient = (
   resolver: (
     command: HostCommandName,
     args?: Exclude<HostCommandArgs, undefined>,
-  ) => HostCommandResult | PromiseLike<HostCommandResult>,
+  ) => HostClientResult | PromiseLike<HostClientResult>,
 ) => {
   const calls: InvokeCall[] = [];
   const invoke: InvokeFn = async (command, args, resultSchema) => {

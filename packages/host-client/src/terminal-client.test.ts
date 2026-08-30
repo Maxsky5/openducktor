@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { HostCommandArgs, HostCommandName } from "@openducktor/host";
+import type { HostCommandArgs, HostCommandName } from "@openducktor/contracts";
 import { HostInvokeError } from "./invoke-utils";
 import { HostTerminalClient, HostTerminalClientError } from "./terminal-client";
 

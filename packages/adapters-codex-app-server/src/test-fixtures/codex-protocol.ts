@@ -14,8 +14,6 @@ type CodexAgentMessageItem = Extract<CodexAppServerThreadItem, { type: "agentMes
 type CodexUserMessageItem = Extract<CodexAppServerThreadItem, { type: "userMessage" }>;
 type CodexSubAgentActivityItem = Extract<CodexAppServerThreadItem, { type: "subAgentActivity" }>;
 type CodexMcpToolCallItem = Extract<CodexAppServerThreadItem, { type: "mcpToolCall" }>;
-type CodexFileChangeItem = Extract<CodexAppServerThreadItem, { type: "fileChange" }>;
-type CodexWebSearchItem = Extract<CodexAppServerThreadItem, { type: "webSearch" }>;
 type CodexTokenUsage = Extract<
   CodexAppServerConsumedRuntimeNotification,
   { method: "thread/tokenUsage/updated" }
@@ -132,22 +130,5 @@ export const codexMcpToolCallItemFixture = (
   result: null,
   error: null,
   durationMs: null,
-  ...input,
-});
-
-export const codexFileChangeItemFixture = (
-  input: Pick<CodexFileChangeItem, "changes" | "id"> & Partial<CodexFileChangeItem>,
-): CodexFileChangeItem => ({
-  type: "fileChange",
-  status: "completed",
-  ...input,
-});
-
-export const codexWebSearchItemFixture = (
-  input: Pick<CodexWebSearchItem, "id" | "query"> & Partial<CodexWebSearchItem>,
-): CodexWebSearchItem => ({
-  type: "webSearch",
-  action: null,
-  results: null,
   ...input,
 });

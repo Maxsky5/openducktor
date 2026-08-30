@@ -18,7 +18,7 @@ export type DevServerGroupRuntime = {
   terminalRunGeneration: number;
 };
 
-export const DEV_SERVER_EVENT_CHANNEL = "openducktor://dev-server-event";
+const DEV_SERVER_EVENT_CHANNEL = "openducktor://dev-server-event";
 export const DEV_SERVER_COLORTERM = "truecolor";
 export const DEV_SERVER_CLICOLOR_FORCE = "1";
 export const DEV_SERVER_FORCE_COLOR = "1";

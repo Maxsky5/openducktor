@@ -14,6 +14,7 @@
         "oxlint": "^1.78.0",
         "typescript": "^5.7.3",
         "yaml": "^2.9.0",
+        "zod": "^4.4.3",
       },
     },
     "apps/electron": {
@@ -201,7 +202,6 @@
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
-        "@openducktor/host": "workspace:*",
         "zod": "^4.4.3",
       },
     },

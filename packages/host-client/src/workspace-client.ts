@@ -15,7 +15,6 @@ import {
   type WorkspaceRepoSettingsInput,
   workspaceRecordSchema,
 } from "@openducktor/contracts";
-import type { HostCommandResult } from "@openducktor/host";
 import type { InvokeFn } from "./invoke-utils";
 import { arrayResultSchema, voidResultSchema } from "./invoke-utils";
 import { z } from "zod";
@@ -26,13 +25,11 @@ export type {
   WorkspaceRepoSettingsInput,
 } from "@openducktor/contracts";
 
-export type StagedLocalAttachment = HostCommandResult<"workspace_stage_local_attachment">;
-
-export type ResolvedLocalAttachment = HostCommandResult<"workspace_resolve_local_attachment_path">;
-
 const stagedLocalAttachmentSchema = z.object({
   path: z.string().refine((path) => path.trim().length > 0),
 });
+export type StagedLocalAttachment = z.output<typeof stagedLocalAttachmentSchema>;
+export type ResolvedLocalAttachment = StagedLocalAttachment;
 
 const workspaceList = async (invokeFn: InvokeFn): Promise<WorkspaceRecord[]> => {
   return invokeFn(

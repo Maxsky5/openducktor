@@ -458,4 +458,4 @@ export const agentSessionTranscriptEventSchema = agentRuntimeEventSchema.refine(
     message:
       "A transcript event must contain a session ref and belong to the ordered session stream.",
   },
-) satisfies z.ZodType<AgentSessionTranscriptEvent>;
+);

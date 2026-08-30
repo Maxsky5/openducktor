@@ -72,7 +72,7 @@ const permissionV2SourceSchema = z.object({
   messageID: z.string(),
   callID: z.string(),
 });
-export const opencodePermissionV2AskedEventSchema = eventSchema(
+const opencodePermissionV2AskedEventSchema = eventSchema(
   "permission.v2.asked",
   z.object({
     id: z.string(),
@@ -84,7 +84,7 @@ export const opencodePermissionV2AskedEventSchema = eventSchema(
     source: permissionV2SourceSchema.optional(),
   }),
 );
-export const opencodePermissionAskedEventSchema = eventSchema(
+const opencodePermissionAskedEventSchema = eventSchema(
   "permission.asked",
   z.object({
     id: z.string(),
@@ -108,10 +108,9 @@ const permissionRepliedEventSchema = <Type extends "permission.replied" | "permi
       reply: z.enum(["once", "always", "reject"]),
     }),
   );
-export const opencodePermissionV2RepliedEventSchema =
+const opencodePermissionV2RepliedEventSchema =
   permissionRepliedEventSchema("permission.v2.replied");
-export const opencodePermissionRepliedEventSchema =
-  permissionRepliedEventSchema("permission.replied");
+const opencodePermissionRepliedEventSchema = permissionRepliedEventSchema("permission.replied");
 
 const questionOptionSchema = z.object({ label: z.string(), description: z.string() });
 const questionSchema = z.object({
@@ -133,8 +132,8 @@ const questionAskedEventSchema = <Type extends "question.asked" | "question.v2.a
       tool: z.object({ messageID: z.string(), callID: z.string() }).optional(),
     }),
   );
-export const opencodeQuestionV2AskedEventSchema = questionAskedEventSchema("question.v2.asked");
-export const opencodeQuestionAskedEventSchema = questionAskedEventSchema("question.asked");
+const opencodeQuestionV2AskedEventSchema = questionAskedEventSchema("question.v2.asked");
+const opencodeQuestionAskedEventSchema = questionAskedEventSchema("question.asked");
 export type ParsedOpencodeQuestionAskedProperties = z.output<
   typeof opencodeQuestionAskedEventSchema
 >["properties"];
@@ -150,16 +149,14 @@ const questionRepliedEventSchema = <Type extends "question.replied" | "question.
       answers: z.array(z.array(z.string())),
     }),
   );
-export const opencodeQuestionV2RepliedEventSchema =
-  questionRepliedEventSchema("question.v2.replied");
-export const opencodeQuestionRepliedEventSchema = questionRepliedEventSchema("question.replied");
+const opencodeQuestionV2RepliedEventSchema = questionRepliedEventSchema("question.v2.replied");
+const opencodeQuestionRepliedEventSchema = questionRepliedEventSchema("question.replied");
 
 const questionRejectedEventSchema = <Type extends "question.rejected" | "question.v2.rejected">(
   type: Type,
 ) => eventSchema(type, z.object({ sessionID: z.string(), requestID: z.string() }));
-export const opencodeQuestionV2RejectedEventSchema =
-  questionRejectedEventSchema("question.v2.rejected");
-export const opencodeQuestionRejectedEventSchema = questionRejectedEventSchema("question.rejected");
+const opencodeQuestionV2RejectedEventSchema = questionRejectedEventSchema("question.v2.rejected");
+const opencodeQuestionRejectedEventSchema = questionRejectedEventSchema("question.rejected");
 
 const sessionStatusSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("idle") }),
@@ -181,7 +178,7 @@ const sessionStatusSchema = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("busy") }),
 ]);
-export const opencodeSessionStatusEventSchema = eventSchema(
+const opencodeSessionStatusEventSchema = eventSchema(
   "session.status",
   z.object({ sessionID: z.string(), status: sessionStatusSchema }),
 );
@@ -252,7 +249,7 @@ const ingressEventDescriptorSchema = z.object({
   syncEvent: z.object({ type: z.string() }).optional(),
 });
 
-export const opencodeGlobalEventPayloadSchema = z.union([
+const opencodeGlobalEventPayloadSchema = z.union([
   opencodeIngressEventSchema,
   syncEnvelopeSchema,
   serverHeartbeatSchema,

@@ -225,7 +225,7 @@ export const opencodeSessionDetailPayloadSchema = z.object({
 });
 
 export type ParsedOpencodeSession = z.output<typeof opencodeSessionDetailPayloadSchema>;
-export const opencodeSessionListPayloadSchema = z.array(opencodeSessionDetailPayloadSchema);
+const opencodeSessionListPayloadSchema = z.array(opencodeSessionDetailPayloadSchema);
 
 export const parseOpencodeSessionListPayload = (value: Session[]): ParsedOpencodeSession[] => {
   const parsed = opencodeSessionListPayloadSchema.safeParse(value);

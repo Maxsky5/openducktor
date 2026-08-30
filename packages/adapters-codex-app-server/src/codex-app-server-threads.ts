@@ -205,7 +205,7 @@ export const codexLoadedThreadIds = (
   response: CodexAppServerThreadLoadedListResponse,
 ): Set<string> => new Set(response.data);
 
-export const threadSnapshotFromReadResponse = (
+const threadSnapshotFromReadResponse = (
   response: CodexAppServerThreadReadResponse | undefined,
 ): CodexThreadSnapshot | null => (response ? codexThreadSnapshot(response.thread) : null);
 

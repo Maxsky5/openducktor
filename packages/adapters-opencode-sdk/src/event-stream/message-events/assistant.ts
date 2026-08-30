@@ -27,7 +27,7 @@ type EmitAssistantPartOptions = {
   linkedSubagentExternalSessionId?: string;
 };
 
-export const shouldSuppressAssistantStreamingAfterIdle = (
+const shouldSuppressAssistantStreamingAfterIdle = (
   runtime: EventStreamRuntime,
   messageId: string,
   roleHint?: string,

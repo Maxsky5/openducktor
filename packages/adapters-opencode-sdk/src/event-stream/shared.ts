@@ -227,7 +227,7 @@ export const isSessionAwaitingRuntimeTurnStart = (
   return isAwaitingRuntimeTurnStart(context.session);
 };
 
-export const isReasoningDeltaField = (field: string): boolean => {
+const isReasoningDeltaField = (field: string): boolean => {
   return (
     field === "reasoning_content" ||
     field === "reasoning_details" ||

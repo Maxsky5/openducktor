@@ -1,7 +1,6 @@
 import {
   parseCodexAppServerRequestResult,
   type CodexAppServerClientRequestMap,
-  type CodexAppServerThread,
   type CodexAppServerThreadTurnsListResponse,
 } from "@openducktor/contracts";
 import type {
@@ -24,12 +23,6 @@ export const parseThreadListResponse = (
     nextCursor: response.nextCursor,
     backwardsCursor: response.backwardsCursor,
   };
-};
-
-export const parseThreadReadResponse = (
-  value: CodexAppServerClientRequestMap["thread/read"]["result"],
-): CodexAppServerThread => {
-  return parseCodexAppServerRequestResult("thread/read", value).thread;
 };
 
 export const parseThreadTurnsListResponse = (
