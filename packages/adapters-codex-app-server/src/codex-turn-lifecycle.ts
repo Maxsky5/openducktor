@@ -249,8 +249,7 @@ export const startCodexTurnForSession = async (
       threadId: session.threadId,
       input,
       sandboxPolicy,
-      model: toTransportModelSelection(model).model,
-      effort: toTransportModelSelection(model).effort,
+      ...toTransportModelSelection(model),
     })
     .then((result) => {
       if (!sessionIsRetained(context, session)) {

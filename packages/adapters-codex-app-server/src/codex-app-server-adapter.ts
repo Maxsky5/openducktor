@@ -772,9 +772,10 @@ export class CodexAppServerAdapter
         );
       }
     }
-    this.contextUsageLoader.cancelSession(input);
     if (session) {
-      this.localSessions.release(input.externalSessionId);
+      this.releaseSessionTree(session);
+    } else {
+      this.contextUsageLoader.cancelSession(input);
     }
   }
 
@@ -1126,8 +1127,20 @@ export class CodexAppServerAdapter
       );
     }
 
-    this.contextUsageLoader.cancelSession(input);
-    this.localSessions.release(input.externalSessionId);
+    this.releaseSessionTree(session);
+  }
+
+  private releaseSessionTree(session: CodexSessionState): void {
+    for (const child of this.localSessions.values()) {
+      if (
+        child.contextOwnerThreadId === session.threadId &&
+        child.runtimeId === session.runtimeId
+      ) {
+        this.releaseSessionTree(child);
+      }
+    }
+    this.contextUsageLoader.cancelSession(codexSessionRef(session));
+    this.localSessions.release(session.threadId);
   }
 
   private runtimeSnapshotReaderDeps() {

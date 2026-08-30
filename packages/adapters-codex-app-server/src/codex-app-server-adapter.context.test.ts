@@ -4,11 +4,13 @@ import {
   codexSessionRef,
   codexSessionRuntimeRef,
   codexStartSessionInput,
+  codexThreadStartResultFixture,
   codexUserMessageInput,
   createDeferred,
   createHarness,
   createRuntimeStreamSubscription,
   flushCodexAdapterWork,
+  RecordingTransport,
 } from "./codex-app-server-adapter.test-harness";
 import { codexTokenUsageFixture } from "./test-fixtures/codex-protocol";
 
@@ -22,6 +24,38 @@ const tokenUsageNotification = (totalTokens: number, threadId = "thread/start-ru
 });
 
 describe("CodexAppServerAdapter context loading", () => {
+  test("can send from a recovered session whose runtime reasoning effort is null", async () => {
+    const transport = new RecordingTransport("runtime-live", false);
+    const request = transport.request.bind(transport);
+    transport.request = async (input) => {
+      if (input.method === "thread/resume") {
+        return {
+          ...codexThreadStartResultFixture("thread-idle", "thread/resume"),
+          reasoningEffort: null,
+        };
+      }
+      return request(input);
+    };
+    const { adapter } = createHarness({ transportFactory: () => transport });
+
+    await adapter.loadSessionContextUsage(codexSessionRef("thread-idle"));
+    expect(adapter.listLiveSessionSnapshots("runtime-live")[0]?.model).toEqual({
+      runtimeKind: "codex",
+      providerId: "codex",
+      modelId: "gpt-5",
+    });
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread-idle",
+        parts: [{ kind: "text", text: "Continue" }],
+      }),
+    );
+
+    const turn = transport.calls.find((call) => call.method === "turn/start");
+    expect(turn?.params).toMatchObject({ threadId: "thread-idle", model: "gpt-5" });
+    expect(turn?.params).not.toHaveProperty("effort");
+  });
+
   test("applies workflow tool policy when context loading cold-resumes a session", async () => {
     const { adapter, transports } = createHarness();
 

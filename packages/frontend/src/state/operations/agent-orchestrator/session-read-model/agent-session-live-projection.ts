@@ -201,6 +201,24 @@ export const toContextUsage = (
   return projected;
 };
 
+const sameContextUsage = (
+  current: Exclude<AgentSessionState["contextUsage"], undefined>,
+  incoming: AgentSessionLiveSnapshot["contextUsage"],
+): boolean => {
+  if (!current || !incoming) {
+    return current === incoming;
+  }
+  return (
+    current.totalTokens === incoming.totalTokens &&
+    current.contextWindow === incoming.contextWindow &&
+    current.outputLimit === incoming.outputLimit &&
+    current.providerId === incoming.providerId &&
+    current.modelId === incoming.modelId &&
+    current.variant === incoming.variant &&
+    current.profileId === incoming.profileId
+  );
+};
+
 const applyDirectSnapshot = (
   current: AgentSessionState,
   snapshot: AgentSessionLiveSnapshot,
@@ -221,13 +239,17 @@ const applyDirectSnapshot = (
     ? current.sessionAssociation
     : transition.association;
   const selectedModel = current.selectedModel ?? snapshot.model ?? null;
+  const currentContextUsage = current.contextUsage ?? null;
+  const contextUsage = sameContextUsage(currentContextUsage, snapshot.contextUsage)
+    ? currentContextUsage
+    : toContextUsage(snapshot.contextUsage);
   if (isTerminalSessionStatus(current.status)) {
     return {
       ...current,
       sessionAssociation,
       livePresence: "present",
       selectedModel,
-      contextUsage: toContextUsage(snapshot.contextUsage),
+      contextUsage: contextUsage ?? currentContextUsage,
       liveParentExternalSessionId: snapshot.parentExternalSessionId,
       pendingApprovals: [],
       pendingQuestions: [],
@@ -253,7 +275,7 @@ const applyDirectSnapshot = (
     liveParentExternalSessionId: snapshot.parentExternalSessionId,
     pendingApprovals: [...directApprovals, ...childApprovals],
     pendingQuestions: [...directQuestions, ...childQuestions],
-    contextUsage: toContextUsage(snapshot.contextUsage),
+    contextUsage,
   };
 };
 

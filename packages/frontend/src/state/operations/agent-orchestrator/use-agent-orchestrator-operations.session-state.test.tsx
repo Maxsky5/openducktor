@@ -1032,6 +1032,15 @@ describe("use-agent-orchestrator-operations session state", () => {
         expect(persistedSession.contextUsage).toBeNull();
 
         await harness.run(async () => {
+          liveStream.emit({
+            type: "session_upsert",
+            session: createAgentSessionLiveSnapshotFixture({
+              contextUsage: { totalTokens: 6_086, contextWindow: 258_400 },
+            }),
+          });
+        });
+
+        await harness.run(async () => {
           const target = {
             externalSessionId: persistedSession.externalSessionId,
             runtimeKind: persistedSession.runtimeKind,
@@ -1039,14 +1048,13 @@ describe("use-agent-orchestrator-operations session state", () => {
           };
           const firstLoad = harness.getLatest().operations.loadAgentSessionContext(target);
           const secondLoad = harness.getLatest().operations.loadAgentSessionContext(target);
-          if (streamedTokens !== null) {
-            liveStream.emit({
-              type: "session_upsert",
-              session: createAgentSessionLiveSnapshotFixture({
-                contextUsage: { totalTokens: streamedTokens, contextWindow: 258_400 },
-              }),
-            });
-          }
+          liveStream.emit({
+            type: "session_upsert",
+            session: createAgentSessionLiveSnapshotFixture({
+              title: "Updated session title",
+              contextUsage: { totalTokens: streamedTokens ?? 6_086, contextWindow: 258_400 },
+            }),
+          });
           releaseContextRead?.();
           await Promise.all([firstLoad, secondLoad]);
         });

@@ -163,6 +163,7 @@ export class CodexContextUsageLoader {
             );
             const currentSession = this.deps.localSessions.get(input.externalSessionId);
             if (!currentSession) {
+              recoveredSession.contextOwnerThreadId = session.threadId;
               this.deps.localSessions.remember(recoveredSession);
             } else if (!currentSession.model && recoveredSession.model) {
               currentSession.model = recoveredSession.model;

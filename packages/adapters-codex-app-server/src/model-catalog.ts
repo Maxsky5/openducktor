@@ -16,12 +16,7 @@ export const requireModelSelection = (
   model: AgentModelSelection | undefined,
 ): AgentModelSelection => {
   if (!model) {
-    throw new Error("Codex App Server requires a model selection with a reasoning effort variant.");
-  }
-  if (!model.variant) {
-    throw new Error(
-      `Codex model '${model.providerId}/${model.modelId}' requires a reasoning effort variant.`,
-    );
+    throw new Error("Codex App Server requires a model selection.");
   }
   return model;
 };
@@ -39,17 +34,17 @@ const validateModelSelection = (
     );
   }
   const supportedEfforts = record.supportedReasoningEfforts.map((effort) => effort.reasoningEffort);
-  if (!supportedEfforts.includes(model.variant ?? "")) {
+  if (model.variant !== undefined && !supportedEfforts.includes(model.variant)) {
     throw new Error(
       `Codex model '${model.providerId}/${model.modelId}' does not support reasoning effort '${model.variant}'.`,
     );
   }
 };
 
-export const toTransportModelSelection = (model: AgentModelSelection) => ({
-  model: model.modelId,
-  effort: codexAppServerReasoningEffortSchema.parse(model.variant),
-});
+export const toTransportModelSelection = (model: AgentModelSelection) =>
+  model.variant === undefined
+    ? { model: model.modelId }
+    : { model: model.modelId, effort: codexAppServerReasoningEffortSchema.parse(model.variant) };
 
 const toAttachmentSupport = (inputModalities: string[]): AgentModelAttachmentSupport => {
   return {

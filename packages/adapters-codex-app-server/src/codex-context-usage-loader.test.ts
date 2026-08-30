@@ -210,66 +210,109 @@ describe("CodexContextUsageLoader", () => {
     }
   });
 
-  test("loads uncached grandchild context through retained root ownership", async () => {
-    const runtimeStream = createRuntimeStreamSubscription();
-    const { adapter, transports } = createHarness({
-      subscribeEvents: runtimeStream.subscribeEvents,
-    });
-    await adapter.startSession(codexStartSessionInput());
-    const state: { subagents: CodexSubagentLinkState } = adapter;
-    state.subagents.upsertLink({
-      runtimeId: "runtime-live",
-      parentThreadId: "thread/start-runtime-live",
-      childThreadId: "child-thread",
-      itemId: "child-thread",
-      status: "running",
-    });
-    state.subagents.upsertLink({
-      runtimeId: "runtime-live",
-      parentThreadId: "child-thread",
-      childThreadId: "grandchild-thread",
-      itemId: "grandchild-thread",
-      status: "running",
-    });
-    runtimeStream.emitNotification({
-      method: "thread/tokenUsage/updated",
-      params: {
-        threadId: "grandchild-thread",
-        turnId: "grandchild-turn",
-        tokenUsage: codexTokenUsageFixture(6_086),
-      },
-    });
-    await flushCodexAdapterWork();
-
-    await expect(
-      adapter.loadLiveSessionContextUsage({
+  test.each(["release", "stop"] as const)(
+    "cleans up recovered descendants on parent %s",
+    async (action) => {
+      const runtimeStream = createRuntimeStreamSubscription();
+      const { adapter, transports } = createHarness({
+        subscribeEvents: runtimeStream.subscribeEvents,
+      });
+      await adapter.startSession(codexStartSessionInput());
+      await adapter.resumeSession(codexSessionRuntimeRef("independent-thread"));
+      const state: { subagents: CodexSubagentLinkState } = adapter;
+      state.subagents.upsertLink({
         runtimeId: "runtime-live",
-        externalSessionId: "grandchild-thread",
-      }),
-    ).resolves.toEqual({ totalTokens: 6_086, contextWindow: 200_000 });
-
-    expect(adapter.listLiveSessionSnapshots("runtime-live")).toContainEqual(
-      expect.objectContaining({
-        ref: expect.objectContaining({ externalSessionId: "grandchild-thread" }),
-        model: { runtimeKind: "codex", providerId: "codex", modelId: "gpt-5", variant: "medium" },
-      }),
-    );
-
-    expect(transports.get("runtime-live")?.calls).toContainEqual(
-      expect.objectContaining({
-        method: "thread/resume",
-        params: expect.objectContaining({
-          config: {
-            "mcp_servers.openducktor.enabled": true,
-            "mcp_servers.openducktor.enabled_tools": [...AGENT_ROLE_TOOL_POLICY.build],
-          },
+        parentThreadId: "thread/start-runtime-live",
+        childThreadId: "child-thread",
+        itemId: "child-thread",
+        status: "running",
+      });
+      state.subagents.upsertLink({
+        runtimeId: "runtime-live",
+        parentThreadId: "child-thread",
+        childThreadId: "grandchild-thread",
+        itemId: "grandchild-thread",
+        status: "running",
+      });
+      runtimeStream.emitNotification({
+        method: "thread/tokenUsage/updated",
+        params: {
           threadId: "grandchild-thread",
-          cwd: "/repo",
-          excludeTurns: false,
+          turnId: "grandchild-turn",
+          tokenUsage: codexTokenUsageFixture(6_086),
+        },
+      });
+      await flushCodexAdapterWork();
+
+      await expect(
+        adapter.loadLiveSessionContextUsage({
+          runtimeId: "runtime-live",
+          externalSessionId: "grandchild-thread",
         }),
-      }),
-    );
-  });
+      ).resolves.toEqual({ totalTokens: 6_086, contextWindow: 200_000 });
+
+      expect(adapter.listLiveSessionSnapshots("runtime-live")).toContainEqual(
+        expect.objectContaining({
+          ref: expect.objectContaining({ externalSessionId: "grandchild-thread" }),
+          model: { runtimeKind: "codex", providerId: "codex", modelId: "gpt-5", variant: "medium" },
+        }),
+      );
+
+      expect(transports.get("runtime-live")?.calls).toContainEqual(
+        expect.objectContaining({
+          method: "thread/resume",
+          params: expect.objectContaining({
+            config: {
+              "mcp_servers.openducktor.enabled": true,
+              "mcp_servers.openducktor.enabled_tools": [...AGENT_ROLE_TOOL_POLICY.build],
+            },
+            threadId: "grandchild-thread",
+            cwd: "/repo",
+            excludeTurns: false,
+          }),
+        }),
+      );
+      const transport = transports.get("runtime-live");
+      if (!transport) {
+        throw new Error("Expected Codex transport.");
+      }
+      state.subagents.upsertLink({
+        runtimeId: "runtime-live",
+        parentThreadId: "grandchild-thread",
+        childThreadId: "pending-thread",
+        itemId: "pending-thread",
+        status: "running",
+      });
+      const blocked = blockResume(transport);
+      const loading = adapter.loadLiveSessionContextUsage({
+        runtimeId: "runtime-live",
+        externalSessionId: "pending-thread",
+      });
+      await blocked.started.promise;
+      const callCount = transport.calls.length;
+      if (action === "release") {
+        await adapter.releaseSession(codexSessionRef());
+      } else {
+        await adapter.stopSession(codexSessionRef());
+      }
+      expect(
+        adapter
+          .listLiveSessionSnapshots("runtime-live")
+          .map((snapshot) => snapshot.ref.externalSessionId),
+      ).toEqual(["independent-thread"]);
+      expect(state.subagents.routeForChild("grandchild-thread", "runtime-live")).toBeNull();
+      expect(transport.calls).toHaveLength(callCount);
+      await expect(loading).rejects.toThrow("was released while loading context usage");
+      blocked.resume.resolve(undefined);
+      await blocked.completed.promise;
+      await flushCodexAdapterWork();
+      expect(
+        adapter
+          .listLiveSessionSnapshots("runtime-live")
+          .map((snapshot) => snapshot.ref.externalSessionId),
+      ).toEqual(["independent-thread"]);
+    },
+  );
 
   test("rejects cross-runtime and cyclic live context routes before resuming", async () => {
     for (const kind of ["cross-runtime", "cycle"] as const) {

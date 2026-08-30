@@ -795,7 +795,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
     ).resolves.toBeUndefined();
   });
 
-  test("rejects missing or unsupported model variants", async () => {
+  test("accepts runtime-default effort and rejects unsupported explicit variants", async () => {
     const missingVariant = createHarness();
 
     await expect(
@@ -808,7 +808,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
         systemPrompt: "Use the repo rules.",
         model: { providerId: "openai", modelId: "gpt-5" },
       }),
-    ).rejects.toThrow("requires a reasoning effort variant");
+    ).resolves.toMatchObject({ externalSessionId: "thread/start-runtime-live" });
 
     const unsupportedVariant = createHarness();
 

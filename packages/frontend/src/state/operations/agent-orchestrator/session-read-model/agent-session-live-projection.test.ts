@@ -71,6 +71,49 @@ const delta = (
 ) => applyAgentSessionLiveDelta({ current, envelope });
 
 describe("agent session live projection", () => {
+  test("preserves context identity for unrelated live updates", () => {
+    const original = snapshot("thread-1", {
+      contextUsage: { totalTokens: 6_086, contextWindow: 258_400 },
+    });
+    const current = build({ snapshots: [original] });
+    const contextUsage = getAgentSession(current, identity("thread-1"))?.contextUsage;
+    const updated = delta(current, {
+      type: "session_upsert",
+      session: {
+        ...original,
+        title: "Renamed",
+        contextUsage: { totalTokens: 6_086, contextWindow: 258_400 },
+      },
+    });
+    expect(getAgentSession(updated, identity("thread-1"))?.contextUsage).toBe(contextUsage);
+    expect(getAgentSession(updated, identity("thread-1"))?.title).toBe("Renamed");
+  });
+
+  test.each(["stopped", "error"] as const)(
+    "keeps last-known context for %s sessions until a measurement arrives",
+    (status) => {
+      const original = snapshot("thread-1", { contextUsage: { totalTokens: 6_086 } });
+      const loaded = build({ snapshots: [original] });
+      const session = getAgentSession(loaded, identity("thread-1"));
+      if (!session) {
+        throw new Error("Expected projected session.");
+      }
+      const terminal = replaceAgentSession(loaded, { ...session, status });
+      const unknown = delta(terminal, {
+        type: "session_upsert",
+        session: { ...original, contextUsage: null },
+      });
+      expect(getAgentSession(unknown, identity("thread-1"))?.contextUsage).toEqual({
+        totalTokens: 6_086,
+      });
+      const zero = delta(unknown, {
+        type: "session_upsert",
+        session: { ...original, contextUsage: { totalTokens: 0 } },
+      });
+      expect(getAgentSession(zero, identity("thread-1"))?.contextUsage).toEqual({ totalTokens: 0 });
+    },
+  );
+
   test.each(["snapshot", "delta"] as const)(
     "keeps workflow-bound subagents under their parent after a %s",
     (delivery) => {

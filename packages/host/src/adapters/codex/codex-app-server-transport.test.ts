@@ -59,6 +59,11 @@ describe("createCodexAppServerTransport", () => {
         message: expect.stringContaining(error.message),
         cause: error,
       });
+      const nextResponse = Effect.runPromise(
+        transport.request({ method: "model/list", params: {} }),
+      );
+      child.stdout.write(`${JSON.stringify({ id: 2, result: { data: [], nextCursor: null } })}\n`);
+      await expect(nextResponse).resolves.toEqual({ data: [], nextCursor: null });
     } finally {
       await Effect.runPromise(transport.close());
     }
