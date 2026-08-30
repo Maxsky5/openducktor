@@ -104,10 +104,11 @@ describe("AgentChatMarkdownRenderer", () => {
     }
   });
 
-  test("wraps markdown prose without changing code block scroll behavior", async () => {
+  test("preserves soft line breaks while wrapping markdown prose", async () => {
     const rendered = render(
       createElement(AgentChatMarkdownRenderer, {
-        markdown: "**supercalifragilisticexpialidocioussupercalifragilisticexpialidocious**",
+        markdown:
+          "first line\nsecond line\n\n**supercalifragilisticexpialidocioussupercalifragilisticexpialidocious**",
       }),
     );
 
@@ -117,6 +118,7 @@ describe("AgentChatMarkdownRenderer", () => {
       });
 
       const markdownBody = rendered.container.querySelector(".markdown-body");
+      expect(markdownBody?.className).toContain("prose-p:whitespace-pre-wrap");
       expect(markdownBody?.className).toContain("prose-p:break-words");
       expect(markdownBody?.className).toContain("prose-li:break-words");
       expect(markdownBody?.className).toContain("prose-blockquote:break-words");

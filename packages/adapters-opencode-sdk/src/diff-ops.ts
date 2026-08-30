@@ -109,13 +109,12 @@ function parseFileStatusArray(body: OpenCodeFileStatus[]): FileStatus[] {
 function parseSnapshotFileDiff(entry: OpenCodeSnapshotFileDiff, index: number): FileDiff {
   const file = entry.file;
   const patch = entry.patch;
-  const status = entry.status;
+  const status = entry.status ?? "modified";
   const missingFields = [
     file === undefined ? "file" : null,
     patch === undefined ? "patch" : null,
-    status === undefined ? "status" : null,
   ].filter((field): field is string => field !== null);
-  if (file === undefined || patch === undefined || status === undefined) {
+  if (file === undefined || patch === undefined) {
     throw new Error(
       `unexpected OpenCode diff entry at index ${index}: missing ${missingFields.join(", ")} fields`,
     );

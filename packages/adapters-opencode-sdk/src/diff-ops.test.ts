@@ -59,7 +59,7 @@ describe("diff-ops", () => {
     ]);
   });
 
-  test("loadSessionDiff rejects missing current producer fields", async () => {
+  test("loadSessionDiff rejects missing required producer fields", async () => {
     installFetch(() =>
       jsonResponse([
         {
@@ -71,8 +71,31 @@ describe("diff-ops", () => {
     );
 
     await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).rejects.toThrow(
-      "OpenCode request failed: load session diff: unexpected OpenCode diff entry at index 0: missing patch, status fields",
+      "OpenCode request failed: load session diff: unexpected OpenCode diff entry at index 0: missing patch fields",
     );
+  });
+
+  test("loadSessionDiff treats an omitted snapshot status as modified", async () => {
+    installFetch(() =>
+      jsonResponse([
+        {
+          file: "src/main.ts",
+          patch: "@@ -1 +1 @@",
+          additions: 2,
+          deletions: 1,
+        },
+      ]),
+    );
+
+    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).resolves.toEqual([
+      {
+        file: "src/main.ts",
+        type: "modified",
+        additions: 2,
+        deletions: 1,
+        diff: "--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1 +1 @@\n",
+      },
+    ]);
   });
 
   test("loadSessionDiff keeps modified full-file payloads path-only", async () => {

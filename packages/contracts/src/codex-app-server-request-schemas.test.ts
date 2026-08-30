@@ -340,7 +340,7 @@ describe("Codex app-server 0.149 experimental request schemas", () => {
     }
   });
 
-  test("parses model/list future reasoning efforts", () => {
+  test("parses model/list future reasoning efforts without later model metadata", () => {
     const response = {
       data: [
         {
@@ -355,8 +355,6 @@ describe("Codex app-server 0.149 experimental request schemas", () => {
           inputModalities: ["text", "image"],
           isDefault: true,
           model: "gpt-5.3-codex",
-          modelSpecialty: null,
-          multiAgentVersion: null,
           serviceTiers: [],
           supportedReasoningEfforts: [
             { reasoningEffort: "future-adaptive", description: "Future reasoning" },
