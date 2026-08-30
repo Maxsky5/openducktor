@@ -17,6 +17,7 @@ tester.run(
       "const result = { value };",
       "const result = { ...values };",
       "const result = condition ? { value } : {};",
+      "function build(undefined: { value: string }) { return { ...(condition ? { value: 'set' } : undefined) }; }",
     ],
     invalid: [
       {
@@ -25,6 +26,18 @@ tester.run(
       },
       {
         code: "const result = { ...(condition ? {} : { value }) };",
+        errors: [error],
+      },
+      {
+        code: "const result = { ...(value !== undefined ? { value } : undefined) };",
+        errors: [error],
+      },
+      {
+        code: "const result = { ...(condition ? undefined : { value }) };",
+        errors: [error],
+      },
+      {
+        code: "const result = { ...(condition ? (undefined) : { value }) };",
         errors: [error],
       },
     ],
