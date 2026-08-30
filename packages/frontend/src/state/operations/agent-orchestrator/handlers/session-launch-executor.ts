@@ -136,6 +136,7 @@ export const buildLaunchedSessionState = ({
     runtimeStatusMessage: null,
     startedAt: summary.startedAt,
     workingDirectory: summary.workingDirectory,
+    livePresence: "unobserved",
     historyLoadState: launch.mode === "resume" ? "not_requested" : "loaded",
     messages:
       initialMessages ??

@@ -89,6 +89,7 @@ const baseSession: AgentSessionState = {
   runtimeStatusMessage: null,
   startedAt: "2026-02-20T10:00:30.000Z",
   workingDirectory: "/repo",
+  livePresence: "unobserved",
   historyLoadState: "not_requested",
   messages: createSessionMessagesState(TEST_EXTERNAL_SESSION_IDS.chatDefault, [baseMessage]),
   pendingApprovals: [],

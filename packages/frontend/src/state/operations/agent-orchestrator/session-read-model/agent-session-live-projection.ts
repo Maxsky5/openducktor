@@ -14,7 +14,6 @@ import {
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   type AgentSessionCollection,
-  createAgentSessionCollection,
   getAgentSession,
   listAgentSessions,
   removeAgentSession,
@@ -29,9 +28,6 @@ import type {
   AgentSessionState,
 } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "../support/messages";
-import { toPersistedSessionIdentity, toPersistedSessionView } from "../support/persistence";
-import { isWorkflowAgentSession } from "../support/workflow-session";
-import type { TaskSessionRecords } from "./task-session-records";
 
 type LiveProjectionEnvelope = Extract<
   AgentSessionLiveEnvelope,
@@ -43,6 +39,11 @@ const toSessionIdentity = (ref: AgentSessionLiveRef): AgentSessionIdentity => ({
   runtimeKind: ref.runtimeKind,
   workingDirectory: ref.workingDirectory,
 });
+
+const agentSessionLiveSnapshotIdentityKeys = (
+  snapshots: readonly AgentSessionLiveSnapshot[],
+): ReadonlySet<string> =>
+  new Set(snapshots.map((snapshot) => agentSessionIdentityKey(toSessionIdentity(snapshot.ref))));
 
 const isTerminalSessionStatus = (status: AgentSessionState["status"]): boolean =>
   status === "stopped" || status === "error";
@@ -223,6 +224,7 @@ const applyDirectSnapshot = (
     return {
       ...current,
       sessionAssociation,
+      livePresence: "present",
       liveParentExternalSessionId: snapshot.parentExternalSessionId,
       pendingApprovals: [],
       pendingQuestions: [],
@@ -243,6 +245,7 @@ const applyDirectSnapshot = (
     title: snapshot.title,
     ...activity,
     runtimeStatusMessage: activity.status === "idle" ? null : current.runtimeStatusMessage,
+    livePresence: "present",
     liveParentExternalSessionId: snapshot.parentExternalSessionId,
     pendingApprovals: [...directApprovals, ...childApprovals],
     pendingQuestions: [...directQuestions, ...childQuestions],
@@ -260,6 +263,7 @@ const createLiveOnlySession = (snapshot: AgentSessionLiveSnapshot): AgentSession
       status: "idle",
       runtimeStatusMessage: null,
       startedAt: snapshot.startedAt,
+      livePresence: "present",
       historyLoadState: "not_requested",
       messages: createSessionMessagesState(identity.externalSessionId),
       contextUsage: null,
@@ -284,7 +288,7 @@ const sameSessionAssociation = (
   return right.kind === "workflow" && left.taskId === right.taskId && left.role === right.role;
 };
 
-const rebuildProjectedPendingInput = (
+export const rebuildProjectedPendingInput = (
   collection: AgentSessionCollection,
 ): AgentSessionCollection => {
   let rebuilt = collection;
@@ -361,19 +365,13 @@ const settleRemovedDirectSession = (session: AgentSessionState): AgentSessionSta
     ...session,
     ...activity,
     runtimeStatusMessage: null,
+    livePresence: "absent",
     liveParentExternalSessionId: undefined,
     pendingApprovals: session.pendingApprovals.filter((request) => request.source !== undefined),
     pendingQuestions: session.pendingQuestions.filter((request) => request.source !== undefined),
     contextUsage: null,
   };
 };
-
-const persistedRecordKeys = (taskSessionRecords: TaskSessionRecords): Set<string> =>
-  new Set(
-    taskSessionRecords.records.map(({ record }) =>
-      agentSessionIdentityKey(toPersistedSessionIdentity(record)),
-    ),
-  );
 
 const resetSessionLiveStateForSnapshot = (
   session: AgentSessionState,
@@ -384,74 +382,43 @@ const resetSessionLiveStateForSnapshot = (
     ? projectObservedSessionActivity(session, "idle")
     : settleAbsentSessionActivity(session)),
   runtimeStatusMessage: null,
+  livePresence: hasLiveSnapshot ? "present" : "absent",
   liveParentExternalSessionId: undefined,
   pendingApprovals: [],
   pendingQuestions: [],
   contextUsage: null,
 });
 
-const materializePersistedSessions = ({
-  current,
-  taskSessionRecords,
-  liveSnapshotKeys,
-}: {
-  current: AgentSessionCollection;
-  taskSessionRecords: TaskSessionRecords;
-  liveSnapshotKeys: ReadonlySet<string>;
-}): AgentSessionCollection => {
-  const loadedTaskIds = new Set(taskSessionRecords.taskIds);
-  const persistedKeys = persistedRecordKeys(taskSessionRecords);
-  const carried: AgentSessionState[] = [];
-  for (const session of listAgentSessions(current)) {
-    const workflowAssociation = isWorkflowAgentSession(session) ? session.sessionAssociation : null;
-    const shouldCarrySession =
-      (workflowAssociation === null && liveSnapshotKeys.has(agentSessionIdentityKey(session))) ||
-      (workflowAssociation !== null &&
-        (!loadedTaskIds.has(workflowAssociation.taskId) ||
-          session.status === "starting" ||
-          persistedKeys.has(agentSessionIdentityKey(session))));
-    if (shouldCarrySession) {
-      carried.push(
-        resetSessionLiveStateForSnapshot(
-          session,
-          liveSnapshotKeys.has(agentSessionIdentityKey(session)),
-        ),
-      );
-    }
-  }
-  let collection = createAgentSessionCollection(carried);
-  for (const { taskId, record } of taskSessionRecords.records) {
-    const identity = toPersistedSessionIdentity(record);
-    const currentSession = getAgentSession(current, identity);
-    const persistedInput: Parameters<typeof toPersistedSessionView>[0] = { taskId, record };
-    if (currentSession) {
-      persistedInput.current = resetSessionLiveStateForSnapshot(
-        currentSession,
-        liveSnapshotKeys.has(agentSessionIdentityKey(currentSession)),
-      );
-    }
-    collection = replaceAgentSession(collection, toPersistedSessionView(persistedInput));
-  }
-  return collection;
-};
+/**
+ * Sessions that survive an authoritative snapshot without live evidence.
+ *
+ * Workflow-associated projections stay until the workflow-record overlay proves
+ * their durable record disappeared against a loaded task; starting sessions are
+ * protected while their launch is still in flight.
+ */
+const isRetainedWithoutLiveSnapshot = (session: AgentSessionState): boolean =>
+  session.status === "starting" || session.sessionAssociation.kind === "workflow";
 
 export const buildAgentSessionLiveCollection = ({
   current,
-  taskSessionRecords,
   snapshots,
 }: {
   current: AgentSessionCollection;
-  taskSessionRecords: TaskSessionRecords;
   snapshots: readonly AgentSessionLiveSnapshot[];
 }): AgentSessionCollection => {
-  const liveSnapshotKeys = new Set(
-    snapshots.map((snapshot) => agentSessionIdentityKey(toSessionIdentity(snapshot.ref))),
-  );
-  let collection = materializePersistedSessions({
-    current,
-    taskSessionRecords,
-    liveSnapshotKeys,
-  });
+  const liveSnapshotKeys = agentSessionLiveSnapshotIdentityKeys(snapshots);
+  let collection = current;
+  for (const session of listAgentSessions(current)) {
+    const hasLiveSnapshot = liveSnapshotKeys.has(agentSessionIdentityKey(session));
+    if (!hasLiveSnapshot && !isRetainedWithoutLiveSnapshot(session)) {
+      collection = removeAgentSession(collection, session);
+      continue;
+    }
+    collection = replaceAgentSession(
+      collection,
+      resetSessionLiveStateForSnapshot(session, hasLiveSnapshot),
+    );
+  }
 
   for (const snapshot of snapshots) {
     const session = getAgentSession(collection, toSessionIdentity(snapshot.ref));
@@ -464,46 +431,11 @@ export const buildAgentSessionLiveCollection = ({
   return rebuildProjectedPendingInput(collection);
 };
 
-export const applyTaskSessionRecords = ({
-  current,
-  taskSessionRecords,
-}: {
-  current: AgentSessionCollection;
-  taskSessionRecords: TaskSessionRecords;
-}): AgentSessionCollection => {
-  const loadedTaskIds = new Set(taskSessionRecords.taskIds);
-  const persistedKeys = persistedRecordKeys(taskSessionRecords);
-  let collection = current;
-  for (const session of listAgentSessions(current)) {
-    const workflowAssociation = isWorkflowAgentSession(session) ? session.sessionAssociation : null;
-    const recordDisappeared =
-      workflowAssociation !== null &&
-      loadedTaskIds.has(workflowAssociation.taskId) &&
-      session.status !== "starting" &&
-      !persistedKeys.has(agentSessionIdentityKey(session));
-    if (recordDisappeared) {
-      collection = removeAgentSession(collection, session);
-    }
-  }
-  for (const { taskId, record } of taskSessionRecords.records) {
-    const identity = toPersistedSessionIdentity(record);
-    const currentSession = getAgentSession(collection, identity);
-    const persistedInput: Parameters<typeof toPersistedSessionView>[0] = { taskId, record };
-    if (currentSession) {
-      persistedInput.current = currentSession;
-    }
-    collection = replaceAgentSession(collection, toPersistedSessionView(persistedInput));
-  }
-  return rebuildProjectedPendingInput(collection);
-};
-
 export const applyAgentSessionLiveDelta = ({
   current,
-  taskSessionRecords,
   envelope,
 }: {
   current: AgentSessionCollection;
-  taskSessionRecords: TaskSessionRecords;
   envelope: LiveProjectionEnvelope;
 }): AgentSessionCollection => {
   if (envelope.type === "session_upsert") {
@@ -518,13 +450,10 @@ export const applyAgentSessionLiveDelta = ({
     return rebuildProjectedPendingInput(withDirectSnapshot);
   }
 
-  const identity = toSessionIdentity(envelope.ref);
   let collection = current;
-  const directSession = getAgentSession(collection, identity);
+  const directSession = getAgentSession(collection, toSessionIdentity(envelope.ref));
   if (directSession) {
     collection = replaceAgentSession(collection, settleRemovedDirectSession(directSession));
-  } else if (!persistedRecordKeys(taskSessionRecords).has(agentSessionIdentityKey(identity))) {
-    collection = removeAgentSession(collection, identity);
   }
   return rebuildProjectedPendingInput(collection);
 };

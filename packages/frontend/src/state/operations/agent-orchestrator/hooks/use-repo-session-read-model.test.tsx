@@ -155,6 +155,11 @@ const createState = (
         runtimeKind: record.runtimeKind,
         workingDirectory: record.workingDirectory,
       }),
+    getStoredSession: (identity: {
+      externalSessionId: string;
+      runtimeKind: AgentSessionRecord["runtimeKind"];
+      workingDirectory: string;
+    }) => sessionStore.getSessionSnapshot(identity),
     getActivitySummary: () =>
       summarizeAgentActivity({ sessions: sessionStore.getActivitySnapshot().sessions }),
     harness: createHookHarness(useRepoSessionReadModel, props),
@@ -171,6 +176,7 @@ const createState = (
       listener(payload);
     },
     queryClient,
+    updateSession: sessionStore.updateSession,
   };
 };
 
@@ -234,6 +240,775 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("keeps a live workflow session across a later task-record refresh", async () => {
+    const state = createState((emit) => {
+      emit({
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [snapshot()],
+      });
+    });
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(state.getSession()?.sessionAssociation).toEqual({
+        kind: "workflow",
+        taskId: "task-1",
+        role: "build",
+      });
+
+      // The durable record list changes while the runtime still reports thread-1.
+      // A new historical record proves the refresh actually applied.
+      const refreshedRecords = [{ ...record, externalSessionId: "thread-refreshed-in" }];
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(
+          agentSessionQueryKeys.list("/repo", "task-1"),
+          refreshedRecords,
+        );
+      });
+      const refreshedIdentity = {
+        externalSessionId: "thread-refreshed-in",
+        runtimeKind: record.runtimeKind,
+        workingDirectory: record.workingDirectory,
+      };
+      await state.harness.waitFor(() => state.getStoredSession(refreshedIdentity) !== null);
+
+      expect(state.getStoredSession(refreshedIdentity)?.sessionAssociation).toEqual({
+        kind: "workflow",
+        taskId: "task-1",
+        role: "build",
+      });
+      expect(state.getSession()).not.toBeNull();
+      expect(state.getSession()?.sessionAssociation).toEqual({
+        kind: "workflow",
+        taskId: "task-1",
+        role: "build",
+      });
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("preserves a fresher selected model across live snapshots", async () => {
+    const state = createState((emit) => {
+      emit({
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [snapshot()],
+      });
+    });
+    const selectedModel = {
+      runtimeKind: "codex",
+      providerId: "openai",
+      modelId: "gpt-5.2",
+    } as const;
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      await state.harness.run(() => {
+        const updated = state.updateSession(snapshot().ref, (current) => ({
+          ...current,
+          selectedModel,
+        }));
+        if (!updated) {
+          throw new Error("Expected the selected model to change.");
+        }
+      });
+      expect(state.getSession()?.selectedModel).toEqual(selectedModel);
+
+      await state.harness.run(() => {
+        state.emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      });
+
+      expect(state.getSession()?.selectedModel).toEqual(selectedModel);
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("keeps a live workflow session when records refresh during an observer restart gap", async () => {
+    const releaseRestartSnapshot = createDeferred<void>();
+    const state = createState((emit, observeIndex) => {
+      if (observeIndex === 1) {
+        emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot()],
+        });
+        return;
+      }
+      // The restarted observer delays its authoritative snapshot.
+      void releaseRestartSnapshot.promise.then(() => {
+        emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot()],
+        });
+      });
+    });
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(state.getSession()?.sessionAssociation).toEqual({
+        kind: "workflow",
+        taskId: "task-1",
+        role: "build",
+      });
+
+      await state.harness.run(() => {
+        state.harness.getLatest().reloadSessionReadModel();
+      });
+      await state.harness.waitFor(() => state.observeAgentSessionLive.mock.calls.length === 2);
+
+      // Task records refresh while the restarted observer waits for its snapshot.
+      const refreshedRecords = [{ ...record, externalSessionId: "thread-refreshed-in-gap" }];
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(
+          agentSessionQueryKeys.list("/repo", "task-1"),
+          refreshedRecords,
+        );
+      });
+      const refreshedIdentity = {
+        externalSessionId: "thread-refreshed-in-gap",
+        runtimeKind: record.runtimeKind,
+        workingDirectory: record.workingDirectory,
+      };
+      await state.harness.waitFor(() => state.getStoredSession(refreshedIdentity) !== null);
+
+      expect(state.getSession()).not.toBeNull();
+      expect(state.getSession()?.sessionAssociation).toEqual({
+        kind: "workflow",
+        taskId: "task-1",
+        role: "build",
+      });
+
+      releaseRestartSnapshot.resolve();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(state.getSession()).not.toBeNull();
+    } finally {
+      await state.harness.unmount();
+      releaseRestartSnapshot.resolve();
+    }
+  });
+
+  test("finishes deletion when the runtime removes a session whose record already disappeared", async () => {
+    const historical = { ...record, externalSessionId: "hist-thread", role: "planner" as const };
+    const state = createState(
+      (emit) => {
+        emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot()],
+        });
+      },
+      [record, historical],
+    );
+    const historicalIdentity = {
+      externalSessionId: historical.externalSessionId,
+      runtimeKind: historical.runtimeKind,
+      workingDirectory: historical.workingDirectory,
+    };
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(state.getSession()).not.toBeNull();
+
+      // A loaded task refresh empties the durable list: the historical row is
+      // pruned immediately (proof the refresh applied) while the live session stays.
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), []);
+      });
+      await state.harness.waitFor(() => state.getStoredSession(historicalIdentity) === null);
+      expect(state.getSession()).not.toBeNull();
+      expect(state.getSession()?.livePresence).toBe("present");
+
+      // The runtime withdraws live evidence; no further query update is needed.
+      await state.harness.run(() => {
+        state.emit({ type: "session_removed", ref: snapshot().ref });
+      });
+      await state.harness.waitFor(() => state.getSession() === null);
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("keeps a removed live session while the switched task set is still hydrating", async () => {
+    const task2Hydration = createDeferred<TaskSessionRecordBatch>();
+    const state = createState(
+      (emit) => {
+        emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot()],
+        });
+      },
+      [],
+      {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks: () => task2Hydration.promise,
+      },
+    );
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(state.getSession()?.livePresence).toBe("present");
+
+      // Same-repo task-set change while task 2 hydration is still pending.
+      const threadTwo = { ...record, externalSessionId: "thread-two", role: "qa" as const };
+      await state.harness.update({ ...state.props, taskIds: ["task-2"] });
+
+      // The runtime withdraws the live session before any current-scope read
+      // has succeeded; the stale task-1 records must not become deletion proof.
+      await state.harness.run(() => {
+        state.emit({ type: "session_removed", ref: snapshot().ref });
+      });
+      expect(state.getSession()).not.toBeNull();
+      expect(state.getSession()?.livePresence).toBe("absent");
+
+      // Task 2 finishes hydrating; its owner set cannot prove anything about
+      // the task-1 session either.
+      await state.harness.run(async () => {
+        task2Hydration.resolve([{ taskId: "task-2", agentSessions: [threadTwo] }]);
+        await task2Hydration.promise;
+      });
+      const threadTwoIdentity = {
+        externalSessionId: threadTwo.externalSessionId,
+        runtimeKind: threadTwo.runtimeKind,
+        workingDirectory: threadTwo.workingDirectory,
+      };
+      await state.harness.waitFor(() => state.getStoredSession(threadTwoIdentity) !== null);
+      expect(state.getStoredSession(threadTwoIdentity)?.sessionAssociation).toEqual({
+        kind: "workflow",
+        taskId: "task-2",
+        role: "qa",
+      });
+      expect(state.getSession()).not.toBeNull();
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("recovers the read model when a successful task set follows a failed one", async () => {
+    const batchList = mock(async () => [
+      {
+        taskId: "task-3",
+        agentSessions: [{ ...record, externalSessionId: "thread-three", role: "qa" as const }],
+      },
+    ]);
+    const state = createState(
+      (emit) => {
+        emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot()],
+        });
+      },
+      [],
+      {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks: batchList,
+      },
+    );
+    const threadThreeIdentity = {
+      externalSessionId: "thread-three",
+      runtimeKind: record.runtimeKind,
+      workingDirectory: record.workingDirectory,
+    };
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      // Task 2's durable read fails for its exact list query.
+      await expect(
+        state.queryClient.fetchQuery({
+          queryKey: agentSessionQueryKeys.list("/repo", "task-2"),
+          queryFn: async () => {
+            throw new Error("task 2 read failed");
+          },
+          staleTime: 0,
+          retry: false,
+        }),
+      ).rejects.toThrow("task 2 read failed");
+      await state.harness.update({ ...state.props, taskIds: ["task-2"] });
+      await state.harness.waitFor(
+        (value) =>
+          value.sessionReadModelLoadState.kind === "failed" &&
+          value.sessionReadModelLoadState.message.endsWith("task 2 read failed"),
+      );
+
+      // Task 3 loads successfully on the same live observation; its collection
+      // applies and the stale task-2 failure no longer describes this scope.
+      await state.harness.update({ ...state.props, taskIds: ["task-3"] });
+      await state.harness.waitFor(() => state.getStoredSession(threadThreeIdentity) !== null);
+      const threadThree = state.getStoredSession(threadThreeIdentity);
+      if (!threadThree) {
+        throw new Error("Expected task-3 historical session.");
+      }
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      expect(threadThree.sessionAssociation).toEqual({
+        kind: "workflow",
+        taskId: "task-3",
+        role: "qa",
+      });
+      expect(state.getSession()).not.toBeNull();
+      expect(batchList).toHaveBeenCalledTimes(1);
+      expect(batchList).toHaveBeenCalledWith("/repo", ["task-3"]);
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("keeps an unresolved repository fault failed across a successful record refresh", async () => {
+    const state = createState((emit) => {
+      emit({
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [snapshot()],
+      });
+    });
+    const refreshedIdentity = {
+      externalSessionId: "thread-refreshed",
+      runtimeKind: record.runtimeKind,
+      workingDirectory: record.workingDirectory,
+    };
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      await state.harness.run(() => {
+        state.emit({
+          type: "fault",
+          repoPath: "/repo",
+          message: "The observation stream stopped.",
+        });
+      });
+      await state.harness.waitFor(
+        (value) =>
+          value.sessionReadModelLoadState.kind === "failed" &&
+          value.sessionReadModelLoadState.message.endsWith("The observation stream stopped."),
+      );
+
+      // A healthy durable-record refresh applies, proves it applied by
+      // materializing its session, and still cannot clear the live fault.
+      const refreshedRecords = [{ ...record, externalSessionId: "thread-refreshed" }];
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(
+          agentSessionQueryKeys.list("/repo", "task-1"),
+          refreshedRecords,
+        );
+      });
+      await state.harness.waitFor(() => state.getStoredSession(refreshedIdentity) !== null);
+
+      const latest = state.harness.getLatest().sessionReadModelLoadState;
+      if (latest.kind !== "failed") {
+        throw new Error("Expected the observation failure to stay failed.");
+      }
+      expect(latest.source).toBe("live-stream");
+      expect(latest.message).toContain("The observation stream stopped.");
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("keeps an unresolved transcript-gap recovery failure across a successful record refresh", async () => {
+    const state = createState((emit) => {
+      emit({
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [snapshot()],
+      });
+    });
+    state.recoverTranscriptGap.mockImplementation(async () => {
+      throw new Error("history reload failed");
+    });
+    const refreshedIdentity = {
+      externalSessionId: "thread-refreshed-gap",
+      runtimeKind: record.runtimeKind,
+      workingDirectory: record.workingDirectory,
+    };
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      await state.harness.run(async () => {
+        state.emit({
+          type: "transcript_gap",
+          repoPath: "/repo",
+          message: "Host event replay skipped transcript events.",
+        });
+      });
+      await state.harness.waitFor(
+        (value) =>
+          value.sessionReadModelLoadState.kind === "failed" &&
+          value.sessionReadModelLoadState.message.endsWith("history reload failed"),
+      );
+
+      const refreshedRecords = [{ ...record, externalSessionId: "thread-refreshed-gap" }];
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(
+          agentSessionQueryKeys.list("/repo", "task-1"),
+          refreshedRecords,
+        );
+      });
+      await state.harness.waitFor(() => state.getStoredSession(refreshedIdentity) !== null);
+
+      const latest = state.harness.getLatest().sessionReadModelLoadState;
+      if (latest.kind !== "failed") {
+        throw new Error("Expected the transcript-gap recovery failure to stay failed.");
+      }
+      expect(latest.source).toBe("live-stream");
+      expect(latest.message).toContain("history reload failed");
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("shows loading while a hydrating task set supersedes a stale failure", async () => {
+    const deferredB = createDeferred<TaskSessionRecordBatch>();
+    const batchList = mock(() => deferredB.promise);
+    const state = createState(
+      (emit) => {
+        emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot()],
+        });
+      },
+      [],
+      {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks: batchList,
+      },
+    );
+    const threadThree = { ...record, externalSessionId: "thread-three", role: "qa" as const };
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      // Task 2's durable read fails for its exact list query.
+      await expect(
+        state.queryClient.fetchQuery({
+          queryKey: agentSessionQueryKeys.list("/repo", "task-2"),
+          queryFn: async () => {
+            throw new Error("task 2 read failed");
+          },
+          staleTime: 0,
+          retry: false,
+        }),
+      ).rejects.toThrow("task 2 read failed");
+      await state.harness.update({ ...state.props, taskIds: ["task-2"] });
+      await state.harness.waitFor(
+        (value) =>
+          value.sessionReadModelLoadState.kind === "failed" &&
+          value.sessionReadModelLoadState.message.endsWith("task 2 read failed"),
+      );
+
+      // Switching to task 3 demotes the stale failure to loading, and a live
+      // snapshot mid-hydration must not bring the old failure back.
+      await state.harness.update({ ...state.props, taskIds: ["task-3"] });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "loading");
+      await state.harness.run(() => {
+        state.emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot()],
+        });
+      });
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("loading");
+
+      deferredB.resolve([{ taskId: "task-3", agentSessions: [threadThree] }]);
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(
+        state.getStoredSession({
+          externalSessionId: threadThree.externalSessionId,
+          runtimeKind: threadThree.runtimeKind,
+          workingDirectory: threadThree.workingDirectory,
+        }),
+      ).not.toBeNull();
+    } finally {
+      await state.harness.unmount();
+      deferredB.resolve([]);
+    }
+  });
+
+  test("keeps a live-stream failure failed across record recovery until the stream recovers", async () => {
+    const state = createState((emit) => {
+      emit({
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [snapshot()],
+      });
+    });
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      // The live stream breaks.
+      await state.harness.run(() => {
+        state.emit({
+          type: "fault",
+          repoPath: "/repo",
+          message: "The observation stream stopped.",
+        });
+      });
+      await state.harness.waitFor(
+        (value) =>
+          value.sessionReadModelLoadState.kind === "failed" &&
+          value.sessionReadModelLoadState.message.endsWith("The observation stream stopped."),
+      );
+
+      // A task-record read failure then overwrites the public slot.
+      await expect(
+        state.queryClient.fetchQuery({
+          queryKey: agentSessionQueryKeys.list("/repo", "task-1"),
+          queryFn: async () => {
+            throw new Error("record read failed");
+          },
+          staleTime: 0,
+          retry: false,
+        }),
+      ).rejects.toThrow("record read failed");
+      await state.harness.waitFor(
+        (value) =>
+          value.sessionReadModelLoadState.kind === "failed" &&
+          value.sessionReadModelLoadState.message.endsWith("record read failed"),
+      );
+
+      // The record read recovers; the live-stream failure must surface again.
+      const refreshedRecords = [{ ...record, externalSessionId: "thread-after-recovery" }];
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(
+          agentSessionQueryKeys.list("/repo", "task-1"),
+          refreshedRecords,
+        );
+      });
+      const recoveredIdentity = {
+        externalSessionId: "thread-after-recovery",
+        runtimeKind: record.runtimeKind,
+        workingDirectory: record.workingDirectory,
+      };
+      await state.harness.waitFor(() => state.getStoredSession(recoveredIdentity) !== null);
+
+      const latest = state.harness.getLatest().sessionReadModelLoadState;
+      if (latest.kind !== "failed") {
+        throw new Error("Expected the live-stream failure to stay failed.");
+      }
+      expect(latest.source).toBe("live-stream");
+      expect(latest.message).toContain("The observation stream stopped.");
+
+      // A fresh authoritative snapshot proves the stream is healthy again.
+      await state.harness.run(() => {
+        state.emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("clears a public live failure when the stream recovers during task hydration", async () => {
+    const deferredRecords = createDeferred<TaskSessionRecordBatch>();
+    const state = createState(
+      (emit) => {
+        emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      },
+      [],
+      {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks: mock(() => deferredRecords.promise),
+      },
+    );
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      await state.harness.update({ ...state.props, taskIds: ["task-2"] });
+      await state.harness.run(() => {
+        state.emit({
+          type: "fault",
+          repoPath: "/repo",
+          message: "The observation stream stopped.",
+        });
+      });
+      await state.harness.waitFor(
+        (value) =>
+          value.sessionReadModelLoadState.kind === "failed" &&
+          value.sessionReadModelLoadState.source === "live-stream",
+      );
+
+      await state.harness.run(() => {
+        state.emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "loading");
+
+      deferredRecords.resolve([{ taskId: "task-2", agentSessions: [] }]);
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+    } finally {
+      await state.harness.unmount();
+      deferredRecords.resolve([]);
+    }
+  });
+
+  test("waits for the initial live snapshot after task-record recovery", async () => {
+    const state = createState(() => undefined);
+    const recoveredRecord = { ...record, externalSessionId: "thread-after-recovery" };
+    const recoveredIdentity = {
+      externalSessionId: recoveredRecord.externalSessionId,
+      runtimeKind: recoveredRecord.runtimeKind,
+      workingDirectory: recoveredRecord.workingDirectory,
+    };
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor(() => state.observeAgentSessionLive.mock.calls.length === 1);
+      await expect(
+        state.queryClient.fetchQuery({
+          queryKey: agentSessionQueryKeys.list("/repo", "task-1"),
+          queryFn: async () => {
+            throw new Error("record read failed before snapshot");
+          },
+          staleTime: 0,
+          retry: false,
+        }),
+      ).rejects.toThrow("record read failed before snapshot");
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [
+          recoveredRecord,
+        ]);
+      });
+      await state.harness.waitFor(() => state.getStoredSession(recoveredIdentity) !== null);
+
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("loading");
+
+      await state.harness.run(() => {
+        state.emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("resurfaces an unresolved live failure after a hydrating task set supersedes a stale one", async () => {
+    const deferredB = createDeferred<TaskSessionRecordBatch>();
+    const batchList = mock(() => deferredB.promise);
+    const state = createState(
+      (emit) => {
+        emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot()],
+        });
+      },
+      [],
+      {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks: batchList,
+      },
+    );
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      // The live stream breaks.
+      await state.harness.run(() => {
+        state.emit({
+          type: "fault",
+          repoPath: "/repo",
+          message: "The observation stream stopped.",
+        });
+      });
+      await state.harness.waitFor(
+        (value) =>
+          value.sessionReadModelLoadState.kind === "failed" &&
+          value.sessionReadModelLoadState.message.endsWith("The observation stream stopped."),
+      );
+
+      // A task-record read failure then overwrites the public slot.
+      await expect(
+        state.queryClient.fetchQuery({
+          queryKey: agentSessionQueryKeys.list("/repo", "task-2"),
+          queryFn: async () => {
+            throw new Error("task 2 read failed");
+          },
+          staleTime: 0,
+          retry: false,
+        }),
+      ).rejects.toThrow("task 2 read failed");
+      await state.harness.update({ ...state.props, taskIds: ["task-2"] });
+      await state.harness.waitFor(
+        (value) =>
+          value.sessionReadModelLoadState.kind === "failed" &&
+          value.sessionReadModelLoadState.message.endsWith("task 2 read failed"),
+      );
+
+      // Switching task sets demotes the stale failure to loading; when the
+      // new scope loads, the still-unresolved live failure must surface again.
+      await state.harness.update({ ...state.props, taskIds: ["task-3"] });
+      deferredB.resolve([
+        {
+          taskId: "task-3",
+          agentSessions: [{ ...record, externalSessionId: "thread-three", role: "qa" as const }],
+        },
+      ]);
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      const latest = state.harness.getLatest().sessionReadModelLoadState;
+      if (latest.kind !== "failed") {
+        throw new Error("Expected the live-stream failure to stay failed.");
+      }
+      expect(latest.source).toBe("live-stream");
+      expect(latest.message).toContain("The observation stream stopped.");
+    } finally {
+      await state.harness.unmount();
+      deferredB.resolve([]);
+    }
+  });
+
+  test("permits historical pruning after the runtime removes a live session", async () => {
+    const state = createState((emit) => {
+      emit({
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [snapshot()],
+      });
+    });
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(state.getSession()).not.toBeNull();
+
+      await state.harness.run(() => {
+        state.emit({ type: "session_removed", ref: snapshot().ref });
+      });
+      expect(state.getSession()).not.toBeNull();
+
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), []);
+      });
+      await state.harness.waitFor(() => state.getSession() === null);
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
   test("projects repository association into session state", async () => {
     const state = createState((emit) => {
       emit({
@@ -278,6 +1053,7 @@ describe("useRepoSessionReadModel", () => {
         workspaceRepoPath: "/repo",
         message:
           "Failed to reconcile task session records for repo '/repo': Cannot reconcile persisted session 'thread-1' because its registered repository scope does not match the incoming workflow scope for task 'task-1' and role 'build'.",
+        source: "task-records",
       });
 
       await state.harness.run(() => {
@@ -327,6 +1103,7 @@ describe("useRepoSessionReadModel", () => {
         workspaceRepoPath: "/repo",
         message:
           "Failed to reconcile task session records for repo '/repo': Cannot reconcile persisted session 'thread-1' because its registered repository scope does not match the incoming workflow scope for task 'task-1' and role 'build'.",
+        source: "task-records",
       });
       expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
       expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
@@ -367,6 +1144,45 @@ describe("useRepoSessionReadModel", () => {
       expect(batchList).toHaveBeenCalledWith("/repo", ["task-1"]);
       expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(2);
       expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+      expect(
+        state.queryClient.getQueryData<AgentSessionRecord[]>(
+          agentSessionQueryKeys.list("/repo", "task-1"),
+        ),
+      ).toEqual([]);
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("keeps forced record retry mode after a transient retry failure", async () => {
+    const batchList = mock(async () => {
+      if (batchList.mock.calls.length === 1) {
+        throw new Error("forced retry failed");
+      }
+      return [{ taskId: "task-1", agentSessions: [] }];
+    });
+    const state = createRepositoryConflictRetryState(batchList);
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [record]);
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      await state.harness.run(() => state.harness.getLatest().reloadSessionReadModel());
+      await state.harness.waitFor(
+        (value) =>
+          value.sessionReadModelLoadState.kind === "failed" &&
+          value.sessionReadModelLoadState.message.endsWith("forced retry failed"),
+      );
+
+      await state.harness.run(() => state.harness.getLatest().reloadSessionReadModel());
+      await state.harness.waitFor(() => batchList.mock.calls.length === 2);
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      expect(batchList).toHaveBeenCalledTimes(2);
       expect(
         state.queryClient.getQueryData<AgentSessionRecord[]>(
           agentSessionQueryKeys.list("/repo", "task-1"),
@@ -526,6 +1342,7 @@ describe("useRepoSessionReadModel", () => {
         workspaceRepoPath: "/repo",
         message:
           "Failed to apply initial live-session snapshot for repo '/repo': Cannot apply live snapshot for session 'thread-1' because its registered workflow scope for task 'task-1' and role 'build' does not match the incoming repository scope.",
+        source: "live-stream",
       });
     } finally {
       await state.harness.unmount();
@@ -1030,6 +1847,7 @@ describe("useRepoSessionReadModel", () => {
         workspaceRepoPath: "/repo",
         message:
           "Failed to recover transcript history after a live-stream gap: history reload failed",
+        source: "live-stream",
       });
     } finally {
       await state.harness.unmount();
@@ -1259,6 +2077,7 @@ describe("useRepoSessionReadModel", () => {
         kind: "failed",
         workspaceRepoPath: "/repo",
         message: "Live-session observation failed: The observation stream stopped.",
+        source: "live-stream",
       });
     } finally {
       await state.harness.unmount();
@@ -1476,6 +2295,7 @@ describe("useRepoSessionReadModel", () => {
         kind: "failed",
         workspaceRepoPath: "/repo",
         message: "Failed to retry task session records for repo '/repo': newer retry failed",
+        source: "task-records",
       });
       const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
       expect(state.queryClient.getQueryData<AgentSessionRecord[]>(queryKey)).toEqual([record]);

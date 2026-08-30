@@ -827,6 +827,7 @@ describe("useAgentStudioSelectionController", () => {
         sessionReadModelLoadState: failedAgentSessionReadModelLoadState(
           workspaceRepoPath,
           "Failed to load agent session read model",
+          "live-stream",
         ),
       },
     );
@@ -864,6 +865,7 @@ describe("useAgentStudioSelectionController", () => {
         sessionReadModelLoadState: failedAgentSessionReadModelLoadState(
           workspaceRepoPath,
           "The session catalog is unavailable.",
+          "live-stream",
         ),
       },
     );

@@ -102,6 +102,7 @@ const BASE_AGENT_SESSION_FIXTURE: AgentSessionState = {
   runtimeStatusMessage: null,
   startedAt: "2026-02-22T08:00:00.000Z",
   workingDirectory: "/tmp/repo/worktree",
+  livePresence: "unobserved",
   historyLoadState: "loaded",
   messages: createSessionMessagesState(TEST_EXTERNAL_SESSION_IDS.default),
   contextUsage: null,

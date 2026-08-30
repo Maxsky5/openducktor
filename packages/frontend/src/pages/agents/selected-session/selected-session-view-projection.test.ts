@@ -283,7 +283,11 @@ describe("selected-session-view-projection", () => {
       session: null,
       sessionSummary: summary,
       selectedTask: createTaskCardFixture(),
-      readModelLoadState: failedAgentSessionReadModelLoadState(repoPath, "Session history failed"),
+      readModelLoadState: failedAgentSessionReadModelLoadState(
+        repoPath,
+        "Session history failed",
+        "live-stream",
+      ),
     });
 
     expect(projection.transcriptState).toEqual({
@@ -321,7 +325,11 @@ describe("selected-session-view-projection", () => {
       sessionSummary: summary,
       sessionFault: { message: "This exact session failed." },
       selectedTask: createTaskCardFixture(),
-      readModelLoadState: failedAgentSessionReadModelLoadState(repoPath, "Session history failed."),
+      readModelLoadState: failedAgentSessionReadModelLoadState(
+        repoPath,
+        "Session history failed.",
+        "live-stream",
+      ),
     });
 
     expect(projection.transcriptState).toEqual({

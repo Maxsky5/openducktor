@@ -1,8 +1,15 @@
+export type AgentSessionReadModelFailureSource = "task-records" | "live-stream";
+
 export type AgentSessionReadModelLoadState =
   | { kind: "unavailable" }
   | { kind: "loading"; workspaceRepoPath: string }
   | { kind: "ready"; workspaceRepoPath: string }
-  | { kind: "failed"; workspaceRepoPath: string; message: string };
+  | {
+      kind: "failed";
+      workspaceRepoPath: string;
+      message: string;
+      source: AgentSessionReadModelFailureSource;
+    };
 
 export const unavailableAgentSessionReadModelLoadState: AgentSessionReadModelLoadState =
   Object.freeze({
@@ -26,10 +33,12 @@ export const readyAgentSessionReadModelLoadState = (
 export const failedAgentSessionReadModelLoadState = (
   workspaceRepoPath: string,
   message: string,
+  source: AgentSessionReadModelFailureSource,
 ): AgentSessionReadModelLoadState => ({
   kind: "failed",
   workspaceRepoPath,
   message,
+  source,
 });
 
 export const currentAgentSessionReadModelLoadState = ({

@@ -15,6 +15,7 @@ const session = (overrides: Partial<AgentSessionState> = {}): AgentSessionState 
   runtimeStatusMessage: null,
   startedAt: "2026-08-15T10:00:00.000Z",
   workingDirectory: "/repo/worktree",
+  livePresence: "unobserved",
   historyLoadState: "loaded",
   messages: createSessionMessagesState("session-1"),
   contextUsage: null,

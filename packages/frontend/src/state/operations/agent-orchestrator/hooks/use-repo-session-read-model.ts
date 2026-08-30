@@ -5,6 +5,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
+import type { AgentSessionCollection } from "@/state/agent-session-collection";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
 import {
@@ -27,14 +28,21 @@ import { loadEffectivePromptOverrides } from "../../prompt-overrides";
 import type { AgentSessionTranscriptEventConsumer } from "../events/session-transcript-events";
 import {
   applyAgentSessionLiveDelta,
-  applyTaskSessionRecords,
   buildAgentSessionLiveCollection,
 } from "../session-read-model/agent-session-live-projection";
+import {
+  applyWorkflowSessionRecords,
+  type LoadedWorkflowSessionRecords,
+  pruneVanishedWorkflowSessions,
+} from "../session-read-model/agent-session-workflow-records";
 import {
   collectPendingApprovalPolicyActions,
   type PendingApprovalPolicyAction,
 } from "../session-read-model/pending-approval-policy";
-import type { TaskSessionRecords } from "../session-read-model/task-session-records";
+import {
+  toLoadedWorkflowSessionRecords,
+  type TaskSessionRecords,
+} from "../session-read-model/task-session-records";
 import { useTaskSessionRecords } from "../session-read-model/use-task-session-records";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { createRepoStaleGuard } from "../support/core";
@@ -67,10 +75,16 @@ export type RepoSessionReadModelState = {
 };
 
 type TaskRecordApplyState =
-  | { kind: "ready"; repoPath: string; records: TaskSessionRecords }
+  | {
+      kind: "ready";
+      repoPath: string;
+      taskIdsKey: string;
+      records: TaskSessionRecords;
+    }
   | {
       kind: "failed";
       repoPath: string;
+      taskIdsKey: string;
       failedAt: "load" | "apply";
       message: string;
     };
@@ -87,6 +101,9 @@ type RecordRetryResult = RecordRetryKey &
 
 const faultMessage = (envelope: Extract<AgentSessionLiveEnvelope, { type: "fault" }>): string =>
   `Live-session observation failed${envelope.operation ? ` during ${envelope.operation}` : ""}: ${envelope.message}`;
+
+const taskIdsScopeKey = (taskIds: string[]): string =>
+  JSON.stringify(normalizeAgentSessionTaskIds(taskIds));
 
 export const useRepoSessionReadModel = ({
   workspaceRepoPath,
@@ -110,8 +127,19 @@ export const useRepoSessionReadModel = ({
   const [recordRetryResult, setRecordRetryResult] = useState<RecordRetryResult | null>(null);
   const retryIdRef = useRef(0);
   const taskRecordApplyRef = useRef<TaskRecordApplyState | null>(null);
-  const taskIdsKey = JSON.stringify(normalizeAgentSessionTaskIds(taskIds));
+  // An unresolved live-stream failure survives task-record recovery so a
+  // durable success cannot report a broken stream as healthy.
+  const liveStreamFailureRef = useRef<string | null>(null);
+  // Marks a loading window created by demoting a stale-scope failure, so its
+  // own success can end it without promoting unrelated loading windows.
+  const demotedStaleFailureRef = useRef(false);
+  // Marks a loading window created when a healthy snapshot clears a public
+  // live failure before the current task-record scope finishes hydrating.
+  const recoveredLiveFailureRef = useRef(false);
+  const initialLiveSnapshotReceivedRef = useRef(false);
+  const taskIdsKey = taskIdsScopeKey(taskIds);
   const readReloadGeneration = useEffectEvent(() => reloadGeneration);
+  const readCurrentTaskIdsKey = useEffectEvent(() => taskIdsKey);
   const observeLiveSessions = useEffectEvent(
     (
       input: Parameters<AgentSessionLiveFrontendPort["observeAgentSessionLive"]>[0],
@@ -169,15 +197,17 @@ export const useRepoSessionReadModel = ({
     (repoPath: string, records: TaskSessionRecords): boolean => {
       try {
         commitSessionCollection((current) => ({
-          collection: applyTaskSessionRecords({
-            current,
-            taskSessionRecords: records,
+          collection: applyWorkflowSessionRecords({
+            projected: current,
+            records: toLoadedWorkflowSessionRecords(records),
+            associationEvidence: current,
           }),
           result: undefined,
         }));
         taskRecordApplyRef.current = {
           kind: "ready",
           repoPath,
+          taskIdsKey: taskIdsScopeKey(records.taskIds),
           records,
         };
         return true;
@@ -186,10 +216,13 @@ export const useRepoSessionReadModel = ({
         taskRecordApplyRef.current = {
           kind: "failed",
           repoPath,
+          taskIdsKey: taskIdsScopeKey(records.taskIds),
           failedAt: "apply",
           message,
         };
-        setSessionReadModelLoadState(failedAgentSessionReadModelLoadState(repoPath, message));
+        setSessionReadModelLoadState(
+          failedAgentSessionReadModelLoadState(repoPath, message, "task-records"),
+        );
         return false;
       }
     },
@@ -262,7 +295,11 @@ export const useRepoSessionReadModel = ({
           return;
         }
         setSessionReadModelLoadState(
-          failedAgentSessionReadModelLoadState(repoPath, retryFailureMessage(cause)),
+          failedAgentSessionReadModelLoadState(
+            repoPath,
+            retryFailureMessage(cause),
+            "task-records",
+          ),
         );
       },
     );
@@ -310,6 +347,20 @@ export const useRepoSessionReadModel = ({
       if (observedRepoPathRef.current !== workspaceRepoPath) {
         // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change, react-doctor/no-derived-state
         setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
+      } else {
+        // A prior task set's failure must not describe a hydrating one.
+        // Reload-driven loading windows keep their own lifecycle.
+        const appliedRecords = taskRecordApplyRef.current;
+        const staleScopeFailure =
+          appliedRecords &&
+          appliedRecords.repoPath === workspaceRepoPath &&
+          appliedRecords.kind === "failed" &&
+          appliedRecords.taskIdsKey !== readCurrentTaskIdsKey();
+        if (staleScopeFailure) {
+          demotedStaleFailureRef.current = true;
+          // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
+          setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
+        }
       }
       return;
     }
@@ -320,18 +371,61 @@ export const useRepoSessionReadModel = ({
       taskRecordApplyRef.current = {
         kind: "failed",
         repoPath: workspaceRepoPath,
+        taskIdsKey: readCurrentTaskIdsKey(),
         failedAt: "load",
         message,
       };
       setSessionReadModelLoadState(
-        failedAgentSessionReadModelLoadState(workspaceRepoPath, message),
+        failedAgentSessionReadModelLoadState(workspaceRepoPath, message, "task-records"),
       );
       return;
     }
 
     // This is the sole task-query-to-session-store write path.
     // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent, react-doctor/no-pass-live-state-to-parent
-    applyTaskRecords(workspaceRepoPath, taskRecords.records);
+    const applied = applyTaskRecords(workspaceRepoPath, taskRecords.records);
+    if (!applied) {
+      return;
+    }
+    // Current-scope records loaded: a prior task-record failure no longer
+    // describes this read model. An unresolved live-stream failure still does
+    // until the stream itself recovers through a fresh snapshot. A loading
+    // window created by a stale-scope or recovered live failure ends with this
+    // success.
+    const liveMessage = liveStreamFailureRef.current;
+    const staleFailureWasDemoted = demotedStaleFailureRef.current;
+    const liveFailureWasRecovered = recoveredLiveFailureRef.current;
+    demotedStaleFailureRef.current = false;
+    recoveredLiveFailureRef.current = false;
+    const recoveredLoadState = (): AgentSessionReadModelLoadState => {
+      if (liveMessage) {
+        return failedAgentSessionReadModelLoadState(workspaceRepoPath, liveMessage, "live-stream");
+      }
+      if (!initialLiveSnapshotReceivedRef.current) {
+        return loadingAgentSessionReadModelLoadState(workspaceRepoPath);
+      }
+      return readyAgentSessionReadModelLoadState(workspaceRepoPath);
+    };
+    // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
+    setSessionReadModelLoadState((currentLoadState) => {
+      if (
+        currentLoadState.kind === "failed" &&
+        currentLoadState.source === "task-records" &&
+        currentLoadState.workspaceRepoPath === workspaceRepoPath
+      ) {
+        return recoveredLoadState();
+      }
+      if (
+        currentLoadState.kind === "loading" &&
+        currentLoadState.workspaceRepoPath === workspaceRepoPath &&
+        (staleFailureWasDemoted || liveFailureWasRecovered)
+      ) {
+        // The failure this window replaced resolved; an unresolved live-stream
+        // failure still surfaces here.
+        return recoveredLoadState();
+      }
+      return currentLoadState;
+    });
   }, [applyTaskRecords, taskRecords, workspaceRepoPath]);
 
   // react-doctor-disable-next-line react-doctor/no-derived-state-effect
@@ -351,8 +445,19 @@ export const useRepoSessionReadModel = ({
     if (recordRetryResult.kind === "failed" && recordRetryResult.taskIdsKey === taskIdsKey) {
       // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
       setRecordRetryResult(null);
+      taskRecordApplyRef.current = {
+        kind: "failed",
+        repoPath: recordRetryResult.repoPath,
+        taskIdsKey: recordRetryResult.taskIdsKey,
+        failedAt: "apply",
+        message: recordRetryResult.message,
+      };
       setSessionReadModelLoadState(
-        failedAgentSessionReadModelLoadState(recordRetryResult.repoPath, recordRetryResult.message),
+        failedAgentSessionReadModelLoadState(
+          recordRetryResult.repoPath,
+          recordRetryResult.message,
+          "task-records",
+        ),
       );
       return;
     }
@@ -419,22 +524,69 @@ export const useRepoSessionReadModel = ({
     const effectReloadGeneration = reloadGeneration;
     let cancelled = false;
     let unsubscribe: (() => void) | null = null;
-    let awaitingInitialSnapshot = true;
-    const readTaskSessionRecords = (): TaskSessionRecords => {
+    const readLoadedWorkflowRecords = (): LoadedWorkflowSessionRecords | null => {
       const current = taskRecordApplyRef.current;
-      if (!current || current.repoPath !== repoPath) {
-        throw new Error(`Task session records are not ready for repo '${repoPath}'.`);
+      if (!current || current.repoPath !== repoPath || current.kind !== "ready") {
+        return null;
       }
-      if (current.kind === "failed") {
-        throw new Error(current.message);
+      // Records applied for a prior task set are stale: the current set stays
+      // unloaded until its own read succeeds, so it cannot prove deletion.
+      if (current.taskIdsKey !== readCurrentTaskIdsKey()) {
+        return null;
       }
-      return current.records;
+      return toLoadedWorkflowSessionRecords(current.records);
+    };
+    // Snapshot commits and task refreshes apply the full record pass.
+    const applyLoadedRecords = (
+      projected: AgentSessionCollection,
+      associationEvidence: AgentSessionCollection,
+    ): AgentSessionCollection => {
+      const workflowRecords = readLoadedWorkflowRecords();
+      return workflowRecords
+        ? applyWorkflowSessionRecords({
+            projected,
+            records: workflowRecords,
+            associationEvidence,
+            existingSelectedModelSource: "current",
+          })
+        : projected;
+    };
+    // Ordered deltas only drop vanished workflow sessions. They never rewrite
+    // saved fields, which can be fresher in memory than in the record cache.
+    const pruneVanishedWorkflowRecords = (
+      projected: AgentSessionCollection,
+    ): AgentSessionCollection => {
+      const workflowRecords = readLoadedWorkflowRecords();
+      return workflowRecords
+        ? pruneVanishedWorkflowSessions({ projected, records: workflowRecords })
+        : projected;
+    };
+    // Every stream write collects the pending-approval policy against the same
+    // commit it belongs to.
+    const commitProjected = (
+      project: (current: AgentSessionCollection) => AgentSessionCollection,
+    ): void => {
+      const policyActions = commitSessionCollection((current) => {
+        const collection = project(current);
+        return {
+          collection,
+          result: collectPendingApprovalPolicyActions({
+            previous: current,
+            next: collection,
+            repoPath,
+          }),
+        };
+      });
+      applyPendingApprovalPolicy(policyActions);
     };
     const isStaleRepoOperation = (): boolean =>
       cancelled || isRepoStale() || readReloadGeneration() !== effectReloadGeneration;
     const failObservation = (message: string): void => {
       if (!isStaleRepoOperation()) {
-        setSessionReadModelLoadState(failedAgentSessionReadModelLoadState(repoPath, message));
+        liveStreamFailureRef.current = message;
+        setSessionReadModelLoadState(
+          failedAgentSessionReadModelLoadState(repoPath, message, "live-stream"),
+        );
       }
     };
     const applyPendingApprovalPolicy = (actions: PendingApprovalPolicyAction[]): void => {
@@ -468,26 +620,49 @@ export const useRepoSessionReadModel = ({
     const commitInitialSnapshot = (
       envelope: Extract<AgentSessionLiveEnvelope, { type: "snapshot" }>,
     ): void => {
-      const policyActions = commitSessionCollection((current) => {
-        const collection = buildAgentSessionLiveCollection({
+      commitProjected((current) => {
+        const projected = buildAgentSessionLiveCollection({
           current,
-          taskSessionRecords: readTaskSessionRecords(),
           snapshots: envelope.sessions,
         });
-        return {
-          collection,
-          result: collectPendingApprovalPolicyActions({
-            previous: current,
-            next: collection,
-            repoPath,
-          }),
-        };
+        return applyLoadedRecords(projected, current);
       });
-      applyPendingApprovalPolicy(policyActions);
-      awaitingInitialSnapshot = false;
-      if (!isStaleRepoOperation()) {
-        setSessionReadModelLoadState(readyAgentSessionReadModelLoadState(repoPath));
+      initialLiveSnapshotReceivedRef.current = true;
+      if (isStaleRepoOperation()) {
+        return;
       }
+      // Any fresh authoritative snapshot proves the stream recovered.
+      const recoveredLiveFailure = liveStreamFailureRef.current !== null;
+      liveStreamFailureRef.current = null;
+      if (readLoadedWorkflowRecords()) {
+        setSessionReadModelLoadState(readyAgentSessionReadModelLoadState(repoPath));
+        return;
+      }
+      // A healthy stream must not mask a failed task-record read, and a
+      // failure from a prior task set must not describe the current one.
+      const appliedRecords = taskRecordApplyRef.current;
+      if (
+        appliedRecords &&
+        appliedRecords.repoPath === repoPath &&
+        appliedRecords.kind === "failed" &&
+        appliedRecords.taskIdsKey === readCurrentTaskIdsKey()
+      ) {
+        setSessionReadModelLoadState(
+          failedAgentSessionReadModelLoadState(repoPath, appliedRecords.message, "task-records"),
+        );
+        return;
+      }
+      if (recoveredLiveFailure) {
+        recoveredLiveFailureRef.current = true;
+        setSessionReadModelLoadState((currentLoadState) =>
+          currentLoadState.kind === "failed" &&
+          currentLoadState.source === "live-stream" &&
+          currentLoadState.workspaceRepoPath === repoPath
+            ? loadingAgentSessionReadModelLoadState(repoPath)
+            : currentLoadState,
+        );
+      }
+      // Hydration owns the public state until its own read resolves.
     };
     const applyEnvelope = (envelope: AgentSessionLiveEnvelope): void => {
       if (isStaleRepoOperation()) {
@@ -506,7 +681,7 @@ export const useRepoSessionReadModel = ({
         }
         return;
       }
-      if (awaitingInitialSnapshot) {
+      if (!initialLiveSnapshotReceivedRef.current) {
         failObservation(
           `Live-session observation delivered '${envelope.type}' before its initial snapshot.`,
         );
@@ -514,22 +689,9 @@ export const useRepoSessionReadModel = ({
       }
       if (envelope.type === "session_upsert" || envelope.type === "session_removed") {
         clearSessionFault(envelope.type === "session_upsert" ? envelope.session.ref : envelope.ref);
-        const policyActions = commitSessionCollection((current) => {
-          const collection = applyAgentSessionLiveDelta({
-            current,
-            taskSessionRecords: readTaskSessionRecords(),
-            envelope,
-          });
-          return {
-            collection,
-            result: collectPendingApprovalPolicyActions({
-              previous: current,
-              next: collection,
-              repoPath,
-            }),
-          };
-        });
-        applyPendingApprovalPolicy(policyActions);
+        commitProjected((current) =>
+          pruneVanishedWorkflowRecords(applyAgentSessionLiveDelta({ current, envelope })),
+        );
         return;
       }
       if (envelope.type === "transcript_event") {
@@ -617,6 +779,9 @@ export const useRepoSessionReadModel = ({
     };
 
     observedRepoPathRef.current = repoPath;
+    demotedStaleFailureRef.current = false;
+    recoveredLiveFailureRef.current = false;
+    initialLiveSnapshotReceivedRef.current = false;
     // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change, react-doctor/no-derived-state
     setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(repoPath));
     void observeLiveSessions({ repoPath }, (envelope) => {
@@ -647,6 +812,10 @@ export const useRepoSessionReadModel = ({
       if (observedRepoPathRef.current === repoPath) {
         observedRepoPathRef.current = null;
       }
+      liveStreamFailureRef.current = null;
+      demotedStaleFailureRef.current = false;
+      recoveredLiveFailureRef.current = false;
+      initialLiveSnapshotReceivedRef.current = false;
       unsubscribe?.();
     };
   }, [

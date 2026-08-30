@@ -203,6 +203,7 @@ describe("resolveAgentStudioNavigationState", () => {
       sessionReadModelLoadState: failedAgentSessionReadModelLoadState(
         "/repo",
         "Failed to load task session metadata",
+        "task-records",
       ),
     });
 

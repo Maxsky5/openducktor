@@ -200,7 +200,6 @@ describe("agent session transcript event consumer", () => {
     });
     sessionsRef.current = applyAgentSessionLiveDelta({
       current: sessionsRef.current,
-      taskSessionRecords: { taskIds: [], records: [] },
       envelope: { type: "session_removed", ref: childRef },
     });
     consumer.handle({
