@@ -778,6 +778,50 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("clears a public live failure when the stream recovers during task hydration", async () => {
+    const deferredRecords = createDeferred<TaskSessionRecordBatch>();
+    const state = createState(
+      (emit) => {
+        emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      },
+      [],
+      {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks: mock(() => deferredRecords.promise),
+      },
+    );
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      await state.harness.update({ ...state.props, taskIds: ["task-2"] });
+      await state.harness.run(() => {
+        state.emit({
+          type: "fault",
+          repoPath: "/repo",
+          message: "The observation stream stopped.",
+        });
+      });
+      await state.harness.waitFor(
+        (value) =>
+          value.sessionReadModelLoadState.kind === "failed" &&
+          value.sessionReadModelLoadState.source === "live-stream",
+      );
+
+      await state.harness.run(() => {
+        state.emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "loading");
+
+      deferredRecords.resolve([{ taskId: "task-2", agentSessions: [] }]);
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+    } finally {
+      await state.harness.unmount();
+      deferredRecords.resolve([]);
+    }
+  });
+
   test("resurfaces an unresolved live failure after a hydrating task set supersedes a stale one", async () => {
     const deferredB = createDeferred<TaskSessionRecordBatch>();
     const batchList = mock(() => deferredB.promise);

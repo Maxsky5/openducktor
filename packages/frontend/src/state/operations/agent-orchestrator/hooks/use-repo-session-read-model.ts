@@ -133,6 +133,9 @@ export const useRepoSessionReadModel = ({
   // Marks a loading window created by demoting a stale-scope failure, so its
   // own success can end it without promoting unrelated loading windows.
   const demotedStaleFailureRef = useRef(false);
+  // Marks a loading window created when a healthy snapshot clears a public
+  // live failure before the current task-record scope finishes hydrating.
+  const recoveredLiveFailureRef = useRef(false);
   const taskIdsKey = taskIdsScopeKey(taskIds);
   const readReloadGeneration = useEffectEvent(() => reloadGeneration);
   const readCurrentTaskIdsKey = useEffectEvent(() => taskIdsKey);
@@ -386,10 +389,13 @@ export const useRepoSessionReadModel = ({
     // Current-scope records loaded: a prior task-record failure no longer
     // describes this read model. An unresolved live-stream failure still does
     // until the stream itself recovers through a fresh snapshot. A loading
-    // window created by demoting a stale-scope failure ends with this success.
+    // window created by a stale-scope or recovered live failure ends with this
+    // success.
     const liveMessage = liveStreamFailureRef.current;
     const staleFailureWasDemoted = demotedStaleFailureRef.current;
+    const liveFailureWasRecovered = recoveredLiveFailureRef.current;
     demotedStaleFailureRef.current = false;
+    recoveredLiveFailureRef.current = false;
     // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
     setSessionReadModelLoadState((currentLoadState) => {
       if (
@@ -404,10 +410,10 @@ export const useRepoSessionReadModel = ({
       if (
         currentLoadState.kind === "loading" &&
         currentLoadState.workspaceRepoPath === workspaceRepoPath &&
-        staleFailureWasDemoted
+        (staleFailureWasDemoted || liveFailureWasRecovered)
       ) {
-        // The stale-scope failure this window replaced resolved; an
-        // unresolved live-stream failure still surfaces here.
+        // The failure this window replaced resolved; an unresolved live-stream
+        // failure still surfaces here.
         return liveMessage
           ? failedAgentSessionReadModelLoadState(workspaceRepoPath, liveMessage, "live-stream")
           : readyAgentSessionReadModelLoadState(workspaceRepoPath);
@@ -620,6 +626,7 @@ export const useRepoSessionReadModel = ({
         return;
       }
       // Any fresh authoritative snapshot proves the stream recovered.
+      const recoveredLiveFailure = liveStreamFailureRef.current !== null;
       liveStreamFailureRef.current = null;
       if (readLoadedWorkflowRecords()) {
         setSessionReadModelLoadState(readyAgentSessionReadModelLoadState(repoPath));
@@ -638,6 +645,16 @@ export const useRepoSessionReadModel = ({
           failedAgentSessionReadModelLoadState(repoPath, appliedRecords.message, "task-records"),
         );
         return;
+      }
+      if (recoveredLiveFailure) {
+        recoveredLiveFailureRef.current = true;
+        setSessionReadModelLoadState((currentLoadState) =>
+          currentLoadState.kind === "failed" &&
+          currentLoadState.source === "live-stream" &&
+          currentLoadState.workspaceRepoPath === repoPath
+            ? loadingAgentSessionReadModelLoadState(repoPath)
+            : currentLoadState,
+        );
       }
       // Hydration owns the public state until its own read resolves.
     };
@@ -757,6 +774,7 @@ export const useRepoSessionReadModel = ({
 
     observedRepoPathRef.current = repoPath;
     demotedStaleFailureRef.current = false;
+    recoveredLiveFailureRef.current = false;
     // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change, react-doctor/no-derived-state
     setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(repoPath));
     void observeLiveSessions({ repoPath }, (envelope) => {
@@ -789,6 +807,7 @@ export const useRepoSessionReadModel = ({
       }
       liveStreamFailureRef.current = null;
       demotedStaleFailureRef.current = false;
+      recoveredLiveFailureRef.current = false;
       unsubscribe?.();
     };
   }, [
