@@ -26,6 +26,7 @@ describe("useNavigationUrlSync", () => {
 
     try {
       const harness = createHookHarness({
+        locationKey: "location-1",
         navigationType: "REPLACE",
         searchParams: new URLSearchParams("task=task-1&agent=build&autostart=1&start=now"),
         setSearchParams,
@@ -74,6 +75,7 @@ describe("useNavigationUrlSync", () => {
     };
 
     const harness = createHookHarness({
+      locationKey: "location-1",
       navigationType: "REPLACE",
       searchParams: new URLSearchParams("task=task-1&agent=spec"),
       setSearchParams,
@@ -88,6 +90,7 @@ describe("useNavigationUrlSync", () => {
     expect(calls).toHaveLength(0);
 
     await harness.update({
+      locationKey: "location-2",
       navigationType: "POP",
       searchParams: new URLSearchParams("task=task-2&session=session-2&agent=planner"),
       setSearchParams,
@@ -110,6 +113,7 @@ describe("useNavigationUrlSync", () => {
     };
 
     const harness = createHookHarness({
+      locationKey: "location-1",
       navigationType: "REPLACE",
       searchParams: new URLSearchParams("task=task-1&agent=build&autostart=1&start=now"),
       setSearchParams,
@@ -137,6 +141,7 @@ describe("useNavigationUrlSync", () => {
     }
 
     await harness.update({
+      locationKey: "location-2",
       navigationType: "REPLACE",
       searchParams: firstNext,
       setSearchParams,
@@ -150,6 +155,7 @@ describe("useNavigationUrlSync", () => {
     expect(calls).toHaveLength(2);
 
     await harness.update({
+      locationKey: "location-3",
       navigationType: "REPLACE",
       searchParams: secondNext,
       setSearchParams,
@@ -172,6 +178,7 @@ describe("useNavigationUrlSync", () => {
     };
 
     const harness = createHookHarness({
+      locationKey: "location-1",
       navigationType: "REPLACE",
       searchParams: new URLSearchParams("task=task-1&agent=build&autostart=1&start=now"),
       setSearchParams,
@@ -193,6 +200,7 @@ describe("useNavigationUrlSync", () => {
     }
 
     await harness.update({
+      locationKey: "location-2",
       navigationType: "POP",
       searchParams: previousUrl,
       setSearchParams,

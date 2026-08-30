@@ -6,6 +6,7 @@ import { useRepoNavigationPersistence } from "./use-repo-navigation-persistence"
 
 type UseAgentStudioQuerySyncArgs = {
   activeWorkspaceId: string | null;
+  locationKey: string;
   navigationType: "POP" | "PUSH" | "REPLACE";
   searchParams: URLSearchParams;
   setSearchParams: SetURLSearchParams;
@@ -13,11 +14,13 @@ type UseAgentStudioQuerySyncArgs = {
 
 export function useAgentStudioQuerySync({
   activeWorkspaceId,
+  locationKey,
   navigationType,
   searchParams,
   setSearchParams,
 }: UseAgentStudioQuerySyncArgs) {
   const { navigation, setNavigation, updateQuery } = useNavigationUrlSync({
+    locationKey,
     navigationType,
     searchParams,
     setSearchParams,

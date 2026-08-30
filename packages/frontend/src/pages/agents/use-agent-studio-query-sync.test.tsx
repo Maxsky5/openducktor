@@ -27,6 +27,7 @@ type StatefulQuerySyncArgs = {
 
 type HookArgsWithDefaults = {
   activeWorkspaceId: string | null;
+  locationKey: string;
   navigationType: HookArgs["navigationType"];
   searchParams: HookArgs["searchParams"];
   setSearchParams: HookArgs["setSearchParams"];
@@ -34,11 +35,13 @@ type HookArgsWithDefaults = {
 
 const normalizeHookArgs = ({
   activeWorkspaceId,
+  locationKey,
   navigationType,
   searchParams,
   setSearchParams,
 }: HookArgsWithDefaults): HookArgs => ({
   activeWorkspaceId,
+  locationKey,
   navigationType,
   searchParams,
   setSearchParams,
@@ -67,6 +70,7 @@ const createStatefulQuerySyncHarness = (initialProps: StatefulQuerySyncArgs) =>
     return useAgentStudioQuerySync(
       normalizeHookArgs({
         activeWorkspaceId,
+        locationKey: "stateful-location",
         navigationType: "REPLACE",
         searchParams,
         setSearchParams,
@@ -77,6 +81,7 @@ const createStatefulQuerySyncHarness = (initialProps: StatefulQuerySyncArgs) =>
 const withQuerySyncDefaults = (
   overrides: Partial<HookArgsWithDefaults> & Pick<HookArgsWithDefaults, "activeWorkspaceId">,
 ): HookArgsWithDefaults => ({
+  locationKey: "location-1",
   navigationType: "REPLACE",
   searchParams: new URLSearchParams(""),
   setSearchParams: () => {},
@@ -92,6 +97,7 @@ describe("useAgentStudioQuerySync", () => {
 
     const harness = createHookHarness({
       activeWorkspaceId: null,
+      locationKey: "location-1",
       navigationType: "REPLACE",
       searchParams: new URLSearchParams("task=task-1&agent=build"),
       setSearchParams,
@@ -133,6 +139,7 @@ describe("useAgentStudioQuerySync", () => {
 
     const harness = createHookHarness({
       activeWorkspaceId: null,
+      locationKey: "location-1",
       navigationType: "REPLACE",
       searchParams: new URLSearchParams("task=task-1&agent=spec"),
       setSearchParams,
@@ -145,6 +152,7 @@ describe("useAgentStudioQuerySync", () => {
 
     await harness.update({
       activeWorkspaceId: null,
+      locationKey: "location-2",
       navigationType: "POP",
       searchParams: new URLSearchParams("task=task-2&session=session-2&agent=planner"),
       setSearchParams,
@@ -157,6 +165,33 @@ describe("useAgentStudioQuerySync", () => {
 
     expect(calls).toHaveLength(0);
 
+    await harness.unmount();
+  });
+
+  test("reapplies a sidebar session when a new location keeps the same URL", async () => {
+    const searchParams = new URLSearchParams("task=task-1&session=session-1&agent=build");
+    const setSearchParams: SetURLSearchParams = () => {};
+    const initialProps: HookArgsWithDefaults = {
+      activeWorkspaceId: null,
+      locationKey: "sidebar-location-1",
+      navigationType: "PUSH",
+      searchParams,
+      setSearchParams,
+    };
+    const harness = createHookHarness(initialProps);
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.updateQuery({ session: "session-2" });
+    });
+    expect(harness.getLatest().sessionExternalIdParam).toBe("session-2");
+
+    await harness.update({
+      ...initialProps,
+      locationKey: "sidebar-location-2",
+    });
+
+    expect(harness.getLatest().sessionExternalIdParam).toBe("session-1");
     await harness.unmount();
   });
 
