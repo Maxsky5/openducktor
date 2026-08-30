@@ -689,12 +689,23 @@ describe("agent session live projection", () => {
       if (!current) {
         throw new Error("Expected projected session.");
       }
-      const terminal = replaceAgentSession(removed, { ...current, status: terminalStatus });
+      const terminal = replaceAgentSession(removed, {
+        ...current,
+        status: terminalStatus,
+        contextUsage: { totalTokens: 6_086, contextWindow: 258_400 },
+      });
 
       const afterIdle = delta(terminal, {
         type: "session_upsert",
         session: snapshot("thread-1", {
           activity: "idle",
+          contextUsage: { totalTokens: 222_747, contextWindow: 258_400 },
+          model: {
+            runtimeKind: "codex",
+            providerId: "codex",
+            modelId: "gpt-5.4",
+            variant: "high",
+          },
           pendingApprovals: [
             {
               requestId: "stale-approval",
@@ -708,6 +719,13 @@ describe("agent session live projection", () => {
       expect(getAgentSession(afterIdle, identity("thread-1"))).toEqual(
         expect.objectContaining({
           status: terminalStatus,
+          contextUsage: { totalTokens: 222_747, contextWindow: 258_400 },
+          selectedModel: {
+            runtimeKind: "codex",
+            providerId: "codex",
+            modelId: "gpt-5.4",
+            variant: "high",
+          },
           pendingApprovals: [],
           pendingQuestions: [],
         }),

@@ -42,6 +42,27 @@ const serverRequestEvent = (message: CodexAppServerProtocolMessage) =>
   });
 
 describe("createCodexAppServerTransport", () => {
+  test("preserves the Codex RPC error message and code", async () => {
+    const child = createChild();
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
+    const error = {
+      code: -32600,
+      message: "Cannot resume child: resume the parent first.",
+    };
+    try {
+      const failure = Effect.runPromise(
+        Effect.flip(transport.request({ method: "thread/resume", params: { threadId: "child" } })),
+      );
+      child.stdout.write(`${JSON.stringify({ id: 1, error })}\n`);
+      await expect(failure).resolves.toMatchObject({
+        message: expect.stringContaining(error.message),
+        cause: error,
+      });
+    } finally {
+      await Effect.runPromise(transport.close());
+    }
+  });
+
   test("rejects malformed JSON-valid model list results with HostValidationError", async () => {
     const child = createChild();
     const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});

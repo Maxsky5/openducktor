@@ -163,39 +163,48 @@ describe("useSelectedSessionContextLoad", () => {
     }
   });
 
-  test("does not load context when retained usage is already present", async () => {
-    const loadAgentSessionContext = mock(async () => undefined);
-    const operations: AgentOperationsContextValue = {
-      readSessionTodos: async () => [],
-      readSessionHistory: async () => [],
-      loadAgentSessionHistory: async () => null,
-      loadAgentSessionContext,
-      startAgentSession: async () => {
-        throw new Error("Not configured");
-      },
-      sendAgentMessage: async () => undefined,
-      stopAgentSession: async () => undefined,
-      updateAgentSessionModel: () => undefined,
-      replyAgentApproval: async () => undefined,
-      answerAgentQuestion: async () => undefined,
-    };
-    const wrapper = createWrapper(operations);
-    const harness = createHookHarness(
-      useSelectedSessionContextLoad,
-      {
-        session: { ...session("thread-1"), contextUsage: { totalTokens: 100 } },
-        repoReadinessState: "ready" as const,
-      },
-      { wrapper },
-    );
+  test.each([true, false])(
+    "loads missing Codex model with retained usage: model present %s",
+    async (hasModel) => {
+      const loadAgentSessionContext = mock(async () => undefined);
+      const operations: AgentOperationsContextValue = {
+        readSessionTodos: async () => [],
+        readSessionHistory: async () => [],
+        loadAgentSessionHistory: async () => null,
+        loadAgentSessionContext,
+        startAgentSession: async () => {
+          throw new Error("Not configured");
+        },
+        sendAgentMessage: async () => undefined,
+        stopAgentSession: async () => undefined,
+        updateAgentSessionModel: () => undefined,
+        replyAgentApproval: async () => undefined,
+        answerAgentQuestion: async () => undefined,
+      };
+      const wrapper = createWrapper(operations);
+      const harness = createHookHarness(
+        useSelectedSessionContextLoad,
+        {
+          session: {
+            ...session("thread-1"),
+            contextUsage: { totalTokens: 100 },
+            selectedModel: hasModel
+              ? { runtimeKind: "codex", providerId: "codex", modelId: "gpt-5.4", variant: "high" }
+              : null,
+          },
+          repoReadinessState: "ready" as const,
+        },
+        { wrapper },
+      );
 
-    try {
-      await harness.mount();
-      expect(loadAgentSessionContext).not.toHaveBeenCalled();
-    } finally {
-      await harness.unmount();
-    }
-  });
+      try {
+        await harness.mount();
+        expect(loadAgentSessionContext).toHaveBeenCalledTimes(hasModel ? 0 : 1);
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
 
   test("returns an actionable error when selected-session context recovery fails", async () => {
     const loadAgentSessionContext = mock(async () => {

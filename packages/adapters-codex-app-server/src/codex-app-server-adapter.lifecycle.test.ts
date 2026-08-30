@@ -515,8 +515,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
     });
   });
 
-  test("fails existing-session send without a model selection", async () => {
-    const { adapter } = createHarness();
+  test("uses the restored Codex model when a saved session has no model selection", async () => {
+    const { adapter, transports } = createHarness();
 
     await expect(
       adapter.sendUserMessage(
@@ -525,8 +525,16 @@ describe("CodexAppServerAdapter lifecycle", () => {
           parts: [{ kind: "text", text: "Continue" }],
         }),
       ),
-    ).rejects.toThrow(
-      "Codex App Server requires a model selection with a reasoning effort variant.",
+    ).resolves.toBeDefined();
+    expect(transports.get("runtime-live")?.calls).toContainEqual(
+      expect.objectContaining({
+        method: "turn/start",
+        params: expect.objectContaining({
+          threadId: "thread-without-model",
+          model: "gpt-5",
+          effort: "medium",
+        }),
+      }),
     );
   });
 

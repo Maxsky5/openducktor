@@ -6,7 +6,7 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { z } from "zod";
-import { errorMessage, HostValidationError } from "../../effect/host-errors";
+import { HostValidationError } from "../../effect/host-errors";
 import type {
   CodexAppServerProtocolMessage,
   CodexAppServerRequestResult,
@@ -40,8 +40,6 @@ export const appendCapturedStderr = (current: string, line: string): string => {
   }
   return encoded.subarray(encoded.byteLength - MAX_CAPTURED_STDERR_BYTES).toString("utf8");
 };
-
-export const extractErrorMessage = errorMessage;
 
 type SendAutomaticServerResponse = (message: {
   jsonrpc: "2.0";

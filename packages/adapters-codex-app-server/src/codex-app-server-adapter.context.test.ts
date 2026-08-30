@@ -75,6 +75,7 @@ describe("CodexAppServerAdapter context loading", () => {
       expect.objectContaining({
         ref: expect.objectContaining({ externalSessionId: "thread-idle" }),
         contextUsage: null,
+        model: { runtimeKind: "codex", providerId: "codex", modelId: "gpt-5", variant: "medium" },
       }),
     );
   });
@@ -127,10 +128,15 @@ describe("CodexAppServerAdapter context loading", () => {
     const loading = adapter.loadSessionContextUsage(codexSessionRef());
     await resumeStarted.promise;
     runtimeStream.emitNotification(tokenUsageNotification(2_000));
+    runtimeStream.emitNotification({
+      method: "thread/status/changed",
+      params: { threadId: "thread/start-runtime-live", status: { type: "idle" } },
+    });
     await flushCodexAdapterWork();
     resume.resolve(undefined);
 
     await expect(loading).resolves.toEqual({ totalTokens: 2_000, contextWindow: 200_000 });
+    expect(adapter.listLiveSessionSnapshots("runtime-live")[0]?.activity).toBe("idle");
   });
 
   test("projects usage that arrives after a successful null resume", async () => {

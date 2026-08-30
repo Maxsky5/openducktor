@@ -23,7 +23,6 @@ import {
 } from "./codex-app-server-request-writer";
 import {
   appendCapturedStderr,
-  extractErrorMessage,
   parseStreamMessage,
   respondToAutomaticServerRequest,
 } from "./codex-app-server-transport-messages";
@@ -40,6 +39,7 @@ import {
 } from "./codex-json-line-writer";
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
 const codexAppServerJsonObjectSchema = z.record(z.string(), z.json());
+const codexRpcErrorSchema = z.object({ code: z.number().int(), message: z.string() });
 export const createCodexAppServerTransport = (
   runtimeId: string,
   child: CodexChildProcess,
@@ -168,10 +168,22 @@ export const createCodexAppServerTransport = (
     }
 
     if ("error" in message) {
+      const error = codexRpcErrorSchema.safeParse(message.error);
+      if (!error.success) {
+        request.reject(
+          new HostValidationError({
+            message: `Codex app-server response ${id} for runtime ${runtimeId} has an invalid RPC error`,
+            field: "error",
+            cause: error.error,
+            details: { runtimeId, id, method: request.method },
+          }),
+        );
+        return;
+      }
       request.reject(
         new HostOperationError({
           operation: `codexAppServerTransport.request.${request.method}`,
-          message: `Codex app-server request ${request.method} failed for runtime ${runtimeId}: ${extractErrorMessage(message.error)}`,
+          message: `Codex app-server request ${request.method} failed for runtime ${runtimeId}: ${error.data.message}`,
           cause: message.error,
           details: { runtimeId, method: request.method },
         }),

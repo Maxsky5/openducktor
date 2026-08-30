@@ -974,6 +974,9 @@ export class CodexAppServerAdapter
     if (route) {
       snapshot.parentExternalSessionId = route.parentExternalSessionId;
     }
+    if (session.model) {
+      snapshot.model = session.model;
+    }
     return agentSessionLiveSnapshotSchema.parse(snapshot);
   }
 

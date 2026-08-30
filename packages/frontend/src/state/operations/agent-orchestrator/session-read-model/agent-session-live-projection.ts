@@ -220,11 +220,14 @@ const applyDirectSnapshot = (
   )
     ? current.sessionAssociation
     : transition.association;
+  const selectedModel = current.selectedModel ?? snapshot.model ?? null;
   if (isTerminalSessionStatus(current.status)) {
     return {
       ...current,
       sessionAssociation,
       livePresence: "present",
+      selectedModel,
+      contextUsage: toContextUsage(snapshot.contextUsage),
       liveParentExternalSessionId: snapshot.parentExternalSessionId,
       pendingApprovals: [],
       pendingQuestions: [],
@@ -243,6 +246,7 @@ const applyDirectSnapshot = (
     ...current,
     sessionAssociation,
     title: snapshot.title,
+    selectedModel,
     ...activity,
     runtimeStatusMessage: activity.status === "idle" ? null : current.runtimeStatusMessage,
     livePresence: "present",

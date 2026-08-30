@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { PolicyBoundSessionRef, ResumeAgentSessionInput } from "@openducktor/core";
-import { defaultCodexEffectivePolicy } from "./codex-app-server-adapter.test-harness";
+import {
+  codexThreadStartResultFixture,
+  defaultCodexEffectivePolicy,
+} from "./codex-app-server-adapter.test-harness";
 import {
   sessionStateFromExistingThread,
   sessionStateFromThreadResume,
@@ -8,7 +11,9 @@ import {
 import type { CodexThreadResumeResult } from "./types";
 
 const threadResumeResponse: CodexThreadResumeResult = {
+  ...codexThreadStartResultFixture("thread-1", "thread/resume"),
   thread: {
+    ...codexThreadStartResultFixture("thread-1", "thread/resume").thread,
     id: "thread-1",
     cwd: "/repo",
     createdAt: 1_778_112_000,
@@ -77,7 +82,7 @@ describe("codex session lifecycle", () => {
     expect(existingThreadSession.liveStatus).toBeUndefined();
   });
 
-  test("preserves optional model absence for existing-thread state", () => {
+  test("restores the runtime model for existing-thread state without a saved selection", () => {
     const input = {
       repoPath: "/repo",
       runtimeKind: "codex",
@@ -95,7 +100,12 @@ describe("codex session lifecycle", () => {
       threadResumeResponse,
     );
 
-    expect(existingThreadSession.model).toBeUndefined();
+    expect(existingThreadSession.model).toEqual({
+      runtimeKind: "codex",
+      providerId: "codex",
+      modelId: "gpt-5",
+      variant: "medium",
+    });
     expect(existingThreadSession.summary.startedAt).toBe("2026-05-07T00:00:00.000Z");
     expect(existingThreadSession.liveStatus).toBeUndefined();
   });

@@ -201,6 +201,16 @@ export const sessionStateFromExistingThread = (
   response: CodexThreadResumeResult,
 ): CodexSessionState => {
   const session = sessionStateFromThreadResumeResponse(input, runtimeId, model, response);
+  if (!model) {
+    session.model = {
+      runtimeKind: "codex",
+      providerId: "codex",
+      modelId: response.model,
+    };
+    if (response.reasoningEffort !== null) {
+      session.model.variant = response.reasoningEffort;
+    }
+  }
   delete session.liveStatus;
   return session;
 };
