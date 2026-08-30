@@ -252,6 +252,117 @@ describe("settings git sections", () => {
     }
   });
 
+  test("does not offer GitHub changes when another provider is configured", async () => {
+    const onDetectGithubRepository = mock(async () => null);
+    const onUpdateSelectedRepoConfig = mock((updater: (current: RepoConfig) => RepoConfig) =>
+      updater(baseRepoConfig),
+    );
+    const rendered = render(
+      createElement(RepositoryGitSection, {
+        selectedRepoPath: "/repo",
+        selectedRepoConfig: {
+          ...baseRepoConfig,
+          git: {
+            provider: {
+              id: "gitlab",
+              enabled: true,
+              autoDetected: false,
+              repository: {
+                host: "gitlab.com",
+                owner: "acme",
+                name: "widget",
+              },
+            },
+          },
+        },
+        runtimeCheck: authenticatedRuntimeCheck,
+        disabled: false,
+        onDetectGithubRepository,
+        onUpdateSelectedRepoConfig,
+      }),
+    );
+
+    try {
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(rendered.container.textContent).toContain(
+        "Git provider gitlab is configured. Remove it before you configure GitHub.",
+      );
+      expect(onDetectGithubRepository).toHaveBeenCalledTimes(0);
+      expect(onUpdateSelectedRepoConfig).toHaveBeenCalledTimes(0);
+      expect(screen.getByRole("switch")).toHaveProperty("disabled", true);
+      expect(screen.getByRole("button", { name: /detect from origin/i })).toHaveProperty(
+        "disabled",
+        true,
+      );
+      expect(screen.getByRole("button", { name: /manual edit/i })).toHaveProperty("disabled", true);
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test("does not replace a provider configured during origin detection", async () => {
+    let repoConfig: RepoConfig = baseRepoConfig;
+    const pendingDetection = createDeferred<{
+      host: string;
+      owner: string;
+      name: string;
+    } | null>();
+    const onUpdateSelectedRepoConfig = (
+      updater: (current: RepoConfig) => RepoConfig,
+    ): RepoConfig => {
+      repoConfig = updater(repoConfig);
+      return repoConfig;
+    };
+    const props = () => ({
+      selectedRepoPath: "/repo",
+      selectedRepoConfig: repoConfig,
+      runtimeCheck: authenticatedRuntimeCheck,
+      disabled: false,
+      onDetectGithubRepository: () => pendingDetection.promise,
+      onUpdateSelectedRepoConfig,
+    });
+    const rendered = render(createElement(RepositoryGitSection, props()));
+
+    try {
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: /detect from origin/i }));
+        await Promise.resolve();
+      });
+
+      repoConfig = {
+        ...repoConfig,
+        git: {
+          provider: {
+            id: "gitlab",
+            enabled: true,
+            autoDetected: false,
+            repository: { host: "gitlab.com", owner: "acme", name: "widget" },
+          },
+        },
+      };
+      rendered.rerender(createElement(RepositoryGitSection, props()));
+
+      await act(async () => {
+        pendingDetection.resolve({ host: "github.com", owner: "detected", name: "repo" });
+        await pendingDetection.promise;
+        await Promise.resolve();
+      });
+
+      expect(repoConfig.git.provider).toEqual({
+        id: "gitlab",
+        enabled: true,
+        autoDetected: false,
+        repository: { host: "gitlab.com", owner: "acme", name: "widget" },
+      });
+    } finally {
+      rendered.unmount();
+    }
+  });
+
   test("same-repo manual edits invalidate an in-flight origin detection", async () => {
     let repoConfig: RepoConfig = {
       ...baseRepoConfig,

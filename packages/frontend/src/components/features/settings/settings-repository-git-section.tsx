@@ -206,6 +206,7 @@ export function RepositoryGitSection({
     githubReadinessLabel,
     githubReadinessMessage,
     githubReady,
+    githubControlsDisabled,
     hasGithubCli,
     isDetecting,
     isManualConfigOpen,
@@ -244,7 +245,7 @@ export function RepositoryGitSection({
         />
         <CardContent className="grid gap-5 py-5">
           <RepositoryGitEnableCard
-            disabled={disabled}
+            disabled={githubControlsDisabled}
             githubEnabled={githubEnabled}
             onCheckedChange={handleGithubEnabledChange}
           />
@@ -256,7 +257,7 @@ export function RepositoryGitSection({
           </div>
 
           <RepositoryGitMappingCard
-            disabled={disabled}
+            disabled={githubControlsDisabled}
             githubHost={githubHost}
             isDetecting={isDetecting}
             isManualConfigOpen={isManualConfigOpen}
@@ -271,7 +272,7 @@ export function RepositoryGitSection({
 
           {isManualConfigOpen ? (
             <RepositoryGitManualConfigForm
-              disabled={disabled}
+              disabled={githubControlsDisabled}
               repositoryDraft={repositoryDraft}
               onDraftFieldChange={handleRepositoryDraftFieldChange}
             />

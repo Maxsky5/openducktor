@@ -33,6 +33,13 @@ export const useSettingsModalRepositoryActions = ({
     }
 
     updateSelectedRepoConfig((repoConfig) => {
+      const configuredProvider = repoConfig.git.provider;
+      if (
+        configuredProvider !== undefined &&
+        configuredProvider.id !== GITHUB_PROVIDER_DESCRIPTOR.id
+      ) {
+        return repoConfig;
+      }
       const currentGithub: GitProviderConfig = selectGitProviderConfig(
         repoConfig.git,
         GITHUB_PROVIDER_DESCRIPTOR.id,

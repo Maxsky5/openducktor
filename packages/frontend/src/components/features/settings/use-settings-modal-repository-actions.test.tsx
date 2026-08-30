@@ -131,4 +131,36 @@ describe("useSettingsModalRepositoryActions", () => {
 
     await harness.unmount();
   });
+
+  test("does not replace a configured non-GitHub provider", async () => {
+    const detectGithubRepository = mock(async () => ({
+      host: "github.com",
+      owner: "duck",
+      name: "repo",
+    }));
+    const gitlabProvider = {
+      id: "gitlab",
+      enabled: true,
+      autoDetected: false,
+      repository: { host: "gitlab.com", owner: "duck", name: "repo" },
+    } as const;
+    const harness = createHookHarness({
+      selectedRepoPath: "/repo-a",
+      initialRepoConfig: {
+        ...createRepoConfig(),
+        git: { provider: gitlabProvider },
+      },
+      detectGithubRepository,
+    });
+
+    await harness.mount();
+
+    await harness.run(async (state) => {
+      await state.detectSelectedRepoGithubRepository();
+    });
+
+    expect(harness.getLatest().repoConfig.git.provider).toEqual(gitlabProvider);
+
+    await harness.unmount();
+  });
 });
