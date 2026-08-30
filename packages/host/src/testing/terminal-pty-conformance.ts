@@ -242,6 +242,10 @@ export const verifyLiveTerminalPtyNaturalExitCleanup = async (
       5_000,
       "Timed out waiting for PTY natural-exit cleanup.",
     );
+    const deadline = Date.now() + 1_000;
+    while (Date.now() < deadline && processIsAlive(childPid)) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
     if (processIsAlive(childPid)) {
       throw new Error(`PTY descendant ${childPid} survived its shell's natural exit.`);
     }
