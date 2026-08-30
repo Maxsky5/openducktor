@@ -20,9 +20,6 @@ type UseTaskStopImpactArgs = {
   readPort?: TaskStopImpactReadPort;
 };
 
-// The count is a host-computed preview of how many live sessions the matching
-// destructive mutation would stop. It stays null until the authoritative read
-// succeeds so the UI never promises a count the host would not deliver.
 export function useTaskStopImpact({
   taskIds,
   operation,
@@ -56,8 +53,7 @@ export function useTaskStopImpact({
   }
   return {
     stoppableSessionCount: query.data?.stoppableSessionCount ?? null,
-    // A mounted observer keeps the cache entry alive, so a dialog reopen can
-    // hit cached data while a background refetch runs. Gate Confirm on both.
+    // Cached data can stay on screen during a new read. Block Confirm until it ends.
     isLoading: query.isPending || query.isFetching,
     error: null,
   };

@@ -23,7 +23,7 @@ export const recordStoppedAgentSessionCount = (
   }
 };
 
-const taskCleanupProgressCopy = {
+const cleanupLabels = {
   task_close: { label: "Close", retryVerb: "close" },
   task_delete: { label: "Delete", retryVerb: "delete" },
   task_reset: { label: "Reset", retryVerb: "reset" },
@@ -33,7 +33,7 @@ const taskCleanupProgressCopy = {
   },
 } as const;
 
-export type TaskCleanupOperation = keyof typeof taskCleanupProgressCopy;
+export type TaskCleanupOperation = keyof typeof cleanupLabels;
 
 type TaskCleanupProgressInput = {
   operation: TaskCleanupOperation;
@@ -46,23 +46,25 @@ export const appendTaskCleanupProgress = <E>(
   error: E,
   { operation, removedWorktrees, deletedBranches, completedSteps = [] }: TaskCleanupProgressInput,
 ): E | HostOperationError => {
-  const copy = taskCleanupProgressCopy[operation];
+  const labels = cleanupLabels[operation];
   const progress: string[] = [];
   if (removedWorktrees.length > 0) {
     progress.push(
-      `${copy.label} cleanup already removed worktrees: ${removedWorktrees.join(", ")}.`,
+      `${labels.label} cleanup already removed worktrees: ${removedWorktrees.join(", ")}.`,
     );
   }
   if (deletedBranches.length > 0) {
-    progress.push(`${copy.label} cleanup already deleted branches: ${deletedBranches.join(", ")}.`);
+    progress.push(
+      `${labels.label} cleanup already deleted branches: ${deletedBranches.join(", ")}.`,
+    );
   }
   if (completedSteps.length > 0) {
-    progress.push(`${copy.label} cleanup already completed: ${completedSteps.join(", ")}.`);
+    progress.push(`${labels.label} cleanup already completed: ${completedSteps.join(", ")}.`);
   }
   if (progress.length === 0) {
     return error;
   }
-  progress.push(`Retry ${copy.retryVerb} to finish cleanup safely.`);
+  progress.push(`Retry ${labels.retryVerb} to finish cleanup safely.`);
   return new HostOperationError({
     operation: `${operation}.cleanup`,
     message: `${errorMessage(error)}\n${progress.join("\n")}`,

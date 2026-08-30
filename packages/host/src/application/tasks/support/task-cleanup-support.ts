@@ -413,8 +413,6 @@ export const taskHasSessionsForRoles = (
   roles: Set<string>,
 ): boolean => sessions.some((session) => roles.has(session.role.trim()));
 
-// Single source for the workflow-role candidate set used by the reset/close
-// mutations and their stop-count preview, so the two cannot drift.
 export const selectWorkflowCleanupSessionRecords = (
   sessions: AgentSessionRecord[],
 ): AgentSessionRecord[] =>

@@ -156,8 +156,8 @@ describe("useTaskStopImpact", () => {
         error: null,
       });
 
-      // Close and reopen the dialog. The stale count stays visible while the
-      // fresh authoritative read runs, but isLoading gates Confirm.
+      // Close and reopen. The old count stays on screen while the new read runs,
+      // but loading blocks Confirm.
       await harness.update({ ...initialProps, enabled: false });
       await harness.update({ ...initialProps, enabled: true });
       await harness.waitFor(({ stopImpact }) => stopImpact.isLoading);

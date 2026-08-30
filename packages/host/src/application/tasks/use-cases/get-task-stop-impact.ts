@@ -1,4 +1,8 @@
-import { type AgentSessionRecord, type TaskStopImpactOperation } from "@openducktor/contracts";
+import {
+  type AgentSessionRecord,
+  type TaskStopImpactOperation,
+  type TaskStopImpactRequest,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostDependencyError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
@@ -8,12 +12,6 @@ import { collectImplementationResetSessionState } from "../support/implementatio
 import { requireDependencies } from "../support/required-task-dependencies";
 import { selectWorkflowCleanupSessionRecords } from "../support/task-cleanup-support";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
-
-export type TaskStopImpactInput = {
-  repoPath: string;
-  taskIds: string[];
-  operation: TaskStopImpactOperation;
-};
 
 type TaskStopImpactDependencies = {
   gitPort: GitPort;
@@ -50,8 +48,7 @@ const requireTaskStopImpactDependencies = (
   return { gitPort, settingsConfig, workspaceSettingsService };
 };
 
-// Candidate selection must mirror the matching mutation's guard inputs so the
-// preview probes exactly the sessions stopLiveSessions would stop.
+// Keep this filter in step with each stop path.
 const selectStopCandidates = (
   operation: TaskStopImpactOperation,
   sessions: AgentSessionRecord[],
@@ -69,7 +66,7 @@ export const createTaskStopImpactUseCase = ({
   settingsConfig,
   workspaceSettingsService,
 }: CreateTaskServiceInput): Pick<TaskService, "getTaskStopImpact"> => ({
-  getTaskStopImpact(input: TaskStopImpactInput) {
+  getTaskStopImpact(input: TaskStopImpactRequest) {
     return Effect.gen(function* () {
       const dependencies = yield* requireDependencies(() =>
         requireTaskStopImpactDependencies(gitPort, settingsConfig, workspaceSettingsService),
@@ -111,8 +108,7 @@ export const createTaskStopImpactUseCase = ({
         }
         previewTasks.push({ taskId, sessions: candidates });
       }
-      // Mirror the mutations: they skip their guard when no candidate sessions
-      // remain, so the preview must not require one in that case either.
+      // Like the stop paths, do not require a guard when no sessions match.
       if (previewTasks.length === 0) {
         return { stoppableSessionCount: 0 };
       }

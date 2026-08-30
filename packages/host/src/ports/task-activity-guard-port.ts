@@ -11,8 +11,7 @@ export type TaskActivityGuardStopResult = {
   stoppedSessionCount: number;
 };
 
-// Callers pre-filter sessions to the set the mutation would act on; the
-// adapter probes and stops exactly what it receives.
+// Callers choose the sessions. The adapter checks and stops only those sessions.
 export type TaskActivityGuardTaskSessions = {
   repoPath: string;
   taskSessions: Array<{

@@ -34,9 +34,7 @@ export const appendImplementationResetCleanupProgress = <E>(
     completedSteps: progress.completedSteps,
   });
 
-// Single source for how implementation reset derives the canonical worktree
-// and which sessions it guards. The mutation and its stop-count preview both
-// consume this so their candidate sets cannot drift.
+// Reset and its preview must use the same worktree session list.
 export const collectImplementationResetSessionState = (
   dependencies: { gitPort: GitPort; settingsConfig: SettingsConfigPort },
   repoConfig: RepoConfig,

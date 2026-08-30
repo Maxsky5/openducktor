@@ -31,9 +31,8 @@ const collectLiveSessions = (
       if (!externalSessionId) {
         continue;
       }
-      // An unsupported probe means the runtime cannot report liveness. Such
-      // probes must not block destructive cleanup; offline runtimes would
-      // otherwise make delete and reset impossible forever.
+      // If a runtime cannot check a session, cleanup must not wait on it.
+      // An offline runtime would otherwise block delete and reset.
       const probe = yield* runtimeRegistry.probeSessionStatus({
         runtimeKind: session.runtimeKind.trim(),
         repoPath,

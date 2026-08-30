@@ -325,7 +325,6 @@ export function useTaskDetailsSheetViewModel({
     deleteTerminalCount,
     deleteActiveSessionCount: deleteStopImpact.stoppableSessionCount,
     deleteActiveSessionCountError: deleteStopImpact.error,
-    // Reset and close both use the selected task's own build/QA session cleanup impact.
     isLoadingResetImpact: isLoadingSingleTaskCleanupImpact || resetStopImpact.isLoading,
     hasManagedResetSessionCleanup: hasManagedSingleTaskCleanup,
     resetManagedWorktreeCount: singleTaskCleanupWorktreeCount,

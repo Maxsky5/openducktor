@@ -8,9 +8,7 @@ import {
   type TaskDirectMergeInput,
   type TaskAssetDescriptionMutation,
   type TaskStatus,
-  type TaskStopImpactRequest,
   type TaskUpdatePatch,
-  taskStopImpactRequestSchema,
 } from "@openducktor/contracts";
 import { z } from "zod";
 import { compactAgentSessionRecord } from "../../domain/agent-session-records";
@@ -18,7 +16,6 @@ import { HostValidationError } from "../../effect/host-errors";
 import {
   commandInputStringSchema,
   type CommandInputRecord,
-  type HostCommandArgs,
   requireParsedRecord,
 } from "./command-inputs";
 
@@ -251,15 +248,6 @@ export const parseTaskDirectMergeInput = (
     `task_direct_merge input.input is invalid: ${result.error.message}`,
     "input.input",
   );
-};
-
-export const parseTaskStopImpactInput = (value: HostCommandArgs): TaskStopImpactRequest => {
-  const parsed = taskStopImpactRequestSchema.safeParse(value);
-  if (parsed.success) {
-    return parsed.data;
-  }
-
-  throw invalidInput(`task_stop_impact_get input is invalid: ${parsed.error.message}`, "input");
 };
 
 export const compactAgentSessionForStorage = (session: AgentSessionRecord): AgentSessionRecord => {

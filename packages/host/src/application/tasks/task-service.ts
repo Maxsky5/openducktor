@@ -13,6 +13,7 @@ import {
   type TaskPullRequestDetectResult,
   type TaskSessionBootstrap,
   type TaskStopImpact,
+  type TaskStopImpactRequest,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { TaskPolicyError } from "../../domain/task/task-policy-error";
@@ -45,10 +46,7 @@ import type {
   WorkspaceSettingsService,
 } from "../workspaces/workspace-settings-service";
 import { createTaskGithubDependencies } from "./support/required-task-dependencies";
-import {
-  createTaskStopImpactUseCase,
-  type TaskStopImpactInput,
-} from "./use-cases/get-task-stop-impact";
+import { createTaskStopImpactUseCase } from "./use-cases/get-task-stop-impact";
 import type {
   AgentSessionDeleteInput,
   AgentSessionUpsertInput,
@@ -120,7 +118,7 @@ export type TaskServiceError =
 
 export type TaskService = {
   listTasks(input: ListTasksInput): Effect.Effect<TaskCard[], TaskServiceError>;
-  getTaskStopImpact(input: TaskStopImpactInput): Effect.Effect<TaskStopImpact, TaskServiceError>;
+  getTaskStopImpact(input: TaskStopImpactRequest): Effect.Effect<TaskStopImpact, TaskServiceError>;
   getTaskMetadata(input: TaskIdInput): Effect.Effect<TaskMetadataPayload, TaskServiceError>;
   agentSessionsList(input: TaskIdInput): Effect.Effect<AgentSessionRecord[], TaskServiceError>;
   agentSessionsListForTasks(

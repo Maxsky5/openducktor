@@ -7,7 +7,6 @@ export type TaskStopImpactReadPort = Pick<typeof host, "taskStopImpactGet">;
 
 const taskStopImpactQueryKeys = {
   all: ["task-stop-impact"] as const,
-  // Callers must pass IDs normalized by normalizeAgentSessionTaskIds.
   get: (repoPath: string, normalizedTaskIds: string[], operation: TaskStopImpactOperation) =>
     [...taskStopImpactQueryKeys.all, "get", repoPath, normalizedTaskIds, operation] as const,
 };
@@ -31,8 +30,7 @@ export const taskStopImpactQueryOptions = ({
     queryFn: () => readPort.taskStopImpactGet(repoPath, normalizedTaskIds, operation),
     staleTime: 0,
     gcTime: 0,
-    // Surface preview failures at once so the destructive-confirm gate shows
-    // an actionable error instead of retrying in the background.
+    // Do not retry: the dialog must show the error and block the action.
     retry: false,
   });
 };
