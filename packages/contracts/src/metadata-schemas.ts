@@ -50,21 +50,31 @@ const taskMetadataPayloadFields = {
 
 const taskMetadataPayloadBodySchema = z.object(taskMetadataPayloadFields);
 const legacyTaskDeliverySchema = z.object({
-  linkedPullRequest: z.json().optional(),
-  directMerge: z.json().optional(),
+  linkedPullRequest: pullRequestSchema.nullable().optional(),
+  directMerge: directMergeRecordSchema.nullable().optional(),
 });
 const legacyTaskMetadataPayloadSchema = z.object({
   ...taskMetadataPayloadFields,
-  delivery: legacyTaskDeliverySchema.optional(),
+  delivery: legacyTaskDeliverySchema.nullish(),
 });
 
 export const taskMetadataPayloadSchema = legacyTaskMetadataPayloadSchema
   .transform(({ delivery, ...payload }): z.input<typeof taskMetadataPayloadBodySchema> => {
-    if (payload.pullRequest === undefined && delivery?.linkedPullRequest !== undefined) {
-      payload.pullRequest = pullRequestSchema.parse(delivery.linkedPullRequest);
+    const linkedPullRequest = delivery?.linkedPullRequest;
+    if (
+      payload.pullRequest === undefined &&
+      linkedPullRequest !== null &&
+      linkedPullRequest !== undefined
+    ) {
+      payload.pullRequest = linkedPullRequest;
     }
-    if (payload.directMerge === undefined && delivery?.directMerge !== undefined) {
-      payload.directMerge = directMergeRecordSchema.parse(delivery.directMerge);
+    const legacyDirectMerge = delivery?.directMerge;
+    if (
+      payload.directMerge === undefined &&
+      legacyDirectMerge !== null &&
+      legacyDirectMerge !== undefined
+    ) {
+      payload.directMerge = legacyDirectMerge;
     }
     return payload;
   })
