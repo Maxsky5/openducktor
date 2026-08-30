@@ -73,12 +73,12 @@ export const codexAppServerUserInputSchema = z.discriminatedUnion("type", [
   }),
   z.strictObject({
     type: z.literal("image"),
-    detail: z.enum(["auto", "low", "high", "original"]).optional(),
+    detail: z.enum(["auto", "low", "high", "original"]).nullable().optional(),
     url: z.string(),
   }),
   z.strictObject({
     type: z.literal("localImage"),
-    detail: z.enum(["auto", "low", "high", "original"]).optional(),
+    detail: z.enum(["auto", "low", "high", "original"]).nullable().optional(),
     path: z.string(),
   }),
   z.strictObject({ type: z.literal("audio"), url: z.string() }),

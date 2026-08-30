@@ -3,6 +3,44 @@ import { parseCodexAppServerClientRequest } from "./codex-app-server-request-sch
 import { parseCodexAppServerRequestResult } from "./codex-app-server-result-schemas";
 
 describe("Codex app-server 0.149 experimental request schemas", () => {
+  test.each([
+    {},
+    { detail: null },
+    { detail: "auto" },
+    { detail: "low" },
+    { detail: "high" },
+    { detail: "original" },
+  ])("preserves image detail in user input: %j", (detail) => {
+    const request = {
+      method: "turn/start",
+      params: {
+        threadId: "thread-1",
+        input: [
+          { type: "image", url: "https://example.com/image.png", ...detail },
+          { type: "localImage", path: "/tmp/image.png", ...detail },
+        ],
+      },
+    };
+
+    expect(parseCodexAppServerClientRequest(request)).toEqual(request);
+  });
+
+  test("rejects invalid image detail values", () => {
+    for (const detail of ["", "invalid", 1, true]) {
+      for (const input of [
+        { type: "image", url: "https://example.com/image.png", detail },
+        { type: "localImage", path: "/tmp/image.png", detail },
+      ]) {
+        expect(() =>
+          parseCodexAppServerClientRequest({
+            method: "turn/start",
+            params: { threadId: "thread-1", input: [input] },
+          }),
+        ).toThrow();
+      }
+    }
+  });
+
   const fullExperimentalRequests = [
     {
       method: "initialize",

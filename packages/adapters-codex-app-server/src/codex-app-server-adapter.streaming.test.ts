@@ -40,6 +40,56 @@ const observeSessionState = async (
 };
 
 describe("CodexAppServerAdapter streaming", () => {
+  test.each(["image", "localImage"] as const)(
+    "delivers streamed %s user messages with null detail without session errors",
+    async (imageType) => {
+      const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+      const { adapter } = createHarness({ subscribeEvents });
+      await adapter.startSession(codexStartSessionInput());
+      const events: AgentEvent[] = [];
+      const unsubscribe = await adapter.subscribeEvents(
+        codexSessionRuntimeRef("thread/start-runtime-live"),
+        (event) => events.push(event),
+      );
+
+      try {
+        const image =
+          imageType === "image"
+            ? { type: imageType, url: "data:image/png;base64,AA==", detail: null }
+            : { type: imageType, path: "/tmp/screenshot.png", detail: null };
+        const params = {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-1",
+          item: {
+            type: "userMessage",
+            id: "user-image-1",
+            clientId: null,
+            content: [{ type: "text", text: "Review this image", text_elements: [] }, image],
+          },
+        };
+        emitNotification({
+          method: "item/started",
+          params: { ...params, startedAtMs: 1_000 },
+        });
+        emitNotification({
+          method: "item/completed",
+          params: { ...params, completedAtMs: 1_001 },
+        });
+        await flushCodexAdapterWork();
+
+        expect(events.filter((event) => event.type === "session_error")).toEqual([]);
+        expect(events.filter((event) => event.type === "user_message")).toEqual([
+          expect.objectContaining({
+            messageId: "user-image-1",
+            parts: expect.arrayContaining([{ kind: "text", text: "Review this image" }]),
+          }),
+        ]);
+      } finally {
+        unsubscribe();
+      }
+    },
+  );
+
   test("ignores known unconsumed notifications without emitting a session error", async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
     const { adapter } = createHarness({ subscribeEvents });
