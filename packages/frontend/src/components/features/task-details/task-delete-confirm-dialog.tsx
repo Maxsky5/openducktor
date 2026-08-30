@@ -79,7 +79,9 @@ export function TaskDeleteConfirmDialog({
               <p>
                 Direct subtasks will also be deleted to avoid orphaned children in the workflow.
               </p>
-            ) : null}
+            ) : (
+              <p>Any descendant subtasks will also be deleted to avoid orphaned children.</p>
+            )}
             {impact.terminalCount === 0 ? null : (
               <p>
                 {impact.terminalCount} associated terminal

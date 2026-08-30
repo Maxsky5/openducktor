@@ -14,16 +14,17 @@ describe("TaskCloseConfirmDialog", () => {
         onCancel={() => {}}
         onConfirm={() => {}}
         taskId="TASK-1"
-        isLoadingImpact
-        isLoadingStopImpact={false}
-        hasManagedSessionCleanup={false}
-        managedWorktreeCount={0}
-        terminalCount={0}
-        activeSessionCount={0}
-        activeSessionCountError={null}
-        impactError={null}
-        isClosePending={false}
-        closeError={null}
+        impact={{
+          isLoading: true,
+          isLoadingStopImpact: false,
+          hasManagedSessionCleanup: false,
+          managedWorktreeCount: 0,
+          terminalCount: 0,
+          activeSessionCount: 0,
+          activeSessionCountError: null,
+          error: null,
+        }}
+        closing={{ isPending: false, error: null }}
       />,
     );
 
@@ -54,16 +55,17 @@ describe("TaskCloseConfirmDialog", () => {
         onCancel={() => {}}
         onConfirm={() => {}}
         taskId="TASK-2"
-        isLoadingImpact={false}
-        isLoadingStopImpact={false}
-        hasManagedSessionCleanup={false}
-        managedWorktreeCount={0}
-        terminalCount={2}
-        activeSessionCount={3}
-        activeSessionCountError={null}
-        impactError="Could not preview cleanup"
-        isClosePending={false}
-        closeError="Close failed"
+        impact={{
+          isLoading: false,
+          isLoadingStopImpact: false,
+          hasManagedSessionCleanup: false,
+          managedWorktreeCount: 0,
+          terminalCount: 2,
+          activeSessionCount: 3,
+          activeSessionCountError: null,
+          error: "Could not preview cleanup",
+        }}
+        closing={{ isPending: false, error: "Close failed" }}
       />,
     );
 
@@ -88,16 +90,17 @@ describe("TaskCloseConfirmDialog", () => {
         onCancel={() => {}}
         onConfirm={() => {}}
         taskId="TASK-3"
-        isLoadingImpact={false}
-        isLoadingStopImpact={false}
-        hasManagedSessionCleanup={false}
-        managedWorktreeCount={0}
-        terminalCount={0}
-        activeSessionCount={null}
-        activeSessionCountError="host unavailable"
-        impactError={null}
-        isClosePending={false}
-        closeError={null}
+        impact={{
+          isLoading: false,
+          isLoadingStopImpact: false,
+          hasManagedSessionCleanup: false,
+          managedWorktreeCount: 0,
+          terminalCount: 0,
+          activeSessionCount: null,
+          activeSessionCountError: "host unavailable",
+          error: null,
+        }}
+        closing={{ isPending: false, error: null }}
       />,
     );
 

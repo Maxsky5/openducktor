@@ -370,7 +370,7 @@ describe("TaskDetailsSheet", () => {
 
       await harness.run((viewModel) => viewModel.confirmDelete());
 
-      expect(onDelete).toHaveBeenCalledWith("TASK-1", { deleteSubtasks: false });
+      expect(onDelete).toHaveBeenCalledWith("TASK-1", { deleteSubtasks: true });
       expect(harness.getLatest().isDeletePending).toBe(true);
       expect(taskDocumentsHookMock.mock.calls.slice(callsBeforeDelete).at(-1)?.[1]).toBe(false);
     } finally {

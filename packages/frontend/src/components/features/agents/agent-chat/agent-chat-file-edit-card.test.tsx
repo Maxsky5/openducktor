@@ -125,25 +125,25 @@ beforeEach(async () => {
     spyOn(pierreDiffViewerModule, "PierreDiffPreloader").mockImplementation(
       Object.assign(preloaderMock, {
         $$typeof: pierreDiffViewerModule.PierreDiffPreloader.$$typeof,
-        type: pierreDiffViewerModule.PierreDiffPreloader.type,
+        type: preloaderMock,
       }),
     ),
     spyOn(pierreDiffViewerModule, "PierrePreloadedDiffViewer").mockImplementation(
       Object.assign(preloadedViewerMock, {
         $$typeof: pierreDiffViewerModule.PierrePreloadedDiffViewer.$$typeof,
-        type: pierreDiffViewerModule.PierrePreloadedDiffViewer.type,
+        type: preloadedViewerMock,
       }),
     ),
     spyOn(pierreDiffViewerModule, "PierreDiffViewer").mockImplementation(
       Object.assign(viewerMock, {
         $$typeof: pierreDiffViewerModule.PierreDiffViewer.$$typeof,
-        type: pierreDiffViewerModule.PierreDiffViewer.type,
+        type: viewerMock,
       }),
     ),
     spyOn(pierreDiffViewerModule, "PierreFileViewer").mockImplementation(
       Object.assign(fileViewerMock, {
         $$typeof: pierreDiffViewerModule.PierreFileViewer.$$typeof,
-        type: pierreDiffViewerModule.PierreFileViewer.type,
+        type: fileViewerMock,
       }),
     ),
   ];

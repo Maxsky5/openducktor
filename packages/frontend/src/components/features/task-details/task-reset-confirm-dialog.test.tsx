@@ -11,16 +11,17 @@ describe("TaskResetConfirmDialog", () => {
         onCancel={() => {}}
         onConfirm={() => {}}
         taskId="TASK-123"
-        isLoadingImpact={false}
-        isLoadingStopImpact={false}
-        hasManagedSessionCleanup
-        managedWorktreeCount={2}
-        terminalCount={2}
-        activeSessionCount={1}
-        activeSessionCountError={null}
-        impactError={null}
-        isResetPending={false}
-        resetError={null}
+        impact={{
+          isLoading: false,
+          isLoadingStopImpact: false,
+          hasManagedSessionCleanup: true,
+          managedWorktreeCount: 2,
+          terminalCount: 2,
+          activeSessionCount: 1,
+          activeSessionCountError: null,
+          error: null,
+        }}
+        reset={{ isPending: false, error: null }}
       />,
     );
 
@@ -44,16 +45,17 @@ describe("TaskResetConfirmDialog", () => {
         onCancel={() => {}}
         onConfirm={() => {}}
         taskId="TASK-123"
-        isLoadingImpact
-        isLoadingStopImpact={false}
-        hasManagedSessionCleanup={false}
-        managedWorktreeCount={0}
-        terminalCount={0}
-        activeSessionCount={0}
-        activeSessionCountError={null}
-        impactError={null}
-        isResetPending={false}
-        resetError={null}
+        impact={{
+          isLoading: true,
+          isLoadingStopImpact: false,
+          hasManagedSessionCleanup: false,
+          managedWorktreeCount: 0,
+          terminalCount: 0,
+          activeSessionCount: 0,
+          activeSessionCountError: null,
+          error: null,
+        }}
+        reset={{ isPending: false, error: null }}
       />,
     );
 
@@ -70,16 +72,17 @@ describe("TaskResetConfirmDialog", () => {
         onCancel={() => {}}
         onConfirm={() => {}}
         taskId="TASK-123"
-        isLoadingImpact={false}
-        isLoadingStopImpact={false}
-        hasManagedSessionCleanup={false}
-        managedWorktreeCount={0}
-        terminalCount={0}
-        activeSessionCount={null}
-        activeSessionCountError="host unavailable"
-        impactError={null}
-        isResetPending={false}
-        resetError={null}
+        impact={{
+          isLoading: false,
+          isLoadingStopImpact: false,
+          hasManagedSessionCleanup: false,
+          managedWorktreeCount: 0,
+          terminalCount: 0,
+          activeSessionCount: null,
+          activeSessionCountError: "host unavailable",
+          error: null,
+        }}
+        reset={{ isPending: false, error: null }}
       />,
     );
 

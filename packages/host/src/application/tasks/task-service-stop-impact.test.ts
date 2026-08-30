@@ -6,6 +6,7 @@ import {
   createBuildWorkspaceSettingsService,
   createDirectMergeGitPort,
   createTaskService,
+  task,
   type TaskActivityGuardPort,
   type TaskStorePort,
 } from "./test-support/task-workflow-harness";
@@ -21,7 +22,9 @@ const metadataWithSessions = (agentSessions: TestSession[]) => ({
 
 const createStopImpactTaskStore = (
   sessionsByTaskId: Record<string, TestSession[]>,
+  tasks = Object.keys(sessionsByTaskId).map((id) => task({ id })),
 ): TaskStorePort => ({
+  listTasks: () => Effect.succeed(tasks),
   getTaskMetadata(input) {
     return Effect.succeed(metadataWithSessions(sessionsByTaskId[input.taskId] ?? []));
   },
@@ -59,11 +62,12 @@ const makeGuard = (
 const createService = (
   sessionsByTaskId: Record<string, TestSession[]>,
   guard?: TaskActivityGuardPort,
+  tasks?: ReturnType<typeof task>[],
 ) => {
   const input = {
     gitPort: createDirectMergeGitPort({ calls: [] }),
     settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-    taskStore: createStopImpactTaskStore(sessionsByTaskId),
+    taskStore: createStopImpactTaskStore(sessionsByTaskId, tasks),
     workspaceSettingsService: createBuildWorkspaceSettingsService({
       workspaceId: "repo",
       repoPath: "/repo",
@@ -93,7 +97,7 @@ describe("getTaskStopImpact", () => {
     expect(countCalls).toEqual([]);
   });
 
-  test("delete previews live sessions across every requested task", async () => {
+  test("delete derives hidden descendants from the authoritative task graph", async () => {
     const countCalls: Array<{ sessionIds: string[]; sessionRoles: string[] }> = [];
     const guard = makeGuard(new Set(["live-build"]), countCalls);
     const service = createService(
@@ -107,12 +111,13 @@ describe("getTaskStopImpact", () => {
         ],
       },
       guard,
+      [task({ id: "task-1" }), task({ id: "task-2", parentId: "task-1" })],
     );
 
     const result = await Effect.runPromise(
       service.getTaskStopImpact({
         repoPath: "/repo",
-        taskIds: ["task-1", "task-2"],
+        taskIds: ["task-1"],
         operation: "delete",
       }),
     );

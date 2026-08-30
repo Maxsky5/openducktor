@@ -6,8 +6,9 @@ import {
   appendImplementationResetCleanupProgress,
   collectImplementationResetSessionState,
   excludeCanonicalImplementationTargets,
+  requireImplementationResetActivityGuard as requireActivityGuard,
   resolveCanonicalImplementationResetTarget,
-  stopActiveImplementationResetActivity,
+  stopActiveImplementationResetActivity as stopActivity,
 } from "../support/implementation-reset-targets";
 import { requireDependencies } from "../support/required-task-dependencies";
 import {
@@ -92,16 +93,14 @@ export const createTaskImplementationResetUseCase = ({
         taskId,
         currentSessions,
       );
-      const cleanupProgress = createTaskCleanupProgressState();
-      yield* stopActiveImplementationResetActivity(
+      const activity = {
         taskActivityGuard,
-        effectiveRepoPath,
+        repoPath: effectiveRepoPath,
         taskId,
-        canonicalSessionState.guarded,
-        cleanupProgress,
-      );
+        sessions: canonicalSessionState.guarded,
+      };
+      yield* requireActivityGuard(activity);
       const branchPrefix = repoConfig.branchPrefix.trim() || DEFAULT_BRANCH_PREFIX;
-      const rollbackStatus = resetImplementationRollbackStatus(current);
       const worktreePaths = yield* collectResetWorktreePaths(
         dependencies,
         effectiveRepoPath,
@@ -132,6 +131,8 @@ export const createTaskImplementationResetUseCase = ({
         relatedBranches,
         canonicalTarget,
       );
+      const cleanupProgress = createTaskCleanupProgressState();
+      yield* stopActivity(activity, cleanupProgress);
       let taskStoreWriteCompleted = false;
       return yield* Effect.gen(function* () {
         yield* runTaskLocalCleanup({
@@ -181,7 +182,7 @@ export const createTaskImplementationResetUseCase = ({
         const updated = yield* taskStore.transitionTask({
           repoPath: effectiveRepoPath,
           taskId,
-          status: rollbackStatus,
+          status: resetImplementationRollbackStatus(current),
         });
         return enrichTask(updated, replaceTaskInList(currentTasks, updated));
       }).pipe(

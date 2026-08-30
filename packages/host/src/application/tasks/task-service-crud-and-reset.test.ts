@@ -853,6 +853,8 @@ describe("createTaskService task mutations and reset", () => {
     });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo-alias" } },
+      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
+      { type: "listBranches", workingDir: "/repo" },
       {
         type: "activityGuard",
         input: {
@@ -863,8 +865,6 @@ describe("createTaskService task mutations and reset", () => {
           ],
         },
       },
-      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
-      { type: "listBranches", workingDir: "/repo" },
       { type: "stopDevServers", input: { repoPath: "/repo", taskId: "epic-1" } },
       { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
       {
@@ -1021,6 +1021,7 @@ describe("createTaskService task mutations and reset", () => {
     ).resolves.toEqual({ ok: true, changes: { taskIds: ["task-1"], removedTaskIds: ["task-1"] } });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
+      { type: "listBranches", workingDir: "/repo" },
       {
         type: "activityGuard",
         input: {
@@ -1028,7 +1029,6 @@ describe("createTaskService task mutations and reset", () => {
           taskSessions: [{ taskId: "task-1", sessions: [session] }],
         },
       },
-      { type: "listBranches", workingDir: "/repo" },
       { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
       {
         type: "removeWorktree",
@@ -1108,6 +1108,7 @@ describe("createTaskService task mutations and reset", () => {
     ).rejects.toThrow("worktree removal race");
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
+      { type: "listBranches", workingDir: "/repo" },
       {
         type: "activityGuard",
         input: {
@@ -1115,7 +1116,6 @@ describe("createTaskService task mutations and reset", () => {
           taskSessions: [{ taskId: "task-1", sessions: [session] }],
         },
       },
-      { type: "listBranches", workingDir: "/repo" },
       { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
       {
         type: "removeWorktree",
@@ -1547,6 +1547,10 @@ describe("createTaskService task mutations and reset", () => {
     ).resolves.toMatchObject({ id: "task-1", status: "ready_for_dev" });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo-alias" } },
+      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
+      { type: "currentBranch", workingDir: "/worktrees/repo/task-1-legacy" },
+      { type: "listBranches", workingDir: "/repo" },
+      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
       {
         type: "resetActivityGuard",
         input: {
@@ -1554,10 +1558,6 @@ describe("createTaskService task mutations and reset", () => {
           taskSessions: [{ taskId: "task-1", sessions: currentSessions }],
         },
       },
-      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
-      { type: "currentBranch", workingDir: "/worktrees/repo/task-1-legacy" },
-      { type: "listBranches", workingDir: "/repo" },
-      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
       { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
       {
         type: "removeWorktree",
@@ -1831,6 +1831,8 @@ describe("createTaskService task mutations and reset", () => {
     ).resolves.toMatchObject({ id: "task-1", status: "open" });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo-alias" } },
+      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
+      { type: "listBranches", workingDir: "/repo" },
       {
         type: "resetActivityGuard",
         input: {
@@ -1838,8 +1840,6 @@ describe("createTaskService task mutations and reset", () => {
           taskSessions: [{ taskId: "task-1", sessions: currentSessions }],
         },
       },
-      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
-      { type: "listBranches", workingDir: "/repo" },
       { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
       {
         type: "removeWorktree",

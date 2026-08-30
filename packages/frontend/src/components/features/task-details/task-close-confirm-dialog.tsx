@@ -24,16 +24,20 @@ type TaskCloseConfirmDialogProps = {
   onCancel: () => void;
   onConfirm: () => void;
   taskId: string;
-  isLoadingImpact: boolean;
-  isLoadingStopImpact: boolean;
-  hasManagedSessionCleanup: boolean;
-  managedWorktreeCount: number;
-  terminalCount: number;
-  activeSessionCount: number | null;
-  activeSessionCountError: string | null;
-  impactError: string | null;
-  isClosePending: boolean;
-  closeError: string | null;
+  impact: {
+    isLoading: boolean;
+    isLoadingStopImpact: boolean;
+    hasManagedSessionCleanup: boolean;
+    managedWorktreeCount: number;
+    terminalCount: number;
+    activeSessionCount: number | null;
+    activeSessionCountError: string | null;
+    error: string | null;
+  };
+  closing: {
+    isPending: boolean;
+    error: string | null;
+  };
 };
 
 export function TaskCloseConfirmDialog({
@@ -42,20 +46,12 @@ export function TaskCloseConfirmDialog({
   onCancel,
   onConfirm,
   taskId,
-  isLoadingImpact,
-  isLoadingStopImpact,
-  hasManagedSessionCleanup,
-  managedWorktreeCount,
-  terminalCount,
-  activeSessionCount,
-  activeSessionCountError,
-  impactError,
-  isClosePending,
-  closeError,
+  impact,
+  closing,
 }: TaskCloseConfirmDialogProps): ReactElement {
-  const isImpactLoading = isLoadingImpact || isLoadingStopImpact;
+  const isImpactLoading = impact.isLoading || impact.isLoadingStopImpact;
   let confirmLabel = "Close task";
-  if (isClosePending) {
+  if (closing.isPending) {
     confirmLabel = "Closing...";
   } else if (isImpactLoading) {
     confirmLabel = "Checking...";
@@ -77,22 +73,24 @@ export function TaskCloseConfirmDialog({
             <p>No code is merged and no pull request is created, updated, or merged.</p>
             <p>Task-scoped dev servers will be stopped.</p>
             <p>
-              {terminalCount === 0
+              {impact.terminalCount === 0
                 ? "No running task terminals will be stopped."
-                : `${terminalCount} associated terminal${terminalCount === 1 ? "" : "s"} will be terminated before the task closes.`}
+                : `${impact.terminalCount} associated terminal${impact.terminalCount === 1 ? "" : "s"} will be terminated before the task closes.`}
             </p>
             <TaskStopImpactNotice
-              count={activeSessionCount}
-              error={activeSessionCountError}
+              count={impact.activeSessionCount}
+              error={impact.activeSessionCountError}
               operation="close"
             />
-            {isLoadingStopImpact ? <p>{formatActiveSessionStopLoadingMessage("close")}</p> : null}
-            {isLoadingImpact ? (
+            {impact.isLoadingStopImpact ? (
+              <p>{formatActiveSessionStopLoadingMessage("close")}</p>
+            ) : null}
+            {impact.isLoading ? (
               <p>{formatManagedSessionCleanupLoadingMessage("close")}</p>
-            ) : impactError ? (
+            ) : impact.error ? (
               <p>{formatUnknownManagedSessionCleanupMessage()}</p>
-            ) : hasManagedSessionCleanup ? (
-              <p>{formatManagedSessionCleanupMessage(managedWorktreeCount)}</p>
+            ) : impact.hasManagedSessionCleanup ? (
+              <p>{formatManagedSessionCleanupMessage(impact.managedWorktreeCount)}</p>
             ) : (
               <p>
                 Linked task worktrees and related local branches will be deleted when present. Any
@@ -101,22 +99,24 @@ export function TaskCloseConfirmDialog({
             )}
             <p>The task record, documents, QA reports, and linked history are retained.</p>
           </div>
-          {impactError ? <p className="mt-2 text-destructive-muted">{impactError}</p> : null}
-          {closeError ? <p className="mt-2 text-destructive-muted">{closeError}</p> : null}
+          {impact.error ? <p className="mt-2 text-destructive-muted">{impact.error}</p> : null}
+          {closing.error ? <p className="mt-2 text-destructive-muted">{closing.error}</p> : null}
         </DialogBody>
 
         <DialogFooter className="mt-0 flex flex-row justify-between gap-2 border-t border-border pt-5">
-          <Button type="button" variant="outline" disabled={isClosePending} onClick={onCancel}>
+          <Button type="button" variant="outline" disabled={closing.isPending} onClick={onCancel}>
             Cancel
           </Button>
           <Button
             type="button"
             variant="warning"
-            disabled={isClosePending || isImpactLoading || activeSessionCountError !== null}
-            aria-busy={isClosePending || isImpactLoading}
+            disabled={
+              closing.isPending || isImpactLoading || impact.activeSessionCountError !== null
+            }
+            aria-busy={closing.isPending || isImpactLoading}
             onClick={onConfirm}
           >
-            {isClosePending || isImpactLoading ? (
+            {closing.isPending || isImpactLoading ? (
               <Loader2 className="animate-spin" data-icon="inline-start" />
             ) : (
               <CircleCheckBig data-icon="inline-start" />

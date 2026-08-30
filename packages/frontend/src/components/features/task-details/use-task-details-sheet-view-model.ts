@@ -148,7 +148,6 @@ export function useTaskDetailsSheetViewModel({
     [task],
   );
   const subtasks = useMemo(() => toSubtasks(task, taskById), [task, taskById]);
-  const hasSubtasks = subtasks.length > 0;
   const shouldRenderSubtasks = task?.issueType === "epic";
   const taskLabels = useMemo(() => toTaskLabels(task?.labels), [task?.labels]);
 
@@ -163,7 +162,6 @@ export function useTaskDetailsSheetViewModel({
   } = useTaskDeleteDialog({
     sheetOpen: open,
     task,
-    hasSubtasks,
     onOpenChange,
     onDelete,
   });
@@ -220,7 +218,7 @@ export function useTaskDetailsSheetViewModel({
     terminalCount: singleTaskTerminalCount,
   } = taskCleanupImpactHook(singleTaskCleanupImpactTaskIds, shouldLoadSingleTaskImpact);
   const deleteStopImpact = taskStopImpactHook({
-    taskIds: deleteImpactTaskIds,
+    taskIds: singleTaskCleanupImpactTaskIds,
     operation: "delete",
     enabled: shouldLoadDeleteImpact,
   });

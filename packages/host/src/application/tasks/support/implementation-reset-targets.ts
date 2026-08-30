@@ -59,31 +59,40 @@ export const collectImplementationResetSessionState = (
     };
   });
 
+type ImplementationResetActivity = {
+  taskActivityGuard: TaskActivityGuardPort | undefined;
+  repoPath: string;
+  taskId: string;
+  sessions: AgentSessionRecord[];
+};
+
+export const requireImplementationResetActivityGuard = (activity: ImplementationResetActivity) => {
+  if (activity.sessions.length === 0 || activity.taskActivityGuard) {
+    return Effect.succeed(activity.taskActivityGuard);
+  }
+  return Effect.fail(
+    new HostDependencyError({
+      dependency: "taskActivityGuard",
+      operation: "task_reset_implementation",
+      message:
+        "task_reset_implementation requires runtime session activity checks for task sessions that may use the canonical worktree.",
+      details: { repoPath: activity.repoPath, taskId: activity.taskId },
+    }),
+  );
+};
+
 export const stopActiveImplementationResetActivity = (
-  taskActivityGuard: TaskActivityGuardPort | undefined,
-  repoPath: string,
-  taskId: string,
-  sessions: AgentSessionRecord[],
+  activity: ImplementationResetActivity,
   progress: TaskCleanupProgressState,
 ) =>
   Effect.gen(function* () {
-    if (sessions.length === 0) {
+    const activityGuard = yield* requireImplementationResetActivityGuard(activity);
+    if (!activityGuard) {
       return;
     }
-    if (!taskActivityGuard) {
-      return yield* Effect.fail(
-        new HostDependencyError({
-          dependency: "taskActivityGuard",
-          operation: "task_reset_implementation",
-          message:
-            "task_reset_implementation requires runtime session activity checks for task sessions that may use the canonical worktree.",
-          details: { repoPath, taskId },
-        }),
-      );
-    }
-    const { stoppedSessionCount } = yield* taskActivityGuard.stopLiveSessions({
-      repoPath,
-      taskSessions: [{ taskId, sessions }],
+    const { stoppedSessionCount } = yield* activityGuard.stopLiveSessions({
+      repoPath: activity.repoPath,
+      taskSessions: [{ taskId: activity.taskId, sessions: activity.sessions }],
     });
     recordStoppedAgentSessionCount(progress, stoppedSessionCount);
   });

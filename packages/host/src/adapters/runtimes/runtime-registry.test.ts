@@ -1270,7 +1270,38 @@ describe("createRuntimeRegistry", () => {
       },
     ]);
   });
-  test("fails active Codex stop when no active turn can be found", async () => {
+  test("treats Codex system errors as already stopped", async () => {
+    const calls: unknown[] = [];
+    const registry = createRuntimeRegistry({
+      runtimes: [createCodexRuntime()],
+      codexAppServer: {
+        request(input) {
+          calls.push(input);
+          return codexThreadReadResult("session-1", "/repo/worktree", {
+            type: "systemError",
+          });
+        },
+      },
+    });
+    await expect(
+      Effect.runPromise(
+        registry.stopSession({
+          runtimeKind: "codex",
+          repoPath: "/repo",
+          externalSessionId: "session-1",
+          workingDirectory: "/repo/worktree",
+        }),
+      ),
+    ).resolves.toBeUndefined();
+    expect(calls).toEqual([
+      {
+        runtimeId: "runtime-1",
+        method: "thread/read",
+        params: { threadId: "session-1", includeTurns: false },
+      },
+    ]);
+  });
+  test("completes active Codex stop when no active turn can be found", async () => {
     const registry = createRuntimeRegistry({
       runtimes: [createCodexRuntime()],
       codexAppServer: {
@@ -1309,7 +1340,7 @@ describe("createRuntimeRegistry", () => {
           workingDirectory: "/repo/worktree",
         }),
       ),
-    ).rejects.toThrow("Codex session is active but no interruptible active turn was found.");
+    ).resolves.toBeUndefined();
   });
   test("fails malformed Codex turn-list payloads with a typed error", async () => {
     const registry = createRuntimeRegistry({

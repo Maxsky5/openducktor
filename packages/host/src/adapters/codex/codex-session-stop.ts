@@ -45,31 +45,11 @@ export const stopCodexSession = (
       return;
     }
     if (thread.status.type === "systemError") {
-      return yield* Effect.fail(
-        new HostOperationError({
-          operation: "codexSessionStop",
-          message: "Codex session thread is in systemError state and cannot be interrupted.",
-          details: {
-            runtimeId: input.runtimeId,
-            externalSessionId: input.externalSessionId,
-            workingDirectory: input.workingDirectory,
-          },
-        }),
-      );
+      return;
     }
     const turnId = yield* findActiveCodexTurnId(input.codexAppServer, input.runtimeId, thread.id);
     if (turnId === null) {
-      return yield* Effect.fail(
-        new HostOperationError({
-          operation: "codexSessionStop",
-          message: "Codex session is active but no interruptible active turn was found.",
-          details: {
-            runtimeId: input.runtimeId,
-            externalSessionId: input.externalSessionId,
-            workingDirectory: input.workingDirectory,
-          },
-        }),
-      );
+      return;
     }
     yield* input.codexAppServer.request({
       runtimeId: input.runtimeId,

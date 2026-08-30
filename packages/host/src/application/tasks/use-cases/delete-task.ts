@@ -102,33 +102,21 @@ export const createTaskDeleteUseCase = ({
           sessions: metadata.agentSessions,
         });
       }
-      const cleanupProgress = createTaskCleanupProgressState();
-      if (
-        targetTaskSessions.some((entry) =>
-          taskHasSessionsForRoles(entry.sessions, workflowCleanupSessionRoles),
-        )
-      ) {
-        if (!taskActivityGuard) {
-          return yield* Effect.fail(
-            new HostDependencyError({
-              dependency: "taskActivityGuard",
-              operation: "task_delete",
-              message:
-                "task_delete requires runtime session activity checks for tasks with workflow sessions.",
-              details: { repoPath, taskId },
-            }),
-          );
-        }
-        const { stoppedSessionCount } = yield* taskActivityGuard.stopLiveSessions({
-          repoPath: effectiveRepoPath,
-          taskSessions: targetTaskSessions.map(({ taskId: targetTaskId, sessions }) => ({
-            taskId: targetTaskId,
-            sessions: selectWorkflowCleanupSessionRecords(sessions),
-          })),
-        });
-        recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
+      const hasWorkflowSessions = targetTaskSessions.some((entry) =>
+        taskHasSessionsForRoles(entry.sessions, workflowCleanupSessionRoles),
+      );
+      const activityGuard = taskActivityGuard;
+      if (hasWorkflowSessions && !activityGuard) {
+        return yield* Effect.fail(
+          new HostDependencyError({
+            dependency: "taskActivityGuard",
+            operation: "task_delete",
+            message:
+              "task_delete requires runtime session activity checks for tasks with workflow sessions.",
+            details: { repoPath, taskId },
+          }),
+        );
       }
-
       const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
         dependencies.settingsConfig,
         repoConfig,
@@ -147,6 +135,17 @@ export const createTaskDeleteUseCase = ({
         branchPrefix,
         targetTaskIds,
       );
+      const cleanupProgress = createTaskCleanupProgressState();
+      if (hasWorkflowSessions && activityGuard) {
+        const { stoppedSessionCount } = yield* activityGuard.stopLiveSessions({
+          repoPath: effectiveRepoPath,
+          taskSessions: targetTaskSessions.map(({ taskId: targetTaskId, sessions }) => ({
+            taskId: targetTaskId,
+            sessions: selectWorkflowCleanupSessionRecords(sessions),
+          })),
+        });
+        recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
+      }
 
       return yield* Effect.gen(function* () {
         yield* runTaskLocalCleanup({

@@ -10,7 +10,10 @@ import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import { collectImplementationResetSessionState } from "../support/implementation-reset-targets";
 import { requireDependencies } from "../support/required-task-dependencies";
-import { selectWorkflowCleanupSessionRecords } from "../support/task-cleanup-support";
+import {
+  collectTaskDeleteTargets,
+  selectWorkflowCleanupSessionRecords,
+} from "../support/task-cleanup-support";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 type TaskStopImpactDependencies = {
@@ -75,7 +78,19 @@ export const createTaskStopImpactUseCase = ({
         input.repoPath,
       );
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
-      const taskIds = [...new Set(input.taskIds)];
+      const requestedTaskIds = [...new Set(input.taskIds)];
+      let taskIds = requestedTaskIds;
+      if (input.operation === "delete") {
+        const currentTasks = yield* taskStore.listTasks({ repoPath: input.repoPath });
+        const deleteTargetIds = new Set(
+          requestedTaskIds.flatMap((taskId) =>
+            collectTaskDeleteTargets(currentTasks, taskId, true).map((task) => task.id),
+          ),
+        );
+        taskIds = currentTasks
+          .filter((task) => deleteTargetIds.has(task.id))
+          .map((task) => task.id);
+      }
       const tasksWithSessions: Array<{ taskId: string; sessions: AgentSessionRecord[] }> = [];
       for (const taskId of taskIds) {
         const metadata = yield* taskStore.getTaskMetadata({
