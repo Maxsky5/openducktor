@@ -1,5 +1,16 @@
 import { describe, expect, test } from "bun:test";
+import type { NotificationOccurrence } from "@openducktor/contracts";
 import { createUnavailableShellBridge } from "./shell-bridge";
+
+const occurrence: NotificationOccurrence = {
+  occurrenceId: "workflow.closed:/repo:task-1:event-1",
+  kind: "workflow.closed",
+  repoPath: "/repo",
+  repositoryLabel: "Repo",
+  task: { id: "task-1", title: "Build notifications" },
+  status: "Task moved to Closed.",
+  navigationTarget: { type: "kanban_task", repoPath: "/repo", taskId: "task-1" },
+};
 
 describe("unavailable shell notification bridge", () => {
   test("reports unsupported instead of claiming OS delivery", async () => {
@@ -23,5 +34,14 @@ describe("unavailable shell notification bridge", () => {
       status: "unsupported",
       message: "OS notifications are unavailable because the OpenDucktor shell is not configured.",
     });
+  });
+
+  test("fails when event transport is used before shell configuration", () => {
+    const notifications = createUnavailableShellBridge().notifications;
+    const expected = "OpenDucktor shell bridge is not configured.";
+
+    expect(() => notifications.publishOccurrence(occurrence)).toThrow(expected);
+    expect(() => notifications.subscribeOccurrences(() => {})).toThrow(expected);
+    expect(() => notifications.subscribeClicks(() => {})).toThrow(expected);
   });
 });

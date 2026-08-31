@@ -19,6 +19,7 @@ import {
   type NotificationDispatchFailure,
   type NotificationProducerFailure,
 } from "@/features/notifications";
+import { selectOsFailureState } from "@/features/notifications/notification-failure-state";
 import type {
   SessionStartNotificationInput,
   SessionStartNotificationPublisher,
@@ -81,7 +82,7 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
             repoPath: failure.repoPath,
           });
           if (failure.channel === "os") {
-            setOsFailure(failure);
+            setOsFailure((current) => selectOsFailureState(current, failure));
           }
         },
         onOsShown: () => setOsFailure(null),

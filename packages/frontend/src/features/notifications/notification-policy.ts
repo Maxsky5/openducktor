@@ -6,6 +6,7 @@ import {
   type NotificationSettings,
 } from "@openducktor/contracts";
 import { buildNotificationCopy, type NotificationCopy } from "./notification-copy";
+import { resolveNotificationCue } from "./notification-sound";
 
 export type NotificationDispatchContext = {
   appFocused: boolean;
@@ -57,19 +58,6 @@ const targetIncludesInApp = (
 const targetIncludesOs = (
   target: NotificationSettings["kinds"][NotificationOccurrence["kind"]]["target"],
 ): boolean => target === "os" || target === "both";
-
-const resolveCue = (
-  sound: NotificationSettings["kinds"][NotificationOccurrence["kind"]]["sound"],
-  globalCue: NotificationCue,
-): NotificationCue | null => {
-  if (sound === "none") {
-    return null;
-  }
-  if (sound === "inherit") {
-    return globalCue;
-  }
-  return sound;
-};
 
 export const createNotificationPolicy = ({
   loadSettings,
@@ -128,7 +116,7 @@ export const createNotificationPolicy = ({
       deliveries.push({ channel: "os", run: os.deliver(copy, occurrence) });
     }
 
-    const cue = resolveCue(kindSettings.sound, settings.globalCue);
+    const cue = resolveNotificationCue(kindSettings.sound, settings.globalCue);
     const muteSound = context.appFocused && settings.soundFocus === "mute_while_focused";
     if (context.externalDeliveryOwner && cue && !muteSound) {
       deliveries.push({

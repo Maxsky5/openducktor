@@ -5,14 +5,18 @@ import {
   notificationSoundSchema,
   type NotificationCue,
   type NotificationKind,
-  type NotificationOsCapability,
   type NotificationSettings,
   type NotificationTarget,
 } from "@openducktor/contracts";
 import { Bell, BellRing, Volume2 } from "lucide-react";
-import { type ReactElement, useEffect, useState } from "react";
-import { NOTIFICATION_KIND_DESCRIPTIONS, NOTIFICATION_KIND_LABELS } from "@/features/notifications";
+import type { ReactElement } from "react";
+import {
+  NOTIFICATION_KIND_DESCRIPTIONS,
+  NOTIFICATION_KIND_LABELS,
+  resolveNotificationCue,
+} from "@/features/notifications";
 import { useNotificationContext } from "@/state/notifications/notification-context";
+import { useNotificationTestControls } from "@/state/notifications/use-notification-test-controls";
 import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
@@ -55,21 +59,12 @@ const soundFocusOptions: SettingsSegmentedOption<NotificationSettings["soundFocu
 const AGENT_KINDS = NOTIFICATION_KIND_VALUES.filter((kind) => kind.startsWith("agent."));
 const WORKFLOW_KINDS = NOTIFICATION_KIND_VALUES.filter((kind) => kind.startsWith("workflow."));
 
-const capabilityLabel = (capability: NotificationOsCapability | null): string => {
-  if (!capability) return "Checking OS notification support…";
-  if (!capability.supported)
-    return capability.failureMessage ?? "OS notifications are unavailable.";
-  if (capability.permission === "denied") return "OS notification permission is denied.";
-  if (capability.permission === "prompt")
-    return "Permission will be requested only when you test OS notifications.";
-  return "OS notifications are ready.";
-};
-
 type NotificationKindRowProps = {
   kind: NotificationKind;
   settings: NotificationSettings;
   disabled: boolean;
   onUpdate: (updater: (current: NotificationSettings) => NotificationSettings) => void;
+  onPreview: (cue: NotificationCue) => void;
 };
 
 function NotificationKindRow({
@@ -77,8 +72,10 @@ function NotificationKindRow({
   settings,
   disabled,
   onUpdate,
+  onPreview,
 }: NotificationKindRowProps): ReactElement {
   const kindSettings = settings.kinds[kind];
+  const previewCue = resolveNotificationCue(kindSettings.sound, settings.globalCue);
   const soundLabelId = `notification-sound-label-${kind}`;
   const updateKind = (next: Partial<typeof kindSettings>): void => {
     onUpdate((current) => ({
@@ -116,15 +113,29 @@ function NotificationKindRow({
       />
       <div className="grid gap-2">
         <Label id={soundLabelId}>Sound</Label>
-        <Combobox
-          value={kindSettings.sound}
-          options={soundOptions}
-          disabled={disabled || !kindSettings.enabled}
-          triggerClassName="w-full"
-          triggerAriaLabelledBy={soundLabelId}
-          searchPlaceholder="Search sounds…"
-          onValueChange={(sound) => updateKind({ sound: notificationSoundSchema.parse(sound) })}
-        />
+        <div className="flex gap-2">
+          <Combobox
+            value={kindSettings.sound}
+            options={soundOptions}
+            disabled={disabled || !kindSettings.enabled}
+            triggerClassName="min-w-0 flex-1"
+            triggerAriaLabelledBy={soundLabelId}
+            searchPlaceholder="Search sounds…"
+            onValueChange={(sound) => updateKind({ sound: notificationSoundSchema.parse(sound) })}
+          />
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            aria-label={`Preview ${NOTIFICATION_KIND_LABELS[kind]} sound`}
+            disabled={disabled || !kindSettings.enabled || !previewCue}
+            onClick={() => {
+              if (previewCue) onPreview(previewCue);
+            }}
+          >
+            <Volume2 aria-hidden="true" />
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -142,38 +153,13 @@ export function SettingsNotificationsSection({
   onUpdateNotifications,
 }: SettingsNotificationsSectionProps): ReactElement {
   const notificationRuntime = useNotificationContext();
-  const [capability, setCapability] = useState<NotificationOsCapability | null>(null);
-  const [testStatus, setTestStatus] = useState<string | null>(null);
-  const [isTesting, setIsTesting] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    void notificationRuntime.getCapability().then((next) => {
-      if (active) setCapability(next);
-    });
-    return () => {
-      active = false;
-    };
-  }, [notificationRuntime]);
-
-  const runTest = async (target: "in_app" | "os"): Promise<void> => {
-    setIsTesting(true);
-    setTestStatus(null);
-    try {
-      if (target === "in_app") {
-        await notificationRuntime.testInApp(notifications);
-        setTestStatus("In-app test sent.");
-        return;
-      }
-      const result = await notificationRuntime.testOs(notifications);
-      setCapability(await notificationRuntime.getCapability());
-      setTestStatus(result.status === "shown" ? "OS test sent." : result.message);
-    } catch (cause) {
-      setTestStatus(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setIsTesting(false);
-    }
-  };
+  const {
+    capability,
+    capabilityDescription,
+    isTesting,
+    status: testStatus,
+    testNotification,
+  } = useNotificationTestControls(notifications);
 
   const renderKindGroup = (title: string, kinds: NotificationKind[]): ReactElement => (
     <section className="grid gap-3">
@@ -185,6 +171,9 @@ export function SettingsNotificationsSection({
           settings={notifications}
           disabled={disabled}
           onUpdate={onUpdateNotifications}
+          onPreview={(cue) => {
+            void notificationRuntime.previewCue(cue, notifications.volumePercent);
+          }}
         />
       ))}
     </section>
@@ -279,7 +268,7 @@ export function SettingsNotificationsSection({
       <section className="flex flex-col gap-3 rounded-lg border border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-medium text-foreground">Test notifications</p>
-          <p className="mt-1 text-xs text-muted-foreground">{capabilityLabel(capability)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{capabilityDescription}</p>
           {capability?.supported && !capability.canGuaranteeSilent ? (
             <p className="mt-1 text-xs text-warning-muted">
               This platform cannot guarantee a silent OS notice. OpenDucktor still requests silent
@@ -302,7 +291,7 @@ export function SettingsNotificationsSection({
             type="button"
             variant="outline"
             disabled={disabled || isTesting}
-            onClick={() => void runTest("in_app")}
+            onClick={() => void testNotification("in_app")}
           >
             <Bell data-icon="inline-start" /> Test in-app
           </Button>
@@ -310,7 +299,7 @@ export function SettingsNotificationsSection({
             type="button"
             variant="outline"
             disabled={disabled || isTesting || capability?.supported === false}
-            onClick={() => void runTest("os")}
+            onClick={() => void testNotification("os")}
           >
             <BellRing data-icon="inline-start" /> Test OS
           </Button>

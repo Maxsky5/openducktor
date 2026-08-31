@@ -112,6 +112,10 @@ const unavailable = async <T>(): Promise<T> => {
   throw new Error(DEFAULT_UNAVAILABLE_MESSAGE);
 };
 
+const unavailableSync = (): never => {
+  throw new Error(DEFAULT_UNAVAILABLE_MESSAGE);
+};
+
 const failUnavailable = async (): Promise<never> => {
   throw new Error(DEFAULT_UNAVAILABLE_MESSAGE);
 };
@@ -189,9 +193,9 @@ export const createUnavailableShellBridge = (): ShellBridge => ({
       status: "unsupported",
       message: "OS notifications are unavailable because the OpenDucktor shell is not configured.",
     }),
-    publishOccurrence: () => {},
-    subscribeOccurrences: () => () => {},
-    subscribeClicks: () => () => {},
+    publishOccurrence: unavailableSync,
+    subscribeOccurrences: unavailableSync,
+    subscribeClicks: unavailableSync,
     dispose: () => {},
   },
   openExternalUrl: failUnavailable,
