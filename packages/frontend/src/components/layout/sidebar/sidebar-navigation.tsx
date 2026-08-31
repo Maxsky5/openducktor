@@ -1,7 +1,6 @@
 import { Bot, Columns3 } from "lucide-react";
 import { type MouseEvent, type ReactElement, useState } from "react";
 import { NavLink, useLocation } from "react-router";
-import { preloadAgentsPage } from "@/pages";
 import { sidebarNavLinkClassName } from "./sidebar-navigation-styles";
 
 const NAV_ITEMS = [
@@ -20,8 +19,6 @@ type SidebarNavigationState = {
   activatedNavigation: ActivatedNavigation | null;
   committedLocationKey: string;
 };
-
-const ROUTE_PRELOADERS = new Map<NavigationRoute, () => void>([["/agents", preloadAgentsPage]]);
 
 type SidebarNavigationProps = {
   hasActiveWorkspace: boolean;
@@ -104,7 +101,6 @@ export function SidebarNavigation({
         const Icon = item.icon;
         const isDisabled = item.requiresRepo && !hasActiveWorkspace;
         const linkTarget: NavigationRoute = isDisabled ? "/kanban" : item.to;
-        const preloadRoute = isDisabled ? undefined : ROUTE_PRELOADERS.get(item.to);
         const isActivated =
           activatedNavigation?.route === linkTarget &&
           activatedNavigation.sourceLocationKey === currentLocationKey;
@@ -114,8 +110,6 @@ export function SidebarNavigation({
             to={linkTarget}
             title={item.label}
             aria-label={item.label}
-            onFocus={preloadRoute}
-            onPointerEnter={preloadRoute}
             onClick={(event) => activateRoute(event, linkTarget, isDisabled)}
             className={({ isActive }) =>
               sidebarNavLinkClassName({
