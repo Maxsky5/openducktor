@@ -142,6 +142,7 @@ const createSession = (
 ): AgentSessionSummary => {
   const session = createAgentSessionFixture({
     externalSessionId,
+    repoPath: workspaceRepoPath,
     sessionAssociation: { kind: "workflow", taskId: taskId, role: "spec" },
     ...overrides,
   });
@@ -1028,6 +1029,60 @@ describe("useAgentStudioSelectionController", () => {
         kind: "runtime_waiting",
       });
       expect(loadSessionHistory).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("loads a selected session from another repository without active repo readiness", async () => {
+    const loadSessionHistory = mock(async () => null);
+    const loadSessionContext = mock(async () => undefined);
+    const session = createSession("task-1", "session-other-repo", {
+      repoPath: "/other/repo",
+      workingDirectory: "/other/repo/worktree",
+      contextUsage: null,
+      historyLoadState: "not_requested",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeWorkspaceId,
+        workspaceRepoPath,
+        sessions: [session],
+        taskIdParam: "task-1",
+        sessionExternalIdParam: sessionExternalIdParam(session),
+      }),
+      {
+        loadSelectedSessionBaselineHistory: loadSessionHistory,
+        loadAgentSessionContext: loadSessionContext,
+        repoRuntimeHealthContext: {
+          runtimeHealthByRuntime: {
+            opencode: createRepoRuntimeHealthFixture({
+              runtime: { status: "checking" },
+            }),
+          },
+        },
+      },
+    );
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().view.selectedSession.transcriptState).toEqual({
+        kind: "session_loading",
+        reason: "history",
+      });
+      expect(loadSessionHistory).toHaveBeenCalledWith({
+        externalSessionId: "session-other-repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/other/repo/worktree",
+      });
+      expect(loadSessionContext).toHaveBeenCalledWith({
+        repoPath: "/other/repo",
+        externalSessionId: "session-other-repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/other/repo/worktree",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+      });
     } finally {
       await harness.unmount();
     }

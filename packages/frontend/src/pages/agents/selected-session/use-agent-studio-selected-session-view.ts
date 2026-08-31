@@ -162,10 +162,22 @@ export function useAgentStudioSelectedSessionView({
       selection.role,
     ],
   );
-  const runtimeReadiness = useRepoRuntimeReadiness({
+  const workspaceRuntimeReadiness = useRepoRuntimeReadiness({
     hasWorkspace: workspaceRepoPath !== null,
     runtimeTarget,
   });
+  const runtimeReadiness = useMemo(
+    () =>
+      loadedSession !== null && loadedSession.repoPath !== workspaceRepoPath
+        ? {
+            ...workspaceRuntimeReadiness,
+            state: "ready" as const,
+            message: null,
+            isLoadingChecks: false,
+          }
+        : workspaceRuntimeReadiness,
+    [loadedSession, workspaceRepoPath, workspaceRuntimeReadiness],
+  );
   const repoReadinessState = runtimeReadiness.state;
   const selectedSessionViewProjection = useMemo(() => {
     if (isUnresolvedExplicitRouteSession && routeSessionResolution.kind === "pending") {
