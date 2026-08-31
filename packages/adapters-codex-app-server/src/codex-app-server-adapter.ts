@@ -536,7 +536,7 @@ export class CodexAppServerAdapter
     flushQueuedUserMessagesLaterImpl(this.turnLifecycleContext(), activeTurn);
   }
 
-  async listAvailableSlashCommands(_: ListAgentSlashCommandsInput) {
+  async listAvailableSlashCommands(_input: ListAgentSlashCommandsInput) {
     return slashCommandCatalogSchema.parse({
       commands: [MANUAL_SESSION_COMPACTION_SLASH_COMMAND],
     });
@@ -551,7 +551,7 @@ export class CodexAppServerAdapter
     return toCodexSkillCatalog(response);
   }
 
-  async listAvailableSubagents(_: ListAgentSubagentsInput) {
+  async listAvailableSubagents(_input: ListAgentSubagentsInput) {
     return unsupported("listAvailableSubagents");
   }
 
@@ -1223,7 +1223,7 @@ export class CodexAppServerAdapter
   }
 
   async loadFileStatus(
-    _: LoadAgentFileStatusInput,
+    _input: LoadAgentFileStatusInput,
   ): Promise<import("@openducktor/contracts").FileStatus[]> {
     return unsupported("loadFileStatus");
   }

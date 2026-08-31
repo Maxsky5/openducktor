@@ -7,6 +7,7 @@ import type {
   AcceptedAgentUserMessage,
   AgentCatalogPort,
   AgentEvent,
+  AgentFileSearchResult,
   AgentModelCatalog,
   AgentSessionHistoryMessage,
   AgentSessionPort,
@@ -14,10 +15,16 @@ import type {
   AgentSessionRuntimeSnapshot,
   AgentSessionSummary,
   AgentSessionTodoItem,
+  AgentSkillCatalog,
+  AgentSlashCommandCatalog,
+  AgentSubagentCatalog,
   AgentWorkspaceInspectionPort,
   EventUnsubscribe,
   ForkAgentSessionInput,
   ListAgentModelsInput,
+  ListAgentSkillsInput,
+  ListAgentSlashCommandsInput,
+  ListAgentSubagentsInput,
   ListSessionRuntimeSnapshotsInput,
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
@@ -28,6 +35,7 @@ import type {
   ReplyApprovalInput,
   ReplyQuestionInput,
   ResumeAgentSessionInput,
+  SearchAgentFilesInput,
   SendAgentUserMessageInput,
   SessionRef,
   StartAgentSessionInput,
@@ -690,32 +698,26 @@ export class OpencodeSdkAdapter
   }
 
   async listAvailableSlashCommands(
-    input: import("@openducktor/core").ListAgentSlashCommandsInput,
-  ): Promise<import("@openducktor/core").AgentSlashCommandCatalog> {
+    input: ListAgentSlashCommandsInput,
+  ): Promise<AgentSlashCommandCatalog> {
     return listAvailableSlashCommands(
       this.createClient,
       await this.resolveRuntimeClientInput(input, "list available slash commands"),
     );
   }
 
-  async listAvailableSkills(
-    _: import("@openducktor/core").ListAgentSkillsInput,
-  ): Promise<import("@openducktor/core").AgentSkillCatalog> {
+  async listAvailableSkills(_input: ListAgentSkillsInput): Promise<AgentSkillCatalog> {
     throw new Error("OpenCode does not support skill reference catalogs.");
   }
 
-  async listAvailableSubagents(
-    input: import("@openducktor/core").ListAgentSubagentsInput,
-  ): Promise<import("@openducktor/core").AgentSubagentCatalog> {
+  async listAvailableSubagents(input: ListAgentSubagentsInput): Promise<AgentSubagentCatalog> {
     return listAvailableSubagents(
       this.createClient,
       await this.resolveRuntimeClientInput(input, "list available subagents"),
     );
   }
 
-  async searchFiles(
-    input: import("@openducktor/core").SearchAgentFilesInput,
-  ): Promise<import("@openducktor/core").AgentFileSearchResult[]> {
+  async searchFiles(input: SearchAgentFilesInput): Promise<AgentFileSearchResult[]> {
     return searchFiles(this.createClient, {
       ...(await this.resolveRuntimeClientInput(input, "search files")),
       query: input.query,
