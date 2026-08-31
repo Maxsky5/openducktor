@@ -9,6 +9,8 @@ import {
   appUpdateCheckInputSchema,
   appUpdateCommandResultSchema,
   appUpdateStateSchema,
+  settingsSnapshotSchema,
+  themeSchema,
 } from "@openducktor/contracts";
 import { OPEN_DUCKTOR_STARTUP_BACKGROUND } from "@openducktor/frontend/startup-splash/theme";
 import {
@@ -89,8 +91,18 @@ import { installApplicationMenu, registerWindowContextMenu } from "./main-menu";
 import { registerElectronTerminalIpc } from "./terminals/electron-terminal-ipc";
 import { createNodePtyPort } from "./terminals/node-pty-adapter";
 
-const { app, BrowserWindow, clipboard, ipcMain, nativeImage, net, protocol, session, shell } =
-  electron;
+const {
+  app,
+  BrowserWindow,
+  clipboard,
+  ipcMain,
+  nativeImage,
+  nativeTheme,
+  net,
+  protocol,
+  session,
+  shell,
+} = electron;
 const APPLICATION_NAME = "OpenDucktor";
 const currentVersion = resolveElectronAppVersion({
   isPackaged: app.isPackaged,
@@ -690,11 +702,19 @@ const registerIpcHandlers = (
   registerElectronTerminalIpc({ ipcMain, terminalService: hostCommandRouter.terminalService });
   registerElectronHostInvokeHandler(ipcMain, {
     isHostShutdownStarted: shutdownController.isHostShutdownStarted,
-    invoke: (command, args) => {
+    invoke: async (command, args) => {
       const operation = hostCommandRouter.invoke(command, args);
-      return runElectronHostInvoke(operation, (effect) =>
+      const result = await runElectronHostInvoke(operation, (effect) =>
         electronMainRuntimeBindings.runHostCommand(command, effect),
       );
+      if (result.ok) {
+        if (command === "workspace_get_settings_snapshot") {
+          nativeTheme.themeSource = settingsSnapshotSchema.parse(result.value).theme;
+        } else if (command === "set_theme") {
+          nativeTheme.themeSource = themeSchema.unwrap().parse(args?.theme);
+        }
+      }
+      return result;
     },
   });
 
