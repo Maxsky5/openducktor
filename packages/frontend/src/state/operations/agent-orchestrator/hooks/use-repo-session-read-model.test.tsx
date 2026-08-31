@@ -13,7 +13,10 @@ import { type AgentSessionReadPort, agentSessionQueryKeys } from "@/state/querie
 import { workspaceQueryKeys } from "@/state/queries/workspace";
 import { summarizeAgentActivity } from "@/state/read-models/agent-activity-read-model";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createAgentSessionFixture,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionTranscriptEventConsumer } from "../events/session-transcript-events";
 import type { AgentSessionLiveFrontendPort } from "./use-repo-session-read-model";
 import { useRepoSessionReadModel } from "./use-repo-session-read-model";
@@ -106,6 +109,18 @@ const createState = (
   const records = Array.isArray(taskRecords) ? taskRecords : [taskRecords];
   queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), records);
   const sessionStore = createAgentSessionsStore("/repo");
+  if (records.length === 0) {
+    sessionStore.replaceSession(
+      createAgentSessionFixture({
+        externalSessionId: record.externalSessionId,
+        runtimeKind: record.runtimeKind,
+        workingDirectory: record.workingDirectory,
+        sessionAssociation: { kind: "unbound" },
+        status: "idle",
+        startedAt: record.startedAt,
+      }),
+    );
+  }
   let listener: ((payload: AgentSessionLiveEnvelope) => void) | null = null;
   const callOrder: string[] = [];
   const unsubscribe = mock(() => undefined);

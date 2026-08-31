@@ -621,8 +621,9 @@ export const useRepoSessionReadModel = ({
       envelope: Extract<AgentSessionLiveEnvelope, { type: "snapshot" }>,
     ): void => {
       commitProjected((current) => {
+        const registered = applyLoadedRecords(current, current);
         const projected = buildAgentSessionLiveCollection({
-          current,
+          current: registered,
           snapshots: envelope.sessions,
         });
         return applyLoadedRecords(projected, current);

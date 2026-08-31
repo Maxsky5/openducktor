@@ -122,7 +122,7 @@ describe("Codex session runtime snapshot reader", () => {
     });
   });
 
-  test("preserves completed unloaded child inventory metadata", async () => {
+  test("does not admit an unregistered child from runtime inventory", async () => {
     const child = {
       ...createChildThread(),
       status: codexThreadStatusSnapshot("notLoaded"),
@@ -147,14 +147,7 @@ describe("Codex session runtime snapshot reader", () => {
         runtimeKind: "codex",
         directories: ["/repo"],
       }),
-    ).resolves.toEqual([
-      expect.objectContaining({
-        availability: "runtime",
-        classification: "idle",
-        parentExternalSessionId: "parent-thread",
-        ref: expect.objectContaining({ externalSessionId: "child-thread" }),
-      }),
-    ]);
+    ).resolves.toEqual([]);
   });
 
   test("settles a previously materialized child during repository hydration", async () => {

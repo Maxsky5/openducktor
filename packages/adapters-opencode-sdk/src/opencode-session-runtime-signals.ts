@@ -17,16 +17,15 @@ export type OpencodeSessionTranscriptEvent = Extract<
 >;
 
 export type OpencodeSessionRuntimeSignal =
-  | { readonly type: "sessions_invalidated" }
+  | {
+      readonly type: "session_event";
+      readonly externalSessionId: string;
+      readonly event: AgentEvent;
+    }
   | {
       readonly type: "context_updated";
       readonly externalSessionId: string;
       readonly contextUsage: OpencodeSessionContextUsage;
-    }
-  | {
-      readonly type: "transcript_event";
-      readonly externalSessionId: string;
-      readonly event: OpencodeSessionTranscriptEvent;
     }
   | { readonly type: "fault"; readonly message: string };
 

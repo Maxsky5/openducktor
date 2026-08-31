@@ -91,7 +91,7 @@ Before mapping native behavior, inspect the runtime's official SDK types, docume
 | `sessionLifecycle.supportedStartModes` | Supported start modes: `fresh`, `reuse`, and `fork` |
 | `sessionLifecycle.supportsSessionFork` | Whether the runtime can fork an existing session |
 | `sessionLifecycle.forkTargets` | Native fork boundaries: `session`, `message`, or `item` |
-| `sessionLifecycle.supportsListLiveSessions` | Whether the runtime can list its live sessions |
+| `sessionLifecycle.supportsListLiveSessions` | Whether the adapter can return retained live state for sessions that OpenDucktor registered |
 | `sessionLifecycle.supportsQueuedUserMessages` | Whether a busy session can accept messages whose queued state remains observable |
 | `sessionLifecycle.supportsPendingInputSnapshots` | Whether live snapshots retain unresolved approvals and questions |
 
@@ -223,6 +223,8 @@ OpenDucktor accepts a runtime definition only when the descriptor schema is vali
 ## Shared runtime behavior
 
 ### Session lifecycle and live state
+
+OpenDucktor owns root-session admission. Start, resume, and fork controls register the returned runtime metadata before the session enters the live-state list. A runtime adapter must not scan a native session inventory to add roots. Runtime events may add a descendant only through a parent that OpenDucktor already retained.
 
 Fresh and forked sessions start with a running lease. Replayed native idle state must not make a new session flicker from running to idle and back before its first turn settles.
 

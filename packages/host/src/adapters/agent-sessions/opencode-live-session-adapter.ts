@@ -1,14 +1,14 @@
 import {
+  createPrepareOpencodeSessionRuntime,
   type OpencodeSessionRuntimeSignal,
   type PrepareOpencodeSessionRuntime,
 } from "@openducktor/adapters-opencode-sdk";
 import {
-  type AgentSessionActivity,
   type AgentSessionContextUsage,
   type AgentSessionLiveLoadContextInput,
   type AgentSessionLiveRef,
-  type AgentSessionTranscriptEvent,
   agentSessionTranscriptEventSchema,
+  isAgentSessionTranscriptEventType,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -51,7 +51,7 @@ export type CreateOpenCodeLiveSessionAdapterPreparerInput = {
     RuntimeLiveSessionLifecyclePort,
     "releaseRuntime" | "runAdapterMutation"
   >;
-  readonly prepareRuntime: PrepareOpencodeSessionRuntime;
+  readonly prepareRuntime?: PrepareOpencodeSessionRuntime;
 };
 
 const stateEffect = <Value, Details extends object>(
@@ -67,24 +67,9 @@ const stateEffect = <Value, Details extends object>(
         : toHostOperationError(cause, operation, details),
   });
 
-const runtimeActivityFromTranscriptEvent = (
-  event: AgentSessionTranscriptEvent,
-): AgentSessionActivity | null => {
-  if (event.type === "session_idle" || event.type === "session_error") {
-    return "idle";
-  }
-  if (event.type !== "session_status") {
-    return null;
-  }
-  if (event.status.type === "busy") {
-    return "running";
-  }
-  return event.status.type === "retry" ? "retrying" : "idle";
-};
-
 export const createOpenCodeLiveSessionAdapterPreparer = ({
   liveSessionLifecycle,
-  prepareRuntime,
+  prepareRuntime = createPrepareOpencodeSessionRuntime(),
 }: CreateOpenCodeLiveSessionAdapterPreparerInput): OpenCodeRuntimeSessionAdapterPreparer => {
   let nextOccurrence = 1;
 
@@ -109,28 +94,6 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
         runtime,
         nextOccurrenceId: () => `opencode-pending-${nextOccurrence++}`,
       });
-      yield* Effect.tryPromise({
-        try: async () => {
-          try {
-            state.initialize(prepared.initialSources, prepared.initialContextUsageBySessionId);
-          } catch (cause) {
-            try {
-              await prepared.release();
-            } catch (cleanupCause) {
-              throw new AggregateError(
-                [cause, cleanupCause],
-                `Failed to initialize and release OpenCode runtime '${runtime.runtimeId}'.`,
-              );
-            }
-            throw cause;
-          }
-        },
-        catch: (cause) =>
-          toHostOperationError(cause, "opencode-live-session.initialize-state", {
-            runtimeId: runtime.runtimeId,
-          }),
-      });
-
       const runtimeSemaphore = Effect.unsafeMakeSemaphore(1);
       const serializeRuntime = runtimeSemaphore.withPermits(1);
       const contextLoads = new Map<string, Promise<AgentSessionContextUsage | null>>();
@@ -169,30 +132,10 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
         commit,
       });
 
-      const refreshProjection = (): Effect.Effect<void, HostError> =>
-        Effect.gen(function* () {
-          const dropCount = state.dropCount();
-          const sources = yield* Effect.tryPromise({
-            try: () => prepared.connection.readSessionSources(),
-            catch: (cause) =>
-              toHostOperationError(cause, "opencode-live-session.refresh-sessions", {
-                runtimeId: runtime.runtimeId,
-              }),
-          });
-          yield* serializeRuntime(
-            commit("opencode-live-session.commit-refresh", () => ({
-              value: undefined,
-              changes: dropCount === state.dropCount() ? state.refresh(sources) : [],
-            })),
-          );
-        });
-
       const handleSignal = (
         signal: OpencodeSessionRuntimeSignal,
       ): Effect.Effect<void, HostError> => {
         switch (signal.type) {
-          case "sessions_invalidated":
-            return refreshProjection();
           case "context_updated":
             return serializeRuntime(
               commit("opencode-live-session.commit-context", () => ({
@@ -200,26 +143,21 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
                 changes: state.retainContext(signal.externalSessionId, signal.contextUsage),
               })),
             );
-          case "transcript_event":
+          case "session_event":
             return serializeRuntime(
               commit("opencode-live-session.commit-transcript-event", () => {
                 const ref = state.refForExternalSession(signal.externalSessionId);
                 if (!ref) {
                   return { value: undefined, changes: [] };
                 }
+                const stateChanges = state.applyEvent(ref, signal.event);
+                if (!isAgentSessionTranscriptEventType(signal.event.type)) {
+                  return { value: undefined, changes: stateChanges };
+                }
                 const event = agentSessionTranscriptEventSchema.parse({
                   ...signal.event,
                   sessionRef: ref,
                 });
-                let stateChanges: AgentSessionLiveAdapterMutation<void>["changes"] = [];
-                if (event.type === "session_error") {
-                  stateChanges = state.settleSessionError(ref);
-                } else {
-                  const runtimeActivity = runtimeActivityFromTranscriptEvent(event);
-                  if (runtimeActivity) {
-                    stateChanges = state.setRuntimeActivity(ref, runtimeActivity);
-                  }
-                }
                 return {
                   value: undefined,
                   changes: [...stateChanges, { type: "transcript_event", event }],

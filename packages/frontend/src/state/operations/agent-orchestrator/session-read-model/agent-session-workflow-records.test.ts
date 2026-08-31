@@ -7,11 +7,12 @@ import {
   listAgentSessions,
   replaceAgentSession,
 } from "@/state/agent-session-collection";
+import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "../support/messages";
 import {
   applyAgentSessionLiveDelta,
-  buildAgentSessionLiveCollection,
+  buildAgentSessionLiveCollection as projectLiveSessionCollection,
 } from "./agent-session-live-projection";
 import {
   applyWorkflowSessionRecords,
@@ -70,6 +71,39 @@ const identity = (
   externalSessionId,
   ...overrides,
 });
+
+const buildAgentSessionLiveCollection = ({
+  current,
+  snapshots,
+}: {
+  current: AgentSessionCollection;
+  snapshots: AgentSessionLiveSnapshot[];
+}): AgentSessionCollection => {
+  let registered = current;
+  for (const liveSession of snapshots) {
+    if (liveSession.parentExternalSessionId !== undefined) {
+      continue;
+    }
+    const sessionIdentity = identity(liveSession.ref.externalSessionId, {
+      runtimeKind: liveSession.ref.runtimeKind,
+      workingDirectory: liveSession.ref.workingDirectory,
+    });
+    if (getAgentSession(registered, sessionIdentity)) {
+      continue;
+    }
+    registered = replaceAgentSession(
+      registered,
+      createAgentSessionFixture({
+        ...sessionIdentity,
+        sessionAssociation: liveSession.repositoryScope ?? { kind: "unbound" },
+        status: "idle",
+        startedAt: liveSession.startedAt,
+        title: liveSession.title,
+      }),
+    );
+  }
+  return projectLiveSessionCollection({ current: registered, snapshots });
+};
 
 const projectAndApplyRecords = ({
   current = emptyAgentSessionCollection(),
@@ -211,7 +245,7 @@ describe("agent session workflow records", () => {
     });
   });
 
-  test("hydrates a runtime-discovered session from its matching task record", () => {
+  test("hydrates an OpenDucktor-registered session from its matching task record", () => {
     const projected = buildAgentSessionLiveCollection({
       current: emptyAgentSessionCollection(),
       snapshots: [snapshot("thread-1")],

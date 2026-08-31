@@ -12,6 +12,7 @@ import {
   createAgentActivitySnapshot,
   createEmptyAgentActivitySnapshot,
 } from "@/state/agent-session-snapshots";
+import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import { createSessionMessagesState } from "../support/messages";
 import {
   applyAgentSessionLiveDelta,
@@ -62,7 +63,32 @@ const build = ({
 }: {
   current?: AgentSessionCollection;
   snapshots: AgentSessionLiveSnapshot[];
-}) => buildAgentSessionLiveCollection({ current, snapshots });
+}) => {
+  let registered = current;
+  for (const liveSession of snapshots) {
+    if (liveSession.parentExternalSessionId !== undefined) {
+      continue;
+    }
+    const sessionIdentity = identity(liveSession.ref.externalSessionId, {
+      runtimeKind: liveSession.ref.runtimeKind,
+      workingDirectory: liveSession.ref.workingDirectory,
+    });
+    if (getAgentSession(registered, sessionIdentity)) {
+      continue;
+    }
+    registered = replaceAgentSession(
+      registered,
+      createAgentSessionFixture({
+        ...sessionIdentity,
+        sessionAssociation: liveSession.repositoryScope ?? { kind: "unbound" },
+        status: "idle",
+        startedAt: liveSession.startedAt,
+        title: liveSession.title,
+      }),
+    );
+  }
+  return buildAgentSessionLiveCollection({ current: registered, snapshots });
+};
 
 const delta = (
   current: AgentSessionCollection,
@@ -86,20 +112,21 @@ const registerWorkflowSession = (
 
 describe("agent session live projection", () => {
   test.each(["snapshot", "delta"] as const)(
-    "does not grant workflow ownership to an unregistered live session from a %s",
+    "does not admit an unregistered root session from a %s",
     (delivery) => {
       const runtimeSession = snapshot("runtime-thread");
       const sessions =
         delivery === "snapshot"
-          ? build({ snapshots: [runtimeSession] })
+          ? buildAgentSessionLiveCollection({
+              current: emptyAgentSessionCollection(),
+              snapshots: [runtimeSession],
+            })
           : delta(emptyAgentSessionCollection(), {
               type: "session_upsert",
               session: runtimeSession,
             });
 
-      expect(getAgentSession(sessions, identity("runtime-thread"))?.sessionAssociation).toEqual({
-        kind: "unbound",
-      });
+      expect(getAgentSession(sessions, identity("runtime-thread"))).toBeNull();
     },
   );
 

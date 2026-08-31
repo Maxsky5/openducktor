@@ -1,18 +1,12 @@
-import type {
-  OpencodeRuntimeSnapshotSource,
-  OpencodeSessionContextUsage,
-} from "@openducktor/adapters-opencode-sdk";
+import type { OpencodeSessionContextUsage } from "@openducktor/adapters-opencode-sdk";
 import {
-  type AgentSessionActivity,
   type AgentSessionContextUsage,
   type AgentSessionLiveReadResult,
   type AgentSessionLiveRef,
   type AgentSessionLiveSnapshot,
-  agentSessionLiveSnapshotSchema,
 } from "@openducktor/contracts";
-import type { AgentSessionSummary } from "@openducktor/core";
+import type { AgentEvent, AgentSessionSummary } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
-import type { z } from "zod";
 import type {
   AgentSessionLiveAdapterChange,
   AgentSessionLiveAdapterMutation,
@@ -28,11 +22,16 @@ import {
   createOpenCodePendingRequestRouter,
   type OpenCodePendingRoute,
 } from "./opencode-pending-request-router";
-
-type RetainedSession = {
-  snapshot: AgentSessionLiveSnapshot;
-  runtimeActivity: OpencodeRuntimeSnapshotSource["runtimeActivity"];
-};
+import {
+  openCodeActivityForPending,
+  openCodeActivityFromEvent,
+  openCodeEventChildId,
+  openCodeEventParentId,
+  openCodeLiveSnapshotsEqual,
+  type OpenCodeLiveSnapshotInput,
+  type OpenCodeRetainedSession,
+  parseOpenCodeLiveSnapshot,
+} from "./opencode-live-session-state-policy";
 
 type CreateOpenCodeLiveSessionStateInput = {
   readonly runtime: OpenCodeRuntimeInstance;
@@ -41,53 +40,18 @@ type CreateOpenCodeLiveSessionStateInput = {
 
 type LoadedContextResult = AgentSessionLiveAdapterMutation<AgentSessionContextUsage | null>;
 
-const snapshotsEqual = (left: AgentSessionLiveSnapshot, right: AgentSessionLiveSnapshot): boolean =>
-  JSON.stringify(left) === JSON.stringify(right);
-
-const classifyActivity = (input: {
-  readonly runtimeActivity: AgentSessionActivity;
-  readonly pendingApprovals: readonly unknown[];
-  readonly pendingQuestions: readonly unknown[];
-}): AgentSessionActivity => {
-  if (input.pendingQuestions.length > 0) {
-    return "waiting_for_question";
-  }
-  if (input.pendingApprovals.length > 0) {
-    return "waiting_for_permission";
-  }
-  return input.runtimeActivity;
-};
-
-type AgentSessionLiveSnapshotInput = z.input<typeof agentSessionLiveSnapshotSchema>;
-
-const parseSnapshot = (
-  value: AgentSessionLiveSnapshotInput,
-  operation: string,
-): AgentSessionLiveSnapshot => {
-  const parsed = agentSessionLiveSnapshotSchema.safeParse(value);
-  if (parsed.success) {
-    return parsed.data;
-  }
-  throw new HostValidationError({
-    message: parsed.error.message,
-    cause: parsed.error,
-    details: { operation },
-  });
-};
-
 export const createOpenCodeLiveSessionState = ({
   runtime,
   nextOccurrenceId,
 }: CreateOpenCodeLiveSessionStateInput) => {
-  let sessionsByRef = new Map<string, RetainedSession>();
-  let dropCount = 0;
+  const sessionsByRef = new Map<string, OpenCodeRetainedSession>();
   const contextUsageBySessionId = new Map<string, AgentSessionContextUsage>();
   const pendingRequests = createOpenCodePendingRequestRouter({
     runtimeId: runtime.runtimeId,
     nextOccurrenceId,
   });
 
-  const requireSession = (ref: AgentSessionLiveRef): RetainedSession => {
+  const requireSession = (ref: AgentSessionLiveRef): OpenCodeRetainedSession => {
     const session = sessionsByRef.get(refKey(ref));
     if (!session || !refsEqual(session.snapshot.ref, ref)) {
       throw new HostValidationError({
@@ -99,74 +63,79 @@ export const createOpenCodeLiveSessionState = ({
     return session;
   };
 
-  const buildSnapshot = (
-    source: OpencodeRuntimeSnapshotSource,
-    activeNativeKeys: Set<string>,
-  ): AgentSessionLiveSnapshot => {
-    const ref: AgentSessionLiveRef = {
-      repoPath: runtime.repoPath,
-      runtimeKind: "opencode",
-      workingDirectory: source.workingDirectory,
-      externalSessionId: source.externalSessionId,
-    };
-    const pendingApprovals = source.pendingApprovals.map((request) =>
-      pendingRequests.projectApproval(ref, request, activeNativeKeys),
-    );
-    const pendingQuestions = source.pendingQuestions.map((request) =>
-      pendingRequests.projectQuestion(ref, request, activeNativeKeys),
-    );
-    const snapshot: AgentSessionLiveSnapshotInput = {
-      ref,
-      activity: classifyActivity({
-        runtimeActivity: source.runtimeActivity,
-        pendingApprovals,
-        pendingQuestions,
-      }),
-      title: source.title,
-      startedAt: source.startedAt,
-      pendingApprovals,
-      pendingQuestions,
-      contextUsage: contextUsageBySessionId.get(source.externalSessionId) ?? null,
-    };
-    if (source.sessionAssociation.kind === "repository") {
-      snapshot.repositoryScope = source.sessionAssociation;
-    }
-    if (source.parentExternalSessionId) {
-      snapshot.parentExternalSessionId = source.parentExternalSessionId;
-    }
-    return parseSnapshot(snapshot, "opencode-live-session.normalize-snapshot");
+  const commitSnapshot = (retained: OpenCodeRetainedSession): AgentSessionLiveAdapterChange[] => {
+    const key = refKey(retained.snapshot.ref);
+    const previous = sessionsByRef.get(key)?.snapshot;
+    sessionsByRef.set(key, retained);
+    return previous && openCodeLiveSnapshotsEqual(previous, retained.snapshot)
+      ? []
+      : [{ type: "session_upsert", snapshot: retained.snapshot }];
   };
 
-  const updateSources = (
-    sources: OpencodeRuntimeSnapshotSource[],
-    emitChanges: boolean,
-  ): AgentSessionLiveAdapterChange[] => {
-    const previous = sessionsByRef;
-    const next = new Map(previous);
-    const activeNativeKeys = new Set<string>();
-    const observedSessionKeys = new Set<string>();
-    for (const source of sources) {
-      const snapshot = buildSnapshot(source, activeNativeKeys);
-      const key = refKey(snapshot.ref);
-      observedSessionKeys.add(key);
-      next.set(key, {
-        snapshot,
-        runtimeActivity: source.runtimeActivity,
+  const ensureEventSession = (
+    ownerRef: AgentSessionLiveRef,
+    event: AgentEvent,
+  ): OpenCodeRetainedSession => {
+    const childExternalSessionId = openCodeEventChildId(event);
+    const parentExternalSessionId = openCodeEventParentId(event);
+    if (!childExternalSessionId || childExternalSessionId === ownerRef.externalSessionId) {
+      return requireSession(ownerRef);
+    }
+    if (!parentExternalSessionId) {
+      throw new HostValidationError({
+        field: "parentExternalSessionId",
+        message: `OpenCode event for child session '${childExternalSessionId}' has no registered parent lineage.`,
+        details: { runtimeId: runtime.runtimeId, externalSessionId: childExternalSessionId },
       });
     }
-    pendingRequests.finishProjection(activeNativeKeys, observedSessionKeys);
-    sessionsByRef = next;
-    if (!emitChanges) {
-      return [];
+    const parentRef = { ...toSessionRef(ownerRef), externalSessionId: parentExternalSessionId };
+    if (!sessionsByRef.has(refKey(parentRef))) {
+      throw new HostValidationError({
+        field: "parentExternalSessionId",
+        message: `OpenCode event for child session '${childExternalSessionId}' names unregistered parent '${parentExternalSessionId}'.`,
+        details: {
+          runtimeId: runtime.runtimeId,
+          externalSessionId: childExternalSessionId,
+          parentExternalSessionId,
+        },
+      });
     }
-    const changes: AgentSessionLiveAdapterChange[] = [];
-    for (const [key, retained] of next) {
-      const previousSnapshot = previous.get(key)?.snapshot;
-      if (!previousSnapshot || !snapshotsEqual(previousSnapshot, retained.snapshot)) {
-        changes.push({ type: "session_upsert", snapshot: retained.snapshot });
+    const childRef = { ...toSessionRef(ownerRef), externalSessionId: childExternalSessionId };
+    const existing = sessionsByRef.get(refKey(childRef));
+    if (existing) {
+      if (existing.snapshot.parentExternalSessionId !== parentExternalSessionId) {
+        throw new HostValidationError({
+          field: "parentExternalSessionId",
+          message: `OpenCode child session '${childExternalSessionId}' changed parent from '${existing.snapshot.parentExternalSessionId ?? "none"}' to '${parentExternalSessionId}'.`,
+          details: {
+            runtimeId: runtime.runtimeId,
+            externalSessionId: childExternalSessionId,
+            parentExternalSessionId,
+          },
+        });
       }
+      return existing;
     }
-    return changes;
+    const title =
+      event.type === "assistant_part" && event.part.kind === "subagent"
+        ? (event.part.agent ?? event.part.description ?? "OpenCode subagent")
+        : "OpenCode subagent";
+    const snapshot = parseOpenCodeLiveSnapshot(
+      {
+        ref: childRef,
+        activity: "idle",
+        title,
+        startedAt: event.timestamp,
+        parentExternalSessionId: parentExternalSessionId,
+        pendingApprovals: [],
+        pendingQuestions: [],
+        contextUsage: contextUsageBySessionId.get(childExternalSessionId) ?? null,
+      },
+      "opencode-live-session.create-child-event-state",
+    );
+    const retained = { snapshot, runtimeActivity: "idle" as const };
+    sessionsByRef.set(refKey(childRef), retained);
+    return retained;
   };
 
   const retainContext = (
@@ -186,14 +155,19 @@ export const createOpenCodeLiveSessionState = ({
       });
     }
     const retained = matches[0];
-    if (!retained || snapshotsEqual(retained.snapshot, { ...retained.snapshot, contextUsage })) {
+    if (
+      !retained ||
+      openCodeLiveSnapshotsEqual(retained.snapshot, { ...retained.snapshot, contextUsage })
+    ) {
       return [];
     }
-    retained.snapshot = parseSnapshot(
-      { ...retained.snapshot, contextUsage },
-      "opencode-live-session.retain-context",
-    );
-    return [{ type: "session_upsert", snapshot: retained.snapshot }];
+    return commitSnapshot({
+      ...retained,
+      snapshot: parseOpenCodeLiveSnapshot(
+        { ...retained.snapshot, contextUsage },
+        "opencode-live-session.retain-context",
+      ),
+    });
   };
 
   const applyLoadedContext = (
@@ -208,11 +182,10 @@ export const createOpenCodeLiveSessionState = ({
       return { value: null, changes: [] };
     }
     const contextUsage = toContextUsage(usage);
-    if (!retained) {
-      return { value: contextUsage, changes: [] };
-    }
-    const changes = retainContext(ref.externalSessionId, usage);
-    return { value: contextUsage, changes };
+    return {
+      value: contextUsage,
+      changes: retained ? retainContext(ref.externalSessionId, usage) : [],
+    };
   };
 
   const retainControlSummary = (summary: AgentSessionSummary): AgentSessionLiveAdapterChange[] => {
@@ -232,20 +205,13 @@ export const createOpenCodeLiveSessionState = ({
     const previous = sessionsByRef.get(refKey(ref));
     const runtimeActivity =
       summary.status === "starting" || summary.status === "running" ? "running" : "idle";
-    const retainedParentExternalSessionId = previous?.snapshot.parentExternalSessionId;
-    const pendingApprovals = previous?.snapshot.pendingApprovals ?? [];
-    const pendingQuestions = previous?.snapshot.pendingQuestions ?? [];
-    const snapshotInput: AgentSessionLiveSnapshotInput = {
+    const snapshotInput: OpenCodeLiveSnapshotInput = {
       ref,
-      activity: classifyActivity({
-        runtimeActivity,
-        pendingApprovals,
-        pendingQuestions,
-      }),
+      activity: runtimeActivity,
       title: summary.title ?? previous?.snapshot.title ?? "OpenCode",
       startedAt: summary.startedAt,
-      pendingApprovals,
-      pendingQuestions,
+      pendingApprovals: previous?.snapshot.pendingApprovals ?? [],
+      pendingQuestions: previous?.snapshot.pendingQuestions ?? [],
       contextUsage:
         contextUsageBySessionId.get(summary.externalSessionId) ??
         previous?.snapshot.contextUsage ??
@@ -254,55 +220,145 @@ export const createOpenCodeLiveSessionState = ({
     if (summary.sessionAssociation.kind === "repository") {
       snapshotInput.repositoryScope = summary.sessionAssociation;
     }
-    if (retainedParentExternalSessionId) {
-      snapshotInput.parentExternalSessionId = retainedParentExternalSessionId;
-    }
-    const snapshot = parseSnapshot(snapshotInput, "opencode-live-session.retain-control-summary");
-    sessionsByRef.set(refKey(ref), { snapshot, runtimeActivity });
-    return previous && snapshotsEqual(previous.snapshot, snapshot)
-      ? []
-      : [{ type: "session_upsert", snapshot }];
-  };
-
-  const setRuntimeActivity = (
-    ref: AgentSessionLiveRef,
-    runtimeActivity: AgentSessionActivity,
-  ): AgentSessionLiveAdapterChange[] => {
-    const retained = requireSession(ref);
-    retained.runtimeActivity = runtimeActivity;
-    const activity = classifyActivity({
-      runtimeActivity: retained.runtimeActivity,
-      pendingApprovals: retained.snapshot.pendingApprovals,
-      pendingQuestions: retained.snapshot.pendingQuestions,
+    return commitSnapshot({
+      runtimeActivity,
+      snapshot: parseOpenCodeLiveSnapshot(
+        snapshotInput,
+        "opencode-live-session.retain-control-summary",
+      ),
     });
-    if (retained.snapshot.activity === activity) {
-      return [];
-    }
-    retained.snapshot = parseSnapshot(
-      { ...retained.snapshot, activity },
-      "opencode-live-session.set-runtime-activity",
-    );
-    return [{ type: "session_upsert", snapshot: retained.snapshot }];
   };
 
-  const settleSessionError = (ref: AgentSessionLiveRef): AgentSessionLiveAdapterChange[] => {
-    const retained = requireSession(ref);
-    pendingRequests.removeSession(ref);
-    retained.runtimeActivity = "idle";
-    const snapshot = parseSnapshot(
-      {
-        ...retained.snapshot,
-        activity: "idle",
-        pendingApprovals: [],
-        pendingQuestions: [],
-      },
-      "opencode-live-session.settle-session-error",
-    );
-    if (snapshotsEqual(retained.snapshot, snapshot)) {
+  const applyEvent = (
+    ownerRef: AgentSessionLiveRef,
+    event: AgentEvent,
+  ): AgentSessionLiveAdapterChange[] => {
+    requireSession(ownerRef);
+    const retained = ensureEventSession(ownerRef, event);
+    const ref = retained.snapshot.ref;
+    if (event.type === "approval_required") {
+      const {
+        type: _type,
+        externalSessionId: _externalSessionId,
+        timestamp: _timestamp,
+        parentExternalSessionId: _parentExternalSessionId,
+        childExternalSessionId: _childExternalSessionId,
+        subagentCorrelationKey: _subagentCorrelationKey,
+        ...nativeRequest
+      } = event;
+      const request = pendingRequests.retainApproval(ref, nativeRequest);
+      return commitSnapshot({
+        ...retained,
+        snapshot: parseOpenCodeLiveSnapshot(
+          {
+            ...retained.snapshot,
+            activity: "waiting_for_permission",
+            pendingApprovals: [
+              ...retained.snapshot.pendingApprovals.filter(
+                (candidate) => candidate.requestId !== request.requestId,
+              ),
+              request,
+            ],
+          },
+          "opencode-live-session.retain-approval",
+        ),
+      });
+    }
+    if (event.type === "question_required") {
+      const {
+        type: _type,
+        externalSessionId: _externalSessionId,
+        timestamp: _timestamp,
+        parentExternalSessionId: _parentExternalSessionId,
+        childExternalSessionId: _childExternalSessionId,
+        subagentCorrelationKey: _subagentCorrelationKey,
+        ...nativeRequest
+      } = event;
+      const request = pendingRequests.retainQuestion(ref, nativeRequest);
+      return commitSnapshot({
+        ...retained,
+        snapshot: parseOpenCodeLiveSnapshot(
+          {
+            ...retained.snapshot,
+            activity: "waiting_for_question",
+            pendingQuestions: [
+              ...retained.snapshot.pendingQuestions.filter(
+                (candidate) => candidate.requestId !== request.requestId,
+              ),
+              request,
+            ],
+          },
+          "opencode-live-session.retain-question",
+        ),
+      });
+    }
+    if (event.type === "approval_resolved" || event.type === "question_resolved") {
+      const kind = event.type === "approval_resolved" ? "approval" : "question";
+      const occurrenceId = pendingRequests.completeNative(ref, event.requestId, kind);
+      if (!occurrenceId) {
+        return [];
+      }
+      const next: OpenCodeRetainedSession = {
+        ...retained,
+        snapshot: parseOpenCodeLiveSnapshot(
+          {
+            ...retained.snapshot,
+            pendingApprovals:
+              kind === "approval"
+                ? retained.snapshot.pendingApprovals.filter(
+                    (candidate) => candidate.requestId !== occurrenceId,
+                  )
+                : retained.snapshot.pendingApprovals,
+            pendingQuestions:
+              kind === "question"
+                ? retained.snapshot.pendingQuestions.filter(
+                    (candidate) => candidate.requestId !== occurrenceId,
+                  )
+                : retained.snapshot.pendingQuestions,
+          },
+          "opencode-live-session.resolve-pending-input",
+        ),
+      };
+      next.snapshot = parseOpenCodeLiveSnapshot(
+        { ...next.snapshot, activity: openCodeActivityForPending(next) },
+        "opencode-live-session.settle-pending-activity",
+      );
+      return commitSnapshot(next);
+    }
+    if (event.type === "assistant_part" && event.part.kind === "subagent") {
+      const running = event.part.status === "pending" || event.part.status === "running";
+      retained.runtimeActivity = running ? "running" : "idle";
+      return commitSnapshot({
+        ...retained,
+        snapshot: parseOpenCodeLiveSnapshot(
+          {
+            ...retained.snapshot,
+            activity: openCodeActivityForPending(retained),
+            title: event.part.agent ?? event.part.description ?? retained.snapshot.title,
+          },
+          "opencode-live-session.retain-subagent",
+        ),
+      });
+    }
+    const runtimeActivity = openCodeActivityFromEvent(event);
+    if (!runtimeActivity) {
       return [];
     }
-    retained.snapshot = snapshot;
-    return [{ type: "session_upsert", snapshot }];
+    retained.runtimeActivity = runtimeActivity;
+    if (event.type === "session_error" || event.type === "session_finished") {
+      pendingRequests.removeSession(ref);
+      retained.snapshot = parseOpenCodeLiveSnapshot(
+        { ...retained.snapshot, pendingApprovals: [], pendingQuestions: [] },
+        "opencode-live-session.settle-session",
+      );
+    }
+    return commitSnapshot({
+      ...retained,
+      snapshot: parseOpenCodeLiveSnapshot(
+        { ...retained.snapshot, activity: openCodeActivityForPending(retained) },
+        "opencode-live-session.retain-activity",
+      ),
+    });
   };
 
   const requirePendingRoute = (
@@ -319,71 +375,77 @@ export const createOpenCodeLiveSessionState = ({
       return [];
     }
     const retained = requireSession(route.ref);
-    const pendingApprovals =
-      route.kind === "approval"
-        ? retained.snapshot.pendingApprovals.filter(
-            (request) => request.requestId !== route.occurrenceId,
-          )
-        : retained.snapshot.pendingApprovals;
-    const pendingQuestions =
-      route.kind === "question"
-        ? retained.snapshot.pendingQuestions.filter(
-            (request) => request.requestId !== route.occurrenceId,
-          )
-        : retained.snapshot.pendingQuestions;
-    retained.snapshot = parseSnapshot(
-      {
-        ...retained.snapshot,
-        activity: classifyActivity({
-          runtimeActivity: retained.runtimeActivity,
-          pendingApprovals,
-          pendingQuestions,
-        }),
-        pendingApprovals,
-        pendingQuestions,
-      },
-      "opencode-live-session.complete-pending-reply",
+    const next: OpenCodeRetainedSession = {
+      ...retained,
+      snapshot: parseOpenCodeLiveSnapshot(
+        {
+          ...retained.snapshot,
+          pendingApprovals:
+            route.kind === "approval"
+              ? retained.snapshot.pendingApprovals.filter(
+                  (request) => request.requestId !== route.occurrenceId,
+                )
+              : retained.snapshot.pendingApprovals,
+          pendingQuestions:
+            route.kind === "question"
+              ? retained.snapshot.pendingQuestions.filter(
+                  (request) => request.requestId !== route.occurrenceId,
+                )
+              : retained.snapshot.pendingQuestions,
+        },
+        "opencode-live-session.complete-pending-reply",
+      ),
+    };
+    next.snapshot = parseOpenCodeLiveSnapshot(
+      { ...next.snapshot, activity: openCodeActivityForPending(next) },
+      "opencode-live-session.complete-pending-activity",
     );
-    return [{ type: "session_upsert", snapshot: retained.snapshot }];
+    return commitSnapshot(next);
   };
 
   const removeSession = (ref: AgentSessionLiveRef): AgentSessionLiveAdapterChange[] => {
-    const key = refKey(ref);
-    const retained = sessionsByRef.get(key);
-    if (!retained || !refsEqual(retained.snapshot.ref, ref)) {
-      return [];
+    const refs = [toSessionRef(ref)];
+    for (let index = 0; index < refs.length; index += 1) {
+      const parent = refs[index];
+      if (!parent) {
+        continue;
+      }
+      for (const retained of sessionsByRef.values()) {
+        if (
+          retained.snapshot.parentExternalSessionId === parent.externalSessionId &&
+          !refs.some((candidate) => refsEqual(candidate, retained.snapshot.ref))
+        ) {
+          refs.push(toSessionRef(retained.snapshot.ref));
+        }
+      }
     }
-    sessionsByRef.delete(key);
-    dropCount += 1;
-    contextUsageBySessionId.delete(ref.externalSessionId);
-    pendingRequests.removeSession(ref);
-    return [{ type: "session_removed", ref: toSessionRef(ref) }];
+    const changes: AgentSessionLiveAdapterChange[] = [];
+    for (const candidate of refs.reverse()) {
+      const key = refKey(candidate);
+      const retained = sessionsByRef.get(key);
+      if (!retained || !refsEqual(retained.snapshot.ref, candidate)) {
+        continue;
+      }
+      sessionsByRef.delete(key);
+      contextUsageBySessionId.delete(candidate.externalSessionId);
+      pendingRequests.removeSession(candidate);
+      changes.push({ type: "session_removed", ref: candidate });
+    }
+    return changes;
   };
 
   return {
-    initialize: (
-      sources: OpencodeRuntimeSnapshotSource[],
-      initialContextUsageBySessionId: ReadonlyMap<string, OpencodeSessionContextUsage>,
-    ): void => {
-      for (const [sessionId, usage] of initialContextUsageBySessionId) {
-        contextUsageBySessionId.set(sessionId, toContextUsage(usage));
-      }
-      updateSources(sources, false);
-    },
-    refresh: (sources: OpencodeRuntimeSnapshotSource[]): AgentSessionLiveAdapterChange[] =>
-      updateSources(sources, true),
-    dropCount: (): number => dropCount,
     has: (ref: AgentSessionLiveRef): boolean => sessionsByRef.has(refKey(ref)),
     listSnapshots: (): AgentSessionLiveSnapshot[] =>
       [...sessionsByRef.values()].map(({ snapshot }) =>
-        parseSnapshot(snapshot, "opencode-live-session.clone-retained-snapshot"),
+        parseOpenCodeLiveSnapshot(snapshot, "opencode-live-session.clone-retained-snapshot"),
       ),
     readSnapshot: (ref: AgentSessionLiveRef): AgentSessionLiveReadResult => {
       const snapshot = sessionsByRef.get(refKey(ref))?.snapshot;
       return snapshot
         ? {
             type: "live",
-            session: parseSnapshot(snapshot, "opencode-live-session.read-snapshot"),
+            session: parseOpenCodeLiveSnapshot(snapshot, "opencode-live-session.read-snapshot"),
           }
         : { type: "missing", ref: toSessionRef(ref) };
     },
@@ -392,8 +454,7 @@ export const createOpenCodeLiveSessionState = ({
     retainContext,
     applyLoadedContext,
     retainControlSummary,
-    setRuntimeActivity,
-    settleSessionError,
+    applyEvent,
     requirePendingRoute,
     completePendingReply,
     removeSession,

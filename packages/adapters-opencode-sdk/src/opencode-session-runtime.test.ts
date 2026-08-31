@@ -1,11 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { createPrepareOpencodeSessionRuntime, type OpencodeSessionRuntimeSignal } from "./index";
-import {
-  permissionAskedEvent,
-  permissionRepliedEvent,
-  sessionStatusEvent,
-} from "./event-stream.test-support";
+import { permissionAskedEvent, sessionStatusEvent } from "./event-stream.test-support";
 import {
   createOpencodeEventFixtures,
   createOpencodeMessageInfoFixture,
@@ -116,6 +112,18 @@ const createLiveClientHarness = (
           error: undefined,
         };
       },
+      get: async ({ sessionID }) => ({
+        data: createOpencodeSessionFixture({
+          id: sessionID,
+          directory: "/repo",
+          title: "OpenDucktor session",
+          time: {
+            created: Date.parse("2026-07-16T10:00:00.000Z"),
+            updated: Date.parse("2026-07-16T10:00:00.000Z"),
+          },
+        }),
+        error: undefined,
+      }),
       status: async () => ({
         data: Object.fromEntries(
           externalSessionIds.map((sessionId) => [sessionId, { type: "idle" }]),
@@ -322,72 +330,57 @@ const createPrepareRuntime = (harness: LiveClientHarness) =>
     now: () => "2026-07-16T10:02:00.000Z",
   });
 
+const resumeOpenDucktorSession = async (
+  prepared: Awaited<ReturnType<ReturnType<typeof createPrepareOpencodeSessionRuntime>>>,
+): Promise<void> => {
+  await prepared.connection.resumeSession({
+    repoPath: "/repo",
+    runtimeKind: "opencode",
+    runtimePolicy: { kind: "opencode" },
+    workingDirectory: "/repo",
+    externalSessionId: "session-1",
+    sessionScope: { kind: "repository" },
+  });
+};
+
 describe("OpenCode session runtime connection", () => {
-  test("subscribes before its authoritative read without loading message history", async () => {
+  test("prepares event transport without enumerating runtime sessions", async () => {
     const harness = createLiveClientHarness();
 
     const prepared = await createPrepareRuntime(harness)(runtimeInput);
 
-    expect(harness.callOrder.slice(0, 3)).toEqual(["subscribe", "connected", "list"]);
-    expect(prepared.initialSources).toHaveLength(1);
-    expect(prepared.initialSources[0]?.pendingApprovals[0]?.requestId).toBe("native-request-1");
+    expect(harness.callOrder).toEqual(["subscribe", "connected"]);
     expect(harness.messageCalls).toEqual([]);
     await prepared.release();
   });
 
-  test("keeps the startup snapshot available after an OpenCode heartbeat", async () => {
+  test("forwards events only after OpenDucktor resumes the session", async () => {
     const harness = createLiveClientHarness();
     const prepared = await createPrepareRuntime(harness)(runtimeInput);
-    let resolveObservation: (outcome: "fault" | "status") => void = () => undefined;
-    const observation = new Promise<"fault" | "status">((resolve) => {
-      resolveObservation = resolve;
-    });
+    const signals: OpencodeSessionRuntimeSignal[] = [];
+    await resumeOpenDucktorSession(prepared);
     await prepared.startForwarding((signal) => {
-      if (signal.type === "fault") {
-        resolveObservation("fault");
-      }
-      if (signal.type === "transcript_event" && signal.event.type === "session_status") {
-        resolveObservation("status");
-      }
+      signals.push(signal);
     });
 
-    harness.emit({
-      id: "event-heartbeat-1",
-      type: "server.heartbeat",
-      properties: {},
-    });
-    harness.emit(sessionStatusEvent({ type: "busy" }, "session-1"));
+    await harness.emitAndWait(sessionStatusEvent({ type: "busy" }, "session-1"));
 
-    expect(await observation).toBe("status");
-    expect(await prepared.connection.readSessionSources()).toHaveLength(1);
-    await prepared.release();
-  });
-
-  test("preserves a retained repository association when runtime sources refresh", async () => {
-    const harness = createLiveClientHarness();
-    const prepared = await createPrepareRuntime(harness)(runtimeInput);
-
-    await prepared.connection.resumeSession({
-      repoPath: "/repo",
-      runtimeKind: "opencode",
-      runtimePolicy: { kind: "opencode" },
-      workingDirectory: "/repo",
+    expect(signals).toContainEqual({
+      type: "session_event",
       externalSessionId: "session-1",
-      sessionScope: { kind: "repository" },
+      event: expect.objectContaining({
+        type: "session_status",
+        status: expect.objectContaining({ type: "busy" }),
+      }),
     });
-
-    const sources = await prepared.connection.readSessionSources();
-
-    expect(sources[0]?.sessionAssociation).toEqual({ kind: "repository" });
+    expect(harness.callOrder).not.toContain("list");
     await prepared.release();
   });
 
-  test("keeps a confirmed registration when a session list omits it", async () => {
+  test("keeps a confirmed registration without reading the session list", async () => {
     const harness = createLiveClientHarness();
     const prepared = await createPrepareRuntime(harness)(runtimeInput);
-    harness.setExternalSessionIds([]);
 
-    expect(await prepared.connection.readSessionSources()).toEqual([]);
     await prepared.connection.sendUserMessage({
       repoPath: "/repo",
       runtimeKind: "opencode",
@@ -399,6 +392,7 @@ describe("OpenCode session runtime connection", () => {
     });
 
     expect(harness.promptCalls).toHaveLength(1);
+    expect(harness.callOrder).not.toContain("list");
     await prepared.release();
   });
 
@@ -430,41 +424,6 @@ describe("OpenCode session runtime connection", () => {
     expect(harness.streamSignal()?.aborted).toBe(true);
   });
 
-  test("aborts initialization while the authoritative session read is pending", async () => {
-    let reportListStarted = (): void => undefined;
-    const listStarted = new Promise<void>((resolve) => {
-      reportListStarted = resolve;
-    });
-    let releaseList = (): void => undefined;
-    const listBarrier = new Promise<void>((resolve) => {
-      releaseList = resolve;
-    });
-    const harness = createLiveClientHarness({
-      onList: reportListStarted,
-      listBarrier: () => listBarrier,
-    });
-    const controller = new AbortController();
-    const preparing = createPrepareRuntime(harness)({
-      ...runtimeInput,
-      signal: controller.signal,
-    });
-    await listStarted;
-
-    controller.abort();
-    const outcome = await Promise.race([
-      preparing.then(
-        () => "resolved" as const,
-        () => "rejected" as const,
-      ),
-      new Promise<"pending">((resolve) => setTimeout(() => resolve("pending"), 50)),
-    ]);
-    releaseList();
-    await preparing.catch(() => undefined);
-
-    expect(outcome).toBe("rejected");
-    expect(harness.streamSignal()?.aborted).toBe(true);
-  });
-
   test("keeps a shared runtime event stream alive when one initializer is aborted", async () => {
     const harness = createLiveClientHarness({ initiallyConnected: false });
     const prepareRuntime = createPrepareRuntime(harness);
@@ -488,126 +447,11 @@ describe("OpenCode session runtime connection", () => {
     expect(harness.streamSignal()?.aborted).toBe(true);
   });
 
-  test("serializes concurrent session source reads", async () => {
-    let listCallCount = 0;
-    let blockNextRead = false;
-    let resolveReadStarted: () => void = () => undefined;
-    let releaseRead: () => void = () => undefined;
-    const readStarted = new Promise<void>((resolve) => {
-      resolveReadStarted = resolve;
-    });
-    const readGate = new Promise<void>((resolve) => {
-      releaseRead = resolve;
-    });
-    const harness = createLiveClientHarness({
-      onList: () => {
-        listCallCount += 1;
-      },
-      listBarrier: async () => {
-        if (blockNextRead) {
-          blockNextRead = false;
-          resolveReadStarted();
-          await readGate;
-        }
-      },
-    });
-    const prepared = await createPrepareRuntime(harness)(runtimeInput);
-    blockNextRead = true;
-
-    const first = prepared.connection.readSessionSources();
-    await readStarted;
-    const second = prepared.connection.readSessionSources();
-    await Promise.resolve();
-
-    expect(listCallCount).toBe(2);
-    releaseRead();
-    await Promise.all([first, second]);
-    expect(listCallCount).toBe(3);
-    await prepared.release();
-  });
-
-  test("reconciles request creation and resolution that occur during initialization", async () => {
-    let resolveCreatedReadStarted: () => void = () => undefined;
-    let releaseCreatedRead: () => void = () => undefined;
-    const createdReadStarted = new Promise<void>((resolve) => {
-      resolveCreatedReadStarted = resolve;
-    });
-    const createdReadGate = new Promise<void>((resolve) => {
-      releaseCreatedRead = resolve;
-    });
-    let createdReadCount = 0;
-    const createdHarness = createLiveClientHarness({
-      permissionListBarrier: async () => {
-        createdReadCount += 1;
-        if (createdReadCount === 1) {
-          resolveCreatedReadStarted();
-          await createdReadGate;
-        }
-      },
-    });
-    createdHarness.setPendingApproval(false);
-    const creating = createPrepareRuntime(createdHarness)(runtimeInput);
-    await createdReadStarted;
-    createdHarness.setPendingApproval(true);
-    await createdHarness.emitAndWait(
-      permissionAskedEvent({
-        requestId: "native-request-1",
-        sessionId: "session-1",
-        permission: "read",
-        patterns: ["README.md"],
-      }),
-    );
-    releaseCreatedRead();
-    const created = await creating;
-    expect(created.initialSources[0]?.pendingApprovals).toHaveLength(1);
-    await created.release();
-
-    let resolveResolvedReadStarted: () => void = () => undefined;
-    let releaseResolvedRead: () => void = () => undefined;
-    const resolvedReadStarted = new Promise<void>((resolve) => {
-      resolveResolvedReadStarted = resolve;
-    });
-    const resolvedReadGate = new Promise<void>((resolve) => {
-      releaseResolvedRead = resolve;
-    });
-    let resolvedReadCount = 0;
-    const resolvedHarness = createLiveClientHarness({
-      permissionListBarrier: async () => {
-        resolvedReadCount += 1;
-        if (resolvedReadCount === 1) {
-          resolveResolvedReadStarted();
-          await resolvedReadGate;
-        }
-      },
-    });
-    const resolving = createPrepareRuntime(resolvedHarness)(runtimeInput);
-    await resolvedReadStarted;
-    resolvedHarness.setPendingApproval(false);
-    await resolvedHarness.emitAndWait(
-      permissionRepliedEvent({ requestId: "native-request-1", sessionId: "session-1" }),
-    );
-    releaseResolvedRead();
-    const resolved = await resolving;
-    expect(resolved.initialSources[0]?.pendingApprovals).toEqual([]);
-    await resolved.release();
-  });
-
   test("buffers transcript signals until forwarding starts and preserves delivery order", async () => {
-    let resolveListStarted: () => void = () => undefined;
-    let releaseList: () => void = () => undefined;
-    const listStarted = new Promise<void>((resolve) => {
-      resolveListStarted = resolve;
-    });
-    const listGate = new Promise<void>((resolve) => {
-      releaseList = resolve;
-    });
-    const harness = createLiveClientHarness({
-      listBarrier: () => listGate,
-      onList: resolveListStarted,
-    });
-    const preparing = createPrepareRuntime(harness)(runtimeInput);
-    await listStarted;
-    harness.emit(
+    const harness = createLiveClientHarness();
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    await resumeOpenDucktorSession(prepared);
+    await harness.emitAndWait(
       createOpencodeMessageEventGroupFixture({
         info: {
           id: "assistant-buffered",
@@ -628,9 +472,6 @@ describe("OpenCode session runtime connection", () => {
         ],
       }),
     );
-    releaseList();
-    const prepared = await preparing;
-
     let resolveFirstStarted: () => void = () => undefined;
     let releaseFirst: () => void = () => undefined;
     const firstStarted = new Promise<void>((resolve) => {
@@ -641,7 +482,7 @@ describe("OpenCode session runtime connection", () => {
     });
     const messages: string[] = [];
     const forwarding = prepared.startForwarding(async (signal) => {
-      if (signal.type !== "transcript_event" || signal.event.type !== "assistant_message") {
+      if (signal.type !== "session_event" || signal.event.type !== "assistant_message") {
         return;
       }
       messages.push(signal.event.message);
@@ -681,78 +522,43 @@ describe("OpenCode session runtime connection", () => {
     await prepared.release();
   });
 
-  test("forwards normalized lifecycle details through the shared live-session signal", async () => {
+  test("forwards pending input as retained session state events", async () => {
     const harness = createLiveClientHarness();
     const prepared = await createPrepareRuntime(harness)(runtimeInput);
     const signals: OpencodeSessionRuntimeSignal[] = [];
-    let resolveStatusSignal: () => void = () => undefined;
-    const statusSignal = new Promise<void>((resolve) => {
-      resolveStatusSignal = resolve;
-    });
+    await resumeOpenDucktorSession(prepared);
     await prepared.startForwarding((signal) => {
       signals.push(signal);
-      if (signal.type === "transcript_event" && signal.event.type === "session_status") {
-        resolveStatusSignal();
-      }
     });
 
     await harness.emitAndWait(
-      sessionStatusEvent(
-        { type: "retry", attempt: 2, message: "Retrying request", next: 250 },
-        "session-1",
-      ),
+      permissionAskedEvent({
+        requestId: "native-request-1",
+        sessionId: "session-1",
+        permission: "read",
+        patterns: ["README.md"],
+      }),
     );
-    await statusSignal;
 
     expect(signals).toContainEqual({
-      type: "transcript_event",
+      type: "session_event",
       externalSessionId: "session-1",
       event: expect.objectContaining({
-        type: "session_status",
-        status: {
-          type: "retry",
-          attempt: 2,
-          message: "Retrying request",
-          nextEpochMs: 250,
-        },
+        type: "approval_required",
+        requestId: "native-request-1",
       }),
     });
-    expect(signals.some((signal) => signal.type === "sessions_invalidated")).toBe(false);
-    await prepared.release();
-  });
-
-  test("does not invalidate sessions after an authoritative session error", async () => {
-    const harness = createLiveClientHarness();
-    const prepared = await createPrepareRuntime(harness)(runtimeInput);
-    const signals: OpencodeSessionRuntimeSignal[] = [];
-    await prepared.startForwarding((signal) => {
-      signals.push(signal);
-    });
-
-    await harness.emitAndWait({
-      type: "session.error",
-      properties: {
-        sessionID: "session-1",
-        error: { name: "UnknownError", data: { message: "Provider failed" } },
-      },
-    });
-
-    expect(signals).toContainEqual({
-      type: "transcript_event",
-      externalSessionId: "session-1",
-      event: expect.objectContaining({ type: "session_error", message: "Provider failed" }),
-    });
-    expect(signals.some((signal) => signal.type === "sessions_invalidated")).toBe(false);
     await prepared.release();
   });
 
   test("forwards runtime-start evidence before a stop-only turn becomes idle", async () => {
     const harness = createLiveClientHarness();
     const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    await resumeOpenDucktorSession(prepared);
     const transcriptEventTypes: string[] = [];
     const sessionStatuses: string[] = [];
     await prepared.startForwarding((signal) => {
-      if (signal.type !== "transcript_event") {
+      if (signal.type !== "session_event") {
         return;
       }
       transcriptEventTypes.push(signal.event.type);
@@ -803,48 +609,7 @@ describe("OpenCode session runtime connection", () => {
     await prepared.release();
   });
 
-  test("retains initialization context and reads genuinely missing context on demand", async () => {
-    let resolveListStarted: () => void = () => undefined;
-    let releaseList: () => void = () => undefined;
-    const listStarted = new Promise<void>((resolve) => {
-      resolveListStarted = resolve;
-    });
-    const listGate = new Promise<void>((resolve) => {
-      releaseList = resolve;
-    });
-    const retainedHarness = createLiveClientHarness({
-      listBarrier: () => listGate,
-      onList: resolveListStarted,
-    });
-    const preparing = createPrepareRuntime(retainedHarness)(runtimeInput);
-    await listStarted;
-    await retainedHarness.emitAndWait({
-      type: "message.updated",
-      properties: {
-        info: {
-          id: "assistant-context",
-          sessionID: "session-1",
-          role: "assistant",
-          providerID: "openai",
-          modelID: "gpt-5",
-          tokens: { input: 30, output: 7 },
-        },
-        parts: [],
-      },
-    });
-    releaseList();
-    const retained = await preparing;
-    expect(retained.initialContextUsageBySessionId.get("session-1")).toEqual({
-      totalTokens: 37,
-      model: {
-        providerId: "openai",
-        modelId: "gpt-5",
-        profileId: "build",
-      },
-    });
-    expect(retainedHarness.messageCalls).toEqual([]);
-    await retained.release();
-
+  test("loads context on demand without enumerating sessions", async () => {
     const missingHarness = createLiveClientHarness({ totalTokens: 1_200 });
     const missing = await createPrepareRuntime(missingHarness)(runtimeInput);
     await expect(
@@ -869,6 +634,7 @@ describe("OpenCode session runtime connection", () => {
         limit: 1,
       },
     ]);
+    expect(missingHarness.callOrder).not.toContain("list");
     await missing.release();
   });
 
@@ -935,16 +701,5 @@ describe("OpenCode session runtime connection", () => {
     await released.release();
     await Promise.resolve();
     expect(releasedSignals).toEqual([]);
-  });
-
-  test("releases the event stream when initialization fails", async () => {
-    const harness = createLiveClientHarness({
-      listError: new Error("session inventory failed"),
-    });
-
-    await expect(createPrepareRuntime(harness)(runtimeInput)).rejects.toThrow(
-      "session inventory failed",
-    );
-    expect(harness.streamSignal()?.aborted).toBe(true);
   });
 });

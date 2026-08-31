@@ -1,4 +1,3 @@
-import type { OpencodeRuntimeSnapshotSource } from "@openducktor/adapters-opencode-sdk";
 import {
   type AgentSessionLivePendingApprovalRequest,
   type AgentSessionLivePendingQuestionRequest,
@@ -6,6 +5,7 @@ import {
   agentSessionLivePendingApprovalRequestSchema,
   agentSessionLivePendingQuestionRequestSchema,
 } from "@openducktor/contracts";
+import type { AgentPendingApprovalRequest, AgentPendingQuestionRequest } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
 import { refKey, refsEqual, toSessionRef } from "./opencode-live-session-normalization";
 
@@ -34,14 +34,12 @@ export const createOpenCodePendingRequestRouter = ({
   const routesByOccurrenceId = new Map<string, OpenCodePendingRoute>();
   const occurrenceIdByNativeKey = new Map<string, string>();
 
-  const project = (
+  const retain = (
     ref: AgentSessionLiveRef,
     kind: OpenCodePendingRoute["kind"],
     nativeRequestId: string,
-    activeNativeKeys: Set<string>,
   ): string => {
     const key = nativeRouteKey(ref, kind, nativeRequestId);
-    activeNativeKeys.add(key);
     let occurrenceId = occurrenceIdByNativeKey.get(key);
     if (!occurrenceId) {
       occurrenceId = nextOccurrenceId();
@@ -57,12 +55,11 @@ export const createOpenCodePendingRequestRouter = ({
   };
 
   return {
-    projectApproval: (
+    retainApproval: (
       ref: AgentSessionLiveRef,
-      request: OpencodeRuntimeSnapshotSource["pendingApprovals"][number],
-      activeNativeKeys: Set<string>,
+      request: AgentPendingApprovalRequest,
     ): AgentSessionLivePendingApprovalRequest => {
-      const occurrenceId = project(ref, "approval", request.requestId, activeNativeKeys);
+      const occurrenceId = retain(ref, "approval", request.requestId);
       const {
         metadata: _metadata,
         requestInstanceId: _requestInstanceId,
@@ -73,30 +70,30 @@ export const createOpenCodePendingRequestRouter = ({
         requestId: occurrenceId,
       });
     },
-    projectQuestion: (
+    retainQuestion: (
       ref: AgentSessionLiveRef,
-      request: OpencodeRuntimeSnapshotSource["pendingQuestions"][number],
-      activeNativeKeys: Set<string>,
+      request: AgentPendingQuestionRequest,
     ): AgentSessionLivePendingQuestionRequest => {
-      const occurrenceId = project(ref, "question", request.requestId, activeNativeKeys);
+      const occurrenceId = retain(ref, "question", request.requestId);
       const { requestInstanceId: _requestInstanceId, ...publicRequest } = request;
       return agentSessionLivePendingQuestionRequestSchema.parse({
         ...publicRequest,
         requestId: occurrenceId,
       });
     },
-    finishProjection: (
-      activeNativeKeys: ReadonlySet<string>,
-      observedSessionKeys: ReadonlySet<string>,
-    ): void => {
-      for (const [key, occurrenceId] of occurrenceIdByNativeKey) {
-        const route = routesByOccurrenceId.get(occurrenceId);
-        if (activeNativeKeys.has(key) || (route && !observedSessionKeys.has(refKey(route.ref)))) {
-          continue;
-        }
-        occurrenceIdByNativeKey.delete(key);
-        routesByOccurrenceId.delete(occurrenceId);
+    completeNative: (
+      ref: AgentSessionLiveRef,
+      nativeRequestId: string,
+      kind: OpenCodePendingRoute["kind"],
+    ): string | null => {
+      const key = nativeRouteKey(ref, kind, nativeRequestId);
+      const occurrenceId = occurrenceIdByNativeKey.get(key);
+      if (!occurrenceId) {
+        return null;
       }
+      occurrenceIdByNativeKey.delete(key);
+      routesByOccurrenceId.delete(occurrenceId);
+      return occurrenceId;
     },
     require: (
       ref: AgentSessionLiveRef,

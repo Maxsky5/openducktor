@@ -283,13 +283,13 @@ const applyDirectSnapshot = (
   };
 };
 
-const createLiveOnlySession = (snapshot: AgentSessionLiveSnapshot): AgentSessionState => {
+const createObservedChildSession = (snapshot: AgentSessionLiveSnapshot): AgentSessionState => {
   const identity = toSessionIdentity(snapshot.ref);
   return applyDirectSnapshot(
     {
       ...identity,
       title: snapshot.title,
-      sessionAssociation: toLiveSessionAssociation(snapshot),
+      sessionAssociation: { kind: "unbound" },
       status: "idle",
       runtimeStatusMessage: null,
       startedAt: snapshot.startedAt,
@@ -448,13 +448,34 @@ export const buildAgentSessionLiveCollection = ({
     );
   }
 
-  for (const snapshot of snapshots) {
-    const session = getAgentSession(collection, toSessionIdentity(snapshot.ref));
-    if (session) {
-      collection = replaceAgentSession(collection, applyDirectSnapshot(session, snapshot));
-      continue;
+  let remaining = [...snapshots];
+  while (remaining.length > 0) {
+    const deferred: AgentSessionLiveSnapshot[] = [];
+    let applied = 0;
+    for (const snapshot of remaining) {
+      const session = getAgentSession(collection, toSessionIdentity(snapshot.ref));
+      if (session) {
+        collection = replaceAgentSession(collection, applyDirectSnapshot(session, snapshot));
+        applied += 1;
+        continue;
+      }
+      const parent = snapshot.parentExternalSessionId
+        ? getAgentSession(collection, {
+            ...toSessionIdentity(snapshot.ref),
+            externalSessionId: snapshot.parentExternalSessionId,
+          })
+        : null;
+      if (parent) {
+        collection = replaceAgentSession(collection, createObservedChildSession(snapshot));
+        applied += 1;
+        continue;
+      }
+      deferred.push(snapshot);
     }
-    collection = replaceAgentSession(collection, createLiveOnlySession(snapshot));
+    if (applied === 0) {
+      break;
+    }
+    remaining = deferred;
   }
   return rebuildProjectedPendingInput(collection);
 };
@@ -469,11 +490,20 @@ export const applyAgentSessionLiveDelta = ({
   if (envelope.type === "session_upsert") {
     const identity = toSessionIdentity(envelope.session.ref);
     const session = getAgentSession(current, identity);
+    const parent = envelope.session.parentExternalSessionId
+      ? getAgentSession(current, {
+          ...identity,
+          externalSessionId: envelope.session.parentExternalSessionId,
+        })
+      : null;
+    if (!session && !parent) {
+      return current;
+    }
     const withDirectSnapshot = replaceAgentSession(
       current,
       session
         ? applyDirectSnapshot(session, envelope.session)
-        : createLiveOnlySession(envelope.session),
+        : createObservedChildSession(envelope.session),
     );
     return rebuildProjectedPendingInput(withDirectSnapshot);
   }
