@@ -4,6 +4,11 @@ import {
   PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE,
 } from "../shared/electron-bridge-contract";
 
+const PIERRE_MULTI_SELECTION_CLIPBOARD_FORMATS = [
+  `electron application/osclipboard;format="${PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE}"`,
+  `web ${PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE}`,
+] as const;
+
 type ElectronEditorClipboardIpcMain = {
   handle(
     channel: string,
@@ -36,14 +41,17 @@ export const readEditorClipboardText = async (
   }
 
   const clipboardItems = await clipboard.read();
-  const clipboardItem = clipboardItems.find((item) => item.types.includes(type));
-  if (clipboardItem === undefined) return "";
+  for (const format of PIERRE_MULTI_SELECTION_CLIPBOARD_FORMATS) {
+    const clipboardItem = clipboardItems.find((item) => item.types.includes(format));
+    if (clipboardItem === undefined) continue;
 
-  const payload = await clipboardItem.getType(type);
-  if (!(payload instanceof Blob)) {
-    throw new TypeError("Editor clipboard format did not contain text data.");
+    const payload = await clipboardItem.getType(format);
+    if (!(payload instanceof Blob)) {
+      throw new TypeError("Editor clipboard format did not contain text data.");
+    }
+    return payload.text();
   }
-  return payload.text();
+  return "";
 };
 
 export const registerElectronEditorClipboardIpc = ({
