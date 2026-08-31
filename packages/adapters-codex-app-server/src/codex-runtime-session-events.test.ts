@@ -2046,7 +2046,7 @@ describe("CodexRuntimeSessionEvents", () => {
     expect(liveMutations[0]?.transcriptEvents).toEqual([]);
   });
 
-  test("forwards normalized transcript events through the live mutation", async () => {
+  test("preserves assistant delta whitespace through the live mutation", async () => {
     let listener: RuntimeListener | null = null;
     const session = createSession("thread-transcript");
     const liveMutations: Array<{ transcriptEvents: unknown[] }> = [];
@@ -2071,19 +2071,37 @@ describe("CodexRuntimeSessionEvents", () => {
           threadId: session.threadId,
           turnId: "turn-1",
           itemId: "message-1",
-          delta: "Working",
+          delta: "QA",
+        },
+      },
+    });
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "notification",
+      message: {
+        method: "item/agentMessage/delta",
+        params: {
+          threadId: session.threadId,
+          turnId: "turn-1",
+          itemId: "message-1",
+          delta: " rejected",
         },
       },
     });
     await flushRuntimeEvents();
 
-    expect(liveMutations).toHaveLength(1);
-    expect(liveMutations[0]?.transcriptEvents).toEqual([
+    expect(liveMutations.flatMap((mutation) => mutation.transcriptEvents)).toEqual([
       expect.objectContaining({
         type: "assistant_delta",
         externalSessionId: session.threadId,
         messageId: "message-1",
-        delta: "Working",
+        delta: "QA",
+      }),
+      expect.objectContaining({
+        type: "assistant_delta",
+        externalSessionId: session.threadId,
+        messageId: "message-1",
+        delta: " rejected",
       }),
     ]);
   });

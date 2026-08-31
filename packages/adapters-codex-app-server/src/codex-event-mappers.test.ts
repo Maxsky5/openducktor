@@ -175,6 +175,45 @@ describe("Codex todo event mapper", () => {
   });
 });
 
+describe("Codex delta event mapper", () => {
+  test("preserves leading and whitespace-only assistant delta content", () => {
+    const pipeline = createCodexEventMapperPipeline();
+    const projectDelta = (delta: string) =>
+      projectCodexCanonicalEvents(
+        pipeline.runLive(
+          {
+            kind: "notification",
+            notification: {
+              method: "item/agentMessage/delta",
+              params: {
+                threadId: "thread-1",
+                turnId: "turn-1",
+                itemId: "message-1",
+                delta,
+              },
+            },
+          },
+          { source: "live", threadId: "thread-1", turnId: "turn-1" },
+        ),
+      );
+
+    expect(projectDelta(" rejected")).toEqual([
+      expect.objectContaining({
+        type: "assistant_delta",
+        messageId: "message-1",
+        delta: " rejected",
+      }),
+    ]);
+    expect(projectDelta(" ")).toEqual([
+      expect.objectContaining({
+        type: "assistant_delta",
+        messageId: "message-1",
+        delta: " ",
+      }),
+    ]);
+  });
+});
+
 describe("Codex subagent event mapper", () => {
   test("merges live spawn begin and completed events into one linked subagent row", () => {
     const pipeline = createCodexEventMapperPipeline();
