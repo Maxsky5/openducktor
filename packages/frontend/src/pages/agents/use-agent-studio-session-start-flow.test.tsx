@@ -1165,12 +1165,16 @@ describe("useAgentStudioSessionStartFlow", () => {
       agent: "build",
     });
     await harness.waitFor(() => sendAgentMessage.mock.calls.length > 0);
-    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-existing"), [
-      expect.objectContaining({
-        kind: "text",
-        text: expect.stringContaining("task-1"),
-      }),
-    ]);
+    expect(sendAgentMessage).toHaveBeenCalledWith(
+      sessionIdentity("session-existing"),
+      [
+        expect.objectContaining({
+          kind: "text",
+          text: expect.stringContaining("task-1"),
+        }),
+      ],
+      { errorAttentionId: expect.any(String) },
+    );
 
     await harness.unmount();
   });

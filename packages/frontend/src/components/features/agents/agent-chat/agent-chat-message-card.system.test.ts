@@ -87,6 +87,30 @@ describe("AgentChatMessageCard system messages", () => {
     expect(html).not.toContain(">System<");
   });
 
+  test("uses an explicit attention ID for a post-start send failure", () => {
+    const html = renderToStaticMarkup(
+      createMessageCardElement({
+        message: {
+          id: "session-notice-post-start-error",
+          role: "system",
+          content: "Failed to send message: runtime unavailable",
+          timestamp: "2026-02-22T10:21:51.000Z",
+          meta: {
+            kind: "session_notice",
+            tone: "error",
+            reason: "session_error",
+            title: "Error",
+            attentionId: "launch-post-error",
+          },
+        },
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain('data-notification-attention-id="launch-post-error"');
+    expect(html).not.toContain('data-notification-attention-id="2026-02-22T10:21:51.000Z"');
+  });
+
   test("renders session compaction notices as informational cards", () => {
     const html = renderToStaticMarkup(
       createMessageCardElement({
