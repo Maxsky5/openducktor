@@ -11,6 +11,10 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { createQueryClient } from "@/lib/query-client";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
+import {
+  NotificationContext,
+  type NotificationContextValue,
+} from "@/state/notifications/notification-context";
 import { runtimeDefinitionsQueryOptions } from "@/state/queries/runtime";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
@@ -22,6 +26,30 @@ export const runtimeDefinitions = [
   CODEX_RUNTIME_DESCRIPTOR,
   CLAUDE_RUNTIME_DESCRIPTOR,
 ];
+
+const notificationContextValue = {
+  osFailure: null,
+  getCapability: async () => ({
+    platform: "browser" as const,
+    supported: true,
+    permission: "prompt" as const,
+    canGuaranteeSilent: true,
+  }),
+  previewCue: async () => {},
+  testInApp: async () => {},
+  testOs: async () => ({ status: "shown" as const }),
+  registerNavigator: () => () => {},
+  sessionStartNotifications: {
+    publishSessionStarted: () => {},
+    publishSessionError: () => {},
+    reportFailure: () => {},
+  },
+  taskStreamSink: {
+    onChange: async () => {},
+    onSnapshot: async () => {},
+    onFailure: () => {},
+  },
+} satisfies NotificationContextValue;
 
 export const createCheck = (
   runtimes: AgentRuntimes,
@@ -111,7 +139,9 @@ export const createOnboardingTestHarness = () => {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <WorkspaceStateContext value={workspaceState}>
-            <OnboardingPage onComplete={() => {}} />
+            <NotificationContext.Provider value={notificationContextValue}>
+              <OnboardingPage onComplete={() => {}} />
+            </NotificationContext.Provider>
           </WorkspaceStateContext>
         </ThemeProvider>
       </QueryClientProvider>,
@@ -135,6 +165,14 @@ export const enterRuntimeStage = async (): Promise<void> => {
       false,
     ),
   );
+};
+
+export const continueFromNotificationsToWorkspace = async (): Promise<void> => {
+  await screen.findByRole("heading", {
+    name: "Choose how OpenDucktor gets your attention",
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
+  await screen.findByRole("heading", { name: "Open your first workspace" });
 };
 
 export const opencodeSection = (): HTMLElement => {

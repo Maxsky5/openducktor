@@ -1,4 +1,5 @@
-import { type ReactElement, useCallback, useRef } from "react";
+import { type ReactElement, useCallback, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router";
 import { MergedPullRequestConfirmDialog } from "@/components/features/pull-requests/merged-pull-request-confirm-dialog";
 import { TaskCreateModal } from "@/components/features/task-create/task-create-modal";
 import {
@@ -18,6 +19,7 @@ import { TaskResetImplementationModal } from "./task-reset-implementation-modal"
 import { useKanbanPageModels } from "./use-kanban-page-models";
 
 export function KanbanPage(): ReactElement {
+  const [searchParams, setSearchParams] = useSearchParams();
   const taskDetailsSheetRef = useRef<TaskDetailsSheetControllerHandle | null>(null);
   const handleOpenDetails = useCallback((taskId: string): void => {
     taskDetailsSheetRef.current?.openTask(taskId);
@@ -29,6 +31,24 @@ export function KanbanPage(): ReactElement {
     onOpenDetails: handleOpenDetails,
     onCloseDetails: handleCloseDetails,
   });
+  const requestedTaskId = searchParams.get("task");
+  useEffect(() => {
+    if (!requestedTaskId) return;
+    const taskExists = models.taskDetailsController.allTasks.some(
+      (task) => task.id === requestedTaskId,
+    );
+    if (!taskExists) return;
+    handleOpenDetails(requestedTaskId);
+    const next = new URLSearchParams(searchParams);
+    next.delete("task");
+    setSearchParams(next, { replace: true });
+  }, [
+    handleOpenDetails,
+    models.taskDetailsController.allTasks,
+    requestedTaskId,
+    searchParams,
+    setSearchParams,
+  ]);
   const taskGitConflictActions = models.taskGitConflictDialog?.conflict
     ? createGitConflictActionsModel({
         operation: models.taskGitConflictDialog.conflict.operation,

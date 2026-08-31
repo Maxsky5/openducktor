@@ -1,14 +1,22 @@
-import type { AgentRuntimes, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import type {
+  AgentRuntimes,
+  NotificationOsCapability,
+  NotificationSettings,
+  RuntimeDescriptor,
+  RuntimeKind,
+} from "@openducktor/contracts";
 import {
   ArrowLeft,
   ArrowRight,
+  Bell,
+  BellRing,
   Bot,
   FolderGit2,
   ListChecks,
   LoaderCircle,
   RefreshCw,
 } from "lucide-react";
-import type { ReactElement, RefObject } from "react";
+import { type ReactElement, type RefObject, useEffect, useState } from "react";
 import {
   FolderPickerCancelAction,
   FolderPickerConfirmAction,
@@ -28,12 +36,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import type { RuntimeExecutableValidationResult } from "@/state/queries/use-runtime-executable-validation";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
+import { useNotificationContext } from "@/state/notifications/notification-context";
 
 const SETUP_STEPS = [
   {
     label: "Configure coding agents",
     detail: "Choose the local coding agents OpenDucktor can run and confirm each executable path.",
     icon: Bot,
+  },
+  {
+    label: "Choose notifications",
+    detail: "Check in-app and OS notifications before an agent needs your input.",
+    icon: Bell,
   },
   {
     label: "Open your first workspace",
@@ -70,7 +84,7 @@ export function WelcomeStage({ onContinue }: WelcomeStageProps): ReactElement {
           className="flex flex-col justify-center bg-muted/20 px-6 py-9 sm:px-9 sm:py-12"
           aria-label="Setup steps"
         >
-          <p className="text-sm font-semibold text-foreground">Two quick setup steps</p>
+          <p className="text-sm font-semibold text-foreground">Three quick setup steps</p>
           <div className="mt-5 divide-y divide-border border-y border-border">
             {SETUP_STEPS.map((step, index) => {
               const Icon = step.icon;
@@ -287,12 +301,151 @@ export function RuntimeStage({
             Back
           </Button>
           <Button size="lg" onClick={onContinue} disabled={continueDisabled || isSaving}>
-            {isSaving ? "Saving coding agents..." : "Continue to workspace"}
+            {isSaving ? "Saving coding agents..." : "Continue to notifications"}
             {!isSaving ? <ArrowRight data-icon="inline-end" /> : null}
           </Button>
         </div>
       </Card>
     </>
+  );
+}
+
+type NotificationsStageProps = {
+  notifications: NotificationSettings | null;
+  onBack: () => void;
+  onContinue: () => void;
+};
+
+const describeOsCapability = (capability: NotificationOsCapability | null): string => {
+  if (!capability) return "Checking OS notification support…";
+  if (!capability.supported) {
+    return capability.failureMessage ?? "OS notifications are unavailable on this device.";
+  }
+  if (capability.permission === "prompt") {
+    return "OpenDucktor will ask for permission only when you test OS notifications.";
+  }
+  return "OS notifications are available on this device.";
+};
+
+export function NotificationsStage({
+  notifications,
+  onBack,
+  onContinue,
+}: NotificationsStageProps): ReactElement {
+  const runtime = useNotificationContext();
+  const [capability, setCapability] = useState<NotificationOsCapability | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [isTesting, setIsTesting] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void runtime
+      .getCapability()
+      .then((next) => {
+        if (active) setCapability(next);
+      })
+      .catch((cause) => {
+        if (active) setStatus(cause instanceof Error ? cause.message : String(cause));
+      });
+    return () => {
+      active = false;
+    };
+  }, [runtime]);
+
+  const testNotification = async (target: "in_app" | "os"): Promise<void> => {
+    if (!notifications) {
+      setStatus("Notification settings are unavailable. Go back and retry setup.");
+      return;
+    }
+    setIsTesting(true);
+    setStatus(null);
+    try {
+      if (target === "in_app") {
+        await runtime.testInApp(notifications);
+        setStatus("In-app test sent.");
+      } else {
+        const result = await runtime.testOs(notifications);
+        setCapability(await runtime.getCapability());
+        setStatus(result.status === "shown" ? "OS test sent." : result.message);
+      }
+    } catch (cause) {
+      setStatus(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  const osDescription = describeOsCapability(capability);
+
+  return (
+    <Card className="flex min-h-[34rem] flex-col overflow-hidden shadow-sm">
+      <CardHeader className="gap-3 border-b border-border px-6 py-5 sm:px-9 sm:py-6">
+        <CardTitle className="text-2xl sm:text-3xl">
+          Choose how OpenDucktor gets your attention
+        </CardTitle>
+        <CardDescription className="max-w-2xl text-sm leading-relaxed sm:text-base">
+          Test in-app and OS notifications now. You can change every notification type and sound
+          later in Settings.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid flex-1 gap-4 bg-muted/20 px-6 py-6 sm:px-9 lg:grid-cols-2">
+        <div className="flex flex-col justify-between gap-5 rounded-xl border border-border bg-card p-5">
+          <div>
+            <Bell className="size-5 text-muted-foreground" aria-hidden="true" />
+            <h3 className="mt-4 font-semibold text-foreground">In-app notifications</h3>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              See a notice inside OpenDucktor and hear your current notification sound.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isTesting || !notifications}
+            onClick={() => void testNotification("in_app")}
+          >
+            Test in-app
+          </Button>
+        </div>
+        <div className="flex flex-col justify-between gap-5 rounded-xl border border-border bg-card p-5">
+          <div>
+            <BellRing className="size-5 text-muted-foreground" aria-hidden="true" />
+            <h3 className="mt-4 font-semibold text-foreground">OS notifications</h3>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{osDescription}</p>
+            {capability?.supported && !capability.canGuaranteeSilent ? (
+              <p className="mt-2 text-xs text-warning-muted">
+                This platform cannot guarantee silent OS delivery.
+              </p>
+            ) : null}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isTesting || !notifications || capability?.supported === false}
+            onClick={() => void testNotification("os")}
+          >
+            Test OS
+          </Button>
+        </div>
+        {status ? (
+          <p className="text-sm text-foreground lg:col-span-2" role="status">
+            {status}
+          </p>
+        ) : null}
+      </CardContent>
+      <div className="flex flex-col-reverse justify-between gap-3 border-t border-border bg-card px-6 py-4 sm:flex-row sm:px-9">
+        <Button variant="outline" onClick={onBack}>
+          <ArrowLeft data-icon="inline-start" /> Back
+        </Button>
+        <div className="flex gap-2 sm:ml-auto">
+          <Button variant="ghost" onClick={onContinue}>
+            Skip
+          </Button>
+          <Button size="lg" onClick={onContinue}>
+            Continue to workspace <ArrowRight data-icon="inline-end" />
+          </Button>
+        </div>
+      </div>
+    </Card>
   );
 }
 
@@ -374,7 +527,7 @@ export function WorkspaceStage({
           onClick={onBack}
         >
           <ArrowLeft data-icon="inline-start" />
-          Back to coding agents
+          Back to notifications
         </Button>
         <div
           data-testid="onboarding-workspace-actions"

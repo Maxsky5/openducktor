@@ -3,6 +3,7 @@ import { CircleSlash2, ShieldAlert } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import type { AgentApprovalRequest } from "@/types/agent-orchestrator";
+import { pendingInputIdentity } from "@/lib/pending-input-identity";
 import { resolveApprovalReplyOutcomes } from "./agent-session-approval-card-model";
 
 const APPROVAL_OUTCOME_LABELS = {
@@ -75,7 +76,12 @@ export function AgentSessionApprovalCard({
     request.tool?.input && !request.command ? formatToolInput(request.tool.input) : null;
 
   return (
-    <section className="rounded-xl border border-warning-border bg-warning-surface shadow-sm">
+    <section
+      className="rounded-xl border border-warning-border bg-warning-surface shadow-sm"
+      data-notification-attention-kind="permission"
+      data-notification-attention-id={pendingInputIdentity(request)}
+      tabIndex={-1}
+    >
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-warning-border px-3 py-1.5">
         <div className="flex min-w-0 items-center gap-2">
           <ShieldAlert className="size-4 text-warning-muted" />

@@ -4,6 +4,7 @@ import path from "node:path";
 import { ElectronOperationError } from "../effect/electron-errors";
 import {
   configureElectronAppIdentity,
+  OPEN_DUCKTOR_APP_USER_MODEL_ID,
   resolveElectronProfileKind,
   resolveElectronProfilePath,
 } from "./electron-app-identity";
@@ -75,6 +76,29 @@ describe("resolveElectronProfilePath", () => {
 });
 
 describe("configureElectronAppIdentity", () => {
+  test("sets the packaged app identity used by Windows notifications", () => {
+    const appUserModelIds: string[] = [];
+
+    configureElectronAppIdentity(
+      {
+        setName() {},
+        setPath() {},
+        setAppUserModelId(id) {
+          appUserModelIds.push(id);
+        },
+      },
+      {
+        appName: customAppName,
+        createDirectory() {},
+        platform: "win32",
+        profileKind: "production",
+        resolveConfigDirectory: () => customConfigPath,
+      },
+    );
+
+    expect(appUserModelIds).toEqual([OPEN_DUCKTOR_APP_USER_MODEL_ID]);
+  });
+
   test("pins Chromium storage paths to the resolved OpenDucktor config profile", () => {
     const calls: Array<[string, string]> = [];
 

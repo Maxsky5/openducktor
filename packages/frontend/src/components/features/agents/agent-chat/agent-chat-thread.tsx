@@ -251,7 +251,11 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
       ))}
 
       {sessionAuxiliaryError ? (
-        <div className="rounded-md border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-surface-foreground">
+        <div
+          className="rounded-md border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-surface-foreground"
+          data-notification-attention-kind="error"
+          tabIndex={-1}
+        >
           {sessionAuxiliaryError}
         </div>
       ) : null}

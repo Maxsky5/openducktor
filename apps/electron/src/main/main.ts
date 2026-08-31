@@ -47,6 +47,10 @@ import {
   ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL,
   ELECTRON_HOST_EVENT_CHANNEL,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
+  ELECTRON_NOTIFICATION_GET_APP_FOCUS_CHANNEL,
+  ELECTRON_NOTIFICATION_GET_CAPABILITY_CHANNEL,
+  ELECTRON_NOTIFICATION_REQUEST_PERMISSION_CHANNEL,
+  ELECTRON_NOTIFICATION_SHOW_CHANNEL,
   ELECTRON_OPEN_EXTERNAL_URL_CHANNEL,
   type ElectronAppUpdateCheckInput,
 } from "../shared/electron-bridge-contract";
@@ -83,6 +87,7 @@ import {
 import { createElectronMainLogger, initializeElectronMainLogger } from "./electron-main-logger";
 import { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindings";
 import { resolveElectronRuntimeDistribution } from "./electron-runtime-distribution";
+import { createElectronNotificationService } from "./electron-notification-service";
 import { disableElectronKeychainStorage } from "./electron-storage-policy";
 import { registerElectronTaskAssetProtocol } from "./electron-task-asset-protocol";
 import { registerElectronTaskStreamIpc } from "./electron-task-stream-ipc";
@@ -99,6 +104,7 @@ const {
   nativeImage,
   nativeTheme,
   net,
+  Notification,
   protocol,
   session,
   shell,
@@ -150,6 +156,7 @@ const hostEventBus = createHostEventBus({
 });
 let activeHostCommandRouter: EffectHostCommandRouter | null = null;
 let activeAppUpdateService: ElectronAppUpdateService | null = null;
+let activeNotificationService: ReturnType<typeof createElectronNotificationService> | null = null;
 
 const isTaggedHostValidationError = (
   cause: unknown,
@@ -686,6 +693,7 @@ const createRejectedAppUpdateCommandResult = (
 const registerIpcHandlers = (
   hostCommandRouter: EffectNodeHostCommandRouter,
   appUpdateService: ElectronAppUpdateService,
+  notificationService: ReturnType<typeof createElectronNotificationService>,
 ): void => {
   registerElectronEditorClipboardIpc({ clipboard, ipcMain });
   registerElectronTaskStreamIpc({
@@ -727,6 +735,19 @@ const registerIpcHandlers = (
     );
     return createElectronLocalAttachmentPreviewUrl(resolvedPath);
   });
+
+  ipcMain.handle(ELECTRON_NOTIFICATION_GET_CAPABILITY_CHANNEL, () =>
+    notificationService.getCapability(),
+  );
+  ipcMain.handle(ELECTRON_NOTIFICATION_REQUEST_PERMISSION_CHANNEL, () =>
+    notificationService.getCapability(),
+  );
+  ipcMain.handle(ELECTRON_NOTIFICATION_GET_APP_FOCUS_CHANNEL, () =>
+    notificationService.isAppFocused(),
+  );
+  ipcMain.handle(ELECTRON_NOTIFICATION_SHOW_CHANNEL, (_event, request) =>
+    notificationService.show(request),
+  );
 
   ipcMain.handle(ELECTRON_APP_UPDATE_GET_STATE_CHANNEL, () =>
     readAppUpdateStateForIpc(appUpdateService.getState()),
@@ -789,10 +810,16 @@ const disposeActiveAppUpdateService = async (): Promise<void> => {
   await service?.dispose();
 };
 
+const disposeActiveNotificationService = (): void => {
+  activeNotificationService?.dispose();
+  activeNotificationService = null;
+};
+
 const disposeActiveElectronRuntimeEffect = (
   reason: string,
 ): Effect.Effect<void, ElectronLifecycleError> =>
   Effect.gen(function* () {
+    yield* Effect.sync(disposeActiveNotificationService);
     const updaterResult = yield* Effect.either(
       Effect.tryPromise({
         try: disposeActiveAppUpdateService,
@@ -894,6 +921,38 @@ const configureElectronReadyRuntimeEffect = ({
         resourcesPath: process.resourcesPath,
       });
       activeAppUpdateService = appUpdateService;
+      if (activeNotificationService) {
+        throw new ElectronLifecycleError({
+          operation: "electron.main.configure-notifications",
+          message: "Electron notification service is already configured.",
+        });
+      }
+      const notificationService = createElectronNotificationService({
+        notifications: {
+          isSupported: () => Notification.isSupported(),
+          create: (options) => {
+            const notification = new Notification(options);
+            return {
+              onShow: (listener) => {
+                notification.on("show", listener);
+              },
+              onFailed: (listener) => {
+                notification.on("failed", (_event, error) => listener(error));
+              },
+              onClick: (listener) => {
+                notification.on("click", listener);
+              },
+              onClose: (listener) => {
+                notification.on("close", listener);
+              },
+              show: () => notification.show(),
+              close: () => notification.close(),
+            };
+          },
+        },
+        getWindows: () => BrowserWindow.getAllWindows(),
+      });
+      activeNotificationService = notificationService;
       configureElectronLoopbackCorsPolicy(
         rendererSession,
         resolveElectronLoopbackCorsOrigin(rendererDevUrl),
@@ -915,7 +974,7 @@ const configureElectronReadyRuntimeEffect = ({
           runElectronMainTask(() => appUpdateService.check({ initiator: "menu" }).then(() => {}));
         },
       });
-      registerIpcHandlers(hostCommandRouter, appUpdateService);
+      registerIpcHandlers(hostCommandRouter, appUpdateService, notificationService);
       registerHostEventForwarding();
       registerAppUpdateStateForwarding(appUpdateService);
       configureElectronDockIcon();

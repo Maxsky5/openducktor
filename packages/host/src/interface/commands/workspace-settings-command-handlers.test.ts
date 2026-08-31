@@ -1,5 +1,5 @@
 import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
-import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
+import { DEFAULT_AGENT_RUNTIMES, DEFAULT_NOTIFICATION_SETTINGS } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { HostOperationError } from "../../effect/host-errors";
@@ -246,6 +246,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
               reusablePrompts: [],
               kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
               autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
+              notifications: DEFAULT_NOTIFICATION_SETTINGS,
               agentRuntimes: DEFAULT_AGENT_RUNTIMES,
               agentModelFavorites: [],
               workspaces: {},
@@ -296,6 +297,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
               reusablePrompts: [],
               kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
               autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
+              notifications: DEFAULT_NOTIFICATION_SETTINGS,
               agentRuntimes: DEFAULT_AGENT_RUNTIMES,
               agentModelFavorites: [
                 { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
@@ -413,6 +415,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
           reusablePrompts: [],
           kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
           autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
+          notifications: DEFAULT_NOTIFICATION_SETTINGS,
           agentRuntimes: {
             opencode: { enabled: true, executablePath: "/bin/opencode" },
             codex: { enabled: false, executablePath: "/bin/codex" },

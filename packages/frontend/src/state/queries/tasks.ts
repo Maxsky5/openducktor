@@ -30,6 +30,15 @@ export const repoTaskDataQueryOptions = createRepoTaskDataQueryOptions((repoPath
   host.tasksList(repoPath),
 );
 
+export const unfilteredRepoTaskDataQueryOptions = (repoPath: string) =>
+  queryOptions({
+    queryKey: taskQueryKeys.unfilteredRepoData(repoPath),
+    queryFn: async (): Promise<RepoTaskData> => ({
+      tasks: await host.tasksList(repoPath),
+    }),
+    staleTime: TASK_DATA_STALE_TIME_MS,
+  });
+
 export const loadRepoTaskDataFromQuery = (
   queryClient: QueryClient,
   repoPath: string,

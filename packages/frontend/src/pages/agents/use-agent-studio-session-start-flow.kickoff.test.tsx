@@ -166,7 +166,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 });
 
 describe("useAgentStudioSessionStartFlow kickoff failures", () => {
-  test("keeps the started session and shows a toast when kickoff send fails", async () => {
+  test("keeps the started session without a legacy toast when kickoff send fails", async () => {
     const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const sendAgentMessage = mock(async () => {
       throw new Error("kickoff failed");
@@ -207,12 +207,7 @@ describe("useAgentStudioSessionStartFlow kickoff failures", () => {
 
       expect(startAgentSession).toHaveBeenCalledTimes(1);
       expect(sendAgentMessage).toHaveBeenCalledTimes(1);
-      expect(toastErrorMock).toHaveBeenCalledWith(
-        "Session started, but the kickoff prompt failed to send.",
-        {
-          description: "kickoff failed",
-        },
-      );
+      expect(toastErrorMock).not.toHaveBeenCalled();
     });
 
     await harness.unmount();

@@ -61,6 +61,17 @@ export const createElectronShellBridge = (): ShellBridge => {
       canOpenExternalUrls: true,
       canPreviewLocalAttachments: true,
     },
+    notifications: {
+      getCapability: () => electronApi.notifications.getCapability(),
+      requestPermission: () => electronApi.notifications.requestPermission(),
+      isAppFocused: () => electronApi.notifications.isAppFocused(),
+      isExternalDeliveryOwner: () => true,
+      showOsNotification: (request) => electronApi.notifications.show(request),
+      publishOccurrence: () => {},
+      subscribeOccurrences: () => () => {},
+      subscribeClicks: (listener) => electronApi.notifications.subscribeClicks(listener),
+      dispose: () => {},
+    },
     subscribeRunEvents: subscribeElectronEvent(electronApi, RUN_EVENT_CHANNEL),
     subscribeDevServerEvents: async (listener) => {
       const unsubscribe = electronApi.subscribe(DEV_SERVER_EVENT_CHANNEL, listener);

@@ -24,6 +24,9 @@ export type SettingsModalDraftActions = {
   updateGlobalSystemSettings: (
     updater: (current: SettingsSnapshot["system"]) => SettingsSnapshot["system"],
   ) => void;
+  updateNotificationSettings: (
+    updater: (current: SettingsSnapshot["notifications"]) => SettingsSnapshot["notifications"],
+  ) => void;
   updateGlobalGeneralSettings: (
     updater: (current: SettingsSnapshot["general"]) => SettingsSnapshot["general"],
   ) => void;
@@ -123,6 +126,15 @@ export const useSettingsModalDraftActions = ({
   const updateGlobalSystemSettings = useCallback(
     (updater: (current: SettingsSnapshot["system"]) => SettingsSnapshot["system"]): void => {
       updateSnapshotSection("system", updater);
+    },
+    [updateSnapshotSection],
+  );
+
+  const updateNotificationSettings = useCallback(
+    (
+      updater: (current: SettingsSnapshot["notifications"]) => SettingsSnapshot["notifications"],
+    ): void => {
+      updateSnapshotSection("notifications", updater);
     },
     [updateSnapshotSection],
   );
@@ -227,6 +239,7 @@ export const useSettingsModalDraftActions = ({
     updateGlobalGitConfig,
     updateGlobalChatSettings,
     updateGlobalSystemSettings,
+    updateNotificationSettings,
     updateGlobalGeneralSettings,
     updateGlobalAppearanceSettings,
     updateAgentRuntimes,

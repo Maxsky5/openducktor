@@ -2,6 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { resolveSettingsDeepLink } from "./settings-deep-link";
 
 describe("resolveSettingsDeepLink", () => {
+  test("opens a global settings section directly", () => {
+    expect(resolveSettingsDeepLink({ kind: "global", section: "notifications" })).toEqual({
+      scope: "global",
+      navigation: { section: "notifications" },
+    });
+  });
+
   test("resolves the repository dev-servers intent as one complete settings destination", () => {
     const deepLink = {
       kind: "repository-dev-servers" as const,

@@ -1,0 +1,251 @@
+import { describe, expect, test } from "bun:test";
+import {
+  agentSessionTranscriptEventSchema,
+  type AgentSessionLiveEnvelope,
+  type AgentSessionLiveSnapshot,
+  type AgentSessionTranscriptEvent,
+} from "@openducktor/contracts";
+import { createSessionOccurrenceProjector } from "./session-occurrence-projector";
+
+const ref = {
+  repoPath: "/repo",
+  runtimeKind: "opencode" as const,
+  workingDirectory: "/repo/worktrees/task-1",
+  externalSessionId: "session-1",
+};
+
+const snapshot = (overrides: Partial<AgentSessionLiveSnapshot> = {}): AgentSessionLiveSnapshot => ({
+  ref,
+  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+  activity: "idle",
+  title: "Builder session",
+  startedAt: "2026-08-31T10:00:00.000Z",
+  pendingApprovals: [],
+  pendingQuestions: [],
+  contextUsage: null,
+  ...overrides,
+});
+
+type WithoutSessionRef<Event> = Event extends AgentSessionTranscriptEvent
+  ? Omit<Event, "sessionRef">
+  : never;
+type TranscriptEventFixture = WithoutSessionRef<AgentSessionTranscriptEvent>;
+
+const transcript = (event: TranscriptEventFixture): AgentSessionTranscriptEvent =>
+  agentSessionTranscriptEventSchema.parse({ ...event, sessionRef: ref });
+
+const createProjector = () =>
+  createSessionOccurrenceProjector({
+    repositoryLabel: "Repo",
+    resolveTask: (taskId) => ({ id: taskId, title: "Build notifications" }),
+  });
+
+describe("session occurrence projector", () => {
+  test("uses snapshots and existing pending inputs only as a baseline", () => {
+    const projector = createProjector();
+    expect(
+      projector.accept({
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [
+          snapshot({
+            activity: "running",
+            pendingApprovals: [
+              { requestId: "permission-1", requestType: "permission_grant", title: "Read" },
+            ],
+          }),
+        ],
+      }),
+    ).toEqual([]);
+
+    expect(
+      projector.accept({
+        type: "session_upsert",
+        session: snapshot({
+          activity: "running",
+          pendingApprovals: [
+            { requestId: "permission-1", requestType: "permission_grant", title: "Read" },
+          ],
+        }),
+      }),
+    ).toEqual([]);
+  });
+
+  test("emits once for each new direct pending request and ignores subagent requests", () => {
+    const projector = createProjector();
+    projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    const permissionUpsert: AgentSessionLiveEnvelope = {
+      type: "session_upsert",
+      session: snapshot({
+        pendingApprovals: [
+          { requestId: "permission-1", requestType: "permission_grant", title: "Read" },
+        ],
+      }),
+    };
+
+    expect(projector.accept(permissionUpsert)).toMatchObject([
+      {
+        kind: "agent.permission_requested",
+        occurrenceId: expect.stringContaining("permission-1"),
+        navigationTarget: {
+          type: "pending_input",
+          repoPath: "/repo",
+          taskId: "task-1",
+          session: {
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/worktrees/task-1",
+            externalSessionId: "session-1",
+          },
+          inputKind: "permission",
+          requestId: "permission-1",
+        },
+      },
+    ]);
+    expect(projector.accept(permissionUpsert)).toEqual([]);
+
+    expect(
+      projector.accept({
+        type: "session_upsert",
+        session: snapshot({
+          parentExternalSessionId: "parent-session",
+          pendingQuestions: [{ requestId: "question-child", questions: [] }],
+        }),
+      }),
+    ).toEqual([]);
+  });
+
+  test("merges error frames, gives error priority over idle, and allows a later episode", () => {
+    const projector = createProjector();
+    projector.accept({
+      type: "snapshot",
+      repoPath: "/repo",
+      sessions: [snapshot({ activity: "running" })],
+    });
+    const turnError = transcript({
+      type: "turn_error",
+      externalSessionId: ref.externalSessionId,
+      timestamp: "2026-08-31T10:01:00.000Z",
+      message: "secret runtime error",
+    });
+    const terminalError = transcript({
+      type: "session_error",
+      externalSessionId: ref.externalSessionId,
+      timestamp: "2026-08-31T10:01:01.000Z",
+      message: "same secret runtime error",
+    });
+
+    expect(projector.accept({ type: "transcript_event", event: turnError })).toMatchObject([
+      {
+        kind: "agent.session_error",
+        status: "Agent Session reported an error.",
+      },
+    ]);
+    expect(projector.accept({ type: "transcript_event", event: terminalError })).toEqual([]);
+    expect(
+      projector.accept({
+        type: "transcript_event",
+        event: transcript({
+          type: "session_idle",
+          externalSessionId: ref.externalSessionId,
+          timestamp: "2026-08-31T10:01:02.000Z",
+        }),
+      }),
+    ).toEqual([]);
+
+    projector.accept({
+      type: "transcript_event",
+      event: transcript({
+        type: "session_status",
+        externalSessionId: ref.externalSessionId,
+        timestamp: "2026-08-31T10:03:00.000Z",
+        status: { type: "busy", message: null },
+      }),
+    });
+    expect(projector.accept({ type: "transcript_event", event: terminalError })).toMatchObject([
+      { kind: "agent.session_error", occurrenceId: expect.stringContaining("cycle-2") },
+    ]);
+  });
+
+  test("emits idle only after observed running and excludes retry, output, and user stop", () => {
+    const projector = createProjector();
+    projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    const events: AgentSessionLiveEnvelope[] = [
+      {
+        type: "transcript_event",
+        event: transcript({
+          type: "session_status",
+          externalSessionId: ref.externalSessionId,
+          timestamp: "2026-08-31T10:01:00.000Z",
+          status: { type: "retry", attempt: 1, message: "retry", nextEpochMs: 1 },
+        }),
+      },
+      {
+        type: "transcript_event",
+        event: transcript({
+          type: "assistant_message",
+          externalSessionId: ref.externalSessionId,
+          timestamp: "2026-08-31T10:01:01.000Z",
+          messageId: "message-1",
+          message: "completed output",
+        }),
+      },
+      {
+        type: "transcript_event",
+        event: transcript({
+          type: "session_finished",
+          externalSessionId: ref.externalSessionId,
+          timestamp: "2026-08-31T10:01:02.000Z",
+          message: "Session stopped",
+        }),
+      },
+    ];
+    expect(events.flatMap((event) => projector.accept(event))).toEqual([]);
+
+    projector.accept({
+      type: "transcript_event",
+      event: transcript({
+        type: "session_status",
+        externalSessionId: ref.externalSessionId,
+        timestamp: "2026-08-31T10:02:00.000Z",
+        status: { type: "busy", message: null },
+      }),
+    });
+    expect(
+      projector.accept({
+        type: "transcript_event",
+        event: transcript({
+          type: "session_finished",
+          externalSessionId: ref.externalSessionId,
+          timestamp: "2026-08-31T10:03:00.000Z",
+          message: "Finished",
+        }),
+      }),
+    ).toMatchObject([{ kind: "agent.session_idle" }]);
+  });
+
+  test("baselines a newly discovered session and excludes child sessions", () => {
+    const projector = createProjector();
+    projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [] });
+    expect(
+      projector.accept({
+        type: "session_upsert",
+        session: snapshot({
+          parentExternalSessionId: "parent-session",
+          pendingQuestions: [{ requestId: "question-1", questions: [] }],
+        }),
+      }),
+    ).toEqual([]);
+    expect(
+      projector.accept({
+        type: "session_upsert",
+        session: snapshot({
+          parentExternalSessionId: "parent-session",
+          pendingQuestions: [
+            { requestId: "question-1", questions: [] },
+            { requestId: "question-2", questions: [] },
+          ],
+        }),
+      }),
+    ).toEqual([]);
+  });
+});

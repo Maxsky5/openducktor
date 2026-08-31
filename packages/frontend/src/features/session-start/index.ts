@@ -18,6 +18,9 @@ export {
   type ResolvedSessionStartDecision,
   type RunSessionStartWorkflow,
   type RunSessionStartWorkflowInput,
+  type SessionStartNotificationInput,
+  type SessionStartNotificationPublisher,
+  wasSessionStartFailureNotified,
   type SessionStartFlowRequest,
   type SessionStartLaunchRequest,
 } from "./session-start-orchestration";

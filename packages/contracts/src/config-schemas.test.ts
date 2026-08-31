@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { JSONType } from "zod";
+import { DEFAULT_NOTIFICATION_SETTINGS } from "./notification-schemas";
 import {
   APP_PLATFORM_VALUES,
   AUTOPILOT_EVENT_IDS,
@@ -106,6 +107,7 @@ describe("config-schemas", () => {
       "reusablePrompts",
       "kanban",
       "autopilot",
+      "notifications",
       "agentRuntimes",
       "agentModelFavorites",
       "workspaces",
@@ -974,5 +976,18 @@ describe("config-schemas", () => {
       eventId: "taskProgressedToSpecReady",
       actionIds: ["startPlanner", "startBuilder"],
     });
+  });
+
+  test("defaults notifications for existing configs and settings snapshots", () => {
+    const config = globalConfigSchema.parse({ version: 3 });
+    const snapshot = settingsSnapshotSchema.parse({
+      theme: "light",
+      git: { defaultMergeMethod: "merge_commit" },
+      workspaces: {},
+      globalPromptOverrides: {},
+    });
+
+    expect(config.notifications).toEqual(DEFAULT_NOTIFICATION_SETTINGS);
+    expect(snapshot.notifications).toEqual(DEFAULT_NOTIFICATION_SETTINGS);
   });
 });

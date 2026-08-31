@@ -9,6 +9,8 @@ type SettingsModalTriggerProps = {
   iconOnly: boolean;
   label: string;
   size: "default" | "sm" | "lg" | "icon";
+  onClick?: () => void;
+  standalone?: boolean;
 };
 
 export function SettingsModalTrigger({
@@ -16,6 +18,8 @@ export function SettingsModalTrigger({
   iconOnly,
   label,
   size,
+  onClick,
+  standalone = false,
 }: SettingsModalTriggerProps): ReactElement {
   const button = (
     <Button
@@ -25,6 +29,7 @@ export function SettingsModalTrigger({
       className={className}
       aria-label={iconOnly ? label : undefined}
       title={iconOnly ? label : undefined}
+      onClick={onClick}
     >
       <Settings />
       {iconOnly ? null : label}
@@ -32,15 +37,19 @@ export function SettingsModalTrigger({
   );
 
   if (!iconOnly) {
+    if (standalone) return button;
     return <DialogTrigger asChild>{button}</DialogTrigger>;
+  }
+
+  let tooltipTrigger = <TooltipTrigger asChild>{button}</TooltipTrigger>;
+  if (!standalone) {
+    tooltipTrigger = <DialogTrigger asChild>{tooltipTrigger}</DialogTrigger>;
   }
 
   return (
     <TooltipProvider>
       <Tooltip>
-        <DialogTrigger asChild>
-          <TooltipTrigger asChild>{button}</TooltipTrigger>
-        </DialogTrigger>
+        {tooltipTrigger}
         <TooltipContent side="top">
           <p>{label}</p>
         </TooltipContent>

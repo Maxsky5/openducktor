@@ -3,6 +3,7 @@ import type { HTMLAttributes, ReactElement } from "react";
 import { useId } from "react";
 import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { cn } from "@/lib/utils";
+import { pendingInputIdentity } from "@/lib/pending-input-identity";
 import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
 import { isAgentQuestionAnswered } from "./agent-session-question-draft";
 import { buildQuestionRenderEntries } from "./agent-session-question-keys";
@@ -67,7 +68,12 @@ export function AgentSessionQuestionCard({
   };
 
   return (
-    <section className="rounded-xl border border-input bg-card shadow-sm">
+    <section
+      className="rounded-xl border border-input bg-card shadow-sm"
+      data-notification-attention-kind="question"
+      data-notification-attention-id={pendingInputIdentity(request)}
+      tabIndex={-1}
+    >
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-input px-3 py-1.5">
         <div className="flex min-w-0 items-center gap-2 text-foreground">
           <CircleDotDashed className="size-4 text-muted-foreground" />

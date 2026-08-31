@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { DEFAULT_NOTIFICATION_SETTINGS } from "@openducktor/contracts";
 import {
   createDefaultGlobalConfig,
   parsePersistedGlobalConfig,
@@ -13,6 +14,7 @@ describe("global config", () => {
     expect(config.version).toBe(3);
     expect(config.agentRuntimes.opencode).toEqual({ enabled: false, executablePath: "" });
     expect(config.autopilot.alwaysStartQaReviewsFresh).toBe(false);
+    expect(config.notifications).toEqual(DEFAULT_NOTIFICATION_SETTINGS);
   });
 
   test("parses current and legacy versions through distinct entry points", () => {
@@ -199,5 +201,6 @@ describe("global config", () => {
       executablePath: "/tools/claude",
     });
     expect(upgraded.autopilot.alwaysStartQaReviewsFresh).toBe(true);
+    expect(upgraded.notifications).toEqual(DEFAULT_NOTIFICATION_SETTINGS);
   });
 });

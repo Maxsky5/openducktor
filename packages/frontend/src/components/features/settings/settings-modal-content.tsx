@@ -7,6 +7,7 @@ import type { SettingsContentFocusRequest } from "./settings-deep-link";
 import { GeneralSettingsSection } from "./settings-general-section";
 import { SettingsGitSection } from "./settings-git-section";
 import { SettingsKanbanSection } from "./settings-kanban-section";
+import { SettingsNotificationsSection } from "./settings-notifications-section";
 import type {
   PromptRoleTabId,
   RepositorySectionId,
@@ -71,6 +72,7 @@ export function SettingsModalContent({
     updateGlobalGeneralSettings,
     updateGlobalAppearanceSettings,
     updateGlobalChatSettings,
+    updateNotificationSettings,
     updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,
@@ -181,6 +183,16 @@ export function SettingsModalContent({
         onUpdateSystem={controller.updateGlobalSystemSettings}
         disabled={isInteractionDisabled}
         onUpdateAppearance={updateGlobalAppearanceSettings}
+      />
+    );
+  }
+
+  if (section === "notifications") {
+    return (
+      <SettingsNotificationsSection
+        notifications={snapshotDraft.notifications}
+        disabled={isInteractionDisabled}
+        onUpdateNotifications={updateNotificationSettings}
       />
     );
   }
