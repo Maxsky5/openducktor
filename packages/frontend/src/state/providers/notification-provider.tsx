@@ -46,17 +46,19 @@ const reportProducerFailure = (failure: NotificationProducerFailure): void => {
   });
 };
 
+const unavailableNotificationNavigator: NotificationNavigator = async () => {
+  toast.error("Notification target unavailable", {
+    description: "OpenDucktor could not open this notification target.",
+  });
+};
+
 export function NotificationProvider({ children }: PropsWithChildren): ReactElement {
   const queryClient = useQueryClient();
   const { workspaces } = useWorkspaceStateContext();
   const shellNotifications = getShellBridge().notifications;
   const [osFailure, setOsFailure] = useState<NotificationDispatchFailure | null>(null);
   const workspacesRef = useRef(workspaces);
-  const navigatorRef = useRef<NotificationNavigator>(async () => {
-    toast.error("Notification target unavailable", {
-      description: "OpenDucktor could not open this notification target.",
-    });
-  });
+  const navigatorRef = useRef<NotificationNavigator>(unavailableNotificationNavigator);
   useEffect(() => {
     workspacesRef.current = workspaces;
   }, [workspaces]);
@@ -159,11 +161,7 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
         navigatorRef.current = navigator;
         return () => {
           if (navigatorRef.current === navigator) {
-            navigatorRef.current = async () => {
-              toast.error("Notification target unavailable", {
-                description: "OpenDucktor could not open this notification target.",
-              });
-            };
+            navigatorRef.current = unavailableNotificationNavigator;
           }
         };
       },
