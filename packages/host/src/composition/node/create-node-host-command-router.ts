@@ -9,7 +9,6 @@ import {
   resolveMcpBridgeDiscoveryPath,
 } from "../../adapters/mcp/mcp-host-bridge-server";
 import { createOpenCodeWorkspaceRuntimeStarter } from "../../adapters/opencode/opencode-workspace-runtime-starter";
-import { createGithubPullRequestReviewAdapter } from "../../adapters/pull-requests/github/github-pull-request-review-adapter";
 import { createRuntimeRegistry } from "../../adapters/runtimes/runtime-registry";
 import { createRuntimeSessionOperations } from "../../adapters/runtimes/runtime-session-operations";
 import { createRuntimeTaskActivityGuard } from "../../adapters/runtimes/runtime-task-activity-guard";
@@ -29,7 +28,6 @@ import { createRuntimeDefinitionsService } from "../../application/runtimes/runt
 import { createRuntimeOrchestratorService } from "../../application/runtimes/runtime-orchestrator-service";
 import { readSavedRuntimeExecutablePath } from "../../application/runtimes/saved-runtime-executable";
 import { createOpenInToolsService } from "../../application/system/open-in-tools-service";
-import { createGithubCommandDependencies } from "../../application/tasks/support/github-pull-requests";
 import type { TaskSyncLoopHandle } from "../../application/tasks/sync/task-sync-service";
 import { createTaskServiceWithMutationProgress } from "../../application/tasks/task-service";
 import { createTaskWorktreeService } from "../../application/tasks/worktrees/task-worktree-service";
@@ -78,6 +76,7 @@ import type {
 } from "./node-host-command-router-types";
 import { createNodeHostDefaultPorts } from "./node-host-default-ports";
 import { createLiveSessionFaultLogger, defaultLifecycleLogger } from "./node-host-lifecycle-logger";
+import { createNodeGitProviderResolver } from "./git-provider-composition";
 import { createNodeRuntimeExecutableCommandHandlers } from "./node-runtime-executable-command-handlers";
 import { createNodeTaskAssetServices } from "./node-task-asset-services";
 import { createNodeTaskEventServices } from "./node-task-event-services";
@@ -307,16 +306,13 @@ export const createNodeEffectHostCommandRouter = (
     taskService,
     workspaceSettingsService,
   });
-  const githubCommandDependencies = createGithubCommandDependencies({
+  const gitProviderResolver = createNodeGitProviderResolver({
+    gitPort: git,
     systemCommands,
     toolDiscovery,
   });
   const pullRequestReviewService = createPullRequestReviewService({
-    providers: [
-      createGithubPullRequestReviewAdapter({
-        githubDependencies: githubCommandDependencies,
-      }),
-    ],
+    resolver: gitProviderResolver,
     taskReader: taskStore,
     workspaceSettingsService,
   });

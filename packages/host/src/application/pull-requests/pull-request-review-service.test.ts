@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
   type GitProviderId,
+  type GitProviderDescriptor,
   type PullRequest,
   type PullRequestReviewContext,
   type RepoConfig,
@@ -8,19 +9,21 @@ import {
   type TaskCard,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import type { GitProviderPort, PullRequestProviderPort } from "../../ports/git-provider-port";
 import type { PullRequestReviewProviderPort } from "../../ports/pull-request-review-provider-port";
 import type { TaskReader } from "../../ports/task-repository-ports";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-service";
+import { createGitProviderResolver } from "../git/git-provider-resolver";
 import { createPullRequestReviewService } from "./pull-request-review-service";
 
-const makeRepoConfig = (): RepoConfig =>
+const makeRepoConfig = (providerId: GitProviderId): RepoConfig =>
   repoConfigSchema.parse({
     workspaceId: "repo",
     workspaceName: "Repo",
     repoPath: "/repo",
     defaultRuntimeKind: "opencode",
     git: {
-      provider: { id: "github", enabled: true },
+      provider: { id: providerId, enabled: true },
     },
   });
 
@@ -101,21 +104,57 @@ const makeLoadedContext = (providerId: GitProviderId): PullRequestReviewContext 
   refreshedAt: "2026-07-10T08:00:00.000Z",
 });
 
+const makeProvider = (
+  providerId: GitProviderId,
+  readContext: PullRequestReviewProviderPort["readContext"],
+): GitProviderPort => {
+  const providerDescriptor: GitProviderDescriptor = {
+    id: providerId,
+    label: providerId,
+    description: `${providerId} provider`,
+    capabilities: {
+      supportsPullRequests: true,
+      supportsPullRequestReview: true,
+    },
+  };
+  const reviewPort: PullRequestReviewProviderPort = { providerId, readContext };
+  const unexpectedProviderOperation = <Success>(): Effect.Effect<Success, never> =>
+    Effect.die("Provider operation is not expected in review service tests");
+  return {
+    getDescriptor: () => providerDescriptor,
+    repository: () => ({
+      getReadRepository: () => unexpectedProviderOperation(),
+      getWriteContext: () => unexpectedProviderOperation(),
+    }),
+    health: () => ({
+      getStatus: () => unexpectedProviderOperation(),
+    }),
+    pullRequests: () =>
+      Effect.succeed<PullRequestProviderPort>({
+        findByBranch: () => unexpectedProviderOperation(),
+        getByNumber: () => unexpectedProviderOperation(),
+        upsert: () => unexpectedProviderOperation(),
+      }),
+    pullRequestReview: () => Effect.succeed(reviewPort),
+  };
+};
+
 const makeService = ({
   pullRequest,
   providers,
 }: {
   pullRequest?: PullRequest;
-  providers: PullRequestReviewProviderPort[];
+  providers: GitProviderPort[];
 }) => {
   const taskReader: Pick<TaskReader, "getTask"> = {
     getTask: () => Effect.succeed(makeTask(pullRequest)),
   };
   const workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath"> = {
-    getRepoConfigByRepoPath: () => Effect.succeed(makeRepoConfig()),
+    getRepoConfigByRepoPath: () =>
+      Effect.succeed(makeRepoConfig(pullRequest?.providerId ?? "github")),
   };
   return createPullRequestReviewService({
-    providers,
+    resolver: createGitProviderResolver(providers),
     taskReader,
     workspaceSettingsService,
   });
@@ -128,14 +167,8 @@ describe("createPullRequestReviewService", () => {
     const service = makeService({
       pullRequest: makePullRequest("gitlab"),
       providers: [
-        {
-          providerId: "github",
-          readContext: githubReadContext,
-        },
-        {
-          providerId: "gitlab",
-          readContext: gitlabReadContext,
-        },
+        makeProvider("github", githubReadContext),
+        makeProvider("gitlab", gitlabReadContext),
       ],
     });
 
@@ -152,12 +185,7 @@ describe("createPullRequestReviewService", () => {
     const githubReadContext = mock(() => Effect.succeed(makeLoadedContext("github")));
     const service = makeService({
       pullRequest: makePullRequest("gitlab"),
-      providers: [
-        {
-          providerId: "github",
-          readContext: githubReadContext,
-        },
-      ],
+      providers: [makeProvider("github", githubReadContext)],
     });
 
     const context = await Effect.runPromise(
@@ -175,12 +203,7 @@ describe("createPullRequestReviewService", () => {
   test("does not invoke any provider for an unlinked task", async () => {
     const githubReadContext = mock(() => Effect.succeed(makeLoadedContext("github")));
     const service = makeService({
-      providers: [
-        {
-          providerId: "github",
-          readContext: githubReadContext,
-        },
-      ],
+      providers: [makeProvider("github", githubReadContext)],
     });
 
     const context = await Effect.runPromise(

@@ -6,8 +6,8 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { errorMessage, HostValidationError } from "../../effect/host-errors";
-import type { PullRequestReviewProviderPort } from "../../ports/pull-request-review-provider-port";
 import type { TaskReader } from "../../ports/task-repository-ports";
+import type { GitProviderResolver } from "../git/git-provider-resolver";
 import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
@@ -47,19 +47,12 @@ const noPullRequest = (taskId: string | undefined): PullRequestReviewContext =>
     reason: taskId ? `Task ${taskId} has no linked pull request.` : "No linked pull request.",
   });
 
-const selectProvider = (
-  providers: readonly PullRequestReviewProviderPort[],
-  linkedPullRequest: PullRequest,
-): PullRequestReviewProviderPort | null => {
-  return providers.find((provider) => provider.providerId === linkedPullRequest.providerId) ?? null;
-};
-
 export const createPullRequestReviewService = ({
-  providers,
+  resolver,
   taskReader,
   workspaceSettingsService,
 }: {
-  providers: readonly PullRequestReviewProviderPort[];
+  resolver: GitProviderResolver;
   taskReader: Pick<TaskReader, "getTask">;
   workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath">;
 }): PullRequestReviewService => {
@@ -82,23 +75,45 @@ export const createPullRequestReviewService = ({
           return noPullRequest(input.taskId);
         }
 
-        const provider = selectProvider(providers, linkedPullRequest);
-        if (!provider) {
-          const providerId = linkedPullRequest.providerId;
+        const providerId = linkedPullRequest.providerId;
+        const resolvedProvider = yield* Effect.either(resolver.resolve(repoConfig));
+        if (resolvedProvider._tag === "Left") {
+          const reason =
+            resolvedProvider.left.reason === "not_registered"
+              ? `Pull request review provider '${providerId}' is not supported.`
+              : errorMessage(resolvedProvider.left);
+          return unavailable(providerId, reason);
+        }
+
+        const provider = resolvedProvider.right;
+        const descriptor = provider.getDescriptor();
+        if (descriptor.id !== providerId) {
           return unavailable(
             providerId,
             `Pull request review provider '${providerId}' is not supported.`,
           );
         }
 
+        if (!descriptor.capabilities.supportsPullRequestReview) {
+          return unavailable(
+            providerId,
+            `Git provider '${providerId}' does not support Pull Request review.`,
+          );
+        }
+
+        const reviewProviderResult = yield* Effect.either(provider.pullRequestReview());
+        if (reviewProviderResult._tag === "Left") {
+          return unavailable(providerId, errorMessage(reviewProviderResult.left));
+        }
+        const reviewProvider = reviewProviderResult.right;
         const reviewResult = yield* Effect.either(
-          provider.readContext({
+          reviewProvider.readContext({
             repoConfig,
             linkedPullRequest,
           }),
         );
         if (reviewResult._tag === "Left") {
-          return providerError(provider.providerId, errorMessage(reviewResult.left));
+          return providerError(providerId, errorMessage(reviewResult.left));
         }
         return reviewResult.right;
       }).pipe(
