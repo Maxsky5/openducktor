@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { SessionRef } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
+import { replaceAgentSession } from "@/state/agent-session-collection";
+import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import {
   findSessionMessageForTest,
   lastSessionMessageForTest,
@@ -222,43 +223,44 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       };
     };
 
-    const sessionsRef = createSessionsRef([
-      buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-        messages: [
-          {
-            id: "tool-running",
-            role: "tool",
-            content: "Tool todowrite running...",
-            timestamp: "2026-02-22T08:00:08.000Z",
-            meta: {
-              kind: "tool",
-              partId: "part-tool-running",
-              callId: "call-tool-running",
-              tool: "todowrite",
-              toolType: "todo",
-              status: "running",
-            },
+    const session = buildSession({
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      messages: [
+        {
+          id: "tool-running",
+          role: "tool",
+          content: "Tool todowrite running...",
+          timestamp: "2026-02-22T08:00:08.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-tool-running",
+            callId: "call-tool-running",
+            tool: "todowrite",
+            toolType: "todo",
+            status: "running",
           },
-        ],
-        pendingApprovals: [
-          {
-            requestId: "perm-1",
-            requestType: "permission_grant" as const,
-            title: `Approve permission: ${"read"}`,
-            summary: `Approval request for ${"read"}.`,
-            affectedPaths: ["*"],
-            action: { name: "read" },
-            mutation: "read_only" as const,
-            supportedReplyOutcomes: [
-              "approve_once" as const,
-              "approve_session" as const,
-              "reject" as const,
-            ],
-          },
-        ],
-      }),
-    ]);
+        },
+      ],
+      pendingApprovals: [
+        {
+          requestId: "perm-1",
+          requestType: "permission_grant" as const,
+          title: `Approve permission: ${"read"}`,
+          summary: `Approval request for ${"read"}.`,
+          affectedPaths: ["*"],
+          action: { name: "read" },
+          mutation: "read_only" as const,
+          supportedReplyOutcomes: [
+            "approve_once" as const,
+            "approve_session" as const,
+            "reject" as const,
+          ],
+        },
+      ],
+    });
+    const sessionsRef = createSessionsRef([session]);
+    const sessionsStore = createAgentSessionsStore("/tmp/repo");
+    sessionsStore.replaceSession(session);
     const persistenceOptions: Array<{ persist: true } | undefined> = [];
     let persistSessionRecordCalls = 0;
 
@@ -268,13 +270,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       options?: { persist: true },
     ) => {
       persistenceOptions.push(options);
-      const current = getAgentSession(sessionsRef.current, identity);
-      if (!current) {
-        return null;
-      }
-      const nextSession = updater(current);
-      sessionsRef.current = replaceAgentSession(sessionsRef.current, nextSession);
-      return nextSession;
+      return sessionsStore.updateSession(identity, updater);
     };
 
     const unsubscribe = await listenToAgentSessionEvents({
@@ -288,14 +284,14 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
         runtimePolicy: { kind: "opencode" },
       },
       turnMetadata: createSessionTurnMetadata(),
-      readSession: (identity) => getAgentSession(sessionsRef.current, identity),
+      readSession: sessionsStore.getSessionSnapshot,
       ensureSession: (identity, createSession) => {
-        const current = getAgentSession(sessionsRef.current, identity);
+        const current = sessionsStore.getSessionSnapshot(identity);
         if (current) {
           return current;
         }
         const nextSession = createSession();
-        sessionsRef.current = replaceAgentSession(sessionsRef.current, nextSession);
+        sessionsStore.replaceSession(nextSession);
         return nextSession;
       },
       updateSession,
@@ -322,6 +318,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [] },
+      readSessionSnapshot: sessionsStore.getSessionSnapshot,
       updateSession,
       persistSessionRecord: async () => {
         persistSessionRecordCalls += 1;
@@ -329,9 +326,13 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     });
 
     try {
-      await actions.stopAgentSession(getSession(sessionsRef));
+      await actions.stopAgentSession(session);
 
-      const lastMessage = lastSessionMessageForTest(getSession(sessionsRef));
+      const stoppedSession = sessionsStore.getSessionSnapshot(session);
+      if (!stoppedSession) {
+        throw new Error("Expected stopped session");
+      }
+      const lastMessage = lastSessionMessageForTest(stoppedSession);
       expect(lastMessage?.content).toBe("Session stopped at your request.");
       expect(lastMessage?.meta).toEqual({
         kind: "session_notice",
@@ -340,7 +341,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
         title: "Stopped",
       });
       const toolMessage = findSessionMessageForTest(
-        getSession(sessionsRef),
+        stoppedSession,
         (message) => message.id === "tool-running",
       );
       expect(toolMessage?.meta?.kind).toBe("tool");
@@ -349,8 +350,8 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       }
       expect(toolMessage.meta.status).toBe("error");
       expect(toolMessage.meta.error).toBe("Session stopped at your request.");
-      expect(getSession(sessionsRef)?.status).toBe("stopped");
-      expect(getSession(sessionsRef)?.stopRequestedAt).toBeNull();
+      expect(stoppedSession.status).toBe("stopped");
+      expect(stoppedSession.stopRequestedAt).toBeNull();
       expect(persistenceOptions).not.toContainEqual({ persist: true });
       expect(persistSessionRecordCalls).toBe(1);
     } finally {
