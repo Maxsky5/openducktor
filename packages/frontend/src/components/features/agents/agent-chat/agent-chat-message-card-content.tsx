@@ -5,17 +5,7 @@ import type {
   AgentUserMessageDisplayPart,
 } from "@openducktor/core";
 import { Brain, Cpu, Hammer, LoaderCircle } from "lucide-react";
-import {
-  Fragment,
-  type MouseEvent,
-  type ReactElement,
-  type ReactNode,
-  useCallback,
-  useDeferredValue,
-  useEffect,
-  useReducer,
-  useRef,
-} from "react";
+import { Fragment, type MouseEvent, type ReactElement, type ReactNode, useCallback } from "react";
 import { CopyIconButton } from "@/components/ui/copy-icon-button";
 import { buildCopyPreview } from "@/lib/copy-preview";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
@@ -40,9 +30,6 @@ import { formatAgentDuration } from "./format-agent-duration";
 import type { ParentSessionRuntimeContext } from "./subagent-session-key";
 import { SubagentTranscriptButton } from "./subagent-transcript-button";
 
-const TEXT_RENDER_PACE_MS = 24;
-const TEXT_RENDER_SNAP = /[\s.,!?;:)\]]/;
-
 type TranscriptAttachmentReference = AgentAttachmentReference & {
   localPreviewAvailable?: boolean;
 };
@@ -63,96 +50,6 @@ const toTranscriptAttachment = (
     reference.localPreviewAvailable = attachment.localPreviewAvailable;
   }
   return reference;
-};
-
-const pacedStep = (size: number): number => {
-  if (size <= 12) {
-    return 2;
-  }
-  if (size <= 48) {
-    return 4;
-  }
-  if (size <= 96) {
-    return 8;
-  }
-  return Math.min(24, Math.ceil(size / 8));
-};
-
-const nextPacedBoundary = (text: string, start: number): number => {
-  const end = Math.min(text.length, start + pacedStep(text.length - start));
-  const max = Math.min(text.length, end + 8);
-  for (let index = end; index < max; index += 1) {
-    if (TEXT_RENDER_SNAP.test(text[index] ?? "")) {
-      return index + 1;
-    }
-  }
-  return end;
-};
-
-const usePacedStreamingText = (text: string, streaming: boolean): string => {
-  const [visibleText, dispatchVisibleText] = useReducer(
-    (_current: string, next: string) => next,
-    text,
-  );
-  const shownRef = useRef(text);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    const clearScheduled = () => {
-      if (timeoutRef.current !== null) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-    };
-
-    const sync = (nextText: string) => {
-      shownRef.current = nextText;
-      dispatchVisibleText(nextText);
-    };
-
-    const run = () => {
-      timeoutRef.current = null;
-      if (!streaming) {
-        sync(text);
-        return;
-      }
-      if (!text.startsWith(shownRef.current) || text.length <= shownRef.current.length) {
-        sync(text);
-        return;
-      }
-
-      const end = nextPacedBoundary(text, shownRef.current.length);
-      sync(text.slice(0, end));
-      if (end < text.length) {
-        timeoutRef.current = setTimeout(run, TEXT_RENDER_PACE_MS);
-      }
-    };
-
-    if (!streaming) {
-      clearScheduled();
-      sync(text);
-      return clearScheduled;
-    }
-
-    if (!text.startsWith(shownRef.current) || text.length < shownRef.current.length) {
-      clearScheduled();
-      sync(text);
-      return clearScheduled;
-    }
-
-    if (text.length !== shownRef.current.length && timeoutRef.current === null) {
-      timeoutRef.current = setTimeout(run, TEXT_RENDER_PACE_MS);
-    }
-
-    return () => {
-      if (timeoutRef.current !== null) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-    };
-  }, [streaming, text]);
-
-  return visibleText;
 };
 
 type MessageHeaderProps = {
@@ -212,15 +109,13 @@ const REASONING_MARKDOWN_CLASS_NAME = cn(
 
 const ReasoningMessage = ({ content, streaming }: ReasoningMessageProps): ReactElement => {
   const sourceText = streaming ? content || "Thinking…" : content;
-  const pacedContent = usePacedStreamingText(sourceText, streaming);
-  const renderedContent = useDeferredValue(pacedContent);
   return (
     <div className="px-1 py-0.5 text-muted-foreground">
       <div className="space-y-0.5 text-[13px] leading-relaxed">
         <span className="block text-[11px] font-medium text-muted-foreground">Thinking:</span>
         <div className="min-w-0">
           <AgentChatMarkdownRenderer
-            markdown={streaming ? renderedContent : pacedContent}
+            markdown={sourceText}
             streaming={streaming}
             variant="compact"
             className={REASONING_MARKDOWN_CLASS_NAME}
@@ -283,14 +178,12 @@ const AssistantMessage = ({
 }: AssistantMessageProps): ReactElement => {
   const streaming = isStreamingAssistantMessage;
   const copyable = canCopyAssistantMessage(message, isStreamingAssistantMessage);
-  const pacedContent = usePacedStreamingText(message.content, streaming);
-  const renderedContent = useDeferredValue(pacedContent);
   const footer = getAssistantFooterData(message, modelCatalog);
   return (
     <div className="group/message relative space-y-2 pr-9">
       {copyable ? <AssistantMessageCopyButton markdown={message.content} /> : null}
       <AgentChatMarkdownRenderer
-        markdown={streaming ? renderedContent : pacedContent}
+        markdown={message.content}
         streaming={streaming}
         variant="document"
       />
