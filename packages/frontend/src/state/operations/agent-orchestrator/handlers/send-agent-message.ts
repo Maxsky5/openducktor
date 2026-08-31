@@ -8,7 +8,12 @@ import {
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import { errorMessage } from "@/lib/errors";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentChatMessage,
+  AgentMessageSendOptions,
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
 import { now } from "../support/core";
 import { appendSessionMessage, upsertUserSessionMessage } from "../support/messages";
@@ -115,7 +120,20 @@ const appendSendFailureNotice = (
   message: string,
   updateSession: UpdateSession,
   removeRunningCompactionNotice: boolean,
+  errorAttentionId?: string,
 ): void => {
+  const meta: Extract<
+    NonNullable<AgentChatMessage["meta"]>,
+    { kind: "session_notice"; reason: "session_error" }
+  > = {
+    kind: "session_notice",
+    tone: "error",
+    reason: "session_error",
+    title: "Error",
+  };
+  if (errorAttentionId) {
+    meta.attentionId = errorAttentionId;
+  }
   updateSession(session, (current) => ({
     ...current,
     messages: appendSessionMessage(
@@ -130,12 +148,7 @@ const appendSendFailureNotice = (
         role: "system",
         content: `Failed to send message: ${message}`,
         timestamp: now(),
-        meta: {
-          kind: "session_notice",
-          tone: "error",
-          reason: "session_error",
-          title: "Error",
-        },
+        meta,
       },
     ),
   }));
@@ -153,7 +166,11 @@ const upsertAcceptedUserMessage = (
 };
 
 export const createSendAgentMessage = (dependencies: SendAgentMessageDependencies) => {
-  return async (identity: AgentSessionIdentity, parts: AgentUserMessagePart[]): Promise<void> => {
+  return async (
+    identity: AgentSessionIdentity,
+    parts: AgentUserMessagePart[],
+    options?: AgentMessageSendOptions,
+  ): Promise<void> => {
     const normalizedParts = normalizeAgentUserMessageParts(parts);
     if (!hasMeaningfulAgentUserMessageParts(normalizedParts)) {
       return;
@@ -237,10 +254,12 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
         errorMessage(error),
         dependencies.updateSession,
         isManualCompactionSend && !isBusyQueuedSend,
+        options?.errorAttentionId,
       );
       if (!isBusyQueuedSend) {
         dependencies.clearSessionTurnState(readySession);
       }
+      throw error;
     }
   };
 };

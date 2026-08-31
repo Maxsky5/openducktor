@@ -62,12 +62,17 @@ type ExecuteSessionStartFromDecisionArgs = {
   persistTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   startAgentSession: StartAgentSession;
   sendAgentMessage?: SendAgentMessage;
+  postStartErrorAttentionId?: string;
   humanRequestChangesTask?: (taskId: string, note?: string) => Promise<void>;
 };
 
 export type RunSessionStartWorkflowInput = Omit<
   ExecuteSessionStartFromDecisionArgs,
-  "queryClient" | "workspaceId" | "startAgentSession" | "sendAgentMessage"
+  | "queryClient"
+  | "workspaceId"
+  | "startAgentSession"
+  | "sendAgentMessage"
+  | "postStartErrorAttentionId"
 >;
 
 export type RunSessionStartWorkflow = (
@@ -221,6 +226,7 @@ export const executeSessionStartFromDecision = async ({
   persistTaskTargetBranch,
   startAgentSession,
   sendAgentMessage,
+  postStartErrorAttentionId,
   humanRequestChangesTask,
 }: ExecuteSessionStartFromDecisionArgs): Promise<SessionStartWorkflowResult> => {
   const intent: Parameters<typeof startSessionWorkflow>[0]["intent"] = {
@@ -276,6 +282,10 @@ export const executeSessionStartFromDecision = async ({
     workflowInput.sendAgentMessage = sendAgentMessage;
   }
 
+  if (postStartErrorAttentionId) {
+    workflowInput.postStartErrorAttentionId = postStartErrorAttentionId;
+  }
+
   if (humanRequestChangesTask) {
     workflowInput.humanRequestChangesTask = humanRequestChangesTask;
   }
@@ -316,6 +326,7 @@ export const createSessionStartWorkflowRunner = ({
       queryClient,
       workspaceId,
       startAgentSession,
+      postStartErrorAttentionId: launchAttemptId,
     };
 
     if (sendAgentMessage) {

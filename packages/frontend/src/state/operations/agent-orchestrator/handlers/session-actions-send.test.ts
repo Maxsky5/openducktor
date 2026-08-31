@@ -81,9 +81,17 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
   });
 
   test("does not store the Codex compaction send result as a user message", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter());
     const originalSendUserMessage = adapter.sendUserMessage;
-    adapter.sendUserMessage = async (input) => acceptedUserMessage(input);
+    adapter.sendUserMessage = async (input) => ({
+      type: "user_message",
+      externalSessionId: input.externalSessionId,
+      timestamp: "2026-02-22T08:00:01.000Z",
+      messageId: "accepted-user-message",
+      message: MANUAL_SESSION_COMPACTION_SLASH_COMMAND.trigger,
+      parts: [],
+      state: "read",
+    });
     const sessionsRef = createSessionsRef([
       buildSession({
         runtimeKind: "codex",
@@ -662,7 +670,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     });
 
     try {
-      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]);
+      await expect(
+        actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]),
+      ).rejects.toThrow("send failed");
       expect(getSession(sessionsRef)?.status).toBe("error");
       const failureMessage = findSessionMessageForTest(getSession(sessionsRef), (message) =>
         message.content.includes("Failed to send message:"),
@@ -800,9 +810,11 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     });
 
     try {
-      await actions.sendAgentMessage(getSession(sessionsRef), [
-        { kind: "text", text: "queued follow-up" },
-      ]);
+      await expect(
+        actions.sendAgentMessage(getSession(sessionsRef), [
+          { kind: "text", text: "queued follow-up" },
+        ]),
+      ).rejects.toThrow("send failed");
 
       expect(getSession(sessionsRef)?.status).toBe("running");
       expect(sessionMessagesToArray(getSession(sessionsRef))).toEqual([

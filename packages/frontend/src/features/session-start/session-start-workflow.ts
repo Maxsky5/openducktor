@@ -8,7 +8,7 @@ import type {
 import type { QueryClient } from "@tanstack/react-query";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
 import { loadRepoConfigFromQuery } from "@/state/queries/workspace";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentMessageSendOptions, AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { StartAgentSession, StartAgentSessionInput } from "@/types/agent-session-start";
 import type { SessionLaunchActionId } from "./session-start-launch-options";
 import { getSessionLaunchAction } from "./session-start-launch-options";
@@ -21,6 +21,7 @@ import { kickoffPromptForTemplate } from "./session-start-prompts";
 export type SendAgentMessage = (
   session: AgentSessionIdentity,
   parts: AgentUserMessagePart[],
+  options?: AgentMessageSendOptions,
 ) => Promise<void>;
 
 export type SessionStartPostAction = "none" | "kickoff" | "send_message";
@@ -58,6 +59,7 @@ type StartSessionWorkflowArgs = {
   persistTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   startAgentSession: StartAgentSession;
   sendAgentMessage?: SendAgentMessage;
+  postStartErrorAttentionId?: string;
   humanRequestChangesTask?: (taskId: string, note?: string) => Promise<void>;
 };
 
@@ -261,6 +263,7 @@ export const startSessionWorkflow = async ({
   persistTaskTargetBranch,
   startAgentSession,
   sendAgentMessage,
+  postStartErrorAttentionId,
   humanRequestChangesTask,
 }: StartSessionWorkflowArgs): Promise<SessionStartWorkflowResult> => {
   const beforeStartActionArgs: Parameters<typeof runBeforeStartAction>[0] = {
@@ -311,12 +314,19 @@ export const startSessionWorkflow = async ({
   const confirmedPostStartMessage = postStartMessage;
   const runPostStartAction = async (): Promise<Error | null> => {
     try {
-      await confirmedPostStartMessageSender(session, [
+      const parts: AgentUserMessagePart[] = [
         {
           kind: "text",
           text: confirmedPostStartMessage,
         },
-      ]);
+      ];
+      if (postStartErrorAttentionId) {
+        await confirmedPostStartMessageSender(session, parts, {
+          errorAttentionId: postStartErrorAttentionId,
+        });
+      } else {
+        await confirmedPostStartMessageSender(session, parts);
+      }
       return null;
     } catch (error) {
       return toError(error);
