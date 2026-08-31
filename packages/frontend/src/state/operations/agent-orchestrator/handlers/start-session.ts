@@ -96,19 +96,20 @@ export const createStartAgentSession = ({
       ? "post-start-message"
       : "no-post-start-message";
     const gateMode = input.startMode === "fresh" && input.queueIfBusy ? "queue" : "coalesce";
-    const inFlightKey =
-      gateMode === "queue"
+    const inFlightKey = [
+      repoPath,
+      taskId,
+      role,
+      startMode,
+      sourceSessionKey,
+      normalizedTargetWorkingDirectory,
+      selectedModelKey,
+      messagePolicyKey,
+    ].join("::");
+    const executionKey =
+      input.startMode === "fresh" && role === "qa"
         ? [repoPath, taskId, role].join("::")
-        : [
-            repoPath,
-            taskId,
-            role,
-            startMode,
-            sourceSessionKey,
-            normalizedTargetWorkingDirectory,
-            selectedModelKey,
-            messagePolicyKey,
-          ].join("::");
+        : inFlightKey;
 
     return session.sessionStartGateRef.current.run(
       inFlightKey,
@@ -159,6 +160,7 @@ export const createStartAgentSession = ({
         }
       },
       gateMode,
+      executionKey,
     );
   };
 };

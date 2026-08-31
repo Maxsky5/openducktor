@@ -1,11 +1,16 @@
 export type SessionStartGate<Result> = {
-  run: (key: string, start: () => Promise<Result>, mode?: "coalesce" | "queue") => Promise<Result>;
+  run: (
+    key: string,
+    start: () => Promise<Result>,
+    mode?: "coalesce" | "queue",
+    executionKey?: string,
+  ) => Promise<Result>;
   clear: () => void;
 };
 
 export const createSessionStartGate = <Result>(): SessionStartGate<Result> => {
   const coalescedStartsByKey = new Map<string, Promise<Result>>();
-  const queuedStartsByKey = new Map<string, Promise<Result>>();
+  const lastStartsByExecutionKey = new Map<string, Promise<Result>>();
   let generation = 0;
 
   const trackStart = (
@@ -24,13 +29,12 @@ export const createSessionStartGate = <Result>(): SessionStartGate<Result> => {
   };
 
   return {
-    run: (key, start, mode = "coalesce") => {
+    run: (key, start, mode = "coalesce", executionKey = key) => {
       if (mode === "coalesce") {
         const inFlightStart = coalescedStartsByKey.get(key);
         if (inFlightStart) {
           return inFlightStart;
         }
-        return trackStart(coalescedStartsByKey, key, start());
       }
 
       const queuedGeneration = generation;
@@ -40,21 +44,24 @@ export const createSessionStartGate = <Result>(): SessionStartGate<Result> => {
         }
         return start();
       };
-      const previousStart = queuedStartsByKey.get(key);
-      if (!previousStart) {
-        return trackStart(queuedStartsByKey, key, startIfCurrent());
-      }
-
-      const previousCompletion = previousStart.then(
-        () => undefined,
-        () => undefined,
-      );
-      return trackStart(queuedStartsByKey, key, previousCompletion.then(startIfCurrent));
+      const previousStart = lastStartsByExecutionKey.get(executionKey);
+      const startPromise = previousStart
+        ? previousStart
+            .then(
+              () => undefined,
+              () => undefined,
+            )
+            .then(startIfCurrent)
+        : startIfCurrent();
+      trackStart(lastStartsByExecutionKey, executionKey, startPromise);
+      return mode === "coalesce"
+        ? trackStart(coalescedStartsByKey, key, startPromise)
+        : startPromise;
     },
     clear: () => {
       generation += 1;
       coalescedStartsByKey.clear();
-      queuedStartsByKey.clear();
+      lastStartsByExecutionKey.clear();
     },
   };
 };
