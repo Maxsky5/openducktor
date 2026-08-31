@@ -12,18 +12,20 @@ import { toast } from "sonner";
 import {
   buildSessionStartedOccurrence,
   buildSessionStartErrorOccurrence,
-  createNotificationRuntime,
-  createNotificationTaskObserver,
-  createNotificationWorkspaceObserver,
-  installCuelumeGestureUnlock,
-  type NotificationDispatchFailure,
-  type NotificationProducerFailure,
-} from "@/features/notifications";
+} from "@/features/notifications/session-start-occurrences";
+import { installCuelumeGestureUnlock } from "@/features/notifications/notification-delivery";
+import { createNotificationRuntime } from "@/features/notifications/notification-runtime";
 import { selectOsFailureState } from "@/features/notifications/notification-failure-state";
+import type { NotificationDispatchFailure } from "@/features/notifications/notification-policy";
+import {
+  createNotificationTaskObserver,
+  type NotificationProducerFailure,
+} from "@/features/notifications/notification-task-observer";
+import { createNotificationWorkspaceObserver } from "@/features/notifications/notification-workspace-observer";
 import type {
   SessionStartNotificationInput,
   SessionStartNotificationPublisher,
-} from "@/features/session-start";
+} from "@/features/session-start/session-start-orchestration";
 import { hostBridge } from "@/lib/host-client";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { unfilteredRepoTaskDataQueryOptions } from "@/state/queries/tasks";

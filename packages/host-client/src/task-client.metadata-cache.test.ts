@@ -37,6 +37,7 @@ const tasksUpdated = (repoPath: string, taskIds: string[]): ExternalTaskSyncEven
   repoPath,
   taskIds,
   removedTaskIds: [],
+  taskSnapshots: taskIds.map((id) => ({ id, title: id, status: "open" })),
   emittedAt: "2026-07-22T00:00:00Z",
 });
 

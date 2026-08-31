@@ -9,10 +9,8 @@ import {
   shouldAdvanceAutopilotBaseline,
   toTaskMap,
 } from "@/features/autopilot/autopilot-events";
-import {
-  isSessionStartFailureFeedbackHandled,
-  useSessionStartWorkflowRunner,
-} from "@/features/session-start";
+import { isSessionStartFailureFeedbackHandled } from "@/features/session-start/session-start-orchestration";
+import { useSessionStartWorkflowRunner } from "@/features/session-start/use-session-start-workflow-runner";
 import { errorMessage } from "@/lib/errors";
 import {
   useAgentOperationsContext,

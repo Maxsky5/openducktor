@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
+import type { ExternalTaskSyncEvent, TaskCard } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber, TestClock, TestContext } from "effect";
 import { HostOperationError } from "../../../effect/host-errors";
 import type { TaskEventStreamPort } from "../../../events/task-event-stream";
@@ -8,15 +8,23 @@ import { createTaskSyncService } from "./task-sync-service";
 
 type TaskSyncServiceTestInput = Omit<
   Parameters<typeof createTaskSyncService>[0],
-  "onBackgroundFailure" | "publicationReporter" | "taskEventStream"
+  "onBackgroundFailure" | "publicationReporter" | "taskEventStream" | "taskService"
 > &
   Partial<
     Pick<Parameters<typeof createTaskSyncService>[0], "onBackgroundFailure" | "publicationReporter">
-  > & { eventBus: Pick<TaskEventStreamPort, "publish"> };
+  > & {
+    eventBus: Pick<TaskEventStreamPort, "publish">;
+    taskService: Omit<Parameters<typeof createTaskSyncService>[0]["taskService"], "listTasks"> &
+      Partial<Pick<Parameters<typeof createTaskSyncService>[0]["taskService"], "listTasks">>;
+  };
 
 const createTaskSyncServiceForTest = (input: TaskSyncServiceTestInput) =>
   createTaskSyncService({
     ...input,
+    taskService: {
+      listTasks: () => Effect.succeed([task(), task({ id: "task-2", title: "Task 2" })]),
+      ...input.taskService,
+    },
     onBackgroundFailure: input.onBackgroundFailure ?? (() => Effect.void),
     publicationReporter: input.publicationReporter ?? { report: () => Effect.void },
     taskEventStream: {
@@ -44,6 +52,32 @@ const createEventBus = () => {
   };
   return { eventBus, events };
 };
+const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
+  id: "task-1",
+  title: "Task 1",
+  description: "",
+  status: "open",
+  priority: 2,
+  issueType: "task",
+  aiReviewEnabled: true,
+  availableActions: [],
+  labels: [],
+  subtaskIds: [],
+  documentSummary: {
+    spec: { has: false },
+    plan: { has: false },
+    qaReport: { has: false, verdict: "not_reviewed" },
+  },
+  agentWorkflows: {
+    spec: { required: false, canSkip: true, available: false, completed: false },
+    planner: { required: false, canSkip: true, available: false, completed: false },
+    builder: { required: true, canSkip: false, available: false, completed: false },
+    qa: { required: true, canSkip: false, available: false, completed: false },
+  },
+  updatedAt: "2026-01-02T03:04:05Z",
+  createdAt: "2026-01-01T03:04:05Z",
+  ...overrides,
+});
 describe("createTaskSyncService", () => {
   test("reports task publication acceptance failures without rejecting committed work", async () => {
     const reports: unknown[] = [];
@@ -78,6 +112,44 @@ describe("createTaskSyncService", () => {
     ).resolves.toBeUndefined();
     expect(reports).toEqual([
       expect.objectContaining({ operation: "task-update", repoPath: "/repo", stage: "acceptance" }),
+    ]);
+  });
+  test("reports task snapshot capture failures without rejecting committed work", async () => {
+    const { eventBus, events } = createEventBus();
+    const reports: unknown[] = [];
+    const failure = new HostOperationError({
+      operation: "task.list",
+      message: "Task snapshots are unavailable.",
+    });
+    const service = createTaskSyncServiceForTest({
+      eventBus,
+      publicationReporter: {
+        report: (report) => Effect.sync(() => reports.push(report)),
+      },
+      taskService: {
+        listTasks: () => Effect.fail(failure),
+        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
+      },
+      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.publishTasksUpdated(
+          "/repo",
+          { taskIds: ["task-1"], removedTaskIds: [] },
+          "task-update",
+        ),
+      ),
+    ).resolves.toBeUndefined();
+    expect(events).toEqual([]);
+    expect(reports).toEqual([
+      expect.objectContaining({
+        operation: "task-update",
+        repoPath: "/repo",
+        stage: "snapshot",
+        cause: failure,
+      }),
     ]);
   });
   test("reports duplicate task IDs without normalizing or publishing the change set", async () => {
@@ -190,6 +262,7 @@ describe("createTaskSyncService", () => {
     const service = createTaskSyncServiceForTest({
       eventBus,
       taskService: {
+        listTasks: () => Effect.succeed([task({ status: "ready_for_dev" })]),
         repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
       },
       workspaceSettingsService: {
@@ -205,8 +278,35 @@ describe("createTaskSyncService", () => {
         kind: "tasks_updated",
         taskIds: ["task-1", "task-2"],
         removedTaskIds: ["task-2"],
+        taskSnapshots: [{ id: "task-1", title: "Task 1", status: "ready_for_dev" }],
       }),
     ]);
+  });
+  test("binds each published event to the task status captured for that update", async () => {
+    const { eventBus, events } = createEventBus();
+    let readIndex = 0;
+    const service = createTaskSyncServiceForTest({
+      eventBus,
+      taskService: {
+        listTasks: () => {
+          const status = readIndex === 0 ? "spec_ready" : "ready_for_dev";
+          readIndex += 1;
+          return Effect.succeed([task({ status })]);
+        },
+        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
+      },
+      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
+    });
+    const changes = { taskIds: ["task-1"], removedTaskIds: [] };
+
+    await Effect.runPromise(service.publishTasksUpdated("/repo", changes, "set-spec"));
+    await Effect.runPromise(service.publishTasksUpdated("/repo", changes, "set-plan"));
+
+    expect(
+      events.map((event) =>
+        event.kind === "tasks_updated" ? event.taskSnapshots[0]?.status : null,
+      ),
+    ).toEqual(["spec_ready", "ready_for_dev"]);
   });
   test("does not construct an event for a legitimate no-op pull request sync", async () => {
     const { eventBus, events } = createEventBus();

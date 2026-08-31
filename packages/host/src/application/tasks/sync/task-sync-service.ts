@@ -1,7 +1,9 @@
 import {
   type ExternalTaskSyncEvent,
   externalTaskSyncEventSchema,
+  type TaskCard,
   type TaskChangeSet,
+  type TaskEventTaskSnapshot,
 } from "@openducktor/contracts";
 import { type Cause, Deferred, Effect, Exit, Fiber, Ref } from "effect";
 import { HostOperationError } from "../../../effect/host-errors";
@@ -38,14 +40,18 @@ export type TaskSyncService = {
   startPullRequestSyncLoop(): Effect.Effect<TaskSyncLoopHandle, never>;
 };
 export type TaskSyncError = HostOperationError | TaskServiceError | WorkspaceSettingsError;
-export type TaskEventPublicationFailure = {
+type TaskEventPublicationFailureBase = {
   operation: string;
   repoPath: string;
   changes: TaskChangeSet;
-  event: ExternalTaskSyncEvent;
-  stage: "acceptance";
   cause: unknown;
 };
+export type TaskEventPublicationFailure =
+  | (TaskEventPublicationFailureBase & {
+      stage: "acceptance";
+      event: ExternalTaskSyncEvent;
+    })
+  | (TaskEventPublicationFailureBase & { stage: "snapshot" });
 export type TaskEventPublicationReporter = {
   report(failure: TaskEventPublicationFailure): Effect.Effect<void, never>;
 };
@@ -56,7 +62,7 @@ export type CreateTaskSyncServiceInput = {
   onBackgroundFailure(failure: HostOperationError): Effect.Effect<void, never>;
   publicationReporter: TaskEventPublicationReporter;
   taskEventStream: TaskEventStreamPort;
-  taskService: Pick<TaskService, "repoPullRequestSyncDetailed">;
+  taskService: Pick<TaskService, "listTasks" | "repoPullRequestSyncDetailed">;
   workspaceSettingsService: Pick<WorkspaceSettingsService, "listWorkspaces">;
 };
 const defaultTaskSyncLifecycleLogger: TaskSyncLifecycleLogger = {
@@ -83,13 +89,25 @@ const buildTasksUpdatedEvent = (
   eventIdFactory: () => string,
   repoPath: string,
   changes: TaskChangeSet,
+  taskSnapshots: readonly TaskEventTaskSnapshot[],
 ): ExternalTaskSyncEvent => ({
   eventId: eventIdFactory(),
   kind: "tasks_updated",
   repoPath,
   ...changes,
+  taskSnapshots: [...taskSnapshots],
   emittedAt: nowIso(),
 });
+const taskSnapshotsForChanges = (
+  tasks: readonly TaskCard[],
+  changes: TaskChangeSet,
+): TaskEventTaskSnapshot[] => {
+  const changedTaskIds = new Set(changes.taskIds);
+  const removedTaskIds = new Set(changes.removedTaskIds);
+  return tasks
+    .filter((task) => changedTaskIds.has(task.id) && !removedTaskIds.has(task.id))
+    .map(({ id, title, status }) => ({ id, title, status }));
+};
 export const createTaskSyncService = ({
   eventIdFactory = () => crypto.randomUUID(),
   intervalMs = DEFAULT_PULL_REQUEST_SYNC_INTERVAL_MS,
@@ -143,14 +161,31 @@ export const createTaskSyncService = ({
       repoPath,
       { taskIds: [taskId], removedTaskIds: [] },
     );
-  const publishTasksUpdated = (repoPath: string, changes: TaskChangeSet, operation: string) => {
-    return publish(
-      buildTasksUpdatedEvent(eventIdFactory, repoPath, changes),
-      operation,
-      repoPath,
-      changes,
-    );
-  };
+  const publishTasksUpdated = (
+    repoPath: string,
+    changes: TaskChangeSet,
+    operation: string,
+  ): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      const tasks = yield* Effect.either(taskService.listTasks({ repoPath }));
+      if (tasks._tag === "Left") {
+        yield* publicationReporter.report({
+          operation,
+          repoPath,
+          changes,
+          stage: "snapshot",
+          cause: tasks.left,
+        });
+        return;
+      }
+      const taskSnapshots = taskSnapshotsForChanges(tasks.right, changes);
+      yield* publish(
+        buildTasksUpdatedEvent(eventIdFactory, repoPath, changes, taskSnapshots),
+        operation,
+        repoPath,
+        changes,
+      );
+    });
   const syncRepoPullRequests = (
     repoPath: string,
   ): Effect.Effect<RepoPullRequestSyncResult, TaskServiceError> =>

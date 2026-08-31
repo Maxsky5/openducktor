@@ -195,11 +195,16 @@ describe("createTaskEventStream", () => {
       repoPath: "/repo",
       taskIds: ["task-1"],
       removedTaskIds: [],
+      taskSnapshots: [{ id: "task-1", title: "Task 1", status: "open" }],
       emittedAt: "2026-04-10T13:00:00.000Z",
     };
 
     stream.publish(published);
+    if (published.kind !== "tasks_updated") throw new Error("expected task update event");
     published.taskIds.push("task-2");
+    const publishedSnapshot = published.taskSnapshots[0];
+    if (!publishedSnapshot) throw new Error("expected task snapshot");
+    publishedSnapshot.title = "Changed after publication";
     await flush();
     const change = frames[1];
     expect(change).toMatchObject({ type: "change", cursor: { epoch, sequence: 1 } });
@@ -207,10 +212,13 @@ describe("createTaskEventStream", () => {
       throw new Error("expected task update frame");
     }
     expect(change.event.taskIds).toEqual(["task-1"]);
+    expect(change.event.taskSnapshots).toEqual([{ id: "task-1", title: "Task 1", status: "open" }]);
     expect(Object.isFrozen(change)).toBe(true);
     expect(Object.isFrozen(change.cursor)).toBe(true);
     expect(Object.isFrozen(change.event)).toBe(true);
     expect(Object.isFrozen(change.event.taskIds)).toBe(true);
+    expect(Object.isFrozen(change.event.taskSnapshots)).toBe(true);
+    expect(Object.isFrozen(change.event.taskSnapshots[0])).toBe(true);
   });
 
   test("rejects task event identifiers with surrounding whitespace", () => {

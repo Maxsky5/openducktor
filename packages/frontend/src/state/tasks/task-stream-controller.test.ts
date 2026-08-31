@@ -19,6 +19,7 @@ const event = (taskId: string): ExternalTaskSyncEvent => ({
   repoPath: "/repo",
   taskIds: [taskId],
   removedTaskIds: [],
+  taskSnapshots: [{ id: taskId, title: taskId, status: "open" }],
   emittedAt: "2026-04-10T13:10:00.000Z",
 });
 

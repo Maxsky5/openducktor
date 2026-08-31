@@ -261,6 +261,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "taskEventStreamAcknowledgeSchema",
   "taskEventStreamFrameSchema",
   "taskEventStreamSubscribeSchema",
+  "taskEventTaskSnapshotSchema",
   "DEFAULT_BRANCH_PREFIX",
   "failureKindSchema",
   "gitCommitAllRequestSchema",

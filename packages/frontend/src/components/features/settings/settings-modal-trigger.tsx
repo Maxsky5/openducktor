@@ -9,19 +9,24 @@ type SettingsModalTriggerProps = {
   iconOnly: boolean;
   label: string;
   size: "default" | "sm" | "lg" | "icon";
-  onClick?: () => void;
-  standalone?: boolean;
 };
 
-export function SettingsModalTrigger({
+type SettingsButtonProps = SettingsModalTriggerProps & {
+  onClick?: () => void;
+};
+
+type SettingsModalOpenButtonProps = SettingsModalTriggerProps & {
+  onClick: () => void;
+};
+
+function SettingsButton({
   className,
   iconOnly,
   label,
   size,
   onClick,
-  standalone = false,
-}: SettingsModalTriggerProps): ReactElement {
-  const button = (
+}: SettingsButtonProps): ReactElement {
+  return (
     <Button
       type="button"
       variant="outline"
@@ -35,21 +40,59 @@ export function SettingsModalTrigger({
       {iconOnly ? null : label}
     </Button>
   );
+}
+
+export function SettingsModalTrigger({
+  className,
+  iconOnly,
+  label,
+  size,
+}: SettingsModalTriggerProps): ReactElement {
+  const button = (
+    <SettingsButton className={className} iconOnly={iconOnly} label={label} size={size} />
+  );
 
   if (!iconOnly) {
-    if (standalone) return button;
     return <DialogTrigger asChild>{button}</DialogTrigger>;
-  }
-
-  let tooltipTrigger = <TooltipTrigger asChild>{button}</TooltipTrigger>;
-  if (!standalone) {
-    tooltipTrigger = <DialogTrigger asChild>{tooltipTrigger}</DialogTrigger>;
   }
 
   return (
     <TooltipProvider>
       <Tooltip>
-        {tooltipTrigger}
+        <DialogTrigger asChild>
+          <TooltipTrigger asChild>{button}</TooltipTrigger>
+        </DialogTrigger>
+        <TooltipContent side="top">
+          <p>{label}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+export function SettingsModalOpenButton({
+  className,
+  iconOnly,
+  label,
+  size,
+  onClick,
+}: SettingsModalOpenButtonProps): ReactElement {
+  const button = (
+    <SettingsButton
+      className={className}
+      iconOnly={iconOnly}
+      label={label}
+      size={size}
+      onClick={onClick}
+    />
+  );
+
+  if (!iconOnly) return button;
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>{button}</TooltipTrigger>
         <TooltipContent side="top">
           <p>{label}</p>
         </TooltipContent>

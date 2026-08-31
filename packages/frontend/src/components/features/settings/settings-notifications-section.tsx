@@ -13,8 +13,8 @@ import type { ReactElement } from "react";
 import {
   NOTIFICATION_KIND_DESCRIPTIONS,
   NOTIFICATION_KIND_LABELS,
-  resolveNotificationCue,
-} from "@/features/notifications";
+} from "@/features/notifications/catalogue";
+import { resolveNotificationCue } from "@/features/notifications/notification-sound";
 import { useNotificationContext } from "@/state/notifications/notification-context";
 import { useNotificationTestControls } from "@/state/notifications/use-notification-test-controls";
 import { Button } from "@/components/ui/button";
@@ -161,7 +161,7 @@ export function SettingsNotificationsSection({
     testNotification,
   } = useNotificationTestControls(notifications);
 
-  const renderKindGroup = (title: string, kinds: NotificationKind[]): ReactElement => (
+  const renderKindGroup = (title: string, kinds: readonly NotificationKind[]): ReactElement => (
     <section className="grid gap-3">
       <h4 className="text-sm font-semibold text-foreground">{title}</h4>
       {kinds.map((kind) => (
@@ -262,8 +262,8 @@ export function SettingsNotificationsSection({
         </div>
       </section>
 
-      {renderKindGroup("Agent activity", [...AGENT_KINDS])}
-      {renderKindGroup("Workflow changes", [...WORKFLOW_KINDS])}
+      {renderKindGroup("Agent activity", AGENT_KINDS)}
+      {renderKindGroup("Workflow changes", WORKFLOW_KINDS)}
 
       <section className="flex flex-col gap-3 rounded-lg border border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div>

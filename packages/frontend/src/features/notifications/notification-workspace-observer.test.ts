@@ -174,6 +174,7 @@ describe("all-workspace notification observation", () => {
       repoPath: "/repo-a",
       taskIds: ["task-1"],
       removedTaskIds: [],
+      taskSnapshots: [{ id: "task-1", title: "Task A", status: "spec_ready" }],
       emittedAt: "2026-08-31T10:01:00.000Z",
     });
 
@@ -181,6 +182,50 @@ describe("all-workspace notification observation", () => {
       {
         kind: "workflow.spec_ready",
         occurrenceId: "workflow.spec_ready:/repo-a:task-1:event-1",
+      },
+    ]);
+  });
+
+  test("publishes each event-bound workflow transition when task reads see a newer state", async () => {
+    let currentTasks = [createTaskCardFixture({ id: "task-1", title: "Task A", status: "open" })];
+    const published: NotificationOccurrence[] = [];
+    const taskObserver = createNotificationTaskObserver({
+      loadTasks: async () => currentTasks,
+      publish: (occurrence) => published.push(occurrence),
+      onFailure: () => {},
+    });
+    await taskObserver.syncWorkspaces([{ repoPath: "/repo-a", repositoryLabel: "Repo A" }]);
+    currentTasks = [
+      createTaskCardFixture({ id: "task-1", title: "Task A", status: "ready_for_dev" }),
+    ];
+
+    await taskObserver.sink.onChange({
+      kind: "tasks_updated",
+      eventId: "event-spec-ready",
+      repoPath: "/repo-a",
+      taskIds: ["task-1"],
+      removedTaskIds: [],
+      taskSnapshots: [{ id: "task-1", title: "Task A", status: "spec_ready" }],
+      emittedAt: "2026-08-31T10:01:00.000Z",
+    });
+    await taskObserver.sink.onChange({
+      kind: "tasks_updated",
+      eventId: "event-ready-for-dev",
+      repoPath: "/repo-a",
+      taskIds: ["task-1"],
+      removedTaskIds: [],
+      taskSnapshots: [{ id: "task-1", title: "Task A", status: "ready_for_dev" }],
+      emittedAt: "2026-08-31T10:02:00.000Z",
+    });
+
+    expect(published.map(({ kind, occurrenceId }) => ({ kind, occurrenceId }))).toEqual([
+      {
+        kind: "workflow.spec_ready",
+        occurrenceId: "workflow.spec_ready:/repo-a:task-1:event-spec-ready",
+      },
+      {
+        kind: "workflow.ready_for_dev",
+        occurrenceId: "workflow.ready_for_dev:/repo-a:task-1:event-ready-for-dev",
       },
     ]);
   });

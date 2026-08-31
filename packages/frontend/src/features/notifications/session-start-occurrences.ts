@@ -1,6 +1,6 @@
 import type { NotificationOccurrence, NotificationSessionIdentity } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import type { SessionStartNotificationInput } from "@/features/session-start";
+import type { SessionStartNotificationInput } from "@/features/session-start/session-start-orchestration";
 
 type SessionStartWorkspace = {
   repoPath: string;

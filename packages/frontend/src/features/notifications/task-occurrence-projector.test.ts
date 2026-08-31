@@ -6,12 +6,16 @@ import { createTaskOccurrenceProjector } from "./task-occurrence-projector";
 const task = (status: TaskStatus): TaskCard =>
   createTaskCardFixture({ id: "task-1", title: "Build notifications", status });
 
-const event = (eventId: string): ExternalTaskSyncEvent => ({
+const event = (
+  eventId: string,
+  status: TaskStatus,
+): Extract<ExternalTaskSyncEvent, { kind: "tasks_updated" }> => ({
   eventId,
   kind: "tasks_updated",
   repoPath: "/repo",
   taskIds: ["task-1"],
   removedTaskIds: [],
+  taskSnapshots: [{ id: "task-1", title: "Task", status }],
   emittedAt: "2026-08-31T10:00:00.000Z",
 });
 
@@ -30,7 +34,7 @@ describe("task occurrence projector", () => {
     });
     projector.replaceBaseline([task("open")]);
 
-    expect(projector.projectChange(event(`event-${status}`), [task(status)])).toMatchObject([
+    expect(projector.projectChange(event(`event-${status}`, status))).toMatchObject([
       {
         kind,
         occurrenceId: `${kind}:/repo:task-1:event-${status}`,
@@ -51,7 +55,7 @@ describe("task occurrence projector", () => {
     });
     projector.replaceBaseline([task("human_review")]);
 
-    expect(projector.projectChange(event("event-closed"), [task("closed")])).toMatchObject([
+    expect(projector.projectChange(event("event-closed", "closed"))).toMatchObject([
       {
         kind: "workflow.closed",
         navigationTarget: { type: "kanban_task", repoPath: "/repo", taskId: "task-1" },
@@ -66,15 +70,13 @@ describe("task occurrence projector", () => {
     });
     projector.replaceBaseline([task("blocked")]);
     projector.replaceBaseline([task("blocked")]);
-    expect(projector.projectChange(event("event-same"), [task("blocked")])).toEqual([]);
-    expect(projector.projectChange(event("event-open"), [task("open")])).toEqual([]);
+    expect(projector.projectChange(event("event-same", "blocked"))).toEqual([]);
+    expect(projector.projectChange(event("event-open", "open"))).toEqual([]);
 
     const newTaskProjector = createTaskOccurrenceProjector({
       repoPath: "/repo",
       repositoryLabel: "Repo",
     });
-    expect(newTaskProjector.projectChange(event("event-created"), [task("spec_ready")])).toEqual(
-      [],
-    );
+    expect(newTaskProjector.projectChange(event("event-created", "spec_ready"))).toEqual([]);
   });
 });
