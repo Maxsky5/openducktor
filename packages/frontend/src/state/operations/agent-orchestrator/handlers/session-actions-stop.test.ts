@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { SessionRef } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { replaceAgentSession } from "@/state/agent-session-collection";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import {
   findSessionMessageForTest,
@@ -154,30 +153,34 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
   test("persists terminal event state when the host stop later fails", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const sessionsRef = createSessionsRef([buildSession()]);
+    const session = buildSession();
+    const sessionsRef = createSessionsRef([session]);
+    const sessionsStore = createAgentSessionsStore("/tmp/repo");
+    sessionsStore.replaceSession(session);
     adapter.stopSession = async () => {
-      const current = getSession(sessionsRef);
-      sessionsRef.current = replaceAgentSession(sessionsRef.current, {
+      sessionsStore.updateSession(session, (current) => ({
         ...current,
         status: "stopped",
         stopRequestedAt: null,
-      });
+      }));
       throw new Error("stop failed after terminal event");
     };
     let persistenceCalls = 0;
     const actions = createSessionActions({
       adapter,
       sessionsRef,
+      readSessionSnapshot: sessionsStore.getSessionSnapshot,
+      updateSession: sessionsStore.updateSession,
       persistSessionRecord: async () => {
         persistenceCalls += 1;
       },
     });
 
-    await expect(actions.stopAgentSession(getSession(sessionsRef))).rejects.toThrow(
+    await expect(actions.stopAgentSession(session)).rejects.toThrow(
       "Failed to stop session 'session-1': stop failed after terminal event",
     );
 
-    expect(getSession(sessionsRef).status).toBe("stopped");
+    expect(sessionsStore.getSessionSnapshot(session)?.status).toBe("stopped");
     expect(persistenceCalls).toBe(1);
   });
 
