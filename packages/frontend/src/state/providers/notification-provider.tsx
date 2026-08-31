@@ -57,7 +57,9 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
       description: "OpenDucktor could not open this notification target.",
     });
   });
-  workspacesRef.current = workspaces;
+  useEffect(() => {
+    workspacesRef.current = workspaces;
+  }, [workspaces]);
 
   const runtime = useMemo(
     () =>

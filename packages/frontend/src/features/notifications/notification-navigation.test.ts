@@ -1,6 +1,13 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionRecord, NotificationNavigationTarget } from "@openducktor/contracts";
-import { addNotificationAttention, matchesNotificationSession } from "./notification-navigation";
+import {
+  addNotificationAttention,
+  findNotificationAttentionTarget,
+  matchesNotificationSession,
+  navigateToNotificationTarget,
+} from "./notification-navigation-logic";
+import { notificationSessionIdentityFromNavigationState } from "./notification-navigation-state";
+import type { NotificationSessionNavigationState } from "./notification-navigation-state";
 
 const session: AgentSessionRecord = {
   externalSessionId: "session-1",
@@ -51,5 +58,74 @@ describe("notification navigation", () => {
     );
     expect(href).not.toContain("runtimeKind");
     expect(href).not.toContain("workingDirectory");
+  });
+
+  test("opens a repository session by its full identity after selecting its workspace", async () => {
+    const calls: string[] = [];
+    const navigate = mock((href: string, options?: { state?: unknown }) => {
+      calls.push("navigate");
+      expect(href).toBe("/agents?session=session-1");
+      expect(options).toEqual({
+        state: {
+          notificationSession: {
+            externalSessionId: "session-1",
+            runtimeKind: "codex",
+            workingDirectory: "/repo/worktree",
+          },
+        },
+      });
+    });
+    const selectWorkspace = mock(async () => {
+      calls.push("select-workspace");
+    });
+    const loadTasks = mock(async () => []);
+
+    await navigateToNotificationTarget(
+      {
+        type: "agent_session",
+        repoPath: "/repo",
+        session: target.session,
+      },
+      {
+        activeWorkspaceId: "workspace-other",
+        workspaces: [{ workspaceId: "workspace-repo", repoPath: "/repo" }],
+        selectWorkspace,
+        loadTasks,
+        loadTaskSessions: mock(async () => []),
+        navigate,
+        reportStale: mock(() => {}),
+      },
+    );
+
+    expect(calls).toEqual(["select-workspace", "navigate"]);
+    expect(loadTasks).not.toHaveBeenCalled();
+  });
+
+  test("matches only the requested error episode", () => {
+    document.body.innerHTML = `
+      <article data-notification-attention-kind="error" data-notification-attention-id="error-1"></article>
+      <article data-notification-attention-kind="error" data-notification-attention-id="error-2"></article>
+      <div data-notification-attention-kind="error"></div>
+    `;
+
+    expect(
+      findNotificationAttentionTarget("error", "error-2")?.dataset.notificationAttentionId,
+    ).toBe("error-2");
+    expect(findNotificationAttentionTarget("error", "missing")).toBeNull();
+  });
+
+  test("accepts navigation state only for the routed external session", () => {
+    const state = { notificationSession: target.session };
+    expect(notificationSessionIdentityFromNavigationState(state, "session-1")).toEqual(
+      target.session,
+    );
+    expect(notificationSessionIdentityFromNavigationState(state, "session-other")).toBeNull();
+    // SAFETY: Deliberately forge malformed browser history state to verify boundary validation.
+    expect(
+      notificationSessionIdentityFromNavigationState(
+        { notificationSession: {} } as NotificationSessionNavigationState,
+        "session-1",
+      ),
+    ).toBeNull();
   });
 });

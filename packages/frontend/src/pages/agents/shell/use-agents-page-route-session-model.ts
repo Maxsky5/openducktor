@@ -1,5 +1,6 @@
 import { startTransition, useCallback, useEffect, useMemo } from "react";
 import { useLocation, useNavigationType, useSearchParams } from "react-router";
+import { notificationSessionIdentityFromNavigationState } from "@/features/notifications/notification-navigation-state";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useAgentSessionReadModelState } from "@/state/app-state-provider";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -46,7 +47,7 @@ export function useAgentsPageRouteSessionModel({
   repoSettings,
   isLoadingRepoSettings,
 }: UseAgentsPageRouteSessionModelArgs): AgentsPageRouteSessionModel {
-  const { key: locationKey } = useLocation();
+  const { key: locationKey, state: locationState } = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigationType = useNavigationType();
   const { sessionReadModelLoadState } = useAgentSessionReadModelState();
@@ -99,11 +100,16 @@ export function useAgentsPageRouteSessionModel({
   );
 
   const taskExecutionFilePreview = useTaskExecutionFilePreviewController();
+  const sessionIdentityFromNavigation = useMemo(
+    () => notificationSessionIdentityFromNavigationState(locationState, sessionExternalIdParam),
+    [locationState, sessionExternalIdParam],
+  );
   const { selection: selectionState, selectAgentStudioSelection: applyAgentStudioSelection } =
     useAgentStudioSelectionState({
       isWorkspaceRestorePending,
       taskIdParam,
       sessionExternalIdParam,
+      sessionIdentityFromNavigation,
       hasExplicitRoleParam,
       roleFromQuery,
       scheduleQueryUpdate,

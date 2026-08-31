@@ -243,6 +243,61 @@ describe("task stream controller recovery", () => {
     expect(harness.onDegraded).not.toHaveBeenCalled();
   });
 
+  test("acknowledges reconciled frames while notification projection stays ordered", async () => {
+    const firstNotification = deferred<void>();
+    const notificationEvents: string[] = [];
+    const notificationSink: TaskStreamNotificationSink = {
+      onChange: mock(async (change) => {
+        notificationEvents.push(change.taskIds[0] ?? "missing");
+        if (change.taskIds[0] === "task-1") {
+          await firstNotification.promise;
+        }
+      }),
+      onSnapshot: mock(async () => {}),
+      onFailure: mock(() => {}),
+    };
+    const harness = createHarness({ notificationSink });
+
+    await harness.controller.start();
+    harness.emit(0, { type: "change", cursor: cursor(0), event: event("task-1") });
+    await flush();
+    harness.emit(0, { type: "change", cursor: cursor(1), event: event("task-2") });
+    await flush();
+
+    expect(harness.records[0]?.acknowledge.mock.calls).toEqual([[cursor(0)], [cursor(1)]]);
+    expect(notificationEvents).toEqual(["task-1"]);
+
+    firstNotification.resolve();
+    await flush();
+
+    expect(notificationEvents).toEqual(["task-1", "task-2"]);
+    expect(notificationSink.onFailure).not.toHaveBeenCalled();
+  });
+
+  test("acknowledges a reconciled snapshot while its notification projection is pending", async () => {
+    const snapshotNotification = deferred<void>();
+    const notificationSink: TaskStreamNotificationSink = {
+      onChange: mock(async () => {}),
+      onSnapshot: mock(async () => snapshotNotification.promise),
+      onFailure: mock(() => {}),
+    };
+    const harness = createHarness({ notificationSink });
+
+    await harness.controller.start();
+    harness.emit(0, {
+      type: "snapshot_required",
+      cursor: cursor(7),
+      reason: "buffer_gap",
+    });
+    await flush();
+
+    expect(harness.taskViewSync.reconcileStreamSnapshot).toHaveBeenCalledWith("/repo");
+    expect(harness.records[0]?.acknowledge).toHaveBeenCalledWith(cursor(7));
+
+    snapshotNotification.resolve();
+    await flush();
+  });
+
   test("application failure closes the subscription, recovers from a snapshot, and resumes", async () => {
     const applicationFailure = new Error("upper failed");
     let applications = 0;

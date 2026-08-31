@@ -138,6 +138,10 @@ describe("session occurrence projector", () => {
       {
         kind: "agent.session_error",
         status: "Agent Session reported an error.",
+        navigationTarget: {
+          type: "session_error",
+          errorId: "2026-08-31T10:01:00.000Z",
+        },
       },
     ]);
     expect(projector.accept({ type: "transcript_event", event: terminalError })).toEqual([]);
@@ -161,8 +165,21 @@ describe("session occurrence projector", () => {
         status: { type: "busy", message: null },
       }),
     });
-    expect(projector.accept({ type: "transcript_event", event: terminalError })).toMatchObject([
-      { kind: "agent.session_error", occurrenceId: expect.stringContaining("cycle-2") },
+    const laterError = transcript({
+      type: "session_error",
+      externalSessionId: ref.externalSessionId,
+      timestamp: "2026-08-31T10:03:01.000Z",
+      message: "later error",
+    });
+    expect(projector.accept({ type: "transcript_event", event: laterError })).toMatchObject([
+      {
+        kind: "agent.session_error",
+        occurrenceId: expect.stringContaining("cycle-2"),
+        navigationTarget: {
+          type: "session_error",
+          errorId: "2026-08-31T10:03:01.000Z",
+        },
+      },
     ]);
   });
 
