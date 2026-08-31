@@ -1,4 +1,8 @@
-import { GITHUB_PROVIDER_DESCRIPTOR, type GitProviderDescriptor } from "@openducktor/contracts";
+import {
+  GITHUB_PROVIDER_DESCRIPTOR,
+  type GitProviderDescriptor,
+  type RepoConfig,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   findGithubPullRequestForBranch,
@@ -33,11 +37,12 @@ export class GithubProviderAdapter implements GitProviderPort {
     gitPort: GitPort;
   }) {
     const repositoryDependencies = { ...githubDependencies, gitPort };
+    const getWriteContext = (repoConfig: RepoConfig) =>
+      requireGithubPullRequestContext(repositoryDependencies, repoConfig.repoPath, repoConfig);
     this.repositoryPort = {
       getReadRepository: (repoConfig) =>
         requireGithubPullRequestReadRepository(githubDependencies, repoConfig.repoPath, repoConfig),
-      getWriteContext: (repoConfig) =>
-        requireGithubPullRequestContext(repositoryDependencies, repoConfig.repoPath, repoConfig),
+      getWriteContext,
     };
     this.healthPort = {
       getStatus: (repoConfig) =>
@@ -46,11 +51,7 @@ export class GithubProviderAdapter implements GitProviderPort {
     this.pullRequestsPort = {
       findByBranch: (input) =>
         Effect.gen(function* () {
-          const context = yield* requireGithubPullRequestContext(
-            repositoryDependencies,
-            input.repoConfig.repoPath,
-            input.repoConfig,
-          );
+          const context = yield* getWriteContext(input.repoConfig);
           const pullRequest = yield* findGithubPullRequestForBranch(
             githubDependencies,
             input.repoConfig.repoPath,
@@ -62,11 +63,7 @@ export class GithubProviderAdapter implements GitProviderPort {
         }),
       getByNumber: (input) =>
         Effect.gen(function* () {
-          const context = yield* requireGithubPullRequestContext(
-            repositoryDependencies,
-            input.repoConfig.repoPath,
-            input.repoConfig,
-          );
+          const context = yield* getWriteContext(input.repoConfig);
           const pullRequest = yield* fetchGithubPullRequestByNumber(
             githubDependencies,
             input.repoConfig.repoPath,
@@ -77,11 +74,7 @@ export class GithubProviderAdapter implements GitProviderPort {
         }),
       upsert: (input) =>
         Effect.gen(function* () {
-          const context = yield* requireGithubPullRequestContext(
-            repositoryDependencies,
-            input.repoConfig.repoPath,
-            input.repoConfig,
-          );
+          const context = yield* getWriteContext(input.repoConfig);
           return yield* upsertGithubPullRequest(
             githubDependencies,
             input.repoConfig.repoPath,

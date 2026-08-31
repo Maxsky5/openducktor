@@ -77,7 +77,7 @@ import type {
 } from "./node-host-command-router-types";
 import { createNodeHostDefaultPorts } from "./node-host-default-ports";
 import { createLiveSessionFaultLogger, defaultLifecycleLogger } from "./node-host-lifecycle-logger";
-import { createGitProviders, createNodeGitProviderResolver } from "./git-provider-composition";
+import { createNodeGitProviderResolver } from "./git-provider-composition";
 import { createNodeRuntimeExecutableCommandHandlers } from "./node-runtime-executable-command-handlers";
 import { createNodeTaskAssetServices } from "./node-task-asset-services";
 import { createNodeTaskEventServices } from "./node-task-event-services";
@@ -491,9 +491,9 @@ export const createNodeEffectHostCommandRouter = (input: CreateNodeHostCommandRo
   }).pipe(
     Effect.flatMap((defaultPorts) => {
       const { git, systemCommands, toolDiscovery } = defaultPorts;
-      const providers = createGitProviders({ gitPort: git, systemCommands, toolDiscovery });
-      return Effect.map(createNodeGitProviderResolver(providers), (resolver) =>
-        assembleNodeEffectHostCommandRouter(input, defaultPorts, resolver),
+      return Effect.map(
+        createNodeGitProviderResolver({ gitPort: git, systemCommands, toolDiscovery }),
+        (resolver) => assembleNodeEffectHostCommandRouter(input, defaultPorts, resolver),
       );
     }),
   );

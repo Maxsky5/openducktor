@@ -1,4 +1,4 @@
-import type { RepoConfig } from "@openducktor/contracts";
+import type { GitProviderId, RepoConfig } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   type GitProviderCapability,
@@ -25,7 +25,7 @@ export const createGitProviderResolver = (
   const providers = Object.freeze([...ports]);
 
   return Effect.gen(function* () {
-    const providersById = new Map<string, GitProviderPort>();
+    const providersById = new Map<GitProviderId, GitProviderPort>();
 
     for (const provider of providers) {
       const providerId = provider.getDescriptor().id;
@@ -86,7 +86,10 @@ type CapabilityRule<Port> = {
   capability: GitProviderCapability;
   supported: boolean;
   getPort: () => Effect.Effect<Port, GitProviderCapabilityError>;
-  checkPort?: (port: Port, providerId: string) => Effect.Effect<void, GitProviderRegistrationError>;
+  checkPort?: (
+    port: Port,
+    providerId: GitProviderId,
+  ) => Effect.Effect<void, GitProviderRegistrationError>;
 };
 
 function checkProvider(
@@ -146,7 +149,7 @@ function checkCapability<Port>(
 
 function checkReviewPortOwner(
   port: PullRequestReviewProviderPort,
-  providerId: string,
+  providerId: GitProviderId,
 ): Effect.Effect<void, GitProviderRegistrationError> {
   if (port.providerId === providerId) {
     return Effect.void;
