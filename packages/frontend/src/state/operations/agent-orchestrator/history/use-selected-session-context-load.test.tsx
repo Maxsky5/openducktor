@@ -67,6 +67,7 @@ describe("useSelectedSessionContextLoad", () => {
       await harness.mount();
       await harness.waitFor(() => loadAgentSessionContext.mock.calls.length === 1);
       expect(loadAgentSessionContext.mock.calls[0]?.[0]).toEqual({
+        repoPath: "/repo",
         externalSessionId: "thread-1",
         runtimeKind: "codex",
         workingDirectory: "/repo/worktree",
@@ -112,6 +113,7 @@ describe("useSelectedSessionContextLoad", () => {
       await harness.mount();
       await harness.waitFor(() => loadAgentSessionContext.mock.calls.length === 1);
       expect(loadAgentSessionContext.mock.calls[0]?.[0]).toEqual({
+        repoPath: "/repo",
         externalSessionId: "child-thread",
         runtimeKind: "codex",
         workingDirectory: "/repo/worktree",
@@ -141,6 +143,7 @@ describe("useSelectedSessionContextLoad", () => {
     };
     const repositorySession: AgentSessionState = {
       ...session("repository-thread"),
+      repoPath: "/other-repo",
       sessionAssociation: { kind: "repository" },
     };
     const wrapper = createWrapper(operations);
@@ -154,6 +157,7 @@ describe("useSelectedSessionContextLoad", () => {
       await harness.mount();
       await harness.waitFor(() => loadAgentSessionContext.mock.calls.length === 1);
       expect(loadAgentSessionContext.mock.calls[0]?.[0]).toEqual({
+        repoPath: "/other-repo",
         externalSessionId: "repository-thread",
         runtimeKind: "codex",
         workingDirectory: "/repo/worktree",

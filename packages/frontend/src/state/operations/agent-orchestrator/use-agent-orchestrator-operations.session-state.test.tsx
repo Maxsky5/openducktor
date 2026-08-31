@@ -1040,6 +1040,7 @@ describe("use-agent-orchestrator-operations session state", () => {
 
         await harness.run(async () => {
           const target = {
+            repoPath: "/tmp/session-repo",
             externalSessionId: persistedSession.externalSessionId,
             runtimeKind: persistedSession.runtimeKind,
             workingDirectory: persistedSession.workingDirectory,
@@ -1059,7 +1060,7 @@ describe("use-agent-orchestrator-operations session state", () => {
 
         expect(contextReadCount).toBe(1);
         expect(receivedContextInput.current).toEqual({
-          repoPath: "/tmp/repo",
+          repoPath: "/tmp/session-repo",
           externalSessionId: persistedSession.externalSessionId,
           runtimeKind: persistedSession.runtimeKind,
           workingDirectory: persistedSession.workingDirectory,

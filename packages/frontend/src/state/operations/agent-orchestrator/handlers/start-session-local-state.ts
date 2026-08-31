@@ -21,6 +21,7 @@ export const persistInitialSession = async ({
         );
       }
       await session.persistSessionRecord(
+        initialSession.repoPath,
         initialSession.sessionAssociation.taskId,
         toPersistedSessionRecord(initialSession),
       );

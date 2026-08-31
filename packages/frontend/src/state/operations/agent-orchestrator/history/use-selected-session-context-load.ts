@@ -23,9 +23,9 @@ const missingContextTarget = ({
   }
   const identity = toAgentSessionIdentity(session);
   if (session.sessionAssociation.kind === "unbound") {
-    return identity;
+    return { repoPath: session.repoPath, ...identity };
   }
-  return { ...identity, sessionScope: session.sessionAssociation };
+  return { repoPath: session.repoPath, ...identity, sessionScope: session.sessionAssociation };
 };
 
 export const useSelectedSessionContextLoad = ({
@@ -43,16 +43,20 @@ export const useSelectedSessionContextLoad = ({
   });
   const stableIdentity = useStableAgentSessionIdentity(target);
   const stableSessionScope = useStableAgentSessionScope(target?.sessionScope);
+  const stableRepoPath = target?.repoPath ?? null;
   const stableTarget = useMemo<AgentSessionContextLoadTarget | null>(() => {
-    if (stableIdentity === null) {
+    if (stableIdentity === null || stableRepoPath === null) {
       return null;
     }
-    const stableTarget: AgentSessionContextLoadTarget = { ...stableIdentity };
+    const stableTarget: AgentSessionContextLoadTarget = {
+      repoPath: stableRepoPath,
+      ...stableIdentity,
+    };
     if (stableSessionScope) {
       stableTarget.sessionScope = stableSessionScope;
     }
     return stableTarget;
-  }, [stableIdentity, stableSessionScope]);
+  }, [stableIdentity, stableRepoPath, stableSessionScope]);
 
   useEffect(() => {
     let isCurrentTarget = true;

@@ -133,10 +133,10 @@ const createHarness = (
         ) ?? null,
       loadAgentSessionHistory: async () => null,
       sessionStartGateRef: { current: createSessionStartGate() },
-      persistSessionRecord: async (taskId, record) => {
+      persistSessionRecord: async (_repoPath, taskId, record) => {
         calls.persistSessionRecord.push({ taskId, record });
       },
-      deleteSessionRecord: async (_taskId, identity) => {
+      deleteSessionRecord: async (_repoPath, _taskId, identity) => {
         calls.deleteSessionRecord.push(identity.externalSessionId);
       },
       clearSessionObservationState: (identity) => {

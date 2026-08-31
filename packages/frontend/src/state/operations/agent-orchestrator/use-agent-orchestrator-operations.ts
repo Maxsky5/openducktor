@@ -88,8 +88,8 @@ export function useAgentOrchestratorOperations({
     tasks,
   });
   const sessionCacheEffects = useMemo(
-    () => createSessionCacheEffects({ workspaceRepoPath, queryClient, hostPort }),
-    [workspaceRepoPath, queryClient, hostPort],
+    () => createSessionCacheEffects({ queryClient, hostPort }),
+    [queryClient, hostPort],
   );
   const { deleteSessionRecord, persistSessionRecord, invalidateSessionStopQueries } =
     sessionCacheEffects;
@@ -114,10 +114,10 @@ export function useAgentOrchestratorOperations({
         const { taskId, role } = nextSession.sessionAssociation;
         runOrchestratorSideEffect(
           "operations-persist-session-snapshot",
-          persistSessionRecord(taskId, toPersistedSessionRecord(nextSession)),
+          persistSessionRecord(nextSession.repoPath, taskId, toPersistedSessionRecord(nextSession)),
           {
             tags: {
-              repoPath: workspaceRepoPath,
+              repoPath: nextSession.repoPath,
               externalSessionId: nextSession.externalSessionId,
               taskId,
               role,
@@ -128,7 +128,7 @@ export function useAgentOrchestratorOperations({
 
       return nextSession;
     },
-    [persistSessionRecord, sessionStore, workspaceRepoPath],
+    [persistSessionRecord, sessionStore],
   );
   const ensureSession = useCallback<EnsureSession>(
     (identity, createSession) => {
@@ -326,16 +326,10 @@ export function useAgentOrchestratorOperations({
         sessionActions,
         loadAgentSessionHistory: sessionHistoryLoaders.loadAgentSessionHistory,
         loadAgentSessionContext: async (session) => {
-          if (!workspaceRepoPath) {
-            throw new Error("Cannot load agent session context without an active workspace.");
-          }
           const previousContextUsage = sessionStore.getSessionSnapshot(session)?.contextUsage;
           const contextUsage = await loadAgentSessionContextFromQuery(
             queryClient,
-            {
-              repoPath: workspaceRepoPath,
-              ...session,
-            },
+            session,
             liveSessionHostPort.agentSessionLiveLoadContext,
           );
           if (contextUsage) {
@@ -355,7 +349,6 @@ export function useAgentOrchestratorOperations({
       sessionHistoryLoaders,
       sessionActions,
       sessionStore,
-      workspaceRepoPath,
     ],
   );
   const historyLoadActions = useMemo<AgentSessionHistoryLoadContextValue>(

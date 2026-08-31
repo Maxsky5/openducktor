@@ -223,4 +223,4 @@ export type AgentPendingInputActionTarget = AgentSessionIdentity | PolicyBoundSe
 export type AgentSessionRuntimeTarget = AgentSessionIdentity &
   Pick<AgentSessionState, "sessionAssociation">;
 
-export type AgentSessionContextLoadTarget = Omit<AgentSessionLiveLoadContextInput, "repoPath">;
+export type AgentSessionContextLoadTarget = AgentSessionLiveLoadContextInput;

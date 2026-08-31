@@ -2,7 +2,11 @@ import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { toPersistedSessionRecord } from "../support/persistence";
 
-type PersistSessionRecord = (taskId: string, record: AgentSessionRecord) => Promise<void>;
+type PersistSessionRecord = (
+  repoPath: string,
+  taskId: string,
+  record: AgentSessionRecord,
+) => Promise<void>;
 
 export type CommitSessionModelChange = (session: AgentSessionState) => Promise<void>;
 
@@ -21,6 +25,7 @@ export const createCommitSessionModelChangePolicy = ({
       );
     }
     await persistSessionRecord(
+      session.repoPath,
       session.sessionAssociation.taskId,
       toPersistedSessionRecord(session),
     );
@@ -45,7 +50,7 @@ export const createCommitStoppedSessionPolicy = ({
 
     const taskId = session.sessionAssociation.taskId;
     const repoPath = session.repoPath;
-    await persistSessionRecord(taskId, toPersistedSessionRecord(session));
+    await persistSessionRecord(repoPath, taskId, toPersistedSessionRecord(session));
     await Promise.all([
       invalidateSessionStopQueries({ repoPath, taskId }),
       refreshTaskData(repoPath, taskId),

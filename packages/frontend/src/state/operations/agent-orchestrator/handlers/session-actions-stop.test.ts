@@ -720,9 +720,10 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     };
     const refreshTaskDataCalls: string[] = [];
     const invalidationCalls: Array<{ repoPath: string; taskId: string; runtimeKind?: string }> = [];
+    const persistenceCalls: Array<{ repoPath: string; taskId: string }> = [];
     let loadSourceSessionCalls = 0;
 
-    const sessionsRef = createSessionsRef([buildSession()]);
+    const sessionsRef = createSessionsRef([buildSession({ repoPath: "/tmp/session-repo" })]);
 
     const actions = createSessionActions({
       workspaceRepoPath: null,
@@ -739,6 +740,9 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
         loadSourceSessionCalls += 1;
         return null;
       },
+      persistSessionRecord: async (repoPath, taskId) => {
+        persistenceCalls.push({ repoPath, taskId });
+      },
       refreshTaskData: async (repoPath) => {
         refreshTaskDataCalls.push(repoPath);
       },
@@ -752,13 +756,14 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     expect(stopTargets).toEqual([
       {
         externalSessionId: "session-1",
-        repoPath: "/tmp/repo",
+        repoPath: "/tmp/session-repo",
         runtimeKind: "opencode",
         workingDirectory: "/tmp/repo/worktree",
       },
     ]);
-    expect(invalidationCalls).toEqual([{ repoPath: "/tmp/repo", taskId: "task-1" }]);
-    expect(refreshTaskDataCalls).toEqual(["/tmp/repo"]);
+    expect(persistenceCalls).toEqual([{ repoPath: "/tmp/session-repo", taskId: "task-1" }]);
+    expect(invalidationCalls).toEqual([{ repoPath: "/tmp/session-repo", taskId: "task-1" }]);
+    expect(refreshTaskDataCalls).toEqual(["/tmp/session-repo"]);
     expect(loadSourceSessionCalls).toBe(0);
   });
 

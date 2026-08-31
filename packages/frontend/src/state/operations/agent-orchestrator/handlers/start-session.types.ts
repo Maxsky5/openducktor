@@ -16,8 +16,16 @@ export type SessionDependencies = {
   sessionStartGateRef: { current: SessionStartGate<StartAgentSessionResult> };
   loadSourceSession: LoadSourceSession;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
-  persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
-  deleteSessionRecord: (taskId: string, identity: AgentSessionIdentity) => Promise<void>;
+  persistSessionRecord: (
+    repoPath: string,
+    taskId: string,
+    record: AgentSessionRecord,
+  ) => Promise<void>;
+  deleteSessionRecord: (
+    repoPath: string,
+    taskId: string,
+    identity: AgentSessionIdentity,
+  ) => Promise<void>;
   clearSessionObservationState: (identity: AgentSessionIdentity) => void;
 };
 

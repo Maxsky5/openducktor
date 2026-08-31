@@ -5,7 +5,6 @@ import { errorMessage } from "@/lib/errors";
 import { refreshAgentSessionListQuery } from "@/state/queries/agent-sessions";
 import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
 import type { AgentOrchestratorHostPort } from "./orchestrator-ports";
-import { requireWorkspaceRepoPath } from "./session-invariants";
 
 type SessionCacheRefreshFailure = {
   operation: "delete" | "save";
@@ -15,7 +14,6 @@ type SessionCacheRefreshFailure = {
 };
 
 type CreateSessionCacheEffectsArgs = {
-  workspaceRepoPath: string | null;
   queryClient: QueryClient;
   hostPort: Pick<
     AgentOrchestratorHostPort,
@@ -46,16 +44,15 @@ const reportDefaultCacheRefreshFailure = (failure: SessionCacheRefreshFailure): 
 };
 
 export const createSessionCacheEffects = ({
-  workspaceRepoPath,
   queryClient,
   hostPort,
   reportCacheRefreshFailure = reportDefaultCacheRefreshFailure,
 }: CreateSessionCacheEffectsArgs) => {
   const persistSessionRecord = async (
+    repoPath: string,
     taskId: string,
     record: AgentSessionRecord,
   ): Promise<void> => {
-    const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
     await hostPort.agentSessionUpsert(repoPath, taskId, record);
     try {
       await refreshAgentSessionListQuery(queryClient, repoPath, taskId, hostPort);
@@ -65,10 +62,10 @@ export const createSessionCacheEffects = ({
   };
 
   const deleteSessionRecord = async (
+    repoPath: string,
     taskId: string,
     identity: AgentSessionIdentity,
   ): Promise<void> => {
-    const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
     await hostPort.agentSessionDelete(repoPath, taskId, identity);
     try {
       await refreshAgentSessionListQuery(queryClient, repoPath, taskId, hostPort);

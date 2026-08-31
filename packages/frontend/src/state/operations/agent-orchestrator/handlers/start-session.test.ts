@@ -595,7 +595,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         runtimeId: "runtime-1",
         workingDirectory: "/tmp/repo",
       }),
-      persistSessionRecord: async (taskId, record) => {
+      persistSessionRecord: async (_repoPath, taskId, record) => {
         persistedTaskId = taskId;
         persistedRecord = record;
       },
@@ -654,7 +654,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       persistSessionRecord: async () => {
         throw new Error("persist failed");
       },
-      deleteSessionRecord: async (_taskId, identity) => {
+      deleteSessionRecord: async (_repoPath, _taskId, identity) => {
         deletedSessionIds.push(identity.externalSessionId);
       },
     });
@@ -712,7 +712,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           },
         },
       }),
-      deleteSessionRecord: async (_taskId, identity) => {
+      deleteSessionRecord: async (_repoPath, _taskId, identity) => {
         deletedSessionIds.push(identity.externalSessionId);
       },
     });
@@ -763,7 +763,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           },
         },
       }),
-      deleteSessionRecord: async (_taskId, identity) => {
+      deleteSessionRecord: async (_repoPath, _taskId, identity) => {
         deletedSessionIds.push(identity.externalSessionId);
       },
     });
@@ -817,7 +817,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       replaceSession: () => {
         throw new Error("registration failed");
       },
-      deleteSessionRecord: async (_taskId, identity) => {
+      deleteSessionRecord: async (_repoPath, _taskId, identity) => {
         deletedSessionIds.push(identity.externalSessionId);
       },
     });
@@ -980,7 +980,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           },
         },
       }),
-      deleteSessionRecord: async (_taskId, identity) => {
+      deleteSessionRecord: async (_repoPath, _taskId, identity) => {
         deletedSessionIds.push(identity.externalSessionId);
       },
     });
@@ -1044,7 +1044,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           },
         },
       }),
-      deleteSessionRecord: async (_taskId, identity) => {
+      deleteSessionRecord: async (_repoPath, _taskId, identity) => {
         deletedSessionIds.push(identity.externalSessionId);
       },
     });
