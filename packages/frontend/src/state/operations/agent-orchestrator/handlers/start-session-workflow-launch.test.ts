@@ -44,7 +44,6 @@ const workflowSourceSession = (): AgentSessionState => ({
   externalSessionId: "source-session",
   sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   runtimeKind: "opencode",
-  repoPath: REPO_PATH,
   status: "idle",
   runtimeStatusMessage: null,
   startedAt: "2026-08-21T09:00:00.000Z",
@@ -133,10 +132,10 @@ const createHarness = (
         ) ?? null,
       loadAgentSessionHistory: async () => null,
       sessionStartGateRef: { current: createSessionStartGate() },
-      persistSessionRecord: async (_repoPath, taskId, record) => {
+      persistSessionRecord: async (taskId, record) => {
         calls.persistSessionRecord.push({ taskId, record });
       },
-      deleteSessionRecord: async (_repoPath, _taskId, identity) => {
+      deleteSessionRecord: async (_taskId, identity) => {
         calls.deleteSessionRecord.push(identity.externalSessionId);
       },
       clearSessionObservationState: (identity) => {
@@ -224,7 +223,6 @@ const registeredSessionState = (): AgentSessionState => ({
   externalSessionId: "external-commit",
   sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   runtimeKind: "opencode",
-  repoPath: REPO_PATH,
   status: "idle",
   runtimeStatusMessage: null,
   startedAt: "2026-08-21T10:00:00.000Z",

@@ -1,7 +1,11 @@
 import type { AgentEnginePort, AgentModelSelection } from "@openducktor/core";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
-import { type ReadSessionSnapshot, requireLoadedSession } from "../support/session-invariants";
+import {
+  type ReadSessionSnapshot,
+  requireLoadedSession,
+  requireWorkspaceRepoPath,
+} from "../support/session-invariants";
 import {
   requireBoundSessionAssociation,
   toRuntimeSessionRef,
@@ -9,6 +13,7 @@ import {
 import type { CommitSessionModelChange } from "./workflow-session-operation-policy";
 
 export type SessionModelActionDependencies = {
+  workspaceRepoPath: string | null;
   adapter: Pick<AgentEnginePort, "updateSessionModel">;
   readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
@@ -16,6 +21,7 @@ export type SessionModelActionDependencies = {
 };
 
 export const createSessionModelActions = ({
+  workspaceRepoPath,
   adapter,
   readSessionSnapshot,
   updateSession,
@@ -29,7 +35,7 @@ export const createSessionModelActions = ({
     requireBoundSessionAssociation(session, "change model");
 
     await adapter.updateSessionModel({
-      ...toRuntimeSessionRef(session.repoPath, session),
+      ...toRuntimeSessionRef(requireWorkspaceRepoPath(workspaceRepoPath), session),
       model: selection,
     });
 

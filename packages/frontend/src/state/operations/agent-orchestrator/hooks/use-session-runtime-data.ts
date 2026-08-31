@@ -37,7 +37,7 @@ import {
 import { resolveSessionRuntimeScope } from "../support/session-runtime-scope";
 
 type UseSessionRuntimeDataArgs = {
-  readinessRepoPath: string | null;
+  repoPath: string | null;
   selectedSession: SessionRuntimeDataTarget | null;
   runtimeDefinitions: RuntimeDescriptor[];
   repoReadinessState: RepoRuntimeReadinessState;
@@ -60,7 +60,7 @@ const skippedRuntimeCatalogQueryOptions = (runtimeRef: RepoRuntimeRef | null) =>
   });
 
 export const useSessionRuntimeData = ({
-  readinessRepoPath,
+  repoPath,
   selectedSession,
   runtimeDefinitions,
   repoReadinessState,
@@ -78,9 +78,8 @@ export const useSessionRuntimeData = ({
       ? selectedSession.sessionAssociation.role
       : null;
   const selectedModel = selectedSession?.selectedModel ?? null;
-  const selectedRepoPath = selectedSession?.repoPath ?? null;
   const stableSelectedSession = useMemo<SessionRuntimeDataTarget | null>(() => {
-    if (!stableSelectedSessionIdentity || !selectedAssociationKind || selectedRepoPath === null) {
+    if (!stableSelectedSessionIdentity || !selectedAssociationKind) {
       return null;
     }
     let sessionAssociation: AgentSessionAssociation;
@@ -96,14 +95,12 @@ export const useSessionRuntimeData = ({
     }
     return {
       identity: stableSelectedSessionIdentity,
-      repoPath: selectedRepoPath,
       sessionAssociation,
       selectedModel,
     };
   }, [
     selectedAssociationKind,
     stableSelectedSessionIdentity,
-    selectedRepoPath,
     selectedModel,
     selectedRole,
     selectedTaskId,
@@ -156,15 +153,15 @@ export const useSessionRuntimeData = ({
   const runtimePolicy = runtimePolicyResult.runtimePolicy;
   const runtimeDataRefs = useMemo(() => {
     return resolveSessionRuntimeDataRefs({
+      repoPath,
       selectedSession: stableSelectedSession,
       runtimePolicy,
       runtimeDefinitions,
     });
-  }, [runtimeDefinitions, runtimePolicy, stableSelectedSession]);
+  }, [repoPath, runtimeDefinitions, runtimePolicy, stableSelectedSession]);
+  const isRuntimeReady = repoReadinessState === "ready";
   const catalogRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.catalogRef : null;
   const todosRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.todosRef : null;
-  const readinessApplies = catalogRef?.repoPath === readinessRepoPath;
-  const isRuntimeReady = !readinessApplies || repoReadinessState === "ready";
 
   const catalogQuery = useQuery({
     ...(catalogRef && isRuntimeReady
@@ -189,6 +186,7 @@ export const useSessionRuntimeData = ({
         ? catalogQuery.error.message
         : null;
     const todosQueryError = todosQuery.error instanceof Error ? todosQuery.error.message : null;
+    const contextError = runtimeDataRefs.kind === "unavailable" ? runtimeDataRefs.error : null;
     const resolvedCatalog = catalogQuery.data ?? null;
     const resolvedTodos = todosQuery.data ?? [];
     const isLoadingModelCatalog =
@@ -201,7 +199,7 @@ export const useSessionRuntimeData = ({
       catalogError: catalogQueryError,
       todosError: todosQueryError,
       runtimePolicyError,
-      contextError: null,
+      contextError,
     };
   }, [
     catalogQuery.data,

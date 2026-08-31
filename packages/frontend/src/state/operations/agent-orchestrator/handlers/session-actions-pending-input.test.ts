@@ -137,18 +137,17 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     expect(approvalReplies).toHaveLength(0);
   });
 
-  test("routes a UI-shaped repository approval through the session repository", async () => {
+  test("routes a UI-shaped repository approval through the active workspace", async () => {
     const request = approvalRequest("perm-repository");
     const session = buildSession({
       sessionAssociation: { kind: "repository" },
-      repoPath: "/session/repository",
       pendingApprovals: [request],
     });
     const { actions, approvalReplies } = createPendingInputActionHarness([session]);
 
     await actions.replyAgentApproval(toAgentSessionIdentity(session), request, "approve_once");
 
-    expect(approvalReplies[0]?.repoPath).toBe("/session/repository");
+    expect(approvalReplies[0]?.repoPath).toBe("/active/repository");
   });
 
   test("routes a mirrored subagent approval to its response session", async () => {
@@ -211,7 +210,6 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     const childSession = buildSession({
       externalSessionId: "claude-child",
       runtimeKind: "claude",
-      repoPath: "/claude/session/repository",
       workingDirectory: "/claude/session/repository",
       sessionAssociation: { kind: "repository" },
     });
@@ -232,7 +230,6 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     const parentSession = buildSession({
       externalSessionId: "claude-parent",
       runtimeKind: "claude",
-      repoPath: "/claude/session/repository",
       workingDirectory: "/claude/session/repository",
       sessionAssociation: { kind: "repository" },
       pendingApprovals: [request],
@@ -279,18 +276,17 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     expect(getSession(sessionsRef).pendingQuestions).toEqual([request]);
   });
 
-  test("routes a UI-shaped repository question through the session repository", async () => {
+  test("routes a UI-shaped repository question through the active workspace", async () => {
     const request = questionRequest("question-repository");
     const session = buildSession({
       sessionAssociation: { kind: "repository" },
-      repoPath: "/session/repository",
       pendingQuestions: [request],
     });
     const { actions, questionReplies } = createPendingInputActionHarness([session]);
 
     await actions.answerAgentQuestion(toAgentSessionIdentity(session), request, [["yes"]]);
 
-    expect(questionReplies[0]?.repoPath).toBe("/session/repository");
+    expect(questionReplies[0]?.repoPath).toBe("/active/repository");
   });
 
   test("routes a mirrored subagent question to its response session", async () => {
@@ -339,11 +335,10 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     expect(getSession(sessionsRef, "session-child").pendingQuestions).toEqual([request]);
   });
 
-  test("routes a UI-shaped Claude subagent question through the child repository", async () => {
+  test("routes a UI-shaped Claude subagent question through the active workspace", async () => {
     const childSession = buildSession({
       externalSessionId: "claude-child",
       runtimeKind: "claude",
-      repoPath: "/claude/session/repository",
       workingDirectory: "/claude/session/repository",
       sessionAssociation: { kind: "repository" },
     });
@@ -364,7 +359,6 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     const parentSession = buildSession({
       externalSessionId: "claude-parent",
       runtimeKind: "claude",
-      repoPath: "/claude/session/repository",
       workingDirectory: "/claude/session/repository",
       sessionAssociation: { kind: "repository" },
       pendingQuestions: [request],
@@ -377,7 +371,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     await actions.answerAgentQuestion(toAgentSessionIdentity(parentSession), request, [["yes"]]);
 
     expect(questionReplies[0]).toMatchObject({
-      repoPath: "/claude/session/repository",
+      repoPath: "/active/repository",
       externalSessionId: "claude-child",
       runtimeKind: "claude",
       workingDirectory: "/claude/session/repository",

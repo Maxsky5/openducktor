@@ -55,27 +55,19 @@ const toSessionRuntimeDataTarget = (
   session: AgentSessionState | null,
   identity: AgentSessionIdentity | null,
   summary: AgentSessionSummary | null,
-  workspaceRepoPath: string | null,
 ): SessionRuntimeDataTarget | null => {
   if (session) {
     return {
       identity: session,
-      repoPath: session.repoPath,
       sessionAssociation: session.sessionAssociation,
       selectedModel: session.selectedModel,
     };
   }
-  if (
-    !identity ||
-    !summary ||
-    !workspaceRepoPath ||
-    !matchesAgentSessionIdentity(summary, identity)
-  ) {
+  if (!identity || !summary || !matchesAgentSessionIdentity(summary, identity)) {
     return null;
   }
   return {
     identity,
-    repoPath: workspaceRepoPath,
     sessionAssociation: {
       kind: "workflow",
       taskId: summary.taskId,
@@ -162,22 +154,10 @@ export function useAgentStudioSelectedSessionView({
       selection.role,
     ],
   );
-  const workspaceRuntimeReadiness = useRepoRuntimeReadiness({
+  const runtimeReadiness = useRepoRuntimeReadiness({
     hasWorkspace: workspaceRepoPath !== null,
     runtimeTarget,
   });
-  const runtimeReadiness = useMemo(
-    () =>
-      loadedSession !== null && loadedSession.repoPath !== workspaceRepoPath
-        ? {
-            ...workspaceRuntimeReadiness,
-            state: "ready" as const,
-            message: null,
-            isLoadingChecks: false,
-          }
-        : workspaceRuntimeReadiness,
-    [loadedSession, workspaceRepoPath, workspaceRuntimeReadiness],
-  );
   const repoReadinessState = runtimeReadiness.state;
   const selectedSessionViewProjection = useMemo(() => {
     if (isUnresolvedExplicitRouteSession && routeSessionResolution.kind === "pending") {
@@ -242,12 +222,11 @@ export function useAgentStudioSelectedSessionView({
       : firstLaunchAction(selection.role);
 
   const runtimeData = useSessionRuntimeData({
-    readinessRepoPath: workspaceRepoPath,
+    repoPath: workspaceRepoPath,
     selectedSession: toSessionRuntimeDataTarget(
       loadedSession,
       selectedSessionIdentity,
       selection.sessionSummary,
-      workspaceRepoPath,
     ),
     runtimeDefinitions,
     repoReadinessState,

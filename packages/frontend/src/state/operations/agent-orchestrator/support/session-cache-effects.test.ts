@@ -46,6 +46,7 @@ describe("createSessionCacheEffects", () => {
     const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
     await queryClient.fetchQuery({ queryKey, queryFn: list });
     const effects = createSessionCacheEffects({
+      workspaceRepoPath: "/repo",
       queryClient,
       hostPort: {
         agentSessionDelete: async () => undefined,
@@ -54,7 +55,7 @@ describe("createSessionCacheEffects", () => {
       },
     });
 
-    await effects.persistSessionRecord("/repo", "task-1", sessionRecord);
+    await effects.persistSessionRecord("task-1", sessionRecord);
 
     expect(upsert).toHaveBeenCalledWith("/repo", "task-1", sessionRecord);
     expect(list).toHaveBeenCalledTimes(2);
@@ -79,6 +80,7 @@ describe("createSessionCacheEffects", () => {
     const upsert = mock(async () => undefined);
     const reportCacheRefreshFailure = mock(() => undefined);
     const effects = createSessionCacheEffects({
+      workspaceRepoPath: "/repo",
       queryClient,
       hostPort: {
         agentSessionDelete: async () => undefined,
@@ -89,9 +91,7 @@ describe("createSessionCacheEffects", () => {
     });
     failRefresh = true;
 
-    await expect(
-      effects.persistSessionRecord("/repo", "task-1", sessionRecord),
-    ).resolves.toBeUndefined();
+    await expect(effects.persistSessionRecord("task-1", sessionRecord)).resolves.toBeUndefined();
 
     expect(upsert).toHaveBeenCalledWith("/repo", "task-1", sessionRecord);
     expect(queryClient.getQueryState(queryKey)?.status).toBe("error");
@@ -111,6 +111,7 @@ describe("createSessionCacheEffects", () => {
     const persistenceError = new Error("Session persistence failed.");
     const reportCacheRefreshFailure = mock(() => undefined);
     const effects = createSessionCacheEffects({
+      workspaceRepoPath: "/repo",
       queryClient,
       hostPort: {
         agentSessionDelete: async () => undefined,
@@ -122,16 +123,17 @@ describe("createSessionCacheEffects", () => {
       reportCacheRefreshFailure,
     });
 
-    await expect(effects.persistSessionRecord("/repo", "task-1", sessionRecord)).rejects.toBe(
+    await expect(effects.persistSessionRecord("task-1", sessionRecord)).rejects.toBe(
       persistenceError,
     );
     expect(reportCacheRefreshFailure).not.toHaveBeenCalled();
   });
 
-  test("persists through the explicit session repository without an active workspace", async () => {
+  test("persists through the active workspace repository", async () => {
     const queryClient = createQueryClient();
     const upsert = mock(async () => undefined);
     const effects = createSessionCacheEffects({
+      workspaceRepoPath: "/session-repo",
       queryClient,
       hostPort: {
         agentSessionDelete: async () => undefined,
@@ -140,7 +142,7 @@ describe("createSessionCacheEffects", () => {
       },
     });
 
-    await effects.persistSessionRecord("/session-repo", "task-1", sessionRecord);
+    await effects.persistSessionRecord("task-1", sessionRecord);
 
     expect(upsert).toHaveBeenCalledWith("/session-repo", "task-1", sessionRecord);
   });
@@ -154,6 +156,7 @@ describe("createSessionCacheEffects", () => {
       return originalInvalidateQueries({ ...filters, refetchType: "none" });
     };
     const effects = createSessionCacheEffects({
+      workspaceRepoPath: "/repo",
       queryClient,
       hostPort: {
         agentSessionDelete: async () => undefined,
@@ -182,6 +185,7 @@ describe("createSessionCacheEffects", () => {
     const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
     await queryClient.fetchQuery({ queryKey, queryFn: list });
     const effects = createSessionCacheEffects({
+      workspaceRepoPath: "/repo",
       queryClient,
       hostPort: {
         agentSessionDelete: deleteSession,
@@ -190,7 +194,7 @@ describe("createSessionCacheEffects", () => {
       },
     });
 
-    await effects.deleteSessionRecord("/repo", "task-1", sessionRecord);
+    await effects.deleteSessionRecord("task-1", sessionRecord);
 
     expect(deleteSession).toHaveBeenCalledWith("/repo", "task-1", sessionRecord);
     expect(list).toHaveBeenCalledTimes(2);
@@ -215,6 +219,7 @@ describe("createSessionCacheEffects", () => {
     const deleteSession = mock(async () => undefined);
     const reportCacheRefreshFailure = mock(() => undefined);
     const effects = createSessionCacheEffects({
+      workspaceRepoPath: "/repo",
       queryClient,
       hostPort: {
         agentSessionDelete: deleteSession,
@@ -225,9 +230,7 @@ describe("createSessionCacheEffects", () => {
     });
     failRefresh = true;
 
-    await expect(
-      effects.deleteSessionRecord("/repo", "task-1", sessionRecord),
-    ).resolves.toBeUndefined();
+    await expect(effects.deleteSessionRecord("task-1", sessionRecord)).resolves.toBeUndefined();
 
     expect(deleteSession).toHaveBeenCalledWith("/repo", "task-1", sessionRecord);
     expect(queryClient.getQueryState(queryKey)?.status).toBe("error");

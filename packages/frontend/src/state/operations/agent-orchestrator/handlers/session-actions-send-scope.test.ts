@@ -41,7 +41,6 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
         buildSession({
           status: "idle",
           sessionAssociation: { kind: "repository" },
-          repoPath: "/tmp/session-repository",
           workingDirectory: "/tmp/repo/repository-chat",
         }),
       ]);
@@ -72,7 +71,7 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
 
       expect(sendInputs).toHaveLength(1);
       expect(sendInputs[0]).toMatchObject({
-        repoPath: "/tmp/session-repository",
+        repoPath: "/tmp/active-workspace",
         runtimeKind: "opencode",
         workingDirectory: "/tmp/repo/repository-chat",
         externalSessionId: "session-1",

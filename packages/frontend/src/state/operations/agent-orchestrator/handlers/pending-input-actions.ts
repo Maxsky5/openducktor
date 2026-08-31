@@ -8,10 +8,11 @@ import type {
   AgentSessionIdentity,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
-import type { ReadSessionSnapshot } from "../support/session-invariants";
+import { type ReadSessionSnapshot, requireWorkspaceRepoPath } from "../support/session-invariants";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
 
 export type PendingInputActionDependencies = {
+  workspaceRepoPath: string | null;
   liveSessionHost: Pick<
     HostClient,
     "agentSessionLiveReplyApproval" | "agentSessionLiveReplyQuestion"
@@ -58,10 +59,7 @@ const preparePendingInputReply = ({
   }
 
   markTurnUserAnchorIfMissing(dependencies, responseSession, responseState.selectedModel);
-  return {
-    responseSession,
-    repoPath: responseState.repoPath,
-  };
+  return responseSession;
 };
 
 export const createPendingInputActions = (dependencies: PendingInputActionDependencies) => {
@@ -71,14 +69,14 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
     outcome: RuntimeApprovalReplyOutcome,
     message?: string,
   ): Promise<void> => {
-    const { responseSession, repoPath } = preparePendingInputReply({
+    const responseSession = preparePendingInputReply({
       dependencies,
       currentSession: identity,
       request,
     });
     const input: Parameters<typeof dependencies.liveSessionHost.agentSessionLiveReplyApproval>[0] =
       {
-        repoPath,
+        repoPath: requireWorkspaceRepoPath(dependencies.workspaceRepoPath),
         externalSessionId: responseSession.externalSessionId,
         runtimeKind: responseSession.runtimeKind,
         workingDirectory: responseSession.workingDirectory,
@@ -96,13 +94,13 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
     request: AgentQuestionRequest,
     answers: string[][],
   ): Promise<void> => {
-    const { responseSession, repoPath } = preparePendingInputReply({
+    const responseSession = preparePendingInputReply({
       dependencies,
       currentSession: identity,
       request,
     });
     await dependencies.liveSessionHost.agentSessionLiveReplyQuestion({
-      repoPath,
+      repoPath: requireWorkspaceRepoPath(dependencies.workspaceRepoPath),
       externalSessionId: responseSession.externalSessionId,
       runtimeKind: responseSession.runtimeKind,
       workingDirectory: responseSession.workingDirectory,

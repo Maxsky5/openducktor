@@ -22,14 +22,13 @@ const recordFixture: AgentSessionRecord = {
 };
 
 const loadRecordFixture = (record: AgentSessionRecord = recordFixture): AgentSessionState =>
-  fromPersistedSessionRecord({ repoPath: "/tmp/repo", taskId: "task-1", record });
+  fromPersistedSessionRecord({ taskId: "task-1", record });
 
 describe("agent-orchestrator/support/persistence", () => {
   test("loads persisted sessions as idle until runtime state is read", () => {
     const loadedSession = loadRecordFixture();
     expect(loadedSession.status).toBe("idle");
     expect(loadedSession.title).toBe("BUILD task-1");
-    expect(loadedSession.repoPath).toBe("/tmp/repo");
     expect(loadedSession.runtimeKind).toBe("opencode");
     expect(loadedSession.pendingApprovals).toEqual([]);
     expect(loadedSession.pendingQuestions).toEqual([]);
@@ -130,7 +129,6 @@ describe("agent-orchestrator/support/persistence", () => {
 
     expect(() =>
       fromPersistedSessionRecord({
-        repoPath: "/tmp/repo",
         taskId: "task-1",
         // @ts-expect-error -- This case verifies runtime rejection of a record without runtimeKind.
         record: invalidRecord,
@@ -150,7 +148,6 @@ describe("agent-orchestrator/support/persistence", () => {
 
     expect(() =>
       fromPersistedSessionRecord({
-        repoPath: "/tmp/repo",
         taskId: "task-1",
         record: invalidRecord,
       }),
@@ -170,7 +167,6 @@ describe("agent-orchestrator/support/persistence", () => {
 
     expect(() =>
       fromPersistedSessionRecord({
-        repoPath: "/tmp/repo",
         taskId: "task-1",
         record: invalidRecord,
       }),

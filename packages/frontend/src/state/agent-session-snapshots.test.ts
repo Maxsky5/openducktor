@@ -23,7 +23,6 @@ const session = (overrides: Partial<AgentSessionState> = {}): AgentSessionState 
   pendingQuestions: [],
   selectedModel: null,
   ...overrides,
-  repoPath: overrides.repoPath ?? "/repo",
 });
 
 describe("createAgentActivitySnapshot", () => {

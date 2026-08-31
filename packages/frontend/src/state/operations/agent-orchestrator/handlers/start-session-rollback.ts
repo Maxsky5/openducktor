@@ -130,7 +130,7 @@ export const rollbackRegisteredStartedSession = async ({
 
   if (durableRecordExists) {
     try {
-      await session.deleteSessionRecord(startedCtx.repoPath, startedCtx.taskId, identity);
+      await session.deleteSessionRecord(startedCtx.taskId, identity);
     } catch (error) {
       session.clearSessionObservationState(identity);
       let preserveFailed = false;

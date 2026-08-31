@@ -123,7 +123,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
         runtimeId: "runtime-1",
         workingDirectory: "/tmp/repo/worktree",
       }),
-      persistSessionRecord: async (_repoPath, _taskId, record) => {
+      persistSessionRecord: async (_taskId, record) => {
         persistedSnapshots.push(record);
       },
     });
@@ -284,7 +284,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       abortTaskSessionStartupLease: async (_repoPath, _taskId, leaseId) => {
         abortedLeaseIds.push(leaseId);
       },
-      deleteSessionRecord: async (_repoPath, _taskId, identity) => {
+      deleteSessionRecord: async (_taskId, identity) => {
         deletedSessionIds.push(identity.externalSessionId);
       },
     });

@@ -7,16 +7,17 @@ import { resolveSessionRuntimeScope } from "./session-runtime-scope";
 
 export type SessionRuntimeDataTarget = {
   identity: AgentSessionIdentity;
-  repoPath: string;
   selectedModel: AgentSessionState["selectedModel"];
   sessionAssociation: AgentSessionState["sessionAssociation"];
 };
 
 export type SessionRuntimeDataRefs =
   | { kind: "none" }
+  | { kind: "unavailable"; error: string }
   | { kind: "available"; catalogRef: RepoRuntimeRef; todosRef: PolicyBoundSessionRef | null };
 
 export type ResolveSessionRuntimeDataRefsInput = {
+  repoPath: string | null;
   selectedSession: SessionRuntimeDataTarget | null;
   runtimePolicy: AgentSessionRuntimePolicy | null;
   runtimeDefinitions: RuntimeDescriptor[];
@@ -40,6 +41,7 @@ const runtimeSupportsTodos = (
 };
 
 export const resolveSessionRuntimeDataRefs = ({
+  repoPath,
   selectedSession,
   runtimePolicy,
   runtimeDefinitions,
@@ -48,8 +50,15 @@ export const resolveSessionRuntimeDataRefs = ({
     return emptySessionRuntimeDataRefs;
   }
 
+  if (!repoPath) {
+    return {
+      kind: "unavailable",
+      error: "Repository path is required to read selected session runtime data.",
+    };
+  }
+
   const catalogRef: RepoRuntimeRef = {
-    repoPath: selectedSession.repoPath,
+    repoPath,
     runtimeKind: selectedSession.identity.runtimeKind,
   };
 
@@ -70,7 +79,7 @@ export const resolveSessionRuntimeDataRefs = ({
   }
 
   const todosRef = toRuntimeSessionRefWithPolicy(
-    selectedSession.repoPath,
+    repoPath,
     { ...selectedSession.identity, selectedModel: selectedSession.selectedModel },
     runtimePolicy,
   );

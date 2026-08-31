@@ -96,6 +96,7 @@ export const createAgentSessionActions = ({
   });
 
   const sendAgentMessage = createSendAgentMessage({
+    workspaceRepoPath,
     adapter,
     readSessionSnapshot,
     updateSession,
@@ -109,6 +110,7 @@ export const createAgentSessionActions = ({
     persistSessionRecord,
   });
   const commitStoppedSession = createCommitStoppedSessionPolicy({
+    workspaceRepoPath,
     persistSessionRecord,
     invalidateSessionStopQueries,
     refreshTaskData,
@@ -153,6 +155,7 @@ export const createAgentSessionActions = ({
   });
 
   const stopAgentSession = createStopAgentSession({
+    workspaceRepoPath,
     adapter,
     readSessionSnapshot,
     updateSession,
@@ -161,6 +164,7 @@ export const createAgentSessionActions = ({
   });
 
   const pendingInputActions = createPendingInputActions({
+    workspaceRepoPath,
     liveSessionHost,
     readSessionSnapshot,
     turnMetadata: sessionTurnState.metadata,
@@ -169,6 +173,7 @@ export const createAgentSessionActions = ({
   });
 
   const modelActions = createSessionModelActions({
+    workspaceRepoPath,
     adapter,
     readSessionSnapshot,
     updateSession,

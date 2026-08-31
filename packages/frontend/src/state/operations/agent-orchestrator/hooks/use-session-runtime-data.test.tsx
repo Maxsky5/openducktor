@@ -64,20 +64,17 @@ const sessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
     pendingQuestions: [],
     selectedModel: null,
     ...overrides,
-    repoPath: overrides.repoPath ?? "/repo",
   };
 };
 
 const identityTarget = (identity = sessionIdentity()) => ({
   identity,
-  repoPath: "/repo",
   sessionAssociation: { kind: "unbound" as const },
   selectedModel: null,
 });
 
 const sessionTarget = (state = sessionState()) => ({
   identity: sessionIdentity(state),
-  repoPath: state.repoPath,
   sessionAssociation: state.sessionAssociation,
   selectedModel: state.selectedModel,
 });
@@ -103,7 +100,7 @@ describe("useSessionRuntimeData", () => {
     const harness = createHookHarness(
       useSessionRuntimeData,
       {
-        readinessRepoPath: "/repo",
+        repoPath: "/repo",
         selectedSession: null,
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
         repoReadinessState: "ready",
@@ -140,7 +137,7 @@ describe("useSessionRuntimeData", () => {
     const harness = createHookHarness(
       useSessionRuntimeData,
       {
-        readinessRepoPath: "/repo",
+        repoPath: "/repo",
         selectedSession: sessionTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
         repoReadinessState: "ready",
@@ -178,7 +175,7 @@ describe("useSessionRuntimeData", () => {
     const harness = createHookHarness(
       useSessionRuntimeData,
       {
-        readinessRepoPath: "/repo",
+        repoPath: "/repo",
         selectedSession: sessionTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
         repoReadinessState: "checking",
@@ -207,48 +204,11 @@ describe("useSessionRuntimeData", () => {
     }
   });
 
-  test("reads runtime data from the selected session repository", async () => {
-    const loadRuntimeCatalog = mock(async () => structuredClone(emptyCatalog));
-    const readSessionTodos = mock(async () => [structuredClone(todoFixture)]);
-    const harness = createHookHarness(
-      useSessionRuntimeData,
-      {
-        readinessRepoPath: "/active/repo",
-        selectedSession: sessionTarget(
-          sessionState({ repoPath: "/session/repo", workingDirectory: "/session/repo" }),
-        ),
-        runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
-        repoReadinessState: "checking",
-        loadRuntimeCatalog,
-        readSessionTodos,
-      },
-      { wrapper },
-    );
-
-    try {
-      await harness.mount();
-      await harness.waitFor((latest) => latest.modelCatalog !== null && latest.todos.length === 1);
-
-      expect(loadRuntimeCatalog).toHaveBeenCalledWith({
-        repoPath: "/session/repo",
-        runtimeKind: "opencode",
-      });
-      expect(readSessionTodos).toHaveBeenCalledWith(
-        expect.objectContaining({
-          repoPath: "/session/repo",
-          workingDirectory: "/session/repo",
-        }),
-      );
-    } finally {
-      await harness.unmount();
-    }
-  });
-
   test("keeps cached selected-session runtime data while runtime readiness drops", async () => {
     const loadRuntimeCatalog = mock(async () => structuredClone(emptyCatalog));
     const readSessionTodos = mock(async () => [structuredClone(todoFixture)]);
     const readyProps: Parameters<typeof useSessionRuntimeData>[0] = {
-      readinessRepoPath: "/repo",
+      repoPath: "/repo",
       selectedSession: sessionTarget(),
       runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       repoReadinessState: "ready",
@@ -291,7 +251,7 @@ describe("useSessionRuntimeData", () => {
     const harness = createHookHarness(
       useSessionRuntimeData,
       {
-        readinessRepoPath: "/repo",
+        repoPath: "/repo",
         selectedSession: sessionTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
         repoReadinessState: "ready" as const,
@@ -326,7 +286,7 @@ describe("useSessionRuntimeData", () => {
     const harness = createHookHarness(
       useSessionRuntimeData,
       {
-        readinessRepoPath: "/repo",
+        repoPath: "/repo",
         selectedSession: sessionTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
         repoReadinessState: "ready",
@@ -386,7 +346,7 @@ describe("useSessionRuntimeData", () => {
     const harness = createHookHarness(
       useSessionRuntimeDataWithQueryClient,
       {
-        readinessRepoPath: "/repo",
+        repoPath: "/repo",
         selectedSession: sessionTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
         repoReadinessState: "ready",
@@ -449,7 +409,7 @@ describe("useSessionRuntimeData", () => {
     const harness = createHookHarness(
       useSessionRuntimeDataWithQueryClient,
       {
-        readinessRepoPath: "/repo",
+        repoPath: "/repo",
         selectedSession: sessionTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
         repoReadinessState: "ready",
@@ -495,7 +455,7 @@ describe("useSessionRuntimeData", () => {
     const harness = createHookHarness(
       useSessionRuntimeData,
       {
-        readinessRepoPath: "/repo",
+        repoPath: "/repo",
         selectedSession: sessionTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
         repoReadinessState: "ready",
@@ -540,7 +500,7 @@ describe("useSessionRuntimeData", () => {
     const harness = createHookHarness(
       useSessionRuntimeData,
       {
-        readinessRepoPath: "/repo",
+        repoPath: "/repo",
         selectedSession: sessionTarget(sessionState({ runtimeKind: "codex" })),
         runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR],
         repoReadinessState: "ready",
@@ -576,7 +536,7 @@ describe("useSessionRuntimeData", () => {
     const loadRuntimeCatalog = mock(async () => emptyCatalog);
     const readSessionTodos = mock(async () => [todoFixture]);
     const props: Parameters<typeof useSessionRuntimeData>[0] = {
-      readinessRepoPath: "/repo",
+      repoPath: "/repo",
       selectedSession: sessionTarget(),
       runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       repoReadinessState: "ready",
@@ -603,13 +563,13 @@ describe("useSessionRuntimeData", () => {
     }
   });
 
-  test("reads selected-session runtime data without an active repository", async () => {
-    const loadRuntimeCatalog = mock(async () => structuredClone(emptyCatalog));
-    const readSessionTodos = mock(async () => [structuredClone(todoFixture)]);
+  test("reports missing workspace repo path without querying runtime data", async () => {
+    const loadRuntimeCatalog = mock(async () => emptyCatalog);
+    const readSessionTodos = mock(async () => [todoFixture]);
     const harness = createHookHarness(
       useSessionRuntimeData,
       {
-        readinessRepoPath: null,
+        repoPath: null,
         selectedSession: identityTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
         repoReadinessState: "ready",
@@ -622,13 +582,11 @@ describe("useSessionRuntimeData", () => {
     try {
       await harness.mount();
 
-      await harness.waitFor((latest) => latest.modelCatalog !== null && latest.todos.length === 1);
-
-      expect(loadRuntimeCatalog).toHaveBeenCalledWith({
-        repoPath: "/repo",
-        runtimeKind: "opencode",
-      });
-      expect(readSessionTodos).toHaveBeenCalledWith(expect.objectContaining({ repoPath: "/repo" }));
+      expect(loadRuntimeCatalog).not.toHaveBeenCalled();
+      expect(readSessionTodos).not.toHaveBeenCalled();
+      expect(harness.getLatest().contextError).toBe(
+        "Repository path is required to read selected session runtime data.",
+      );
     } finally {
       await harness.unmount();
     }
@@ -640,7 +598,7 @@ describe("useSessionRuntimeData", () => {
     const harness = createHookHarness(
       useSessionRuntimeData,
       {
-        readinessRepoPath: "/repo",
+        repoPath: "/repo",
         selectedSession: sessionTarget(sessionState({ workingDirectory: "" })),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
         repoReadinessState: "ready",

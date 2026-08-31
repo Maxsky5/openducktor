@@ -63,17 +63,15 @@ export const toPersistedSessionIdentity = (record: AgentSessionRecord): AgentSes
 });
 
 export const fromPersistedSessionRecord = ({
-  repoPath,
   taskId,
   record,
-}: PersistedTaskSessionRecord & { repoPath: string }): AgentSessionState => {
+}: PersistedTaskSessionRecord): AgentSessionState => {
   const identity = toPersistedSessionIdentity(record);
 
   return {
     externalSessionId: identity.externalSessionId,
     title: formatWorkflowAgentSessionTitle(record.role, taskId),
     sessionAssociation: { kind: "workflow", taskId, role: record.role },
-    repoPath,
     // Stored records lack live state, so cold reads start idle.
     status: "idle",
     runtimeStatusMessage: null,
@@ -101,17 +99,15 @@ export const fromPersistedSessionRecord = ({
 };
 
 export const toPersistedSessionView = ({
-  repoPath,
   taskId,
   record,
   current,
   associationEvidence,
 }: PersistedTaskSessionRecord & {
-  repoPath: string;
   current?: AgentSessionState | undefined;
   associationEvidence?: AgentSessionAssociation | undefined;
 }): AgentSessionState => {
-  const persisted = fromPersistedSessionRecord({ repoPath, taskId, record });
+  const persisted = fromPersistedSessionRecord({ taskId, record });
   const previousAssociation = current?.sessionAssociation ?? associationEvidence;
   if (!previousAssociation) {
     return persisted;
@@ -132,7 +128,6 @@ export const toPersistedSessionView = ({
   return {
     ...current,
     sessionAssociation: transition.association,
-    repoPath: persisted.repoPath,
     runtimeKind: persisted.runtimeKind,
     startedAt: persisted.startedAt,
     workingDirectory: persisted.workingDirectory,

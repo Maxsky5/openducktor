@@ -1014,7 +1014,6 @@ describe("useAgentStudioChatComposer", () => {
     const loadFileSearch = mock(async () => FILE_SEARCH_RESULTS);
     const loadedSession = createLoadedSession({
       runtimeKind: "opencode",
-      repoPath: "/repo",
       workingDirectory: "/repo/session-worktree",
     });
     const harness = createHookHarness(
@@ -1054,7 +1053,6 @@ describe("useAgentStudioChatComposer", () => {
     const loadFileSearch = mock(async () => FILE_SEARCH_RESULTS);
     const loadedSession = createLoadedSession({
       runtimeKind: "opencode",
-      repoPath: "/repo",
       workingDirectory: "/repo/opencode-worktree",
     });
     const selectedSessionIdentity = {
@@ -1101,7 +1099,6 @@ describe("useAgentStudioChatComposer", () => {
     const loadFileSearch = mock(async () => FILE_SEARCH_RESULTS);
     const loadedSession = createLoadedSession({
       runtimeKind: "codex",
-      repoPath: "/repo",
       selectedModel: {
         runtimeKind: "codex",
         providerId: "openai",
@@ -1151,7 +1148,6 @@ describe("useAgentStudioChatComposer", () => {
     const loadFileSearch = mock(async () => FILE_SEARCH_RESULTS);
     const loadedSession = createLoadedSession({
       runtimeKind: "opencode",
-      repoPath: "/session/repo",
       workingDirectory: "/repo/session-worktree",
     });
     const harness = createHookHarness(
@@ -1178,7 +1174,7 @@ describe("useAgentStudioChatComposer", () => {
       expect(results).toEqual(FILE_SEARCH_RESULTS);
       expect(loadFileSearch).toHaveBeenCalledWith(
         {
-          repoPath: "/session/repo",
+          repoPath: "/active/repo",
           runtimeKind: "opencode",
           workingDirectory: "/repo/session-worktree",
         },
@@ -1189,7 +1185,7 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("queries session slash commands without an active repository", async () => {
+  test("does not query session slash commands without an active repository", async () => {
     const loadSlashCommands = mock(async () => ({
       commands: [{ id: "review", trigger: "review", title: "review", hints: [] }],
     }));
@@ -1198,7 +1194,6 @@ describe("useAgentStudioChatComposer", () => {
         workspaceRepoPath: null,
         loadedSession: createLoadedSession({
           runtimeKind: "opencode",
-          repoPath: "/session/repo",
           workingDirectory: "/repo/session-worktree",
         }),
         loadSlashCommands,
@@ -1212,13 +1207,10 @@ describe("useAgentStudioChatComposer", () => {
       await harness.mount();
       await harness.waitFor((state) => state.isSlashCommandsLoading === false);
 
-      expect(loadSlashCommands).toHaveBeenCalledTimes(1);
-      expect(loadSlashCommands).toHaveBeenCalledWith({
-        repoPath: "/session/repo",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo/session-worktree",
-      });
-      expect(harness.getLatest().slashCommandsError).toBeNull();
+      expect(loadSlashCommands).not.toHaveBeenCalled();
+      expect(harness.getLatest().slashCommandsError).toBe(
+        "Repository path is required to read selected session runtime data.",
+      );
     } finally {
       await harness.unmount();
     }
@@ -1390,7 +1382,6 @@ describe("useAgentStudioChatComposer", () => {
       createBaseProps({
         loadedSession: createLoadedSession({
           runtimeKind: "opencode",
-          repoPath: "/repo",
           workingDirectory: "/repo/session-worktree",
         }),
         loadFileSearch,

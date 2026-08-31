@@ -46,11 +46,8 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
       modelCalls.push(input);
     };
 
-    const sessionsRef = createSessionsRef([
-      buildSession({ status: "idle", repoPath: "/tmp/session-repo" }),
-    ]);
+    const sessionsRef = createSessionsRef([buildSession({ status: "idle" })]);
     const persistedModels: Array<{
-      repoPath: string;
       taskId: string;
       modelId: string | undefined;
     }> = [];
@@ -58,8 +55,8 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      persistSessionRecord: async (repoPath, taskId, record) => {
-        persistedModels.push({ repoPath, taskId, modelId: record.selectedModel?.modelId });
+      persistSessionRecord: async (taskId, record) => {
+        persistedModels.push({ taskId, modelId: record.selectedModel?.modelId });
       },
     });
 
@@ -72,9 +69,7 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
 
       expect(modelCalls).toHaveLength(1);
       expect(getSession(sessionsRef)?.selectedModel?.modelId).toBe("gpt-5");
-      expect(persistedModels).toEqual([
-        { repoPath: "/tmp/session-repo", taskId: "task-1", modelId: "gpt-5" },
-      ]);
+      expect(persistedModels).toEqual([{ taskId: "task-1", modelId: "gpt-5" }]);
     } finally {
       adapter.updateSessionModel = originalUpdateSessionModel;
     }
@@ -161,7 +156,6 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
     const sessionsRef = createSessionsRef([
       buildSession({
         sessionAssociation: { kind: "repository" },
-        repoPath: "/tmp/session-repository",
         workingDirectory: "/tmp/repo/repository-chat",
       }),
     ]);
@@ -184,7 +178,7 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
     expect(modelCalls).toEqual([
       {
         externalSessionId: "session-1",
-        repoPath: "/tmp/session-repository",
+        repoPath: "/tmp/active-workspace",
         runtimeKind: "opencode",
         workingDirectory: "/tmp/repo/repository-chat",
         model: {

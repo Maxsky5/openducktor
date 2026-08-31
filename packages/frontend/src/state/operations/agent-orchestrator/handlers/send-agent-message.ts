@@ -12,7 +12,11 @@ import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orch
 import type { UpdateSession } from "../events/session-event-types";
 import { now } from "../support/core";
 import { appendSessionMessage, upsertUserSessionMessage } from "../support/messages";
-import { type ReadSessionSnapshot, requireLoadedSession } from "../support/session-invariants";
+import {
+  type ReadSessionSnapshot,
+  requireLoadedSession,
+  requireWorkspaceRepoPath,
+} from "../support/session-invariants";
 import { removeRunningSessionCompactionNotices } from "../support/session-notice-messages";
 import { toBoundRuntimeSessionRef } from "../support/session-runtime-ref";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
@@ -20,6 +24,7 @@ import { toUserChatMessage } from "../support/user-message-event";
 import type { PreparedSessionSend } from "./prepare-session-send";
 
 export type SendAgentMessageDependencies = {
+  workspaceRepoPath: string | null;
   adapter: Pick<AgentEnginePort, "sendUserMessage">;
   readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
@@ -199,7 +204,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
 
     try {
       const runtimeSessionRef = toBoundRuntimeSessionRef(
-        readySession.repoPath,
+        requireWorkspaceRepoPath(dependencies.workspaceRepoPath),
         readySession,
         "send message",
       );

@@ -33,17 +33,14 @@ const sessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   pendingQuestions: [],
   selectedModel: null,
   ...overrides,
-  repoPath: overrides.repoPath ?? "/repo",
 });
 const identityTarget = (identity = sessionIdentity()) => ({
   identity,
-  repoPath: "/repo",
   sessionAssociation: { kind: "unbound" as const },
   selectedModel: null,
 });
 const stateTarget = (state = sessionState()) => ({
   identity: sessionIdentity(state),
-  repoPath: state.repoPath,
   sessionAssociation: state.sessionAssociation,
   selectedModel: state.selectedModel,
 });
@@ -52,6 +49,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
   test("returns no refs without a selected session", () => {
     expect(
       resolveSessionRuntimeDataRefs({
+        repoPath: "/repo",
         selectedSession: null,
         runtimePolicy: null,
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
@@ -61,9 +59,24 @@ describe("resolveSessionRuntimeDataRefs", () => {
     });
   });
 
+  test("reports missing repository path without runtime refs", () => {
+    expect(
+      resolveSessionRuntimeDataRefs({
+        repoPath: null,
+        selectedSession: stateTarget(),
+        runtimePolicy: { kind: "opencode" },
+        runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
+      }),
+    ).toEqual({
+      kind: "unavailable",
+      error: "Repository path is required to read selected session runtime data.",
+    });
+  });
+
   test("returns stable refs without depending on repo runtime readiness", () => {
     expect(
       resolveSessionRuntimeDataRefs({
+        repoPath: "/repo",
         selectedSession: stateTarget(),
         runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
@@ -88,6 +101,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
   test("returns only the catalog ref when todos are unsupported", () => {
     expect(
       resolveSessionRuntimeDataRefs({
+        repoPath: "/repo",
         selectedSession: identityTarget(),
         runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
@@ -105,6 +119,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
   test("returns todo refs for a plain selected-session identity", () => {
     expect(
       resolveSessionRuntimeDataRefs({
+        repoPath: "/repo",
         selectedSession: identityTarget(),
         runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
@@ -128,6 +143,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
   test("forwards repository scope from the selected session association", () => {
     expect(
       resolveSessionRuntimeDataRefs({
+        repoPath: "/repo",
         selectedSession: {
           ...identityTarget(),
           sessionAssociation: { kind: "repository" },
@@ -155,6 +171,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
   test("returns unscoped todo refs for an unbound session", () => {
     expect(
       resolveSessionRuntimeDataRefs({
+        repoPath: "/repo",
         selectedSession: stateTarget(sessionState({ sessionAssociation: { kind: "unbound" } })),
         runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
@@ -178,6 +195,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
   test("fails fast on invalid selected-session runtime context", () => {
     expect(() =>
       resolveSessionRuntimeDataRefs({
+        repoPath: "/repo",
         selectedSession: stateTarget(sessionState({ workingDirectory: "" })),
         runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),

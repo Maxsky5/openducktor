@@ -49,7 +49,6 @@ const createSession = (): AgentSessionState =>
     externalSessionId: sessionTarget.externalSessionId,
     sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
     runtimeKind: "opencode",
-    repoPath: "/repo",
 
     status: "running",
     startedAt: "2026-06-12T08:00:00.000Z",
@@ -275,7 +274,6 @@ describe("session history loader", () => {
       readSessionSnapshot: harness.readSessionSnapshot,
       updateSession: harness.updateSession,
       loadSystemPromptContext: createWorkflowSessionHistoryPromptPolicy({
-        workspaceRepoPath: "/repo",
         workspaceId: "workspace-1",
         taskRef: { current: [createTaskFixture()] },
         loadRepoPromptOverrides: async (): Promise<RepoPromptOverrides> => ({}),
@@ -305,7 +303,6 @@ describe("session history loader", () => {
       readSessionSnapshot: harness.readSessionSnapshot,
       updateSession: harness.updateSession,
       loadSystemPromptContext: createWorkflowSessionHistoryPromptPolicy({
-        workspaceRepoPath: "/repo",
         workspaceId: "workspace-1",
         taskRef: { current: [createTaskFixture()] },
         loadRepoPromptOverrides: async (): Promise<RepoPromptOverrides> => ({}),

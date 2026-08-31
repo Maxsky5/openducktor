@@ -7,7 +7,6 @@ const sessionFixture: AgentSessionState = {
   runtimeKind: "opencode",
   externalSessionId: "external-1",
   sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-  repoPath: "/tmp/repo",
   status: "running",
   runtimeStatusMessage: null,
   startedAt: "2026-02-22T08:00:00.000Z",

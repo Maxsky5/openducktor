@@ -184,8 +184,6 @@ export type AgentSessionState = {
   title?: string;
   sessionAssociation: AgentSessionAssociation;
   runtimeKind: RuntimeKind;
-  /** Runtime routing context carried in memory; task session records do not persist it. */
-  repoPath: string;
   status: "starting" | "running" | "idle" | "error" | "stopped";
   runtimeStatusMessage: string | null;
   startedAt: string;
@@ -220,4 +218,4 @@ export type AgentSessionIdentity = Pick<
 export type AgentSessionRuntimeTarget = AgentSessionIdentity &
   Pick<AgentSessionState, "sessionAssociation">;
 
-export type AgentSessionContextLoadTarget = AgentSessionLiveLoadContextInput;
+export type AgentSessionContextLoadTarget = Omit<AgentSessionLiveLoadContextInput, "repoPath">;

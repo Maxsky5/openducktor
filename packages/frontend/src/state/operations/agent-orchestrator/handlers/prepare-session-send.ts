@@ -42,7 +42,6 @@ export const createPrepareSessionSend = ({
     session: AgentSessionState,
     { prepareWorkflowContext }: { prepareWorkflowContext: boolean },
   ): Promise<PreparedSessionSend> => {
-    const sessionRepoPath = session.repoPath;
     const workspaceRepoPathAtStart = workspaceRepoPath;
     const repoEpochAtStart = repoEpochRef.current;
     const isStale = (): boolean =>
@@ -64,11 +63,6 @@ export const createPrepareSessionSend = ({
       return {};
     }
     const workflowRepoPath = requireWorkspaceRepoPath(workspaceRepoPathAtStart);
-    if (workflowRepoPath !== sessionRepoPath) {
-      throw new Error(
-        `Cannot prepare workflow context for session '${session.externalSessionId}' because its repository '${sessionRepoPath}' is not active.`,
-      );
-    }
     throwIfRepoStale(isStale, STALE_SEND_PREPARATION_ERROR);
     if (!workspaceId) {
       throw new Error("Active workspace is required.");
@@ -82,7 +76,7 @@ export const createPrepareSessionSend = ({
         task,
         loadRepoPromptOverrides,
       }),
-      ensureExistingSessionRuntime(sessionRepoPath, session.runtimeKind),
+      ensureExistingSessionRuntime(workflowRepoPath, session.runtimeKind),
     ]);
     throwIfRepoStale(isStale, STALE_SEND_PREPARATION_ERROR);
 
