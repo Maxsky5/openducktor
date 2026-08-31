@@ -56,11 +56,7 @@ export const createPullRequestReviewService = ({
       const providerId = pullRequest.providerId;
       const providerResult = yield* Effect.either(resolver.resolve(repoConfig));
       if (providerResult._tag === "Left") {
-        const reason =
-          providerResult.left.reason === "not_registered"
-            ? `Pull request review provider '${providerId}' is not supported.`
-            : errorMessage(providerResult.left);
-        return unavailable(providerId, reason);
+        return unavailable(providerId, errorMessage(providerResult.left));
       }
 
       const provider = providerResult.right;

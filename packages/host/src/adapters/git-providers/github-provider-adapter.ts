@@ -37,11 +37,12 @@ export class GithubProviderAdapter implements GitProviderPort {
     gitPort: GitPort;
   }) {
     const repositoryDependencies = { ...githubDependencies, gitPort };
+    const getReadRepository = (repoConfig: RepoConfig) =>
+      requireGithubPullRequestReadRepository(githubDependencies, repoConfig.repoPath, repoConfig);
     const getWriteContext = (repoConfig: RepoConfig) =>
       requireGithubPullRequestContext(repositoryDependencies, repoConfig.repoPath, repoConfig);
     this.repositoryPort = {
-      getReadRepository: (repoConfig) =>
-        requireGithubPullRequestReadRepository(githubDependencies, repoConfig.repoPath, repoConfig),
+      getReadRepository,
       getWriteContext,
     };
     this.healthPort = {
@@ -51,11 +52,11 @@ export class GithubProviderAdapter implements GitProviderPort {
     this.pullRequestsPort = {
       findByBranch: (input) =>
         Effect.gen(function* () {
-          const context = yield* getWriteContext(input.repoConfig);
+          const repository = yield* getReadRepository(input.repoConfig);
           const pullRequest = yield* findGithubPullRequestForBranch(
             githubDependencies,
             input.repoConfig.repoPath,
-            context,
+            repository,
             input.sourceBranch,
             input.state,
           );
@@ -63,11 +64,11 @@ export class GithubProviderAdapter implements GitProviderPort {
         }),
       getByNumber: (input) =>
         Effect.gen(function* () {
-          const context = yield* getWriteContext(input.repoConfig);
+          const repository = yield* getReadRepository(input.repoConfig);
           const pullRequest = yield* fetchGithubPullRequestByNumber(
             githubDependencies,
             input.repoConfig.repoPath,
-            context,
+            repository,
             input.number,
           );
           return pullRequest.record;

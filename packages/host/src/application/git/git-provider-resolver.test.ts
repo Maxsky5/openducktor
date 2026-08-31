@@ -19,13 +19,13 @@ import {
 const unexpectedPortCall = <Success>(): Effect.Effect<Success, never> =>
   Effect.die("Capability port operation is not expected in resolver tests");
 
-const repositoryPort: GitProviderRepositoryPort = {
+const repositoryPort = (): GitProviderRepositoryPort => ({
   getReadRepository: () => unexpectedPortCall(),
   getWriteContext: () => unexpectedPortCall(),
-};
-const healthPort: GitProviderHealthPort = {
+});
+const healthPort = (): GitProviderHealthPort => ({
   getStatus: () => unexpectedPortCall(),
-};
+});
 const pullRequestPort: PullRequestProviderPort = {
   findByBranch: () => unexpectedPortCall(),
   getByNumber: () => unexpectedPortCall(),
@@ -66,8 +66,8 @@ const provider = ({
   asyncCapabilityAccess?: boolean;
 }): GitProviderPort => ({
   getDescriptor: () => providerDescriptor,
-  repository: () => repositoryPort,
-  health: () => healthPort,
+  repository: repositoryPort,
+  health: healthPort,
   pullRequests: () => {
     if (pullRequests) {
       return asyncCapabilityAccess

@@ -20,9 +20,8 @@ import {
 import { createNodeHostCommandRouter } from "./create-node-host-command-router-promise";
 import { createLiveSessionFaultLogger } from "./node-host-lifecycle-logger";
 
-const runtimeDistribution = createSourceRuntimeDistribution(
-  path.resolve(import.meta.dir, "../../../../.."),
-);
+const createRuntimeDistribution = () =>
+  createSourceRuntimeDistribution(path.resolve(import.meta.dir, "../../../../.."));
 
 const createRuntimeRegistry = (
   stopAllRuntimes: RuntimeRegistryPort["stopAllRuntimes"] = () => Effect.succeed([]),
@@ -89,12 +88,25 @@ const createFailingRouterInput = (): CreateNodeHostCommandRouterInput => ({
   mcpBridgeDiscoveryMode: "production",
   onBackgroundFailure: () => Effect.void,
   runtimeDistribution: {
-    ...runtimeDistribution,
-    get mode(): typeof runtimeDistribution.mode {
+    ...createRuntimeDistribution(),
+    get mode(): "source" {
       throw new Error("Default port setup failed");
     },
   },
   taskEventPublicationReporter: { report: () => Effect.void },
+  terminalPty,
+});
+
+const createAssemblyFailingRouterInput = (): CreateNodeHostCommandRouterInput => ({
+  get lifecycleLogger(): HostLifecycleLogger {
+    throw new Error("Router assembly failed");
+  },
+  mcpBridgeDiscoveryMode: "production",
+  onBackgroundFailure: () => Effect.void,
+  runtimeDistribution: createRuntimeDistribution(),
+  runtimeRegistry: createRuntimeRegistry(),
+  taskEventPublicationReporter: { report: () => Effect.void },
+  taskStore: createTaskStoreTestDouble({}),
   terminalPty,
 });
 
@@ -110,7 +122,7 @@ const createRouter = (input: {
     mcpHostBridge: createMcpHostBridge(),
     onBackgroundFailure: input.onBackgroundFailure ?? (() => Effect.void),
     taskEventPublicationReporter: { report: () => Effect.void },
-    runtimeDistribution,
+    runtimeDistribution: createRuntimeDistribution(),
     runtimeRegistry: input.runtimeRegistry ?? createRuntimeRegistry(),
     taskStore: createTaskStoreTestDouble({}),
     terminalPty,
@@ -145,6 +157,23 @@ describe("createNodeEffectHostCommandRouter", () => {
     await expect(router).rejects.toThrow("Default port setup failed");
   });
 
+  test("returns synchronous assembly faults through the Effect channel", async () => {
+    const result = await Effect.runPromise(
+      createNodeEffectHostCommandRouter(createAssemblyFailingRouterInput()).pipe(Effect.either),
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") {
+      expect(result.left).toEqual(
+        expect.objectContaining({
+          _tag: "HostOperationError",
+          operation: "host.create-router",
+          message: "Router assembly failed",
+        }),
+      );
+    }
+  });
+
   test("publishes development discovery from composition mode despite ambient channel", async () => {
     const configDir = await mkdtemp(path.join(tmpdir(), "openducktor-node-host-discovery-"));
     const { logger } = createLogger();
@@ -158,7 +187,7 @@ describe("createNodeEffectHostCommandRouter", () => {
           OPENDUCKTOR_CONFIG_DIR: configDir,
           OPENDUCKTOR_DEV_INSTANCE: "browser-0123456789ab",
         },
-        runtimeDistribution,
+        runtimeDistribution: createRuntimeDistribution(),
         runtimeRegistry: createRuntimeRegistry(),
         taskEventPublicationReporter: { report: () => Effect.void },
         taskStore: createTaskStoreTestDouble({}),

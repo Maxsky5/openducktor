@@ -69,7 +69,7 @@ export const createTaskPullRequestDetectionUseCase = ({
       const openPullRequest = yield* findGithubPullRequestForBranch(
         dependencies,
         effectiveRepoPath,
-        githubContext,
+        githubContext.repository,
         taskContext.sourceBranch,
         "open",
       );
@@ -88,7 +88,7 @@ export const createTaskPullRequestDetectionUseCase = ({
       const pullRequest = yield* findGithubPullRequestForBranch(
         dependencies,
         effectiveRepoPath,
-        githubContext,
+        githubContext.repository,
         taskContext.sourceBranch,
         "all",
       );
