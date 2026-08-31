@@ -11,6 +11,7 @@ import type { SystemCommandPort } from "../../ports/system-command-port";
 import { createGitProviderResolver } from "../git/git-provider-resolver";
 import { createGithubCommandDependencies } from "./support/github-pull-requests";
 import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
+import type { CreateTaskServiceInput } from "./task-service";
 import {
   createAgentSessionRecord,
   createBuildSettingsConfig,
@@ -34,10 +35,17 @@ import {
   task,
 } from "./test-support/task-workflow-harness";
 
+type RealGithubProviderDependencies = Required<
+  Pick<
+    CreateTaskServiceInput,
+    "gitPort" | "gitProviderResolver" | "githubCli" | "systemCommands" | "toolDiscovery"
+  >
+>;
+
 const createRealGithubProviderDependencies = async (
   gitPort: GitPort,
   systemCommands: SystemCommandPort,
-) => {
+): Promise<RealGithubProviderDependencies> => {
   const githubCli = createGithubCliAdapter(systemCommands);
   const toolDiscovery = createToolDiscoveryAdapter({ systemCommands });
   const githubDependencies = createGithubCommandDependencies({
@@ -48,7 +56,7 @@ const createRealGithubProviderDependencies = async (
   const gitProviderResolver = await Effect.runPromise(
     createGitProviderResolver([new GithubProviderAdapter({ githubDependencies, gitPort })]),
   );
-  return { githubCli, gitProviderResolver, toolDiscovery };
+  return { gitPort, gitProviderResolver, githubCli, systemCommands, toolDiscovery };
 };
 
 describe("createTaskService pull requests", () => {
@@ -215,17 +223,9 @@ describe("createTaskService pull requests", () => {
       }),
       {
         listRemotes(workingDir) {
-          return Effect.tryPromise({
-            try: async () => {
-              calls.push({ type: "listRemotes", workingDir });
-              return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
-            },
-            catch: (cause) =>
-              new HostOperationError({
-                operation: "test.effect",
-                message: cause instanceof Error ? cause.message : String(cause),
-                cause: cause,
-              }),
+          return Effect.sync(() => {
+            calls.push({ type: "listRemotes", workingDir });
+            return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
           });
         },
       },
@@ -240,8 +240,6 @@ describe("createTaskService pull requests", () => {
     );
     const service = createTaskService({
       ...providerDependencies,
-      gitPort,
-      systemCommands,
       taskStore,
       taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
       workspaceSettingsService: createBuildWorkspaceSettingsService({
@@ -356,8 +354,6 @@ describe("createTaskService pull requests", () => {
       );
       const service = createTaskService({
         ...providerDependencies,
-        gitPort,
-        systemCommands,
         taskStore: {
           getTask: () => Effect.succeed(task({ status: "human_review" })),
           getTaskMetadata: () =>
@@ -555,17 +551,9 @@ describe("createTaskService pull requests", () => {
     };
     const gitPort = extendGitPort(createDirectMergeGitPort({ calls }), {
       listRemotes(workingDir) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "listRemotes", workingDir });
-            return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
+        return Effect.sync(() => {
+          calls.push({ type: "listRemotes", workingDir });
+          return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
         });
       },
     });
@@ -608,8 +596,6 @@ describe("createTaskService pull requests", () => {
     );
     const service = createTaskService({
       ...providerDependencies,
-      gitPort,
-      systemCommands,
       taskStore,
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
