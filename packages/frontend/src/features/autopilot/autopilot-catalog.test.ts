@@ -76,5 +76,6 @@ describe("autopilot-catalog", () => {
       eventId: "taskProgressedToReadyForDev",
       actionIds: [],
     });
+    expect(nextSettings.alwaysStartQaReviewsFresh).toBe(false);
   });
 });

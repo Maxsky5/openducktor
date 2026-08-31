@@ -95,17 +95,20 @@ export const createStartAgentSession = ({
     const messagePolicyKey = startCtx.holdForPostStartMessage
       ? "post-start-message"
       : "no-post-start-message";
-    const inFlightKey = [
-      repoPath,
-      taskId,
-      role,
-      startMode,
-      sourceSessionKey,
-      normalizedTargetWorkingDirectory,
-      selectedModelKey,
-      messagePolicyKey,
-    ].join("::");
     const gateMode = input.startMode === "fresh" && input.queueIfBusy ? "queue" : "coalesce";
+    const inFlightKey =
+      gateMode === "queue"
+        ? [repoPath, taskId, role].join("::")
+        : [
+            repoPath,
+            taskId,
+            role,
+            startMode,
+            sourceSessionKey,
+            normalizedTargetWorkingDirectory,
+            selectedModelKey,
+            messagePolicyKey,
+          ].join("::");
 
     return session.sessionStartGateRef.current.run(
       inFlightKey,

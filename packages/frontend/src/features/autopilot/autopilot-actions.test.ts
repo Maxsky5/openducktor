@@ -478,9 +478,9 @@ describe("autopilot feature helpers", () => {
     const task = createTask({ id: "TASK-QA-OVERLAP", status: "ai_review" });
     task.agentWorkflows.qa.available = true;
     const args = createExecuteArgs(task);
-    args.resolveTaskWorktree.mockResolvedValue({
-      workingDirectory: "/tmp/repo/current-worktree",
-    });
+    args.resolveTaskWorktree
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ workingDirectory: "/tmp/repo/current-worktree" });
     args.queryClient.setQueryData(
       settingsSnapshotQueryOptions().queryKey,
       createSettingsSnapshotFixture(),
@@ -574,6 +574,7 @@ describe("autopilot feature helpers", () => {
       await Promise.all([firstStart, secondStart]);
 
       expect(secondStartOutcome).not.toBe("timeout");
+      expect(args.resolveTaskWorktree).toHaveBeenCalledTimes(2);
       expect(bootstrapPrepareCount).toBe(2);
       expect(startCount).toBe(2);
       expect(kickoffSessionIds).toHaveLength(2);

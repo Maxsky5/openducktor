@@ -249,6 +249,7 @@ describe("settings save transforms", () => {
       eventId: "taskProgressedToSpecReady",
       actionIds: [],
     });
+    expect(saveReady.alwaysStartQaReviewsFresh).toBe(false);
   });
 
   test("normalizes empty hook commands to empty arrays", () => {
