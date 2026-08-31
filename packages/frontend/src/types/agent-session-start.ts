@@ -15,6 +15,7 @@ export type StartAgentSessionInput =
       selectedModel: AgentModelSelection;
       startMode: "fresh";
       holdForPostStartMessage?: boolean;
+      queueIfBusy?: boolean;
       targetWorkingDirectory?: string | null;
     }
   | {

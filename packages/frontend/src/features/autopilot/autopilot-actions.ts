@@ -41,6 +41,7 @@ type ExecuteAutopilotActionArgs = {
   activeWorkspace: ActiveWorkspace;
   task: TaskCard;
   actionId: AutopilotActionId;
+  alwaysStartQaReviewsFresh: boolean;
   queryClient: QueryClient;
   loadTaskSessionRecords: (repoPath: string, taskId: string) => Promise<AgentSessionRecord[]>;
   loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
@@ -165,15 +166,23 @@ const resolveAutopilotStart = async ({
   activeWorkspace,
   action,
   task,
+  alwaysStartQaReviewsFresh,
   loadTaskSessionRecords,
   resolveTaskWorktree,
 }: Pick<
   ExecuteAutopilotActionArgs,
-  "activeWorkspace" | "task" | "loadTaskSessionRecords" | "resolveTaskWorktree"
+  | "activeWorkspace"
+  | "task"
+  | "alwaysStartQaReviewsFresh"
+  | "loadTaskSessionRecords"
+  | "resolveTaskWorktree"
 > & {
   action: AutopilotActionDefinition;
 }): Promise<AutopilotStartResolution> => {
-  const taskSessions = await loadTaskSessionRecords(activeWorkspace.repoPath, task.id);
+  const forceFreshQa = action.id === "startQa" && alwaysStartQaReviewsFresh;
+  const taskSessions = forceFreshQa
+    ? []
+    : await loadTaskSessionRecords(activeWorkspace.repoPath, task.id);
   const latestRoleSession = findLatestSessionRecordByRole(taskSessions, action.role);
 
   if (action.startPolicy.kind === "latestRoleSession") {
@@ -276,6 +285,7 @@ export const executeAutopilotAction = async ({
   activeWorkspace,
   task,
   actionId,
+  alwaysStartQaReviewsFresh,
   queryClient,
   loadTaskSessionRecords,
   loadRepoRuntimeCatalog,
@@ -289,6 +299,7 @@ export const executeAutopilotAction = async ({
       activeWorkspace,
       action,
       task,
+      alwaysStartQaReviewsFresh,
       loadTaskSessionRecords,
       resolveTaskWorktree,
     });
@@ -317,6 +328,9 @@ export const executeAutopilotAction = async ({
     };
     if (startResolution.targetWorkingDirectory !== undefined) {
       request.targetWorkingDirectory = startResolution.targetWorkingDirectory;
+    }
+    if (actionId === "startQa" && alwaysStartQaReviewsFresh) {
+      request.queueIfBusy = true;
     }
     const workflow = await runSessionStartWorkflow({
       request,

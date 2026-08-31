@@ -48,4 +48,24 @@ describe("resolveLaunchStartMode", () => {
       }),
     ).toBe("reuse");
   });
+
+  test("keeps reuse as the manual QA default when a QA session exists", () => {
+    expect(
+      resolveLaunchStartMode({
+        launchActionId: "qa_review",
+        existingSessionOptions: [
+          {
+            value: "qa-session-1",
+            sourceSession: {
+              externalSessionId: "qa-session-1",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
+            label: "QA #1",
+            description: "Existing QA session",
+          },
+        ],
+      }),
+    ).toBe("reuse");
+  });
 });

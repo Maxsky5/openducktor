@@ -44,6 +44,7 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   reusablePrompts: [],
   kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
   autopilot: {
+    alwaysStartQaReviewsFresh: false,
     rules: [
       { eventId: "taskProgressedToSpecReady", actionIds: [] },
       { eventId: "taskProgressedToReadyForDev", actionIds: [] },
@@ -156,8 +157,30 @@ describe("createWorkspaceSettingsService", () => {
     expect(snapshot.agentRuntimes?.codex?.defaults).toEqual(DEFAULT_CODEX_RUNTIME_POLICY);
     expect(snapshot.agentRuntimes?.codex?.roleOverrides).toEqual({});
     expect(snapshot.appearance).toEqual(DEFAULT_APPEARANCE_SETTINGS);
+    expect(snapshot.autopilot.alwaysStartQaReviewsFresh).toBe(false);
     expect(snapshot.agentModelFavorites).toEqual([]);
     expect(snapshot.workspaces).toEqual({});
+  });
+  test("persists the Autopilot fresh QA setting through a new settings read", async () => {
+    const settingsConfig = createFakeSettingsConfig({ config: globalConfig() });
+    const service = createWorkspaceSettingsService(settingsConfig);
+    const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
+
+    await Effect.runPromise(
+      service.saveSettingsSnapshot({
+        ...snapshot,
+        autopilot: {
+          ...snapshot.autopilot,
+          alwaysStartQaReviewsFresh: true,
+        },
+      }),
+    );
+
+    expect(settingsConfig.writtenConfigs).toHaveLength(1);
+    expect(settingsConfig.writtenConfigs[0]?.autopilot.alwaysStartQaReviewsFresh).toBe(true);
+    await expect(Effect.runPromise(service.getSettingsSnapshot())).resolves.toMatchObject({
+      autopilot: { alwaysStartQaReviewsFresh: true },
+    });
   });
 
   test("updates only canonical agent model favorites", async () => {

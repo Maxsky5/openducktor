@@ -10,6 +10,7 @@ export const prepareAutopilotSettingsForSave = (
   );
 
   return {
+    alwaysStartQaReviewsFresh: autopilot.alwaysStartQaReviewsFresh,
     rules: AUTOPILOT_EVENT_IDS.map((eventId) => {
       const explicitRule = rulesByEvent.get(eventId);
       const actionIds = (explicitRule?.actionIds ?? []).filter(

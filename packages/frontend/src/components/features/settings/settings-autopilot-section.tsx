@@ -2,6 +2,7 @@ import type { AutopilotSettings } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   AUTOPILOT_ACTION_DEFINITIONS,
   AUTOPILOT_DISABLED_VALUE,
@@ -34,6 +35,30 @@ export function SettingsAutopilotSection({
           Automatically start workflow actions when task transitions are observed while the app is
           running.
         </p>
+      </div>
+
+      <div className="rounded-md border border-border bg-card p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-foreground">
+              Always start QA reviews in a fresh session
+            </p>
+            <p className="text-xs text-muted-foreground">
+              This applies only to QA reviews started by Autopilot. Each review gets a new session.
+            </p>
+          </div>
+          <Switch
+            checked={autopilot.alwaysStartQaReviewsFresh}
+            onCheckedChange={(checked) =>
+              onUpdateAutopilot((current) => ({
+                ...current,
+                alwaysStartQaReviewsFresh: checked,
+              }))
+            }
+            disabled={disabled}
+            aria-label="Always start QA reviews in a fresh session"
+          />
+        </div>
       </div>
 
       <div className="grid gap-3 rounded-md border border-border bg-card p-4">

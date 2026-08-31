@@ -3,6 +3,7 @@ import type { AutopilotSettings } from "@openducktor/contracts";
 import { getAutopilotSelectedValue, setAutopilotRuleAction } from "./autopilot-catalog";
 
 const createAutopilotSettings = (): AutopilotSettings => ({
+  alwaysStartQaReviewsFresh: false,
   rules: [
     {
       eventId: "taskProgressedToSpecReady",
@@ -58,6 +59,7 @@ describe("autopilot-catalog", () => {
   test("preserves default-backed rules when updating a partial settings payload", () => {
     const nextSettings = setAutopilotRuleAction(
       {
+        alwaysStartQaReviewsFresh: false,
         rules: [
           {
             eventId: "taskProgressedToSpecReady",
@@ -74,5 +76,6 @@ describe("autopilot-catalog", () => {
       eventId: "taskProgressedToReadyForDev",
       actionIds: [],
     });
+    expect(nextSettings.alwaysStartQaReviewsFresh).toBe(false);
   });
 });

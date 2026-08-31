@@ -9,7 +9,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
 import { loadRepoConfigFromQuery } from "@/state/queries/workspace";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import type { StartAgentSession } from "@/types/agent-session-start";
+import type { StartAgentSession, StartAgentSessionInput } from "@/types/agent-session-start";
 import type { SessionLaunchActionId } from "./session-start-launch-options";
 import { getSessionLaunchAction } from "./session-start-launch-options";
 import {
@@ -40,6 +40,7 @@ export type SessionStartWorkflowIntent = {
   targetWorkingDirectory?: string | null;
   postStartAction: SessionStartPostAction;
   holdForPostStartMessage?: boolean;
+  queueIfBusy?: boolean;
   message?: string;
   beforeStartAction?: SessionStartBeforeAction;
 };
@@ -114,14 +115,16 @@ const startSessionFromIntent = ({
     });
   }
 
-  const freshRequest = {
+  const freshRequest: Extract<StartAgentSessionInput, { startMode: "fresh" }> = {
     taskId: intent.taskId,
     role: intent.role,
     startMode: "fresh" as const,
     selectedModel: requireSelectedModel(selection, "fresh"),
     holdForPostStartMessage,
   };
-
+  if (intent.queueIfBusy) {
+    freshRequest.queueIfBusy = true;
+  }
   if (intent.targetWorkingDirectory !== undefined) {
     return startAgentSession({
       ...freshRequest,

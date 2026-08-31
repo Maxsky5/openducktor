@@ -8,6 +8,7 @@ import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shar
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { checksQueryKeys } from "../../queries/checks";
 import { runtimeQueryKeys } from "../../queries/runtime";
+import { workspaceQueryKeys } from "../../queries/workspace";
 import { host } from "../shared/host";
 import { useRepoSettingsOperations } from "./use-repo-settings-operations";
 
@@ -677,6 +678,10 @@ describe("use-repo-settings-operations", () => {
     const normalizedSnapshot: SettingsSnapshot = {
       ...createSettingsSnapshot(),
       chat: explicitChatSettings,
+      autopilot: {
+        ...createSettingsSnapshot().autopilot,
+        alwaysStartQaReviewsFresh: true,
+      },
       workspaces: {
         "repo-a": {
           ...createRepoConfig(),
@@ -703,6 +708,10 @@ describe("use-repo-settings-operations", () => {
     const snapshot: SettingsSnapshot = {
       ...createSettingsSnapshot(),
       chat: explicitChatSettings,
+      autopilot: {
+        ...createSettingsSnapshot().autopilot,
+        alwaysStartQaReviewsFresh: true,
+      },
       workspaces: {
         "repo-a": {
           ...createRepoConfig(),
@@ -716,8 +725,17 @@ describe("use-repo-settings-operations", () => {
       await harness.getLatest().saveSettingsSnapshot(snapshot);
       expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith(snapshot);
       expect(workspaceSaveSettingsSnapshot.mock.calls[0]?.[0]?.chat).toEqual(explicitChatSettings);
+      expect(
+        workspaceSaveSettingsSnapshot.mock.calls[0]?.[0]?.autopilot.alwaysStartQaReviewsFresh,
+      ).toBe(true);
       expect(applyWorkspaceRecords).toHaveBeenCalledWith([createWorkspaceRecord()]);
       await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(normalizedSnapshot);
+      expect(
+        harness
+          .getQueryClient()
+          .getQueryData<SettingsSnapshot>(workspaceQueryKeys.settingsSnapshot())?.autopilot
+          .alwaysStartQaReviewsFresh,
+      ).toBe(true);
       expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();

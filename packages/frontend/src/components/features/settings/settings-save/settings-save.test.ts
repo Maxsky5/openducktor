@@ -211,6 +211,7 @@ describe("settings save transforms", () => {
 
   test("prepares autopilot settings in canonical event order", () => {
     const saveReady = prepareAutopilotSettingsForSave({
+      alwaysStartQaReviewsFresh: true,
       rules: [
         {
           eventId: "taskProgressedToHumanReview",
@@ -223,6 +224,7 @@ describe("settings save transforms", () => {
       ],
     });
 
+    expect(saveReady.alwaysStartQaReviewsFresh).toBe(true);
     expect(saveReady.rules).toEqual([
       { eventId: "taskProgressedToSpecReady", actionIds: ["startPlanner"] },
       { eventId: "taskProgressedToReadyForDev", actionIds: [] },
@@ -234,6 +236,7 @@ describe("settings save transforms", () => {
 
   test("preserves explicit empty autopilot actions for a configured event", () => {
     const saveReady = prepareAutopilotSettingsForSave({
+      alwaysStartQaReviewsFresh: false,
       rules: [
         {
           eventId: "taskProgressedToSpecReady",
@@ -246,6 +249,7 @@ describe("settings save transforms", () => {
       eventId: "taskProgressedToSpecReady",
       actionIds: [],
     });
+    expect(saveReady.alwaysStartQaReviewsFresh).toBe(false);
   });
 
   test("normalizes empty hook commands to empty arrays", () => {

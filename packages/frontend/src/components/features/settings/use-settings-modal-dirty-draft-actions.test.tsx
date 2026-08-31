@@ -86,17 +86,22 @@ describe("useSettingsModalDirtyDraftActions", () => {
         ...appearance,
         horizontalScrollbarVisibility: "hide",
       }));
+      state.updateGlobalAutopilotSettings((autopilot) => ({
+        ...autopilot,
+        alwaysStartQaReviewsFresh: true,
+      }));
       state.updateSelectedRepoConfig((repoConfig) => ({
         ...repoConfig,
         branchPrefix: "feature/",
       }));
     });
 
-    expect(harness.getLatest().clearSaveError).toHaveBeenCalledTimes(4);
+    expect(harness.getLatest().clearSaveError).toHaveBeenCalledTimes(5);
     expect(harness.getLatest().dirtyCalls).toEqual([
       "chat",
       "general",
       "appearance",
+      "autopilot",
       "repoSettings",
     ]);
     expect(harness.getLatest().snapshotDraft?.chat.showThinkingMessages).toBe(true);
@@ -106,6 +111,7 @@ describe("useSettingsModalDirtyDraftActions", () => {
     expect(harness.getLatest().snapshotDraft?.appearance.horizontalScrollbarVisibility).toBe(
       "hide",
     );
+    expect(harness.getLatest().snapshotDraft?.autopilot.alwaysStartQaReviewsFresh).toBe(true);
     expect(harness.getLatest().snapshotDraft?.workspaces.repo?.branchPrefix).toBe("feature/");
 
     await harness.unmount();

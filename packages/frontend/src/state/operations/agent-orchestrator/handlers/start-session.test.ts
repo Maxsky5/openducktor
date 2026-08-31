@@ -155,11 +155,66 @@ describe("agent-orchestrator/handlers/start-session", () => {
     );
   });
 
-  test("does not dedupe in-flight starts across different roles", async () => {
-    const startBuildDeferred = createDeferred<void>();
+  test("dedupes matching in-flight fresh starts", async () => {
+    const startEntered = createDeferred<void>();
+    const releaseStart = createDeferred<void>();
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    let startCount = 0;
+    adapter.startSession = async (input) => {
+      startCount += 1;
+      startEntered.resolve();
+      await releaseStart.promise;
+      return {
+        runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
+        externalSessionId: "session-manual-fresh",
+        startedAt: "2026-08-31T10:00:00.000Z",
+        sessionAssociation: input.sessionScope,
+        status: "idle",
+      };
+    };
+    const { start } = createStartSessionTestHarness({
+      adapter,
+      taskRef: { current: [taskFixture] },
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeKind: "opencode",
+        runtimeId: "runtime-1",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+    });
+
+    try {
+      const firstStart = start({
+        taskId: "task-1",
+        role: "build",
+        startMode: "fresh",
+        selectedModel: BUILD_SELECTION,
+      });
+      await startEntered.promise;
+      const secondStart = start({
+        taskId: "task-1",
+        role: "build",
+        startMode: "fresh",
+        selectedModel: BUILD_SELECTION,
+      });
+      releaseStart.resolve();
+
+      const [firstSession, secondSession] = await Promise.all([firstStart, secondStart]);
+      expect(startCount).toBe(1);
+      expect(firstSession).toEqual(secondSession);
+    } finally {
+      releaseStart.resolve();
+      adapter.startSession = originalStartSession;
+    }
+  });
+
+  test("serializes fresh starts across roles for the same task", async () => {
+    const releaseQaStart = createDeferred<void>();
     const startedRoles: string[] = [];
+    const qaStarted = createDeferred<void>();
     const buildStarted = createDeferred<void>();
-    const plannerStarted = createDeferred<void>();
 
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
@@ -168,11 +223,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
         throw new Error("Expected workflow session scope.");
       }
       startedRoles.push(input.sessionScope.role);
-      if (input.sessionScope.role === "build") {
-        buildStarted.resolve();
-        await startBuildDeferred.promise;
+      if (input.sessionScope.role === "qa") {
+        qaStarted.resolve();
+        await releaseQaStart.promise;
       } else {
-        plannerStarted.resolve();
+        buildStarted.resolve();
       }
       return {
         runtimeKind: "opencode",
@@ -189,7 +244,19 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
     const { start } = createStartSessionTestHarness({
       adapter,
-      taskRef: { current: [taskFixture] },
+      taskRef: {
+        current: [
+          {
+            ...taskFixture,
+            status: "ai_review",
+            aiReviewEnabled: true,
+            agentWorkflows: {
+              ...taskFixture.agentWorkflows,
+              qa: { ...taskFixture.agentWorkflows.qa, required: true, available: true },
+            },
+          },
+        ],
+      },
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -199,34 +266,35 @@ describe("agent-orchestrator/handlers/start-session", () => {
     });
 
     try {
+      const qaPromise = start({
+        taskId: "task-1",
+        role: "qa",
+        startMode: "fresh",
+        selectedModel: QA_SELECTION,
+        queueIfBusy: true,
+      });
+      await qaStarted.promise;
       const buildPromise = start({
         taskId: "task-1",
         role: "build",
         startMode: "fresh",
         selectedModel: BUILD_SELECTION,
       });
-      await Promise.resolve();
-      const plannerPromise = start({
-        taskId: "task-1",
-        role: "planner",
-        startMode: "fresh",
-        selectedModel: BUILD_SELECTION,
-      });
+
+      expect(await withTimeout(buildStarted.promise, 25)).toBe("timeout");
+      expect(startedRoles).toEqual(["qa"]);
+
+      releaseQaStart.resolve();
       await buildStarted.promise;
-      const plannerStartResult = await withTimeout(plannerStarted.promise, 50);
-
-      expect(new Set(startedRoles)).toEqual(new Set(["build", "planner"]));
-      expect(plannerStartResult).toBeUndefined();
-
-      startBuildDeferred.resolve();
+      await expect(qaPromise).resolves.toEqual(
+        expect.objectContaining({ externalSessionId: "qa-external" }),
+      );
       await expect(buildPromise).resolves.toEqual(
         expect.objectContaining({ externalSessionId: "build-external" }),
       );
-      await expect(plannerPromise).resolves.toEqual(
-        expect.objectContaining({ externalSessionId: "planner-external" }),
-      );
+      expect(startedRoles).toEqual(["qa", "build"]);
     } finally {
-      startBuildDeferred.resolve();
+      releaseQaStart.resolve();
       adapter.startSession = originalStartSession;
       host.agentSessionsList = originalAgentSessionsList;
     }
