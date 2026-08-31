@@ -1,8 +1,8 @@
-import type {
-  GitProviderRepository,
-  PullRequest,
-  RepoConfig,
-  TaskApprovalContext,
+import {
+  type GitProviderRepository,
+  type PullRequest,
+  type RepoConfig,
+  type TaskApprovalContext,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { checkoutBranch } from "../../../domain/task";
@@ -92,8 +92,8 @@ export const githubProviderStatus = (
   repoConfig: RepoConfig,
 ) =>
   Effect.gen(function* () {
-    const providerConfig = repoConfig.git.providers[GITHUB_PROVIDER_ID];
-    if (!providerConfig?.enabled) {
+    const githubConfig = repoConfig.git.provider;
+    if (githubConfig?.id !== GITHUB_PROVIDER_ID || !githubConfig.enabled) {
       return {
         providerId: GITHUB_PROVIDER_ID,
         enabled: false,
@@ -113,7 +113,7 @@ export const githubProviderStatus = (
       };
     }
     const { ghCommand } = githubCommandResult.right;
-    const repository = providerConfig.repository;
+    const repository = githubConfig.repository;
     if (!repository) {
       return {
         providerId: GITHUB_PROVIDER_ID,
@@ -223,7 +223,7 @@ const requireSingleGithubRemoteName = (
     if (matches.length === 0) {
       return yield* Effect.fail(
         new HostValidationError({
-          field: "git.providers.github.repository",
+          field: "git.provider.repository",
           message: `No git remote matches the configured GitHub repository ${repository.host}:${repository.owner}/${repository.name}.`,
           details: { repoPath },
         }),
@@ -231,7 +231,7 @@ const requireSingleGithubRemoteName = (
     }
     return yield* Effect.fail(
       new HostValidationError({
-        field: "git.providers.github.repository",
+        field: "git.provider.repository",
         message: `Multiple git remotes match the configured GitHub repository ${repository.host}:${repository.owner}/${repository.name}: ${matches.join(", ")}. Configure a single matching remote before opening or updating a pull request.`,
         details: { repoPath, matches },
       }),
@@ -267,21 +267,21 @@ export const requireGithubPullRequestReadRepository = (
   repoConfig: RepoConfig,
 ) =>
   Effect.gen(function* () {
-    const providerConfig = repoConfig.git.providers[GITHUB_PROVIDER_ID];
-    if (!providerConfig?.enabled) {
+    const githubConfig = repoConfig.git.provider;
+    if (githubConfig?.id !== GITHUB_PROVIDER_ID || !githubConfig.enabled) {
       return yield* Effect.fail(
         new HostValidationError({
-          field: "git.providers.github.enabled",
+          field: "git.provider.enabled",
           message: "GitHub pull request support is not enabled for this repository.",
           details: { repoPath },
         }),
       );
     }
-    const repository = providerConfig.repository;
+    const repository = githubConfig.repository;
     if (!repository) {
       return yield* Effect.fail(
         new HostValidationError({
-          field: "git.providers.github.repository",
+          field: "git.provider.repository",
           message: "GitHub pull request support requires repository coordinates.",
           details: { repoPath },
         }),
@@ -392,17 +392,17 @@ export const githubPullRequestSyncPolicy = (
   repoConfig: RepoConfig,
 ) =>
   Effect.gen(function* () {
-    const providerConfig = repoConfig.git.providers[GITHUB_PROVIDER_ID];
+    const githubConfig = repoConfig.git.provider;
     const githubCommandResult =
-      providerConfig?.enabled === true
+      githubConfig?.id === GITHUB_PROVIDER_ID && githubConfig.enabled === true
         ? yield* Effect.either(resolveGithubCommandDependencies(dependencies))
         : null;
     const policy: GithubPullRequestSyncPolicy = {
       providerId: GITHUB_PROVIDER_ID,
       available: githubCommandResult?._tag === "Right",
     };
-    if (providerConfig?.repository) {
-      policy.repository = providerConfig.repository;
+    if (githubConfig?.id === GITHUB_PROVIDER_ID && githubConfig.repository) {
+      policy.repository = githubConfig.repository;
     }
     return policy;
   });

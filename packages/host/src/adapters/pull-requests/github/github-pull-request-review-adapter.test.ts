@@ -30,11 +30,10 @@ const createRepoConfig = ({ githubEnabled = true }: { githubEnabled?: boolean } 
     repoPath: "/repo",
     defaultRuntimeKind: "opencode",
     git: {
-      providers: {
-        github: {
-          enabled: githubEnabled,
-          repository: { host: "github.com", owner: "openai", name: "openducktor" },
-        },
+      provider: {
+        id: "github",
+        enabled: githubEnabled,
+        repository: { host: "github.com", owner: "openai", name: "openducktor" },
       },
     },
   });

@@ -200,12 +200,15 @@ export function RepositoryGitSection({
 }: RepositoryGitSectionProps): ReactElement {
   const {
     cliStatusLabel,
+    configuredProviderId,
     detectionMessage,
     githubEnabled,
     githubHost,
     githubReadinessLabel,
     githubReadinessMessage,
     githubReady,
+    githubControlsDisabled,
+    hasConfiguredNonGithubProvider,
     hasGithubCli,
     isDetecting,
     isManualConfigOpen,
@@ -215,6 +218,7 @@ export function RepositoryGitSection({
     usesDefaultGithubHost,
     handleDetectFromOrigin,
     handleGithubEnabledChange,
+    handleRemoveConfiguredProvider,
     handleRepositoryDraftFieldChange,
     handleToggleManualEdit,
   } = useRepositoryGitSectionModel({
@@ -243,39 +247,62 @@ export function RepositoryGitSection({
           githubReadinessMessage={githubReadinessMessage}
         />
         <CardContent className="grid gap-5 py-5">
-          <RepositoryGitEnableCard
-            disabled={disabled}
-            githubEnabled={githubEnabled}
-            onCheckedChange={handleGithubEnabledChange}
-          />
+          {hasConfiguredNonGithubProvider ? (
+            <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">
+                  {configuredProviderId} provider configured
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Remove this provider before configuring GitHub for this repository.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={disabled}
+                onClick={handleRemoveConfiguredProvider}
+              >
+                Remove provider
+              </Button>
+            </div>
+          ) : (
+            <>
+              <RepositoryGitEnableCard
+                disabled={githubControlsDisabled}
+                githubEnabled={githubEnabled}
+                onCheckedChange={handleGithubEnabledChange}
+              />
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={githubEnabled ? "success" : "warning"}>{providerStatusLabel}</Badge>
-            <Badge variant={hasGithubCli ? "success" : "danger"}>{cliStatusLabel}</Badge>
-            {usesDefaultGithubHost ? null : <Badge variant="outline">{githubHost}</Badge>}
-          </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={githubEnabled ? "success" : "warning"}>{providerStatusLabel}</Badge>
+                <Badge variant={hasGithubCli ? "success" : "danger"}>{cliStatusLabel}</Badge>
+                {usesDefaultGithubHost ? null : <Badge variant="outline">{githubHost}</Badge>}
+              </div>
 
-          <RepositoryGitMappingCard
-            disabled={disabled}
-            githubHost={githubHost}
-            isDetecting={isDetecting}
-            isManualConfigOpen={isManualConfigOpen}
-            repositorySlug={repositorySlug}
-            onDetectFromOrigin={handleDetectFromOrigin}
-            onToggleManualEdit={handleToggleManualEdit}
-          />
+              <RepositoryGitMappingCard
+                disabled={githubControlsDisabled}
+                githubHost={githubHost}
+                isDetecting={isDetecting}
+                isManualConfigOpen={isManualConfigOpen}
+                repositorySlug={repositorySlug}
+                onDetectFromOrigin={handleDetectFromOrigin}
+                onToggleManualEdit={handleToggleManualEdit}
+              />
 
-          {detectionMessage ? (
-            <p className="text-sm text-muted-foreground">{detectionMessage}</p>
-          ) : null}
+              {detectionMessage ? (
+                <p className="text-sm text-muted-foreground">{detectionMessage}</p>
+              ) : null}
 
-          {isManualConfigOpen ? (
-            <RepositoryGitManualConfigForm
-              disabled={disabled}
-              repositoryDraft={repositoryDraft}
-              onDraftFieldChange={handleRepositoryDraftFieldChange}
-            />
-          ) : null}
+              {isManualConfigOpen ? (
+                <RepositoryGitManualConfigForm
+                  disabled={githubControlsDisabled}
+                  repositoryDraft={repositoryDraft}
+                  onDraftFieldChange={handleRepositoryDraftFieldChange}
+                />
+              ) : null}
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

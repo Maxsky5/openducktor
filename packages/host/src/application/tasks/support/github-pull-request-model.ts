@@ -1,4 +1,5 @@
 import {
+  GITHUB_PROVIDER_DESCRIPTOR,
   type GitProviderRepository,
   type PullRequest,
   pullRequestSchema,
@@ -7,7 +8,7 @@ import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import { parseJson } from "../../../effect/json";
 import { z, type JSONType } from "zod";
 
-export const GITHUB_PROVIDER_ID = "github";
+export const GITHUB_PROVIDER_ID = GITHUB_PROVIDER_DESCRIPTOR.id;
 
 export const repositoryKey = (repository: { host: string; owner: string; name: string }): string =>
   `${repository.host}/${repository.owner}/${repository.name}`.toLowerCase();

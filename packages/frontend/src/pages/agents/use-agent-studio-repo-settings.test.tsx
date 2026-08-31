@@ -20,7 +20,7 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   worktreeBasePath: "/worktrees",
   branchPrefix: "codex/",
   defaultTargetBranch: { remote: "origin", branch: "main" },
-  git: { providers: {} },
+  git: {},
   hooks: { preStart: [], postComplete: [] },
   devServers: [],
   worktreeCopyPaths: [],
@@ -100,8 +100,10 @@ describe("useAgentStudioRepoSettings", () => {
     const hostClient = createRepoConfigHost(async () =>
       createRepoConfig({
         git: {
-          providers: {
-            github: { enabled, autoDetected: false },
+          provider: {
+            id: "github",
+            enabled,
+            autoDetected: false,
           },
         },
       }),
@@ -126,6 +128,28 @@ describe("useAgentStudioRepoSettings", () => {
 
     config.resolve(createRepoConfig());
     await harness.waitFor((state) => !state.isLoadingRepoSettings);
+    expect(harness.getLatest().githubIntegrationEnabled).toBe(false);
+
+    await harness.unmount();
+  });
+
+  test("keeps GitHub integration disabled for another configured provider", async () => {
+    const hostClient = createRepoConfigHost(async () =>
+      createRepoConfig({
+        git: {
+          provider: {
+            id: "gitlab",
+            enabled: true,
+            autoDetected: false,
+          },
+        },
+      }),
+    );
+    const harness = createHookHarness({ activeWorkspaceId: "workspace-repo", hostClient });
+
+    await harness.mount();
+    await harness.waitFor((state) => state.repoSettings !== null);
+
     expect(harness.getLatest().githubIntegrationEnabled).toBe(false);
 
     await harness.unmount();

@@ -165,6 +165,11 @@ describe("config-schemas", () => {
     expect(parsed.devServers).toEqual([]);
   });
 
+  test("defaults repository Git config to no provider", () => {
+    const parsed = repoConfigSchema.parse(baseRepoConfigInput);
+    expect(parsed.git).toEqual({});
+  });
+
   test("ignores legacy trusted hook fields", () => {
     const parsed = repoConfigSchema.parse({
       ...baseRepoConfigInput,

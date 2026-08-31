@@ -26,9 +26,7 @@ const createInitialSnapshot = (): SettingsSnapshot =>
         worktreeBasePath: "/tmp/a",
         branchPrefix: "obp",
         defaultTargetBranch: { remote: "origin", branch: "main" },
-        git: {
-          providers: {},
-        },
+        git: {},
         hooks: { preStart: [], postComplete: [] },
         devServers: [],
         worktreeCopyPaths: [],

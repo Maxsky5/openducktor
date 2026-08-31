@@ -45,9 +45,7 @@ const createSettingsSnapshot = (): SettingsSnapshot =>
         worktreeBasePath: undefined,
         branchPrefix: "odt",
         defaultTargetBranch: { remote: "origin", branch: "main" },
-        git: {
-          providers: {},
-        },
+        git: {},
         hooks: { preStart: [], postComplete: [] },
         devServers: [],
         worktreeCopyPaths: [],
@@ -62,9 +60,7 @@ const createSettingsSnapshot = (): SettingsSnapshot =>
         worktreeBasePath: undefined,
         branchPrefix: "odt",
         defaultTargetBranch: { remote: "origin", branch: "main" },
-        git: {
-          providers: {},
-        },
+        git: {},
         hooks: { preStart: [], postComplete: [] },
         devServers: [],
         worktreeCopyPaths: [],

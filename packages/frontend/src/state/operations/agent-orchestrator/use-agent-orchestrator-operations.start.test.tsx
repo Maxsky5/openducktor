@@ -301,9 +301,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       defaultRuntimeKind: "opencode" as const,
       branchPrefix: "obp",
       defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: {
-        providers: {},
-      },
+      git: {},
       hooks: {
         preStart: [],
         postComplete: [],
@@ -443,9 +441,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       defaultRuntimeKind: "opencode" as const,
       branchPrefix: "obp",
       defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: {
-        providers: {},
-      },
+      git: {},
       hooks: {
         preStart: [],
         postComplete: [],
@@ -727,9 +723,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
         defaultRuntimeKind: "opencode" as const,
         branchPrefix: "obp",
         defaultTargetBranch: { remote: "origin", branch: "main" },
-        git: {
-          providers: {},
-        },
+        git: {},
         hooks: {
           preStart: [],
           postComplete: [],

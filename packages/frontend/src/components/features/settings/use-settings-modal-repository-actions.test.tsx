@@ -22,9 +22,7 @@ const createRepoConfig = (): RepoConfig => ({
   defaultRuntimeKind: "opencode",
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
-  git: {
-    providers: {},
-  },
+  git: {},
   hooks: { preStart: [], postComplete: [] },
   devServers: [],
   worktreeCopyPaths: [],
@@ -77,7 +75,7 @@ describe("useSettingsModalRepositoryActions", () => {
 
     expect(detected).toBeNull();
     expect(detectGithubRepository).toHaveBeenCalledTimes(0);
-    expect(harness.getLatest().repoConfig.git.providers.github).toBeUndefined();
+    expect(harness.getLatest().repoConfig.git.provider).toBeUndefined();
 
     await harness.unmount();
   });
@@ -91,12 +89,11 @@ describe("useSettingsModalRepositoryActions", () => {
     const initialRepoConfig: RepoConfig = {
       ...createRepoConfig(),
       git: {
-        providers: {
-          github: {
-            enabled: false,
-            autoDetected: false,
-            repository: { host: "github.com", owner: "existing", name: "repo" },
-          },
+        provider: {
+          id: "github",
+          enabled: false,
+          autoDetected: false,
+          repository: { host: "github.com", owner: "existing", name: "repo" },
         },
       },
     };
@@ -122,7 +119,7 @@ describe("useSettingsModalRepositoryActions", () => {
     expect(detectedRepo.host).toBe("github.com");
     expect(detectedRepo.owner).toBe("duck");
     expect(detectedRepo.name).toBe("repo");
-    const githubProvider = harness.getLatest().repoConfig.git.providers.github;
+    const githubProvider = harness.getLatest().repoConfig.git.provider;
     if (!githubProvider) {
       throw new Error("Expected GitHub provider settings");
     }
@@ -131,6 +128,38 @@ describe("useSettingsModalRepositoryActions", () => {
     expect(githubProvider.repository?.host).toBe("github.com");
     expect(githubProvider.repository?.owner).toBe("duck");
     expect(githubProvider.repository?.name).toBe("repo");
+
+    await harness.unmount();
+  });
+
+  test("does not replace a configured non-GitHub provider", async () => {
+    const detectGithubRepository = mock(async () => ({
+      host: "github.com",
+      owner: "duck",
+      name: "repo",
+    }));
+    const gitlabProvider = {
+      id: "gitlab",
+      enabled: true,
+      autoDetected: false,
+      repository: { host: "gitlab.com", owner: "duck", name: "repo" },
+    } as const;
+    const harness = createHookHarness({
+      selectedRepoPath: "/repo-a",
+      initialRepoConfig: {
+        ...createRepoConfig(),
+        git: { provider: gitlabProvider },
+      },
+      detectGithubRepository,
+    });
+
+    await harness.mount();
+
+    await harness.run(async (state) => {
+      await state.detectSelectedRepoGithubRepository();
+    });
+
+    expect(harness.getLatest().repoConfig.git.provider).toEqual(gitlabProvider);
 
     await harness.unmount();
   });

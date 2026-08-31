@@ -412,7 +412,7 @@ describe("useAgentStudioSessionStartFlow", () => {
         defaultRuntimeKind: "opencode",
         branchPrefix: "codex/",
         defaultTargetBranch: { remote: "origin", branch: "main" },
-        git: { providers: {} },
+        git: {},
         hooks: { preStart: [], postComplete: [] },
         devServers: [],
         worktreeCopyPaths: [],

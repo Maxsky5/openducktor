@@ -1,12 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import type { PullRequest } from "@openducktor/contracts";
+import { repoConfigSchema, type PullRequest } from "@openducktor/contracts";
 import { Effect } from "effect";
+import type { GitPort } from "../../../ports/git-port";
 import type { SystemCommandPort } from "../../../ports/system-command-port";
 import type { ToolDiscoveryPort } from "../../../ports/tool-discovery-port";
 import {
   findGithubPullRequestForBranch,
   type GithubCommandDependencies,
+  type GithubRepositoryDependencies,
+  githubProviderStatus,
+  githubPullRequestSyncPolicy,
   pullRequestRecordsMatch,
+  requireGithubPullRequestReadRepository,
 } from "./github-pull-requests";
 import { parseGithubPullListResponse, parseGithubPullResponse } from "./github-pull-request-model";
 
@@ -162,5 +167,55 @@ describe("findGithubPullRequestForBranch", () => {
       CLICOLOR_FORCE: "0",
       FORCE_COLOR: "0",
     });
+  });
+});
+
+describe("GitHub provider selection", () => {
+  test("does not resolve GitHub dependencies for another configured provider", async () => {
+    let resolveGithubCommandCalls = 0;
+    const dependencies: GithubRepositoryDependencies = {
+      resolveGithubCommand() {
+        resolveGithubCommandCalls += 1;
+        return Effect.die("GitHub dependencies must not be resolved");
+      },
+      // SAFETY: The provider mismatch must return before any Git operation is read.
+      gitPort: {} as GitPort,
+      // SAFETY: The provider mismatch must return before any command operation is read.
+      systemCommands: {} as SystemCommandPort,
+      // SAFETY: The provider mismatch must return before any tool discovery operation is read.
+      toolDiscovery: {} as ToolDiscoveryPort,
+    };
+    const repoConfig = repoConfigSchema.parse({
+      workspaceId: "repo",
+      workspaceName: "Repo",
+      repoPath: "/repo",
+      defaultRuntimeKind: "opencode",
+      git: {
+        provider: {
+          id: "gitlab",
+          enabled: true,
+          autoDetected: false,
+          repository: { host: "gitlab.com", owner: "acme", name: "widget" },
+        },
+      },
+    });
+
+    const status = await Effect.runPromise(githubProviderStatus(dependencies, "/repo", repoConfig));
+    const readResult = await Effect.runPromiseExit(
+      requireGithubPullRequestReadRepository(dependencies, "/repo", repoConfig),
+    );
+    const syncPolicy = await Effect.runPromise(
+      githubPullRequestSyncPolicy(dependencies, repoConfig),
+    );
+
+    expect(status).toEqual({
+      providerId: "github",
+      enabled: false,
+      available: false,
+      reason: "GitHub provider is not enabled for this repository.",
+    });
+    expect(readResult._tag).toBe("Failure");
+    expect(syncPolicy).toEqual({ providerId: "github", available: false });
+    expect(resolveGithubCommandCalls).toBe(0);
   });
 });

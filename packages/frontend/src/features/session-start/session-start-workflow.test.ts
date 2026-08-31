@@ -204,7 +204,7 @@ describe("session-start-workflow", () => {
         remote: "upstream",
         branch: "develop",
       },
-      git: { providers: {} },
+      git: {},
       hooks: { preStart: [], postComplete: [] },
       devServers: [],
       worktreeCopyPaths: [],

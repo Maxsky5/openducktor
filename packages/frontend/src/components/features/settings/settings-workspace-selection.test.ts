@@ -11,9 +11,7 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   worktreeBasePath: "  /tmp/worktrees  ",
   branchPrefix: "  ",
   defaultTargetBranch: { remote: "origin", branch: "main" },
-  git: {
-    providers: {},
-  },
+  git: {},
   hooks: {
     preStart: [],
     postComplete: [],

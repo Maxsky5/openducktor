@@ -15,7 +15,7 @@ const repoConfig: RepoConfig = {
   worktreeBasePath: undefined,
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
-  git: { providers: {} },
+  git: {},
   hooks: { preStart: ["bun install"], postComplete: ["bun run clean"] },
   devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
   worktreeCopyPaths: [".env"],

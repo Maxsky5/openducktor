@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { GITHUB_PROVIDER_DESCRIPTOR } from "@openducktor/contracts";
 import type { host } from "@/state/operations/host";
 import { repoConfigQueryOptions, toRepoSettingsInput } from "@/state/queries/workspace";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -18,10 +19,14 @@ export function useAgentStudioRepoSettings(args: {
       hostClient,
     ),
     enabled: activeWorkspaceId !== null,
-    select: (config) => ({
-      repoSettings: toRepoSettingsInput(config),
-      githubIntegrationEnabled: config.git.providers.github?.enabled === true,
-    }),
+    select: (config) => {
+      const provider = config.git.provider;
+      return {
+        repoSettings: toRepoSettingsInput(config),
+        githubIntegrationEnabled:
+          provider?.id === GITHUB_PROVIDER_DESCRIPTOR.id && provider.enabled === true,
+      };
+    },
   });
   const repoSettings =
     activeWorkspaceId !== null ? (repoSettingsResult?.repoSettings ?? null) : null;

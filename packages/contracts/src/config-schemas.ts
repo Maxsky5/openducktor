@@ -389,7 +389,7 @@ export const repoConfigSchema = z.object({
     remote: "origin",
     branch: "main",
   }),
-  git: repoGitConfigSchema.default({ providers: {} }),
+  git: repoGitConfigSchema.default({}),
   hooks: repoHooksSchema.default({ preStart: [], postComplete: [] }),
   devServers: z
     .array(repoDevServerScriptSchema)

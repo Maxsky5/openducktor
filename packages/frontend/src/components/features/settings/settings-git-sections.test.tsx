@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { RepoConfig, RuntimeCheck } from "@openducktor/contracts";
+import type { GitProviderConfig, RepoConfig, RuntimeCheck } from "@openducktor/contracts";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -38,15 +38,14 @@ const baseRepoConfig: RepoConfig = {
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {
-    providers: {
-      github: {
-        enabled: true,
-        autoDetected: true,
-        repository: {
-          host: "github.com",
-          owner: "openai",
-          name: "openducktor",
-        },
+    provider: {
+      id: "github",
+      enabled: true,
+      autoDetected: true,
+      repository: {
+        host: "github.com",
+        owner: "openai",
+        name: "openducktor",
       },
     },
   },
@@ -59,6 +58,13 @@ const baseRepoConfig: RepoConfig = {
   promptOverrides: {},
   agentDefaults: {},
 };
+
+const createGitlabProvider = (): GitProviderConfig => ({
+  id: "gitlab",
+  enabled: true,
+  autoDetected: false,
+  repository: { host: "gitlab.com", owner: "acme", name: "widget" },
+});
 
 describe("settings git sections", () => {
   test("renders global GitHub CLI and auth readiness", () => {
@@ -111,15 +117,14 @@ describe("settings git sections", () => {
         selectedRepoConfig: {
           ...baseRepoConfig,
           git: {
-            providers: {
-              github: {
-                enabled: true,
-                autoDetected: false,
-                repository: {
-                  host: "github.mycorp.com",
-                  owner: "openai",
-                  name: "openducktor",
-                },
+            provider: {
+              id: "github",
+              enabled: true,
+              autoDetected: false,
+              repository: {
+                host: "github.mycorp.com",
+                owner: "openai",
+                name: "openducktor",
               },
             },
           },
@@ -146,15 +151,14 @@ describe("settings git sections", () => {
       const [repoConfig, setRepoConfig] = useState<RepoConfig>({
         ...baseRepoConfig,
         git: {
-          providers: {
-            github: {
-              enabled: true,
-              autoDetected: false,
-              repository: {
-                host: "github.com",
-                owner: "openai",
-                name: "openducktor",
-              },
+          provider: {
+            id: "github",
+            enabled: true,
+            autoDetected: false,
+            repository: {
+              host: "github.com",
+              owner: "openai",
+              name: "openducktor",
             },
           },
         },
@@ -195,15 +199,14 @@ describe("settings git sections", () => {
     let repoConfig: RepoConfig = {
       ...baseRepoConfig,
       git: {
-        providers: {
-          github: {
-            enabled: true,
-            autoDetected: false,
-            repository: {
-              host: "github.com",
-              owner: "before-click",
-              name: "before-click",
-            },
+        provider: {
+          id: "github",
+          enabled: true,
+          autoDetected: false,
+          repository: {
+            host: "github.com",
+            owner: "before-click",
+            name: "before-click",
           },
         },
       },
@@ -234,7 +237,7 @@ describe("settings git sections", () => {
     );
 
     try {
-      expect(repoConfig.git.providers.github?.repository).toEqual({
+      expect(repoConfig.git.provider?.repository).toEqual({
         host: "github.com",
         owner: "before-click",
         name: "before-click",
@@ -245,7 +248,7 @@ describe("settings git sections", () => {
         fireEvent.click(screen.getByRole("button", { name: /detect from origin/i }));
       });
 
-      expect(repoConfig.git.providers.github?.repository).toEqual({
+      expect(repoConfig.git.provider?.repository).toEqual({
         host: "github.com",
         owner: "acme",
         name: "widget",
@@ -256,16 +259,121 @@ describe("settings git sections", () => {
     }
   });
 
+  test("allows removing another configured provider before configuring GitHub", async () => {
+    const onDetectGithubRepository = mock(async () => null);
+    const gitlabProvider = createGitlabProvider();
+    const initialRepoConfig: RepoConfig = {
+      ...baseRepoConfig,
+      git: {
+        provider: gitlabProvider,
+      },
+    };
+    const ControlledRepositoryGitSection = (): ReturnType<typeof createElement> => {
+      const [repoConfig, setRepoConfig] = useState(initialRepoConfig);
+      return createElement(
+        "div",
+        null,
+        createElement(
+          "output",
+          { "data-testid": "configured-provider-id" },
+          repoConfig.git.provider?.id ?? "none",
+        ),
+        createElement(RepositoryGitSection, {
+          selectedRepoPath: "/repo",
+          selectedRepoConfig: repoConfig,
+          runtimeCheck: authenticatedRuntimeCheck,
+          disabled: false,
+          onDetectGithubRepository,
+          onUpdateSelectedRepoConfig: setRepoConfig,
+        }),
+      );
+    };
+    const rendered = render(createElement(ControlledRepositoryGitSection));
+
+    try {
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(rendered.container.textContent).toContain(
+        "Git provider gitlab is configured. Remove it before you configure GitHub.",
+      );
+      expect(onDetectGithubRepository).toHaveBeenCalledTimes(0);
+      expect(screen.queryByRole("switch")).toBeNull();
+      expect(screen.queryByRole("button", { name: /detect from origin/i })).toBeNull();
+      expect(rendered.container.querySelector("#repo-github-host")).toBeNull();
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: /remove provider/i }));
+      });
+
+      expect(screen.getByTestId("configured-provider-id").textContent).toBe("none");
+      expect(screen.getByRole("switch")).toBeTruthy();
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test("does not replace a provider configured during origin detection", async () => {
+    let repoConfig: RepoConfig = baseRepoConfig;
+    const pendingDetection = createDeferred<{
+      host: string;
+      owner: string;
+      name: string;
+    } | null>();
+    const onUpdateSelectedRepoConfig = (
+      updater: (current: RepoConfig) => RepoConfig,
+    ): RepoConfig => {
+      repoConfig = updater(repoConfig);
+      return repoConfig;
+    };
+    const props = () => ({
+      selectedRepoPath: "/repo",
+      selectedRepoConfig: repoConfig,
+      runtimeCheck: authenticatedRuntimeCheck,
+      disabled: false,
+      onDetectGithubRepository: () => pendingDetection.promise,
+      onUpdateSelectedRepoConfig,
+    });
+    const rendered = render(createElement(RepositoryGitSection, props()));
+
+    try {
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: /detect from origin/i }));
+        await Promise.resolve();
+      });
+
+      const gitlabProvider = createGitlabProvider();
+      repoConfig = {
+        ...repoConfig,
+        git: {
+          provider: gitlabProvider,
+        },
+      };
+      rendered.rerender(createElement(RepositoryGitSection, props()));
+
+      await act(async () => {
+        pendingDetection.resolve({ host: "github.com", owner: "detected", name: "repo" });
+        await pendingDetection.promise;
+        await Promise.resolve();
+      });
+
+      expect(repoConfig.git.provider).toBe(gitlabProvider);
+    } finally {
+      rendered.unmount();
+    }
+  });
+
   test("same-repo manual edits invalidate an in-flight origin detection", async () => {
     let repoConfig: RepoConfig = {
       ...baseRepoConfig,
       git: {
-        providers: {
-          github: {
-            enabled: true,
-            autoDetected: false,
-            repository: undefined,
-          },
+        provider: {
+          id: "github",
+          enabled: true,
+          autoDetected: false,
+          repository: undefined,
         },
       },
     };
@@ -313,7 +421,7 @@ describe("settings git sections", () => {
         await Promise.resolve();
       });
 
-      expect(repoConfig.git.providers.github?.repository).toEqual({
+      expect(repoConfig.git.provider?.repository).toEqual({
         host: "github.com",
         owner: "manual-owner",
         name: "manual-repo",
@@ -335,12 +443,11 @@ describe("settings git sections", () => {
       const [repoConfig, setRepoConfig] = useState<RepoConfig>({
         ...baseRepoConfig,
         git: {
-          providers: {
-            github: {
-              enabled: true,
-              autoDetected: false,
-              repository: undefined,
-            },
+          provider: {
+            id: "github",
+            enabled: true,
+            autoDetected: false,
+            repository: undefined,
           },
         },
       });
@@ -423,12 +530,11 @@ describe("settings git sections", () => {
             selectedRepoConfig: {
               ...baseRepoConfig,
               git: {
-                providers: {
-                  github: {
-                    enabled: true,
-                    autoDetected: false,
-                    repository: undefined,
-                  },
+                provider: {
+                  id: "github",
+                  enabled: true,
+                  autoDetected: false,
+                  repository: undefined,
                 },
               },
             },

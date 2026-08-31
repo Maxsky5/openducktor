@@ -17,7 +17,7 @@ export type LoadedGlobalConfig = GlobalConfig;
 export const createDefaultGlobalConfig = (): LoadedGlobalConfig =>
   globalConfigSchema.parse({ version: 3 });
 
-const migratePersistedConfig = (payload: PersistedConfigObject) => {
+const migrateReusablePrompts = (payload: PersistedConfigObject) => {
   const chat = payload.chat;
   const customPrompts = chat && isPersistedConfigObject(chat) ? chat.customPrompts : undefined;
   if (payload.reusablePrompts !== undefined || !Array.isArray(customPrompts)) {
@@ -29,6 +29,54 @@ const migratePersistedConfig = (payload: PersistedConfigObject) => {
     reusablePrompts: customPrompts,
   };
 };
+
+const migrateRepositoryGitConfig = (workspaceId: string, workspace: JSONType): JSONType => {
+  if (!isPersistedConfigObject(workspace) || !isPersistedConfigObject(workspace.git)) {
+    return workspace;
+  }
+
+  const { providers, ...git } = workspace.git;
+  if (!isPersistedConfigObject(providers)) {
+    return workspace;
+  }
+
+  const entries = Object.entries(providers);
+  if (Object.hasOwn(git, "provider")) {
+    throw new HostValidationError({
+      message: `Repository "${workspaceId}" contains both canonical and legacy Git provider configuration.`,
+    });
+  }
+  if (entries.length > 1) {
+    throw new HostValidationError({
+      message: `Repository "${workspaceId}" has ${entries.length} legacy Git providers; only one provider can be configured.`,
+    });
+  }
+  if (entries.length === 0) {
+    return { ...workspace, git };
+  }
+
+  const [providerId, config] = entries[0]!;
+  const provider = isPersistedConfigObject(config) ? { ...config, id: providerId } : config;
+  return { ...workspace, git: { ...git, provider } };
+};
+
+const migrateRepositoryGitConfigs = (payload: PersistedConfigObject) => {
+  if (!isPersistedConfigObject(payload.workspaces)) {
+    return payload;
+  }
+  return {
+    ...payload,
+    workspaces: Object.fromEntries(
+      Object.entries(payload.workspaces).map(([id, workspace]) => [
+        id,
+        migrateRepositoryGitConfig(id, workspace),
+      ]),
+    ),
+  };
+};
+
+const migratePersistedConfig = (payload: PersistedConfigObject) =>
+  migrateRepositoryGitConfigs(migrateReusablePrompts(payload));
 
 const parseSupportedConfigObject = (
   payload: JSONType,

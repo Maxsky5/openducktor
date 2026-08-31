@@ -1,4 +1,10 @@
-import type { GitProviderRepository, RepoConfig, RuntimeCheck } from "@openducktor/contracts";
+import {
+  GITHUB_PROVIDER_DESCRIPTOR,
+  type GitProviderConfig,
+  type GitProviderRepository,
+  type RepoConfig,
+  type RuntimeCheck,
+} from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 
 type UseRepositoryGitSectionModelArgs = {
@@ -18,6 +24,7 @@ export type GithubRepositoryDraft = {
 
 type RepositoryGitSectionState = {
   repoPath: string | null;
+  providerId: string | undefined;
   repositoryKey: string;
   repositoryDraft: GithubRepositoryDraft;
   isManualConfigOpen: boolean;
@@ -27,6 +34,7 @@ type RepositoryGitSectionState = {
 
 type RepositoryGitSectionContext = {
   repoPath: string | null;
+  providerId: string | undefined;
   repository: GitProviderRepository | undefined;
   hasRepositoryCoordinates: boolean;
 };
@@ -74,6 +82,9 @@ type UseRepositoryGitSectionModelResult = {
   githubReadinessLabel: string;
   githubReadinessMessage: string;
   githubReady: boolean;
+  githubControlsDisabled: boolean;
+  configuredProviderId: string | undefined;
+  hasConfiguredNonGithubProvider: boolean;
   hasGithubCli: boolean;
   isDetecting: boolean;
   isManualConfigOpen: boolean;
@@ -83,6 +94,7 @@ type UseRepositoryGitSectionModelResult = {
   usesDefaultGithubHost: boolean;
   handleDetectFromOrigin: () => void;
   handleGithubEnabledChange: (checked: boolean) => void;
+  handleRemoveConfiguredProvider: () => void;
   handleRepositoryDraftFieldChange: (field: keyof GithubRepositoryDraft, value: string) => void;
   handleToggleManualEdit: () => void;
 };
@@ -93,15 +105,34 @@ const EMPTY_GITHUB_CONFIG = {
   repository: undefined,
 } as const;
 
-const buildGithubConfig = (
+const hasNonGithubProvider = (repoConfig: RepoConfig | null): boolean => {
+  const provider = repoConfig?.git.provider;
+  return provider !== undefined && provider.id !== GITHUB_PROVIDER_DESCRIPTOR.id;
+};
+
+const updateGithubProviderConfig = (
   repoConfig: RepoConfig,
-  overrides: Partial<NonNullable<RepoConfig["git"]["providers"]["github"]>>,
-): NonNullable<RepoConfig["git"]["providers"]["github"]> => ({
-  enabled: repoConfig.git.providers.github?.enabled ?? false,
-  autoDetected: repoConfig.git.providers.github?.autoDetected ?? false,
-  repository: repoConfig.git.providers.github?.repository,
-  ...overrides,
-});
+  overrides: Partial<Omit<GitProviderConfig, "id">>,
+): RepoConfig => {
+  if (hasNonGithubProvider(repoConfig)) {
+    return repoConfig;
+  }
+
+  const github = repoConfig.git.provider;
+  return {
+    ...repoConfig,
+    git: {
+      ...repoConfig.git,
+      provider: {
+        enabled: github?.enabled ?? false,
+        autoDetected: github?.autoDetected ?? false,
+        repository: github?.repository,
+        ...overrides,
+        id: GITHUB_PROVIDER_DESCRIPTOR.id,
+      },
+    },
+  };
+};
 
 const trimRepositoryDraft = (draft: GithubRepositoryDraft): GithubRepositoryDraft => ({
   host: draft.host.trim(),
@@ -131,10 +162,12 @@ const toRepositoryFromDraft = (draft: GithubRepositoryDraft): GitProviderReposit
 
 const createRepositoryGitSectionState = ({
   hasRepositoryCoordinates,
+  providerId,
   repoPath,
   repository,
 }: RepositoryGitSectionContext): RepositoryGitSectionState => ({
   repoPath,
+  providerId,
   repositoryKey: toRepositoryKey(repository),
   repositoryDraft: buildRepositoryDraft(repository),
   isManualConfigOpen: repoPath != null && !hasRepositoryCoordinates,
@@ -147,6 +180,7 @@ const isStateForContext = (
   context: RepositoryGitSectionContext,
 ): boolean =>
   state.repoPath === context.repoPath &&
+  state.providerId === context.providerId &&
   state.repositoryKey === toRepositoryKey(context.repository);
 
 const repositoryGitSectionReducer = (
@@ -231,7 +265,9 @@ export function useRepositoryGitSectionModel({
   selectedRepoConfig,
   selectedRepoPath,
 }: UseRepositoryGitSectionModelArgs): UseRepositoryGitSectionModelResult {
-  const initialGithubRepository = selectedRepoConfig?.git.providers.github?.repository;
+  const initialProvider = selectedRepoConfig?.git.provider;
+  const initialGithubRepository =
+    initialProvider?.id === GITHUB_PROVIDER_DESCRIPTOR.id ? initialProvider.repository : undefined;
   const initialHasRepositoryCoordinates = Boolean(
     initialGithubRepository?.host && initialGithubRepository.owner && initialGithubRepository.name,
   );
@@ -242,17 +278,26 @@ export function useRepositoryGitSectionModel({
   const attemptedAutoDetectByRepo = attemptedAutoDetectByRepoRef.current;
   const activeDetectionSequenceRef = useRef(0);
   const activeRepoPathRef = useRef<string | null>(selectedRepoPath);
+  const activeProviderIdRef = useRef(selectedRepoConfig?.git.provider?.id);
   const [sectionState, dispatchSectionState] = useReducer(
     repositoryGitSectionReducer,
     {
       hasRepositoryCoordinates: initialHasRepositoryCoordinates,
+      providerId: selectedRepoConfig?.git.provider?.id,
       repository: initialGithubRepository,
       repoPath: selectedRepoPath,
     },
     createRepositoryGitSectionState,
   );
 
-  const github = selectedRepoConfig?.git.providers.github ?? EMPTY_GITHUB_CONFIG;
+  const configuredProvider = selectedRepoConfig?.git.provider;
+  const github =
+    configuredProvider?.id === GITHUB_PROVIDER_DESCRIPTOR.id
+      ? configuredProvider
+      : EMPTY_GITHUB_CONFIG;
+  const hasConfiguredNonGithubProvider = hasNonGithubProvider(selectedRepoConfig);
+  const configuredProviderId = selectedRepoConfig?.git.provider?.id;
+  const githubControlsDisabled = disabled || hasConfiguredNonGithubProvider;
   const githubEnabled = github.enabled ?? false;
   const hasGithubCli = runtimeCheck?.ghOk ?? false;
   const githubHost = github.repository?.host ?? "github.com";
@@ -268,32 +313,47 @@ export function useRepositoryGitSectionModel({
     hasGithubCli &&
     hasRepositoryCoordinates &&
     (usesDefaultGithubHost ? (runtimeCheck?.ghAuthOk ?? false) : true);
-  const githubReadinessLabel = githubReady
-    ? usesDefaultGithubHost
-      ? "Ready"
-      : "Configured"
-    : "Not ready";
-  const githubReadinessMessage = !github.enabled
-    ? "Enable GitHub for this repository to offer “Open pull request” during human approval."
-    : !runtimeCheck?.ghOk
-      ? "Install GitHub CLI (`gh`) to enable provider-backed pull requests."
-      : usesDefaultGithubHost && !runtimeCheck.ghAuthOk
-        ? (runtimeCheck.ghAuthError ?? "Run `gh auth login` to authenticate GitHub.")
-        : !hasRepositoryCoordinates
-          ? "Repository host, owner, and name are still missing."
-          : usesDefaultGithubHost
-            ? "GitHub pull requests are ready for this repository."
-            : `GitHub pull requests are configured for ${githubHost}. Authentication for that host is validated during approval.`;
-  const providerStatusLabel = githubEnabled ? "Pull requests enabled" : "Pull requests disabled";
+  let githubReadinessLabel = "Not ready";
+  if (hasConfiguredNonGithubProvider) {
+    githubReadinessLabel = "Unavailable";
+  } else if (githubReady) {
+    githubReadinessLabel = usesDefaultGithubHost ? "Ready" : "Configured";
+  }
+
+  let githubReadinessMessage: string;
+  if (hasConfiguredNonGithubProvider) {
+    githubReadinessMessage = `Git provider ${configuredProviderId} is configured. Remove it before you configure GitHub.`;
+  } else if (!github.enabled) {
+    githubReadinessMessage =
+      "Enable GitHub for this repository to offer “Open pull request” during human approval.";
+  } else if (!runtimeCheck?.ghOk) {
+    githubReadinessMessage = "Install GitHub CLI (`gh`) to enable provider-backed pull requests.";
+  } else if (usesDefaultGithubHost && !runtimeCheck.ghAuthOk) {
+    githubReadinessMessage =
+      runtimeCheck.ghAuthError ?? "Run `gh auth login` to authenticate GitHub.";
+  } else if (!hasRepositoryCoordinates) {
+    githubReadinessMessage = "Repository host, owner, and name are still missing.";
+  } else if (usesDefaultGithubHost) {
+    githubReadinessMessage = "GitHub pull requests are ready for this repository.";
+  } else {
+    githubReadinessMessage = `GitHub pull requests are configured for ${githubHost}. Authentication for that host is validated during approval.`;
+  }
+
+  let providerStatusLabel = "Pull requests disabled";
+  if (hasConfiguredNonGithubProvider) {
+    providerStatusLabel = `${configuredProviderId} configured`;
+  } else if (githubEnabled) {
+    providerStatusLabel = "Pull requests enabled";
+  }
   const cliStatusLabel = hasGithubCli ? "CLI installed" : "CLI missing";
-  activeRepoPathRef.current = selectedRepoPath;
   const repositorySectionContext = useMemo<RepositoryGitSectionContext>(
     () => ({
       hasRepositoryCoordinates,
+      providerId: configuredProviderId,
       repository: github.repository,
       repoPath: selectedRepoPath,
     }),
-    [github.repository, hasRepositoryCoordinates, selectedRepoPath],
+    [configuredProviderId, github.repository, hasRepositoryCoordinates, selectedRepoPath],
   );
   const currentSectionState = isStateForContext(sectionState, repositorySectionContext)
     ? sectionState
@@ -302,28 +362,21 @@ export function useRepositoryGitSectionModel({
     currentSectionState;
 
   useEffect(() => {
+    activeRepoPathRef.current = selectedRepoPath;
+    activeProviderIdRef.current = configuredProviderId;
     dispatchSectionState({ type: "context_changed", context: repositorySectionContext });
-  }, [repositorySectionContext]);
+  }, [configuredProviderId, repositorySectionContext, selectedRepoPath]);
 
   const commitGithubRepositoryDraft = useCallback(
     (nextDraft: GithubRepositoryDraft): void => {
       const trimmedDraft = trimRepositoryDraft(nextDraft);
 
-      onUpdateSelectedRepoConfig((repoConfig) => ({
-        ...repoConfig,
-        git: {
-          ...repoConfig.git,
-          providers: {
-            ...repoConfig.git.providers,
-            github: buildGithubConfig(repoConfig, {
-              repository:
-                trimmedDraft.host && trimmedDraft.owner && trimmedDraft.name
-                  ? trimmedDraft
-                  : undefined,
-            }),
-          },
-        },
-      }));
+      onUpdateSelectedRepoConfig((repoConfig) =>
+        updateGithubProviderConfig(repoConfig, {
+          repository:
+            trimmedDraft.host && trimmedDraft.owner && trimmedDraft.name ? trimmedDraft : undefined,
+        }),
+      );
     },
     [onUpdateSelectedRepoConfig],
   );
@@ -353,19 +406,33 @@ export function useRepositoryGitSectionModel({
 
   const handleGithubEnabledChange = useCallback(
     (checked: boolean): void => {
-      onUpdateSelectedRepoConfig((repoConfig) => ({
-        ...repoConfig,
-        git: {
-          ...repoConfig.git,
-          providers: {
-            ...repoConfig.git.providers,
-            github: buildGithubConfig(repoConfig, { enabled: checked }),
-          },
-        },
-      }));
+      onUpdateSelectedRepoConfig((repoConfig) =>
+        updateGithubProviderConfig(repoConfig, { enabled: checked }),
+      );
     },
     [onUpdateSelectedRepoConfig],
   );
+
+  const handleRemoveConfiguredProvider = useCallback((): void => {
+    if (!hasConfiguredNonGithubProvider || configuredProviderId === undefined) {
+      return;
+    }
+
+    const providerId = configuredProviderId;
+    invalidateActiveDetection({ clearMessage: true });
+    onUpdateSelectedRepoConfig((repoConfig) => {
+      if (repoConfig.git.provider?.id !== providerId) {
+        return repoConfig;
+      }
+      const { provider: _provider, ...git } = repoConfig.git;
+      return { ...repoConfig, git };
+    });
+  }, [
+    configuredProviderId,
+    hasConfiguredNonGithubProvider,
+    invalidateActiveDetection,
+    onUpdateSelectedRepoConfig,
+  ]);
 
   const handleRepositoryDraftFieldChange = useCallback(
     (field: keyof GithubRepositoryDraft, value: string): void => {
@@ -383,11 +450,12 @@ export function useRepositoryGitSectionModel({
 
   const runDetection = useCallback(
     async (manual: boolean): Promise<void> => {
-      if (!selectedRepoConfig || isDetecting) {
+      if (!selectedRepoConfig || hasConfiguredNonGithubProvider || isDetecting) {
         return;
       }
 
       const detectionSequence = activeDetectionSequenceRef.current + 1;
+      const detectionProviderId = configuredProviderId;
       activeDetectionSequenceRef.current = detectionSequence;
       dispatchSectionState({
         type: "detection_started",
@@ -395,7 +463,8 @@ export function useRepositoryGitSectionModel({
 
       const isActiveDetection = (): boolean =>
         detectionSequence === activeDetectionSequenceRef.current &&
-        activeRepoPathRef.current === selectedRepoPath;
+        activeRepoPathRef.current === selectedRepoPath &&
+        activeProviderIdRef.current === detectionProviderId;
       try {
         const detected = await onDetectGithubRepository();
         if (isActiveDetection()) {
@@ -426,6 +495,8 @@ export function useRepositoryGitSectionModel({
     },
     [
       commitGithubRepositoryDraft,
+      configuredProviderId,
+      hasConfiguredNonGithubProvider,
       isDetecting,
       onDetectGithubRepository,
       repositorySectionContext,
@@ -439,6 +510,7 @@ export function useRepositoryGitSectionModel({
       !selectedRepoPath ||
       !selectedRepoConfig ||
       disabled ||
+      hasConfiguredNonGithubProvider ||
       hasRepositoryCoordinates ||
       isDetecting
     ) {
@@ -453,6 +525,7 @@ export function useRepositoryGitSectionModel({
   }, [
     attemptedAutoDetectByRepo,
     disabled,
+    hasConfiguredNonGithubProvider,
     hasRepositoryCoordinates,
     isDetecting,
     runDetection,
@@ -462,12 +535,15 @@ export function useRepositoryGitSectionModel({
 
   return {
     cliStatusLabel,
+    configuredProviderId,
     detectionMessage,
     githubEnabled,
+    githubControlsDisabled,
     githubHost,
     githubReadinessLabel,
     githubReadinessMessage,
     githubReady,
+    hasConfiguredNonGithubProvider,
     hasGithubCli,
     isDetecting,
     isManualConfigOpen,
@@ -479,6 +555,7 @@ export function useRepositoryGitSectionModel({
       void runDetection(true);
     },
     handleGithubEnabledChange,
+    handleRemoveConfiguredProvider,
     handleRepositoryDraftFieldChange,
     handleToggleManualEdit: () => {
       dispatchSectionState({
