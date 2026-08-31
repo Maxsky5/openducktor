@@ -8,6 +8,7 @@ import {
 } from "./notification-navigation-logic";
 import { notificationSessionIdentityFromNavigationState } from "./notification-navigation-state";
 import type { NotificationSessionNavigationState } from "./notification-navigation-state";
+import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 
 const session: AgentSessionRecord = {
   externalSessionId: "session-1",
@@ -99,6 +100,48 @@ describe("notification navigation", () => {
 
     expect(calls).toEqual(["select-workspace", "navigate"]);
     expect(loadTasks).not.toHaveBeenCalled();
+  });
+
+  test("loads task data while workspace selection is pending", async () => {
+    let finishSelection: (() => void) | undefined;
+    const selectWorkspace = mock(
+      () =>
+        new Promise<void>((resolve) => {
+          finishSelection = resolve;
+        }),
+    );
+    const loadTasks = mock(async () => [
+      createTaskCardFixture({ id: "task-1", status: "ready_for_dev" }),
+    ]);
+    const navigate = mock(() => {});
+
+    const navigation = navigateToNotificationTarget(
+      {
+        type: "agent_studio_task",
+        repoPath: "/repo",
+        taskId: "task-1",
+        preferredRole: "build",
+      },
+      {
+        activeWorkspaceId: "workspace-other",
+        workspaces: [{ workspaceId: "workspace-repo", repoPath: "/repo" }],
+        selectWorkspace,
+        loadTasks,
+        loadTaskSessions: mock(async () => []),
+        navigate,
+        reportStale: mock(() => {}),
+      },
+    );
+
+    await Promise.resolve();
+    expect(selectWorkspace).toHaveBeenCalledWith("workspace-repo");
+    expect(loadTasks).toHaveBeenCalledWith("/repo");
+    expect(navigate).not.toHaveBeenCalled();
+
+    finishSelection?.();
+    await navigation;
+
+    expect(navigate).toHaveBeenCalledWith("/agents?task=task-1&agent=build");
   });
 
   test("matches only the requested error episode", () => {

@@ -3,14 +3,13 @@ import {
   createContext,
   type PropsWithChildren,
   type ReactElement,
+  type ReactNode,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -36,9 +35,8 @@ import {
   type SettingsModalNavigationState,
 } from "./settings-modal-open-state";
 import { SettingsSidebar } from "./settings-modal-sidebars";
-import { SettingsModalTrigger } from "./settings-modal-trigger";
+import { SettingsModalOpenButton, SettingsModalTrigger } from "./settings-modal-trigger";
 import { useSettingsModalController } from "./use-settings-modal-controller";
-import { useNotificationContext } from "@/state/notifications/notification-context";
 
 export type { SettingsDeepLink } from "./settings-deep-link";
 
@@ -51,24 +49,20 @@ type SettingsModalProps = {
   onOpenChange?: (open: boolean) => void;
 };
 
-type SettingsModalDialogProps = SettingsModalProps & {
-  controlledOpen?: boolean;
-  hideTrigger?: boolean;
+type SettingsModalDialogProps = {
+  children?: ReactNode;
+  deepLink?: SettingsDeepLink | undefined;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
 };
 
 function SettingsModalDialog({
-  triggerClassName,
-  triggerIconOnly = false,
-  triggerSize = triggerIconOnly ? "icon" : "sm",
-  triggerLabel = "Settings",
+  children,
   deepLink,
   onOpenChange,
-  controlledOpen,
-  hideTrigger = false,
+  open,
 }: SettingsModalDialogProps): ReactElement {
   const initialOpenState = resolveSettingsModalOpenState(deepLink);
-  const [internalOpen, setInternalOpen] = useState(false);
-  const open = controlledOpen ?? internalOpen;
   const [activeDeepLinkResolution, setActiveDeepLinkResolution] =
     useState<SettingsDeepLinkResolution | null>(initialOpenState.deepLinkResolution);
   const [contentFocusRequest, setContentFocusRequest] =
@@ -121,10 +115,9 @@ function SettingsModalDialog({
   );
 
   const closeModal = useCallback((): void => {
-    setInternalOpen(false);
     setActiveDeepLinkResolution(null);
     setContentFocusRequest(null);
-    onOpenChange?.(false);
+    onOpenChange(false);
   }, [onOpenChange]);
 
   const handleSave = (): void => {
@@ -148,20 +141,12 @@ function SettingsModalDialog({
     setActiveDeepLinkResolution(nextOpenState.deepLinkResolution);
     setNavigation(nextOpenState.navigation);
     setContentFocusRequest(nextOpenState.contentFocusRequest);
-    setInternalOpen(true);
-    onOpenChange?.(true);
+    onOpenChange(true);
   };
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      {hideTrigger ? null : (
-        <SettingsModalTrigger
-          className={triggerClassName}
-          iconOnly={triggerIconOnly}
-          label={triggerLabel}
-          size={triggerSize}
-        />
-      )}
+      {children}
 
       <DialogContent className="flex h-[90vh] max-h-[90vh] max-w-7xl flex-col p-0">
         <DialogHeader className="shrink-0 border-b border-border px-6 pb-4 pt-6">
@@ -234,6 +219,35 @@ function SettingsModalDialog({
   );
 }
 
+function LocalSettingsModal({
+  triggerClassName,
+  triggerIconOnly = false,
+  triggerSize = triggerIconOnly ? "icon" : "sm",
+  triggerLabel = "Settings",
+  deepLink,
+  onOpenChange,
+}: SettingsModalProps): ReactElement {
+  const [open, setOpen] = useState(false);
+  const handleOpenChange = useCallback(
+    (nextOpen: boolean): void => {
+      setOpen(nextOpen);
+      onOpenChange?.(nextOpen);
+    },
+    [onOpenChange],
+  );
+
+  return (
+    <SettingsModalDialog open={open} deepLink={deepLink} onOpenChange={handleOpenChange}>
+      <SettingsModalTrigger
+        className={triggerClassName}
+        iconOnly={triggerIconOnly}
+        label={triggerLabel}
+        size={triggerSize}
+      />
+    </SettingsModalDialog>
+  );
+}
+
 type SettingsModalOpenRequest = {
   deepLink?: SettingsDeepLink;
   onOpenChange?: (open: boolean) => void;
@@ -248,10 +262,8 @@ const SettingsModalContext = createContext<SettingsModalContextValue | null>(nul
 type ActiveSettingsRequest = SettingsModalOpenRequest & { id: number };
 
 export function SettingsModalProvider({ children }: PropsWithChildren): ReactElement {
-  const { osFailure } = useNotificationContext();
   const [activeRequest, setActiveRequest] = useState<ActiveSettingsRequest | null>(null);
   const requestIdRef = useRef(0);
-  const reportedOsFailureRef = useRef<string | null>(null);
 
   const openSettings = useCallback((request: SettingsModalOpenRequest = {}): void => {
     requestIdRef.current += 1;
@@ -270,27 +282,13 @@ export function SettingsModalProvider({ children }: PropsWithChildren): ReactEle
 
   const contextValue = useMemo(() => ({ openSettings }), [openSettings]);
 
-  useEffect(() => {
-    if (!osFailure || reportedOsFailureRef.current === osFailure.occurrenceId) return;
-    reportedOsFailureRef.current = osFailure.occurrenceId;
-    toast.error("OS notification failed", {
-      id: "notification-os-delivery-failure",
-      description: osFailure.message,
-      action: {
-        label: "Open settings",
-        onClick: () => openSettings({ deepLink: { kind: "global", section: "notifications" } }),
-      },
-    });
-  }, [openSettings, osFailure]);
-
   return (
     <SettingsModalContext.Provider value={contextValue}>
       {children}
       {activeRequest ? (
         <SettingsModalDialog
           key={activeRequest.id}
-          controlledOpen
-          hideTrigger
+          open
           {...(activeRequest.deepLink ? { deepLink: activeRequest.deepLink } : {})}
           onOpenChange={handleOpenChange}
         />
@@ -307,19 +305,18 @@ export function useSettingsModal(): SettingsModalContextValue {
 
 export function SettingsModal(props: SettingsModalProps): ReactElement {
   const context = useContext(SettingsModalContext);
-  if (!context) return <SettingsModalDialog {...props} />;
+  if (!context) return <LocalSettingsModal {...props} />;
 
   const request: SettingsModalOpenRequest = {};
   if (props.deepLink) request.deepLink = props.deepLink;
   if (props.onOpenChange) request.onOpenChange = props.onOpenChange;
 
   return (
-    <SettingsModalTrigger
+    <SettingsModalOpenButton
       className={props.triggerClassName}
       iconOnly={props.triggerIconOnly ?? false}
       label={props.triggerLabel ?? "Settings"}
       size={props.triggerSize ?? (props.triggerIconOnly ? "icon" : "sm")}
-      standalone
       onClick={() => context.openSettings(request)}
     />
   );

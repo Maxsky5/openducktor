@@ -6,8 +6,8 @@ import type {
   NotificationSettings,
 } from "@openducktor/contracts";
 import { createContext, useContext } from "react";
-import type { NotificationDispatchFailure } from "@/features/notifications";
-import type { SessionStartNotificationPublisher } from "@/features/session-start";
+import type { NotificationDispatchFailure } from "@/features/notifications/notification-policy";
+import type { SessionStartNotificationPublisher } from "@/features/session-start/session-start-orchestration";
 import type { TaskStreamNotificationSink } from "@/state/tasks/task-stream-controller";
 
 export type NotificationNavigator = (target: NotificationNavigationTarget) => Promise<void>;

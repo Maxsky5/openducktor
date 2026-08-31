@@ -3,7 +3,7 @@ import type {
   ExternalTaskSyncEvent,
   NotificationKind,
   NotificationOccurrence,
-  TaskCard,
+  TaskEventTaskSnapshot,
   TaskStatus,
 } from "@openducktor/contracts";
 
@@ -58,9 +58,6 @@ const workflowNotification = (status: TaskStatus): WorkflowNotification | null =
   }
 };
 
-const changedTaskIds = (event: ExternalTaskSyncEvent): readonly string[] =>
-  event.kind === "external_task_created" ? [event.taskId] : event.taskIds;
-
 export const createTaskOccurrenceProjector = ({
   repoPath,
   repositoryLabel,
@@ -68,23 +65,20 @@ export const createTaskOccurrenceProjector = ({
   repoPath: string;
   repositoryLabel: string;
 }) => {
-  let baseline = new Map<string, TaskCard>();
+  let baseline = new Map<string, TaskEventTaskSnapshot>();
 
-  const replaceBaseline = (tasks: readonly TaskCard[]): void => {
+  const replaceBaseline = (tasks: readonly TaskEventTaskSnapshot[]): void => {
     baseline = new Map(tasks.map((task) => [task.id, task]));
   };
 
   const projectChange = (
-    event: ExternalTaskSyncEvent,
-    refreshedTasks: readonly TaskCard[],
+    event: Extract<ExternalTaskSyncEvent, { kind: "tasks_updated" }>,
   ): NotificationOccurrence[] => {
-    const refreshedById = new Map(refreshedTasks.map((task) => [task.id, task]));
     const occurrences: NotificationOccurrence[] = [];
 
-    for (const taskId of changedTaskIds(event)) {
-      const previous = baseline.get(taskId);
-      const current = refreshedById.get(taskId);
-      if (!previous || !current || previous.status === current.status) {
+    for (const current of event.taskSnapshots) {
+      const previous = baseline.get(current.id);
+      if (!previous || previous.status === current.status) {
         continue;
       }
       const notification = workflowNotification(current.status);
@@ -94,13 +88,13 @@ export const createTaskOccurrenceProjector = ({
       const { kind, status, preferredRole } = notification;
       let navigationTarget: NotificationOccurrence["navigationTarget"];
       if (current.status === "closed") {
-        navigationTarget = { type: "kanban_task", repoPath, taskId };
+        navigationTarget = { type: "kanban_task", repoPath, taskId: current.id };
       } else {
-        navigationTarget = { type: "agent_studio_task", repoPath, taskId };
+        navigationTarget = { type: "agent_studio_task", repoPath, taskId: current.id };
         if (preferredRole) navigationTarget.preferredRole = preferredRole;
       }
       const occurrence: NotificationOccurrence = {
-        occurrenceId: `${kind}:${repoPath}:${taskId}:${event.eventId}`,
+        occurrenceId: `${kind}:${repoPath}:${current.id}:${event.eventId}`,
         kind,
         repoPath,
         repositoryLabel,
@@ -112,7 +106,8 @@ export const createTaskOccurrenceProjector = ({
       occurrences.push(occurrence);
     }
 
-    replaceBaseline(refreshedTasks);
+    for (const taskId of event.removedTaskIds) baseline.delete(taskId);
+    for (const task of event.taskSnapshots) baseline.set(task.id, task);
     return occurrences;
   };
 

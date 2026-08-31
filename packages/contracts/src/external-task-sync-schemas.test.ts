@@ -36,6 +36,7 @@ describe("external-task-sync-schemas", () => {
       repoPath: "/repo",
       taskIds: ["task-7", "task-8"],
       removedTaskIds: ["task-7"],
+      taskSnapshots: [{ id: "task-8", title: "Task 8", status: "ready_for_dev" }],
       emittedAt: "2026-04-10T13:05:00.000Z",
     });
 
@@ -44,6 +45,9 @@ describe("external-task-sync-schemas", () => {
     if (parsed.kind === "tasks_updated") {
       expect(parsed.taskIds).toEqual(["task-7", "task-8"]);
       expect(parsed.removedTaskIds).toEqual(["task-7"]);
+      expect(parsed.taskSnapshots).toEqual([
+        { id: "task-8", title: "Task 8", status: "ready_for_dev" },
+      ]);
     }
   });
 
@@ -121,6 +125,33 @@ describe("external-task-sync-schemas", () => {
         repoPath: "/repo",
         ...invalidChangeSet,
         emittedAt: "2026-04-10T13:15:00.000Z",
+      }).success,
+    ).toBe(false);
+  });
+  test("requires one snapshot for each changed task that was not removed", () => {
+    const event = {
+      eventId: "event-snapshots",
+      kind: "tasks_updated" as const,
+      repoPath: "/repo",
+      taskIds: ["task-7", "task-8"],
+      removedTaskIds: ["task-7"],
+      emittedAt: "2026-04-10T13:15:00.000Z",
+    };
+
+    expect(tasksUpdatedEventSchema.safeParse({ ...event, taskSnapshots: [] }).success).toBe(false);
+    expect(
+      tasksUpdatedEventSchema.safeParse({
+        ...event,
+        taskSnapshots: [{ id: "task-7", title: "Removed", status: "open" }],
+      }).success,
+    ).toBe(false);
+    expect(
+      tasksUpdatedEventSchema.safeParse({
+        ...event,
+        taskSnapshots: [
+          { id: "task-8", title: "Task 8", status: "open" },
+          { id: "task-8", title: "Task 8", status: "spec_ready" },
+        ],
       }).success,
     ).toBe(false);
   });

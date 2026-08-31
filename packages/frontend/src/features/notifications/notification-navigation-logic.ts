@@ -71,12 +71,14 @@ export const navigateToNotificationTarget = async (
     return;
   }
 
-  if (dependencies.activeWorkspaceId !== workspace.workspaceId) {
-    await dependencies.selectWorkspace(workspace.workspaceId);
-  }
+  const workspaceSelection =
+    dependencies.activeWorkspaceId === workspace.workspaceId
+      ? Promise.resolve()
+      : dependencies.selectWorkspace(workspace.workspaceId);
 
   const taskId = "taskId" in target ? target.taskId : undefined;
   if (!taskId) {
+    await workspaceSelection;
     if (target.type === "agent_studio_task" || target.type === "kanban_task") {
       return;
     }
@@ -88,7 +90,7 @@ export const navigateToNotificationTarget = async (
     return;
   }
 
-  const tasks = await dependencies.loadTasks(target.repoPath);
+  const [tasks] = await Promise.all([dependencies.loadTasks(target.repoPath), workspaceSelection]);
   const task = tasks.find((entry) => entry.id === taskId);
   if (!task) {
     dependencies.reportStale(`Task ${taskId} no longer exists in this repository.`);

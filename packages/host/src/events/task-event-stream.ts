@@ -66,9 +66,11 @@ const freezeEvent = (event: ExternalTaskSyncEvent): ExternalTaskSyncEvent => {
   if (event.kind === "tasks_updated") {
     const taskIds = [...event.taskIds];
     const removedTaskIds = [...event.removedTaskIds];
+    const taskSnapshots = event.taskSnapshots.map((task) => Object.freeze({ ...task }));
     Object.freeze(taskIds);
     Object.freeze(removedTaskIds);
-    return Object.freeze({ ...event, taskIds, removedTaskIds });
+    Object.freeze(taskSnapshots);
+    return Object.freeze({ ...event, taskIds, removedTaskIds, taskSnapshots });
   }
   return Object.freeze({ ...event });
 };

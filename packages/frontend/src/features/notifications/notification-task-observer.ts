@@ -2,6 +2,7 @@ import type {
   ExternalTaskSyncEvent,
   NotificationOccurrence,
   TaskCard,
+  TaskEventTaskSnapshot,
 } from "@openducktor/contracts";
 import type { TaskStreamNotificationSink } from "@/state/tasks/task-stream-controller";
 import { createTaskOccurrenceProjector } from "./task-occurrence-projector";
@@ -20,7 +21,7 @@ type NotificationProducerFailure = {
 type TaskObserverEntry = {
   label: string;
   projector: ReturnType<typeof createTaskOccurrenceProjector>;
-  tasks: Map<string, TaskCard>;
+  tasks: Map<string, TaskEventTaskSnapshot>;
 };
 
 export const createNotificationTaskObserver = ({
@@ -64,7 +65,9 @@ export const createNotificationTaskObserver = ({
     }
   };
 
-  const refreshForChange = async (event: ExternalTaskSyncEvent): Promise<void> => {
+  const refreshForExternalTask = async (
+    event: Extract<ExternalTaskSyncEvent, { kind: "external_task_created" }>,
+  ): Promise<void> => {
     const workspace = workspaces.get(event.repoPath);
     if (!workspace) {
       return;
@@ -89,14 +92,29 @@ export const createNotificationTaskObserver = ({
         entries.set(event.repoPath, entry);
         return;
       }
-      const occurrences = entry.projector.projectChange(event, tasks);
+      entry.projector.replaceBaseline(tasks);
       entry.tasks = new Map(tasks.map((task) => [task.id, task]));
-      for (const occurrence of occurrences) {
-        publish(occurrence);
-      }
     } catch (cause) {
       reportFailure(event.repoPath, cause);
     }
+  };
+
+  const refreshForChange = async (event: ExternalTaskSyncEvent): Promise<void> => {
+    if (event.kind === "external_task_created") {
+      await refreshForExternalTask(event);
+      return;
+    }
+    const workspace = workspaces.get(event.repoPath);
+    if (!workspace) return;
+    let entry = entries.get(event.repoPath);
+    if (!entry || entry.label !== workspace.repositoryLabel) {
+      await loadBaseline(workspace);
+      return;
+    }
+    const occurrences = entry.projector.projectChange(event);
+    for (const taskId of event.removedTaskIds) entry.tasks.delete(taskId);
+    for (const task of event.taskSnapshots) entry.tasks.set(task.id, task);
+    for (const occurrence of occurrences) publish(occurrence);
   };
 
   const refreshAllBaselines = async (): Promise<void> => {
