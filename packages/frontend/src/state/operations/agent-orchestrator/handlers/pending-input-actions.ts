@@ -53,19 +53,22 @@ const preparePendingInputReply = ({
     currentSession,
     request,
   );
-  const contextSession = sessions
-    .map((session) => dependencies.readSessionSnapshot(session))
-    .find((session) => session !== null);
-  if (!contextSession) {
+  const responseState = dependencies.readSessionSnapshot(responseSession);
+  const repoSession =
+    responseState ??
+    sessions
+      .map((session) => dependencies.readSessionSnapshot(session))
+      .find((session) => session !== null);
+  if (!repoSession) {
     throw new Error(
       `Cannot reply to pending input for session '${responseSession.externalSessionId}' because its repository context is unavailable.`,
     );
   }
 
-  markTurnUserAnchorIfMissing(dependencies, responseSession, contextSession.selectedModel);
+  markTurnUserAnchorIfMissing(dependencies, responseSession, responseState?.selectedModel ?? null);
   return {
     responseSession,
-    repoPath: contextSession.repoPath,
+    repoPath: repoSession.repoPath,
   };
 };
 

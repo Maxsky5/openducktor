@@ -3,7 +3,7 @@ import type {
   AgentSessionLiveReplyApprovalInput,
   AgentSessionLiveReplyQuestionInput,
 } from "@openducktor/contracts";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
@@ -12,6 +12,7 @@ import type {
 import {
   buildSession,
   createSessionActions,
+  createSessionTurnStateFixture,
   createSessionsRef,
   getSession,
 } from "./session-actions.test-helpers";
@@ -151,32 +152,37 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
   });
 
   test("routes a mirrored subagent approval to its response session", async () => {
-    const childSession = {
+    const childSession = buildSession({
       externalSessionId: "session-child",
-      runtimeKind: "opencode" as const,
-      workingDirectory: "/tmp/repo/worktree",
-      sessionAssociation: { kind: "repository" as const },
-    };
+      sessionAssociation: { kind: "repository" },
+      selectedModel: { providerId: "openai", modelId: "child-model" },
+    });
     const request: AgentApprovalRequest = {
       ...approvalRequest("perm-child"),
-      responseSession: childSession,
+      responseSession: {
+        ...toAgentSessionIdentity(childSession),
+        sessionAssociation: childSession.sessionAssociation,
+      },
       source: {
         kind: "subagent",
         parentExternalSessionId: "session-parent",
         childExternalSessionId: childSession.externalSessionId,
       },
     };
+    const parentSession = buildSession({
+      externalSessionId: "session-parent",
+      pendingApprovals: [request],
+      selectedModel: { providerId: "openai", modelId: "parent-model" },
+    });
     const sessionsRef = createSessionsRef([
-      buildSession({ externalSessionId: "session-parent", pendingApprovals: [request] }),
-      buildSession({
-        externalSessionId: "session-child",
-        sessionAssociation: { kind: "repository" },
-        pendingApprovals: [request],
-      }),
+      parentSession,
+      { ...childSession, pendingApprovals: [request] },
     ]);
     const replies: AgentSessionLiveReplyApprovalInput[] = [];
+    const sessionTurnState = createSessionTurnStateFixture();
     const actions = createSessionActions({
       sessionsRef,
+      sessionTurnState: sessionTurnState.sessionTurnState,
       liveSessionHost: {
         agentSessionLiveReplyApproval: async (input) => {
           replies.push(input);
@@ -194,6 +200,11 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     expect(replies[0]?.externalSessionId).toBe("session-child");
     expect(getSession(sessionsRef, "session-parent").pendingApprovals).toEqual([request]);
     expect(getSession(sessionsRef, "session-child").pendingApprovals).toEqual([request]);
+    expect(
+      sessionTurnState.turnMetadata.readModel(
+        agentSessionIdentityKey(toAgentSessionIdentity(childSession)),
+      ),
+    ).toEqual(childSession.selectedModel);
   });
 
   test("routes a UI-shaped Claude subagent approval through the loaded parent repository", async () => {
