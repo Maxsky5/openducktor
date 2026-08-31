@@ -40,6 +40,7 @@ export type SessionStartWorkflowIntent = {
   targetWorkingDirectory?: string | null;
   postStartAction: SessionStartPostAction;
   holdForPostStartMessage?: boolean;
+  queueIfBusy?: boolean;
   message?: string;
   beforeStartAction?: SessionStartBeforeAction;
 };
@@ -121,6 +122,9 @@ const startSessionFromIntent = ({
     selectedModel: requireSelectedModel(selection, "fresh"),
     holdForPostStartMessage,
   };
+  if (intent.queueIfBusy) {
+    freshRequest.queueIfBusy = true;
+  }
   if (intent.targetWorkingDirectory !== undefined) {
     return startAgentSession({
       ...freshRequest,

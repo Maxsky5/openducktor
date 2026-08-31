@@ -1,5 +1,5 @@
 export type SessionStartGate<Result> = {
-  run: (key: string, start: () => Promise<Result>) => Promise<Result>;
+  run: (key: string, start: () => Promise<Result>, mode?: "coalesce" | "queue") => Promise<Result>;
   clear: () => void;
 };
 
@@ -7,13 +7,13 @@ export const createSessionStartGate = <Result>(): SessionStartGate<Result> => {
   const startsByKey = new Map<string, Promise<Result>>();
 
   return {
-    run: (key, start) => {
+    run: (key, start, mode = "coalesce") => {
       const inFlightStart = startsByKey.get(key);
-      if (inFlightStart) {
+      if (inFlightStart && mode === "coalesce") {
         return inFlightStart;
       }
 
-      const startPromise = start();
+      const startPromise = inFlightStart ? inFlightStart.then(start, start) : start();
       startsByKey.set(key, startPromise);
       const clearStart = (): void => {
         if (startsByKey.get(key) === startPromise) {

@@ -21,6 +21,7 @@ import { createSessionStartGate } from "@/features/session-start/session-start-g
 import type { SessionStartWorkflowResult } from "@/features/session-start/session-start-workflow";
 import { MISSING_BUILD_TARGET_ERROR } from "@/lib/session-start-errors";
 import { createStartSessionTestHarness } from "@/state/operations/agent-orchestrator/handlers/start-session.test-helpers";
+import { withTimeout } from "@/state/operations/agent-orchestrator/test-utils";
 import {
   repoConfigQueryOptions,
   settingsSnapshotQueryOptions,
@@ -473,7 +474,7 @@ describe("autopilot feature helpers", () => {
     ).toBe(true);
   });
 
-  test("starts distinct sessions for overlapping enabled QA invocations", async () => {
+  test("starts the second distinct session before the first kickoff completes", async () => {
     const task = createTask({ id: "TASK-QA-OVERLAP", status: "ai_review" });
     task.agentWorkflows.qa.available = true;
     const args = createExecuteArgs(task);
@@ -488,6 +489,9 @@ describe("autopilot feature helpers", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
     const releaseStarts = createDeferred<void>();
+    const firstKickoffStarted = createDeferred<void>();
+    const releaseFirstKickoff = createDeferred<void>();
+    const secondSessionStarted = createDeferred<void>();
     const sessionStartGate = createSessionStartGate<AgentSessionIdentity>();
     let isBootstrapActive = false;
     let bootstrapPrepareCount = 0;
@@ -498,6 +502,9 @@ describe("autopilot feature helpers", () => {
       startCount += 1;
       const sessionNumber = startCount;
       await releaseStarts.promise;
+      if (sessionNumber === 2) {
+        secondSessionStarted.resolve();
+      }
       return {
         runtimeKind: "opencode",
         workingDirectory: input.workingDirectory,
@@ -540,6 +547,10 @@ describe("autopilot feature helpers", () => {
       startAgentSession: start,
       sendAgentMessage: async (session) => {
         kickoffSessionIds.push(session.externalSessionId);
+        if (kickoffSessionIds.length === 1) {
+          firstKickoffStarted.resolve();
+          await releaseFirstKickoff.promise;
+        }
       },
     });
 
@@ -557,14 +568,19 @@ describe("autopilot feature helpers", () => {
         alwaysStartQaReviewsFresh: true,
       });
       releaseStarts.resolve();
+      await firstKickoffStarted.promise;
+      const secondStartOutcome = await withTimeout(secondSessionStarted.promise, 500);
+      releaseFirstKickoff.resolve();
       await Promise.all([firstStart, secondStart]);
 
+      expect(secondStartOutcome).not.toBe("timeout");
       expect(bootstrapPrepareCount).toBe(2);
       expect(startCount).toBe(2);
       expect(kickoffSessionIds).toHaveLength(2);
       expect(new Set(kickoffSessionIds)).toEqual(new Set(["qa-session-1", "qa-session-2"]));
     } finally {
       releaseStarts.resolve();
+      releaseFirstKickoff.resolve();
       adapter.startSession = originalStartSession;
     }
   });

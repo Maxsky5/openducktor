@@ -105,52 +105,57 @@ export const createStartAgentSession = ({
       selectedModelKey,
       messagePolicyKey,
     ].join("::");
+    const gateMode = input.startMode === "fresh" && input.queueIfBusy ? "queue" : "coalesce";
 
-    return session.sessionStartGateRef.current.run(inFlightKey, async () => {
-      const deps = {
-        session,
-        runtime,
-        task,
-        model,
-      };
-      if (input.startMode === "reuse") {
-        return executeReuseStart({ ctx: startCtx, input, deps });
-      }
-
-      const prepared =
-        input.startMode === "fork"
-          ? await prepareWorkflowForkLaunch({ ctx: startCtx, input, deps })
-          : await prepareWorkflowFreshLaunch({
-              ctx: startCtx,
-              input,
-              targetWorkingDirectory: freshStartTarget?.targetWorkingDirectory,
-              deps,
-            });
-
-      let commitStarted = false;
-      try {
-        const result: PreparedSessionLaunchResult = await executePreparedLaunch({
-          launch: prepared.launch,
-          commit: async (commitInput) => {
-            commitStarted = true;
-            await commitWorkflowSessionLaunch({
-              ...commitInput,
-              bootstrap: prepared.bootstrap,
-              ctx: startCtx,
-              deps: { session, runtime },
-            });
-          },
-        });
-        return toAgentSessionIdentity(result.summary);
-      } catch (cause) {
-        if (commitStarted || !prepared.bootstrap) {
-          throw cause;
+    return session.sessionStartGateRef.current.run(
+      inFlightKey,
+      async () => {
+        const deps = {
+          session,
+          runtime,
+          task,
+          model,
+        };
+        if (input.startMode === "reuse") {
+          return executeReuseStart({ ctx: startCtx, input, deps });
         }
-        return rollbackBootstrapAfterStartFailure({
-          cause,
-          bootstrap: prepared.bootstrap,
-        });
-      }
-    });
+
+        const prepared =
+          input.startMode === "fork"
+            ? await prepareWorkflowForkLaunch({ ctx: startCtx, input, deps })
+            : await prepareWorkflowFreshLaunch({
+                ctx: startCtx,
+                input,
+                targetWorkingDirectory: freshStartTarget?.targetWorkingDirectory,
+                deps,
+              });
+
+        let commitStarted = false;
+        try {
+          const result: PreparedSessionLaunchResult = await executePreparedLaunch({
+            launch: prepared.launch,
+            commit: async (commitInput) => {
+              commitStarted = true;
+              await commitWorkflowSessionLaunch({
+                ...commitInput,
+                bootstrap: prepared.bootstrap,
+                ctx: startCtx,
+                deps: { session, runtime },
+              });
+            },
+          });
+          return toAgentSessionIdentity(result.summary);
+        } catch (cause) {
+          if (commitStarted || !prepared.bootstrap) {
+            throw cause;
+          }
+          return rollbackBootstrapAfterStartFailure({
+            cause,
+            bootstrap: prepared.bootstrap,
+          });
+        }
+      },
+      gateMode,
+    );
   };
 };

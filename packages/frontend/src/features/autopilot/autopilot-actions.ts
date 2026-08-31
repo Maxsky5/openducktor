@@ -281,7 +281,7 @@ const toSessionStartDecision = ({
   };
 };
 
-const executeAutopilotActionNow = async ({
+export const executeAutopilotAction = async ({
   activeWorkspace,
   task,
   actionId,
@@ -329,6 +329,9 @@ const executeAutopilotActionNow = async ({
     if (startResolution.targetWorkingDirectory !== undefined) {
       request.targetWorkingDirectory = startResolution.targetWorkingDirectory;
     }
+    if (actionId === "startQa" && alwaysStartQaReviewsFresh) {
+      request.queueIfBusy = true;
+    }
     const workflow = await runSessionStartWorkflow({
       request,
       decision: toSessionStartDecision({
@@ -352,34 +355,4 @@ const executeAutopilotActionNow = async ({
     }
     throw error;
   }
-};
-
-const pendingFreshQaStarts = new Map<string, Promise<void>>();
-
-const enqueueFreshQaStart = async <T>(key: string, start: () => Promise<T>): Promise<T> => {
-  const previousStart = pendingFreshQaStarts.get(key) ?? Promise.resolve();
-  const { promise: currentStart, resolve: finishStart } = Promise.withResolvers<void>();
-  pendingFreshQaStarts.set(key, currentStart);
-
-  await previousStart;
-  try {
-    return await start();
-  } finally {
-    finishStart();
-    if (pendingFreshQaStarts.get(key) === currentStart) {
-      pendingFreshQaStarts.delete(key);
-    }
-  }
-};
-
-export const executeAutopilotAction = (
-  args: ExecuteAutopilotActionArgs,
-): Promise<AutopilotActionOutcome> => {
-  const shouldQueue = args.actionId === "startQa" && args.alwaysStartQaReviewsFresh;
-  if (!shouldQueue) {
-    return executeAutopilotActionNow(args);
-  }
-
-  const taskKey = JSON.stringify([args.activeWorkspace.repoPath, args.task.id]);
-  return enqueueFreshQaStart(taskKey, () => executeAutopilotActionNow(args));
 };

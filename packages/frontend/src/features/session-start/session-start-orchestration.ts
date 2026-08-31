@@ -22,6 +22,7 @@ export type SessionStartFlowRequest = Omit<NewSessionStartRequest, "selectedMode
   initialStartMode?: AgentSessionStartMode;
   postStartAction: SessionStartPostAction;
   holdForPostStartMessage?: boolean;
+  queueIfBusy?: boolean;
   message?: string;
   beforeStartAction?: SessionStartBeforeAction;
 };
@@ -215,6 +216,10 @@ export const executeSessionStartFromDecision = async ({
 
   if (request.holdForPostStartMessage) {
     intent.holdForPostStartMessage = true;
+  }
+
+  if (decision.startMode === "fresh" && request.queueIfBusy) {
+    intent.queueIfBusy = true;
   }
 
   if (request.message) {
