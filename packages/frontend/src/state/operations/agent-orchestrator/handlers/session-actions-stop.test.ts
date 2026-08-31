@@ -151,6 +151,35 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     }
   });
 
+  test("persists terminal event state when the host stop later fails", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const sessionsRef = createSessionsRef([buildSession()]);
+    adapter.stopSession = async () => {
+      const current = getSession(sessionsRef);
+      sessionsRef.current = replaceAgentSession(sessionsRef.current, {
+        ...current,
+        status: "stopped",
+        stopRequestedAt: null,
+      });
+      throw new Error("stop failed after terminal event");
+    };
+    let persistenceCalls = 0;
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      persistSessionRecord: async () => {
+        persistenceCalls += 1;
+      },
+    });
+
+    await expect(actions.stopAgentSession(getSession(sessionsRef))).rejects.toThrow(
+      "Failed to stop session 'session-1': stop failed after terminal event",
+    );
+
+    expect(getSession(sessionsRef).status).toBe("stopped");
+    expect(persistenceCalls).toBe(1);
+  });
+
   test("records stop intent before awaiting authoritative session stop", async () => {
     const adapter = new OpencodeSdkAdapter();
     const stopDeferred = createDeferred<void>();

@@ -60,10 +60,13 @@ export const createStopAgentSession = ({
     try {
       await adapter.stopSession(toRuntimeSessionRef(stopRepoPath, session));
     } catch (error) {
-      updateSession(session, (current) => ({
+      const nextSession = updateSession(session, (current) => ({
         ...current,
         stopRequestedAt: null,
       }));
+      if (nextSession?.status === "stopped") {
+        await commitStoppedSession(nextSession);
+      }
       throw new Error(`Failed to stop session '${externalSessionId}': ${errorMessage(error)}`);
     }
 

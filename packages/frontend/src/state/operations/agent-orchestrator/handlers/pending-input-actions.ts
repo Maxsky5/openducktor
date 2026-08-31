@@ -49,26 +49,18 @@ const preparePendingInputReply = ({
   currentSession: AgentSessionIdentity;
   request: AgentApprovalRequest | AgentQuestionRequest;
 }) => {
-  const { responseSession, sessions } = resolveAgentPendingInputParticipants(
-    currentSession,
-    request,
-  );
+  const { responseSession } = resolveAgentPendingInputParticipants(currentSession, request);
   const responseState = dependencies.readSessionSnapshot(responseSession);
-  const repoSession =
-    responseState ??
-    sessions
-      .map((session) => dependencies.readSessionSnapshot(session))
-      .find((session) => session !== null);
-  if (!repoSession) {
+  if (!responseState) {
     throw new Error(
       `Cannot reply to pending input for session '${responseSession.externalSessionId}' because its repository context is unavailable.`,
     );
   }
 
-  markTurnUserAnchorIfMissing(dependencies, responseSession, responseState?.selectedModel ?? null);
+  markTurnUserAnchorIfMissing(dependencies, responseSession, responseState.selectedModel);
   return {
     responseSession,
-    repoPath: repoSession.repoPath,
+    repoPath: responseState.repoPath,
   };
 };
 

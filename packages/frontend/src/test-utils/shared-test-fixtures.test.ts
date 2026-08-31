@@ -55,6 +55,7 @@ describe("shared test fixtures", () => {
         role: "assistant",
         content: "hello",
         timestamp: "2026-03-23T10:00:00.000Z",
+        meta: { kind: "assistant", agentRole: "spec" },
       },
     ]);
     const first = createAgentSessionFixture({ messages });
@@ -77,6 +78,8 @@ describe("shared test fixtures", () => {
     expect(second.pendingApprovals).toEqual([]);
     expect(first.messages).not.toBe(second.messages);
     expect(first.messages.items).not.toBe(second.messages.items);
+    expect(first.messages.items[0]).not.toBe(second.messages.items[0]);
+    expect(first.messages.items[0]?.meta).not.toBe(second.messages.items[0]?.meta);
     expect(getSessionMessageCount(first)).toBe(1);
     expect(getSessionMessageCount(second)).toBe(1);
   });

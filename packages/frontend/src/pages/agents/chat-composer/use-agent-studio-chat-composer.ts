@@ -190,14 +190,15 @@ export function useAgentStudioChatComposer({
     }
     return { kind: "repo", runtimeKind: selectedTargetRuntimeKind };
   }, [selectedSessionIdentity, selectedTargetRuntimeKind]);
+  const promptInputRepoPath = loadedSession?.repoPath ?? workspaceRepoPath;
   const promptInputRuntime = useMemo(
     () =>
       resolveChatComposerPromptInputRuntime({
-        workspaceRepoPath,
+        workspaceRepoPath: promptInputRepoPath,
         repoReadinessState,
         source: promptInputRuntimeSource,
       }),
-    [promptInputRuntimeSource, repoReadinessState, workspaceRepoPath],
+    [promptInputRepoPath, promptInputRuntimeSource, repoReadinessState],
   );
   const promptInputRuntimeKind =
     promptInputRuntime.state === "available"
@@ -307,13 +308,13 @@ export function useAgentStudioChatComposer({
           isAvailable: true,
           unavailableReason: "The current session model catalog is unavailable.",
           retry: async (): Promise<void> => {
-            if (!workspaceRepoPath) {
+            if (!promptInputRepoPath) {
               throw new Error(
                 "A repository path is required to refresh the session model catalog.",
               );
             }
             await queryClient.invalidateQueries({
-              queryKey: runtimeCatalogQueryKeys.repo(workspaceRepoPath, descriptor.kind),
+              queryKey: runtimeCatalogQueryKeys.repo(promptInputRepoPath, descriptor.kind),
               exact: true,
             });
           },
@@ -329,7 +330,7 @@ export function useAgentStudioChatComposer({
     selectedSession.runtimeData.catalogError,
     selectedSessionIdentity,
     sessionModelCatalog,
-    workspaceRepoPath,
+    promptInputRepoPath,
   ]);
   const selectedComposerResource = repoModelPickerResources.find(
     (resource) => resource.runtimeKind === selectedRuntimeKind,

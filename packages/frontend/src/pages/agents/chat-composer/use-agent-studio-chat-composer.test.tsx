@@ -1014,6 +1014,7 @@ describe("useAgentStudioChatComposer", () => {
     const loadFileSearch = mock(async () => FILE_SEARCH_RESULTS);
     const loadedSession = createLoadedSession({
       runtimeKind: "opencode",
+      repoPath: "/repo",
       workingDirectory: "/repo/session-worktree",
     });
     const harness = createHookHarness(
@@ -1053,6 +1054,7 @@ describe("useAgentStudioChatComposer", () => {
     const loadFileSearch = mock(async () => FILE_SEARCH_RESULTS);
     const loadedSession = createLoadedSession({
       runtimeKind: "opencode",
+      repoPath: "/repo",
       workingDirectory: "/repo/opencode-worktree",
     });
     const selectedSessionIdentity = {
@@ -1099,6 +1101,7 @@ describe("useAgentStudioChatComposer", () => {
     const loadFileSearch = mock(async () => FILE_SEARCH_RESULTS);
     const loadedSession = createLoadedSession({
       runtimeKind: "codex",
+      repoPath: "/repo",
       selectedModel: {
         runtimeKind: "codex",
         providerId: "openai",
@@ -1148,10 +1151,12 @@ describe("useAgentStudioChatComposer", () => {
     const loadFileSearch = mock(async () => FILE_SEARCH_RESULTS);
     const loadedSession = createLoadedSession({
       runtimeKind: "opencode",
+      repoPath: "/session/repo",
       workingDirectory: "/repo/session-worktree",
     });
     const harness = createHookHarness(
       createBaseProps({
+        workspaceRepoPath: "/active/repo",
         loadedSession,
         loadFileSearch,
       }),
@@ -1173,7 +1178,7 @@ describe("useAgentStudioChatComposer", () => {
       expect(results).toEqual(FILE_SEARCH_RESULTS);
       expect(loadFileSearch).toHaveBeenCalledWith(
         {
-          repoPath: "/repo",
+          repoPath: "/session/repo",
           runtimeKind: "opencode",
           workingDirectory: "/repo/session-worktree",
         },
@@ -1184,14 +1189,16 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("queries runtime slash commands for stdio OpenCode sessions", async () => {
+  test("queries session slash commands without an active repository", async () => {
     const loadSlashCommands = mock(async () => ({
       commands: [{ id: "review", trigger: "review", title: "review", hints: [] }],
     }));
     const harness = createHookHarness(
       createBaseProps({
+        workspaceRepoPath: null,
         loadedSession: createLoadedSession({
           runtimeKind: "opencode",
+          repoPath: "/session/repo",
           workingDirectory: "/repo/session-worktree",
         }),
         loadSlashCommands,
@@ -1207,7 +1214,7 @@ describe("useAgentStudioChatComposer", () => {
 
       expect(loadSlashCommands).toHaveBeenCalledTimes(1);
       expect(loadSlashCommands).toHaveBeenCalledWith({
-        repoPath: "/repo",
+        repoPath: "/session/repo",
         runtimeKind: "opencode",
         workingDirectory: "/repo/session-worktree",
       });
@@ -1383,6 +1390,7 @@ describe("useAgentStudioChatComposer", () => {
       createBaseProps({
         loadedSession: createLoadedSession({
           runtimeKind: "opencode",
+          repoPath: "/repo",
           workingDirectory: "/repo/session-worktree",
         }),
         loadFileSearch,

@@ -16,13 +16,8 @@ export const createCommitSessionModelChangePolicy = ({
   persistSessionRecord: PersistSessionRecord;
 }): CommitSessionModelChange => {
   return async (session): Promise<void> => {
-    if (session.sessionAssociation.kind === "repository") {
+    if (session.sessionAssociation.kind !== "workflow") {
       return;
-    }
-    if (session.sessionAssociation.kind === "unbound") {
-      throw new Error(
-        `Cannot persist model change for unbound session '${session.externalSessionId}'.`,
-      );
     }
     await persistSessionRecord(
       session.repoPath,

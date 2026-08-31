@@ -207,7 +207,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     ).toEqual(childSession.selectedModel);
   });
 
-  test("routes a UI-shaped Claude subagent approval through the loaded parent repository", async () => {
+  test("rejects a subagent approval when its response session is not loaded", async () => {
     const childSession = buildSession({
       externalSessionId: "claude-child",
       runtimeKind: "claude",
@@ -239,18 +239,12 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     });
     const { actions, approvalReplies } = createPendingInputActionHarness([parentSession]);
 
-    await actions.replyAgentApproval(
-      toAgentSessionIdentity(parentSession),
-      request,
-      "approve_once",
+    await expect(
+      actions.replyAgentApproval(toAgentSessionIdentity(parentSession), request, "approve_once"),
+    ).rejects.toThrow(
+      "Cannot reply to pending input for session 'claude-child' because its repository context is unavailable.",
     );
-
-    expect(approvalReplies[0]).toMatchObject({
-      repoPath: "/claude/session/repository",
-      externalSessionId: "claude-child",
-      runtimeKind: "claude",
-      workingDirectory: "/claude/session/repository",
-    });
+    expect(approvalReplies).toHaveLength(0);
   });
 
   test("routes a question through the generic host without annotating transcript state locally", async () => {

@@ -208,8 +208,8 @@ describe("useSessionRuntimeData", () => {
   });
 
   test("reads runtime data from the selected session repository", async () => {
-    const loadRuntimeCatalog = mock(async () => emptyCatalog);
-    const readSessionTodos = mock(async () => [todoFixture]);
+    const loadRuntimeCatalog = mock(async () => structuredClone(emptyCatalog));
+    const readSessionTodos = mock(async () => [structuredClone(todoFixture)]);
     const harness = createHookHarness(
       useSessionRuntimeData,
       {
@@ -245,8 +245,8 @@ describe("useSessionRuntimeData", () => {
   });
 
   test("keeps cached selected-session runtime data while runtime readiness drops", async () => {
-    const loadRuntimeCatalog = mock(async () => emptyCatalog);
-    const readSessionTodos = mock(async () => [todoFixture]);
+    const loadRuntimeCatalog = mock(async () => structuredClone(emptyCatalog));
+    const readSessionTodos = mock(async () => [structuredClone(todoFixture)]);
     const readyProps: Parameters<typeof useSessionRuntimeData>[0] = {
       readinessRepoPath: "/repo",
       selectedSession: sessionTarget(),
@@ -604,8 +604,8 @@ describe("useSessionRuntimeData", () => {
   });
 
   test("reads selected-session runtime data without an active repository", async () => {
-    const loadRuntimeCatalog = mock(async () => emptyCatalog);
-    const readSessionTodos = mock(async () => [todoFixture]);
+    const loadRuntimeCatalog = mock(async () => structuredClone(emptyCatalog));
+    const readSessionTodos = mock(async () => [structuredClone(todoFixture)]);
     const harness = createHookHarness(
       useSessionRuntimeData,
       {
