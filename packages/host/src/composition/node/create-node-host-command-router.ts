@@ -35,8 +35,11 @@ import { createTerminalService } from "../../application/terminals/terminal-serv
 import { loadGlobalConfig } from "../../application/workspaces/workspace-settings-model";
 import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import type { GitProviderResolver } from "../../application/git/git-provider-resolver";
-import { HostOperationError, HostResourceError } from "../../effect/host-errors";
-import type { GitProviderRegistrationError } from "../../ports/git-provider-errors";
+import {
+  HostOperationError,
+  HostResourceError,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import { createTerminalLaunchEnvironment } from "../../infrastructure/terminals/terminal-launch-environment";
 import { createAgentSessionLiveCommandHandlers } from "../../interface/commands/agent-session-live-command-handlers";
 import { createClaudeRuntimeCommandHandlers } from "../../interface/commands/claude-runtime-command-handlers";
@@ -326,7 +329,6 @@ const assembleNodeEffectHostCommandRouter = (
 
   let pullRequestSyncLoop: TaskSyncLoopHandle | null = null;
   let taskAssetStagingSwept = false;
-
   const stopPullRequestSyncLoop = () =>
     Effect.gen(function* () {
       if (!pullRequestSyncLoop) {
@@ -342,7 +344,6 @@ const assembleNodeEffectHostCommandRouter = (
       pullRequestSyncLoop = null;
       yield* writeHostLifecycleLog(lifecycleLogger, "info", "Pull request sync loop stopped");
     });
-
   const router = createEffectHostCommandRouter({
     initialize: () =>
       Effect.gen(function* () {
@@ -483,17 +484,16 @@ const assembleNodeEffectHostCommandRouter = (
   });
   return Object.assign(router, { taskAssetReadService, taskEventStream, terminalService });
 };
-
-export const createNodeEffectHostCommandRouter = (
-  input: CreateNodeHostCommandRouterInput,
-): Effect.Effect<EffectNodeHostCommandRouter, GitProviderRegistrationError> => {
-  const defaultPorts = createNodeHostDefaultPorts(input);
-  const providers = createGitProviders({
-    gitPort: defaultPorts.git,
-    systemCommands: defaultPorts.systemCommands,
-    toolDiscovery: defaultPorts.toolDiscovery,
-  });
-  return createNodeGitProviderResolver(providers).pipe(
-    Effect.map((resolver) => assembleNodeEffectHostCommandRouter(input, defaultPorts, resolver)),
+export const createNodeEffectHostCommandRouter = (input: CreateNodeHostCommandRouterInput) =>
+  Effect.try({
+    try: () => createNodeHostDefaultPorts(input),
+    catch: (cause) => toHostOperationError(cause, "host.create-router"),
+  }).pipe(
+    Effect.flatMap((defaultPorts) => {
+      const { git, systemCommands, toolDiscovery } = defaultPorts;
+      const providers = createGitProviders({ gitPort: git, systemCommands, toolDiscovery });
+      return Effect.map(createNodeGitProviderResolver(providers), (resolver) =>
+        assembleNodeEffectHostCommandRouter(input, defaultPorts, resolver),
+      );
+    }),
   );
-};

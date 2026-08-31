@@ -140,9 +140,11 @@ const makeProvider = (
 };
 
 const makeService = ({
+  configuredProviderId,
   pullRequest,
   providers,
 }: {
+  configuredProviderId: GitProviderId;
   pullRequest?: PullRequest;
   providers: GitProviderPort[];
 }) => {
@@ -150,8 +152,7 @@ const makeService = ({
     getTask: () => Effect.succeed(makeTask(pullRequest)),
   };
   const workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath"> = {
-    getRepoConfigByRepoPath: () =>
-      Effect.succeed(makeRepoConfig(pullRequest?.providerId ?? "github")),
+    getRepoConfigByRepoPath: () => Effect.succeed(makeRepoConfig(configuredProviderId)),
   };
   return createPullRequestReviewService({
     resolver: Effect.runSync(createGitProviderResolver(providers)),
@@ -165,6 +166,7 @@ describe("createPullRequestReviewService", () => {
     const githubReadContext = mock(() => Effect.succeed(makeLoadedContext("github")));
     const gitlabReadContext = mock(() => Effect.succeed(makeLoadedContext("gitlab")));
     const service = makeService({
+      configuredProviderId: "gitlab",
       pullRequest: makePullRequest("gitlab"),
       providers: [
         makeProvider("github", githubReadContext),
@@ -184,6 +186,7 @@ describe("createPullRequestReviewService", () => {
   test("does not fall back to another provider for an unsupported linked pull request", async () => {
     const githubReadContext = mock(() => Effect.succeed(makeLoadedContext("github")));
     const service = makeService({
+      configuredProviderId: "gitlab",
       pullRequest: makePullRequest("gitlab"),
       providers: [makeProvider("github", githubReadContext)],
     });
@@ -200,9 +203,35 @@ describe("createPullRequestReviewService", () => {
     expect(githubReadContext).not.toHaveBeenCalled();
   });
 
+  test("does not use a configured provider for another provider's pull request", async () => {
+    const githubReadContext = mock(() => Effect.succeed(makeLoadedContext("github")));
+    const gitlabReadContext = mock(() => Effect.succeed(makeLoadedContext("gitlab")));
+    const service = makeService({
+      configuredProviderId: "github",
+      pullRequest: makePullRequest("gitlab"),
+      providers: [
+        makeProvider("github", githubReadContext),
+        makeProvider("gitlab", gitlabReadContext),
+      ],
+    });
+
+    const context = await Effect.runPromise(
+      service.getContext({ repoPath: "/repo", taskId: "task-1" }),
+    );
+
+    expect(context).toEqual({
+      status: "unavailable",
+      providerId: "gitlab",
+      reason: "Pull request review provider 'gitlab' is not supported.",
+    });
+    expect(githubReadContext).not.toHaveBeenCalled();
+    expect(gitlabReadContext).not.toHaveBeenCalled();
+  });
+
   test("does not invoke any provider for an unlinked task", async () => {
     const githubReadContext = mock(() => Effect.succeed(makeLoadedContext("github")));
     const service = makeService({
+      configuredProviderId: "github",
       providers: [makeProvider("github", githubReadContext)],
     });
 

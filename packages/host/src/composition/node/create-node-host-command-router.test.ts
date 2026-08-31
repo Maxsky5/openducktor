@@ -17,6 +17,7 @@ import {
   type CreateNodeHostCommandRouterInput,
   createNodeEffectHostCommandRouter,
 } from "./create-node-host-command-router";
+import { createNodeHostCommandRouter } from "./create-node-host-command-router-promise";
 import { createLiveSessionFaultLogger } from "./node-host-lifecycle-logger";
 
 const runtimeDistribution = createSourceRuntimeDistribution(
@@ -84,6 +85,19 @@ const createLogger = () => {
   return { errors, infos, logger };
 };
 
+const createFailingRouterInput = (): CreateNodeHostCommandRouterInput => ({
+  mcpBridgeDiscoveryMode: "production",
+  onBackgroundFailure: () => Effect.void,
+  runtimeDistribution: {
+    ...runtimeDistribution,
+    get mode(): typeof runtimeDistribution.mode {
+      throw new Error("Default port setup failed");
+    },
+  },
+  taskEventPublicationReporter: { report: () => Effect.void },
+  terminalPty,
+});
+
 const createRouter = (input: {
   eventBus?: HostEventBusPort;
   logger: HostLifecycleLogger;
@@ -108,6 +122,29 @@ const createRouter = (input: {
 };
 
 describe("createNodeEffectHostCommandRouter", () => {
+  test("returns synchronous setup faults through the Effect channel", async () => {
+    const result = await Effect.runPromise(
+      createNodeEffectHostCommandRouter(createFailingRouterInput()).pipe(Effect.either),
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") {
+      expect(result.left).toEqual(
+        expect.objectContaining({
+          _tag: "HostOperationError",
+          operation: "host.create-router",
+          message: "Default port setup failed",
+        }),
+      );
+    }
+  });
+
+  test("rejects the Promise boundary for synchronous setup faults", async () => {
+    const router = createNodeHostCommandRouter(createFailingRouterInput());
+
+    await expect(router).rejects.toThrow("Default port setup failed");
+  });
+
   test("publishes development discovery from composition mode despite ambient channel", async () => {
     const configDir = await mkdtemp(path.join(tmpdir(), "openducktor-node-host-discovery-"));
     const { logger } = createLogger();

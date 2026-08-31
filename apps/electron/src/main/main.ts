@@ -17,7 +17,6 @@ import {
   createHostEventBus,
   type EffectHostCommandRouter,
   type EffectNodeHostCommandRouter,
-  type GitProviderRegistrationError,
   type HostRuntimeDistribution,
 } from "@openducktor/host";
 import { Effect, Either } from "effect";
@@ -249,9 +248,7 @@ const registerPrivilegedProtocolSchemes = (): void => {
   ]);
 };
 
-const createElectronHostCommandRouter = (
-  runtimeDistribution: HostRuntimeDistribution,
-): Effect.Effect<EffectNodeHostCommandRouter, GitProviderRegistrationError> =>
+const createElectronHostCommandRouter = (runtimeDistribution: HostRuntimeDistribution) =>
   createElectronEffectHostCommandRouter({
     clientVersion: currentVersion,
     eventBus: hostEventBus,
