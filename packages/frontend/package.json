@@ -65,7 +65,7 @@
     "react-dom": "^19.2.8",
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4",
-    "react-router": "^8.3.0",
+    "react-router": "^8.3.1",
     "react-syntax-highlighter": "^16.1.1",
     "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.1",
@@ -79,7 +79,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
-    "@happy-dom/global-registrator": "^20.11.12",
+    "@happy-dom/global-registrator": "^20.11.13",
     "@tailwindcss/typography": "^0.5.20",
     "@testing-library/react": "^16.3.3",
     "@types/mdast": "4.0.4",
