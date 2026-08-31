@@ -14,10 +14,11 @@ type ElectronEditorClipboardIpcMain = Parameters<
 type ElectronEditorClipboardHandler = Parameters<ElectronEditorClipboardIpcMain["handle"]>[1];
 
 describe("Electron editor clipboard IPC", () => {
-  test("reads plain text and Pierre multi-selection data in the main process", () => {
+  test("reads plain text and Pierre multi-selection data in the main process", async () => {
     const handlers = new Map<string, ElectronEditorClipboardHandler>();
-    const read = mock((format: string) => `typed:${format}`);
-    const readText = mock(() => "plain");
+    const getType = mock(async (format: string) => new Blob([`typed:${format}`]));
+    const read = mock(async () => [{ getType, types: [PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE] }]);
+    const readText = mock(async () => "plain");
     registerElectronEditorClipboardIpc({
       clipboard: { read, readText },
       ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
@@ -25,17 +26,29 @@ describe("Electron editor clipboard IPC", () => {
     const handler = handlers.get(ELECTRON_EDITOR_CLIPBOARD_READ_CHANNEL);
 
     expect(handler).toBeFunction();
-    expect(readEditorClipboardText({ read, readText })).toBe("plain");
-    expect(readEditorClipboardText({ read, readText }, PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE)).toBe(
-      `typed:${PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE}`,
+    expect(await readEditorClipboardText({ read, readText })).toBe("plain");
+    expect(
+      await readEditorClipboardText({ read, readText }, PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE),
+    ).toBe(`typed:${PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE}`);
+    expect(getType).toHaveBeenCalledWith(PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE);
+  });
+
+  test("returns empty text when the Pierre multi-selection format is absent", async () => {
+    const clipboard = {
+      read: mock(async () => []),
+      readText: mock(async () => "plain"),
+    };
+
+    expect(await readEditorClipboardText(clipboard, PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE)).toBe(
+      "",
     );
   });
 
-  test("rejects any other renderer-supplied format", () => {
-    const read = mock(() => "not read");
-    const clipboard = { read, readText: mock(() => "plain") };
+  test("rejects any other renderer-supplied format", async () => {
+    const read = mock(async () => []);
+    const clipboard = { read, readText: mock(async () => "plain") };
 
-    expect(() => readEditorClipboardText(clipboard, "text/html")).toThrow(
+    await expect(readEditorClipboardText(clipboard, "text/html")).rejects.toThrow(
       "Unsupported editor clipboard format.",
     );
     expect(read).not.toHaveBeenCalled();
