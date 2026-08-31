@@ -35,6 +35,7 @@ const createTestShellBridge = (overrides: Partial<ShellBridge> = {}): ShellBridg
     canOpenExternalUrls: true,
     canPreviewLocalAttachments: true,
   },
+  notifications: createUnavailableShellBridge().notifications,
   openExternalUrl: async () => {},
   resolveLocalAttachmentPreviewSrc: async () => "asset://preview",
   resolveTaskAssetSrc: async () => "asset://task-preview",

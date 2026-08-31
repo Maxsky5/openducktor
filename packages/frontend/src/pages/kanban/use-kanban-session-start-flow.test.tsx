@@ -700,7 +700,7 @@ describe("useKanbanSessionStartFlow", () => {
         openTaskIds: ["TASK-1"],
       });
       expect(navigate).not.toHaveBeenCalled();
-      expect(toastSuccess).toHaveBeenCalled();
+      expect(toastSuccess).not.toHaveBeenCalled();
 
       await harness.run((state) => {
         state.onDelegate("TASK-1");

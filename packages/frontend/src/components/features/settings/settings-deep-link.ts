@@ -2,10 +2,15 @@ import type { RuntimeKind } from "@openducktor/contracts";
 import type { RepositorySectionId, SettingsSectionId } from "./settings-modal-constants";
 import type { SettingsWorkspaceSelectionPolicy } from "./settings-workspace-selection";
 
-export type SettingsDeepLink = {
-  kind: "repository-dev-servers";
-  repositoryPath: string | null;
-};
+export type SettingsDeepLink =
+  | {
+      kind: "repository-dev-servers";
+      repositoryPath: string | null;
+    }
+  | {
+      kind: "global";
+      section: Exclude<SettingsSectionId, "repositories">;
+    };
 
 export type SettingsContentFocusRequest =
   | { kind: "repository-dev-servers" }
@@ -34,6 +39,11 @@ export type SettingsDeepLinkResolution =
 
 export const resolveSettingsDeepLink = (deepLink: SettingsDeepLink): SettingsDeepLinkResolution => {
   switch (deepLink.kind) {
+    case "global":
+      return {
+        scope: "global",
+        navigation: { section: deepLink.section },
+      };
     case "repository-dev-servers":
       return {
         scope: "repository",

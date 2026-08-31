@@ -4,6 +4,8 @@ import { hostBridge, hostClient } from "@/lib/host-client";
 import { createAgentSessionViewSync } from "@/state/queries/agent-session-view-sync";
 import { getProductionTaskViewSync } from "@/state/queries/task-view-sync";
 import { createTaskStreamController } from "@/state/tasks/task-stream-controller";
+import type { TaskStreamNotificationSink } from "@/state/tasks/task-stream-controller";
+import { useNotificationContext } from "../notifications/notification-context";
 import {
   useAgentSessionsContext,
   useChecksOperationsContext,
@@ -19,6 +21,7 @@ import { type TaskStreamControllerFactory, useAppLifecycle } from "../lifecycle/
 const createProductionTaskStreamController =
   (
     removeTaskSessions: (repoPath: string, taskIds: string[]) => void,
+    notificationSink: TaskStreamNotificationSink,
   ): TaskStreamControllerFactory =>
   ({ queryClient, getActiveRepoPath, onDegraded, onSnapshotFinished, onSnapshotStarted }) =>
     createTaskStreamController({
@@ -32,6 +35,7 @@ const createProductionTaskStreamController =
         refreshLiveSessions: (repoPath) => hostClient.agentSessionLiveRefresh({ repoPath }),
       }),
       getActiveRepoPath,
+      notificationSink,
       onDegraded,
       onSnapshotFinished,
       onSnapshotStarted,
@@ -55,23 +59,27 @@ export function AppLifecycleStateProvider({
   const { refreshTaskStoreCheckForRepo } = useChecksOperationsContext();
   const { loadWorkspaceTasks } = useTaskControlContext();
   const sessionStore = useAgentSessionsContext();
+  const { taskStreamSink } = useNotificationContext();
   const taskStreamControllerFactory = useMemo(
     () =>
-      createProductionTaskStreamController((repoPath, taskIds) => {
-        if (sessionStore.getActivitySnapshot().workspaceRepoPath !== repoPath) {
-          return;
-        }
-        const taskIdSet = new Set(taskIds);
-        for (const session of sessionStore.listSessionSnapshots()) {
-          if (
-            session.sessionAssociation.kind === "workflow" &&
-            taskIdSet.has(session.sessionAssociation.taskId)
-          ) {
-            sessionStore.removeSession(session);
+      createProductionTaskStreamController(
+        (repoPath, taskIds) => {
+          if (sessionStore.getActivitySnapshot().workspaceRepoPath !== repoPath) {
+            return;
           }
-        }
-      }),
-    [sessionStore],
+          const taskIdSet = new Set(taskIds);
+          for (const session of sessionStore.listSessionSnapshots()) {
+            if (
+              session.sessionAssociation.kind === "workflow" &&
+              taskIdSet.has(session.sessionAssociation.taskId)
+            ) {
+              sessionStore.removeSession(session);
+            }
+          }
+        },
+        taskStreamSink,
+      ),
+    [sessionStore, taskStreamSink],
   );
 
   useAppLifecycle({

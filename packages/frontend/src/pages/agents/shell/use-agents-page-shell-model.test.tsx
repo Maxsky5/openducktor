@@ -22,6 +22,10 @@ import {
   TasksStateContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
+import {
+  NotificationContext,
+  type NotificationContextValue,
+} from "@/state/notifications/notification-context";
 import type {
   AgentOperationsContextValue,
   ChecksStateContextValue,
@@ -520,15 +524,41 @@ const runtimeDefinitionsValue = () => ({
   loadRepoRuntimeFileSearch: async () => [],
 });
 
+const notificationContextValue: NotificationContextValue = {
+  osFailure: null,
+  getCapability: async () => ({
+    platform: "unavailable",
+    supported: false,
+    permission: "not_applicable",
+    canGuaranteeSilent: false,
+  }),
+  previewCue: async () => {},
+  testInApp: async () => {},
+  testOs: async () => ({ status: "shown" }),
+  registerNavigator: () => () => {},
+  sessionStartNotifications: {
+    publishSessionStarted: () => {},
+    publishSessionError: () => {},
+    reportFailure: () => {},
+  },
+  taskStreamSink: {
+    onChange: async () => {},
+    onSnapshot: async () => {},
+    onFailure: () => {},
+  },
+};
+
 const AppStateTestWrapper = ({ children }: PropsWithChildren): ReactElement => (
   <WorkspaceStateContext.Provider value={workspaceStateValue()}>
     <ChecksStateContext.Provider value={checksStateValue()}>
       <TasksStateContext.Provider value={tasksState}>
         <AgentOperationsContext.Provider value={agentOperations}>
           <AgentSessionsContext.Provider value={sessionStore}>
-            <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsValue()}>
-              {children}
-            </RuntimeDefinitionsContext.Provider>
+            <NotificationContext.Provider value={notificationContextValue}>
+              <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsValue()}>
+                {children}
+              </RuntimeDefinitionsContext.Provider>
+            </NotificationContext.Provider>
           </AgentSessionsContext.Provider>
         </AgentOperationsContext.Provider>
       </TasksStateContext.Provider>

@@ -6,6 +6,7 @@ import { ElectronOperationError, errorMessage } from "../effect/electron-errors"
 type ElectronAppIdentity = {
   setName(name: string): void;
   setPath(name: "userData" | "sessionData", value: string): void;
+  setAppUserModelId?(id: string): void;
 };
 
 type CreateProfileDirectory = (profilePath: string) => void;
@@ -21,9 +22,12 @@ type ConfigureElectronAppIdentityOptions = {
   createDirectory?: CreateProfileDirectory;
   developmentInstanceId?: string;
   profileKind: ElectronProfileKind;
+  platform?: NodeJS.Platform;
   processEnv?: NodeJS.ProcessEnv;
   resolveConfigDirectory?: ResolveConfigDirectory;
 };
+
+export const OPEN_DUCKTOR_APP_USER_MODEL_ID = "com.openducktor.app";
 
 const createProfileDirectory: CreateProfileDirectory = (profilePath) => {
   mkdirSync(profilePath, { recursive: true });
@@ -59,12 +63,22 @@ export const configureElectronAppIdentity = (
     appName,
     createDirectory = createProfileDirectory,
     developmentInstanceId,
+    platform = process.platform,
     profileKind,
     processEnv = process.env,
     resolveConfigDirectory = resolveOpenDucktorBaseDir,
   }: ConfigureElectronAppIdentityOptions,
 ): void => {
   app.setName(appName);
+  if (platform === "win32") {
+    if (!app.setAppUserModelId) {
+      throw new ElectronOperationError({
+        operation: "electron.app-identity.configure-windows-app-id",
+        message: "Electron cannot configure the Windows app user model ID.",
+      });
+    }
+    app.setAppUserModelId(OPEN_DUCKTOR_APP_USER_MODEL_ID);
+  }
   let profilePath = "";
   try {
     profilePath = resolveElectronProfilePath(

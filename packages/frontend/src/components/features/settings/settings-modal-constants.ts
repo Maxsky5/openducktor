@@ -2,6 +2,7 @@ import type { AgentPromptTemplateId } from "@openducktor/contracts";
 import { agentPromptTemplateIdValues } from "@openducktor/contracts";
 import { listBuiltinAgentPromptTemplates } from "@openducktor/core";
 import {
+  Bell,
   Columns3,
   Cpu,
   FolderGit2,
@@ -24,7 +25,8 @@ export type SettingsSectionId =
   | "appearance"
   | "chat"
   | "kanban"
-  | "autopilot";
+  | "autopilot"
+  | "notifications";
 export type RepositorySectionId = "configuration" | "scripts" | "git" | "agents" | "prompts";
 export type PromptRoleTabId = "shared" | "spec" | "planner" | "build" | "qa";
 
@@ -43,6 +45,7 @@ export const SETTINGS_SECTIONS: ReadonlyArray<{
   { id: "prompts", label: "System Prompts", icon: MessageSquareText },
   { id: "reusable-prompts", label: "Reusable Prompts", icon: MessageSquarePlus },
   { id: "chat", label: "Chat", icon: MessageSquare },
+  { id: "notifications", label: "Notifications", icon: Bell },
   { id: "kanban", label: "Kanban", icon: Columns3 },
   { id: "autopilot", label: "Autopilot", icon: Workflow },
 ];

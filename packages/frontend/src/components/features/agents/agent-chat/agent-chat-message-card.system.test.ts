@@ -81,6 +81,7 @@ describe("AgentChatMessageCard system messages", () => {
     expect(html).toContain("bg-destructive-surface");
     expect(html).toContain("Our servers are currently overloaded. Please try again later.");
     expect(html).toContain("Error");
+    expect(html).toContain('data-notification-attention-kind="error"');
     expect(html).not.toContain("border-cancelled-border");
     expect(html).not.toContain(">System<");
   });

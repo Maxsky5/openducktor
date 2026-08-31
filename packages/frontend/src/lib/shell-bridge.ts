@@ -4,6 +4,11 @@ import type {
   AppUpdateCommandResult,
   AppUpdateState,
   HostEventPayload,
+  NotificationClickEvent,
+  NotificationDeliveryResult,
+  NotificationOccurrence,
+  NotificationOsCapability,
+  NotificationOsDeliveryRequest,
   TaskAssetRenderContext,
   TaskEventCursor,
   TaskEventStreamFrame,
@@ -75,9 +80,22 @@ export type TerminalBridge = {
   ): Promise<TerminalTransportConnection>;
 };
 
+export type NotificationBridge = {
+  getCapability(): Promise<NotificationOsCapability>;
+  requestPermission(): Promise<NotificationOsCapability>;
+  isAppFocused(): Promise<boolean>;
+  isExternalDeliveryOwner(): boolean;
+  showOsNotification(request: NotificationOsDeliveryRequest): Promise<NotificationDeliveryResult>;
+  publishOccurrence(occurrence: NotificationOccurrence): void;
+  subscribeOccurrences(listener: (occurrence: NotificationOccurrence) => void): () => void;
+  subscribeClicks(listener: (event: NotificationClickEvent) => void): () => void;
+  dispose(): void;
+};
+
 export type ShellBridge = HostBridge & {
   appUpdates: AppUpdateBridge;
   capabilities: ShellCapabilities;
+  notifications: NotificationBridge;
   openExternalUrl: (url: string) => Promise<void>;
   resolveLocalAttachmentPreviewSrc: (path: string) => Promise<string>;
   resolveTaskAssetSrc: (context: TaskAssetRenderContext) => Promise<string>;
@@ -151,6 +169,30 @@ export const createUnavailableShellBridge = (): ShellBridge => ({
   capabilities: {
     canOpenExternalUrls: false,
     canPreviewLocalAttachments: false,
+  },
+  notifications: {
+    getCapability: async () => ({
+      platform: "unavailable",
+      supported: false,
+      permission: "not_applicable",
+      canGuaranteeSilent: false,
+    }),
+    requestPermission: async () => ({
+      platform: "unavailable",
+      supported: false,
+      permission: "not_applicable",
+      canGuaranteeSilent: false,
+    }),
+    isAppFocused: async () => false,
+    isExternalDeliveryOwner: () => false,
+    showOsNotification: async () => ({
+      status: "unsupported",
+      message: "OS notifications are unavailable because the OpenDucktor shell is not configured.",
+    }),
+    publishOccurrence: () => {},
+    subscribeOccurrences: () => () => {},
+    subscribeClicks: () => () => {},
+    dispose: () => {},
   },
   openExternalUrl: failUnavailable,
   resolveLocalAttachmentPreviewSrc: failUnavailable,

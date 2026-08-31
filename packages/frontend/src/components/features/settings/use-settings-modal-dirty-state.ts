@@ -5,6 +5,7 @@ export type DirtySections = {
   general: boolean;
   appearance: boolean;
   chat: boolean;
+  notifications: boolean;
   reusablePrompts: boolean;
   globalGit: boolean;
   agentRuntimes?: boolean;
@@ -18,6 +19,7 @@ export const EMPTY_DIRTY_SECTIONS: DirtySections = {
   general: false,
   appearance: false,
   chat: false,
+  notifications: false,
   reusablePrompts: false,
   globalGit: false,
   agentRuntimes: false,

@@ -74,10 +74,35 @@ export type RunSessionStartWorkflow = (
   input: RunSessionStartWorkflowInput,
 ) => Promise<SessionStartWorkflowResult>;
 
+export type SessionStartNotificationInput = {
+  launchAttemptId: string;
+  workspaceId: string | null;
+  taskId: string;
+  taskTitle?: string;
+  role: SessionStartFlowRequest["role"];
+  session?: AgentSessionIdentity;
+};
+
+export type SessionStartNotificationPublisher = {
+  publishSessionStarted(
+    input: SessionStartNotificationInput & { session: AgentSessionIdentity },
+  ): void;
+  publishSessionError(input: SessionStartNotificationInput): void;
+  reportFailure(cause: unknown, input: SessionStartNotificationInput): void;
+};
+
+const notifiedSessionStartFailures = new WeakSet<Error>();
+
+export const wasSessionStartFailureNotified = (cause: unknown): boolean =>
+  cause instanceof Error && notifiedSessionStartFailures.has(cause);
+
 type CreateSessionStartWorkflowRunnerArgs = Pick<
   ExecuteSessionStartFromDecisionArgs,
   "queryClient" | "workspaceId" | "startAgentSession" | "sendAgentMessage"
->;
+> & {
+  notifications?: SessionStartNotificationPublisher;
+  createLaunchAttemptId?: () => string;
+};
 
 const launchActionSupportsReusableSessions = (
   launchActionId: SessionStartFlowRequest["launchActionId"],
@@ -263,8 +288,29 @@ export const createSessionStartWorkflowRunner = ({
   workspaceId,
   startAgentSession,
   sendAgentMessage,
+  notifications,
+  createLaunchAttemptId = () => crypto.randomUUID(),
 }: CreateSessionStartWorkflowRunnerArgs): RunSessionStartWorkflow => {
-  return (input) => {
+  return async (input) => {
+    const launchAttemptId = createLaunchAttemptId();
+    const notificationInput: SessionStartNotificationInput = {
+      launchAttemptId,
+      workspaceId,
+      taskId: input.request.taskId,
+      role: input.request.role,
+    };
+    if (input.task?.title) notificationInput.taskTitle = input.task.title;
+    const reportNotificationFailure = (cause: unknown): void => {
+      try {
+        notifications?.reportFailure(cause, notificationInput);
+      } catch {
+        console.error("Session start notification failure reporting failed.", {
+          launchAttemptId,
+          taskId: input.request.taskId,
+          workspaceId,
+        });
+      }
+    };
     const args: ExecuteSessionStartFromDecisionArgs = {
       ...input,
       queryClient,
@@ -276,6 +322,32 @@ export const createSessionStartWorkflowRunner = ({
       args.sendAgentMessage = sendAgentMessage;
     }
 
-    return executeSessionStartFromDecision(args);
+    let result: SessionStartWorkflowResult;
+    try {
+      result = await executeSessionStartFromDecision(args);
+    } catch (cause) {
+      try {
+        notifications?.publishSessionError(notificationInput);
+        if (notifications && cause instanceof Error) {
+          notifiedSessionStartFailures.add(cause);
+        }
+      } catch (notificationCause) {
+        reportNotificationFailure(notificationCause);
+      }
+      throw cause;
+    }
+
+    const { postStartActionError, ...session } = result;
+    const notificationWithSession = { ...notificationInput, session };
+    try {
+      if (postStartActionError) {
+        notifications?.publishSessionError(notificationWithSession);
+      } else if (input.decision.startMode === "fresh" || input.decision.startMode === "fork") {
+        notifications?.publishSessionStarted(notificationWithSession);
+      }
+    } catch (cause) {
+      reportNotificationFailure(cause);
+    }
+    return result;
   };
 };

@@ -15,6 +15,7 @@ describe("settings modal sidebars", () => {
       chat: 0,
       kanban: 0,
       autopilot: 0,
+      notifications: 0,
     };
 
     const html = renderToStaticMarkup(
@@ -33,6 +34,7 @@ describe("settings modal sidebars", () => {
     expect(html).toContain("Reusable Prompts");
     expect(html).toContain("Appearance");
     expect(html).toContain("Chat");
+    expect(html).toContain("Notifications");
     expect(html).toContain("Kanban");
     expect(html).toContain("Autopilot");
   });
@@ -48,6 +50,7 @@ describe("settings modal sidebars", () => {
       chat: 0,
       kanban: 0,
       autopilot: 0,
+      notifications: 0,
     };
 
     const html = renderToStaticMarkup(
@@ -74,6 +77,7 @@ describe("settings modal sidebars", () => {
       chat: 0,
       kanban: 0,
       autopilot: 0,
+      notifications: 0,
     };
 
     const html = renderToStaticMarkup(
@@ -100,6 +104,7 @@ describe("settings modal sidebars", () => {
       chat: 0,
       kanban: 0,
       autopilot: 0,
+      notifications: 0,
     };
 
     const html = renderToStaticMarkup(
@@ -126,6 +131,7 @@ describe("settings modal sidebars", () => {
       chat: 0,
       kanban: 0,
       autopilot: 0,
+      notifications: 0,
     };
 
     const html = renderToStaticMarkup(

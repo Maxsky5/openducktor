@@ -24,6 +24,10 @@ import {
   WorkspacePresenceContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
+import {
+  NotificationContext,
+  type NotificationContextValue,
+} from "@/state/notifications/notification-context";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import {
   runtimeDefinitionsQueryOptions,
@@ -72,6 +76,30 @@ const activeRepoConfig = {
   agentDefaults: {},
   agentStudioState: { openTaskIds: [] },
 } satisfies RepoConfig;
+
+const notificationContextValue = {
+  osFailure: null,
+  getCapability: async () => ({
+    platform: "unavailable" as const,
+    supported: false,
+    permission: "not_applicable" as const,
+    canGuaranteeSilent: false,
+  }),
+  previewCue: async () => {},
+  testInApp: async () => {},
+  testOs: async () => ({ status: "shown" as const }),
+  registerNavigator: () => () => {},
+  sessionStartNotifications: {
+    publishSessionStarted: () => {},
+    publishSessionError: () => {},
+    reportFailure: () => {},
+  },
+  taskStreamSink: {
+    onChange: async () => {},
+    onSnapshot: async () => {},
+    onFailure: () => {},
+  },
+} satisfies NotificationContextValue;
 
 type MemoryStorageOverrides = {
   getItem?: (key: string) => string | null;
@@ -326,15 +354,17 @@ function AppShellTestEnvironment({
                       <ChecksStateContext.Provider value={createChecksState()}>
                         <TasksStateContext.Provider value={createTasksState()}>
                           <AgentSessionsContext.Provider value={createAgentSessionsStore("/repo")}>
-                            <Routes>
-                              <Route element={<AppShell />}>
-                                <Route path="/kanban" element={<main>Kanban</main>} />
-                                <Route
-                                  path="/onboarding"
-                                  element={<Navigate to="/kanban" replace />}
-                                />
-                              </Route>
-                            </Routes>
+                            <NotificationContext.Provider value={notificationContextValue}>
+                              <Routes>
+                                <Route element={<AppShell />}>
+                                  <Route path="/kanban" element={<main>Kanban</main>} />
+                                  <Route
+                                    path="/onboarding"
+                                    element={<Navigate to="/kanban" replace />}
+                                  />
+                                </Route>
+                              </Routes>
+                            </NotificationContext.Provider>
                           </AgentSessionsContext.Provider>
                         </TasksStateContext.Provider>
                       </ChecksStateContext.Provider>
@@ -551,8 +581,12 @@ describe("AppShell", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
     await screen.findByRole("heading", { name: "Configure coding agents" });
-    fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue to notifications" }));
     fireEvent.click(await screen.findByRole("button", { name: "Continue without a coding agent" }));
+    await screen.findByRole("heading", {
+      name: "Choose how OpenDucktor gets your attention",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
     await screen.findByRole("heading", { name: "Open your first workspace" });
     const selectionActions = await screen.findByTestId("onboarding-workspace-actions");
     const workspaceContent = screen.getByTestId("onboarding-workspace-content");
@@ -561,21 +595,21 @@ describe("AppShell", () => {
     expect(workspaceFooter.parentElement).toBe(workspaceContent.parentElement);
     expect(workspaceFooter.contains(selectionActions)).toBe(true);
     expect(
-      within(workspaceFooter).getByRole("button", { name: "Back to coding agents" }),
+      within(workspaceFooter).getByRole("button", { name: "Back to notifications" }),
     ).toBeTruthy();
     expect(screen.queryByText("Choose a local Git repository to continue.")).toBeNull();
     fireEvent.click(within(workspaceFooter).getByRole("button", { name: "Choose This Folder" }));
     const submitActions = await screen.findByTestId("onboarding-workspace-actions");
     expect(workspaceFooter.contains(submitActions)).toBe(true);
     expect(
-      within(workspaceFooter).getByRole("button", { name: "Back to coding agents" }),
+      within(workspaceFooter).getByRole("button", { name: "Back to notifications" }),
     ).toBeTruthy();
     expect(within(workspaceFooter).getByRole("button", { name: "Open repository" })).toBeTruthy();
     fireEvent.click(await screen.findByRole("button", { name: "Open repository" }));
 
     expect(await screen.findByRole("button", { name: "Opening repository..." })).toBeTruthy();
     expect(
-      screen.getByRole<HTMLButtonElement>("button", { name: "Back to coding agents" }).disabled,
+      screen.getByRole<HTMLButtonElement>("button", { name: "Back to notifications" }).disabled,
     ).toBe(true);
     expect(screen.getByTestId("current-route").textContent).toBe("/onboarding");
     expect(screen.queryByText("Kanban")).toBeNull();
@@ -630,13 +664,17 @@ describe("AppShell", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
     await screen.findByRole("heading", { name: "Configure coding agents" });
-    fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue to notifications" }));
     fireEvent.click(await screen.findByRole("button", { name: "Continue without a coding agent" }));
+    await screen.findByRole("heading", {
+      name: "Choose how OpenDucktor gets your attention",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
     await screen.findByRole("heading", { name: "Open your first workspace" });
     fireEvent.click(await screen.findByRole("button", { name: "Choose This Folder" }));
     fireEvent.click(await screen.findByRole("button", { name: "Open repository" }));
 
-    const backButton = screen.getByRole("button", { name: "Back to coding agents" });
+    const backButton = screen.getByRole("button", { name: "Back to notifications" });
     if (!(backButton instanceof HTMLButtonElement)) {
       throw new TypeError("Expected the back action to be a button.");
     }

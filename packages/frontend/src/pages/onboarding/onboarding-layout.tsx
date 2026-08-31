@@ -1,4 +1,4 @@
-import { Check, Cpu, FolderGit2, Route } from "lucide-react";
+import { Bell, Check, Cpu, FolderGit2, Route } from "lucide-react";
 import {
   type CSSProperties,
   type ReactElement,
@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 
 const APP_VERSION = getAppVersion();
 
-export type OnboardingStage = "welcome" | "runtimes" | "workspace";
+export type OnboardingStage = "welcome" | "runtimes" | "notifications" | "workspace";
 
 const ONBOARDING_STAGES = [
   {
@@ -25,6 +25,11 @@ const ONBOARDING_STAGES = [
     id: "runtimes",
     label: "Coding agents",
     icon: Cpu,
+  },
+  {
+    id: "notifications",
+    label: "Notifications",
+    icon: Bell,
   },
   {
     id: "workspace",
@@ -94,7 +99,7 @@ export function OnboardingLayout({ stage, children }: OnboardingLayoutProps): Re
           aria-label="Onboarding progress"
           data-orientation="horizontal"
         >
-          <ol className="grid grid-cols-3">
+          <ol className="grid grid-cols-4">
             {ONBOARDING_STAGES.map((item, index) => {
               const complete = index < currentStageIndex;
               const current = index === currentStageIndex;

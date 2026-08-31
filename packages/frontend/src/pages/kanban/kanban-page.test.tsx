@@ -13,7 +13,7 @@ import {
 import type { AgentModelCatalog } from "@openducktor/core";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { type RenderResult, render, waitFor } from "@testing-library/react";
-import { act, type ComponentProps, isValidElement, type ReactElement } from "react";
+import { act, type ComponentProps, type ReactElement } from "react";
 import { MemoryRouter, useLocation } from "react-router";
 import { z } from "zod";
 import { hostClient } from "@/lib/host-client";
@@ -35,6 +35,10 @@ import {
   WorkspacePresenceContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
+import {
+  NotificationContext,
+  type NotificationContextValue,
+} from "@/state/notifications/notification-context";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { repositoryGitProviderContextQueryKeys } from "@/state/queries/git-provider-context";
 import { systemQueryKeys } from "@/state/queries/system";
@@ -91,6 +95,9 @@ const toastActionSchema = z.object({
   label: z.string(),
   onClick: z.function(),
 });
+const publishSessionStartedMock = mock(() => {});
+const publishSessionErrorMock = mock(() => {});
+const reportSessionNotificationFailureMock = mock(() => {});
 let toastSpies: Array<{ mockRestore(): void }> = [];
 const loadRepoRuntimeCatalogMock = mock(async (): Promise<AgentModelCatalog> => ({
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -123,6 +130,30 @@ const loadRepoRuntimeCatalogMock = mock(async (): Promise<AgentModelCatalog> => 
     },
   ],
 }));
+
+const notificationContextValue = {
+  osFailure: null,
+  getCapability: async () => ({
+    platform: "unavailable" as const,
+    supported: false,
+    permission: "not_applicable" as const,
+    canGuaranteeSilent: false,
+  }),
+  previewCue: async () => {},
+  testInApp: async () => {},
+  testOs: async () => ({ status: "shown" as const }),
+  registerNavigator: () => () => {},
+  sessionStartNotifications: {
+    publishSessionStarted: publishSessionStartedMock,
+    publishSessionError: publishSessionErrorMock,
+    reportFailure: reportSessionNotificationFailureMock,
+  },
+  taskStreamSink: {
+    onChange: async () => {},
+    onSnapshot: async () => {},
+    onFailure: () => {},
+  },
+} satisfies NotificationContextValue;
 
 type PendingMergedPullRequestFixture = {
   taskId: string;
@@ -595,10 +626,12 @@ const renderPage = async (
                                   loadRepoRuntimeFileSearch: async () => [],
                                 }}
                               >
-                                <MemoryRouter initialEntries={["/"]}>
-                                  <LocationProbe />
-                                  <KanbanModelsProbe />
-                                </MemoryRouter>
+                                <NotificationContext.Provider value={notificationContextValue}>
+                                  <MemoryRouter initialEntries={["/"]}>
+                                    <LocationProbe />
+                                    <KanbanModelsProbe />
+                                  </MemoryRouter>
+                                </NotificationContext.Provider>
                               </RuntimeDefinitionsContext.Provider>
                             </AgentSessionReadModelStateContext.Provider>
                           </AgentOperationsContext.Provider>
@@ -806,6 +839,9 @@ describe("KanbanPage session start modal flow", () => {
     resetTaskMock.mockClear();
     toastSuccessMock.mockClear();
     toastErrorMock.mockClear();
+    publishSessionStartedMock.mockClear();
+    publishSessionErrorMock.mockClear();
+    reportSessionNotificationFailureMock.mockClear();
     loadRepoRuntimeCatalogMock.mockClear();
   });
 
@@ -985,7 +1021,7 @@ describe("KanbanPage session start modal flow", () => {
   });
 
   kanbanTest(
-    "background confirm keeps user on Kanban and shows background success toast",
+    "background confirm keeps user on Kanban and publishes a started notification",
     async () => {
       const renderer = await renderPage();
 
@@ -1005,30 +1041,14 @@ describe("KanbanPage session start modal flow", () => {
       expect(updateAgentSessionModelMock).not.toHaveBeenCalled();
       expect(sendAgentMessageMock).toHaveBeenCalledTimes(1);
       expect(renderer.getLocation()).toBe("/");
-      expect(toastSuccessMock).toHaveBeenCalledWith(
-        "Started Builder session in background for TASK-123.",
+      expect(publishSessionStartedMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          duration: 10000,
+          taskId: "TASK-123",
+          role: "build",
+          session: sessionIdentity("session-1"),
         }),
       );
-      const toastCall = toastSuccessMock.mock.calls.at(0);
-      const toastDescription = toastCall?.[1]?.description;
-      expect(isValidElement(toastDescription)).toBe(true);
-      if (!isValidElement(toastDescription)) {
-        throw new Error("Expected background toast description to render an action element.");
-      }
-      const toastDescriptionRender = render(toastDescription);
-      const actionButton = toastDescriptionRender.container.querySelector("button");
-      if (!actionButton) {
-        throw new Error("Expected background toast action button.");
-      }
-      await act(async () => {
-        actionButton.click();
-        await Promise.resolve();
-      });
-      expect(renderer.getLocation()).toBe("/agents?task=TASK-123&session=session-1&agent=build");
-
-      toastDescriptionRender.unmount();
+      expect(toastSuccessMock).not.toHaveBeenCalled();
 
       await act(async () => {
         renderer.unmount();
@@ -1097,7 +1117,7 @@ describe("KanbanPage session start modal flow", () => {
     },
   );
 
-  kanbanTest("kickoff send failure still reports kickoff error after session start", async () => {
+  kanbanTest("kickoff send failure publishes a session error after session start", async () => {
     sendAgentMessageMock.mockImplementationOnce(async () => {
       throw new Error("config unavailable");
     });
@@ -1117,21 +1137,21 @@ describe("KanbanPage session start modal flow", () => {
     expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
     expect(sendAgentMessageMock).toHaveBeenCalledTimes(1);
     expect(renderer.getLocation()).toBe("/agents?task=TASK-123&session=session-1&agent=build");
-    await waitForMockCall(toastErrorMock);
-    expect(toastErrorMock).toHaveBeenCalledWith(
-      "Session started, but the kickoff prompt failed to send.",
-      {
-        description: "config unavailable",
-      },
+    expect(publishSessionErrorMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: "TASK-123",
+        role: "build",
+        session: sessionIdentity("session-1"),
+      }),
     );
-    expect(toastErrorMock).not.toHaveBeenCalledWith("Failed to start the session.");
+    expect(toastErrorMock).not.toHaveBeenCalled();
 
     await act(async () => {
       renderer.unmount();
     });
   });
 
-  kanbanTest("session start failure shows a single modal-level error toast", async () => {
+  kanbanTest("session start failure publishes one task-level session error", async () => {
     startAgentSessionMock.mockImplementationOnce(async () => {
       throw new Error("Worktree path already exists for task TASK-123");
     });
@@ -1149,11 +1169,11 @@ describe("KanbanPage session start modal flow", () => {
     });
 
     await waitForMockCall(startAgentSessionMock);
-    await waitForMockCall(toastErrorMock);
-    expect(toastErrorMock).toHaveBeenCalledTimes(1);
-    expect(toastErrorMock).toHaveBeenCalledWith("Failed to start the session.", {
-      description: "Worktree path already exists for task TASK-123",
-    });
+    expect(publishSessionErrorMock).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: "TASK-123", role: "build" }),
+    );
+    expect(publishSessionErrorMock.mock.calls.at(0)?.at(0)).not.toHaveProperty("session");
+    expect(toastErrorMock).not.toHaveBeenCalled();
     expect(renderer.getLocation()).toBe("/");
 
     await act(async () => {
@@ -1161,39 +1181,41 @@ describe("KanbanPage session start modal flow", () => {
     });
   });
 
-  kanbanTest("malformed kickoff override prevents starting a session", async () => {
-    currentRepoConfigFixture = createRepoConfigFixture({
-      "kickoff.build_implementation_start": {
-        template: "Kickoff {{unsupported.token}}",
-        baseVersion: 1,
-      },
-    });
+  kanbanTest(
+    "malformed kickoff override prevents start and publishes a session error",
+    async () => {
+      currentRepoConfigFixture = createRepoConfigFixture({
+        "kickoff.build_implementation_start": {
+          template: "Kickoff {{unsupported.token}}",
+          baseVersion: 1,
+        },
+      });
 
-    const renderer = await renderPage();
+      const renderer = await renderPage();
 
-    await act(async () => {
-      renderer.getKanbanColumnProps().onDelegate("TASK-123");
-    });
+      await act(async () => {
+        renderer.getKanbanColumnProps().onDelegate("TASK-123");
+      });
 
-    await confirmSessionStartModal(renderer, {
-      modelId: "openai/gpt-5",
-      profileId: "build-agent",
-      variant: "default",
-    });
+      await confirmSessionStartModal(renderer, {
+        modelId: "openai/gpt-5",
+        profileId: "build-agent",
+        variant: "default",
+      });
 
-    expect(startAgentSessionMock).not.toHaveBeenCalled();
-    expect(sendAgentMessageMock).not.toHaveBeenCalled();
-    expect(renderer.getLocation()).toBe("/");
-    await waitForMockCall(toastErrorMock);
-    expect(toastErrorMock).toHaveBeenCalledWith("Failed to start the session.", {
-      description:
-        'Prompt template "kickoff.build_implementation_start" uses unsupported placeholder "unsupported.token".',
-    });
+      expect(startAgentSessionMock).not.toHaveBeenCalled();
+      expect(sendAgentMessageMock).not.toHaveBeenCalled();
+      expect(renderer.getLocation()).toBe("/");
+      expect(publishSessionErrorMock).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: "TASK-123", role: "build" }),
+      );
+      expect(toastErrorMock).not.toHaveBeenCalled();
 
-    await act(async () => {
-      renderer.unmount();
-    });
-  });
+      await act(async () => {
+        renderer.unmount();
+      });
+    },
+  );
 
   kanbanTest("modal model edits are propagated to session start payload", async () => {
     const renderer = await renderPage();

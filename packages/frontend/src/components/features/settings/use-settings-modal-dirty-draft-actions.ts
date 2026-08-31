@@ -65,6 +65,17 @@ export const useSettingsModalDirtyDraftActions = ({
     [draftActions, runDirtyAction],
   );
 
+  const updateNotificationSettings = useCallback(
+    (
+      updater: (current: SettingsSnapshot["notifications"]) => SettingsSnapshot["notifications"],
+    ): void => {
+      runDirtyAction("notifications", () => {
+        draftActions.updateNotificationSettings(updater);
+      });
+    },
+    [draftActions, runDirtyAction],
+  );
+
   const updateGlobalGeneralSettings = useCallback(
     (updater: (current: SettingsSnapshot["general"]) => SettingsSnapshot["general"]): void => {
       runDirtyAction("general", () => {
@@ -166,6 +177,7 @@ export const useSettingsModalDirtyDraftActions = ({
     updateGlobalGitConfig,
     updateGlobalChatSettings,
     updateGlobalSystemSettings,
+    updateNotificationSettings,
     updateGlobalGeneralSettings,
     updateGlobalAppearanceSettings,
     updateAgentRuntimes,

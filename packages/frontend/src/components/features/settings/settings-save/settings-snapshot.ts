@@ -24,6 +24,7 @@ export const prepareSettingsSnapshotForSave = (
     reusablePrompts: prepareReusablePromptsForSave(snapshot.reusablePrompts),
     kanban: snapshot.kanban,
     autopilot: prepareAutopilotSettingsForSave(snapshot.autopilot),
+    notifications: snapshot.notifications,
     agentRuntimes: snapshot.agentRuntimes,
     agentModelFavorites: snapshot.agentModelFavorites,
     workspaces,

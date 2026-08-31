@@ -99,6 +99,7 @@ export const useSettingsModalPromptValidation = ({
     "reusable-prompts": 0,
     appearance: 0,
     chat: 0,
+    notifications: 0,
     kanban: 0,
     autopilot: 0,
   } satisfies Record<SettingsSectionId, number>;
