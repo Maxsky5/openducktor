@@ -34,6 +34,8 @@ export const agentStudioSelectionQueryKey = (selection: AgentStudioSelectionStat
   [
     selection.taskId,
     agentStudioSelectionSessionExternalId(selection) ?? "",
+    selection.sessionIdentity?.runtimeKind ?? "",
+    selection.sessionIdentity?.workingDirectory ?? "",
     selection.hasExplicitRoleSelection ? selection.role : "",
     selection.hasExplicitRoleSelection ? "role:explicit" : "role:derived",
   ].join("\u001f");
@@ -42,17 +44,34 @@ export const createAgentStudioRouteSelectionState = ({
   isWorkspaceRestorePending,
   taskIdParam,
   sessionExternalIdParam,
+  sessionIdentityFromNavigation = null,
   hasExplicitRoleParam,
   roleFromQuery,
 }: {
   isWorkspaceRestorePending: boolean;
   taskIdParam: string;
   sessionExternalIdParam: string | null;
+  sessionIdentityFromNavigation?: AgentSessionIdentity | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
 }): AgentStudioSelectionState => {
   if (isWorkspaceRestorePending) {
     return emptyAgentStudioSelectionState();
+  }
+
+  if (
+    !taskIdParam &&
+    sessionExternalIdParam &&
+    sessionIdentityFromNavigation?.externalSessionId === sessionExternalIdParam
+  ) {
+    return {
+      taskId: "",
+      sessionExternalId: sessionExternalIdParam,
+      sessionIdentity: sessionIdentityFromNavigation,
+      role: roleFromQuery,
+      hasExplicitRoleSelection: hasExplicitRoleParam,
+      keepSessionless: false,
+    };
   }
 
   return {

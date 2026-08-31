@@ -45,7 +45,13 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
     <article
       className={vm.articleClassName}
       style={vm.articleStyle}
-      {...(isSessionError ? { "data-notification-attention-kind": "error", tabIndex: -1 } : {})}
+      {...(isSessionError
+        ? {
+            "data-notification-attention-kind": "error",
+            "data-notification-attention-id": message.timestamp,
+            tabIndex: -1,
+          }
+        : {})}
     >
       <MessageHeader
         message={message}

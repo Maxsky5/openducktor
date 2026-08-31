@@ -342,6 +342,81 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
+  test("opens an exact repository session from notification route state", async () => {
+    const repositorySession = createAgentSessionFixture({
+      externalSessionId: "repository-session",
+      runtimeKind: "codex",
+      workingDirectory: "/repo/worktrees/repository-session",
+      sessionAssociation: { kind: "repository" },
+      historyLoadState: "loaded",
+    });
+    const selectionState = createAgentStudioRouteSelectionState({
+      isRepoNavigationBoundaryPending: false,
+      taskIdParam: "",
+      sessionExternalIdParam: repositorySession.externalSessionId,
+      sessionIdentityFromNavigation: repositorySession,
+      hasExplicitRoleParam: false,
+      roleFromQuery: "spec",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeWorkspaceId,
+        workspaceRepoPath,
+        taskIdParam: "",
+        sessionExternalIdParam: repositorySession.externalSessionId,
+        selectionState,
+      }),
+    );
+    sessionStore.replaceSession(repositorySession);
+
+    try {
+      await harness.mount();
+
+      const latest = harness.getLatest();
+      expect(latest.activeTaskTabId).toBe("");
+      expect(latest.view.selectedSession.loadedSession).toBe(repositorySession);
+      expect(latest.view.selectedSession.transcriptState).toEqual({ kind: "visible" });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("shows a clear failure for a stale repository session route", async () => {
+    const sessionIdentity = {
+      externalSessionId: "removed-repository-session",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo/worktrees/removed",
+    };
+    const selectionState = createAgentStudioRouteSelectionState({
+      isRepoNavigationBoundaryPending: false,
+      taskIdParam: "",
+      sessionExternalIdParam: sessionIdentity.externalSessionId,
+      sessionIdentityFromNavigation: sessionIdentity,
+      hasExplicitRoleParam: false,
+      roleFromQuery: "spec",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeWorkspaceId,
+        workspaceRepoPath,
+        taskIdParam: "",
+        sessionExternalIdParam: sessionIdentity.externalSessionId,
+        selectionState,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().view.selectedSession.transcriptState).toEqual({
+        kind: "failed",
+        message: 'Agent session "removed-repository-session" was not found for this repository.',
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("surfaces context recovery failure without hiding pending input", async () => {
     const selectedSession = createSession("task-1", "session-with-approval", {
       contextUsage: null,

@@ -82,6 +82,7 @@ describe("AgentChatMessageCard system messages", () => {
     expect(html).toContain("Our servers are currently overloaded. Please try again later.");
     expect(html).toContain("Error");
     expect(html).toContain('data-notification-attention-kind="error"');
+    expect(html).toContain('data-notification-attention-id="2026-02-22T10:21:50.000Z"');
     expect(html).not.toContain("border-cancelled-border");
     expect(html).not.toContain(">System<");
   });

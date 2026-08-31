@@ -137,7 +137,10 @@ export const createSessionOccurrenceProjector = ({
     ];
   };
 
-  const finishErrorEpisode = (projection: SessionProjection): NotificationOccurrence[] => {
+  const finishErrorEpisode = (
+    projection: SessionProjection,
+    errorId: string,
+  ): NotificationOccurrence[] => {
     if (projection.errorNotified) {
       return [];
     }
@@ -146,11 +149,11 @@ export const createSessionOccurrenceProjector = ({
     }
     projection.running = false;
     projection.errorNotified = true;
-    const errorId = `cycle-${projection.cycle}`;
+    const cycleId = `cycle-${projection.cycle}`;
     return [
       sessionOccurrence(projection, {
         kind: "agent.session_error",
-        suffix: errorId,
+        suffix: cycleId,
         status: "Agent Session reported an error.",
         navigationTarget: { type: "session_error", ...sessionTarget(projection), errorId },
       }),
@@ -255,7 +258,7 @@ export const createSessionOccurrenceProjector = ({
       return finishIdleCycle(projection);
     }
     if (event.type === "turn_error" || event.type === "session_error") {
-      return finishErrorEpisode(projection);
+      return finishErrorEpisode(projection, event.timestamp);
     }
     return [];
   };

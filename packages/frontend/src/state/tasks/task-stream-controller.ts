@@ -78,6 +78,7 @@ export const createTaskStreamController = ({
   let awaitingReplayCursor: TaskEventCursor | null = null;
   let pendingSnapshot: Extract<TaskStreamFrame, { type: "snapshot_required" }> | null = null;
   const pendingChanges = new Map<string, Extract<TaskStreamFrame, { type: "change" }>>();
+  let notificationWork = Promise.resolve();
 
   const compareCursor = (left: TaskEventCursor, right: TaskEventCursor): number => {
     if (left.epoch !== right.epoch) {
@@ -113,6 +114,10 @@ export const createTaskStreamController = ({
         // Notification reporting must not block task-stream acknowledgement.
       }
     }
+  };
+
+  const enqueueNotificationSink = (operation: () => Promise<void>): void => {
+    notificationWork = notificationWork.then(() => runNotificationSink(operation));
   };
 
   const close = (owner: OwnedSubscription): Promise<void> => {
@@ -170,7 +175,7 @@ export const createTaskStreamController = ({
       taskViewSync.reconcileExternalEvent(frame.event, getActiveRepoPath()),
       agentSessionViewSync.reconcileExternalEvent(frame.event),
     ]);
-    await runNotificationSink(() => notificationSink?.onChange(frame.event) ?? Promise.resolve());
+    enqueueNotificationSink(() => notificationSink?.onChange(frame.event) ?? Promise.resolve());
     if (!isActive(owner, frameGeneration)) return false;
     processedCursor = frame.cursor;
     return acknowledge(owner, frame.cursor, frameGeneration);
@@ -188,7 +193,7 @@ export const createTaskStreamController = ({
     try {
       const taskIds = await taskViewSync.reconcileStreamSnapshot(activeRepoPath);
       await agentSessionViewSync.reconcileStreamSnapshot(activeRepoPath, taskIds);
-      await runNotificationSink(() => notificationSink?.onSnapshot() ?? Promise.resolve());
+      enqueueNotificationSink(() => notificationSink?.onSnapshot() ?? Promise.resolve());
       succeeded = true;
     } finally {
       onSnapshotFinished?.(activeRepoPath, succeeded);
