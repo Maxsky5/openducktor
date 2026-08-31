@@ -1,6 +1,5 @@
 import type {
   AgentRuntimes,
-  NotificationOsCapability,
   NotificationSettings,
   RuntimeDescriptor,
   RuntimeKind,
@@ -16,7 +15,7 @@ import {
   LoaderCircle,
   RefreshCw,
 } from "lucide-react";
-import { type ReactElement, type RefObject, useEffect, useState } from "react";
+import type { ReactElement, RefObject } from "react";
 import {
   FolderPickerCancelAction,
   FolderPickerConfirmAction,
@@ -36,7 +35,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import type { RuntimeExecutableValidationResult } from "@/state/queries/use-runtime-executable-validation";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
-import { useNotificationContext } from "@/state/notifications/notification-context";
+import { useNotificationTestControls } from "@/state/notifications/use-notification-test-controls";
 
 const SETUP_STEPS = [
   {
@@ -316,66 +315,13 @@ type NotificationsStageProps = {
   onContinue: () => void;
 };
 
-const describeOsCapability = (capability: NotificationOsCapability | null): string => {
-  if (!capability) return "Checking OS notification support…";
-  if (!capability.supported) {
-    return capability.failureMessage ?? "OS notifications are unavailable on this device.";
-  }
-  if (capability.permission === "prompt") {
-    return "OpenDucktor will ask for permission only when you test OS notifications.";
-  }
-  return "OS notifications are available on this device.";
-};
-
 export function NotificationsStage({
   notifications,
   onBack,
   onContinue,
 }: NotificationsStageProps): ReactElement {
-  const runtime = useNotificationContext();
-  const [capability, setCapability] = useState<NotificationOsCapability | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
-  const [isTesting, setIsTesting] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    void runtime
-      .getCapability()
-      .then((next) => {
-        if (active) setCapability(next);
-      })
-      .catch((cause) => {
-        if (active) setStatus(cause instanceof Error ? cause.message : String(cause));
-      });
-    return () => {
-      active = false;
-    };
-  }, [runtime]);
-
-  const testNotification = async (target: "in_app" | "os"): Promise<void> => {
-    if (!notifications) {
-      setStatus("Notification settings are unavailable. Go back and retry setup.");
-      return;
-    }
-    setIsTesting(true);
-    setStatus(null);
-    try {
-      if (target === "in_app") {
-        await runtime.testInApp(notifications);
-        setStatus("In-app test sent.");
-      } else {
-        const result = await runtime.testOs(notifications);
-        setCapability(await runtime.getCapability());
-        setStatus(result.status === "shown" ? "OS test sent." : result.message);
-      }
-    } catch (cause) {
-      setStatus(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setIsTesting(false);
-    }
-  };
-
-  const osDescription = describeOsCapability(capability);
+  const { capability, capabilityDescription, isTesting, status, testNotification } =
+    useNotificationTestControls(notifications);
 
   return (
     <Card className="flex min-h-[34rem] flex-col overflow-hidden shadow-sm">
@@ -410,7 +356,9 @@ export function NotificationsStage({
           <div>
             <BellRing className="size-5 text-muted-foreground" aria-hidden="true" />
             <h3 className="mt-4 font-semibold text-foreground">OS notifications</h3>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{osDescription}</p>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              {capabilityDescription}
+            </p>
             {capability?.supported && !capability.canGuaranteeSilent ? (
               <p className="mt-2 text-xs text-warning-muted">
                 This platform cannot guarantee silent OS delivery.
