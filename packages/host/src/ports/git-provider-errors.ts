@@ -20,7 +20,8 @@ export class GitProviderResolutionError extends Data.TaggedError("GitProviderRes
 export type GitProviderRegistrationFailureReason =
   | "duplicate_provider_id"
   | "declared_capability_missing_port"
-  | "undeclared_capability_has_port";
+  | "undeclared_capability_has_port"
+  | "capability_provider_id_mismatch";
 
 export class GitProviderRegistrationError extends Data.TaggedError("GitProviderRegistrationError")<{
   readonly reason: GitProviderRegistrationFailureReason;

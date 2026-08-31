@@ -1,4 +1,5 @@
 import { GithubProviderAdapter } from "../../adapters/git-providers/github-provider-adapter";
+import { Effect } from "effect";
 import {
   createGitProviderResolver,
   type GitProviderResolver,
@@ -18,5 +19,7 @@ export const createNodeGitProviderResolver = ({
   toolDiscovery: ToolDiscoveryPort;
 }): GitProviderResolver => {
   const githubDependencies = createGithubCommandDependencies({ systemCommands, toolDiscovery });
-  return createGitProviderResolver([new GithubProviderAdapter({ githubDependencies, gitPort })]);
+  return Effect.runSync(
+    createGitProviderResolver([new GithubProviderAdapter({ githubDependencies, gitPort })]),
+  );
 };

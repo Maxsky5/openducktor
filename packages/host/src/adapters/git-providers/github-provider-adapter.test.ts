@@ -14,7 +14,7 @@ describe("GithubProviderAdapter", () => {
         Effect.die("GitHub command execution is not expected in resolver composition"),
       ),
     });
-    const resolver = createGitProviderResolver([github]);
+    const resolver = await Effect.runPromise(createGitProviderResolver([github]));
     const config = repoConfigSchema.parse({
       workspaceId: "repo",
       workspaceName: "Repo",

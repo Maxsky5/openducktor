@@ -154,7 +154,7 @@ const makeService = ({
       Effect.succeed(makeRepoConfig(pullRequest?.providerId ?? "github")),
   };
   return createPullRequestReviewService({
-    resolver: createGitProviderResolver(providers),
+    resolver: Effect.runSync(createGitProviderResolver(providers)),
     taskReader,
     workspaceSettingsService,
   });

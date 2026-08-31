@@ -13,6 +13,7 @@ import {
   GitProviderRegistrationError,
   GitProviderResolutionError,
   createGitProviderResolver,
+  type GitProviderResolver,
 } from "./git-provider-resolver";
 
 const unexpectedPortCall = <Success>(): Effect.Effect<Success, never> =>
@@ -31,7 +32,7 @@ const pullRequestPort: PullRequestProviderPort = {
   upsert: () => unexpectedPortCall(),
 };
 const pullRequestReviewPort: PullRequestReviewProviderPort = {
-  providerId: "test",
+  providerId: "github",
   readContext: () => unexpectedPortCall(),
 };
 
@@ -57,34 +58,44 @@ const provider = ({
   providerDescriptor,
   pullRequests,
   pullRequestReview,
+  asyncCapabilityAccess = false,
 }: {
   providerDescriptor: GitProviderDescriptor;
   pullRequests?: PullRequestProviderPort;
   pullRequestReview?: PullRequestReviewProviderPort;
+  asyncCapabilityAccess?: boolean;
 }): GitProviderPort => ({
   getDescriptor: () => providerDescriptor,
   repository: () => repositoryPort,
   health: () => healthPort,
-  pullRequests: () =>
-    pullRequests
-      ? Effect.succeed(pullRequests)
-      : Effect.fail(
-          new GitProviderCapabilityError({
-            providerId: providerDescriptor.id,
-            capability: "pull_requests",
-            message: `Provider '${providerDescriptor.id}' does not support Pull Requests.`,
-          }),
-        ),
-  pullRequestReview: () =>
-    pullRequestReview
-      ? Effect.succeed(pullRequestReview)
-      : Effect.fail(
-          new GitProviderCapabilityError({
-            providerId: providerDescriptor.id,
-            capability: "pull_request_review",
-            message: `Provider '${providerDescriptor.id}' does not support Pull Request review.`,
-          }),
-        ),
+  pullRequests: () => {
+    if (pullRequests) {
+      return asyncCapabilityAccess
+        ? Effect.promise(() => Promise.resolve(pullRequests))
+        : Effect.succeed(pullRequests);
+    }
+    return Effect.fail(
+      new GitProviderCapabilityError({
+        providerId: providerDescriptor.id,
+        capability: "pull_requests",
+        message: `Provider '${providerDescriptor.id}' does not support Pull Requests.`,
+      }),
+    );
+  },
+  pullRequestReview: () => {
+    if (pullRequestReview) {
+      return asyncCapabilityAccess
+        ? Effect.promise(() => Promise.resolve(pullRequestReview))
+        : Effect.succeed(pullRequestReview);
+    }
+    return Effect.fail(
+      new GitProviderCapabilityError({
+        providerId: providerDescriptor.id,
+        capability: "pull_request_review",
+        message: `Provider '${providerDescriptor.id}' does not support Pull Request review.`,
+      }),
+    );
+  },
 });
 
 const repoConfig = (providerConfig?: { id: string; enabled: boolean }) =>
@@ -96,14 +107,18 @@ const repoConfig = (providerConfig?: { id: string; enabled: boolean }) =>
     git: providerConfig ? { provider: providerConfig } : {},
   });
 
-const resolveEither = (
-  resolver: ReturnType<typeof createGitProviderResolver>,
-  config: ReturnType<typeof repoConfig>,
-) => Effect.runPromise(resolver.resolve(config).pipe(Effect.either));
+const resolveEither = (resolver: GitProviderResolver, config: ReturnType<typeof repoConfig>) =>
+  Effect.runPromise(resolver.resolve(config).pipe(Effect.either));
+
+const createResolverSync = (providers: readonly GitProviderPort[]) =>
+  Effect.runSync(createGitProviderResolver(providers));
+
+const registrationEither = (providers: readonly GitProviderPort[]) =>
+  Effect.runPromise(createGitProviderResolver(providers).pipe(Effect.either));
 
 describe("createGitProviderResolver", () => {
   test("fails with a typed error when no provider is configured", async () => {
-    const resolver = createGitProviderResolver([]);
+    const resolver = createResolverSync([]);
 
     const result = await resolveEither(resolver, repoConfig());
 
@@ -117,7 +132,7 @@ describe("createGitProviderResolver", () => {
 
   test("fails with a typed error when the configured provider is disabled", async () => {
     const github = provider({ providerDescriptor: descriptor({ id: "github" }) });
-    const resolver = createGitProviderResolver([github]);
+    const resolver = createResolverSync([github]);
 
     const result = await resolveEither(resolver, repoConfig({ id: "github", enabled: false }));
 
@@ -131,7 +146,7 @@ describe("createGitProviderResolver", () => {
 
   test("fails with a typed error when the configured provider is not registered", async () => {
     const github = provider({ providerDescriptor: descriptor({ id: "github" }) });
-    const resolver = createGitProviderResolver([github]);
+    const resolver = createResolverSync([github]);
 
     const result = await resolveEither(resolver, repoConfig({ id: "gitlab", enabled: true }));
 
@@ -146,7 +161,7 @@ describe("createGitProviderResolver", () => {
   test("resolves the exact configured GitHub provider", async () => {
     const github = provider({ providerDescriptor: descriptor({ id: "github" }) });
     const other = provider({ providerDescriptor: descriptor({ id: "gitlab" }) });
-    const resolver = createGitProviderResolver([other, github]);
+    const resolver = createResolverSync([other, github]);
 
     const resolved = await Effect.runPromise(
       resolver.resolve(repoConfig({ id: "github", enabled: true })),
@@ -158,7 +173,7 @@ describe("createGitProviderResolver", () => {
   test("copies the registered provider collection", async () => {
     const github = provider({ providerDescriptor: descriptor({ id: "github" }) });
     const registrations: GitProviderPort[] = [github];
-    const resolver = createGitProviderResolver(registrations);
+    const resolver = createResolverSync(registrations);
     registrations.push(provider({ providerDescriptor: descriptor({ id: "gitlab" }) }));
 
     const result = await resolveEither(resolver, repoConfig({ id: "gitlab", enabled: true }));
@@ -169,11 +184,67 @@ describe("createGitProviderResolver", () => {
     }
   });
 
-  test("rejects duplicate descriptor IDs", () => {
+  test("rejects duplicate descriptor IDs", async () => {
     const first = provider({ providerDescriptor: descriptor({ id: "github" }) });
     const second = provider({ providerDescriptor: descriptor({ id: "github" }) });
 
-    expect(() => createGitProviderResolver([first, second])).toThrow(GitProviderRegistrationError);
+    const result = await registrationEither([first, second]);
+
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") {
+      expect(result.left).toBeInstanceOf(GitProviderRegistrationError);
+      expect(result.left.reason).toBe("duplicate_provider_id");
+    }
+  });
+
+  test("rejects a review port owned by another provider", async () => {
+    const foreignReviewPort: PullRequestReviewProviderPort = {
+      providerId: "gitlab",
+      readContext: () => unexpectedPortCall(),
+    };
+    const github = provider({
+      providerDescriptor: descriptor({
+        id: "github",
+        supportsPullRequests: true,
+        supportsPullRequestReview: true,
+      }),
+      pullRequests: pullRequestPort,
+      pullRequestReview: foreignReviewPort,
+    });
+
+    const result = await registrationEither([github]);
+
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") {
+      expect(result.left).toEqual(
+        expect.objectContaining({
+          _tag: "GitProviderRegistrationError",
+          reason: "capability_provider_id_mismatch",
+          capability: "pull_request_review",
+          providerId: "github",
+        }),
+      );
+    }
+  });
+
+  test("accepts asynchronous capability accessors", async () => {
+    const github = provider({
+      providerDescriptor: descriptor({
+        id: "github",
+        supportsPullRequests: true,
+        supportsPullRequestReview: true,
+      }),
+      pullRequests: pullRequestPort,
+      pullRequestReview: pullRequestReviewPort,
+      asyncCapabilityAccess: true,
+    });
+
+    const resolver = await Effect.runPromise(createGitProviderResolver([github]));
+    const resolved = await Effect.runPromise(
+      resolver.resolve(repoConfig({ id: "github", enabled: true })),
+    );
+
+    expect(resolved).toBe(github);
   });
 
   test.each([
@@ -215,7 +286,7 @@ describe("createGitProviderResolver", () => {
     },
   ])(
     "rejects $name",
-    ({ providerDescriptor, pullRequests, pullRequestReview, reason, capability }) => {
+    async ({ providerDescriptor, pullRequests, pullRequestReview, reason, capability }) => {
       const providerInput: Parameters<typeof provider>[0] = { providerDescriptor };
       if (pullRequests) {
         providerInput.pullRequests = pullRequests;
@@ -225,20 +296,25 @@ describe("createGitProviderResolver", () => {
       }
       const invalidProvider = provider(providerInput);
 
-      expect(() => createGitProviderResolver([invalidProvider])).toThrow(
-        expect.objectContaining({
-          _tag: "GitProviderRegistrationError",
-          reason,
-          capability,
-          providerId: "github",
-        }),
-      );
+      const result = await registrationEither([invalidProvider]);
+
+      expect(result._tag).toBe("Left");
+      if (result._tag === "Left") {
+        expect(result.left).toEqual(
+          expect.objectContaining({
+            _tag: "GitProviderRegistrationError",
+            reason,
+            capability,
+            providerId: "github",
+          }),
+        );
+      }
     },
   );
 
   test("unsupported capability access fails with a typed error", async () => {
     const basicProvider = provider({ providerDescriptor: descriptor({ id: "basic" }) });
-    const resolver = createGitProviderResolver([basicProvider]);
+    const resolver = createResolverSync([basicProvider]);
     const resolved = await Effect.runPromise(
       resolver.resolve(repoConfig({ id: "basic", enabled: true })),
     );
