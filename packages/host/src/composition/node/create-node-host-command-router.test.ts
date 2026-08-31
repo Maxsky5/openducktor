@@ -104,28 +104,30 @@ const createRouter = (input: {
   if (input.eventBus) {
     routerInput.eventBus = input.eventBus;
   }
-  return createNodeEffectHostCommandRouter(routerInput);
+  return Effect.runSync(createNodeEffectHostCommandRouter(routerInput));
 };
 
 describe("createNodeEffectHostCommandRouter", () => {
   test("publishes development discovery from composition mode despite ambient channel", async () => {
     const configDir = await mkdtemp(path.join(tmpdir(), "openducktor-node-host-discovery-"));
     const { logger } = createLogger();
-    const router = createNodeEffectHostCommandRouter({
-      lifecycleLogger: logger,
-      mcpBridgeDiscoveryMode: "development",
-      onBackgroundFailure: () => Effect.void,
-      processEnv: {
-        OPENDUCKTOR_CHANNEL: "production",
-        OPENDUCKTOR_CONFIG_DIR: configDir,
-        OPENDUCKTOR_DEV_INSTANCE: "browser-0123456789ab",
-      },
-      runtimeDistribution,
-      runtimeRegistry: createRuntimeRegistry(),
-      taskEventPublicationReporter: { report: () => Effect.void },
-      taskStore: createTaskStoreTestDouble({}),
-      terminalPty,
-    });
+    const router = Effect.runSync(
+      createNodeEffectHostCommandRouter({
+        lifecycleLogger: logger,
+        mcpBridgeDiscoveryMode: "development",
+        onBackgroundFailure: () => Effect.void,
+        processEnv: {
+          OPENDUCKTOR_CHANNEL: "production",
+          OPENDUCKTOR_CONFIG_DIR: configDir,
+          OPENDUCKTOR_DEV_INSTANCE: "browser-0123456789ab",
+        },
+        runtimeDistribution,
+        runtimeRegistry: createRuntimeRegistry(),
+        taskEventPublicationReporter: { report: () => Effect.void },
+        taskStore: createTaskStoreTestDouble({}),
+        terminalPty,
+      }),
+    );
 
     try {
       await Effect.runPromise(router.initialize());

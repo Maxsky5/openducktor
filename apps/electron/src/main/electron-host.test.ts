@@ -665,7 +665,7 @@ describe("createElectronHostCommandRouter", () => {
       descriptor: createRuntimeDefinitionsService().listRuntimeDefinitions()[0],
     } satisfies RuntimeInstanceSummary;
     try {
-      const router = createElectronHostCommandRouter({
+      const router = await createElectronHostCommandRouter({
         lifecycleLogger: {
           info(message) {
             return Effect.sync(() => lifecycleLogs.push(message));
@@ -720,7 +720,7 @@ describe("createElectronHostCommandRouter", () => {
   });
 
   test("registers migrated filesystem host commands", async () => {
-    const router = createElectronHostCommandRouter({
+    const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
@@ -741,7 +741,7 @@ describe("createElectronHostCommandRouter", () => {
   });
 
   test("registers migrated workspace settings host commands", async () => {
-    const router = createElectronHostCommandRouter({
+    const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
@@ -756,7 +756,7 @@ describe("createElectronHostCommandRouter", () => {
   });
 
   test("registers migrated local attachment host commands", async () => {
-    const router = createElectronHostCommandRouter({
+    const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       localAttachments: createLocalAttachments(),
@@ -815,7 +815,7 @@ describe("createElectronHostCommandRouter", () => {
         }),
     };
     const runtimeRegistry = createRuntimeRegistry({ workspaceStarter });
-    const router = createElectronHostCommandRouter({
+    const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
@@ -893,7 +893,7 @@ describe("createElectronHostCommandRouter", () => {
 
   test("registers migrated passive dev server state command", async () => {
     const { eventBus, events } = createEventBus();
-    const router = createElectronHostCommandRouter({
+    const router = await createElectronHostCommandRouter({
       devServerProcesses: createDevServerProcesses(),
       eventBus,
       filesystem: createFilesystem(),
@@ -982,7 +982,7 @@ describe("createElectronHostCommandRouter", () => {
   });
 
   test("registers migrated read-only git host commands", async () => {
-    const router = createElectronHostCommandRouter({
+    const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
@@ -1115,7 +1115,7 @@ describe("createElectronHostCommandRouter", () => {
   });
 
   test("registers migrated open-in system host commands", async () => {
-    const router = createElectronHostCommandRouter({
+    const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
@@ -1139,7 +1139,7 @@ describe("createElectronHostCommandRouter", () => {
   });
 
   test("registers migrated GitHub repository detection command", async () => {
-    const router = createElectronHostCommandRouter({
+    const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
@@ -1158,7 +1158,7 @@ describe("createElectronHostCommandRouter", () => {
   });
 
   test("registers migrated diagnostics host commands", async () => {
-    const router = createElectronHostCommandRouter({
+    const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
@@ -1185,7 +1185,7 @@ describe("createElectronHostCommandRouter", () => {
   });
 
   test("registers migrated task list host command", async () => {
-    const router = createElectronHostCommandRouter({
+    const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
@@ -1329,7 +1329,7 @@ describe("createElectronHostCommandRouter", () => {
       probeMcpStatus: () => Effect.dieMessage("unexpected MCP probe"),
     };
     const sessionTaskStore = createTaskStore();
-    const sessionStopRouter = createElectronHostCommandRouter({
+    const sessionStopRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
@@ -1426,7 +1426,7 @@ describe("createElectronHostCommandRouter", () => {
       updatedAt: "2026-01-02T00:00:00Z",
       revision: 1,
     });
-    const deleteRouter = createElectronHostCommandRouter({
+    const deleteRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
@@ -1454,7 +1454,7 @@ describe("createElectronHostCommandRouter", () => {
       }),
     ).resolves.toMatchObject({ id: "task-1", status: "open" });
     const resetImplementationTaskStore = createTaskStore();
-    const resetImplementationRouter = createElectronHostCommandRouter({
+    const resetImplementationRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
@@ -1491,7 +1491,7 @@ describe("createElectronHostCommandRouter", () => {
       }),
     ).resolves.toMatchObject({ id: "task-1", status: "ready_for_dev" });
     const pullRequestTaskStore = createTaskStore();
-    const pullRequestRouter = createElectronHostCommandRouter({
+    const pullRequestRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
@@ -1525,7 +1525,7 @@ describe("createElectronHostCommandRouter", () => {
       }),
     ).resolves.toBe(true);
 
-    const approvalRouter = createElectronHostCommandRouter({
+    const approvalRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
@@ -1576,7 +1576,7 @@ describe("createElectronHostCommandRouter", () => {
       },
     });
 
-    const detectPullRequestRouter = createElectronHostCommandRouter({
+    const detectPullRequestRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
@@ -1653,7 +1653,7 @@ describe("createElectronHostCommandRouter", () => {
       },
     });
 
-    const upsertPullRequestRouter = createElectronHostCommandRouter({
+    const upsertPullRequestRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: {
         ...createGit(),
@@ -1740,7 +1740,7 @@ describe("createElectronHostCommandRouter", () => {
       state: "open",
     });
 
-    const pullRequestSyncRouter = createElectronHostCommandRouter({
+    const pullRequestSyncRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
@@ -1851,7 +1851,7 @@ describe("createElectronHostCommandRouter", () => {
       }),
     ).resolves.toEqual({ ok: true });
 
-    const reviewRouter = createElectronHostCommandRouter({
+    const reviewRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
@@ -2006,7 +2006,7 @@ describe("createElectronHostCommandRouter", () => {
       status: "closed",
     });
 
-    const directMergeStartRouter = createElectronHostCommandRouter({
+    const directMergeStartRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: {
         ...createGit(),
@@ -2104,7 +2104,7 @@ describe("createElectronHostCommandRouter", () => {
       availableActions: expect.arrayContaining(["open_builder"]),
     });
 
-    const completionRouter = createElectronHostCommandRouter({
+    const completionRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
@@ -2183,7 +2183,7 @@ describe("createElectronHostCommandRouter", () => {
       availableActions: expect.arrayContaining(["qa_start"]),
     });
 
-    const directMergeRouter = createElectronHostCommandRouter({
+    const directMergeRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
@@ -2269,7 +2269,7 @@ describe("createElectronHostCommandRouter", () => {
       status: "closed",
     });
 
-    const mergedPullRequestRouter = createElectronHostCommandRouter({
+    const mergedPullRequestRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
@@ -2352,7 +2352,7 @@ describe("createElectronHostCommandRouter", () => {
       status: "closed",
     });
 
-    const blockRouter = createElectronHostCommandRouter({
+    const blockRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
@@ -2478,7 +2478,7 @@ describe("createElectronHostCommandRouter", () => {
       },
       pathIsWithinRoot: () => Effect.succeed(true),
     };
-    const router = createElectronHostCommandRouter({
+    const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),

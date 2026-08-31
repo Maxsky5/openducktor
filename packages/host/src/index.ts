@@ -52,9 +52,9 @@ export {
 export {
   type CreateNodeHostCommandRouterInput,
   createNodeEffectHostCommandRouter,
-  createNodeHostCommandRouter,
   type EffectNodeHostCommandRouter,
 } from "./composition/node/create-node-host-command-router";
+export { createNodeHostCommandRouter } from "./composition/node/create-node-host-command-router-promise";
 export {
   type DevelopmentInstanceMode,
   OPENDUCKTOR_DEV_INSTANCE_ENV,

@@ -34,7 +34,9 @@ import { createTaskWorktreeService } from "../../application/tasks/worktrees/tas
 import { createTerminalService } from "../../application/terminals/terminal-service";
 import { loadGlobalConfig } from "../../application/workspaces/workspace-settings-model";
 import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
+import type { GitProviderResolver } from "../../application/git/git-provider-resolver";
 import { HostOperationError, HostResourceError } from "../../effect/host-errors";
+import type { GitProviderRegistrationError } from "../../ports/git-provider-errors";
 import { createTerminalLaunchEnvironment } from "../../infrastructure/terminals/terminal-launch-environment";
 import { createAgentSessionLiveCommandHandlers } from "../../interface/commands/agent-session-live-command-handlers";
 import { createClaudeRuntimeCommandHandlers } from "../../interface/commands/claude-runtime-command-handlers";
@@ -56,11 +58,7 @@ import { createTaskWorktreeCommandHandlers } from "../../interface/commands/task
 import { createTerminalCommandHandlers } from "../../interface/commands/terminal-command-handlers";
 import { createWorkspaceFilesCommandHandlers } from "../../interface/commands/workspace-files-command-handlers";
 import { createWorkspaceSettingsCommandHandlers } from "../../interface/commands/workspace-settings-command-handlers";
-import {
-  createEffectHostCommandRouter,
-  type HostCommandRouter,
-  toPromiseHostCommandRouter,
-} from "../../interface/router/host-command-router";
+import { createEffectHostCommandRouter } from "../../interface/router/host-command-router";
 import {
   createStopDevServersStep,
   createStopMcpHostBridgeStep,
@@ -76,7 +74,7 @@ import type {
 } from "./node-host-command-router-types";
 import { createNodeHostDefaultPorts } from "./node-host-default-ports";
 import { createLiveSessionFaultLogger, defaultLifecycleLogger } from "./node-host-lifecycle-logger";
-import { createNodeGitProviderResolver } from "./git-provider-composition";
+import { createDefaultNodeGitProviderResolver } from "./git-provider-composition";
 import { createNodeRuntimeExecutableCommandHandlers } from "./node-runtime-executable-command-handlers";
 import { createNodeTaskAssetServices } from "./node-task-asset-services";
 import { createNodeTaskEventServices } from "./node-task-event-services";
@@ -85,8 +83,10 @@ import { resolveWorkspaceRuntimeMcpBridgeConnection } from "./workspace-runtime-
 
 export type { CreateNodeHostCommandRouterInput, EffectNodeHostCommandRouter };
 
-export const createNodeEffectHostCommandRouter = (
+const assembleNodeEffectHostCommandRouter = (
   input: CreateNodeHostCommandRouterInput,
+  defaultPorts: ReturnType<typeof createNodeHostDefaultPorts>,
+  gitProviderResolver: GitProviderResolver,
 ): EffectNodeHostCommandRouter => {
   const {
     clientVersion,
@@ -115,7 +115,7 @@ export const createNodeEffectHostCommandRouter = (
     terminalPty,
     toolDiscovery,
     worktreeFiles,
-  } = createNodeHostDefaultPorts(input);
+  } = defaultPorts;
   const codexAppServerService = createCodexAppServerService(effectiveCodexAppServer);
   const liveSessionAdapterRegistry = createLiveSessionAdapterRegistry();
   const agentSessionLiveStateService = createAgentSessionLiveStateService({
@@ -306,11 +306,6 @@ export const createNodeEffectHostCommandRouter = (
     taskService,
     workspaceSettingsService,
   });
-  const gitProviderResolver = createNodeGitProviderResolver({
-    gitPort: git,
-    systemCommands,
-    toolDiscovery,
-  });
   const pullRequestReviewService = createPullRequestReviewService({
     resolver: gitProviderResolver,
     taskReader: taskStore,
@@ -489,6 +484,15 @@ export const createNodeEffectHostCommandRouter = (
   return Object.assign(router, { taskAssetReadService, taskEventStream, terminalService });
 };
 
-export const createNodeHostCommandRouter = (
+export const createNodeEffectHostCommandRouter = (
   input: CreateNodeHostCommandRouterInput,
-): HostCommandRouter => toPromiseHostCommandRouter(createNodeEffectHostCommandRouter(input));
+): Effect.Effect<EffectNodeHostCommandRouter, GitProviderRegistrationError> => {
+  const defaultPorts = createNodeHostDefaultPorts(input);
+  return createDefaultNodeGitProviderResolver({
+    gitPort: defaultPorts.git,
+    systemCommands: defaultPorts.systemCommands,
+    toolDiscovery: defaultPorts.toolDiscovery,
+  }).pipe(
+    Effect.map((resolver) => assembleNodeEffectHostCommandRouter(input, defaultPorts, resolver)),
+  );
+};

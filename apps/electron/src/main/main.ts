@@ -248,9 +248,7 @@ const registerPrivilegedProtocolSchemes = (): void => {
   ]);
 };
 
-const createElectronHostCommandRouter = (
-  runtimeDistribution: HostRuntimeDistribution,
-): EffectNodeHostCommandRouter =>
+const createElectronHostCommandRouter = (runtimeDistribution: HostRuntimeDistribution) =>
   createElectronEffectHostCommandRouter({
     clientVersion: currentVersion,
     eventBus: hostEventBus,
@@ -326,11 +324,11 @@ const prepareElectronPreReadyRuntimeEffect = (): Effect.Effect<
         ),
     });
     const runtimeDistribution = yield* resolveRuntimeDistributionEffect();
-    const hostCommandRouter = yield* Effect.try({
-      try: () => createElectronHostCommandRouter(runtimeDistribution),
-      catch: (cause) =>
+    const hostCommandRouter = yield* createElectronHostCommandRouter(runtimeDistribution).pipe(
+      Effect.mapError((cause) =>
         mapStartupPreparationError(cause, "electron.main.create-host-router", errorMessage(cause)),
-    });
+      ),
+    );
     activeHostCommandRouter = hostCommandRouter;
     return { hostCommandRouter };
   });
