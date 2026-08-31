@@ -10,6 +10,11 @@ export const isWorkflowAgentSession = (
   return session?.sessionAssociation.kind === "workflow";
 };
 
+export const isPrimaryWorkflowAgentSession = (
+  session: AgentSessionState | null | undefined,
+): session is WorkflowAgentSessionState =>
+  isWorkflowAgentSession(session) && session.liveParentExternalSessionId === undefined;
+
 export const requireWorkflowAgentSession = (
   session: AgentSessionState,
   action: string,
