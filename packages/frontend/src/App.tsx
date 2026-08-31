@@ -6,7 +6,7 @@ import { ThemeProvider } from "@/components/layout/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { QueryProvider } from "@/lib/query-provider";
 import { loadNotFoundPage } from "@/pages";
-import { AgentsPage } from "@/pages/agents/shell/agents-page";
+import { AgentsPage } from "@/pages/agents/agents-page";
 import { KanbanPage } from "@/pages/kanban/kanban-page";
 import { AppStateProvider } from "@/state";
 import { KanbanBoardLoadingShell } from "./pages/kanban/kanban-board-loading-shell";
