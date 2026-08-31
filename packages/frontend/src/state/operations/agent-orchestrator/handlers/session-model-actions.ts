@@ -33,10 +33,11 @@ export const createSessionModelActions = ({
       model: selection,
     });
 
-    const nextSession = updateSession(session, (current) => ({
-      ...current,
-      selectedModel: selection,
-    }));
+    const nextSession =
+      updateSession(session, (current) => ({
+        ...current,
+        selectedModel: selection,
+      })) ?? readSessionSnapshot(session);
     if (!nextSession) {
       throw new Error(
         `Session '${session.externalSessionId}' became unavailable after its model changed.`,

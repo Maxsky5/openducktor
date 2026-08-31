@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import type {
   AgentApprovalRequest,
+  AgentPendingInputActionTarget,
   AgentQuestionRequest,
   AgentSessionContextLoadTarget,
   AgentSessionIdentity,
@@ -29,13 +30,13 @@ type SessionActions = {
     selection: AgentModelSelection | null,
   ) => Promise<void>;
   replyAgentApproval: (
-    session: AgentSessionIdentity,
+    session: AgentPendingInputActionTarget,
     request: AgentApprovalRequest,
     outcome: RuntimeApprovalReplyOutcome,
     message?: string,
   ) => Promise<void>;
   answerAgentQuestion: (
-    session: AgentSessionIdentity,
+    session: AgentPendingInputActionTarget,
     request: AgentQuestionRequest,
     answers: string[][],
   ) => Promise<void>;

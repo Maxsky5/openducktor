@@ -30,6 +30,7 @@ import type {
 } from "@openducktor/core";
 import type {
   AgentApprovalRequest,
+  AgentPendingInputActionTarget,
   AgentQuestionRequest,
   AgentSessionContextLoadTarget,
   AgentSessionIdentity,
@@ -207,13 +208,13 @@ export type AgentOperationsContextValue = {
     selection: AgentModelSelection | null,
   ) => void;
   replyAgentApproval: (
-    session: AgentSessionIdentity,
+    session: AgentPendingInputActionTarget,
     request: AgentApprovalRequest,
     outcome: RuntimeApprovalReplyOutcome,
     message?: string,
   ) => Promise<void>;
   answerAgentQuestion: (
-    session: AgentSessionIdentity,
+    session: AgentPendingInputActionTarget,
     request: AgentQuestionRequest,
     answers: string[][],
   ) => Promise<void>;

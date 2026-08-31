@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import {
   buildSession,
   createSessionActions,
@@ -8,6 +9,35 @@ import {
 } from "./session-actions.test-helpers";
 
 describe("agent-orchestrator/handlers/session-actions model", () => {
+  test("persists an accepted model update when the selected model is unchanged", async () => {
+    const session = buildSession({
+      selectedModel: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+      },
+    });
+    const selection = session.selectedModel;
+    const store = createAgentSessionsStore("/tmp/repo");
+    store.replaceSession(session);
+    const adapter = new OpencodeSdkAdapter();
+    adapter.updateSessionModel = async () => {};
+    let persistenceCalls = 0;
+    const actions = createSessionActions({
+      adapter,
+      readSessionSnapshot: store.getSessionSnapshot,
+      updateSession: store.updateSession,
+      persistSessionRecord: async () => {
+        persistenceCalls += 1;
+      },
+    });
+
+    await actions.updateAgentSessionModel(session, selection);
+
+    expect(store.getSessionSnapshot(session)?.selectedModel).toEqual(selection);
+    expect(persistenceCalls).toBe(1);
+  });
+
   test("updates the host session and persists the selected model for an idle session", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalUpdateSessionModel = adapter.updateSessionModel;
@@ -222,7 +252,10 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      updateSession: () => null,
+      updateSession: () => {
+        sessionsRef.current = createSessionsRef().current;
+        return null;
+      },
       persistSessionRecord: async () => {
         persistenceCalls += 1;
       },

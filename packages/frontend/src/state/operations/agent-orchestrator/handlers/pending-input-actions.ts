@@ -4,6 +4,7 @@ import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { resolveAgentPendingInputParticipants } from "@/state/agent-session-pending-input-participants";
 import type {
   AgentApprovalRequest,
+  AgentPendingInputActionTarget,
   AgentQuestionRequest,
   AgentSessionIdentity,
   AgentSessionState,
@@ -24,8 +25,6 @@ export type PendingInputActionDependencies = {
   ) => number | undefined;
   readTurnUserMessageStartedAtMs: (sessionKey: string) => number | undefined;
 };
-
-type PendingInputActionTarget = AgentSessionIdentity & Partial<Pick<AgentSessionState, "repoPath">>;
 
 type ResolvedPendingInputRuntimeSession = {
   responseSession: AgentSessionIdentity & Pick<AgentSessionState, "repoPath">;
@@ -52,7 +51,7 @@ const resolvePendingInputRuntimeSession = ({
   request,
 }: {
   readSessionSnapshot: ReadSessionSnapshot;
-  currentSession: PendingInputActionTarget;
+  currentSession: AgentPendingInputActionTarget;
   request: AgentApprovalRequest | AgentQuestionRequest;
 }): ResolvedPendingInputRuntimeSession => {
   const { responseSession, sessions } = resolveAgentPendingInputParticipants(
@@ -64,7 +63,8 @@ const resolvePendingInputRuntimeSession = ({
     loadedResponseSession ??
     sessions.map((session) => readSessionSnapshot(session)).find((session) => session !== null) ??
     null;
-  const repoPath = contextSession?.repoPath ?? currentSession.repoPath;
+  const callerRepoPath = "repoPath" in currentSession ? currentSession.repoPath : null;
+  const repoPath = contextSession?.repoPath ?? callerRepoPath;
   if (!repoPath) {
     throw new Error(
       `Cannot reply to pending input for session '${responseSession.externalSessionId}' because its repository context is unavailable.`,
@@ -89,7 +89,7 @@ const resolvePendingInputRuntimeSession = ({
 
 export const createPendingInputActions = (dependencies: PendingInputActionDependencies) => {
   const replyAgentApproval = async (
-    identity: PendingInputActionTarget,
+    identity: AgentPendingInputActionTarget,
     request: AgentApprovalRequest,
     outcome: RuntimeApprovalReplyOutcome,
     message?: string,
@@ -118,7 +118,7 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
   };
 
   const answerAgentQuestion = async (
-    identity: PendingInputActionTarget,
+    identity: AgentPendingInputActionTarget,
     request: AgentQuestionRequest,
     answers: string[][],
   ): Promise<void> => {

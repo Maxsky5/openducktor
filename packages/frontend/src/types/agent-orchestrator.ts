@@ -11,6 +11,7 @@ import type {
 import type {
   AgentModelSelection,
   AgentPendingApprovalRequest,
+  PolicyBoundSessionRef,
   AgentRole,
   AgentSubagentExecutionMode,
   AgentSubagentStatus,
@@ -216,6 +217,8 @@ export type AgentSessionIdentity = Pick<
   AgentSessionState,
   "externalSessionId" | "runtimeKind" | "workingDirectory"
 >;
+
+export type AgentPendingInputActionTarget = AgentSessionIdentity | PolicyBoundSessionRef;
 
 export type AgentSessionRuntimeTarget = AgentSessionIdentity &
   Pick<AgentSessionState, "sessionAssociation">;
