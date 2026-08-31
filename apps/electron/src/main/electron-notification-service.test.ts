@@ -23,34 +23,12 @@ class FakeNativeNotification {
     return this;
   }
 
-  onShow(listener: () => void): void {
-    this.on("show", listener);
-  }
-
-  onFailed(listener: (error: string) => void): void {
-    this.on("failed", (_event, error) => listener(String(error)));
-  }
-
-  onClick(listener: () => void): void {
-    this.on("click", listener);
-  }
-
-  onClose(listener: () => void): void {
-    this.on("close", listener);
-  }
-
   show(): void {}
 
   emit(event: string, ...args: unknown[]): void {
     this.listeners.get(event)?.(...args);
   }
 }
-
-const notifications = {
-  isSupported: () => FakeNativeNotification.isSupported(),
-  create: (options: { title: string; body: string; silent: boolean }) =>
-    new FakeNativeNotification(options),
-};
 
 const request = {
   occurrenceId: "workflow.closed:/repo:task-1:event-1",
@@ -65,7 +43,7 @@ describe("Electron notification service", () => {
     FakeNativeNotification.supported = true;
     FakeNativeNotification.instances = [];
     const service = createElectronNotificationService({
-      notifications,
+      Notification: FakeNativeNotification,
       getWindows: () => [],
     });
 
@@ -89,7 +67,7 @@ describe("Electron notification service", () => {
   test("reports unsupported and failed delivery", async () => {
     FakeNativeNotification.supported = false;
     const unsupported = createElectronNotificationService({
-      notifications,
+      Notification: FakeNativeNotification,
       getWindows: () => [],
     });
     expect(await unsupported.show(request)).toEqual({
@@ -100,7 +78,7 @@ describe("Electron notification service", () => {
     FakeNativeNotification.supported = true;
     FakeNativeNotification.instances = [];
     const service = createElectronNotificationService({
-      notifications,
+      Notification: FakeNativeNotification,
       getWindows: () => [],
     });
     const delivery = service.show(request);
@@ -117,7 +95,7 @@ describe("Electron notification service", () => {
     const focus = mock(() => {});
     const send = mock(() => {});
     const service = createElectronNotificationService({
-      notifications,
+      Notification: FakeNativeNotification,
       getWindows: () => [
         {
           isDestroyed: () => false,
