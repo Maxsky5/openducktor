@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import type { GithubCommandDependencies } from "../../../application/tasks/support/github-pull-requests";
+import { createGithubCliAdapter } from "../../git-providers/github-cli";
 import type { SystemCommandPort } from "../../../ports/system-command-port";
 import type { ToolDiscoveryPort } from "../../../ports/tool-discovery-port";
 
@@ -20,9 +21,11 @@ export const createGithubReviewTestDependencies = (
     resolveToolPath: () => unexpectedCall("resolveToolPath"),
     validateToolPath: () => unexpectedCall("validateToolPath"),
   };
+  const githubCli = createGithubCliAdapter(systemCommands);
 
   return {
-    resolveGithubCommand: () => Effect.succeed({ ghCommand: "gh", systemCommands }),
+    githubCli,
+    resolveGithubCommand: () => Effect.succeed({ ghCommand: "gh", githubCli }),
     systemCommands,
     toolDiscovery,
   };

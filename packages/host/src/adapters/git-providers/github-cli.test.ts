@@ -5,7 +5,7 @@ import type {
   SystemCommandRunOptions,
   SystemCommandRunResult,
 } from "../../ports/system-command-port";
-import { readGithubCliVersion, runGithubCliCommand } from "./github-cli";
+import { createGithubCliAdapter } from "./github-cli";
 
 type RunCall = {
   command: string;
@@ -41,12 +41,13 @@ const createSystemCommandPort = ({
   return { port, runCalls, versionCalls };
 };
 
-describe("GitHub CLI command helpers", () => {
-  test("runGithubCliCommand preserves command options and enforces machine-readable env", async () => {
+describe("createGithubCliAdapter", () => {
+  test("run preserves command options and enforces machine-readable env", async () => {
     const { port, runCalls } = createSystemCommandPort();
+    const githubCli = createGithubCliAdapter(port);
 
     await Effect.runPromise(
-      runGithubCliCommand(port, "gh", ["api", "repos/openai/openducktor/pulls"], {
+      githubCli.run("gh", ["api", "repos/openai/openducktor/pulls"], {
         cwd: "/repo",
         env: {
           FORCE_COLOR: "1",
@@ -76,11 +77,12 @@ describe("GitHub CLI command helpers", () => {
     });
   });
 
-  test("readGithubCliVersion uses the same machine-readable env", async () => {
+  test("readVersion uses the same machine-readable env", async () => {
     const { port, versionCalls } = createSystemCommandPort();
+    const githubCli = createGithubCliAdapter(port);
 
     await Effect.runPromise(
-      readGithubCliVersion(port, "gh", {
+      githubCli.readVersion("gh", {
         env: {
           FORCE_COLOR: "1",
           CUSTOM_PATH: "/bin",

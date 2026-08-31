@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { createGithubCliAdapter } from "../../adapters/git-providers/github-cli";
 import { GithubProviderAdapter } from "../../adapters/git-providers/github-provider-adapter";
 import {
   createGitProviderResolver,
@@ -19,6 +20,11 @@ export const createNodeGitProviderResolver = ({
   systemCommands: SystemCommandPort;
   toolDiscovery: ToolDiscoveryPort;
 }): Effect.Effect<GitProviderResolver, GitProviderRegistrationError> => {
-  const githubDependencies = createGithubCommandDependencies({ systemCommands, toolDiscovery });
+  const githubCli = createGithubCliAdapter(systemCommands);
+  const githubDependencies = createGithubCommandDependencies({
+    githubCli,
+    systemCommands,
+    toolDiscovery,
+  });
   return createGitProviderResolver([new GithubProviderAdapter({ githubDependencies, gitPort })]);
 };

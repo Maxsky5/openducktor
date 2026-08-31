@@ -1,6 +1,8 @@
 import { Effect } from "effect";
-import type { GithubRepositoryDetectionService } from "../../application/git/github-repository-detection-service";
+import { repoConfigSchema } from "@openducktor/contracts";
+import type { GitProviderRepositoryService } from "../../application/git/git-provider-repository-service";
 import { HostOperationError } from "../../effect/host-errors";
+import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
 import {
   type CreateHostCommandRouterInput,
   createEffectHostCommandRouter,
@@ -15,8 +17,8 @@ const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
 describe("createGithubRepositoryDetectionCommandHandlers", () => {
   test("routes workspace_detect_github_repository to the detection service", async () => {
     const calls: unknown[] = [];
-    const service: GithubRepositoryDetectionService = {
-      detectGithubRepository(input) {
+    const service: GitProviderRepositoryService = {
+      detectRepository(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push(input);
@@ -31,8 +33,20 @@ describe("createGithubRepositoryDetectionCommandHandlers", () => {
         });
       },
     };
+    const repoConfig = repoConfigSchema.parse({
+      workspaceId: "repo",
+      workspaceName: "Repo",
+      repoPath: "/repo",
+      defaultRuntimeKind: "opencode",
+      git: {},
+    });
     const router = createHostCommandRouter({
-      handlers: createGithubRepositoryDetectionCommandHandlers(service),
+      handlers: createGithubRepositoryDetectionCommandHandlers({
+        service,
+        workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
+          getRepoConfigByRepoPath: () => Effect.succeed(repoConfig),
+        }),
+      }),
     });
     await expect(
       router.invoke("workspace_detect_github_repository", { repoPath: "/repo" }),
@@ -41,6 +55,19 @@ describe("createGithubRepositoryDetectionCommandHandlers", () => {
       owner: "openai",
       name: "openducktor",
     });
-    expect(calls).toEqual([{ repoPath: "/repo" }]);
+    expect(calls).toEqual([
+      {
+        repoConfig: expect.objectContaining({
+          repoPath: "/repo",
+          git: {
+            provider: {
+              id: "github",
+              enabled: true,
+              autoDetected: false,
+            },
+          },
+        }),
+      },
+    ]);
   });
 });

@@ -1,4 +1,5 @@
 import {
+  parseGitProviderRepositoryFromRemoteUrl,
   type GitProviderRepository,
   type PullRequest,
   type RepoConfig,
@@ -7,11 +8,10 @@ import {
 import { Effect } from "effect";
 import { checkoutBranch } from "../../../domain/task";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
+import type { GithubCliPort } from "../../../ports/github-cli-port";
 import type { GitPort } from "../../../ports/git-port";
-import type { SystemCommandPort, SystemCommandRunResult } from "../../../ports/system-command-port";
+import type { SystemCommandPort } from "../../../ports/system-command-port";
 import type { ToolDiscoveryError, ToolDiscoveryPort } from "../../../ports/tool-discovery-port";
-import { runGithubCliCommand } from "../../git/github-cli";
-import { parseGithubRemoteUrl } from "../../git/github-repository-detection-service";
 import {
   combinedCommandOutput,
   GITHUB_PROVIDER_ID,
@@ -36,6 +36,7 @@ export {
 
 export type GithubCommandDependencies = {
   resolveGithubCommand: () => Effect.Effect<ResolvedGithubCommandDependencies, ToolDiscoveryError>;
+  githubCli: GithubCliPort;
   systemCommands: SystemCommandPort;
   toolDiscovery: ToolDiscoveryPort;
 };
@@ -44,24 +45,27 @@ export type GithubRepositoryDependencies = GithubCommandDependencies & {
 };
 export type ResolvedGithubCommandDependencies = {
   ghCommand: string;
-  systemCommands: SystemCommandPort;
+  githubCli: GithubCliPort;
 };
 
 export const createGithubCommandDependencies = ({
+  githubCli,
   systemCommands,
   toolDiscovery,
 }: {
+  githubCli: GithubCliPort;
   systemCommands: SystemCommandPort;
   toolDiscovery: ToolDiscoveryPort;
 }): GithubCommandDependencies => {
   const resolveGithubCommand = () =>
     toolDiscovery.resolveToolPath("githubCli").pipe(
       Effect.map((ghCommand): ResolvedGithubCommandDependencies => {
-        return { ghCommand, systemCommands };
+        return { ghCommand, githubCli };
       }),
     );
 
   return {
+    githubCli,
     resolveGithubCommand,
     systemCommands,
     toolDiscovery,
@@ -86,90 +90,6 @@ const resolveRequiredGithubCommandDependencies = (
     ),
   );
 
-export const githubProviderStatus = (
-  dependencies: GithubRepositoryDependencies,
-  repoPath: string,
-  repoConfig: RepoConfig,
-) =>
-  Effect.gen(function* () {
-    const githubConfig = repoConfig.git.provider;
-    if (githubConfig?.id !== GITHUB_PROVIDER_ID || !githubConfig.enabled) {
-      return {
-        providerId: GITHUB_PROVIDER_ID,
-        enabled: false,
-        available: false,
-        reason: "GitHub provider is not enabled for this repository.",
-      };
-    }
-    const githubCommandResult = yield* Effect.either(
-      resolveGithubCommandDependencies(dependencies),
-    );
-    if (githubCommandResult._tag === "Left") {
-      return {
-        providerId: GITHUB_PROVIDER_ID,
-        enabled: true,
-        available: false,
-        reason: errorMessage(githubCommandResult.left),
-      };
-    }
-    const { ghCommand } = githubCommandResult.right;
-    const repository = githubConfig.repository;
-    if (!repository) {
-      return {
-        providerId: GITHUB_PROVIDER_ID,
-        enabled: true,
-        available: false,
-        reason: "GitHub repository coordinates are missing.",
-      };
-    }
-    const authStatusResult = yield* Effect.either(
-      runGithubCliCommand(dependencies.systemCommands, ghCommand, [
-        "auth",
-        "status",
-        "--hostname",
-        repository.host,
-      ]),
-    );
-    if (authStatusResult._tag === "Left") {
-      return {
-        providerId: GITHUB_PROVIDER_ID,
-        enabled: true,
-        available: false,
-        reason: `Failed to check GitHub authentication: ${errorMessage(authStatusResult.left)}`,
-      };
-    }
-    const authStatus: SystemCommandRunResult = authStatusResult.right;
-    if (!authStatus.ok) {
-      const output = combinedCommandOutput(authStatus.stdout, authStatus.stderr);
-      return {
-        providerId: GITHUB_PROVIDER_ID,
-        enabled: true,
-        available: false,
-        reason:
-          output.length > 0
-            ? output
-            : "GitHub authentication is not configured. Run `gh auth login`.",
-      };
-    }
-    const expectedKey = repositoryKey(repository);
-    const hasMatchingRemote = (yield* dependencies.gitPort.listRemotes(repoPath)).some((remote) => {
-      const parsed = parseGithubRemoteUrl(remote.url);
-      return parsed !== null && repositoryKey(parsed) === expectedKey;
-    });
-    if (!hasMatchingRemote) {
-      return {
-        providerId: GITHUB_PROVIDER_ID,
-        enabled: true,
-        available: false,
-        reason: `No matching Git remote is configured for ${repository.owner}/${repository.name} on ${repository.host}.`,
-      };
-    }
-    return {
-      providerId: GITHUB_PROVIDER_ID,
-      enabled: true,
-      available: true,
-    };
-  });
 export const runGithubCommand = (
   dependencies: GithubCommandDependencies,
   repoPath: string,
@@ -179,14 +99,9 @@ export const runGithubCommand = (
   Effect.gen(function* () {
     const hostArgs = host.trim() ? ["--hostname", host.trim(), ...args] : args;
     const githubCommand = yield* resolveGithubCommandDependencies(dependencies);
-    const result = yield* runGithubCliCommand(
-      githubCommand.systemCommands,
-      githubCommand.ghCommand,
-      hostArgs,
-      {
-        cwd: repoPath,
-      },
-    );
+    const result = yield* githubCommand.githubCli.run(githubCommand.ghCommand, hostArgs, {
+      cwd: repoPath,
+    });
     if (result.ok) {
       return result.stdout;
     }
@@ -206,7 +121,7 @@ const matchingGithubRemoteNames = (
   Effect.gen(function* () {
     const expectedKey = repositoryKey(repository);
     return (yield* gitPort.listRemotes(repoPath)).flatMap((remote) => {
-      const parsed = parseGithubRemoteUrl(remote.url);
+      const parsed = parseGitProviderRepositoryFromRemoteUrl(remote.url);
       return parsed !== null && repositoryKey(parsed) === expectedKey ? [remote.name] : [];
     });
   });
@@ -242,7 +157,7 @@ const probeResolvedGithubAuthOrThrow = (
   host: string,
 ) =>
   Effect.gen(function* () {
-    const result = yield* runGithubCliCommand(dependencies.systemCommands, dependencies.ghCommand, [
+    const result = yield* dependencies.githubCli.run(dependencies.ghCommand, [
       "auth",
       "status",
       "--hostname",

@@ -1,6 +1,5 @@
 import type { GitProviderRepository } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { runGithubCliCommand } from "../../git/github-cli";
 import type { GithubCommandDependencies } from "./github-pull-requests";
 
 const githubRepositorySelector = (repository: GitProviderRepository): string => {
@@ -16,8 +15,7 @@ export const runGithubRepositoryCommandAllowFailure = (
 ) =>
   Effect.gen(function* () {
     const githubCommand = yield* dependencies.resolveGithubCommand();
-    return yield* runGithubCliCommand(
-      githubCommand.systemCommands,
+    return yield* githubCommand.githubCli.run(
       githubCommand.ghCommand,
       [...args, "--repo", githubRepositorySelector(repository)],
       { cwd: repoPath },

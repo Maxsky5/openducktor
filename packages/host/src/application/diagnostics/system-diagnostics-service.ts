@@ -13,6 +13,7 @@ import {
   type HostOperationErrorAggregate,
   type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
+import type { GithubCliPort } from "../../ports/github-cli-port";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
 import type { SystemCommandPort, SystemCommandRunResult } from "../../ports/system-command-port";
@@ -22,7 +23,6 @@ import type {
   ToolDiscoveryId,
   ToolDiscoveryPort,
 } from "../../ports/tool-discovery-port";
-import { readGithubCliVersion, runGithubCliCommand } from "../git/github-cli";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
 
 type CachedRuntimeCheck = {
@@ -56,9 +56,9 @@ const parseGithubAuthLogin = (output: string): string | null => {
   const login = remainder.split(/[\s(']/)[0]?.trim() ?? "";
   return login.length > 0 ? login : null;
 };
-const probeGithubAuthStatus = (systemCommands: SystemCommandPort, ghCommand: string) =>
+const probeGithubAuthStatus = (githubCli: GithubCliPort, ghCommand: string) =>
   Effect.gen(function* () {
-    const result: SystemCommandRunResult = yield* runGithubCliCommand(systemCommands, ghCommand, [
+    const result: SystemCommandRunResult = yield* githubCli.run(ghCommand, [
       "auth",
       "status",
       "--hostname",
@@ -158,6 +158,7 @@ const versionForResolvedTool = (
         }),
       );
 export const createSystemDiagnosticsService = ({
+  githubCli,
   runtimeDefinitionsService,
   runtimeHealth,
   settingsConfig,
@@ -165,6 +166,7 @@ export const createSystemDiagnosticsService = ({
   toolDiscovery,
   repoStoreDiagnostics,
 }: {
+  githubCli: GithubCliPort;
   runtimeDefinitionsService: RuntimeDefinitionsService;
   runtimeHealth: RuntimeHealthPort;
   settingsConfig: SettingsConfigPort;
@@ -181,7 +183,7 @@ export const createSystemDiagnosticsService = ({
         systemCommands.versionCommand(path, ["--version"]),
       );
       const ghVersion = yield* versionForResolvedTool("gh", ghTool.path, (path) =>
-        readGithubCliVersion(systemCommands, path),
+        githubCli.readVersion(path),
       );
       const gitError = gitTool.error ?? gitVersion.error;
       const ghError = ghTool.error ?? ghVersion.error;
@@ -189,7 +191,7 @@ export const createSystemDiagnosticsService = ({
       const ghOk = ghError === null;
       const githubAuth =
         ghOk && ghTool.path !== null
-          ? yield* probeGithubAuthStatus(systemCommands, ghTool.path)
+          ? yield* probeGithubAuthStatus(githubCli, ghTool.path)
           : { ghAuthOk: false, ghAuthLogin: null, ghAuthError: ghError };
       const runtimes: RuntimeHealth[] = yield* Effect.forEach(
         runtimeDefinitionsService.listRuntimeDefinitions(),

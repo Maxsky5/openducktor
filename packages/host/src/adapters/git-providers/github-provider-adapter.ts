@@ -8,12 +8,11 @@ import {
   findGithubPullRequestForBranch,
   fetchGithubPullRequestByNumber,
   type GithubCommandDependencies,
-  githubProviderStatus,
-  requireGithubPullRequestContext,
-  requireGithubPullRequestReadRepository,
   upsertGithubPullRequest,
 } from "../../application/tasks/support/github-pull-requests";
+import { type HostError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
+import { GitProviderRepositoryError } from "../../ports/git-provider-errors";
 import type {
   GitProviderHealthPort,
   GitProviderPort,
@@ -22,6 +21,22 @@ import type {
 } from "../../ports/git-provider-port";
 import type { PullRequestReviewProviderPort } from "../../ports/pull-request-review-provider-port";
 import { createGithubPullRequestReviewAdapter } from "../pull-requests/github/github-pull-request-review-adapter";
+import { createGithubProviderHealthPort } from "./github-provider-health";
+import { createGithubProviderRepositoryAdapter } from "./github-provider-repository";
+
+const toPullRequestRepositoryError = (cause: HostError | GitProviderRepositoryError): HostError =>
+  cause instanceof GitProviderRepositoryError
+    ? new HostValidationError({
+        field: "git.provider.repository",
+        message: cause.message,
+        cause,
+        details: {
+          reason: cause.reason,
+          repoPath: cause.repoPath,
+          remoteNames: cause.remoteNames,
+        },
+      })
+    : cause;
 
 export class GithubProviderAdapter implements GitProviderPort {
   private readonly repositoryPort: GitProviderRepositoryPort;
@@ -36,19 +51,24 @@ export class GithubProviderAdapter implements GitProviderPort {
     githubDependencies: GithubCommandDependencies;
     gitPort: GitPort;
   }) {
-    const repositoryDependencies = { ...githubDependencies, gitPort };
+    const repositoryAdapter = createGithubProviderRepositoryAdapter({
+      githubDependencies,
+      gitPort,
+    });
     const getReadRepository = (repoConfig: RepoConfig) =>
-      requireGithubPullRequestReadRepository(githubDependencies, repoConfig.repoPath, repoConfig);
+      repositoryAdapter.port
+        .getReadRepository(repoConfig)
+        .pipe(Effect.mapError(toPullRequestRepositoryError));
     const getWriteContext = (repoConfig: RepoConfig) =>
-      requireGithubPullRequestContext(repositoryDependencies, repoConfig.repoPath, repoConfig);
-    this.repositoryPort = {
-      getReadRepository,
-      getWriteContext,
-    };
-    this.healthPort = {
-      getStatus: (repoConfig) =>
-        githubProviderStatus(repositoryDependencies, repoConfig.repoPath, repoConfig),
-    };
+      repositoryAdapter.port
+        .getWriteContext(repoConfig)
+        .pipe(Effect.mapError(toPullRequestRepositoryError));
+
+    this.repositoryPort = repositoryAdapter.port;
+    this.healthPort = createGithubProviderHealthPort({
+      githubDependencies,
+      requireSingleMatchingRemote: repositoryAdapter.requireSingleMatchingRemote,
+    });
     this.pullRequestsPort = {
       findByBranch: (input) =>
         Effect.gen(function* () {

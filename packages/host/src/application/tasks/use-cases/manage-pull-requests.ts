@@ -21,6 +21,7 @@ type Cases = Pick<TaskService, "linkPullRequest" | "upsertPullRequest" | "unlink
 
 export const createTaskPullRequestManagementUseCases = ({
   githubDependencies,
+  gitProviderResolver,
   taskStore,
   settingsConfig,
   taskWorktreeService,
@@ -93,6 +94,7 @@ export const createTaskPullRequestManagementUseCases = ({
       const dependencies = yield* requireDependencies(() =>
         requirePullRequestUpsertDependencies({
           githubDependencies,
+          gitProviderResolver,
           settingsConfig,
           taskWorktreeService,
           workspaceSettingsService,

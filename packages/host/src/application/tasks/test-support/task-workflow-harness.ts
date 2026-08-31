@@ -14,8 +14,9 @@ import type {
   TaskCard,
   WorkspaceRecord,
 } from "@openducktor/contracts";
-import { globalConfigSchema } from "@openducktor/contracts";
+import { GITHUB_PROVIDER_DESCRIPTOR, globalConfigSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { createGithubCliAdapter } from "../../../adapters/git-providers/github-cli";
 import { createToolDiscoveryAdapter } from "../../../adapters/system/tool-discovery";
 import { HostOperationError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
@@ -27,6 +28,7 @@ import type { TaskStorePort as RealTaskStorePort } from "../../../ports/task-rep
 import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
 import type { DevServerService } from "../../dev-servers/dev-server-service";
 import type { DevServerTaskInput } from "../../dev-servers/dev-server-service-types";
+import type { GitProviderResolver } from "../../git/git-provider-resolver";
 import { createRuntimeDefinitionsService } from "../../runtimes/runtime-definitions-service";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import {
@@ -146,6 +148,32 @@ const extendSettingsConfigPort = (
 ): SettingsConfigPort => createSettingsConfigPort({ ...base, ...overrides });
 const createTaskStorePort = (overrides: TaskStorePort): RealTaskStorePort =>
   createTaskStoreTestDouble(overrides);
+const defaultGitProviderResolver: GitProviderResolver = {
+  resolve: (repoConfig) =>
+    Effect.succeed({
+      getDescriptor: () => GITHUB_PROVIDER_DESCRIPTOR,
+      repository: () => ({
+        detectRepository: () => Effect.dieMessage("unexpected repository detection"),
+        getReadRepository: () => Effect.dieMessage("unexpected repository read"),
+        getWriteContext: () => Effect.dieMessage("unexpected repository write context"),
+      }),
+      health: () => ({
+        getStatus: () =>
+          Effect.succeed({
+            providerId: repoConfig.git.provider?.id ?? GITHUB_PROVIDER_DESCRIPTOR.id,
+            enabled: true,
+            available: true,
+            executablePath: "gh",
+            version: "gh version test",
+            authenticated: true,
+            account: "octocat",
+            repositoryMappingValid: true,
+          }),
+      }),
+      pullRequests: () => Effect.dieMessage("unexpected Pull Request port"),
+      pullRequestReview: () => Effect.dieMessage("unexpected Pull Request review port"),
+    }),
+};
 const createTaskService = (
   input: Omit<CreateTaskServiceInput, "taskStore" | "taskActivityGuard"> & {
     taskActivityGuard?: TaskActivityGuardPort;
@@ -164,6 +192,9 @@ const createTaskService = (
   );
   const taskServiceInput: CreateTaskServiceInput = {
     ...rest,
+    gitProviderResolver: rest.gitProviderResolver ?? defaultGitProviderResolver,
+    githubCli:
+      rest.githubCli ?? createGithubCliAdapter(rest.systemCommands ?? defaultSystemCommands),
     terminalService:
       rest.terminalService ??
       ({
@@ -200,6 +231,9 @@ const createTaskServiceWithMutationProgress = (
   );
   const taskServiceInput: CreateTaskServiceInput = {
     ...rest,
+    gitProviderResolver: rest.gitProviderResolver ?? defaultGitProviderResolver,
+    githubCli:
+      rest.githubCli ?? createGithubCliAdapter(rest.systemCommands ?? defaultSystemCommands),
     terminalService:
       rest.terminalService ??
       ({

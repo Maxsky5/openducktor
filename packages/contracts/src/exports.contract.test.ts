@@ -554,6 +554,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "gitMergeMethodSchema",
   "gitProviderCapabilitiesSchema",
   "gitProviderAvailabilitySchema",
+  "gitProviderHealthSchema",
   "gitProviderConfigSchema",
   "gitProviderDescriptorSchema",
   "gitProviderIdSchema",

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { repoConfigSchema, type PullRequest } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { createGithubCliAdapter } from "../../../adapters/git-providers/github-cli";
 import type { GitPort } from "../../../ports/git-port";
 import type { SystemCommandPort } from "../../../ports/system-command-port";
 import type { ToolDiscoveryPort } from "../../../ports/tool-discovery-port";
@@ -8,7 +9,6 @@ import {
   findGithubPullRequestForBranch,
   type GithubCommandDependencies,
   type GithubRepositoryDependencies,
-  githubProviderStatus,
   githubPullRequestSyncPolicy,
   pullRequestRecordsMatch,
   requireGithubPullRequestReadRepository,
@@ -140,8 +140,10 @@ describe("findGithubPullRequestForBranch", () => {
         });
       },
     };
+    const githubCli = createGithubCliAdapter(systemCommands);
     const dependencies: GithubCommandDependencies = {
-      resolveGithubCommand: () => Effect.succeed({ ghCommand: "gh", systemCommands }),
+      githubCli,
+      resolveGithubCommand: () => Effect.succeed({ ghCommand: "gh", githubCli }),
       systemCommands,
       toolDiscovery,
     };
@@ -171,6 +173,10 @@ describe("GitHub provider selection", () => {
   test("does not resolve GitHub dependencies for another configured provider", async () => {
     let resolveGithubCommandCalls = 0;
     const dependencies: GithubRepositoryDependencies = {
+      githubCli: {
+        readVersion: () => Effect.die("GitHub CLI must not be read"),
+        run: () => Effect.die("GitHub CLI must not run"),
+      },
       resolveGithubCommand() {
         resolveGithubCommandCalls += 1;
         return Effect.die("GitHub dependencies must not be resolved");
@@ -197,7 +203,6 @@ describe("GitHub provider selection", () => {
       },
     });
 
-    const status = await Effect.runPromise(githubProviderStatus(dependencies, "/repo", repoConfig));
     const readResult = await Effect.runPromiseExit(
       requireGithubPullRequestReadRepository(dependencies, "/repo", repoConfig),
     );
@@ -205,12 +210,6 @@ describe("GitHub provider selection", () => {
       githubPullRequestSyncPolicy(dependencies, repoConfig),
     );
 
-    expect(status).toEqual({
-      providerId: "github",
-      enabled: false,
-      available: false,
-      reason: "GitHub provider is not enabled for this repository.",
-    });
     expect(readResult._tag).toBe("Failure");
     expect(syncPolicy).toEqual({ providerId: "github", available: false });
     expect(resolveGithubCommandCalls).toBe(0);

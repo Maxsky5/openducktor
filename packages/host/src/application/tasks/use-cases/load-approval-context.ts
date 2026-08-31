@@ -8,8 +8,8 @@ import {
 } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
 import { providerStatuses } from "../support/approval-readiness";
+import { requireApprovalContextDependencies } from "../support/required-provider-task-dependencies";
 import {
-  requireApprovalContextDependencies,
   requireDependencies,
   type TaskGithubDependencyInput,
 } from "../support/required-task-dependencies";
@@ -22,6 +22,7 @@ import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskApprovalContextUseCase = ({
   githubDependencies,
+  gitProviderResolver,
   taskStore,
   settingsConfig,
   taskWorktreeService,
@@ -36,6 +37,7 @@ export const createTaskApprovalContextUseCase = ({
       const dependencies = yield* requireDependencies(() =>
         requireApprovalContextDependencies({
           githubDependencies,
+          gitProviderResolver,
           settingsConfig,
           taskWorktreeService,
           workspaceSettingsService,
@@ -56,7 +58,7 @@ export const createTaskApprovalContextUseCase = ({
       const effectiveRepoPath = repoConfig.repoPath;
       const metadata = yield* taskStore.getTaskMetadata({ repoPath: effectiveRepoPath, taskId });
       const defaultMergeMethod = yield* loadDefaultMergeMethod(dependencies.settingsConfig);
-      const providers = yield* providerStatuses(dependencies, effectiveRepoPath, repoConfig);
+      const providers = yield* providerStatuses(dependencies.gitProviderResolver, repoConfig);
 
       if (metadata.directMerge !== undefined) {
         const directMerge = metadata.directMerge;

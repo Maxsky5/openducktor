@@ -20,6 +20,7 @@ const unexpectedPortCall = <Success>(): Effect.Effect<Success, never> =>
   Effect.die("Capability port operation is not expected in resolver tests");
 
 const repositoryPort = (): GitProviderRepositoryPort => ({
+  detectRepository: () => unexpectedPortCall(),
   getReadRepository: () => unexpectedPortCall(),
   getWriteContext: () => unexpectedPortCall(),
 });

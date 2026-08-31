@@ -7,6 +7,7 @@ import {
   type RuntimeHealth,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { createGithubCliAdapter } from "../../adapters/git-providers/github-cli";
 import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { HostOperationError } from "../../effect/host-errors";
@@ -194,12 +195,17 @@ const createTaskStore = (
       }),
   });
 const createSystemDiagnosticsServiceForTest = (
-  input: Omit<Parameters<typeof createSystemDiagnosticsService>[0], "toolDiscovery"> & {
+  input: Omit<
+    Parameters<typeof createSystemDiagnosticsService>[0],
+    "githubCli" | "toolDiscovery"
+  > & {
+    githubCli?: Parameters<typeof createSystemDiagnosticsService>[0]["githubCli"];
     toolDiscovery?: ToolDiscoveryPort;
   },
 ) =>
   createSystemDiagnosticsService({
     ...input,
+    githubCli: input.githubCli ?? createGithubCliAdapter(input.systemCommands),
     toolDiscovery: input.toolDiscovery ?? createToolDiscoveryPort(),
   });
 describe("createSystemDiagnosticsService", () => {

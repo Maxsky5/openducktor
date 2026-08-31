@@ -30,6 +30,7 @@ import {
   isHostError,
 } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
+import type { GithubCliPort } from "../../ports/github-cli-port";
 import type { GitPort, GitPortError } from "../../ports/git-port";
 import type { RuntimeRegistryError, RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
@@ -39,6 +40,7 @@ import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-
 import type { ToolDiscoveryError, ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { WorktreeFileError, WorktreeFilePort } from "../../ports/worktree-file-port";
 import type { DevServerService, DevServerServiceError } from "../dev-servers/dev-server-service";
+import type { GitProviderResolver } from "../git/git-provider-resolver";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
 import type { TerminalService, TerminalServiceError } from "../terminals/terminal-service";
 import type {
@@ -256,6 +258,8 @@ export type CreateTaskServiceInput = {
   devServerService?: DevServerService;
   terminalService?: TaskTerminalCleanupPort;
   gitPort?: GitPort;
+  gitProviderResolver?: GitProviderResolver;
+  githubCli?: GithubCliPort;
   taskStore: TaskStorePort;
   taskActivityGuard?: TaskActivityGuardPort;
   settingsConfig?: SettingsConfigPort;
