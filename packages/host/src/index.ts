@@ -122,7 +122,6 @@ export type {
   FindPullRequestByBranchInput,
   GetPullRequestByNumberInput,
   GitProviderHealthPort,
-  GitProviderOperationError,
   GitProviderPort,
   GitProviderRepositoryContext,
   GitProviderRepositoryPort,

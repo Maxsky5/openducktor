@@ -7,16 +7,9 @@ import type {
   TaskApprovalContext,
 } from "@openducktor/contracts";
 import type { Effect } from "effect";
-import type { HostValidationErrorAggregate } from "../effect/host-errors";
-import type { GitPortError } from "./git-port";
+import type { HostError } from "../effect/host-errors";
 import type { GitProviderCapabilityError } from "./git-provider-errors";
 import type { PullRequestReviewProviderPort } from "./pull-request-review-provider-port";
-import type { ToolDiscoveryError } from "./tool-discovery-port";
-
-export type GitProviderOperationError =
-  | GitPortError
-  | HostValidationErrorAggregate
-  | ToolDiscoveryError;
 
 export type GitProviderRepositoryContext = {
   repository: GitProviderRepository;
@@ -24,18 +17,12 @@ export type GitProviderRepositoryContext = {
 };
 
 export type GitProviderRepositoryPort = {
-  getReadRepository(
-    repoConfig: RepoConfig,
-  ): Effect.Effect<GitProviderRepository, GitProviderOperationError>;
-  getWriteContext(
-    repoConfig: RepoConfig,
-  ): Effect.Effect<GitProviderRepositoryContext, GitProviderOperationError>;
+  getReadRepository(repoConfig: RepoConfig): Effect.Effect<GitProviderRepository, HostError>;
+  getWriteContext(repoConfig: RepoConfig): Effect.Effect<GitProviderRepositoryContext, HostError>;
 };
 
 export type GitProviderHealthPort = {
-  getStatus(
-    repoConfig: RepoConfig,
-  ): Effect.Effect<GitProviderAvailability, GitProviderOperationError>;
+  getStatus(repoConfig: RepoConfig): Effect.Effect<GitProviderAvailability, HostError>;
 };
 
 export type PullRequestProviderInput = {
@@ -60,11 +47,9 @@ export type UpsertPullRequestInput = PullRequestProviderInput & {
 export type PullRequestProviderPort = {
   findByBranch(
     input: FindPullRequestByBranchInput,
-  ): Effect.Effect<PullRequest | undefined, GitProviderOperationError>;
-  getByNumber(
-    input: GetPullRequestByNumberInput,
-  ): Effect.Effect<PullRequest, GitProviderOperationError>;
-  upsert(input: UpsertPullRequestInput): Effect.Effect<PullRequest, GitProviderOperationError>;
+  ): Effect.Effect<PullRequest | undefined, HostError>;
+  getByNumber(input: GetPullRequestByNumberInput): Effect.Effect<PullRequest, HostError>;
+  upsert(input: UpsertPullRequestInput): Effect.Effect<PullRequest, HostError>;
 };
 
 export type GitProviderPort = {
