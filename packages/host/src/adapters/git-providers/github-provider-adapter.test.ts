@@ -28,15 +28,17 @@ const repoConfig = (host = "github.com") =>
 
 const createHealthDependencies = ({
   authResult = { ok: true, stdout: "Logged in to github.com account Maxsky5", stderr: "" },
+  runAuth,
   version = "gh version 2.95.0",
 }: {
   authResult?: SystemCommandRunResult;
+  runAuth?: (args: string[]) => SystemCommandRunResult;
   version?: string | null;
 } = {}): GithubCommandDependencies => {
   const systemCommands: SystemCommandPort = {
     resolveCommandPath: () => Effect.die("Unexpected resolveCommandPath call"),
     versionCommand: () => Effect.succeed(version),
-    runCommandAllowFailure: () => Effect.succeed(authResult),
+    runCommandAllowFailure: (_command, args) => Effect.succeed(runAuth?.(args) ?? authResult),
   };
   const githubCli = createGithubCliAdapter(systemCommands);
   return {
@@ -260,6 +262,45 @@ describe("GithubProviderAdapter", () => {
       account: "Maxsky5",
       repositoryMappingValid: true,
     });
+  });
+
+  test("checks only the active account and reports its login", async () => {
+    const authCalls: string[][] = [];
+    const github = new GithubProviderAdapter({
+      githubDependencies: createHealthDependencies({
+        runAuth: (args) => {
+          authCalls.push(args);
+          return args.includes("--active")
+            ? {
+                ok: true,
+                stdout: "Logged in to github.com account active-user (keyring)",
+                stderr: "",
+              }
+            : {
+                ok: false,
+                stdout: "",
+                stderr: "inactive account has expired credentials",
+              };
+        },
+      }),
+      gitPort: createGitPortTestDouble({
+        listRemotes: () =>
+          Effect.succeed([{ name: "origin", url: "git@github.com:Maxsky5/openducktor.git" }]),
+      }),
+    });
+
+    const health = await Effect.runPromise(github.health().getStatus(repoConfig()));
+    await Effect.runPromise(github.repository().getReadRepository(repoConfig()));
+
+    expect(health).toMatchObject({
+      available: true,
+      authenticated: true,
+      account: "active-user",
+    });
+    expect(authCalls).toHaveLength(2);
+    expect(authCalls).toEqual(
+      authCalls.map(() => ["auth", "status", "--active", "--hostname", "github.com"]),
+    );
   });
 
   test("rejects duplicate configured repository mappings in the repository port and health", async () => {

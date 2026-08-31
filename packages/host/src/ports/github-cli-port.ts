@@ -5,7 +5,17 @@ import type {
 } from "../effect/host-errors";
 import type { Effect } from "effect";
 
+export type GithubCliAuthentication = {
+  authenticated: boolean;
+  account: string | null;
+  reason: string | null;
+};
+
 export type GithubCliPort = {
+  getAuthentication(
+    ghCommand: string,
+    host: string,
+  ): Effect.Effect<GithubCliAuthentication, HostOperationErrorAggregate>;
   readVersion(
     ghCommand: string,
     options?: SystemCommandRunOptions,

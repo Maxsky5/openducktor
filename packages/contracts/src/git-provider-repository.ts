@@ -32,21 +32,33 @@ const parseScpStyleRemote = (value: string): ParsedGitRemote | null => {
 };
 
 const parseSlashSeparatedRemote = (value: string, prefix: string): ParsedGitRemote | null => {
-  const remainder = value.slice(prefix.length);
-  const separatorIndex = remainder.indexOf("/");
-  if (separatorIndex <= 0 || separatorIndex === remainder.length - 1) {
+  try {
+    const parsed = new URL(value);
+    if (
+      !value.startsWith(prefix) ||
+      parsed.hostname.length === 0 ||
+      parsed.search.length > 0 ||
+      parsed.hash.length > 0
+    ) {
+      return null;
+    }
+    return {
+      host: prefix === SSH_URL_PREFIX ? parsed.hostname : parsed.host,
+      path: parsed.pathname.slice(1),
+    };
+  } catch {
     return null;
   }
-
-  return {
-    host: remainder.slice(0, separatorIndex),
-    path: remainder.slice(separatorIndex + 1),
-  };
 };
 
 const splitRepositoryPath = (path: string): RepositoryPath | null => {
-  const [owner, name] = path.split("/", 3);
-  if (!owner?.trim() || !name?.trim()) {
+  const segments = path.split("/");
+  if (segments.length !== 2) {
+    return null;
+  }
+  const owner = segments[0]?.trim() ?? "";
+  const name = stripGitSuffix(segments[1]?.trim() ?? "");
+  if (owner.length === 0 || name.length === 0) {
     return null;
   }
 
@@ -64,13 +76,12 @@ export const parseGitProviderRepositoryFromRemoteUrl = (
     return null;
   }
 
-  const withoutSuffix = stripGitSuffix(trimmed);
-  const parsedRemote = withoutSuffix.startsWith(SSH_GIT_PREFIX)
-    ? parseScpStyleRemote(withoutSuffix)
-    : withoutSuffix.startsWith(HTTPS_PREFIX)
-      ? parseSlashSeparatedRemote(withoutSuffix, HTTPS_PREFIX)
-      : withoutSuffix.startsWith(SSH_URL_PREFIX)
-        ? parseSlashSeparatedRemote(withoutSuffix, SSH_URL_PREFIX)
+  const parsedRemote = trimmed.startsWith(SSH_GIT_PREFIX)
+    ? parseScpStyleRemote(trimmed)
+    : trimmed.startsWith(HTTPS_PREFIX)
+      ? parseSlashSeparatedRemote(trimmed, HTTPS_PREFIX)
+      : trimmed.startsWith(SSH_URL_PREFIX)
+        ? parseSlashSeparatedRemote(trimmed, SSH_URL_PREFIX)
         : null;
 
   if (!parsedRemote) {

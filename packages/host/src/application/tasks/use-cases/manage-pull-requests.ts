@@ -5,7 +5,6 @@ import { loadOpenApprovalContext } from "../support/approval-readiness";
 import {
   fetchGithubPullRequestByNumber,
   GITHUB_PROVIDER_ID,
-  requireGithubPullRequestContext,
   upsertGithubPullRequest,
 } from "../support/github-pull-requests";
 import {
@@ -20,6 +19,7 @@ import type { CreateTaskServiceInput, TaskService } from "../task-service";
 type Cases = Pick<TaskService, "linkPullRequest" | "upsertPullRequest" | "unlinkPullRequest">;
 
 export const createTaskPullRequestManagementUseCases = ({
+  gitPort,
   githubDependencies,
   gitProviderResolver,
   taskStore,
@@ -41,6 +41,7 @@ export const createTaskPullRequestManagementUseCases = ({
       }
       const dependencies = yield* requireDependencies(() =>
         requirePullRequestLinkDependencies({
+          gitProviderResolver,
           githubDependencies,
           workspaceSettingsService,
         }),
@@ -69,15 +70,12 @@ export const createTaskPullRequestManagementUseCases = ({
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = repoConfig.repoPath;
-      const githubContext = yield* requireGithubPullRequestContext(
-        dependencies,
-        effectiveRepoPath,
-        repoConfig,
-      );
+      const provider = yield* dependencies.gitProviderResolver.resolve(repoConfig);
+      const repository = yield* provider.repository().getReadRepository(repoConfig);
       const pullRequest = yield* fetchGithubPullRequestByNumber(
         dependencies,
         effectiveRepoPath,
-        githubContext.repository,
+        repository,
         number,
       );
       yield* taskStore.setPullRequest({
@@ -93,6 +91,7 @@ export const createTaskPullRequestManagementUseCases = ({
       const { repoPath, taskId, content } = input;
       const dependencies = yield* requireDependencies(() =>
         requirePullRequestUpsertDependencies({
+          gitPort,
           githubDependencies,
           gitProviderResolver,
           settingsConfig,
@@ -138,11 +137,8 @@ export const createTaskPullRequestManagementUseCases = ({
           }),
         );
       }
-      const githubContext = yield* requireGithubPullRequestContext(
-        dependencies,
-        effectiveRepoPath,
-        repoConfig,
-      );
+      const provider = yield* dependencies.gitProviderResolver.resolve(repoConfig);
+      const githubContext = yield* provider.repository().getWriteContext(repoConfig);
       const pushResult = yield* dependencies.gitPort.pushBranch(
         approval.workingDirectory,
         approval.sourceBranch,

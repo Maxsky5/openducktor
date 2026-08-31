@@ -42,6 +42,31 @@ const createSystemCommandPort = ({
 };
 
 describe("createGithubCliAdapter", () => {
+  test("reads authentication from the active account for the requested host", async () => {
+    const { port, runCalls } = createSystemCommandPort({
+      runResult: {
+        ok: true,
+        stdout: "Logged in to github.example.com account active-user (keyring)\n",
+        stderr: "",
+      },
+    });
+    const githubCli = createGithubCliAdapter(port);
+
+    const authentication = await Effect.runPromise(
+      githubCli.getAuthentication("/usr/local/bin/gh", "github.example.com"),
+    );
+
+    expect(authentication).toEqual({
+      authenticated: true,
+      account: "active-user",
+      reason: null,
+    });
+    expect(runCalls[0]).toMatchObject({
+      command: "/usr/local/bin/gh",
+      args: ["auth", "status", "--active", "--hostname", "github.example.com"],
+    });
+  });
+
   test("run preserves command options and enforces machine-readable env", async () => {
     const { port, runCalls } = createSystemCommandPort();
     const githubCli = createGithubCliAdapter(port);

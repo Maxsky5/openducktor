@@ -11,20 +11,6 @@ import type { createGithubProviderRepositoryAdapter } from "./github-provider-re
 
 const GITHUB_PROVIDER_ID = GITHUB_PROVIDER_DESCRIPTOR.id;
 
-const commandOutput = (stdout: string, stderr: string): string =>
-  [stdout.trim(), stderr.trim()].filter((value) => value.length > 0).join("\n");
-
-const parseAccount = (output: string): string | null => {
-  const marker = "account ";
-  const markerIndex = output.indexOf(marker);
-  if (markerIndex < 0) {
-    return null;
-  }
-  const remainder = output.slice(markerIndex + marker.length).trimStart();
-  const account = remainder.split(/[\s(']/)[0]?.trim() ?? "";
-  return account.length > 0 ? account : null;
-};
-
 const failure = ({
   enabled = true,
   executablePath = null,
@@ -93,7 +79,7 @@ export const createGithubProviderHealthPort = ({
       }
       const repository = provider.repository;
       const authResult = yield* Effect.either(
-        command.githubCli.run(command.ghCommand, ["auth", "status", "--hostname", repository.host]),
+        command.githubCli.getAuthentication(command.ghCommand, repository.host),
       );
       if (authResult._tag === "Left") {
         return failure({
@@ -102,15 +88,16 @@ export const createGithubProviderHealthPort = ({
           reason: `Failed to check GitHub authentication: ${errorMessage(authResult.left)}`,
         });
       }
-      const authOutput = commandOutput(authResult.right.stdout, authResult.right.stderr);
-      if (!authResult.right.ok) {
+      if (!authResult.right.authenticated) {
         return failure({
           executablePath: command.ghCommand,
           version,
-          reason: authOutput || "GitHub authentication is not configured. Run `gh auth login`.",
+          reason:
+            authResult.right.reason ??
+            "GitHub authentication is not configured. Run `gh auth login`.",
         });
       }
-      const account = parseAccount(authOutput);
+      const account = authResult.right.account;
       const mappingResult = yield* Effect.either(
         requireSingleMatchingRemote(repoConfig.repoPath, repository),
       );

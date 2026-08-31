@@ -14,9 +14,6 @@ import type { GitProviderRepositoryPort } from "../../ports/git-provider-port";
 
 const GITHUB_PROVIDER_ID = GITHUB_PROVIDER_DESCRIPTOR.id;
 
-const commandOutput = (stdout: string, stderr: string): string =>
-  [stdout.trim(), stderr.trim()].filter((value) => value.length > 0).join("\n");
-
 const configuredRepository = (repoConfig: RepoConfig) =>
   Effect.gen(function* () {
     const provider = repoConfig.git.provider;
@@ -128,20 +125,15 @@ export const createGithubProviderRepositoryAdapter = ({
             }),
         ),
       );
-      const result = yield* command.githubCli.run(command.ghCommand, [
-        "auth",
-        "status",
-        "--hostname",
-        host,
-      ]);
-      if (result.ok) {
+      const authentication = yield* command.githubCli.getAuthentication(command.ghCommand, host);
+      if (authentication.authenticated) {
         return;
       }
       return yield* Effect.fail(
         new HostValidationError({
           field: "github.auth",
           message:
-            commandOutput(result.stdout, result.stderr) ||
+            authentication.reason ||
             "GitHub authentication is not configured. Run `gh auth login`.",
           details: { host },
         }),

@@ -1,5 +1,4 @@
 import {
-  parseGitProviderRepositoryFromRemoteUrl,
   type GitProviderRepository,
   type PullRequest,
   type RepoConfig,
@@ -7,9 +6,8 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { checkoutBranch } from "../../../domain/task";
-import { errorMessage, HostValidationError } from "../../../effect/host-errors";
+import { HostValidationError } from "../../../effect/host-errors";
 import type { GithubCliPort } from "../../../ports/github-cli-port";
-import type { GitPort } from "../../../ports/git-port";
 import type { SystemCommandPort } from "../../../ports/system-command-port";
 import type { ToolDiscoveryError, ToolDiscoveryPort } from "../../../ports/tool-discovery-port";
 import {
@@ -21,7 +19,6 @@ import {
   parseGithubPullListResponse,
   parseGithubPullResponse,
   type ResolvedPullRequest,
-  repositoryKey,
 } from "./github-pull-request-model";
 
 export {
@@ -39,9 +36,6 @@ export type GithubCommandDependencies = {
   githubCli: GithubCliPort;
   systemCommands: SystemCommandPort;
   toolDiscovery: ToolDiscoveryPort;
-};
-export type GithubRepositoryDependencies = GithubCommandDependencies & {
-  gitPort: GitPort;
 };
 export type ResolvedGithubCommandDependencies = {
   ghCommand: string;
@@ -75,21 +69,6 @@ export const createGithubCommandDependencies = ({
 const resolveGithubCommandDependencies = (dependencies: GithubCommandDependencies) =>
   dependencies.resolveGithubCommand();
 
-const resolveRequiredGithubCommandDependencies = (
-  dependencies: GithubCommandDependencies,
-  repoPath: string,
-) =>
-  resolveGithubCommandDependencies(dependencies).pipe(
-    Effect.mapError(
-      (cause) =>
-        new HostValidationError({
-          field: "githubCli",
-          message: `GitHub pull request support requires the gh CLI. ${errorMessage(cause)}`,
-          details: { repoPath },
-        }),
-    ),
-  );
-
 export const runGithubCommand = (
   dependencies: GithubCommandDependencies,
   repoPath: string,
@@ -112,118 +91,6 @@ export const runGithubCommand = (
         details: { repoPath },
       }),
     );
-  });
-const matchingGithubRemoteNames = (
-  gitPort: GitPort,
-  repoPath: string,
-  repository: GitProviderRepository,
-) =>
-  Effect.gen(function* () {
-    const expectedKey = repositoryKey(repository);
-    return (yield* gitPort.listRemotes(repoPath)).flatMap((remote) => {
-      const parsed = parseGitProviderRepositoryFromRemoteUrl(remote.url);
-      return parsed !== null && repositoryKey(parsed) === expectedKey ? [remote.name] : [];
-    });
-  });
-const requireSingleGithubRemoteName = (
-  gitPort: GitPort,
-  repoPath: string,
-  repository: GitProviderRepository,
-) =>
-  Effect.gen(function* () {
-    const matches = yield* matchingGithubRemoteNames(gitPort, repoPath, repository);
-    if (matches.length === 1) {
-      return matches[0] ?? "";
-    }
-    if (matches.length === 0) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "git.provider.repository",
-          message: `No git remote matches the configured GitHub repository ${repository.host}:${repository.owner}/${repository.name}.`,
-          details: { repoPath },
-        }),
-      );
-    }
-    return yield* Effect.fail(
-      new HostValidationError({
-        field: "git.provider.repository",
-        message: `Multiple git remotes match the configured GitHub repository ${repository.host}:${repository.owner}/${repository.name}: ${matches.join(", ")}. Configure a single matching remote before opening or updating a pull request.`,
-        details: { repoPath, matches },
-      }),
-    );
-  });
-const probeResolvedGithubAuthOrThrow = (
-  dependencies: ResolvedGithubCommandDependencies,
-  host: string,
-) =>
-  Effect.gen(function* () {
-    const result = yield* dependencies.githubCli.run(dependencies.ghCommand, [
-      "auth",
-      "status",
-      "--hostname",
-      host,
-    ]);
-    if (result.ok) {
-      return;
-    }
-    return yield* Effect.fail(
-      new HostValidationError({
-        field: "github.auth",
-        message:
-          combinedCommandOutput(result.stdout, result.stderr) ||
-          "GitHub authentication is not configured. Run `gh auth login`.",
-        details: { host },
-      }),
-    );
-  });
-export const requireGithubPullRequestReadRepository = (
-  dependencies: GithubCommandDependencies,
-  repoPath: string,
-  repoConfig: RepoConfig,
-) =>
-  Effect.gen(function* () {
-    const githubConfig = repoConfig.git.provider;
-    if (githubConfig?.id !== GITHUB_PROVIDER_ID || !githubConfig.enabled) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "git.provider.enabled",
-          message: "GitHub pull request support is not enabled for this repository.",
-          details: { repoPath },
-        }),
-      );
-    }
-    const repository = githubConfig.repository;
-    if (!repository) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "git.provider.repository",
-          message: "GitHub pull request support requires repository coordinates.",
-          details: { repoPath },
-        }),
-      );
-    }
-    const githubCommand = yield* resolveRequiredGithubCommandDependencies(dependencies, repoPath);
-    yield* probeResolvedGithubAuthOrThrow(githubCommand, repository.host);
-    return repository;
-  });
-
-export const requireGithubPullRequestContext = (
-  dependencies: GithubRepositoryDependencies,
-  repoPath: string,
-  repoConfig: RepoConfig,
-) =>
-  Effect.gen(function* () {
-    const repository = yield* requireGithubPullRequestReadRepository(
-      dependencies,
-      repoPath,
-      repoConfig,
-    );
-    const remoteName = yield* requireSingleGithubRemoteName(
-      dependencies.gitPort,
-      repoPath,
-      repository,
-    );
-    return { repository, remoteName };
   });
 const selectGithubPullRequestForBranch = (
   pullRequests: ResolvedPullRequest[],

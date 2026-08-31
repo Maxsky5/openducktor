@@ -9,10 +9,7 @@ import {
 import { HostValidationError } from "../../../effect/host-errors";
 import { providerStatuses } from "../support/approval-readiness";
 import { requireApprovalContextDependencies } from "../support/required-provider-task-dependencies";
-import {
-  requireDependencies,
-  type TaskGithubDependencyInput,
-} from "../support/required-task-dependencies";
+import { requireDependencies } from "../support/required-task-dependencies";
 import { loadDefaultMergeMethod } from "../support/task-workflow-helpers";
 import {
   effectiveTargetBranchForTask,
@@ -21,22 +18,19 @@ import {
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskApprovalContextUseCase = ({
-  githubDependencies,
+  gitPort,
   gitProviderResolver,
   taskStore,
   settingsConfig,
   taskWorktreeService,
   workspaceSettingsService,
-}: CreateTaskServiceInput & TaskGithubDependencyInput): Pick<
-  TaskService,
-  "getApprovalContext"
-> => ({
+}: CreateTaskServiceInput): Pick<TaskService, "getApprovalContext"> => ({
   getApprovalContext(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const dependencies = yield* requireDependencies(() =>
         requireApprovalContextDependencies({
-          githubDependencies,
+          gitPort,
           gitProviderResolver,
           settingsConfig,
           taskWorktreeService,

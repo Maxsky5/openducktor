@@ -47,10 +47,37 @@ describe("git provider repository parsing", () => {
     });
   });
 
+  test("uses the API host for ssh URLs with a transport port", () => {
+    expect(
+      parseGitProviderRepositoryFromRemoteUrl(
+        "ssh://git@github.mycorp.com:2222/openai/openducktor.git",
+      ),
+    ).toEqual({
+      host: "github.mycorp.com",
+      owner: "openai",
+      name: "openducktor",
+    });
+  });
+
+  test("keeps an HTTPS port that is part of an enterprise API host", () => {
+    expect(
+      parseGitProviderRepositoryFromRemoteUrl(
+        "https://github.mycorp.com:8443/openai/openducktor.git",
+      ),
+    ).toEqual({
+      host: "github.mycorp.com:8443",
+      owner: "openai",
+      name: "openducktor",
+    });
+  });
+
   test("returns null for unsupported or incomplete remotes", () => {
     expect(parseGitProviderRepositoryFromRemoteUrl("")).toBeNull();
     expect(parseGitProviderRepositoryFromRemoteUrl("git@github.com")).toBeNull();
     expect(parseGitProviderRepositoryFromRemoteUrl("https://github.com/openai")).toBeNull();
+    expect(
+      parseGitProviderRepositoryFromRemoteUrl("https://github.com/openai/openducktor/extra"),
+    ).toBeNull();
     expect(parseGitProviderRepositoryFromRemoteUrl("file:///tmp/repo")).toBeNull();
   });
 

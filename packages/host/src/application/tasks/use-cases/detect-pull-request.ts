@@ -1,9 +1,6 @@
 import { Effect } from "effect";
 import { HostValidationError } from "../../../effect/host-errors";
-import {
-  findGithubPullRequestForBranch,
-  requireGithubPullRequestContext,
-} from "../support/github-pull-requests";
+import { findGithubPullRequestForBranch } from "../support/github-pull-requests";
 import {
   requireDependencies,
   requirePullRequestDetectionDependencies,
@@ -14,6 +11,8 @@ import { loadTaskBranchCleanup } from "../support/task-worktree-cleanup";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskPullRequestDetectionUseCase = ({
+  gitPort,
+  gitProviderResolver,
   githubDependencies,
   taskStore,
   taskWorktreeService,
@@ -24,6 +23,8 @@ export const createTaskPullRequestDetectionUseCase = ({
       const { repoPath, taskId } = input;
       const dependencies = yield* requireDependencies(() =>
         requirePullRequestDetectionDependencies({
+          gitPort,
+          gitProviderResolver,
           githubDependencies,
           taskWorktreeService,
           workspaceSettingsService,
@@ -61,15 +62,12 @@ export const createTaskPullRequestDetectionUseCase = ({
         taskId,
         "Pull request detection",
       );
-      const githubContext = yield* requireGithubPullRequestContext(
-        dependencies,
-        effectiveRepoPath,
-        repoConfig,
-      );
+      const provider = yield* dependencies.gitProviderResolver.resolve(repoConfig);
+      const repository = yield* provider.repository().getReadRepository(repoConfig);
       const openPullRequest = yield* findGithubPullRequestForBranch(
         dependencies,
         effectiveRepoPath,
-        githubContext.repository,
+        repository,
         taskContext.sourceBranch,
         "open",
       );
@@ -88,7 +86,7 @@ export const createTaskPullRequestDetectionUseCase = ({
       const pullRequest = yield* findGithubPullRequestForBranch(
         dependencies,
         effectiveRepoPath,
-        githubContext.repository,
+        repository,
         taskContext.sourceBranch,
         "all",
       );

@@ -16,7 +16,7 @@ import {
 import type { GithubCliPort } from "../../ports/github-cli-port";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
-import type { SystemCommandPort, SystemCommandRunResult } from "../../ports/system-command-port";
+import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { RepoStoreDiagnostics, TaskStoreError } from "../../ports/task-repository-ports";
 import type {
   ToolDiscoveryError,
@@ -46,42 +46,13 @@ const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
   Effect.gen(function* () {
     return (yield* settingsConfig.readConfig()) ?? createDefaultGlobalConfig();
   });
-const parseGithubAuthLogin = (output: string): string | null => {
-  const accountMarker = "account ";
-  const markerIndex = output.indexOf(accountMarker);
-  if (markerIndex < 0) {
-    return null;
-  }
-  const remainder = output.slice(markerIndex + accountMarker.length).trimStart();
-  const login = remainder.split(/[\s(']/)[0]?.trim() ?? "";
-  return login.length > 0 ? login : null;
-};
 const probeGithubAuthStatus = (githubCli: GithubCliPort, ghCommand: string) =>
   Effect.gen(function* () {
-    const result: SystemCommandRunResult = yield* githubCli.run(ghCommand, [
-      "auth",
-      "status",
-      "--hostname",
-      "github.com",
-    ]);
-    const stdout = result.stdout.trim();
-    const stderr = result.stderr.trim();
-    const combined =
-      stderr.length === 0 ? stdout : stdout.length === 0 ? stderr : `${stdout}\n${stderr}`;
-    if (result.ok) {
-      return {
-        ghAuthOk: true,
-        ghAuthLogin: parseGithubAuthLogin(combined),
-        ghAuthError: null,
-      };
-    }
+    const result = yield* githubCli.getAuthentication(ghCommand, "github.com");
     return {
-      ghAuthOk: false,
-      ghAuthLogin: null,
-      ghAuthError:
-        combined.length > 0
-          ? combined
-          : "GitHub authentication is not configured. Run `gh auth login`.",
+      ghAuthOk: result.authenticated,
+      ghAuthLogin: result.account,
+      ghAuthError: result.reason,
     };
   }).pipe(
     Effect.catchAll(() =>

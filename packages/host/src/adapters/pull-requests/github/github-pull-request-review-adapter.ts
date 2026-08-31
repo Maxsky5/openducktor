@@ -1,11 +1,12 @@
 import { pullRequestReviewContextSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
+import type { GitProviderRepository, RepoConfig } from "@openducktor/contracts";
 import {
   GITHUB_PROVIDER_ID,
   type GithubCommandDependencies,
-  requireGithubPullRequestReadRepository,
 } from "../../../application/tasks/support/github-pull-requests";
-import { errorMessage, HostValidationError } from "../../../effect/host-errors";
+import { errorMessage, type HostError, HostValidationError } from "../../../effect/host-errors";
+import type { GitProviderRepositoryError } from "../../../ports/git-provider-errors";
 import type { PullRequestReviewProviderPort } from "../../../ports/pull-request-review-provider-port";
 import {
   createGithubPullRequestReviewReader,
@@ -21,9 +22,13 @@ const unavailable = (reason: string) =>
 
 export const createGithubPullRequestReviewAdapter = ({
   githubDependencies,
+  getReadRepository,
   reviewReader = createGithubPullRequestReviewReader(),
 }: {
   githubDependencies: GithubCommandDependencies;
+  getReadRepository: (
+    repoConfig: RepoConfig,
+  ) => Effect.Effect<GitProviderRepository, HostError | GitProviderRepositoryError>;
   reviewReader?: GithubPullRequestReviewReader;
 }): PullRequestReviewProviderPort => {
   return {
@@ -40,9 +45,7 @@ export const createGithubPullRequestReviewAdapter = ({
         }
 
         const repoPath = input.repoConfig.repoPath;
-        const repositoryResult = yield* Effect.either(
-          requireGithubPullRequestReadRepository(githubDependencies, repoPath, input.repoConfig),
-        );
+        const repositoryResult = yield* Effect.either(getReadRepository(input.repoConfig));
         if (repositoryResult._tag === "Left") {
           return unavailable(errorMessage(repositoryResult.left));
         }

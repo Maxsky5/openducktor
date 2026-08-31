@@ -2,16 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { repoConfigSchema, type PullRequest } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createGithubCliAdapter } from "../../../adapters/git-providers/github-cli";
-import type { GitPort } from "../../../ports/git-port";
 import type { SystemCommandPort } from "../../../ports/system-command-port";
 import type { ToolDiscoveryPort } from "../../../ports/tool-discovery-port";
 import {
   findGithubPullRequestForBranch,
   type GithubCommandDependencies,
-  type GithubRepositoryDependencies,
   githubPullRequestSyncPolicy,
   pullRequestRecordsMatch,
-  requireGithubPullRequestReadRepository,
 } from "./github-pull-requests";
 import { parseGithubPullListResponse, parseGithubPullResponse } from "./github-pull-request-model";
 
@@ -172,8 +169,9 @@ describe("findGithubPullRequestForBranch", () => {
 describe("GitHub provider selection", () => {
   test("does not resolve GitHub dependencies for another configured provider", async () => {
     let resolveGithubCommandCalls = 0;
-    const dependencies: GithubRepositoryDependencies = {
+    const dependencies: GithubCommandDependencies = {
       githubCli: {
+        getAuthentication: () => Effect.die("GitHub authentication must not be read"),
         readVersion: () => Effect.die("GitHub CLI must not be read"),
         run: () => Effect.die("GitHub CLI must not run"),
       },
@@ -181,8 +179,6 @@ describe("GitHub provider selection", () => {
         resolveGithubCommandCalls += 1;
         return Effect.die("GitHub dependencies must not be resolved");
       },
-      // SAFETY: The provider mismatch must return before any Git operation is read.
-      gitPort: {} as GitPort,
       // SAFETY: The provider mismatch must return before any command operation is read.
       systemCommands: {} as SystemCommandPort,
       // SAFETY: The provider mismatch must return before any tool discovery operation is read.
@@ -203,14 +199,10 @@ describe("GitHub provider selection", () => {
       },
     });
 
-    const readResult = await Effect.runPromiseExit(
-      requireGithubPullRequestReadRepository(dependencies, "/repo", repoConfig),
-    );
     const syncPolicy = await Effect.runPromise(
       githubPullRequestSyncPolicy(dependencies, repoConfig),
     );
 
-    expect(readResult._tag).toBe("Failure");
     expect(syncPolicy).toEqual({ providerId: "github", available: false });
     expect(resolveGithubCommandCalls).toBe(0);
   });

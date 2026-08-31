@@ -18,6 +18,7 @@ import {
 import { Effect } from "effect";
 import { TaskPolicyError } from "../../domain/task/task-policy-error";
 import type {
+  HostCommandErrorAggregate,
   HostDependencyErrorAggregate,
   HostInvariantErrorAggregate,
   HostOperationErrorAggregate,
@@ -31,6 +32,10 @@ import {
 } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
 import type { GithubCliPort } from "../../ports/github-cli-port";
+import {
+  GitProviderRepositoryError,
+  GitProviderResolutionError,
+} from "../../ports/git-provider-errors";
 import type { GitPort, GitPortError } from "../../ports/git-port";
 import type { RuntimeRegistryError, RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
@@ -102,6 +107,9 @@ import type { TaskWorktreeService } from "./worktrees/task-worktree-service";
 
 export type TaskServiceError =
   | DevServerServiceError
+  | GitProviderRepositoryError
+  | GitProviderResolutionError
+  | HostCommandErrorAggregate
   | GitPortError
   | HostDependencyErrorAggregate
   | HostInvariantErrorAggregate
@@ -273,7 +281,11 @@ export type CreateTaskServiceInput = {
   taskSessionBootstrapCoordinator?: TaskSessionBootstrapCoordinator;
 };
 const isTaskServiceError = (cause: unknown): cause is TaskServiceError =>
-  cause instanceof TaskAssetError || cause instanceof TaskPolicyError || isHostError(cause);
+  cause instanceof GitProviderRepositoryError ||
+  cause instanceof GitProviderResolutionError ||
+  cause instanceof TaskAssetError ||
+  cause instanceof TaskPolicyError ||
+  isHostError(cause);
 
 const toTaskServiceError = (cause: unknown): TaskServiceError => {
   if (isTaskServiceError(cause)) {

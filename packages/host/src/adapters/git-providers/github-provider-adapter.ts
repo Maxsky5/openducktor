@@ -106,7 +106,10 @@ export class GithubProviderAdapter implements GitProviderPort {
           );
         }),
     };
-    this.pullRequestReviewPort = createGithubPullRequestReviewAdapter({ githubDependencies });
+    this.pullRequestReviewPort = createGithubPullRequestReviewAdapter({
+      githubDependencies,
+      getReadRepository,
+    });
   }
 
   getDescriptor(): GitProviderDescriptor {

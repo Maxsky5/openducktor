@@ -270,6 +270,13 @@ describe("createSystemDiagnosticsService", () => {
       CLICOLOR_FORCE: "0",
       FORCE_COLOR: "0",
     });
+    expect(commandCalls.find((call) => call.command === "gh")?.args).toEqual([
+      "auth",
+      "status",
+      "--active",
+      "--hostname",
+      "github.com",
+    ]);
     const ghVersionCall = versionCommandCalls.find((call) => call.command === "gh");
     expect(ghVersionCall?.args).toEqual(["--version"]);
     expect(ghVersionCall?.options?.env).toMatchObject({
