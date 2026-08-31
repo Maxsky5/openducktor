@@ -769,7 +769,7 @@ afterEach(() => {
 });
 
 const createHookHarness = () =>
-  createSharedHookHarness((_: undefined) => useAgentsPageShellModel(), undefined, {
+  createSharedHookHarness(() => useAgentsPageShellModel(), undefined, {
     wrapper: AppStateTestWrapper,
   });
 
