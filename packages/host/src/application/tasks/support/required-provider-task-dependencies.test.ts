@@ -10,7 +10,7 @@ import { requireApprovalContextDependencies } from "./required-provider-task-dep
 import { requireDirectMergeDependencies } from "./required-task-dependencies";
 
 const dependencyStub = <Dependency>(): Dependency => {
-  // SAFETY: These dependency gates only check that each required object exists and return it unchanged.
+  // SAFETY: These gates only check that each value exists, then return it unchanged.
   return {} as Dependency;
 };
 

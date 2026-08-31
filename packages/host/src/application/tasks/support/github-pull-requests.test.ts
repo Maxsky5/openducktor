@@ -171,7 +171,7 @@ describe("GitHub provider selection", () => {
     let resolveGithubCommandCalls = 0;
     const dependencies: GithubCommandDependencies = {
       githubCli: {
-        getAuthentication: () => Effect.die("GitHub authentication must not be read"),
+        getAuth: () => Effect.die("GitHub authentication must not be read"),
         readVersion: () => Effect.die("GitHub CLI must not be read"),
         run: () => Effect.die("GitHub CLI must not run"),
       },
@@ -179,9 +179,9 @@ describe("GitHub provider selection", () => {
         resolveGithubCommandCalls += 1;
         return Effect.die("GitHub dependencies must not be resolved");
       },
-      // SAFETY: The provider mismatch must return before any command operation is read.
+      // SAFETY: A provider mismatch returns before it reads the command.
       systemCommands: {} as SystemCommandPort,
-      // SAFETY: The provider mismatch must return before any tool discovery operation is read.
+      // SAFETY: A provider mismatch returns before it reads tool discovery.
       toolDiscovery: {} as ToolDiscoveryPort,
     };
     const repoConfig = repoConfigSchema.parse({

@@ -81,8 +81,8 @@ describe("GithubProviderAdapter", () => {
     expect(resolved.getDescriptor().capabilities.supportsPullRequestReview).toBe(true);
     expect(resolved.repository()).toEqual(
       expect.objectContaining({
-        getReadRepository: expect.any(Function),
-        getMappedRepositoryContext: expect.any(Function),
+        getRepository: expect.any(Function),
+        getMapping: expect.any(Function),
       }),
     );
     expect(resolved.health()).toEqual(
@@ -290,7 +290,7 @@ describe("GithubProviderAdapter", () => {
     });
 
     const health = await Effect.runPromise(github.health().getStatus(repoConfig()));
-    await Effect.runPromise(github.repository().getReadRepository(repoConfig()));
+    await Effect.runPromise(github.repository().getRepository(repoConfig()));
 
     expect(health).toMatchObject({
       available: true,
@@ -316,7 +316,7 @@ describe("GithubProviderAdapter", () => {
     });
 
     const mapping = await Effect.runPromise(
-      Effect.either(github.repository().getMappedRepositoryContext(repoConfig())),
+      Effect.either(github.repository().getMapping(repoConfig())),
     );
     const health = await Effect.runPromise(github.health().getStatus(repoConfig()));
 

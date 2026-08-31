@@ -48,7 +48,7 @@ const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
   });
 const probeGithubAuthStatus = (githubCli: GithubCliPort, ghCommand: string) =>
   Effect.gen(function* () {
-    const result = yield* githubCli.getAuthentication(ghCommand, "github.com");
+    const result = yield* githubCli.getAuth(ghCommand, "github.com");
     return {
       ghAuthOk: result.authenticated,
       ghAuthLogin: result.account,

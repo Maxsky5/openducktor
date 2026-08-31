@@ -35,17 +35,17 @@ import {
   task,
 } from "./test-support/task-workflow-harness";
 
-type RealGithubProviderDependencies = Required<
+type GithubTaskDependencies = Required<
   Pick<
     CreateTaskServiceInput,
     "gitPort" | "gitProviderResolver" | "githubCli" | "systemCommands" | "toolDiscovery"
   >
 >;
 
-const createRealGithubProviderDependencies = async (
+const createGithubTaskDependencies = async (
   gitPort: GitPort,
   systemCommands: SystemCommandPort,
-): Promise<RealGithubProviderDependencies> => {
+): Promise<GithubTaskDependencies> => {
   const githubCli = createGithubCliAdapter(systemCommands);
   const toolDiscovery = createToolDiscoveryAdapter({ systemCommands });
   const githubDependencies = createGithubCommandDependencies({
@@ -234,10 +234,7 @@ describe("createTaskService pull requests", () => {
       calls,
       openPayload: githubPullListPayload([{ number: 42 }]),
     });
-    const providerDependencies = await createRealGithubProviderDependencies(
-      gitPort,
-      systemCommands,
-    );
+    const providerDependencies = await createGithubTaskDependencies(gitPort, systemCommands);
     const service = createTaskService({
       ...providerDependencies,
       taskStore,
@@ -348,10 +345,7 @@ describe("createTaskService pull requests", () => {
         calls,
         openPayload: githubPullListPayload([]),
       });
-      const providerDependencies = await createRealGithubProviderDependencies(
-        gitPort,
-        systemCommands,
-      );
+      const providerDependencies = await createGithubTaskDependencies(gitPort, systemCommands);
       const service = createTaskService({
         ...providerDependencies,
         taskStore: {
@@ -590,10 +584,7 @@ describe("createTaskService pull requests", () => {
         });
       },
     });
-    const providerDependencies = await createRealGithubProviderDependencies(
-      gitPort,
-      systemCommands,
-    );
+    const providerDependencies = await createGithubTaskDependencies(gitPort, systemCommands);
     const service = createTaskService({
       ...providerDependencies,
       taskStore,

@@ -21,7 +21,7 @@ const parseRepoPath = (args: HostCommandArgs): string => {
   return requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath");
 };
 
-const githubDetectionConfig = (repoConfig: RepoConfig): RepoConfig => {
+const detectionConfig = (repoConfig: RepoConfig): RepoConfig => {
   const configuredProvider = repoConfig.git.provider;
   if (configuredProvider !== undefined && configuredProvider.id !== GITHUB_PROVIDER_DESCRIPTOR.id) {
     throw new HostValidationError({
@@ -57,7 +57,7 @@ export const createGithubRepositoryDetectionCommandHandlers = ({
         const repoPath = parseRepoPath(args);
         const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
         return yield* service.detectRepository({
-          repoConfig: githubDetectionConfig(repoConfig),
+          repoConfig: detectionConfig(repoConfig),
         });
       }).pipe(
         Effect.mapError((cause) => {

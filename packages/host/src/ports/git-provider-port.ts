@@ -11,7 +11,7 @@ import type { HostError } from "../effect/host-errors";
 import type { GitProviderCapabilityError, GitProviderRepositoryError } from "./git-provider-errors";
 import type { PullRequestReviewProviderPort } from "./pull-request-review-provider-port";
 
-export type GitProviderRepositoryContext = {
+export type GitProviderRepositoryMapping = {
   repository: GitProviderRepository;
   remoteName: string;
 };
@@ -20,12 +20,12 @@ export type GitProviderRepositoryPort = {
   detectRepository(
     repoPath: string,
   ): Effect.Effect<GitProviderRepository, HostError | GitProviderRepositoryError>;
-  getReadRepository(
+  getRepository(
     repoConfig: RepoConfig,
   ): Effect.Effect<GitProviderRepository, HostError | GitProviderRepositoryError>;
-  getMappedRepositoryContext(
+  getMapping(
     repoConfig: RepoConfig,
-  ): Effect.Effect<GitProviderRepositoryContext, HostError | GitProviderRepositoryError>;
+  ): Effect.Effect<GitProviderRepositoryMapping, HostError | GitProviderRepositoryError>;
 };
 
 export type GitProviderHealthPort = {

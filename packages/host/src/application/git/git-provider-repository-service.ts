@@ -7,19 +7,15 @@ import type {
 } from "../../ports/git-provider-errors";
 import type { GitProviderResolver } from "./git-provider-resolver";
 
-export type GitProviderRepositoryDetectionInput = {
-  repoConfig: RepoConfig;
-};
-
 export type GitProviderRepositoryServiceError =
   | GitProviderRepositoryError
   | GitProviderResolutionError
   | HostError;
 
 export type GitProviderRepositoryService = {
-  detectRepository(
-    input: GitProviderRepositoryDetectionInput,
-  ): Effect.Effect<GitProviderRepository, GitProviderRepositoryServiceError>;
+  detectRepository(input: {
+    repoConfig: RepoConfig;
+  }): Effect.Effect<GitProviderRepository, GitProviderRepositoryServiceError>;
 };
 
 export const createGitProviderRepositoryService = (

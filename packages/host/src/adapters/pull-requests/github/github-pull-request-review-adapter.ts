@@ -22,11 +22,11 @@ const unavailable = (reason: string) =>
 
 export const createGithubPullRequestReviewAdapter = ({
   githubDependencies,
-  getReadRepository,
+  getRepository,
   reviewReader = createGithubPullRequestReviewReader(),
 }: {
   githubDependencies: GithubCommandDependencies;
-  getReadRepository: (
+  getRepository: (
     repoConfig: RepoConfig,
   ) => Effect.Effect<GitProviderRepository, HostError | GitProviderRepositoryError>;
   reviewReader?: GithubPullRequestReviewReader;
@@ -45,7 +45,7 @@ export const createGithubPullRequestReviewAdapter = ({
         }
 
         const repoPath = input.repoConfig.repoPath;
-        const repositoryResult = yield* Effect.either(getReadRepository(input.repoConfig));
+        const repositoryResult = yield* Effect.either(getRepository(input.repoConfig));
         if (repositoryResult._tag === "Left") {
           return unavailable(errorMessage(repositoryResult.left));
         }

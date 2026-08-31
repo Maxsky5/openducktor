@@ -124,7 +124,7 @@ export type {
   GetPullRequestByNumberInput,
   GitProviderHealthPort,
   GitProviderPort,
-  GitProviderRepositoryContext,
+  GitProviderRepositoryMapping,
   GitProviderRepositoryPort,
   PullRequestProviderInput,
   PullRequestProviderPort,

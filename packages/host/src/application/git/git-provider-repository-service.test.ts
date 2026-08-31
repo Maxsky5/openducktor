@@ -21,8 +21,8 @@ describe("GitProviderRepositoryService", () => {
           name: "openducktor",
         });
       },
-      getReadRepository: () => Effect.die("Unexpected getReadRepository call"),
-      getMappedRepositoryContext: () => Effect.die("Unexpected getMappedRepositoryContext call"),
+      getRepository: () => Effect.die("Unexpected getRepository call"),
+      getMapping: () => Effect.die("Unexpected getMapping call"),
     };
     const health: GitProviderHealthPort = {
       getStatus: () => Effect.die("Unexpected health call"),

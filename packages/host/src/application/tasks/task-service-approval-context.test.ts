@@ -23,8 +23,8 @@ const createGitProviderResolver = (health: GitProviderHealth): GitProviderResolv
       getDescriptor: () => GITHUB_PROVIDER_DESCRIPTOR,
       repository: () => ({
         detectRepository: () => Effect.die("Unexpected detectRepository call"),
-        getReadRepository: () => Effect.die("Unexpected getReadRepository call"),
-        getMappedRepositoryContext: () => Effect.die("Unexpected getMappedRepositoryContext call"),
+        getRepository: () => Effect.die("Unexpected getRepository call"),
+        getMapping: () => Effect.die("Unexpected getMapping call"),
       }),
       health: () => ({ getStatus: () => Effect.succeed(health) }),
       pullRequests: () => Effect.die("Unexpected pullRequests call"),

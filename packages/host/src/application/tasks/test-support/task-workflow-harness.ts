@@ -154,13 +154,13 @@ const defaultGitProviderResolver: GitProviderResolver = {
       getDescriptor: () => GITHUB_PROVIDER_DESCRIPTOR,
       repository: () => ({
         detectRepository: () => Effect.dieMessage("unexpected repository detection"),
-        getReadRepository: (configuredRepo) => {
+        getRepository: (configuredRepo) => {
           const repository = configuredRepo.git.provider?.repository;
           return repository
             ? Effect.succeed(repository)
             : Effect.dieMessage("test repository mapping is missing");
         },
-        getMappedRepositoryContext: (configuredRepo) => {
+        getMapping: (configuredRepo) => {
           const repository = configuredRepo.git.provider?.repository;
           return repository
             ? Effect.succeed({ repository, remoteName: "origin" })

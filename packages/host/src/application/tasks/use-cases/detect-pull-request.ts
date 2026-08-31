@@ -63,7 +63,7 @@ export const createTaskPullRequestDetectionUseCase = ({
         "Pull request detection",
       );
       const provider = yield* dependencies.gitProviderResolver.resolve(repoConfig);
-      const { repository } = yield* provider.repository().getMappedRepositoryContext(repoConfig);
+      const { repository } = yield* provider.repository().getMapping(repoConfig);
       const openPullRequest = yield* findGithubPullRequestForBranch(
         dependencies,
         effectiveRepoPath,

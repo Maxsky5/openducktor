@@ -10,9 +10,7 @@ const GITHUB_CLI_MACHINE_ENV = {
   FORCE_COLOR: "0",
 };
 
-const githubCliCommandOptions = (
-  options: SystemCommandRunOptions = {},
-): SystemCommandRunOptions => ({
+const commandOptions = (options: SystemCommandRunOptions = {}): SystemCommandRunOptions => ({
   ...options,
   env: {
     ...options.env,
@@ -35,12 +33,12 @@ const parseAccount = (output: string): string | null => {
 };
 
 export const createGithubCliAdapter = (systemCommands: SystemCommandPort): GithubCliPort => ({
-  getAuthentication: (ghCommand, host) =>
+  getAuth: (ghCommand, host) =>
     systemCommands
       .runCommandAllowFailure(
         ghCommand,
         ["auth", "status", "--active", "--hostname", host],
-        githubCliCommandOptions(),
+        commandOptions(),
       )
       .pipe(
         Effect.map((result) => {
@@ -55,7 +53,7 @@ export const createGithubCliAdapter = (systemCommands: SystemCommandPort): Githu
         }),
       ),
   readVersion: (ghCommand, options) =>
-    systemCommands.versionCommand(ghCommand, ["--version"], githubCliCommandOptions(options)),
+    systemCommands.versionCommand(ghCommand, ["--version"], commandOptions(options)),
   run: (ghCommand, args, options) =>
-    systemCommands.runCommandAllowFailure(ghCommand, args, githubCliCommandOptions(options)),
+    systemCommands.runCommandAllowFailure(ghCommand, args, commandOptions(options)),
 });

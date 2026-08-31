@@ -24,7 +24,7 @@ import { createGithubPullRequestReviewAdapter } from "../pull-requests/github/gi
 import { createGithubProviderHealthPort } from "./github-provider-health";
 import { createGithubProviderRepositoryAdapter } from "./github-provider-repository";
 
-const toPullRequestRepositoryError = (cause: HostError | GitProviderRepositoryError): HostError =>
+const toPullRequestError = (cause: HostError | GitProviderRepositoryError): HostError =>
   cause instanceof GitProviderRepositoryError
     ? new HostValidationError({
         field: "git.provider.repository",
@@ -55,24 +55,20 @@ export class GithubProviderAdapter implements GitProviderPort {
       githubDependencies,
       gitPort,
     });
-    const getReadRepository = (repoConfig: RepoConfig) =>
-      repositoryAdapter.port
-        .getReadRepository(repoConfig)
-        .pipe(Effect.mapError(toPullRequestRepositoryError));
-    const getMappedRepositoryContext = (repoConfig: RepoConfig) =>
-      repositoryAdapter.port
-        .getMappedRepositoryContext(repoConfig)
-        .pipe(Effect.mapError(toPullRequestRepositoryError));
+    const getRepository = (repoConfig: RepoConfig) =>
+      repositoryAdapter.port.getRepository(repoConfig).pipe(Effect.mapError(toPullRequestError));
+    const getMapping = (repoConfig: RepoConfig) =>
+      repositoryAdapter.port.getMapping(repoConfig).pipe(Effect.mapError(toPullRequestError));
 
     this.repositoryPort = repositoryAdapter.port;
     this.healthPort = createGithubProviderHealthPort({
       githubDependencies,
-      requireSingleMatchingRemote: repositoryAdapter.requireSingleMatchingRemote,
+      matchRemote: repositoryAdapter.matchRemote,
     });
     this.pullRequestsPort = {
       findByBranch: (input) =>
         Effect.gen(function* () {
-          const repository = yield* getReadRepository(input.repoConfig);
+          const repository = yield* getRepository(input.repoConfig);
           const pullRequest = yield* findGithubPullRequestForBranch(
             githubDependencies,
             input.repoConfig.repoPath,
@@ -84,7 +80,7 @@ export class GithubProviderAdapter implements GitProviderPort {
         }),
       getByNumber: (input) =>
         Effect.gen(function* () {
-          const repository = yield* getReadRepository(input.repoConfig);
+          const repository = yield* getRepository(input.repoConfig);
           const pullRequest = yield* fetchGithubPullRequestByNumber(
             githubDependencies,
             input.repoConfig.repoPath,
@@ -95,7 +91,7 @@ export class GithubProviderAdapter implements GitProviderPort {
         }),
       upsert: (input) =>
         Effect.gen(function* () {
-          const context = yield* getMappedRepositoryContext(input.repoConfig);
+          const context = yield* getMapping(input.repoConfig);
           return yield* upsertGithubPullRequest(
             githubDependencies,
             input.repoConfig.repoPath,
@@ -108,7 +104,7 @@ export class GithubProviderAdapter implements GitProviderPort {
     };
     this.pullRequestReviewPort = createGithubPullRequestReviewAdapter({
       githubDependencies,
-      getReadRepository,
+      getRepository,
     });
   }
 
