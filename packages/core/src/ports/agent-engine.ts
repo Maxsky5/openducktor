@@ -4,6 +4,7 @@ import type {
   AgentSessionControlResumeInput,
   AgentSessionControlSendInput,
   AgentSessionControlStartInput,
+  AgentSessionControlSummary,
   AgentSessionScope,
   AgentSessionWorkflowScope,
   CodexEffectivePolicy,
@@ -263,10 +264,10 @@ export interface AgentSessionLivePort {
 
 /** Runtime-neutral session controls owned by the host application boundary. */
 export interface AgentSessionControlPort {
-  startSession(input: AgentSessionControlStartInput): Promise<AgentSessionSummary>;
-  resumeSession(input: AgentSessionControlResumeInput): Promise<AgentSessionSummary>;
+  startSession(input: AgentSessionControlStartInput): Promise<AgentSessionControlSummary>;
+  resumeSession(input: AgentSessionControlResumeInput): Promise<AgentSessionControlSummary>;
   releaseSession(input: SessionRef): Promise<void>;
-  forkSession(input: AgentSessionControlForkInput): Promise<AgentSessionSummary>;
+  forkSession(input: AgentSessionControlForkInput): Promise<AgentSessionControlSummary>;
   updateSessionModel(input: UpdateAgentSessionModelInput): Promise<void>;
   sendUserMessage(input: AgentSessionControlSendInput): Promise<AcceptedAgentUserMessage>;
   stopSession(input: SessionRef): Promise<void>;

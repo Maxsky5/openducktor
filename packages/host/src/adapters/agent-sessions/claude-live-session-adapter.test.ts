@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import {
-  type AgentSessionControlSummary,
-  RUNTIME_DESCRIPTORS_BY_KIND,
-  repoConfigSchema,
-} from "@openducktor/contracts";
+import { RUNTIME_DESCRIPTORS_BY_KIND, repoConfigSchema } from "@openducktor/contracts";
+import type { AgentSessionSummary } from "@openducktor/core";
 import { Effect } from "effect";
 import type {
   ClaudeAgentSdkService,
@@ -61,7 +58,7 @@ const summary = {
   sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   startedAt: "2026-07-17T10:01:00.000Z",
   status: "idle",
-} as const satisfies AgentSessionControlSummary;
+} as const satisfies AgentSessionSummary;
 
 const session: ClaudeSessionContext = {
   acceptedUserMessages: [],

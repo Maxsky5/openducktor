@@ -3,7 +3,6 @@ import { runtimeKindSchema } from "./agent-runtime-schemas";
 import { agentUserMessageEventSchema } from "./agent-session-event-schemas";
 import {
   agentModelSelectionSchema,
-  agentSessionAssociationSchema,
   agentSessionLiveRefSchema,
   agentSessionScopeSchema,
 } from "./agent-session-schemas";
@@ -146,7 +145,6 @@ export const agentSessionControlSummarySchema = z
     runtimeKind: runtimeKindSchema,
     workingDirectory: nonEmptyStringSchema,
     title: z.string().optional(),
-    sessionAssociation: agentSessionAssociationSchema,
     startedAt: z.string().datetime({ offset: true }),
     status: z.enum(["starting", "running", "idle", "error", "stopped"]),
   })

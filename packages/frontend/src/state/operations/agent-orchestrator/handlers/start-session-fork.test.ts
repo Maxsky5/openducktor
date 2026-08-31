@@ -362,7 +362,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     expect(getSession(sessionsRef.current, "fork-persistence-failure")).toBeUndefined();
   });
 
-  test("keeps the task startup lease when persistence rollback cannot stop the fork", async () => {
+  test("keeps the task startup lease without attaching when persistence rollback cannot stop the fork", async () => {
     const adapter = new OpencodeSdkAdapter();
     const abortedLeaseIds: string[] = [];
     const sessionsRef = createSessionsRef([
@@ -413,7 +413,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       "Failed to stop the started session during rollback: runtime unavailable. Cleanup was not continued.",
     );
     expect(abortedLeaseIds).toEqual([]);
-    expect(getSession(sessionsRef.current, "fork-persistence-stop-failure")).toBeDefined();
+    expect(getSession(sessionsRef.current, "fork-persistence-stop-failure")).toBeUndefined();
   });
 
   test("acquires the task startup lease before loading stopped source session history", async () => {

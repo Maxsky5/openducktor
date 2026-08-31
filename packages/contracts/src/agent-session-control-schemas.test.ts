@@ -215,12 +215,11 @@ describe("agent session control contracts", () => {
     ).toBe(false);
   });
 
-  test("carries explicit association instead of a nullable role in control summaries", () => {
+  test("returns runtime metadata without task ownership in control summaries", () => {
     const summary = {
       externalSessionId: "session-1",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      sessionAssociation: workflowScope,
       startedAt: "2026-07-16T10:00:00.000Z",
       status: "idle",
     } as const;
@@ -229,7 +228,7 @@ describe("agent session control contracts", () => {
     expect(
       agentSessionControlSummarySchema.safeParse({
         ...summary,
-        role: "build",
+        sessionAssociation: workflowScope,
       }).success,
     ).toBe(false);
   });

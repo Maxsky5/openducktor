@@ -110,7 +110,6 @@ const noBackgroundFailure = () => Effect.void;
 
 const liveSnapshot = (): AgentSessionLiveSnapshot => ({
   ref,
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   activity: "waiting_for_permission",
   title: "Live Codex session",
   startedAt: "2026-07-16T10:01:00.000Z",
@@ -215,19 +214,20 @@ const createControllerHarness = ({
         ) => {
           policyBoundContextLoads.push(input);
           const usage = persistedContextUsage;
-          snapshots = [
-            {
-              ...liveSnapshot(),
-              ref: {
-                repoPath: input.repoPath,
-                runtimeKind: "codex",
-                workingDirectory: input.workingDirectory,
-                externalSessionId: input.externalSessionId,
-              },
-              sessionAssociation: input.sessionScope ?? { kind: "unbound" },
-              contextUsage: usage,
+          const nextSnapshot: AgentSessionLiveSnapshot = {
+            ...liveSnapshot(),
+            ref: {
+              repoPath: input.repoPath,
+              runtimeKind: "codex",
+              workingDirectory: input.workingDirectory,
+              externalSessionId: input.externalSessionId,
             },
-          ];
+            contextUsage: usage,
+          };
+          if (input.sessionScope?.kind === "repository") {
+            nextSnapshot.repositoryScope = input.sessionScope;
+          }
+          snapshots = [nextSnapshot];
           return usage;
         },
         loadSessionDiff: async (input: Parameters<CodexAppServerAdapter["loadSessionDiff"]>[0]) => {
@@ -1085,7 +1085,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       type: "session_upsert",
       snapshot: {
         ref: expect.objectContaining({ externalSessionId: "persisted-thread" }),
-        sessionAssociation: { kind: "repository" },
+        repositoryScope: { kind: "repository" },
         contextUsage: null,
       },
     });

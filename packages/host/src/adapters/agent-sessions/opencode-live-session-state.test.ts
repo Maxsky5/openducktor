@@ -113,7 +113,7 @@ describe("OpenCode host live-session state", () => {
     });
   });
 
-  test("reports the association from the latest runtime observation", () => {
+  test("publishes only repository scope from the latest runtime observation", () => {
     const state = createState();
     state.initialize([source("session-1", "request-1")], new Map());
     state.retainControlSummary({
@@ -134,29 +134,33 @@ describe("OpenCode host live-session state", () => {
       source("session-2", "request-3"),
     ]);
 
-    expect(state.listSnapshots()).toEqual(
+    const snapshots = state.listSnapshots();
+    expect(snapshots).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           ref: expect.objectContaining({ externalSessionId: "session-1" }),
-          sessionAssociation: { kind: "unbound" },
         }),
         expect.objectContaining({
           ref: expect.objectContaining({ externalSessionId: "session-2" }),
-          sessionAssociation: { kind: "unbound" },
         }),
       ]),
     );
+    expect(snapshots.every((snapshot) => !("sessionAssociation" in snapshot))).toBe(true);
     expect(changes).toEqual(
       expect.arrayContaining([
         {
           type: "session_upsert",
           snapshot: expect.objectContaining({
             ref: expect.objectContaining({ externalSessionId: "session-1" }),
-            sessionAssociation: { kind: "unbound" },
           }),
         },
       ]),
     );
+    expect(
+      changes.every(
+        (change) => change.type !== "session_upsert" || !("sessionAssociation" in change.snapshot),
+      ),
+    ).toBe(true);
   });
 
   test("keeps a confirmed session when a later list omits it", () => {

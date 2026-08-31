@@ -17,7 +17,6 @@ const snapshot = (
     workingDirectory: "/repo",
     externalSessionId: `${runtimeKind}-session`,
   },
-  sessionAssociation: { kind: "unbound" },
   activity,
   title: `${runtimeKind} session`,
   startedAt: "2026-08-16T10:00:00.000Z",

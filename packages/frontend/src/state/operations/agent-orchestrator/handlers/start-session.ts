@@ -18,7 +18,7 @@ import { resolveStartTask } from "./start-session-policies";
 import { rollbackBootstrapAfterStartFailure } from "./start-session-rollback";
 import { serializeSelectedModelKey } from "./start-session-runtime";
 import {
-  commitWorkflowSessionLaunch,
+  registerWorkflowSessionLaunch,
   prepareWorkflowForkLaunch,
   prepareWorkflowFreshLaunch,
 } from "./start-session-workflow-launch";
@@ -131,14 +131,14 @@ export const createStartAgentSession = ({
                 deps,
               });
 
-        let commitStarted = false;
+        let registrationStarted = false;
         try {
           const result: PreparedSessionLaunchResult = await executePreparedLaunch({
             launch: prepared.launch,
-            commit: async (commitInput) => {
-              commitStarted = true;
-              await commitWorkflowSessionLaunch({
-                ...commitInput,
+            register: async (registrationInput) => {
+              registrationStarted = true;
+              await registerWorkflowSessionLaunch({
+                ...registrationInput,
                 bootstrap: prepared.bootstrap,
                 ctx: startCtx,
                 deps: { session, runtime },
@@ -147,7 +147,7 @@ export const createStartAgentSession = ({
           });
           return toAgentSessionIdentity(result.summary);
         } catch (cause) {
-          if (commitStarted || !prepared.bootstrap) {
+          if (registrationStarted || !prepared.bootstrap) {
             throw cause;
           }
           return rollbackBootstrapAfterStartFailure({

@@ -29,7 +29,6 @@ const liveSnapshot = (
   runtimeKind: RuntimeKind = "codex",
 ): AgentSessionLiveSnapshot => ({
   ref: sessionRef(externalSessionId, runtimeKind),
-  sessionAssociation: { kind: "unbound" },
   activity: "idle",
   title: `Session ${externalSessionId}`,
   startedAt: "2026-07-16T10:00:00.000Z",
@@ -99,80 +98,11 @@ const expectHostFailure = async <Success>(
 };
 
 describe("createAgentSessionLiveStateService", () => {
-  for (const runtimeKind of ["codex", "opencode", "claude"] as const) {
-    test(`retains ${runtimeKind} binding on unbound observations and rejects scope drift`, async () => {
-      const { events, service } = createHarness();
-      const bound = {
-        ...liveSnapshot("session-1", runtimeKind),
-        sessionAssociation: { kind: "repository" } as const,
-      };
-      await Effect.runPromise(
-        service.registerRuntimeAdapter(
-          fakeAdapter({
-            runtimeId: `${runtimeKind}-runtime`,
-            runtimeKind,
-            snapshots: () => [bound],
-          }),
-        ),
-      );
-      events.length = 0;
-
-      await Effect.runPromise(
-        service.runAdapterMutation(
-          Effect.succeed({
-            value: undefined,
-            changes: [
-              {
-                type: "session_upsert" as const,
-                snapshot: { ...bound, sessionAssociation: { kind: "unbound" as const } },
-              },
-            ],
-          }),
-        ),
-      );
-
-      expect(events).toEqual([
-        {
-          type: "session_upsert",
-          session: expect.objectContaining({ sessionAssociation: { kind: "repository" } }),
-        },
-      ]);
-      events.length = 0;
-
-      const failure = await expectHostFailure(
-        service.runAdapterMutation(
-          Effect.succeed({
-            value: undefined,
-            changes: [
-              {
-                type: "session_upsert" as const,
-                snapshot: {
-                  ...bound,
-                  sessionAssociation: {
-                    kind: "workflow" as const,
-                    taskId: "task-1",
-                    role: "build" as const,
-                  },
-                },
-              },
-            ],
-          }),
-        ),
-      );
-
-      expect(failure).toMatchObject({
-        _tag: "HostInvariantError",
-        invariant: "agent_session_live_association_is_stable",
-      });
-      expect(events).toEqual([]);
-    });
-  }
-
-  test("preserves repository association across snapshots, list, read, and events", async () => {
+  test("preserves repository scope across snapshots, list, read, and events", async () => {
     const { events, service } = createHarness();
     const snapshot = {
       ...liveSnapshot("repository-session"),
-      sessionAssociation: { kind: "repository" } as const,
+      repositoryScope: { kind: "repository" } as const,
     };
     await Effect.runPromise(
       service.registerRuntimeAdapter(
@@ -1018,7 +948,6 @@ describe("createAgentSessionLiveStateService", () => {
       externalSessionId: "persisted-session",
       runtimeKind: "opencode" as const,
       workingDirectory: "/repo/persisted-session",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } as const,
       startedAt: "2026-07-16T10:00:00.000Z",
       status: "idle" as const,
     };

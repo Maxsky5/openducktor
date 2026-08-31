@@ -42,7 +42,6 @@ import type {
   AgentSessionLiveAdapterPort,
   AgentSessionLiveAdapterRegistryPort,
 } from "../../ports/agent-session-live-adapter-port";
-import { createAgentSessionLiveAssociationRetention } from "./agent-session-live-association-retention";
 import {
   formatAgentSessionLiveFaultLog,
   toAgentSessionLiveEnvelope,
@@ -132,19 +131,16 @@ export const createAgentSessionLiveStateService = ({
   publish,
   coordinator = createLiveStateCoordinator(),
 }: CreateAgentSessionLiveStateServiceInput): AgentSessionLiveStateService => {
-  const associationRetention = createAgentSessionLiveAssociationRetention();
-
   const publishEnvelopeResult = (envelope: AgentSessionLiveEnvelope) =>
     Effect.gen(function* () {
-      const retainedEnvelope = yield* associationRetention.retainEnvelope(envelope);
-      if (retainedEnvelope.type === "fault") {
+      if (envelope.type === "fault") {
         const faultLogResult = yield* Effect.either(
-          faultLog(formatAgentSessionLiveFaultLog(retainedEnvelope)),
+          faultLog(formatAgentSessionLiveFaultLog(envelope)),
         );
         const publishResult = yield* Effect.either(
           Effect.try({
-            try: () => publish(retainedEnvelope),
-            catch: (cause) => toAgentSessionLiveEnvelopePublishError(cause, retainedEnvelope.type),
+            try: () => publish(envelope),
+            catch: (cause) => toAgentSessionLiveEnvelopePublishError(cause, envelope.type),
           }),
         );
         if (faultLogResult._tag === "Left" && publishResult._tag === "Left") {
@@ -157,7 +153,7 @@ export const createAgentSessionLiveStateService = ({
                 publishFailure: publishResult.left,
               },
               details: {
-                eventType: retainedEnvelope.type,
+                eventType: envelope.type,
                 faultLogFailure: faultLogResult.left,
                 publishFailure: publishResult.left,
               },
@@ -173,8 +169,8 @@ export const createAgentSessionLiveStateService = ({
         return null;
       }
       yield* Effect.try({
-        try: () => publish(retainedEnvelope),
-        catch: (cause) => toAgentSessionLiveEnvelopePublishError(cause, retainedEnvelope.type),
+        try: () => publish(envelope),
+        catch: (cause) => toAgentSessionLiveEnvelopePublishError(cause, envelope.type),
       });
       return null;
     });
@@ -226,7 +222,7 @@ export const createAgentSessionLiveStateService = ({
         }
         seen.add(key);
       }
-      return yield* associationRetention.retainSnapshots(flattened, repoPath);
+      return flattened;
     });
 
   const service: AgentSessionLiveStateService = {
@@ -247,7 +243,6 @@ export const createAgentSessionLiveStateService = ({
         Effect.gen(function* () {
           const adapter = yield* adapterRegistry.find(input);
           if (!adapter) {
-            associationRetention.forget(input);
             return { type: "missing", ref: input } satisfies AgentSessionLiveReadResult;
           }
           const result = yield* adapter.readRetainedSnapshot(input);
@@ -257,11 +252,9 @@ export const createAgentSessionLiveStateService = ({
             "agent-session-live.read-retained",
           );
           if (parsed.type === "missing") {
-            associationRetention.forget(parsed.ref);
             return parsed;
           }
-          const session = yield* associationRetention.retainSnapshot(parsed.session);
-          return { type: "live", session };
+          return parsed;
         }),
       ),
     loadContext: (input) =>

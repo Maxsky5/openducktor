@@ -28,22 +28,6 @@ import {
 } from "./start-session.test-helpers";
 import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
 
-const waitForSessionCount = async (
-  getCount: () => number,
-  expectedCount: number,
-  remainingAttempts = 10,
-): Promise<void> => {
-  if (getCount() === expectedCount) {
-    return;
-  }
-  if (remainingAttempts <= 0) {
-    return;
-  }
-  await Promise.resolve();
-  await Promise.resolve();
-  await waitForSessionCount(getCount, expectedCount, remainingAttempts - 1);
-};
-
 describe("agent-orchestrator/handlers/start-session", () => {
   beforeEach(async () => {
     await clearAppQueryClient();
@@ -443,17 +427,16 @@ describe("agent-orchestrator/handlers/start-session", () => {
         holdForPostStartMessage: true,
       });
 
-      await waitForSessionCount(() => listAgentSessions(sessionCollection).length, 1);
-
-      expect(listAgentSessions(sessionCollection)).toHaveLength(1);
-      expect(listAgentSessions(sessionCollection)[0]?.status).toBe("starting");
       await expect(withTimeout(startPromise, 25)).resolves.toBe("timeout");
+      expect(listAgentSessions(sessionCollection)).toHaveLength(0);
 
       persistDeferred.resolve();
 
       await expect(startPromise).resolves.toEqual(
         expect.objectContaining({ externalSessionId: "planner-external" }),
       );
+      expect(listAgentSessions(sessionCollection)).toHaveLength(1);
+      expect(listAgentSessions(sessionCollection)[0]?.status).toBe("starting");
     } finally {
       persistDeferred.resolve();
       adapter.startSession = originalStartSession;
@@ -512,7 +495,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("publishes message-first starts to agent activity before persistence finishes", async () => {
+  test("publishes message-first starts to agent activity after persistence finishes", async () => {
     const persistDeferred = createDeferred<void>();
     const sessionStore = createAgentSessionsStore("/tmp/repo");
     const adapter = new OpencodeSdkAdapter();
@@ -552,20 +535,19 @@ describe("agent-orchestrator/handlers/start-session", () => {
         holdForPostStartMessage: true,
       });
 
-      await waitForSessionCount(() => sessionStore.getActivitySnapshot().sessions.length, 1);
+      await expect(withTimeout(startPromise, 25)).resolves.toBe("timeout");
+      expect(sessionStore.getActivitySnapshot().sessions).toEqual([]);
 
+      persistDeferred.resolve();
+      await expect(startPromise).resolves.toEqual(
+        expect.objectContaining({ externalSessionId: "message-first-session" }),
+      );
       expect(sessionStore.getActivitySnapshot().sessions).toEqual([
         expect.objectContaining({
           externalSessionId: "message-first-session",
           activityState: "starting",
         }),
       ]);
-      await expect(withTimeout(startPromise, 25)).resolves.toBe("timeout");
-
-      persistDeferred.resolve();
-      await expect(startPromise).resolves.toEqual(
-        expect.objectContaining({ externalSessionId: "message-first-session" }),
-      );
     } finally {
       persistDeferred.resolve();
       adapter.startSession = originalStartSession;
@@ -624,7 +606,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
     const persistedSessionRecord: AgentSessionRecord = persistedRecord;
 
-    expect(launchOrder).toEqual(["runtime-started", "task-attached", "task-record-stored"]);
+    expect(launchOrder).toEqual(["runtime-started", "task-record-stored", "task-attached"]);
     expect(persistedSessionRecord.externalSessionId).toBe("external-1");
     expect("status" in persistedSessionRecord).toBe(false);
     expect("taskId" in persistedSessionRecord).toBe(false);
@@ -677,7 +659,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           selectedModel: PLANNER_SELECTION,
         }),
       ).rejects.toThrow(
-        'Failed to persist started session "external-session-persist-fail": persist failed. The started session was stopped and removed locally. The durable session record was deleted.',
+        'Failed to persist started session "external-session-persist-fail": persist failed. The started session was stopped and its local state was cleared. The durable session record was deleted.',
       );
       expect(calls).toHaveLength(1);
       expect(calls[0]?.[0]).toBe("[agent-orchestrator]");
@@ -739,7 +721,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     expect(abortCalls).toBe(1);
   });
 
-  test("preserves a registered fresh session when rollback cannot stop it", async () => {
+  test("preserves a durable session record without attaching it when rollback cannot stop it", async () => {
     const sessionsRef = { current: emptyAgentSessionCollection() };
     const deletedSessionIds: string[] = [];
     let abortCalls = 0;
@@ -787,7 +769,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     ).rejects.toThrow(
       "Failed to stop the started session during rollback: runtime unavailable. Cleanup was not continued.",
     );
-    expect(getSession(sessionsRef.current, "external-stop-fail")).toBeDefined();
+    expect(getSession(sessionsRef.current, "external-stop-fail")).toBeUndefined();
     expect(deletedSessionIds).toEqual([]);
     expect(abortCalls).toBe(0);
   });
@@ -839,7 +821,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         selectedModel: PLANNER_SELECTION,
       }),
     ).rejects.toThrow(
-      'Failed to register started session "external-registration-stop-fail": registration failed. Failed to roll back the started session after the registration failure: runtime unavailable',
+      'Failed to attach stored session "external-registration-stop-fail" to task "task-1": registration failed. Failed to stop the started session during rollback: runtime unavailable. Cleanup was not continued.',
     );
     expect(abortCalls).toBe(0);
     expect(deletedSessionIds).toEqual([]);
@@ -896,7 +878,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     expect(abortCalls).toBe(0);
   });
 
-  test("preserves the registered session and commits bootstrap resources when durable deletion fails", async () => {
+  test("preserves the durable record and commits bootstrap resources when deletion fails", async () => {
     const sessionsRef = { current: emptyAgentSessionCollection() };
     let completeCalls = 0;
     let abortCalls = 0;
@@ -941,11 +923,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
         selectedModel: PLANNER_SELECTION,
       }),
     ).rejects.toThrow(
-      "Failed to delete the durable session record: Non-Error thrown: undefined. The stopped session remains registered locally and durably for recovery. The task worktree bootstrap was committed to preserve its resources.",
+      "Failed to delete the durable session record: Non-Error thrown: undefined. The stopped session remains durably recorded for recovery. The task worktree bootstrap was committed to preserve its resources.",
     );
     expect(completeCalls).toBe(1);
     expect(abortCalls).toBe(0);
-    expect(getSession(sessionsRef.current, "external-falsy-rollback-errors")).toBeDefined();
+    expect(getSession(sessionsRef.current, "external-falsy-rollback-errors")).toBeUndefined();
   });
 
   test("stops and deletes a fresh non-Builder session when the repository changes after bootstrap commits", async () => {
@@ -1168,7 +1150,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     );
     expect(completeCalls).toBe(1);
     expect(abortCalls).toBe(0);
-    expect(getSession(sessionsRef.current, "external-bootstrap-delete-fail")).toBeDefined();
+    expect(getSession(sessionsRef.current, "external-bootstrap-delete-fail")).toBeUndefined();
   });
 
   test("throws when task is missing after reuse checks", async () => {

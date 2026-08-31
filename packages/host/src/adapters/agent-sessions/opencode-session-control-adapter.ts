@@ -5,8 +5,9 @@ import {
   acceptedAgentUserMessageSchema,
   agentSessionTranscriptEventSchema,
 } from "@openducktor/contracts";
-import type { AgentUserMessagePart } from "@openducktor/core";
+import type { AgentSessionSummary, AgentUserMessagePart } from "@openducktor/core";
 import { Effect } from "effect";
+import { toAgentSessionControlMetadata } from "../../application/agent-sessions/agent-session-control-metadata";
 import {
   type HostError,
   HostValidationError,
@@ -17,12 +18,7 @@ import type {
   AgentSessionLiveAdapterMutation,
 } from "../../ports/agent-session-live-adapter-port";
 import type { OpenCodeRuntimeInstance } from "./opencode-live-session-normalization";
-import {
-  parseOutput,
-  refKey,
-  toControlSummary,
-  toSessionRef,
-} from "./opencode-live-session-normalization";
+import { parseOutput, refKey, toSessionRef } from "./opencode-live-session-normalization";
 import type { OpenCodeLiveSessionState } from "./opencode-live-session-state";
 
 type SerializeRuntime = <Success>(
@@ -83,7 +79,7 @@ export const createOpenCodeSessionControlAdapter = ({
 
   const runControlSummary = (
     operation: string,
-    run: () => Promise<AgentSessionControlSummary>,
+    run: () => Promise<AgentSessionSummary>,
   ): Effect.Effect<AgentSessionControlSummary, HostError> =>
     serializeRuntime(
       Effect.tryPromise({
@@ -93,13 +89,13 @@ export const createOpenCodeSessionControlAdapter = ({
             runtimeId: runtime.runtimeId,
           }),
       }).pipe(
-        Effect.flatMap((summary) => toControlSummary(summary)),
         Effect.flatMap((summary) =>
           commit(`${operation}.commit`, () => ({
             value: summary,
             changes: state.retainControlSummary(summary),
           })),
         ),
+        Effect.flatMap((summary) => toAgentSessionControlMetadata(summary, operation)),
       ),
     );
 

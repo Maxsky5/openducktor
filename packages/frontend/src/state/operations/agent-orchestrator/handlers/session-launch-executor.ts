@@ -1,8 +1,5 @@
-import type {
-  AgentEnginePort,
-  AgentSessionHistoryMessage,
-  AgentSessionSummary,
-} from "@openducktor/core";
+import type { AgentEnginePort, AgentSessionHistoryMessage } from "@openducktor/core";
+import type { AgentSessionControlSummary } from "@openducktor/contracts";
 import { errorMessage } from "@/lib/errors";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
@@ -50,8 +47,8 @@ export type SessionLaunchExecutorDependencies = {
   currentWorkspaceRepoPathRef: { current: string | null };
 };
 
-export type PreparedSessionLaunchCommitInput = {
-  summary: AgentSessionSummary;
+export type PreparedSessionRegistrationInput = {
+  summary: AgentSessionControlSummary;
   identity: AgentSessionIdentity;
   sessionState: AgentSessionState;
   isStaleOperation: () => boolean;
@@ -59,19 +56,19 @@ export type PreparedSessionLaunchCommitInput = {
 
 export type ExecutePreparedSessionLaunchInput = {
   launch: PreparedSessionLaunch;
-  commit?: ((input: PreparedSessionLaunchCommitInput) => Promise<void>) | undefined;
+  register?: ((input: PreparedSessionRegistrationInput) => Promise<void>) | undefined;
   isCallerContextStale?: (() => boolean) | undefined;
 };
 
 export type PreparedSessionLaunchResult = {
-  summary: AgentSessionSummary;
+  summary: AgentSessionControlSummary;
   sessionAssociation: PreparedSessionLaunch["sessionAssociation"];
 };
 
 const callPreparedRuntimeLaunch = (
   adapter: SessionLaunchAdapter,
   launch: PreparedSessionLaunch,
-): Promise<AgentSessionSummary> => {
+): Promise<AgentSessionControlSummary> => {
   const runtimeRef = {
     repoPath: launch.repoPath,
     runtimeKind: launch.runtimeKind,
@@ -111,7 +108,7 @@ const callPreparedRuntimeLaunch = (
 
 const launchedSessionStatus = (
   launch: PreparedSessionLaunch,
-  summary: AgentSessionSummary,
+  summary: AgentSessionControlSummary,
 ): AgentSessionState["status"] => {
   if (launch.mode === "resume") {
     return summary.status;
@@ -125,7 +122,7 @@ export const buildLaunchedSessionState = ({
   initialMessages,
 }: {
   launch: PreparedSessionLaunch;
-  summary: AgentSessionSummary;
+  summary: AgentSessionControlSummary;
   initialMessages?: AgentSessionState["messages"] | undefined;
 }): AgentSessionState => {
   const state: AgentSessionState = {
@@ -294,7 +291,7 @@ const loadForkInitialMessages = async ({
   deps,
 }: {
   launch: Extract<PreparedSessionLaunch, { mode: "fork" }>;
-  summary: AgentSessionSummary;
+  summary: AgentSessionControlSummary;
   identity: AgentSessionIdentity;
   deps: SessionLaunchExecutorDependencies;
 }): Promise<AgentSessionHistoryMessage[]> => {
@@ -315,7 +312,7 @@ const loadForkInitialMessages = async ({
 
 const buildForkInitialMessages = (
   launch: Extract<PreparedSessionLaunch, { mode: "fork" }>,
-  summary: AgentSessionSummary,
+  summary: AgentSessionControlSummary,
   forkHistory: AgentSessionHistoryMessage[],
 ): AgentSessionState["messages"] =>
   createSessionMessagesState(summary.externalSessionId, [
@@ -385,17 +382,21 @@ export const createExecutePreparedSessionLaunch = (deps: SessionLaunchExecutorDe
 
     const sessionState = buildLaunchedSessionState({ launch, summary, initialMessages });
     throwIfRepoStale(isStaleOperation, STALE_START_ERROR);
-    try {
-      deps.replaceSession(sessionState);
-    } catch (cause) {
-      await rollbackFailedRegistration({
-        cause,
-        adapter: deps.adapter,
-        repoPath: launch.repoPath,
-        identity,
-        removeSession: deps.removeSession,
-        mode: launch.mode,
-      });
+    if (input.register) {
+      await input.register({ summary, identity, sessionState, isStaleOperation });
+    } else {
+      try {
+        deps.replaceSession(sessionState);
+      } catch (cause) {
+        await rollbackFailedRegistration({
+          cause,
+          adapter: deps.adapter,
+          repoPath: launch.repoPath,
+          identity,
+          removeSession: deps.removeSession,
+          mode: launch.mode,
+        });
+      }
     }
     if (isStaleOperation()) {
       await stopLaunchedSessionOnStaleAndThrow({
@@ -406,10 +407,6 @@ export const createExecutePreparedSessionLaunch = (deps: SessionLaunchExecutorDe
         mode: launch.mode,
         removeSession: deps.removeSession,
       });
-    }
-
-    if (input.commit) {
-      await input.commit({ summary, identity, sessionState, isStaleOperation });
     }
 
     return {

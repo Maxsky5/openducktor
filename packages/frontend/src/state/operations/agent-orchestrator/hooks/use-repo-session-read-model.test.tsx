@@ -70,7 +70,6 @@ const snapshot = (overrides: Partial<AgentSessionLiveSnapshot> = {}): AgentSessi
     workingDirectory: record.workingDirectory,
     externalSessionId: record.externalSessionId,
   },
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   activity: "idle",
   title: "Builder",
   startedAt: record.startedAt,
@@ -186,7 +185,7 @@ const createRepositoryConflictRetryState = (
     emit({
       type: "snapshot",
       repoPath: "/repo",
-      sessions: [snapshot({ sessionAssociation: { kind: "repository" } })],
+      sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
     });
   },
 ) =>
@@ -1014,7 +1013,7 @@ describe("useRepoSessionReadModel", () => {
       emit({
         type: "snapshot",
         repoPath: "/repo",
-        sessions: [snapshot({ sessionAssociation: { kind: "repository" } })],
+        sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
       });
     }, []);
 
@@ -1033,7 +1032,7 @@ describe("useRepoSessionReadModel", () => {
       emit({
         type: "snapshot",
         repoPath: "/repo",
-        sessions: [snapshot({ sessionAssociation: { kind: "repository" } })],
+        sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
       });
     }, []);
 
@@ -1060,7 +1059,7 @@ describe("useRepoSessionReadModel", () => {
         state.emit({
           type: "snapshot",
           repoPath: "/repo",
-          sessions: [snapshot({ sessionAssociation: { kind: "repository" } })],
+          sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
         });
       });
       expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("failed");
@@ -1077,7 +1076,7 @@ describe("useRepoSessionReadModel", () => {
         emit({
           type: "snapshot",
           repoPath: "/repo",
-          sessions: [snapshot({ sessionAssociation: { kind: "repository" } })],
+          sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
         });
       },
       [],
@@ -1119,7 +1118,7 @@ describe("useRepoSessionReadModel", () => {
         emit({
           type: "snapshot",
           repoPath: "/repo",
-          sessions: [snapshot({ sessionAssociation: { kind: "repository" } })],
+          sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
         });
       },
       [],
@@ -1261,7 +1260,7 @@ describe("useRepoSessionReadModel", () => {
             ? [
                 snapshot({
                   ref: { ...snapshot().ref, repoPath },
-                  sessionAssociation: { kind: "repository" },
+                  repositoryScope: { kind: "repository" },
                 }),
               ]
             : [],
@@ -1327,7 +1326,7 @@ describe("useRepoSessionReadModel", () => {
         state.emit({
           type: "snapshot",
           repoPath: "/repo",
-          sessions: [snapshot({ sessionAssociation: { kind: "repository" } })],
+          sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
         });
       });
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
@@ -1366,7 +1365,7 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.run(() => {
         state.emit({
           type: "session_upsert",
-          session: snapshot({ sessionAssociation: { kind: "repository" } }),
+          session: snapshot({ repositoryScope: { kind: "repository" } }),
         });
       });
 
@@ -1535,11 +1534,7 @@ describe("useRepoSessionReadModel", () => {
         emit({
           type: "snapshot",
           repoPath: "/repo",
-          sessions: [
-            snapshot({
-              sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
-            }),
-          ],
+          sessions: [snapshot()],
         });
       },
       { ...record, role: "spec" },
@@ -1574,7 +1569,6 @@ describe("useRepoSessionReadModel", () => {
         state.emit({
           type: "session_upsert",
           session: snapshot({
-            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
             pendingApprovals: [mutatingApproval],
           }),
         });
@@ -1644,11 +1638,6 @@ describe("useRepoSessionReadModel", () => {
           externalSessionId: sessionRecord.externalSessionId,
         },
         activity: "waiting_for_permission",
-        sessionAssociation: {
-          kind: "workflow",
-          taskId: "task-1",
-          role: sessionRecord.role,
-        },
         pendingApprovals: [
           {
             requestId: `approval-${sessionRecord.externalSessionId}`,
@@ -2323,7 +2312,6 @@ describe("useRepoSessionReadModel", () => {
           repoPath: "/repo",
           sessions: [
             snapshot({
-              sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
               pendingApprovals: [initialApproval],
             }),
           ],
@@ -2363,7 +2351,6 @@ describe("useRepoSessionReadModel", () => {
         state.emit({
           type: "session_upsert",
           session: snapshot({
-            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
             pendingApprovals: [initialApproval, laterApproval],
           }),
         });

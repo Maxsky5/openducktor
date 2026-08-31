@@ -5,7 +5,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { EnsureRuntimeOptions, RuntimeInfo } from "../runtime/runtime";
 import { readFreshSessionRuntimeKind } from "../support/session-runtime-kind";
 import type { PreparedSessionLaunch } from "./prepared-session-launch";
-import type { PreparedSessionLaunchCommitInput } from "./session-launch-executor";
+import type { PreparedSessionRegistrationInput } from "./session-launch-executor";
 import type {
   StartAgentSessionInput,
   StartSessionContext,
@@ -17,8 +17,8 @@ import { acquireTaskSessionStartupLease } from "./task-session-startup-lease";
 import { persistInitialSession } from "./start-session-local-state";
 import {
   rollbackBootstrapAfterStartFailure,
-  rollbackRegisteredStartedSession,
   rollbackStartedSessionAfterPersistenceFailure,
+  rollbackWorkflowSessionRegistration,
 } from "./start-session-rollback";
 import { loadStartSystemPrompt } from "./start-session-runtime";
 import { resolveStartTask } from "./start-session-policies";
@@ -177,7 +177,7 @@ export const prepareWorkflowForkLaunch = async ({
   }
 };
 
-export const commitWorkflowSessionLaunch = async ({
+export const registerWorkflowSessionLaunch = async ({
   bootstrap,
   ctx,
   summary,
@@ -185,7 +185,7 @@ export const commitWorkflowSessionLaunch = async ({
   sessionState,
   isStaleOperation,
   deps,
-}: PreparedSessionLaunchCommitInput & {
+}: PreparedSessionRegistrationInput & {
   bootstrap: RuntimeInfo["bootstrap"];
   ctx: StartSessionContext;
   deps: Pick<StartSessionExecutionDependencies, "session" | "runtime">;
@@ -194,7 +194,7 @@ export const commitWorkflowSessionLaunch = async ({
 
   if (isStaleOperation()) {
     const cause = new Error(STALE_START_ERROR);
-    const rollbackInput: Parameters<typeof rollbackRegisteredStartedSession>[0] = {
+    const rollbackInput: Parameters<typeof rollbackWorkflowSessionRegistration>[0] = {
       message: STALE_START_ERROR,
       cause,
       startedCtx,
@@ -207,7 +207,7 @@ export const commitWorkflowSessionLaunch = async ({
     if (bootstrap) {
       rollbackInput.bootstrap = bootstrap;
     }
-    await rollbackRegisteredStartedSession(rollbackInput);
+    await rollbackWorkflowSessionRegistration(rollbackInput);
   }
 
   try {
@@ -246,8 +246,16 @@ export const commitWorkflowSessionLaunch = async ({
     if (isStaleOperation()) {
       throw new Error(STALE_START_ERROR);
     }
+    try {
+      deps.session.replaceSession(sessionState);
+    } catch (cause) {
+      throw new Error(
+        `Failed to attach stored session "${identity.externalSessionId}" to task "${ctx.taskId}": ${errorMessage(cause)}.`,
+        cause instanceof Error ? { cause } : undefined,
+      );
+    }
   } catch (cause) {
-    const rollbackInput: Parameters<typeof rollbackRegisteredStartedSession>[0] = {
+    const rollbackInput: Parameters<typeof rollbackWorkflowSessionRegistration>[0] = {
       message: cause instanceof Error ? cause.message : String(cause),
       cause,
       startedCtx,
@@ -260,6 +268,6 @@ export const commitWorkflowSessionLaunch = async ({
       rollbackInput.bootstrap = bootstrap;
       rollbackInput.commitBootstrapOnDeleteFailure = !bootstrapCompletionAttempted;
     }
-    await rollbackRegisteredStartedSession(rollbackInput);
+    await rollbackWorkflowSessionRegistration(rollbackInput);
   }
 };

@@ -960,7 +960,6 @@ export class CodexAppServerAdapter
     const route = this.subagents.routeForChild(session.threadId, session.runtimeId);
     const snapshot: AgentSessionLiveSnapshot = {
       ref: codexSessionRef(session),
-      sessionAssociation: session.summary.sessionAssociation,
       activity: classifyAgentSessionActivity({
         runtimeActivity,
         pendingApprovals,
@@ -972,6 +971,9 @@ export class CodexAppServerAdapter
       pendingQuestions,
       contextUsage: this.runtimeEvents.latestContextUsage(session.runtimeId, session.threadId),
     };
+    if (session.summary.sessionAssociation.kind === "repository") {
+      snapshot.repositoryScope = session.summary.sessionAssociation;
+    }
     if (route) {
       snapshot.parentExternalSessionId = route.parentExternalSessionId;
     }
@@ -1000,12 +1002,11 @@ export class CodexAppServerAdapter
       parentSession.runtimeId,
     );
     const isRunning = childStatus === "pending" || childStatus === "running";
-    return agentSessionLiveSnapshotSchema.parse({
+    const snapshot: AgentSessionLiveSnapshot = {
       ref: {
         ...codexSessionRef(parentSession),
         externalSessionId: route.childExternalSessionId,
       },
-      sessionAssociation: parentSession.summary.sessionAssociation,
       activity: classifyAgentSessionActivity({
         runtimeActivity: isRunning ? "running" : "idle",
         pendingApprovals,
@@ -1017,7 +1018,11 @@ export class CodexAppServerAdapter
       pendingApprovals,
       pendingQuestions,
       contextUsage,
-    });
+    };
+    if (parentSession.summary.sessionAssociation.kind === "repository") {
+      snapshot.repositoryScope = parentSession.summary.sessionAssociation;
+    }
+    return agentSessionLiveSnapshotSchema.parse(snapshot);
   }
 
   async subscribeEvents(

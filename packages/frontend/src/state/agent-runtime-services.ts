@@ -1,9 +1,5 @@
 import type { RuntimeInstanceSummary, RuntimeKind } from "@openducktor/contracts";
-import type {
-  AcceptedAgentUserMessage,
-  AgentEnginePort,
-  AgentSessionSummary,
-} from "@openducktor/core";
+import type { AcceptedAgentUserMessage, AgentEnginePort } from "@openducktor/core";
 import { validateRuntimeDefinitionForOpenDucktor } from "@/lib/agent-runtime";
 import { host } from "./operations/shared/host";
 import {
@@ -19,23 +15,6 @@ type AgentRuntimeServices = {
   agentEngine: AgentEnginePort;
   runtimeCatalogOperations: RuntimeCatalogOperations;
   startRepoRuntime: (repoPath: string, runtimeKind: RuntimeKind) => Promise<RuntimeInstanceSummary>;
-};
-
-const toAgentSessionSummary = (
-  summary: Awaited<ReturnType<typeof host.agentSessionControlStart>>,
-): AgentSessionSummary => {
-  const session: AgentSessionSummary = {
-    externalSessionId: summary.externalSessionId,
-    runtimeKind: summary.runtimeKind,
-    workingDirectory: summary.workingDirectory,
-    sessionAssociation: summary.sessionAssociation,
-    startedAt: summary.startedAt,
-    status: summary.status,
-  };
-  if (summary.title !== undefined) {
-    session.title = summary.title;
-  }
-  return session;
 };
 
 const toAcceptedAgentUserMessage = (
@@ -106,11 +85,10 @@ const createAgentEngine = (
   runtimeKinds: RuntimeKind[],
 ): AgentEnginePort => {
   return {
-    startSession: async (input) =>
-      toAgentSessionSummary(await host.agentSessionControlStart(input)),
-    resumeSession: (input) => host.agentSessionControlResume(input).then(toAgentSessionSummary),
+    startSession: (input) => host.agentSessionControlStart(input),
+    resumeSession: (input) => host.agentSessionControlResume(input),
     releaseSession: (input) => host.agentSessionControlRelease(input),
-    forkSession: (input) => host.agentSessionControlFork(input).then(toAgentSessionSummary),
+    forkSession: (input) => host.agentSessionControlFork(input),
     listRuntimeDefinitions: () =>
       runtimeKinds.map((runtimeKind) => getAdapter(runtimeKind).getRuntimeDefinition()),
     listAvailableModels: (input) => getAdapter(input.runtimeKind).listAvailableModels(input),

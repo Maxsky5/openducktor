@@ -31,7 +31,6 @@ const controlSummary = (
   runtimeKind: input.runtimeKind,
   workingDirectory: input.workingDirectory,
   title: "Build session",
-  sessionAssociation: input.sessionScope,
   startedAt: "2026-07-16T10:00:00.000Z",
   status: "idle" as const,
 });
@@ -86,7 +85,6 @@ const createHarness = async (resolveAttachment?: LocalAttachmentService["resolve
             workingDirectory: input.workingDirectory,
             externalSessionId: "session-1",
           },
-          sessionAssociation: input.sessionScope,
           activity: "idle",
           title: "Build session",
           startedAt: "2026-07-16T10:00:00.000Z",
@@ -199,10 +197,10 @@ describe("createAgentSessionLiveCommandHandlers", () => {
     };
     await expect(
       Effect.runPromise(router.invoke("agent_session_control_resume", resumeInput)),
-    ).resolves.toMatchObject({ sessionAssociation: sessionScope });
+    ).resolves.toMatchObject({ externalSessionId: "session-1" });
     await expect(
       Effect.runPromise(router.invoke("agent_session_control_fork", forkInput)),
-    ).resolves.toMatchObject({ sessionAssociation: sessionScope });
+    ).resolves.toMatchObject({ externalSessionId: "fork-1" });
     expect(resumes).toEqual([resumeInput]);
     expect(forks).toEqual([forkInput]);
   });

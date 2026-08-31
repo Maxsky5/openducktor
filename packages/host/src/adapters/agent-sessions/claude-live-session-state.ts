@@ -10,6 +10,7 @@ import {
   isAgentSessionTranscriptEventType,
 } from "@openducktor/contracts";
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
+import type { AgentSessionSummary } from "@openducktor/core";
 import type {
   AgentSessionLiveAdapterChange,
   AgentSessionLiveAdapterMutation,
@@ -164,7 +165,6 @@ export const createClaudeLiveSessionState = ({
     const isRoot = ref.externalSessionId === session.externalSessionId;
     const snapshot: AgentSessionLiveSnapshot = {
       ref,
-      sessionAssociation: session.summary.sessionAssociation,
       activity: session.activity === "idle" ? "idle" : "running",
       title: isRoot ? (session.summary.title ?? "Claude session") : "Claude subagent",
       startedAt: isRoot ? session.startedAt : timestamp,
@@ -172,6 +172,9 @@ export const createClaudeLiveSessionState = ({
       pendingQuestions: [],
       contextUsage: null,
     };
+    if (session.summary.sessionAssociation.kind === "repository") {
+      snapshot.repositoryScope = session.summary.sessionAssociation;
+    }
     if (!isRoot) {
       snapshot.parentExternalSessionId = session.externalSessionId;
     }
@@ -456,7 +459,7 @@ export const createClaudeLiveSessionState = ({
     },
     removeSession: removeSessionTree,
     retainControlSummary: (
-      summary: AgentSessionControlSummary,
+      summary: AgentSessionSummary,
       options: {
         readonly parentExternalSessionId?: string;
         readonly preserveRetainedActivity?: boolean;
@@ -477,7 +480,6 @@ export const createClaudeLiveSessionState = ({
       }
       const nextSnapshot: AgentSessionLiveSnapshot = {
         ref,
-        sessionAssociation: summary.sessionAssociation,
         activity,
         title: summary.title ?? current?.title ?? "Claude session",
         startedAt: summary.startedAt,
@@ -485,6 +487,9 @@ export const createClaudeLiveSessionState = ({
         pendingQuestions: current?.pendingQuestions ?? [],
         contextUsage: current?.contextUsage ?? null,
       };
+      if (summary.sessionAssociation.kind === "repository") {
+        nextSnapshot.repositoryScope = summary.sessionAssociation;
+      }
       if (options.parentExternalSessionId) {
         nextSnapshot.parentExternalSessionId = options.parentExternalSessionId;
       }

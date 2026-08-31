@@ -98,6 +98,11 @@ Files:
 
 Owns:
 
+- projecting runtime metadata and optional repository scope from live snapshots
+- applying workflow ownership only from durable task session records or an explicit local start registration
+
+Invariant: live runtime snapshots cannot carry workflow ownership. Runtime discovery may create unbound or repository-scoped projections, but it cannot attach a session to a task.
+
 - consuming query-backed durable task session records for the active task set
 - observing the generic host live-event transport before requesting a repository refresh
 - accepting the repository snapshot as the first item for each initial load or reconnect
@@ -755,6 +760,8 @@ selected-session/new-session model fallback or runtime-kind priority rules.
 Files:
 
 - `handlers/start-session.ts`
+- `handlers/session-launch-executor.ts`
+- `handlers/start-session-workflow-launch.ts`
 - `handlers/session-actions.ts`
 - `handlers/send-agent-message.ts`
 - `handlers/stop-session.ts`
@@ -765,9 +772,12 @@ Files:
 Owns:
 
 - start, reuse, fork, send, stop, model update, permission reply, and question reply
-- persisting durable session records after starts
+- asking the runtime to create a session and accepting metadata-only control results
+- registering a workflow session in the fixed order: create it in the runtime, persist its task record, then attach it to local task state
 - rolling back failed starts
 - passing route refs to listeners and context refs to runtime actions
+
+Invariant: only the explicit workflow start path may register task ownership. Runtime control results and live discovery must not supply task ownership.
 
 Invariant: session-action availability answers whether an action is valid for
 the selected task, role, launch action, and current loaded session. It must not

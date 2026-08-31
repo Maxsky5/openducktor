@@ -77,7 +77,7 @@ export const rollbackStartedSessionAfterPersistenceFailure = async ({
   bootstrap?: SessionBootstrap;
 }): Promise<never> => {
   const externalSessionId = startedCtx.summary.externalSessionId;
-  const input: Parameters<typeof rollbackRegisteredStartedSession>[0] = {
+  const input: Parameters<typeof rollbackWorkflowSessionRegistration>[0] = {
     message: `Failed to persist started session "${externalSessionId}": ${errorMessage(error)}.`,
     cause: error,
     startedCtx,
@@ -89,10 +89,10 @@ export const rollbackStartedSessionAfterPersistenceFailure = async ({
   if (bootstrap) {
     input.bootstrap = bootstrap;
   }
-  return rollbackRegisteredStartedSession(input);
+  return rollbackWorkflowSessionRegistration(input);
 };
 
-export const rollbackRegisteredStartedSession = async ({
+export const rollbackWorkflowSessionRegistration = async ({
   message,
   cause,
   startedCtx,
@@ -147,7 +147,7 @@ export const rollbackRegisteredStartedSession = async ({
       const progress = [
         "The started session was stopped.",
         `Failed to delete the durable session record: ${errorMessage(error)}.`,
-        "The stopped session remains registered locally and durably for recovery.",
+        "The stopped session remains durably recorded for recovery.",
       ];
       if (bootstrap) {
         if (commitBootstrapOnDeleteFailure) {
@@ -191,7 +191,7 @@ export const rollbackRegisteredStartedSession = async ({
     }
   }
 
-  const progress = ["The started session was stopped and removed locally."];
+  const progress = ["The started session was stopped and its local state was cleared."];
   if (durableRecordExists) {
     progress.push("The durable session record was deleted.");
   }

@@ -65,14 +65,18 @@ export const nativeSource = (
   ...overrides,
 });
 
-export const controlSummary = {
+export const controlMetadata = {
   externalSessionId: "controlled-session",
   runtimeKind: "opencode" as const,
   workingDirectory: "/repo/worktree",
   title: "Controlled session",
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } as const,
   startedAt: "2026-07-16T10:02:00.000Z",
   status: "running" as const,
+};
+
+export const controlSummary = {
+  ...controlMetadata,
+  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } as const,
 };
 
 type ControlCall = {

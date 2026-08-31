@@ -2,12 +2,13 @@ import {
   type AgentSessionControlSummary,
   acceptedAgentUserMessageSchema,
   agentSessionContextUsageSchema,
-  agentSessionControlSummarySchema,
   type RuntimeInstanceSummary,
   type RuntimeKind,
 } from "@openducktor/contracts";
+import type { AgentSessionSummary } from "@openducktor/core";
 import { Effect } from "effect";
 import type { z } from "zod";
+import { toAgentSessionControlMetadata } from "../../application/agent-sessions/agent-session-control-metadata";
 import type { ClaudePendingInputResolution } from "../../application/runtimes/claude-agent-sdk-service";
 import { requireClaudeWorkspaceWorkingDirectory } from "../../application/runtimes/claude-workspace-runtime";
 import {
@@ -238,7 +239,7 @@ export const createClaudeLiveSessionAdapterPreparer =
 
       const runSummary = (
         operation: string,
-        run: () => Effect.Effect<unknown, HostError>,
+        run: () => Effect.Effect<AgentSessionSummary, HostError>,
         options: {
           readonly parentExternalSessionId?: string;
           readonly preserveRetainedActivity?: boolean;
@@ -246,15 +247,13 @@ export const createClaudeLiveSessionAdapterPreparer =
       ): Effect.Effect<AgentSessionControlSummary, HostError> =>
         eventCoordinator.runControlMutation(
           run().pipe(
-            Effect.flatMap((value) =>
-              parseOutput(agentSessionControlSummarySchema, value, operation),
-            ),
             Effect.flatMap((summary) =>
               commit(`${operation}.retain-summary`, () => ({
                 value: summary,
                 changes: state.retainControlSummary(summary, options),
               })),
             ),
+            Effect.flatMap((summary) => toAgentSessionControlMetadata(summary, operation)),
           ),
         );
 

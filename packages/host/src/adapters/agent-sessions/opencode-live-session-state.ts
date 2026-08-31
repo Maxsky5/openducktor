@@ -5,12 +5,12 @@ import type {
 import {
   type AgentSessionActivity,
   type AgentSessionContextUsage,
-  type AgentSessionControlSummary,
   type AgentSessionLiveReadResult,
   type AgentSessionLiveRef,
   type AgentSessionLiveSnapshot,
   agentSessionLiveSnapshotSchema,
 } from "@openducktor/contracts";
+import type { AgentSessionSummary } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
 import type { z } from "zod";
 import type {
@@ -117,7 +117,6 @@ export const createOpenCodeLiveSessionState = ({
     );
     const snapshot: AgentSessionLiveSnapshotInput = {
       ref,
-      sessionAssociation: source.sessionAssociation,
       activity: classifyActivity({
         runtimeActivity: source.runtimeActivity,
         pendingApprovals,
@@ -129,6 +128,9 @@ export const createOpenCodeLiveSessionState = ({
       pendingQuestions,
       contextUsage: contextUsageBySessionId.get(source.externalSessionId) ?? null,
     };
+    if (source.sessionAssociation.kind === "repository") {
+      snapshot.repositoryScope = source.sessionAssociation;
+    }
     if (source.parentExternalSessionId) {
       snapshot.parentExternalSessionId = source.parentExternalSessionId;
     }
@@ -213,9 +215,7 @@ export const createOpenCodeLiveSessionState = ({
     return { value: contextUsage, changes };
   };
 
-  const retainControlSummary = (
-    summary: AgentSessionControlSummary,
-  ): AgentSessionLiveAdapterChange[] => {
+  const retainControlSummary = (summary: AgentSessionSummary): AgentSessionLiveAdapterChange[] => {
     if (summary.runtimeKind !== "opencode") {
       throw new HostValidationError({
         field: "runtimeKind",
@@ -237,7 +237,6 @@ export const createOpenCodeLiveSessionState = ({
     const pendingQuestions = previous?.snapshot.pendingQuestions ?? [];
     const snapshotInput: AgentSessionLiveSnapshotInput = {
       ref,
-      sessionAssociation: summary.sessionAssociation,
       activity: classifyActivity({
         runtimeActivity,
         pendingApprovals,
@@ -252,6 +251,9 @@ export const createOpenCodeLiveSessionState = ({
         previous?.snapshot.contextUsage ??
         null,
     };
+    if (summary.sessionAssociation.kind === "repository") {
+      snapshotInput.repositoryScope = summary.sessionAssociation;
+    }
     if (retainedParentExternalSessionId) {
       snapshotInput.parentExternalSessionId = retainedParentExternalSessionId;
     }

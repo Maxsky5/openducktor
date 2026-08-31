@@ -4,6 +4,7 @@ import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-li
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import { createOpenCodeLiveSessionAdapterPreparer } from "./opencode-live-session-adapter";
 import {
+  controlMetadata,
   controlSummary,
   createLifecycle,
   createRuntimeHarness,
@@ -13,7 +14,7 @@ import {
 } from "./opencode-live-session-adapter.test-support";
 
 describe("OpenCode live session controls", () => {
-  test("publishes workflow forks without a subagent parent", async () => {
+  test("publishes created forks without task ownership or a subagent parent", async () => {
     const harness = createRuntimeHarness();
     const publishedChanges: AgentSessionLiveAdapterChange[] = [];
     const prepared = await Effect.runPromise(
@@ -46,7 +47,8 @@ describe("OpenCode live session controls", () => {
       if (!fork) {
         throw new Error("Expected a retained workflow fork.");
       }
-      expect(fork).toMatchObject({ sessionAssociation: controlSummary.sessionAssociation });
+      expect(fork).not.toHaveProperty("sessionAssociation");
+      expect(fork.repositoryScope).toBeUndefined();
       expect(fork.parentExternalSessionId).toBeUndefined();
       expect(publishedChanges).toContainEqual({ type: "session_upsert", snapshot: fork });
     } finally {
@@ -78,20 +80,17 @@ describe("OpenCode live session controls", () => {
           sessionScope: controlSummary.sessionAssociation,
         }),
       );
-      await expect(
-        Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo")),
-      ).resolves.toEqual([
-        expect.objectContaining({
-          parentExternalSessionId: "builder-session",
-          sessionAssociation: controlSummary.sessionAssociation,
-        }),
+      const snapshots = await Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo"));
+      expect(snapshots).toEqual([
+        expect.objectContaining({ parentExternalSessionId: "builder-session" }),
       ]);
+      expect(snapshots[0]).not.toHaveProperty("sessionAssociation");
     } finally {
       await Effect.runPromise(prepared.adapter.releaseRuntime());
     }
   });
 
-  test("delegates controls while the host projection remains the only session authority", async () => {
+  test("returns metadata-only controls while the host retains runtime state", async () => {
     const harness = createRuntimeHarness();
     const publishedChanges: AgentSessionLiveAdapterChange[] = [];
     const prepared = await Effect.runPromise(
@@ -112,7 +111,7 @@ describe("OpenCode live session controls", () => {
     };
 
     await expect(Effect.runPromise(adapter.startSession(startInput))).resolves.toEqual(
-      controlSummary,
+      controlMetadata,
     );
     expect(adapter.matches(controlRef)).toBe(true);
     await Effect.runPromise(
@@ -441,7 +440,7 @@ describe("OpenCode live session controls", () => {
   });
 
   for (const operation of ["start", "resume", "fork"] as const) {
-    test(`reports the latest runtime association after ${operation} invalidation and refresh`, async () => {
+    test(`does not publish runtime association after ${operation} invalidation and refresh`, async () => {
       const harness = createRuntimeHarness();
       const publishedChanges: AgentSessionLiveAdapterChange[] = [];
       const prepared = await Effect.runPromise(
@@ -497,23 +496,24 @@ describe("OpenCode live session controls", () => {
       ]);
       await harness.emit({ type: "sessions_invalidated" });
 
-      await expect(Effect.runPromise(adapter.listRetainedSnapshots("/repo"))).resolves.toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            ref: controlRef,
-            sessionAssociation: { kind: "unbound" },
-          }),
-        ]),
+      const snapshots = await Effect.runPromise(adapter.listRetainedSnapshots("/repo"));
+      expect(snapshots).toEqual(
+        expect.arrayContaining([expect.objectContaining({ ref: controlRef })]),
       );
-      await expect(
-        Effect.runPromise(adapter.readRetainedSnapshot(controlRef)),
-      ).resolves.toMatchObject({
-        type: "live",
-        session: {
-          ref: controlRef,
-          sessionAssociation: { kind: "unbound" },
-        },
-      });
+      const snapshot = snapshots.find(
+        (item) => item.ref.externalSessionId === controlRef.externalSessionId,
+      );
+      if (!snapshot) {
+        throw new Error("Expected the controlled live session.");
+      }
+      expect(snapshot).not.toHaveProperty("sessionAssociation");
+      expect(snapshot.repositoryScope).toBeUndefined();
+      const retained = await Effect.runPromise(adapter.readRetainedSnapshot(controlRef));
+      expect(retained).toMatchObject({ type: "live", session: { ref: controlRef } });
+      if (retained.type !== "live") {
+        throw new Error("Expected a retained live session.");
+      }
+      expect(retained.session).not.toHaveProperty("sessionAssociation");
       expect(
         publishedChanges.filter(
           (change) =>
@@ -525,10 +525,18 @@ describe("OpenCode live session controls", () => {
           type: "session_upsert",
           snapshot: expect.objectContaining({
             ref: controlRef,
-            sessionAssociation: { kind: "unbound" },
           }),
         },
       ]);
+      const upsert = publishedChanges.find(
+        (change) =>
+          change.type === "session_upsert" &&
+          change.snapshot.ref.externalSessionId === "controlled-session",
+      );
+      if (!upsert || upsert.type !== "session_upsert") {
+        throw new Error("Expected the refreshed session upsert.");
+      }
+      expect(upsert.snapshot).not.toHaveProperty("sessionAssociation");
     });
   }
 

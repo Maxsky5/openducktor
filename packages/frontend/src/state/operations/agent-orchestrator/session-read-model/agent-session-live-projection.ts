@@ -219,18 +219,14 @@ const sameContextUsage = (
   );
 };
 
-const toDiscoveredSessionAssociation = (
-  association: AgentSessionAssociation,
-): AgentSessionAssociation => {
-  // Runtime scope supports live routing, but it does not prove that OpenDucktor registered the session to a task.
-  return association.kind === "workflow" ? { kind: "unbound" } : association;
-};
+const toLiveSessionAssociation = (snapshot: AgentSessionLiveSnapshot): AgentSessionAssociation =>
+  snapshot.repositoryScope ?? { kind: "unbound" };
 
 const applyDirectSnapshot = (
   current: AgentSessionState,
   snapshot: AgentSessionLiveSnapshot,
 ): AgentSessionState => {
-  const discoveredAssociation = toDiscoveredSessionAssociation(snapshot.sessionAssociation);
+  const discoveredAssociation = toLiveSessionAssociation(snapshot);
   const transition = resolveAgentSessionAssociationTransition(
     current.sessionAssociation,
     discoveredAssociation,
@@ -293,7 +289,7 @@ const createLiveOnlySession = (snapshot: AgentSessionLiveSnapshot): AgentSession
     {
       ...identity,
       title: snapshot.title,
-      sessionAssociation: toDiscoveredSessionAssociation(snapshot.sessionAssociation),
+      sessionAssociation: toLiveSessionAssociation(snapshot),
       status: "idle",
       runtimeStatusMessage: null,
       startedAt: snapshot.startedAt,

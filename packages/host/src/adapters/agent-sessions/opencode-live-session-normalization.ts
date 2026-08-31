@@ -1,10 +1,8 @@
 import type { OpencodeSessionContextUsage } from "@openducktor/adapters-opencode-sdk";
 import {
   type AgentSessionContextUsage,
-  type AgentSessionControlSummary,
   type AgentSessionLiveRef,
   agentSessionContextUsageSchema,
-  agentSessionControlSummarySchema,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -120,12 +118,3 @@ export const requireRuntime = (
     }),
   );
 };
-
-export const toControlSummary = (
-  summary: AgentSessionControlSummary,
-): Effect.Effect<AgentSessionControlSummary, HostValidationError<OperationValidationDetails>> =>
-  parseOutput(
-    agentSessionControlSummarySchema,
-    summary,
-    "opencode-live-session.normalize-control-summary",
-  );
