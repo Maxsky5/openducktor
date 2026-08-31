@@ -155,7 +155,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     );
   });
 
-  test("dedupes matching in-flight fresh starts without a start-attempt identity", async () => {
+  test("dedupes matching in-flight fresh starts", async () => {
     const startEntered = createDeferred<void>();
     const releaseStart = createDeferred<void>();
     const adapter = new OpencodeSdkAdapter();

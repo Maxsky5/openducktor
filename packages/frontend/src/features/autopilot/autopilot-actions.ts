@@ -281,7 +281,7 @@ const toSessionStartDecision = ({
   };
 };
 
-export const executeAutopilotAction = async ({
+const executeAutopilotActionNow = async ({
   activeWorkspace,
   task,
   actionId,
@@ -293,7 +293,6 @@ export const executeAutopilotAction = async ({
   runSessionStartWorkflow,
 }: ExecuteAutopilotActionArgs): Promise<AutopilotActionOutcome> => {
   const action = AUTOPILOT_ACTION_DEFINITIONS[actionId];
-  const forceFreshQa = action.id === "startQa" && alwaysStartQaReviewsFresh;
 
   try {
     const startResolution = await resolveAutopilotStart({
@@ -330,18 +329,14 @@ export const executeAutopilotAction = async ({
     if (startResolution.targetWorkingDirectory !== undefined) {
       request.targetWorkingDirectory = startResolution.targetWorkingDirectory;
     }
-    const workflowInput: Parameters<typeof runSessionStartWorkflow>[0] = {
+    const workflow = await runSessionStartWorkflow({
       request,
       decision: toSessionStartDecision({
         resolution: startResolution,
         selectedModel,
       }),
       task,
-    };
-    if (forceFreshQa) {
-      workflowInput.startAttemptId = crypto.randomUUID();
-    }
-    const workflow = await runSessionStartWorkflow(workflowInput);
+    });
 
     return {
       kind: "started",
@@ -357,4 +352,34 @@ export const executeAutopilotAction = async ({
     }
     throw error;
   }
+};
+
+const pendingFreshQaStarts = new Map<string, Promise<void>>();
+
+const enqueueFreshQaStart = async <T>(key: string, start: () => Promise<T>): Promise<T> => {
+  const previousStart = pendingFreshQaStarts.get(key) ?? Promise.resolve();
+  const { promise: currentStart, resolve: finishStart } = Promise.withResolvers<void>();
+  pendingFreshQaStarts.set(key, currentStart);
+
+  await previousStart;
+  try {
+    return await start();
+  } finally {
+    finishStart();
+    if (pendingFreshQaStarts.get(key) === currentStart) {
+      pendingFreshQaStarts.delete(key);
+    }
+  }
+};
+
+export const executeAutopilotAction = (
+  args: ExecuteAutopilotActionArgs,
+): Promise<AutopilotActionOutcome> => {
+  const shouldQueue = args.actionId === "startQa" && args.alwaysStartQaReviewsFresh;
+  if (!shouldQueue) {
+    return executeAutopilotActionNow(args);
+  }
+
+  const taskKey = JSON.stringify([args.activeWorkspace.repoPath, args.task.id]);
+  return enqueueFreshQaStart(taskKey, () => executeAutopilotActionNow(args));
 };

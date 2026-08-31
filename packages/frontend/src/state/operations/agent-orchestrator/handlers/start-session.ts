@@ -95,7 +95,7 @@ export const createStartAgentSession = ({
     const messagePolicyKey = startCtx.holdForPostStartMessage
       ? "post-start-message"
       : "no-post-start-message";
-    const inFlightKeyParts = [
+    const inFlightKey = [
       repoPath,
       taskId,
       role,
@@ -104,11 +104,7 @@ export const createStartAgentSession = ({
       normalizedTargetWorkingDirectory,
       selectedModelKey,
       messagePolicyKey,
-    ];
-    if (input.startMode === "fresh" && input.startAttemptId) {
-      inFlightKeyParts.push(input.startAttemptId);
-    }
-    const inFlightKey = inFlightKeyParts.join("::");
+    ].join("::");
 
     return session.sessionStartGateRef.current.run(inFlightKey, async () => {
       const deps = {

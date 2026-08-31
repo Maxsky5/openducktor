@@ -52,7 +52,6 @@ type StartSessionWorkflowArgs = {
   queryClient: QueryClient;
   intent: SessionStartWorkflowIntent;
   selection: AgentModelSelection | null;
-  startAttemptId?: string;
   task: TaskCard | null;
   workspaceId: string | null;
   persistTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
@@ -92,10 +91,8 @@ const startSessionFromIntent = ({
   selection,
   startAgentSession,
   holdForPostStartMessage,
-  startAttemptId,
 }: Pick<StartSessionWorkflowArgs, "intent" | "selection" | "startAgentSession"> & {
   holdForPostStartMessage: boolean;
-  startAttemptId: string | undefined;
 }): Promise<AgentSessionIdentity> => {
   if (intent.startMode === "reuse") {
     return startAgentSession({
@@ -124,10 +121,6 @@ const startSessionFromIntent = ({
     selectedModel: requireSelectedModel(selection, "fresh"),
     holdForPostStartMessage,
   };
-  if (startAttemptId) {
-    freshRequest.startAttemptId = startAttemptId;
-  }
-
   if (intent.targetWorkingDirectory !== undefined) {
     return startAgentSession({
       ...freshRequest,
@@ -259,7 +252,6 @@ export const startSessionWorkflow = async ({
   queryClient,
   intent,
   selection,
-  startAttemptId,
   task,
   workspaceId,
   persistTaskTargetBranch,
@@ -295,7 +287,6 @@ export const startSessionWorkflow = async ({
     selection,
     startAgentSession,
     holdForPostStartMessage: postStartMessage !== null || intent.holdForPostStartMessage === true,
-    startAttemptId,
   });
 
   if (intent.postStartAction === "none") {

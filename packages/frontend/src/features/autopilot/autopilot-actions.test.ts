@@ -487,10 +487,10 @@ describe("autopilot feature helpers", () => {
 
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
-    const bothGateCallsEntered = createDeferred<void>();
     const releaseStarts = createDeferred<void>();
     const realGate = createSessionStartGate<AgentSessionIdentity>();
-    let gateCallCount = 0;
+    let bootstrapActive = false;
+    let bootstrapCount = 0;
     let startCount = 0;
     const kickoffSessionIds: string[] = [];
 
@@ -513,22 +513,31 @@ describe("autopilot feature helpers", () => {
       taskRef: { current: [task] },
       sessionStartGateRef: {
         current: {
-          run: (key, startSession) => {
-            gateCallCount += 1;
-            if (gateCallCount === 2) {
-              bothGateCallsEntered.resolve();
-            }
-            return realGate.run(key, startSession);
-          },
+          run: (key, startSession) => realGate.run(key, startSession),
           clear: () => realGate.clear(),
         },
       },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo/current-worktree",
-      }),
+      ensureRuntime: async () => {
+        if (bootstrapActive) {
+          throw new Error("Task session bootstrap is already in progress");
+        }
+        bootstrapActive = true;
+        bootstrapCount += 1;
+        return {
+          kind: "opencode",
+          runtimeKind: "opencode",
+          runtimeId: "runtime-1",
+          workingDirectory: "/tmp/repo/current-worktree",
+          bootstrap: {
+            complete: async () => {
+              bootstrapActive = false;
+            },
+            abort: async () => {
+              bootstrapActive = false;
+            },
+          },
+        };
+      },
     });
     const runSessionStartWorkflow = createSessionStartWorkflowRunner({
       queryClient: args.queryClient,
@@ -552,10 +561,10 @@ describe("autopilot feature helpers", () => {
         actionId: "startQa",
         alwaysStartQaReviewsFresh: true,
       });
-      await bothGateCallsEntered.promise;
       releaseStarts.resolve();
       await Promise.all([firstStart, secondStart]);
 
+      expect(bootstrapCount).toBe(2);
       expect(startCount).toBe(2);
       expect(kickoffSessionIds).toHaveLength(2);
       expect(new Set(kickoffSessionIds)).toEqual(new Set(["qa-session-1", "qa-session-2"]));
