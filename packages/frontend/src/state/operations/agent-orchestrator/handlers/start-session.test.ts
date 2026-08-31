@@ -573,17 +573,21 @@ describe("agent-orchestrator/handlers/start-session", () => {
   });
 
   test("persists only durable session record fields during start", async () => {
+    const launchOrder: string[] = [];
     let persistedTaskId: string | null = null;
     let persistedRecord: AgentSessionRecord | null = null;
     const adapter = new OpencodeSdkAdapter();
-    adapter.startSession = async (input: StartAgentSessionInput) => ({
-      externalSessionId: "external-1",
-      runtimeKind: input.runtimeKind,
-      workingDirectory: input.workingDirectory,
-      sessionAssociation: input.sessionScope,
-      startedAt: "2026-03-21T10:00:00.000Z",
-      status: "running",
-    });
+    adapter.startSession = async (input: StartAgentSessionInput) => {
+      launchOrder.push("runtime-started");
+      return {
+        externalSessionId: "external-1",
+        runtimeKind: input.runtimeKind,
+        workingDirectory: input.workingDirectory,
+        sessionAssociation: input.sessionScope,
+        startedAt: "2026-03-21T10:00:00.000Z",
+        status: "running",
+      };
+    };
     const { start } = createStartSessionTestHarness({
       taskRef: {
         current: [createTaskCardFixture({ id: "task-1", status: "open" })],
@@ -595,7 +599,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
         runtimeId: "runtime-1",
         workingDirectory: "/tmp/repo",
       }),
+      onSessionCollectionChange: () => {
+        launchOrder.push("task-attached");
+      },
       persistSessionRecord: async (taskId, record) => {
+        launchOrder.push("task-record-stored");
         persistedTaskId = taskId;
         persistedRecord = record;
       },
@@ -616,6 +624,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
     const persistedSessionRecord: AgentSessionRecord = persistedRecord;
 
+    expect(launchOrder).toEqual(["runtime-started", "task-attached", "task-record-stored"]);
     expect(persistedSessionRecord.externalSessionId).toBe("external-1");
     expect("status" in persistedSessionRecord).toBe(false);
     expect("taskId" in persistedSessionRecord).toBe(false);

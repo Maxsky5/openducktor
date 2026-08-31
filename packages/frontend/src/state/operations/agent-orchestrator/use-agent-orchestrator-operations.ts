@@ -235,7 +235,6 @@ export function useAgentOrchestratorOperations({
     recoverTranscriptGap,
     queryClient,
     sessionReadPort: hostPort,
-    deleteSessionRecord,
   });
   const ensureRuntime = useMemo(
     () =>

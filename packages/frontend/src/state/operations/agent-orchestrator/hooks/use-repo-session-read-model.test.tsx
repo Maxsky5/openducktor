@@ -1,6 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
 import type {
-  AgentSessionIdentity,
   AgentSessionLiveEnvelope,
   AgentSessionLiveReplyApprovalInput,
   AgentSessionLiveSnapshot,
@@ -134,19 +133,6 @@ const createState = (
     close: mock(() => undefined),
   };
   const recoverTranscriptGap = mock(async (_message: string) => undefined);
-  const deleteSessionRecord = mock(async (taskId: string, identity: AgentSessionIdentity) => {
-    const queryKey = agentSessionQueryKeys.list("/repo", taskId);
-    const currentRecords = queryClient.getQueryData<AgentSessionRecord[]>(queryKey) ?? [];
-    queryClient.setQueryData(
-      queryKey,
-      currentRecords.filter(
-        (currentRecord) =>
-          currentRecord.externalSessionId !== identity.externalSessionId ||
-          currentRecord.runtimeKind !== identity.runtimeKind ||
-          currentRecord.workingDirectory !== identity.workingDirectory,
-      ),
-    );
-  });
   const props: Parameters<typeof useRepoSessionReadModel>[0] = {
     workspaceRepoPath: "/repo",
     taskIds: ["task-1"],
@@ -159,7 +145,6 @@ const createState = (
     recoverTranscriptGap,
     queryClient,
     sessionReadPort,
-    deleteSessionRecord,
   };
 
   return {
@@ -183,7 +168,6 @@ const createState = (
     unsubscribe,
     agentSessionLiveReplyApproval,
     recoverTranscriptGap,
-    deleteSessionRecord,
     transcriptEvents,
     emit: (payload: AgentSessionLiveEnvelope) => {
       if (!listener) {
@@ -212,45 +196,6 @@ const createRepositoryConflictRetryState = (
   });
 
 describe("useRepoSessionReadModel", () => {
-  test("deletes a proven persisted child so it cannot return after live removal and record reload", async () => {
-    const state = createState((emit) => {
-      emit({
-        type: "snapshot",
-        repoPath: "/repo",
-        sessions: [snapshot({ parentExternalSessionId: "parent-thread" })],
-      });
-    });
-
-    try {
-      await state.harness.mount();
-      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
-
-      expect(state.deleteSessionRecord).toHaveBeenCalledWith("task-1", {
-        externalSessionId: record.externalSessionId,
-        runtimeKind: record.runtimeKind,
-        workingDirectory: record.workingDirectory,
-      });
-      await state.harness.waitFor(
-        () =>
-          state.queryClient.getQueryData<AgentSessionRecord[]>(
-            agentSessionQueryKeys.list("/repo", "task-1"),
-          )?.length === 0,
-      );
-
-      await state.harness.run(() => {
-        state.emit({ type: "session_removed", ref: snapshot().ref });
-      });
-      await state.harness.waitFor(() => state.getSession() === null);
-
-      await state.harness.run(() => {
-        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), []);
-      });
-      expect(state.getSession()).toBeNull();
-    } finally {
-      await state.harness.unmount();
-    }
-  });
-
   test("observes the repository and commits snapshot plus ordered creation once", async () => {
     const state = createState((emit) => {
       emit({

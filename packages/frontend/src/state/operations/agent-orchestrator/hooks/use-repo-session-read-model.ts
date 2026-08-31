@@ -32,7 +32,6 @@ import {
 } from "../session-read-model/agent-session-live-projection";
 import {
   applyWorkflowSessionRecords,
-  findPersistedSubagentSessionRecords,
   type LoadedWorkflowSessionRecords,
   pruneVanishedWorkflowSessions,
 } from "../session-read-model/agent-session-workflow-records";
@@ -47,7 +46,6 @@ import {
 import { useTaskSessionRecords } from "../session-read-model/use-task-session-records";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { createRepoStaleGuard } from "../support/core";
-import { toPersistedSessionIdentity } from "../support/persistence";
 
 export type AgentSessionLiveFrontendPort = Pick<HostClient, "agentSessionLiveReplyApproval"> & {
   observeAgentSessionLive: (
@@ -68,7 +66,6 @@ type UseRepoSessionReadModelArgs = {
   recoverTranscriptGap: (message: string) => Promise<void>;
   queryClient: QueryClient;
   sessionReadPort: AgentSessionReadPort;
-  deleteSessionRecord: (taskId: string, identity: AgentSessionIdentity) => Promise<void>;
 };
 
 export type RepoSessionReadModelState = {
@@ -120,7 +117,6 @@ export const useRepoSessionReadModel = ({
   recoverTranscriptGap,
   queryClient,
   sessionReadPort,
-  deleteSessionRecord,
 }: UseRepoSessionReadModelArgs): RepoSessionReadModelState => {
   const [sessionReadModelLoadState, setSessionReadModelLoadState] =
     useState<AgentSessionReadModelLoadState>(unavailableAgentSessionReadModelLoadState);
@@ -154,7 +150,6 @@ export const useRepoSessionReadModel = ({
     (input: Parameters<AgentSessionLiveFrontendPort["agentSessionLiveReplyApproval"]>[0]) =>
       liveSessionPort.agentSessionLiveReplyApproval(input),
   );
-  const deletePersistedSessionRecord = useEffectEvent(deleteSessionRecord);
   const handleTranscriptEvent = useEffectEvent(
     (event: Parameters<AgentSessionTranscriptEventConsumer["handle"]>[0]) =>
       transcriptEvents.handle(event),
@@ -529,7 +524,6 @@ export const useRepoSessionReadModel = ({
     const effectReloadGeneration = reloadGeneration;
     let cancelled = false;
     let unsubscribe: (() => void) | null = null;
-    const subagentRecordRepairsInFlight = new Set<string>();
     const readLoadedWorkflowRecords = (): LoadedWorkflowSessionRecords | null => {
       const current = taskRecordApplyRef.current;
       if (!current || current.repoPath !== repoPath || current.kind !== "ready") {
@@ -569,69 +563,23 @@ export const useRepoSessionReadModel = ({
     };
     const isStaleRepoOperation = (): boolean =>
       cancelled || isRepoStale() || readReloadGeneration() !== effectReloadGeneration;
-    const repairPersistedSubagentRecords = (collection: AgentSessionCollection): void => {
-      const workflowRecords = readLoadedWorkflowRecords();
-      if (!workflowRecords) {
-        return;
-      }
-      for (const persistedRecord of findPersistedSubagentSessionRecords({
-        projected: collection,
-        records: workflowRecords,
-      })) {
-        const identity = toPersistedSessionIdentity(persistedRecord.record);
-        const repairKey = JSON.stringify([persistedRecord.taskId, identity]);
-        if (subagentRecordRepairsInFlight.has(repairKey)) {
-          continue;
-        }
-        subagentRecordRepairsInFlight.add(repairKey);
-        runOrchestratorSideEffect(
-          "agent-session-delete-invalid-subagent-record",
-          deletePersistedSessionRecord(persistedRecord.taskId, identity).finally(() => {
-            subagentRecordRepairsInFlight.delete(repairKey);
-          }),
-          {
-            tags: {
-              repoPath,
-              taskId: persistedRecord.taskId,
-              externalSessionId: identity.externalSessionId,
-            },
-            onFailure: ({ reason }) => {
-              if (isStaleRepoOperation()) {
-                return;
-              }
-              setSessionReadModelLoadState(
-                failedAgentSessionReadModelLoadState(
-                  repoPath,
-                  `Failed to remove invalid subagent task record for task '${persistedRecord.taskId}': ${reason}`,
-                  "task-records",
-                ),
-              );
-            },
-          },
-        );
-      }
-    };
-    // Every stream write collects the pending-approval policy and proven
-    // persisted subagent records against the same commit they belong to.
+    // Every stream write collects the pending-approval policy against the same
+    // commit it belongs to.
     const commitProjected = (
       project: (current: AgentSessionCollection) => AgentSessionCollection,
     ): void => {
-      const result = commitSessionCollection((current) => {
+      const policyActions = commitSessionCollection((current) => {
         const collection = project(current);
         return {
           collection,
-          result: {
-            collection,
-            policyActions: collectPendingApprovalPolicyActions({
-              previous: current,
-              next: collection,
-              repoPath,
-            }),
-          },
+          result: collectPendingApprovalPolicyActions({
+            previous: current,
+            next: collection,
+            repoPath,
+          }),
         };
       });
-      applyPendingApprovalPolicy(result.policyActions);
-      repairPersistedSubagentRecords(result.collection);
+      applyPendingApprovalPolicy(policyActions);
     };
     const failObservation = (message: string): void => {
       if (!isStaleRepoOperation()) {

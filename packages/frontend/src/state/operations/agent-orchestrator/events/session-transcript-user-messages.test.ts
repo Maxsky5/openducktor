@@ -387,58 +387,6 @@ describe("agent-orchestrator session transcript events", () => {
     );
   });
 
-  test("does not request durable writes for workflow-bound subagent events", async () => {
-    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
-    const adapter: SessionEventAdapter = {
-      subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(handler);
-        return () => {};
-      },
-      replyApproval: async () => {},
-    };
-    const sessionsRef = createSessionsRef([
-      buildSession({
-        runtimeKind: "codex",
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-        liveParentExternalSessionId: "parent-session",
-      }),
-    ]);
-    const updateSessionOptions: unknown[] = [];
-    const applySessionUpdate = createSessionUpdater(sessionsRef);
-
-    await listenToAgentSessionEvents({
-      adapter,
-      repoPath: "/tmp/repo",
-      externalSessionId: "session-1",
-      sessionsRef,
-      updateSession: (identity, updater, options) => {
-        updateSessionOptions.push(options);
-        return applySessionUpdate(identity, updater);
-      },
-      resolveTurnDurationMs: () => undefined,
-      clearTurnDuration: () => {},
-    });
-
-    const handleEvent = handlers[0];
-    if (!handleEvent) {
-      throw new Error("Expected session event handler to be registered");
-    }
-    handleEvent({
-      type: "session_compacted",
-      externalSessionId: "session-1",
-      timestamp: "2026-08-31T12:02:44.000Z",
-      message: "Session compacted.",
-    });
-    handleEvent({
-      type: "session_finished",
-      externalSessionId: "session-1",
-      timestamp: "2026-08-31T12:02:45.000Z",
-      message: "Session finished.",
-    });
-
-    expect(updateSessionOptions).toEqual([undefined, undefined]);
-  });
-
   test("merges queued user_message updates in place when the agent reads the turn", async () => {
     const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {

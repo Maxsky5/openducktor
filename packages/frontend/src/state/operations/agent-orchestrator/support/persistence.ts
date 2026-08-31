@@ -18,11 +18,6 @@ export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessi
   if (!isWorkflowAgentSession(session)) {
     throw new Error(`Session '${session.externalSessionId}' is not a workflow session.`);
   }
-  if (session.liveParentExternalSessionId !== undefined) {
-    throw new Error(
-      `Cannot persist subagent session '${session.externalSessionId}' as a task workflow session.`,
-    );
-  }
   const runtimeKind = session.runtimeKind;
   let selectedModel: AgentSessionRecord["selectedModel"] = null;
   if (session.selectedModel) {

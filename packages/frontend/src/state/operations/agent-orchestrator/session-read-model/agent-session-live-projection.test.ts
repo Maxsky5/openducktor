@@ -70,7 +70,42 @@ const delta = (
   envelope: Parameters<typeof applyAgentSessionLiveDelta>[0]["envelope"],
 ) => applyAgentSessionLiveDelta({ current, envelope });
 
+const registerWorkflowSession = (
+  collection: AgentSessionCollection,
+  externalSessionId: string,
+  overrides: Partial<AgentSessionIdentity> = {},
+): AgentSessionCollection => {
+  const session = getAgentSession(collection, identity(externalSessionId, overrides));
+  if (!session) {
+    throw new Error(`Expected session '${externalSessionId}' before workflow registration.`);
+  }
+  return replaceAgentSession(collection, {
+    ...session,
+    sessionAssociation: workflowAssociation(),
+  });
+};
+
 describe("agent session live projection", () => {
+  test.each(["snapshot", "delta"] as const)(
+    "does not grant workflow ownership to an unregistered live session from a %s",
+    (delivery) => {
+      const runtimeSession = snapshot("runtime-thread", {
+        sessionAssociation: workflowAssociation(),
+      });
+      const sessions =
+        delivery === "snapshot"
+          ? build({ snapshots: [runtimeSession] })
+          : delta(emptyAgentSessionCollection(), {
+              type: "session_upsert",
+              session: runtimeSession,
+            });
+
+      expect(getAgentSession(sessions, identity("runtime-thread"))?.sessionAssociation).toEqual({
+        kind: "unbound",
+      });
+    },
+  );
+
   test("preserves context identity for unrelated live updates", () => {
     const original = snapshot("thread-1", {
       contextUsage: { totalTokens: 6_086, contextWindow: 258_400 },
@@ -130,9 +165,13 @@ describe("agent session live projection", () => {
           parentExternalSessionId: "parent",
         }),
       ];
-      let collection = build({
-        snapshots: delivery === "snapshot" ? snapshots : [],
-      });
+      let collection = registerWorkflowSession(
+        build({ snapshots: [snapshot("parent")] }),
+        "parent",
+      );
+      if (delivery === "snapshot") {
+        collection = build({ current: collection, snapshots });
+      }
       if (delivery === "delta") {
         for (const session of snapshots) {
           collection = delta(collection, { type: "session_upsert", session });
@@ -149,7 +188,7 @@ describe("agent session live projection", () => {
       expect(getAgentSession(collection, identity("child-1"))?.pendingQuestions).toHaveLength(1);
       expect(getAgentSession(collection, identity("parent"))?.pendingQuestions[0]).toMatchObject({
         requestId: "child-question",
-        responseSession: { ...identity("child-1"), sessionAssociation: association },
+        responseSession: { ...identity("child-1"), sessionAssociation: { kind: "unbound" } },
       });
       const removed = delta(collection, {
         type: "session_removed",
@@ -177,7 +216,7 @@ describe("agent session live projection", () => {
     },
   );
 
-  test("carries workflow, repository, and unbound associations from one mixed snapshot", () => {
+  test("keeps live workflow claims unbound while carrying non-workflow associations", () => {
     const sessions = build({
       snapshots: [
         snapshot("workflow-thread", { sessionAssociation: workflowAssociation() }),
@@ -186,9 +225,9 @@ describe("agent session live projection", () => {
       ],
     });
 
-    expect(getAgentSession(sessions, identity("workflow-thread"))?.sessionAssociation).toEqual(
-      workflowAssociation(),
-    );
+    expect(getAgentSession(sessions, identity("workflow-thread"))?.sessionAssociation).toEqual({
+      kind: "unbound",
+    });
     expect(getAgentSession(sessions, identity("repository-thread"))?.sessionAssociation).toEqual({
       kind: "repository",
     });
@@ -218,7 +257,7 @@ describe("agent session live projection", () => {
 
       expect(
         getAgentSession(sessions, identity(`${runtimeKind}-wf`, { runtimeKind })),
-      ).toMatchObject({ sessionAssociation: workflowAssociation() });
+      ).toMatchObject({ sessionAssociation: { kind: "unbound" } });
       expect(
         getAgentSession(sessions, identity(`${runtimeKind}-repo`, { runtimeKind })),
       ).toMatchObject({ sessionAssociation: { kind: "repository" } });
@@ -229,9 +268,10 @@ describe("agent session live projection", () => {
   );
 
   test("retains a workflow association when a reconnect snapshot is unbound", () => {
-    const initial = build({
-      snapshots: [snapshot("thread-1", { sessionAssociation: workflowAssociation() })],
-    });
+    const initial = registerWorkflowSession(
+      build({ snapshots: [snapshot("thread-1")] }),
+      "thread-1",
+    );
     const next = build({ current: initial, snapshots: [snapshot("thread-1")] });
 
     expect(getAgentSession(next, identity("thread-1"))?.sessionAssociation).toEqual(
@@ -240,9 +280,10 @@ describe("agent session live projection", () => {
   });
 
   test("rejects a conflicting live scope change", () => {
-    const initial = build({
-      snapshots: [snapshot("thread-1", { sessionAssociation: workflowAssociation() })],
-    });
+    const initial = registerWorkflowSession(
+      build({ snapshots: [snapshot("thread-1")] }),
+      "thread-1",
+    );
 
     expect(() =>
       delta(initial, {
@@ -359,7 +400,7 @@ describe("agent session live projection", () => {
   });
 
   test("retains starting and workflow projections without live evidence while dropping other absent sessions", () => {
-    const initial = build({
+    const projected = build({
       snapshots: [
         snapshot("starting-thread"),
         snapshot("workflow-thread", { sessionAssociation: workflowAssociation() }),
@@ -367,6 +408,7 @@ describe("agent session live projection", () => {
         snapshot("unbound-thread"),
       ],
     });
+    const initial = registerWorkflowSession(projected, "workflow-thread");
     const starting = getAgentSession(initial, identity("starting-thread"));
     if (!starting) {
       throw new Error("Expected starting session.");
@@ -385,12 +427,15 @@ describe("agent session live projection", () => {
   });
 
   test("commits the live-reported flag with the same projection that applies runtime evidence", () => {
-    const initial = build({
-      snapshots: [
-        snapshot("live-thread", { sessionAssociation: workflowAssociation() }),
-        snapshot("absent-later-thread"),
-      ],
-    });
+    const initial = registerWorkflowSession(
+      build({
+        snapshots: [
+          snapshot("live-thread", { sessionAssociation: workflowAssociation() }),
+          snapshot("absent-later-thread"),
+        ],
+      }),
+      "live-thread",
+    );
     expect(getAgentSession(initial, identity("live-thread"))?.livePresence).toBe("present");
 
     // A reconnect snapshot without the workflow session clears its flag,
@@ -728,11 +773,15 @@ describe("agent session live projection", () => {
       workingDirectory,
       externalSessionId: "thread-1",
     };
-    const loaded = build({
-      snapshots: [
-        snapshot("thread-1", { ref: opencodeRef, sessionAssociation: workflowAssociation() }),
-      ],
-    });
+    const loaded = registerWorkflowSession(
+      build({
+        snapshots: [
+          snapshot("thread-1", { ref: opencodeRef, sessionAssociation: workflowAssociation() }),
+        ],
+      }),
+      "thread-1",
+      { runtimeKind: "opencode" },
+    );
     const current = getAgentSession(loaded, identity("thread-1", { runtimeKind: "opencode" }));
     if (!current) {
       throw new Error("Expected projected OpenCode session.");
@@ -851,7 +900,15 @@ describe("agent session live projection", () => {
       externalSessionId: "claude-parent",
       ...claudeIdentity,
     };
+    const registeredParent = registerWorkflowSession(
+      build({
+        snapshots: [snapshot(parentRef.externalSessionId, { ref: parentRef })],
+      }),
+      parentRef.externalSessionId,
+      claudeIdentity,
+    );
     const sessions = build({
+      current: registeredParent,
       snapshots: [
         snapshot(parentRef.externalSessionId, {
           ref: parentRef,

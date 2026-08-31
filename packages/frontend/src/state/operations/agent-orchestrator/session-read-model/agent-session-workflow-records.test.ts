@@ -15,7 +15,6 @@ import {
 } from "./agent-session-live-projection";
 import {
   applyWorkflowSessionRecords,
-  findPersistedSubagentSessionRecords,
   type LoadedWorkflowSessionRecords,
   pruneVanishedWorkflowSessions,
 } from "./agent-session-workflow-records";
@@ -214,7 +213,7 @@ describe("agent session workflow records", () => {
     });
   });
 
-  test("keeps a matching workflow scope from persisted records", () => {
+  test("hydrates a runtime-discovered session from its matching task record", () => {
     const projected = buildAgentSessionLiveCollection({
       current: emptyAgentSessionCollection(),
       snapshots: [
@@ -237,13 +236,17 @@ describe("agent session workflow records", () => {
   });
 
   test("rejects a conflicting workflow scope from persisted records", () => {
-    const projected = buildAgentSessionLiveCollection({
+    const discovered = buildAgentSessionLiveCollection({
       current: emptyAgentSessionCollection(),
-      snapshots: [
-        snapshot("thread-1", {
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
-        }),
-      ],
+      snapshots: [snapshot("thread-1")],
+    });
+    const discoveredSession = getAgentSession(discovered, identity("thread-1"));
+    if (!discoveredSession) {
+      throw new Error("Expected discovered session.");
+    }
+    const projected = replaceAgentSession(discovered, {
+      ...discoveredSession,
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
     });
 
     expect(() =>
@@ -256,7 +259,7 @@ describe("agent session workflow records", () => {
     );
   });
 
-  test("does not overlay a persisted workflow record onto a proven live subagent", () => {
+  test("hydrates an unbound live session into workflow scope and refreshes parent routing", () => {
     const projected = buildAgentSessionLiveCollection({
       current: emptyAgentSessionCollection(),
       snapshots: [
@@ -286,29 +289,25 @@ describe("agent session workflow records", () => {
       ],
     });
 
-    const workflowRecords = loadedRecords({
-      taskId: "task-1",
-      record: record("child-thread"),
+    const next = applyRecordsOnly({
+      projected,
+      records: loadedRecords({ taskId: "task-1", record: record("child-thread") }),
     });
-    const next = applyRecordsOnly({ projected, records: workflowRecords });
-    const unboundAssociation = { kind: "unbound" } as const;
+    const workflowAssociation = { kind: "workflow", taskId: "task-1", role: "build" } as const;
 
-    expect(
-      findPersistedSubagentSessionRecords({ projected: next, records: workflowRecords }),
-    ).toEqual([...workflowRecords.records]);
     expect(getAgentSession(next, identity("child-thread"))?.sessionAssociation).toEqual(
-      unboundAssociation,
+      workflowAssociation,
     );
     expect(getAgentSession(next, identity("parent-thread"))?.pendingApprovals).toEqual([
       expect.objectContaining({
         requestId: "child-approval",
-        responseSession: { ...identity("child-thread"), sessionAssociation: unboundAssociation },
+        responseSession: { ...identity("child-thread"), sessionAssociation: workflowAssociation },
       }),
     ]);
     expect(getAgentSession(next, identity("parent-thread"))?.pendingQuestions).toEqual([
       expect.objectContaining({
         requestId: "child-question",
-        responseSession: { ...identity("child-thread"), sessionAssociation: unboundAssociation },
+        responseSession: { ...identity("child-thread"), sessionAssociation: workflowAssociation },
       }),
     ]);
   });
@@ -417,8 +416,12 @@ describe("agent session workflow records", () => {
   });
 
   test("keeps a live workflow session across snapshot and task refresh while the runtime reports it", () => {
+    const registered = applyRecordsOnly({
+      projected: emptyAgentSessionCollection(),
+      records: loadedRecords({ taskId: "task-1", record: record("live-thread") }),
+    });
     const projected = buildAgentSessionLiveCollection({
-      current: emptyAgentSessionCollection(),
+      current: registered,
       snapshots: [
         snapshot("live-thread", {
           sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
@@ -444,8 +447,12 @@ describe("agent session workflow records", () => {
   });
 
   test("a task refresh prunes a workflow projection the runtime stopped reporting", () => {
+    const registered = applyRecordsOnly({
+      projected: emptyAgentSessionCollection(),
+      records: loadedRecords({ taskId: "task-1", record: record("live-thread") }),
+    });
     const projected = buildAgentSessionLiveCollection({
-      current: emptyAgentSessionCollection(),
+      current: registered,
       snapshots: [
         snapshot("live-thread", {
           sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },

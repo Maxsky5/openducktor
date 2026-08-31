@@ -89,17 +89,6 @@ describe("agent-orchestrator/support/persistence", () => {
     expect("title" in persisted).toBe(false);
   });
 
-  test("rejects persisting workflow-bound subagent sessions", () => {
-    const subagentSession: AgentSessionState = {
-      ...loadRecordFixture(),
-      liveParentExternalSessionId: "parent-session",
-    };
-
-    expect(() => toPersistedSessionRecord(subagentSession)).toThrow(
-      "Cannot persist subagent session 'external-1' as a task workflow session.",
-    );
-  });
-
   test("preserves non-default runtime kind across persistence", () => {
     const customRuntimeRecord: AgentSessionRecord = {
       ...recordFixture,

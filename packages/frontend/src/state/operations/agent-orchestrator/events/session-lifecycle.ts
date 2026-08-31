@@ -29,7 +29,7 @@ import {
   normalizeSessionErrorMessage,
 } from "../support/tool-messages";
 import { toUserChatMessage } from "../support/user-message-event";
-import { isPrimaryWorkflowAgentSession } from "../support/workflow-session";
+import { isWorkflowAgentSession } from "../support/workflow-session";
 import type { SessionEvent, SessionLifecycleEventContext } from "./session-event-types";
 import { settleSessionToIdle } from "./session-helpers";
 
@@ -42,7 +42,7 @@ const clearTurnTracking = (
 const workflowSessionPersistenceOptions = (
   context: Pick<SessionLifecycleEventContext, "session" | "store">,
 ) =>
-  isPrimaryWorkflowAgentSession(context.store.readSession(context.session.identity))
+  isWorkflowAgentSession(context.store.readSession(context.session.identity))
     ? ({ persist: true } as const)
     : undefined;
 
