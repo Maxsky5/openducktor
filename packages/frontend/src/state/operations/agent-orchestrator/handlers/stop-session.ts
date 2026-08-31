@@ -87,7 +87,7 @@ export const createStopAgentSession = ({
     });
 
     if (nextStoppedSession) {
-      await commitStoppedSession(nextStoppedSession, stopRepoPath);
+      await commitStoppedSession(nextStoppedSession);
     }
   };
 };

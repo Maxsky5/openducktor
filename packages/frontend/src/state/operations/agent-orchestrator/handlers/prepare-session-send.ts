@@ -49,11 +49,8 @@ export const createPrepareSessionSend = ({
     const isStale = (): boolean =>
       repoEpochRef.current !== repoEpochAtStart ||
       currentWorkspaceRepoPathRef.current !== workspaceRepoPathAtStart;
-    const assertNotStale = (): void => {
-      throwIfRepoStale(isStale, STALE_SEND_PREPARATION_ERROR);
-    };
 
-    assertNotStale();
+    throwIfRepoStale(isStale, STALE_SEND_PREPARATION_ERROR);
     const association = session.sessionAssociation;
     if (!association) {
       throw new Error(
@@ -88,7 +85,7 @@ export const createPrepareSessionSend = ({
       }),
       ensureExistingSessionRuntime(repoPath, session.runtimeKind),
     ]);
-    assertNotStale();
+    throwIfRepoStale(isStale, STALE_SEND_PREPARATION_ERROR);
 
     return {
       repoPath,

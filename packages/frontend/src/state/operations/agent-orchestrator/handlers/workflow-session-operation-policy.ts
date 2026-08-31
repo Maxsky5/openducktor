@@ -27,7 +27,7 @@ export const createCommitSessionModelChangePolicy = ({
   };
 };
 
-export type CommitStoppedSession = (session: AgentSessionState, repoPath: string) => Promise<void>;
+export type CommitStoppedSession = (session: AgentSessionState) => Promise<void>;
 
 export const createCommitStoppedSessionPolicy = ({
   persistSessionRecord,
@@ -38,12 +38,13 @@ export const createCommitStoppedSessionPolicy = ({
   invalidateSessionStopQueries: (input: { repoPath: string; taskId: string }) => Promise<void>;
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
 }): CommitStoppedSession => {
-  return async (session, repoPath): Promise<void> => {
+  return async (session): Promise<void> => {
     if (session.sessionAssociation.kind !== "workflow") {
       return;
     }
 
     const taskId = session.sessionAssociation.taskId;
+    const repoPath = session.repoPath;
     await persistSessionRecord(taskId, toPersistedSessionRecord(session));
     await Promise.all([
       invalidateSessionStopQueries({ repoPath, taskId }),

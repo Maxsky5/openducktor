@@ -1,42 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
-import type {
-  AcceptedAgentUserMessage,
-  AgentEnginePort,
-  AgentUserMessagePart,
-} from "@openducktor/core";
-import { serializeAgentUserMessagePartsToText } from "@openducktor/core";
+import type { AgentEnginePort, AgentUserMessagePart } from "@openducktor/core";
 import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
+import { acceptedUserMessage } from "./session-actions-send.test-support";
 import {
   buildSession,
   createSessionActions,
   createSessionsRef,
   getSession,
 } from "./session-actions.test-helpers";
-
-const acceptedUserMessage = (
-  input: Pick<
-    Parameters<AgentEnginePort["sendUserMessage"]>[0],
-    "externalSessionId" | "model" | "parts"
-  >,
-): AcceptedAgentUserMessage => {
-  // SAFETY: AgentEnginePort uses the same core message-part variants; generated optional fields differ only in declaration form.
-  const parts = input.parts as AgentUserMessagePart[];
-  const event: AcceptedAgentUserMessage = {
-    type: "user_message",
-    externalSessionId: input.externalSessionId,
-    timestamp: "2026-02-22T08:00:01.000Z",
-    messageId: "accepted-user-message",
-    message: serializeAgentUserMessagePartsToText(parts),
-    parts: [],
-    state: "read",
-  };
-  if (input.model) {
-    event.model = input.model;
-  }
-  return event;
-};
 
 const repositorySendCases: Array<{ label: string; parts: AgentUserMessagePart[] }> = [
   {
