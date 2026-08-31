@@ -22,7 +22,7 @@ const unexpectedPortCall = <Success>(): Effect.Effect<Success, never> =>
 const repositoryPort = (): GitProviderRepositoryPort => ({
   detectRepository: () => unexpectedPortCall(),
   getReadRepository: () => unexpectedPortCall(),
-  getWriteContext: () => unexpectedPortCall(),
+  getMappedRepositoryContext: () => unexpectedPortCall(),
 });
 const healthPort = (): GitProviderHealthPort => ({
   getStatus: () => unexpectedPortCall(),

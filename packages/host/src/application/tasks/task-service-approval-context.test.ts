@@ -24,7 +24,7 @@ const createGitProviderResolver = (health: GitProviderHealth): GitProviderResolv
       repository: () => ({
         detectRepository: () => Effect.die("Unexpected detectRepository call"),
         getReadRepository: () => Effect.die("Unexpected getReadRepository call"),
-        getWriteContext: () => Effect.die("Unexpected getWriteContext call"),
+        getMappedRepositoryContext: () => Effect.die("Unexpected getMappedRepositoryContext call"),
       }),
       health: () => ({ getStatus: () => Effect.succeed(health) }),
       pullRequests: () => Effect.die("Unexpected pullRequests call"),

@@ -59,9 +59,9 @@ export class GithubProviderAdapter implements GitProviderPort {
       repositoryAdapter.port
         .getReadRepository(repoConfig)
         .pipe(Effect.mapError(toPullRequestRepositoryError));
-    const getWriteContext = (repoConfig: RepoConfig) =>
+    const getMappedRepositoryContext = (repoConfig: RepoConfig) =>
       repositoryAdapter.port
-        .getWriteContext(repoConfig)
+        .getMappedRepositoryContext(repoConfig)
         .pipe(Effect.mapError(toPullRequestRepositoryError));
 
     this.repositoryPort = repositoryAdapter.port;
@@ -95,7 +95,7 @@ export class GithubProviderAdapter implements GitProviderPort {
         }),
       upsert: (input) =>
         Effect.gen(function* () {
-          const context = yield* getWriteContext(input.repoConfig);
+          const context = yield* getMappedRepositoryContext(input.repoConfig);
           return yield* upsertGithubPullRequest(
             githubDependencies,
             input.repoConfig.repoPath,

@@ -71,7 +71,7 @@ export const createTaskPullRequestManagementUseCases = ({
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = repoConfig.repoPath;
       const provider = yield* dependencies.gitProviderResolver.resolve(repoConfig);
-      const repository = yield* provider.repository().getReadRepository(repoConfig);
+      const { repository } = yield* provider.repository().getMappedRepositoryContext(repoConfig);
       const pullRequest = yield* fetchGithubPullRequestByNumber(
         dependencies,
         effectiveRepoPath,
@@ -138,7 +138,7 @@ export const createTaskPullRequestManagementUseCases = ({
         );
       }
       const provider = yield* dependencies.gitProviderResolver.resolve(repoConfig);
-      const githubContext = yield* provider.repository().getWriteContext(repoConfig);
+      const githubContext = yield* provider.repository().getMappedRepositoryContext(repoConfig);
       const pushResult = yield* dependencies.gitPort.pushBranch(
         approval.workingDirectory,
         approval.sourceBranch,

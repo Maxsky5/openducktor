@@ -22,7 +22,7 @@ describe("GitProviderRepositoryService", () => {
         });
       },
       getReadRepository: () => Effect.die("Unexpected getReadRepository call"),
-      getWriteContext: () => Effect.die("Unexpected getWriteContext call"),
+      getMappedRepositoryContext: () => Effect.die("Unexpected getMappedRepositoryContext call"),
     };
     const health: GitProviderHealthPort = {
       getStatus: () => Effect.die("Unexpected health call"),

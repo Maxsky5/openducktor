@@ -131,7 +131,7 @@ const makeProvider = (
     repository: () => ({
       detectRepository: () => unexpectedProviderOperation(),
       getReadRepository: () => unexpectedProviderOperation(),
-      getWriteContext: () => unexpectedProviderOperation(),
+      getMappedRepositoryContext: () => unexpectedProviderOperation(),
     }),
     health: () => ({
       getStatus: () => unexpectedProviderOperation(),

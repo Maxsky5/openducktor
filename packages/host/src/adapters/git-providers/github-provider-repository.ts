@@ -147,7 +147,7 @@ export const createGithubProviderRepositoryAdapter = ({
       return repository;
     });
 
-  const getWriteContext = (repoConfig: RepoConfig) =>
+  const getMappedRepositoryContext = (repoConfig: RepoConfig) =>
     Effect.gen(function* () {
       const repository = yield* getReadRepository(repoConfig);
       const remoteName = yield* requireSingleMatchingRemote(repoConfig.repoPath, repository);
@@ -184,7 +184,7 @@ export const createGithubProviderRepositoryAdapter = ({
         return yield* Effect.fail(detectionError(canonicalRepoPath, repositories));
       }),
     getReadRepository,
-    getWriteContext,
+    getMappedRepositoryContext,
   };
 
   return { port, requireSingleMatchingRemote };

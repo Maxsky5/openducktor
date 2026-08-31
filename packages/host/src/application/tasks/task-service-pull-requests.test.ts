@@ -1,10 +1,15 @@
 import { Effect } from "effect";
 import { z } from "zod";
-import { GITHUB_PROVIDER_DESCRIPTOR } from "@openducktor/contracts";
+import { createGithubCliAdapter } from "../../adapters/git-providers/github-cli";
+import { GithubProviderAdapter } from "../../adapters/git-providers/github-provider-adapter";
+import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
 import { TaskPolicyError } from "../../domain/task";
 import { HostOperationError } from "../../effect/host-errors";
-import type { GitProviderResolver } from "../git/git-provider-resolver";
+import type { GitPort } from "../../ports/git-port";
 import { GitProviderRepositoryError } from "../../ports/git-provider-errors";
+import type { SystemCommandPort } from "../../ports/system-command-port";
+import { createGitProviderResolver } from "../git/git-provider-resolver";
+import { createGithubCommandDependencies } from "./support/github-pull-requests";
 import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
 import {
   createAgentSessionRecord,
@@ -28,6 +33,23 @@ import {
   type TaskStorePort,
   task,
 } from "./test-support/task-workflow-harness";
+
+const createRealGithubProviderDependencies = async (
+  gitPort: GitPort,
+  systemCommands: SystemCommandPort,
+) => {
+  const githubCli = createGithubCliAdapter(systemCommands);
+  const toolDiscovery = createToolDiscoveryAdapter({ systemCommands });
+  const githubDependencies = createGithubCommandDependencies({
+    githubCli,
+    systemCommands,
+    toolDiscovery,
+  });
+  const gitProviderResolver = await Effect.runPromise(
+    createGitProviderResolver([new GithubProviderAdapter({ githubDependencies, gitPort })]),
+  );
+  return { githubCli, gitProviderResolver, toolDiscovery };
+};
 
 describe("createTaskService pull requests", () => {
   test("detects and links an existing open pull request for the task branch", async () => {
@@ -184,35 +206,42 @@ describe("createTaskService pull requests", () => {
         });
       },
     };
-    const service = createTaskService({
-      gitPort: extendGitPort(
-        createDirectMergeGitPort({
-          calls,
-          currentBranches: {
-            "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
-          },
-        }),
-        {
-          listRemotes(workingDir) {
-            return Effect.tryPromise({
-              try: async () => {
-                calls.push({ type: "listRemotes", workingDir });
-                return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
-              },
-              catch: (cause) =>
-                new HostOperationError({
-                  operation: "test.effect",
-                  message: cause instanceof Error ? cause.message : String(cause),
-                  cause: cause,
-                }),
-            });
-          },
-        },
-      ),
-      systemCommands: createPullRequestDetectSystemCommands({
+    const gitPort = extendGitPort(
+      createDirectMergeGitPort({
         calls,
-        openPayload: githubPullListPayload([{ number: 42 }]),
+        currentBranches: {
+          "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+        },
       }),
+      {
+        listRemotes(workingDir) {
+          return Effect.tryPromise({
+            try: async () => {
+              calls.push({ type: "listRemotes", workingDir });
+              return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
+            },
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
+          });
+        },
+      },
+    );
+    const systemCommands = createPullRequestDetectSystemCommands({
+      calls,
+      openPayload: githubPullListPayload([{ number: 42 }]),
+    });
+    const providerDependencies = await createRealGithubProviderDependencies(
+      gitPort,
+      systemCommands,
+    );
+    const service = createTaskService({
+      ...providerDependencies,
+      gitPort,
+      systemCommands,
       taskStore,
       taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
       workspaceSettingsService: createBuildWorkspaceSettingsService({
@@ -296,45 +325,39 @@ describe("createTaskService pull requests", () => {
     expect(error.code).toBe("TASK_POLICY_ERROR");
   });
   test.each([
-    ["no_matching_remote", []],
-    ["ambiguous_matching_remotes", ["origin", "upstream"]],
+    ["detect", "no_matching_remote", []],
+    ["detect", "ambiguous_matching_remotes", ["origin", "upstream"]],
+    ["link", "no_matching_remote", []],
+    ["link", "ambiguous_matching_remotes", ["origin", "upstream"]],
   ] as const)(
-    "detectPullRequest preserves the provider repository error for %s",
-    async (reason, remoteNames) => {
+    "%s pull request preserves the real provider repository error for %s",
+    async (operation, reason, remoteNames) => {
       const calls: unknown[] = [];
-      const repositoryError = new GitProviderRepositoryError({
-        reason,
-        providerId: "github",
-        repoPath: "/repo",
-        remoteNames,
-        message: `repository mapping failed: ${reason}`,
-      });
-      const gitProviderResolver: GitProviderResolver = {
-        resolve: () =>
-          Effect.succeed({
-            getDescriptor: () => GITHUB_PROVIDER_DESCRIPTOR,
-            repository: () => ({
-              detectRepository: () => Effect.fail(repositoryError),
-              getReadRepository: () => Effect.fail(repositoryError),
-              getWriteContext: () => Effect.fail(repositoryError),
-            }),
-            health: () => ({ getStatus: () => Effect.die("unexpected health check") }),
-            pullRequests: () => Effect.die("unexpected Pull Request port"),
-            pullRequestReview: () => Effect.die("unexpected Pull Request review port"),
-          }),
-      };
-      const service = createTaskService({
-        gitPort: createDirectMergeGitPort({
+      const matchingRemotes = remoteNames.map((name) => ({
+        name,
+        url: "git@github.com:openai/openducktor.git",
+      }));
+      const gitPort = extendGitPort(
+        createDirectMergeGitPort({
           calls,
           currentBranches: {
             "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
           },
         }),
-        gitProviderResolver,
-        systemCommands: createPullRequestDetectSystemCommands({
-          calls,
-          openPayload: githubPullListPayload([]),
-        }),
+        { listRemotes: () => Effect.succeed(matchingRemotes) },
+      );
+      const systemCommands = createPullRequestDetectSystemCommands({
+        calls,
+        openPayload: githubPullListPayload([]),
+      });
+      const providerDependencies = await createRealGithubProviderDependencies(
+        gitPort,
+        systemCommands,
+      );
+      const service = createTaskService({
+        ...providerDependencies,
+        gitPort,
+        systemCommands,
         taskStore: {
           getTask: () => Effect.succeed(task({ status: "human_review" })),
           getTaskMetadata: () =>
@@ -360,12 +383,20 @@ describe("createTaskService pull requests", () => {
         }),
       });
 
-      const error = await Effect.runPromise(
-        Effect.flip(service.detectPullRequest({ repoPath: "/repo", taskId: "task-1" })),
-      );
+      const taskInput = { repoPath: "/repo", taskId: "task-1" };
+      const error =
+        operation === "detect"
+          ? await Effect.runPromise(Effect.flip(service.detectPullRequest(taskInput)))
+          : await Effect.runPromise(
+              Effect.flip(
+                service.linkPullRequest({ ...taskInput, providerId: "github", number: 42 }),
+              ),
+            );
 
-      expect(error).toBe(repositoryError);
       expect(error).toBeInstanceOf(GitProviderRepositoryError);
+      if (!(error instanceof GitProviderRepositoryError)) throw error;
+      expect(error.reason).toBe(reason);
+      expect(error.remoteNames).toEqual(remoteNames);
     },
   );
   test("links a pull request by number after fetching provider metadata", async () => {
@@ -522,56 +553,63 @@ describe("createTaskService pull requests", () => {
         });
       },
     };
+    const gitPort = extendGitPort(createDirectMergeGitPort({ calls }), {
+      listRemotes(workingDir) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "listRemotes", workingDir });
+            return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+    });
+    const systemCommands = createSystemCommandPort({
+      resolveCommandPath(command) {
+        calls.push({ type: "resolveCommand", command });
+        return Effect.succeed(command);
+      },
+      versionCommand() {
+        return Effect.dieMessage("unexpected version command");
+      },
+      runCommandAllowFailure(command, args, options) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "command", command, args, options });
+            if (args.includes("auth")) {
+              return {
+                ok: true,
+                stdout: "Logged in to github.com account octocat\n",
+                stderr: "",
+              };
+            }
+            if (args.some((arg) => arg.includes("pulls/77"))) {
+              return { ok: true, stdout: githubPullResponsePayload({ number: 77 }), stderr: "" };
+            }
+            throw new Error(`unexpected command args: ${args.join(" ")}`);
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+    });
+    const providerDependencies = await createRealGithubProviderDependencies(
+      gitPort,
+      systemCommands,
+    );
     const service = createTaskService({
-      gitPort: extendGitPort(createDirectMergeGitPort({ calls }), {
-        listRemotes(workingDir) {
-          return Effect.tryPromise({
-            try: async () => {
-              calls.push({ type: "listRemotes", workingDir });
-              return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
-            },
-            catch: (cause) =>
-              new HostOperationError({
-                operation: "test.effect",
-                message: cause instanceof Error ? cause.message : String(cause),
-                cause: cause,
-              }),
-          });
-        },
-      }),
-      systemCommands: createSystemCommandPort({
-        resolveCommandPath(command) {
-          calls.push({ type: "resolveCommand", command });
-          return Effect.succeed(command);
-        },
-        versionCommand() {
-          return Effect.dieMessage("unexpected version command");
-        },
-        runCommandAllowFailure(command, args, options) {
-          return Effect.tryPromise({
-            try: async () => {
-              calls.push({ type: "command", command, args, options });
-              if (args.includes("auth")) {
-                return {
-                  ok: true,
-                  stdout: "Logged in to github.com account octocat\n",
-                  stderr: "",
-                };
-              }
-              if (args.some((arg) => arg.includes("pulls/77"))) {
-                return { ok: true, stdout: githubPullResponsePayload({ number: 77 }), stderr: "" };
-              }
-              throw new Error(`unexpected command args: ${args.join(" ")}`);
-            },
-            catch: (cause) =>
-              new HostOperationError({
-                operation: "test.effect",
-                message: cause instanceof Error ? cause.message : String(cause),
-                cause: cause,
-              }),
-          });
-        },
-      }),
+      ...providerDependencies,
+      gitPort,
+      systemCommands,
       taskStore,
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",

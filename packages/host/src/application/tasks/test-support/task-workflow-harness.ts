@@ -160,7 +160,7 @@ const defaultGitProviderResolver: GitProviderResolver = {
             ? Effect.succeed(repository)
             : Effect.dieMessage("test repository mapping is missing");
         },
-        getWriteContext: (configuredRepo) => {
+        getMappedRepositoryContext: (configuredRepo) => {
           const repository = configuredRepo.git.provider?.repository;
           return repository
             ? Effect.succeed({ repository, remoteName: "origin" })

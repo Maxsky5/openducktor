@@ -23,7 +23,7 @@ export type GitProviderRepositoryPort = {
   getReadRepository(
     repoConfig: RepoConfig,
   ): Effect.Effect<GitProviderRepository, HostError | GitProviderRepositoryError>;
-  getWriteContext(
+  getMappedRepositoryContext(
     repoConfig: RepoConfig,
   ): Effect.Effect<GitProviderRepositoryContext, HostError | GitProviderRepositoryError>;
 };

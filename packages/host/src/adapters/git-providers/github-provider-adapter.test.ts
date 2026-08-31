@@ -82,7 +82,7 @@ describe("GithubProviderAdapter", () => {
     expect(resolved.repository()).toEqual(
       expect.objectContaining({
         getReadRepository: expect.any(Function),
-        getWriteContext: expect.any(Function),
+        getMappedRepositoryContext: expect.any(Function),
       }),
     );
     expect(resolved.health()).toEqual(
@@ -316,7 +316,7 @@ describe("GithubProviderAdapter", () => {
     });
 
     const mapping = await Effect.runPromise(
-      Effect.either(github.repository().getWriteContext(repoConfig())),
+      Effect.either(github.repository().getMappedRepositoryContext(repoConfig())),
     );
     const health = await Effect.runPromise(github.health().getStatus(repoConfig()));
 
