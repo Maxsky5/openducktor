@@ -24,7 +24,7 @@ export type TaskActivityGuardPort = {
   countLiveSessions(
     input: TaskActivityGuardTaskSessions,
   ): Effect.Effect<{ liveSessionCount: number }, TaskActivityGuardError>;
-  stopLiveSessions(
+  cleanupTaskSessions(
     input: TaskActivityGuardTaskSessions,
   ): Effect.Effect<TaskActivityGuardStopResult, TaskActivityGuardError>;
 };

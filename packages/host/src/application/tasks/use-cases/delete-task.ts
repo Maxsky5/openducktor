@@ -129,6 +129,9 @@ export const createTaskDeleteUseCase = ({
         branchPrefix,
         targetTaskSessions,
       );
+      if (taskSessionBootstrapCoordinator) {
+        yield* taskSessionBootstrapCoordinator.acquireWorktreeLifecycle(worktreePaths);
+      }
       const branchNames = yield* collectRelatedTaskBranches(
         dependencies.gitPort,
         effectiveRepoPath,
@@ -137,7 +140,7 @@ export const createTaskDeleteUseCase = ({
       );
       const cleanupProgress = createTaskCleanupProgressState();
       if (hasWorkflowSessions && activityGuard) {
-        const { stoppedSessionCount } = yield* activityGuard.stopLiveSessions({
+        const { stoppedSessionCount } = yield* activityGuard.cleanupTaskSessions({
           repoPath: effectiveRepoPath,
           taskSessions: targetTaskSessions.map(({ taskId: targetTaskId, sessions }) => ({
             taskId: targetTaskId,

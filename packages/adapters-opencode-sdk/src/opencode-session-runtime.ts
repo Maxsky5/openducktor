@@ -36,6 +36,7 @@ import {
 import { observeRuntimeEvents, registerSession, releaseSessionRuntime } from "./session-registry";
 import type {
   OpencodeSdkAdapterOptions,
+  RunOpencodeDirectoryRead,
   RuntimeEventTransportRecord,
   SessionRecord,
 } from "./types";
@@ -80,6 +81,11 @@ export type PreparedOpencodeSessionRuntime = {
 export type PrepareOpencodeSessionRuntime = (
   input: PrepareOpencodeSessionRuntimeInput,
 ) => Promise<PreparedOpencodeSessionRuntime>;
+
+type PrepareOpencodeSessionRuntimeOptions = OpencodeSdkAdapterOptions & {
+  readonly directoryExists: (directory: string) => Promise<boolean>;
+  readonly runDirectoryRead: RunOpencodeDirectoryRead;
+};
 
 const runtimeInitializationAbortFailure = (signal: AbortSignal, runtimeId: string): Error =>
   signal.reason instanceof Error
@@ -139,7 +145,7 @@ const releaseEventSessions = async (
 };
 
 export const createPrepareOpencodeSessionRuntime = (
-  options: OpencodeSdkAdapterOptions = {},
+  options: PrepareOpencodeSessionRuntimeOptions,
 ): PrepareOpencodeSessionRuntime => {
   const createClient = options.createClient ?? buildDefaultFactory();
   const now = options.now ?? nowIso;
@@ -227,13 +233,6 @@ export const createPrepareOpencodeSessionRuntime = (
     };
 
     const syncEventSessions = async (sources: OpencodeRuntimeSnapshotSource[]): Promise<void> => {
-      const activeSessionIds = new Set(sources.map((source) => source.externalSessionId));
-      // oxlint-disable-next-line unicorn/no-useless-spread -- cleanup awaits and must not include new sessions
-      for (const session of [...eventSessions.values()]) {
-        if (!activeSessionIds.has(session.externalSessionId)) {
-          await releaseSessionRuntime(session, eventSessions, runtimeEventTransports);
-        }
-      }
       for (const source of sources) {
         const existing = eventSessions.get(source.externalSessionId);
         if (existing?.input.workingDirectory === source.workingDirectory) {
@@ -288,6 +287,8 @@ export const createPrepareOpencodeSessionRuntime = (
         const snapshotInput: Parameters<typeof listOpencodeRuntimeSnapshotSources>[0] = {
           createClient,
           runtimeEndpoint: input.runtimeEndpoint,
+          directoryExists: options.directoryExists,
+          runDirectoryRead: options.runDirectoryRead,
           now,
         };
         if (input.directories) {

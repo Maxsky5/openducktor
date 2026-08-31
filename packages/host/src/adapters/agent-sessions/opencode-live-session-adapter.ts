@@ -1,5 +1,4 @@
 import {
-  createPrepareOpencodeSessionRuntime,
   type OpencodeSessionRuntimeSignal,
   type PrepareOpencodeSessionRuntime,
 } from "@openducktor/adapters-opencode-sdk";
@@ -52,7 +51,7 @@ export type CreateOpenCodeLiveSessionAdapterPreparerInput = {
     RuntimeLiveSessionLifecyclePort,
     "releaseRuntime" | "runAdapterMutation"
   >;
-  readonly prepareRuntime?: PrepareOpencodeSessionRuntime;
+  readonly prepareRuntime: PrepareOpencodeSessionRuntime;
 };
 
 const stateEffect = <Value, Details extends object>(
@@ -85,7 +84,7 @@ const runtimeActivityFromTranscriptEvent = (
 
 export const createOpenCodeLiveSessionAdapterPreparer = ({
   liveSessionLifecycle,
-  prepareRuntime = createPrepareOpencodeSessionRuntime(),
+  prepareRuntime,
 }: CreateOpenCodeLiveSessionAdapterPreparerInput): OpenCodeRuntimeSessionAdapterPreparer => {
   let nextOccurrence = 1;
 

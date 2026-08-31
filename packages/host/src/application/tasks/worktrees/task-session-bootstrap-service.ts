@@ -108,7 +108,13 @@ export const createTaskSessionBootstrapUseCase = ({
           );
         }
         const bootstrapId = crypto.randomUUID();
-        yield* coordinator.acquireBootstrap(canonicalRepoPath, taskId, bootstrapId, role);
+        yield* coordinator.acquireBootstrap(
+          canonicalRepoPath,
+          taskId,
+          bootstrapId,
+          role,
+          worktreePath,
+        );
         const prepared = yield* Effect.either(
           Effect.gen(function* () {
             const task = yield* taskStore.getTask({ repoPath: canonicalRepoPath, taskId });

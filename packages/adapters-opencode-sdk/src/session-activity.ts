@@ -45,11 +45,3 @@ export const clearAwaitingRuntimeTurnStart = (session: SessionRecord | undefined
   }
   session.isAwaitingRuntimeTurnStart = false;
 };
-
-export const isLocalSessionBusy = (session: SessionRecord): boolean => {
-  return (
-    session.isSendingUserMessage ||
-    session.isAwaitingRuntimeTurnStart ||
-    session.streamTurnStatus === "active"
-  );
-};

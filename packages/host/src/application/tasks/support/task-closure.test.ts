@@ -114,6 +114,7 @@ test("holds the task lifecycle guard across cleanup and closure", async () => {
         "task-1",
         "bootstrap-1",
         "build",
+        null,
       ),
     );
     bootstrapWasBlocked = bootstrap._tag === "Left";
@@ -147,6 +148,7 @@ test("does not begin cleanup while a task session bootstrap is active", async ()
       "task-1",
       "bootstrap-1",
       "build",
+      null,
     ),
   );
   let cleanupStarted = false;

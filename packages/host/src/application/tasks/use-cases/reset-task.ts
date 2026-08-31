@@ -114,6 +114,9 @@ export const createTaskFullResetUseCase = ({
         workflowCleanupSessionRoles,
         "reset task",
       );
+      if (taskSessionBootstrapCoordinator) {
+        yield* taskSessionBootstrapCoordinator.acquireWorktreeLifecycle(worktreePaths);
+      }
       const branchNames = yield* collectRelatedTaskBranches(
         dependencies.gitPort,
         effectiveRepoPath,
@@ -122,7 +125,7 @@ export const createTaskFullResetUseCase = ({
       );
       const cleanupProgress = createTaskCleanupProgressState();
       if (hasWorkflowSessions && activityGuard) {
-        const { stoppedSessionCount } = yield* activityGuard.stopLiveSessions({
+        const { stoppedSessionCount } = yield* activityGuard.cleanupTaskSessions({
           repoPath: effectiveRepoPath,
           taskSessions: [
             {

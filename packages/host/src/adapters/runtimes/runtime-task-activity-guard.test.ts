@@ -1,12 +1,29 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
+import type { AgentSessionLiveSnapshot, AgentSessionRecord } from "@openducktor/contracts";
 import { Effect } from "effect";
+import type { AgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import { HostOperationError } from "../../effect/host-errors";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import { createRuntimeTaskActivityGuard as createEffectRuntimeTaskActivityGuard } from "./runtime-task-activity-guard";
 
 const createRuntimeTaskActivityGuard = (
-  ...args: Parameters<typeof createEffectRuntimeTaskActivityGuard>
-) => createEffectRuntimeTaskActivityGuard(...args);
+  input: Omit<
+    Parameters<typeof createEffectRuntimeTaskActivityGuard>[0],
+    "sessionService" | "settingsConfig"
+  > & {
+    sessionService?: Pick<AgentSessionLiveStateService, "list" | "releaseSession">;
+    pathExists?: (path: string) => boolean;
+  },
+) =>
+  createEffectRuntimeTaskActivityGuard({
+    ...input,
+    settingsConfig: {
+      pathExists: (path) => Effect.succeed(input.pathExists?.(path) ?? true),
+    },
+    sessionService: input.sessionService ?? {
+      list: () => Effect.succeed([]),
+      releaseSession: () => Effect.void,
+    },
+  });
 const registry = ({
   liveSessions = new Set<string>(),
   probeCalls = [],
@@ -116,6 +133,21 @@ const session = (overrides: Partial<AgentSessionRecord> = {}): AgentSessionRecor
   selectedModel: null,
   ...overrides,
 });
+const snapshot = (): AgentSessionLiveSnapshot => ({
+  ref: {
+    repoPath: "/repo",
+    runtimeKind: "opencode",
+    workingDirectory: "/repo/worktree",
+    externalSessionId: "external-build-session",
+  },
+  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+  activity: "idle",
+  title: "Build session",
+  startedAt: "2026-05-10T10:00:00.000Z",
+  pendingApprovals: [],
+  pendingQuestions: [],
+  contextUsage: null,
+});
 describe("createRuntimeTaskActivityGuard", () => {
   test("counts live sessions across tasks without stopping them", async () => {
     const probeCalls: unknown[] = [];
@@ -177,7 +209,7 @@ describe("createRuntimeTaskActivityGuard", () => {
     });
     await expect(
       Effect.runPromise(
-        guard.stopLiveSessions({
+        guard.cleanupTaskSessions({
           repoPath: "/repo",
           taskSessions: [{ taskId: "task-1", sessions: [session()] }],
         }),
@@ -219,7 +251,7 @@ describe("createRuntimeTaskActivityGuard", () => {
     });
     await expect(
       Effect.runPromise(
-        guard.stopLiveSessions({
+        guard.cleanupTaskSessions({
           repoPath: "/repo",
           taskSessions: [{ taskId: "task-1", sessions: [session()] }],
         }),
@@ -237,7 +269,7 @@ describe("createRuntimeTaskActivityGuard", () => {
     });
     await expect(
       Effect.runPromise(
-        guard.stopLiveSessions({
+        guard.cleanupTaskSessions({
           repoPath: "/repo",
           taskSessions: [
             {
@@ -266,13 +298,62 @@ describe("createRuntimeTaskActivityGuard", () => {
     });
     await expect(
       Effect.runPromise(
-        guard.stopLiveSessions({
+        guard.cleanupTaskSessions({
           repoPath: "/repo",
           taskSessions: [{ taskId: "task-1", sessions: [session()] }],
         }),
       ),
     ).resolves.toEqual({ stoppedSessionCount: 0 });
     expect(stopCalls).toEqual([]);
+  });
+  test("releases an idle task session after checking runtime activity", async () => {
+    const releaseCalls: string[] = [];
+    const guard = createRuntimeTaskActivityGuard({
+      runtimeRegistry: registry(),
+      sessionService: {
+        list: () => Effect.succeed([snapshot()]),
+        releaseSession: (ref) =>
+          Effect.sync(() => {
+            releaseCalls.push(ref.externalSessionId);
+          }),
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        guard.cleanupTaskSessions({
+          repoPath: "/repo",
+          taskSessions: [{ taskId: "task-1", sessions: [session()] }],
+        }),
+      ),
+    ).resolves.toEqual({ stoppedSessionCount: 0 });
+    expect(releaseCalls).toEqual(["external-build-session"]);
+  });
+  test("releases a missing-worktree session without probing it", async () => {
+    const probeCalls: unknown[] = [];
+    const releaseCalls: string[] = [];
+    const guard = createRuntimeTaskActivityGuard({
+      runtimeRegistry: registry({ probeCalls }),
+      pathExists: () => false,
+      sessionService: {
+        list: () => Effect.succeed([snapshot()]),
+        releaseSession: (ref) =>
+          Effect.sync(() => {
+            releaseCalls.push(ref.externalSessionId);
+          }),
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        guard.cleanupTaskSessions({
+          repoPath: "/repo",
+          taskSessions: [{ taskId: "task-1", sessions: [session()] }],
+        }),
+      ),
+    ).resolves.toEqual({ stoppedSessionCount: 0 });
+    expect(probeCalls).toEqual([]);
+    expect(releaseCalls).toEqual(["external-build-session"]);
   });
   test("surfaces stop failures as actionable errors instead of proceeding with cleanup", async () => {
     const guard = createRuntimeTaskActivityGuard({
@@ -283,7 +364,7 @@ describe("createRuntimeTaskActivityGuard", () => {
     });
     await expect(
       Effect.runPromise(
-        guard.stopLiveSessions({
+        guard.cleanupTaskSessions({
           repoPath: "/repo",
           taskSessions: [{ taskId: "task-1", sessions: [session()] }],
         }),
@@ -303,7 +384,7 @@ describe("createRuntimeTaskActivityGuard", () => {
 
     const error = await Effect.runPromise(
       guard
-        .stopLiveSessions({
+        .cleanupTaskSessions({
           repoPath: "/repo",
           taskSessions: [
             {

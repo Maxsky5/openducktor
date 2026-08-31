@@ -21,6 +21,7 @@ type LiveClientHarness = {
   promptCalls: unknown[];
   permissionReplyCalls: unknown[];
   questionReplyCalls: unknown[];
+  setExternalSessionIds: (sessionIds: string[]) => void;
   setPermissionReplyError: (error: Error | null) => void;
   setPendingApproval: (pending: boolean) => void;
   emit: (event: OpencodeEventFixtureInput) => void;
@@ -62,7 +63,7 @@ const createLiveClientHarness = (
     initiallyConnected?: boolean;
   } = {},
 ): LiveClientHarness => {
-  const externalSessionIds = input.externalSessionIds ?? [input.externalSessionId ?? "session-1"];
+  let externalSessionIds = input.externalSessionIds ?? [input.externalSessionId ?? "session-1"];
   const externalSessionId = externalSessionIds[0] ?? "session-1";
   const nativeRequestId = input.nativeRequestId ?? "native-request-1";
   const callOrder: string[] = [];
@@ -271,6 +272,9 @@ const createLiveClientHarness = (
     promptCalls,
     permissionReplyCalls,
     questionReplyCalls,
+    setExternalSessionIds: (sessionIds) => {
+      externalSessionIds = sessionIds;
+    },
     setPermissionReplyError: (error) => {
       permissionReplyError = error;
     },
@@ -314,6 +318,8 @@ const runtimeInput = {
 const createPrepareRuntime = (harness: LiveClientHarness) =>
   createPrepareOpencodeSessionRuntime({
     createClient: () => harness.client,
+    directoryExists: async () => true,
+    runDirectoryRead: (_directory, read) => read(),
     now: () => "2026-07-16T10:02:00.000Z",
   });
 
@@ -374,6 +380,26 @@ describe("OpenCode session runtime connection", () => {
     const sources = await prepared.connection.readSessionSources();
 
     expect(sources[0]?.sessionAssociation).toEqual({ kind: "repository" });
+    await prepared.release();
+  });
+
+  test("keeps a confirmed registration when a session list omits it", async () => {
+    const harness = createLiveClientHarness();
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    harness.setExternalSessionIds([]);
+
+    expect(await prepared.connection.readSessionSources()).toEqual([]);
+    await prepared.connection.sendUserMessage({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+      runtimePolicy: { kind: "opencode" },
+      workingDirectory: "/repo",
+      externalSessionId: "session-1",
+      sessionScope: { kind: "repository" },
+      parts: [{ kind: "text", text: "Continue" }],
+    });
+
+    expect(harness.promptCalls).toHaveLength(1);
     await prepared.release();
   });
 

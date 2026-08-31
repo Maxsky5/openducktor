@@ -12,7 +12,6 @@ import type {
   AgentSessionHistoryMessage,
   AgentSessionPort,
   AgentSessionRuntimePolicy,
-  AgentSessionRuntimeSnapshot,
   AgentSessionSummary,
   AgentSessionTodoItem,
   AgentSkillCatalog,
@@ -25,13 +24,11 @@ import type {
   ListAgentSkillsInput,
   ListAgentSlashCommandsInput,
   ListAgentSubagentsInput,
-  ListSessionRuntimeSnapshotsInput,
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
   LoadAgentSessionTodosInput,
   PolicyBoundSessionRef,
-  ReadSessionRuntimeSnapshotInput,
   ReplyApprovalInput,
   ReplyQuestionInput,
   ResumeAgentSessionInput,
@@ -45,7 +42,6 @@ import {
   agentSessionRefsEqual,
   assertAgentRuntimePolicyBinding,
   classifySystemSlashCommandInvocation,
-  toAgentSessionRuntimeSnapshot,
   withAgentSessionRef,
 } from "@openducktor/core";
 import {
@@ -66,12 +62,6 @@ import {
   type SessionEventListeners,
   subscribeSessionEvents,
 } from "./event-emitter";
-import {
-  applyOpencodeAwaitingTurnStartToRuntimeSnapshot,
-  findOpencodeLocalRuntimeSnapshot,
-  listOpencodeLocalRuntimeSnapshots,
-  listOpencodeRuntimeSnapshotSources,
-} from "./live-session-snapshots";
 import { sendUserMessage, usesPromptAsyncTransport } from "./message-execution";
 import { loadSessionHistory, loadSessionTodos } from "./message-ops";
 import { createOpenCodeMessageId } from "./opencode-message-id";
@@ -500,116 +490,6 @@ export class OpencodeSdkAdapter
       registrationInput.logEvent = this.logEvent;
     }
     return registerSession(registrationInput);
-  }
-
-  async listSessionRuntimeSnapshots(
-    input: ListSessionRuntimeSnapshotsInput,
-  ): Promise<AgentSessionRuntimeSnapshot[]> {
-    const runtimeClientInput = await this.resolveRuntimeClientInput(
-      { ...input, workingDirectory: input.repoPath },
-      "list session runtime snapshots",
-    );
-    const snapshotInput: Parameters<typeof listOpencodeRuntimeSnapshotSources>[0] = {
-      createClient: this.createClient,
-      runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
-      now: this.now,
-    };
-    if (input.directories) {
-      snapshotInput.directories = input.directories;
-    }
-    const snapshots = await listOpencodeRuntimeSnapshotSources(snapshotInput);
-    const existingExternalSessionIds = new Set(
-      snapshots.map((snapshot) => snapshot.externalSessionId),
-    );
-    const localSnapshotInput: Parameters<typeof listOpencodeLocalRuntimeSnapshots>[0] = {
-      sessions: this.sessions,
-      runtimeId: runtimeClientInput.runtimeId,
-      repoPath: input.repoPath,
-      runtimeKind: input.runtimeKind,
-      existingExternalSessionIds,
-    };
-    if (input.directories) {
-      localSnapshotInput.directories = input.directories;
-    }
-    const localSnapshots = listOpencodeLocalRuntimeSnapshots(localSnapshotInput);
-    const liveSnapshots = snapshots.map((snapshot) =>
-      toAgentSessionRuntimeSnapshot({
-        ref: {
-          repoPath: input.repoPath,
-          runtimeKind: input.runtimeKind,
-          workingDirectory: snapshot.workingDirectory,
-          externalSessionId: snapshot.externalSessionId,
-        },
-        snapshot: applyOpencodeAwaitingTurnStartToRuntimeSnapshot({
-          sessions: this.sessions,
-          runtimeId: runtimeClientInput.runtimeId,
-          snapshot,
-        }),
-      }),
-    );
-    const localRuntimeSnapshots = localSnapshots.map((snapshot) =>
-      toAgentSessionRuntimeSnapshot({
-        ref: {
-          repoPath: input.repoPath,
-          runtimeKind: input.runtimeKind,
-          workingDirectory: snapshot.workingDirectory,
-          externalSessionId: snapshot.externalSessionId,
-        },
-        snapshot,
-      }),
-    );
-    return [...liveSnapshots, ...localRuntimeSnapshots];
-  }
-
-  async readSessionRuntimeSnapshot(
-    input: ReadSessionRuntimeSnapshotInput,
-  ): Promise<AgentSessionRuntimeSnapshot> {
-    const runtimeClientInput = await this.resolveRuntimeClientInput(
-      input,
-      "read session runtime snapshot",
-    );
-    const snapshots = await listOpencodeRuntimeSnapshotSources({
-      createClient: this.createClient,
-      runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
-      directories: [input.workingDirectory],
-      now: this.now,
-    });
-    const scannedSnapshot =
-      snapshots.find((candidate) => candidate.externalSessionId === input.externalSessionId) ??
-      null;
-    const localSnapshot = findOpencodeLocalRuntimeSnapshot({
-      sessions: this.sessions,
-      runtimeId: runtimeClientInput.runtimeId,
-      repoPath: input.repoPath,
-      runtimeKind: input.runtimeKind,
-      workingDirectory: input.workingDirectory,
-      externalSessionId: input.externalSessionId,
-    });
-    const snapshot = scannedSnapshot
-      ? applyOpencodeAwaitingTurnStartToRuntimeSnapshot({
-          sessions: this.sessions,
-          runtimeId: runtimeClientInput.runtimeId,
-          snapshot: scannedSnapshot,
-        })
-      : localSnapshot;
-    if (!snapshot) {
-      return toAgentSessionRuntimeSnapshot({
-        ref: input,
-        snapshot: null,
-      });
-    }
-
-    const canonicalWorkingDirectory =
-      scannedSnapshot?.workingDirectory ??
-      localSnapshot?.workingDirectory ??
-      input.workingDirectory;
-    return toAgentSessionRuntimeSnapshot({
-      ref: {
-        ...input,
-        workingDirectory: canonicalWorkingDirectory,
-      },
-      snapshot,
-    });
   }
 
   async loadSessionHistory(

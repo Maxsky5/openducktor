@@ -54,7 +54,7 @@ const makeGuard = (
       };
     });
   },
-  stopLiveSessions() {
+  cleanupTaskSessions() {
     return Effect.fail(new HostOperationError({ operation: "test", message: "unexpected stop" }));
   },
 });

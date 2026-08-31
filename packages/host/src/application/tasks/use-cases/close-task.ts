@@ -93,19 +93,6 @@ export const createTaskCloseUseCase = ({
             }),
           );
         }
-        if (hasWorkflowSessions && taskActivityGuard) {
-          const { stoppedSessionCount } = yield* taskActivityGuard.stopLiveSessions({
-            repoPath: effectiveRepoPath,
-            taskSessions: [
-              {
-                taskId,
-                sessions: selectWorkflowCleanupSessionRecords(currentSessions),
-              },
-            ],
-          });
-          recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
-        }
-
         const taskWorktreePath = dependencies.settingsConfig.join(managedWorktreeBasePath, taskId);
         const taskWorktreePathExists =
           yield* dependencies.settingsConfig.pathExists(taskWorktreePath);
@@ -125,6 +112,21 @@ export const createTaskCloseUseCase = ({
           current,
           currentSessions,
         );
+        if (taskSessionBootstrapCoordinator) {
+          yield* taskSessionBootstrapCoordinator.acquireWorktreeLifecycle(worktreePaths);
+        }
+        if (hasWorkflowSessions && taskActivityGuard) {
+          const { stoppedSessionCount } = yield* taskActivityGuard.cleanupTaskSessions({
+            repoPath: effectiveRepoPath,
+            taskSessions: [
+              {
+                taskId,
+                sessions: selectWorkflowCleanupSessionRecords(currentSessions),
+              },
+            ],
+          });
+          recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
+        }
         const branchNames = yield* collectRelatedTaskBranches(
           dependencies.gitPort,
           effectiveRepoPath,

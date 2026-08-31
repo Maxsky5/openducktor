@@ -497,12 +497,14 @@ describe("OpenCode live session controls", () => {
       ]);
       await harness.emit({ type: "sessions_invalidated" });
 
-      await expect(Effect.runPromise(adapter.listRetainedSnapshots("/repo"))).resolves.toEqual([
-        expect.objectContaining({
-          ref: controlRef,
-          sessionAssociation: { kind: "unbound" },
-        }),
-      ]);
+      await expect(Effect.runPromise(adapter.listRetainedSnapshots("/repo"))).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            ref: controlRef,
+            sessionAssociation: { kind: "unbound" },
+          }),
+        ]),
+      );
       await expect(
         Effect.runPromise(adapter.readRetainedSnapshot(controlRef)),
       ).resolves.toMatchObject({

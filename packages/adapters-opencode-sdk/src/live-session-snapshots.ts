@@ -6,47 +6,20 @@ import type {
   AgentSessionRuntimeSnapshotSource,
 } from "@openducktor/core";
 import type { SessionStatus } from "@opencode-ai/sdk/v2/client";
-import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import { parseOpencodeSessionListPayload, type ParsedOpencodeSession } from "./opencode-ingress";
 import { listOpencodeLiveSessionPendingInput } from "./pending-input-ops";
-import {
-  clearAwaitingRuntimeTurnStart,
-  isAwaitingRuntimeTurnStart,
-  isLocalSessionBusy,
-} from "./session-activity";
 import { toIsoFromEpoch } from "./session-runtime-utils";
-import type { ClientFactory, SessionRecord } from "./types";
+import type { ClientFactory, RunOpencodeDirectoryRead } from "./types";
 import { z } from "zod";
 
 export type ListOpencodeRuntimeSnapshotSourcesInput = {
   createClient: ClientFactory;
   runtimeEndpoint: string;
   directories?: string[];
+  directoryExists: (directory: string) => Promise<boolean>;
+  runDirectoryRead: RunOpencodeDirectoryRead;
   now: () => string;
-};
-
-export type OpencodeLocalRuntimeSnapshotInput = {
-  sessions: ReadonlyMap<string, SessionRecord>;
-  runtimeId: string;
-  repoPath: string;
-  runtimeKind: string;
-};
-
-export type ListOpencodeLocalRuntimeSnapshotsInput = OpencodeLocalRuntimeSnapshotInput & {
-  directories?: string[];
-  existingExternalSessionIds: ReadonlySet<string>;
-};
-
-export type ReadOpencodeLocalRuntimeSnapshotInput = OpencodeLocalRuntimeSnapshotInput & {
-  workingDirectory: string;
-  externalSessionId: string;
-};
-
-export type ApplyOpencodeAwaitingTurnStartToRuntimeSnapshotInput = {
-  sessions: ReadonlyMap<string, SessionRecord>;
-  runtimeId: string;
-  snapshot: OpencodeRuntimeSnapshotSource;
 };
 
 export type OpencodeRuntimeSnapshotSource = AgentSessionRuntimeSnapshotSource & {
@@ -129,126 +102,6 @@ const normalizeSessionDirectory = (directory: string | undefined): string | unde
   return normalized.length > 0 ? normalized : undefined;
 };
 
-const toOpencodeLocalRuntimeSnapshot = (session: SessionRecord): OpencodeRuntimeSnapshotSource => ({
-  externalSessionId: session.externalSessionId,
-  sessionAssociation: session.summary.sessionAssociation,
-  title:
-    session.summary.title ??
-    (session.summary.sessionAssociation.kind === "workflow"
-      ? formatWorkflowAgentSessionTitle(
-          session.summary.sessionAssociation.role,
-          session.summary.sessionAssociation.taskId,
-        )
-      : "OpenCode"),
-  workingDirectory: session.input.workingDirectory,
-  startedAt: session.summary.startedAt,
-  runtimeActivity: isLocalSessionBusy(session) ? "running" : "idle",
-  pendingApprovals: [],
-  pendingQuestions: [],
-});
-
-export const applyOpencodeAwaitingTurnStartToRuntimeSnapshot = ({
-  sessions,
-  runtimeId,
-  snapshot,
-}: ApplyOpencodeAwaitingTurnStartToRuntimeSnapshotInput): OpencodeRuntimeSnapshotSource => {
-  const localSession = sessions.get(snapshot.externalSessionId);
-  if (!localSession || localSession.runtimeId !== runtimeId) {
-    return snapshot;
-  }
-
-  const hasRuntimeTurnStartEvidence =
-    snapshot.runtimeActivity !== "idle" ||
-    snapshot.pendingApprovals.length > 0 ||
-    snapshot.pendingQuestions.length > 0;
-  if (hasRuntimeTurnStartEvidence) {
-    clearAwaitingRuntimeTurnStart(localSession);
-    return snapshot;
-  }
-
-  if (!isAwaitingRuntimeTurnStart(localSession)) {
-    return snapshot;
-  }
-
-  return {
-    ...snapshot,
-    runtimeActivity: "running",
-  };
-};
-
-export const listOpencodeLocalRuntimeSnapshots = ({
-  sessions,
-  runtimeId,
-  repoPath,
-  runtimeKind,
-  directories,
-  existingExternalSessionIds,
-}: ListOpencodeLocalRuntimeSnapshotsInput): OpencodeRuntimeSnapshotSource[] => {
-  const requestedDirectorySet =
-    directories && directories.length > 0
-      ? new Set(
-          directories
-            .map((directory) => normalizeSessionDirectory(directory))
-            .filter((directory): directory is string => directory !== undefined),
-        )
-      : null;
-
-  const snapshots: OpencodeRuntimeSnapshotSource[] = [];
-  for (const session of sessions.values()) {
-    if (
-      existingExternalSessionIds.has(session.externalSessionId) ||
-      session.runtimeId !== runtimeId ||
-      session.input.repoPath !== repoPath ||
-      session.input.runtimeKind !== runtimeKind
-    ) {
-      continue;
-    }
-
-    const workingDirectory = normalizeSessionDirectory(session.input.workingDirectory);
-    if (!workingDirectory) {
-      continue;
-    }
-    if (requestedDirectorySet && !requestedDirectorySet.has(workingDirectory)) {
-      continue;
-    }
-
-    snapshots.push({
-      ...toOpencodeLocalRuntimeSnapshot(session),
-      workingDirectory,
-    });
-  }
-  return snapshots;
-};
-
-export const findOpencodeLocalRuntimeSnapshot = ({
-  sessions,
-  runtimeId,
-  repoPath,
-  runtimeKind,
-  workingDirectory,
-  externalSessionId,
-}: ReadOpencodeLocalRuntimeSnapshotInput): OpencodeRuntimeSnapshotSource | null => {
-  const localSession = sessions.get(externalSessionId);
-  const localSessionWorkingDirectory = normalizeSessionDirectory(
-    localSession?.input.workingDirectory,
-  );
-  const requestedWorkingDirectory = normalizeSessionDirectory(workingDirectory);
-  if (
-    !localSession ||
-    localSession.runtimeId !== runtimeId ||
-    localSession.input.repoPath !== repoPath ||
-    localSession.input.runtimeKind !== runtimeKind ||
-    localSessionWorkingDirectory === undefined ||
-    localSessionWorkingDirectory !== requestedWorkingDirectory
-  ) {
-    return null;
-  }
-  return {
-    ...toOpencodeLocalRuntimeSnapshot(localSession),
-    workingDirectory: localSessionWorkingDirectory,
-  };
-};
-
 const requireSessionDirectory = (
   directory: ParsedOpencodeSession["directory"],
   sessionId: string,
@@ -287,6 +140,8 @@ export const listOpencodeRuntimeSnapshotSources = async ({
   createClient,
   runtimeEndpoint,
   directories,
+  directoryExists,
+  runDirectoryRead,
   now,
 }: ListOpencodeRuntimeSnapshotSourcesInput): Promise<OpencodeRuntimeSnapshotSource[]> => {
   const unscopedClient = createClient({ runtimeEndpoint });
@@ -312,28 +167,46 @@ export const listOpencodeRuntimeSnapshotSources = async ({
       filteredSessions.map((session) => requireSessionDirectory(session.directory, session.id)),
     ),
   );
-  const statusEntries = await Promise.all(
-    sessionDirectories.map(async (directory) => {
-      const statusPayload = await unscopedClient.session.status({ directory });
-      return [
-        directory,
-        toOpencodeSessionStatusMap(unwrapData(statusPayload, "get session status"), directory),
-      ] as const;
-    }),
-  );
-  const statusesByDirectory = new Map(statusEntries);
-  const pendingInputEntries = await Promise.all(
+  const directoryEntries = await Promise.all(
     sessionDirectories.map((directory) =>
-      listOpencodeLiveSessionPendingInput(createClient, {
-        runtimeEndpoint,
-        workingDirectory: directory,
+      runDirectoryRead(directory, async () => {
+        if (!(await directoryExists(directory))) {
+          return null;
+        }
+        const [statusPayload, pendingInput] = await Promise.all([
+          unscopedClient.session.status({ directory }),
+          listOpencodeLiveSessionPendingInput(createClient, {
+            runtimeEndpoint,
+            workingDirectory: directory,
+          }),
+        ]);
+        return {
+          directory,
+          statuses: toOpencodeSessionStatusMap(
+            unwrapData(statusPayload, "get session status"),
+            directory,
+          ),
+          pendingInput,
+        };
       }),
     ),
   );
-  const pendingInputBySession = mergeOpencodePendingInputBySession(pendingInputEntries);
+  const availableDirectoryEntries = directoryEntries.filter(
+    (entry): entry is NonNullable<typeof entry> => entry !== null,
+  );
+  const statusesByDirectory = new Map(
+    availableDirectoryEntries.map(({ directory, statuses }) => [directory, statuses]),
+  );
+  const availableDirectories = new Set(statusesByDirectory.keys());
+  const pendingInputBySession = mergeOpencodePendingInputBySession(
+    availableDirectoryEntries.map(({ pendingInput }) => pendingInput),
+  );
 
-  return filteredSessions.map((session) => {
+  return filteredSessions.flatMap((session) => {
     const normalizedDirectory = requireSessionDirectory(session.directory, session.id);
+    if (!availableDirectories.has(normalizedDirectory)) {
+      return [];
+    }
     const directoryStatuses = statusesByDirectory.get(normalizedDirectory);
     const parentExternalSessionId = readParentExternalSessionId(session);
     const snapshot: OpencodeRuntimeSnapshotSource = {
@@ -349,6 +222,6 @@ export const listOpencodeRuntimeSnapshotSources = async ({
     if (parentExternalSessionId) {
       snapshot.parentExternalSessionId = parentExternalSessionId;
     }
-    return snapshot;
+    return [snapshot];
   });
 };

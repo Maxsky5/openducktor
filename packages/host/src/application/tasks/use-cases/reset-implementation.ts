@@ -36,7 +36,7 @@ export const createTaskImplementationResetUseCase = ({
   terminalService,
   worktreeFiles,
   workspaceSettingsService,
-  taskSessionBootstrapCoordinator,
+  taskSessionBootstrapCoordinator: coordinator,
 }: CreateTaskServiceInput) => ({
   resetImplementation(input: Parameters<TaskService["resetImplementation"]>[0]) {
     return Effect.gen(function* () {
@@ -50,13 +50,9 @@ export const createTaskImplementationResetUseCase = ({
         ),
       );
       const storeDependencies = requireImplementationResetStoreDependencies(taskStore);
-      if (taskSessionBootstrapCoordinator) {
+      if (coordinator) {
         const canonicalInputRepo = yield* dependencies.gitPort.canonicalizePath(repoPath);
-        yield* taskSessionBootstrapCoordinator.acquireLifecycle(
-          canonicalInputRepo,
-          [taskId],
-          "reset implementation",
-        );
+        yield* coordinator.acquireLifecycle(canonicalInputRepo, [taskId], "reset implementation");
       }
       const currentTasks = yield* taskStore.listTasks({ repoPath });
       const current = currentTasks.find((task) => task.id === taskId);
@@ -131,6 +127,9 @@ export const createTaskImplementationResetUseCase = ({
         relatedBranches,
         canonicalTarget,
       );
+      if (coordinator) {
+        yield* coordinator.acquireWorktreeLifecycle(worktreePaths);
+      }
       const cleanupProgress = createTaskCleanupProgressState();
       yield* stopActivity(activity, cleanupProgress);
       let taskStoreWriteCompleted = false;

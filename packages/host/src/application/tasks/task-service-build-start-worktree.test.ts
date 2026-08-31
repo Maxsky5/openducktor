@@ -31,7 +31,9 @@ const taskStoreEffect = <Success>(run: () => Promise<Success>) =>
 describe("createTaskService build start worktree handling", () => {
   test("rejects bootstrap reservations that do not match the acquired startup role", async () => {
     const coordinator = createTaskSessionBootstrapCoordinator();
-    await Effect.runPromise(coordinator.acquireBootstrap("/repo", "task-1", "bootstrap-1", "spec"));
+    await Effect.runPromise(
+      coordinator.acquireBootstrap("/repo", "task-1", "bootstrap-1", "spec", null),
+    );
 
     await expect(
       Effect.runPromise(

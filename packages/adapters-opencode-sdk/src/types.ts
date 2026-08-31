@@ -128,6 +128,11 @@ export type OpencodeStreamEventLog = {
 
 export type OpencodeEventLogger = (entry: OpencodeStreamEventLog) => void;
 
+export type RunOpencodeDirectoryRead = <Value>(
+  directory: string,
+  read: () => Promise<Value>,
+) => Promise<Value>;
+
 export type OpencodeSdkAdapterOptions = {
   now?: () => string;
   createClient?: ClientFactory;
