@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
   createDefaultNotificationSettings,
+  type NotificationOccurrence,
   type NotificationOsDeliveryRequest,
 } from "@openducktor/contracts";
 import type { NotificationBridge } from "@/lib/shell-bridge";
@@ -30,6 +31,40 @@ const createBridge = (overrides: Partial<NotificationBridge> = {}): Notification
 });
 
 describe("notification runtime tests", () => {
+  test("bounds display text before publishing the occurrence", () => {
+    const publishOccurrence = mock((_occurrence: NotificationOccurrence) => {});
+    const runtime = createNotificationRuntime({
+      bridge: createBridge({ publishOccurrence }),
+      loadSettings: async () => createDefaultNotificationSettings(),
+      navigate: async () => {},
+      onFailure: () => {},
+    });
+
+    runtime.publish({
+      occurrenceId: "occurrence-long-copy",
+      kind: "agent.session_idle",
+      repoPath: "/repo",
+      repositoryLabel: "r".repeat(140),
+      task: { id: "task-1", title: "t".repeat(260) },
+      sessionLabel: "s".repeat(140),
+      status: "Agent Session is idle.",
+      navigationTarget: {
+        type: "agent_session",
+        repoPath: "/repo",
+        session: {
+          runtimeKind: "opencode",
+          workingDirectory: "/repo",
+          externalSessionId: "session-1",
+        },
+      },
+    });
+
+    const published = publishOccurrence.mock.calls[0]?.[0];
+    expect(published?.repositoryLabel).toHaveLength(120);
+    expect(published?.task?.title).toHaveLength(240);
+    expect(published?.sessionLabel).toHaveLength(120);
+  });
+
   test("requests permission only from the explicit OS test", async () => {
     const requestPermission = mock(async () => ({
       platform: "browser" as const,

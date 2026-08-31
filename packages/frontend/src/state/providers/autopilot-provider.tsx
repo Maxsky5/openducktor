@@ -10,8 +10,8 @@ import {
   toTaskMap,
 } from "@/features/autopilot/autopilot-events";
 import {
+  isSessionStartFailureFeedbackHandled,
   useSessionStartWorkflowRunner,
-  wasSessionStartFailureNotified,
 } from "@/features/session-start";
 import { errorMessage } from "@/lib/errors";
 import {
@@ -102,7 +102,7 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
                 });
               }
             } catch (error) {
-              if (!wasSessionStartFailureNotified(error)) {
+              if (!isSessionStartFailureFeedbackHandled(error)) {
                 toast.error(`Autopilot failed for ${observedEvent.task.id}.`, {
                   description: errorMessage(error),
                 });

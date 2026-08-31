@@ -20,10 +20,11 @@ describe("OS notification failure state", () => {
     expect(selectOsFailureState(current, failure("occurrence-2"))).toBe(current);
   });
 
-  test("starts a new state when the failure cause changes", () => {
+  test("keeps the active state when the failure cause changes", () => {
+    const current = failure("occurrence-1");
     const next = failure("occurrence-2", "The OS notification service failed.");
 
-    expect(selectOsFailureState(failure("occurrence-1"), next)).toBe(next);
+    expect(selectOsFailureState(current, next)).toBe(current);
   });
 
   test("starts a new state after a successful delivery clears the failure", () => {

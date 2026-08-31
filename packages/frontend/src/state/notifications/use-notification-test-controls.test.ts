@@ -24,4 +24,13 @@ describe("notification OS capability description", () => {
       "Capability check failed.",
     );
   });
+
+  test("shows the latest delivery failure instead of reporting ready", () => {
+    expect(
+      describeNotificationOsCapability(
+        capability({ failureMessage: "The native notification service failed." }),
+        null,
+      ),
+    ).toBe("The native notification service failed.");
+  });
 });

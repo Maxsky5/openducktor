@@ -18,7 +18,7 @@ import {
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { supportsTaskTargetBranchSelection } from "./constants";
-import { wasSessionStartFailureNotified } from "./session-start-orchestration";
+import { isSessionStartFailureFeedbackHandled } from "./session-start-orchestration";
 import type { SessionStartExistingSessionOption } from "./session-start-types";
 import type { SessionStartModalOpenRequest } from "./use-session-start-modal-coordinator";
 import { useSessionStartModalCoordinator } from "./use-session-start-modal-coordinator";
@@ -377,7 +377,7 @@ export function useSessionStartModalRunner({
         });
         resolvePendingRun(settle);
       } catch (error) {
-        if (!wasSessionStartFailureNotified(error)) {
+        if (!isSessionStartFailureFeedbackHandled(error)) {
           toast.error("Failed to start the session.", {
             description: errorMessage(error),
           });

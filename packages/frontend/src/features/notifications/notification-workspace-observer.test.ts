@@ -48,6 +48,64 @@ const liveUpsert = (pendingRequestIds: string[]): AgentSessionLiveEnvelope => {
 };
 
 describe("all-workspace notification observation", () => {
+  test("does not restore a workspace removed while its baseline is loading", async () => {
+    let finishBaseline: ((tasks: TaskCard[]) => void) | undefined;
+    const baseline = new Promise<TaskCard[]>((resolve) => {
+      finishBaseline = resolve;
+    });
+    const observe = mock(async () => () => {});
+    const taskObserver = createNotificationTaskObserver({
+      loadTasks: async () => baseline,
+      publish: () => {},
+      onFailure: () => {},
+    });
+    const observer = createNotificationWorkspaceObserver({
+      observe,
+      taskObserver,
+      publish: () => {},
+      onFailure: () => {},
+    });
+
+    const add = observer.syncWorkspaces([{ repoPath: "/repo-a", repositoryLabel: "Repo A" }]);
+    await flush();
+    await observer.syncWorkspaces([]);
+    finishBaseline?.([createTaskCardFixture({ id: "task-1", title: "Task A", status: "open" })]);
+    await add;
+
+    expect(observe).not.toHaveBeenCalled();
+    expect(taskObserver.resolveTask("/repo-a", "task-1")).toBeNull();
+  });
+
+  test("does not observe a workspace before its pending baseline finishes", async () => {
+    let finishBaseline: ((tasks: TaskCard[]) => void) | undefined;
+    const baseline = new Promise<TaskCard[]>((resolve) => {
+      finishBaseline = resolve;
+    });
+    const observe = mock(async () => () => {});
+    const taskObserver = createNotificationTaskObserver({
+      loadTasks: async () => baseline,
+      publish: () => {},
+      onFailure: () => {},
+    });
+    const observer = createNotificationWorkspaceObserver({
+      observe,
+      taskObserver,
+      publish: () => {},
+      onFailure: () => {},
+    });
+    const workspaces = [{ repoPath: "/repo-a", repositoryLabel: "Repo A" }];
+
+    const firstSync = observer.syncWorkspaces(workspaces);
+    await flush();
+    const secondSync = observer.syncWorkspaces(workspaces);
+    await flush();
+
+    expect(observe).not.toHaveBeenCalled();
+    finishBaseline?.([]);
+    await Promise.all([firstSync, secondSync]);
+    expect(observe).toHaveBeenCalledTimes(1);
+  });
+
   test("baselines every added workspace, observes inactive repos, and stops removed repos", async () => {
     const tasks = new Map<string, TaskCard[]>([
       ["/repo-a", [createTaskCardFixture({ id: "task-1", title: "Task A", status: "open" })]],

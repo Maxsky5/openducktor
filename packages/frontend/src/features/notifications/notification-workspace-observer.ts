@@ -27,6 +27,7 @@ export const createNotificationWorkspaceObserver = ({
   onFailure(failure: NotificationProducerFailure): void;
 }) => {
   const observations = new Map<string, Observation>();
+  let syncVersion = 0;
 
   const stopObservation = (repoPath: string): void => {
     const observation = observations.get(repoPath);
@@ -78,12 +79,16 @@ export const createNotificationWorkspaceObserver = ({
 
   return {
     async syncWorkspaces(workspaces: readonly NotificationWorkspace[]): Promise<void> {
-      await taskObserver.syncWorkspaces(workspaces);
+      const version = ++syncVersion;
       const nextRepoPaths = new Set(workspaces.map((workspace) => workspace.repoPath));
       for (const repoPath of observations.keys()) {
         if (!nextRepoPaths.has(repoPath)) {
           stopObservation(repoPath);
         }
+      }
+      await taskObserver.syncWorkspaces(workspaces);
+      if (version !== syncVersion) {
+        return;
       }
       for (const workspace of workspaces) {
         const current = observations.get(workspace.repoPath);
@@ -97,6 +102,7 @@ export const createNotificationWorkspaceObserver = ({
       }
     },
     dispose(): void {
+      syncVersion += 1;
       for (const repoPath of observations.keys()) {
         stopObservation(repoPath);
       }
