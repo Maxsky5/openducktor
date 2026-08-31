@@ -2,11 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { repoConfigSchema, type PullRequest } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createGithubCliAdapter } from "../../../adapters/git-providers/github-cli";
+import type { GithubCommandResolverPort } from "../../../ports/github-cli-port";
 import type { SystemCommandPort } from "../../../ports/system-command-port";
-import type { ToolDiscoveryPort } from "../../../ports/tool-discovery-port";
 import {
   findGithubPullRequestForBranch,
-  type GithubCommandDependencies,
   githubPullRequestSyncPolicy,
   pullRequestRecordsMatch,
 } from "./github-pull-requests";
@@ -111,43 +110,14 @@ describe("findGithubPullRequestForBranch", () => {
         });
       },
     };
-    const toolDiscovery: ToolDiscoveryPort = {
-      discoverTool() {
-        return Effect.succeed({
-          displayLabel: "System PATH",
-          path: "gh",
-          sourceCategory: "system_path",
-        });
-      },
-      resolveTool() {
-        return Effect.succeed({
-          displayLabel: "System PATH",
-          path: "gh",
-          sourceCategory: "system_path",
-        });
-      },
-      resolveToolPath() {
-        return Effect.succeed("gh");
-      },
-      validateToolPath(_toolId, executablePath) {
-        return Effect.succeed({
-          displayLabel: "Saved path",
-          path: executablePath,
-          sourceCategory: "provided_path",
-        });
-      },
-    };
     const githubCli = createGithubCliAdapter(systemCommands);
-    const dependencies: GithubCommandDependencies = {
-      githubCli,
-      resolveGithubCommand: () => Effect.succeed({ ghCommand: "gh", githubCli }),
-      systemCommands,
-      toolDiscovery,
+    const githubCommands: GithubCommandResolverPort = {
+      resolve: () => Effect.succeed({ ghCommand: "gh", githubCli }),
     };
 
     const pullRequest = await Effect.runPromise(
       findGithubPullRequestForBranch(
-        dependencies,
+        githubCommands,
         "/repo",
         { host: "github.com", owner: "Maxsky5", name: "openducktor" },
         "odt/task-1",
@@ -167,22 +137,13 @@ describe("findGithubPullRequestForBranch", () => {
 });
 
 describe("GitHub provider selection", () => {
-  test("does not resolve GitHub dependencies for another configured provider", async () => {
-    let resolveGithubCommandCalls = 0;
-    const dependencies: GithubCommandDependencies = {
-      githubCli: {
-        getAuth: () => Effect.die("GitHub authentication must not be read"),
-        readVersion: () => Effect.die("GitHub CLI must not be read"),
-        run: () => Effect.die("GitHub CLI must not run"),
+  test("does not resolve a GitHub command for another configured provider", async () => {
+    let resolveCalls = 0;
+    const githubCommands: GithubCommandResolverPort = {
+      resolve() {
+        resolveCalls += 1;
+        return Effect.die("GitHub command must not be resolved");
       },
-      resolveGithubCommand() {
-        resolveGithubCommandCalls += 1;
-        return Effect.die("GitHub dependencies must not be resolved");
-      },
-      // SAFETY: A provider mismatch returns before it reads the command.
-      systemCommands: {} as SystemCommandPort,
-      // SAFETY: A provider mismatch returns before it reads tool discovery.
-      toolDiscovery: {} as ToolDiscoveryPort,
     };
     const repoConfig = repoConfigSchema.parse({
       workspaceId: "repo",
@@ -200,10 +161,10 @@ describe("GitHub provider selection", () => {
     });
 
     const syncPolicy = await Effect.runPromise(
-      githubPullRequestSyncPolicy(dependencies, repoConfig),
+      githubPullRequestSyncPolicy(githubCommands, repoConfig),
     );
 
     expect(syncPolicy).toEqual({ providerId: "github", available: false });
-    expect(resolveGithubCommandCalls).toBe(0);
+    expect(resolveCalls).toBe(0);
   });
 });

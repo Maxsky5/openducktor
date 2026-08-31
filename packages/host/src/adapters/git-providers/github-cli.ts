@@ -1,6 +1,7 @@
 import { Effect } from "effect";
-import type { GithubCliPort } from "../../ports/github-cli-port";
+import type { GithubCliPort, GithubCommandResolverPort } from "../../ports/github-cli-port";
 import type { SystemCommandPort, SystemCommandRunOptions } from "../../ports/system-command-port";
+import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 
 const GITHUB_CLI_MACHINE_ENV = {
   GH_PROMPT_DISABLED: "1",
@@ -21,30 +22,20 @@ const commandOptions = (options: SystemCommandRunOptions = {}): SystemCommandRun
 const commandOutput = (stdout: string, stderr: string): string =>
   [stdout.trim(), stderr.trim()].filter((value) => value.length > 0).join("\n");
 
-const parseAccount = (output: string): string | null => {
-  const marker = "account ";
-  const markerIndex = output.indexOf(marker);
-  if (markerIndex < 0) {
-    return null;
-  }
-  const remainder = output.slice(markerIndex + marker.length).trimStart();
-  const account = remainder.split(/[\s(']/)[0]?.trim() ?? "";
-  return account.length > 0 ? account : null;
-};
-
 export const createGithubCliAdapter = (systemCommands: SystemCommandPort): GithubCliPort => ({
   getAuth: (ghCommand, host) =>
     systemCommands
       .runCommandAllowFailure(
         ghCommand,
-        ["auth", "status", "--active", "--hostname", host],
+        ["api", "user", "--hostname", host, "--jq", ".login"],
         commandOptions(),
       )
       .pipe(
         Effect.map((result) => {
           const output = commandOutput(result.stdout, result.stderr);
+          const account = result.stdout.trim() || null;
           return result.ok
-            ? { authenticated: true, account: parseAccount(output), reason: null }
+            ? { authenticated: true, account, reason: null }
             : {
                 authenticated: false,
                 account: null,
@@ -56,4 +47,17 @@ export const createGithubCliAdapter = (systemCommands: SystemCommandPort): Githu
     systemCommands.versionCommand(ghCommand, ["--version"], commandOptions(options)),
   run: (ghCommand, args, options) =>
     systemCommands.runCommandAllowFailure(ghCommand, args, commandOptions(options)),
+});
+
+export const createGithubCommandResolver = ({
+  githubCli,
+  toolDiscovery,
+}: {
+  githubCli: GithubCliPort;
+  toolDiscovery: ToolDiscoveryPort;
+}): GithubCommandResolverPort => ({
+  resolve: () =>
+    toolDiscovery
+      .resolveToolPath("githubCli")
+      .pipe(Effect.map((ghCommand) => ({ ghCommand, githubCli }))),
 });

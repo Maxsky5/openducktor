@@ -10,19 +10,19 @@ import {
 import { Effect } from "effect";
 import { z } from "zod";
 import { combinedCommandOutput } from "../../../application/tasks/support/github-pull-request-model";
-import type { GithubCommandDependencies } from "../../../application/tasks/support/github-pull-requests";
 import { runGithubRepositoryCommandAllowFailure } from "../../../application/tasks/support/github-repository-command";
 import {
   errorMessage,
   HostValidationError,
   type HostValidationErrorAggregate,
 } from "../../../effect/host-errors";
+import type { GithubCommandResolverPort } from "../../../ports/github-cli-port";
 import { loadGithubPullRequestReviewOverview } from "./github-pull-request-review-overview";
 import { parseGithubJson } from "./github-pull-request-review-payload";
 import { loadGithubReviewThreads } from "./github-pull-request-review-threads";
 
 type GithubPullRequestReviewReadInput = {
-  dependencies: GithubCommandDependencies;
+  githubCommands: GithubCommandResolverPort;
   repoPath: string;
   repository: GitProviderRepository;
   pullRequestNumber: number;
@@ -161,7 +161,7 @@ export const createGithubPullRequestReviewReader = (): GithubPullRequestReviewRe
         [
           loadGithubPullRequestReviewOverview(input),
           runGithubRepositoryCommandAllowFailure(
-            input.dependencies,
+            input.githubCommands,
             input.repoPath,
             input.repository,
             [

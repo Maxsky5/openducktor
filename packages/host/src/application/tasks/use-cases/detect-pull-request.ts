@@ -4,7 +4,6 @@ import { findGithubPullRequestForBranch } from "../support/github-pull-requests"
 import {
   requireDependencies,
   requirePullRequestDetectionDependencies,
-  type TaskGithubDependencyInput,
 } from "../support/required-task-dependencies";
 import { validatePullRequestManagementStatusEffect } from "../support/task-validation-effects";
 import { loadTaskBranchCleanup } from "../support/task-worktree-cleanup";
@@ -13,11 +12,11 @@ import type { CreateTaskServiceInput, TaskService } from "../task-service";
 export const createTaskPullRequestDetectionUseCase = ({
   gitPort,
   gitProviderResolver,
-  githubDependencies,
+  githubCommands,
   taskStore,
   taskWorktreeService,
   workspaceSettingsService,
-}: CreateTaskServiceInput & TaskGithubDependencyInput): Pick<TaskService, "detectPullRequest"> => ({
+}: CreateTaskServiceInput): Pick<TaskService, "detectPullRequest"> => ({
   detectPullRequest(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
@@ -25,7 +24,7 @@ export const createTaskPullRequestDetectionUseCase = ({
         requirePullRequestDetectionDependencies({
           gitPort,
           gitProviderResolver,
-          githubDependencies,
+          githubCommands,
           taskWorktreeService,
           workspaceSettingsService,
         }),

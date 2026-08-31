@@ -4,9 +4,9 @@ import {
   type RepoConfig,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { GithubCommandDependencies } from "../../application/tasks/support/github-pull-requests";
 import { errorMessage } from "../../effect/host-errors";
 import type { GitProviderHealthPort } from "../../ports/git-provider-port";
+import type { GithubCommandResolverPort } from "../../ports/github-cli-port";
 import type { createGithubProviderRepositoryAdapter } from "./github-provider-repository";
 
 const GITHUB_PROVIDER_ID = GITHUB_PROVIDER_DESCRIPTOR.id;
@@ -14,10 +14,10 @@ const GITHUB_PROVIDER_ID = GITHUB_PROVIDER_DESCRIPTOR.id;
 type MatchRemote = ReturnType<typeof createGithubProviderRepositoryAdapter>["matchRemote"];
 
 export const createGithubProviderHealthPort = ({
-  githubDependencies,
+  githubCommands,
   matchRemote,
 }: {
-  githubDependencies: GithubCommandDependencies;
+  githubCommands: GithubCommandResolverPort;
   matchRemote: MatchRemote;
 }): GitProviderHealthPort => ({
   getStatus: (repoConfig: RepoConfig) =>
@@ -30,7 +30,7 @@ export const createGithubProviderHealthPort = ({
         });
       }
 
-      const commandResult = yield* Effect.either(githubDependencies.resolveGithubCommand());
+      const commandResult = yield* Effect.either(githubCommands.resolve());
       if (commandResult._tag === "Left") {
         return unhealthy({ reason: errorMessage(commandResult.left) });
       }

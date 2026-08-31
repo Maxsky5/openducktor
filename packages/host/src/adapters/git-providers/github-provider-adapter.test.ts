@@ -5,9 +5,9 @@ import { createGithubCliAdapter } from "./github-cli";
 import { createGitProviderResolver } from "../../application/git/git-provider-resolver";
 import { HostDependencyError } from "../../effect/host-errors";
 import { GitProviderRepositoryError } from "../../ports/git-provider-errors";
+import type { GithubCommandResolverPort } from "../../ports/github-cli-port";
 import type { SystemCommandPort, SystemCommandRunResult } from "../../ports/system-command-port";
-import type { GithubCommandDependencies } from "../../application/tasks/support/github-pull-requests";
-import { createGithubReviewTestDependencies } from "../pull-requests/github/github-pull-request-review.test-support";
+import { createGithubReviewTestCommands } from "../pull-requests/github/github-pull-request-review.test-support";
 import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
 import { GithubProviderAdapter } from "./github-provider-adapter";
 
@@ -27,14 +27,14 @@ const repoConfig = (host = "github.com") =>
   });
 
 const createHealthDependencies = ({
-  authResult = { ok: true, stdout: "Logged in to github.com account Maxsky5", stderr: "" },
+  authResult = { ok: true, stdout: "Maxsky5\n", stderr: "" },
   runAuth,
   version = "gh version 2.95.0",
 }: {
   authResult?: SystemCommandRunResult;
   runAuth?: (args: string[]) => SystemCommandRunResult;
   version?: string | null;
-} = {}): GithubCommandDependencies => {
+} = {}): GithubCommandResolverPort => {
   const systemCommands: SystemCommandPort = {
     resolveCommandPath: () => Effect.die("Unexpected resolveCommandPath call"),
     versionCommand: () => Effect.succeed(version),
@@ -42,15 +42,7 @@ const createHealthDependencies = ({
   };
   const githubCli = createGithubCliAdapter(systemCommands);
   return {
-    githubCli,
-    resolveGithubCommand: () => Effect.succeed({ ghCommand: "gh", githubCli }),
-    systemCommands,
-    toolDiscovery: {
-      discoverTool: () => Effect.die("Unexpected discoverTool call"),
-      resolveTool: () => Effect.die("Unexpected resolveTool call"),
-      resolveToolPath: () => Effect.die("Unexpected resolveToolPath call"),
-      validateToolPath: () => Effect.die("Unexpected validateToolPath call"),
-    },
+    resolve: () => Effect.succeed({ ghCommand: "gh", githubCli }),
   };
 };
 
@@ -58,7 +50,7 @@ describe("GithubProviderAdapter", () => {
   test("resolves as the configured provider with typed capability access", async () => {
     const github = new GithubProviderAdapter({
       gitPort: createGitPortTestDouble({}),
-      githubDependencies: createGithubReviewTestDependencies(() =>
+      githubCommands: createGithubReviewTestCommands(() =>
         Effect.die("GitHub command execution is not expected in resolver composition"),
       ),
     });
@@ -108,7 +100,7 @@ describe("GithubProviderAdapter", () => {
           { name: "upstream", url: "https://github.com/Maxsky5/openducktor.git" },
         ]),
     });
-    const githubDependencies = createGithubReviewTestDependencies((_command, args) => {
+    const githubCommands = createGithubReviewTestCommands((_command, args) => {
       if (args[0] === "auth") {
         return Effect.succeed({ ok: true, stdout: "", stderr: "" });
       }
@@ -132,7 +124,7 @@ describe("GithubProviderAdapter", () => {
       }
       return Effect.succeed({ ok: true, stdout: "[]", stderr: "" });
     });
-    const github = new GithubProviderAdapter({ githubDependencies, gitPort });
+    const github = new GithubProviderAdapter({ githubCommands, gitPort });
     const pullRequests = await Effect.runPromise(github.pullRequests());
     const repoConfig = repoConfigSchema.parse({
       workspaceId: "repo",
@@ -159,7 +151,7 @@ describe("GithubProviderAdapter", () => {
 
   test("detects one GitHub repository identity across supported remote URL forms", async () => {
     const github = new GithubProviderAdapter({
-      githubDependencies: createHealthDependencies(),
+      githubCommands: createHealthDependencies(),
       gitPort: createGitPortTestDouble({
         canonicalizePath: () => Effect.succeed("/canonical/repo"),
         isGitRepository: () => Effect.succeed(true),
@@ -179,7 +171,7 @@ describe("GithubProviderAdapter", () => {
 
   test("detects GitHub Enterprise repositories", async () => {
     const github = new GithubProviderAdapter({
-      githubDependencies: createHealthDependencies(),
+      githubCommands: createHealthDependencies(),
       gitPort: createGitPortTestDouble({
         canonicalizePath: () => Effect.succeed("/repo"),
         isGitRepository: () => Effect.succeed(true),
@@ -205,7 +197,7 @@ describe("GithubProviderAdapter", () => {
   test("returns typed failures for missing and ambiguous repository remotes", async () => {
     const adapter = (urls: string[]) =>
       new GithubProviderAdapter({
-        githubDependencies: createHealthDependencies(),
+        githubCommands: createHealthDependencies(),
         gitPort: createGitPortTestDouble({
           canonicalizePath: () => Effect.succeed("/repo"),
           isGitRepository: () => Effect.succeed(true),
@@ -245,7 +237,7 @@ describe("GithubProviderAdapter", () => {
 
   test("reports CLI version, authenticated account, and valid repository mapping", async () => {
     const github = new GithubProviderAdapter({
-      githubDependencies: createHealthDependencies(),
+      githubCommands: createHealthDependencies(),
       gitPort: createGitPortTestDouble({
         listRemotes: () =>
           Effect.succeed([{ name: "origin", url: "git@github.com:Maxsky5/openducktor.git" }]),
@@ -264,23 +256,13 @@ describe("GithubProviderAdapter", () => {
     });
   });
 
-  test("checks only the active account and reports its login", async () => {
+  test("uses the API user login for authentication", async () => {
     const authCalls: string[][] = [];
     const github = new GithubProviderAdapter({
-      githubDependencies: createHealthDependencies({
+      githubCommands: createHealthDependencies({
         runAuth: (args) => {
           authCalls.push(args);
-          return args.includes("--active")
-            ? {
-                ok: true,
-                stdout: "Logged in to github.com account active-user (keyring)",
-                stderr: "",
-              }
-            : {
-                ok: false,
-                stdout: "",
-                stderr: "inactive account has expired credentials",
-              };
+          return { ok: true, stdout: "active-user\n", stderr: "" };
         },
       }),
       gitPort: createGitPortTestDouble({
@@ -299,13 +281,13 @@ describe("GithubProviderAdapter", () => {
     });
     expect(authCalls).toHaveLength(2);
     expect(authCalls).toEqual(
-      authCalls.map(() => ["auth", "status", "--active", "--hostname", "github.com"]),
+      authCalls.map(() => ["api", "user", "--hostname", "github.com", "--jq", ".login"]),
     );
   });
 
   test("rejects duplicate configured repository mappings in the repository port and health", async () => {
     const github = new GithubProviderAdapter({
-      githubDependencies: createHealthDependencies(),
+      githubCommands: createHealthDependencies(),
       gitPort: createGitPortTestDouble({
         listRemotes: () =>
           Effect.succeed([
@@ -342,15 +324,15 @@ describe("GithubProviderAdapter", () => {
         Effect.succeed([{ name: "origin", url: "git@github.com:Maxsky5/openducktor.git" }]),
     });
     const missingCli = new GithubProviderAdapter({
-      githubDependencies: {
+      githubCommands: {
         ...createHealthDependencies(),
-        resolveGithubCommand: () =>
+        resolve: () =>
           Effect.fail(new HostDependencyError({ dependency: "gh", message: "gh was not found" })),
       },
       gitPort,
     });
     const failedAuth = new GithubProviderAdapter({
-      githubDependencies: createHealthDependencies({
+      githubCommands: createHealthDependencies({
         authResult: { ok: false, stdout: "", stderr: "authentication failed" },
       }),
       gitPort,

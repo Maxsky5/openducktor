@@ -5,7 +5,8 @@ import type {
   SystemCommandRunOptions,
   SystemCommandRunResult,
 } from "../../ports/system-command-port";
-import { createGithubCliAdapter } from "./github-cli";
+import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
+import { createGithubCliAdapter, createGithubCommandResolver } from "./github-cli";
 
 type RunCall = {
   command: string;
@@ -42,11 +43,11 @@ const createSystemCommandPort = ({
 };
 
 describe("createGithubCliAdapter", () => {
-  test("reads auth from the active account for the requested host", async () => {
+  test("reads the API user for the requested host", async () => {
     const { port, runCalls } = createSystemCommandPort({
       runResult: {
         ok: true,
-        stdout: "Logged in to github.example.com account active-user (keyring)\n",
+        stdout: "active-user\n",
         stderr: "",
       },
     });
@@ -63,7 +64,7 @@ describe("createGithubCliAdapter", () => {
     });
     expect(runCalls[0]).toMatchObject({
       command: "/usr/local/bin/gh",
-      args: ["auth", "status", "--active", "--hostname", "github.example.com"],
+      args: ["api", "user", "--hostname", "github.example.com", "--jq", ".login"],
     });
   });
 
@@ -131,5 +132,27 @@ describe("createGithubCliAdapter", () => {
         },
       },
     ]);
+  });
+
+  test("resolves the configured GitHub CLI", async () => {
+    const { port } = createSystemCommandPort();
+    const githubCli = createGithubCliAdapter(port);
+    const calls: string[] = [];
+    const toolDiscovery: ToolDiscoveryPort = {
+      discoverTool: () => Effect.dieMessage("Unexpected discoverTool call"),
+      resolveTool: () => Effect.dieMessage("Unexpected resolveTool call"),
+      resolveToolPath: (toolId) => {
+        calls.push(toolId);
+        return Effect.succeed("/usr/local/bin/gh");
+      },
+      validateToolPath: () => Effect.dieMessage("Unexpected validateToolPath call"),
+    };
+
+    const command = await Effect.runPromise(
+      createGithubCommandResolver({ githubCli, toolDiscovery }).resolve(),
+    );
+
+    expect(command).toEqual({ ghCommand: "/usr/local/bin/gh", githubCli });
+    expect(calls).toEqual(["githubCli"]);
   });
 });

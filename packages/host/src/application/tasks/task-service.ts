@@ -31,7 +31,7 @@ import {
   isHostError,
 } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
-import type { GithubCliPort } from "../../ports/github-cli-port";
+import type { GithubCommandResolverPort } from "../../ports/github-cli-port";
 import {
   GitProviderRepositoryError,
   GitProviderResolutionError,
@@ -52,7 +52,6 @@ import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "../workspaces/workspace-settings-service";
-import { createTaskGithubDependencies } from "./support/required-task-dependencies";
 import { createTaskStopImpactUseCase } from "./use-cases/get-task-stop-impact";
 import type {
   AgentSessionDeleteInput,
@@ -267,7 +266,7 @@ export type CreateTaskServiceInput = {
   terminalService?: TaskTerminalCleanupPort;
   gitPort?: GitPort;
   gitProviderResolver?: GitProviderResolver;
-  githubCli?: GithubCliPort;
+  githubCommands?: GithubCommandResolverPort;
   taskStore: TaskStorePort;
   taskActivityGuard?: TaskActivityGuardPort;
   settingsConfig?: SettingsConfigPort;
@@ -327,10 +326,9 @@ export const createTaskServiceWithMutationProgress = (
 const createTaskServiceImplementation = (
   input: CreateTaskServiceInput,
 ): TaskServiceWithMutationProgress => {
-  const githubDependencies = createTaskGithubDependencies(input);
   const taskSessionBootstrapCoordinator =
     input.taskSessionBootstrapCoordinator ?? createTaskSessionBootstrapCoordinator();
-  const useCaseInput = { ...input, githubDependencies, taskSessionBootstrapCoordinator };
+  const useCaseInput = { ...input, taskSessionBootstrapCoordinator };
   const taskSessionBootstrap = createTaskSessionBootstrapUseCase(useCaseInput);
   const service = {
     ...createTaskQueryUseCases(useCaseInput),

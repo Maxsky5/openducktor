@@ -1,11 +1,9 @@
 import type { GitProviderRepository, PullRequestReviewActivity } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { z } from "zod";
-import {
-  type GithubCommandDependencies,
-  runGithubCommand,
-} from "../../../application/tasks/support/github-pull-requests";
+import { runGithubCommand } from "../../../application/tasks/support/github-pull-requests";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
+import type { GithubCommandResolverPort } from "../../../ports/github-cli-port";
 import { parseGithubJson } from "./github-pull-request-review-payload";
 import {
   type GithubReviewCommentLineRange,
@@ -296,7 +294,7 @@ const parseReviewThreadCommentsPage = (payload: string): ParsedReviewThreadComme
 };
 
 type GithubReviewThreadsReadInput = {
-  dependencies: GithubCommandDependencies;
+  githubCommands: GithubCommandResolverPort;
   repoPath: string;
   repository: GitProviderRepository;
   pullRequestNumber: number;
@@ -307,7 +305,7 @@ const runReviewGraphql = (
   query: string,
   variables: readonly { name: string; value: string | number }[],
 ) =>
-  runGithubCommand(input.dependencies, input.repoPath, input.repository.host, [
+  runGithubCommand(input.githubCommands, input.repoPath, input.repository.host, [
     "api",
     "graphql",
     "-f",

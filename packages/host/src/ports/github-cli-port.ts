@@ -4,6 +4,7 @@ import type {
   HostPathAccessErrorAggregate,
 } from "../effect/host-errors";
 import type { Effect } from "effect";
+import type { ToolDiscoveryError } from "./tool-discovery-port";
 
 export type GithubCliAuth = {
   authenticated: boolean;
@@ -25,4 +26,13 @@ export type GithubCliPort = {
     args: string[],
     options?: SystemCommandRunOptions,
   ): Effect.Effect<SystemCommandRunResult, HostOperationErrorAggregate>;
+};
+
+export type ResolvedGithubCommand = {
+  ghCommand: string;
+  githubCli: GithubCliPort;
+};
+
+export type GithubCommandResolverPort = {
+  resolve(): Effect.Effect<ResolvedGithubCommand, ToolDiscoveryError>;
 };

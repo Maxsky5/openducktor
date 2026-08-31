@@ -4,7 +4,6 @@ import { createCodexLiveSessionAdapterPreparer } from "../../adapters/agent-sess
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
 import { createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/opencode-live-session-adapter";
 import { createCodexWorkspaceRuntimeStarter } from "../../adapters/codex/codex-workspace-runtime-starter";
-import { createGithubCliAdapter } from "../../adapters/git-providers/github-cli";
 import {
   createMcpHostBridgeServer,
   resolveMcpBridgeDiscoveryPath,
@@ -37,6 +36,7 @@ import { loadGlobalConfig } from "../../application/workspaces/workspace-setting
 import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import type { GitProviderResolver } from "../../application/git/git-provider-resolver";
 import { HostOperationError, HostResourceError } from "../../effect/host-errors";
+import type { GithubCliPort, GithubCommandResolverPort } from "../../ports/github-cli-port";
 import { createTerminalLaunchEnvironment } from "../../infrastructure/terminals/terminal-launch-environment";
 import { createAgentSessionLiveCommandHandlers } from "../../interface/commands/agent-session-live-command-handlers";
 import { createClaudeRuntimeCommandHandlers } from "../../interface/commands/claude-runtime-command-handlers";
@@ -86,6 +86,10 @@ export const assembleNodeEffectHostCommandRouter = (
   input: CreateNodeHostCommandRouterInput,
   defaultPorts: ReturnType<typeof createNodeHostDefaultPorts>,
   gitProviderResolver: GitProviderResolver,
+  github: {
+    githubCli: GithubCliPort;
+    githubCommands: GithubCommandResolverPort;
+  },
 ): EffectNodeHostCommandRouter => {
   const {
     clientVersion,
@@ -115,7 +119,7 @@ export const assembleNodeEffectHostCommandRouter = (
     toolDiscovery,
     worktreeFiles,
   } = defaultPorts;
-  const githubCli = createGithubCliAdapter(systemCommands);
+  const { githubCli, githubCommands } = github;
   const codexAppServerService = createCodexAppServerService(effectiveCodexAppServer);
   const liveSessionAdapterRegistry = createLiveSessionAdapterRegistry();
   const agentSessionLiveStateService = createAgentSessionLiveStateService({
@@ -285,7 +289,7 @@ export const assembleNodeEffectHostCommandRouter = (
     terminalService,
     gitPort: git,
     gitProviderResolver,
-    githubCli,
+    githubCommands,
     taskStore,
     taskActivityGuard,
     settingsConfig,

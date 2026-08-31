@@ -7,11 +7,11 @@ import { Effect } from "effect";
 import {
   findGithubPullRequestForBranch,
   fetchGithubPullRequestByNumber,
-  type GithubCommandDependencies,
   upsertGithubPullRequest,
 } from "../../application/tasks/support/github-pull-requests";
 import { type HostError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
+import type { GithubCommandResolverPort } from "../../ports/github-cli-port";
 import { GitProviderRepositoryError } from "../../ports/git-provider-errors";
 import type {
   GitProviderHealthPort,
@@ -45,14 +45,14 @@ export class GithubProviderAdapter implements GitProviderPort {
   private readonly pullRequestReviewPort: PullRequestReviewProviderPort;
 
   constructor({
-    githubDependencies,
+    githubCommands,
     gitPort,
   }: {
-    githubDependencies: GithubCommandDependencies;
+    githubCommands: GithubCommandResolverPort;
     gitPort: GitPort;
   }) {
     const repositoryAdapter = createGithubProviderRepositoryAdapter({
-      githubDependencies,
+      githubCommands,
       gitPort,
     });
     const getRepository = (repoConfig: RepoConfig) =>
@@ -62,7 +62,7 @@ export class GithubProviderAdapter implements GitProviderPort {
 
     this.repositoryPort = repositoryAdapter.port;
     this.healthPort = createGithubProviderHealthPort({
-      githubDependencies,
+      githubCommands,
       matchRemote: repositoryAdapter.matchRemote,
     });
     this.pullRequestsPort = {
@@ -70,7 +70,7 @@ export class GithubProviderAdapter implements GitProviderPort {
         Effect.gen(function* () {
           const repository = yield* getRepository(input.repoConfig);
           const pullRequest = yield* findGithubPullRequestForBranch(
-            githubDependencies,
+            githubCommands,
             input.repoConfig.repoPath,
             repository,
             input.sourceBranch,
@@ -82,7 +82,7 @@ export class GithubProviderAdapter implements GitProviderPort {
         Effect.gen(function* () {
           const repository = yield* getRepository(input.repoConfig);
           const pullRequest = yield* fetchGithubPullRequestByNumber(
-            githubDependencies,
+            githubCommands,
             input.repoConfig.repoPath,
             repository,
             input.number,
@@ -93,7 +93,7 @@ export class GithubProviderAdapter implements GitProviderPort {
         Effect.gen(function* () {
           const context = yield* getMapping(input.repoConfig);
           return yield* upsertGithubPullRequest(
-            githubDependencies,
+            githubCommands,
             input.repoConfig.repoPath,
             context,
             input.approval,
@@ -103,7 +103,7 @@ export class GithubProviderAdapter implements GitProviderPort {
         }),
     };
     this.pullRequestReviewPort = createGithubPullRequestReviewAdapter({
-      githubDependencies,
+      githubCommands,
       getRepository,
     });
   }

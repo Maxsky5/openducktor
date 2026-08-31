@@ -1,18 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
-import type { GithubCommandDependencies } from "../../../application/tasks/support/github-pull-requests";
 import { HostOperationError } from "../../../effect/host-errors";
+import type { GithubCommandResolverPort } from "../../../ports/github-cli-port";
 import { loadGithubPullRequestReviewOverview } from "./github-pull-request-review-overview";
-import { createGithubReviewTestDependencies } from "./github-pull-request-review.test-support";
+import { createGithubReviewTestCommands } from "./github-pull-request-review.test-support";
 
-const createDependencies = <Response>({
+const createCommands = <Response>({
   commands = [],
   response,
 }: {
   commands?: string[][];
   response: (args: string[]) => Response;
-}): GithubCommandDependencies => {
-  return createGithubReviewTestDependencies((_command, args) => {
+}): GithubCommandResolverPort => {
+  return createGithubReviewTestCommands((_command, args) => {
     commands.push(args);
     if (!args.join(" ").includes("PullRequestReviewOverview")) {
       return Effect.fail(
@@ -27,8 +27,8 @@ const createDependencies = <Response>({
   });
 };
 
-const input = (dependencies: GithubCommandDependencies) => ({
-  dependencies,
+const input = (githubCommands: GithubCommandResolverPort) => ({
+  githubCommands,
   repoPath: "/repo",
   repository: { host: "github.com", owner: "openai", name: "openducktor" },
   pullRequestNumber: 42,
@@ -74,7 +74,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
     const overview = await Effect.runPromise(
       loadGithubPullRequestReviewOverview(
         input(
-          createDependencies({
+          createCommands({
             commands,
             response: () =>
               responsePage({
@@ -224,7 +224,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
     };
 
     const overview = await Effect.runPromise(
-      loadGithubPullRequestReviewOverview(input(createDependencies({ commands, response }))),
+      loadGithubPullRequestReviewOverview(input(createCommands({ commands, response }))),
     );
 
     expect(overview.comments.map((comment) => comment.id)).toEqual([
@@ -274,7 +274,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
     };
 
     const overview = await Effect.runPromise(
-      loadGithubPullRequestReviewOverview(input(createDependencies({ commands, response }))),
+      loadGithubPullRequestReviewOverview(input(createCommands({ commands, response }))),
     );
 
     expect(
@@ -295,7 +295,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
     const overview = await Effect.runPromise(
       loadGithubPullRequestReviewOverview(
         input(
-          createDependencies({
+          createCommands({
             response: () =>
               responsePage({
                 comments: [],
@@ -330,7 +330,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
     const overview = await Effect.runPromise(
       loadGithubPullRequestReviewOverview(
         input(
-          createDependencies({
+          createCommands({
             response: () =>
               responsePage({
                 comments: [],
@@ -355,7 +355,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
     const result = await Effect.runPromise(
       loadGithubPullRequestReviewOverview(
         input(
-          createDependencies({
+          createCommands({
             response: () =>
               responsePage({
                 comments: [],
@@ -378,7 +378,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
     const result = await Effect.runPromise(
       loadGithubPullRequestReviewOverview(
         input(
-          createDependencies({
+          createCommands({
             response: () =>
               responsePage({
                 comments: [],
@@ -401,7 +401,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
     const result = await Effect.runPromise(
       loadGithubPullRequestReviewOverview(
         input(
-          createDependencies({
+          createCommands({
             response: () => responsePage({ comments: [], reviews: [null] }),
           }),
         ),
@@ -437,7 +437,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
 
     const result = await Effect.runPromise(
       loadGithubPullRequestReviewOverview(
-        input(createDependencies({ response: () => malformed })),
+        input(createCommands({ response: () => malformed })),
       ).pipe(Effect.either),
     );
 

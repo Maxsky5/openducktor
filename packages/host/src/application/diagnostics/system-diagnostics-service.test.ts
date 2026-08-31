@@ -104,7 +104,7 @@ const createRuntimeHealthPort = (
 });
 const createSystemCommandPort = ({
   missingCommands = [],
-  ghAuthResult = { ok: true, stdout: "Logged in to github.com account octocat\n", stderr: "" },
+  ghAuthResult = { ok: true, stdout: "octocat\n", stderr: "" },
   calls = [],
   versionCalls = [],
   versionForCommand,
@@ -271,11 +271,12 @@ describe("createSystemDiagnosticsService", () => {
       FORCE_COLOR: "0",
     });
     expect(commandCalls.find((call) => call.command === "gh")?.args).toEqual([
-      "auth",
-      "status",
-      "--active",
+      "api",
+      "user",
       "--hostname",
       "github.com",
+      "--jq",
+      ".login",
     ]);
     const ghVersionCall = versionCommandCalls.find((call) => call.command === "gh");
     expect(ghVersionCall?.args).toEqual(["--version"]);

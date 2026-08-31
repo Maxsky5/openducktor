@@ -1,6 +1,9 @@
 import { Effect } from "effect";
 import { z } from "zod";
-import { createGithubCliAdapter } from "../../adapters/git-providers/github-cli";
+import {
+  createGithubCliAdapter,
+  createGithubCommandResolver,
+} from "../../adapters/git-providers/github-cli";
 import { GithubProviderAdapter } from "../../adapters/git-providers/github-provider-adapter";
 import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
 import { TaskPolicyError } from "../../domain/task";
@@ -9,7 +12,6 @@ import type { GitPort } from "../../ports/git-port";
 import { GitProviderRepositoryError } from "../../ports/git-provider-errors";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { createGitProviderResolver } from "../git/git-provider-resolver";
-import { createGithubCommandDependencies } from "./support/github-pull-requests";
 import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
 import type { CreateTaskServiceInput } from "./task-service";
 import {
@@ -38,7 +40,7 @@ import {
 type GithubTaskDependencies = Required<
   Pick<
     CreateTaskServiceInput,
-    "gitPort" | "gitProviderResolver" | "githubCli" | "systemCommands" | "toolDiscovery"
+    "gitPort" | "gitProviderResolver" | "githubCommands" | "systemCommands" | "toolDiscovery"
   >
 >;
 
@@ -48,15 +50,14 @@ const createGithubTaskDependencies = async (
 ): Promise<GithubTaskDependencies> => {
   const githubCli = createGithubCliAdapter(systemCommands);
   const toolDiscovery = createToolDiscoveryAdapter({ systemCommands });
-  const githubDependencies = createGithubCommandDependencies({
+  const githubCommands = createGithubCommandResolver({
     githubCli,
-    systemCommands,
     toolDiscovery,
   });
   const gitProviderResolver = await Effect.runPromise(
-    createGitProviderResolver([new GithubProviderAdapter({ githubDependencies, gitPort })]),
+    createGitProviderResolver([new GithubProviderAdapter({ githubCommands, gitPort })]),
   );
-  return { gitPort, gitProviderResolver, githubCli, systemCommands, toolDiscovery };
+  return { gitPort, gitProviderResolver, githubCommands, systemCommands, toolDiscovery };
 };
 
 describe("createTaskService pull requests", () => {
@@ -563,10 +564,10 @@ describe("createTaskService pull requests", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "command", command, args, options });
-            if (args.includes("auth")) {
+            if (args[0] === "api" && args[1] === "user") {
               return {
                 ok: true,
-                stdout: "Logged in to github.com account octocat\n",
+                stdout: "octocat\n",
                 stderr: "",
               };
             }

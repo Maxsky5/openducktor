@@ -6,19 +6,19 @@ import {
   type RepoConfig,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { GithubCommandDependencies } from "../../application/tasks/support/github-pull-requests";
 import { errorMessage, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import { GitProviderRepositoryError } from "../../ports/git-provider-errors";
 import type { GitProviderRepositoryPort } from "../../ports/git-provider-port";
+import type { GithubCommandResolverPort } from "../../ports/github-cli-port";
 
 const GITHUB_PROVIDER_ID = GITHUB_PROVIDER_DESCRIPTOR.id;
 
 export const createGithubProviderRepositoryAdapter = ({
-  githubDependencies,
+  githubCommands,
   gitPort,
 }: {
-  githubDependencies: Pick<GithubCommandDependencies, "resolveGithubCommand">;
+  githubCommands: GithubCommandResolverPort;
   gitPort: GitPort;
 }) => {
   const findRemoteNames = (repoPath: string, repository: GitProviderRepository) =>
@@ -42,7 +42,7 @@ export const createGithubProviderRepositoryAdapter = ({
 
   const requireAuth = (repoPath: string, host: string) =>
     Effect.gen(function* () {
-      const command = yield* githubDependencies.resolveGithubCommand().pipe(
+      const command = yield* githubCommands.resolve().pipe(
         Effect.mapError(
           (cause) =>
             new HostValidationError({

@@ -7,9 +7,7 @@ import {
 import { Effect } from "effect";
 import { checkoutBranch } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
-import type { GithubCliPort } from "../../../ports/github-cli-port";
-import type { SystemCommandPort } from "../../../ports/system-command-port";
-import type { ToolDiscoveryError, ToolDiscoveryPort } from "../../../ports/tool-discovery-port";
+import type { GithubCommandResolverPort } from "../../../ports/github-cli-port";
 import {
   combinedCommandOutput,
   GITHUB_PROVIDER_ID,
@@ -31,53 +29,15 @@ export {
   type ResolvedPullRequest,
 } from "./github-pull-request-model";
 
-export type GithubCommandDependencies = {
-  resolveGithubCommand: () => Effect.Effect<ResolvedGithubCommandDependencies, ToolDiscoveryError>;
-  githubCli: GithubCliPort;
-  systemCommands: SystemCommandPort;
-  toolDiscovery: ToolDiscoveryPort;
-};
-export type ResolvedGithubCommandDependencies = {
-  ghCommand: string;
-  githubCli: GithubCliPort;
-};
-
-export const createGithubCommandDependencies = ({
-  githubCli,
-  systemCommands,
-  toolDiscovery,
-}: {
-  githubCli: GithubCliPort;
-  systemCommands: SystemCommandPort;
-  toolDiscovery: ToolDiscoveryPort;
-}): GithubCommandDependencies => {
-  const resolveGithubCommand = () =>
-    toolDiscovery.resolveToolPath("githubCli").pipe(
-      Effect.map((ghCommand): ResolvedGithubCommandDependencies => {
-        return { ghCommand, githubCli };
-      }),
-    );
-
-  return {
-    githubCli,
-    resolveGithubCommand,
-    systemCommands,
-    toolDiscovery,
-  };
-};
-
-const resolveGithubCommandDependencies = (dependencies: GithubCommandDependencies) =>
-  dependencies.resolveGithubCommand();
-
 export const runGithubCommand = (
-  dependencies: GithubCommandDependencies,
+  githubCommands: GithubCommandResolverPort,
   repoPath: string,
   host: string,
   args: string[],
 ) =>
   Effect.gen(function* () {
     const hostArgs = host.trim() ? ["--hostname", host.trim(), ...args] : args;
-    const githubCommand = yield* resolveGithubCommandDependencies(dependencies);
+    const githubCommand = yield* githubCommands.resolve();
     const result = yield* githubCommand.githubCli.run(githubCommand.ghCommand, hostArgs, {
       cwd: repoPath,
     });
@@ -113,7 +73,7 @@ const selectGithubPullRequestForBranch = (
   return pullRequests[0];
 };
 export const findGithubPullRequestForBranch = (
-  dependencies: GithubCommandDependencies,
+  githubCommands: GithubCommandResolverPort,
   repoPath: string,
   repository: GitProviderRepository,
   sourceBranch: string,
@@ -121,7 +81,7 @@ export const findGithubPullRequestForBranch = (
 ) =>
   Effect.gen(function* () {
     const repoSlug = `${repository.owner}/${repository.name}`;
-    const payload = yield* runGithubCommand(dependencies, repoPath, repository.host, [
+    const payload = yield* runGithubCommand(githubCommands, repoPath, repository.host, [
       "api",
       "--method",
       "GET",
@@ -149,14 +109,14 @@ export const findGithubPullRequestForBranch = (
     });
   });
 export const fetchGithubPullRequestByNumber = (
-  dependencies: GithubCommandDependencies,
+  githubCommands: GithubCommandResolverPort,
   repoPath: string,
   repository: GitProviderRepository,
   number: number,
 ) =>
   Effect.gen(function* () {
     const repoSlug = `${repository.owner}/${repository.name}`;
-    const payload = yield* runGithubCommand(dependencies, repoPath, repository.host, [
+    const payload = yield* runGithubCommand(githubCommands, repoPath, repository.host, [
       "api",
       `repos/${repoSlug}/pulls/${number}`,
     ]);
@@ -170,14 +130,14 @@ export const fetchGithubPullRequestByNumber = (
     });
   });
 export const githubPullRequestSyncPolicy = (
-  dependencies: GithubCommandDependencies,
+  githubCommands: GithubCommandResolverPort,
   repoConfig: RepoConfig,
 ) =>
   Effect.gen(function* () {
     const githubConfig = repoConfig.git.provider;
     const githubCommandResult =
       githubConfig?.id === GITHUB_PROVIDER_ID && githubConfig.enabled === true
-        ? yield* Effect.either(resolveGithubCommandDependencies(dependencies))
+        ? yield* Effect.either(githubCommands.resolve())
         : null;
     const policy: GithubPullRequestSyncPolicy = {
       providerId: GITHUB_PROVIDER_ID,
@@ -189,7 +149,7 @@ export const githubPullRequestSyncPolicy = (
     return policy;
   });
 export const fetchLinkedPullRequest = (
-  dependencies: GithubCommandDependencies,
+  githubCommands: GithubCommandResolverPort,
   repoPath: string,
   policy: GithubPullRequestSyncPolicy,
   pullRequest: PullRequest,
@@ -198,14 +158,14 @@ export const fetchLinkedPullRequest = (
     return Effect.succeed(undefined);
   }
   return fetchGithubPullRequestByNumber(
-    dependencies,
+    githubCommands,
     repoPath,
     policy.repository,
     pullRequest.number,
   );
 };
 export const upsertGithubPullRequest = (
-  dependencies: GithubCommandDependencies,
+  githubCommands: GithubCommandResolverPort,
   repoPath: string,
   context: GithubPullRequestContext,
   approval: TaskApprovalContext,
@@ -241,7 +201,12 @@ export const upsertGithubPullRequest = (
             "-f",
             `body=${body}`,
           ];
-    const payload = yield* runGithubCommand(dependencies, repoPath, context.repository.host, args);
+    const payload = yield* runGithubCommand(
+      githubCommands,
+      repoPath,
+      context.repository.host,
+      args,
+    );
     const pullRequest = yield* Effect.try({
       try: () => parseGithubPullResponse(payload),
       catch: (cause) =>
