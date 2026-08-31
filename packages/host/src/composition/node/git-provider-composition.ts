@@ -14,10 +14,10 @@ import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 type GitProviderResolverEffect = Effect.Effect<GitProviderResolver, GitProviderRegistrationError>;
 
 export const createNodeGitProviderResolver = (
-  registrations: readonly GitProviderPort[],
-): GitProviderResolverEffect => createGitProviderResolver(registrations);
+  providers: readonly GitProviderPort[],
+): GitProviderResolverEffect => createGitProviderResolver(providers);
 
-export const createDefaultNodeGitProviderResolver = ({
+export const createGitProviders = ({
   gitPort,
   systemCommands,
   toolDiscovery,
@@ -25,9 +25,7 @@ export const createDefaultNodeGitProviderResolver = ({
   gitPort: GitPort;
   systemCommands: SystemCommandPort;
   toolDiscovery: ToolDiscoveryPort;
-}): GitProviderResolverEffect => {
+}): readonly GitProviderPort[] => {
   const githubDependencies = createGithubCommandDependencies({ systemCommands, toolDiscovery });
-  return createNodeGitProviderResolver([
-    new GithubProviderAdapter({ githubDependencies, gitPort }),
-  ]);
+  return [new GithubProviderAdapter({ githubDependencies, gitPort })];
 };

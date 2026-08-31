@@ -26,6 +26,87 @@ export type PullRequestReviewService = {
   ): Effect.Effect<PullRequestReviewContext, PullRequestReviewServiceError>;
 };
 
+export const createPullRequestReviewService = ({
+  resolver,
+  taskReader,
+  workspaceSettingsService,
+}: {
+  resolver: GitProviderResolver;
+  taskReader: Pick<TaskReader, "getTask">;
+  workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath">;
+}): PullRequestReviewService => ({
+  getContext(input) {
+    return Effect.gen(function* () {
+      const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(input.repoPath);
+      let pullRequest: PullRequest | null = null;
+      if (input.taskId) {
+        const taskResult = yield* Effect.either(
+          taskReader.getTask({ repoPath: repoConfig.repoPath, taskId: input.taskId }),
+        );
+        if (taskResult._tag === "Left") {
+          return providerError("unknown", errorMessage(taskResult.left));
+        }
+        pullRequest = taskResult.right.pullRequest ?? null;
+      }
+
+      if (!pullRequest) {
+        return noPullRequest(input.taskId);
+      }
+
+      const providerId = pullRequest.providerId;
+      const providerResult = yield* Effect.either(resolver.resolve(repoConfig));
+      if (providerResult._tag === "Left") {
+        const reason =
+          providerResult.left.reason === "not_registered"
+            ? `Pull request review provider '${providerId}' is not supported.`
+            : errorMessage(providerResult.left);
+        return unavailable(providerId, reason);
+      }
+
+      const provider = providerResult.right;
+      const descriptor = provider.getDescriptor();
+      if (descriptor.id !== providerId) {
+        return unavailable(
+          providerId,
+          `Pull request review provider '${providerId}' is not supported.`,
+        );
+      }
+
+      if (!descriptor.capabilities.supportsPullRequestReview) {
+        return unavailable(
+          providerId,
+          `Git provider '${providerId}' does not support Pull Request review.`,
+        );
+      }
+
+      const reviewPortResult = yield* Effect.either(provider.pullRequestReview());
+      if (reviewPortResult._tag === "Left") {
+        return unavailable(providerId, errorMessage(reviewPortResult.left));
+      }
+      const reviewPort = reviewPortResult.right;
+      const contextResult = yield* Effect.either(
+        reviewPort.readContext({
+          repoConfig,
+          linkedPullRequest: pullRequest,
+        }),
+      );
+      if (contextResult._tag === "Left") {
+        return providerError(providerId, errorMessage(contextResult.left));
+      }
+      return contextResult.right;
+    }).pipe(
+      Effect.mapError((cause) =>
+        cause instanceof HostValidationError
+          ? cause
+          : new HostValidationError({
+              message: errorMessage(cause),
+              cause,
+            }),
+      ),
+    );
+  },
+});
+
 const unavailable = (providerId: GitProviderId, reason: string): PullRequestReviewContext =>
   pullRequestReviewContextSchema.parse({
     status: "unavailable",
@@ -46,86 +127,3 @@ const noPullRequest = (taskId: string | undefined): PullRequestReviewContext =>
     providerId: "unknown",
     reason: taskId ? `Task ${taskId} has no linked pull request.` : "No linked pull request.",
   });
-
-export const createPullRequestReviewService = ({
-  resolver,
-  taskReader,
-  workspaceSettingsService,
-}: {
-  resolver: GitProviderResolver;
-  taskReader: Pick<TaskReader, "getTask">;
-  workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath">;
-}): PullRequestReviewService => {
-  return {
-    getContext(input) {
-      return Effect.gen(function* () {
-        const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(input.repoPath);
-        let linkedPullRequest: PullRequest | null = null;
-        if (input.taskId) {
-          const taskResult = yield* Effect.either(
-            taskReader.getTask({ repoPath: repoConfig.repoPath, taskId: input.taskId }),
-          );
-          if (taskResult._tag === "Left") {
-            return providerError("unknown", errorMessage(taskResult.left));
-          }
-          linkedPullRequest = taskResult.right.pullRequest ?? null;
-        }
-
-        if (!linkedPullRequest) {
-          return noPullRequest(input.taskId);
-        }
-
-        const providerId = linkedPullRequest.providerId;
-        const resolvedProvider = yield* Effect.either(resolver.resolve(repoConfig));
-        if (resolvedProvider._tag === "Left") {
-          const reason =
-            resolvedProvider.left.reason === "not_registered"
-              ? `Pull request review provider '${providerId}' is not supported.`
-              : errorMessage(resolvedProvider.left);
-          return unavailable(providerId, reason);
-        }
-
-        const provider = resolvedProvider.right;
-        const descriptor = provider.getDescriptor();
-        if (descriptor.id !== providerId) {
-          return unavailable(
-            providerId,
-            `Pull request review provider '${providerId}' is not supported.`,
-          );
-        }
-
-        if (!descriptor.capabilities.supportsPullRequestReview) {
-          return unavailable(
-            providerId,
-            `Git provider '${providerId}' does not support Pull Request review.`,
-          );
-        }
-
-        const reviewProviderResult = yield* Effect.either(provider.pullRequestReview());
-        if (reviewProviderResult._tag === "Left") {
-          return unavailable(providerId, errorMessage(reviewProviderResult.left));
-        }
-        const reviewProvider = reviewProviderResult.right;
-        const reviewResult = yield* Effect.either(
-          reviewProvider.readContext({
-            repoConfig,
-            linkedPullRequest,
-          }),
-        );
-        if (reviewResult._tag === "Left") {
-          return providerError(providerId, errorMessage(reviewResult.left));
-        }
-        return reviewResult.right;
-      }).pipe(
-        Effect.mapError((cause) =>
-          cause instanceof HostValidationError
-            ? cause
-            : new HostValidationError({
-                message: errorMessage(cause),
-                cause,
-              }),
-        ),
-      );
-    },
-  };
-};

@@ -172,9 +172,9 @@ describe("createGitProviderResolver", () => {
 
   test("copies the registered provider collection", async () => {
     const github = provider({ providerDescriptor: descriptor({ id: "github" }) });
-    const registrations: GitProviderPort[] = [github];
-    const resolver = createResolverSync(registrations);
-    registrations.push(provider({ providerDescriptor: descriptor({ id: "gitlab" }) }));
+    const providers: GitProviderPort[] = [github];
+    const resolver = createResolverSync(providers);
+    providers.push(provider({ providerDescriptor: descriptor({ id: "gitlab" }) }));
 
     const result = await resolveEither(resolver, repoConfig({ id: "gitlab", enabled: true }));
 

@@ -19,91 +19,10 @@ export type GitProviderResolver = {
   resolve(repoConfig: RepoConfig): Effect.Effect<GitProviderPort, GitProviderResolutionError>;
 };
 
-type CapabilityRegistration<Port> = {
-  capability: GitProviderCapability;
-  declared: boolean;
-  access: () => Effect.Effect<Port, GitProviderCapabilityError>;
-  validatePort?: (
-    port: Port,
-    providerId: string,
-  ) => Effect.Effect<void, GitProviderRegistrationError>;
-};
-
-const validateCapabilityRegistration = <Port>(
-  provider: GitProviderPort,
-  registration: CapabilityRegistration<Port>,
-): Effect.Effect<void, GitProviderRegistrationError> =>
-  Effect.gen(function* () {
-    const providerId = provider.getDescriptor().id;
-    const portResult = yield* Effect.either(registration.access());
-    const supplied = portResult._tag === "Right";
-    if (registration.declared !== supplied) {
-      if (registration.declared) {
-        return yield* Effect.fail(
-          new GitProviderRegistrationError({
-            reason: "declared_capability_missing_port",
-            providerId,
-            capability: registration.capability,
-            message: `Git provider '${providerId}' declares '${registration.capability}' but does not supply its port.`,
-          }),
-        );
-      }
-
-      return yield* Effect.fail(
-        new GitProviderRegistrationError({
-          reason: "undeclared_capability_has_port",
-          providerId,
-          capability: registration.capability,
-          message: `Git provider '${providerId}' supplies '${registration.capability}' without declaring support.`,
-        }),
-      );
-    }
-
-    if (portResult._tag === "Right" && registration.validatePort) {
-      yield* registration.validatePort(portResult.right, providerId);
-    }
-  });
-
-const validateReviewPortOwner = (
-  port: PullRequestReviewProviderPort,
-  providerId: string,
-): Effect.Effect<void, GitProviderRegistrationError> => {
-  if (port.providerId === providerId) {
-    return Effect.void;
-  }
-
-  return Effect.fail(
-    new GitProviderRegistrationError({
-      reason: "capability_provider_id_mismatch",
-      providerId,
-      capability: "pull_request_review",
-      message: `Git provider '${providerId}' supplies a Pull Request review port owned by '${port.providerId}'.`,
-    }),
-  );
-};
-
-const validateProviderRegistration = (
-  provider: GitProviderPort,
-): Effect.Effect<void, GitProviderRegistrationError> =>
-  Effect.gen(function* () {
-    const { capabilities } = provider.getDescriptor();
-    yield* validateCapabilityRegistration(provider, {
-      capability: "pull_requests",
-      declared: capabilities.supportsPullRequests,
-      access: () => provider.pullRequests(),
-    });
-    yield* validateCapabilityRegistration(provider, {
-      capability: "pull_request_review",
-      declared: capabilities.supportsPullRequestReview,
-      access: () => provider.pullRequestReview(),
-      validatePort: validateReviewPortOwner,
-    });
-  });
-
 export const createGitProviderResolver = (
-  registrations: readonly GitProviderPort[],
+  ports: readonly GitProviderPort[],
 ): Effect.Effect<GitProviderResolver, GitProviderRegistrationError> => {
-  const providers = Object.freeze([...registrations]);
+  const providers = Object.freeze([...ports]);
 
   return Effect.gen(function* () {
     const providersById = new Map<string, GitProviderPort>();
@@ -123,13 +42,13 @@ export const createGitProviderResolver = (
     }
 
     for (const provider of providers) {
-      yield* validateProviderRegistration(provider);
+      yield* checkProvider(provider);
     }
 
     return {
       resolve(repoConfig) {
-        const providerConfig = repoConfig.git.provider;
-        if (!providerConfig) {
+        const selection = repoConfig.git.provider;
+        if (!selection) {
           return Effect.fail(
             new GitProviderResolutionError({
               reason: "not_configured",
@@ -137,23 +56,23 @@ export const createGitProviderResolver = (
             }),
           );
         }
-        if (!providerConfig.enabled) {
+        if (!selection.enabled) {
           return Effect.fail(
             new GitProviderResolutionError({
               reason: "disabled",
-              providerId: providerConfig.id,
-              message: `Git provider '${providerConfig.id}' is disabled for this repository.`,
+              providerId: selection.id,
+              message: `Git provider '${selection.id}' is disabled for this repository.`,
             }),
           );
         }
 
-        const provider = providersById.get(providerConfig.id);
+        const provider = providersById.get(selection.id);
         if (!provider) {
           return Effect.fail(
             new GitProviderResolutionError({
               reason: "not_registered",
-              providerId: providerConfig.id,
-              message: `Git provider '${providerConfig.id}' has no registered implementation.`,
+              providerId: selection.id,
+              message: `Git provider '${selection.id}' has no registered implementation.`,
             }),
           );
         }
@@ -162,3 +81,83 @@ export const createGitProviderResolver = (
     } satisfies GitProviderResolver;
   });
 };
+
+type CapabilityRule<Port> = {
+  capability: GitProviderCapability;
+  supported: boolean;
+  getPort: () => Effect.Effect<Port, GitProviderCapabilityError>;
+  checkPort?: (port: Port, providerId: string) => Effect.Effect<void, GitProviderRegistrationError>;
+};
+
+function checkProvider(
+  provider: GitProviderPort,
+): Effect.Effect<void, GitProviderRegistrationError> {
+  return Effect.gen(function* () {
+    const { capabilities } = provider.getDescriptor();
+    yield* checkCapability(provider, {
+      capability: "pull_requests",
+      supported: capabilities.supportsPullRequests,
+      getPort: () => provider.pullRequests(),
+    });
+    yield* checkCapability(provider, {
+      capability: "pull_request_review",
+      supported: capabilities.supportsPullRequestReview,
+      getPort: () => provider.pullRequestReview(),
+      checkPort: checkReviewPortOwner,
+    });
+  });
+}
+
+function checkCapability<Port>(
+  provider: GitProviderPort,
+  rule: CapabilityRule<Port>,
+): Effect.Effect<void, GitProviderRegistrationError> {
+  return Effect.gen(function* () {
+    const providerId = provider.getDescriptor().id;
+    const portResult = yield* Effect.either(rule.getPort());
+    const hasPort = portResult._tag === "Right";
+    if (rule.supported !== hasPort) {
+      if (rule.supported) {
+        return yield* Effect.fail(
+          new GitProviderRegistrationError({
+            reason: "declared_capability_missing_port",
+            providerId,
+            capability: rule.capability,
+            message: `Git provider '${providerId}' declares '${rule.capability}' but does not supply its port.`,
+          }),
+        );
+      }
+
+      return yield* Effect.fail(
+        new GitProviderRegistrationError({
+          reason: "undeclared_capability_has_port",
+          providerId,
+          capability: rule.capability,
+          message: `Git provider '${providerId}' supplies '${rule.capability}' without declaring support.`,
+        }),
+      );
+    }
+
+    if (portResult._tag === "Right" && rule.checkPort) {
+      yield* rule.checkPort(portResult.right, providerId);
+    }
+  });
+}
+
+function checkReviewPortOwner(
+  port: PullRequestReviewProviderPort,
+  providerId: string,
+): Effect.Effect<void, GitProviderRegistrationError> {
+  if (port.providerId === providerId) {
+    return Effect.void;
+  }
+
+  return Effect.fail(
+    new GitProviderRegistrationError({
+      reason: "capability_provider_id_mismatch",
+      providerId,
+      capability: "pull_request_review",
+      message: `Git provider '${providerId}' supplies a Pull Request review port owned by '${port.providerId}'.`,
+    }),
+  );
+}
