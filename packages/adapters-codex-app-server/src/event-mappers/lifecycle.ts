@@ -1,4 +1,4 @@
-import { extractStringField } from "../codex-app-server-shared";
+import { extractStringField, readCodexString } from "../codex-app-server-shared";
 import { codexItemTypeMatches, extractCodexTokenUsageTotals } from "../codex-app-server-transcript";
 import type {
   CodexCanonicalAssistantDeltaEvent,
@@ -199,8 +199,8 @@ export const deltaMapper: CodexEventMapper = {
     if (!isText && !isReasoning) {
       return emptyCodexMappingResult();
     }
-    const delta = extractStringField(input.notification.params, ["delta"]);
-    if (!delta) {
+    const delta = readCodexString(input.notification.params.delta);
+    if (delta === null || delta.length === 0) {
       return emptyCodexMappingResult();
     }
     const messageId = extractStringField(input.notification.params, ["itemId", "item_id"]);
