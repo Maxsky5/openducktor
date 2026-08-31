@@ -76,7 +76,7 @@ export const createTaskPullRequestManagementUseCases = ({
       const pullRequest = yield* fetchGithubPullRequestByNumber(
         dependencies,
         effectiveRepoPath,
-        githubContext,
+        githubContext.repository,
         number,
       );
       yield* taskStore.setPullRequest({

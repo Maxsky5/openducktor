@@ -150,10 +150,7 @@ describe("findGithubPullRequestForBranch", () => {
       findGithubPullRequestForBranch(
         dependencies,
         "/repo",
-        {
-          repository: { host: "github.com", owner: "Maxsky5", name: "openducktor" },
-          remoteName: "origin",
-        },
+        { host: "github.com", owner: "Maxsky5", name: "openducktor" },
         "odt/task-1",
         "open",
       ),

@@ -52,9 +52,9 @@ export {
 export {
   type CreateNodeHostCommandRouterInput,
   createNodeEffectHostCommandRouter,
-  createNodeHostCommandRouter,
   type EffectNodeHostCommandRouter,
 } from "./composition/node/create-node-host-command-router";
+export { createNodeHostCommandRouter } from "./composition/node/create-node-host-command-router-promise";
 export {
   type DevelopmentInstanceMode,
   OPENDUCKTOR_DEV_INSTANCE_ENV,
@@ -113,8 +113,28 @@ export { CodexSessionHistoryError } from "./ports/codex-session-history-error";
 export type { DevServerProcessPort } from "./ports/dev-server-process-port";
 export type { FilesystemPort } from "./ports/filesystem-port";
 export type { GitPort } from "./ports/git-port";
+export {
+  GitProviderCapabilityError,
+  GitProviderRegistrationError,
+  GitProviderResolutionError,
+} from "./ports/git-provider-errors";
+export type {
+  FindPullRequestByBranchInput,
+  GetPullRequestByNumberInput,
+  GitProviderHealthPort,
+  GitProviderPort,
+  GitProviderRepositoryContext,
+  GitProviderRepositoryPort,
+  PullRequestProviderInput,
+  PullRequestProviderPort,
+  UpsertPullRequestInput,
+} from "./ports/git-provider-port";
 export type { LocalAttachmentPort } from "./ports/local-attachment-port";
 export type { OpenInToolsPort } from "./ports/open-in-tools-port";
+export type {
+  PullRequestReviewProviderInput,
+  PullRequestReviewProviderPort,
+} from "./ports/pull-request-review-provider-port";
 export type {
   RuntimeExecutableProbePort,
   RuntimeExecutableProbesByKind,

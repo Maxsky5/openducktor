@@ -901,8 +901,9 @@ export const startTypescriptHostBackendEffect = ({
     if (providedToolPaths) {
       routerInput.providedToolPaths = providedToolPaths;
     }
-    const hostCommandRouter: EffectNodeHostCommandRouter =
-      createNodeEffectHostCommandRouter(routerInput);
+    const hostCommandRouter: EffectNodeHostCommandRouter = yield* createNodeEffectHostCommandRouter(
+      routerInput,
+    ).pipe(Effect.mapError((cause) => toWebOperationError(cause, "web.host.create-host-router")));
     const taskEventLeaseManager = createTaskEventLeaseManager({
       encodeFrame: writeTaskFrameSseEvent,
       reportDeliveryFailure: ({ cause, subscriptionId }) =>

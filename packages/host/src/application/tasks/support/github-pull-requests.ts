@@ -333,13 +333,13 @@ const selectGithubPullRequestForBranch = (
 export const findGithubPullRequestForBranch = (
   dependencies: GithubCommandDependencies,
   repoPath: string,
-  context: GithubPullRequestContext,
+  repository: GitProviderRepository,
   sourceBranch: string,
   state: "open" | "all",
 ) =>
   Effect.gen(function* () {
-    const repoSlug = `${context.repository.owner}/${context.repository.name}`;
-    const payload = yield* runGithubCommand(dependencies, repoPath, context.repository.host, [
+    const repoSlug = `${repository.owner}/${repository.name}`;
+    const payload = yield* runGithubCommand(dependencies, repoPath, repository.host, [
       "api",
       "--method",
       "GET",
@@ -347,7 +347,7 @@ export const findGithubPullRequestForBranch = (
       "-f",
       `state=${state}`,
       "-f",
-      `head=${context.repository.owner}:${sourceBranch}`,
+      `head=${repository.owner}:${sourceBranch}`,
     ]);
     const parsed = yield* Effect.try({
       try: () => parseGithubPullListResponse(payload),
@@ -369,12 +369,12 @@ export const findGithubPullRequestForBranch = (
 export const fetchGithubPullRequestByNumber = (
   dependencies: GithubCommandDependencies,
   repoPath: string,
-  context: GithubPullRequestContext,
+  repository: GitProviderRepository,
   number: number,
 ) =>
   Effect.gen(function* () {
-    const repoSlug = `${context.repository.owner}/${context.repository.name}`;
-    const payload = yield* runGithubCommand(dependencies, repoPath, context.repository.host, [
+    const repoSlug = `${repository.owner}/${repository.name}`;
+    const payload = yield* runGithubCommand(dependencies, repoPath, repository.host, [
       "api",
       `repos/${repoSlug}/pulls/${number}`,
     ]);
@@ -418,7 +418,7 @@ export const fetchLinkedPullRequest = (
   return fetchGithubPullRequestByNumber(
     dependencies,
     repoPath,
-    { repository: policy.repository, remoteName: "" },
+    policy.repository,
     pullRequest.number,
   );
 };
