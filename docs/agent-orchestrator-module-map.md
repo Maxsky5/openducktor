@@ -894,7 +894,7 @@ operations invalidate the exact task-session-record query, and the repo read
 model reacts to that owned query data.
 Live projection during repo reads splits by ownership.
 `agent-session-live-projection.ts` applies host snapshots and ordered deltas and knows nothing about tasks or records.
-`agent-session-workflow-records.ts` applies saved task-store records onto that projection: it restores past sessions, fills matching live sessions with their saved fields, and prunes a workflow session only when its task is loaded, its record is gone, it is not starting, and `liveReported` is false.
+`agent-session-workflow-records.ts` applies saved task-store records onto that projection: it restores past sessions, fills matching live sessions with their saved fields, and prunes a workflow session only when its task is loaded, its record is gone, it is not starting, and `liveReported` is false. A record that matches a live session with parent ancestry is not applied because the runtime has proved that the session is a subagent; `useRepoSessionReadModel` deletes that exact record through the task-session mutation boundary and refreshes its query.
 `useRepoSessionReadModel` projects, then applies records, then commits once for snapshots, deltas, and task refreshes alike.
 Unloaded, failed, or stale record reads skip that step because they cannot prove deletion.
 A successful current-scope record read clears prior task-record failures only; live-stream failures recover through the stream itself.

@@ -15,6 +15,7 @@ import {
 } from "./agent-session-live-projection";
 import {
   applyWorkflowSessionRecords,
+  findPersistedSubagentSessionRecords,
   type LoadedWorkflowSessionRecords,
   pruneVanishedWorkflowSessions,
 } from "./agent-session-workflow-records";
@@ -255,7 +256,7 @@ describe("agent session workflow records", () => {
     );
   });
 
-  test("hydrates an unbound live session into workflow scope and refreshes parent routing", () => {
+  test("does not overlay a persisted workflow record onto a proven live subagent", () => {
     const projected = buildAgentSessionLiveCollection({
       current: emptyAgentSessionCollection(),
       snapshots: [
@@ -285,25 +286,29 @@ describe("agent session workflow records", () => {
       ],
     });
 
-    const next = applyRecordsOnly({
-      projected,
-      records: loadedRecords({ taskId: "task-1", record: record("child-thread") }),
+    const workflowRecords = loadedRecords({
+      taskId: "task-1",
+      record: record("child-thread"),
     });
-    const workflowAssociation = { kind: "workflow", taskId: "task-1", role: "build" } as const;
+    const next = applyRecordsOnly({ projected, records: workflowRecords });
+    const unboundAssociation = { kind: "unbound" } as const;
 
+    expect(
+      findPersistedSubagentSessionRecords({ projected: next, records: workflowRecords }),
+    ).toEqual([...workflowRecords.records]);
     expect(getAgentSession(next, identity("child-thread"))?.sessionAssociation).toEqual(
-      workflowAssociation,
+      unboundAssociation,
     );
     expect(getAgentSession(next, identity("parent-thread"))?.pendingApprovals).toEqual([
       expect.objectContaining({
         requestId: "child-approval",
-        responseSession: { ...identity("child-thread"), sessionAssociation: workflowAssociation },
+        responseSession: { ...identity("child-thread"), sessionAssociation: unboundAssociation },
       }),
     ]);
     expect(getAgentSession(next, identity("parent-thread"))?.pendingQuestions).toEqual([
       expect.objectContaining({
         requestId: "child-question",
-        responseSession: { ...identity("child-thread"), sessionAssociation: workflowAssociation },
+        responseSession: { ...identity("child-thread"), sessionAssociation: unboundAssociation },
       }),
     ]);
   });

@@ -18,6 +18,18 @@ export type LoadedWorkflowSessionRecords = {
   records: readonly PersistedTaskSessionRecord[];
 };
 
+export const findPersistedSubagentSessionRecords = ({
+  projected,
+  records,
+}: {
+  projected: AgentSessionCollection;
+  records: LoadedWorkflowSessionRecords;
+}): PersistedTaskSessionRecord[] =>
+  records.records.filter(({ record }) => {
+    const session = getAgentSession(projected, toPersistedSessionIdentity(record));
+    return session?.liveParentExternalSessionId !== undefined;
+  });
+
 const persistedRecordIdentityKeys = (records: readonly PersistedTaskSessionRecord[]): Set<string> =>
   new Set(records.map(({ record }) => agentSessionIdentityKey(toPersistedSessionIdentity(record))));
 
@@ -70,9 +82,21 @@ export const applyWorkflowSessionRecords = ({
   associationEvidence: AgentSessionCollection;
   existingSelectedModelSource?: "record" | "current";
 }): AgentSessionCollection => {
-  const pruned = pruneRecordlessWorkflowSessions(projected, workflowRecords);
+  const persistedSubagentRecords = new Set(
+    findPersistedSubagentSessionRecords({ projected, records: workflowRecords }),
+  );
+  const applicableWorkflowRecords =
+    persistedSubagentRecords.size === 0
+      ? workflowRecords
+      : {
+          loadedTaskIds: workflowRecords.loadedTaskIds,
+          records: workflowRecords.records.filter(
+            (persistedRecord) => !persistedSubagentRecords.has(persistedRecord),
+          ),
+        };
+  const pruned = pruneRecordlessWorkflowSessions(projected, applicableWorkflowRecords);
   let collection = pruned;
-  for (const persistedRecord of workflowRecords.records) {
+  for (const persistedRecord of applicableWorkflowRecords.records) {
     const identity = toPersistedSessionIdentity(persistedRecord.record);
     const currentSession = getAgentSession(collection, identity);
     const persistedInput: Parameters<typeof toPersistedSessionView>[0] = { ...persistedRecord };
