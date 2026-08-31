@@ -5,12 +5,12 @@ import { ApplicationOverlays } from "@/components/layout/application-overlays";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { QueryProvider } from "@/lib/query-provider";
-import { loadAgentsPage, loadNotFoundPage } from "@/pages";
+import { loadNotFoundPage } from "@/pages";
+import { AgentStudioRouteLoadingSkeleton } from "@/pages/agents/agent-studio-route-loading-skeleton";
+import { AgentsPage } from "@/pages/agents/shell/agents-page";
 import { KanbanPage } from "@/pages/kanban/kanban-page";
 import { AppStateProvider } from "@/state";
 import { KanbanBoardLoadingShell } from "./pages/kanban/kanban-board-loading-shell";
-
-const AgentsPage = lazy(loadAgentsPage);
 
 const NotFoundPage = lazy(loadNotFoundPage);
 
@@ -72,7 +72,10 @@ export function App({ routerMode = "browser" }: AppProps): ReactElement {
                     path="/kanban"
                     element={withRouteFallback(<KanbanPage />, <KanbanRouteFallback />)}
                   />
-                  <Route path="/agents" element={withRouteFallback(<AgentsPage />)} />
+                  <Route
+                    path="/agents"
+                    element={withRouteFallback(<AgentsPage />, <AgentStudioRouteLoadingSkeleton />)}
+                  />
                   <Route
                     path="/planner"
                     element={<Navigate to="/agents?agent=planner" replace />}
