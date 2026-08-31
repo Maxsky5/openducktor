@@ -63,7 +63,7 @@ describe("createSessionCacheEffects", () => {
     expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(false);
   });
 
-  test("reports a workflow mutation failure when the authoritative session refresh fails", async () => {
+  test("keeps a successful durable save successful when the query refresh fails", async () => {
     const queryClient = createQueryClient();
     const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
     let failRefresh = false;
@@ -91,9 +91,7 @@ describe("createSessionCacheEffects", () => {
     });
     failRefresh = true;
 
-    await expect(effects.persistSessionRecord("task-1", sessionRecord)).rejects.toThrow(
-      "Session cache refresh failed.",
-    );
+    await expect(effects.persistSessionRecord("task-1", sessionRecord)).resolves.toBeUndefined();
 
     expect(upsert).toHaveBeenCalledWith("/repo", "task-1", sessionRecord);
     expect(queryClient.getQueryState(queryKey)?.status).toBe("error");

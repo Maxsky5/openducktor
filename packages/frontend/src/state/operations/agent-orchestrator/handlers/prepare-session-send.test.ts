@@ -79,4 +79,17 @@ describe("prepare session send", () => {
       }),
     ).rejects.toThrow("Workspace changed while preparing session send.");
   });
+
+  test("sends a repository session when the active workspace has changed", async () => {
+    const { ensureExistingRuntimeCalls, prepareSend } = createPrepareSend({
+      currentWorkspaceRepoPathRef: { current: "/tmp/other" },
+    });
+
+    const result = await prepareSend(buildSession({ sessionAssociation: { kind: "repository" } }), {
+      prepareWorkflowContext: true,
+    });
+
+    expect(result).toEqual({ repoPath: "/tmp/repo" });
+    expect(ensureExistingRuntimeCalls).toEqual([]);
+  });
 });

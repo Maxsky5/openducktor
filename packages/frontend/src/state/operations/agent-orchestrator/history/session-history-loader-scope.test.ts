@@ -8,6 +8,7 @@ import {
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
+import { createTaskCardFixture } from "../test-utils";
 import {
   createLoadAgentSessionHistory,
   loadSessionHistoryIntoStore,
@@ -61,6 +62,7 @@ const createPromptPolicy = (
   loadRepoPromptOverrides = async (): Promise<RepoPromptOverrides> => ({}),
 ) =>
   createWorkflowSessionHistoryPromptPolicy({
+    workspaceRepoPath: "/repo",
     workspaceId: "workspace-1",
     taskRef: { current: [] },
     loadRepoPromptOverrides,
@@ -120,6 +122,39 @@ describe("session history loader scope", () => {
     expect(loadRepoPromptOverrides).not.toHaveBeenCalled();
     expect(loadSessionHistory).not.toHaveBeenCalled();
     expect(harness.session.historyLoadState).toBe("not_requested");
+  });
+
+  test("rejects workflow history from a repository outside the active workspace", async () => {
+    const workflowSession: AgentSessionState = {
+      ...createSession(),
+      repoPath: "/other-repo",
+    };
+    const harness = createHistoryLoadHarness(workflowSession);
+    const loadRepoPromptOverrides = mock(async (): Promise<RepoPromptOverrides> => ({}));
+    const loadSessionHistory = mock(async () => []);
+    const loadAgentSessionHistory = createLoadAgentSessionHistory({
+      workspaceRepoPath: "/repo",
+      adapter: { loadSessionHistory },
+      repoEpochRef: { current: 0 },
+      currentWorkspaceRepoPathRef: { current: "/repo" },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      loadSystemPromptContext: createWorkflowSessionHistoryPromptPolicy({
+        workspaceRepoPath: "/repo",
+        workspaceId: "workspace-1",
+        taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
+        loadRepoPromptOverrides,
+      }),
+    });
+
+    await expect(loadAgentSessionHistory(sessionTarget)).resolves.toBeNull();
+
+    expect(loadRepoPromptOverrides).not.toHaveBeenCalled();
+    expect(loadSessionHistory).not.toHaveBeenCalled();
+    expect(harness.session.historyLoadState).toBe("failed");
+    expect(harness.session.historyLoadFailure?.detail).toBe(
+      "Cannot load workflow history for session 'external-1' because its repository '/other-repo' is not active.",
+    );
   });
 
   test("rejects history loading when the session association is missing", async () => {

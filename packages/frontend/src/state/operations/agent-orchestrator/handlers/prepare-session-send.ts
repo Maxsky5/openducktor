@@ -50,7 +50,6 @@ export const createPrepareSessionSend = ({
       repoEpochRef.current !== repoEpochAtStart ||
       currentWorkspaceRepoPathRef.current !== workspaceRepoPathAtStart;
 
-    throwIfRepoStale(isStale, STALE_SEND_PREPARATION_ERROR);
     const association = session.sessionAssociation;
     if (!association) {
       throw new Error(
@@ -71,6 +70,7 @@ export const createPrepareSessionSend = ({
         `Cannot prepare workflow context for session '${session.externalSessionId}' because its repository '${repoPath}' is not active.`,
       );
     }
+    throwIfRepoStale(isStale, STALE_SEND_PREPARATION_ERROR);
     if (!workspaceId) {
       throw new Error("Active workspace is required.");
     }

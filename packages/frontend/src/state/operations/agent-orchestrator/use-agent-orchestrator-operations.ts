@@ -180,6 +180,7 @@ export function useAgentOrchestratorOperations({
       readSessionSnapshot: sessionStore.getSessionSnapshot,
       updateSession,
       loadSystemPromptContext: createWorkflowSessionHistoryPromptPolicy({
+        workspaceRepoPath,
         workspaceId,
         taskRef,
         loadRepoPromptOverrides: queryBackedPromptOverrides,

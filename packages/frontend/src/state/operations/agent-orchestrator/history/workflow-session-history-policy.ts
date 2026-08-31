@@ -8,10 +8,12 @@ export type LoadSessionHistorySystemPromptContext = (
 ) => Promise<AgentSessionHistorySystemPromptContext | undefined>;
 
 export const createWorkflowSessionHistoryPromptPolicy = ({
+  workspaceRepoPath,
   workspaceId,
   taskRef,
   loadRepoPromptOverrides,
 }: {
+  workspaceRepoPath: string | null;
   workspaceId: string | null;
   taskRef: { current: TaskCard[] };
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
@@ -23,6 +25,11 @@ export const createWorkflowSessionHistoryPromptPolicy = ({
     if (session.sessionAssociation.kind === "unbound") {
       throw new Error(
         `Cannot load history for unbound session '${session.externalSessionId}'; repository or workflow context is required.`,
+      );
+    }
+    if (session.repoPath !== workspaceRepoPath) {
+      throw new Error(
+        `Cannot load workflow history for session '${session.externalSessionId}' because its repository '${session.repoPath}' is not active.`,
       );
     }
     if (!workspaceId) {
