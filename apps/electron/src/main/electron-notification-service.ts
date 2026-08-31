@@ -5,20 +5,19 @@ import {
   type NotificationOsCapability,
   type NotificationOsDeliveryRequest,
 } from "@openducktor/contracts";
+import type { Event as ElectronEvent } from "electron";
 import { ELECTRON_NOTIFICATION_CLICKED_CHANNEL } from "../shared/electron-bridge-contract";
 
 type ElectronNotificationInstance = {
-  onShow(listener: () => void): void;
-  onFailed(listener: (error: string) => void): void;
-  onClick(listener: () => void): void;
-  onClose(listener: () => void): void;
+  on(event: "show" | "click" | "close", listener: () => void): void;
+  on(event: "failed", listener: (event: ElectronEvent, error: string) => void): void;
   show(): void;
   close(): void;
 };
 
-type ElectronNotificationPort = {
+type ElectronNotificationConstructor = {
+  new (options: { title: string; body: string; silent: boolean }): ElectronNotificationInstance;
   isSupported(): boolean;
-  create(options: { title: string; body: string; silent: boolean }): ElectronNotificationInstance;
 };
 
 type ElectronNotificationWindow = {
@@ -36,12 +35,12 @@ type ElectronNotificationWindow = {
 };
 
 type CreateElectronNotificationServiceOptions = {
-  notifications: ElectronNotificationPort;
+  Notification: ElectronNotificationConstructor;
   getWindows(): ElectronNotificationWindow[];
 };
 
 export const createElectronNotificationService = ({
-  notifications,
+  Notification,
   getWindows,
 }: CreateElectronNotificationServiceOptions) => {
   const retainedNotifications = new Set<ElectronNotificationInstance>();
@@ -50,7 +49,7 @@ export const createElectronNotificationService = ({
   const getCapability = (): NotificationOsCapability => {
     const capability: NotificationOsCapability = {
       platform: "electron",
-      supported: notifications.isSupported(),
+      supported: Notification.isSupported(),
       permission: "not_applicable",
       canGuaranteeSilent: true,
     };
@@ -84,7 +83,7 @@ export const createElectronNotificationService = ({
     rawRequest: NotificationOsDeliveryRequest,
   ): Promise<NotificationDeliveryResult> => {
     const request = notificationOsDeliveryRequestSchema.parse(rawRequest);
-    if (!notifications.isSupported()) {
+    if (!Notification.isSupported()) {
       return {
         status: "unsupported",
         message: "This system does not support Electron OS notifications.",
@@ -107,19 +106,19 @@ export const createElectronNotificationService = ({
       };
 
       try {
-        const notification = notifications.create({
+        const notification = new Notification({
           title: request.title,
           body: request.body,
           silent: true,
         });
         retainedNotifications.add(notification);
-        notification.onShow(() => settle({ status: "shown" }));
-        notification.onFailed((error) => {
+        notification.on("show", () => settle({ status: "shown" }));
+        notification.on("failed", (_event, error) => {
           retainedNotifications.delete(notification);
           settle({ status: "failed", message: error.slice(0, 500) });
         });
-        notification.onClick(() => focusAndRoute(request));
-        notification.onClose(() => retainedNotifications.delete(notification));
+        notification.on("click", () => focusAndRoute(request));
+        notification.on("close", () => retainedNotifications.delete(notification));
         notification.show();
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);

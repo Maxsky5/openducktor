@@ -62,6 +62,7 @@ import {
 import { createElectronUpdaterAdapter } from "./app-updates/electron-updater-adapter";
 import { createGitHubReleaseSource } from "./app-updates/github-release-source";
 import { resolveElectronAppVersion } from "./electron-app-version";
+import { configureElectronWindowsAppIdentity } from "./electron-app-identity";
 import { prepareElectronDevelopmentInstanceEffect } from "./electron-development-instance";
 import { registerElectronEditorClipboardIpc } from "./electron-editor-clipboard-ipc";
 import { createElectronEffectHostCommandRouter } from "./electron-host";
@@ -303,6 +304,7 @@ const prepareElectronPreReadyRuntimeEffect = (): Effect.Effect<
   ElectronError
 > =>
   Effect.gen(function* () {
+    configureElectronWindowsAppIdentity(app, process.platform);
     const developmentInstanceClaim = yield* prepareElectronDevelopmentInstanceEffect({
       app,
       appName: APPLICATION_NAME,
@@ -928,28 +930,7 @@ const configureElectronReadyRuntimeEffect = ({
         });
       }
       const notificationService = createElectronNotificationService({
-        notifications: {
-          isSupported: () => Notification.isSupported(),
-          create: (options) => {
-            const notification = new Notification(options);
-            return {
-              onShow: (listener) => {
-                notification.on("show", listener);
-              },
-              onFailed: (listener) => {
-                notification.on("failed", (_event, error) => listener(error));
-              },
-              onClick: (listener) => {
-                notification.on("click", listener);
-              },
-              onClose: (listener) => {
-                notification.on("close", listener);
-              },
-              show: () => notification.show(),
-              close: () => notification.close(),
-            };
-          },
-        },
+        Notification,
         getWindows: () => BrowserWindow.getAllWindows(),
       });
       activeNotificationService = notificationService;
