@@ -20,6 +20,7 @@ export const describeNotificationOsCapability = (
   if (capability.permission === "prompt") {
     return "Permission will be requested only when you test OS notifications.";
   }
+  if (capability.failureMessage) return capability.failureMessage;
   return "OS notifications are ready.";
 };
 

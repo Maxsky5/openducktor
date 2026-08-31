@@ -5,6 +5,7 @@ import {
   type AgentSessionLiveSnapshot,
   type AgentSessionTranscriptEvent,
 } from "@openducktor/contracts";
+import { buildNotificationCopy } from "./notification-copy";
 import { createSessionOccurrenceProjector } from "./session-occurrence-projector";
 
 const ref = {
@@ -41,6 +42,30 @@ const createProjector = () =>
   });
 
 describe("session occurrence projector", () => {
+  test("does not expose a runtime-generated session title", () => {
+    const projector = createProjector();
+    const secretTitle = "Customer token sk-secret-title";
+    projector.accept({
+      type: "snapshot",
+      repoPath: "/repo",
+      sessions: [snapshot({ title: secretTitle })],
+    });
+
+    const [occurrence] = projector.accept({
+      type: "session_upsert",
+      session: snapshot({
+        title: secretTitle,
+        pendingApprovals: [
+          { requestId: "permission-1", requestType: "permission_grant", title: "Read" },
+        ],
+      }),
+    });
+
+    expect(occurrence).toBeDefined();
+    if (!occurrence) throw new Error("Expected a permission notification occurrence.");
+    expect(buildNotificationCopy(occurrence).body).not.toContain(secretTitle);
+  });
+
   test("uses snapshots and existing pending inputs only as a baseline", () => {
     const projector = createProjector();
     expect(

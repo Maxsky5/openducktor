@@ -22,7 +22,9 @@ import {
 } from "@/state/operations/agent-orchestrator/handlers/session-actions.test-helpers";
 import {
   createSessionStartWorkflowRunner,
+  isSessionStartFailureFeedbackHandled,
   type SessionStartNotificationPublisher,
+  SessionStartWorkflowError,
 } from "./session-start-orchestration";
 
 const selection = {
@@ -101,17 +103,27 @@ describe("session-start notifications", () => {
 
   test("publishes one task-only Session Error when creation fails", async () => {
     const notifications = createPublisher();
+    const startFailure = new Error("start failed");
     const runner = createSessionStartWorkflowRunner({
       queryClient: new QueryClient(),
       workspaceId: "workspace-1",
       startAgentSession: mock(async () => {
-        throw new Error("start failed");
+        throw startFailure;
       }),
       notifications,
       createLaunchAttemptId: () => "launch-error",
     });
 
-    await expect(runner(baseInput)).rejects.toThrow("start failed");
+    let rejected: unknown;
+    try {
+      await runner(baseInput);
+    } catch (cause) {
+      rejected = cause;
+    }
+
+    expect(rejected).toBeInstanceOf(SessionStartWorkflowError);
+    expect(rejected).toHaveProperty("originalCause", startFailure);
+    expect(isSessionStartFailureFeedbackHandled(rejected)).toBe(true);
     expect(notifications.publishSessionError).toHaveBeenCalledWith({
       launchAttemptId: "launch-error",
       workspaceId: "workspace-1",
@@ -120,6 +132,63 @@ describe("session-start notifications", () => {
       role: "build",
     });
     expect(notifications.publishSessionStarted).not.toHaveBeenCalled();
+  });
+
+  test("marks non-Error start failures as handled when the notification publishes", async () => {
+    const notifications = createPublisher();
+    const runner = createSessionStartWorkflowRunner({
+      queryClient: new QueryClient(),
+      workspaceId: "workspace-1",
+      startAgentSession: mock(async () => {
+        throw "start failed";
+      }),
+      notifications,
+      createLaunchAttemptId: () => "launch-string-error",
+    });
+
+    let rejected: unknown;
+    try {
+      await runner(baseInput);
+    } catch (cause) {
+      rejected = cause;
+    }
+
+    expect(rejected).toBeInstanceOf(SessionStartWorkflowError);
+    expect(rejected).toHaveProperty("message", "start failed");
+    expect(isSessionStartFailureFeedbackHandled(rejected)).toBe(true);
+  });
+
+  test("leaves feedback to the caller when the error notification cannot publish", async () => {
+    const notifications = createPublisher();
+    notifications.publishSessionError = mock(() => {
+      throw new Error("notification failed");
+    });
+    const runner = createSessionStartWorkflowRunner({
+      queryClient: new QueryClient(),
+      workspaceId: "workspace-1",
+      startAgentSession: mock(async () => {
+        throw new Error("start failed");
+      }),
+      notifications,
+      createLaunchAttemptId: () => "launch-notification-error",
+    });
+
+    let rejected: unknown;
+    try {
+      await runner(baseInput);
+    } catch (cause) {
+      rejected = cause;
+    }
+
+    expect(isSessionStartFailureFeedbackHandled(rejected)).toBe(false);
+    expect(notifications.reportFailure).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "notification failed" }),
+      expect.objectContaining({ launchAttemptId: "launch-notification-error" }),
+    );
+  });
+
+  test("does not treat unrelated errors as handled session-start failures", () => {
+    expect(isSessionStartFailureFeedbackHandled(new Error("other failure"))).toBe(false);
   });
 
   test("publishes only Session Error when the post-start message fails", async () => {

@@ -13,6 +13,7 @@ import {
   createShellOsNotificationAdapter,
   createSonnerNotificationAdapter,
 } from "./notification-delivery";
+import { prepareNotificationOccurrence } from "./notification-occurrence";
 import { createNotificationPolicy, type NotificationDispatchFailure } from "./notification-policy";
 
 export const createNotificationRuntime = ({
@@ -85,7 +86,9 @@ export const createNotificationRuntime = ({
   return {
     dispatch,
     publish(rawOccurrence: NotificationOccurrence): void {
-      const occurrence = notificationOccurrenceSchema.parse(rawOccurrence);
+      const occurrence = notificationOccurrenceSchema.parse(
+        prepareNotificationOccurrence(rawOccurrence),
+      );
       bridge.publishOccurrence(occurrence);
       void dispatch(occurrence);
     },

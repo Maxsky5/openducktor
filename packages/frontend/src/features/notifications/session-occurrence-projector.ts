@@ -30,7 +30,6 @@ type SessionProjection = {
   pendingApprovals: Set<string>;
   pendingQuestions: Set<string>;
   running: boolean;
-  title: string;
   ref: AgentSessionLiveSnapshot["ref"];
 };
 
@@ -55,7 +54,6 @@ const createProjection = (snapshot: AgentSessionLiveSnapshot): SessionProjection
   pendingApprovals: new Set(snapshot.pendingApprovals.map(pendingInputIdentity)),
   pendingQuestions: new Set(snapshot.pendingQuestions.map(pendingInputIdentity)),
   running: snapshot.activity === "running",
-  title: snapshot.title,
   ref: snapshot.ref,
 });
 
@@ -89,7 +87,6 @@ export const createSessionOccurrenceProjector = ({
       kind: input.kind,
       repoPath: projection.ref.repoPath,
       repositoryLabel,
-      sessionLabel: projection.title,
       status: input.status,
       navigationTarget: input.navigationTarget,
     };
@@ -196,7 +193,6 @@ export const createSessionOccurrenceProjector = ({
 
     projection.association = snapshot.sessionAssociation;
     projection.isSubagent = snapshot.parentExternalSessionId !== undefined;
-    projection.title = snapshot.title;
     projection.ref = snapshot.ref;
     if (projection.isSubagent) {
       projection.pendingApprovals = new Set(snapshot.pendingApprovals.map(pendingInputIdentity));

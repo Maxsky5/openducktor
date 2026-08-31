@@ -96,10 +96,18 @@ export type SessionStartNotificationPublisher = {
   reportFailure(cause: unknown, input: SessionStartNotificationInput): void;
 };
 
-const notifiedSessionStartFailures = new WeakSet<Error>();
+export class SessionStartWorkflowError extends Error {
+  constructor(
+    readonly originalCause: Error,
+    readonly feedbackHandled: boolean,
+  ) {
+    super(originalCause.message);
+    this.name = "SessionStartWorkflowError";
+  }
+}
 
-export const wasSessionStartFailureNotified = (cause: unknown): boolean =>
-  cause instanceof Error && notifiedSessionStartFailures.has(cause);
+export const isSessionStartFailureFeedbackHandled = (cause: unknown): boolean =>
+  cause instanceof SessionStartWorkflowError && cause.feedbackHandled;
 
 type CreateSessionStartWorkflowRunnerArgs = Pick<
   ExecuteSessionStartFromDecisionArgs,
@@ -337,15 +345,17 @@ export const createSessionStartWorkflowRunner = ({
     try {
       result = await executeSessionStartFromDecision(args);
     } catch (cause) {
+      let feedbackHandled = false;
       try {
-        notifications?.publishSessionError(notificationInput);
-        if (notifications && cause instanceof Error) {
-          notifiedSessionStartFailures.add(cause);
+        if (notifications) {
+          notifications.publishSessionError(notificationInput);
+          feedbackHandled = true;
         }
       } catch (notificationCause) {
         reportNotificationFailure(notificationCause);
       }
-      throw cause;
+      const startError = cause instanceof Error ? cause : new Error(String(cause));
+      throw new SessionStartWorkflowError(startError, feedbackHandled);
     }
 
     const { postStartActionError, ...session } = result;

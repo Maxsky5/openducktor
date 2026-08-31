@@ -34,6 +34,10 @@ export const createNotificationTaskObserver = ({
 }) => {
   const workspaces = new Map<string, NotificationWorkspace>();
   const entries = new Map<string, TaskObserverEntry>();
+  const baselineLoads = new Map<
+    string,
+    { workspace: NotificationWorkspace; promise: Promise<void> }
+  >();
 
   const reportFailure = (repoPath: string, cause: unknown): void => {
     onFailure({ repoPath, source: "task", cause });
@@ -42,6 +46,9 @@ export const createNotificationTaskObserver = ({
   const loadBaseline = async (workspace: NotificationWorkspace): Promise<void> => {
     try {
       const tasks = await loadTasks(workspace.repoPath);
+      if (workspaces.get(workspace.repoPath) !== workspace) {
+        return;
+      }
       const projector = createTaskOccurrenceProjector({
         repoPath: workspace.repoPath,
         repositoryLabel: workspace.repositoryLabel,
@@ -64,6 +71,9 @@ export const createNotificationTaskObserver = ({
     }
     try {
       const tasks = await loadTasks(event.repoPath);
+      if (workspaces.get(event.repoPath) !== workspace) {
+        return;
+      }
       let entry = entries.get(event.repoPath);
       if (!entry || entry.label !== workspace.repositoryLabel) {
         const projector = createTaskOccurrenceProjector({
@@ -107,14 +117,22 @@ export const createNotificationTaskObserver = ({
         if (!nextRepoPaths.has(repoPath)) {
           workspaces.delete(repoPath);
           entries.delete(repoPath);
+          baselineLoads.delete(repoPath);
         }
       }
       const baselines: Promise<void>[] = [];
       for (const workspace of nextWorkspaces) {
         const previous = workspaces.get(workspace.repoPath);
-        workspaces.set(workspace.repoPath, workspace);
         if (!previous || previous.repositoryLabel !== workspace.repositoryLabel) {
-          baselines.push(loadBaseline(workspace));
+          workspaces.set(workspace.repoPath, workspace);
+          const promise = loadBaseline(workspace);
+          baselineLoads.set(workspace.repoPath, { workspace, promise });
+          baselines.push(promise);
+        } else {
+          const pending = baselineLoads.get(workspace.repoPath);
+          if (pending?.workspace === previous) {
+            baselines.push(pending.promise);
+          }
         }
       }
       await Promise.all(baselines);
