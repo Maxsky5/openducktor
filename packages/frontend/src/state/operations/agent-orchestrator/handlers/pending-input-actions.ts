@@ -4,7 +4,6 @@ import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { resolveAgentPendingInputParticipants } from "@/state/agent-session-pending-input-participants";
 import type {
   AgentApprovalRequest,
-  AgentPendingInputActionTarget,
   AgentQuestionRequest,
   AgentSessionIdentity,
   AgentSessionState,
@@ -26,85 +25,65 @@ export type PendingInputActionDependencies = {
   readTurnUserMessageStartedAtMs: (sessionKey: string) => number | undefined;
 };
 
-type ResolvedPendingInputRuntimeSession = {
-  responseSession: AgentSessionIdentity & Pick<AgentSessionState, "repoPath">;
-  turnContextSession: AgentSessionState | null;
-};
-
 const markTurnUserAnchorIfMissing = (
   dependencies: Pick<
     PendingInputActionDependencies,
     "recordTurnUserMessageTimestamp" | "readTurnUserMessageStartedAtMs" | "turnMetadata"
   >,
-  session: AgentSessionState,
+  session: AgentSessionIdentity,
+  selectedModel: AgentSessionState["selectedModel"],
 ): void => {
   const sessionKey = agentSessionIdentityKey(session);
   if (dependencies.readTurnUserMessageStartedAtMs(sessionKey) === undefined) {
     dependencies.recordTurnUserMessageTimestamp(sessionKey, Date.now());
   }
-  dependencies.turnMetadata.recordModel(sessionKey, session.selectedModel ?? null);
+  dependencies.turnMetadata.recordModel(sessionKey, selectedModel);
 };
 
-const resolvePendingInputRuntimeSession = ({
-  readSessionSnapshot,
+const preparePendingInputReply = ({
+  dependencies,
   currentSession,
   request,
 }: {
-  readSessionSnapshot: ReadSessionSnapshot;
-  currentSession: AgentPendingInputActionTarget;
+  dependencies: PendingInputActionDependencies;
+  currentSession: AgentSessionIdentity;
   request: AgentApprovalRequest | AgentQuestionRequest;
-}): ResolvedPendingInputRuntimeSession => {
+}) => {
   const { responseSession, sessions } = resolveAgentPendingInputParticipants(
     currentSession,
     request,
   );
-  const loadedResponseSession = readSessionSnapshot(responseSession);
-  const contextSession =
-    loadedResponseSession ??
-    sessions.map((session) => readSessionSnapshot(session)).find((session) => session !== null) ??
-    null;
-  const callerRepoPath = "repoPath" in currentSession ? currentSession.repoPath : null;
-  const repoPath = contextSession?.repoPath ?? callerRepoPath;
-  if (!repoPath) {
+  const contextSession = sessions
+    .map((session) => dependencies.readSessionSnapshot(session))
+    .find((session) => session !== null);
+  if (!contextSession) {
     throw new Error(
       `Cannot reply to pending input for session '${responseSession.externalSessionId}' because its repository context is unavailable.`,
     );
   }
+
+  markTurnUserAnchorIfMissing(dependencies, responseSession, contextSession.selectedModel);
   return {
-    responseSession: { ...responseSession, repoPath },
-    turnContextSession: contextSession
-      ? {
-          ...contextSession,
-          externalSessionId: responseSession.externalSessionId,
-          runtimeKind: responseSession.runtimeKind,
-          workingDirectory: responseSession.workingDirectory,
-          sessionAssociation:
-            request.responseSession?.sessionAssociation ??
-            loadedResponseSession?.sessionAssociation ??
-            contextSession.sessionAssociation,
-        }
-      : null,
+    responseSession,
+    repoPath: contextSession.repoPath,
   };
 };
 
 export const createPendingInputActions = (dependencies: PendingInputActionDependencies) => {
   const replyAgentApproval = async (
-    identity: AgentPendingInputActionTarget,
+    identity: AgentSessionIdentity,
     request: AgentApprovalRequest,
     outcome: RuntimeApprovalReplyOutcome,
     message?: string,
   ): Promise<void> => {
-    const { responseSession, turnContextSession } = resolvePendingInputRuntimeSession({
-      readSessionSnapshot: dependencies.readSessionSnapshot,
+    const { responseSession, repoPath } = preparePendingInputReply({
+      dependencies,
       currentSession: identity,
       request,
     });
-    if (turnContextSession) {
-      markTurnUserAnchorIfMissing(dependencies, turnContextSession);
-    }
     const input: Parameters<typeof dependencies.liveSessionHost.agentSessionLiveReplyApproval>[0] =
       {
-        repoPath: responseSession.repoPath,
+        repoPath,
         externalSessionId: responseSession.externalSessionId,
         runtimeKind: responseSession.runtimeKind,
         workingDirectory: responseSession.workingDirectory,
@@ -118,20 +97,17 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
   };
 
   const answerAgentQuestion = async (
-    identity: AgentPendingInputActionTarget,
+    identity: AgentSessionIdentity,
     request: AgentQuestionRequest,
     answers: string[][],
   ): Promise<void> => {
-    const { responseSession, turnContextSession } = resolvePendingInputRuntimeSession({
-      readSessionSnapshot: dependencies.readSessionSnapshot,
+    const { responseSession, repoPath } = preparePendingInputReply({
+      dependencies,
       currentSession: identity,
       request,
     });
-    if (turnContextSession) {
-      markTurnUserAnchorIfMissing(dependencies, turnContextSession);
-    }
     await dependencies.liveSessionHost.agentSessionLiveReplyQuestion({
-      repoPath: responseSession.repoPath,
+      repoPath,
       externalSessionId: responseSession.externalSessionId,
       runtimeKind: responseSession.runtimeKind,
       workingDirectory: responseSession.workingDirectory,

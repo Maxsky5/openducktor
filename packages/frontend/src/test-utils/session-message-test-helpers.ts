@@ -22,9 +22,6 @@ export const createSessionMessagesFixture = (
   if (Array.isArray(messages)) {
     return createSessionMessagesState(externalSessionId, messages);
   }
-  if (messages.externalSessionId === externalSessionId) {
-    return messages;
-  }
   return createSessionMessagesState(
     externalSessionId,
     getSessionMessagesSlice({ externalSessionId: messages.externalSessionId, messages }, 0),

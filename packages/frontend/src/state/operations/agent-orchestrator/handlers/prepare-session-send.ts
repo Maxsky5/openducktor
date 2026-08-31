@@ -16,7 +16,6 @@ type PrepareSessionSendDependencies = {
 };
 
 export type PreparedSessionSend = {
-  repoPath: string;
   systemPrompt?: string;
 };
 
@@ -43,7 +42,7 @@ export const createPrepareSessionSend = ({
     session: AgentSessionState,
     { prepareWorkflowContext }: { prepareWorkflowContext: boolean },
   ): Promise<PreparedSessionSend> => {
-    const repoPath = session.repoPath;
+    const sessionRepoPath = session.repoPath;
     const workspaceRepoPathAtStart = workspaceRepoPath;
     const repoEpochAtStart = repoEpochRef.current;
     const isStale = (): boolean =>
@@ -62,12 +61,12 @@ export const createPrepareSessionSend = ({
       );
     }
     if (association.kind === "repository" || !prepareWorkflowContext) {
-      return { repoPath };
+      return {};
     }
     const workflowRepoPath = requireWorkspaceRepoPath(workspaceRepoPathAtStart);
-    if (workflowRepoPath !== repoPath) {
+    if (workflowRepoPath !== sessionRepoPath) {
       throw new Error(
-        `Cannot prepare workflow context for session '${session.externalSessionId}' because its repository '${repoPath}' is not active.`,
+        `Cannot prepare workflow context for session '${session.externalSessionId}' because its repository '${sessionRepoPath}' is not active.`,
       );
     }
     throwIfRepoStale(isStale, STALE_SEND_PREPARATION_ERROR);
@@ -83,12 +82,11 @@ export const createPrepareSessionSend = ({
         task,
         loadRepoPromptOverrides,
       }),
-      ensureExistingSessionRuntime(repoPath, session.runtimeKind),
+      ensureExistingSessionRuntime(sessionRepoPath, session.runtimeKind),
     ]);
     throwIfRepoStale(isStale, STALE_SEND_PREPARATION_ERROR);
 
     return {
-      repoPath,
       systemPrompt: promptContext.systemPrompt,
     };
   };

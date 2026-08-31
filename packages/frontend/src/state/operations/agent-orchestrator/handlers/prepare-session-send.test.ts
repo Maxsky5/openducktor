@@ -59,7 +59,6 @@ describe("prepare session send", () => {
       prepareWorkflowContext: true,
     });
 
-    expect(result.repoPath).toBe("/tmp/repo");
     expect(result.systemPrompt).toContain("Build login");
     expect(ensureExistingRuntimeCalls).toEqual([["/tmp/repo", "opencode"]]);
   });
@@ -89,7 +88,7 @@ describe("prepare session send", () => {
       prepareWorkflowContext: true,
     });
 
-    expect(result).toEqual({ repoPath: "/tmp/repo" });
+    expect(result).toEqual({});
     expect(ensureExistingRuntimeCalls).toEqual([]);
   });
 });

@@ -49,8 +49,16 @@ describe("shared test fixtures", () => {
   });
 
   test("createAgentSessionFixture returns isolated nested objects", () => {
-    const first = createAgentSessionFixture();
-    const second = createAgentSessionFixture();
+    const messages = createSessionMessagesState(TEST_EXTERNAL_SESSION_IDS.default, [
+      {
+        id: "message-1",
+        role: "assistant",
+        content: "hello",
+        timestamp: "2026-03-23T10:00:00.000Z",
+      },
+    ]);
+    const first = createAgentSessionFixture({ messages });
+    const second = createAgentSessionFixture({ messages });
 
     first.pendingApprovals.push({
       requestId: "permission-1",
@@ -66,17 +74,11 @@ describe("shared test fixtures", () => {
         "reject" as const,
       ],
     });
-    first.messages = createSessionMessagesState(first.externalSessionId, [
-      {
-        id: "message-1",
-        role: "assistant",
-        content: "hello",
-        timestamp: "2026-03-23T10:00:00.000Z",
-      },
-    ]);
-
     expect(second.pendingApprovals).toEqual([]);
-    expect(getSessionMessageCount(second)).toBe(0);
+    expect(first.messages).not.toBe(second.messages);
+    expect(first.messages.items).not.toBe(second.messages.items);
+    expect(getSessionMessageCount(first)).toBe(1);
+    expect(getSessionMessageCount(second)).toBe(1);
   });
 
   test("createAgentSessionFixture uses the canonical external id by default", () => {

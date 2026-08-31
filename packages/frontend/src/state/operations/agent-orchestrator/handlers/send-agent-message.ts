@@ -199,7 +199,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
 
     try {
       const runtimeSessionRef = toBoundRuntimeSessionRef(
-        preparedSend.repoPath,
+        readySession.repoPath,
         readySession,
         "send message",
       );

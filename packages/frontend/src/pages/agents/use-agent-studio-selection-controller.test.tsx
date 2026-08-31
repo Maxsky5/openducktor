@@ -1338,6 +1338,7 @@ describe("useAgentStudioSelectionController", () => {
   });
 
   test("loads runtime data only for the visible session when selected and view sessions differ", async () => {
+    const sessionRepoPath = "/tmp/repo";
     const readSessionTodos = mock(async ({ externalSessionId }: { externalSessionId: string }) => [
       {
         id: `todo-${externalSessionId}`,
@@ -1348,12 +1349,14 @@ describe("useAgentStudioSelectionController", () => {
     ]);
     const activeSession = createSession("task-1", "session-build", {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      repoPath: sessionRepoPath,
       runtimeKind: "opencode",
       workingDirectory: "/repo/task-1",
       status: "running",
     });
     const viewSession = createSession("task-2", "session-qa", {
       sessionAssociation: { kind: "workflow", taskId: "task-2", role: "qa" },
+      repoPath: sessionRepoPath,
       runtimeKind: "opencode",
       workingDirectory: "/repo/task-2",
       status: "running",
@@ -1378,7 +1381,7 @@ describe("useAgentStudioSelectionController", () => {
       );
       expect(readSessionTodos).toHaveBeenCalledTimes(1);
       expect(readSessionTodos).toHaveBeenCalledWith({
-        repoPath: workspaceRepoPath,
+        repoPath: sessionRepoPath,
         runtimeKind: "opencode",
         workingDirectory: "/repo/task-1",
         externalSessionId: "session-build",
@@ -1409,7 +1412,7 @@ describe("useAgentStudioSelectionController", () => {
 
       expect(readSessionTodos).toHaveBeenCalledTimes(1);
       expect(readSessionTodos).toHaveBeenCalledWith({
-        repoPath: workspaceRepoPath,
+        repoPath: sessionRepoPath,
         runtimeKind: "opencode",
         workingDirectory: "/repo/task-2",
         externalSessionId: "session-qa",

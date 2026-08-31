@@ -3,7 +3,6 @@ import type {
   AgentSessionLiveReplyApprovalInput,
   AgentSessionLiveReplyQuestionInput,
 } from "@openducktor/contracts";
-import type { PolicyBoundSessionRef } from "@openducktor/core";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type {
   AgentApprovalRequest,
@@ -54,17 +53,6 @@ const questionRequest = (requestId: string): AgentQuestionRequest => ({
       custom: false,
     },
   ],
-});
-
-const policyBoundSessionRef = (
-  externalSessionId: string,
-  workingDirectory = "/tmp/repo/worktree",
-): PolicyBoundSessionRef => ({
-  repoPath: "/tmp/repo",
-  externalSessionId,
-  runtimeKind: "opencode",
-  workingDirectory,
-  runtimePolicy: { kind: "opencode" },
 });
 
 type PendingInputActionHarness = {
@@ -127,32 +115,6 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       },
     ]);
     expect(getSession(sessionsRef).pendingApprovals).toEqual([request]);
-  });
-
-  test("replies to an approval from a transcript-only normalized session ref", async () => {
-    const replies: AgentSessionLiveReplyApprovalInput[] = [];
-    const actions = createSessionActions({
-      sessionsRef: createSessionsRef(),
-      liveSessionHost: {
-        agentSessionLiveReplyApproval: async (input) => {
-          replies.push(input);
-        },
-        agentSessionLiveReplyQuestion: async () => {},
-      },
-    });
-
-    await actions.replyAgentApproval(
-      policyBoundSessionRef("session-transcript-1", "/tmp/repo"),
-      approvalRequest("perm-1"),
-      "approve_once",
-    );
-
-    expect(replies[0]).toMatchObject({
-      repoPath: "/tmp/repo",
-      externalSessionId: "session-transcript-1",
-      workingDirectory: "/tmp/repo",
-      requestId: "perm-1",
-    });
   });
 
   test("fails closed when an approval target has no recorded repository context", async () => {
@@ -224,7 +186,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     });
 
     await actions.replyAgentApproval(
-      policyBoundSessionRef("session-parent"),
+      toAgentSessionIdentity(getSession(sessionsRef, "session-parent")),
       request,
       "approve_once",
     );
@@ -312,33 +274,6 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     expect(getSession(sessionsRef).pendingQuestions).toEqual([request]);
   });
 
-  test("answers a question from a transcript-only normalized session ref", async () => {
-    const replies: AgentSessionLiveReplyQuestionInput[] = [];
-    const actions = createSessionActions({
-      sessionsRef: createSessionsRef(),
-      liveSessionHost: {
-        agentSessionLiveReplyApproval: async () => {},
-        agentSessionLiveReplyQuestion: async (input) => {
-          replies.push(input);
-        },
-      },
-    });
-
-    await actions.answerAgentQuestion(
-      policyBoundSessionRef("session-transcript-1", "/tmp/repo"),
-      questionRequest("question-1"),
-      [["yes"]],
-    );
-
-    expect(replies[0]).toMatchObject({
-      repoPath: "/tmp/repo",
-      externalSessionId: "session-transcript-1",
-      workingDirectory: "/tmp/repo",
-      requestId: "question-1",
-      answers: [["yes"]],
-    });
-  });
-
   test("routes a UI-shaped repository question through the session repository", async () => {
     const request = questionRequest("question-repository");
     const session = buildSession({
@@ -388,7 +323,11 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       },
     });
 
-    await actions.answerAgentQuestion(policyBoundSessionRef("session-parent"), request, [["yes"]]);
+    await actions.answerAgentQuestion(
+      toAgentSessionIdentity(getSession(sessionsRef, "session-parent")),
+      request,
+      [["yes"]],
+    );
 
     expect(replies[0]?.externalSessionId).toBe("session-child");
     expect(getSession(sessionsRef, "session-parent").pendingQuestions).toEqual([request]);
