@@ -106,10 +106,7 @@ export const createStartAgentSession = ({
       selectedModelKey,
       messagePolicyKey,
     ].join("::");
-    const executionKey =
-      input.startMode === "fresh" && role === "qa"
-        ? [repoPath, taskId, role].join("::")
-        : inFlightKey;
+    const executionKey = input.startMode === "reuse" ? inFlightKey : [repoPath, taskId].join("::");
 
     return session.sessionStartGateRef.current.run(
       inFlightKey,
