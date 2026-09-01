@@ -46,11 +46,6 @@ type PendingDelivery = {
   run(): Promise<void>;
 };
 
-type NotificationDispatchSnapshot = {
-  appFocused: boolean;
-  settings: NotificationSettings;
-};
-
 const errorMessage = (cause: unknown): string => {
   const message = cause instanceof Error ? cause.message : String(cause);
   return message.slice(0, 500);
@@ -71,7 +66,7 @@ export const createNotificationPolicy = ({
   sound,
   onFailure,
 }: CreateNotificationPolicyOptions) => {
-  const dispatchSnapshots = new Map<string, Promise<NotificationDispatchSnapshot | null>>();
+  const settingsSnapshots = new Map<string, Promise<NotificationSettings | null>>();
   const deliveredChannels = new Map<string, Set<PendingDelivery["channel"]>>();
 
   const reportFailure = (
@@ -88,22 +83,18 @@ export const createNotificationPolicy = ({
     });
   };
 
-  const loadDispatchSnapshot = (
+  const loadSettingsSnapshot = (
     occurrence: NotificationOccurrence,
-    appFocused: boolean,
-  ): Promise<NotificationDispatchSnapshot | null> => {
-    const existing = dispatchSnapshots.get(occurrence.occurrenceId);
+  ): Promise<NotificationSettings | null> => {
+    const existing = settingsSnapshots.get(occurrence.occurrenceId);
     if (existing) return existing;
     const snapshot = loadSettings()
-      .then((settings) => ({
-        appFocused,
-        settings: notificationSettingsSchema.parse(settings),
-      }))
+      .then((settings) => notificationSettingsSchema.parse(settings))
       .catch((cause: unknown) => {
         reportFailure(occurrence, "settings", cause);
         return null;
       });
-    dispatchSnapshots.set(occurrence.occurrenceId, snapshot);
+    settingsSnapshots.set(occurrence.occurrenceId, snapshot);
     return snapshot;
   };
 
@@ -124,9 +115,8 @@ export const createNotificationPolicy = ({
     context: NotificationDispatchContext,
   ): Promise<void> => {
     const occurrence = notificationOccurrenceSchema.parse(rawOccurrence);
-    const snapshot = await loadDispatchSnapshot(occurrence, context.appFocused);
-    if (!snapshot) return;
-    const { appFocused, settings } = snapshot;
+    const settings = await loadSettingsSnapshot(occurrence);
+    if (!settings) return;
 
     const kindSettings = settings.kinds[occurrence.kind];
     if (!kindSettings.enabled) {
@@ -142,7 +132,7 @@ export const createNotificationPolicy = ({
       });
     }
 
-    const suppressOs = appFocused && settings.osFocus === "suppress_if_focused";
+    const suppressOs = context.appFocused && settings.osFocus === "suppress_if_focused";
     if (context.externalDeliveryOwner && targetIncludesOs(kindSettings.target) && !suppressOs) {
       addDelivery(occurrence.occurrenceId, deliveries, {
         channel: "os",
@@ -151,7 +141,7 @@ export const createNotificationPolicy = ({
     }
 
     const cue = resolveNotificationCue(kindSettings.sound, settings.globalCue);
-    const muteSound = appFocused && settings.soundFocus === "mute_while_focused";
+    const muteSound = context.appFocused && settings.soundFocus === "mute_while_focused";
     if (context.externalDeliveryOwner && cue && !muteSound) {
       addDelivery(occurrence.occurrenceId, deliveries, {
         channel: "sound",

@@ -400,6 +400,10 @@ export const createBrowserNotificationCoordinator = ({
       return true;
     },
     async isAnyTabFocused() {
+      const focusLockFailure = failureMessages.get("focus_lock");
+      if (focusLockFailure) {
+        throw new Error(focusLockFailure);
+      }
       try {
         const snapshot = await locks.query();
         failureMessages.delete("focus_query");

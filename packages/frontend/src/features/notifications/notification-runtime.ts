@@ -63,33 +63,31 @@ export const createNotificationRuntime = ({
     }
   };
 
+  const reportOsFailure = (occurrence: NotificationOccurrence, cause: unknown): void => {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    onFailure({
+      channel: "os",
+      kind: occurrence.kind,
+      occurrenceId: occurrence.occurrenceId,
+      repoPath: occurrence.repoPath,
+      message: message.slice(0, 500),
+    });
+  };
+
   const dispatch = async (rawOccurrence: NotificationOccurrence): Promise<void> => {
     const occurrence = notificationOccurrenceSchema.parse(rawOccurrence);
+    await policy.dispatch(occurrence, {
+      appFocused: false,
+      externalDeliveryOwner: false,
+    });
     try {
       await bridge.withExternalDeliveryOwnership(occurrence.occurrenceId, async (owner) => {
-        if (!owner) {
-          await policy.dispatch(occurrence, {
-            appFocused: false,
-            externalDeliveryOwner: false,
-          });
-          return;
-        }
+        if (!owner) return;
         let appFocused: boolean;
         try {
           appFocused = await bridge.isAppFocused();
         } catch (cause) {
-          const message = cause instanceof Error ? cause.message : String(cause);
-          onFailure({
-            channel: "os",
-            kind: occurrence.kind,
-            occurrenceId: occurrence.occurrenceId,
-            repoPath: occurrence.repoPath,
-            message: message.slice(0, 500),
-          });
-          await policy.dispatch(occurrence, {
-            appFocused: false,
-            externalDeliveryOwner: false,
-          });
+          reportOsFailure(occurrence, cause);
           return;
         }
         await policy.dispatch(occurrence, {
@@ -98,14 +96,7 @@ export const createNotificationRuntime = ({
         });
       });
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : String(cause);
-      onFailure({
-        channel: "settings",
-        kind: occurrence.kind,
-        occurrenceId: occurrence.occurrenceId,
-        repoPath: occurrence.repoPath,
-        message: message.slice(0, 500),
-      });
+      reportOsFailure(occurrence, cause);
     }
   };
 

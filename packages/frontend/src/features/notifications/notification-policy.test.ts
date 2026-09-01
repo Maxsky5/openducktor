@@ -119,6 +119,23 @@ describe("notification policy", () => {
     expect(harness.sound).toHaveBeenCalledTimes(1);
   });
 
+  test("uses the current focus state when leadership changes", async () => {
+    const harness = createHarness("both");
+
+    await harness.policy.dispatch(occurrence, {
+      appFocused: false,
+      externalDeliveryOwner: false,
+    });
+    await harness.policy.dispatch(occurrence, {
+      appFocused: true,
+      externalDeliveryOwner: true,
+    });
+
+    expect(harness.inApp).toHaveBeenCalledTimes(1);
+    expect(harness.os).not.toHaveBeenCalled();
+    expect(harness.sound).not.toHaveBeenCalled();
+  });
+
   test("deduplicates each semantic occurrence", async () => {
     const harness = createHarness("both");
     const context = { appFocused: false, externalDeliveryOwner: true };
