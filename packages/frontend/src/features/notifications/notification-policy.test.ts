@@ -45,6 +45,16 @@ const createHarness = (target: "in_app" | "os" | "both", enabled = true) => {
   return { policy, inApp, os, sound, onFailure, settings };
 };
 
+const dispatchAsOwner = async (
+  harness: ReturnType<typeof createHarness>,
+  appFocused = false,
+): Promise<void> => {
+  const plan = await harness.policy.dispatch(occurrence, { phase: "local" });
+  if (plan) {
+    await harness.policy.dispatch(occurrence, { phase: "external", appFocused });
+  }
+};
+
 describe("notification policy", () => {
   test.each([
     ["in_app", 1, 0],
@@ -53,10 +63,7 @@ describe("notification policy", () => {
   ] as const)("delivers %s without rerouting", async (target, inAppCalls, osCalls) => {
     const harness = createHarness(target);
 
-    await harness.policy.dispatch(occurrence, {
-      appFocused: false,
-      externalDeliveryOwner: true,
-    });
+    await dispatchAsOwner(harness);
 
     expect(harness.inApp).toHaveBeenCalledTimes(inAppCalls);
     expect(harness.os).toHaveBeenCalledTimes(osCalls);
@@ -66,10 +73,7 @@ describe("notification policy", () => {
   test("delivers nothing when the kind is disabled", async () => {
     const harness = createHarness("both", false);
 
-    await harness.policy.dispatch(occurrence, {
-      appFocused: false,
-      externalDeliveryOwner: true,
-    });
+    await dispatchAsOwner(harness);
 
     expect(harness.inApp).not.toHaveBeenCalled();
     expect(harness.os).not.toHaveBeenCalled();
@@ -79,10 +83,7 @@ describe("notification policy", () => {
   test("suppresses OS and sound while focused but keeps in-app delivery", async () => {
     const harness = createHarness("both");
 
-    await harness.policy.dispatch(occurrence, {
-      appFocused: true,
-      externalDeliveryOwner: true,
-    });
+    await dispatchAsOwner(harness, true);
 
     expect(harness.inApp).toHaveBeenCalledTimes(1);
     expect(harness.os).not.toHaveBeenCalled();
@@ -92,10 +93,7 @@ describe("notification policy", () => {
   test("lets only the external owner deliver OS and sound", async () => {
     const harness = createHarness("both");
 
-    await harness.policy.dispatch(occurrence, {
-      appFocused: false,
-      externalDeliveryOwner: false,
-    });
+    await harness.policy.dispatch(occurrence, { phase: "local" });
 
     expect(harness.inApp).toHaveBeenCalledTimes(1);
     expect(harness.os).not.toHaveBeenCalled();
@@ -105,14 +103,8 @@ describe("notification policy", () => {
   test("delivers local once and external once when leadership replays an occurrence", async () => {
     const harness = createHarness("both");
 
-    await harness.policy.dispatch(occurrence, {
-      appFocused: false,
-      externalDeliveryOwner: false,
-    });
-    await harness.policy.dispatch(occurrence, {
-      appFocused: false,
-      externalDeliveryOwner: true,
-    });
+    await harness.policy.dispatch(occurrence, { phase: "local" });
+    await harness.policy.dispatch(occurrence, { phase: "external", appFocused: false });
 
     expect(harness.inApp).toHaveBeenCalledTimes(1);
     expect(harness.os).toHaveBeenCalledTimes(1);
@@ -122,14 +114,8 @@ describe("notification policy", () => {
   test("uses the current focus state when leadership changes", async () => {
     const harness = createHarness("both");
 
-    await harness.policy.dispatch(occurrence, {
-      appFocused: false,
-      externalDeliveryOwner: false,
-    });
-    await harness.policy.dispatch(occurrence, {
-      appFocused: true,
-      externalDeliveryOwner: true,
-    });
+    await harness.policy.dispatch(occurrence, { phase: "local" });
+    await harness.policy.dispatch(occurrence, { phase: "external", appFocused: true });
 
     expect(harness.inApp).toHaveBeenCalledTimes(1);
     expect(harness.os).not.toHaveBeenCalled();
@@ -138,10 +124,8 @@ describe("notification policy", () => {
 
   test("deduplicates each semantic occurrence", async () => {
     const harness = createHarness("both");
-    const context = { appFocused: false, externalDeliveryOwner: true };
-
-    await harness.policy.dispatch(occurrence, context);
-    await harness.policy.dispatch(occurrence, context);
+    await dispatchAsOwner(harness);
+    await dispatchAsOwner(harness);
 
     expect(harness.inApp).toHaveBeenCalledTimes(1);
     expect(harness.os).toHaveBeenCalledTimes(1);
@@ -154,10 +138,7 @@ describe("notification policy", () => {
       throw new Error("native delivery failed");
     });
 
-    await harness.policy.dispatch(occurrence, {
-      appFocused: false,
-      externalDeliveryOwner: true,
-    });
+    await dispatchAsOwner(harness);
 
     expect(harness.inApp).toHaveBeenCalledTimes(1);
     expect(harness.sound).toHaveBeenCalledTimes(1);

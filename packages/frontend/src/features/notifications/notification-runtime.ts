@@ -14,7 +14,12 @@ import {
   createSonnerNotificationAdapter,
 } from "./notification-delivery";
 import { prepareNotificationOccurrence } from "./notification-occurrence";
-import { createNotificationPolicy, type NotificationDispatchFailure } from "./notification-policy";
+import {
+  createNotificationPolicy,
+  type InAppNotificationAdapter,
+  type NotificationDispatchFailure,
+  type SoundNotificationAdapter,
+} from "./notification-policy";
 
 export const createNotificationRuntime = ({
   bridge,
@@ -22,16 +27,20 @@ export const createNotificationRuntime = ({
   navigate,
   onFailure,
   onOsShown = () => {},
+  inApp: inAppOverride,
+  sound: soundOverride,
 }: {
   bridge: NotificationBridge;
   loadSettings(): Promise<NotificationSettings>;
   navigate(target: NotificationNavigationTarget): Promise<void>;
   onFailure(failure: NotificationDispatchFailure): void;
   onOsShown?: () => void;
+  inApp?: InAppNotificationAdapter;
+  sound?: SoundNotificationAdapter;
 }) => {
-  const inApp = createSonnerNotificationAdapter({ navigate });
+  const inApp = inAppOverride ?? createSonnerNotificationAdapter({ navigate });
   const os = createShellOsNotificationAdapter(bridge, onOsShown);
-  const sound = createCuelumeNotificationSoundAdapter();
+  const sound = soundOverride ?? createCuelumeNotificationSoundAdapter();
   const policy = createNotificationPolicy({
     loadSettings,
     inApp,
@@ -63,10 +72,10 @@ export const createNotificationRuntime = ({
     }
   };
 
-  const reportOsFailure = (occurrence: NotificationOccurrence, cause: unknown): void => {
+  const reportCoordinationFailure = (occurrence: NotificationOccurrence, cause: unknown): void => {
     const message = cause instanceof Error ? cause.message : String(cause);
     onFailure({
-      channel: "os",
+      channel: "coordination",
       kind: occurrence.kind,
       occurrenceId: occurrence.occurrenceId,
       repoPath: occurrence.repoPath,
@@ -76,27 +85,23 @@ export const createNotificationRuntime = ({
 
   const dispatch = async (rawOccurrence: NotificationOccurrence): Promise<void> => {
     const occurrence = notificationOccurrenceSchema.parse(rawOccurrence);
-    await policy.dispatch(occurrence, {
-      appFocused: false,
-      externalDeliveryOwner: false,
-    });
+    const externalPlan = await policy.dispatch(occurrence, { phase: "local" });
+    if (!externalPlan) return;
     try {
       await bridge.withExternalDeliveryOwnership(occurrence.occurrenceId, async (owner) => {
         if (!owner) return;
-        let appFocused: boolean;
-        try {
-          appFocused = await bridge.isAppFocused();
-        } catch (cause) {
-          reportOsFailure(occurrence, cause);
-          return;
+        let appFocused: boolean | undefined;
+        if (externalPlan.requiresFocus) {
+          try {
+            appFocused = await bridge.isAppFocused();
+          } catch (cause) {
+            reportCoordinationFailure(occurrence, cause);
+          }
         }
-        await policy.dispatch(occurrence, {
-          appFocused,
-          externalDeliveryOwner: true,
-        });
+        await policy.dispatch(occurrence, { phase: "external", appFocused });
       });
     } catch (cause) {
-      reportOsFailure(occurrence, cause);
+      reportCoordinationFailure(occurrence, cause);
     }
   };
 

@@ -83,7 +83,7 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
             occurrenceId: failure.occurrenceId,
             repoPath: failure.repoPath,
           });
-          if (failure.channel === "os") {
+          if (failure.channel === "os" || failure.channel === "coordination") {
             setOsFailure((current) => selectOsFailureState(current, failure));
           }
         },

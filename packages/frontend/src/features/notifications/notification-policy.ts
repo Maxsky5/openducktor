@@ -8,12 +8,11 @@ import {
 import { buildNotificationCopy, type NotificationCopy } from "./notification-copy";
 import { resolveNotificationCue } from "./notification-sound";
 
-export type NotificationDispatchContext = {
-  appFocused: boolean;
-  externalDeliveryOwner: boolean;
-};
+export type NotificationDispatchContext =
+  | { phase: "local" }
+  | { phase: "external"; appFocused: boolean | undefined };
 
-type InAppNotificationAdapter = {
+export type InAppNotificationAdapter = {
   deliver(copy: NotificationCopy, occurrence: NotificationOccurrence): Promise<void>;
 };
 
@@ -21,12 +20,16 @@ type OsNotificationAdapter = {
   deliver(copy: NotificationCopy, occurrence: NotificationOccurrence): Promise<void>;
 };
 
-type SoundNotificationAdapter = {
+export type SoundNotificationAdapter = {
   play(cue: NotificationCue, volumePercent: number): Promise<void>;
 };
 
+export type NotificationExternalDeliveryPlan = {
+  requiresFocus: boolean;
+};
+
 export type NotificationDispatchFailure = {
-  channel: "in_app" | "os" | "sound" | "settings";
+  channel: "coordination" | "in_app" | "os" | "sound" | "settings";
   kind: NotificationOccurrence["kind"];
   occurrenceId: string;
   repoPath: string;
@@ -113,40 +116,45 @@ export const createNotificationPolicy = ({
   const dispatch = async (
     rawOccurrence: NotificationOccurrence,
     context: NotificationDispatchContext,
-  ): Promise<void> => {
+  ): Promise<NotificationExternalDeliveryPlan | null> => {
     const occurrence = notificationOccurrenceSchema.parse(rawOccurrence);
     const settings = await loadSettingsSnapshot(occurrence);
-    if (!settings) return;
+    if (!settings) return null;
 
     const kindSettings = settings.kinds[occurrence.kind];
     if (!kindSettings.enabled) {
-      return;
+      return null;
     }
 
     const copy = buildNotificationCopy(occurrence);
     const deliveries: PendingDelivery[] = [];
-    if (targetIncludesInApp(kindSettings.target)) {
+    if (context.phase === "local" && targetIncludesInApp(kindSettings.target)) {
       addDelivery(occurrence.occurrenceId, deliveries, {
         channel: "in_app",
         run: () => inApp.deliver(copy, occurrence),
       });
     }
 
-    const suppressOs = context.appFocused && settings.osFocus === "suppress_if_focused";
-    if (context.externalDeliveryOwner && targetIncludesOs(kindSettings.target) && !suppressOs) {
-      addDelivery(occurrence.occurrenceId, deliveries, {
-        channel: "os",
-        run: () => os.deliver(copy, occurrence),
-      });
+    const osSelected = targetIncludesOs(kindSettings.target);
+    const cue = resolveNotificationCue(kindSettings.sound, settings.globalCue);
+    if (context.phase === "external" && osSelected) {
+      const canDeliverOs = settings.osFocus === "always_send" || context.appFocused === false;
+      if (canDeliverOs) {
+        addDelivery(occurrence.occurrenceId, deliveries, {
+          channel: "os",
+          run: () => os.deliver(copy, occurrence),
+        });
+      }
     }
 
-    const cue = resolveNotificationCue(kindSettings.sound, settings.globalCue);
-    const muteSound = context.appFocused && settings.soundFocus === "mute_while_focused";
-    if (context.externalDeliveryOwner && cue && !muteSound) {
-      addDelivery(occurrence.occurrenceId, deliveries, {
-        channel: "sound",
-        run: () => sound.play(cue, settings.volumePercent),
-      });
+    if (context.phase === "external" && cue) {
+      const canPlaySound = settings.soundFocus === "always_play" || context.appFocused === false;
+      if (canPlaySound) {
+        addDelivery(occurrence.occurrenceId, deliveries, {
+          channel: "sound",
+          run: () => sound.play(cue, settings.volumePercent),
+        });
+      }
     }
 
     const results = await Promise.allSettled(deliveries.map(({ run }) => run()));
@@ -158,6 +166,14 @@ export const createNotificationPolicy = ({
         }
       }
     }
+
+    if (context.phase === "external") return null;
+    if (!osSelected && !cue) return null;
+    return {
+      requiresFocus:
+        (osSelected && settings.osFocus === "suppress_if_focused") ||
+        (Boolean(cue) && settings.soundFocus === "mute_while_focused"),
+    };
   };
 
   return { dispatch };

@@ -19,8 +19,13 @@ function NotificationFailurePromptHost(): ReactElement {
     () => openSettings({ deepLink: { kind: "global", section: "notifications" } }),
     [openSettings],
   );
+  const reloadApplication = useCallback(() => window.location.reload(), []);
   return (
-    <NotificationFailurePrompt failure={osFailure} onOpenSettings={openNotificationSettings} />
+    <NotificationFailurePrompt
+      failure={osFailure}
+      onOpenSettings={openNotificationSettings}
+      onReload={reloadApplication}
+    />
   );
 }
 
