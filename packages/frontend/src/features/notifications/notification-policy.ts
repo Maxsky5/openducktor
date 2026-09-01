@@ -43,7 +43,12 @@ type CreateNotificationPolicyOptions = {
 
 type PendingDelivery = {
   channel: NotificationDispatchFailure["channel"];
-  run: Promise<void>;
+  run(): Promise<void>;
+};
+
+type NotificationDispatchSnapshot = {
+  appFocused: boolean;
+  settings: NotificationSettings;
 };
 
 const errorMessage = (cause: unknown): string => {
@@ -66,7 +71,8 @@ export const createNotificationPolicy = ({
   sound,
   onFailure,
 }: CreateNotificationPolicyOptions) => {
-  const seenOccurrenceIds = new Set<string>();
+  const dispatchSnapshots = new Map<string, Promise<NotificationDispatchSnapshot | null>>();
+  const deliveredChannels = new Map<string, Set<PendingDelivery["channel"]>>();
 
   const reportFailure = (
     occurrence: NotificationOccurrence,
@@ -82,23 +88,45 @@ export const createNotificationPolicy = ({
     });
   };
 
+  const loadDispatchSnapshot = (
+    occurrence: NotificationOccurrence,
+    appFocused: boolean,
+  ): Promise<NotificationDispatchSnapshot | null> => {
+    const existing = dispatchSnapshots.get(occurrence.occurrenceId);
+    if (existing) return existing;
+    const snapshot = loadSettings()
+      .then((settings) => ({
+        appFocused,
+        settings: notificationSettingsSchema.parse(settings),
+      }))
+      .catch((cause: unknown) => {
+        reportFailure(occurrence, "settings", cause);
+        return null;
+      });
+    dispatchSnapshots.set(occurrence.occurrenceId, snapshot);
+    return snapshot;
+  };
+
+  const addDelivery = (
+    occurrenceId: string,
+    deliveries: PendingDelivery[],
+    delivery: PendingDelivery,
+  ): void => {
+    const delivered = deliveredChannels.get(occurrenceId) ?? new Set();
+    if (delivered.has(delivery.channel)) return;
+    delivered.add(delivery.channel);
+    deliveredChannels.set(occurrenceId, delivered);
+    deliveries.push(delivery);
+  };
+
   const dispatch = async (
     rawOccurrence: NotificationOccurrence,
     context: NotificationDispatchContext,
   ): Promise<void> => {
     const occurrence = notificationOccurrenceSchema.parse(rawOccurrence);
-    if (seenOccurrenceIds.has(occurrence.occurrenceId)) {
-      return;
-    }
-    seenOccurrenceIds.add(occurrence.occurrenceId);
-
-    let settings: NotificationSettings;
-    try {
-      settings = notificationSettingsSchema.parse(await loadSettings());
-    } catch (cause) {
-      reportFailure(occurrence, "settings", cause);
-      return;
-    }
+    const snapshot = await loadDispatchSnapshot(occurrence, context.appFocused);
+    if (!snapshot) return;
+    const { appFocused, settings } = snapshot;
 
     const kindSettings = settings.kinds[occurrence.kind];
     if (!kindSettings.enabled) {
@@ -108,24 +136,30 @@ export const createNotificationPolicy = ({
     const copy = buildNotificationCopy(occurrence);
     const deliveries: PendingDelivery[] = [];
     if (targetIncludesInApp(kindSettings.target)) {
-      deliveries.push({ channel: "in_app", run: inApp.deliver(copy, occurrence) });
-    }
-
-    const suppressOs = context.appFocused && settings.osFocus === "suppress_if_focused";
-    if (context.externalDeliveryOwner && targetIncludesOs(kindSettings.target) && !suppressOs) {
-      deliveries.push({ channel: "os", run: os.deliver(copy, occurrence) });
-    }
-
-    const cue = resolveNotificationCue(kindSettings.sound, settings.globalCue);
-    const muteSound = context.appFocused && settings.soundFocus === "mute_while_focused";
-    if (context.externalDeliveryOwner && cue && !muteSound) {
-      deliveries.push({
-        channel: "sound",
-        run: sound.play(cue, settings.volumePercent),
+      addDelivery(occurrence.occurrenceId, deliveries, {
+        channel: "in_app",
+        run: () => inApp.deliver(copy, occurrence),
       });
     }
 
-    const results = await Promise.allSettled(deliveries.map(({ run }) => run));
+    const suppressOs = appFocused && settings.osFocus === "suppress_if_focused";
+    if (context.externalDeliveryOwner && targetIncludesOs(kindSettings.target) && !suppressOs) {
+      addDelivery(occurrence.occurrenceId, deliveries, {
+        channel: "os",
+        run: () => os.deliver(copy, occurrence),
+      });
+    }
+
+    const cue = resolveNotificationCue(kindSettings.sound, settings.globalCue);
+    const muteSound = appFocused && settings.soundFocus === "mute_while_focused";
+    if (context.externalDeliveryOwner && cue && !muteSound) {
+      addDelivery(occurrence.occurrenceId, deliveries, {
+        channel: "sound",
+        run: () => sound.play(cue, settings.volumePercent),
+      });
+    }
+
+    const results = await Promise.allSettled(deliveries.map(({ run }) => run()));
     for (const [index, result] of results.entries()) {
       if (result.status === "rejected") {
         const delivery = deliveries[index];

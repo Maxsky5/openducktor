@@ -2,12 +2,15 @@ import { describe, expect, test } from "bun:test";
 import type { NotificationOccurrence } from "@openducktor/contracts";
 import { createBrowserNotificationCoordinator } from "./browser-notification-coordinator";
 
+type CoordinatorMessage =
+  | { type: "occurrence"; occurrence: NotificationOccurrence }
+  | { type: "external_delivery_complete"; occurrenceId: string };
+
 type LockRequest = {
   name: string;
   mode: "exclusive" | "shared";
-  ifAvailable: boolean;
   signal: AbortSignal | undefined;
-  callback: (lock: { name: string } | null) => Promise<void>;
+  callback: (lock: { name: string }) => Promise<void>;
   resolve(): void;
   reject(cause: Error): void;
   active: boolean;
@@ -16,16 +19,17 @@ type LockRequest = {
 class FakeLockManager {
   private readonly requests: LockRequest[] = [];
 
+  constructor(private paused = false) {}
+
   request(
     name: string,
-    options: { mode: "exclusive" | "shared"; signal?: AbortSignal; ifAvailable?: boolean },
-    callback: (lock: { name: string } | null) => Promise<void>,
+    options: { mode: "exclusive" | "shared"; signal?: AbortSignal },
+    callback: (lock: { name: string }) => Promise<void>,
   ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const request: LockRequest = {
         name,
         mode: options.mode,
-        ifAvailable: options.ifAvailable ?? false,
         signal: options.signal,
         callback,
         resolve,
@@ -54,17 +58,25 @@ class FakeLockManager {
     };
   }
 
+  resume(): void {
+    this.paused = false;
+    for (const name of new Set(this.requests.map((request) => request.name))) {
+      this.drain(name);
+    }
+  }
+
+  heldCount(): number {
+    return this.requests.filter((request) => request.active).length;
+  }
+
   private drain(name: string): void {
+    if (this.paused) {
+      return;
+    }
     const matching = this.requests.filter((request) => request.name === name);
     const active = matching.filter((request) => request.active);
     const pending = matching.filter((request) => !request.active);
     if (pending.length === 0 || active.some((request) => request.mode === "exclusive")) {
-      const unavailable = pending.filter((request) => request.ifAvailable);
-      for (const request of unavailable) {
-        const index = this.requests.indexOf(request);
-        if (index >= 0) this.requests.splice(index, 1);
-        void request.callback(null).then(request.resolve, request.reject);
-      }
       return;
     }
     const next = pending[0];
@@ -109,7 +121,7 @@ class FakeBroadcastChannel {
 
   constructor(private readonly hub: FakeBroadcastHub) {}
 
-  postMessage(value: NotificationOccurrence): void {
+  postMessage(value: CoordinatorMessage): void {
     for (const channel of this.hub.channels) {
       if (channel !== this) {
         channel.emit(value);
@@ -130,7 +142,7 @@ class FakeBroadcastChannel {
     this.listeners.clear();
   }
 
-  private emit(value: NotificationOccurrence): void {
+  private emit(value: CoordinatorMessage): void {
     const event = new MessageEvent("message", { data: value });
     for (const listener of this.listeners) {
       listener(event);
@@ -168,6 +180,10 @@ const waitForAsync = async (condition: () => Promise<boolean>): Promise<void> =>
   throw new Error("Condition was not met.");
 };
 
+const waitFor = async (condition: () => boolean): Promise<void> => {
+  await waitForAsync(async () => condition());
+};
+
 const occurrence: NotificationOccurrence = {
   occurrenceId: "workflow.closed:/repo:task-1:event-1",
   kind: "workflow.closed",
@@ -179,34 +195,8 @@ const occurrence: NotificationOccurrence = {
 };
 
 describe("browser notification coordinator", () => {
-  test("claims external delivery once when an occurrence arrives during startup", async () => {
-    const locks = new FakeLockManager();
-    const hub = new FakeBroadcastHub();
-    const first = createBrowserNotificationCoordinator({
-      channel: hub.createChannel(),
-      locks,
-      focusDocument: { hasFocus: () => false },
-      focusWindow: new FakeFocusWindow(),
-    });
-    const second = createBrowserNotificationCoordinator({
-      channel: hub.createChannel(),
-      locks,
-      focusDocument: { hasFocus: () => false },
-      focusWindow: new FakeFocusWindow(),
-    });
-
-    expect(
-      await Promise.all([
-        first.claimExternalDelivery(occurrence.occurrenceId),
-        second.claimExternalDelivery(occurrence.occurrenceId),
-      ]),
-    ).toEqual([true, false]);
-    first.dispose();
-    second.dispose();
-  });
-
-  test("claims a new occurrence without an ownerless window after disposal", async () => {
-    const locks = new FakeLockManager();
+  test("delivers an occurrence once when leadership starts after publication", async () => {
+    const locks = new FakeLockManager(true);
     const hub = new FakeBroadcastHub();
     const first = createBrowserNotificationCoordinator({
       channel: hub.createChannel(),
@@ -221,16 +211,88 @@ describe("browser notification coordinator", () => {
       focusWindow: new FakeFocusWindow(),
     });
     const received: NotificationOccurrence[] = [];
-    second.subscribeOccurrences((value) => received.push(value));
+    first.subscribeOccurrences((value) => {
+      if (!first.isExternalDeliveryOwner()) return;
+      received.push(value);
+      first.completeExternalDelivery(value.occurrenceId);
+    });
 
-    expect(await first.claimExternalDelivery(occurrence.occurrenceId)).toBe(true);
-    expect(first.getFailureMessage()).toBeNull();
-    first.publishOccurrence(occurrence);
+    second.publishOccurrence(occurrence);
+    expect(received).toEqual([]);
+    locks.resume();
+    await waitFor(() => received.length === 1);
+
     expect(received).toEqual([occurrence]);
+    expect(locks.heldCount()).toBe(1);
+    first.dispose();
+    second.dispose();
+  });
+
+  test("replays an occurrence published during owner handoff", async () => {
+    const locks = new FakeLockManager();
+    const hub = new FakeBroadcastHub();
+    const first = createBrowserNotificationCoordinator({
+      channel: hub.createChannel(),
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+    });
+    const second = createBrowserNotificationCoordinator({
+      channel: hub.createChannel(),
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+    });
+    await waitFor(() => first.isExternalDeliveryOwner());
+    const received: NotificationOccurrence[] = [];
+    second.subscribeOccurrences((value) => {
+      received.push(value);
+      second.completeExternalDelivery(value.occurrenceId);
+    });
 
     first.dispose();
-    expect(await second.claimExternalDelivery(`${occurrence.occurrenceId}:next`)).toBe(true);
+    second.publishOccurrence(occurrence);
+    await waitFor(() => received.length === 1);
+
+    expect(received).toEqual([occurrence]);
+    expect(second.isExternalDeliveryOwner()).toBe(true);
     second.dispose();
+  });
+
+  test("uses one live external delivery lock for many occurrences", async () => {
+    const locks = new FakeLockManager();
+    const hub = new FakeBroadcastHub();
+    const owner = createBrowserNotificationCoordinator({
+      channel: hub.createChannel(),
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+    });
+    const publisher = createBrowserNotificationCoordinator({
+      channel: hub.createChannel(),
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+    });
+    const received: NotificationOccurrence[] = [];
+    owner.subscribeOccurrences((value) => {
+      received.push(value);
+      owner.completeExternalDelivery(value.occurrenceId);
+    });
+    await waitFor(() => owner.isExternalDeliveryOwner());
+
+    for (let index = 0; index < 100; index += 1) {
+      publisher.publishOccurrence({
+        ...occurrence,
+        occurrenceId: `${occurrence.occurrenceId}:${index}`,
+      });
+    }
+    await waitFor(() => received.length === 100);
+
+    expect(received).toHaveLength(100);
+    expect(locks.heldCount()).toBe(1);
+    owner.dispose();
+    publisher.dispose();
   });
 
   test("counts any focused tab and releases focus on blur", async () => {

@@ -21,12 +21,31 @@ const createCoordinator = () => ({
   getFailureMessage: mock((): string | null => null),
   publishOccurrence: mock((_occurrence: NotificationOccurrence) => {}),
   subscribeOccurrences: mock((_listener: (value: NotificationOccurrence) => void) => () => {}),
-  claimExternalDelivery: mock(async (_occurrenceId: string) => true),
+  isExternalDeliveryOwner: mock(() => true),
+  completeExternalDelivery: mock((_occurrenceId: string) => {}),
   isAnyTabFocused: mock(async () => false),
   dispose: mock(() => {}),
 });
 
 describe("browser notification bridge", () => {
+  test("completes external delivery ownership after dispatch fails", async () => {
+    const coordinator = createCoordinator();
+    const bridge = createBrowserNotificationBridge({
+      NativeNotification: null,
+      coordinator,
+      focusWindow: () => {},
+    });
+    const expected = new Error("delivery failed");
+
+    await expect(
+      bridge.withExternalDeliveryOwnership(occurrence.occurrenceId, async (owner) => {
+        expect(owner).toBe(true);
+        throw expected;
+      }),
+    ).rejects.toBe(expected);
+    expect(coordinator.completeExternalDelivery).toHaveBeenCalledWith(occurrence.occurrenceId);
+  });
+
   test("does not request permission until the explicit action", async () => {
     let permission: NotificationPermission = "default";
     const requestPermission = mock(async () => {

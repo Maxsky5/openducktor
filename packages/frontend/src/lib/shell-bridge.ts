@@ -84,7 +84,10 @@ export type NotificationBridge = {
   getCapability(): Promise<NotificationOsCapability>;
   requestPermission(): Promise<NotificationOsCapability>;
   isAppFocused(): Promise<boolean>;
-  claimExternalDelivery(occurrenceId: string): Promise<boolean>;
+  withExternalDeliveryOwnership(
+    occurrenceId: string,
+    dispatch: (externalDeliveryOwner: boolean) => Promise<void>,
+  ): Promise<void>;
   showOsNotification(request: NotificationOsDeliveryRequest): Promise<NotificationDeliveryResult>;
   publishOccurrence(occurrence: NotificationOccurrence): void;
   subscribeOccurrences(listener: (occurrence: NotificationOccurrence) => void): () => void;
@@ -188,7 +191,7 @@ export const createUnavailableShellBridge = (): ShellBridge => ({
       canGuaranteeSilent: false,
     }),
     isAppFocused: async () => false,
-    claimExternalDelivery: async () => false,
+    withExternalDeliveryOwnership: async (_occurrenceId, dispatch) => dispatch(false),
     showOsNotification: async () => ({
       status: "unsupported",
       message: "OS notifications are unavailable because the OpenDucktor shell is not configured.",
