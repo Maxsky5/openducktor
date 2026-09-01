@@ -74,23 +74,16 @@ export const createBrowserNotificationBridge = ({
         failureMessage: "This browser cannot coordinate notifications and sound across tabs.",
       };
     }
-    const coordinationFailure = coordinator.getFailureMessage();
-    if (coordinationFailure) {
-      return {
-        platform: "browser",
-        supported: false,
-        permission: resolvePermission(NativeNotification.permission),
-        canGuaranteeSilent,
-        failureMessage: `Browser notification coordination failed: ${coordinationFailure}`,
-      };
-    }
     const capability: NotificationOsCapability = {
       platform: "browser",
       supported: true,
       permission: resolvePermission(NativeNotification.permission),
       canGuaranteeSilent,
     };
-    if (latestFailureMessage) {
+    const coordinationFailure = coordinator.getFailureMessage();
+    if (coordinationFailure) {
+      capability.failureMessage = `Browser notification coordination failed: ${coordinationFailure}`;
+    } else if (latestFailureMessage) {
       capability.failureMessage = latestFailureMessage;
     }
     return capability;
@@ -139,6 +132,7 @@ export const createBrowserNotificationBridge = ({
         settled = true;
         if (result.status === "shown") {
           latestFailureMessage = undefined;
+          coordinator.clearFailure();
         } else if (result.status === "failed") {
           latestFailureMessage = result.message;
         }

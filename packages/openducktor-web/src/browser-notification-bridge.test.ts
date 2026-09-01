@@ -19,6 +19,7 @@ const occurrence: NotificationOccurrence = {
 const createCoordinator = () => ({
   supported: true,
   getFailureMessage: mock((): string | null => null),
+  clearFailure: mock(() => {}),
   publishOccurrence: mock((_occurrence: NotificationOccurrence) => {}),
   subscribeOccurrences: mock((_listener: (value: NotificationOccurrence) => void) => () => {}),
   isExternalDeliveryOwner: mock(() => true),
@@ -82,6 +83,62 @@ describe("browser notification bridge", () => {
 
     expect(await bridge.requestPermission()).toMatchObject({ permission: "granted" });
     expect(requestPermission).toHaveBeenCalledTimes(1);
+  });
+
+  test("keeps recovery available after a coordination failure and clears it on success", async () => {
+    let failureMessage: string | null = "Lock snapshot failed.";
+    const coordinator = createCoordinator();
+    coordinator.getFailureMessage.mockImplementation(() => failureMessage);
+    coordinator.clearFailure.mockImplementation(() => {
+      failureMessage = null;
+    });
+    const instances: BrowserNotificationInstance[] = [];
+    class TestNotification implements BrowserNotificationInstance {
+      static permission: NotificationPermission = "granted";
+      static requestPermission = async (): Promise<NotificationPermission> => "granted";
+      onclick: ((event: Event) => void) | null = null;
+      onclose: ((event: Event) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      onshow: ((event: Event) => void) | null = null;
+      silent: boolean | null = null;
+      close(): void {}
+      constructor(_title: string, _options?: NotificationOptions) {
+        instances.push(this);
+      }
+    }
+    const bridge = createBrowserNotificationBridge({
+      NativeNotification: TestNotification,
+      coordinator,
+      canGuaranteeSilent: true,
+      focusWindow: () => {},
+    });
+
+    expect(await bridge.getCapability()).toEqual({
+      platform: "browser",
+      supported: true,
+      permission: "granted",
+      canGuaranteeSilent: true,
+      failureMessage: "Browser notification coordination failed: Lock snapshot failed.",
+    });
+
+    const delivery = bridge.showOsNotification({
+      occurrenceId: occurrence.occurrenceId,
+      title: "Notifications are working",
+      body: "This is an OS notification test.",
+      silent: true,
+      navigationTarget: occurrence.navigationTarget,
+    });
+    await Promise.resolve();
+    instances[0]?.onshow?.(new Event("show"));
+
+    await expect(delivery).resolves.toEqual({ status: "shown" });
+    expect(coordinator.clearFailure).toHaveBeenCalledTimes(1);
+    expect(await bridge.getCapability()).toEqual({
+      platform: "browser",
+      supported: true,
+      permission: "granted",
+      canGuaranteeSilent: true,
+    });
   });
 
   test("sends one silent notification and publishes its exact click target", async () => {

@@ -698,7 +698,7 @@ describe("browser notification coordinator", () => {
     joiningBridge.dispose();
   });
 
-  test("reports a lock snapshot failure without external delivery", async () => {
+  test("recovers from a lock snapshot failure on the next successful claim", async () => {
     const locks = new FakeLockManager();
     const hub = new FakeBroadcastHub();
     const owner = createBrowserNotificationCoordinator({
@@ -734,6 +734,14 @@ describe("browser notification coordinator", () => {
     expect(deliveries).toBe(0);
     expect(claimFailure).toEqual(new Error("Lock snapshot failed."));
     expect(owner.getFailureMessage()).toBe("Lock snapshot failed.");
+
+    publisher.publishOccurrence({
+      ...occurrence,
+      occurrenceId: `${occurrence.occurrenceId}:retry`,
+    });
+    await waitFor(() => deliveries === 1);
+
+    expect(owner.getFailureMessage()).toBeNull();
     owner.dispose();
     publisher.dispose();
   });

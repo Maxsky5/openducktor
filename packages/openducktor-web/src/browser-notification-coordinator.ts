@@ -46,6 +46,7 @@ type FocusWindow = {
 export type BrowserNotificationCoordinator = {
   readonly supported: boolean;
   getFailureMessage(): string | null;
+  clearFailure(): void;
   publishOccurrence(occurrence: NotificationOccurrence): void;
   subscribeOccurrences(listener: (occurrence: NotificationOccurrence) => void): () => void;
   isExternalDeliveryOwner(): boolean;
@@ -105,6 +106,7 @@ export const createBrowserNotificationCoordinator = ({
       supported: false,
       getFailureMessage: () =>
         "This browser cannot coordinate notifications and sound across tabs.",
+      clearFailure: () => {},
       publishOccurrence: () => {},
       subscribeOccurrences: () => () => {},
       isExternalDeliveryOwner: () => false,
@@ -237,6 +239,7 @@ export const createBrowserNotificationCoordinator = ({
     }
     registeredChannel.postMessage({ type: "external_delivery_claimed", occurrenceId });
     await Promise.all(acknowledgements);
+    failureMessage = null;
   };
 
   const trackClaimPropagation = (occurrenceId: string): Promise<void> => {
@@ -356,6 +359,9 @@ export const createBrowserNotificationCoordinator = ({
   return {
     supported,
     getFailureMessage: () => failureMessage,
+    clearFailure() {
+      failureMessage = null;
+    },
     publishOccurrence(occurrence) {
       const parsed = notificationOccurrenceSchema.parse(occurrence);
       if (!claimedOccurrences.has(parsed.occurrenceId)) {
