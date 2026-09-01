@@ -9,6 +9,8 @@ import type { TaskAssetQuarantine } from "../../ports/task-asset-file-port";
 export type QuarantineManifest = TaskAssetQuarantine & { version: 1 };
 
 const ACTIVE_PUBLICATIONS = new Set<string>();
+// Bun can race concurrent directory moves on Windows, so one process claims each source in order.
+const CLAIM_TAILS = new Map<string, Promise<string[]>>();
 const PUBLICATION_PREFIX = ".publishing-";
 
 const missingErrorSchema = z.object({ code: z.literal("ENOENT") }).passthrough();
@@ -57,6 +59,22 @@ const validateManifest = (value: JSONType): QuarantineManifest => {
     throw new Error("Task asset quarantine manifest is invalid.");
   }
   return parsed.data;
+};
+
+const queueClaim = async (
+  quarantineRoot: string,
+  claim: () => Promise<string[]>,
+): Promise<string[]> => {
+  const previous = CLAIM_TAILS.get(quarantineRoot) ?? Promise.resolve([]);
+  const current = previous.then(claim, claim);
+  CLAIM_TAILS.set(quarantineRoot, current);
+  try {
+    return await current;
+  } finally {
+    if (CLAIM_TAILS.get(quarantineRoot) === current) {
+      CLAIM_TAILS.delete(quarantineRoot);
+    }
+  }
 };
 
 export const createTaskAssetQuarantineFiles = ({
@@ -172,23 +190,25 @@ export const createTaskAssetQuarantineFiles = ({
       }
     },
     async claim(destinationRoot: string): Promise<string[]> {
-      const claimed: string[] = [];
-      await mkdir(destinationRoot, { recursive: true });
-      for (const quarantineId of await listIds({ ignoreMissingEntries: true })) {
-        const destinationPath = path.join(destinationRoot, quarantineId);
-        try {
-          await rename(root(quarantineId), destinationPath);
-        } catch (cause) {
-          if (!isMissing(cause)) {
-            throw cause;
+      return queueClaim(quarantineRoot, async () => {
+        const claimed: string[] = [];
+        await mkdir(destinationRoot, { recursive: true });
+        for (const quarantineId of await listIds({ ignoreMissingEntries: true })) {
+          const destinationPath = path.join(destinationRoot, quarantineId);
+          try {
+            await rename(root(quarantineId), destinationPath);
+          } catch (cause) {
+            if (!isMissing(cause)) {
+              throw cause;
+            }
+            continue;
           }
-          continue;
+          if (await existingStat(destinationPath)) {
+            claimed.push(quarantineId);
+          }
         }
-        if (await existingStat(destinationPath)) {
-          claimed.push(quarantineId);
-        }
-      }
-      return claimed;
+        return claimed;
+      });
     },
     async list(): Promise<TaskAssetQuarantine[]> {
       const manifests: TaskAssetQuarantine[] = [];

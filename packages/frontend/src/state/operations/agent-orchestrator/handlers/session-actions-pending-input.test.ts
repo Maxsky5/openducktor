@@ -206,7 +206,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     ).toEqual(childSession.selectedModel);
   });
 
-  test("rejects a subagent approval when its response session is not loaded", async () => {
+  test("routes a subagent approval before its response session is loaded", async () => {
     const childSession = buildSession({
       externalSessionId: "claude-child",
       runtimeKind: "claude",
@@ -236,12 +236,18 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     });
     const { actions, approvalReplies } = createPendingInputActionHarness([parentSession]);
 
-    await expect(
-      actions.replyAgentApproval(toAgentSessionIdentity(parentSession), request, "approve_once"),
-    ).rejects.toThrow(
-      "Cannot reply to pending input for session 'claude-child' because its repository context is unavailable.",
+    await actions.replyAgentApproval(
+      toAgentSessionIdentity(parentSession),
+      request,
+      "approve_once",
     );
-    expect(approvalReplies).toHaveLength(0);
+
+    expect(approvalReplies[0]).toMatchObject({
+      repoPath: "/active/repository",
+      externalSessionId: "claude-child",
+      runtimeKind: "claude",
+      workingDirectory: "/claude/session/repository",
+    });
   });
 
   test("routes a question through the generic host without annotating transcript state locally", async () => {
@@ -367,6 +373,41 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       parentSession,
       childSession,
     ]);
+
+    await actions.answerAgentQuestion(toAgentSessionIdentity(parentSession), request, [["yes"]]);
+
+    expect(questionReplies[0]).toMatchObject({
+      repoPath: "/active/repository",
+      externalSessionId: "claude-child",
+      runtimeKind: "claude",
+      workingDirectory: "/claude/session/repository",
+    });
+  });
+
+  test("routes a subagent question before its response session is loaded", async () => {
+    const childSession = {
+      externalSessionId: "claude-child",
+      runtimeKind: "claude" as const,
+      workingDirectory: "/claude/session/repository",
+      sessionAssociation: { kind: "repository" as const },
+    };
+    const request: AgentQuestionRequest = {
+      ...questionRequest("question-unloaded-child"),
+      responseSession: childSession,
+      source: {
+        kind: "subagent",
+        parentExternalSessionId: "claude-parent",
+        childExternalSessionId: childSession.externalSessionId,
+      },
+    };
+    const parentSession = buildSession({
+      externalSessionId: "claude-parent",
+      runtimeKind: "claude",
+      workingDirectory: "/claude/session/repository",
+      sessionAssociation: { kind: "repository" },
+      pendingQuestions: [request],
+    });
+    const { actions, questionReplies } = createPendingInputActionHarness([parentSession]);
 
     await actions.answerAgentQuestion(toAgentSessionIdentity(parentSession), request, [["yes"]]);
 

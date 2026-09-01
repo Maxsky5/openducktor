@@ -52,13 +52,15 @@ const preparePendingInputReply = ({
 }) => {
   const { responseSession } = resolveAgentPendingInputParticipants(currentSession, request);
   const responseState = dependencies.readSessionSnapshot(responseSession);
-  if (!responseState) {
+  if (!responseState && !request.responseSession) {
     throw new Error(
       `Cannot reply to pending input for session '${responseSession.externalSessionId}' because its repository context is unavailable.`,
     );
   }
 
-  markTurnUserAnchorIfMissing(dependencies, responseSession, responseState.selectedModel);
+  if (responseState) {
+    markTurnUserAnchorIfMissing(dependencies, responseSession, responseState.selectedModel);
+  }
   return responseSession;
 };
 
