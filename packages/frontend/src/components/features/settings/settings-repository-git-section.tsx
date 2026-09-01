@@ -1,4 +1,4 @@
-import type { GitProviderHealth, GitProviderRepository, RepoConfig } from "@openducktor/contracts";
+import type { GitProviderRepository, RepoConfig } from "@openducktor/contracts";
 import { Github, LoaderCircle, PencilLine, RefreshCcw } from "lucide-react";
 import type { ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -8,17 +8,31 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
+  type GithubCliStatus,
   type GithubRepositoryDraft,
+  type GitProviderHealthState,
   useRepositoryGitSectionModel,
 } from "./use-repository-git-section-model";
 
 type RepositoryGitSectionProps = {
   selectedRepoPath: string | null;
   selectedRepoConfig: RepoConfig | null;
-  providerHealth: GitProviderHealth | null;
+  providerHealth: GitProviderHealthState;
   disabled: boolean;
   onDetectGithubRepository: () => Promise<GitProviderRepository | null>;
   onUpdateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
+};
+
+const cliStatusBadgeVariant = (
+  status: Exclude<GithubCliStatus, "hidden">,
+): "success" | "danger" | "outline" => {
+  if (status === "installed") {
+    return "success";
+  }
+  if (status === "missing" || status === "error") {
+    return "danger";
+  }
+  return "outline";
 };
 
 type RepositoryGitStatusHeaderProps = {
@@ -200,6 +214,7 @@ export function RepositoryGitSection({
 }: RepositoryGitSectionProps): ReactElement {
   const {
     cliStatusLabel,
+    cliStatus,
     configuredProviderId,
     detectionMessage,
     githubEnabled,
@@ -209,7 +224,6 @@ export function RepositoryGitSection({
     githubReady,
     githubControlsDisabled,
     hasConfiguredNonGithubProvider,
-    hasGithubCli,
     isDetecting,
     isManualConfigOpen,
     providerStatusLabel,
@@ -276,7 +290,9 @@ export function RepositoryGitSection({
 
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant={githubEnabled ? "success" : "warning"}>{providerStatusLabel}</Badge>
-                <Badge variant={hasGithubCli ? "success" : "danger"}>{cliStatusLabel}</Badge>
+                {cliStatus === "hidden" ? null : (
+                  <Badge variant={cliStatusBadgeVariant(cliStatus)}>{cliStatusLabel}</Badge>
+                )}
                 {usesDefaultGithubHost ? null : <Badge variant="outline">{githubHost}</Badge>}
               </div>
 

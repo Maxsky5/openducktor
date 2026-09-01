@@ -10,11 +10,19 @@ import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 type UseRepositoryGitSectionModelArgs = {
   selectedRepoPath: string | null;
   selectedRepoConfig: RepoConfig | null;
-  providerHealth: GitProviderHealth | null;
+  providerHealth: GitProviderHealthState;
   disabled: boolean;
   onDetectGithubRepository: () => Promise<GitProviderRepository | null>;
   onUpdateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
 };
+
+export type GitProviderHealthState =
+  | { status: "idle" }
+  | { status: "pending" }
+  | { status: "error"; message: string }
+  | { status: "loaded"; health: GitProviderHealth };
+
+export type GithubCliStatus = "hidden" | "pending" | "error" | "installed" | "missing";
 
 export type GithubRepositoryDraft = {
   host: string;
@@ -76,6 +84,7 @@ type RepositoryGitSectionAction =
 
 type UseRepositoryGitSectionModelResult = {
   cliStatusLabel: string;
+  cliStatus: GithubCliStatus;
   detectionMessage: string | null;
   githubEnabled: boolean;
   githubHost: string;
@@ -85,7 +94,6 @@ type UseRepositoryGitSectionModelResult = {
   githubControlsDisabled: boolean;
   configuredProviderId: string | undefined;
   hasConfiguredNonGithubProvider: boolean;
-  hasGithubCli: boolean;
   isDetecting: boolean;
   isManualConfigOpen: boolean;
   providerStatusLabel: string;
@@ -299,7 +307,8 @@ export function useRepositoryGitSectionModel({
   const configuredProviderId = selectedRepoConfig?.git.provider?.id;
   const githubControlsDisabled = disabled || hasConfiguredNonGithubProvider;
   const githubEnabled = github.enabled ?? false;
-  const hasGithubCli = providerHealth?.executablePath != null;
+  const health = providerHealth.status === "loaded" ? providerHealth.health : null;
+  const hasGithubCli = health?.executablePath != null;
   const githubHost = github.repository?.host ?? "github.com";
   const usesDefaultGithubHost = githubHost === "github.com";
   const hasRepositoryCoordinates = Boolean(
@@ -308,8 +317,7 @@ export function useRepositoryGitSectionModel({
   const repositorySlug = hasRepositoryCoordinates
     ? `${github.repository?.owner}/${github.repository?.name}`
     : null;
-  const githubReady =
-    githubEnabled && hasRepositoryCoordinates && providerHealth?.available === true;
+  const githubReady = githubEnabled && hasRepositoryCoordinates && health?.available === true;
   let githubReadinessLabel = "Not ready";
   if (hasConfiguredNonGithubProvider) {
     githubReadinessLabel = "Unavailable";
@@ -323,14 +331,20 @@ export function useRepositoryGitSectionModel({
   } else if (!github.enabled) {
     githubReadinessMessage =
       "Enable GitHub for this repository to offer “Open pull request” during human approval.";
+  } else if (providerHealth.status === "pending") {
+    githubReadinessMessage = "Checking GitHub CLI, authentication, and repository mapping.";
+  } else if (providerHealth.status === "error") {
+    githubReadinessMessage = providerHealth.message;
+  } else if (providerHealth.status === "idle") {
+    githubReadinessMessage = "GitHub health has not been checked.";
   } else if (!hasGithubCli) {
     githubReadinessMessage = "Install GitHub CLI (`gh`) to enable provider-backed pull requests.";
   } else if (!hasRepositoryCoordinates) {
     githubReadinessMessage = "Repository host, owner, and name are still missing.";
-  } else if (providerHealth?.available) {
+  } else if (health?.available) {
     githubReadinessMessage = "GitHub pull requests are ready for this repository.";
   } else {
-    githubReadinessMessage = providerHealth?.reason ?? `GitHub is not ready for ${githubHost}.`;
+    githubReadinessMessage = health?.reason ?? `GitHub is not ready for ${githubHost}.`;
   }
 
   let providerStatusLabel = "Pull requests disabled";
@@ -339,7 +353,20 @@ export function useRepositoryGitSectionModel({
   } else if (githubEnabled) {
     providerStatusLabel = "Pull requests enabled";
   }
-  const cliStatusLabel = hasGithubCli ? "CLI installed" : "CLI missing";
+  let cliStatus: GithubCliStatus = "hidden";
+  let cliStatusLabel = "";
+  if (githubEnabled && !hasConfiguredNonGithubProvider) {
+    if (providerHealth.status === "pending") {
+      cliStatus = "pending";
+      cliStatusLabel = "Checking CLI";
+    } else if (providerHealth.status === "error") {
+      cliStatus = "error";
+      cliStatusLabel = "Health check failed";
+    } else if (providerHealth.status === "loaded") {
+      cliStatus = hasGithubCli ? "installed" : "missing";
+      cliStatusLabel = hasGithubCli ? "CLI installed" : "CLI missing";
+    }
+  }
   const repositorySectionContext = useMemo<RepositoryGitSectionContext>(
     () => ({
       hasRepositoryCoordinates,
@@ -528,6 +555,7 @@ export function useRepositoryGitSectionModel({
   ]);
 
   return {
+    cliStatus,
     cliStatusLabel,
     configuredProviderId,
     detectionMessage,
@@ -538,7 +566,6 @@ export function useRepositoryGitSectionModel({
     githubReadinessMessage,
     githubReady,
     hasConfiguredNonGithubProvider,
-    hasGithubCli,
     isDetecting,
     isManualConfigOpen,
     providerStatusLabel,

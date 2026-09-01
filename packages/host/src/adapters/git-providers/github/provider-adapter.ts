@@ -66,7 +66,7 @@ export class GithubProviderAdapter implements GitProviderPort {
         }),
       getByNumber: (input) =>
         Effect.gen(function* () {
-          const { repository } = yield* getMapping(input.repoConfig);
+          const repository = yield* getRepository(input.repoConfig);
           const pullRequest = yield* fetchGithubPullRequestByNumber(
             githubCli,
             input.repoConfig.repoPath,

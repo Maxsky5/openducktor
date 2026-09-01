@@ -1,7 +1,10 @@
 import { type GitProviderRepository, type TaskApprovalContext } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { checkoutBranch } from "../../../domain/task";
-import { HostValidationError } from "../../../effect/host-errors";
+import {
+  HostValidationError,
+  type HostValidationErrorAggregate,
+} from "../../../effect/host-errors";
 import { runGithubApi, type GithubCli } from "./cli";
 import {
   type GithubPullRequestContext,
@@ -12,12 +15,19 @@ import {
 } from "./pull-request-model";
 
 export {
-  GITHUB_PROVIDER_ID,
   type GithubPullBranchRef,
   type GithubPullRequestContext,
   type GithubPullResponse,
   type ResolvedPullRequest,
 } from "./pull-request-model";
+
+const toPullRequestValidationError = (cause: unknown): HostValidationErrorAggregate =>
+  cause instanceof HostValidationError
+    ? cause
+    : new HostValidationError({
+        message: cause instanceof Error ? cause.message : String(cause),
+        cause,
+      });
 
 const selectGithubPullRequestForBranch = (
   pullRequests: ResolvedPullRequest[],
@@ -60,19 +70,11 @@ export const findGithubPullRequestForBranch = (
     ]);
     const parsed = yield* Effect.try({
       try: () => parseGithubPullListResponse(payload),
-      catch: (cause) =>
-        new HostValidationError({
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause,
-        }),
+      catch: toPullRequestValidationError,
     });
     return yield* Effect.try({
       try: () => selectGithubPullRequestForBranch(parsed, sourceBranch, state),
-      catch: (cause) =>
-        new HostValidationError({
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause,
-        }),
+      catch: toPullRequestValidationError,
     });
   });
 export const fetchGithubPullRequestByNumber = (
@@ -89,11 +91,7 @@ export const fetchGithubPullRequestByNumber = (
     ]);
     return yield* Effect.try({
       try: () => parseGithubPullResponse(payload),
-      catch: (cause) =>
-        new HostValidationError({
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause,
-        }),
+      catch: toPullRequestValidationError,
     });
   });
 export const upsertGithubPullRequest = (
@@ -136,11 +134,7 @@ export const upsertGithubPullRequest = (
     const payload = yield* runGithubApi(githubCli, repoPath, context.repository.host, args);
     const pullRequest = yield* Effect.try({
       try: () => parseGithubPullResponse(payload),
-      catch: (cause) =>
-        new HostValidationError({
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause,
-        }),
+      catch: toPullRequestValidationError,
     });
     return pullRequest.record;
   });

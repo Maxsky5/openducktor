@@ -296,17 +296,23 @@ type GithubReviewThreadsReadInput = {
   pullRequestNumber: number;
 };
 
+type GithubReviewGraphqlVariable = {
+  flag: "-f" | "-F";
+  name: string;
+  value: string | number;
+};
+
 const runReviewGraphql = (
   input: GithubReviewThreadsReadInput,
   query: string,
-  variables: readonly { name: string; value: string | number }[],
+  variables: readonly GithubReviewGraphqlVariable[],
 ) =>
   runGithubApi(input.githubCli, input.repoPath, input.repository.host, [
     "api",
     "graphql",
     "-f",
     `query=${query}`,
-    ...variables.flatMap(({ name, value }) => ["-F", `${name}=${value}`]),
+    ...variables.flatMap(({ flag, name, value }) => [flag, `${name}=${value}`]),
   ]).pipe(
     Effect.mapError(
       (cause) =>
@@ -327,13 +333,13 @@ export const loadGithubReviewThreads = (input: GithubReviewThreadsReadInput) =>
     let threadsCursor: string | null = null;
 
     do {
-      const variables: { name: string; value: string | number }[] = [
-        { name: "owner", value: input.repository.owner },
-        { name: "name", value: input.repository.name },
-        { name: "number", value: input.pullRequestNumber },
+      const variables: GithubReviewGraphqlVariable[] = [
+        { flag: "-f", name: "owner", value: input.repository.owner },
+        { flag: "-f", name: "name", value: input.repository.name },
+        { flag: "-F", name: "number", value: input.pullRequestNumber },
       ];
       if (threadsCursor) {
-        variables.push({ name: "threadsCursor", value: threadsCursor });
+        variables.push({ flag: "-f", name: "threadsCursor", value: threadsCursor });
       }
       const payload = yield* runReviewGraphql(input, REVIEW_THREADS_QUERY, variables);
       const page = yield* Effect.try({
@@ -364,8 +370,8 @@ export const loadGithubReviewThreads = (input: GithubReviewThreadsReadInput) =>
             input,
             REVIEW_THREAD_COMMENTS_QUERY,
             [
-              { name: "threadId", value: commentPage.threadId },
-              { name: "commentsCursor", value: commentsCursor },
+              { flag: "-f", name: "threadId", value: commentPage.threadId },
+              { flag: "-f", name: "commentsCursor", value: commentsCursor },
             ],
           );
           const parsedCommentsPage: ParsedReviewThreadCommentsPage = yield* Effect.try({

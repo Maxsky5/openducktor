@@ -10,8 +10,8 @@ type RemoteParts = {
 };
 
 type RepositoryPath = {
-  name: string;
   owner: string;
+  name: string;
 };
 
 export function parseGitRepositoryUrl(remoteUrl: string): GitProviderRepository | null {
@@ -25,14 +25,13 @@ export function parseGitRepositoryUrl(remoteUrl: string): GitProviderRepository 
     return null;
   }
 
-  const host = remote.host.includes("@") ? (remote.host.split("@").at(-1) ?? "") : remote.host;
   const repository = parseRepositoryPath(remote.path);
-  if (!host.trim() || !repository) {
+  if (!remote.host.trim() || !repository) {
     return null;
   }
 
   return {
-    host: host.trim(),
+    host: remote.host.trim(),
     owner: repository.owner,
     name: repository.name,
   };

@@ -1,6 +1,10 @@
 import type { ReactElement } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { gitProviderHealthQueryOptions } from "@/state/queries/git-provider-health";
+import { errorMessage } from "@/lib/errors";
+import {
+  gitProviderHealthQueryOptions,
+  shouldLoadGitProviderHealth,
+} from "@/state/queries/git-provider-health";
 import type { SettingsContentFocusRequest } from "./settings-deep-link";
 import type { PromptRoleTabId, RepositorySectionId } from "./settings-modal-constants";
 import { RepositorySidebar } from "./settings-modal-sidebars";
@@ -11,6 +15,7 @@ import { RepositoryConfigurationSection } from "./settings-repository-configurat
 import { RepositoryGitSection } from "./settings-repository-git-section";
 import { RepositoryScriptsSection } from "./settings-repository-scripts-section";
 import type { SettingsModalController } from "./use-settings-modal-controller";
+import type { GitProviderHealthState } from "./use-repository-git-section-model";
 
 type SettingsRepositoryContentProps = {
   repositorySection: RepositorySectionId;
@@ -128,13 +133,25 @@ export function SettingsRepositoryContent({
     ? (repoScriptValidationErrorCountByWorkspaceId[selectedWorkspaceId] ?? 0)
     : 0;
   const selectedRepoPath = selectedWorkspace?.repoPath ?? "";
+  const loadProviderHealth = shouldLoadGitProviderHealth({
+    isGitSection: repositorySection === "git",
+    provider: selectedRepoConfig?.git.provider,
+    repoPath: selectedRepoPath,
+  });
   const providerHealthQuery = useQuery({
     ...gitProviderHealthQueryOptions(selectedRepoPath),
-    enabled:
-      repositorySection === "git" &&
-      selectedRepoConfig?.git.provider?.enabled === true &&
-      selectedRepoPath.length > 0,
+    enabled: loadProviderHealth,
   });
+  let providerHealth: GitProviderHealthState = { status: "idle" };
+  if (loadProviderHealth) {
+    if (providerHealthQuery.isPending) {
+      providerHealth = { status: "pending" };
+    } else if (providerHealthQuery.isError) {
+      providerHealth = { status: "error", message: errorMessage(providerHealthQuery.error) };
+    } else if (providerHealthQuery.data) {
+      providerHealth = { status: "loaded", health: providerHealthQuery.data };
+    }
+  }
 
   return (
     <div className="grid h-full lg:grid-cols-[240px_minmax(0,1fr)]">
@@ -193,7 +210,7 @@ export function SettingsRepositoryContent({
           <RepositoryGitSection
             selectedRepoPath={selectedWorkspace?.repoPath ?? null}
             selectedRepoConfig={selectedRepoConfig}
-            providerHealth={providerHealthQuery.data ?? null}
+            providerHealth={providerHealth}
             disabled={isInteractionDisabled}
             onDetectGithubRepository={controller.detectSelectedRepoGithubRepository}
             onUpdateSelectedRepoConfig={updateSelectedRepoConfig}

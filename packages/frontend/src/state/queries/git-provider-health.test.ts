@@ -1,7 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { GitProviderHealth } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
-import { gitProviderHealthQueryKeys, gitProviderHealthQueryOptions } from "./git-provider-health";
+import {
+  gitProviderHealthQueryKeys,
+  gitProviderHealthQueryOptions,
+  shouldLoadGitProviderHealth,
+} from "./git-provider-health";
 
 describe("git provider health query", () => {
   test("keys health by repository and loads it through the host", async () => {
@@ -25,6 +29,45 @@ describe("git provider health query", () => {
     ).resolves.toEqual(health);
     expect(gitProviderHealthQueryKeys.repo("/repo")).toEqual(["git-provider-health", "/repo"]);
     expect(workspaceGetGitProviderHealth).toHaveBeenCalledWith("/repo");
+    queryClient.clear();
+  });
+
+  test("does not load GitHub health for another provider", () => {
+    expect(
+      shouldLoadGitProviderHealth({
+        isGitSection: true,
+        provider: {
+          id: "gitlab",
+          enabled: true,
+          autoDetected: false,
+          repository: { host: "gitlab.com", owner: "acme", name: "widget" },
+        },
+        repoPath: "/repo",
+      }),
+    ).toBeFalse();
+  });
+
+  test("fails when the provider health read exceeds the diagnostics time limit", async () => {
+    const hostRead = Promise.withResolvers<GitProviderHealth>();
+    let runTimeout: (() => void) | undefined;
+    const scheduler = (task: () => void) => {
+      runTimeout = task;
+      return () => {};
+    };
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const query = queryClient.fetchQuery(
+      gitProviderHealthQueryOptions(
+        "/repo",
+        { workspaceGetGitProviderHealth: () => hostRead.promise },
+        scheduler,
+      ),
+    );
+
+    runTimeout?.();
+
+    await expect(query).rejects.toThrow("Timed out after 15000ms");
     queryClient.clear();
   });
 });

@@ -1101,6 +1101,21 @@ describe("createGithubPullRequestReviewReader", () => {
     ).toEqual(["thread-1-comment-1", "thread-1-comment-2", "thread-2-comment-1"]);
     expect(context.reviewThreads).toEqual({ openCount: 2 });
     expect(commands.filter((args) => args.includes("api"))).toHaveLength(4);
+    const graphqlVariables = commands
+      .filter((args) => args.includes("graphql"))
+      .flatMap((args) =>
+        args.flatMap((arg, index) =>
+          arg.includes("=") && (args[index - 1] === "-f" || args[index - 1] === "-F")
+            ? [[args[index - 1], arg]]
+            : [],
+        ),
+      );
+    expect(graphqlVariables).toContainEqual(["-f", "owner=openai"]);
+    expect(graphqlVariables).toContainEqual(["-f", "name=openducktor"]);
+    expect(graphqlVariables).toContainEqual(["-F", "number=42"]);
+    expect(graphqlVariables).toContainEqual(["-f", "threadId=thread-1"]);
+    expect(graphqlVariables).toContainEqual(["-f", "commentsCursor=comments-page-2"]);
+    expect(graphqlVariables).toContainEqual(["-f", "threadsCursor=threads-page-2"]);
   });
 
   test("loads independent pull request resources concurrently", async () => {

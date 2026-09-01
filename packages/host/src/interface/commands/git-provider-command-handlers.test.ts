@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import type { GitProviderService } from "../../application/git/git-provider-service";
+import { GitProviderRepositoryError } from "../../ports/git-provider-errors";
 import {
   type CreateHostCommandRouterInput,
   createEffectHostCommandRouter,
@@ -56,5 +57,30 @@ describe("createGitProviderCommandHandlers", () => {
       router.invoke("workspace_get_git_provider_health", { repoPath: "/repo" }),
     ).resolves.toMatchObject({ providerId: "github", available: true });
     expect(calls.at(-1)).toBe("/repo");
+  });
+
+  test("preserves typed provider failures", async () => {
+    const failure = new GitProviderRepositoryError({
+      providerId: "github",
+      reason: "no_matching_remote",
+      repoPath: "/repo",
+      message: "No matching GitHub remote.",
+      remoteNames: [],
+    });
+    const service: GitProviderService = {
+      detectRepository: () => Effect.fail(failure),
+      getHealth: () => Effect.die("unexpected health read"),
+    };
+    const router = createEffectHostCommandRouter({
+      handlers: createGitProviderCommandHandlers({ service }),
+    });
+
+    await expect(
+      Effect.runPromise(
+        router
+          .invoke("workspace_detect_github_repository", { repoPath: "/repo" })
+          .pipe(Effect.flip),
+      ),
+    ).resolves.toBe(failure);
   });
 });

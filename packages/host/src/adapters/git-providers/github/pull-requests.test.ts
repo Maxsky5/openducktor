@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
+import { HostValidationError } from "../../../effect/host-errors";
 import type { SystemCommandPort } from "../../../ports/system-command-port";
 import type { ToolDiscoveryPort } from "../../../ports/tool-discovery-port";
 import { createGithubCli } from "./cli";
 import { parseGithubPullListResponse, parseGithubPullResponse } from "./pull-request-model";
-import { findGithubPullRequestForBranch } from "./pull-requests";
+import { fetchGithubPullRequestByNumber, findGithubPullRequestForBranch } from "./pull-requests";
 
 const githubPullResponse = {
   number: 42,
@@ -18,6 +19,22 @@ const githubPullResponse = {
   head: { ref: "odt/task-42" },
   base: { ref: "main" },
 };
+
+const githubCliForPayload = (payload: string) =>
+  createGithubCli({
+    systemCommands: {
+      resolveCommandPath: (command) => Effect.succeed(command),
+      versionCommand: () => Effect.succeed("gh version 2.95.0"),
+      runCommandAllowFailure: () =>
+        Effect.succeed({ ok: true, stdout: payload, stderr: "", exitCode: 0 }),
+    },
+    toolDiscovery: {
+      discoverTool: () => Effect.die("unexpected discoverTool call"),
+      resolveTool: () => Effect.die("unexpected resolveTool call"),
+      resolveToolPath: () => Effect.succeed("gh"),
+      validateToolPath: () => Effect.die("unexpected validateToolPath call"),
+    },
+  });
 
 describe("GitHub pull request response parsing", () => {
   test("parses the exact gh response fields used by task state", () => {
@@ -52,6 +69,39 @@ describe("GitHub pull request response parsing", () => {
 });
 
 describe("findGithubPullRequestForBranch", () => {
+  test("preserves the field on malformed GitHub payloads", async () => {
+    const malformed = { ...githubPullResponse, head: { ref: 42 } };
+
+    const failure = await Effect.runPromise(
+      findGithubPullRequestForBranch(
+        githubCliForPayload(JSON.stringify([malformed])),
+        "/repo",
+        { host: "github.com", owner: "openai", name: "openducktor" },
+        "odt/task-42",
+        "open",
+      ).pipe(Effect.flip),
+    );
+
+    expect(failure).toBeInstanceOf(HostValidationError);
+    expect(failure).toMatchObject({ field: "head.ref" });
+  });
+
+  test("preserves the field when a pull request read returns malformed data", async () => {
+    const malformed = { ...githubPullResponse, head: { ref: 42 } };
+
+    const failure = await Effect.runPromise(
+      fetchGithubPullRequestByNumber(
+        githubCliForPayload(JSON.stringify(malformed)),
+        "/repo",
+        { host: "github.com", owner: "openai", name: "openducktor" },
+        42,
+      ).pipe(Effect.flip),
+    );
+
+    expect(failure).toBeInstanceOf(HostValidationError);
+    expect(failure).toMatchObject({ field: "head.ref" });
+  });
+
   test("disables inherited CLI color so gh api stdout remains parseable JSON", async () => {
     const commandCalls: Array<{
       args: string[];

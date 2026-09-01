@@ -64,6 +64,7 @@ export const createTaskPullRequestManagementUseCases = ({
           }),
         );
       }
+      yield* provider.repository().getMapping(repoConfig);
       const pullRequests = yield* provider.pullRequests();
       const pullRequest = yield* pullRequests.getByNumber({ repoConfig, number });
       yield* taskStore.setPullRequest({

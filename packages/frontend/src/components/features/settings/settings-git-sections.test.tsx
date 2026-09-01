@@ -5,6 +5,7 @@ import { act, createElement, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SettingsGitSection } from "./settings-git-section";
 import { RepositoryGitSection } from "./settings-repository-git-section";
+import type { GitProviderHealthState } from "./use-repository-git-section-model";
 
 const authenticatedGitProviderHealth: GitProviderHealth = {
   providerId: "github",
@@ -16,6 +17,11 @@ const authenticatedGitProviderHealth: GitProviderHealth = {
   account: "octocat",
   repositoryMappingValid: true,
 };
+
+const loadedHealth = (health: GitProviderHealth): GitProviderHealthState => ({
+  status: "loaded",
+  health,
+});
 
 const createDeferred = <T,>() => {
   let resolve!: (value: T) => void;
@@ -84,13 +90,13 @@ describe("settings git sections", () => {
       createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: baseRepoConfig,
-        providerHealth: {
+        providerHealth: loadedHealth({
           ...authenticatedGitProviderHealth,
           available: false,
           authenticated: false,
           account: null,
           reason: "Run `gh auth login` to connect GitHub.",
-        },
+        }),
         disabled: false,
         onDetectGithubRepository: async () => null,
         onUpdateSelectedRepoConfig: () => baseRepoConfig,
@@ -103,6 +109,63 @@ describe("settings git sections", () => {
     expect(html).toContain("openai/openducktor");
     expect(html).toContain("bg-warning-surface");
     expect(html).toContain("bg-success-surface");
+  });
+
+  test("does not report a missing CLI while GitHub is disabled", () => {
+    const html = renderToStaticMarkup(
+      createElement(RepositoryGitSection, {
+        selectedRepoPath: "/repo",
+        selectedRepoConfig: {
+          ...baseRepoConfig,
+          git: {
+            provider: {
+              ...baseRepoConfig.git.provider!,
+              enabled: false,
+            },
+          },
+        },
+        providerHealth: { status: "idle" },
+        disabled: false,
+        onDetectGithubRepository: async () => null,
+        onUpdateSelectedRepoConfig: () => baseRepoConfig,
+      }),
+    );
+
+    expect(html).toContain("Pull requests disabled");
+    expect(html).not.toContain("CLI missing");
+  });
+
+  test("shows a pending GitHub health check without reporting a missing CLI", () => {
+    const html = renderToStaticMarkup(
+      createElement(RepositoryGitSection, {
+        selectedRepoPath: "/repo",
+        selectedRepoConfig: baseRepoConfig,
+        providerHealth: { status: "pending" },
+        disabled: false,
+        onDetectGithubRepository: async () => null,
+        onUpdateSelectedRepoConfig: () => baseRepoConfig,
+      }),
+    );
+
+    expect(html).toContain("Checking CLI");
+    expect(html).not.toContain("CLI missing");
+  });
+
+  test("shows a failed GitHub health check without reporting a missing CLI", () => {
+    const html = renderToStaticMarkup(
+      createElement(RepositoryGitSection, {
+        selectedRepoPath: "/repo",
+        selectedRepoConfig: baseRepoConfig,
+        providerHealth: { status: "error", message: "Health command failed." },
+        disabled: false,
+        onDetectGithubRepository: async () => null,
+        onUpdateSelectedRepoConfig: () => baseRepoConfig,
+      }),
+    );
+
+    expect(html).toContain("Health check failed");
+    expect(html).toContain("Health command failed.");
+    expect(html).not.toContain("CLI missing");
   });
 
   test("renders enterprise host repository readiness without assuming github.com auth", () => {
@@ -124,9 +187,7 @@ describe("settings git sections", () => {
             },
           },
         },
-        providerHealth: {
-          ...authenticatedGitProviderHealth,
-        },
+        providerHealth: loadedHealth(authenticatedGitProviderHealth),
         disabled: false,
         onDetectGithubRepository: async () => null,
         onUpdateSelectedRepoConfig: () => baseRepoConfig,
@@ -159,7 +220,7 @@ describe("settings git sections", () => {
       return createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: repoConfig,
-        providerHealth: authenticatedGitProviderHealth,
+        providerHealth: loadedHealth(authenticatedGitProviderHealth),
         disabled: false,
         onDetectGithubRepository: async () => null,
         onUpdateSelectedRepoConfig: (updater) => {
@@ -221,7 +282,7 @@ describe("settings git sections", () => {
       createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: repoConfig,
-        providerHealth: authenticatedGitProviderHealth,
+        providerHealth: loadedHealth(authenticatedGitProviderHealth),
         disabled: false,
         onDetectGithubRepository,
         onUpdateSelectedRepoConfig,
@@ -273,7 +334,7 @@ describe("settings git sections", () => {
         createElement(RepositoryGitSection, {
           selectedRepoPath: "/repo",
           selectedRepoConfig: repoConfig,
-          providerHealth: authenticatedGitProviderHealth,
+          providerHealth: loadedHealth(authenticatedGitProviderHealth),
           disabled: false,
           onDetectGithubRepository,
           onUpdateSelectedRepoConfig: setRepoConfig,
@@ -323,7 +384,7 @@ describe("settings git sections", () => {
     const props = () => ({
       selectedRepoPath: "/repo",
       selectedRepoConfig: repoConfig,
-      providerHealth: authenticatedGitProviderHealth,
+      providerHealth: loadedHealth(authenticatedGitProviderHealth),
       disabled: false,
       onDetectGithubRepository: () => pendingDetection.promise,
       onUpdateSelectedRepoConfig,
@@ -386,7 +447,7 @@ describe("settings git sections", () => {
       createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: repoConfig,
-        providerHealth: authenticatedGitProviderHealth,
+        providerHealth: loadedHealth(authenticatedGitProviderHealth),
         disabled: false,
         onDetectGithubRepository: () => pendingDetection.promise,
         onUpdateSelectedRepoConfig,
@@ -447,7 +508,7 @@ describe("settings git sections", () => {
       return createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: repoConfig,
-        providerHealth: authenticatedGitProviderHealth,
+        providerHealth: loadedHealth(authenticatedGitProviderHealth),
         disabled: false,
         onDetectGithubRepository: () => detection.promise,
         onUpdateSelectedRepoConfig: (updater) => {
@@ -501,7 +562,7 @@ describe("settings git sections", () => {
         createElement(RepositoryGitSection, {
           selectedRepoPath: "/repo",
           selectedRepoConfig: null,
-          providerHealth: authenticatedGitProviderHealth,
+          providerHealth: loadedHealth(authenticatedGitProviderHealth),
           disabled: false,
           onDetectGithubRepository,
           onUpdateSelectedRepoConfig: () => baseRepoConfig,
@@ -530,7 +591,7 @@ describe("settings git sections", () => {
                 },
               },
             },
-            providerHealth: authenticatedGitProviderHealth,
+            providerHealth: loadedHealth(authenticatedGitProviderHealth),
             disabled: false,
             onDetectGithubRepository,
             onUpdateSelectedRepoConfig: () => baseRepoConfig,

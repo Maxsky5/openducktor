@@ -54,10 +54,6 @@ export const createTaskPullRequestSyncUseCases = ({
           return yield* Effect.fail(providerResult.left);
         }
         const provider = providerResult.right;
-        const health = yield* provider.health().getStatus(repoConfig);
-        if (!health.available) {
-          return { ran: false, changedTaskIds: [] };
-        }
         const pullRequests = yield* provider.pullRequests();
         const providerId = provider.getDescriptor().id;
 

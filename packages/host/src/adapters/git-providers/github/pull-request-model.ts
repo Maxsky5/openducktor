@@ -8,7 +8,7 @@ import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import { parseJson } from "../../../effect/json";
 import { z, type JSONType } from "zod";
 
-export const GITHUB_PROVIDER_ID = GITHUB_PROVIDER_DESCRIPTOR.id;
+const GITHUB_PROVIDER_ID = GITHUB_PROVIDER_DESCRIPTOR.id;
 
 export const combinedCommandOutput = (stdout: string, stderr: string): string => {
   const trimmedStdout = stdout.trim();
