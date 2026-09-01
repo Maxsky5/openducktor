@@ -40,17 +40,16 @@ export class GithubProviderAdapter implements GitProviderPort {
     toolDiscovery: ToolDiscoveryPort;
   }) {
     const githubCli = createGithubCli({ systemCommands, toolDiscovery });
-    const repositoryAdapter = createGithubProviderRepositoryAdapter({
+    const repositoryPort = createGithubProviderRepositoryAdapter({
       gitPort,
     });
-    const getRepository = (repoConfig: RepoConfig) =>
-      repositoryAdapter.port.getRepository(repoConfig);
-    const getMapping = (repoConfig: RepoConfig) => repositoryAdapter.port.getMapping(repoConfig);
+    const getRepository = (repoConfig: RepoConfig) => repositoryPort.getRepository(repoConfig);
+    const getMapping = (repoConfig: RepoConfig) => repositoryPort.getMapping(repoConfig);
 
-    this.repositoryPort = repositoryAdapter.port;
+    this.repositoryPort = repositoryPort;
     this.healthPort = createGithubProviderHealthPort({
       githubCli,
-      matchRemote: repositoryAdapter.matchRemote,
+      repositoryPort,
     });
     this.pullRequestsPort = {
       findByBranch: (input) =>

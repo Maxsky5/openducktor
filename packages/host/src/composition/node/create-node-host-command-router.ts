@@ -136,11 +136,14 @@ export const assembleNodeEffectHostCommandRouter = (
   const filesystemService = createFilesystemService(filesystem);
   const workspaceFilesService = createWorkspaceFilesService(filesystem, git);
   const gitService = createGitService({ gitPort: git, settingsConfig, worktreeFiles });
-  const gitProviderService = createGitProviderService(gitProviderResolver);
+  const workspaceSettingsService = createWorkspaceSettingsService(settingsConfig);
+  const gitProviderService = createGitProviderService({
+    resolver: gitProviderResolver,
+    workspaceSettingsService,
+  });
   const localAttachmentService = createLocalAttachmentService(localAttachments);
   const openInToolsService = createOpenInToolsService(openInTools);
   const runtimeDefinitionsService = createRuntimeDefinitionsService();
-  const workspaceSettingsService = createWorkspaceSettingsService(settingsConfig);
   const taskAssetServiceInput: Parameters<typeof createNodeTaskAssetServices>[0] = {
     onBackgroundFailure,
     processEnv,
@@ -459,7 +462,6 @@ export const assembleNodeEffectHostCommandRouter = (
       ...createGitCommandHandlers(gitService),
       ...createGitProviderCommandHandlers({
         service: gitProviderService,
-        workspaceSettingsService,
       }),
       ...createLocalAttachmentCommandHandlers(localAttachmentService),
       ...createOpenInToolsCommandHandlers(openInToolsService),

@@ -42,7 +42,7 @@ export const createGithubProviderRepositoryAdapter = ({ gitPort }: { gitPort: Gi
       return { repository, remoteName };
     });
 
-  const port: GitProviderRepositoryPort = {
+  return {
     detectRepository: (repoPath) =>
       Effect.gen(function* () {
         const canonicalRepoPath = yield* gitPort.canonicalizePath(repoPath).pipe(
@@ -73,9 +73,7 @@ export const createGithubProviderRepositoryAdapter = ({ gitPort }: { gitPort: Gi
       }),
     getRepository,
     getMapping,
-  };
-
-  return { port, matchRemote };
+  } satisfies GitProviderRepositoryPort;
 };
 
 const configuredRepository = (repoConfig: RepoConfig) =>

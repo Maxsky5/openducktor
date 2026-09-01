@@ -6,11 +6,12 @@ import type {
   GitProviderPort,
   GitProviderRepositoryPort,
 } from "../../ports/git-provider-port";
+import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
 import { createGitProviderResolver } from "./git-provider-resolver";
 import { createGitProviderService } from "./git-provider-service";
 
 describe("GitProviderService", () => {
-  test("resolves the configured provider and detects through its repository port", async () => {
+  test("loads repository settings and runs provider repository and health operations", async () => {
     const calls: string[] = [];
     const repository: GitProviderRepositoryPort = {
       detectRepository(repoPath) {
@@ -25,7 +26,19 @@ describe("GitProviderService", () => {
       getMapping: () => Effect.die("Unexpected getMapping call"),
     };
     const health: GitProviderHealthPort = {
-      getStatus: () => Effect.die("Unexpected health call"),
+      getStatus: (config) => {
+        calls.push(`health:${config.repoPath}`);
+        return Effect.succeed({
+          providerId: "github",
+          enabled: true,
+          available: true,
+          executablePath: "gh",
+          version: "gh version test",
+          authenticated: true,
+          account: "octocat",
+          repositoryMappingValid: true,
+        });
+      },
     };
     const provider: GitProviderPort = {
       getDescriptor: () => GITHUB_PROVIDER_DESCRIPTOR,
@@ -44,20 +57,45 @@ describe("GitProviderService", () => {
         }),
     };
     const resolver = await Effect.runPromise(createGitProviderResolver([provider]));
-    const service = createGitProviderService(resolver);
-    const repoConfig = repoConfigSchema.parse({
+    const detectionRepoConfig = repoConfigSchema.parse({
+      workspaceId: "repo",
+      workspaceName: "Repo",
+      repoPath: "/repo",
+      defaultRuntimeKind: "opencode",
+      git: {},
+    });
+    const healthRepoConfig = repoConfigSchema.parse({
       workspaceId: "repo",
       workspaceName: "Repo",
       repoPath: "/repo",
       defaultRuntimeKind: "opencode",
       git: { provider: { id: "github", enabled: true } },
     });
+    const repoConfigs = [detectionRepoConfig, healthRepoConfig];
+    const service = createGitProviderService({
+      resolver,
+      workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
+        getRepoConfigByRepoPath: (repoPath) => {
+          calls.push(`settings:${repoPath}`);
+          const repoConfig = repoConfigs.shift();
+          return repoConfig
+            ? Effect.succeed(repoConfig)
+            : Effect.die("Unexpected repository settings read");
+        },
+      }),
+    });
 
-    await expect(Effect.runPromise(service.detectRepository({ repoConfig }))).resolves.toEqual({
+    await expect(
+      Effect.runPromise(service.detectRepository({ repoPath: "/repo", providerId: "github" })),
+    ).resolves.toEqual({
       host: "github.mycorp.com",
       owner: "openai",
       name: "openducktor",
     });
-    expect(calls).toEqual(["/repo"]);
+    await expect(Effect.runPromise(service.getHealth("/repo"))).resolves.toMatchObject({
+      providerId: "github",
+      available: true,
+    });
+    expect(calls).toEqual(["settings:/repo", "/repo", "settings:/repo", "health:/repo"]);
   });
 });

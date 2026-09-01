@@ -1,8 +1,5 @@
 import { Effect } from "effect";
-import { repoConfigSchema } from "@openducktor/contracts";
 import type { GitProviderService } from "../../application/git/git-provider-service";
-import { HostOperationError } from "../../effect/host-errors";
-import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
 import {
   type CreateHostCommandRouterInput,
   createEffectHostCommandRouter,
@@ -19,21 +16,11 @@ describe("createGitProviderCommandHandlers", () => {
     const calls: unknown[] = [];
     const service: GitProviderService = {
       detectRepository(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push(input);
-            return { host: "github.com", owner: "openai", name: "openducktor" };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
+        calls.push(input);
+        return Effect.succeed({ host: "github.com", owner: "openai", name: "openducktor" });
       },
-      getHealth(config) {
-        calls.push(config);
+      getHealth(repoPath) {
+        calls.push(repoPath);
         return Effect.succeed({
           providerId: "github",
           enabled: true,
@@ -46,19 +33,9 @@ describe("createGitProviderCommandHandlers", () => {
         });
       },
     };
-    const repoConfig = repoConfigSchema.parse({
-      workspaceId: "repo",
-      workspaceName: "Repo",
-      repoPath: "/repo",
-      defaultRuntimeKind: "opencode",
-      git: {},
-    });
     const router = createHostCommandRouter({
       handlers: createGitProviderCommandHandlers({
         service,
-        workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
-          getRepoConfigByRepoPath: () => Effect.succeed(repoConfig),
-        }),
       }),
     });
     await expect(
@@ -70,22 +47,14 @@ describe("createGitProviderCommandHandlers", () => {
     });
     expect(calls).toEqual([
       {
-        repoConfig: expect.objectContaining({
-          repoPath: "/repo",
-          git: {
-            provider: {
-              id: "github",
-              enabled: true,
-              autoDetected: false,
-            },
-          },
-        }),
+        repoPath: "/repo",
+        providerId: "github",
       },
     ]);
 
     await expect(
       router.invoke("workspace_get_git_provider_health", { repoPath: "/repo" }),
     ).resolves.toMatchObject({ providerId: "github", available: true });
-    expect(calls.at(-1)).toBe(repoConfig);
+    expect(calls.at(-1)).toBe("/repo");
   });
 });

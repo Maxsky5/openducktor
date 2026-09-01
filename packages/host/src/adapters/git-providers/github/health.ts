@@ -5,20 +5,20 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { errorMessage } from "../../../effect/host-errors";
-import type { GitProviderHealthPort } from "../../../ports/git-provider-port";
+import type {
+  GitProviderHealthPort,
+  GitProviderRepositoryPort,
+} from "../../../ports/git-provider-port";
 import type { GithubCli } from "./cli";
-import type { createGithubProviderRepositoryAdapter } from "./repository";
 
 const GITHUB_PROVIDER_ID = GITHUB_PROVIDER_DESCRIPTOR.id;
 
-type MatchRemote = ReturnType<typeof createGithubProviderRepositoryAdapter>["matchRemote"];
-
 export const createGithubProviderHealthPort = ({
   githubCli,
-  matchRemote,
+  repositoryPort,
 }: {
   githubCli: GithubCli;
-  matchRemote: MatchRemote;
+  repositoryPort: GitProviderRepositoryPort;
 }): GitProviderHealthPort => ({
   getStatus: (repoConfig: RepoConfig) =>
     Effect.gen(function* () {
@@ -51,8 +51,7 @@ export const createGithubProviderHealthPort = ({
           reason: "GitHub repository coordinates are missing.",
         });
       }
-      const repository = provider.repository;
-      const authResult = yield* Effect.either(command.getAuth(repository.host));
+      const authResult = yield* Effect.either(command.getAuth(provider.repository.host));
       if (authResult._tag === "Left") {
         return unhealthy({
           executablePath: command.executablePath,
@@ -70,7 +69,7 @@ export const createGithubProviderHealthPort = ({
         });
       }
       const account = authResult.right.account;
-      const mappingResult = yield* Effect.either(matchRemote(repoConfig.repoPath, repository));
+      const mappingResult = yield* Effect.either(repositoryPort.getMapping(repoConfig));
       if (mappingResult._tag === "Left") {
         const mappingError = mappingResult.left;
         if (mappingError._tag !== "GitProviderRepositoryError") {
