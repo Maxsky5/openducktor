@@ -157,4 +157,47 @@ describe("notification runtime tests", () => {
     );
     expect(onFailure).not.toHaveBeenCalled();
   });
+
+  test("keeps local delivery when the browser focus state cannot be read", async () => {
+    const loadSettings = mock(async () => {
+      const settings = createDefaultNotificationSettings();
+      settings.volumePercent = 0;
+      return settings;
+    });
+    const showOsNotification = mock(async (_request: NotificationOsDeliveryRequest) => ({
+      status: "shown" as const,
+    }));
+    const onFailure = mock(() => {});
+    const runtime = createNotificationRuntime({
+      bridge: createBridge({
+        isAppFocused: async () => {
+          throw new Error("Focus lock query failed.");
+        },
+        showOsNotification,
+      }),
+      loadSettings,
+      navigate: async () => {},
+      onFailure,
+    });
+
+    await runtime.dispatch({
+      occurrenceId: "workflow.closed:/repo:task-1:event-focus-failure",
+      kind: "workflow.closed",
+      repoPath: "/repo",
+      repositoryLabel: "Repo",
+      task: { id: "task-1", title: "Build notifications" },
+      status: "Task moved to Closed.",
+      navigationTarget: { type: "kanban_task", repoPath: "/repo", taskId: "task-1" },
+    });
+
+    expect(loadSettings).toHaveBeenCalledTimes(1);
+    expect(showOsNotification).not.toHaveBeenCalled();
+    expect(onFailure).toHaveBeenCalledWith({
+      channel: "os",
+      kind: "workflow.closed",
+      occurrenceId: "workflow.closed:/repo:task-1:event-focus-failure",
+      repoPath: "/repo",
+      message: "Focus lock query failed.",
+    });
+  });
 });

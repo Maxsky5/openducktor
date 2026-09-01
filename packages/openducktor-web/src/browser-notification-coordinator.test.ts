@@ -10,6 +10,7 @@ type CoordinatorMessage =
 
 const EXTERNAL_DELIVERY_LOCK_NAME = "openducktor:notifications:external-delivery";
 const TAB_LOCK_NAME_PREFIX = "openducktor:notifications:tab:";
+const APP_FOCUS_LOCK_NAME = "openducktor:notifications:app-focus";
 
 type LockRequest = {
   name: string;
@@ -25,6 +26,7 @@ class FakeLockManager {
   private readonly requests: LockRequest[] = [];
   private readonly deferredRequests: LockRequest[] = [];
   private readonly deferredNames = new Set<string>();
+  private readonly requestFailures = new Map<string, Error>();
   private queryFailure: Error | null = null;
 
   constructor(private paused = false) {}
@@ -34,6 +36,11 @@ class FakeLockManager {
     options: { mode: "exclusive" | "shared"; signal?: AbortSignal },
     callback: (lock: { name: string }) => Promise<void>,
   ): Promise<void> {
+    const requestFailure = this.requestFailures.get(name);
+    if (requestFailure) {
+      this.requestFailures.delete(name);
+      return Promise.reject(requestFailure);
+    }
     return new Promise<void>((resolve, reject) => {
       const request: LockRequest = {
         name,
@@ -100,6 +107,10 @@ class FakeLockManager {
 
   rejectNextQuery(cause: Error): void {
     this.queryFailure = cause;
+  }
+
+  rejectNextRequest(name: string, cause: Error): void {
+    this.requestFailures.set(name, cause);
   }
 
   resume(): void {
@@ -742,6 +753,43 @@ describe("browser notification coordinator", () => {
     await waitFor(() => deliveries === 1);
 
     expect(owner.getFailureMessage()).toBeNull();
+    owner.dispose();
+    publisher.dispose();
+  });
+
+  test("keeps a focus lock failure after claim and focus query success", async () => {
+    const locks = new FakeLockManager();
+    locks.rejectNextRequest(APP_FOCUS_LOCK_NAME, new Error("Focus lock failed."));
+    const hub = new FakeBroadcastHub();
+    const owner = createBrowserNotificationCoordinator({
+      createChannel: () => hub.createChannel(),
+      locks,
+      focusDocument: { hasFocus: () => true },
+      focusWindow: new FakeFocusWindow(),
+    });
+    const publisher = createBrowserNotificationCoordinator({
+      createChannel: () => hub.createChannel(),
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+    });
+    let deliveries = 0;
+    owner.subscribeOccurrences((value) => {
+      void owner.claimExternalDelivery(value.occurrenceId).then((externalOwner) => {
+        if (externalOwner) deliveries += 1;
+      });
+    });
+    await waitFor(() => owner.getFailureMessage() === "Focus lock failed.");
+    await waitFor(() => owner.isExternalDeliveryOwner());
+
+    publisher.publishOccurrence({
+      ...occurrence,
+      occurrenceId: `${occurrence.occurrenceId}:focus-lock-failure`,
+    });
+    await waitFor(() => deliveries === 1);
+    await owner.isAnyTabFocused();
+
+    expect(owner.getFailureMessage()).toBe("Focus lock failed.");
     owner.dispose();
     publisher.dispose();
   });

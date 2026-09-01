@@ -132,7 +132,6 @@ export const createBrowserNotificationBridge = ({
         settled = true;
         if (result.status === "shown") {
           latestFailureMessage = undefined;
-          coordinator.clearFailure();
         } else if (result.status === "failed") {
           latestFailureMessage = result.message;
         }
