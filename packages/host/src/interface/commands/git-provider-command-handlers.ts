@@ -1,6 +1,6 @@
 import { GITHUB_PROVIDER_DESCRIPTOR, type RepoConfig } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { GitProviderRepositoryService } from "../../application/git/git-provider-repository-service";
+import type { GitProviderService } from "../../application/git/git-provider-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { errorMessage, HostValidationError, isHostError } from "../../effect/host-errors";
 import { GitProviderRepositoryError } from "../../ports/git-provider-errors";
@@ -13,12 +13,29 @@ import {
   requireString,
 } from "./command-inputs";
 
-const parseRepoPath = (args: HostCommandArgs): string => {
-  const record = requireRecord(
-    commandInputRecordSchema.safeParse(args),
-    "workspace_detect_github_repository input",
-  );
+const parseRepoPath = (args: HostCommandArgs, command: string): string => {
+  const record = requireRecord(commandInputRecordSchema.safeParse(args), `${command} input`);
   return requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath");
+};
+
+const providerError = (cause: unknown) => {
+  if (isHostError(cause)) {
+    return cause;
+  }
+  if (cause instanceof GitProviderRepositoryError) {
+    return new HostValidationError({
+      field: "git.provider.repository",
+      message: cause.message,
+      cause,
+      details: {
+        reason: cause.reason,
+        repoPath: cause.repoPath,
+        remoteNames: cause.remoteNames,
+        repositories: cause.repositories,
+      },
+    });
+  }
+  return new HostValidationError({ message: errorMessage(cause), cause });
 };
 
 const detectionConfig = (repoConfig: RepoConfig): RepoConfig => {
@@ -44,43 +61,26 @@ const detectionConfig = (repoConfig: RepoConfig): RepoConfig => {
   };
 };
 
-export const createGithubRepositoryDetectionCommandHandlers = ({
+export const createGitProviderCommandHandlers = ({
   service,
   workspaceSettingsService,
 }: {
-  service: GitProviderRepositoryService;
+  service: GitProviderService;
   workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath">;
 }) =>
   ({
     workspace_detect_github_repository: (args) =>
       Effect.gen(function* () {
-        const repoPath = parseRepoPath(args);
+        const repoPath = parseRepoPath(args, "workspace_detect_github_repository");
         const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
         return yield* service.detectRepository({
           repoConfig: detectionConfig(repoConfig),
         });
-      }).pipe(
-        Effect.mapError((cause) => {
-          if (isHostError(cause)) {
-            return cause;
-          }
-          if (cause instanceof GitProviderRepositoryError) {
-            return new HostValidationError({
-              field: "git.provider.repository",
-              message: cause.message,
-              cause,
-              details: {
-                reason: cause.reason,
-                repoPath: cause.repoPath,
-                remoteNames: cause.remoteNames,
-                repositories: cause.repositories,
-              },
-            });
-          }
-          return new HostValidationError({
-            message: errorMessage(cause),
-            cause,
-          });
-        }),
-      ),
+      }).pipe(Effect.mapError(providerError)),
+    workspace_get_git_provider_health: (args) =>
+      Effect.gen(function* () {
+        const repoPath = parseRepoPath(args, "workspace_get_git_provider_health");
+        const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+        return yield* service.getHealth(repoConfig);
+      }).pipe(Effect.mapError(providerError)),
   }) satisfies HostCommandHandlerDefinitions;

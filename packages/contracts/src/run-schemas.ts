@@ -87,11 +87,6 @@ export type ToolExecutableProvenance = z.infer<typeof toolExecutableProvenanceSc
 export const systemCheckSchema = z.object({
   gitOk: z.boolean(),
   gitVersion: z.string().nullable(),
-  ghOk: z.boolean().default(false),
-  ghVersion: z.string().nullable().default(null),
-  ghAuthOk: z.boolean().default(false),
-  ghAuthLogin: z.string().nullable().default(null),
-  ghAuthError: z.string().nullable().default(null),
   runtimes: z.array(runtimeHealthSchema).default([]),
   repoStoreHealth: repoStoreHealthSchema,
   taskStoreOk: z.boolean(),
@@ -104,11 +99,6 @@ export type SystemCheck = z.infer<typeof systemCheckSchema>;
 export const runtimeCheckSchema = z.object({
   gitOk: z.boolean(),
   gitVersion: z.string().nullable(),
-  ghOk: z.boolean().default(false),
-  ghVersion: z.string().nullable().default(null),
-  ghAuthOk: z.boolean().default(false),
-  ghAuthLogin: z.string().nullable().default(null),
-  ghAuthError: z.string().nullable().default(null),
   runtimes: z.array(runtimeHealthSchema).default([]),
   errors: z.array(z.string()),
 });

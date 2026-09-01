@@ -133,11 +133,6 @@ describe("DiagnosticsPanelSections", () => {
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        ghOk: true,
-        ghVersion: "gh version 2.73.0",
-        ghAuthOk: true,
-        ghAuthLogin: "octocat",
-        ghAuthError: null,
         runtimes: [
           { kind: "opencode", ok: true, executablePath: "/bin/opencode", version: opencodeValue },
           {
@@ -191,7 +186,6 @@ describe("DiagnosticsPanelSections", () => {
     expect(html).toContain("Repository path:");
     expect(html).toContain("Worktree directory:");
     expect(html).toContain("Git:");
-    expect(html).toContain("GitHub CLI:");
     expect(html).toContain("OpenCode:");
     expect(html).toContain("Codex:");
     expect(html).toContain("Claude:");
@@ -224,11 +218,6 @@ describe("DiagnosticsPanelSections", () => {
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        ghOk: false,
-        ghVersion: null,
-        ghAuthOk: false,
-        ghAuthLogin: null,
-        ghAuthError: "gh not found in PATH",
         runtimes: [
           { kind: "opencode", ok: false, executablePath: null, version: null },
           { kind: "codex", enabled: false, ok: false, executablePath: null, version: null },
@@ -278,7 +267,6 @@ describe("DiagnosticsPanelSections", () => {
 
     const html = renderToStaticMarkup(createElement(DiagnosticsPanelSections, { model }));
 
-    expect(html).toContain("GitHub optional");
     expect(html).not.toContain("gh not found in PATH");
     expect(html).toContain("runtime failed");
     expect(html).not.toContain("server unavailable");

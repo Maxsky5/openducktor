@@ -31,8 +31,8 @@ import {
   isHostError,
 } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
-import type { GithubCommandResolverPort } from "../../ports/github-cli-port";
 import {
+  GitProviderCapabilityError,
   GitProviderRepositoryError,
   GitProviderResolutionError,
 } from "../../ports/git-provider-errors";
@@ -107,6 +107,7 @@ import type { TaskWorktreeService } from "./worktrees/task-worktree-service";
 export type TaskServiceError =
   | DevServerServiceError
   | GitProviderRepositoryError
+  | GitProviderCapabilityError
   | GitProviderResolutionError
   | HostCommandErrorAggregate
   | GitPortError
@@ -266,7 +267,6 @@ export type CreateTaskServiceInput = {
   terminalService?: TaskTerminalCleanupPort;
   gitPort?: GitPort;
   gitProviderResolver?: GitProviderResolver;
-  githubCommands?: GithubCommandResolverPort;
   taskStore: TaskStorePort;
   taskActivityGuard?: TaskActivityGuardPort;
   settingsConfig?: SettingsConfigPort;
@@ -280,6 +280,7 @@ export type CreateTaskServiceInput = {
   taskSessionBootstrapCoordinator?: TaskSessionBootstrapCoordinator;
 };
 const isTaskServiceError = (cause: unknown): cause is TaskServiceError =>
+  cause instanceof GitProviderCapabilityError ||
   cause instanceof GitProviderRepositoryError ||
   cause instanceof GitProviderResolutionError ||
   cause instanceof TaskAssetError ||

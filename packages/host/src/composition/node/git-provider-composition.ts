@@ -1,19 +1,24 @@
 import { Effect } from "effect";
-import { GithubProviderAdapter } from "../../adapters/git-providers/github-provider-adapter";
+import { GithubProviderAdapter } from "../../adapters/git-providers/github/provider-adapter";
 import {
   createGitProviderResolver,
   type GitProviderResolver,
 } from "../../application/git/git-provider-resolver";
 import type { GitPort } from "../../ports/git-port";
 import type { GitProviderRegistrationError } from "../../ports/git-provider-errors";
-import type { GithubCommandResolverPort } from "../../ports/github-cli-port";
+import type { SystemCommandPort } from "../../ports/system-command-port";
+import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 
 export const createNodeGitProviderResolver = ({
   gitPort,
-  githubCommands,
+  systemCommands,
+  toolDiscovery,
 }: {
   gitPort: GitPort;
-  githubCommands: GithubCommandResolverPort;
+  systemCommands: SystemCommandPort;
+  toolDiscovery: ToolDiscoveryPort;
 }): Effect.Effect<GitProviderResolver, GitProviderRegistrationError> => {
-  return createGitProviderResolver([new GithubProviderAdapter({ githubCommands, gitPort })]);
+  return createGitProviderResolver([
+    new GithubProviderAdapter({ gitPort, systemCommands, toolDiscovery }),
+  ]);
 };

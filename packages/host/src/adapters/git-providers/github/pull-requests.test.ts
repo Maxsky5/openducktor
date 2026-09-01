@@ -1,43 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { repoConfigSchema, type PullRequest } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { createGithubCliAdapter } from "../../../adapters/git-providers/github-cli";
-import type { GithubCommandResolverPort } from "../../../ports/github-cli-port";
 import type { SystemCommandPort } from "../../../ports/system-command-port";
-import {
-  findGithubPullRequestForBranch,
-  githubPullRequestSyncPolicy,
-  pullRequestRecordsMatch,
-} from "./github-pull-requests";
-import { parseGithubPullListResponse, parseGithubPullResponse } from "./github-pull-request-model";
-
-const pullRequest = (overrides: Partial<PullRequest> = {}): PullRequest => ({
-  providerId: "github",
-  number: 42,
-  url: "https://github.com/openducktor/openducktor/pull/42",
-  state: "open",
-  createdAt: "2026-05-01T10:00:00Z",
-  updatedAt: "2026-05-02T10:00:00Z",
-  lastSyncedAt: "2026-05-03T10:00:00Z",
-  ...overrides,
-});
-
-describe("pullRequestRecordsMatch", () => {
-  test("ignores sync timestamps so background polling does not churn unchanged tasks", () => {
-    expect(
-      pullRequestRecordsMatch(
-        pullRequest({ lastSyncedAt: "2026-05-03T10:00:00Z" }),
-        pullRequest({ lastSyncedAt: "2026-05-03T10:05:00Z" }),
-      ),
-    ).toBe(true);
-  });
-
-  test("detects user-visible pull request changes", () => {
-    expect(
-      pullRequestRecordsMatch(pullRequest({ state: "open" }), pullRequest({ state: "merged" })),
-    ).toBe(false);
-  });
-});
+import type { ToolDiscoveryPort } from "../../../ports/tool-discovery-port";
+import { createGithubCli } from "./cli";
+import { parseGithubPullListResponse, parseGithubPullResponse } from "./pull-request-model";
+import { findGithubPullRequestForBranch } from "./pull-requests";
 
 const githubPullResponse = {
   number: 42,
@@ -110,14 +77,17 @@ describe("findGithubPullRequestForBranch", () => {
         });
       },
     };
-    const githubCli = createGithubCliAdapter(systemCommands);
-    const githubCommands: GithubCommandResolverPort = {
-      resolve: () => Effect.succeed({ ghCommand: "gh", githubCli }),
+    const toolDiscovery: ToolDiscoveryPort = {
+      discoverTool: () => Effect.die("Unexpected discoverTool call"),
+      resolveTool: () => Effect.die("Unexpected resolveTool call"),
+      resolveToolPath: () => Effect.succeed("gh"),
+      validateToolPath: () => Effect.die("Unexpected validateToolPath call"),
     };
+    const githubCli = createGithubCli({ systemCommands, toolDiscovery });
 
     const pullRequest = await Effect.runPromise(
       findGithubPullRequestForBranch(
-        githubCommands,
+        githubCli,
         "/repo",
         { host: "github.com", owner: "Maxsky5", name: "openducktor" },
         "odt/task-1",
@@ -133,38 +103,5 @@ describe("findGithubPullRequestForBranch", () => {
       CLICOLOR_FORCE: "0",
       FORCE_COLOR: "0",
     });
-  });
-});
-
-describe("GitHub provider selection", () => {
-  test("does not resolve a GitHub command for another configured provider", async () => {
-    let resolveCalls = 0;
-    const githubCommands: GithubCommandResolverPort = {
-      resolve() {
-        resolveCalls += 1;
-        return Effect.die("GitHub command must not be resolved");
-      },
-    };
-    const repoConfig = repoConfigSchema.parse({
-      workspaceId: "repo",
-      workspaceName: "Repo",
-      repoPath: "/repo",
-      defaultRuntimeKind: "opencode",
-      git: {
-        provider: {
-          id: "gitlab",
-          enabled: true,
-          autoDetected: false,
-          repository: { host: "gitlab.com", owner: "acme", name: "widget" },
-        },
-      },
-    });
-
-    const syncPolicy = await Effect.runPromise(
-      githubPullRequestSyncPolicy(githubCommands, repoConfig),
-    );
-
-    expect(syncPolicy).toEqual({ providerId: "github", available: false });
-    expect(resolveCalls).toBe(0);
   });
 });

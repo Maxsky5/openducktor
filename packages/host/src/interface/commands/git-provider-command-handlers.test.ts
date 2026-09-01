@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { repoConfigSchema } from "@openducktor/contracts";
-import type { GitProviderRepositoryService } from "../../application/git/git-provider-repository-service";
+import type { GitProviderService } from "../../application/git/git-provider-service";
 import { HostOperationError } from "../../effect/host-errors";
 import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
 import {
@@ -9,15 +9,15 @@ import {
   toPromiseHostCommandRouter,
 } from "../router/host-command-router";
 
-import { createGithubRepositoryDetectionCommandHandlers } from "./github-repository-detection-command-handlers";
+import { createGitProviderCommandHandlers } from "./git-provider-command-handlers";
 
 const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
-describe("createGithubRepositoryDetectionCommandHandlers", () => {
+describe("createGitProviderCommandHandlers", () => {
   test("routes workspace_detect_github_repository to the detection service", async () => {
     const calls: unknown[] = [];
-    const service: GitProviderRepositoryService = {
+    const service: GitProviderService = {
       detectRepository(input) {
         return Effect.tryPromise({
           try: async () => {
@@ -32,6 +32,19 @@ describe("createGithubRepositoryDetectionCommandHandlers", () => {
             }),
         });
       },
+      getHealth(config) {
+        calls.push(config);
+        return Effect.succeed({
+          providerId: "github",
+          enabled: true,
+          available: true,
+          executablePath: "gh",
+          version: "gh version 2.95.0",
+          authenticated: true,
+          account: "octocat",
+          repositoryMappingValid: true,
+        });
+      },
     };
     const repoConfig = repoConfigSchema.parse({
       workspaceId: "repo",
@@ -41,7 +54,7 @@ describe("createGithubRepositoryDetectionCommandHandlers", () => {
       git: {},
     });
     const router = createHostCommandRouter({
-      handlers: createGithubRepositoryDetectionCommandHandlers({
+      handlers: createGitProviderCommandHandlers({
         service,
         workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
           getRepoConfigByRepoPath: () => Effect.succeed(repoConfig),
@@ -69,5 +82,10 @@ describe("createGithubRepositoryDetectionCommandHandlers", () => {
         }),
       },
     ]);
+
+    await expect(
+      router.invoke("workspace_get_git_provider_health", { repoPath: "/repo" }),
+    ).resolves.toMatchObject({ providerId: "github", available: true });
+    expect(calls.at(-1)).toBe(repoConfig);
   });
 });

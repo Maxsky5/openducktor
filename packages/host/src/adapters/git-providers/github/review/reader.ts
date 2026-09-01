@@ -9,20 +9,19 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { z } from "zod";
-import { combinedCommandOutput } from "../../../application/tasks/support/github-pull-request-model";
-import { runGithubRepositoryCommandAllowFailure } from "../../../application/tasks/support/github-repository-command";
+import { combinedCommandOutput } from "../pull-request-model";
 import {
   errorMessage,
   HostValidationError,
   type HostValidationErrorAggregate,
-} from "../../../effect/host-errors";
-import type { GithubCommandResolverPort } from "../../../ports/github-cli-port";
-import { loadGithubPullRequestReviewOverview } from "./github-pull-request-review-overview";
-import { parseGithubJson } from "./github-pull-request-review-payload";
-import { loadGithubReviewThreads } from "./github-pull-request-review-threads";
+} from "../../../../effect/host-errors";
+import { runGithubRepositoryCommandAllowFailure, type GithubCli } from "../cli";
+import { loadGithubPullRequestReviewOverview } from "./overview";
+import { parseGithubJson } from "./payload";
+import { loadGithubReviewThreads } from "./threads";
 
 type GithubPullRequestReviewReadInput = {
-  githubCommands: GithubCommandResolverPort;
+  githubCli: GithubCli;
   repoPath: string;
   repository: GitProviderRepository;
   pullRequestNumber: number;
@@ -161,7 +160,7 @@ export const createGithubPullRequestReviewReader = (): GithubPullRequestReviewRe
         [
           loadGithubPullRequestReviewOverview(input),
           runGithubRepositoryCommandAllowFailure(
-            input.githubCommands,
+            input.githubCli,
             input.repoPath,
             input.repository,
             [

@@ -7,14 +7,12 @@ import {
   type RuntimeHealth,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { createGithubCliAdapter } from "../../adapters/git-providers/github-cli";
 import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { HostOperationError } from "../../effect/host-errors";
-import type { GithubCliPort } from "../../ports/github-cli-port";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
-import type { SystemCommandPort, SystemCommandRunResult } from "../../ports/system-command-port";
+import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
@@ -105,18 +103,10 @@ const createRuntimeHealthPort = (
 });
 const createSystemCommandPort = ({
   missingCommands = [],
-  ghAuthResult = { ok: true, stdout: "octocat\n", stderr: "" },
-  calls = [],
   versionCalls = [],
   versionForCommand,
 }: {
   missingCommands?: string[];
-  ghAuthResult?: SystemCommandRunResult;
-  calls?: Array<{
-    command: string;
-    args: string[];
-    options: Parameters<SystemCommandPort["runCommandAllowFailure"]>[2];
-  }>;
   versionCalls?: Array<{
     command: string;
     args: string[];
@@ -134,22 +124,7 @@ const createSystemCommandPort = ({
         missing.has(command) ? null : version === undefined ? `${command} version 1.0.0` : version,
       );
     },
-    runCommandAllowFailure: (command, args, options) =>
-      Effect.tryPromise({
-        try: async () => {
-          calls.push({ command, args, options });
-          if (command === "gh") {
-            return ghAuthResult;
-          }
-          return { ok: true, stdout: "", stderr: "" };
-        },
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "test.effect",
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause: cause,
-          }),
-      }),
+    runCommandAllowFailure: () => Effect.succeed({ ok: true, stdout: "", stderr: "" }),
   };
   return port;
 };
@@ -196,27 +171,17 @@ const createTaskStore = (
       }),
   });
 const createSystemDiagnosticsServiceForTest = (
-  input: Omit<
-    Parameters<typeof createSystemDiagnosticsService>[0],
-    "githubCli" | "toolDiscovery"
-  > & {
-    githubCli?: Parameters<typeof createSystemDiagnosticsService>[0]["githubCli"];
+  input: Omit<Parameters<typeof createSystemDiagnosticsService>[0], "toolDiscovery"> & {
     toolDiscovery?: ToolDiscoveryPort;
   },
 ) =>
   createSystemDiagnosticsService({
     ...input,
-    githubCli: input.githubCli ?? createGithubCliAdapter(input.systemCommands),
     toolDiscovery: input.toolDiscovery ?? createToolDiscoveryPort(),
   });
 describe("createSystemDiagnosticsService", () => {
-  test("runtimeCheck reports CLI, GitHub auth, runtime health, and config enablement", async () => {
+  test("runtimeCheck reports Git, runtime health, and config enablement", async () => {
     const runtimeHealthCalls: RuntimeHealth["kind"][] = [];
-    const commandCalls: Array<{
-      command: string;
-      args: string[];
-      options: Parameters<SystemCommandPort["runCommandAllowFailure"]>[2];
-    }> = [];
     const versionCommandCalls: Array<{
       command: string;
       args: string[];
@@ -243,16 +208,12 @@ describe("createSystemDiagnosticsService", () => {
         },
       }),
       systemCommands: createSystemCommandPort({
-        calls: commandCalls,
         versionCalls: versionCommandCalls,
       }),
       repoStoreDiagnostics: createTaskStore(),
     });
     const check = await Effect.runPromise(service.runtimeCheck(true));
     expect(check.gitOk).toBe(true);
-    expect(check.ghOk).toBe(true);
-    expect(check.ghAuthOk).toBe(true);
-    expect(check.ghAuthLogin).toBe("octocat");
     expect(check.runtimes).toEqual([
       expect.objectContaining({ kind: "opencode", enabled: true, ok: true }),
       expect.objectContaining({
@@ -264,30 +225,9 @@ describe("createSystemDiagnosticsService", () => {
     ]);
     expect(runtimeHealthCalls).toEqual(["opencode"]);
     expect(check.errors).toEqual([]);
-    expect(commandCalls.find((call) => call.command === "gh")?.options?.env).toMatchObject({
-      GH_PROMPT_DISABLED: "1",
-      NO_COLOR: "1",
-      CLICOLOR: "0",
-      CLICOLOR_FORCE: "0",
-      FORCE_COLOR: "0",
-    });
-    expect(commandCalls.find((call) => call.command === "gh")?.args).toEqual([
-      "api",
-      "user",
-      "--hostname",
-      "github.com",
-      "--jq",
-      ".login",
-    ]);
-    const ghVersionCall = versionCommandCalls.find((call) => call.command === "gh");
-    expect(ghVersionCall?.args).toEqual(["--version"]);
-    expect(ghVersionCall?.options?.env).toMatchObject({
-      GH_PROMPT_DISABLED: "1",
-      NO_COLOR: "1",
-      CLICOLOR: "0",
-      CLICOLOR_FORCE: "0",
-      FORCE_COLOR: "0",
-    });
+    expect(versionCommandCalls).toContainEqual(
+      expect.objectContaining({ command: "git", args: ["--version"] }),
+    );
   });
   test("runtimeCheck caches fresh results unless force refresh is requested", async () => {
     let version = "1.0.0";
@@ -370,63 +310,13 @@ describe("createSystemDiagnosticsService", () => {
     expect(startedKinds).toEqual(["opencode", "codex"]);
     expect(check.runtimes.map(({ kind }) => kind)).toEqual(["opencode", "codex"]);
   });
-  test("runtimeCheck reports missing gh without making it a blocking diagnostic error", async () => {
-    const service = createSystemDiagnosticsServiceForTest({
-      runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
-      runtimeHealth: createRuntimeHealthPort(),
-      settingsConfig: createSettingsConfig(null),
-      systemCommands: createSystemCommandPort({ missingCommands: ["git", "gh"] }),
-      toolDiscovery: createToolDiscoveryPort({ missingCommands: ["git", "gh"] }),
-      repoStoreDiagnostics: createTaskStore(),
-    });
-
-    const check = await Effect.runPromise(service.runtimeCheck(true));
-
-    expect(check.gitOk).toBe(false);
-    expect(check.ghOk).toBe(false);
-    expect(check.ghAuthOk).toBe(false);
-    expect(check.ghAuthError).toBe(
-      "gh not found. Checked OPENDUCKTOR_GH_PATH, PATH. Install GitHub CLI and ensure gh is available on PATH, or set OPENDUCKTOR_GH_PATH.",
-    );
-    expect(check.errors).toEqual([
-      "git not found. Checked OPENDUCKTOR_GIT_PATH, PATH. Install git and ensure it is available on PATH, or set OPENDUCKTOR_GIT_PATH.",
-    ]);
-  });
-  test("runtimeCheck reports the GitHub authentication probe failure", async () => {
-    const githubCli: GithubCliPort = {
-      getAuth: () =>
-        Effect.fail(
-          new HostOperationError({
-            operation: "github.auth",
-            message: "gh api failed",
-          }),
-        ),
-      readVersion: () => Effect.succeed("gh version 2.80.0"),
-      run: () => Effect.die("unexpected GitHub command"),
-    };
-    const service = createSystemDiagnosticsServiceForTest({
-      githubCli,
-      runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
-      runtimeHealth: createRuntimeHealthPort(),
-      settingsConfig: createSettingsConfig(null),
-      systemCommands: createSystemCommandPort(),
-      repoStoreDiagnostics: createTaskStore(),
-    });
-
-    const check = await Effect.runPromise(service.runtimeCheck(true));
-
-    expect(check.ghOk).toBe(true);
-    expect(check.ghAuthOk).toBe(false);
-    expect(check.ghAuthLogin).toBeNull();
-    expect(check.ghAuthError).toBe("Failed to query GitHub authentication status: gh api failed");
-  });
   test("runtimeCheck reports unhealthy CLI tools when version probes fail", async () => {
     const service = createSystemDiagnosticsServiceForTest({
       runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
       runtimeHealth: createRuntimeHealthPort(),
       settingsConfig: createSettingsConfig(null),
       systemCommands: createSystemCommandPort({
-        versionForCommand: (command) => (command === "git" || command === "gh" ? null : undefined),
+        versionForCommand: (command) => (command === "git" ? null : undefined),
       }),
       toolDiscovery: createToolDiscoveryPort(),
       repoStoreDiagnostics: createTaskStore(),
@@ -436,10 +326,6 @@ describe("createSystemDiagnosticsService", () => {
 
     expect(check.gitOk).toBe(false);
     expect(check.gitVersion).toBeNull();
-    expect(check.ghOk).toBe(false);
-    expect(check.ghVersion).toBeNull();
-    expect(check.ghAuthOk).toBe(false);
-    expect(check.ghAuthError).toBe("Failed reading gh --version from gh.");
     expect(check.errors).toEqual(["Failed reading git --version from git."]);
   });
   test("taskStoreCheck delegates active repo store readiness through the task store", async () => {

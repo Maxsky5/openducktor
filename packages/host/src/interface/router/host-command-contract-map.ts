@@ -5,7 +5,7 @@ import type { createCodexAppServerCommandHandlers } from "../commands/codex-app-
 import type { createDevServerCommandHandlers } from "../commands/dev-server-command-handlers";
 import type { createFilesystemCommandHandlers } from "../commands/filesystem-command-handlers";
 import type { createGitCommandHandlers } from "../commands/git-command-handlers";
-import type { createGithubRepositoryDetectionCommandHandlers } from "../commands/github-repository-detection-command-handlers";
+import type { createGitProviderCommandHandlers } from "../commands/git-provider-command-handlers";
 import type { createLocalAttachmentCommandHandlers } from "../commands/local-attachment-command-handlers";
 import type { createOpenInToolsCommandHandlers } from "../commands/open-in-tools-command-handlers";
 import type { createPullRequestReviewCommandHandlers } from "../commands/pull-request-review-command-handlers";
@@ -28,7 +28,7 @@ type AllHostCommandHandlers = ReturnType<typeof createAgentSessionLiveCommandHan
   ReturnType<typeof createDevServerCommandHandlers> &
   ReturnType<typeof createFilesystemCommandHandlers> &
   ReturnType<typeof createGitCommandHandlers> &
-  ReturnType<typeof createGithubRepositoryDetectionCommandHandlers> &
+  ReturnType<typeof createGitProviderCommandHandlers> &
   ReturnType<typeof createLocalAttachmentCommandHandlers> &
   ReturnType<typeof createOpenInToolsCommandHandlers> &
   ReturnType<typeof createPullRequestReviewCommandHandlers> &

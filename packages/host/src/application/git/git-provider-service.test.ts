@@ -7,9 +7,9 @@ import type {
   GitProviderRepositoryPort,
 } from "../../ports/git-provider-port";
 import { createGitProviderResolver } from "./git-provider-resolver";
-import { createGitProviderRepositoryService } from "./git-provider-repository-service";
+import { createGitProviderService } from "./git-provider-service";
 
-describe("GitProviderRepositoryService", () => {
+describe("GitProviderService", () => {
   test("resolves the configured provider and detects through its repository port", async () => {
     const calls: string[] = [];
     const repository: GitProviderRepositoryPort = {
@@ -44,7 +44,7 @@ describe("GitProviderRepositoryService", () => {
         }),
     };
     const resolver = await Effect.runPromise(createGitProviderResolver([provider]));
-    const service = createGitProviderRepositoryService(resolver);
+    const service = createGitProviderService(resolver);
     const repoConfig = repoConfigSchema.parse({
       workspaceId: "repo",
       workspaceName: "Repo",

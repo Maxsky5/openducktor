@@ -1,18 +1,28 @@
 import { expect, test } from "bun:test";
 import { GITHUB_PROVIDER_DESCRIPTOR, repoConfigSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { createGithubReviewTestCommands } from "../../adapters/pull-requests/github/github-pull-request-review.test-support";
+import type { SystemCommandPort } from "../../ports/system-command-port";
+import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
 import { createNodeGitProviderResolver } from "./git-provider-composition";
 
 test("node composition registers the GitHub provider", async () => {
-  const githubCommands = createGithubReviewTestCommands(() =>
-    Effect.die("GitHub command execution is not expected in composition tests"),
-  );
+  const systemCommands: SystemCommandPort = {
+    resolveCommandPath: () => Effect.die("Unexpected resolveCommandPath call"),
+    versionCommand: () => Effect.die("Unexpected versionCommand call"),
+    runCommandAllowFailure: () => Effect.die("Unexpected runCommandAllowFailure call"),
+  };
+  const toolDiscovery: ToolDiscoveryPort = {
+    discoverTool: () => Effect.die("Unexpected discoverTool call"),
+    resolveTool: () => Effect.die("Unexpected resolveTool call"),
+    resolveToolPath: () => Effect.die("Unexpected resolveToolPath call"),
+    validateToolPath: () => Effect.die("Unexpected validateToolPath call"),
+  };
   const resolver = await Effect.runPromise(
     createNodeGitProviderResolver({
       gitPort: createGitPortTestDouble({}),
-      githubCommands,
+      systemCommands,
+      toolDiscovery,
     }),
   );
   const repoConfig = repoConfigSchema.parse({

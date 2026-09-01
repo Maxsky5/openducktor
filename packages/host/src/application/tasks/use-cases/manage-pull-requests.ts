@@ -3,11 +3,6 @@ import { ensureCleanTaskWorktree } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
 import { loadOpenApprovalContext } from "../support/approval-readiness";
 import {
-  fetchGithubPullRequestByNumber,
-  GITHUB_PROVIDER_ID,
-  upsertGithubPullRequest,
-} from "../support/github-pull-requests";
-import {
   requireDependencies,
   requirePullRequestLinkDependencies,
   requirePullRequestUpsertDependencies,
@@ -19,7 +14,6 @@ type Cases = Pick<TaskService, "linkPullRequest" | "upsertPullRequest" | "unlink
 
 export const createTaskPullRequestManagementUseCases = ({
   gitPort,
-  githubCommands,
   gitProviderResolver,
   taskStore,
   settingsConfig,
@@ -29,19 +23,9 @@ export const createTaskPullRequestManagementUseCases = ({
   linkPullRequest(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, providerId, number } = input;
-      if (providerId !== GITHUB_PROVIDER_ID) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "providerId",
-            message: `Unsupported pull request provider for task_pull_request_link: ${providerId}`,
-            details: { providerId },
-          }),
-        );
-      }
       const dependencies = yield* requireDependencies(() =>
         requirePullRequestLinkDependencies({
           gitProviderResolver,
-          githubCommands,
           workspaceSettingsService,
         }),
       );
@@ -70,13 +54,18 @@ export const createTaskPullRequestManagementUseCases = ({
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = repoConfig.repoPath;
       const provider = yield* dependencies.gitProviderResolver.resolve(repoConfig);
-      const { repository } = yield* provider.repository().getMapping(repoConfig);
-      const pullRequest = yield* fetchGithubPullRequestByNumber(
-        dependencies,
-        effectiveRepoPath,
-        repository,
-        number,
-      );
+      const selectedProviderId = provider.getDescriptor().id;
+      if (providerId !== selectedProviderId) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "providerId",
+            message: `Pull request provider '${providerId}' does not match configured provider '${selectedProviderId}'.`,
+            details: { providerId, selectedProviderId },
+          }),
+        );
+      }
+      const pullRequests = yield* provider.pullRequests();
+      const pullRequest = yield* pullRequests.getByNumber({ repoConfig, number });
       yield* taskStore.setPullRequest({
         repoPath: effectiveRepoPath,
         taskId,
@@ -91,7 +80,6 @@ export const createTaskPullRequestManagementUseCases = ({
       const dependencies = yield* requireDependencies(() =>
         requirePullRequestUpsertDependencies({
           gitPort,
-          githubCommands,
           gitProviderResolver,
           settingsConfig,
           taskWorktreeService,
@@ -137,12 +125,13 @@ export const createTaskPullRequestManagementUseCases = ({
         );
       }
       const provider = yield* dependencies.gitProviderResolver.resolve(repoConfig);
-      const githubContext = yield* provider.repository().getMapping(repoConfig);
+      const context = yield* provider.repository().getMapping(repoConfig);
+      const pullRequests = yield* provider.pullRequests();
       const pushResult = yield* dependencies.gitPort.pushBranch(
         approval.workingDirectory,
         approval.sourceBranch,
         {
-          remote: githubContext.remoteName,
+          remote: context.remoteName,
           setUpstream: true,
           forceWithLease: false,
         },
@@ -156,14 +145,12 @@ export const createTaskPullRequestManagementUseCases = ({
           }),
         );
       }
-      const pullRequest = yield* upsertGithubPullRequest(
-        dependencies,
-        effectiveRepoPath,
-        githubContext,
+      const pullRequest = yield* pullRequests.upsert({
+        repoConfig,
         approval,
-        content.title,
-        content.body,
-      );
+        title: content.title,
+        body: content.body,
+      });
       yield* taskStore.setPullRequest({ repoPath: effectiveRepoPath, taskId, pullRequest });
       return pullRequest;
     });

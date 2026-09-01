@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { errorMessage, HostValidationError } from "../../../effect/host-errors";
+import { errorMessage, HostValidationError } from "../../../../effect/host-errors";
 
 const zodIssueField = (cause: z.ZodError, fieldPrefix?: string): string => {
   const path = cause.issues[0]?.path;

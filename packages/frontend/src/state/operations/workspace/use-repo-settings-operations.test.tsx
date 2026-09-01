@@ -788,6 +788,9 @@ describe("use-repo-settings-operations", () => {
       expect(invalidateQueries).toHaveBeenCalledWith({
         queryKey: checksQueryKeys.all,
       });
+      expect(invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ["git-provider-health"],
+      });
       refreshResult.resolve();
     } finally {
       await harness.unmount();

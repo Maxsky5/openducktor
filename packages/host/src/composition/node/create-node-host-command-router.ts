@@ -20,7 +20,7 @@ import { createSystemDiagnosticsService } from "../../application/diagnostics/sy
 import { createFilesystemService } from "../../application/filesystem/filesystem-service";
 import { createWorkspaceFilesService } from "../../application/filesystem/workspace-files-service";
 import { createGitService } from "../../application/git/git-service";
-import { createGitProviderRepositoryService } from "../../application/git/git-provider-repository-service";
+import { createGitProviderService } from "../../application/git/git-provider-service";
 import { createOdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import { createPullRequestReviewService } from "../../application/pull-requests/pull-request-review-service";
 import { createCodexAppServerService } from "../../application/runtimes/codex-app-server-service";
@@ -36,7 +36,6 @@ import { loadGlobalConfig } from "../../application/workspaces/workspace-setting
 import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import type { GitProviderResolver } from "../../application/git/git-provider-resolver";
 import { HostOperationError, HostResourceError } from "../../effect/host-errors";
-import type { GithubCliPort, GithubCommandResolverPort } from "../../ports/github-cli-port";
 import { createTerminalLaunchEnvironment } from "../../infrastructure/terminals/terminal-launch-environment";
 import { createAgentSessionLiveCommandHandlers } from "../../interface/commands/agent-session-live-command-handlers";
 import { createClaudeRuntimeCommandHandlers } from "../../interface/commands/claude-runtime-command-handlers";
@@ -44,7 +43,7 @@ import { createCodexAppServerCommandHandlers } from "../../interface/commands/co
 import { createDevServerCommandHandlers } from "../../interface/commands/dev-server-command-handlers";
 import { createFilesystemCommandHandlers } from "../../interface/commands/filesystem-command-handlers";
 import { createGitCommandHandlers } from "../../interface/commands/git-command-handlers";
-import { createGithubRepositoryDetectionCommandHandlers } from "../../interface/commands/github-repository-detection-command-handlers";
+import { createGitProviderCommandHandlers } from "../../interface/commands/git-provider-command-handlers";
 import { createLocalAttachmentCommandHandlers } from "../../interface/commands/local-attachment-command-handlers";
 import { createOpenInToolsCommandHandlers } from "../../interface/commands/open-in-tools-command-handlers";
 import { createPullRequestReviewCommandHandlers } from "../../interface/commands/pull-request-review-command-handlers";
@@ -86,10 +85,6 @@ export const assembleNodeEffectHostCommandRouter = (
   input: CreateNodeHostCommandRouterInput,
   defaultPorts: ReturnType<typeof createNodeHostDefaultPorts>,
   gitProviderResolver: GitProviderResolver,
-  github: {
-    githubCli: GithubCliPort;
-    githubCommands: GithubCommandResolverPort;
-  },
 ): EffectNodeHostCommandRouter => {
   const {
     clientVersion,
@@ -119,7 +114,6 @@ export const assembleNodeEffectHostCommandRouter = (
     toolDiscovery,
     worktreeFiles,
   } = defaultPorts;
-  const { githubCli, githubCommands } = github;
   const codexAppServerService = createCodexAppServerService(effectiveCodexAppServer);
   const liveSessionAdapterRegistry = createLiveSessionAdapterRegistry();
   const agentSessionLiveStateService = createAgentSessionLiveStateService({
@@ -142,7 +136,7 @@ export const assembleNodeEffectHostCommandRouter = (
   const filesystemService = createFilesystemService(filesystem);
   const workspaceFilesService = createWorkspaceFilesService(filesystem, git);
   const gitService = createGitService({ gitPort: git, settingsConfig, worktreeFiles });
-  const gitProviderRepositoryService = createGitProviderRepositoryService(gitProviderResolver);
+  const gitProviderService = createGitProviderService(gitProviderResolver);
   const localAttachmentService = createLocalAttachmentService(localAttachments);
   const openInToolsService = createOpenInToolsService(openInTools);
   const runtimeDefinitionsService = createRuntimeDefinitionsService();
@@ -158,7 +152,6 @@ export const assembleNodeEffectHostCommandRouter = (
   const assets = createNodeTaskAssetServices(taskAssetServiceInput);
   const { startupSweep, taskAssetReadService, taskAssetStagingService, taskStore } = assets;
   const systemDiagnosticsService = createSystemDiagnosticsService({
-    githubCli,
     runtimeDefinitionsService,
     runtimeHealth,
     settingsConfig,
@@ -289,7 +282,6 @@ export const assembleNodeEffectHostCommandRouter = (
     terminalService,
     gitPort: git,
     gitProviderResolver,
-    githubCommands,
     taskStore,
     taskActivityGuard,
     settingsConfig,
@@ -465,8 +457,8 @@ export const assembleNodeEffectHostCommandRouter = (
       ...createFilesystemCommandHandlers(filesystemService),
       ...createWorkspaceFilesCommandHandlers(workspaceFilesService),
       ...createGitCommandHandlers(gitService),
-      ...createGithubRepositoryDetectionCommandHandlers({
-        service: gitProviderRepositoryService,
+      ...createGitProviderCommandHandlers({
+        service: gitProviderService,
         workspaceSettingsService,
       }),
       ...createLocalAttachmentCommandHandlers(localAttachmentService),

@@ -1,4 +1,6 @@
 import type { ReactElement } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { gitProviderHealthQueryOptions } from "@/state/queries/git-provider-health";
 import type { SettingsContentFocusRequest } from "./settings-deep-link";
 import type { PromptRoleTabId, RepositorySectionId } from "./settings-modal-constants";
 import { RepositorySidebar } from "./settings-modal-sidebars";
@@ -125,6 +127,14 @@ export function SettingsRepositoryContent({
   const selectedRepoScriptValidationErrorCount = selectedWorkspaceId
     ? (repoScriptValidationErrorCountByWorkspaceId[selectedWorkspaceId] ?? 0)
     : 0;
+  const selectedRepoPath = selectedWorkspace?.repoPath ?? "";
+  const providerHealthQuery = useQuery({
+    ...gitProviderHealthQueryOptions(selectedRepoPath),
+    enabled:
+      repositorySection === "git" &&
+      selectedRepoConfig?.git.provider?.enabled === true &&
+      selectedRepoPath.length > 0,
+  });
 
   return (
     <div className="grid h-full lg:grid-cols-[240px_minmax(0,1fr)]">
@@ -183,7 +193,7 @@ export function SettingsRepositoryContent({
           <RepositoryGitSection
             selectedRepoPath={selectedWorkspace?.repoPath ?? null}
             selectedRepoConfig={selectedRepoConfig}
-            runtimeCheck={controller.runtimeCheck}
+            providerHealth={providerHealthQuery.data ?? null}
             disabled={isInteractionDisabled}
             onDetectGithubRepository={controller.detectSelectedRepoGithubRepository}
             onUpdateSelectedRepoConfig={updateSelectedRepoConfig}

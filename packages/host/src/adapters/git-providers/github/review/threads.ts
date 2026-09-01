@@ -1,14 +1,10 @@
 import type { GitProviderRepository, PullRequestReviewActivity } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { z } from "zod";
-import { runGithubCommand } from "../../../application/tasks/support/github-pull-requests";
-import { errorMessage, HostValidationError } from "../../../effect/host-errors";
-import type { GithubCommandResolverPort } from "../../../ports/github-cli-port";
-import { parseGithubJson } from "./github-pull-request-review-payload";
-import {
-  type GithubReviewCommentLineRange,
-  parseGithubReviewCommentContent,
-} from "./github-pull-request-review-suggestions";
+import { errorMessage, HostValidationError } from "../../../../effect/host-errors";
+import { runGithubApi, type GithubCli } from "../cli";
+import { parseGithubJson } from "./payload";
+import { type GithubReviewCommentLineRange, parseGithubReviewCommentContent } from "./suggestions";
 
 export type ReviewThreadCommentsCursor = {
   threadId: string;
@@ -294,7 +290,7 @@ const parseReviewThreadCommentsPage = (payload: string): ParsedReviewThreadComme
 };
 
 type GithubReviewThreadsReadInput = {
-  githubCommands: GithubCommandResolverPort;
+  githubCli: GithubCli;
   repoPath: string;
   repository: GitProviderRepository;
   pullRequestNumber: number;
@@ -305,7 +301,7 @@ const runReviewGraphql = (
   query: string,
   variables: readonly { name: string; value: string | number }[],
 ) =>
-  runGithubCommand(input.githubCommands, input.repoPath, input.repository.host, [
+  runGithubApi(input.githubCli, input.repoPath, input.repository.host, [
     "api",
     "graphql",
     "-f",

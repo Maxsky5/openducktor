@@ -36,6 +36,12 @@ export type PullRequestProviderInput = {
   repoConfig: RepoConfig;
 };
 
+export type ProviderPullRequest = {
+  record: PullRequest;
+  sourceBranch: string;
+  targetBranch: string;
+};
+
 export type FindPullRequestByBranchInput = PullRequestProviderInput & {
   sourceBranch: string;
   state: "open" | "all";
@@ -54,9 +60,13 @@ export type UpsertPullRequestInput = PullRequestProviderInput & {
 export type PullRequestProviderPort = {
   findByBranch(
     input: FindPullRequestByBranchInput,
-  ): Effect.Effect<PullRequest | undefined, HostError>;
-  getByNumber(input: GetPullRequestByNumberInput): Effect.Effect<PullRequest, HostError>;
-  upsert(input: UpsertPullRequestInput): Effect.Effect<PullRequest, HostError>;
+  ): Effect.Effect<ProviderPullRequest | undefined, HostError | GitProviderRepositoryError>;
+  getByNumber(
+    input: GetPullRequestByNumberInput,
+  ): Effect.Effect<ProviderPullRequest, HostError | GitProviderRepositoryError>;
+  upsert(
+    input: UpsertPullRequestInput,
+  ): Effect.Effect<PullRequest, HostError | GitProviderRepositoryError>;
 };
 
 export type GitProviderPort = {

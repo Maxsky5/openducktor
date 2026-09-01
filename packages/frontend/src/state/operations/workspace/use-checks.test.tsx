@@ -28,11 +28,6 @@ reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 const makeRuntimeCheck = (overrides: Partial<RuntimeCheck> = {}): RuntimeCheck => ({
   gitOk: true,
   gitVersion: "2.45.0",
-  ghOk: true,
-  ghVersion: "2.73.0",
-  ghAuthOk: true,
-  ghAuthLogin: "octocat",
-  ghAuthError: null,
   runtimes: [{ kind: "opencode", ok: true, executablePath: "/bin/opencode", version: "0.12.0" }],
   errors: [],
   ...overrides,
@@ -475,11 +470,6 @@ describe("use-checks", () => {
         : makeRuntimeCheck({
             gitOk: false,
             gitVersion: null,
-            ghOk: false,
-            ghVersion: null,
-            ghAuthOk: false,
-            ghAuthLogin: null,
-            ghAuthError: "git missing",
             runtimes: [{ kind: "opencode", ok: false, executablePath: null, version: null }],
             errors: ["git missing"],
           });

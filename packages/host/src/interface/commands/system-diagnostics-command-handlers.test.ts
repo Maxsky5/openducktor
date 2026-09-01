@@ -16,11 +16,6 @@ const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
 const runtimeCheckResult = {
   gitOk: true,
   gitVersion: "2.50.0",
-  ghOk: true,
-  ghVersion: "2.75.0",
-  ghAuthOk: true,
-  ghAuthLogin: "octocat",
-  ghAuthError: null,
   runtimes: [],
   errors: [],
 } satisfies RuntimeCheck;

@@ -16,10 +16,6 @@ import type {
 } from "@openducktor/contracts";
 import { globalConfigSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
-import {
-  createGithubCliAdapter,
-  createGithubCommandResolver,
-} from "../../../adapters/git-providers/github-cli";
 import { createToolDiscoveryAdapter } from "../../../adapters/system/tool-discovery";
 import { HostOperationError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
@@ -172,12 +168,6 @@ const createTaskServiceInput = (input: TaskServiceTestInput): CreateTaskServiceI
   const taskServiceInput: CreateTaskServiceInput = {
     ...rest,
     gitProviderResolver: rest.gitProviderResolver ?? createDefaultGitProviderResolver(),
-    githubCommands:
-      rest.githubCommands ??
-      createGithubCommandResolver({
-        githubCli: createGithubCliAdapter(systemCommands),
-        toolDiscovery: resolvedToolDiscovery,
-      }),
     terminalService:
       rest.terminalService ??
       ({
@@ -865,7 +855,7 @@ const createPullRequestUpsertSystemCommands = ({
       return Effect.succeed(command === "gh" ? command : null);
     },
     versionCommand() {
-      return Effect.dieMessage("unexpected version command");
+      return Effect.succeed("gh version test");
     },
     runCommandAllowFailure(command, args, options) {
       calls.push({ type: "command", command, args, options });
@@ -903,10 +893,13 @@ const createPullRequestSyncSystemCommands = ({
       return Effect.succeed(command === "gh" && available ? command : null);
     },
     versionCommand() {
-      return Effect.dieMessage("unexpected version command");
+      return Effect.succeed("gh version test");
     },
     runCommandAllowFailure(command, args, options) {
       calls.push({ type: "command", command, args, options });
+      if (args[0] === "api" && args[1] === "user") {
+        return Effect.succeed({ ok: true, stdout: "octocat\n", stderr: "" });
+      }
       if (args.some((arg) => arg.includes("pulls/42"))) {
         return Effect.succeed({ ok: true, stdout: payload, stderr: "" });
       }

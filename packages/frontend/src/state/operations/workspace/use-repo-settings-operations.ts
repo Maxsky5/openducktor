@@ -14,6 +14,7 @@ import { normalizeTargetBranch } from "@/lib/target-branch";
 import { normalizeRepoScripts } from "@/state/read-models/settings-read-model";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
 import { checksQueryKeys } from "../../queries/checks";
+import { gitProviderHealthQueryKeys } from "../../queries/git-provider-health";
 import {
   loadRepoConfigFromQuery,
   loadSettingsSnapshotFromQuery,
@@ -189,6 +190,7 @@ export function useRepoSettingsOperations({
       queryClient.setQueryData(workspaceQueryKeys.list(), workspaces);
       applyWorkspaceRecords(workspaces);
       void queryClient.invalidateQueries({ queryKey: checksQueryKeys.all });
+      void queryClient.invalidateQueries({ queryKey: gitProviderHealthQueryKeys.all });
     },
     [applyWorkspaceRecords, queryClient, settingsSnapshotQueryKey],
   );

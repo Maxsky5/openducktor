@@ -5,14 +5,11 @@ import {
   type RepoConfig,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { errorMessage, type HostError, HostValidationError } from "../../../effect/host-errors";
-import type { GitProviderRepositoryError } from "../../../ports/git-provider-errors";
-import type { GithubCommandResolverPort } from "../../../ports/github-cli-port";
-import type { PullRequestReviewProviderPort } from "../../../ports/pull-request-review-provider-port";
-import {
-  createGithubPullRequestReviewReader,
-  type GithubPullRequestReviewReader,
-} from "./github-pull-request-review-reader";
+import { errorMessage, type HostError, HostValidationError } from "../../../../effect/host-errors";
+import type { GitProviderRepositoryError } from "../../../../ports/git-provider-errors";
+import type { PullRequestReviewProviderPort } from "../../../../ports/pull-request-review-provider-port";
+import type { GithubCli } from "../cli";
+import { createGithubPullRequestReviewReader, type GithubPullRequestReviewReader } from "./reader";
 
 const GITHUB_PROVIDER_ID = GITHUB_PROVIDER_DESCRIPTOR.id;
 
@@ -24,11 +21,11 @@ const unavailable = (reason: string) =>
   });
 
 export const createGithubPullRequestReviewAdapter = ({
-  githubCommands,
+  githubCli,
   getRepository,
   reviewReader = createGithubPullRequestReviewReader(),
 }: {
-  githubCommands: GithubCommandResolverPort;
+  githubCli: GithubCli;
   getRepository: (
     repoConfig: RepoConfig,
   ) => Effect.Effect<GitProviderRepository, HostError | GitProviderRepositoryError>;
@@ -54,7 +51,7 @@ export const createGithubPullRequestReviewAdapter = ({
         }
 
         return yield* reviewReader.read({
-          githubCommands,
+          githubCli,
           repoPath,
           repository: repositoryResult.right,
           pullRequestNumber: input.linkedPullRequest.number,

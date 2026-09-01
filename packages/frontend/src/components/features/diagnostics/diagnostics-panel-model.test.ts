@@ -80,11 +80,6 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        ghOk: true,
-        ghVersion: "gh version 2.73.0",
-        ghAuthOk: true,
-        ghAuthLogin: "octocat",
-        ghAuthError: null,
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
@@ -109,11 +104,6 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        ghOk: true,
-        ghVersion: "gh version 2.73.0",
-        ghAuthOk: true,
-        ghAuthLogin: "octocat",
-        ghAuthError: null,
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
@@ -159,11 +149,6 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        ghOk: true,
-        ghVersion: "gh version 2.73.0",
-        ghAuthOk: true,
-        ghAuthLogin: "octocat",
-        ghAuthError: null,
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
@@ -214,11 +199,6 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        ghOk: true,
-        ghVersion: "gh version 2.73.0",
-        ghAuthOk: true,
-        ghAuthLogin: "octocat",
-        ghAuthError: null,
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
@@ -240,7 +220,6 @@ describe("buildDiagnosticsPanelModel", () => {
     expect(cliToolsSection?.badge.label).toBe("Available");
     expect(cliToolsSection?.rows).toEqual([
       { label: "Git", value: "git version 2.50.1" },
-      { label: "GitHub CLI", value: "gh version 2.73.0" },
       { label: "OpenCode", value: "1.2.9", breakAll: true },
       { label: "Codex", value: "missing (runtime disabled)", breakAll: true },
       { label: "Claude", value: "missing (runtime disabled)", breakAll: true },
@@ -269,11 +248,6 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        ghOk: true,
-        ghVersion: "gh version 2.73.0",
-        ghAuthOk: true,
-        ghAuthLogin: "octocat",
-        ghAuthError: null,
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
@@ -309,11 +283,6 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        ghOk: true,
-        ghVersion: "gh version 2.73.0",
-        ghAuthOk: true,
-        ghAuthLogin: "octocat",
-        ghAuthError: null,
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
@@ -368,11 +337,6 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        ghOk: true,
-        ghVersion: "gh version 2.73.0",
-        ghAuthOk: true,
-        ghAuthLogin: "octocat",
-        ghAuthError: null,
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
@@ -415,11 +379,6 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        ghOk: true,
-        ghVersion: "gh version 2.73.0",
-        ghAuthOk: true,
-        ghAuthLogin: "octocat",
-        ghAuthError: null,
         runtimes: makeBuiltInRuntimeDiagnostics({
           kind: "opencode",
           ok: true,
@@ -478,11 +437,6 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        ghOk: false,
-        ghVersion: null,
-        ghAuthOk: false,
-        ghAuthLogin: null,
-        ghAuthError: "gh not found in PATH",
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: false, version: null }),
         errors: ["opencode not found in PATH"],
       },
@@ -533,9 +487,8 @@ describe("buildDiagnosticsPanelModel", () => {
     expect(model.criticalReasons).toEqual(
       expect.arrayContaining(["runtime failed", "task store failed"]),
     );
-    expect(model.criticalReasons).not.toContain("gh not found in PATH");
     const cliToolsSection = model.sections.find((section) => section.key === "cli-tools");
-    expect(cliToolsSection?.badge).toEqual({ label: "GitHub optional", variant: "warning" });
+    expect(cliToolsSection?.badge).toEqual({ label: "Available", variant: "success" });
     expect(cliToolsSection?.errors).toEqual([]);
     expect(runtimeSection?.errors).toEqual(["runtime failed"]);
     expect(mcpSection?.errors).toEqual([]);
@@ -552,11 +505,6 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        ghOk: true,
-        ghVersion: "gh version 2.73.0",
-        ghAuthOk: true,
-        ghAuthLogin: "octocat",
-        ghAuthError: null,
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
@@ -596,11 +544,6 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        ghOk: true,
-        ghVersion: "gh version 2.73.0",
-        ghAuthOk: true,
-        ghAuthLogin: "octocat",
-        ghAuthError: null,
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
@@ -673,11 +616,6 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        ghOk: true,
-        ghVersion: "gh version 2.73.0",
-        ghAuthOk: true,
-        ghAuthLogin: "octocat",
-        ghAuthError: null,
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
@@ -752,11 +690,6 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        ghOk: true,
-        ghVersion: "gh version 2.73.0",
-        ghAuthOk: true,
-        ghAuthLogin: "octocat",
-        ghAuthError: null,
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
@@ -796,11 +729,6 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        ghOk: true,
-        ghVersion: "gh version 2.73.0",
-        ghAuthOk: true,
-        ghAuthLogin: "octocat",
-        ghAuthError: null,
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },
@@ -844,11 +772,6 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        ghOk: true,
-        ghVersion: "gh version 2.73.0",
-        ghAuthOk: true,
-        ghAuthLogin: "octocat",
-        ghAuthError: null,
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
         errors: [],
       },

@@ -1,4 +1,4 @@
-import type { GitProviderRepository, RepoConfig, RuntimeCheck } from "@openducktor/contracts";
+import type { GitProviderHealth, GitProviderRepository, RepoConfig } from "@openducktor/contracts";
 import { Github, LoaderCircle, PencilLine, RefreshCcw } from "lucide-react";
 import type { ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +15,7 @@ import {
 type RepositoryGitSectionProps = {
   selectedRepoPath: string | null;
   selectedRepoConfig: RepoConfig | null;
-  runtimeCheck: RuntimeCheck | null;
+  providerHealth: GitProviderHealth | null;
   disabled: boolean;
   onDetectGithubRepository: () => Promise<GitProviderRepository | null>;
   onUpdateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
@@ -193,7 +193,7 @@ function RepositoryGitManualConfigForm({
 export function RepositoryGitSection({
   selectedRepoPath,
   selectedRepoConfig,
-  runtimeCheck,
+  providerHealth,
   disabled,
   onDetectGithubRepository,
   onUpdateSelectedRepoConfig,
@@ -225,7 +225,7 @@ export function RepositoryGitSection({
     disabled,
     onDetectGithubRepository,
     onUpdateSelectedRepoConfig,
-    runtimeCheck,
+    providerHealth,
     selectedRepoConfig,
     selectedRepoPath,
   });

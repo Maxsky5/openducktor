@@ -14,6 +14,7 @@ import { TaskAssetError } from "../../effect/task-asset-error";
 import type { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
 import type { DevServerProcessStartExitError } from "../../ports/dev-server-process-port";
 import {
+  GitProviderCapabilityError,
   GitProviderRepositoryError,
   GitProviderResolutionError,
 } from "../../ports/git-provider-errors";
@@ -28,6 +29,7 @@ export type HostCommandHandlerError =
   | CodexSessionHistoryError
   | DevServerProcessStartExitError
   | FilesystemListDirectoryError
+  | GitProviderCapabilityError
   | GitProviderRepositoryError
   | GitProviderResolutionError
   | HostError
@@ -79,7 +81,11 @@ const toHostCommandHandlerError = (
   if (isHostError(cause)) {
     return cause;
   }
-  if (cause instanceof GitProviderRepositoryError || cause instanceof GitProviderResolutionError) {
+  if (
+    cause instanceof GitProviderCapabilityError ||
+    cause instanceof GitProviderRepositoryError ||
+    cause instanceof GitProviderResolutionError
+  ) {
     return cause;
   }
   if (cause instanceof TaskAssetError) {

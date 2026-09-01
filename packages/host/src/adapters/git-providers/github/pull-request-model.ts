@@ -10,9 +10,6 @@ import { z, type JSONType } from "zod";
 
 export const GITHUB_PROVIDER_ID = GITHUB_PROVIDER_DESCRIPTOR.id;
 
-export const repositoryKey = (repository: { host: string; owner: string; name: string }): string =>
-  `${repository.host}/${repository.owner}/${repository.name}`.toLowerCase();
-
 export const combinedCommandOutput = (stdout: string, stderr: string): string => {
   const trimmedStdout = stdout.trim();
   const trimmedStderr = stderr.trim();
@@ -61,12 +58,6 @@ export type ResolvedPullRequest = {
 export type GithubPullRequestContext = {
   repository: GitProviderRepository;
   remoteName: string;
-};
-
-export type GithubPullRequestSyncPolicy = {
-  providerId: typeof GITHUB_PROVIDER_ID;
-  available: boolean;
-  repository?: GitProviderRepository;
 };
 
 const parseGithubPullPayload = (value: JSONType): GithubPullResponse => {
@@ -153,15 +144,6 @@ export const parseGithubPullResponse = (payload: string): ResolvedPullRequest =>
   }
   return normalizeGithubPullRequest(parseGithubPullPayload(parsed));
 };
-
-const comparablePullRequestRecord = ({
-  lastSyncedAt: _lastSyncedAt,
-  ...pullRequest
-}: PullRequest): Omit<PullRequest, "lastSyncedAt"> => pullRequest;
-
-export const pullRequestRecordsMatch = (left: PullRequest, right: PullRequest): boolean =>
-  JSON.stringify(comparablePullRequestRecord(left)) ===
-  JSON.stringify(comparablePullRequestRecord(right));
 
 export const isEditablePullRequest = (pullRequest: PullRequest | undefined): boolean =>
   pullRequest?.providerId === GITHUB_PROVIDER_ID &&

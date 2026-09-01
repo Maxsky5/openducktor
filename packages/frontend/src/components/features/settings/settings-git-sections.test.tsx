@@ -1,21 +1,20 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { GitProviderConfig, RepoConfig, RuntimeCheck } from "@openducktor/contracts";
+import type { GitProviderConfig, RepoConfig, GitProviderHealth } from "@openducktor/contracts";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SettingsGitSection } from "./settings-git-section";
 import { RepositoryGitSection } from "./settings-repository-git-section";
 
-const authenticatedRuntimeCheck: RuntimeCheck = {
-  gitOk: true,
-  gitVersion: "git version 2.50.1",
-  ghOk: true,
-  ghVersion: "gh version 2.73.0",
-  ghAuthOk: true,
-  ghAuthLogin: "octocat",
-  ghAuthError: null,
-  runtimes: [],
-  errors: [],
+const authenticatedGitProviderHealth: GitProviderHealth = {
+  providerId: "github",
+  enabled: true,
+  available: true,
+  executablePath: "gh",
+  version: "gh version 2.73.0",
+  authenticated: true,
+  account: "octocat",
+  repositoryMappingValid: true,
 };
 
 const createDeferred = <T,>() => {
@@ -67,22 +66,17 @@ const createGitlabProvider = (): GitProviderConfig => ({
 });
 
 describe("settings git sections", () => {
-  test("renders global GitHub CLI and auth readiness", () => {
+  test("renders global Git defaults without provider details", () => {
     const html = renderToStaticMarkup(
       createElement(SettingsGitSection, {
         git: { defaultMergeMethod: "merge_commit" },
-        runtimeCheck: authenticatedRuntimeCheck,
         disabled: false,
         onUpdateGit: () => ({ defaultMergeMethod: "merge_commit" }),
       }),
     );
 
-    expect(html).toContain("GitHub CLI");
-    expect(html).toContain("Installed");
-    expect(html).toContain("gh version 2.73.0");
-    expect(html).toContain("GitHub Authentication");
-    expect(html).toContain("Authenticated");
-    expect(html).toContain("Authenticated as octocat.");
+    expect(html).toContain("Default merge method");
+    expect(html).not.toContain("GitHub CLI");
   });
 
   test("renders repository readiness blockers when GitHub auth is missing", () => {
@@ -90,11 +84,12 @@ describe("settings git sections", () => {
       createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: baseRepoConfig,
-        runtimeCheck: {
-          ...authenticatedRuntimeCheck,
-          ghAuthOk: false,
-          ghAuthLogin: null,
-          ghAuthError: "Run `gh auth login` to connect GitHub.",
+        providerHealth: {
+          ...authenticatedGitProviderHealth,
+          available: false,
+          authenticated: false,
+          account: null,
+          reason: "Run `gh auth login` to connect GitHub.",
         },
         disabled: false,
         onDetectGithubRepository: async () => null,
@@ -129,11 +124,8 @@ describe("settings git sections", () => {
             },
           },
         },
-        runtimeCheck: {
-          ...authenticatedRuntimeCheck,
-          ghAuthOk: false,
-          ghAuthLogin: null,
-          ghAuthError: "github.com auth missing",
+        providerHealth: {
+          ...authenticatedGitProviderHealth,
         },
         disabled: false,
         onDetectGithubRepository: async () => null,
@@ -143,7 +135,7 @@ describe("settings git sections", () => {
 
     expect(html).toContain("Configured");
     expect(html).toContain("github.mycorp.com");
-    expect(html).toContain("validated during approval");
+    expect(html).toContain("GitHub pull requests are ready");
   });
 
   test("allows editing repository inputs without crashing when the field is temporarily blank", () => {
@@ -167,7 +159,7 @@ describe("settings git sections", () => {
       return createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: repoConfig,
-        runtimeCheck: authenticatedRuntimeCheck,
+        providerHealth: authenticatedGitProviderHealth,
         disabled: false,
         onDetectGithubRepository: async () => null,
         onUpdateSelectedRepoConfig: (updater) => {
@@ -229,7 +221,7 @@ describe("settings git sections", () => {
       createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: repoConfig,
-        runtimeCheck: authenticatedRuntimeCheck,
+        providerHealth: authenticatedGitProviderHealth,
         disabled: false,
         onDetectGithubRepository,
         onUpdateSelectedRepoConfig,
@@ -281,7 +273,7 @@ describe("settings git sections", () => {
         createElement(RepositoryGitSection, {
           selectedRepoPath: "/repo",
           selectedRepoConfig: repoConfig,
-          runtimeCheck: authenticatedRuntimeCheck,
+          providerHealth: authenticatedGitProviderHealth,
           disabled: false,
           onDetectGithubRepository,
           onUpdateSelectedRepoConfig: setRepoConfig,
@@ -331,7 +323,7 @@ describe("settings git sections", () => {
     const props = () => ({
       selectedRepoPath: "/repo",
       selectedRepoConfig: repoConfig,
-      runtimeCheck: authenticatedRuntimeCheck,
+      providerHealth: authenticatedGitProviderHealth,
       disabled: false,
       onDetectGithubRepository: () => pendingDetection.promise,
       onUpdateSelectedRepoConfig,
@@ -394,7 +386,7 @@ describe("settings git sections", () => {
       createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: repoConfig,
-        runtimeCheck: authenticatedRuntimeCheck,
+        providerHealth: authenticatedGitProviderHealth,
         disabled: false,
         onDetectGithubRepository: () => pendingDetection.promise,
         onUpdateSelectedRepoConfig,
@@ -455,7 +447,7 @@ describe("settings git sections", () => {
       return createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: repoConfig,
-        runtimeCheck: authenticatedRuntimeCheck,
+        providerHealth: authenticatedGitProviderHealth,
         disabled: false,
         onDetectGithubRepository: () => detection.promise,
         onUpdateSelectedRepoConfig: (updater) => {
@@ -509,7 +501,7 @@ describe("settings git sections", () => {
         createElement(RepositoryGitSection, {
           selectedRepoPath: "/repo",
           selectedRepoConfig: null,
-          runtimeCheck: authenticatedRuntimeCheck,
+          providerHealth: authenticatedGitProviderHealth,
           disabled: false,
           onDetectGithubRepository,
           onUpdateSelectedRepoConfig: () => baseRepoConfig,
@@ -538,7 +530,7 @@ describe("settings git sections", () => {
                 },
               },
             },
-            runtimeCheck: authenticatedRuntimeCheck,
+            providerHealth: authenticatedGitProviderHealth,
             disabled: false,
             onDetectGithubRepository,
             onUpdateSelectedRepoConfig: () => baseRepoConfig,

@@ -6,21 +6,14 @@ import {
   type RepoConfig,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { errorMessage, HostValidationError } from "../../effect/host-errors";
-import type { GitPort } from "../../ports/git-port";
-import { GitProviderRepositoryError } from "../../ports/git-provider-errors";
-import type { GitProviderRepositoryPort } from "../../ports/git-provider-port";
-import type { GithubCommandResolverPort } from "../../ports/github-cli-port";
+import { HostValidationError } from "../../../effect/host-errors";
+import type { GitPort } from "../../../ports/git-port";
+import { GitProviderRepositoryError } from "../../../ports/git-provider-errors";
+import type { GitProviderRepositoryPort } from "../../../ports/git-provider-port";
 
 const GITHUB_PROVIDER_ID = GITHUB_PROVIDER_DESCRIPTOR.id;
 
-export const createGithubProviderRepositoryAdapter = ({
-  githubCommands,
-  gitPort,
-}: {
-  githubCommands: GithubCommandResolverPort;
-  gitPort: GitPort;
-}) => {
+export const createGithubProviderRepositoryAdapter = ({ gitPort }: { gitPort: GitPort }) => {
   const findRemoteNames = (repoPath: string, repository: GitProviderRepository) =>
     Effect.gen(function* () {
       const expectedKey = gitRepositoryKey(repository);
@@ -40,37 +33,7 @@ export const createGithubProviderRepositoryAdapter = ({
       return yield* Effect.fail(mappingError({ repoPath, repository, remoteNames }));
     });
 
-  const requireAuth = (repoPath: string, host: string) =>
-    Effect.gen(function* () {
-      const command = yield* githubCommands.resolve().pipe(
-        Effect.mapError(
-          (cause) =>
-            new HostValidationError({
-              field: "githubCli",
-              message: `GitHub operations require the gh CLI. ${errorMessage(cause)}`,
-              details: { repoPath },
-            }),
-        ),
-      );
-      const auth = yield* command.githubCli.getAuth(command.ghCommand, host);
-      if (auth.authenticated) {
-        return;
-      }
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "github.auth",
-          message: auth.reason || "GitHub authentication is not configured. Run `gh auth login`.",
-          details: { host },
-        }),
-      );
-    });
-
-  const getRepository = (repoConfig: RepoConfig) =>
-    Effect.gen(function* () {
-      const repository = yield* configuredRepository(repoConfig);
-      yield* requireAuth(repoConfig.repoPath, repository.host);
-      return repository;
-    });
+  const getRepository = (repoConfig: RepoConfig) => configuredRepository(repoConfig);
 
   const getMapping = (repoConfig: RepoConfig) =>
     Effect.gen(function* () {

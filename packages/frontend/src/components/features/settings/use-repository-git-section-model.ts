@@ -1,16 +1,16 @@
 import {
   GITHUB_PROVIDER_DESCRIPTOR,
   type GitProviderConfig,
+  type GitProviderHealth,
   type GitProviderRepository,
   type RepoConfig,
-  type RuntimeCheck,
 } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 
 type UseRepositoryGitSectionModelArgs = {
   selectedRepoPath: string | null;
   selectedRepoConfig: RepoConfig | null;
-  runtimeCheck: RuntimeCheck | null;
+  providerHealth: GitProviderHealth | null;
   disabled: boolean;
   onDetectGithubRepository: () => Promise<GitProviderRepository | null>;
   onUpdateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
@@ -261,7 +261,7 @@ export function useRepositoryGitSectionModel({
   disabled,
   onDetectGithubRepository,
   onUpdateSelectedRepoConfig,
-  runtimeCheck,
+  providerHealth,
   selectedRepoConfig,
   selectedRepoPath,
 }: UseRepositoryGitSectionModelArgs): UseRepositoryGitSectionModelResult {
@@ -299,7 +299,7 @@ export function useRepositoryGitSectionModel({
   const configuredProviderId = selectedRepoConfig?.git.provider?.id;
   const githubControlsDisabled = disabled || hasConfiguredNonGithubProvider;
   const githubEnabled = github.enabled ?? false;
-  const hasGithubCli = runtimeCheck?.ghOk ?? false;
+  const hasGithubCli = providerHealth?.executablePath != null;
   const githubHost = github.repository?.host ?? "github.com";
   const usesDefaultGithubHost = githubHost === "github.com";
   const hasRepositoryCoordinates = Boolean(
@@ -309,10 +309,7 @@ export function useRepositoryGitSectionModel({
     ? `${github.repository?.owner}/${github.repository?.name}`
     : null;
   const githubReady =
-    githubEnabled &&
-    hasGithubCli &&
-    hasRepositoryCoordinates &&
-    (usesDefaultGithubHost ? (runtimeCheck?.ghAuthOk ?? false) : true);
+    githubEnabled && hasRepositoryCoordinates && providerHealth?.available === true;
   let githubReadinessLabel = "Not ready";
   if (hasConfiguredNonGithubProvider) {
     githubReadinessLabel = "Unavailable";
@@ -326,17 +323,14 @@ export function useRepositoryGitSectionModel({
   } else if (!github.enabled) {
     githubReadinessMessage =
       "Enable GitHub for this repository to offer “Open pull request” during human approval.";
-  } else if (!runtimeCheck?.ghOk) {
+  } else if (!hasGithubCli) {
     githubReadinessMessage = "Install GitHub CLI (`gh`) to enable provider-backed pull requests.";
-  } else if (usesDefaultGithubHost && !runtimeCheck.ghAuthOk) {
-    githubReadinessMessage =
-      runtimeCheck.ghAuthError ?? "Run `gh auth login` to authenticate GitHub.";
   } else if (!hasRepositoryCoordinates) {
     githubReadinessMessage = "Repository host, owner, and name are still missing.";
-  } else if (usesDefaultGithubHost) {
+  } else if (providerHealth?.available) {
     githubReadinessMessage = "GitHub pull requests are ready for this repository.";
   } else {
-    githubReadinessMessage = `GitHub pull requests are configured for ${githubHost}. Authentication for that host is validated during approval.`;
+    githubReadinessMessage = providerHealth?.reason ?? `GitHub is not ready for ${githubHost}.`;
   }
 
   let providerStatusLabel = "Pull requests disabled";

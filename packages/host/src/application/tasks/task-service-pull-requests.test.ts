@@ -1,10 +1,6 @@
 import { Effect } from "effect";
 import { z } from "zod";
-import {
-  createGithubCliAdapter,
-  createGithubCommandResolver,
-} from "../../adapters/git-providers/github-cli";
-import { GithubProviderAdapter } from "../../adapters/git-providers/github-provider-adapter";
+import { GithubProviderAdapter } from "../../adapters/git-providers/github/provider-adapter";
 import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
 import { TaskPolicyError } from "../../domain/task";
 import { HostOperationError } from "../../effect/host-errors";
@@ -40,24 +36,33 @@ import {
 type GithubTaskDependencies = Required<
   Pick<
     CreateTaskServiceInput,
-    "gitPort" | "gitProviderResolver" | "githubCommands" | "systemCommands" | "toolDiscovery"
+    "gitPort" | "gitProviderResolver" | "systemCommands" | "toolDiscovery"
   >
 >;
 
-const createGithubTaskDependencies = async (
+const createGithubTaskDependencies = (
   gitPort: GitPort,
   systemCommands: SystemCommandPort,
-): Promise<GithubTaskDependencies> => {
-  const githubCli = createGithubCliAdapter(systemCommands);
+): GithubTaskDependencies => {
   const toolDiscovery = createToolDiscoveryAdapter({ systemCommands });
-  const githubCommands = createGithubCommandResolver({
-    githubCli,
-    toolDiscovery,
-  });
-  const gitProviderResolver = await Effect.runPromise(
-    createGitProviderResolver([new GithubProviderAdapter({ githubCommands, gitPort })]),
+  const gitProviderResolver = Effect.runSync(
+    createGitProviderResolver([
+      new GithubProviderAdapter({ gitPort, systemCommands, toolDiscovery }),
+    ]),
   );
-  return { gitPort, gitProviderResolver, githubCommands, systemCommands, toolDiscovery };
+  return { gitPort, gitProviderResolver, systemCommands, toolDiscovery };
+};
+
+const createGithubTaskService = (input: Parameters<typeof createTaskService>[0]) => {
+  if (!input.systemCommands) {
+    throw new Error("GitHub task tests require system commands.");
+  }
+  const gitPort = extendGitPort(input.gitPort ?? createDirectMergeGitPort({ calls: [] }), {
+    listRemotes: () =>
+      Effect.succeed([{ name: "origin", url: "git@github.com:openai/openducktor.git" }]),
+  });
+  const providerDependencies = createGithubTaskDependencies(gitPort, input.systemCommands);
+  return createTaskService({ ...input, ...providerDependencies });
 };
 
 describe("createTaskService pull requests", () => {
@@ -781,7 +786,7 @@ describe("createTaskService pull requests", () => {
     };
     await expect(
       Effect.runPromise(
-        createTaskService({
+        createGithubTaskService({
           gitPort: extendGitPort(
             createDirectMergeGitPort({
               calls,
@@ -996,7 +1001,7 @@ describe("createTaskService pull requests", () => {
     };
     await expect(
       Effect.runPromise(
-        createTaskService({
+        createGithubTaskService({
           gitPort: extendGitPort(
             createDirectMergeGitPort({
               calls,
@@ -1196,7 +1201,7 @@ describe("createTaskService pull requests", () => {
         });
       },
     };
-    const service = createTaskService({
+    const service = createGithubTaskService({
       gitPort: extendGitPort(
         createDirectMergeGitPort({
           calls,
@@ -1520,7 +1525,7 @@ describe("createTaskService pull requests", () => {
     };
     await expect(
       Effect.runPromise(
-        createTaskService({
+        createGithubTaskService({
           gitPort: extendGitPort(
             createDirectMergeGitPort({
               calls,
@@ -2296,7 +2301,7 @@ describe("createTaskService pull requests", () => {
     };
     await expect(
       Effect.runPromise(
-        createTaskService({
+        createGithubTaskService({
           devServerService: createDirectMergeDevServerService(calls),
           gitPort: createDirectMergeGitPort({
             calls,
@@ -2530,7 +2535,7 @@ describe("createTaskService pull requests", () => {
     };
     await expect(
       Effect.runPromise(
-        createTaskService({
+        createGithubTaskService({
           systemCommands: createPullRequestSyncSystemCommands({
             calls,
             payload: githubPullResponsePayload({
@@ -2594,7 +2599,7 @@ describe("createTaskService pull requests", () => {
         return writes === 1 ? Effect.succeed(true) : Effect.fail(mutationFailure);
       },
     };
-    const service = createTaskService({
+    const service = createGithubTaskService({
       systemCommands: createPullRequestSyncSystemCommands({
         calls: [],
         payload: githubPullResponsePayload({
@@ -2646,7 +2651,7 @@ describe("createTaskService pull requests", () => {
         Effect.succeed([{ id: "task-1", status: "human_review", pullRequest: linkedPullRequest }]),
       setPullRequest: () => Effect.fail(mutationFailure),
     };
-    const service = createTaskService({
+    const service = createGithubTaskService({
       systemCommands: createPullRequestSyncSystemCommands({
         calls: [],
         payload: githubPullResponsePayload({
@@ -2696,7 +2701,7 @@ describe("createTaskService pull requests", () => {
       setPullRequest: () => Effect.succeed(true),
       listTasks: () => Effect.fail(mutationFailure),
     };
-    const service = createTaskService({
+    const service = createGithubTaskService({
       devServerService: createDirectMergeDevServerService([]),
       gitPort: createDirectMergeGitPort({ calls: [] }),
       settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
@@ -2897,7 +2902,7 @@ describe("createTaskService pull requests", () => {
     };
     await expect(
       Effect.runPromise(
-        createTaskService({
+        createGithubTaskService({
           systemCommands: createPullRequestSyncSystemCommands({
             calls,
             available: false,

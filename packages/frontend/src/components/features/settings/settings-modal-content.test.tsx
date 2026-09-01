@@ -170,10 +170,18 @@ describe("settings modal content", () => {
     };
 
     const scriptsHtml = renderToStaticMarkup(
-      createElement(SettingsModalContent, { ...baseProps, repositorySection: "scripts" }),
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(SettingsModalContent, { ...baseProps, repositorySection: "scripts" }),
+      ),
     );
     const configurationHtml = renderToStaticMarkup(
-      createElement(SettingsModalContent, { ...baseProps, repositorySection: "configuration" }),
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(SettingsModalContent, { ...baseProps, repositorySection: "configuration" }),
+      ),
     );
 
     expect(scriptsHtml).toContain("Worktree setup script");
@@ -227,19 +235,23 @@ describe("settings modal content", () => {
     };
 
     const html = renderToStaticMarkup(
-      createElement(SettingsModalContent, {
-        section: "repositories",
-        repositorySection: "configuration",
-        globalPromptRoleTab: "shared",
-        repoPromptRoleTab: "shared",
-        selectedReusablePromptId: null,
-        isInteractionDisabled: false,
-        controller,
-        onRepositorySectionChange: () => {},
-        onGlobalPromptRoleTabChange: () => {},
-        onRepoPromptRoleTabChange: () => {},
-        onSelectedReusablePromptIdChange: () => {},
-      }),
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(SettingsModalContent, {
+          section: "repositories",
+          repositorySection: "configuration",
+          globalPromptRoleTab: "shared",
+          repoPromptRoleTab: "shared",
+          selectedReusablePromptId: null,
+          isInteractionDisabled: false,
+          controller,
+          onRepositorySectionChange: () => {},
+          onGlobalPromptRoleTabChange: () => {},
+          onRepoPromptRoleTabChange: () => {},
+          onSelectedReusablePromptIdChange: () => {},
+        }),
+      ),
     );
 
     expect(html).toContain('title="1 error in Scripts"');
@@ -254,19 +266,23 @@ describe("settings modal content", () => {
       requiredWorkspaceRepoPath: "/missing/repo",
     };
     const html = renderToStaticMarkup(
-      createElement(SettingsModalContent, {
-        section: "repositories",
-        repositorySection: "scripts",
-        globalPromptRoleTab: "shared",
-        repoPromptRoleTab: "shared",
-        selectedReusablePromptId: null,
-        isInteractionDisabled: false,
-        controller,
-        onRepositorySectionChange: () => {},
-        onGlobalPromptRoleTabChange: () => {},
-        onRepoPromptRoleTabChange: () => {},
-        onSelectedReusablePromptIdChange: () => {},
-      }),
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(SettingsModalContent, {
+          section: "repositories",
+          repositorySection: "scripts",
+          globalPromptRoleTab: "shared",
+          repoPromptRoleTab: "shared",
+          selectedReusablePromptId: null,
+          isInteractionDisabled: false,
+          controller,
+          onRepositorySectionChange: () => {},
+          onGlobalPromptRoleTabChange: () => {},
+          onRepoPromptRoleTabChange: () => {},
+          onSelectedReusablePromptIdChange: () => {},
+        }),
+      ),
     );
 
     expect(html).toContain("Add a repository first");

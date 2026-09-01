@@ -5,7 +5,6 @@ import {
   type HostDependencyErrorAggregate,
 } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
-import type { GithubCommandResolverPort } from "../../../ports/github-cli-port";
 import type { RuntimeRegistryPort } from "../../../ports/runtime-registry-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { SystemCommandPort } from "../../../ports/system-command-port";
@@ -37,15 +36,6 @@ export const requireDependencies = <A>(
             cause,
           }),
   });
-const requireGithubCommandResolver = (
-  githubCommands: GithubCommandResolverPort | undefined,
-  operation: string,
-): GithubCommandResolverPort => {
-  if (!githubCommands) {
-    throw missingTaskDependency(`GitHub command resolver is required for ${operation}.`);
-  }
-  return githubCommands;
-};
 export const requireAgentSessionDependencies = (
   taskStore: TaskStorePort,
   settingsConfig: SettingsConfigPort | undefined,
@@ -296,21 +286,14 @@ export const requireLinkMergedPullRequestDependencies = (
 export const requirePullRequestDetectionDependencies = ({
   gitPort,
   gitProviderResolver,
-  githubCommands,
   taskWorktreeService,
   workspaceSettingsService,
 }: {
   gitPort: GitPort | undefined;
   gitProviderResolver: GitProviderResolver | undefined;
-  githubCommands: GithubCommandResolverPort | undefined;
   taskWorktreeService: TaskWorktreeService | undefined;
   workspaceSettingsService: WorkspaceSettingsService | undefined;
-}): {
-  gitPort: GitPort;
-  gitProviderResolver: GitProviderResolver;
-  taskWorktreeService: TaskWorktreeService;
-  workspaceSettingsService: WorkspaceSettingsService;
-} & GithubCommandResolverPort => {
+}) => {
   if (!gitProviderResolver) {
     throw missingTaskDependency("Git provider resolver is required for task_pull_request_detect.");
   }
@@ -325,12 +308,7 @@ export const requirePullRequestDetectionDependencies = ({
       "Workspace settings service is required for task_pull_request_detect.",
     );
   }
-  const githubCommandResolver = requireGithubCommandResolver(
-    githubCommands,
-    "task_pull_request_detect",
-  );
   return {
-    ...githubCommandResolver,
     gitPort,
     gitProviderResolver,
     taskWorktreeService,
@@ -339,16 +317,11 @@ export const requirePullRequestDetectionDependencies = ({
 };
 export const requirePullRequestLinkDependencies = ({
   gitProviderResolver,
-  githubCommands,
   workspaceSettingsService,
 }: {
   gitProviderResolver: GitProviderResolver | undefined;
-  githubCommands: GithubCommandResolverPort | undefined;
   workspaceSettingsService: WorkspaceSettingsService | undefined;
-}): {
-  gitProviderResolver: GitProviderResolver;
-  workspaceSettingsService: WorkspaceSettingsService;
-} & GithubCommandResolverPort => {
+}) => {
   if (!gitProviderResolver) {
     throw missingTaskDependency("Git provider resolver is required for task_pull_request_link.");
   }
@@ -357,12 +330,7 @@ export const requirePullRequestLinkDependencies = ({
       "Workspace settings service is required for task_pull_request_link.",
     );
   }
-  const githubCommandResolver = requireGithubCommandResolver(
-    githubCommands,
-    "task_pull_request_link",
-  );
   return {
-    ...githubCommandResolver,
     gitProviderResolver,
     workspaceSettingsService,
   };
@@ -370,24 +338,16 @@ export const requirePullRequestLinkDependencies = ({
 export const requirePullRequestUpsertDependencies = ({
   gitPort,
   gitProviderResolver,
-  githubCommands,
   settingsConfig,
   taskWorktreeService,
   workspaceSettingsService,
 }: {
   gitPort: GitPort | undefined;
-  githubCommands: GithubCommandResolverPort | undefined;
   gitProviderResolver: GitProviderResolver | undefined;
   settingsConfig: SettingsConfigPort | undefined;
   taskWorktreeService: TaskWorktreeService | undefined;
   workspaceSettingsService: WorkspaceSettingsService | undefined;
-}): {
-  gitPort: GitPort;
-  settingsConfig: SettingsConfigPort;
-  gitProviderResolver: GitProviderResolver;
-  taskWorktreeService: TaskWorktreeService;
-  workspaceSettingsService: WorkspaceSettingsService;
-} & GithubCommandResolverPort => {
+}) => {
   if (!settingsConfig) {
     throw missingTaskDependency("Settings config port is required for task_pull_request_upsert.");
   }
@@ -405,12 +365,7 @@ export const requirePullRequestUpsertDependencies = ({
       "Workspace settings service is required for task_pull_request_upsert.",
     );
   }
-  const githubCommandResolver = requireGithubCommandResolver(
-    githubCommands,
-    "task_pull_request_upsert",
-  );
   return {
-    ...githubCommandResolver,
     gitPort,
     gitProviderResolver,
     settingsConfig,
@@ -420,23 +375,19 @@ export const requirePullRequestUpsertDependencies = ({
 };
 
 export const requirePullRequestSyncDependencies = ({
-  githubCommands,
+  gitProviderResolver,
   workspaceSettingsService,
 }: {
-  githubCommands: GithubCommandResolverPort | undefined;
+  gitProviderResolver: GitProviderResolver | undefined;
   workspaceSettingsService: WorkspaceSettingsService | undefined;
-}): {
-  workspaceSettingsService: WorkspaceSettingsService;
-} & GithubCommandResolverPort => {
+}) => {
+  if (!gitProviderResolver) {
+    throw missingTaskDependency("Git provider resolver is required for repo_pull_request_sync.");
+  }
   if (!workspaceSettingsService) {
     throw missingTaskDependency(
       "Workspace settings service is required for repo_pull_request_sync.",
     );
   }
-  const githubCommandResolver = requireGithubCommandResolver(
-    githubCommands,
-    "repo_pull_request_sync",
-  );
-
-  return { ...githubCommandResolver, workspaceSettingsService };
+  return { gitProviderResolver, workspaceSettingsService };
 };

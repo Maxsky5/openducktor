@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
-import { HostOperationError } from "../../../effect/host-errors";
-import type { GithubCommandResolverPort } from "../../../ports/github-cli-port";
-import { loadGithubPullRequestReviewOverview } from "./github-pull-request-review-overview";
-import { createGithubReviewTestCommands } from "./github-pull-request-review.test-support";
+import { HostOperationError } from "../../../../effect/host-errors";
+import type { GithubCli } from "../cli";
+import { loadGithubPullRequestReviewOverview } from "./overview";
+import { createGithubReviewTestCli } from "./test-support";
 
 const createCommands = <Response>({
   commands = [],
@@ -11,8 +11,8 @@ const createCommands = <Response>({
 }: {
   commands?: string[][];
   response: (args: string[]) => Response;
-}): GithubCommandResolverPort => {
-  return createGithubReviewTestCommands((_command, args) => {
+}): GithubCli => {
+  return createGithubReviewTestCli((_command, args) => {
     commands.push(args);
     if (!args.join(" ").includes("PullRequestReviewOverview")) {
       return Effect.fail(
@@ -27,8 +27,8 @@ const createCommands = <Response>({
   });
 };
 
-const input = (githubCommands: GithubCommandResolverPort) => ({
-  githubCommands,
+const input = (githubCli: GithubCli) => ({
+  githubCli,
   repoPath: "/repo",
   repository: { host: "github.com", owner: "openai", name: "openducktor" },
   pullRequestNumber: 42,

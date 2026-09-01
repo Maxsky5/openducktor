@@ -13,7 +13,6 @@ import {
   type HostOperationErrorAggregate,
   type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
-import type { GithubCliPort } from "../../ports/github-cli-port";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
@@ -46,22 +45,6 @@ const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
   Effect.gen(function* () {
     return (yield* settingsConfig.readConfig()) ?? createDefaultGlobalConfig();
   });
-const probeGithubAuthStatus = (githubCli: GithubCliPort, ghCommand: string) =>
-  Effect.either(githubCli.getAuth(ghCommand, "github.com")).pipe(
-    Effect.map((result) =>
-      result._tag === "Right"
-        ? {
-            ghAuthOk: result.right.authenticated,
-            ghAuthLogin: result.right.account,
-            ghAuthError: result.right.reason,
-          }
-        : {
-            ghAuthOk: false,
-            ghAuthLogin: null,
-            ghAuthError: `Failed to query GitHub authentication status: ${errorMessage(result.left)}`,
-          },
-    ),
-  );
 const buildTaskStoreCheck = (repoStoreHealth: RepoStoreHealth): TaskStoreCheck => {
   const taskStoreError = !repoStoreHealth.isReady ? repoStoreHealth.detail : null;
   return {
@@ -128,7 +111,6 @@ const versionForResolvedTool = (
         }),
       );
 export const createSystemDiagnosticsService = ({
-  githubCli,
   runtimeDefinitionsService,
   runtimeHealth,
   settingsConfig,
@@ -136,7 +118,6 @@ export const createSystemDiagnosticsService = ({
   toolDiscovery,
   repoStoreDiagnostics,
 }: {
-  githubCli: GithubCliPort;
   runtimeDefinitionsService: RuntimeDefinitionsService;
   runtimeHealth: RuntimeHealthPort;
   settingsConfig: SettingsConfigPort;
@@ -148,21 +129,11 @@ export const createSystemDiagnosticsService = ({
   const probeRuntimeCheck = (config: LoadedGlobalConfig) =>
     Effect.gen(function* () {
       const gitTool = yield* resolveToolAvailability(toolDiscovery, "git");
-      const ghTool = yield* resolveToolAvailability(toolDiscovery, "githubCli");
       const gitVersion = yield* versionForResolvedTool("git", gitTool.path, (path) =>
         systemCommands.versionCommand(path, ["--version"]),
       );
-      const ghVersion = yield* versionForResolvedTool("gh", ghTool.path, (path) =>
-        githubCli.readVersion(path),
-      );
       const gitError = gitTool.error ?? gitVersion.error;
-      const ghError = ghTool.error ?? ghVersion.error;
       const gitOk = gitError === null;
-      const ghOk = ghError === null;
-      const githubAuth =
-        ghOk && ghTool.path !== null
-          ? yield* probeGithubAuthStatus(githubCli, ghTool.path)
-          : { ghAuthOk: false, ghAuthLogin: null, ghAuthError: ghError };
       const runtimes: RuntimeHealth[] = yield* Effect.forEach(
         runtimeDefinitionsService.listRuntimeDefinitions(),
         (definition) => {
@@ -192,9 +163,6 @@ export const createSystemDiagnosticsService = ({
       return {
         gitOk,
         gitVersion: gitVersion.version,
-        ghOk,
-        ghVersion: ghVersion.version,
-        ...githubAuth,
         runtimes,
         errors,
       };
@@ -242,11 +210,6 @@ export const createSystemDiagnosticsService = ({
       return {
         gitOk: runtime.gitOk,
         gitVersion: runtime.gitVersion,
-        ghOk: runtime.ghOk,
-        ghVersion: runtime.ghVersion,
-        ghAuthOk: runtime.ghAuthOk,
-        ghAuthLogin: runtime.ghAuthLogin,
-        ghAuthError: runtime.ghAuthError,
         runtimes: runtime.runtimes,
         repoStoreHealth: taskStore.repoStoreHealth,
         taskStoreOk: taskStore.taskStoreOk,

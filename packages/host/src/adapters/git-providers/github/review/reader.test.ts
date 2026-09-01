@@ -3,10 +3,10 @@ import type { JSONType } from "zod";
 
 type GithubApiObject = Record<string, JSONType>;
 import { Effect } from "effect";
-import { HostOperationError } from "../../../effect/host-errors";
-import type { GithubCommandResolverPort } from "../../../ports/github-cli-port";
-import { createGithubPullRequestReviewReader } from "./github-pull-request-review-reader";
-import { createGithubReviewTestCommands } from "./github-pull-request-review.test-support";
+import { HostOperationError } from "../../../../effect/host-errors";
+import type { GithubCli } from "../cli";
+import { createGithubPullRequestReviewReader } from "./reader";
+import { createGithubReviewTestCli } from "./test-support";
 
 type PullRequestActorFixture = {
   login: string;
@@ -63,7 +63,7 @@ const createCommands = ({
     stderr?: string;
     exitCode?: number | null;
   };
-} = {}): GithubCommandResolverPort => {
+} = {}): GithubCli => {
   const succeed = (stdout: JSONType) =>
     Effect.gen(function* () {
       if (commandActivity) {
@@ -82,7 +82,7 @@ const createCommands = ({
         stderr: "",
       };
     });
-  return createGithubReviewTestCommands((_command, args) => {
+  return createGithubReviewTestCli((_command, args) => {
     commands.push(args);
     const command = args.join(" ");
     if (command.includes("pr checks")) {
@@ -392,7 +392,7 @@ describe("createGithubPullRequestReviewReader", () => {
 
     const context = await Effect.runPromise(
       provider.read({
-        githubCommands: createCommands({ commands }),
+        githubCli: createCommands({ commands }),
         repoPath: "/repo",
         repository: { host: "github.com", owner: "openai", name: "openducktor" },
         pullRequestNumber: 42,
@@ -458,7 +458,7 @@ describe("createGithubPullRequestReviewReader", () => {
 
     await Effect.runPromise(
       provider.read({
-        githubCommands: createCommands({ commands }),
+        githubCli: createCommands({ commands }),
         repoPath: "/repo",
         repository: { host: "github.com", owner: "openai", name: "openducktor" },
         pullRequestNumber: 42,
@@ -492,7 +492,7 @@ describe("createGithubPullRequestReviewReader", () => {
 
     const context = await Effect.runPromise(
       provider.read({
-        githubCommands: createCommands({ pullRequestViewResponse }),
+        githubCli: createCommands({ pullRequestViewResponse }),
         repoPath: "/repo",
         repository: { host: "github.com", owner: "openai", name: "openducktor" },
         pullRequestNumber: 42,
@@ -543,7 +543,7 @@ describe("createGithubPullRequestReviewReader", () => {
 
     const context = await Effect.runPromise(
       provider.read({
-        githubCommands: createCommands({
+        githubCli: createCommands({
           commands,
           pullRequestViewResponse,
           reviewThreadNodes: [
@@ -612,7 +612,7 @@ describe("createGithubPullRequestReviewReader", () => {
 
     const context = await Effect.runPromise(
       provider.read({
-        githubCommands: createCommands({
+        githubCli: createCommands({
           commands,
           pullRequestViewResponse: fairnestPullRequestViewResponse,
           reviewThreadNodes: fairnestPullRequestReviewThreadNodes,
@@ -693,7 +693,7 @@ describe("createGithubPullRequestReviewReader", () => {
     const provider = createGithubPullRequestReviewReader();
     const context = await Effect.runPromise(
       provider.read({
-        githubCommands: createCommands({
+        githubCli: createCommands({
           pullRequestViewResponse: fairnestPullRequestViewResponse,
           reviewThreadNodes: [
             {
@@ -742,7 +742,7 @@ describe("createGithubPullRequestReviewReader", () => {
     const provider = createGithubPullRequestReviewReader();
     const context = await Effect.runPromise(
       provider.read({
-        githubCommands: createCommands({
+        githubCli: createCommands({
           pullRequestViewResponse: fairnestPullRequestViewResponse,
           reviewThreadNodes: [
             {
@@ -796,7 +796,7 @@ describe("createGithubPullRequestReviewReader", () => {
     const provider = createGithubPullRequestReviewReader();
     const context = await Effect.runPromise(
       provider.read({
-        githubCommands: createCommands({
+        githubCli: createCommands({
           pullRequestViewResponse: fairnestPullRequestViewResponse,
           reviewThreadNodes: [
             {
@@ -901,7 +901,7 @@ describe("createGithubPullRequestReviewReader", () => {
     const provider = createGithubPullRequestReviewReader();
     const context = await Effect.runPromise(
       provider.read({
-        githubCommands: createCommands({
+        githubCli: createCommands({
           pullRequestViewResponse: fairnestPullRequestViewResponse,
           reviewThreadNodes: [
             {
@@ -1083,7 +1083,7 @@ describe("createGithubPullRequestReviewReader", () => {
 
     const context = await Effect.runPromise(
       provider.read({
-        githubCommands: createCommands({ commands, reviewThreadResponse }),
+        githubCli: createCommands({ commands, reviewThreadResponse }),
         repoPath: "/repo",
         repository: { host: "github.com", owner: "openai", name: "openducktor" },
         pullRequestNumber: 42,
@@ -1109,7 +1109,7 @@ describe("createGithubPullRequestReviewReader", () => {
 
     await Effect.runPromise(
       provider.read({
-        githubCommands: createCommands({ commandActivity, commandDelayMs: 20 }),
+        githubCli: createCommands({ commandActivity, commandDelayMs: 20 }),
         repoPath: "/repo",
         repository: { host: "github.com", owner: "openai", name: "openducktor" },
         pullRequestNumber: 42,
@@ -1124,7 +1124,7 @@ describe("createGithubPullRequestReviewReader", () => {
 
     const context = await Effect.runPromise(
       provider.read({
-        githubCommands: createCommands({
+        githubCli: createCommands({
           checksResponse: {
             ok: false,
             exitCode: 8,
@@ -1160,7 +1160,7 @@ describe("createGithubPullRequestReviewReader", () => {
 
     const context = await Effect.runPromise(
       provider.read({
-        githubCommands: createCommands({
+        githubCli: createCommands({
           checksResponse: {
             ok: false,
             exitCode: 1,
@@ -1193,7 +1193,7 @@ describe("createGithubPullRequestReviewReader", () => {
     const result = await Effect.runPromise(
       provider
         .read({
-          githubCommands: createCommands({ pullRequestViewResponse: malformedView }),
+          githubCli: createCommands({ pullRequestViewResponse: malformedView }),
           repoPath: "/repo",
           repository: { host: "github.com", owner: "openai", name: "openducktor" },
           pullRequestNumber: 42,
@@ -1213,7 +1213,7 @@ describe("createGithubPullRequestReviewReader", () => {
     const result = await Effect.runPromise(
       reader
         .read({
-          githubCommands: createCommands({ reviewThreadNodes: [null] }),
+          githubCli: createCommands({ reviewThreadNodes: [null] }),
           repoPath: "/repo",
           repository: { host: "github.com", owner: "openai", name: "openducktor" },
           pullRequestNumber: 42,
@@ -1233,7 +1233,7 @@ describe("createGithubPullRequestReviewReader", () => {
     const result = await Effect.runPromise(
       reader
         .read({
-          githubCommands: createCommands({
+          githubCli: createCommands({
             checksResponse: { ok: true, stdout: [null] },
           }),
           repoPath: "/repo",
@@ -1255,7 +1255,7 @@ describe("createGithubPullRequestReviewReader", () => {
 
     const context = await Effect.runPromise(
       provider.read({
-        githubCommands: createCommands({
+        githubCli: createCommands({
           checksResponse: {
             ok: true,
             stdout: [
@@ -1289,7 +1289,7 @@ describe("createGithubPullRequestReviewReader", () => {
     await expect(
       Effect.runPromise(
         provider.read({
-          githubCommands: createCommands({
+          githubCli: createCommands({
             checksResponse: {
               ok: false,
               exitCode: 1,

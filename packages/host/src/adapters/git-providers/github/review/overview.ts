@@ -7,17 +7,16 @@ import type {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { z } from "zod";
-import { runGithubCommand } from "../../../application/tasks/support/github-pull-requests";
 import {
   errorMessage,
   HostValidationError,
   type HostValidationErrorAggregate,
-} from "../../../effect/host-errors";
-import type { GithubCommandResolverPort } from "../../../ports/github-cli-port";
-import { parseGithubJson } from "./github-pull-request-review-payload";
+} from "../../../../effect/host-errors";
+import { runGithubApi, type GithubCli } from "../cli";
+import { parseGithubJson } from "./payload";
 
 type GithubPullRequestReviewOverviewReadInput = {
-  githubCommands: GithubCommandResolverPort;
+  githubCli: GithubCli;
   repoPath: string;
   repository: GitProviderRepository;
   pullRequestNumber: number;
@@ -315,7 +314,7 @@ const runOverviewGraphql = (
   input: GithubPullRequestReviewOverviewReadInput,
   variables: readonly GithubGraphqlVariable[],
 ): Effect.Effect<string, HostValidationError<{ pullRequestNumber: number }>> =>
-  runGithubCommand(input.githubCommands, input.repoPath, input.repository.host, [
+  runGithubApi(input.githubCli, input.repoPath, input.repository.host, [
     "api",
     "graphql",
     "-f",
