@@ -1,6 +1,7 @@
 import type {
   AgentSessionIdentity,
   AgentSessionLiveEnvelope,
+  AgentSessionLiveRefreshInput,
   AgentSessionRecord,
   TaskWorktreeSummary,
 } from "@openducktor/contracts";
@@ -40,7 +41,7 @@ export type AgentOrchestratorLiveSessionHostPort = {
   agentSessionLiveReplyApproval: typeof host.agentSessionLiveReplyApproval;
   agentSessionLiveReplyQuestion: typeof host.agentSessionLiveReplyQuestion;
   observeAgentSessionLive: (
-    input: { repoPath: string },
+    input: AgentSessionLiveRefreshInput,
     listener: (envelope: AgentSessionLiveEnvelope) => void,
   ) => Promise<() => void>;
 };

@@ -7,10 +7,7 @@ import {
 } from "@openducktor/contracts";
 import type { AgentEvent, AgentSessionSummary } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
-import type {
-  AgentSessionLiveAdapterChange,
-  AgentSessionLiveAdapterMutation,
-} from "../../ports/agent-session-live-adapter-port";
+import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
 import type { OpenCodeRuntimeInstance } from "./opencode-live-session-normalization";
 import {
   refKey,
@@ -22,6 +19,7 @@ import {
   createOpenCodePendingRequestRouter,
   type OpenCodePendingRoute,
 } from "./opencode-pending-request-router";
+import { refreshOpenCodeRegisteredSources } from "./opencode-live-session-source-refresh";
 import {
   openCodeActivityForPending,
   openCodeActivityFromEvent,
@@ -33,18 +31,15 @@ import {
   parseOpenCodeLiveSnapshot,
 } from "./opencode-live-session-state-policy";
 
-type CreateOpenCodeLiveSessionStateInput = {
-  readonly runtime: OpenCodeRuntimeInstance;
-  readonly nextOccurrenceId: () => string;
-};
-
-type LoadedContextResult = AgentSessionLiveAdapterMutation<AgentSessionContextUsage | null>;
-
 export const createOpenCodeLiveSessionState = ({
   runtime,
   nextOccurrenceId,
-}: CreateOpenCodeLiveSessionStateInput) => {
+}: {
+  readonly runtime: OpenCodeRuntimeInstance;
+  readonly nextOccurrenceId: () => string;
+}) => {
   const sessionsByRef = new Map<string, OpenCodeRetainedSession>();
+  let dropCount = 0;
   const contextUsageBySessionId = new Map<string, AgentSessionContextUsage>();
   const pendingRequests = createOpenCodePendingRequestRouter({
     runtimeId: runtime.runtimeId,
@@ -173,7 +168,7 @@ export const createOpenCodeLiveSessionState = ({
   const applyLoadedContext = (
     ref: AgentSessionLiveRef,
     usage: OpencodeSessionContextUsage | null,
-  ): LoadedContextResult => {
+  ) => {
     const retained = sessionsByRef.get(refKey(ref));
     if (retained?.snapshot.contextUsage) {
       return { value: retained.snapshot.contextUsage, changes: [] };
@@ -220,13 +215,18 @@ export const createOpenCodeLiveSessionState = ({
     if (summary.sessionAssociation.kind === "repository") {
       snapshotInput.repositoryScope = summary.sessionAssociation;
     }
-    return commitSnapshot({
+    const retained: OpenCodeRetainedSession = {
       runtimeActivity,
       snapshot: parseOpenCodeLiveSnapshot(
         snapshotInput,
         "opencode-live-session.retain-control-summary",
       ),
-    });
+    };
+    retained.snapshot = parseOpenCodeLiveSnapshot(
+      { ...retained.snapshot, activity: openCodeActivityForPending(retained) },
+      "opencode-live-session.retain-control-activity",
+    );
+    return commitSnapshot(retained);
   };
 
   const applyEvent = (
@@ -427,6 +427,7 @@ export const createOpenCodeLiveSessionState = ({
         continue;
       }
       sessionsByRef.delete(key);
+      dropCount += 1;
       contextUsageBySessionId.delete(candidate.externalSessionId);
       pendingRequests.removeSession(candidate);
       changes.push({ type: "session_removed", ref: candidate });
@@ -451,9 +452,23 @@ export const createOpenCodeLiveSessionState = ({
     },
     contextUsage: (ref: AgentSessionLiveRef): AgentSessionContextUsage | null =>
       sessionsByRef.get(refKey(ref))?.snapshot.contextUsage ?? null,
+    dropCount: (): number => dropCount,
     retainContext,
     applyLoadedContext,
     retainControlSummary,
+    refreshRegisteredSources: (
+      refs: ReadonlyArray<AgentSessionLiveRef>,
+      sources: Parameters<typeof refreshOpenCodeRegisteredSources>[0]["sources"],
+    ): AgentSessionLiveAdapterChange[] =>
+      refreshOpenCodeRegisteredSources({
+        runtime,
+        refs,
+        sources,
+        contextUsageBySessionId,
+        pendingRequests,
+        commitSnapshot,
+        removeSession,
+      }),
     applyEvent,
     requirePendingRoute,
     completePendingReply,
@@ -473,6 +488,7 @@ export const createOpenCodeLiveSessionState = ({
     },
     release: (): AgentSessionLiveRef[] => {
       const refs = [...sessionsByRef.values()].map(({ snapshot }) => toSessionRef(snapshot.ref));
+      dropCount += refs.length;
       sessionsByRef.clear();
       pendingRequests.clear();
       contextUsageBySessionId.clear();
@@ -480,5 +496,3 @@ export const createOpenCodeLiveSessionState = ({
     },
   };
 };
-
-export type OpenCodeLiveSessionState = ReturnType<typeof createOpenCodeLiveSessionState>;

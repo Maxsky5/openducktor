@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type {
   AgentSessionLiveEnvelope,
+  AgentSessionLiveRefreshInput,
   AgentSessionLiveReplyApprovalInput,
   AgentSessionLiveSnapshot,
   AgentSessionRecord,
@@ -126,7 +127,7 @@ const createState = (
   const unsubscribe = mock(() => undefined);
   const observeAgentSessionLive = mock(
     async (
-      _input: { repoPath: string },
+      _input: AgentSessionLiveRefreshInput,
       nextListener: (payload: AgentSessionLiveEnvelope) => void,
     ) => {
       callOrder.push("observe");
@@ -246,7 +247,17 @@ describe("useRepoSessionReadModel", () => {
         role: "build",
       });
       expect(state.observeAgentSessionLive).toHaveBeenCalledWith(
-        { repoPath: "/repo" },
+        {
+          repoPath: "/repo",
+          registeredSessionRefs: [
+            {
+              repoPath: "/repo",
+              runtimeKind: "codex",
+              workingDirectory: "/repo/worktree",
+              externalSessionId: "thread-1",
+            },
+          ],
+        },
         expect.any(Function),
       );
     } finally {

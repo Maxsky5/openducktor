@@ -43,9 +43,10 @@ const fakeAdapter = (input: {
   snapshots: () => ReadonlyArray<AgentSessionLiveSnapshot>;
   listEffect?: () => Effect.Effect<ReadonlyArray<AgentSessionLiveSnapshot>, HostError>;
   contextEffect?: AgentSessionLiveAdapterPort["loadContext"];
+  refreshRegisteredSessions?: AgentSessionLiveAdapterPort["refreshRegisteredSessions"];
 }): AgentSessionLiveAdapterPort => {
   const runtimeKind = input.runtimeKind ?? "codex";
-  return {
+  const adapter = {
     supportsSessionControl: false,
     binding: { runtimeId: input.runtimeId, runtimeKind, repoPath: "/repo" },
     matches: (ref) =>
@@ -72,7 +73,10 @@ const fakeAdapter = (input: {
     replyApproval: () => Effect.void,
     replyQuestion: () => Effect.void,
     releaseRuntime: () => Effect.succeed(input.snapshots().map((snapshot) => snapshot.ref)),
-  };
+  } satisfies AgentSessionLiveAdapterPort;
+  return input.refreshRegisteredSessions
+    ? { ...adapter, refreshRegisteredSessions: input.refreshRegisteredSessions }
+    : adapter;
 };
 
 const createHarness = () => {
@@ -98,6 +102,41 @@ const expectHostFailure = async <Success>(
 };
 
 describe("createAgentSessionLiveStateService", () => {
+  test("refreshes only explicit OpenDucktor-registered session refs before publishing", async () => {
+    const { events, service } = createHarness();
+    const registeredRef = sessionRef("registered", "opencode");
+    let snapshots: AgentSessionLiveSnapshot[] = [];
+    const refreshCalls: ReadonlyArray<AgentSessionLiveRef>[] = [];
+    await Effect.runPromise(
+      service.registerRuntimeAdapter(
+        fakeAdapter({
+          runtimeId: "runtime-opencode",
+          runtimeKind: "opencode",
+          snapshots: () => snapshots,
+          refreshRegisteredSessions: (refs) =>
+            Effect.sync(() => {
+              refreshCalls.push(refs);
+              snapshots = [liveSnapshot("registered", "opencode")];
+            }),
+        }),
+      ),
+    );
+    events.length = 0;
+
+    await Effect.runPromise(
+      service.refresh({ repoPath: "/repo", registeredSessionRefs: [registeredRef] }),
+    );
+
+    expect(refreshCalls).toEqual([[registeredRef]]);
+    expect(events).toEqual([
+      {
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [liveSnapshot("registered", "opencode")],
+      },
+    ]);
+  });
+
   test("preserves repository scope across snapshots, list, read, and events", async () => {
     const { events, service } = createHarness();
     const snapshot = {

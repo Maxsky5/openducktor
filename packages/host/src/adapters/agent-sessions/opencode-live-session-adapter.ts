@@ -1,5 +1,4 @@
 import {
-  createPrepareOpencodeSessionRuntime,
   type OpencodeSessionRuntimeSignal,
   type PrepareOpencodeSessionRuntime,
 } from "@openducktor/adapters-opencode-sdk";
@@ -51,7 +50,7 @@ export type CreateOpenCodeLiveSessionAdapterPreparerInput = {
     RuntimeLiveSessionLifecyclePort,
     "releaseRuntime" | "runAdapterMutation"
   >;
-  readonly prepareRuntime?: PrepareOpencodeSessionRuntime;
+  readonly prepareRuntime: PrepareOpencodeSessionRuntime;
 };
 
 const stateEffect = <Value, Details extends object>(
@@ -69,7 +68,7 @@ const stateEffect = <Value, Details extends object>(
 
 export const createOpenCodeLiveSessionAdapterPreparer = ({
   liveSessionLifecycle,
-  prepareRuntime = createPrepareOpencodeSessionRuntime(),
+  prepareRuntime,
 }: CreateOpenCodeLiveSessionAdapterPreparerInput): OpenCodeRuntimeSessionAdapterPreparer => {
   let nextOccurrence = 1;
 
@@ -131,6 +130,32 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
         serializeRuntime,
         commit,
       });
+
+      const refreshRegisteredSessions = (
+        refs: ReadonlyArray<AgentSessionLiveRef>,
+      ): Effect.Effect<void, HostError> =>
+        Effect.gen(function* () {
+          const dropCount = state.dropCount();
+          const sources = yield* Effect.tryPromise({
+            try: () => prepared.connection.refreshRegisteredSessions(refs),
+            catch: (cause) =>
+              toHostOperationError(cause, "opencode-live-session.refresh-registered-sessions", {
+                runtimeId: runtime.runtimeId,
+              }),
+          });
+          yield* serializeRuntime(
+            stateEffect(
+              "opencode-live-session.refresh-registered-state",
+              () => {
+                if (dropCount !== state.dropCount()) {
+                  return;
+                }
+                state.refreshRegisteredSources(refs, sources);
+              },
+              { runtimeId: runtime.runtimeId },
+            ),
+          );
+        });
 
       const handleSignal = (
         signal: OpencodeSessionRuntimeSignal,
@@ -249,6 +274,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
             () => state.readSnapshot(ref),
             { runtimeId: runtime.runtimeId, externalSessionId: ref.externalSessionId },
           ),
+        refreshRegisteredSessions,
         loadContext: (input) =>
           Effect.suspend(() => {
             const retained = state.contextUsage(input);

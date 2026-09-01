@@ -44,6 +44,8 @@ const createLiveClientHarness = (
     nativeRequestId?: string;
     totalTokens?: number;
     pendingQuestion?: boolean;
+    childSessionIdsByParent?: Readonly<Record<string, ReadonlyArray<string>>>;
+    busySessionIds?: string[];
     listBarrier?: () => Promise<void>;
     listError?: Error;
     onList?: () => void;
@@ -113,21 +115,49 @@ const createLiveClientHarness = (
         };
       },
       get: async ({ sessionID }) => ({
-        data: createOpencodeSessionFixture({
-          id: sessionID,
-          directory: "/repo",
-          title: "OpenDucktor session",
-          time: {
-            created: Date.parse("2026-07-16T10:00:00.000Z"),
-            updated: Date.parse("2026-07-16T10:00:00.000Z"),
-          },
-        }),
+        data: (() => {
+          callOrder.push(`get:${sessionID}`);
+          return createOpencodeSessionFixture({
+            id: sessionID,
+            directory: "/repo",
+            title: "OpenDucktor session",
+            time: {
+              created: Date.parse("2026-07-16T10:00:00.000Z"),
+              updated: Date.parse("2026-07-16T10:00:00.000Z"),
+            },
+          });
+        })(),
         error: undefined,
       }),
+      children: async ({ sessionID }) => {
+        callOrder.push(`children:${sessionID}`);
+        return {
+          data: (input.childSessionIdsByParent?.[sessionID] ?? []).map((childSessionId) =>
+            createOpencodeSessionFixture({
+              id: childSessionId,
+              parentID: sessionID,
+              directory: "/repo",
+              title: "OpenCode subagent",
+              time: {
+                created: Date.parse("2026-07-16T10:01:00.000Z"),
+                updated: Date.parse("2026-07-16T10:01:00.000Z"),
+              },
+            }),
+          ),
+          error: undefined,
+        };
+      },
       status: async () => ({
-        data: Object.fromEntries(
-          externalSessionIds.map((sessionId) => [sessionId, { type: "idle" }]),
-        ),
+        data: (() => {
+          callOrder.push("status");
+          const busySessionIds = new Set(input.busySessionIds ?? []);
+          return Object.fromEntries(
+            externalSessionIds.map((sessionId) => [
+              sessionId,
+              { type: busySessionIds.has(sessionId) ? "busy" : "idle" },
+            ]),
+          );
+        })(),
         error: undefined,
       }),
       messages: async (request: SessionMessagesRequest) => {
@@ -164,6 +194,7 @@ const createLiveClientHarness = (
     permission: {
       ...baseClient.permission,
       list: async () => {
+        callOrder.push("permission.list");
         const data = pendingApproval
           ? externalSessionIds.map((sessionId) => ({
               id: nativeRequestId,
@@ -191,6 +222,7 @@ const createLiveClientHarness = (
     question: {
       ...baseClient.question,
       list: async () => {
+        callOrder.push("question.list");
         const data = pendingQuestion
           ? [
               {
@@ -351,6 +383,42 @@ describe("OpenCode session runtime connection", () => {
 
     expect(harness.callOrder).toEqual(["subscribe", "connected"]);
     expect(harness.messageCalls).toEqual([]);
+    await prepared.release();
+  });
+
+  test("refreshes only registered OpenDucktor roots without listing sessions", async () => {
+    const harness = createLiveClientHarness({
+      externalSessionIds: ["session-1", "child-session", "unknown-session"],
+      busySessionIds: ["session-1", "child-session"],
+      childSessionIdsByParent: { "session-1": ["child-session"] },
+    });
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+
+    const sources = await prepared.connection.refreshRegisteredSessions([
+      {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+        externalSessionId: "session-1",
+      },
+    ]);
+
+    expect(sources).toEqual([
+      expect.objectContaining({
+        externalSessionId: "session-1",
+        runtimeActivity: "running",
+        pendingApprovals: [expect.objectContaining({ requestId: "native-request-1" })],
+      }),
+      expect.objectContaining({
+        externalSessionId: "child-session",
+        parentExternalSessionId: "session-1",
+        runtimeActivity: "running",
+      }),
+    ]);
+    expect(sources.some((source) => source.externalSessionId === "unknown-session")).toBe(false);
+    expect(harness.callOrder).toContain("get:session-1");
+    expect(harness.callOrder).toContain("children:session-1");
+    expect(harness.callOrder).not.toContain("list");
     await prepared.release();
   });
 

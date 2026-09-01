@@ -21,6 +21,52 @@ import {
 } from "./opencode-live-session-adapter.test-support";
 
 describe("createOpenCodeLiveSessionAdapterPreparer", () => {
+  test("refreshes only OpenDucktor-registered roots from OpenCode", async () => {
+    const harness = createRuntimeHarness({
+      registeredSources: [
+        {
+          externalSessionId: ref.externalSessionId,
+          workingDirectory: ref.workingDirectory,
+          sessionAssociation: { kind: "unbound" },
+          title: "Known builder",
+          startedAt: "2026-07-16T10:00:00.000Z",
+          runtimeActivity: "running",
+          pendingApprovals: [
+            {
+              requestId: "permission-1",
+              requestType: "file_change",
+              title: "Edit a file",
+            },
+          ],
+          pendingQuestions: [],
+        },
+      ],
+    });
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle([]),
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime),
+    );
+
+    const refreshRegisteredSessions = prepared.adapter.refreshRegisteredSessions;
+    if (!refreshRegisteredSessions) {
+      throw new Error("Expected OpenCode to support registered-session refresh.");
+    }
+    await Effect.runPromise(refreshRegisteredSessions([ref]));
+
+    expect(harness.refreshRegisteredSessionCalls).toEqual([["session-1"]]);
+    await expect(
+      Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo")),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        ref,
+        activity: "waiting_for_permission",
+        pendingApprovals: [expect.objectContaining({ requestId: "opencode-pending-1" })],
+      }),
+    ]);
+  });
+
   test("owns strict snapshots, opaque replies, retained context, and normalized signals", async () => {
     const harness = createRuntimeHarness();
     const publishedChanges: AgentSessionLiveAdapterChange[] = [];
@@ -261,6 +307,79 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     });
 
     await Effect.runPromise(adapter.releaseRuntime());
+  });
+
+  test("does not restore a released session when an earlier registered refresh finishes", async () => {
+    const harness = createRuntimeHarness({
+      registeredSources: [
+        {
+          externalSessionId: ref.externalSessionId,
+          workingDirectory: ref.workingDirectory,
+          sessionAssociation: { kind: "unbound" },
+          title: "Known builder",
+          startedAt: "2026-07-16T10:00:00.000Z",
+          runtimeActivity: "idle",
+          pendingApprovals: [],
+          pendingQuestions: [],
+        },
+      ],
+    });
+    let markReadStarted: () => void = () => undefined;
+    let finishRead: () => void = () => undefined;
+    const readStarted = new Promise<void>((resolve) => {
+      markReadStarted = resolve;
+    });
+    const readGate = new Promise<void>((resolve) => {
+      finishRead = resolve;
+    });
+    const basePrepare = harness.prepareRuntime;
+    const prepareRuntime: PrepareOpencodeSessionRuntime = async (input) => {
+      const prepared = await basePrepare(input);
+      return {
+        ...prepared,
+        connection: {
+          ...prepared.connection,
+          refreshRegisteredSessions: async (refs) => {
+            markReadStarted();
+            await readGate;
+            return prepared.connection.refreshRegisteredSessions(refs);
+          },
+        },
+      };
+    };
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle([]),
+        prepareRuntime,
+      })(runtime),
+    );
+    await Effect.runPromise(
+      prepared.adapter.resumeSession({
+        ...ref,
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      }),
+    );
+    const refreshRegisteredSessions = prepared.adapter.refreshRegisteredSessions;
+    if (!refreshRegisteredSessions) {
+      throw new Error("Expected OpenCode to support registered-session refresh.");
+    }
+
+    const refresh = Effect.runPromise(refreshRegisteredSessions([ref]));
+    await readStarted;
+    const release = Effect.runPromise(prepared.adapter.releaseSession(ref));
+    const releaseFinishedWhileReadWaited = await Promise.race([
+      release.then(() => true),
+      Bun.sleep(200).then(() => false),
+    ]);
+    finishRead();
+    await Promise.all([refresh, release]);
+
+    expect(releaseFinishedWhileReadWaited).toBe(true);
+    await expect(Effect.runPromise(prepared.adapter.readRetainedSnapshot(ref))).resolves.toEqual({
+      type: "missing",
+      ref,
+    });
+    await Effect.runPromise(prepared.adapter.releaseRuntime());
   });
 
   test("keeps missing-context work demand-driven and shares one in-flight request", async () => {

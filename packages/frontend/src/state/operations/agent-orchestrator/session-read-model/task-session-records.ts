@@ -1,7 +1,9 @@
-import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionLiveRef, AgentSessionRecord, TaskCard } from "@openducktor/contracts";
+import { agentSessionRefKey } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import { loadAgentSessionListsFromQuery } from "@/state/queries/agent-sessions";
 import type { PersistedTaskSessionRecord } from "../support/persistence";
+import { toPersistedSessionIdentity } from "../support/persistence";
 import type { LoadedWorkflowSessionRecords } from "./agent-session-workflow-records";
 
 export type TaskSessionRecords = {
@@ -32,6 +34,18 @@ export const toTaskSessionRecords = (
     taskIds: tasks.map((task) => task.id),
     records,
   };
+};
+
+export const toRegisteredSessionRefs = (
+  repoPath: string,
+  records: LoadedWorkflowSessionRecords,
+): AgentSessionLiveRef[] => {
+  const refs = new Map<string, AgentSessionLiveRef>();
+  for (const { record } of records.records) {
+    const ref = { repoPath, ...toPersistedSessionIdentity(record) };
+    refs.set(agentSessionRefKey(ref), ref);
+  }
+  return [...refs.values()];
 };
 
 export const loadTaskSessionRecordsForTasks = async ({

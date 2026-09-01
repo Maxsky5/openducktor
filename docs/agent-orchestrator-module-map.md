@@ -877,6 +877,7 @@ Owns:
 
 - reading durable task session records through per-task session-list queries
 - keeping per-task session-list query keys as the only frontend cache for persisted session records
+- supplying exact durable root session references when the host refreshes live runtime state
 - applying loaded durable records onto the projected live collection during repo reads
 - presenting task session history to Agent Studio, Kanban, task details, and autopilot
 
@@ -896,8 +897,9 @@ changes for UI history surfaces. Orchestrator internals must not reload the repo
 session read model for explicit start/reuse preparation; they may load exactly
 one source session through `source-session-loader.ts`.
 `useTaskSessionRecords` is the only hook that fans out per-task session-record
-queries for repo startup. `useRepoSessionReadModel` consumes that result, attaches
-to the generic host live-state stream, and owns the one collection projection/commit.
+queries for repo startup. `useRepoSessionReadModel` consumes that result, passes
+its exact root references to the host refresh, attaches to the generic host live-state
+stream, and owns the one collection projection/commit.
 It must not select a runtime adapter or load transcript history. Task reset pages
 must not call a session refresh command after reset. Reset
 operations invalidate the exact task-session-record query, and the repo read
@@ -905,7 +907,7 @@ model reacts to that owned query data.
 Live projection during repo reads splits by ownership.
 `agent-session-live-projection.ts` applies host snapshots and ordered deltas and knows nothing about tasks or records. It rejects unknown roots and accepts an unknown descendant only when its declared parent is already registered.
 `agent-session-live-projection.ts` never treats runtime state as task ownership. Only the OpenDucktor start transaction or a saved task-store record can attach a session to a task. `agent-session-workflow-records.ts` restores past sessions, fills matching live sessions with their saved fields, and prunes a workflow session only when its task is loaded, its record is gone, it is not starting, and `liveReported` is false.
-`useRepoSessionReadModel` projects, then applies records, then commits once for snapshots, deltas, and task refreshes alike.
+`useRepoSessionReadModel` applies loaded records before and after each live projection, then commits once for snapshots, deltas, and task refreshes alike. The first record pass admits only durable OpenDucktor roots; the second restores durable workflow fields after live status is applied.
 Unloaded, failed, or stale record reads skip that step because they cannot prove deletion.
 A successful current-scope record read clears prior task-record failures only; live-stream failures recover through the stream itself.
 `liveReported` commits inside the session state; do not add a presence store beside it.
@@ -915,9 +917,8 @@ A successful current-scope record read clears prior task-record failures only; l
 1. The app loads task IDs from the task store.
 2. `use-task-session-records.ts` reads per-task session records through the
    shared task-session query keys.
-3. The renderer observes the existing generic host-event channel, then requests
-   one live-state refresh for the active repository.
-4. The refresh publishes live state for host-retained OpenDucktor sessions before later deltas; `buildAgentSessionLiveCollection` applies it only to registered roots and their descendants, workflow session records apply on top, and the collection commits once.
+3. The renderer observes the existing generic host-event channel, then requests one live-state refresh for the active repository with the exact roots from durable task session records.
+4. Each runtime adapter reads only those roots and their verified descendants. `buildAgentSessionLiveCollection` rejects any other root, reapplies workflow session records, and commits the collection once.
 5. Session rows, activity, pending input, retained context usage, and sidebar
    counters all derive from that same committed collection.
 6. Subsequent ordered upserts, removals, transcript events, faults, and catalog

@@ -140,7 +140,6 @@ const snapshot = (): AgentSessionLiveSnapshot => ({
     workingDirectory: "/repo/worktree",
     externalSessionId: "external-build-session",
   },
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   activity: "idle",
   title: "Build session",
   startedAt: "2026-05-10T10:00:00.000Z",
@@ -382,7 +381,6 @@ describe("createRuntimeTaskActivityGuard", () => {
         ...buildSnapshot.ref,
         externalSessionId: "external-qa-session",
       },
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
     };
     const guard = createRuntimeTaskActivityGuard({
       runtimeRegistry: registry({

@@ -128,9 +128,24 @@ export const createOpenCodePendingRequestRouter = ({
         }
       }
     },
+    removeMissingForSession: (
+      ref: AgentSessionLiveRef,
+      activeOccurrenceIds: ReadonlySet<string>,
+    ): void => {
+      for (const [occurrenceId, route] of routesByOccurrenceId) {
+        if (refsEqual(route.ref, ref) && !activeOccurrenceIds.has(occurrenceId)) {
+          routesByOccurrenceId.delete(occurrenceId);
+          occurrenceIdByNativeKey.delete(
+            nativeRouteKey(route.ref, route.kind, route.nativeRequestId),
+          );
+        }
+      }
+    },
     clear: (): void => {
       routesByOccurrenceId.clear();
       occurrenceIdByNativeKey.clear();
     },
   };
 };
+
+export type OpenCodePendingRequestRouter = ReturnType<typeof createOpenCodePendingRequestRouter>;

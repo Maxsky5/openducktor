@@ -82,6 +82,9 @@ type AgentSessionLiveAdapterBase = {
   readonly readRetainedSnapshot: (
     ref: AgentSessionLiveRef,
   ) => Effect.Effect<AgentSessionLiveReadResult, HostError>;
+  readonly refreshRegisteredSessions?: (
+    refs: ReadonlyArray<AgentSessionLiveRef>,
+  ) => Effect.Effect<void, HostError>;
   readonly loadContext: (
     input: AgentSessionLiveLoadContextInput,
   ) => Effect.Effect<AgentSessionContextUsage | null, HostError>;

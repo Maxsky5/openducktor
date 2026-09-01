@@ -85,6 +85,30 @@ describe("OpenCode host live-session state", () => {
     expect(state.listSnapshots()[0]?.pendingApprovals).toEqual([]);
   });
 
+  test("keeps pending input authoritative when a later control summary arrives", () => {
+    const state = createState();
+    state.retainControlSummary(summary());
+    const ref = state.listSnapshots()[0]?.ref;
+    if (!ref) {
+      throw new Error("Expected a retained OpenDucktor session.");
+    }
+    state.applyEvent(ref, {
+      type: "approval_required",
+      externalSessionId: ref.externalSessionId,
+      timestamp: "2026-07-16T10:01:00.000Z",
+      requestId: "permission-1",
+      requestType: "file_change",
+      title: "Edit a file",
+    });
+
+    state.retainControlSummary({ ...summary(), status: "idle" });
+
+    expect(state.listSnapshots()[0]).toMatchObject({
+      activity: "waiting_for_permission",
+      pendingApprovals: [expect.objectContaining({ requestId: "opaque-1" })],
+    });
+  });
+
   test("admits descendants only through registered parent lineage", () => {
     const state = createState();
     state.retainControlSummary(summary("parent"));

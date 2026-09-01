@@ -1,4 +1,8 @@
-import type { AgentSessionLiveEnvelope, AgentSessionLiveRef } from "@openducktor/contracts";
+import type {
+  AgentSessionLiveEnvelope,
+  AgentSessionLiveRef,
+  AgentSessionLiveRefreshInput,
+} from "@openducktor/contracts";
 import { agentSessionRefKey, buildReadOnlyPermissionRejectionMessage } from "@openducktor/core";
 import type { HostClient } from "@openducktor/host-client";
 import type { QueryClient } from "@tanstack/react-query";
@@ -41,6 +45,7 @@ import {
 } from "../session-read-model/pending-approval-policy";
 import {
   toLoadedWorkflowSessionRecords,
+  toRegisteredSessionRefs,
   type TaskSessionRecords,
 } from "../session-read-model/task-session-records";
 import { useTaskSessionRecords } from "../session-read-model/use-task-session-records";
@@ -49,7 +54,7 @@ import { createRepoStaleGuard } from "../support/core";
 
 export type AgentSessionLiveFrontendPort = Pick<HostClient, "agentSessionLiveReplyApproval"> & {
   observeAgentSessionLive: (
-    input: { repoPath: string },
+    input: AgentSessionLiveRefreshInput,
     listener: (envelope: AgentSessionLiveEnvelope) => void,
   ) => Promise<() => void>;
 };
@@ -785,7 +790,11 @@ export const useRepoSessionReadModel = ({
     initialLiveSnapshotReceivedRef.current = false;
     // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change, react-doctor/no-derived-state
     setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(repoPath));
-    void observeLiveSessions({ repoPath }, (envelope) => {
+    const loadedRecords = readLoadedWorkflowRecords();
+    const registeredSessionRefs = loadedRecords
+      ? toRegisteredSessionRefs(repoPath, loadedRecords)
+      : [];
+    void observeLiveSessions({ repoPath, registeredSessionRefs }, (envelope) => {
       if (isStaleRepoOperation()) {
         return;
       }

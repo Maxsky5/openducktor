@@ -4,13 +4,22 @@ import type {
   AgentSessionAssociation,
   AgentSessionRuntimeActivity,
   AgentSessionRuntimeSnapshotSource,
+  SessionRef,
 } from "@openducktor/core";
 import type { SessionStatus } from "@opencode-ai/sdk/v2/client";
 import { unwrapData } from "./data-utils";
-import { parseOpencodeSessionListPayload, type ParsedOpencodeSession } from "./opencode-ingress";
+import {
+  opencodeSessionDetailPayloadSchema,
+  parseOpencodeSessionListPayload,
+  type ParsedOpencodeSession,
+} from "./opencode-ingress";
 import { listOpencodeLiveSessionPendingInput } from "./pending-input-ops";
+import {
+  clearAwaitingRuntimeTurnStart,
+  isAwaitingRuntimeTurnStart,
+} from "./session-activity";
 import { toIsoFromEpoch } from "./session-runtime-utils";
-import type { ClientFactory, ReadOpencodeDirectory } from "./types";
+import type { ClientFactory, ReadOpencodeDirectory, SessionRecord } from "./types";
 import { z } from "zod";
 
 export type ListOpencodeRuntimeSnapshotSourcesInput = {
@@ -25,6 +34,36 @@ export type OpencodeRuntimeSnapshotSource = AgentSessionRuntimeSnapshotSource & 
   externalSessionId: string;
   sessionAssociation: AgentSessionAssociation;
   workingDirectory: string;
+};
+
+type ApplyOpencodeAwaitingTurnStartToRuntimeSnapshotInput = {
+  sessions: ReadonlyMap<string, SessionRecord>;
+  runtimeId: string;
+  snapshot: OpencodeRuntimeSnapshotSource;
+};
+
+export const applyOpencodeAwaitingTurnStartToRuntimeSnapshot = ({
+  sessions,
+  runtimeId,
+  snapshot,
+}: ApplyOpencodeAwaitingTurnStartToRuntimeSnapshotInput): OpencodeRuntimeSnapshotSource => {
+  const localSession = sessions.get(snapshot.externalSessionId);
+  if (!localSession || localSession.runtimeId !== runtimeId) {
+    return snapshot;
+  }
+
+  const hasRuntimeTurnStartEvidence =
+    snapshot.runtimeActivity !== "idle" ||
+    snapshot.pendingApprovals.length > 0 ||
+    snapshot.pendingQuestions.length > 0;
+  if (hasRuntimeTurnStartEvidence) {
+    clearAwaitingRuntimeTurnStart(localSession);
+    return snapshot;
+  }
+  if (!isAwaitingRuntimeTurnStart(localSession)) {
+    return snapshot;
+  }
+  return { ...snapshot, runtimeActivity: "running" };
 };
 
 type OpencodeLiveSessionPendingInputBySessionId = Record<
@@ -224,5 +263,121 @@ export const listOpencodeRuntimeSnapshotSources = async ({
       snapshot.parentExternalSessionId = parentExternalSessionId;
     }
     return [snapshot];
+  });
+};
+
+export const readOpencodeRegisteredRuntimeSnapshotSources = async ({
+  createClient,
+  runtimeEndpoint,
+  refs,
+  readDirectory,
+  now,
+}: {
+  createClient: ClientFactory;
+  runtimeEndpoint: string;
+  refs: ReadonlyArray<SessionRef>;
+  readDirectory: ReadOpencodeDirectory;
+  now: () => string;
+}): Promise<OpencodeRuntimeSnapshotSource[]> => {
+  for (const ref of refs) {
+    if (ref.runtimeKind !== "opencode") {
+      throw new Error(
+        `Cannot refresh registered OpenCode session '${ref.externalSessionId}' for runtime '${ref.runtimeKind}'.`,
+      );
+    }
+  }
+
+  const refsByDirectory = new Map<string, SessionRef[]>();
+  for (const ref of refs) {
+    const directoryRefs = refsByDirectory.get(ref.workingDirectory) ?? [];
+    directoryRefs.push(ref);
+    refsByDirectory.set(ref.workingDirectory, directoryRefs);
+  }
+  const directoryResults = await Promise.all(
+    [...refsByDirectory].map(([directory, directoryRefs]) =>
+      readDirectory(directory, async () => {
+        const client = createClient({ runtimeEndpoint, workingDirectory: directory });
+        const [statusResponse, pendingInput] = await Promise.all([
+          client.session.status({ directory }),
+          listOpencodeLiveSessionPendingInput(createClient, {
+            runtimeEndpoint,
+            workingDirectory: directory,
+          }),
+        ]);
+        const sessions = new Map<
+          string,
+          z.output<typeof opencodeSessionDetailPayloadSchema> & { workingDirectory: string }
+        >();
+        for (const ref of directoryRefs) {
+          const detailResponse = await client.session.get({
+            directory,
+            sessionID: ref.externalSessionId,
+          });
+          const detail = opencodeSessionDetailPayloadSchema.parse(
+            unwrapData(detailResponse, "get registered session"),
+          );
+          if (detail.id !== ref.externalSessionId || detail.directory !== directory) {
+            throw new Error(
+              `OpenCode returned session '${detail.id}' in '${detail.directory}' for registered session '${ref.externalSessionId}' in '${directory}'.`,
+            );
+          }
+          const queue = [detail];
+          for (let index = 0; index < queue.length; index += 1) {
+            const parent = queue[index];
+            if (!parent || sessions.has(parent.id)) {
+              continue;
+            }
+            sessions.set(parent.id, { ...parent, workingDirectory: directory });
+            const childrenResponse = await client.session.children({
+              directory,
+              sessionID: parent.id,
+            });
+            const children = z
+              .array(opencodeSessionDetailPayloadSchema)
+              .parse(unwrapData(childrenResponse, "get registered session children"));
+            for (const child of children) {
+              if (child.parentID !== parent.id) {
+                throw new Error(
+                  `OpenCode child session '${child.id}' does not name registered lineage parent '${parent.id}'.`,
+                );
+              }
+              queue.push(child);
+            }
+          }
+        }
+        return {
+          pendingInput,
+          sessions,
+          statuses: toOpencodeSessionStatusMap(
+            unwrapData(statusResponse, "get session status"),
+            directory,
+          ),
+        };
+      }),
+    ),
+  );
+
+  const roots = new Set(refs.map((ref) => ref.externalSessionId));
+  return directoryResults.flatMap((result) => {
+    if (!result) {
+      return [];
+    }
+    return [...result.sessions.values()].map((session) => {
+      const pending = result.pendingInput[session.id] ?? { approvals: [], questions: [] };
+      const source: OpencodeRuntimeSnapshotSource = {
+        externalSessionId: session.id,
+        sessionAssociation: { kind: "unbound" },
+        title: session.title,
+        workingDirectory: session.workingDirectory,
+        startedAt: toIsoFromEpoch(session.time.created, now),
+        runtimeActivity: toOpencodeRuntimeActivity(result.statuses[session.id]),
+        pendingApprovals: pending.approvals,
+        pendingQuestions: pending.questions,
+      };
+      if (!roots.has(session.id) && session.parentID) {
+        source.parentExternalSessionId = session.parentID;
+      }
+      return source;
+    });
   });
 };

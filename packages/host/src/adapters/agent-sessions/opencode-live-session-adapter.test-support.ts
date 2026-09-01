@@ -1,6 +1,7 @@
 import type {
   OpencodeNativeApprovalReply,
   OpencodeNativeQuestionReply,
+  OpencodeRuntimeSnapshotSource,
   OpencodeSessionRuntimeConnection,
   OpencodeSessionRuntimeSignal,
   PrepareOpencodeSessionRuntime,
@@ -69,12 +70,14 @@ type RuntimeHarness = {
   readonly controlCalls: ControlCall[];
   readonly releaseCalls: string[];
   readonly contextLoadCalls: string[];
+  readonly refreshRegisteredSessionCalls: ReadonlyArray<ReadonlyArray<string>>;
 };
 
 export const createRuntimeHarness = (
   options: {
     readonly sendUserMessageBarrier?: Promise<void>;
     readonly onSendUserMessage?: () => void;
+    readonly registeredSources?: OpencodeRuntimeSnapshotSource[];
   } = {},
 ): RuntimeHarness => {
   let listener: ((signal: OpencodeSessionRuntimeSignal) => void | Promise<void>) | null = null;
@@ -83,8 +86,13 @@ export const createRuntimeHarness = (
   const controlCalls: ControlCall[] = [];
   const releaseCalls: string[] = [];
   const contextLoadCalls: string[] = [];
+  const refreshRegisteredSessionCalls: string[][] = [];
 
   const connection: OpencodeSessionRuntimeConnection = {
+    refreshRegisteredSessions: async (refs) => {
+      refreshRegisteredSessionCalls.push(refs.map((candidate) => candidate.externalSessionId));
+      return options.registeredSources ?? [];
+    },
     loadContextUsage: async (input) => {
       contextLoadCalls.push(input.externalSessionId);
       return {
@@ -162,6 +170,7 @@ export const createRuntimeHarness = (
     controlCalls,
     releaseCalls,
     contextLoadCalls,
+    refreshRegisteredSessionCalls,
   };
 };
 

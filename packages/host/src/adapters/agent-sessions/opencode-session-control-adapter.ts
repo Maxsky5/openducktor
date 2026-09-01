@@ -19,7 +19,9 @@ import type {
 } from "../../ports/agent-session-live-adapter-port";
 import type { OpenCodeRuntimeInstance } from "./opencode-live-session-normalization";
 import { parseOutput, refKey, toSessionRef } from "./opencode-live-session-normalization";
-import type { OpenCodeLiveSessionState } from "./opencode-live-session-state";
+import type { createOpenCodeLiveSessionState } from "./opencode-live-session-state";
+
+type OpenCodeLiveSessionState = ReturnType<typeof createOpenCodeLiveSessionState>;
 
 type SerializeRuntime = <Success>(
   effect: Effect.Effect<Success, HostError>,

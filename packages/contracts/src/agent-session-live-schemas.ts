@@ -202,8 +202,24 @@ export const agentSessionLiveListInputSchema = z
   .strict();
 export type AgentSessionLiveListInput = z.infer<typeof agentSessionLiveListInputSchema>;
 
-export const agentSessionLiveRefreshInputSchema = agentSessionLiveListInputSchema;
-export type AgentSessionLiveRefreshInput = AgentSessionLiveListInput;
+export const agentSessionLiveRefreshInputSchema = z
+  .object({
+    repoPath: nonEmptyStringSchema,
+    registeredSessionRefs: z.array(agentSessionLiveRefSchema).optional(),
+  })
+  .strict()
+  .superRefine((input, context) => {
+    for (const [index, ref] of (input.registeredSessionRefs ?? []).entries()) {
+      if (ref.repoPath !== input.repoPath) {
+        context.addIssue({
+          code: "custom",
+          path: ["registeredSessionRefs", index, "repoPath"],
+          message: "Registered session repoPath must match the refresh repoPath.",
+        });
+      }
+    }
+  });
+export type AgentSessionLiveRefreshInput = z.infer<typeof agentSessionLiveRefreshInputSchema>;
 
 export const agentSessionLiveReadInputSchema = agentSessionLiveRefSchema;
 export type AgentSessionLiveReadInput = z.infer<typeof agentSessionLiveReadInputSchema>;

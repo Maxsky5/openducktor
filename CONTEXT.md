@@ -285,7 +285,7 @@ The low-level registry step that resolves a **Runtime Session Reference** to the
 _Avoid_: runtime recovery, repo default fallback, persisted endpoint
 
 **Session Runtime Snapshot**:
-The host-owned live-state snapshot for **Agent Sessions** that OpenDucktor has registered and their observed descendants. A **Session Runtime Snapshot** can mark those sessions as running, idle, stopped, errored, or waiting for input. It must not scan a runtime session inventory or add an unknown root session.
+The host-owned live-state snapshot for **Agent Sessions** that OpenDucktor has registered and their verified descendants. On reload, OpenDucktor supplies the exact durable root references that a runtime adapter may read for status and pending input. A **Session Runtime Snapshot** can mark those sessions as running, idle, stopped, errored, or waiting for input. It must not scan a runtime session inventory or add an unknown root session.
 _Avoid_: runtime session discovery, Session Status source, polling, reconciliation store
 
 **Agent Chat**:

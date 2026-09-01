@@ -279,6 +279,18 @@ export class OpencodeSdkAdapter
     return registerSession(registrationInput);
   }
 
+  async observeRegisteredSession(input: {
+    repoPath: string;
+    workingDirectory: string;
+    externalSessionId: string;
+  }): Promise<AgentSessionSummary> {
+    return this.ensureSessionState({
+      ...input,
+      runtimeKind: "opencode",
+      runtimePolicy: { kind: "opencode" },
+    });
+  }
+
   private async ensureSessionState(input: PolicyBoundSessionRef): Promise<AgentSessionSummary> {
     assertOpenCodeRuntimePolicyBinding(input, "ensure OpenCode session state");
     const existing = this.sessions.get(input.externalSessionId);

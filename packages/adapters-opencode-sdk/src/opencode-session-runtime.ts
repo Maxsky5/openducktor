@@ -9,6 +9,11 @@ import type {
   StartAgentSessionInput,
   UpdateAgentSessionModelInput,
 } from "@openducktor/core";
+import type { OpencodeRuntimeSnapshotSource } from "./live-session-snapshots";
+import {
+  applyOpencodeAwaitingTurnStartToRuntimeSnapshot,
+  readOpencodeRegisteredRuntimeSnapshotSources,
+} from "./live-session-snapshots";
 import type { ParsedOpencodeEvent as Event } from "./opencode-global-event-ingress";
 import { buildDefaultFactory, nowIso } from "./client-factory";
 import { OpencodeSdkAdapter } from "./opencode-sdk-adapter";
@@ -28,6 +33,7 @@ import {
 import { observeRuntimeEvents, releaseSessionRuntime } from "./session-registry";
 import type {
   OpencodeSdkAdapterOptions,
+  ReadOpencodeDirectory,
   RuntimeEventTransportRecord,
   SessionRecord,
 } from "./types";
@@ -46,6 +52,9 @@ export type {
 } from "./opencode-session-native-operations";
 
 export type OpencodeSessionRuntimeConnection = {
+  readonly refreshRegisteredSessions: (
+    refs: ReadonlyArray<SessionRef>,
+  ) => Promise<OpencodeRuntimeSnapshotSource[]>;
   readonly loadContextUsage: (ref: SessionRef) => Promise<OpencodeSessionContextUsage | null>;
   readonly replyApproval: (input: OpencodeNativeApprovalReply) => Promise<void>;
   readonly replyQuestion: (input: OpencodeNativeQuestionReply) => Promise<void>;
@@ -69,6 +78,10 @@ export type PreparedOpencodeSessionRuntime = {
 export type PrepareOpencodeSessionRuntime = (
   input: PrepareOpencodeSessionRuntimeInput,
 ) => Promise<PreparedOpencodeSessionRuntime>;
+
+type PrepareOpencodeSessionRuntimeOptions = OpencodeSdkAdapterOptions & {
+  readonly readDirectory: ReadOpencodeDirectory;
+};
 
 const runtimeInitializationAbortFailure = (signal: AbortSignal, runtimeId: string): Error =>
   signal.reason instanceof Error
@@ -128,17 +141,18 @@ const releaseEventSessions = async (
 };
 
 export const createPrepareOpencodeSessionRuntime = (
-  options: OpencodeSdkAdapterOptions = {},
+  options: PrepareOpencodeSessionRuntimeOptions,
 ): PrepareOpencodeSessionRuntime => {
-  const createClient = options.createClient ?? buildDefaultFactory();
-  const now = options.now ?? nowIso;
+  const { readDirectory, ...adapterOptions } = options;
+  const createClient = adapterOptions.createClient ?? buildDefaultFactory();
+  const now = adapterOptions.now ?? nowIso;
   const runtimeEventTransports = new Map<string, RuntimeEventTransportRecord>();
 
   return async (input) => {
     const eventSessions = new Map<string, SessionRecord>();
     const controlAdapter = new OpencodeSdkAdapter(
       {
-        ...options,
+        ...adapterOptions,
         repoRuntimeResolver: {
           requireRepoRuntime: async () => ({
             kind: "opencode",
@@ -229,8 +243,8 @@ export const createPrepareOpencodeSessionRuntime = (
     if (input.signal) {
       observationInput.signal = input.signal;
     }
-    if (options.logEvent) {
-      observationInput.logEvent = options.logEvent;
+    if (adapterOptions.logEvent) {
+      observationInput.logEvent = adapterOptions.logEvent;
     }
     const observation = await observeRuntimeEvents(observationInput);
 
@@ -271,6 +285,40 @@ export const createPrepareOpencodeSessionRuntime = (
     }
 
     const connection: OpencodeSessionRuntimeConnection = {
+      refreshRegisteredSessions: async (refs) => {
+        const sources = await readOpencodeRegisteredRuntimeSnapshotSources({
+          createClient,
+          runtimeEndpoint: input.runtimeEndpoint,
+          refs,
+          readDirectory,
+          now,
+        });
+        const rootsById = new Map(
+          sources
+            .filter((source) => source.parentExternalSessionId === undefined)
+            .map((source) => [source.externalSessionId, source]),
+        );
+        for (const ref of refs) {
+          const source = rootsById.get(ref.externalSessionId);
+          if (!source || source.workingDirectory !== ref.workingDirectory) {
+            throw new Error(
+              `OpenCode did not return registered session '${ref.externalSessionId}' in '${ref.workingDirectory}'.`,
+            );
+          }
+          await controlAdapter.observeRegisteredSession({
+            repoPath: ref.repoPath,
+            workingDirectory: ref.workingDirectory,
+            externalSessionId: ref.externalSessionId,
+          });
+        }
+        return sources.map((snapshot) =>
+          applyOpencodeAwaitingTurnStartToRuntimeSnapshot({
+            sessions: eventSessions,
+            runtimeId: input.runtimeId,
+            snapshot,
+          }),
+        );
+      },
       loadContextUsage: (ref) =>
         readLatestOpencodeContextUsage(
           { createClient, runtimeEndpoint: input.runtimeEndpoint },

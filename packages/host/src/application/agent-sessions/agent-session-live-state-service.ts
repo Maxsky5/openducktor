@@ -229,6 +229,16 @@ export const createAgentSessionLiveStateService = ({
     refresh: (input) =>
       coordinator.run(
         Effect.gen(function* () {
+          const registeredRefs = input.registeredSessionRefs ?? [];
+          yield* Effect.forEach(adapterRegistry.listForRepo(input.repoPath), (adapter) => {
+            if (!adapter.refreshRegisteredSessions) {
+              return Effect.void;
+            }
+            const adapterRefs = registeredRefs.filter(
+              (ref) => ref.runtimeKind === adapter.binding.runtimeKind,
+            );
+            return adapter.refreshRegisteredSessions(adapterRefs);
+          });
           const snapshots = yield* listSnapshots(input.repoPath);
           yield* publishEnvelope({
             type: "snapshot",
