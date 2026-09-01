@@ -19,7 +19,6 @@ const occurrence: NotificationOccurrence = {
 const createCoordinator = () => ({
   supported: true,
   getFailureMessage: mock((): string | null => null),
-  clearFailure: mock(() => {}),
   publishOccurrence: mock((_occurrence: NotificationOccurrence) => {}),
   subscribeOccurrences: mock((_listener: (value: NotificationOccurrence) => void) => () => {}),
   isExternalDeliveryOwner: mock(() => true),
@@ -85,13 +84,10 @@ describe("browser notification bridge", () => {
     expect(requestPermission).toHaveBeenCalledTimes(1);
   });
 
-  test("keeps recovery available after a coordination failure and clears it on success", async () => {
-    let failureMessage: string | null = "Lock snapshot failed.";
+  test("keeps a coordination failure after unrelated OS delivery succeeds", async () => {
+    const failureMessage: string | null = "Lock snapshot failed.";
     const coordinator = createCoordinator();
     coordinator.getFailureMessage.mockImplementation(() => failureMessage);
-    coordinator.clearFailure.mockImplementation(() => {
-      failureMessage = null;
-    });
     const instances: BrowserNotificationInstance[] = [];
     class TestNotification implements BrowserNotificationInstance {
       static permission: NotificationPermission = "granted";
@@ -132,12 +128,12 @@ describe("browser notification bridge", () => {
     instances[0]?.onshow?.(new Event("show"));
 
     await expect(delivery).resolves.toEqual({ status: "shown" });
-    expect(coordinator.clearFailure).toHaveBeenCalledTimes(1);
     expect(await bridge.getCapability()).toEqual({
       platform: "browser",
       supported: true,
       permission: "granted",
       canGuaranteeSilent: true,
+      failureMessage: "Browser notification coordination failed: Lock snapshot failed.",
     });
   });
 

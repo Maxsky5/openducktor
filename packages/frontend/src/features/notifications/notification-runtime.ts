@@ -67,10 +67,34 @@ export const createNotificationRuntime = ({
     const occurrence = notificationOccurrenceSchema.parse(rawOccurrence);
     try {
       await bridge.withExternalDeliveryOwnership(occurrence.occurrenceId, async (owner) => {
-        const appFocused = await bridge.isAppFocused();
+        if (!owner) {
+          await policy.dispatch(occurrence, {
+            appFocused: false,
+            externalDeliveryOwner: false,
+          });
+          return;
+        }
+        let appFocused: boolean;
+        try {
+          appFocused = await bridge.isAppFocused();
+        } catch (cause) {
+          const message = cause instanceof Error ? cause.message : String(cause);
+          onFailure({
+            channel: "os",
+            kind: occurrence.kind,
+            occurrenceId: occurrence.occurrenceId,
+            repoPath: occurrence.repoPath,
+            message: message.slice(0, 500),
+          });
+          await policy.dispatch(occurrence, {
+            appFocused: false,
+            externalDeliveryOwner: false,
+          });
+          return;
+        }
         await policy.dispatch(occurrence, {
           appFocused,
-          externalDeliveryOwner: owner,
+          externalDeliveryOwner: true,
         });
       });
     } catch (cause) {

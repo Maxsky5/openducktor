@@ -43,10 +43,16 @@ type FocusWindow = {
   removeEventListener(type: "focus" | "blur", listener: EventListener): void;
 };
 
+type CoordinationOperation =
+  | "tab_registration"
+  | "claim"
+  | "external_ownership"
+  | "focus_lock"
+  | "focus_query";
+
 export type BrowserNotificationCoordinator = {
   readonly supported: boolean;
   getFailureMessage(): string | null;
-  clearFailure(): void;
   publishOccurrence(occurrence: NotificationOccurrence): void;
   subscribeOccurrences(listener: (occurrence: NotificationOccurrence) => void): () => void;
   isExternalDeliveryOwner(): boolean;
@@ -106,7 +112,6 @@ export const createBrowserNotificationCoordinator = ({
       supported: false,
       getFailureMessage: () =>
         "This browser cannot coordinate notifications and sound across tabs.",
-      clearFailure: () => {},
       publishOccurrence: () => {},
       subscribeOccurrences: () => () => {},
       isExternalDeliveryOwner: () => false,
@@ -117,7 +122,7 @@ export const createBrowserNotificationCoordinator = ({
   }
 
   let disposed = false;
-  let failureMessage: string | null = null;
+  const failureMessages = new Map<CoordinationOperation, string>();
   let channel: BroadcastChannelLike | null = null;
   let externalDeliveryOwner = false;
   let releaseExternalDeliveryLock: (() => void) | null = null;
@@ -134,6 +139,10 @@ export const createBrowserNotificationCoordinator = ({
   const activeClaimPropagations = new Set<Promise<void>>();
   const tabLockName = `${TAB_LOCK_NAME_PREFIX}${tabId}`;
 
+  const recordFailure = (operation: CoordinationOperation, cause: unknown): void => {
+    failureMessages.set(operation, cause instanceof Error ? cause.message : String(cause));
+  };
+
   const releaseTabState = (): void => {
     tabLockAbortController?.abort();
     tabLockAbortController = null;
@@ -147,6 +156,7 @@ export const createBrowserNotificationCoordinator = ({
     void locks
       .request(tabLockName, { mode: "exclusive", signal: controller.signal }, async () => {
         if (disposed) return;
+        failureMessages.delete("tab_registration");
         tabLockAbortController = null;
         const registeredChannel = createChannel();
         channel = registeredChannel;
@@ -169,7 +179,7 @@ export const createBrowserNotificationCoordinator = ({
           tabLockAbortController = null;
         }
         if (!controller.signal.aborted) {
-          failureMessage = cause instanceof Error ? cause.message : String(cause);
+          recordFailure("tab_registration", cause);
         }
       });
   };
@@ -202,7 +212,7 @@ export const createBrowserNotificationCoordinator = ({
       )
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return;
-        failureMessage = cause instanceof Error ? cause.message : String(cause);
+        recordFailure("claim", cause);
         throw cause;
       })
       .finally(() => {
@@ -222,7 +232,7 @@ export const createBrowserNotificationCoordinator = ({
     try {
       snapshot = await locks.query();
     } catch (cause) {
-      failureMessage = cause instanceof Error ? cause.message : String(cause);
+      recordFailure("claim", cause);
       throw cause;
     }
     const tabIds = new Set(
@@ -239,7 +249,7 @@ export const createBrowserNotificationCoordinator = ({
     }
     registeredChannel.postMessage({ type: "external_delivery_claimed", occurrenceId });
     await Promise.all(acknowledgements);
-    failureMessage = null;
+    failureMessages.delete("claim");
   };
 
   const trackClaimPropagation = (occurrenceId: string): Promise<void> => {
@@ -296,6 +306,7 @@ export const createBrowserNotificationCoordinator = ({
         { mode: "exclusive", signal: controller.signal },
         async () => {
           if (disposed) return;
+          failureMessages.delete("external_ownership");
           externalDeliveryLockAbortController = null;
           externalDeliveryOwner = true;
           replayPendingOccurrences();
@@ -311,7 +322,7 @@ export const createBrowserNotificationCoordinator = ({
           externalDeliveryLockAbortController = null;
         }
         if (!controller.signal.aborted) {
-          failureMessage = cause instanceof Error ? cause.message : String(cause);
+          recordFailure("external_ownership", cause);
         }
       });
   };
@@ -334,6 +345,7 @@ export const createBrowserNotificationCoordinator = ({
         if (disposed || !focusDocument.hasFocus()) {
           return;
         }
+        failureMessages.delete("focus_lock");
         focusLockAbortController = null;
         await new Promise<void>((resolve) => {
           releaseFocusLock = resolve;
@@ -345,7 +357,7 @@ export const createBrowserNotificationCoordinator = ({
           focusLockAbortController = null;
         }
         if (!controller.signal.aborted) {
-          failureMessage = cause instanceof Error ? cause.message : String(cause);
+          recordFailure("focus_lock", cause);
         }
       });
   };
@@ -358,10 +370,7 @@ export const createBrowserNotificationCoordinator = ({
 
   return {
     supported,
-    getFailureMessage: () => failureMessage,
-    clearFailure() {
-      failureMessage = null;
-    },
+    getFailureMessage: () => [...failureMessages.values()].join(" ") || null,
     publishOccurrence(occurrence) {
       const parsed = notificationOccurrenceSchema.parse(occurrence);
       if (!claimedOccurrences.has(parsed.occurrenceId)) {
@@ -391,8 +400,14 @@ export const createBrowserNotificationCoordinator = ({
       return true;
     },
     async isAnyTabFocused() {
-      const snapshot = await locks.query();
-      return snapshot.held?.some((lock) => lock.name === APP_FOCUS_LOCK_NAME) ?? false;
+      try {
+        const snapshot = await locks.query();
+        failureMessages.delete("focus_query");
+        return snapshot.held?.some((lock) => lock.name === APP_FOCUS_LOCK_NAME) ?? false;
+      } catch (cause) {
+        recordFailure("focus_query", cause);
+        throw cause;
+      }
     },
     dispose() {
       if (disposed) {
