@@ -178,7 +178,8 @@ export const createBrowserNotificationBridge = ({
       await dispatch(await coordinator.claimExternalDelivery(occurrenceId));
     },
     showOsNotification,
-    publishOccurrence: (occurrence) => coordinator.publishOccurrence(occurrence),
+    publishOccurrence: (occurrence, settings) =>
+      coordinator.publishOccurrence(occurrence, settings),
     subscribeOccurrences: (listener) => coordinator.subscribeOccurrences(listener),
     subscribeClicks(listener) {
       clickListeners.add(listener);

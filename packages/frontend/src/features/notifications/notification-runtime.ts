@@ -9,17 +9,12 @@ import {
 } from "@openducktor/contracts";
 import type { NotificationBridge } from "@/lib/shell-bridge";
 import {
-  createCuelumeNotificationSoundAdapter,
   createShellOsNotificationAdapter,
-  createSonnerNotificationAdapter,
+  type createCuelumeNotificationSoundAdapter,
+  type createSonnerNotificationAdapter,
 } from "./notification-delivery";
 import { prepareNotificationOccurrence } from "./notification-occurrence";
-import {
-  createNotificationPolicy,
-  type InAppNotificationAdapter,
-  type NotificationDispatchFailure,
-  type SoundNotificationAdapter,
-} from "./notification-policy";
+import { createNotificationPolicy, type NotificationDispatchFailure } from "./notification-policy";
 
 export const createNotificationRuntime = ({
   bridge,
@@ -27,20 +22,18 @@ export const createNotificationRuntime = ({
   navigate,
   onFailure,
   onOsShown = () => {},
-  inApp: inAppOverride,
-  sound: soundOverride,
+  inApp,
+  sound,
 }: {
   bridge: NotificationBridge;
   loadSettings(): Promise<NotificationSettings>;
   navigate(target: NotificationNavigationTarget): Promise<void>;
   onFailure(failure: NotificationDispatchFailure): void;
   onOsShown?: () => void;
-  inApp?: InAppNotificationAdapter;
-  sound?: SoundNotificationAdapter;
+  inApp: ReturnType<typeof createSonnerNotificationAdapter>;
+  sound: ReturnType<typeof createCuelumeNotificationSoundAdapter>;
 }) => {
-  const inApp = inAppOverride ?? createSonnerNotificationAdapter({ navigate });
   const os = createShellOsNotificationAdapter(bridge, onOsShown);
-  const sound = soundOverride ?? createCuelumeNotificationSoundAdapter();
   const policy = createNotificationPolicy({
     loadSettings,
     inApp,
@@ -83,8 +76,13 @@ export const createNotificationRuntime = ({
     });
   };
 
-  const dispatch = async (rawOccurrence: NotificationOccurrence): Promise<void> => {
+  const dispatch = async (
+    rawOccurrence: NotificationOccurrence,
+    suppliedSettings?: NotificationSettings,
+  ): Promise<void> => {
     const occurrence = notificationOccurrenceSchema.parse(rawOccurrence);
+    const settings = await policy.loadSettingsSnapshot(occurrence, suppliedSettings);
+    if (!settings) return;
     const externalPlan = await policy.dispatch(occurrence, { phase: "local" });
     if (!externalPlan) return;
     try {
@@ -111,12 +109,15 @@ export const createNotificationRuntime = ({
       const occurrence = notificationOccurrenceSchema.parse(
         prepareNotificationOccurrence(rawOccurrence),
       );
-      bridge.publishOccurrence(occurrence);
-      void dispatch(occurrence);
+      void policy.loadSettingsSnapshot(occurrence).then((settings) => {
+        if (!settings) return;
+        bridge.publishOccurrence(occurrence, settings);
+        return dispatch(occurrence, settings);
+      });
     },
     subscribe(): () => void {
-      const stopOccurrences = bridge.subscribeOccurrences((occurrence) => {
-        void dispatch(occurrence);
+      const stopOccurrences = bridge.subscribeOccurrences((occurrence, settings) => {
+        void dispatch(occurrence, settings);
       });
       const stopClicks = bridge.subscribeClicks(({ navigationTarget }) => {
         void navigate(navigationTarget);

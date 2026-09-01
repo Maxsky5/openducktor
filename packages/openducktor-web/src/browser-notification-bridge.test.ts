@@ -1,5 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { NotificationClickEvent, NotificationOccurrence } from "@openducktor/contracts";
+import type {
+  NotificationClickEvent,
+  NotificationOccurrence,
+  NotificationSettings,
+} from "@openducktor/contracts";
 import {
   type BrowserNotificationConstructor,
   type BrowserNotificationInstance,
@@ -19,8 +23,13 @@ const occurrence: NotificationOccurrence = {
 const createCoordinator = () => ({
   supported: true,
   getFailureMessage: mock((): string | null => null),
-  publishOccurrence: mock((_occurrence: NotificationOccurrence) => {}),
-  subscribeOccurrences: mock((_listener: (value: NotificationOccurrence) => void) => () => {}),
+  publishOccurrence: mock(
+    (_occurrence: NotificationOccurrence, _settings: NotificationSettings) => {},
+  ),
+  subscribeOccurrences: mock(
+    (_listener: (value: NotificationOccurrence, settings: NotificationSettings) => void) =>
+      () => {},
+  ),
   isExternalDeliveryOwner: mock(() => true),
   claimExternalDelivery: mock(async (_occurrenceId: string) => true),
   isAnyTabFocused: mock(async () => false),

@@ -1,16 +1,21 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { NotificationOccurrence } from "@openducktor/contracts";
+import {
+  createDefaultNotificationSettings,
+  type NotificationOccurrence,
+  type NotificationSettings,
+} from "@openducktor/contracts";
 import { createBrowserNotificationBridge } from "./browser-notification-bridge";
 import { createBrowserNotificationCoordinator } from "./browser-notification-coordinator";
 
 type CoordinatorMessage =
-  | { type: "occurrence"; occurrence: NotificationOccurrence }
+  | { type: "occurrence"; occurrence: NotificationOccurrence; settings: NotificationSettings }
   | { type: "external_delivery_claimed"; occurrenceId: string }
   | { type: "external_delivery_claim_ack"; occurrenceId: string; tabId: string };
 
 const EXTERNAL_DELIVERY_LOCK_NAME = "openducktor:notifications:external-delivery";
 const TAB_LOCK_NAME_PREFIX = "openducktor:notifications:tab:";
 const APP_FOCUS_LOCK_NAME = "openducktor:notifications:app-focus";
+const settings = createDefaultNotificationSettings();
 
 type LockRequest = {
   name: string;
@@ -356,18 +361,23 @@ describe("browser notification coordinator", () => {
       focusWindow: new FakeFocusWindow(),
     });
     const received: NotificationOccurrence[] = [];
-    first.subscribeOccurrences((value) => {
+    const receivedSettings: NotificationSettings[] = [];
+    first.subscribeOccurrences((value, settingsSnapshot) => {
       void first.claimExternalDelivery(value.occurrenceId).then((owner) => {
-        if (owner) received.push(value);
+        if (owner) {
+          received.push(value);
+          receivedSettings.push(settingsSnapshot);
+        }
       });
     });
 
-    second.publishOccurrence(occurrence);
+    second.publishOccurrence(occurrence, settings);
     expect(received).toEqual([]);
     locks.resume();
     await waitFor(() => received.length === 1);
 
     expect(received).toEqual([occurrence]);
+    expect(receivedSettings).toEqual([settings]);
     expect(locks.heldCount(EXTERNAL_DELIVERY_LOCK_NAME)).toBe(1);
     first.dispose();
     second.dispose();
@@ -397,7 +407,7 @@ describe("browser notification coordinator", () => {
     });
 
     first.dispose();
-    second.publishOccurrence(occurrence);
+    second.publishOccurrence(occurrence, settings);
     await waitFor(() => received.length === 1);
 
     expect(received).toEqual([occurrence]);
@@ -458,7 +468,7 @@ describe("browser notification coordinator", () => {
     subscribe(secondBridge);
     await waitFor(() => firstCoordinator.isExternalDeliveryOwner());
 
-    secondBridge.publishOccurrence(occurrence);
+    secondBridge.publishOccurrence(occurrence, settings);
     await hub.flushNext(firstChannel, "occurrence");
     expect(showOsNotification).not.toHaveBeenCalled();
     firstBridge.dispose();
@@ -511,7 +521,7 @@ describe("browser notification coordinator", () => {
     });
     await waitFor(() => owner.isExternalDeliveryOwner());
 
-    recipient.publishOccurrence(occurrence);
+    recipient.publishOccurrence(occurrence, settings);
     await hub.flushNext(ownerChannel, "occurrence");
     expect(claims).toBe(0);
     recipient.dispose();
@@ -594,7 +604,7 @@ describe("browser notification coordinator", () => {
     subscribe(publisherBridge);
     await waitFor(() => firstCoordinator.isExternalDeliveryOwner());
 
-    publisherBridge.publishOccurrence(occurrence);
+    publisherBridge.publishOccurrence(occurrence, settings);
     await hub.flushNext(firstChannel, "occurrence");
     await hub.flushNext(publisherChannel, "external_delivery_claimed");
     await hub.flushNext(firstChannel, "external_delivery_claim_ack");
@@ -690,7 +700,7 @@ describe("browser notification coordinator", () => {
     expect(joiningChannel).toBeUndefined();
     expect(hub.channels.size).toBe(2);
 
-    publisherBridge.publishOccurrence(occurrence);
+    publisherBridge.publishOccurrence(occurrence, settings);
     await hub.flushNext(ownerChannel, "occurrence");
     await hub.flushNext(publisherChannel, "external_delivery_claimed");
     await hub.flushNext(ownerChannel, "external_delivery_claim_ack");
@@ -739,17 +749,20 @@ describe("browser notification coordinator", () => {
     await waitFor(() => owner.isExternalDeliveryOwner());
     locks.rejectNextQuery(new Error("Lock snapshot failed."));
 
-    publisher.publishOccurrence(occurrence);
+    publisher.publishOccurrence(occurrence, settings);
     await waitFor(() => claimFailure !== undefined);
 
     expect(deliveries).toBe(0);
     expect(claimFailure).toEqual(new Error("Lock snapshot failed."));
     expect(owner.getFailureMessage()).toBe("Lock snapshot failed.");
 
-    publisher.publishOccurrence({
-      ...occurrence,
-      occurrenceId: `${occurrence.occurrenceId}:retry`,
-    });
+    publisher.publishOccurrence(
+      {
+        ...occurrence,
+        occurrenceId: `${occurrence.occurrenceId}:retry`,
+      },
+      settings,
+    );
     await waitFor(() => deliveries === 1);
 
     expect(owner.getFailureMessage()).toBeNull();
@@ -782,10 +795,13 @@ describe("browser notification coordinator", () => {
     await waitFor(() => owner.getFailureMessage() === "Focus lock failed.");
     await waitFor(() => owner.isExternalDeliveryOwner());
 
-    publisher.publishOccurrence({
-      ...occurrence,
-      occurrenceId: `${occurrence.occurrenceId}:focus-lock-failure`,
-    });
+    publisher.publishOccurrence(
+      {
+        ...occurrence,
+        occurrenceId: `${occurrence.occurrenceId}:focus-lock-failure`,
+      },
+      settings,
+    );
     await waitFor(() => deliveries === 1);
 
     await expect(owner.isAnyTabFocused()).rejects.toThrow("Focus lock failed.");
@@ -818,10 +834,13 @@ describe("browser notification coordinator", () => {
     await waitFor(() => owner.isExternalDeliveryOwner());
 
     for (let index = 0; index < 100; index += 1) {
-      publisher.publishOccurrence({
-        ...occurrence,
-        occurrenceId: `${occurrence.occurrenceId}:${index}`,
-      });
+      publisher.publishOccurrence(
+        {
+          ...occurrence,
+          occurrenceId: `${occurrence.occurrenceId}:${index}`,
+        },
+        settings,
+      );
     }
     await waitFor(() => received.length === 100);
 

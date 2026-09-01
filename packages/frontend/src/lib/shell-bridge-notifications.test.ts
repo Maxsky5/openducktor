@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { NotificationOccurrence } from "@openducktor/contracts";
+import {
+  createDefaultNotificationSettings,
+  type NotificationOccurrence,
+} from "@openducktor/contracts";
 import { createUnavailableShellBridge } from "./shell-bridge";
 
 const occurrence: NotificationOccurrence = {
@@ -40,7 +43,9 @@ describe("unavailable shell notification bridge", () => {
     const notifications = createUnavailableShellBridge().notifications;
     const expected = "OpenDucktor shell bridge is not configured.";
 
-    expect(() => notifications.publishOccurrence(occurrence)).toThrow(expected);
+    expect(() =>
+      notifications.publishOccurrence(occurrence, createDefaultNotificationSettings()),
+    ).toThrow(expected);
     expect(() => notifications.subscribeOccurrences(() => {})).toThrow(expected);
     expect(() => notifications.subscribeClicks(() => {})).toThrow(expected);
   });

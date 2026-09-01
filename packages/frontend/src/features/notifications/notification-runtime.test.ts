@@ -3,9 +3,10 @@ import {
   createDefaultNotificationSettings,
   type NotificationOccurrence,
   type NotificationOsDeliveryRequest,
+  type NotificationSettings,
 } from "@openducktor/contracts";
 import type { NotificationBridge } from "@/lib/shell-bridge";
-import { createNotificationRuntime } from "./notification-runtime";
+import { createNotificationRuntime as createProductionNotificationRuntime } from "./notification-runtime";
 
 const createBridge = (overrides: Partial<NotificationBridge> = {}): NotificationBridge => ({
   getCapability: async () => ({
@@ -51,9 +52,28 @@ const createDeliveryAdapters = () => {
   };
 };
 
+type RuntimeOptions = Parameters<typeof createProductionNotificationRuntime>[0];
+type TestRuntimeOptions = Omit<RuntimeOptions, "inApp" | "sound"> &
+  Partial<Pick<RuntimeOptions, "inApp" | "sound">>;
+
+const createNotificationRuntime = (options: TestRuntimeOptions) => {
+  const delivery = createDeliveryAdapters();
+  return createProductionNotificationRuntime({
+    inApp: delivery.inApp,
+    sound: delivery.sound,
+    ...options,
+  });
+};
+
 describe("notification runtime tests", () => {
-  test("bounds display text before publishing the occurrence", () => {
-    const publishOccurrence = mock((_occurrence: NotificationOccurrence) => {});
+  test("bounds display text before publishing the occurrence", async () => {
+    let resolvePublished = (_occurrence: NotificationOccurrence): void => {};
+    const publishedOccurrence = new Promise<NotificationOccurrence>((resolve) => {
+      resolvePublished = resolve;
+    });
+    const publishOccurrence = mock((published: NotificationOccurrence) => {
+      resolvePublished(published);
+    });
     const runtime = createNotificationRuntime({
       bridge: createBridge({ publishOccurrence }),
       loadSettings: async () => createDefaultNotificationSettings(),
@@ -80,10 +100,93 @@ describe("notification runtime tests", () => {
       },
     });
 
-    const published = publishOccurrence.mock.calls[0]?.[0];
+    const published = await publishedOccurrence;
     expect(published?.repositoryLabel).toHaveLength(120);
     expect(published?.task?.title).toHaveLength(240);
     expect(published?.sessionLabel).toHaveLength(120);
+  });
+
+  test("publishes the settings snapshot selected for the occurrence", async () => {
+    const settings = createDefaultNotificationSettings();
+    settings.kinds["workflow.closed"] = { enabled: true, target: "in_app", sound: "none" };
+    let resolvePublished = (_settings: NotificationSettings | undefined): void => {};
+    const published = new Promise<NotificationSettings | undefined>((resolve) => {
+      resolvePublished = resolve;
+    });
+    const publishOccurrence = mock(
+      (_occurrence: NotificationOccurrence, publishedSettings?: NotificationSettings) => {
+        resolvePublished(publishedSettings);
+      },
+    );
+    const delivery = createDeliveryAdapters();
+    const runtime = createNotificationRuntime({
+      bridge: createBridge({ publishOccurrence }),
+      loadSettings: async () => settings,
+      navigate: async () => {},
+      onFailure: () => {},
+      inApp: delivery.inApp,
+      sound: delivery.sound,
+    });
+
+    runtime.publish(workflowClosedOccurrence("event-settings-snapshot"));
+
+    expect(await published).toEqual(settings);
+  });
+
+  test("uses one settings snapshot when another tab receives the occurrence", async () => {
+    let receiveOccurrence:
+      | ((occurrence: NotificationOccurrence, settings: NotificationSettings) => void)
+      | null = null;
+    let resolveDelivery = (): void => {};
+    const delivered = new Promise<void>((resolve) => {
+      resolveDelivery = resolve;
+    });
+    const recipientInApp = mock(async () => resolveDelivery());
+    const recipientLoadSettings = mock(async () => {
+      const settings = createDefaultNotificationSettings();
+      settings.kinds["workflow.closed"].enabled = false;
+      return settings;
+    });
+    const recipient = createNotificationRuntime({
+      bridge: createBridge({
+        subscribeOccurrences(listener) {
+          receiveOccurrence = listener;
+          return () => {};
+        },
+      }),
+      loadSettings: recipientLoadSettings,
+      navigate: async () => {},
+      onFailure: () => {},
+      inApp: { deliver: recipientInApp },
+      sound: { play: async () => {} },
+    });
+    recipient.subscribe();
+
+    const publisherSettings = createDefaultNotificationSettings();
+    publisherSettings.kinds["workflow.closed"] = {
+      enabled: true,
+      target: "in_app",
+      sound: "none",
+    };
+    const publisherDelivery = createDeliveryAdapters();
+    const publisher = createNotificationRuntime({
+      bridge: createBridge({
+        publishOccurrence(occurrence, settings) {
+          receiveOccurrence?.(occurrence, settings);
+        },
+      }),
+      loadSettings: async () => publisherSettings,
+      navigate: async () => {},
+      onFailure: () => {},
+      inApp: publisherDelivery.inApp,
+      sound: publisherDelivery.sound,
+    });
+
+    publisher.publish(workflowClosedOccurrence("event-two-tabs"));
+    await delivered;
+
+    expect(recipientInApp).toHaveBeenCalledTimes(1);
+    expect(recipientLoadSettings).not.toHaveBeenCalled();
   });
 
   test("requests permission only from the explicit OS test", async () => {
@@ -440,5 +543,33 @@ describe("notification runtime tests", () => {
     expect(onFailure).toHaveBeenCalledWith(
       expect.objectContaining({ channel: "coordination", message: "Focus lock query failed." }),
     );
+  });
+
+  test("does not coordinate an occurrence again after external delivery is complete", async () => {
+    const delivery = createDeliveryAdapters();
+    const isAppFocused = mock(async () => false);
+    const withExternalDeliveryOwnership = mock(
+      async (_occurrenceId: string, dispatch: (owner: boolean) => Promise<void>) => dispatch(true),
+    );
+    const onFailure = mock(() => {});
+    const runtime = createNotificationRuntime({
+      bridge: createBridge({ isAppFocused, withExternalDeliveryOwnership }),
+      loadSettings: async () => createDefaultNotificationSettings(),
+      navigate: async () => {},
+      onFailure,
+      inApp: delivery.inApp,
+      sound: delivery.sound,
+    });
+    const occurrence = workflowClosedOccurrence("event-complete");
+
+    await runtime.dispatch(occurrence);
+    isAppFocused.mockImplementation(async () => {
+      throw new Error("Late focus failure.");
+    });
+    await runtime.dispatch(occurrence);
+
+    expect(withExternalDeliveryOwnership).toHaveBeenCalledTimes(1);
+    expect(isAppFocused).toHaveBeenCalledTimes(1);
+    expect(onFailure).not.toHaveBeenCalled();
   });
 });

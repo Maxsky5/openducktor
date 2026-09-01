@@ -9,6 +9,7 @@ import type {
   NotificationOccurrence,
   NotificationOsCapability,
   NotificationOsDeliveryRequest,
+  NotificationSettings,
   TaskAssetRenderContext,
   TaskEventCursor,
   TaskEventStreamFrame,
@@ -89,8 +90,10 @@ export type NotificationBridge = {
     dispatch: (externalDeliveryOwner: boolean) => Promise<void>,
   ): Promise<void>;
   showOsNotification(request: NotificationOsDeliveryRequest): Promise<NotificationDeliveryResult>;
-  publishOccurrence(occurrence: NotificationOccurrence): void;
-  subscribeOccurrences(listener: (occurrence: NotificationOccurrence) => void): () => void;
+  publishOccurrence(occurrence: NotificationOccurrence, settings: NotificationSettings): void;
+  subscribeOccurrences(
+    listener: (occurrence: NotificationOccurrence, settings: NotificationSettings) => void,
+  ): () => void;
   subscribeClicks(listener: (event: NotificationClickEvent) => void): () => void;
   dispose(): void;
 };
