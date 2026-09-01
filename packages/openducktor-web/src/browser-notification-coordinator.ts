@@ -1,4 +1,9 @@
-import { notificationOccurrenceSchema, type NotificationOccurrence } from "@openducktor/contracts";
+import {
+  notificationOccurrenceSchema,
+  notificationSettingsSchema,
+  type NotificationOccurrence,
+  type NotificationSettings,
+} from "@openducktor/contracts";
 import { z } from "zod";
 
 const OCCURRENCE_CHANNEL_NAME = "openducktor:notifications:occurrences";
@@ -7,7 +12,11 @@ const TAB_LOCK_NAME_PREFIX = "openducktor:notifications:tab:";
 const APP_FOCUS_LOCK_NAME = "openducktor:notifications:app-focus";
 
 const coordinatorMessageSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("occurrence"), occurrence: notificationOccurrenceSchema }),
+  z.object({
+    type: z.literal("occurrence"),
+    occurrence: notificationOccurrenceSchema,
+    settings: notificationSettingsSchema.removeDefault(),
+  }),
   z.object({ type: z.literal("external_delivery_claimed"), occurrenceId: z.string().min(1) }),
   z.object({
     type: z.literal("external_delivery_claim_ack"),
@@ -53,8 +62,10 @@ type CoordinationOperation =
 export type BrowserNotificationCoordinator = {
   readonly supported: boolean;
   getFailureMessage(): string | null;
-  publishOccurrence(occurrence: NotificationOccurrence): void;
-  subscribeOccurrences(listener: (occurrence: NotificationOccurrence) => void): () => void;
+  publishOccurrence(occurrence: NotificationOccurrence, settings: NotificationSettings): void;
+  subscribeOccurrences(
+    listener: (occurrence: NotificationOccurrence, settings: NotificationSettings) => void,
+  ): () => void;
   isExternalDeliveryOwner(): boolean;
   claimExternalDelivery(occurrenceId: string): Promise<boolean>;
   isAnyTabFocused(): Promise<boolean>;
@@ -67,6 +78,11 @@ type CreateBrowserNotificationCoordinatorOptions = {
   focusDocument?: FocusDocument | null;
   focusWindow?: FocusWindow | null;
   tabId?: string;
+};
+
+type PendingOccurrence = {
+  occurrence: NotificationOccurrence;
+  settings: NotificationSettings;
 };
 
 const getDefaultChannelFactory = (): (() => BroadcastChannelLike) | null => {
@@ -131,10 +147,12 @@ export const createBrowserNotificationCoordinator = ({
   let focusLockAbortController: AbortController | null = null;
   let releaseTabLock: (() => void) | null = null;
   let tabLockAbortController: AbortController | null = null;
-  const pendingOccurrences = new Map<string, NotificationOccurrence>();
-  const queuedPublications = new Map<string, NotificationOccurrence>();
+  const pendingOccurrences = new Map<string, PendingOccurrence>();
+  const queuedPublications = new Map<string, PendingOccurrence>();
   const claimedOccurrences = new Set<string>();
-  const occurrenceListeners = new Set<(occurrence: NotificationOccurrence) => void>();
+  const occurrenceListeners = new Set<
+    (occurrence: NotificationOccurrence, settings: NotificationSettings) => void
+  >();
   const claimAcknowledgements = new Map<string, Map<string, () => void>>();
   const activeClaimPropagations = new Set<Promise<void>>();
   const tabLockName = `${TAB_LOCK_NAME_PREFIX}${tabId}`;
@@ -161,8 +179,8 @@ export const createBrowserNotificationCoordinator = ({
         const registeredChannel = createChannel();
         channel = registeredChannel;
         registeredChannel.addEventListener("message", handleMessage);
-        for (const occurrence of queuedPublications.values()) {
-          registeredChannel.postMessage({ type: "occurrence", occurrence });
+        for (const pending of queuedPublications.values()) {
+          registeredChannel.postMessage({ type: "occurrence", ...pending });
         }
         queuedPublications.clear();
         holdExternalDeliveryOwnership();
@@ -261,16 +279,16 @@ export const createBrowserNotificationCoordinator = ({
     return propagation;
   };
 
-  const notifyOccurrenceListeners = (occurrence: NotificationOccurrence): void => {
+  const notifyOccurrenceListeners = ({ occurrence, settings }: PendingOccurrence): void => {
     for (const listener of occurrenceListeners) {
-      listener(occurrence);
+      listener(occurrence, settings);
     }
   };
 
   const replayPendingOccurrences = (): void => {
     if (!externalDeliveryOwner) return;
-    for (const occurrence of pendingOccurrences.values()) {
-      notifyOccurrenceListeners(occurrence);
+    for (const pending of pendingOccurrences.values()) {
+      notifyOccurrenceListeners(pending);
     }
   };
 
@@ -291,10 +309,11 @@ export const createBrowserNotificationCoordinator = ({
       });
       return;
     }
-    if (!claimedOccurrences.has(parsed.data.occurrence.occurrenceId)) {
-      pendingOccurrences.set(parsed.data.occurrence.occurrenceId, parsed.data.occurrence);
+    const pending = { occurrence: parsed.data.occurrence, settings: parsed.data.settings };
+    if (!claimedOccurrences.has(pending.occurrence.occurrenceId)) {
+      pendingOccurrences.set(pending.occurrence.occurrenceId, pending);
     }
-    notifyOccurrenceListeners(parsed.data.occurrence);
+    notifyOccurrenceListeners(pending);
   };
 
   const holdExternalDeliveryOwnership = (): void => {
@@ -371,22 +390,24 @@ export const createBrowserNotificationCoordinator = ({
   return {
     supported,
     getFailureMessage: () => [...failureMessages.values()].join(" ") || null,
-    publishOccurrence(occurrence) {
+    publishOccurrence(occurrence, settings) {
       const parsed = notificationOccurrenceSchema.parse(occurrence);
+      const parsedSettings = notificationSettingsSchema.removeDefault().parse(settings);
+      const pending = { occurrence: parsed, settings: parsedSettings };
       if (!claimedOccurrences.has(parsed.occurrenceId)) {
-        pendingOccurrences.set(parsed.occurrenceId, parsed);
+        pendingOccurrences.set(parsed.occurrenceId, pending);
       }
       if (channel) {
-        channel.postMessage({ type: "occurrence", occurrence: parsed });
+        channel.postMessage({ type: "occurrence", ...pending });
       } else {
-        queuedPublications.set(parsed.occurrenceId, parsed);
+        queuedPublications.set(parsed.occurrenceId, pending);
       }
     },
     subscribeOccurrences(listener) {
       occurrenceListeners.add(listener);
       if (externalDeliveryOwner) {
-        for (const occurrence of pendingOccurrences.values()) {
-          listener(occurrence);
+        for (const pending of pendingOccurrences.values()) {
+          listener(pending.occurrence, pending.settings);
         }
       }
       return () => occurrenceListeners.delete(listener);

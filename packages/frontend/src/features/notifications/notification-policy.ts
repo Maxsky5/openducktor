@@ -12,7 +12,7 @@ export type NotificationDispatchContext =
   | { phase: "local" }
   | { phase: "external"; appFocused: boolean | undefined };
 
-export type InAppNotificationAdapter = {
+type InAppNotificationAdapter = {
   deliver(copy: NotificationCopy, occurrence: NotificationOccurrence): Promise<void>;
 };
 
@@ -20,7 +20,7 @@ type OsNotificationAdapter = {
   deliver(copy: NotificationCopy, occurrence: NotificationOccurrence): Promise<void>;
 };
 
-export type SoundNotificationAdapter = {
+type SoundNotificationAdapter = {
   play(cue: NotificationCue, volumePercent: number): Promise<void>;
 };
 
@@ -44,8 +44,10 @@ type CreateNotificationPolicyOptions = {
   onFailure(failure: NotificationDispatchFailure): void;
 };
 
+type DeliveryChannel = "in_app" | "os" | "sound";
+
 type PendingDelivery = {
-  channel: NotificationDispatchFailure["channel"];
+  channel: DeliveryChannel;
   run(): Promise<void>;
 };
 
@@ -70,7 +72,7 @@ export const createNotificationPolicy = ({
   onFailure,
 }: CreateNotificationPolicyOptions) => {
   const settingsSnapshots = new Map<string, Promise<NotificationSettings | null>>();
-  const deliveredChannels = new Map<string, Set<PendingDelivery["channel"]>>();
+  const terminalChannels = new Map<string, Set<DeliveryChannel>>();
 
   const reportFailure = (
     occurrence: NotificationOccurrence,
@@ -88,10 +90,12 @@ export const createNotificationPolicy = ({
 
   const loadSettingsSnapshot = (
     occurrence: NotificationOccurrence,
+    suppliedSettings?: NotificationSettings,
   ): Promise<NotificationSettings | null> => {
     const existing = settingsSnapshots.get(occurrence.occurrenceId);
     if (existing) return existing;
-    const snapshot = loadSettings()
+    const snapshot = Promise.resolve(suppliedSettings)
+      .then((settings) => settings ?? loadSettings())
       .then((settings) => notificationSettingsSchema.parse(settings))
       .catch((cause: unknown) => {
         reportFailure(occurrence, "settings", cause);
@@ -101,15 +105,20 @@ export const createNotificationPolicy = ({
     return snapshot;
   };
 
+  const markChannelTerminal = (occurrenceId: string, channel: DeliveryChannel): boolean => {
+    const terminal = terminalChannels.get(occurrenceId) ?? new Set();
+    if (terminal.has(channel)) return false;
+    terminal.add(channel);
+    terminalChannels.set(occurrenceId, terminal);
+    return true;
+  };
+
   const addDelivery = (
     occurrenceId: string,
     deliveries: PendingDelivery[],
     delivery: PendingDelivery,
   ): void => {
-    const delivered = deliveredChannels.get(occurrenceId) ?? new Set();
-    if (delivered.has(delivery.channel)) return;
-    delivered.add(delivery.channel);
-    deliveredChannels.set(occurrenceId, delivered);
+    if (!markChannelTerminal(occurrenceId, delivery.channel)) return;
     deliveries.push(delivery);
   };
 
@@ -144,6 +153,8 @@ export const createNotificationPolicy = ({
           channel: "os",
           run: () => os.deliver(copy, occurrence),
         });
+      } else {
+        markChannelTerminal(occurrence.occurrenceId, "os");
       }
     }
 
@@ -154,6 +165,8 @@ export const createNotificationPolicy = ({
           channel: "sound",
           run: () => sound.play(cue, settings.volumePercent),
         });
+      } else {
+        markChannelTerminal(occurrence.occurrenceId, "sound");
       }
     }
 
@@ -168,13 +181,16 @@ export const createNotificationPolicy = ({
     }
 
     if (context.phase === "external") return null;
-    if (!osSelected && !cue) return null;
+    const terminal = terminalChannels.get(occurrence.occurrenceId);
+    const osPending = osSelected && !terminal?.has("os");
+    const soundPending = Boolean(cue) && !terminal?.has("sound");
+    if (!osPending && !soundPending) return null;
     return {
       requiresFocus:
-        (osSelected && settings.osFocus === "suppress_if_focused") ||
-        (Boolean(cue) && settings.soundFocus === "mute_while_focused"),
+        (osPending && settings.osFocus === "suppress_if_focused") ||
+        (soundPending && settings.soundFocus === "mute_while_focused"),
     };
   };
 
-  return { dispatch };
+  return { dispatch, loadSettingsSnapshot };
 };

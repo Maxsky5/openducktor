@@ -5,18 +5,28 @@ import {
   type ReactElement,
   useEffect,
   useMemo,
+  useReducer,
   useRef,
-  useState,
 } from "react";
 import { toast } from "sonner";
 import {
   buildSessionStartedOccurrence,
   buildSessionStartErrorOccurrence,
 } from "@/features/notifications/session-start-occurrences";
-import { installCuelumeGestureUnlock } from "@/features/notifications/notification-delivery";
+import {
+  createCuelumeNotificationSoundAdapter,
+  createSonnerNotificationAdapter,
+  installCuelumeGestureUnlock,
+} from "@/features/notifications/notification-delivery";
 import { createNotificationRuntime } from "@/features/notifications/notification-runtime";
-import { selectOsFailureState } from "@/features/notifications/notification-failure-state";
 import type { NotificationDispatchFailure } from "@/features/notifications/notification-policy";
+import {
+  clearOsNotificationFailure,
+  createNotificationFailureState,
+  type NotificationFailureState,
+  recordNotificationFailure,
+  selectNotificationFailure,
+} from "@/features/notifications/notification-failure-state";
 import {
   createNotificationTaskObserver,
   type NotificationProducerFailure,
@@ -55,42 +65,61 @@ const unavailableNotificationNavigator: NotificationNavigator = async () => {
   });
 };
 
+type NotificationFailureAction =
+  | { type: "reported"; failure: NotificationDispatchFailure }
+  | { type: "os-shown" };
+
+const reduceNotificationFailureState = (
+  state: NotificationFailureState,
+  action: NotificationFailureAction,
+): NotificationFailureState => {
+  if (action.type === "reported") {
+    return recordNotificationFailure(state, action.failure);
+  }
+  return clearOsNotificationFailure(state);
+};
+
 export function NotificationProvider({ children }: PropsWithChildren): ReactElement {
   const queryClient = useQueryClient();
   const { workspaces } = useWorkspaceStateContext();
   const shellNotifications = getShellBridge().notifications;
-  const [osFailure, setOsFailure] = useState<NotificationDispatchFailure | null>(null);
+  const [failureState, updateFailureState] = useReducer(
+    reduceNotificationFailureState,
+    undefined,
+    createNotificationFailureState,
+  );
   const workspacesRef = useRef(workspaces);
   const navigatorRef = useRef<NotificationNavigator>(unavailableNotificationNavigator);
   useEffect(() => {
     workspacesRef.current = workspaces;
   }, [workspaces]);
 
-  const runtime = useMemo(
-    () =>
-      createNotificationRuntime({
-        bridge: shellNotifications,
-        loadSettings: async () => {
-          const options = settingsSnapshotQueryOptions();
-          const snapshot = await queryClient.fetchQuery({ ...options, staleTime: 0 });
-          return snapshot.notifications;
-        },
-        navigate: (target) => navigatorRef.current(target),
-        onFailure: (failure) => {
-          console.error("Notification delivery failed.", {
-            channel: failure.channel,
-            kind: failure.kind,
-            occurrenceId: failure.occurrenceId,
-            repoPath: failure.repoPath,
-          });
-          if (failure.channel === "os" || failure.channel === "coordination") {
-            setOsFailure((current) => selectOsFailureState(current, failure));
-          }
-        },
-        onOsShown: () => setOsFailure(null),
-      }),
-    [queryClient, shellNotifications],
-  );
+  const runtime = useMemo(() => {
+    const navigate: NotificationNavigator = (target) => navigatorRef.current(target);
+    return createNotificationRuntime({
+      bridge: shellNotifications,
+      loadSettings: async () => {
+        const options = settingsSnapshotQueryOptions();
+        const snapshot = await queryClient.fetchQuery({ ...options, staleTime: 0 });
+        return snapshot.notifications;
+      },
+      navigate,
+      inApp: createSonnerNotificationAdapter({ navigate }),
+      sound: createCuelumeNotificationSoundAdapter(),
+      onFailure: (failure) => {
+        console.error("Notification delivery failed.", {
+          channel: failure.channel,
+          kind: failure.kind,
+          occurrenceId: failure.occurrenceId,
+          repoPath: failure.repoPath,
+        });
+        if (failure.channel === "os" || failure.channel === "coordination") {
+          updateFailureState({ type: "reported", failure });
+        }
+      },
+      onOsShown: () => updateFailureState({ type: "os-shown" }),
+    });
+  }, [queryClient, shellNotifications]);
 
   const taskObserver = useMemo(
     () =>
@@ -155,7 +184,7 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
 
   const value = useMemo<NotificationContextValue>(
     () => ({
-      osFailure,
+      osFailure: selectNotificationFailure(failureState),
       getCapability: runtime.getCapability,
       previewCue: runtime.previewCue,
       testInApp: runtime.testInApp,
@@ -171,7 +200,7 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
       sessionStartNotifications,
       taskStreamSink: taskObserver.sink,
     }),
-    [osFailure, runtime, sessionStartNotifications, taskObserver.sink],
+    [failureState, runtime, sessionStartNotifications, taskObserver.sink],
   );
 
   return <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>;
