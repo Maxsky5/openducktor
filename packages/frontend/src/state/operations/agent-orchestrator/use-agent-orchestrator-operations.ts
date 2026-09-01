@@ -21,6 +21,7 @@ import {
   createLoadSelectedSessionBaselineHistory,
   createReloadAgentSessionHistory,
 } from "./history/session-history-loader";
+import { createWorkflowSessionHistoryPromptPolicy } from "./history/workflow-session-history-policy";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
 import { useRepoSessionReadModel } from "./hooks/use-repo-session-read-model";
 import {
@@ -178,8 +179,11 @@ export function useAgentOrchestratorOperations({
       currentWorkspaceRepoPathRef,
       readSessionSnapshot: sessionStore.getSessionSnapshot,
       updateSession,
-      taskRef,
-      loadRepoPromptOverrides: queryBackedPromptOverrides,
+      loadSystemPromptContext: createWorkflowSessionHistoryPromptPolicy({
+        workspaceId,
+        taskRef,
+        loadRepoPromptOverrides: queryBackedPromptOverrides,
+      }),
       loadSettingsSnapshot: () => loadSettingsSnapshotFromQuery(queryClient),
     };
 
@@ -328,8 +332,8 @@ export function useAgentOrchestratorOperations({
           const contextUsage = await loadAgentSessionContextFromQuery(
             queryClient,
             {
-              repoPath: workspaceRepoPath,
               ...session,
+              repoPath: workspaceRepoPath,
             },
             liveSessionHostPort.agentSessionLiveLoadContext,
           );

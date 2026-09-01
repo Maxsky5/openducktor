@@ -63,7 +63,7 @@ describe("createSessionCacheEffects", () => {
     expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(false);
   });
 
-  test("keeps a successful durable write successful when the query refresh fails", async () => {
+  test("keeps a successful durable save successful when the query refresh fails", async () => {
     const queryClient = createQueryClient();
     const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
     let failRefresh = false;
@@ -129,11 +129,11 @@ describe("createSessionCacheEffects", () => {
     expect(reportCacheRefreshFailure).not.toHaveBeenCalled();
   });
 
-  test("fails instead of silently dropping a session record without an active workspace", async () => {
+  test("persists through the active workspace repository", async () => {
     const queryClient = createQueryClient();
     const upsert = mock(async () => undefined);
     const effects = createSessionCacheEffects({
-      workspaceRepoPath: null,
+      workspaceRepoPath: "/session-repo",
       queryClient,
       hostPort: {
         agentSessionDelete: async () => undefined,
@@ -142,13 +142,9 @@ describe("createSessionCacheEffects", () => {
       },
     });
 
-    await expect(effects.persistSessionRecord("task-1", sessionRecord)).rejects.toThrow(
-      "Active workspace repo path is unavailable.",
-    );
-    expect(upsert).not.toHaveBeenCalled();
-    expect(
-      queryClient.getQueryData<AgentSessionRecord[]>(agentSessionQueryKeys.list("/repo", "task-1")),
-    ).toBeUndefined();
+    await effects.persistSessionRecord("task-1", sessionRecord);
+
+    expect(upsert).toHaveBeenCalledWith("/session-repo", "task-1", sessionRecord);
   });
 
   test("invalidates stop-related task queries without superseding session refreshes", async () => {

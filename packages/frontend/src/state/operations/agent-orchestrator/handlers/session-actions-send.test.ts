@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
-import type { AcceptedAgentUserMessage, SendAgentUserMessageInput } from "@openducktor/core";
-import { serializeAgentUserMessagePartsToText } from "@openducktor/core";
+import type { AcceptedAgentUserMessage } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
 import {
@@ -23,25 +22,7 @@ import {
   getSession,
 } from "./session-actions.test-helpers";
 import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
-
-const acceptedUserMessage = (
-  input: SendAgentUserMessageInput,
-  messageId = "accepted-user-message",
-): AcceptedAgentUserMessage => {
-  const event: AcceptedAgentUserMessage = {
-    type: "user_message",
-    externalSessionId: input.externalSessionId,
-    timestamp: "2026-02-22T08:00:01.000Z",
-    messageId,
-    message: serializeAgentUserMessagePartsToText(input.parts),
-    parts: [],
-    state: "read",
-  };
-  if (input.model) {
-    event.model = input.model;
-  }
-  return event;
-};
+import { acceptedUserMessage } from "./session-actions-send.test-support";
 
 describe("agent-orchestrator/handlers/session-actions send", () => {
   test("routes a normalized workflow control without loading runtime policy settings", async () => {

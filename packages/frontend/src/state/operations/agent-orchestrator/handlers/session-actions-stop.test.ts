@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { SessionRef } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
+import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import {
   findSessionMessageForTest,
   lastSessionMessageForTest,
@@ -151,6 +151,39 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     }
   });
 
+  test("persists terminal event state when the host stop later fails", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const session = buildSession();
+    const sessionsRef = createSessionsRef([session]);
+    const sessionsStore = createAgentSessionsStore("/tmp/repo");
+    sessionsStore.replaceSession(session);
+    adapter.stopSession = async () => {
+      sessionsStore.updateSession(session, (current) => ({
+        ...current,
+        status: "stopped",
+        stopRequestedAt: null,
+      }));
+      throw new Error("stop failed after terminal event");
+    };
+    let persistenceCalls = 0;
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      readSessionSnapshot: sessionsStore.getSessionSnapshot,
+      updateSession: sessionsStore.updateSession,
+      persistSessionRecord: async () => {
+        persistenceCalls += 1;
+      },
+    });
+
+    await expect(actions.stopAgentSession(session)).rejects.toThrow(
+      "Failed to stop session 'session-1': stop failed after terminal event",
+    );
+
+    expect(sessionsStore.getSessionSnapshot(session)?.status).toBe("stopped");
+    expect(persistenceCalls).toBe(1);
+  });
+
   test("records stop intent before awaiting authoritative session stop", async () => {
     const adapter = new OpencodeSdkAdapter();
     const stopDeferred = createDeferred<void>();
@@ -193,55 +226,54 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       };
     };
 
-    const sessionsRef = createSessionsRef([
-      buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-        messages: [
-          {
-            id: "tool-running",
-            role: "tool",
-            content: "Tool todowrite running...",
-            timestamp: "2026-02-22T08:00:08.000Z",
-            meta: {
-              kind: "tool",
-              partId: "part-tool-running",
-              callId: "call-tool-running",
-              tool: "todowrite",
-              toolType: "todo",
-              status: "running",
-            },
+    const session = buildSession({
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      messages: [
+        {
+          id: "tool-running",
+          role: "tool",
+          content: "Tool todowrite running...",
+          timestamp: "2026-02-22T08:00:08.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-tool-running",
+            callId: "call-tool-running",
+            tool: "todowrite",
+            toolType: "todo",
+            status: "running",
           },
-        ],
-        pendingApprovals: [
-          {
-            requestId: "perm-1",
-            requestType: "permission_grant" as const,
-            title: `Approve permission: ${"read"}`,
-            summary: `Approval request for ${"read"}.`,
-            affectedPaths: ["*"],
-            action: { name: "read" },
-            mutation: "read_only" as const,
-            supportedReplyOutcomes: [
-              "approve_once" as const,
-              "approve_session" as const,
-              "reject" as const,
-            ],
-          },
-        ],
-      }),
-    ]);
+        },
+      ],
+      pendingApprovals: [
+        {
+          requestId: "perm-1",
+          requestType: "permission_grant" as const,
+          title: `Approve permission: ${"read"}`,
+          summary: `Approval request for ${"read"}.`,
+          affectedPaths: ["*"],
+          action: { name: "read" },
+          mutation: "read_only" as const,
+          supportedReplyOutcomes: [
+            "approve_once" as const,
+            "approve_session" as const,
+            "reject" as const,
+          ],
+        },
+      ],
+    });
+    const sessionsRef = createSessionsRef([session]);
+    const sessionsStore = createAgentSessionsStore("/tmp/repo");
+    sessionsStore.replaceSession(session);
+    const persistenceOptions: Array<{ persist: true } | undefined> = [];
+    let persistSessionRecordCalls = 0;
 
     const updateSession = (
       identity: AgentSessionIdentity,
       updater: (current: AgentSessionState) => AgentSessionState,
+      options?: { persist: true },
     ) => {
-      const current = getAgentSession(sessionsRef.current, identity);
-      if (!current) {
-        return null;
-      }
-      const nextSession = updater(current);
-      sessionsRef.current = replaceAgentSession(sessionsRef.current, nextSession);
-      return nextSession;
+      persistenceOptions.push(options);
+      return sessionsStore.updateSession(identity, updater);
     };
 
     const unsubscribe = await listenToAgentSessionEvents({
@@ -255,14 +287,14 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
         runtimePolicy: { kind: "opencode" },
       },
       turnMetadata: createSessionTurnMetadata(),
-      readSession: (identity) => getAgentSession(sessionsRef.current, identity),
+      readSession: sessionsStore.getSessionSnapshot,
       ensureSession: (identity, createSession) => {
-        const current = getAgentSession(sessionsRef.current, identity);
+        const current = sessionsStore.getSessionSnapshot(identity);
         if (current) {
           return current;
         }
         const nextSession = createSession();
-        sessionsRef.current = replaceAgentSession(sessionsRef.current, nextSession);
+        sessionsStore.replaceSession(nextSession);
         return nextSession;
       },
       updateSession,
@@ -289,13 +321,21 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [] },
+      readSessionSnapshot: sessionsStore.getSessionSnapshot,
       updateSession,
+      persistSessionRecord: async () => {
+        persistSessionRecordCalls += 1;
+      },
     });
 
     try {
-      await actions.stopAgentSession(getSession(sessionsRef));
+      await actions.stopAgentSession(session);
 
-      const lastMessage = lastSessionMessageForTest(getSession(sessionsRef));
+      const stoppedSession = sessionsStore.getSessionSnapshot(session);
+      if (!stoppedSession) {
+        throw new Error("Expected stopped session");
+      }
+      const lastMessage = lastSessionMessageForTest(stoppedSession);
       expect(lastMessage?.content).toBe("Session stopped at your request.");
       expect(lastMessage?.meta).toEqual({
         kind: "session_notice",
@@ -304,7 +344,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
         title: "Stopped",
       });
       const toolMessage = findSessionMessageForTest(
-        getSession(sessionsRef),
+        stoppedSession,
         (message) => message.id === "tool-running",
       );
       expect(toolMessage?.meta?.kind).toBe("tool");
@@ -313,8 +353,10 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       }
       expect(toolMessage.meta.status).toBe("error");
       expect(toolMessage.meta.error).toBe("Session stopped at your request.");
-      expect(getSession(sessionsRef)?.status).toBe("stopped");
-      expect(getSession(sessionsRef)?.stopRequestedAt).toBeNull();
+      expect(stoppedSession.status).toBe("stopped");
+      expect(stoppedSession.stopRequestedAt).toBeNull();
+      expect(persistenceOptions).not.toContainEqual({ persist: true });
+      expect(persistSessionRecordCalls).toBe(1);
     } finally {
       adapter.subscribeEvents = originalSubscribeEvents;
       adapter.stopSession = originalStopSession;
@@ -532,7 +574,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
   test("refreshes task-owned state after successful authoritative stop", async () => {
     const adapter = new OpencodeSdkAdapter();
-    let refreshTaskDataCalls = 0;
+    const refreshTaskDataCalls: Array<[string, string | string[] | undefined]> = [];
     let loadSourceSessionCalls = 0;
     let stopCalls = 0;
     const invalidationCalls: Array<{ repoPath: string; taskId: string; runtimeKind?: string }> = [];
@@ -555,8 +597,8 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
         loadSourceSessionCalls += 1;
         return null;
       },
-      refreshTaskData: async () => {
-        refreshTaskDataCalls += 1;
+      refreshTaskData: async (repoPath, taskIdOrIds) => {
+        refreshTaskDataCalls.push([repoPath, taskIdOrIds]);
       },
       invalidateSessionStopQueries: async (input) => {
         invalidationCalls.push(input);
@@ -565,7 +607,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
     await actions.stopAgentSession(getSession(sessionsRef));
     expect(stopCalls).toBe(1);
-    expect(refreshTaskDataCalls).toBe(1);
+    expect(refreshTaskDataCalls).toEqual([["/tmp/repo", "task-1"]]);
     expect(loadSourceSessionCalls).toBe(0);
     expect(invalidationCalls).toEqual([
       {
@@ -577,10 +619,57 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
   test("does not call task persistence or task refresh for a repository session", async () => {
     const adapter = new OpencodeSdkAdapter();
-    adapter.stopSession = async () => {};
+    const stopTargets: SessionRef[] = [];
+    adapter.stopSession = async (target) => {
+      stopTargets.push(target);
+    };
     const taskCalls: string[] = [];
     const sessionsRef = createSessionsRef([
-      buildSession({ sessionAssociation: { kind: "repository" } }),
+      buildSession({
+        sessionAssociation: { kind: "repository" },
+      }),
+    ]);
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      workspaceRepoPath: "/tmp/active-workspace",
+      persistSessionRecord: async () => {
+        taskCalls.push("persist");
+      },
+      refreshTaskData: async () => {
+        taskCalls.push("refresh");
+      },
+      invalidateSessionStopQueries: async () => {
+        taskCalls.push("invalidate");
+      },
+    });
+
+    await actions.stopAgentSession(getSession(sessionsRef));
+
+    expect(getSession(sessionsRef)?.status).toBe("stopped");
+    expect(stopTargets).toEqual([
+      {
+        repoPath: "/tmp/active-workspace",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+        externalSessionId: "session-1",
+      },
+    ]);
+    expect(taskCalls).toEqual([]);
+  });
+
+  test("stops an unbound live session without task side effects", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const stopTargets: SessionRef[] = [];
+    adapter.stopSession = async (target) => {
+      stopTargets.push(target);
+    };
+    const taskCalls: string[] = [];
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        sessionAssociation: { kind: "unbound" },
+        workingDirectory: "/tmp/repo/unbound-chat",
+      }),
     ]);
     const actions = createSessionActions({
       adapter,
@@ -598,53 +687,81 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
     await actions.stopAgentSession(getSession(sessionsRef));
 
-    expect(getSession(sessionsRef)?.status).toBe("stopped");
+    expect(stopTargets).toEqual([
+      {
+        repoPath: "/tmp/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/unbound-chat",
+        externalSessionId: "session-1",
+      },
+    ]);
+    expect(getSession(sessionsRef).status).toBe("stopped");
     expect(taskCalls).toEqual([]);
   });
 
-  test("fails fast when stopping without an active workspace", async () => {
+  test("rejects a missing association before stopping the runtime", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    let stopCalls = 0;
+    adapter.stopSession = async () => {
+      stopCalls += 1;
+    };
+    const malformedSession = buildSession();
+    Reflect.deleteProperty(malformedSession, "sessionAssociation");
+    const sessionsRef = createSessionsRef([malformedSession]);
+    const actions = createSessionActions({ adapter, sessionsRef });
+
+    await expect(actions.stopAgentSession(getSession(sessionsRef))).rejects.toThrow(
+      "Cannot stop for session 'session-1' because its association is missing.",
+    );
+    expect(stopCalls).toBe(0);
+  });
+
+  test("reports workflow stop persistence failure without task invalidation", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    adapter.stopSession = async () => {};
+    const taskCalls: string[] = [];
+    const sessionsRef = createSessionsRef([buildSession()]);
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      persistSessionRecord: async () => {
+        taskCalls.push("persist");
+        throw new Error("stopped session persistence failed");
+      },
+      refreshTaskData: async () => {
+        taskCalls.push("refresh");
+      },
+      invalidateSessionStopQueries: async () => {
+        taskCalls.push("invalidate");
+      },
+    });
+
+    await expect(actions.stopAgentSession(getSession(sessionsRef))).rejects.toThrow(
+      "stopped session persistence failed",
+    );
+
+    expect(getSession(sessionsRef).status).toBe("stopped");
+    expect(taskCalls).toEqual(["persist"]);
+  });
+
+  test("rejects stop without an active workspace", async () => {
     const adapter = new OpencodeSdkAdapter();
     const stopTargets: SessionRef[] = [];
     adapter.stopSession = async (target) => {
       stopTargets.push(target);
     };
-    const refreshTaskDataCalls: string[] = [];
-    const invalidationCalls: Array<{ repoPath: string; taskId: string; runtimeKind?: string }> = [];
-    let loadSourceSessionCalls = 0;
-
     const sessionsRef = createSessionsRef([buildSession()]);
 
     const actions = createSessionActions({
       workspaceRepoPath: null,
       adapter,
       sessionsRef,
-      taskRef: { current: [] },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo",
-      }),
-      loadSourceSession: async () => {
-        loadSourceSessionCalls += 1;
-        return null;
-      },
-      refreshTaskData: async (repoPath) => {
-        refreshTaskDataCalls.push(repoPath);
-      },
-      invalidateSessionStopQueries: async (input) => {
-        invalidationCalls.push(input);
-      },
     });
 
     await expect(actions.stopAgentSession(getSession(sessionsRef))).rejects.toThrow(
       "Active workspace repo path is unavailable.",
     );
-
     expect(stopTargets).toEqual([]);
-    expect(invalidationCalls).toEqual([]);
-    expect(refreshTaskDataCalls).toEqual([]);
-    expect(loadSourceSessionCalls).toBe(0);
   });
 
   test("allows stopping a running session even when role is unavailable", async () => {

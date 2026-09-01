@@ -205,8 +205,8 @@ describe("useSessionRuntimeData", () => {
   });
 
   test("keeps cached selected-session runtime data while runtime readiness drops", async () => {
-    const loadRuntimeCatalog = mock(async () => emptyCatalog);
-    const readSessionTodos = mock(async () => [todoFixture]);
+    const loadRuntimeCatalog = mock(async () => structuredClone(emptyCatalog));
+    const readSessionTodos = mock(async () => [structuredClone(todoFixture)]);
     const readyProps: Parameters<typeof useSessionRuntimeData>[0] = {
       repoPath: "/repo",
       selectedSession: sessionTarget(),

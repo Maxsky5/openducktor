@@ -1,6 +1,5 @@
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
-import { z } from "zod";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { resolveAgentPendingInputParticipants } from "@/state/agent-session-pending-input-participants";
 import type {
@@ -32,62 +31,37 @@ const markTurnUserAnchorIfMissing = (
     PendingInputActionDependencies,
     "recordTurnUserMessageTimestamp" | "readTurnUserMessageStartedAtMs" | "turnMetadata"
   >,
-  session: AgentSessionState,
+  session: AgentSessionIdentity,
+  selectedModel: AgentSessionState["selectedModel"],
 ): void => {
   const sessionKey = agentSessionIdentityKey(session);
   if (dependencies.readTurnUserMessageStartedAtMs(sessionKey) === undefined) {
     dependencies.recordTurnUserMessageTimestamp(sessionKey, Date.now());
   }
-  dependencies.turnMetadata.recordModel(sessionKey, session.selectedModel ?? null);
+  dependencies.turnMetadata.recordModel(sessionKey, selectedModel);
 };
 
-const resolvePendingInputRuntimeSession = ({
-  readSessionSnapshot,
+const preparePendingInputReply = ({
+  dependencies,
   currentSession,
   request,
 }: {
-  readSessionSnapshot: ReadSessionSnapshot;
+  dependencies: PendingInputActionDependencies;
   currentSession: AgentSessionIdentity;
   request: AgentApprovalRequest | AgentQuestionRequest;
 }) => {
-  const { responseSession, sessions } = resolveAgentPendingInputParticipants(
-    currentSession,
-    request,
-  );
-  const loadedResponseSession = readSessionSnapshot(responseSession);
-  const contextSession =
-    loadedResponseSession ??
-    sessions.map((session) => readSessionSnapshot(session)).find((session) => session !== null) ??
-    null;
-  return {
-    responseSession,
-    turnContextSession: contextSession
-      ? {
-          ...contextSession,
-          externalSessionId: responseSession.externalSessionId,
-          runtimeKind: responseSession.runtimeKind,
-          workingDirectory: responseSession.workingDirectory,
-          sessionAssociation:
-            request.responseSession?.sessionAssociation ??
-            loadedResponseSession?.sessionAssociation ??
-            contextSession.sessionAssociation,
-        }
-      : null,
-  } satisfies {
-    responseSession: AgentSessionIdentity;
-    turnContextSession: AgentSessionState | null;
-  };
-};
-
-const replyRepoPath = (
-  workspaceRepoPath: string | null,
-  identity: AgentSessionIdentity,
-): string => {
-  const repoPathResult = z.string().safeParse("repoPath" in identity ? identity.repoPath : null);
-  if (repoPathResult.success) {
-    return repoPathResult.data;
+  const { responseSession } = resolveAgentPendingInputParticipants(currentSession, request);
+  const responseState = dependencies.readSessionSnapshot(responseSession);
+  if (!responseState && !request.responseSession) {
+    throw new Error(
+      `Cannot reply to pending input for session '${responseSession.externalSessionId}' because its repository context is unavailable.`,
+    );
   }
-  return requireWorkspaceRepoPath(workspaceRepoPath);
+
+  if (responseState) {
+    markTurnUserAnchorIfMissing(dependencies, responseSession, responseState.selectedModel);
+  }
+  return responseSession;
 };
 
 export const createPendingInputActions = (dependencies: PendingInputActionDependencies) => {
@@ -97,17 +71,14 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
     outcome: RuntimeApprovalReplyOutcome,
     message?: string,
   ): Promise<void> => {
-    const { responseSession, turnContextSession } = resolvePendingInputRuntimeSession({
-      readSessionSnapshot: dependencies.readSessionSnapshot,
+    const responseSession = preparePendingInputReply({
+      dependencies,
       currentSession: identity,
       request,
     });
-    if (turnContextSession) {
-      markTurnUserAnchorIfMissing(dependencies, turnContextSession);
-    }
     const input: Parameters<typeof dependencies.liveSessionHost.agentSessionLiveReplyApproval>[0] =
       {
-        repoPath: replyRepoPath(dependencies.workspaceRepoPath, identity),
+        repoPath: requireWorkspaceRepoPath(dependencies.workspaceRepoPath),
         externalSessionId: responseSession.externalSessionId,
         runtimeKind: responseSession.runtimeKind,
         workingDirectory: responseSession.workingDirectory,
@@ -125,16 +96,13 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
     request: AgentQuestionRequest,
     answers: string[][],
   ): Promise<void> => {
-    const { responseSession, turnContextSession } = resolvePendingInputRuntimeSession({
-      readSessionSnapshot: dependencies.readSessionSnapshot,
+    const responseSession = preparePendingInputReply({
+      dependencies,
       currentSession: identity,
       request,
     });
-    if (turnContextSession) {
-      markTurnUserAnchorIfMissing(dependencies, turnContextSession);
-    }
     await dependencies.liveSessionHost.agentSessionLiveReplyQuestion({
-      repoPath: replyRepoPath(dependencies.workspaceRepoPath, identity),
+      repoPath: requireWorkspaceRepoPath(dependencies.workspaceRepoPath),
       externalSessionId: responseSession.externalSessionId,
       runtimeKind: responseSession.runtimeKind,
       workingDirectory: responseSession.workingDirectory,

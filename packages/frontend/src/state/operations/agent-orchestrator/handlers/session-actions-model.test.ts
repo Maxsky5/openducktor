@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
-import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
-import type { UpdateSession } from "../events/session-event-types";
+import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import {
   buildSession,
   createSessionActions,
@@ -10,6 +9,35 @@ import {
 } from "./session-actions.test-helpers";
 
 describe("agent-orchestrator/handlers/session-actions model", () => {
+  test("persists an accepted model update when the selected model is unchanged", async () => {
+    const session = buildSession({
+      selectedModel: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+      },
+    });
+    const selection = session.selectedModel;
+    const store = createAgentSessionsStore("/tmp/repo");
+    store.replaceSession(session);
+    const adapter = new OpencodeSdkAdapter();
+    adapter.updateSessionModel = async () => {};
+    let persistenceCalls = 0;
+    const actions = createSessionActions({
+      adapter,
+      readSessionSnapshot: store.getSessionSnapshot,
+      updateSession: store.updateSession,
+      persistSessionRecord: async () => {
+        persistenceCalls += 1;
+      },
+    });
+
+    await actions.updateAgentSessionModel(session, selection);
+
+    expect(store.getSessionSnapshot(session)?.selectedModel).toEqual(selection);
+    expect(persistenceCalls).toBe(1);
+  });
+
   test("updates the host session and persists the selected model for an idle session", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalUpdateSessionModel = adapter.updateSessionModel;
@@ -19,20 +47,16 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
     };
 
     const sessionsRef = createSessionsRef([buildSession({ status: "idle" })]);
-    const updateSessionOptions: Array<Parameters<UpdateSession>[2]> = [];
+    const persistedModels: Array<{
+      taskId: string;
+      modelId: string | undefined;
+    }> = [];
 
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      updateSession: (identity, updater, options) => {
-        const current = getAgentSession(sessionsRef.current, identity);
-        if (!current) {
-          return null;
-        }
-        updateSessionOptions.push(options);
-        const nextSession = updater(current);
-        sessionsRef.current = replaceAgentSession(sessionsRef.current, nextSession);
-        return nextSession;
+      persistSessionRecord: async (taskId, record) => {
+        persistedModels.push({ taskId, modelId: record.selectedModel?.modelId });
       },
     });
 
@@ -45,7 +69,7 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
 
       expect(modelCalls).toHaveLength(1);
       expect(getSession(sessionsRef)?.selectedModel?.modelId).toBe("gpt-5");
-      expect(updateSessionOptions).toEqual([{ persist: true }]);
+      expect(persistedModels).toEqual([{ taskId: "task-1", modelId: "gpt-5" }]);
     } finally {
       adapter.updateSessionModel = originalUpdateSessionModel;
     }
@@ -60,20 +84,13 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
     };
 
     const sessionsRef = createSessionsRef([buildSession()]);
-    const updateSessionOptions: Array<Parameters<UpdateSession>[2]> = [];
+    let persistenceCalls = 0;
 
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      updateSession: (identity, updater, options) => {
-        const current = getAgentSession(sessionsRef.current, identity);
-        if (!current) {
-          return null;
-        }
-        updateSessionOptions.push(options);
-        const nextSession = updater(current);
-        sessionsRef.current = replaceAgentSession(sessionsRef.current, nextSession);
-        return nextSession;
+      persistSessionRecord: async () => {
+        persistenceCalls += 1;
       },
     });
 
@@ -97,7 +114,7 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
         },
       });
       expect(getSession(sessionsRef)?.selectedModel?.modelId).toBe("gpt-5");
-      expect(updateSessionOptions).toEqual([{ persist: true }]);
+      expect(persistenceCalls).toBe(1);
     } finally {
       adapter.updateSessionModel = originalUpdateSessionModel;
     }
@@ -128,6 +145,133 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
     } finally {
       adapter.updateSessionModel = originalUpdateSessionModel;
     }
+  });
+
+  test("changes a repository session model without task persistence", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const modelCalls: Array<Parameters<OpencodeSdkAdapter["updateSessionModel"]>[0]> = [];
+    adapter.updateSessionModel = async (input) => {
+      modelCalls.push(input);
+    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        sessionAssociation: { kind: "repository" },
+        workingDirectory: "/tmp/repo/repository-chat",
+      }),
+    ]);
+    let persistenceCalls = 0;
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      workspaceRepoPath: "/tmp/active-workspace",
+      persistSessionRecord: async () => {
+        persistenceCalls += 1;
+      },
+    });
+
+    await actions.updateAgentSessionModel(getSession(sessionsRef), {
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+    });
+
+    expect(modelCalls).toEqual([
+      {
+        externalSessionId: "session-1",
+        repoPath: "/tmp/active-workspace",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/repository-chat",
+        model: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+        },
+      },
+    ]);
+    expect(getSession(sessionsRef).selectedModel?.modelId).toBe("gpt-5");
+    expect(persistenceCalls).toBe(0);
+  });
+
+  test("reports workflow model persistence failure after the runtime accepts the change", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    let runtimeCalls = 0;
+    adapter.updateSessionModel = async () => {
+      runtimeCalls += 1;
+    };
+    const sessionsRef = createSessionsRef([buildSession()]);
+    let persistenceCalls = 0;
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      persistSessionRecord: async () => {
+        persistenceCalls += 1;
+        throw new Error("task session persistence failed");
+      },
+    });
+
+    await expect(
+      actions.updateAgentSessionModel(getSession(sessionsRef), {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+      }),
+    ).rejects.toThrow("task session persistence failed");
+    expect(runtimeCalls).toBe(1);
+    expect(persistenceCalls).toBe(1);
+  });
+
+  test("rejects an unbound model change before calling the runtime", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    let runtimeCalls = 0;
+    adapter.updateSessionModel = async () => {
+      runtimeCalls += 1;
+    };
+    const sessionsRef = createSessionsRef([
+      buildSession({ sessionAssociation: { kind: "unbound" } }),
+    ]);
+    const actions = createSessionActions({ adapter, sessionsRef });
+
+    await expect(
+      actions.updateAgentSessionModel(getSession(sessionsRef), {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+      }),
+    ).rejects.toThrow(
+      "Cannot change model for unbound session 'session-1'; repository or workflow context is required.",
+    );
+    expect(runtimeCalls).toBe(0);
+  });
+
+  test("reports a stale model operation when the session disappears after runtime update", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    let runtimeCalls = 0;
+    adapter.updateSessionModel = async () => {
+      runtimeCalls += 1;
+    };
+    const sessionsRef = createSessionsRef([buildSession()]);
+    let persistenceCalls = 0;
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      updateSession: () => {
+        sessionsRef.current = createSessionsRef().current;
+        return null;
+      },
+      persistSessionRecord: async () => {
+        persistenceCalls += 1;
+      },
+    });
+
+    await expect(
+      actions.updateAgentSessionModel(getSession(sessionsRef), {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+      }),
+    ).rejects.toThrow("Session 'session-1' became unavailable after its model changed.");
+    expect(runtimeCalls).toBe(1);
+    expect(persistenceCalls).toBe(0);
   });
 
   test("fails instead of silently ignoring model changes for an unloaded session", async () => {

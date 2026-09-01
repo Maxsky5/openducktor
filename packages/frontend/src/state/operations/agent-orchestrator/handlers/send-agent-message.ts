@@ -8,11 +8,7 @@ import {
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import { errorMessage } from "@/lib/errors";
-import type {
-  AgentSessionIdentity,
-  AgentSessionState,
-  WorkflowAgentSessionState,
-} from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
 import { now } from "../support/core";
 import { appendSessionMessage, upsertUserSessionMessage } from "../support/messages";
@@ -22,10 +18,9 @@ import {
   requireWorkspaceRepoPath,
 } from "../support/session-invariants";
 import { removeRunningSessionCompactionNotices } from "../support/session-notice-messages";
-import { toWorkflowSessionRef } from "../support/session-runtime-ref";
+import { toBoundRuntimeSessionRef } from "../support/session-runtime-ref";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
 import { toUserChatMessage } from "../support/user-message-event";
-import { isWorkflowAgentSession } from "../support/workflow-session";
 import type { PreparedSessionSend } from "./prepare-session-send";
 
 export type SendAgentMessageDependencies = {
@@ -33,7 +28,10 @@ export type SendAgentMessageDependencies = {
   adapter: Pick<AgentEnginePort, "sendUserMessage">;
   readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
-  prepareSessionSend: (session: WorkflowAgentSessionState) => Promise<PreparedSessionSend>;
+  prepareSessionSend: (
+    session: AgentSessionState,
+    options: { prepareWorkflowContext: boolean },
+  ) => Promise<PreparedSessionSend>;
   turnMetadata: SessionTurnMetadata;
   clearSessionTurnState: (session: AgentSessionIdentity) => void;
   recordTurnUserMessageTimestamp: (
@@ -77,13 +75,13 @@ const prepareIdleSessionForSend = async ({
   readSessionSnapshot,
   updateSession,
 }: {
-  session: WorkflowAgentSessionState;
-  prepareSessionSend: (session: WorkflowAgentSessionState) => Promise<PreparedSessionSend>;
+  session: AgentSessionState;
+  prepareSessionSend: SendAgentMessageDependencies["prepareSessionSend"];
   readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
 }): Promise<PreparedSessionSend> => {
   try {
-    return await prepareSessionSend(session);
+    return await prepareSessionSend(session, { prepareWorkflowContext: true });
   } catch (error) {
     settleStartingSession(session, "error", readSessionSnapshot, updateSession);
     throw error;
@@ -165,8 +163,8 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
 
     const currentSession = requireLoadedSession(dependencies.readSessionSnapshot, identity);
     const externalSessionId = currentSession.externalSessionId;
-    if (!isWorkflowAgentSession(currentSession)) {
-      throw new Error(`Session '${externalSessionId}' is not a workflow session.`);
+    if (currentSession.status === "stopped") {
+      throw new Error(`Cannot send message to stopped session '${externalSessionId}'.`);
     }
     if (isAgentSessionWaitingInput(currentSession)) {
       settleStartingSession(
@@ -180,10 +178,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
 
     const sessionWasBusy = currentSession.status === "running";
     const preparedSend = sessionWasBusy
-      ? {
-          repoPath: requireWorkspaceRepoPath(dependencies.workspaceRepoPath),
-          systemPrompt: undefined,
-        }
+      ? await dependencies.prepareSessionSend(currentSession, { prepareWorkflowContext: false })
       : await prepareIdleSessionForSend({
           session: currentSession,
           prepareSessionSend: dependencies.prepareSessionSend,
@@ -208,7 +203,11 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     }
 
     try {
-      const runtimeSessionRef = toWorkflowSessionRef(preparedSend.repoPath, readySession);
+      const runtimeSessionRef = toBoundRuntimeSessionRef(
+        requireWorkspaceRepoPath(dependencies.workspaceRepoPath),
+        readySession,
+        "send message",
+      );
       const sendInput: Parameters<typeof dependencies.adapter.sendUserMessage>[0] = {
         ...runtimeSessionRef,
         parts: normalizedParts,

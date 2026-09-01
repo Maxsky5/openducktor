@@ -299,7 +299,7 @@ export const handleSessionCompacted = (
         buildSessionCompactedNoticeMessage(event.timestamp, event.message, messageId),
       ),
     }),
-    { persist: true },
+    workflowSessionPersistenceOptions(context),
   );
 };
 
@@ -317,7 +317,7 @@ export const handleSessionCompactionStarted = (
         buildSessionCompactionStartedNoticeMessage(event.timestamp, event.message, messageId),
       ),
     }),
-    { persist: true },
+    workflowSessionPersistenceOptions(context),
   );
 };
 
@@ -354,20 +354,22 @@ export const handleSessionError = (
   event: Extract<SessionEvent, { type: "session_error" }>,
 ): void => {
   const sessionErrorMessage = normalizeSessionErrorMessage(event.message);
+  const sessionBeforeUpdate = context.store.readSession(context.session.identity);
+  const userStopAborted =
+    Boolean(sessionBeforeUpdate?.stopRequestedAt) &&
+    isStopAbortSessionErrorMessage(sessionErrorMessage);
   context.store.updateSession(
     context.session.identity,
     (current) => {
-      const appendUserStoppedNotice =
-        Boolean(current.stopRequestedAt) && isStopAbortSessionErrorMessage(sessionErrorMessage);
       return {
         ...current,
         pendingUserMessageStartedAt: undefined,
         runtimeStatusMessage: null,
-        status: appendUserStoppedNotice ? "stopped" : "error",
+        status: userStopAborted ? "stopped" : "error",
         stopRequestedAt: null,
         pendingApprovals: [],
         pendingQuestions: [],
-        messages: appendUserStoppedNotice
+        messages: userStopAborted
           ? removeRunningSessionCompactionNotices(
               settleTerminalMessages(current, event.timestamp, {
                 outcome: "error",
@@ -389,7 +391,7 @@ export const handleSessionError = (
             ),
       };
     },
-    workflowSessionPersistenceOptions(context),
+    userStopAborted ? undefined : workflowSessionPersistenceOptions(context),
   );
   context.turn.clearTurnDuration(context.session.key, event.timestamp);
   clearTurnTracking(context);
@@ -435,6 +437,10 @@ export const handleSessionFinished = (
   context: SessionLifecycleEventContext,
   event: Extract<SessionEvent, { type: "session_finished" }>,
 ): void => {
+  const sessionBeforeUpdate = context.store.readSession(context.session.identity);
+  const persistenceOptions = sessionBeforeUpdate?.stopRequestedAt
+    ? undefined
+    : workflowSessionPersistenceOptions(context);
   context.store.updateSession(
     context.session.identity,
     (current) => {
@@ -466,7 +472,7 @@ export const handleSessionFinished = (
         stopRequestedAt: null,
       };
     },
-    workflowSessionPersistenceOptions(context),
+    persistenceOptions,
   );
   context.turn.clearTurnDuration(context.session.key, event.timestamp);
   clearTurnTracking(context);

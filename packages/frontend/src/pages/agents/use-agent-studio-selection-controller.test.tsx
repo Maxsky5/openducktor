@@ -1033,6 +1033,48 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
+  test("waits for active workspace readiness before loading a selected session", async () => {
+    const loadSessionHistory = mock(async () => null);
+    const loadSessionContext = mock(async () => undefined);
+    const session = createSession("task-1", "session-other-repo", {
+      workingDirectory: "/other/repo/worktree",
+      contextUsage: null,
+      historyLoadState: "not_requested",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeWorkspaceId,
+        workspaceRepoPath,
+        sessions: [session],
+        taskIdParam: "task-1",
+        sessionExternalIdParam: sessionExternalIdParam(session),
+      }),
+      {
+        loadSelectedSessionBaselineHistory: loadSessionHistory,
+        loadAgentSessionContext: loadSessionContext,
+        repoRuntimeHealthContext: {
+          runtimeHealthByRuntime: {
+            opencode: createRepoRuntimeHealthFixture({
+              runtime: { status: "checking" },
+            }),
+          },
+        },
+      },
+    );
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().view.selectedSession.transcriptState).toEqual({
+        kind: "runtime_waiting",
+      });
+      expect(loadSessionHistory).not.toHaveBeenCalled();
+      expect(loadSessionContext).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("prefers immediate selection state over stale query role and session", async () => {
     const specSession = createSession("task-1", "session-spec", {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },

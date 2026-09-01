@@ -1,5 +1,5 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
-import type { WorkflowAgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { EnsureExistingSessionRuntime } from "../runtime/runtime";
 import { throwIfRepoStale } from "../support/core";
 import { requireWorkspaceRepoPath } from "../support/session-invariants";
@@ -16,16 +16,15 @@ type PrepareSessionSendDependencies = {
 };
 
 export type PreparedSessionSend = {
-  repoPath: string;
-  systemPrompt: string;
+  systemPrompt?: string;
 };
 
 const STALE_SEND_PREPARATION_ERROR = "Workspace changed while preparing session send.";
 
-const findSessionTask = (tasks: TaskCard[], session: WorkflowAgentSessionState): TaskCard => {
-  const task = tasks.find((entry) => entry.id === session.sessionAssociation.taskId);
+const findSessionTask = (tasks: TaskCard[], taskId: string): TaskCard => {
+  const task = tasks.find((entry) => entry.id === taskId);
   if (!task) {
-    throw new Error(`Task not found: ${session.sessionAssociation.taskId}`);
+    throw new Error(`Task not found: ${taskId}`);
   }
   return task;
 };
@@ -39,34 +38,49 @@ export const createPrepareSessionSend = ({
   ensureExistingSessionRuntime,
   loadRepoPromptOverrides,
 }: PrepareSessionSendDependencies) => {
-  return async (session: WorkflowAgentSessionState): Promise<PreparedSessionSend> => {
-    const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
+  return async (
+    session: AgentSessionState,
+    { prepareWorkflowContext }: { prepareWorkflowContext: boolean },
+  ): Promise<PreparedSessionSend> => {
+    const workspaceRepoPathAtStart = workspaceRepoPath;
+    const repoEpochAtStart = repoEpochRef.current;
+    const isStale = (): boolean =>
+      repoEpochRef.current !== repoEpochAtStart ||
+      currentWorkspaceRepoPathRef.current !== workspaceRepoPathAtStart;
+
+    const association = session.sessionAssociation;
+    if (!association) {
+      throw new Error(
+        `Cannot send message for session '${session.externalSessionId}' because its association is missing.`,
+      );
+    }
+    if (association.kind === "unbound") {
+      throw new Error(
+        `Cannot send message for unbound session '${session.externalSessionId}'; repository or workflow context is required.`,
+      );
+    }
+    if (association.kind === "repository" || !prepareWorkflowContext) {
+      return {};
+    }
+    const workflowRepoPath = requireWorkspaceRepoPath(workspaceRepoPathAtStart);
+    throwIfRepoStale(isStale, STALE_SEND_PREPARATION_ERROR);
     if (!workspaceId) {
       throw new Error("Active workspace is required.");
     }
 
-    const repoEpochAtStart = repoEpochRef.current;
-    const isStale = (): boolean =>
-      repoEpochRef.current !== repoEpochAtStart || currentWorkspaceRepoPathRef.current !== repoPath;
-    const assertNotStale = (): void => {
-      throwIfRepoStale(isStale, STALE_SEND_PREPARATION_ERROR);
-    };
-
-    assertNotStale();
-    const task = findSessionTask(taskRef.current, session);
+    const task = findSessionTask(taskRef.current, association.taskId);
     const [promptContext] = await Promise.all([
       loadSessionPromptContext({
         workspaceId,
-        role: session.sessionAssociation.role,
+        role: association.role,
         task,
         loadRepoPromptOverrides,
       }),
-      ensureExistingSessionRuntime(repoPath, session.runtimeKind),
+      ensureExistingSessionRuntime(workflowRepoPath, session.runtimeKind),
     ]);
-    assertNotStale();
+    throwIfRepoStale(isStale, STALE_SEND_PREPARATION_ERROR);
 
     return {
-      repoPath,
       systemPrompt: promptContext.systemPrompt,
     };
   };

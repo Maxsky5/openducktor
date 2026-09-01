@@ -201,7 +201,7 @@ describe("useAgentChatTranscriptModel", () => {
     });
     const prefixRow = harness.getLatest().transcriptState.rows[0];
 
-    const nextSession = buildSession({
+    const nextSession = {
       ...session,
       messages: createSessionMessagesState(
         "session-tail-append",
@@ -211,7 +211,7 @@ describe("useAgentChatTranscriptModel", () => {
         ],
         session.messages.version + 1,
       ),
-    });
+    };
     await harness.update({
       session: nextSession,
       showThinkingMessages: true,
@@ -243,7 +243,7 @@ describe("useAgentChatTranscriptModel", () => {
     const previousRowCount = previousRows.length;
 
     await harness.update({
-      session: buildSession({
+      session: {
         ...session,
         messages: createSessionMessagesState(
           "session-tail-append-duplicate-id",
@@ -256,7 +256,7 @@ describe("useAgentChatTranscriptModel", () => {
           ],
           session.messages.version + 1,
         ),
-      }),
+      },
       showThinkingMessages: true,
     });
 
@@ -275,14 +275,14 @@ describe("useAgentChatTranscriptModel", () => {
       id: "assistant-streaming",
       meta: { kind: "assistant", isFinal: false, agentRole: "build" },
     });
-    const session = buildSession({
+    const session = {
       ...baseSession,
       messages: createSessionMessagesState(
         "session-tail-finalize",
         [...baseSession.messages.items, streamingAssistant],
         2,
       ),
-    });
+    };
     const harness = await mountHarness({
       session,
       showThinkingMessages: true,
@@ -300,14 +300,14 @@ describe("useAgentChatTranscriptModel", () => {
       meta: { kind: "assistant", isFinal: true, agentRole: "build", durationMs: 4_000 },
     });
     await harness.update({
-      session: buildSession({
+      session: {
         ...session,
         messages: createSessionMessagesState(
           "session-tail-finalize",
           [...baseSession.messages.items, finalizedAssistant],
           3,
         ),
-      }),
+      },
       showThinkingMessages: true,
     });
     await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {

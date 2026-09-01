@@ -1,5 +1,7 @@
 import type {
   AgentSessionRuntimePolicy,
+  AgentSessionRef,
+  AgentSessionScope,
   PolicyBoundSessionRef,
   RuntimeWorkingDirectoryRef,
   SessionRef,
@@ -57,6 +59,44 @@ export const toRuntimeSessionRef = (
       action: `reach session '${session.externalSessionId}'`,
     }),
     externalSessionId: session.externalSessionId,
+  };
+};
+
+export const requireBoundSessionAssociation = (
+  session: RuntimeSessionContextSource,
+  action: string,
+): AgentSessionScope => {
+  const association = requireSessionAssociation(session, action);
+  if (association.kind === "unbound") {
+    throw new Error(
+      `Cannot ${action} for unbound session '${session.externalSessionId}'; repository or workflow context is required.`,
+    );
+  }
+  return association;
+};
+
+export const requireSessionAssociation = (
+  session: RuntimeSessionContextSource,
+  action: string,
+): RuntimeSessionContextSource["sessionAssociation"] => {
+  const association = session.sessionAssociation;
+  if (!association) {
+    throw new Error(
+      `Cannot ${action} for session '${session.externalSessionId}' because its association is missing.`,
+    );
+  }
+  return association;
+};
+
+export const toBoundRuntimeSessionRef = (
+  repoPath: string,
+  session: RuntimeSessionContextSource,
+  action: string,
+): AgentSessionRef & { sessionScope: Exclude<AgentSessionRef["sessionScope"], undefined> } => {
+  const association = requireBoundSessionAssociation(session, action);
+  return {
+    ...toRuntimeSessionRef(repoPath, session),
+    sessionScope: association,
   };
 };
 

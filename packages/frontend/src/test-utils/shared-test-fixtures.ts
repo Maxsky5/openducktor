@@ -286,7 +286,7 @@ const toAgentSessionFixtureMessages = (
   externalSessionId: string,
   messages: AgentSessionFixtureMessages | undefined,
 ): SessionMessagesState => {
-  return createSessionMessagesFixture(externalSessionId, messages);
+  return structuredClone(createSessionMessagesFixture(externalSessionId, messages));
 };
 
 const assertCanonicalAgentSessionFixtureInput = (input: AgentSessionFixtureOverrides): void => {

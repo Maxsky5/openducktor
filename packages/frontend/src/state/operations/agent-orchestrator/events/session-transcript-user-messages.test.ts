@@ -324,6 +324,69 @@ describe("agent-orchestrator session transcript events", () => {
     );
   });
 
+  test("keeps repository compaction notices live-only", async () => {
+    const handlers: Array<(event: SessionEvent) => void> = [];
+    const updateSessionOptions: Array<Parameters<SessionUpdateFn>[2]> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_externalSessionId, handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const sessionsRef = createSessionsRef([
+      buildSession({ sessionAssociation: { kind: "repository" } }),
+    ]);
+    const applySessionUpdate = createSessionUpdater(sessionsRef);
+    const updateSession: SessionUpdateFn = (identity, updater, options) => {
+      updateSessionOptions.push(options);
+      return applySessionUpdate(identity, updater);
+    };
+    await listenToAgentSessionEvents({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionRef: {
+        repoPath: "/tmp/repo",
+        runtimeKind: "opencode",
+        runtimePolicy: { kind: "opencode" },
+        workingDirectory: "/tmp/repo",
+        externalSessionId: "session-1",
+        sessionScope: { kind: "repository" },
+      },
+      sessionsRef,
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+    handleEvent({
+      type: "session_compaction_started",
+      externalSessionId: "session-1",
+      timestamp: "2026-05-18T21:00:30.000Z",
+      messageId: "compact-repository",
+      message: "Session compaction started.",
+    });
+    handleEvent({
+      type: "session_compacted",
+      externalSessionId: "session-1",
+      timestamp: "2026-05-18T21:01:00.000Z",
+      messageId: "compact-repository",
+      message: "Session compacted.",
+    });
+
+    expect(updateSessionOptions).toEqual([undefined, undefined]);
+    expect(getSessionMessages(sessionsRef).at(-1)).toEqual(
+      expect.objectContaining({
+        id: "compact-repository",
+        content: "Session compacted.",
+      }),
+    );
+  });
+
   test("merges queued user_message updates in place when the agent reads the turn", async () => {
     const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {

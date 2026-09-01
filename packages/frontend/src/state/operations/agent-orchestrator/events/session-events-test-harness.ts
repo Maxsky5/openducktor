@@ -399,9 +399,6 @@ export const listenToAgentSessionEvents = (
     providedSessionRef?.externalSessionId ?? externalSessionId ?? "session-1";
   sessionsRef.current = createAgentSessionCollection(listAgentSessions(sessionsRef.current));
   const session = getSession(sessionsRef, targetExternalSessionId);
-  if (session.sessionAssociation.kind !== "workflow") {
-    throw new Error(`Session '${session.externalSessionId}' is not a workflow session.`);
-  }
   const sessionRef =
     providedSessionRef ??
     runtimeRefForSession({

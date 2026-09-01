@@ -146,9 +146,12 @@ describe("agent-orchestrator/support/persistence", () => {
       },
     };
 
-    expect(() => fromPersistedSessionRecord({ taskId: "task-1", record: invalidRecord })).toThrow(
-      "Persisted session 'external-1' selected model is missing runtime kind.",
-    );
+    expect(() =>
+      fromPersistedSessionRecord({
+        taskId: "task-1",
+        record: invalidRecord,
+      }),
+    ).toThrow("Persisted session 'external-1' selected model is missing runtime kind.");
   });
 
   test("rejects persisted selected models whose runtime kind disagrees with the session", () => {
@@ -162,9 +165,12 @@ describe("agent-orchestrator/support/persistence", () => {
       },
     };
 
-    expect(() => fromPersistedSessionRecord({ taskId: "task-1", record: invalidRecord })).toThrow(
-      "Unsupported runtime kind 'claude-code'.",
-    );
+    expect(() =>
+      fromPersistedSessionRecord({
+        taskId: "task-1",
+        record: invalidRecord,
+      }),
+    ).toThrow("Unsupported runtime kind 'claude-code'.");
   });
 
   test("rejects persisting selected models without a runtime kind", () => {

@@ -18,7 +18,11 @@ import { createSendAgentMessage } from "./send-agent-message";
 import { createSessionModelActions } from "./session-model-actions";
 import { createStartAgentSession } from "./start-session";
 import type { RuntimeDependencies, SessionDependencies } from "./start-session.types";
-import { createStopAgentSession, type StopAgentSessionDependencies } from "./stop-session";
+import { createStopAgentSession } from "./stop-session";
+import {
+  createCommitSessionModelChangePolicy,
+  createCommitStoppedSessionPolicy,
+} from "./workflow-session-operation-policy";
 
 type SessionActionsDependencies = {
   workspaceRepoPath: string | null;
@@ -46,9 +50,9 @@ type SessionActionsDependencies = {
   loadSourceSession: LoadSourceSession;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
-  persistSessionRecord: StopAgentSessionDependencies["persistSessionRecord"];
+  persistSessionRecord: SessionDependencies["persistSessionRecord"];
   deleteSessionRecord: SessionDependencies["deleteSessionRecord"];
-  invalidateSessionStopQueries: StopAgentSessionDependencies["invalidateSessionStopQueries"];
+  invalidateSessionStopQueries: (input: { repoPath: string; taskId: string }) => Promise<void>;
 };
 
 export const createAgentSessionActions = ({
@@ -102,6 +106,16 @@ export const createAgentSessionActions = ({
     recordTurnUserMessageTimestamp: sessionTurnState.timing.recordTurnUserMessageTimestamp,
   });
 
+  const commitSessionModelChange = createCommitSessionModelChangePolicy({
+    persistSessionRecord,
+  });
+  const commitStoppedSession = createCommitStoppedSessionPolicy({
+    workspaceRepoPath,
+    persistSessionRecord,
+    invalidateSessionStopQueries,
+    refreshTaskData,
+  });
+
   const startAgentSession = createStartAgentSession({
     repo: {
       workspaceRepoPath,
@@ -146,9 +160,7 @@ export const createAgentSessionActions = ({
     readSessionSnapshot,
     updateSession,
     clearSessionTurnState: sessionTurnState.clearSession,
-    persistSessionRecord,
-    invalidateSessionStopQueries,
-    refreshTaskData,
+    commitStoppedSession,
   });
 
   const pendingInputActions = createPendingInputActions({
@@ -165,6 +177,7 @@ export const createAgentSessionActions = ({
     adapter,
     readSessionSnapshot,
     updateSession,
+    commitSessionModelChange,
   });
 
   return {
