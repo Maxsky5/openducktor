@@ -4,6 +4,7 @@ import {
   type NotificationOccurrence,
   type NotificationOsDeliveryRequest,
 } from "@openducktor/contracts";
+import { toast } from "sonner";
 import type { NotificationBridge } from "@/lib/shell-bridge";
 import { createNotificationRuntime } from "./notification-runtime";
 
@@ -156,6 +157,101 @@ describe("notification runtime tests", () => {
       expect.any(Function),
     );
     expect(onFailure).not.toHaveBeenCalled();
+  });
+
+  test("keeps the local toast when browser ownership fails", async () => {
+    const activeToastIds = new Set(toast.getToasts().map(({ id }) => id));
+    const showOsNotification = mock(async (_request: NotificationOsDeliveryRequest) => ({
+      status: "shown" as const,
+    }));
+    const onFailure = mock(() => {});
+    const runtime = createNotificationRuntime({
+      bridge: createBridge({
+        withExternalDeliveryOwnership: async () => {
+          throw new Error("Claim propagation failed.");
+        },
+        showOsNotification,
+      }),
+      loadSettings: async () => {
+        const settings = createDefaultNotificationSettings();
+        settings.volumePercent = 0;
+        return settings;
+      },
+      navigate: async () => {},
+      onFailure,
+    });
+
+    try {
+      await runtime.dispatch({
+        occurrenceId: "workflow.closed:/repo:task-1:event-claim-failure",
+        kind: "workflow.closed",
+        repoPath: "/repo",
+        repositoryLabel: "Repo",
+        task: { id: "task-1", title: "Build notifications" },
+        status: "Task moved to Closed.",
+        navigationTarget: { type: "kanban_task", repoPath: "/repo", taskId: "task-1" },
+      });
+
+      const localToasts = toast.getToasts().filter(({ id }) => !activeToastIds.has(id));
+      expect(localToasts).toHaveLength(1);
+      expect(showOsNotification).not.toHaveBeenCalled();
+      expect(onFailure).toHaveBeenCalledWith({
+        channel: "os",
+        kind: "workflow.closed",
+        occurrenceId: "workflow.closed:/repo:task-1:event-claim-failure",
+        repoPath: "/repo",
+        message: "Claim propagation failed.",
+      });
+    } finally {
+      for (const { id } of toast.getToasts()) {
+        if (!activeToastIds.has(id)) toast.dismiss(id);
+      }
+    }
+  });
+
+  test("uses current focus when a later dispatch owns external delivery", async () => {
+    const activeToastIds = new Set(toast.getToasts().map(({ id }) => id));
+    const owners = [false, true];
+    const showOsNotification = mock(async (_request: NotificationOsDeliveryRequest) => ({
+      status: "shown" as const,
+    }));
+    const runtime = createNotificationRuntime({
+      bridge: createBridge({
+        isAppFocused: async () => true,
+        withExternalDeliveryOwnership: async (_occurrenceId, dispatch) =>
+          dispatch(owners.shift() ?? false),
+        showOsNotification,
+      }),
+      loadSettings: async () => {
+        const settings = createDefaultNotificationSettings();
+        settings.volumePercent = 0;
+        return settings;
+      },
+      navigate: async () => {},
+      onFailure: () => {},
+    });
+    const occurrence: NotificationOccurrence = {
+      occurrenceId: "workflow.closed:/repo:task-1:event-owner-handoff",
+      kind: "workflow.closed",
+      repoPath: "/repo",
+      repositoryLabel: "Repo",
+      task: { id: "task-1", title: "Build notifications" },
+      status: "Task moved to Closed.",
+      navigationTarget: { type: "kanban_task", repoPath: "/repo", taskId: "task-1" },
+    };
+
+    try {
+      await runtime.dispatch(occurrence);
+      await runtime.dispatch(occurrence);
+
+      const localToasts = toast.getToasts().filter(({ id }) => !activeToastIds.has(id));
+      expect(localToasts).toHaveLength(1);
+      expect(showOsNotification).not.toHaveBeenCalled();
+    } finally {
+      for (const { id } of toast.getToasts()) {
+        if (!activeToastIds.has(id)) toast.dismiss(id);
+      }
+    }
   });
 
   test("keeps local delivery when the browser focus state cannot be read", async () => {

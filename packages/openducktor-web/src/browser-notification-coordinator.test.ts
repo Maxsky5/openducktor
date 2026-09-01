@@ -757,7 +757,7 @@ describe("browser notification coordinator", () => {
     publisher.dispose();
   });
 
-  test("keeps a focus lock failure after claim and focus query success", async () => {
+  test("reports focus as unavailable after focus lock failure", async () => {
     const locks = new FakeLockManager();
     locks.rejectNextRequest(APP_FOCUS_LOCK_NAME, new Error("Focus lock failed."));
     const hub = new FakeBroadcastHub();
@@ -787,8 +787,8 @@ describe("browser notification coordinator", () => {
       occurrenceId: `${occurrence.occurrenceId}:focus-lock-failure`,
     });
     await waitFor(() => deliveries === 1);
-    await owner.isAnyTabFocused();
 
+    await expect(owner.isAnyTabFocused()).rejects.toThrow("Focus lock failed.");
     expect(owner.getFailureMessage()).toBe("Focus lock failed.");
     owner.dispose();
     publisher.dispose();
