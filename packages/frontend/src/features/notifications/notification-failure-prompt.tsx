@@ -5,9 +5,11 @@ import type { NotificationDispatchFailure } from "./notification-policy";
 export function NotificationFailurePrompt({
   failure,
   onOpenSettings,
+  onReload,
 }: {
   failure: NotificationDispatchFailure | null;
   onOpenSettings(): void;
+  onReload(): void;
 }): ReactElement | null {
   const reportedOccurrenceIdRef = useRef<string | null>(null);
 
@@ -18,12 +20,20 @@ export function NotificationFailurePrompt({
     }
     if (reportedOccurrenceIdRef.current === failure.occurrenceId) return;
     reportedOccurrenceIdRef.current = failure.occurrenceId;
-    toast.error("OS notification failed", {
-      id: "notification-os-delivery-failure",
+    let title = "OS notification failed";
+    let id = "notification-os-delivery-failure";
+    let action = { label: "Open settings", onClick: onOpenSettings };
+    if (failure.channel === "coordination") {
+      title = "Browser notification coordination failed";
+      id = "notification-coordination-failure";
+      action = { label: "Reload", onClick: onReload };
+    }
+    toast.error(title, {
+      id,
       description: failure.message,
-      action: { label: "Open settings", onClick: onOpenSettings },
+      action,
     });
-  }, [failure, onOpenSettings]);
+  }, [failure, onOpenSettings, onReload]);
 
   return null;
 }

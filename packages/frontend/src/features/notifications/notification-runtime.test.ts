@@ -4,7 +4,6 @@ import {
   type NotificationOccurrence,
   type NotificationOsDeliveryRequest,
 } from "@openducktor/contracts";
-import { toast } from "sonner";
 import type { NotificationBridge } from "@/lib/shell-bridge";
 import { createNotificationRuntime } from "./notification-runtime";
 
@@ -30,6 +29,27 @@ const createBridge = (overrides: Partial<NotificationBridge> = {}): Notification
   dispose: () => {},
   ...overrides,
 });
+
+const workflowClosedOccurrence = (suffix: string): NotificationOccurrence => ({
+  occurrenceId: `workflow.closed:/repo:task-1:${suffix}`,
+  kind: "workflow.closed",
+  repoPath: "/repo",
+  repositoryLabel: "Repo",
+  task: { id: "task-1", title: "Build notifications" },
+  status: "Task moved to Closed.",
+  navigationTarget: { type: "kanban_task", repoPath: "/repo", taskId: "task-1" },
+});
+
+const createDeliveryAdapters = () => {
+  const deliverInApp = mock(async () => {});
+  const playSound = mock(async () => {});
+  return {
+    deliverInApp,
+    playSound,
+    inApp: { deliver: deliverInApp },
+    sound: { play: playSound },
+  };
+};
 
 describe("notification runtime tests", () => {
   test("bounds display text before publishing the occurrence", () => {
@@ -160,7 +180,7 @@ describe("notification runtime tests", () => {
   });
 
   test("keeps the local toast when browser ownership fails", async () => {
-    const activeToastIds = new Set(toast.getToasts().map(({ id }) => id));
+    const delivery = createDeliveryAdapters();
     const showOsNotification = mock(async (_request: NotificationOsDeliveryRequest) => ({
       status: "shown" as const,
     }));
@@ -179,38 +199,25 @@ describe("notification runtime tests", () => {
       },
       navigate: async () => {},
       onFailure,
+      inApp: delivery.inApp,
+      sound: delivery.sound,
     });
 
-    try {
-      await runtime.dispatch({
-        occurrenceId: "workflow.closed:/repo:task-1:event-claim-failure",
-        kind: "workflow.closed",
-        repoPath: "/repo",
-        repositoryLabel: "Repo",
-        task: { id: "task-1", title: "Build notifications" },
-        status: "Task moved to Closed.",
-        navigationTarget: { type: "kanban_task", repoPath: "/repo", taskId: "task-1" },
-      });
+    await runtime.dispatch(workflowClosedOccurrence("event-claim-failure"));
 
-      const localToasts = toast.getToasts().filter(({ id }) => !activeToastIds.has(id));
-      expect(localToasts).toHaveLength(1);
-      expect(showOsNotification).not.toHaveBeenCalled();
-      expect(onFailure).toHaveBeenCalledWith({
-        channel: "os",
-        kind: "workflow.closed",
-        occurrenceId: "workflow.closed:/repo:task-1:event-claim-failure",
-        repoPath: "/repo",
-        message: "Claim propagation failed.",
-      });
-    } finally {
-      for (const { id } of toast.getToasts()) {
-        if (!activeToastIds.has(id)) toast.dismiss(id);
-      }
-    }
+    expect(delivery.deliverInApp).toHaveBeenCalledTimes(1);
+    expect(showOsNotification).not.toHaveBeenCalled();
+    expect(onFailure).toHaveBeenCalledWith({
+      channel: "coordination",
+      kind: "workflow.closed",
+      occurrenceId: "workflow.closed:/repo:task-1:event-claim-failure",
+      repoPath: "/repo",
+      message: "Claim propagation failed.",
+    });
   });
 
   test("uses current focus when a later dispatch owns external delivery", async () => {
-    const activeToastIds = new Set(toast.getToasts().map(({ id }) => id));
+    const delivery = createDeliveryAdapters();
     const owners = [false, true];
     const showOsNotification = mock(async (_request: NotificationOsDeliveryRequest) => ({
       status: "shown" as const,
@@ -229,32 +236,20 @@ describe("notification runtime tests", () => {
       },
       navigate: async () => {},
       onFailure: () => {},
+      inApp: delivery.inApp,
+      sound: delivery.sound,
     });
-    const occurrence: NotificationOccurrence = {
-      occurrenceId: "workflow.closed:/repo:task-1:event-owner-handoff",
-      kind: "workflow.closed",
-      repoPath: "/repo",
-      repositoryLabel: "Repo",
-      task: { id: "task-1", title: "Build notifications" },
-      status: "Task moved to Closed.",
-      navigationTarget: { type: "kanban_task", repoPath: "/repo", taskId: "task-1" },
-    };
 
-    try {
-      await runtime.dispatch(occurrence);
-      await runtime.dispatch(occurrence);
+    const occurrence = workflowClosedOccurrence("event-owner-handoff");
+    await runtime.dispatch(occurrence);
+    await runtime.dispatch(occurrence);
 
-      const localToasts = toast.getToasts().filter(({ id }) => !activeToastIds.has(id));
-      expect(localToasts).toHaveLength(1);
-      expect(showOsNotification).not.toHaveBeenCalled();
-    } finally {
-      for (const { id } of toast.getToasts()) {
-        if (!activeToastIds.has(id)) toast.dismiss(id);
-      }
-    }
+    expect(delivery.deliverInApp).toHaveBeenCalledTimes(1);
+    expect(showOsNotification).not.toHaveBeenCalled();
   });
 
   test("keeps local delivery when the browser focus state cannot be read", async () => {
+    const delivery = createDeliveryAdapters();
     const loadSettings = mock(async () => {
       const settings = createDefaultNotificationSettings();
       settings.volumePercent = 0;
@@ -274,6 +269,8 @@ describe("notification runtime tests", () => {
       loadSettings,
       navigate: async () => {},
       onFailure,
+      inApp: delivery.inApp,
+      sound: delivery.sound,
     });
 
     await runtime.dispatch({
@@ -287,13 +284,161 @@ describe("notification runtime tests", () => {
     });
 
     expect(loadSettings).toHaveBeenCalledTimes(1);
+    expect(delivery.deliverInApp).toHaveBeenCalledTimes(1);
     expect(showOsNotification).not.toHaveBeenCalled();
     expect(onFailure).toHaveBeenCalledWith({
-      channel: "os",
+      channel: "coordination",
       kind: "workflow.closed",
       occurrenceId: "workflow.closed:/repo:task-1:event-focus-failure",
       repoPath: "/repo",
       message: "Focus lock query failed.",
     });
+  });
+
+  test("does not claim external delivery when the kind is disabled", async () => {
+    const delivery = createDeliveryAdapters();
+    const withExternalDeliveryOwnership = mock(
+      async (_occurrenceId: string, dispatch: (owner: boolean) => Promise<void>) => dispatch(true),
+    );
+    const isAppFocused = mock(async () => false);
+    const runtime = createNotificationRuntime({
+      bridge: createBridge({ withExternalDeliveryOwnership, isAppFocused }),
+      loadSettings: async () => {
+        const settings = createDefaultNotificationSettings();
+        settings.kinds["workflow.closed"].enabled = false;
+        return settings;
+      },
+      navigate: async () => {},
+      onFailure: () => {},
+      inApp: delivery.inApp,
+      sound: delivery.sound,
+    });
+
+    await runtime.dispatch(workflowClosedOccurrence("event-disabled"));
+
+    expect(delivery.deliverInApp).not.toHaveBeenCalled();
+    expect(withExternalDeliveryOwnership).not.toHaveBeenCalled();
+    expect(isAppFocused).not.toHaveBeenCalled();
+  });
+
+  test("does not claim external delivery for an in-app notice without sound", async () => {
+    const delivery = createDeliveryAdapters();
+    const withExternalDeliveryOwnership = mock(
+      async (_occurrenceId: string, dispatch: (owner: boolean) => Promise<void>) => dispatch(true),
+    );
+    const isAppFocused = mock(async () => false);
+    const runtime = createNotificationRuntime({
+      bridge: createBridge({ withExternalDeliveryOwnership, isAppFocused }),
+      loadSettings: async () => {
+        const settings = createDefaultNotificationSettings();
+        settings.kinds["workflow.closed"] = {
+          enabled: true,
+          target: "in_app",
+          sound: "none",
+        };
+        return settings;
+      },
+      navigate: async () => {},
+      onFailure: () => {},
+      inApp: delivery.inApp,
+      sound: delivery.sound,
+    });
+
+    await runtime.dispatch(workflowClosedOccurrence("event-local-only"));
+
+    expect(delivery.deliverInApp).toHaveBeenCalledTimes(1);
+    expect(withExternalDeliveryOwnership).not.toHaveBeenCalled();
+    expect(isAppFocused).not.toHaveBeenCalled();
+  });
+
+  test("sends always-send OS notices without reading focus", async () => {
+    const delivery = createDeliveryAdapters();
+    const isAppFocused = mock(async () => {
+      throw new Error("Focus lock query failed.");
+    });
+    const showOsNotification = mock(async (_request: NotificationOsDeliveryRequest) => ({
+      status: "shown" as const,
+    }));
+    const onFailure = mock(() => {});
+    const runtime = createNotificationRuntime({
+      bridge: createBridge({ isAppFocused, showOsNotification }),
+      loadSettings: async () => {
+        const settings = createDefaultNotificationSettings();
+        settings.osFocus = "always_send";
+        settings.kinds["workflow.closed"].sound = "none";
+        return settings;
+      },
+      navigate: async () => {},
+      onFailure,
+      inApp: delivery.inApp,
+      sound: delivery.sound,
+    });
+
+    await runtime.dispatch(workflowClosedOccurrence("event-always-os"));
+
+    expect(isAppFocused).not.toHaveBeenCalled();
+    expect(showOsNotification).toHaveBeenCalledTimes(1);
+    expect(onFailure).not.toHaveBeenCalled();
+  });
+
+  test("plays always-play sounds without reading focus", async () => {
+    const delivery = createDeliveryAdapters();
+    const isAppFocused = mock(async () => {
+      throw new Error("Focus lock query failed.");
+    });
+    const onFailure = mock(() => {});
+    const runtime = createNotificationRuntime({
+      bridge: createBridge({ isAppFocused }),
+      loadSettings: async () => {
+        const settings = createDefaultNotificationSettings();
+        settings.soundFocus = "always_play";
+        settings.kinds["workflow.closed"].target = "in_app";
+        return settings;
+      },
+      navigate: async () => {},
+      onFailure,
+      inApp: delivery.inApp,
+      sound: delivery.sound,
+    });
+
+    await runtime.dispatch(workflowClosedOccurrence("event-always-sound"));
+
+    expect(isAppFocused).not.toHaveBeenCalled();
+    expect(delivery.playSound).toHaveBeenCalledTimes(1);
+    expect(onFailure).not.toHaveBeenCalled();
+  });
+
+  test("keeps always-send OS delivery when focus-dependent sound cannot read focus", async () => {
+    const delivery = createDeliveryAdapters();
+    const showOsNotification = mock(async (_request: NotificationOsDeliveryRequest) => ({
+      status: "shown" as const,
+    }));
+    const onFailure = mock(() => {});
+    const runtime = createNotificationRuntime({
+      bridge: createBridge({
+        isAppFocused: async () => {
+          throw new Error("Focus lock query failed.");
+        },
+        showOsNotification,
+      }),
+      loadSettings: async () => {
+        const settings = createDefaultNotificationSettings();
+        settings.osFocus = "always_send";
+        settings.soundFocus = "mute_while_focused";
+        return settings;
+      },
+      navigate: async () => {},
+      onFailure,
+      inApp: delivery.inApp,
+      sound: delivery.sound,
+    });
+
+    await runtime.dispatch(workflowClosedOccurrence("event-partial-focus-failure"));
+
+    expect(showOsNotification).toHaveBeenCalledTimes(1);
+    expect(delivery.playSound).not.toHaveBeenCalled();
+    expect(onFailure).toHaveBeenCalledWith(
+      expect.objectContaining({ channel: "coordination", message: "Focus lock query failed." }),
+    );
   });
 });
