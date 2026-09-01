@@ -191,4 +191,121 @@ describe("OpenCode host live-session state", () => {
     expect(state.removeSession(ref)).toEqual([{ type: "session_removed", ref }]);
     expect(state.listSnapshots()).toEqual([]);
   });
+
+  test("removes a vanished descendant when a registered root refresh omits it", () => {
+    const state = createState();
+    state.retainControlSummary(summary("parent"));
+    const parentRef = state.listSnapshots()[0]?.ref;
+    if (!parentRef) {
+      throw new Error("Expected a retained OpenDucktor parent.");
+    }
+    state.applyEvent(parentRef, {
+      type: "question_required",
+      externalSessionId: "parent",
+      timestamp: "2026-07-16T10:02:00.000Z",
+      requestId: "native-question-1",
+      parentExternalSessionId: "parent",
+      childExternalSessionId: "child",
+      questions: [],
+    });
+
+    state.refreshRegisteredSources([
+      {
+        type: "present",
+        ref: parentRef,
+        sources: [
+          {
+            externalSessionId: "parent",
+            workingDirectory: parentRef.workingDirectory,
+            sessionAssociation: { kind: "unbound" },
+            title: "OpenDucktor session",
+            startedAt: "2026-07-16T10:01:00.000Z",
+            runtimeActivity: "idle",
+            pendingApprovals: [],
+            pendingQuestions: [],
+          },
+        ],
+      },
+    ]);
+
+    expect(state.listSnapshots().map((snapshot) => snapshot.ref.externalSessionId)).toEqual([
+      "parent",
+    ]);
+  });
+
+  test("removes a registered root when OpenCode confirms it is missing", () => {
+    const state = createState();
+    state.retainControlSummary(summary("parent"));
+    const parentRef = state.listSnapshots()[0]?.ref;
+    if (!parentRef) {
+      throw new Error("Expected a retained OpenDucktor parent.");
+    }
+
+    expect(state.refreshRegisteredSources([{ type: "missing", ref: parentRef }])).toEqual([
+      { type: "session_removed", ref: parentRef },
+    ]);
+    expect(state.listSnapshots()).toEqual([]);
+  });
+
+  test("removes a root only after its durable registration is omitted", () => {
+    const state = createState();
+    state.retainControlSummary(summary("parent"));
+    const parentRef = state.listSnapshots()[0]?.ref;
+    if (!parentRef) {
+      throw new Error("Expected a retained OpenDucktor parent.");
+    }
+
+    expect(state.refreshRegisteredSources([])).toEqual([]);
+    expect(state.listSnapshots()).toHaveLength(1);
+    state.refreshRegisteredSources([
+      {
+        type: "present",
+        ref: parentRef,
+        sources: [
+          {
+            externalSessionId: "parent",
+            workingDirectory: parentRef.workingDirectory,
+            sessionAssociation: { kind: "unbound" },
+            title: "OpenDucktor session",
+            startedAt: "2026-07-16T10:01:00.000Z",
+            runtimeActivity: "idle",
+            pendingApprovals: [],
+            pendingQuestions: [],
+          },
+        ],
+      },
+    ]);
+
+    expect(state.refreshRegisteredSources([])).toEqual([
+      { type: "session_removed", ref: parentRef },
+    ]);
+    expect(state.listSnapshots()).toEqual([]);
+  });
+
+  test("does not retain a pending route when event validation fails", () => {
+    const state = createOpenCodeLiveSessionState({
+      runtime,
+      nextOccurrenceId: () => "",
+    });
+    state.retainControlSummary(summary());
+    const ref = state.listSnapshots()[0]?.ref;
+    if (!ref) {
+      throw new Error("Expected a retained OpenDucktor session.");
+    }
+
+    expect(() =>
+      state.applyEvent(ref, {
+        type: "approval_required",
+        externalSessionId: "session-1",
+        timestamp: "2026-07-16T10:02:00.000Z",
+        requestId: "native-approval-1",
+        requestType: "command_execution",
+        title: "Run command",
+      }),
+    ).toThrow();
+    expect(() => state.requirePendingRoute(ref, "", "approval")).toThrow(
+      "Unknown or resolved OpenCode approval occurrence",
+    );
+    expect(state.listSnapshots()[0]?.pendingApprovals).toEqual([]);
+  });
 });

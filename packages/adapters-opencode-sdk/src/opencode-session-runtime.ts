@@ -9,11 +9,12 @@ import type {
   StartAgentSessionInput,
   UpdateAgentSessionModelInput,
 } from "@openducktor/core";
-import type { OpencodeRuntimeSnapshotSource } from "./live-session-snapshots";
 import {
   applyOpencodeAwaitingTurnStartToRuntimeSnapshot,
+  type OpencodeRegisteredRuntimeRefreshResult,
   readOpencodeRegisteredRuntimeSnapshotSources,
 } from "./live-session-snapshots";
+import { readSessionLifecycleEvent } from "./event-stream/shared";
 import type { ParsedOpencodeEvent as Event } from "./opencode-global-event-ingress";
 import { buildDefaultFactory, nowIso } from "./client-factory";
 import { OpencodeSdkAdapter } from "./opencode-sdk-adapter";
@@ -54,7 +55,7 @@ export type {
 export type OpencodeSessionRuntimeConnection = {
   readonly refreshRegisteredSessions: (
     refs: ReadonlyArray<SessionRef>,
-  ) => Promise<OpencodeRuntimeSnapshotSource[]>;
+  ) => Promise<OpencodeRegisteredRuntimeRefreshResult[]>;
   readonly loadContextUsage: (ref: SessionRef) => Promise<OpencodeSessionContextUsage | null>;
   readonly replyApproval: (input: OpencodeNativeApprovalReply) => Promise<void>;
   readonly replyQuestion: (input: OpencodeNativeQuestionReply) => Promise<void>;
@@ -209,10 +210,45 @@ export const createPrepareOpencodeSessionRuntime = (
       }
     };
 
+    const belongsToRegisteredRoot = (
+      externalSessionId: string,
+      parentExternalSessionId?: string,
+    ): boolean => {
+      const eventTransport = runtimeEventTransports.get(input.runtimeId);
+      let currentId: string | undefined = externalSessionId;
+      let parentId = parentExternalSessionId;
+      const visited = new Set<string>();
+      while (currentId && !visited.has(currentId)) {
+        visited.add(currentId);
+        if (eventSessions.has(currentId)) {
+          return true;
+        }
+        const nextId: string | undefined =
+          parentId ??
+          eventTransport?.parentExternalSessionIdByChildExternalSessionId.get(currentId);
+        currentId = nextId;
+        parentId = undefined;
+      }
+      return false;
+    };
+
     const forwardEventSignals = async (event: Event): Promise<void> => {
       await drainSessionSignals();
+      const lifecycleEvent = readSessionLifecycleEvent(event);
+      if (
+        lifecycleEvent?.type === "session.deleted" &&
+        belongsToRegisteredRoot(
+          lifecycleEvent.externalSessionId,
+          lifecycleEvent.parentExternalSessionId,
+        )
+      ) {
+        await emitSignal({
+          type: "session_removed",
+          externalSessionId: lifecycleEvent.externalSessionId,
+        });
+      }
       const contextSignal = readOpencodeSessionContextSignal(event);
-      if (contextSignal && eventSessions.has(contextSignal.externalSessionId)) {
+      if (contextSignal && belongsToRegisteredRoot(contextSignal.externalSessionId)) {
         await emitSignal(contextSignal);
       }
     };
@@ -286,37 +322,35 @@ export const createPrepareOpencodeSessionRuntime = (
 
     const connection: OpencodeSessionRuntimeConnection = {
       refreshRegisteredSessions: async (refs) => {
-        const sources = await readOpencodeRegisteredRuntimeSnapshotSources({
+        const results = await readOpencodeRegisteredRuntimeSnapshotSources({
           createClient,
           runtimeEndpoint: input.runtimeEndpoint,
           refs,
           readDirectory,
           now,
+          onRootPresent: (ref, detail) =>
+            controlAdapter
+              .observeRegisteredSession({
+                repoPath: ref.repoPath,
+                workingDirectory: ref.workingDirectory,
+                externalSessionId: ref.externalSessionId,
+                detail,
+              })
+              .then(() => undefined),
         });
-        const rootsById = new Map(
-          sources
-            .filter((source) => source.parentExternalSessionId === undefined)
-            .map((source) => [source.externalSessionId, source]),
-        );
-        for (const ref of refs) {
-          const source = rootsById.get(ref.externalSessionId);
-          if (!source || source.workingDirectory !== ref.workingDirectory) {
-            throw new Error(
-              `OpenCode did not return registered session '${ref.externalSessionId}' in '${ref.workingDirectory}'.`,
-            );
-          }
-          await controlAdapter.observeRegisteredSession({
-            repoPath: ref.repoPath,
-            workingDirectory: ref.workingDirectory,
-            externalSessionId: ref.externalSessionId,
-          });
-        }
-        return sources.map((snapshot) =>
-          applyOpencodeAwaitingTurnStartToRuntimeSnapshot({
-            sessions: eventSessions,
-            runtimeId: input.runtimeId,
-            snapshot,
-          }),
+        return results.map((result) =>
+          result.type === "missing"
+            ? result
+            : {
+                ...result,
+                sources: result.sources.map((snapshot) =>
+                  applyOpencodeAwaitingTurnStartToRuntimeSnapshot({
+                    sessions: eventSessions,
+                    runtimeId: input.runtimeId,
+                    snapshot,
+                  }),
+                ),
+              },
         );
       },
       loadContextUsage: (ref) =>

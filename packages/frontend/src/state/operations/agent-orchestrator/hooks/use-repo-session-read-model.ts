@@ -53,6 +53,7 @@ import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { createRepoStaleGuard } from "../support/core";
 
 export type AgentSessionLiveFrontendPort = Pick<HostClient, "agentSessionLiveReplyApproval"> & {
+  agentSessionLiveRefresh: HostClient["agentSessionLiveRefresh"];
   observeAgentSessionLive: (
     input: AgentSessionLiveRefreshInput,
     listener: (envelope: AgentSessionLiveEnvelope) => void,
@@ -110,6 +111,13 @@ const faultMessage = (envelope: Extract<AgentSessionLiveEnvelope, { type: "fault
 const taskIdsScopeKey = (taskIds: string[]): string =>
   JSON.stringify(normalizeAgentSessionTaskIds(taskIds));
 
+const registeredSessionRefsKey = (repoPath: string, records: TaskSessionRecords): string =>
+  JSON.stringify(
+    toRegisteredSessionRefs(repoPath, toLoadedWorkflowSessionRecords(records))
+      .map(agentSessionRefKey)
+      .sort(),
+  );
+
 export const useRepoSessionReadModel = ({
   workspaceRepoPath,
   taskIds,
@@ -142,6 +150,7 @@ export const useRepoSessionReadModel = ({
   // live failure before the current task-record scope finishes hydrating.
   const recoveredLiveFailureRef = useRef(false);
   const initialLiveSnapshotReceivedRef = useRef(false);
+  const registeredRootRefreshCountRef = useRef(0);
   const taskIdsKey = taskIdsScopeKey(taskIds);
   const readReloadGeneration = useEffectEvent(() => reloadGeneration);
   const readCurrentTaskIdsKey = useEffectEvent(() => taskIdsKey);
@@ -150,6 +159,10 @@ export const useRepoSessionReadModel = ({
       input: Parameters<AgentSessionLiveFrontendPort["observeAgentSessionLive"]>[0],
       listener: Parameters<AgentSessionLiveFrontendPort["observeAgentSessionLive"]>[1],
     ) => liveSessionPort.observeAgentSessionLive(input, listener),
+  );
+  const refreshLiveSessions = useEffectEvent(
+    (input: Parameters<AgentSessionLiveFrontendPort["agentSessionLiveRefresh"]>[0]) =>
+      liveSessionPort.agentSessionLiveRefresh(input),
   );
   const replyLiveApproval = useEffectEvent(
     (input: Parameters<AgentSessionLiveFrontendPort["agentSessionLiveReplyApproval"]>[0]) =>
@@ -386,11 +399,56 @@ export const useRepoSessionReadModel = ({
       return;
     }
 
+    const previousApply = taskRecordApplyRef.current;
+    const previousRegisteredRefsKey =
+      previousApply?.kind === "ready" && previousApply.repoPath === workspaceRepoPath
+        ? registeredSessionRefsKey(workspaceRepoPath, previousApply.records)
+        : null;
+    const nextRegisteredRefsKey = registeredSessionRefsKey(workspaceRepoPath, taskRecords.records);
+
     // This is the sole task-query-to-session-store write path.
     // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent, react-doctor/no-pass-live-state-to-parent
     const applied = applyTaskRecords(workspaceRepoPath, taskRecords.records);
     if (!applied) {
       return;
+    }
+    if (
+      observedRepoPathRef.current === workspaceRepoPath &&
+      previousRegisteredRefsKey !== nextRegisteredRefsKey
+    ) {
+      const repoPath = workspaceRepoPath;
+      const repoEpoch = repoEpochRef.current;
+      const currentTaskIdsKey = readCurrentTaskIdsKey();
+      const registeredSessionRefs = toRegisteredSessionRefs(
+        repoPath,
+        toLoadedWorkflowSessionRecords(taskRecords.records),
+      );
+      registeredRootRefreshCountRef.current += 1;
+      // react-doctor-disable-next-line react-doctor/no-pass-live-state-to-parent -- this is the host refresh boundary, not a parent state callback
+      void refreshLiveSessions({ repoPath, registeredSessionRefs }).then(
+        () => {
+          registeredRootRefreshCountRef.current -= 1;
+        },
+        (cause: unknown) => {
+          registeredRootRefreshCountRef.current -= 1;
+          const currentApply = taskRecordApplyRef.current;
+          const stale =
+            currentWorkspaceRepoPathRef.current !== repoPath ||
+            repoEpochRef.current !== repoEpoch ||
+            currentApply?.kind !== "ready" ||
+            currentApply.repoPath !== repoPath ||
+            currentApply.taskIdsKey !== currentTaskIdsKey ||
+            registeredSessionRefsKey(repoPath, currentApply.records) !== nextRegisteredRefsKey;
+          if (stale) {
+            return;
+          }
+          const message = `Failed to refresh registered sessions for repo '${repoPath}': ${errorMessage(cause)}`;
+          liveStreamFailureRef.current = message;
+          setSessionReadModelLoadState(
+            failedAgentSessionReadModelLoadState(repoPath, message, "live-stream"),
+          );
+        },
+      );
     }
     // Current-scope records loaded: a prior task-record failure no longer
     // describes this read model. An unresolved live-stream failure still does
@@ -431,7 +489,7 @@ export const useRepoSessionReadModel = ({
       }
       return currentLoadState;
     });
-  }, [applyTaskRecords, taskRecords, workspaceRepoPath]);
+  }, [applyTaskRecords, currentWorkspaceRepoPathRef, repoEpochRef, taskRecords, workspaceRepoPath]);
 
   // react-doctor-disable-next-line react-doctor/no-derived-state-effect
   useEffect(() => {
@@ -638,8 +696,11 @@ export const useRepoSessionReadModel = ({
         return;
       }
       // Any fresh authoritative snapshot proves the stream recovered.
-      const recoveredLiveFailure = liveStreamFailureRef.current !== null;
-      liveStreamFailureRef.current = null;
+      const registeredRootRefresh = registeredRootRefreshCountRef.current > 0;
+      const recoveredLiveFailure = !registeredRootRefresh && liveStreamFailureRef.current !== null;
+      if (!registeredRootRefresh) {
+        liveStreamFailureRef.current = null;
+      }
       if (readLoadedWorkflowRecords()) {
         setSessionReadModelLoadState(readyAgentSessionReadModelLoadState(repoPath));
         return;

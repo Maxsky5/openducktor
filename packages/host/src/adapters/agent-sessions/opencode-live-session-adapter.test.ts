@@ -67,6 +67,31 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     ]);
   });
 
+  test("removes retained state when OpenCode deletes an owned session", async () => {
+    const harness = createRuntimeHarness();
+    const publishedChanges: AgentSessionLiveAdapterChange[] = [];
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle(publishedChanges),
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime),
+    );
+    await Effect.runPromise(
+      prepared.adapter.resumeSession({
+        ...ref,
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      }),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+
+    await harness.emit({ type: "session_removed", externalSessionId: ref.externalSessionId });
+
+    await expect(
+      Effect.runPromise(prepared.adapter.listRetainedSnapshots(ref.repoPath)),
+    ).resolves.toEqual([]);
+    expect(publishedChanges).toContainEqual({ type: "session_removed", ref });
+  });
+
   test("owns strict snapshots, opaque replies, retained context, and normalized signals", async () => {
     const harness = createRuntimeHarness();
     const publishedChanges: AgentSessionLiveAdapterChange[] = [];

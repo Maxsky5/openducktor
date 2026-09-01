@@ -10,6 +10,7 @@ import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orch
 import {
   buildLaunchedSessionState,
   createExecutePreparedSessionLaunch,
+  type ExecutePreparedSessionLaunchInput,
   type PreparedSessionRegistrationInput,
   type SessionLaunchExecutorDependencies,
 } from "./session-launch-executor";
@@ -92,7 +93,9 @@ const createExecutorHarness = () => {
     },
   } satisfies SessionLaunchExecutorDependencies["adapter"];
 
-  const deps: SessionLaunchExecutorDependencies = {
+  const deps: SessionLaunchExecutorDependencies & {
+    replaceSession: (session: AgentSessionState) => void;
+  } = {
     adapter,
     replaceSession: (session) => {
       calls.replaceSession.push(session);
@@ -106,7 +109,16 @@ const createExecutorHarness = () => {
     currentWorkspaceRepoPathRef,
   };
 
-  const execute = createExecutePreparedSessionLaunch(deps);
+  const executePrepared = createExecutePreparedSessionLaunch(deps);
+  const registerLocally = async ({
+    sessionState,
+  }: PreparedSessionRegistrationInput): Promise<void> => {
+    deps.replaceSession(sessionState);
+  };
+  const execute = (
+    input: Omit<ExecutePreparedSessionLaunchInput, "register"> &
+      Partial<Pick<ExecutePreparedSessionLaunchInput, "register">>,
+  ) => executePrepared({ ...input, register: input.register ?? registerLocally });
 
   return { calls, deps, execute, repoEpochRef, currentWorkspaceRepoPathRef, sessionsRef };
 };
@@ -166,6 +178,7 @@ describe("session-launch-executor", () => {
     });
     expect(harness.calls.replaceSession[0]?.sessionAssociation).toEqual({ kind: "repository" });
     expect(harness.calls.stopSession).toHaveLength(0);
+    expect(harness.calls.removeSession).toHaveLength(0);
   });
 
   test("registers the launched session with the exact association and selected model", async () => {
@@ -267,11 +280,8 @@ describe("session-launch-executor", () => {
     expect(harness.calls.replaceSession[0]?.status).toBe("running");
   });
 
-  test("releases a resumed session when local registration fails", async () => {
+  test("leaves resumed-session cleanup with the required registration owner", async () => {
     const harness = createExecutorHarness();
-    harness.deps.replaceSession = () => {
-      throw new Error("registration failed");
-    };
     const launch: PreparedSessionLaunch = {
       mode: "resume",
       repoPath: REPO_PATH,
@@ -281,12 +291,17 @@ describe("session-launch-executor", () => {
       externalSessionId: "existing-session",
     };
 
-    await expect(harness.execute({ launch })).rejects.toThrow(
-      'Failed to register started session "existing-session": registration failed.',
-    );
-    expect(harness.calls.releaseSession).toHaveLength(1);
+    await expect(
+      harness.execute({
+        launch,
+        register: async () => {
+          throw new Error("registration failed");
+        },
+      }),
+    ).rejects.toThrow("registration failed");
+    expect(harness.calls.releaseSession).toHaveLength(0);
     expect(harness.calls.stopSession).toHaveLength(0);
-    expect(harness.calls.removeSession).toHaveLength(1);
+    expect(harness.calls.removeSession).toHaveLength(0);
   });
 
   test("does not seed a system prompt header for a resume without a prompt", async () => {
@@ -615,34 +630,6 @@ describe("session-launch-executor", () => {
     expect(harness.calls.stopSession).toHaveLength(1);
   });
 
-  test("rolls back the launched runtime session when local registration fails", async () => {
-    const harness = createExecutorHarness();
-    harness.deps.replaceSession = () => {
-      throw new Error("registration failed");
-    };
-
-    await expect(harness.execute({ launch: repositoryStartLaunch() })).rejects.toThrow(
-      'Failed to register started session "started-1": registration failed. The started session was stopped and removed locally.',
-    );
-    expect(harness.calls.stopSession).toHaveLength(1);
-    expect(harness.calls.removeSession).toHaveLength(1);
-  });
-
-  test("keeps rollback failure visible when registration cleanup cannot stop the runtime", async () => {
-    const harness = createExecutorHarness();
-    harness.deps.replaceSession = () => {
-      throw new Error("registration failed");
-    };
-    harness.deps.adapter.stopSession = async () => {
-      throw new Error("runtime unavailable");
-    };
-
-    await expect(harness.execute({ launch: repositoryStartLaunch() })).rejects.toThrow(
-      'Failed to register started session "started-1": registration failed. Failed to roll back the started session after the registration failure: runtime unavailable',
-    );
-    expect(harness.calls.removeSession).toHaveLength(0);
-  });
-
   test("keeps registration ownership explicit and passes stale guard plus session state", async () => {
     const harness = createExecutorHarness();
     const registrationInputs: PreparedSessionRegistrationInput[] = [];
@@ -665,7 +652,7 @@ describe("session-launch-executor", () => {
     expect(registrationInput.isStaleOperation()).toBe(false);
   });
 
-  test("surfaces registration failures without attaching the session", async () => {
+  test("leaves registration failure cleanup with the required registration owner", async () => {
     const harness = createExecutorHarness();
 
     await expect(
@@ -677,6 +664,7 @@ describe("session-launch-executor", () => {
       }),
     ).rejects.toThrow("commit failed");
     expect(harness.calls.stopSession).toHaveLength(0);
+    expect(harness.calls.removeSession).toHaveLength(0);
     expect(listAgentSessions(harness.sessionsRef.current)).toHaveLength(0);
   });
 

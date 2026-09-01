@@ -27,6 +27,7 @@ export type OpencodeSessionRuntimeSignal =
       readonly externalSessionId: string;
       readonly contextUsage: OpencodeSessionContextUsage;
     }
+  | { readonly type: "session_removed"; readonly externalSessionId: string }
   | { readonly type: "fault"; readonly message: string };
 
 export const isOpencodeSessionTranscriptEvent = (

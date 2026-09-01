@@ -91,7 +91,11 @@ export const createRuntimeHarness = (
   const connection: OpencodeSessionRuntimeConnection = {
     refreshRegisteredSessions: async (refs) => {
       refreshRegisteredSessionCalls.push(refs.map((candidate) => candidate.externalSessionId));
-      return options.registeredSources ?? [];
+      return refs.map((candidate) => ({
+        type: "present" as const,
+        ref: candidate,
+        sources: options.registeredSources ?? [],
+      }));
     },
     loadContextUsage: async (input) => {
       contextLoadCalls.push(input.externalSessionId);

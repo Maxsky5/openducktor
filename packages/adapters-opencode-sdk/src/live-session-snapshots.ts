@@ -36,6 +36,14 @@ export type OpencodeRuntimeSnapshotSource = AgentSessionRuntimeSnapshotSource & 
   workingDirectory: string;
 };
 
+export type OpencodeRegisteredRuntimeRefreshResult =
+  | {
+      readonly type: "present";
+      readonly ref: SessionRef;
+      readonly sources: OpencodeRuntimeSnapshotSource[];
+    }
+  | { readonly type: "missing"; readonly ref: SessionRef };
+
 type ApplyOpencodeAwaitingTurnStartToRuntimeSnapshotInput = {
   sessions: ReadonlyMap<string, SessionRecord>;
   runtimeId: string;
@@ -272,112 +280,102 @@ export const readOpencodeRegisteredRuntimeSnapshotSources = async ({
   refs,
   readDirectory,
   now,
+  onRootPresent,
 }: {
   createClient: ClientFactory;
   runtimeEndpoint: string;
   refs: ReadonlyArray<SessionRef>;
   readDirectory: ReadOpencodeDirectory;
   now: () => string;
-}): Promise<OpencodeRuntimeSnapshotSource[]> => {
-  for (const ref of refs) {
+  onRootPresent: (ref: SessionRef, detail: ParsedOpencodeSession) => Promise<void>;
+}): Promise<OpencodeRegisteredRuntimeRefreshResult[]> => {
+  const results = await Promise.all(
+    refs.map(async (ref) => {
     if (ref.runtimeKind !== "opencode") {
       throw new Error(
         `Cannot refresh registered OpenCode session '${ref.externalSessionId}' for runtime '${ref.runtimeKind}'.`,
       );
     }
-  }
-
-  const refsByDirectory = new Map<string, SessionRef[]>();
-  for (const ref of refs) {
-    const directoryRefs = refsByDirectory.get(ref.workingDirectory) ?? [];
-    directoryRefs.push(ref);
-    refsByDirectory.set(ref.workingDirectory, directoryRefs);
-  }
-  const directoryResults = await Promise.all(
-    [...refsByDirectory].map(([directory, directoryRefs]) =>
-      readDirectory(directory, async () => {
-        const client = createClient({ runtimeEndpoint, workingDirectory: directory });
-        const [statusResponse, pendingInput] = await Promise.all([
-          client.session.status({ directory }),
-          listOpencodeLiveSessionPendingInput(createClient, {
-            runtimeEndpoint,
-            workingDirectory: directory,
-          }),
-        ]);
-        const sessions = new Map<
-          string,
-          z.output<typeof opencodeSessionDetailPayloadSchema> & { workingDirectory: string }
-        >();
-        for (const ref of directoryRefs) {
-          const detailResponse = await client.session.get({
-            directory,
-            sessionID: ref.externalSessionId,
-          });
-          const detail = opencodeSessionDetailPayloadSchema.parse(
-            unwrapData(detailResponse, "get registered session"),
+      return readDirectory(ref.workingDirectory, async () => {
+        const client = createClient({
+          runtimeEndpoint,
+          workingDirectory: ref.workingDirectory,
+        });
+        const detailResponse = await client.session.get({
+          directory: ref.workingDirectory,
+          sessionID: ref.externalSessionId,
+        });
+        const missingRoot =
+          detailResponse.response?.status === 404 &&
+          z.object({ name: z.literal("NotFoundError") }).safeParse(detailResponse.error).success;
+        if (missingRoot) {
+          return { type: "missing", ref } as const;
+        }
+        const detail = opencodeSessionDetailPayloadSchema.parse(
+          unwrapData(detailResponse, "get registered session"),
+        );
+        if (detail.id !== ref.externalSessionId || detail.directory !== ref.workingDirectory) {
+          throw new Error(
+            `OpenCode returned session '${detail.id}' in '${detail.directory}' for registered session '${ref.externalSessionId}' in '${ref.workingDirectory}'.`,
           );
-          if (detail.id !== ref.externalSessionId || detail.directory !== directory) {
-            throw new Error(
-              `OpenCode returned session '${detail.id}' in '${detail.directory}' for registered session '${ref.externalSessionId}' in '${directory}'.`,
-            );
+        }
+        await onRootPresent(ref, detail);
+
+        const sessions = new Map<string, ParsedOpencodeSession>();
+        const queue = [detail];
+        for (let index = 0; index < queue.length; index += 1) {
+          const parent = queue[index];
+          if (!parent || sessions.has(parent.id)) {
+            continue;
           }
-          const queue = [detail];
-          for (let index = 0; index < queue.length; index += 1) {
-            const parent = queue[index];
-            if (!parent || sessions.has(parent.id)) {
-              continue;
+          sessions.set(parent.id, parent);
+          const childrenResponse = await client.session.children({
+            directory: ref.workingDirectory,
+            sessionID: parent.id,
+          });
+          const children = z
+            .array(opencodeSessionDetailPayloadSchema)
+            .parse(unwrapData(childrenResponse, "get registered session children"));
+          for (const child of children) {
+            if (child.parentID !== parent.id) {
+              throw new Error(
+                `OpenCode child session '${child.id}' does not name registered lineage parent '${parent.id}'.`,
+              );
             }
-            sessions.set(parent.id, { ...parent, workingDirectory: directory });
-            const childrenResponse = await client.session.children({
-              directory,
-              sessionID: parent.id,
-            });
-            const children = z
-              .array(opencodeSessionDetailPayloadSchema)
-              .parse(unwrapData(childrenResponse, "get registered session children"));
-            for (const child of children) {
-              if (child.parentID !== parent.id) {
-                throw new Error(
-                  `OpenCode child session '${child.id}' does not name registered lineage parent '${parent.id}'.`,
-                );
-              }
-              queue.push(child);
-            }
+            queue.push(child);
           }
         }
-        return {
-          pendingInput,
-          sessions,
-          statuses: toOpencodeSessionStatusMap(
-            unwrapData(statusResponse, "get session status"),
-            directory,
-          ),
-        };
-      }),
-    ),
+        const [statusResponse, pendingBySessionId] = await Promise.all([
+          client.session.status({ directory: ref.workingDirectory }),
+          listOpencodeLiveSessionPendingInput(createClient, {
+            runtimeEndpoint,
+            workingDirectory: ref.workingDirectory,
+          }),
+        ]);
+        const statuses = toOpencodeSessionStatusMap(
+          unwrapData(statusResponse, "get session status"),
+          ref.workingDirectory,
+        );
+        const sources = [...sessions.values()].map((session) => {
+          const pending = pendingBySessionId[session.id] ?? { approvals: [], questions: [] };
+          const source: OpencodeRuntimeSnapshotSource = {
+            externalSessionId: session.id,
+            sessionAssociation: { kind: "unbound" },
+            title: session.title,
+            workingDirectory: ref.workingDirectory,
+            startedAt: toIsoFromEpoch(session.time.created, now),
+            runtimeActivity: toOpencodeRuntimeActivity(statuses[session.id]),
+            pendingApprovals: pending.approvals,
+            pendingQuestions: pending.questions,
+          };
+          if (session.id !== ref.externalSessionId && session.parentID) {
+            source.parentExternalSessionId = session.parentID;
+          }
+          return source;
+        });
+        return { type: "present", ref, sources } as const;
+      });
+    }),
   );
-
-  const roots = new Set(refs.map((ref) => ref.externalSessionId));
-  return directoryResults.flatMap((result) => {
-    if (!result) {
-      return [];
-    }
-    return [...result.sessions.values()].map((session) => {
-      const pending = result.pendingInput[session.id] ?? { approvals: [], questions: [] };
-      const source: OpencodeRuntimeSnapshotSource = {
-        externalSessionId: session.id,
-        sessionAssociation: { kind: "unbound" },
-        title: session.title,
-        workingDirectory: session.workingDirectory,
-        startedAt: toIsoFromEpoch(session.time.created, now),
-        runtimeActivity: toOpencodeRuntimeActivity(result.statuses[session.id]),
-        pendingApprovals: pending.approvals,
-        pendingQuestions: pending.questions,
-      };
-      if (!roots.has(session.id) && session.parentID) {
-        source.parentExternalSessionId = session.parentID;
-      }
-      return source;
-    });
-  });
+  return results.filter((result): result is OpencodeRegisteredRuntimeRefreshResult => result !== null);
 };

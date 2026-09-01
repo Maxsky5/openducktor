@@ -136,7 +136,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
       ): Effect.Effect<void, HostError> =>
         Effect.gen(function* () {
           const dropCount = state.dropCount();
-          const sources = yield* Effect.tryPromise({
+          const results = yield* Effect.tryPromise({
             try: () => prepared.connection.refreshRegisteredSessions(refs),
             catch: (cause) =>
               toHostOperationError(cause, "opencode-live-session.refresh-registered-sessions", {
@@ -150,7 +150,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
                 if (dropCount !== state.dropCount()) {
                   return;
                 }
-                state.refreshRegisteredSources(refs, sources);
+                state.refreshRegisteredSources(results);
               },
               { runtimeId: runtime.runtimeId },
             ),
@@ -186,6 +186,16 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
                 return {
                   value: undefined,
                   changes: [...stateChanges, { type: "transcript_event", event }],
+                };
+              }),
+            );
+          case "session_removed":
+            return serializeRuntime(
+              commit("opencode-live-session.commit-session-removal", () => {
+                const ref = state.refForExternalSession(signal.externalSessionId);
+                return {
+                  value: undefined,
+                  changes: ref ? state.removeSession(ref) : [],
                 };
               }),
             );

@@ -27,6 +27,7 @@ export const createDefaultAgentOrchestratorDependencies = (): AgentOrchestratorD
     taskSessionStartupLeaseAbort: (...args) => host.taskSessionStartupLeaseAbort(...args),
   },
   liveSessionHostPort: {
+    agentSessionLiveRefresh: (...args) => host.agentSessionLiveRefresh(...args),
     agentSessionLiveLoadContext: (...args) => host.agentSessionLiveLoadContext(...args),
     agentSessionLiveRead: (...args) => host.agentSessionLiveRead(...args),
     agentSessionLiveReplyApproval: (...args) => host.agentSessionLiveReplyApproval(...args),

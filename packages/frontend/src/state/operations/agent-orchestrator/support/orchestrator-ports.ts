@@ -36,6 +36,7 @@ export type AgentOrchestratorRuntimeHostPort = {
 };
 
 export type AgentOrchestratorLiveSessionHostPort = {
+  agentSessionLiveRefresh: typeof host.agentSessionLiveRefresh;
   agentSessionLiveLoadContext: typeof host.agentSessionLiveLoadContext;
   agentSessionLiveRead: typeof host.agentSessionLiveRead;
   agentSessionLiveReplyApproval: typeof host.agentSessionLiveReplyApproval;

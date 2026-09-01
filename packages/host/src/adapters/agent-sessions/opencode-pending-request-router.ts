@@ -16,6 +16,13 @@ export type OpenCodePendingRoute = {
   readonly ref: AgentSessionLiveRef;
 };
 
+export type PreparedOpenCodePendingRequest<
+  Request extends AgentSessionLivePendingApprovalRequest | AgentSessionLivePendingQuestionRequest,
+> = {
+  readonly request: Request;
+  readonly route: OpenCodePendingRoute;
+};
+
 type CreateOpenCodePendingRequestRouterInput = {
   readonly runtimeId: string;
   readonly nextOccurrenceId: () => string;
@@ -34,66 +41,76 @@ export const createOpenCodePendingRequestRouter = ({
   const routesByOccurrenceId = new Map<string, OpenCodePendingRoute>();
   const occurrenceIdByNativeKey = new Map<string, string>();
 
-  const retain = (
+  const prepareRoute = (
     ref: AgentSessionLiveRef,
     kind: OpenCodePendingRoute["kind"],
     nativeRequestId: string,
-  ): string => {
+  ): OpenCodePendingRoute => {
     const key = nativeRouteKey(ref, kind, nativeRequestId);
-    let occurrenceId = occurrenceIdByNativeKey.get(key);
-    if (!occurrenceId) {
-      occurrenceId = nextOccurrenceId();
-      occurrenceIdByNativeKey.set(key, occurrenceId);
-    }
-    routesByOccurrenceId.set(occurrenceId, {
+    const occurrenceId = occurrenceIdByNativeKey.get(key) ?? nextOccurrenceId();
+    return {
       occurrenceId,
       nativeRequestId,
       kind,
       ref: toSessionRef(ref),
-    });
-    return occurrenceId;
+    };
   };
 
   return {
-    retainApproval: (
+    prepareApproval: (
       ref: AgentSessionLiveRef,
       request: AgentPendingApprovalRequest,
-    ): AgentSessionLivePendingApprovalRequest => {
-      const occurrenceId = retain(ref, "approval", request.requestId);
+    ): PreparedOpenCodePendingRequest<AgentSessionLivePendingApprovalRequest> => {
+      const route = prepareRoute(ref, "approval", request.requestId);
       const {
         metadata: _metadata,
         requestInstanceId: _requestInstanceId,
         ...publicRequest
       } = request;
-      return agentSessionLivePendingApprovalRequestSchema.parse({
-        ...publicRequest,
-        requestId: occurrenceId,
-      });
+      return {
+        route,
+        request: agentSessionLivePendingApprovalRequestSchema.parse({
+          ...publicRequest,
+          requestId: route.occurrenceId,
+        }),
+      };
     },
-    retainQuestion: (
+    prepareQuestion: (
       ref: AgentSessionLiveRef,
       request: AgentPendingQuestionRequest,
-    ): AgentSessionLivePendingQuestionRequest => {
-      const occurrenceId = retain(ref, "question", request.requestId);
+    ): PreparedOpenCodePendingRequest<AgentSessionLivePendingQuestionRequest> => {
+      const route = prepareRoute(ref, "question", request.requestId);
       const { requestInstanceId: _requestInstanceId, ...publicRequest } = request;
-      return agentSessionLivePendingQuestionRequestSchema.parse({
-        ...publicRequest,
-        requestId: occurrenceId,
-      });
+      return {
+        route,
+        request: agentSessionLivePendingQuestionRequestSchema.parse({
+          ...publicRequest,
+          requestId: route.occurrenceId,
+        }),
+      };
     },
-    completeNative: (
+    commitPrepared: (
+      prepared: PreparedOpenCodePendingRequest<
+        AgentSessionLivePendingApprovalRequest | AgentSessionLivePendingQuestionRequest
+      >,
+    ): void => {
+      routesByOccurrenceId.set(prepared.route.occurrenceId, prepared.route);
+      occurrenceIdByNativeKey.set(
+        nativeRouteKey(prepared.route.ref, prepared.route.kind, prepared.route.nativeRequestId),
+        prepared.route.occurrenceId,
+      );
+    },
+    findNative: (
       ref: AgentSessionLiveRef,
       nativeRequestId: string,
       kind: OpenCodePendingRoute["kind"],
-    ): string | null => {
+    ): OpenCodePendingRoute | null => {
       const key = nativeRouteKey(ref, kind, nativeRequestId);
       const occurrenceId = occurrenceIdByNativeKey.get(key);
       if (!occurrenceId) {
         return null;
       }
-      occurrenceIdByNativeKey.delete(key);
-      routesByOccurrenceId.delete(occurrenceId);
-      return occurrenceId;
+      return routesByOccurrenceId.get(occurrenceId) ?? null;
     },
     require: (
       ref: AgentSessionLiveRef,

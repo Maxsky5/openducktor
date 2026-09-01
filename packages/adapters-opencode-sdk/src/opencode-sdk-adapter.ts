@@ -80,7 +80,7 @@ import {
   failOpencodeUserMessageSend,
   projectAdmittedOpencodeUserMessage,
 } from "./opencode-agent-session-projection";
-import { opencodeSessionDetailPayloadSchema } from "./opencode-ingress";
+import { opencodeSessionDetailPayloadSchema, type ParsedOpencodeSession } from "./opencode-ingress";
 import { replyApproval, replyQuestion } from "./pending-input-ops";
 import { toOpenCodeRequestError } from "./request-errors";
 import {
@@ -283,15 +283,22 @@ export class OpencodeSdkAdapter
     repoPath: string;
     workingDirectory: string;
     externalSessionId: string;
+    detail: ParsedOpencodeSession;
   }): Promise<AgentSessionSummary> {
-    return this.ensureSessionState({
-      ...input,
+    const sessionRef: PolicyBoundSessionRef = {
+      repoPath: input.repoPath,
+      workingDirectory: input.workingDirectory,
+      externalSessionId: input.externalSessionId,
       runtimeKind: "opencode",
       runtimePolicy: { kind: "opencode" },
-    });
+    };
+    return this.ensureSessionState(sessionRef, input.detail);
   }
 
-  private async ensureSessionState(input: PolicyBoundSessionRef): Promise<AgentSessionSummary> {
+  private async ensureSessionState(
+    input: PolicyBoundSessionRef,
+    knownDetail?: ParsedOpencodeSession,
+  ): Promise<AgentSessionSummary> {
     assertOpenCodeRuntimePolicyBinding(input, "ensure OpenCode session state");
     const existing = this.sessions.get(input.externalSessionId);
     if (existing) {
@@ -334,11 +341,24 @@ export class OpencodeSdkAdapter
         workingDirectory: input.workingDirectory,
       });
     }
-    const detail = await client.session.get({
-      directory: input.workingDirectory,
-      sessionID: input.externalSessionId,
-    });
-    const detailData = unwrapData(detail, "get session");
+    let detailRecord: ParsedOpencodeSession;
+    if (knownDetail) {
+      if (
+        knownDetail.id !== input.externalSessionId ||
+        knownDetail.directory !== input.workingDirectory
+      ) {
+        throw new Error(
+          `Cannot observe OpenCode session '${input.externalSessionId}' in '${input.workingDirectory}' from detail '${knownDetail.id}' in '${knownDetail.directory}'.`,
+        );
+      }
+      detailRecord = knownDetail;
+    } else {
+      const detail = await client.session.get({
+        directory: input.workingDirectory,
+        sessionID: input.externalSessionId,
+      });
+      detailRecord = opencodeSessionDetailPayloadSchema.parse(unwrapData(detail, "get session"));
+    }
     if (policy) {
       await applySessionPolicy({
         client,
@@ -347,7 +367,6 @@ export class OpencodeSdkAdapter
         workingDirectory: input.workingDirectory,
       });
     }
-    const detailRecord = opencodeSessionDetailPayloadSchema.parse(detailData);
     const startedAt = toIsoFromEpoch(detailRecord.time.created, this.now);
     const sessionInput = toExistingSessionInput(input);
 

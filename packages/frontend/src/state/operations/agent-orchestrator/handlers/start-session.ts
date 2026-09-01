@@ -49,7 +49,6 @@ export const createStartAgentSession = ({
 }: StartSessionDependencies) => {
   const executePreparedLaunch = createExecutePreparedSessionLaunch({
     adapter: runtime.adapter,
-    replaceSession: session.replaceSession,
     removeSession: session.removeSession,
     loadSettingsSnapshot: model.loadSettingsSnapshot,
     repoEpochRef: repo.repoEpochRef,
