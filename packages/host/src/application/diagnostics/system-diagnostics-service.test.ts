@@ -11,6 +11,7 @@ import { createGithubCliAdapter } from "../../adapters/git-providers/github-cli"
 import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { HostOperationError } from "../../effect/host-errors";
+import type { GithubCliPort } from "../../ports/github-cli-port";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { SystemCommandPort, SystemCommandRunResult } from "../../ports/system-command-port";
@@ -390,6 +391,34 @@ describe("createSystemDiagnosticsService", () => {
     expect(check.errors).toEqual([
       "git not found. Checked OPENDUCKTOR_GIT_PATH, PATH. Install git and ensure it is available on PATH, or set OPENDUCKTOR_GIT_PATH.",
     ]);
+  });
+  test("runtimeCheck reports the GitHub authentication probe failure", async () => {
+    const githubCli: GithubCliPort = {
+      getAuth: () =>
+        Effect.fail(
+          new HostOperationError({
+            operation: "github.auth",
+            message: "gh api failed",
+          }),
+        ),
+      readVersion: () => Effect.succeed("gh version 2.80.0"),
+      run: () => Effect.die("unexpected GitHub command"),
+    };
+    const service = createSystemDiagnosticsServiceForTest({
+      githubCli,
+      runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
+      runtimeHealth: createRuntimeHealthPort(),
+      settingsConfig: createSettingsConfig(null),
+      systemCommands: createSystemCommandPort(),
+      repoStoreDiagnostics: createTaskStore(),
+    });
+
+    const check = await Effect.runPromise(service.runtimeCheck(true));
+
+    expect(check.ghOk).toBe(true);
+    expect(check.ghAuthOk).toBe(false);
+    expect(check.ghAuthLogin).toBeNull();
+    expect(check.ghAuthError).toBe("Failed to query GitHub authentication status: gh api failed");
   });
   test("runtimeCheck reports unhealthy CLI tools when version probes fail", async () => {
     const service = createSystemDiagnosticsServiceForTest({

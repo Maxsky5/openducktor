@@ -47,20 +47,19 @@ const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
     return (yield* settingsConfig.readConfig()) ?? createDefaultGlobalConfig();
   });
 const probeGithubAuthStatus = (githubCli: GithubCliPort, ghCommand: string) =>
-  Effect.gen(function* () {
-    const result = yield* githubCli.getAuth(ghCommand, "github.com");
-    return {
-      ghAuthOk: result.authenticated,
-      ghAuthLogin: result.account,
-      ghAuthError: result.reason,
-    };
-  }).pipe(
-    Effect.catchAll(() =>
-      Effect.succeed({
-        ghAuthOk: false,
-        ghAuthLogin: null,
-        ghAuthError: "Failed to query GitHub authentication status.",
-      }),
+  Effect.either(githubCli.getAuth(ghCommand, "github.com")).pipe(
+    Effect.map((result) =>
+      result._tag === "Right"
+        ? {
+            ghAuthOk: result.right.authenticated,
+            ghAuthLogin: result.right.account,
+            ghAuthError: result.right.reason,
+          }
+        : {
+            ghAuthOk: false,
+            ghAuthLogin: null,
+            ghAuthError: `Failed to query GitHub authentication status: ${errorMessage(result.left)}`,
+          },
     ),
   );
 const buildTaskStoreCheck = (repoStoreHealth: RepoStoreHealth): TaskStoreCheck => {
