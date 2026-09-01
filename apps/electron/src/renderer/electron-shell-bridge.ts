@@ -65,7 +65,7 @@ export const createElectronShellBridge = (): ShellBridge => {
       getCapability: () => electronApi.notifications.getCapability(),
       requestPermission: () => electronApi.notifications.requestPermission(),
       isAppFocused: () => electronApi.notifications.isAppFocused(),
-      isExternalDeliveryOwner: () => true,
+      claimExternalDelivery: async () => true,
       showOsNotification: (request) => electronApi.notifications.show(request),
       publishOccurrence: () => {},
       subscribeOccurrences: () => () => {},

@@ -1,7 +1,7 @@
 import { notificationOccurrenceSchema, type NotificationOccurrence } from "@openducktor/contracts";
 
 const OCCURRENCE_CHANNEL_NAME = "openducktor:notifications:occurrences";
-const EXTERNAL_DELIVERY_LOCK_NAME = "openducktor:notifications:external-delivery";
+const EXTERNAL_DELIVERY_LOCK_PREFIX = "openducktor:notifications:external-delivery";
 const APP_FOCUS_LOCK_NAME = "openducktor:notifications:app-focus";
 
 type BroadcastChannelLike = {
@@ -12,11 +12,12 @@ type BroadcastChannelLike = {
 };
 
 type LockSnapshot = { held?: Array<{ name?: string }> };
+type LockHandle = { name: string };
 type LockManagerLike = {
   request(
     name: string,
-    options: { mode: "exclusive" | "shared"; signal?: AbortSignal },
-    callback: () => Promise<void>,
+    options: { mode: "exclusive" | "shared"; signal?: AbortSignal; ifAvailable?: boolean },
+    callback: (lock: LockHandle | null) => Promise<void>,
   ): Promise<void>;
   query(): Promise<LockSnapshot>;
 };
@@ -32,7 +33,7 @@ export type BrowserNotificationCoordinator = {
   getFailureMessage(): string | null;
   publishOccurrence(occurrence: NotificationOccurrence): void;
   subscribeOccurrences(listener: (occurrence: NotificationOccurrence) => void): () => void;
-  isExternalDeliveryOwner(): boolean;
+  claimExternalDelivery(occurrenceId: string): Promise<boolean>;
   isAnyTabFocused(): Promise<boolean>;
   dispose(): void;
 };
@@ -59,8 +60,8 @@ const getDefaultLocks = (): LockManagerLike | null => {
   }
   return {
     request: (name, options, callback) =>
-      locks.request<void>(name, options, async () => {
-        await callback();
+      locks.request<void>(name, options, async (lock) => {
+        await callback(lock ? { name: lock.name } : null);
       }),
     query: async () => {
       const snapshot = await locks.query();
@@ -85,7 +86,7 @@ export const createBrowserNotificationCoordinator = ({
         "This browser cannot coordinate notifications and sound across tabs.",
       publishOccurrence: () => {},
       subscribeOccurrences: () => () => {},
-      isExternalDeliveryOwner: () => false,
+      claimExternalDelivery: async () => false,
       isAnyTabFocused: async () => false,
       dispose: () => channel?.close(),
     };
@@ -93,11 +94,11 @@ export const createBrowserNotificationCoordinator = ({
 
   let disposed = false;
   let failureMessage: string | null = null;
-  let externalDeliveryOwner = false;
-  let releaseExternalDeliveryLock: (() => void) | null = null;
   let releaseFocusLock: (() => void) | null = null;
   let focusLockAbortController: AbortController | null = null;
-  const externalLockAbortController = new AbortController();
+  const externalClaimResults = new Map<string, Promise<boolean>>();
+  const externalClaimAbortControllers = new Set<AbortController>();
+  const externalClaimReleases = new Map<string, () => void>();
   const occurrenceListeners = new Set<(occurrence: NotificationOccurrence) => void>();
 
   const handleMessage = (event: MessageEvent<unknown>): void => {
@@ -111,27 +112,41 @@ export const createBrowserNotificationCoordinator = ({
   };
   channel.addEventListener("message", handleMessage);
 
-  void locks
-    .request(
-      EXTERNAL_DELIVERY_LOCK_NAME,
-      { mode: "exclusive", signal: externalLockAbortController.signal },
-      async () => {
-        if (disposed) {
-          return;
-        }
-        externalDeliveryOwner = true;
-        await new Promise<void>((resolve) => {
-          releaseExternalDeliveryLock = resolve;
-        });
-        releaseExternalDeliveryLock = null;
-        externalDeliveryOwner = false;
-      },
-    )
-    .catch((cause: unknown) => {
-      if (!externalLockAbortController.signal.aborted) {
-        failureMessage = cause instanceof Error ? cause.message : String(cause);
-      }
+  const claimExternalDelivery = (occurrenceId: string): Promise<boolean> => {
+    const existingClaim = externalClaimResults.get(occurrenceId);
+    if (existingClaim) return existingClaim;
+    if (disposed) return Promise.resolve(false);
+
+    const controller = new AbortController();
+    externalClaimAbortControllers.add(controller);
+    const claim = new Promise<boolean>((resolve) => {
+      void locks
+        .request(
+          `${EXTERNAL_DELIVERY_LOCK_PREFIX}:${occurrenceId}`,
+          { mode: "exclusive", ifAvailable: true, signal: controller.signal },
+          async (lock) => {
+            if (!lock || disposed) {
+              resolve(false);
+              return;
+            }
+            resolve(true);
+            await new Promise<void>((release) => {
+              externalClaimReleases.set(occurrenceId, release);
+            });
+            externalClaimReleases.delete(occurrenceId);
+          },
+        )
+        .catch((cause: unknown) => {
+          resolve(false);
+          if (!controller.signal.aborted) {
+            failureMessage = cause instanceof Error ? cause.message : String(cause);
+          }
+        })
+        .finally(() => externalClaimAbortControllers.delete(controller));
     });
+    externalClaimResults.set(occurrenceId, claim);
+    return claim;
+  };
 
   const releaseFocusedState = (): void => {
     focusLockAbortController?.abort();
@@ -185,7 +200,7 @@ export const createBrowserNotificationCoordinator = ({
       occurrenceListeners.add(listener);
       return () => occurrenceListeners.delete(listener);
     },
-    isExternalDeliveryOwner: () => externalDeliveryOwner,
+    claimExternalDelivery,
     async isAnyTabFocused() {
       const snapshot = await locks.query();
       return snapshot.held?.some((lock) => lock.name === APP_FOCUS_LOCK_NAME) ?? false;
@@ -195,8 +210,10 @@ export const createBrowserNotificationCoordinator = ({
         return;
       }
       disposed = true;
-      externalLockAbortController.abort();
-      releaseExternalDeliveryLock?.();
+      for (const controller of externalClaimAbortControllers) controller.abort();
+      for (const release of externalClaimReleases.values()) release();
+      externalClaimAbortControllers.clear();
+      externalClaimReleases.clear();
       releaseFocusedState();
       occurrenceListeners.clear();
       channel.removeEventListener("message", handleMessage);

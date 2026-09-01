@@ -5,8 +5,9 @@ import { createBrowserNotificationCoordinator } from "./browser-notification-coo
 type LockRequest = {
   name: string;
   mode: "exclusive" | "shared";
+  ifAvailable: boolean;
   signal: AbortSignal | undefined;
-  callback: () => Promise<void>;
+  callback: (lock: { name: string } | null) => Promise<void>;
   resolve(): void;
   reject(cause: Error): void;
   active: boolean;
@@ -17,13 +18,14 @@ class FakeLockManager {
 
   request(
     name: string,
-    options: { mode: "exclusive" | "shared"; signal?: AbortSignal },
-    callback: () => Promise<void>,
+    options: { mode: "exclusive" | "shared"; signal?: AbortSignal; ifAvailable?: boolean },
+    callback: (lock: { name: string } | null) => Promise<void>,
   ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const request: LockRequest = {
         name,
         mode: options.mode,
+        ifAvailable: options.ifAvailable ?? false,
         signal: options.signal,
         callback,
         resolve,
@@ -57,6 +59,12 @@ class FakeLockManager {
     const active = matching.filter((request) => request.active);
     const pending = matching.filter((request) => !request.active);
     if (pending.length === 0 || active.some((request) => request.mode === "exclusive")) {
+      const unavailable = pending.filter((request) => request.ifAvailable);
+      for (const request of unavailable) {
+        const index = this.requests.indexOf(request);
+        if (index >= 0) this.requests.splice(index, 1);
+        void request.callback(null).then(request.resolve, request.reject);
+      }
       return;
     }
     const next = pending[0];
@@ -70,7 +78,7 @@ class FakeLockManager {
       next.mode === "shared" ? pending.filter((request) => request.mode === "shared") : [next];
     for (const request of ready) {
       request.active = true;
-      void request.callback().then(
+      void request.callback({ name: request.name }).then(
         () => {
           const index = this.requests.indexOf(request);
           if (index >= 0) {
@@ -82,6 +90,7 @@ class FakeLockManager {
         (cause) => request.reject(cause instanceof Error ? cause : new Error(String(cause))),
       );
     }
+    this.drain(name);
   }
 }
 
@@ -149,16 +158,6 @@ class FakeFocusWindow {
   }
 }
 
-const waitFor = async (condition: () => boolean): Promise<void> => {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    if (condition()) {
-      return;
-    }
-    await Promise.resolve();
-  }
-  throw new Error("Condition was not met.");
-};
-
 const waitForAsync = async (condition: () => Promise<boolean>): Promise<void> => {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     if (await condition()) {
@@ -180,7 +179,33 @@ const occurrence: NotificationOccurrence = {
 };
 
 describe("browser notification coordinator", () => {
-  test("broadcasts semantic occurrences and hands leadership to the next tab", async () => {
+  test("claims external delivery once when an occurrence arrives during startup", async () => {
+    const locks = new FakeLockManager();
+    const hub = new FakeBroadcastHub();
+    const first = createBrowserNotificationCoordinator({
+      channel: hub.createChannel(),
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+    });
+    const second = createBrowserNotificationCoordinator({
+      channel: hub.createChannel(),
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+    });
+
+    expect(
+      await Promise.all([
+        first.claimExternalDelivery(occurrence.occurrenceId),
+        second.claimExternalDelivery(occurrence.occurrenceId),
+      ]),
+    ).toEqual([true, false]);
+    first.dispose();
+    second.dispose();
+  });
+
+  test("claims a new occurrence without an ownerless window after disposal", async () => {
     const locks = new FakeLockManager();
     const hub = new FakeBroadcastHub();
     const first = createBrowserNotificationCoordinator({
@@ -198,15 +223,13 @@ describe("browser notification coordinator", () => {
     const received: NotificationOccurrence[] = [];
     second.subscribeOccurrences((value) => received.push(value));
 
-    await waitFor(() => first.isExternalDeliveryOwner());
-    expect(second.isExternalDeliveryOwner()).toBe(false);
+    expect(await first.claimExternalDelivery(occurrence.occurrenceId)).toBe(true);
     expect(first.getFailureMessage()).toBeNull();
     first.publishOccurrence(occurrence);
     expect(received).toEqual([occurrence]);
 
     first.dispose();
-    await waitFor(() => second.isExternalDeliveryOwner());
-    expect(second.isExternalDeliveryOwner()).toBe(true);
+    expect(await second.claimExternalDelivery(`${occurrence.occurrenceId}:next`)).toBe(true);
     second.dispose();
   });
 

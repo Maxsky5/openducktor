@@ -21,7 +21,7 @@ const createBridge = (overrides: Partial<NotificationBridge> = {}): Notification
     canGuaranteeSilent: true,
   }),
   isAppFocused: async () => false,
-  isExternalDeliveryOwner: () => true,
+  claimExternalDelivery: async () => true,
   showOsNotification: async () => ({ status: "shown" }),
   publishOccurrence: () => {},
   subscribeOccurrences: () => () => {},
@@ -115,6 +115,37 @@ describe("notification runtime tests", () => {
 
     const result = await runtime.testOs(createDefaultNotificationSettings());
     expect(result.status).toBe("denied");
+    expect(showOsNotification).not.toHaveBeenCalled();
+  });
+
+  test("does not send OS delivery when another browser tab wins the occurrence claim", async () => {
+    const showOsNotification = mock(async (_request: NotificationOsDeliveryRequest) => ({
+      status: "shown" as const,
+    }));
+    const runtime = createNotificationRuntime({
+      bridge: createBridge({
+        claimExternalDelivery: async () => false,
+        showOsNotification,
+      }),
+      loadSettings: async () => {
+        const settings = createDefaultNotificationSettings();
+        settings.volumePercent = 0;
+        return settings;
+      },
+      navigate: async () => {},
+      onFailure: () => {},
+    });
+
+    await runtime.dispatch({
+      occurrenceId: "workflow.closed:/repo:task-1:event-1",
+      kind: "workflow.closed",
+      repoPath: "/repo",
+      repositoryLabel: "Repo",
+      task: { id: "task-1", title: "Build notifications" },
+      status: "Task moved to Closed.",
+      navigationTarget: { type: "kanban_task", repoPath: "/repo", taskId: "task-1" },
+    });
+
     expect(showOsNotification).not.toHaveBeenCalled();
   });
 });
