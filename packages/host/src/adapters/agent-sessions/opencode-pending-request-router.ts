@@ -16,7 +16,7 @@ export type OpenCodePendingRoute = {
   readonly ref: AgentSessionLiveRef;
 };
 
-export type PreparedOpenCodePendingRequest<
+export type StagedOpenCodeRequest<
   Request extends AgentSessionLivePendingApprovalRequest | AgentSessionLivePendingQuestionRequest,
 > = {
   readonly request: Request;
@@ -41,7 +41,7 @@ export const createOpenCodePendingRequestRouter = ({
   const routesByOccurrenceId = new Map<string, OpenCodePendingRoute>();
   const occurrenceIdByNativeKey = new Map<string, string>();
 
-  const prepareRoute = (
+  const stageRoute = (
     ref: AgentSessionLiveRef,
     kind: OpenCodePendingRoute["kind"],
     nativeRequestId: string,
@@ -57,11 +57,11 @@ export const createOpenCodePendingRequestRouter = ({
   };
 
   return {
-    prepareApproval: (
+    stageApproval: (
       ref: AgentSessionLiveRef,
       request: AgentPendingApprovalRequest,
-    ): PreparedOpenCodePendingRequest<AgentSessionLivePendingApprovalRequest> => {
-      const route = prepareRoute(ref, "approval", request.requestId);
+    ): StagedOpenCodeRequest<AgentSessionLivePendingApprovalRequest> => {
+      const route = stageRoute(ref, "approval", request.requestId);
       const {
         metadata: _metadata,
         requestInstanceId: _requestInstanceId,
@@ -75,11 +75,11 @@ export const createOpenCodePendingRequestRouter = ({
         }),
       };
     },
-    prepareQuestion: (
+    stageQuestion: (
       ref: AgentSessionLiveRef,
       request: AgentPendingQuestionRequest,
-    ): PreparedOpenCodePendingRequest<AgentSessionLivePendingQuestionRequest> => {
-      const route = prepareRoute(ref, "question", request.requestId);
+    ): StagedOpenCodeRequest<AgentSessionLivePendingQuestionRequest> => {
+      const route = stageRoute(ref, "question", request.requestId);
       const { requestInstanceId: _requestInstanceId, ...publicRequest } = request;
       return {
         route,
@@ -89,15 +89,15 @@ export const createOpenCodePendingRequestRouter = ({
         }),
       };
     },
-    commitPrepared: (
-      prepared: PreparedOpenCodePendingRequest<
+    save: (
+      staged: StagedOpenCodeRequest<
         AgentSessionLivePendingApprovalRequest | AgentSessionLivePendingQuestionRequest
       >,
     ): void => {
-      routesByOccurrenceId.set(prepared.route.occurrenceId, prepared.route);
+      routesByOccurrenceId.set(staged.route.occurrenceId, staged.route);
       occurrenceIdByNativeKey.set(
-        nativeRouteKey(prepared.route.ref, prepared.route.kind, prepared.route.nativeRequestId),
-        prepared.route.occurrenceId,
+        nativeRouteKey(staged.route.ref, staged.route.kind, staged.route.nativeRequestId),
+        staged.route.occurrenceId,
       );
     },
     findNative: (

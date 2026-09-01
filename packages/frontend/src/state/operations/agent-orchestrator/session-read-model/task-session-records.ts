@@ -36,7 +36,7 @@ export const toTaskSessionRecords = (
   };
 };
 
-export const toRegisteredSessionRefs = (
+export const toWorkflowRootRefs = (
   repoPath: string,
   records: LoadedWorkflowSessionRecords,
 ): AgentSessionLiveRef[] => {

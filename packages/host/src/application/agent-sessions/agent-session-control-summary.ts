@@ -6,13 +6,13 @@ import type { AgentSessionSummary } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 
-export const toAgentSessionControlMetadata = (
+export const toAgentSessionControlSummary = (
   summary: AgentSessionSummary,
   operation: string,
 ): Effect.Effect<AgentSessionControlSummary, HostValidationError<{ operation: string }>> =>
   Effect.try({
     try: () => {
-      const metadata: AgentSessionControlSummary = {
+      const control: AgentSessionControlSummary = {
         externalSessionId: summary.externalSessionId,
         runtimeKind: summary.runtimeKind,
         workingDirectory: summary.workingDirectory,
@@ -20,9 +20,9 @@ export const toAgentSessionControlMetadata = (
         status: summary.status,
       };
       if (summary.title !== undefined) {
-        metadata.title = summary.title;
+        control.title = summary.title;
       }
-      return agentSessionControlSummarySchema.parse(metadata);
+      return agentSessionControlSummarySchema.parse(control);
     },
     catch: (cause) =>
       new HostValidationError({

@@ -20,7 +20,7 @@ import {
   type OpenCodePendingRoute,
 } from "./opencode-pending-request-router";
 import { toOpenCodeRetainedControlSummary } from "./opencode-live-session-control-summary";
-import { refreshOpenCodeRegisteredSources } from "./opencode-live-session-source-refresh";
+import { applyOpenCodeWorkflowRoots } from "./opencode-live-session-source-refresh";
 import {
   openCodeActivityForPending,
   openCodeActivityFromEvent,
@@ -40,7 +40,7 @@ export const createOpenCodeLiveSessionState = ({
 }) => {
   const sessionsByRef = new Map<string, OpenCodeRetainedSession>();
   let dropCount = 0;
-  const registeredRootsByRef = new Map<string, AgentSessionLiveRef>();
+  const workflowRootsByRef = new Map<string, AgentSessionLiveRef>();
   const contextUsageBySessionId = new Map<string, AgentSessionContextUsage>();
   const pendingRequests = createOpenCodePendingRequestRouter({
     runtimeId: runtime.runtimeId,
@@ -220,7 +220,7 @@ export const createOpenCodeLiveSessionState = ({
         subagentCorrelationKey: _subagentCorrelationKey,
         ...nativeRequest
       } = event;
-      const prepared = pendingRequests.prepareApproval(ref, nativeRequest);
+      const staged = pendingRequests.stageApproval(ref, nativeRequest);
       const next = {
         ...retained,
         snapshot: parseOpenCodeLiveSnapshot(
@@ -229,15 +229,15 @@ export const createOpenCodeLiveSessionState = ({
             activity: "waiting_for_permission",
             pendingApprovals: [
               ...retained.snapshot.pendingApprovals.filter(
-                (candidate) => candidate.requestId !== prepared.request.requestId,
+                (candidate) => candidate.requestId !== staged.request.requestId,
               ),
-              prepared.request,
+              staged.request,
             ],
           },
           "opencode-live-session.retain-approval",
         ),
       };
-      pendingRequests.commitPrepared(prepared);
+      pendingRequests.save(staged);
       return commitSnapshot(next);
     }
     if (event.type === "question_required") {
@@ -250,7 +250,7 @@ export const createOpenCodeLiveSessionState = ({
         subagentCorrelationKey: _subagentCorrelationKey,
         ...nativeRequest
       } = event;
-      const prepared = pendingRequests.prepareQuestion(ref, nativeRequest);
+      const staged = pendingRequests.stageQuestion(ref, nativeRequest);
       const next = {
         ...retained,
         snapshot: parseOpenCodeLiveSnapshot(
@@ -259,15 +259,15 @@ export const createOpenCodeLiveSessionState = ({
             activity: "waiting_for_question",
             pendingQuestions: [
               ...retained.snapshot.pendingQuestions.filter(
-                (candidate) => candidate.requestId !== prepared.request.requestId,
+                (candidate) => candidate.requestId !== staged.request.requestId,
               ),
-              prepared.request,
+              staged.request,
             ],
           },
           "opencode-live-session.retain-question",
         ),
       };
-      pendingRequests.commitPrepared(prepared);
+      pendingRequests.save(staged);
       return commitSnapshot(next);
     }
     if (event.type === "approval_resolved" || event.type === "question_resolved") {
@@ -445,22 +445,22 @@ export const createOpenCodeLiveSessionState = ({
     retainContext,
     applyLoadedContext,
     retainControlSummary,
-    refreshRegisteredSources: (
-      results: Parameters<typeof refreshOpenCodeRegisteredSources>[0]["results"],
+    applyWorkflowRoots: (
+      results: Parameters<typeof applyOpenCodeWorkflowRoots>[0]["results"],
     ): AgentSessionLiveAdapterChange[] => {
-      const changes = refreshOpenCodeRegisteredSources({
+      const changes = applyOpenCodeWorkflowRoots({
         runtime,
         results,
-        previousRegisteredRoots: [...registeredRootsByRef.values()],
-        retainedSnapshots: [...sessionsByRef.values()].map(({ snapshot }) => snapshot),
+        oldRoots: [...workflowRootsByRef.values()],
+        snapshots: [...sessionsByRef.values()].map(({ snapshot }) => snapshot),
         contextUsageBySessionId,
         pendingRequests,
-        commitSnapshot,
+        saveSession: commitSnapshot,
         removeSession,
       });
-      registeredRootsByRef.clear();
+      workflowRootsByRef.clear();
       for (const result of results) {
-        registeredRootsByRef.set(refKey(result.ref), toSessionRef(result.ref));
+        workflowRootsByRef.set(refKey(result.ref), toSessionRef(result.ref));
       }
       return changes;
     },
@@ -485,7 +485,7 @@ export const createOpenCodeLiveSessionState = ({
       const refs = [...sessionsByRef.values()].map(({ snapshot }) => toSessionRef(snapshot.ref));
       dropCount += refs.length;
       sessionsByRef.clear();
-      registeredRootsByRef.clear();
+      workflowRootsByRef.clear();
       pendingRequests.clear();
       contextUsageBySessionId.clear();
       return refs;

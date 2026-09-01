@@ -11,8 +11,8 @@ import type {
 } from "@openducktor/core";
 import {
   applyOpencodeAwaitingTurnStartToRuntimeSnapshot,
-  type OpencodeRegisteredRuntimeRefreshResult,
-  readOpencodeRegisteredRuntimeSnapshotSources,
+  type OpencodeWorkflowRootRead,
+  readOpencodeWorkflowRoots,
 } from "./live-session-snapshots";
 import { readSessionLifecycleEvent } from "./event-stream/shared";
 import type { ParsedOpencodeEvent as Event } from "./opencode-global-event-ingress";
@@ -55,7 +55,7 @@ export type {
 export type OpencodeSessionRuntimeConnection = {
   readonly refreshRegisteredSessions: (
     refs: ReadonlyArray<SessionRef>,
-  ) => Promise<OpencodeRegisteredRuntimeRefreshResult[]>;
+  ) => Promise<OpencodeWorkflowRootRead[]>;
   readonly loadContextUsage: (ref: SessionRef) => Promise<OpencodeSessionContextUsage | null>;
   readonly replyApproval: (input: OpencodeNativeApprovalReply) => Promise<void>;
   readonly replyQuestion: (input: OpencodeNativeQuestionReply) => Promise<void>;
@@ -322,7 +322,7 @@ export const createPrepareOpencodeSessionRuntime = (
 
     const connection: OpencodeSessionRuntimeConnection = {
       refreshRegisteredSessions: async (refs) => {
-        const results = await readOpencodeRegisteredRuntimeSnapshotSources({
+        const results = await readOpencodeWorkflowRoots({
           createClient,
           runtimeEndpoint: input.runtimeEndpoint,
           refs,

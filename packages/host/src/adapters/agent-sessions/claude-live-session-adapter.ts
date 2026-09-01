@@ -8,7 +8,7 @@ import {
 import type { AgentSessionSummary } from "@openducktor/core";
 import { Effect } from "effect";
 import type { z } from "zod";
-import { toAgentSessionControlMetadata } from "../../application/agent-sessions/agent-session-control-metadata";
+import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
 import type { ClaudePendingInputResolution } from "../../application/runtimes/claude-agent-sdk-service";
 import { requireClaudeWorkspaceWorkingDirectory } from "../../application/runtimes/claude-workspace-runtime";
 import {
@@ -253,7 +253,7 @@ export const createClaudeLiveSessionAdapterPreparer =
                 changes: state.retainControlSummary(summary, options),
               })),
             ),
-            Effect.flatMap((summary) => toAgentSessionControlMetadata(summary, operation)),
+            Effect.flatMap((summary) => toAgentSessionControlSummary(summary, operation)),
           ),
         );
 

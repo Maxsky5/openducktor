@@ -1,5 +1,5 @@
 export type {
-  OpencodeRegisteredRuntimeRefreshResult,
+  OpencodeWorkflowRootRead,
   OpencodeRuntimeSnapshotSource,
 } from "./live-session-snapshots";
 export { OpencodeSdkAdapter } from "./opencode-sdk-adapter";

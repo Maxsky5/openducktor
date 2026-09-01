@@ -209,7 +209,7 @@ describe("OpenCode host live-session state", () => {
       questions: [],
     });
 
-    state.refreshRegisteredSources([
+    state.applyWorkflowRoots([
       {
         type: "present",
         ref: parentRef,
@@ -241,7 +241,7 @@ describe("OpenCode host live-session state", () => {
       throw new Error("Expected a retained OpenDucktor parent.");
     }
 
-    expect(state.refreshRegisteredSources([{ type: "missing", ref: parentRef }])).toEqual([
+    expect(state.applyWorkflowRoots([{ type: "missing", ref: parentRef }])).toEqual([
       { type: "session_removed", ref: parentRef },
     ]);
     expect(state.listSnapshots()).toEqual([]);
@@ -255,9 +255,9 @@ describe("OpenCode host live-session state", () => {
       throw new Error("Expected a retained OpenDucktor parent.");
     }
 
-    expect(state.refreshRegisteredSources([])).toEqual([]);
+    expect(state.applyWorkflowRoots([])).toEqual([]);
     expect(state.listSnapshots()).toHaveLength(1);
-    state.refreshRegisteredSources([
+    state.applyWorkflowRoots([
       {
         type: "present",
         ref: parentRef,
@@ -276,9 +276,7 @@ describe("OpenCode host live-session state", () => {
       },
     ]);
 
-    expect(state.refreshRegisteredSources([])).toEqual([
-      { type: "session_removed", ref: parentRef },
-    ]);
+    expect(state.applyWorkflowRoots([])).toEqual([{ type: "session_removed", ref: parentRef }]);
     expect(state.listSnapshots()).toEqual([]);
   });
 

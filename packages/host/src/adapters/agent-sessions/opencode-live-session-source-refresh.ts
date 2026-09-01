@@ -1,4 +1,4 @@
-import type { OpencodeRegisteredRuntimeRefreshResult } from "@openducktor/adapters-opencode-sdk";
+import type { OpencodeWorkflowRootRead } from "@openducktor/adapters-opencode-sdk";
 import type {
   AgentSessionContextUsage,
   AgentSessionLiveRef,
@@ -10,7 +10,7 @@ import type { OpenCodeRuntimeInstance } from "./opencode-live-session-normalizat
 import { refKey, toSessionRef } from "./opencode-live-session-normalization";
 import type {
   OpenCodePendingRequestRouter,
-  PreparedOpenCodePendingRequest,
+  StagedOpenCodeRequest,
 } from "./opencode-pending-request-router";
 import {
   openCodeActivityForPending,
@@ -19,25 +19,25 @@ import {
   parseOpenCodeLiveSnapshot,
 } from "./opencode-live-session-state-policy";
 
-type RefreshOpenCodeRegisteredSourcesInput = {
+type ApplyOpenCodeWorkflowRootsInput = {
   runtime: OpenCodeRuntimeInstance;
-  results: ReadonlyArray<OpencodeRegisteredRuntimeRefreshResult>;
-  previousRegisteredRoots: ReadonlyArray<AgentSessionLiveRef>;
-  retainedSnapshots: ReadonlyArray<AgentSessionLiveSnapshot>;
+  results: ReadonlyArray<OpencodeWorkflowRootRead>;
+  oldRoots: ReadonlyArray<AgentSessionLiveRef>;
+  snapshots: ReadonlyArray<AgentSessionLiveSnapshot>;
   contextUsageBySessionId: ReadonlyMap<string, AgentSessionContextUsage>;
   pendingRequests: OpenCodePendingRequestRouter;
-  commitSnapshot: (retained: OpenCodeRetainedSession) => AgentSessionLiveAdapterChange[];
+  saveSession: (session: OpenCodeRetainedSession) => AgentSessionLiveAdapterChange[];
   removeSession: (ref: AgentSessionLiveRef) => AgentSessionLiveAdapterChange[];
 };
 
-type AnyPreparedRequest = PreparedOpenCodePendingRequest<
+type StagedRequest = StagedOpenCodeRequest<
   | AgentSessionLiveSnapshot["pendingApprovals"][number]
   | AgentSessionLiveSnapshot["pendingQuestions"][number]
 >;
 
-type PreparedSource = {
-  readonly retained: OpenCodeRetainedSession;
-  readonly pending: ReadonlyArray<AnyPreparedRequest>;
+type StagedSession = {
+  readonly session: OpenCodeRetainedSession;
+  readonly requests: ReadonlyArray<StagedRequest>;
 };
 
 const isDescendantOf = (
@@ -59,25 +59,23 @@ const isDescendantOf = (
   return false;
 };
 
-export const refreshOpenCodeRegisteredSources = ({
+export const applyOpenCodeWorkflowRoots = ({
   runtime,
   results,
-  previousRegisteredRoots,
-  retainedSnapshots,
+  oldRoots,
+  snapshots,
   contextUsageBySessionId,
   pendingRequests,
-  commitSnapshot,
+  saveSession,
   removeSession,
-}: RefreshOpenCodeRegisteredSourcesInput): AgentSessionLiveAdapterChange[] => {
-  const snapshotsByRef = new Map(
-    retainedSnapshots.map((snapshot) => [refKey(snapshot.ref), snapshot]),
-  );
-  const refsToRemove: AgentSessionLiveRef[] = [];
-  const preparedSources: PreparedSource[] = [];
-  const nextRegisteredRootKeys = new Set(results.map(({ ref }) => refKey(ref)));
-  for (const ref of previousRegisteredRoots) {
-    if (!nextRegisteredRootKeys.has(refKey(ref))) {
-      refsToRemove.push(ref);
+}: ApplyOpenCodeWorkflowRootsInput): AgentSessionLiveAdapterChange[] => {
+  const snapshotsByRef = new Map(snapshots.map((snapshot) => [refKey(snapshot.ref), snapshot]));
+  const refsToDrop: AgentSessionLiveRef[] = [];
+  const stagedSessions: StagedSession[] = [];
+  const nextRootKeys = new Set(results.map(({ ref }) => refKey(ref)));
+  for (const ref of oldRoots) {
+    if (!nextRootKeys.has(refKey(ref))) {
+      refsToDrop.push(ref);
     }
   }
 
@@ -90,16 +88,16 @@ export const refreshOpenCodeRegisteredSources = ({
       });
     }
     if (result.type === "missing") {
-      refsToRemove.push(result.ref);
+      refsToDrop.push(result.ref);
       continue;
     }
-    const rootSource = result.sources.find(
+    const root = result.sources.find(
       (source) =>
         source.externalSessionId === result.ref.externalSessionId &&
         source.workingDirectory === result.ref.workingDirectory &&
         source.parentExternalSessionId === undefined,
     );
-    if (!rootSource) {
+    if (!root) {
       throw new HostValidationError({
         field: "registeredSessionRef",
         message: `OpenCode did not return registered session '${result.ref.externalSessionId}' in '${result.ref.workingDirectory}'.`,
@@ -107,7 +105,7 @@ export const refreshOpenCodeRegisteredSources = ({
       });
     }
 
-    const sourceRefKeys = new Set(
+    const readKeys = new Set(
       result.sources.map((source) =>
         refKey({
           repoPath: runtime.repoPath,
@@ -117,12 +115,12 @@ export const refreshOpenCodeRegisteredSources = ({
         }),
       ),
     );
-    for (const snapshot of retainedSnapshots) {
+    for (const snapshot of snapshots) {
       if (
         isDescendantOf(snapshot, result.ref, snapshotsByRef) &&
-        !sourceRefKeys.has(refKey(snapshot.ref))
+        !readKeys.has(refKey(snapshot.ref))
       ) {
-        refsToRemove.push(snapshot.ref);
+        refsToDrop.push(snapshot.ref);
       }
     }
 
@@ -133,19 +131,19 @@ export const refreshOpenCodeRegisteredSources = ({
         workingDirectory: source.workingDirectory,
         externalSessionId: source.externalSessionId,
       };
-      const preparedApprovals = source.pendingApprovals.map((request) =>
-        pendingRequests.prepareApproval(ref, request),
+      const approvals = source.pendingApprovals.map((request) =>
+        pendingRequests.stageApproval(ref, request),
       );
-      const preparedQuestions = source.pendingQuestions.map((request) =>
-        pendingRequests.prepareQuestion(ref, request),
+      const questions = source.pendingQuestions.map((request) =>
+        pendingRequests.stageQuestion(ref, request),
       );
       const snapshotInput: OpenCodeLiveSnapshotInput = {
         ref,
         activity: source.runtimeActivity,
         title: source.title,
         startedAt: source.startedAt,
-        pendingApprovals: preparedApprovals.map(({ request }) => request),
-        pendingQuestions: preparedQuestions.map(({ request }) => request),
+        pendingApprovals: approvals.map(({ request }) => request),
+        pendingQuestions: questions.map(({ request }) => request),
         contextUsage: contextUsageBySessionId.get(source.externalSessionId) ?? null,
       };
       if (source.parentExternalSessionId) {
@@ -154,37 +152,39 @@ export const refreshOpenCodeRegisteredSources = ({
       if (source.sessionAssociation.kind === "repository") {
         snapshotInput.repositoryScope = source.sessionAssociation;
       }
-      const retained: OpenCodeRetainedSession = {
+      const base: OpenCodeRetainedSession = {
         runtimeActivity: source.runtimeActivity,
         snapshot: parseOpenCodeLiveSnapshot(
           snapshotInput,
           "opencode-live-session.refresh-registered-source",
         ),
       };
-      retained.snapshot = parseOpenCodeLiveSnapshot(
-        { ...retained.snapshot, activity: openCodeActivityForPending(retained) },
-        "opencode-live-session.refresh-registered-activity",
-      );
-      preparedSources.push({
-        retained,
-        pending: [...preparedApprovals, ...preparedQuestions],
+      stagedSessions.push({
+        session: {
+          ...base,
+          snapshot: parseOpenCodeLiveSnapshot(
+            { ...base.snapshot, activity: openCodeActivityForPending(base) },
+            "opencode-live-session.refresh-registered-activity",
+          ),
+        },
+        requests: [...approvals, ...questions],
       });
     }
   }
 
   const changes: AgentSessionLiveAdapterChange[] = [];
-  for (const ref of refsToRemove) {
+  for (const ref of refsToDrop) {
     changes.push(...removeSession(ref));
   }
-  for (const prepared of preparedSources) {
-    for (const request of prepared.pending) {
-      pendingRequests.commitPrepared(request);
+  for (const staged of stagedSessions) {
+    for (const request of staged.requests) {
+      pendingRequests.save(request);
     }
     pendingRequests.removeMissingForSession(
-      prepared.retained.snapshot.ref,
-      new Set(prepared.pending.map(({ route }) => route.occurrenceId)),
+      staged.session.snapshot.ref,
+      new Set(staged.requests.map(({ route }) => route.occurrenceId)),
     );
-    changes.push(...commitSnapshot(prepared.retained));
+    changes.push(...saveSession(staged.session));
   }
   return changes;
 };

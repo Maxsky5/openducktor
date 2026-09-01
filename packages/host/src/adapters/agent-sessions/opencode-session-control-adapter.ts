@@ -7,7 +7,7 @@ import {
 } from "@openducktor/contracts";
 import type { AgentSessionSummary, AgentUserMessagePart } from "@openducktor/core";
 import { Effect } from "effect";
-import { toAgentSessionControlMetadata } from "../../application/agent-sessions/agent-session-control-metadata";
+import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
 import {
   type HostError,
   HostValidationError,
@@ -97,7 +97,7 @@ export const createOpenCodeSessionControlAdapter = ({
             changes: state.retainControlSummary(summary),
           })),
         ),
-        Effect.flatMap((summary) => toAgentSessionControlMetadata(summary, operation)),
+        Effect.flatMap((summary) => toAgentSessionControlSummary(summary, operation)),
       ),
     );
 

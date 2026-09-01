@@ -150,7 +150,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
                 if (dropCount !== state.dropCount()) {
                   return;
                 }
-                state.refreshRegisteredSources(results);
+                state.applyWorkflowRoots(results);
               },
               { runtimeId: runtime.runtimeId },
             ),

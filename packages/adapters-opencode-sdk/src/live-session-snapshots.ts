@@ -14,10 +14,7 @@ import {
   type ParsedOpencodeSession,
 } from "./opencode-ingress";
 import { listOpencodeLiveSessionPendingInput } from "./pending-input-ops";
-import {
-  clearAwaitingRuntimeTurnStart,
-  isAwaitingRuntimeTurnStart,
-} from "./session-activity";
+import { clearAwaitingRuntimeTurnStart, isAwaitingRuntimeTurnStart } from "./session-activity";
 import { toIsoFromEpoch } from "./session-runtime-utils";
 import type { ClientFactory, ReadOpencodeDirectory, SessionRecord } from "./types";
 import { z } from "zod";
@@ -36,7 +33,7 @@ export type OpencodeRuntimeSnapshotSource = AgentSessionRuntimeSnapshotSource & 
   workingDirectory: string;
 };
 
-export type OpencodeRegisteredRuntimeRefreshResult =
+export type OpencodeWorkflowRootRead =
   | {
       readonly type: "present";
       readonly ref: SessionRef;
@@ -274,7 +271,7 @@ export const listOpencodeRuntimeSnapshotSources = async ({
   });
 };
 
-export const readOpencodeRegisteredRuntimeSnapshotSources = async ({
+export const readOpencodeWorkflowRoots = async ({
   createClient,
   runtimeEndpoint,
   refs,
@@ -288,14 +285,14 @@ export const readOpencodeRegisteredRuntimeSnapshotSources = async ({
   readDirectory: ReadOpencodeDirectory;
   now: () => string;
   onRootPresent: (ref: SessionRef, detail: ParsedOpencodeSession) => Promise<void>;
-}): Promise<OpencodeRegisteredRuntimeRefreshResult[]> => {
+}): Promise<OpencodeWorkflowRootRead[]> => {
   const results = await Promise.all(
     refs.map(async (ref) => {
-    if (ref.runtimeKind !== "opencode") {
-      throw new Error(
-        `Cannot refresh registered OpenCode session '${ref.externalSessionId}' for runtime '${ref.runtimeKind}'.`,
-      );
-    }
+      if (ref.runtimeKind !== "opencode") {
+        throw new Error(
+          `Cannot refresh registered OpenCode session '${ref.externalSessionId}' for runtime '${ref.runtimeKind}'.`,
+        );
+      }
       return readDirectory(ref.workingDirectory, async () => {
         const client = createClient({
           runtimeEndpoint,
@@ -377,5 +374,5 @@ export const readOpencodeRegisteredRuntimeSnapshotSources = async ({
       });
     }),
   );
-  return results.filter((result): result is OpencodeRegisteredRuntimeRefreshResult => result !== null);
+  return results.filter((result): result is OpencodeWorkflowRootRead => result !== null);
 };

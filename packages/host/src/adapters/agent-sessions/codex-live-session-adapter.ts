@@ -15,7 +15,7 @@ import {
 import type { AgentRuntimePolicyBinding, AgentSessionSummary } from "@openducktor/core";
 import { Effect } from "effect";
 import type { z } from "zod";
-import { toAgentSessionControlMetadata } from "../../application/agent-sessions/agent-session-control-metadata";
+import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
 import {
   type HostError,
   type HostOperationErrorAggregate,
@@ -197,7 +197,7 @@ export const createCodexLiveSessionAdapterPreparer =
                   }),
                 ),
           ),
-          Effect.flatMap((summary) => toAgentSessionControlMetadata(summary, operation)),
+          Effect.flatMap((summary) => toAgentSessionControlSummary(summary, operation)),
         );
 
       const releaseRuntime = (): Effect.Effect<ReadonlyArray<AgentSessionLiveRef>, HostError> =>
