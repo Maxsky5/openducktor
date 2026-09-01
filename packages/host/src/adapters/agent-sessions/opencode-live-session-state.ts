@@ -80,6 +80,7 @@ export const createOpenCodeLiveSessionState = ({
   nextOccurrenceId,
 }: CreateOpenCodeLiveSessionStateInput) => {
   let sessionsByRef = new Map<string, RetainedSession>();
+  let dropCount = 0;
   const contextUsageBySessionId = new Map<string, AgentSessionContextUsage>();
   const pendingRequests = createOpenCodePendingRequestRouter({
     runtimeId: runtime.runtimeId,
@@ -351,6 +352,7 @@ export const createOpenCodeLiveSessionState = ({
       return [];
     }
     sessionsByRef.delete(key);
+    dropCount += 1;
     contextUsageBySessionId.delete(ref.externalSessionId);
     pendingRequests.removeSession(ref);
     return [{ type: "session_removed", ref: toSessionRef(ref) }];
@@ -368,6 +370,7 @@ export const createOpenCodeLiveSessionState = ({
     },
     refresh: (sources: OpencodeRuntimeSnapshotSource[]): AgentSessionLiveAdapterChange[] =>
       updateSources(sources, true),
+    dropCount: (): number => dropCount,
     has: (ref: AgentSessionLiveRef): boolean => sessionsByRef.has(refKey(ref)),
     listSnapshots: (): AgentSessionLiveSnapshot[] =>
       [...sessionsByRef.values()].map(({ snapshot }) =>

@@ -202,7 +202,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     await Effect.runPromise(adapter.releaseRuntime());
   });
 
-  test("does not hold the runtime state lock while a session refresh waits", async () => {
+  test("does not restore a released session when an earlier refresh finishes", async () => {
     const harness = createRuntimeHarness();
     let markReadStarted: () => void = () => undefined;
     let finishRead: () => void = () => undefined;
@@ -246,6 +246,10 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     await Promise.all([refresh, release]);
 
     expect(releaseFinishedWhileReadWaited).toBe(true);
+    await expect(Effect.runPromise(prepared.adapter.readRetainedSnapshot(ref))).resolves.toEqual({
+      type: "missing",
+      ref,
+    });
     await Effect.runPromise(prepared.adapter.releaseRuntime());
   });
 
