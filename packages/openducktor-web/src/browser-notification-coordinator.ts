@@ -26,7 +26,6 @@ type BroadcastChannelLike = {
 
 type LockSnapshot = {
   held?: Array<{ name?: string }>;
-  pending?: Array<{ name?: string }>;
 };
 type LockHandle = { name: string };
 type LockManagerLike = {
@@ -56,19 +55,19 @@ export type BrowserNotificationCoordinator = {
 };
 
 type CreateBrowserNotificationCoordinatorOptions = {
-  channel?: BroadcastChannelLike | null;
+  createChannel?: (() => BroadcastChannelLike) | null;
   locks?: LockManagerLike | null;
   focusDocument?: FocusDocument | null;
   focusWindow?: FocusWindow | null;
   tabId?: string;
 };
 
-const createDefaultChannel = (): BroadcastChannelLike | null => {
+const getDefaultChannelFactory = (): (() => BroadcastChannelLike) | null => {
   const NativeBroadcastChannel = globalThis.BroadcastChannel;
   if (!NativeBroadcastChannel) {
     return null;
   }
-  return new NativeBroadcastChannel(OCCURRENCE_CHANNEL_NAME);
+  return () => new NativeBroadcastChannel(OCCURRENCE_CHANNEL_NAME);
 };
 
 const getDefaultLocks = (): LockManagerLike | null => {
@@ -88,21 +87,20 @@ const getDefaultLocks = (): LockManagerLike | null => {
       const snapshot = await locks.query();
       return {
         held: (snapshot.held ?? []).map((entry) => (entry.name ? { name: entry.name } : {})),
-        pending: (snapshot.pending ?? []).map((entry) => (entry.name ? { name: entry.name } : {})),
       };
     },
   };
 };
 
 export const createBrowserNotificationCoordinator = ({
-  channel = createDefaultChannel(),
+  createChannel = getDefaultChannelFactory(),
   locks = getDefaultLocks(),
   focusDocument = globalThis.document ?? null,
   focusWindow = globalThis.window ?? null,
   tabId = globalThis.crypto.randomUUID(),
 }: CreateBrowserNotificationCoordinatorOptions = {}): BrowserNotificationCoordinator => {
-  const supported = Boolean(channel && locks && focusDocument && focusWindow);
-  if (!channel || !locks || !focusDocument || !focusWindow) {
+  const supported = Boolean(createChannel && locks && focusDocument && focusWindow);
+  if (!createChannel || !locks || !focusDocument || !focusWindow) {
     return {
       supported: false,
       getFailureMessage: () =>
@@ -112,12 +110,13 @@ export const createBrowserNotificationCoordinator = ({
       isExternalDeliveryOwner: () => false,
       claimExternalDelivery: async () => false,
       isAnyTabFocused: async () => false,
-      dispose: () => channel?.close(),
+      dispose: () => {},
     };
   }
 
   let disposed = false;
   let failureMessage: string | null = null;
+  let channel: BroadcastChannelLike | null = null;
   let externalDeliveryOwner = false;
   let releaseExternalDeliveryLock: (() => void) | null = null;
   let externalDeliveryLockAbortController: AbortController | null = null;
@@ -126,6 +125,7 @@ export const createBrowserNotificationCoordinator = ({
   let releaseTabLock: (() => void) | null = null;
   let tabLockAbortController: AbortController | null = null;
   const pendingOccurrences = new Map<string, NotificationOccurrence>();
+  const queuedPublications = new Map<string, NotificationOccurrence>();
   const claimedOccurrences = new Set<string>();
   const occurrenceListeners = new Set<(occurrence: NotificationOccurrence) => void>();
   const claimAcknowledgements = new Map<string, Map<string, () => void>>();
@@ -146,6 +146,17 @@ export const createBrowserNotificationCoordinator = ({
       .request(tabLockName, { mode: "exclusive", signal: controller.signal }, async () => {
         if (disposed) return;
         tabLockAbortController = null;
+        const registeredChannel = createChannel();
+        channel = registeredChannel;
+        registeredChannel.addEventListener("message", handleMessage);
+        for (const occurrence of queuedPublications.values()) {
+          registeredChannel.postMessage({ type: "occurrence", occurrence });
+        }
+        queuedPublications.clear();
+        holdExternalDeliveryOwnership();
+        if (focusDocument.hasFocus()) {
+          holdFocusedState();
+        }
         await new Promise<void>((resolve) => {
           releaseTabLock = resolve;
         });
@@ -160,7 +171,6 @@ export const createBrowserNotificationCoordinator = ({
         }
       });
   };
-  holdTabState();
 
   const getTabId = (lock: { name?: string }): string | null => {
     if (!lock.name?.startsWith(TAB_LOCK_NAME_PREFIX)) return null;
@@ -206,16 +216,26 @@ export const createBrowserNotificationCoordinator = ({
   };
 
   const propagateClaim = async (occurrenceId: string): Promise<void> => {
-    const snapshot = await locks.query();
+    let snapshot: LockSnapshot;
+    try {
+      snapshot = await locks.query();
+    } catch (cause) {
+      failureMessage = cause instanceof Error ? cause.message : String(cause);
+      throw cause;
+    }
     const tabIds = new Set(
-      [...(snapshot.held ?? []), ...(snapshot.pending ?? [])]
+      (snapshot.held ?? [])
         .map(getTabId)
         .filter((value): value is string => value !== null && value !== tabId),
     );
     const acknowledgements = [...tabIds].map((recipientTabId) =>
       waitForClaimAcknowledgementOrExit(occurrenceId, recipientTabId),
     );
-    channel.postMessage({ type: "external_delivery_claimed", occurrenceId });
+    const registeredChannel = channel;
+    if (!registeredChannel) {
+      throw new Error("The browser notification channel is not registered.");
+    }
+    registeredChannel.postMessage({ type: "external_delivery_claimed", occurrenceId });
     await Promise.all(acknowledgements);
   };
 
@@ -251,7 +271,7 @@ export const createBrowserNotificationCoordinator = ({
     if (parsed.data.type === "external_delivery_claimed") {
       claimedOccurrences.add(parsed.data.occurrenceId);
       pendingOccurrences.delete(parsed.data.occurrenceId);
-      channel.postMessage({
+      channel?.postMessage({
         type: "external_delivery_claim_ack",
         occurrenceId: parsed.data.occurrenceId,
         tabId,
@@ -263,7 +283,6 @@ export const createBrowserNotificationCoordinator = ({
     }
     notifyOccurrenceListeners(parsed.data.occurrence);
   };
-  channel.addEventListener("message", handleMessage);
 
   const holdExternalDeliveryOwnership = (): void => {
     const controller = new AbortController();
@@ -293,7 +312,6 @@ export const createBrowserNotificationCoordinator = ({
         }
       });
   };
-  holdExternalDeliveryOwnership();
 
   const releaseFocusedState = (): void => {
     focusLockAbortController?.abort();
@@ -303,7 +321,7 @@ export const createBrowserNotificationCoordinator = ({
   };
 
   const holdFocusedState = (): void => {
-    if (disposed || focusLockAbortController || releaseFocusLock) {
+    if (disposed || !channel || focusLockAbortController || releaseFocusLock) {
       return;
     }
     const controller = new AbortController();
@@ -333,9 +351,7 @@ export const createBrowserNotificationCoordinator = ({
   const handleBlur = (): void => releaseFocusedState();
   focusWindow.addEventListener("focus", handleFocus);
   focusWindow.addEventListener("blur", handleBlur);
-  if (focusDocument.hasFocus()) {
-    holdFocusedState();
-  }
+  holdTabState();
 
   return {
     supported,
@@ -345,7 +361,11 @@ export const createBrowserNotificationCoordinator = ({
       if (!claimedOccurrences.has(parsed.occurrenceId)) {
         pendingOccurrences.set(parsed.occurrenceId, parsed);
       }
-      channel.postMessage({ type: "occurrence", occurrence: parsed });
+      if (channel) {
+        channel.postMessage({ type: "occurrence", occurrence: parsed });
+      } else {
+        queuedPublications.set(parsed.occurrenceId, parsed);
+      }
     },
     subscribeOccurrences(listener) {
       occurrenceListeners.add(listener);
@@ -376,14 +396,16 @@ export const createBrowserNotificationCoordinator = ({
       externalDeliveryLockAbortController?.abort();
       externalDeliveryLockAbortController = null;
       releaseFocusedState();
-      releaseTabState();
       pendingOccurrences.clear();
+      queuedPublications.clear();
       const finishExternalDeliveryOwnership = (): void => {
         releaseExternalDeliveryLock?.();
         releaseExternalDeliveryLock = null;
         externalDeliveryOwner = false;
-        channel.removeEventListener("message", handleMessage);
-        channel.close();
+        channel?.removeEventListener("message", handleMessage);
+        channel?.close();
+        channel = null;
+        releaseTabState();
       };
       if (activeClaimPropagations.size > 0) {
         void Promise.allSettled(activeClaimPropagations).then(finishExternalDeliveryOwnership);

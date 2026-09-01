@@ -9,6 +9,7 @@ type CoordinatorMessage =
   | { type: "external_delivery_claim_ack"; occurrenceId: string; tabId: string };
 
 const EXTERNAL_DELIVERY_LOCK_NAME = "openducktor:notifications:external-delivery";
+const TAB_LOCK_NAME_PREFIX = "openducktor:notifications:tab:";
 
 type LockRequest = {
   name: string;
@@ -22,6 +23,9 @@ type LockRequest = {
 
 class FakeLockManager {
   private readonly requests: LockRequest[] = [];
+  private readonly deferredRequests: LockRequest[] = [];
+  private readonly deferredNames = new Set<string>();
+  private queryFailure: Error | null = null;
 
   constructor(private paused = false) {}
 
@@ -42,16 +46,22 @@ class FakeLockManager {
       };
       options.signal?.addEventListener("abort", () => {
         if (!request.active) {
-          const index = this.requests.indexOf(request);
-          if (index >= 0) {
-            this.requests.splice(index, 1);
+          for (const requests of [this.requests, this.deferredRequests]) {
+            const index = requests.indexOf(request);
+            if (index >= 0) {
+              requests.splice(index, 1);
+            }
           }
           reject(new DOMException("Aborted", "AbortError"));
           this.drain(name);
         }
       });
-      this.requests.push(request);
-      this.drain(name);
+      if (this.deferredNames.has(name)) {
+        this.deferredRequests.push(request);
+      } else {
+        this.requests.push(request);
+        this.drain(name);
+      }
     });
   }
 
@@ -59,6 +69,11 @@ class FakeLockManager {
     held: Array<{ name: string }>;
     pending: Array<{ name: string }>;
   }> {
+    if (this.queryFailure) {
+      const cause = this.queryFailure;
+      this.queryFailure = null;
+      throw cause;
+    }
     return {
       held: this.requests
         .filter((request) => request.active)
@@ -67,6 +82,24 @@ class FakeLockManager {
         .filter((request) => !request.active)
         .map((request) => ({ name: request.name })),
     };
+  }
+
+  defer(name: string): void {
+    this.deferredNames.add(name);
+  }
+
+  admit(name: string): void {
+    this.deferredNames.delete(name);
+    const deferred = this.deferredRequests.filter((request) => request.name === name);
+    for (const request of deferred) {
+      this.deferredRequests.splice(this.deferredRequests.indexOf(request), 1);
+      this.requests.push(request);
+    }
+    this.drain(name);
+  }
+
+  rejectNextQuery(cause: Error): void {
+    this.queryFailure = cause;
   }
 
   resume(): void {
@@ -300,13 +333,13 @@ describe("browser notification coordinator", () => {
     const locks = new FakeLockManager(true);
     const hub = new FakeBroadcastHub();
     const first = createBrowserNotificationCoordinator({
-      channel: hub.createChannel(),
+      createChannel: () => hub.createChannel(),
       locks,
       focusDocument: { hasFocus: () => false },
       focusWindow: new FakeFocusWindow(),
     });
     const second = createBrowserNotificationCoordinator({
-      channel: hub.createChannel(),
+      createChannel: () => hub.createChannel(),
       locks,
       focusDocument: { hasFocus: () => false },
       focusWindow: new FakeFocusWindow(),
@@ -333,13 +366,13 @@ describe("browser notification coordinator", () => {
     const locks = new FakeLockManager();
     const hub = new FakeBroadcastHub();
     const first = createBrowserNotificationCoordinator({
-      channel: hub.createChannel(),
+      createChannel: () => hub.createChannel(),
       locks,
       focusDocument: { hasFocus: () => false },
       focusWindow: new FakeFocusWindow(),
     });
     const second = createBrowserNotificationCoordinator({
-      channel: hub.createChannel(),
+      createChannel: () => hub.createChannel(),
       locks,
       focusDocument: { hasFocus: () => false },
       focusWindow: new FakeFocusWindow(),
@@ -364,16 +397,22 @@ describe("browser notification coordinator", () => {
   test("waits for asynchronous claim propagation before owner handoff", async () => {
     const locks = new FakeLockManager();
     const hub = new FakeBroadcastHub(false);
-    const firstChannel = hub.createChannel();
-    const secondChannel = hub.createChannel();
+    let firstChannel!: FakeBroadcastChannel;
+    let secondChannel!: FakeBroadcastChannel;
     const firstCoordinator = createBrowserNotificationCoordinator({
-      channel: firstChannel,
+      createChannel: () => {
+        firstChannel = hub.createChannel();
+        return firstChannel;
+      },
       locks,
       focusDocument: { hasFocus: () => false },
       focusWindow: new FakeFocusWindow(),
     });
     const secondCoordinator = createBrowserNotificationCoordinator({
-      channel: secondChannel,
+      createChannel: () => {
+        secondChannel = hub.createChannel();
+        return secondChannel;
+      },
       locks,
       focusDocument: { hasFocus: () => false },
       focusWindow: new FakeFocusWindow(),
@@ -431,17 +470,23 @@ describe("browser notification coordinator", () => {
   test("finishes claim propagation when an unresponsive tab exits", async () => {
     const locks = new FakeLockManager();
     const hub = new FakeBroadcastHub(false);
-    const ownerChannel = hub.createChannel();
-    const recipientChannel = hub.createChannel();
+    let ownerChannel!: FakeBroadcastChannel;
+    let recipientChannel!: FakeBroadcastChannel;
     const owner = createBrowserNotificationCoordinator({
-      channel: ownerChannel,
+      createChannel: () => {
+        ownerChannel = hub.createChannel();
+        return ownerChannel;
+      },
       locks,
       focusDocument: { hasFocus: () => false },
       focusWindow: new FakeFocusWindow(),
       tabId: "owner",
     });
     const recipient = createBrowserNotificationCoordinator({
-      channel: recipientChannel,
+      createChannel: () => {
+        recipientChannel = hub.createChannel();
+        return recipientChannel;
+      },
       locks,
       focusDocument: { hasFocus: () => false },
       focusWindow: new FakeFocusWindow(),
@@ -468,25 +513,34 @@ describe("browser notification coordinator", () => {
   test("does not redeliver when the next owner receives an occurrence after claim starts", async () => {
     const locks = new FakeLockManager();
     const hub = new FakeBroadcastHub(false);
-    const firstChannel = hub.createChannel();
-    const nextOwnerChannel = hub.createChannel();
-    const publisherChannel = hub.createChannel();
+    let firstChannel!: FakeBroadcastChannel;
+    let nextOwnerChannel!: FakeBroadcastChannel;
+    let publisherChannel!: FakeBroadcastChannel;
     const firstCoordinator = createBrowserNotificationCoordinator({
-      channel: firstChannel,
+      createChannel: () => {
+        firstChannel = hub.createChannel();
+        return firstChannel;
+      },
       locks,
       focusDocument: { hasFocus: () => false },
       focusWindow: new FakeFocusWindow(),
       tabId: "first",
     });
     const nextOwnerCoordinator = createBrowserNotificationCoordinator({
-      channel: nextOwnerChannel,
+      createChannel: () => {
+        nextOwnerChannel = hub.createChannel();
+        return nextOwnerChannel;
+      },
       locks,
       focusDocument: { hasFocus: () => false },
       focusWindow: new FakeFocusWindow(),
       tabId: "next-owner",
     });
     const publisherCoordinator = createBrowserNotificationCoordinator({
-      channel: publisherChannel,
+      createChannel: () => {
+        publisherChannel = hub.createChannel();
+        return publisherChannel;
+      },
       locks,
       focusDocument: { hasFocus: () => false },
       focusWindow: new FakeFocusWindow(),
@@ -552,17 +606,149 @@ describe("browser notification coordinator", () => {
     publisherBridge.dispose();
   });
 
-  test("uses one live external delivery lock for many occurrences", async () => {
+  test("does not admit a channel before its tab registration is visible", async () => {
+    const locks = new FakeLockManager();
+    const hub = new FakeBroadcastHub(false);
+    let ownerChannel!: FakeBroadcastChannel;
+    let publisherChannel!: FakeBroadcastChannel;
+    let joiningChannel: FakeBroadcastChannel | undefined;
+    const joiningTabLockName = `${TAB_LOCK_NAME_PREFIX}joining`;
+    locks.defer(joiningTabLockName);
+    const ownerCoordinator = createBrowserNotificationCoordinator({
+      createChannel: () => {
+        ownerChannel = hub.createChannel();
+        return ownerChannel;
+      },
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+      tabId: "owner",
+    });
+    const publisherCoordinator = createBrowserNotificationCoordinator({
+      createChannel: () => {
+        publisherChannel = hub.createChannel();
+        return publisherChannel;
+      },
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+      tabId: "publisher",
+    });
+    const joiningCoordinator = createBrowserNotificationCoordinator({
+      createChannel: () => {
+        joiningChannel = hub.createChannel();
+        return joiningChannel;
+      },
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+      tabId: "joining",
+    });
+    const ownerBridge = createBrowserNotificationBridge({
+      NativeNotification: null,
+      coordinator: ownerCoordinator,
+      focusWindow: () => {},
+    });
+    const publisherBridge = createBrowserNotificationBridge({
+      NativeNotification: null,
+      coordinator: publisherCoordinator,
+      focusWindow: () => {},
+    });
+    const joiningBridge = createBrowserNotificationBridge({
+      NativeNotification: null,
+      coordinator: joiningCoordinator,
+      focusWindow: () => {},
+    });
+    const showOsNotification = mock(async () => {});
+    const playSound = mock(async () => {});
+    const dispatches: Promise<void>[] = [];
+    const subscribe = (bridge: ReturnType<typeof createBrowserNotificationBridge>): void => {
+      bridge.subscribeOccurrences((value) => {
+        const dispatch = bridge.withExternalDeliveryOwnership(value.occurrenceId, async (owner) => {
+          if (!owner) return;
+          await Promise.all([showOsNotification(), playSound()]);
+        });
+        dispatches.push(dispatch);
+        void dispatch.catch(() => {});
+      });
+    };
+    subscribe(ownerBridge);
+    subscribe(publisherBridge);
+    subscribe(joiningBridge);
+    await waitFor(() => ownerCoordinator.isExternalDeliveryOwner());
+    expect(joiningChannel).toBeUndefined();
+    expect(hub.channels.size).toBe(2);
+
+    publisherBridge.publishOccurrence(occurrence);
+    await hub.flushNext(ownerChannel, "occurrence");
+    await hub.flushNext(publisherChannel, "external_delivery_claimed");
+    await hub.flushNext(ownerChannel, "external_delivery_claim_ack");
+    await waitFor(() => showOsNotification.mock.calls.length === 1);
+    locks.admit(joiningTabLockName);
+    await waitFor(() => locks.heldCount(joiningTabLockName) === 1);
+    expect(joiningChannel).toBeDefined();
+    ownerBridge.dispose();
+    await waitFor(() => publisherCoordinator.isExternalDeliveryOwner());
+    publisherBridge.dispose();
+    await waitFor(() => joiningCoordinator.isExternalDeliveryOwner());
+    await Promise.allSettled(dispatches);
+
+    expect(showOsNotification).toHaveBeenCalledTimes(1);
+    expect(playSound).toHaveBeenCalledTimes(1);
+    joiningBridge.dispose();
+  });
+
+  test("reports a lock snapshot failure without external delivery", async () => {
     const locks = new FakeLockManager();
     const hub = new FakeBroadcastHub();
     const owner = createBrowserNotificationCoordinator({
-      channel: hub.createChannel(),
+      createChannel: () => hub.createChannel(),
       locks,
       focusDocument: { hasFocus: () => false },
       focusWindow: new FakeFocusWindow(),
     });
     const publisher = createBrowserNotificationCoordinator({
-      channel: hub.createChannel(),
+      createChannel: () => hub.createChannel(),
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+    });
+    let claimFailure: unknown;
+    let deliveries = 0;
+    owner.subscribeOccurrences((value) => {
+      void owner
+        .claimExternalDelivery(value.occurrenceId)
+        .then((externalOwner) => {
+          if (externalOwner) deliveries += 1;
+        })
+        .catch((cause: unknown) => {
+          claimFailure = cause;
+        });
+    });
+    await waitFor(() => owner.isExternalDeliveryOwner());
+    locks.rejectNextQuery(new Error("Lock snapshot failed."));
+
+    publisher.publishOccurrence(occurrence);
+    await waitFor(() => claimFailure !== undefined);
+
+    expect(deliveries).toBe(0);
+    expect(claimFailure).toEqual(new Error("Lock snapshot failed."));
+    expect(owner.getFailureMessage()).toBe("Lock snapshot failed.");
+    owner.dispose();
+    publisher.dispose();
+  });
+
+  test("uses one live external delivery lock for many occurrences", async () => {
+    const locks = new FakeLockManager();
+    const hub = new FakeBroadcastHub();
+    const owner = createBrowserNotificationCoordinator({
+      createChannel: () => hub.createChannel(),
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+    });
+    const publisher = createBrowserNotificationCoordinator({
+      createChannel: () => hub.createChannel(),
       locks,
       focusDocument: { hasFocus: () => false },
       focusWindow: new FakeFocusWindow(),
@@ -595,13 +781,13 @@ describe("browser notification coordinator", () => {
     let focused = true;
     const focusWindow = new FakeFocusWindow();
     const first = createBrowserNotificationCoordinator({
-      channel: hub.createChannel(),
+      createChannel: () => hub.createChannel(),
       locks,
       focusDocument: { hasFocus: () => focused },
       focusWindow,
     });
     const second = createBrowserNotificationCoordinator({
-      channel: hub.createChannel(),
+      createChannel: () => hub.createChannel(),
       locks,
       focusDocument: { hasFocus: () => false },
       focusWindow: new FakeFocusWindow(),
