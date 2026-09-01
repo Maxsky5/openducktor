@@ -7,7 +7,7 @@ const APP_FOCUS_LOCK_NAME = "openducktor:notifications:app-focus";
 
 const coordinatorMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("occurrence"), occurrence: notificationOccurrenceSchema }),
-  z.object({ type: z.literal("external_delivery_complete"), occurrenceId: z.string().min(1) }),
+  z.object({ type: z.literal("external_delivery_claimed"), occurrenceId: z.string().min(1) }),
 ]);
 type CoordinatorMessage = z.infer<typeof coordinatorMessageSchema>;
 
@@ -41,7 +41,7 @@ export type BrowserNotificationCoordinator = {
   publishOccurrence(occurrence: NotificationOccurrence): void;
   subscribeOccurrences(listener: (occurrence: NotificationOccurrence) => void): () => void;
   isExternalDeliveryOwner(): boolean;
-  completeExternalDelivery(occurrenceId: string): void;
+  claimExternalDelivery(occurrenceId: string): boolean;
   isAnyTabFocused(): Promise<boolean>;
   dispose(): void;
 };
@@ -98,7 +98,7 @@ export const createBrowserNotificationCoordinator = ({
       publishOccurrence: () => {},
       subscribeOccurrences: () => () => {},
       isExternalDeliveryOwner: () => false,
-      completeExternalDelivery: () => {},
+      claimExternalDelivery: () => false,
       isAnyTabFocused: async () => false,
       dispose: () => channel?.close(),
     };
@@ -130,7 +130,7 @@ export const createBrowserNotificationCoordinator = ({
   const handleMessage = (event: MessageEvent<unknown>): void => {
     const parsed = coordinatorMessageSchema.safeParse(event.data);
     if (!parsed.success) return;
-    if (parsed.data.type === "external_delivery_complete") {
+    if (parsed.data.type === "external_delivery_claimed") {
       pendingOccurrences.delete(parsed.data.occurrenceId);
       return;
     }
@@ -229,9 +229,11 @@ export const createBrowserNotificationCoordinator = ({
       return () => occurrenceListeners.delete(listener);
     },
     isExternalDeliveryOwner: () => externalDeliveryOwner,
-    completeExternalDelivery(occurrenceId) {
+    claimExternalDelivery(occurrenceId) {
+      if (!externalDeliveryOwner || !pendingOccurrences.has(occurrenceId)) return false;
       pendingOccurrences.delete(occurrenceId);
-      channel.postMessage({ type: "external_delivery_complete", occurrenceId });
+      channel.postMessage({ type: "external_delivery_claimed", occurrenceId });
+      return true;
     },
     async isAnyTabFocused() {
       const snapshot = await locks.query();

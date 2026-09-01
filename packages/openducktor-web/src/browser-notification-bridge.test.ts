@@ -22,13 +22,13 @@ const createCoordinator = () => ({
   publishOccurrence: mock((_occurrence: NotificationOccurrence) => {}),
   subscribeOccurrences: mock((_listener: (value: NotificationOccurrence) => void) => () => {}),
   isExternalDeliveryOwner: mock(() => true),
-  completeExternalDelivery: mock((_occurrenceId: string) => {}),
+  claimExternalDelivery: mock((_occurrenceId: string) => true),
   isAnyTabFocused: mock(async () => false),
   dispose: mock(() => {}),
 });
 
 describe("browser notification bridge", () => {
-  test("completes external delivery ownership after dispatch fails", async () => {
+  test("claims external delivery before dispatch starts", async () => {
     const coordinator = createCoordinator();
     const bridge = createBrowserNotificationBridge({
       NativeNotification: null,
@@ -39,11 +39,11 @@ describe("browser notification bridge", () => {
 
     await expect(
       bridge.withExternalDeliveryOwnership(occurrence.occurrenceId, async (owner) => {
+        expect(coordinator.claimExternalDelivery).toHaveBeenCalledWith(occurrence.occurrenceId);
         expect(owner).toBe(true);
         throw expected;
       }),
     ).rejects.toBe(expected);
-    expect(coordinator.completeExternalDelivery).toHaveBeenCalledWith(occurrence.occurrenceId);
   });
 
   test("does not request permission until the explicit action", async () => {
