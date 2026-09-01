@@ -1,10 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type { NotificationOccurrence } from "@openducktor/contracts";
+import { createBrowserNotificationBridge } from "./browser-notification-bridge";
 import { createBrowserNotificationCoordinator } from "./browser-notification-coordinator";
 
 type CoordinatorMessage =
   | { type: "occurrence"; occurrence: NotificationOccurrence }
-  | { type: "external_delivery_complete"; occurrenceId: string };
+  | { type: "external_delivery_claimed"; occurrenceId: string };
 
 type LockRequest = {
   name: string;
@@ -118,10 +119,14 @@ class FakeBroadcastHub {
 
 class FakeBroadcastChannel {
   private readonly listeners = new Set<(event: MessageEvent<unknown>) => void>();
+  private closed = false;
 
   constructor(private readonly hub: FakeBroadcastHub) {}
 
   postMessage(value: CoordinatorMessage): void {
+    if (this.closed) {
+      throw new DOMException("The broadcast channel is closed.", "InvalidStateError");
+    }
     for (const channel of this.hub.channels) {
       if (channel !== this) {
         channel.emit(value);
@@ -138,6 +143,7 @@ class FakeBroadcastChannel {
   }
 
   close(): void {
+    this.closed = true;
     this.hub.channels.delete(this);
     this.listeners.clear();
   }
@@ -212,9 +218,8 @@ describe("browser notification coordinator", () => {
     });
     const received: NotificationOccurrence[] = [];
     first.subscribeOccurrences((value) => {
-      if (!first.isExternalDeliveryOwner()) return;
+      if (!first.claimExternalDelivery(value.occurrenceId)) return;
       received.push(value);
-      first.completeExternalDelivery(value.occurrenceId);
     });
 
     second.publishOccurrence(occurrence);
@@ -246,8 +251,8 @@ describe("browser notification coordinator", () => {
     await waitFor(() => first.isExternalDeliveryOwner());
     const received: NotificationOccurrence[] = [];
     second.subscribeOccurrences((value) => {
+      if (!second.claimExternalDelivery(value.occurrenceId)) return;
       received.push(value);
-      second.completeExternalDelivery(value.occurrenceId);
     });
 
     first.dispose();
@@ -257,6 +262,65 @@ describe("browser notification coordinator", () => {
     expect(received).toEqual([occurrence]);
     expect(second.isExternalDeliveryOwner()).toBe(true);
     second.dispose();
+  });
+
+  test("does not replay a claimed occurrence when its owner closes during delivery", async () => {
+    const locks = new FakeLockManager();
+    const hub = new FakeBroadcastHub();
+    const firstCoordinator = createBrowserNotificationCoordinator({
+      channel: hub.createChannel(),
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+    });
+    const secondCoordinator = createBrowserNotificationCoordinator({
+      channel: hub.createChannel(),
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+    });
+    const firstBridge = createBrowserNotificationBridge({
+      NativeNotification: null,
+      coordinator: firstCoordinator,
+      focusWindow: () => {},
+    });
+    const secondBridge = createBrowserNotificationBridge({
+      NativeNotification: null,
+      coordinator: secondCoordinator,
+      focusWindow: () => {},
+    });
+    let releaseDelivery = (): void => {};
+    const pendingDelivery = new Promise<void>((resolve) => {
+      releaseDelivery = resolve;
+    });
+    const showOsNotification = mock(async () => pendingDelivery);
+    const playSound = mock(async () => pendingDelivery);
+    const dispatches: Promise<void>[] = [];
+    const subscribe = (bridge: ReturnType<typeof createBrowserNotificationBridge>): (() => void) =>
+      bridge.subscribeOccurrences((value) => {
+        const dispatch = bridge.withExternalDeliveryOwnership(value.occurrenceId, async (owner) => {
+          if (!owner) return;
+          await Promise.all([showOsNotification(), playSound()]);
+        });
+        dispatches.push(dispatch);
+        void dispatch.catch(() => {});
+      });
+    subscribe(firstBridge);
+    subscribe(secondBridge);
+    await waitFor(() => firstCoordinator.isExternalDeliveryOwner());
+
+    secondBridge.publishOccurrence(occurrence);
+    await waitFor(() => showOsNotification.mock.calls.length === 1);
+    firstBridge.dispose();
+    await waitFor(() => secondCoordinator.isExternalDeliveryOwner());
+    releaseDelivery();
+    const results = await Promise.allSettled(dispatches);
+
+    expect(showOsNotification).toHaveBeenCalledTimes(1);
+    expect(playSound).toHaveBeenCalledTimes(1);
+    expect(results.every((result) => result.status === "fulfilled")).toBe(true);
+    expect(locks.heldCount()).toBe(1);
+    secondBridge.dispose();
   });
 
   test("uses one live external delivery lock for many occurrences", async () => {
@@ -276,8 +340,8 @@ describe("browser notification coordinator", () => {
     });
     const received: NotificationOccurrence[] = [];
     owner.subscribeOccurrences((value) => {
+      if (!owner.claimExternalDelivery(value.occurrenceId)) return;
       received.push(value);
-      owner.completeExternalDelivery(value.occurrenceId);
     });
     await waitFor(() => owner.isExternalDeliveryOwner());
 
