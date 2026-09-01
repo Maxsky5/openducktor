@@ -22,7 +22,7 @@ const createCoordinator = () => ({
   publishOccurrence: mock((_occurrence: NotificationOccurrence) => {}),
   subscribeOccurrences: mock((_listener: (value: NotificationOccurrence) => void) => () => {}),
   isExternalDeliveryOwner: mock(() => true),
-  claimExternalDelivery: mock((_occurrenceId: string) => true),
+  claimExternalDelivery: mock(async (_occurrenceId: string) => true),
   isAnyTabFocused: mock(async () => false),
   dispose: mock(() => {}),
 });

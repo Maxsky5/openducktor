@@ -3,6 +3,7 @@ import { z } from "zod";
 
 const OCCURRENCE_CHANNEL_NAME = "openducktor:notifications:occurrences";
 const EXTERNAL_DELIVERY_LOCK_NAME = "openducktor:notifications:external-delivery";
+const EXTERNAL_DELIVERY_CLAIM_LOCK_NAME = "openducktor:notifications:external-delivery-claim";
 const APP_FOCUS_LOCK_NAME = "openducktor:notifications:app-focus";
 
 const coordinatorMessageSchema = z.discriminatedUnion("type", [
@@ -41,7 +42,7 @@ export type BrowserNotificationCoordinator = {
   publishOccurrence(occurrence: NotificationOccurrence): void;
   subscribeOccurrences(listener: (occurrence: NotificationOccurrence) => void): () => void;
   isExternalDeliveryOwner(): boolean;
-  claimExternalDelivery(occurrenceId: string): boolean;
+  claimExternalDelivery(occurrenceId: string): Promise<boolean>;
   isAnyTabFocused(): Promise<boolean>;
   dispose(): void;
 };
@@ -98,7 +99,7 @@ export const createBrowserNotificationCoordinator = ({
       publishOccurrence: () => {},
       subscribeOccurrences: () => () => {},
       isExternalDeliveryOwner: () => false,
-      claimExternalDelivery: () => false,
+      claimExternalDelivery: async () => false,
       isAnyTabFocused: async () => false,
       dispose: () => channel?.close(),
     };
@@ -111,8 +112,78 @@ export const createBrowserNotificationCoordinator = ({
   let externalDeliveryLockAbortController: AbortController | null = null;
   let releaseFocusLock: (() => void) | null = null;
   let focusLockAbortController: AbortController | null = null;
+  let releasePendingClaimLock: (() => void) | null = null;
+  let pendingClaimLockAbortController: AbortController | null = null;
+  let claimBarrier: Promise<void> | null = null;
   const pendingOccurrences = new Map<string, NotificationOccurrence>();
+  const claimedOccurrences = new Set<string>();
   const occurrenceListeners = new Set<(occurrence: NotificationOccurrence) => void>();
+
+  const releasePendingClaimState = (): void => {
+    pendingClaimLockAbortController?.abort();
+    pendingClaimLockAbortController = null;
+    releasePendingClaimLock?.();
+    releasePendingClaimLock = null;
+  };
+
+  const holdPendingClaimState = (): void => {
+    if (
+      disposed ||
+      pendingOccurrences.size === 0 ||
+      pendingClaimLockAbortController ||
+      releasePendingClaimLock
+    ) {
+      return;
+    }
+    const controller = new AbortController();
+    pendingClaimLockAbortController = controller;
+    void locks
+      .request(
+        EXTERNAL_DELIVERY_CLAIM_LOCK_NAME,
+        { mode: "shared", signal: controller.signal },
+        async () => {
+          if (disposed || pendingOccurrences.size === 0) return;
+          pendingClaimLockAbortController = null;
+          await new Promise<void>((resolve) => {
+            releasePendingClaimLock = resolve;
+          });
+          releasePendingClaimLock = null;
+        },
+      )
+      .catch((cause: unknown) => {
+        if (pendingClaimLockAbortController === controller) {
+          pendingClaimLockAbortController = null;
+        }
+        if (!controller.signal.aborted) {
+          failureMessage = cause instanceof Error ? cause.message : String(cause);
+        }
+      });
+  };
+
+  const updatePendingClaimState = (): void => {
+    if (pendingOccurrences.size > 0) {
+      holdPendingClaimState();
+      return;
+    }
+    releasePendingClaimState();
+  };
+
+  const waitForClaimPropagation = (): Promise<void> => {
+    if (claimBarrier) return claimBarrier;
+    const barrier = locks
+      .request(EXTERNAL_DELIVERY_CLAIM_LOCK_NAME, { mode: "exclusive" }, async () => {})
+      .catch((cause: unknown) => {
+        failureMessage = cause instanceof Error ? cause.message : String(cause);
+        throw cause;
+      })
+      .finally(() => {
+        if (claimBarrier === barrier) {
+          claimBarrier = null;
+        }
+      });
+    claimBarrier = barrier;
+    return barrier;
+  };
 
   const notifyOccurrenceListeners = (occurrence: NotificationOccurrence): void => {
     for (const listener of occurrenceListeners) {
@@ -131,10 +202,15 @@ export const createBrowserNotificationCoordinator = ({
     const parsed = coordinatorMessageSchema.safeParse(event.data);
     if (!parsed.success) return;
     if (parsed.data.type === "external_delivery_claimed") {
+      claimedOccurrences.add(parsed.data.occurrenceId);
       pendingOccurrences.delete(parsed.data.occurrenceId);
+      updatePendingClaimState();
       return;
     }
-    pendingOccurrences.set(parsed.data.occurrence.occurrenceId, parsed.data.occurrence);
+    if (!claimedOccurrences.has(parsed.data.occurrence.occurrenceId)) {
+      pendingOccurrences.set(parsed.data.occurrence.occurrenceId, parsed.data.occurrence);
+      updatePendingClaimState();
+    }
     notifyOccurrenceListeners(parsed.data.occurrence);
   };
   channel.addEventListener("message", handleMessage);
@@ -216,7 +292,10 @@ export const createBrowserNotificationCoordinator = ({
     getFailureMessage: () => failureMessage,
     publishOccurrence(occurrence) {
       const parsed = notificationOccurrenceSchema.parse(occurrence);
-      pendingOccurrences.set(parsed.occurrenceId, parsed);
+      if (!claimedOccurrences.has(parsed.occurrenceId)) {
+        pendingOccurrences.set(parsed.occurrenceId, parsed);
+        updatePendingClaimState();
+      }
       channel.postMessage({ type: "occurrence", occurrence: parsed });
     },
     subscribeOccurrences(listener) {
@@ -229,10 +308,13 @@ export const createBrowserNotificationCoordinator = ({
       return () => occurrenceListeners.delete(listener);
     },
     isExternalDeliveryOwner: () => externalDeliveryOwner,
-    claimExternalDelivery(occurrenceId) {
+    async claimExternalDelivery(occurrenceId) {
       if (!externalDeliveryOwner || !pendingOccurrences.has(occurrenceId)) return false;
+      claimedOccurrences.add(occurrenceId);
       pendingOccurrences.delete(occurrenceId);
+      updatePendingClaimState();
       channel.postMessage({ type: "external_delivery_claimed", occurrenceId });
+      await waitForClaimPropagation();
       return true;
     },
     async isAnyTabFocused() {
@@ -246,11 +328,19 @@ export const createBrowserNotificationCoordinator = ({
       disposed = true;
       externalDeliveryLockAbortController?.abort();
       externalDeliveryLockAbortController = null;
-      releaseExternalDeliveryLock?.();
-      releaseExternalDeliveryLock = null;
-      externalDeliveryOwner = false;
       releaseFocusedState();
       pendingOccurrences.clear();
+      releasePendingClaimState();
+      const finishExternalDeliveryOwnership = (): void => {
+        releaseExternalDeliveryLock?.();
+        releaseExternalDeliveryLock = null;
+        externalDeliveryOwner = false;
+      };
+      if (claimBarrier) {
+        void claimBarrier.then(finishExternalDeliveryOwnership, finishExternalDeliveryOwnership);
+      } else {
+        finishExternalDeliveryOwnership();
+      }
       occurrenceListeners.clear();
       channel.removeEventListener("message", handleMessage);
       channel.close();
