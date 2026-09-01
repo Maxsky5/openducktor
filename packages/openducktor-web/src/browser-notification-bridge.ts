@@ -181,7 +181,16 @@ export const createBrowserNotificationBridge = ({
       return getCapability();
     },
     isAppFocused: () => coordinator.isAnyTabFocused(),
-    claimExternalDelivery: (occurrenceId) => coordinator.claimExternalDelivery(occurrenceId),
+    async withExternalDeliveryOwnership(occurrenceId, dispatch) {
+      const owner = coordinator.isExternalDeliveryOwner();
+      try {
+        await dispatch(owner);
+      } finally {
+        if (owner) {
+          coordinator.completeExternalDelivery(occurrenceId);
+        }
+      }
+    },
     showOsNotification,
     publishOccurrence: (occurrence) => coordinator.publishOccurrence(occurrence),
     subscribeOccurrences: (listener) => coordinator.subscribeOccurrences(listener),

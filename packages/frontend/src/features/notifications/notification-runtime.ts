@@ -66,10 +66,12 @@ export const createNotificationRuntime = ({
   const dispatch = async (rawOccurrence: NotificationOccurrence): Promise<void> => {
     const occurrence = notificationOccurrenceSchema.parse(rawOccurrence);
     try {
-      const appFocused = await bridge.isAppFocused();
-      await policy.dispatch(occurrence, {
-        appFocused,
-        externalDeliveryOwner: await bridge.claimExternalDelivery(occurrence.occurrenceId),
+      await bridge.withExternalDeliveryOwnership(occurrence.occurrenceId, async (owner) => {
+        const appFocused = await bridge.isAppFocused();
+        await policy.dispatch(occurrence, {
+          appFocused,
+          externalDeliveryOwner: owner,
+        });
       });
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);

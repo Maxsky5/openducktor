@@ -21,7 +21,7 @@ const createBridge = (overrides: Partial<NotificationBridge> = {}): Notification
     canGuaranteeSilent: true,
   }),
   isAppFocused: async () => false,
-  claimExternalDelivery: async () => true,
+  withExternalDeliveryOwnership: async (_occurrenceId, dispatch) => dispatch(true),
   showOsNotification: async () => ({ status: "shown" }),
   publishOccurrence: () => {},
   subscribeOccurrences: () => () => {},
@@ -118,13 +118,17 @@ describe("notification runtime tests", () => {
     expect(showOsNotification).not.toHaveBeenCalled();
   });
 
-  test("does not send OS delivery when another browser tab wins the occurrence claim", async () => {
+  test("does not send OS delivery when another browser tab owns external delivery", async () => {
     const showOsNotification = mock(async (_request: NotificationOsDeliveryRequest) => ({
       status: "shown" as const,
     }));
+    const withExternalDeliveryOwnership = mock(
+      async (_occurrenceId: string, dispatch: (owner: boolean) => Promise<void>) => dispatch(false),
+    );
+    const onFailure = mock(() => {});
     const runtime = createNotificationRuntime({
       bridge: createBridge({
-        claimExternalDelivery: async () => false,
+        withExternalDeliveryOwnership,
         showOsNotification,
       }),
       loadSettings: async () => {
@@ -133,7 +137,7 @@ describe("notification runtime tests", () => {
         return settings;
       },
       navigate: async () => {},
-      onFailure: () => {},
+      onFailure,
     });
 
     await runtime.dispatch({
@@ -147,5 +151,10 @@ describe("notification runtime tests", () => {
     });
 
     expect(showOsNotification).not.toHaveBeenCalled();
+    expect(withExternalDeliveryOwnership).toHaveBeenCalledWith(
+      "workflow.closed:/repo:task-1:event-1",
+      expect.any(Function),
+    );
+    expect(onFailure).not.toHaveBeenCalled();
   });
 });
