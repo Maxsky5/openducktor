@@ -318,8 +318,7 @@ const runtimeInput = {
 const createPrepareRuntime = (harness: LiveClientHarness) =>
   createPrepareOpencodeSessionRuntime({
     createClient: () => harness.client,
-    directoryExists: async () => true,
-    runDirectoryRead: (_directory, read) => read(),
+    readDirectory: (_directory, read) => read(),
     now: () => "2026-07-16T10:02:00.000Z",
   });
 

@@ -36,7 +36,7 @@ import {
 import { observeRuntimeEvents, registerSession, releaseSessionRuntime } from "./session-registry";
 import type {
   OpencodeSdkAdapterOptions,
-  RunOpencodeDirectoryRead,
+  ReadOpencodeDirectory,
   RuntimeEventTransportRecord,
   SessionRecord,
 } from "./types";
@@ -83,8 +83,7 @@ export type PrepareOpencodeSessionRuntime = (
 ) => Promise<PreparedOpencodeSessionRuntime>;
 
 type PrepareOpencodeSessionRuntimeOptions = OpencodeSdkAdapterOptions & {
-  readonly directoryExists: (directory: string) => Promise<boolean>;
-  readonly runDirectoryRead: RunOpencodeDirectoryRead;
+  readonly readDirectory: ReadOpencodeDirectory;
 };
 
 const runtimeInitializationAbortFailure = (signal: AbortSignal, runtimeId: string): Error =>
@@ -147,15 +146,16 @@ const releaseEventSessions = async (
 export const createPrepareOpencodeSessionRuntime = (
   options: PrepareOpencodeSessionRuntimeOptions,
 ): PrepareOpencodeSessionRuntime => {
-  const createClient = options.createClient ?? buildDefaultFactory();
-  const now = options.now ?? nowIso;
+  const { readDirectory, ...adapterOptions } = options;
+  const createClient = adapterOptions.createClient ?? buildDefaultFactory();
+  const now = adapterOptions.now ?? nowIso;
   const runtimeEventTransports = new Map<string, RuntimeEventTransportRecord>();
 
   return async (input) => {
     const eventSessions = new Map<string, SessionRecord>();
     const controlAdapter = new OpencodeSdkAdapter(
       {
-        ...options,
+        ...adapterOptions,
         repoRuntimeResolver: {
           requireRepoRuntime: async () => ({
             kind: "opencode",
@@ -273,8 +273,8 @@ export const createPrepareOpencodeSessionRuntime = (
             }
           },
         };
-        if (options.logEvent) {
-          registrationInput.logEvent = options.logEvent;
+        if (adapterOptions.logEvent) {
+          registrationInput.logEvent = adapterOptions.logEvent;
         }
         registerSession(registrationInput);
       }
@@ -287,8 +287,7 @@ export const createPrepareOpencodeSessionRuntime = (
         const snapshotInput: Parameters<typeof listOpencodeRuntimeSnapshotSources>[0] = {
           createClient,
           runtimeEndpoint: input.runtimeEndpoint,
-          directoryExists: options.directoryExists,
-          runDirectoryRead: options.runDirectoryRead,
+          readDirectory,
           now,
         };
         if (input.directories) {
@@ -345,8 +344,8 @@ export const createPrepareOpencodeSessionRuntime = (
     if (input.signal) {
       observationInput.signal = input.signal;
     }
-    if (options.logEvent) {
-      observationInput.logEvent = options.logEvent;
+    if (adapterOptions.logEvent) {
+      observationInput.logEvent = adapterOptions.logEvent;
     }
     const observation = await observeRuntimeEvents(observationInput);
 

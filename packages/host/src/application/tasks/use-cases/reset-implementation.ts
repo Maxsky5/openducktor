@@ -4,11 +4,11 @@ import { canResetImplementationFromStatus } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
 import {
   appendImplementationResetCleanupProgress,
+  cleanupImplementationResetActivity as cleanupActivity,
   collectImplementationResetSessionState,
   excludeCanonicalImplementationTargets,
   requireImplementationResetActivityGuard as requireActivityGuard,
   resolveCanonicalImplementationResetTarget,
-  stopActiveImplementationResetActivity as stopActivity,
 } from "../support/implementation-reset-targets";
 import { requireDependencies } from "../support/required-task-dependencies";
 import {
@@ -26,7 +26,7 @@ import {
 import { enrichTask } from "../support/task-workflow-helpers";
 import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import { createTaskCleanupProgressState } from "../support/task-cleanup-progress";
-import type { CreateTaskServiceInput, TaskService } from "../task-service";
+import type { TaskService, TaskServiceUseCaseInput } from "../task-service";
 export const createTaskImplementationResetUseCase = ({
   devServerService,
   gitPort,
@@ -37,7 +37,7 @@ export const createTaskImplementationResetUseCase = ({
   worktreeFiles,
   workspaceSettingsService,
   taskSessionBootstrapCoordinator: coordinator,
-}: CreateTaskServiceInput) => ({
+}: TaskServiceUseCaseInput) => ({
   resetImplementation(input: Parameters<TaskService["resetImplementation"]>[0]) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
@@ -50,10 +50,8 @@ export const createTaskImplementationResetUseCase = ({
         ),
       );
       const storeDependencies = requireImplementationResetStoreDependencies(taskStore);
-      if (coordinator) {
-        const canonicalInputRepo = yield* dependencies.gitPort.canonicalizePath(repoPath);
-        yield* coordinator.acquireLifecycle(canonicalInputRepo, [taskId], "reset implementation");
-      }
+      const canonicalInputRepo = yield* dependencies.gitPort.canonicalizePath(repoPath);
+      yield* coordinator.acquireLifecycle(canonicalInputRepo, [taskId], "reset implementation");
       const currentTasks = yield* taskStore.listTasks({ repoPath });
       const current = currentTasks.find((task) => task.id === taskId);
       if (!current) {
@@ -127,11 +125,9 @@ export const createTaskImplementationResetUseCase = ({
         relatedBranches,
         canonicalTarget,
       );
-      if (coordinator) {
-        yield* coordinator.acquireWorktreeLifecycle(worktreePaths);
-      }
+      yield* coordinator.acquireWorktreeLifecycle(worktreePaths);
       const cleanupProgress = createTaskCleanupProgressState();
-      yield* stopActivity(activity, cleanupProgress);
+      yield* cleanupActivity(activity, cleanupProgress);
       let taskStoreWriteCompleted = false;
       return yield* Effect.gen(function* () {
         yield* runTaskLocalCleanup({

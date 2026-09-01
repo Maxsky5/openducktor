@@ -1,6 +1,6 @@
 import type { AgentSessionLiveSnapshot, AgentSessionRecord } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { AgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
+import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
 import { HostOperationError } from "../../effect/host-errors";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import { createRuntimeTaskActivityGuard as createEffectRuntimeTaskActivityGuard } from "./runtime-task-activity-guard";

@@ -10,15 +10,14 @@ import { unwrapData } from "./data-utils";
 import { parseOpencodeSessionListPayload, type ParsedOpencodeSession } from "./opencode-ingress";
 import { listOpencodeLiveSessionPendingInput } from "./pending-input-ops";
 import { toIsoFromEpoch } from "./session-runtime-utils";
-import type { ClientFactory, RunOpencodeDirectoryRead } from "./types";
+import type { ClientFactory, ReadOpencodeDirectory } from "./types";
 import { z } from "zod";
 
 export type ListOpencodeRuntimeSnapshotSourcesInput = {
   createClient: ClientFactory;
   runtimeEndpoint: string;
   directories?: string[];
-  directoryExists: (directory: string) => Promise<boolean>;
-  runDirectoryRead: RunOpencodeDirectoryRead;
+  readDirectory: ReadOpencodeDirectory;
   now: () => string;
 };
 
@@ -140,8 +139,7 @@ export const listOpencodeRuntimeSnapshotSources = async ({
   createClient,
   runtimeEndpoint,
   directories,
-  directoryExists,
-  runDirectoryRead,
+  readDirectory,
   now,
 }: ListOpencodeRuntimeSnapshotSourcesInput): Promise<OpencodeRuntimeSnapshotSource[]> => {
   const unscopedClient = createClient({ runtimeEndpoint });
@@ -169,10 +167,7 @@ export const listOpencodeRuntimeSnapshotSources = async ({
   );
   const directoryEntries = await Promise.all(
     sessionDirectories.map((directory) =>
-      runDirectoryRead(directory, async () => {
-        if (!(await directoryExists(directory))) {
-          return null;
-        }
+      readDirectory(directory, async () => {
         const [statusPayload, pendingInput] = await Promise.all([
           unscopedClient.session.status({ directory }),
           listOpencodeLiveSessionPendingInput(createClient, {

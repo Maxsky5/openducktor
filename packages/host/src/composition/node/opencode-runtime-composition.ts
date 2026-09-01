@@ -1,6 +1,6 @@
 import {
   createPrepareOpencodeSessionRuntime,
-  type RunOpencodeDirectoryRead,
+  type ReadOpencodeDirectory,
 } from "@openducktor/adapters-opencode-sdk";
 import { Effect } from "effect";
 import { createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/opencode-live-session-adapter";
@@ -35,14 +35,19 @@ export const createOpenCodeRuntimeComposition = ({
   taskSessionBootstrapCoordinator,
   toolDiscovery,
 }: CreateOpenCodeRuntimeCompositionInput): RuntimeWorkspaceStarterPort => {
-  const runDirectoryRead: RunOpencodeDirectoryRead = (directory, read) =>
+  const readDirectory: ReadOpencodeDirectory = (directory, read) =>
     Effect.runPromise(
       taskSessionBootstrapCoordinator.runWorktreeRead(
         directory,
-        Effect.tryPromise({
-          try: read,
-          catch: (cause) =>
-            toHostOperationError(cause, "opencode-live-session.read-directory", { directory }),
+        Effect.gen(function* () {
+          if (!(yield* settingsConfig.pathExists(directory))) {
+            return null;
+          }
+          return yield* Effect.tryPromise({
+            try: read,
+            catch: (cause) =>
+              toHostOperationError(cause, "opencode-live-session.read-directory", { directory }),
+          });
         }),
       ),
     );
@@ -56,8 +61,7 @@ export const createOpenCodeRuntimeComposition = ({
     prepareLiveSessionAdapter: createOpenCodeLiveSessionAdapterPreparer({
       liveSessionLifecycle,
       prepareRuntime: createPrepareOpencodeSessionRuntime({
-        directoryExists: (directory) => Effect.runPromise(settingsConfig.pathExists(directory)),
-        runDirectoryRead,
+        readDirectory,
       }),
     }),
     resolveMcpBridgeConnection,

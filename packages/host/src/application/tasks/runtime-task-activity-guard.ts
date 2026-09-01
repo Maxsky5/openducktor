@@ -1,13 +1,13 @@
 import { type AgentSessionRecord } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { AgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
+import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
 import { hasSameAgentSessionIdentity } from "../../domain/agent-session-identity";
 import { HostOperationError } from "../../effect/host-errors";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type {
   TaskActivityGuardPort,
-  TaskActivityGuardStopResult,
+  TaskActivityCleanupResult,
   TaskActivityGuardTaskSessions,
 } from "../../ports/task-activity-guard-port";
 
@@ -198,7 +198,7 @@ export const createRuntimeTaskActivityGuard = ({
         liveSessions,
       );
       yield* releaseTaskSessions(sessionService, input);
-      return { stoppedSessionCount } satisfies TaskActivityGuardStopResult;
+      return { stoppedSessionCount } satisfies TaskActivityCleanupResult;
     });
   },
 });

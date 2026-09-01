@@ -24,7 +24,7 @@ import { collectCloseWorktreePaths } from "../support/task-close-cleanup";
 import { completeTaskClosure } from "../support/task-closure";
 import { validateManualCloseTaskEffect } from "../support/task-validation-effects";
 import { enrichTask } from "../support/task-workflow-helpers";
-import type { CreateTaskServiceInput, TaskService } from "../task-service";
+import type { TaskService, TaskServiceUseCaseInput } from "../task-service";
 
 export const createTaskCloseUseCase = ({
   devServerService,
@@ -37,7 +37,7 @@ export const createTaskCloseUseCase = ({
   worktreeFiles,
   workspaceSettingsService,
   taskSessionBootstrapCoordinator,
-}: CreateTaskServiceInput): Pick<TaskService, "closeTask"> => ({
+}: TaskServiceUseCaseInput): Pick<TaskService, "closeTask"> => ({
   closeTask(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
@@ -112,9 +112,7 @@ export const createTaskCloseUseCase = ({
           current,
           currentSessions,
         );
-        if (taskSessionBootstrapCoordinator) {
-          yield* taskSessionBootstrapCoordinator.acquireWorktreeLifecycle(worktreePaths);
-        }
+        yield* taskSessionBootstrapCoordinator.acquireWorktreeLifecycle(worktreePaths);
         if (hasWorkflowSessions && taskActivityGuard) {
           const { stoppedSessionCount } = yield* taskActivityGuard.cleanupTaskSessions({
             repoPath: effectiveRepoPath,

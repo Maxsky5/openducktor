@@ -81,7 +81,7 @@ export const requireImplementationResetActivityGuard = (activity: Implementation
   );
 };
 
-export const stopActiveImplementationResetActivity = (
+export const cleanupImplementationResetActivity = (
   activity: ImplementationResetActivity,
   progress: TaskCleanupProgressState,
 ) =>

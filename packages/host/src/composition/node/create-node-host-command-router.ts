@@ -9,7 +9,7 @@ import {
 } from "../../adapters/mcp/mcp-host-bridge-server";
 import { createRuntimeRegistry } from "../../adapters/runtimes/runtime-registry";
 import { createRuntimeSessionOperations } from "../../adapters/runtimes/runtime-session-operations";
-import { createRuntimeTaskActivityGuard } from "../../adapters/runtimes/runtime-task-activity-guard";
+import { createRuntimeTaskActivityGuard } from "../../application/tasks/runtime-task-activity-guard";
 import { createRuntimeWorkspaceStarterDispatcher } from "../../adapters/runtimes/runtime-workspace-starter-dispatcher";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import { createLocalAttachmentService } from "../../application/attachments/local-attachment-service";

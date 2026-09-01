@@ -18,5 +18,5 @@ export type {
   OpencodeEventLogger,
   OpencodeSdkAdapterOptions,
   OpencodeStreamEventLog,
-  RunOpencodeDirectoryRead,
+  ReadOpencodeDirectory,
 } from "./types";

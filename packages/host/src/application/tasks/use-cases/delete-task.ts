@@ -21,7 +21,7 @@ import {
   workflowCleanupSessionRoles,
 } from "../support/task-cleanup-support";
 import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
-import type { CreateTaskServiceInput, TaskServiceWithMutationProgress } from "../task-service";
+import type { TaskServiceUseCaseInput, TaskServiceWithMutationProgress } from "../task-service";
 
 export const createTaskDeleteUseCase = ({
   devServerService,
@@ -33,7 +33,7 @@ export const createTaskDeleteUseCase = ({
   worktreeFiles,
   workspaceSettingsService,
   taskSessionBootstrapCoordinator,
-}: CreateTaskServiceInput): Pick<TaskServiceWithMutationProgress, "deleteTask"> => ({
+}: TaskServiceUseCaseInput): Pick<TaskServiceWithMutationProgress, "deleteTask"> => ({
   deleteTask(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, deleteSubtasks } = input;
@@ -46,13 +46,11 @@ export const createTaskDeleteUseCase = ({
         ),
       );
       const canonicalInputRepo = yield* dependencies.gitPort.canonicalizePath(repoPath);
-      if (taskSessionBootstrapCoordinator) {
-        yield* taskSessionBootstrapCoordinator.acquireLifecycle(
-          canonicalInputRepo,
-          [taskId],
-          "delete tasks",
-        );
-      }
+      yield* taskSessionBootstrapCoordinator.acquireLifecycle(
+        canonicalInputRepo,
+        [taskId],
+        "delete tasks",
+      );
       const currentTasks = yield* taskStore.listTasks({ repoPath });
       const current = currentTasks.find((task) => task.id === taskId);
       if (!current) {
@@ -84,7 +82,7 @@ export const createTaskDeleteUseCase = ({
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
       const additionalTaskIds = targetTaskIds.filter((targetTaskId) => targetTaskId !== taskId);
-      if (taskSessionBootstrapCoordinator && additionalTaskIds.length > 0) {
+      if (additionalTaskIds.length > 0) {
         yield* taskSessionBootstrapCoordinator.acquireLifecycle(
           canonicalInputRepo,
           additionalTaskIds,
@@ -129,9 +127,7 @@ export const createTaskDeleteUseCase = ({
         branchPrefix,
         targetTaskSessions,
       );
-      if (taskSessionBootstrapCoordinator) {
-        yield* taskSessionBootstrapCoordinator.acquireWorktreeLifecycle(worktreePaths);
-      }
+      yield* taskSessionBootstrapCoordinator.acquireWorktreeLifecycle(worktreePaths);
       const branchNames = yield* collectRelatedTaskBranches(
         dependencies.gitPort,
         effectiveRepoPath,

@@ -24,7 +24,7 @@ import {
 } from "../support/task-cleanup-support";
 import { enrichTask } from "../support/task-workflow-helpers";
 import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
-import type { CreateTaskServiceInput, TaskService } from "../task-service";
+import type { TaskService, TaskServiceUseCaseInput } from "../task-service";
 
 export const createTaskFullResetUseCase = ({
   devServerService,
@@ -36,7 +36,7 @@ export const createTaskFullResetUseCase = ({
   worktreeFiles,
   workspaceSettingsService,
   taskSessionBootstrapCoordinator,
-}: CreateTaskServiceInput) => ({
+}: TaskServiceUseCaseInput) => ({
   resetTask(input: Parameters<TaskService["resetTask"]>[0]) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
@@ -49,14 +49,12 @@ export const createTaskFullResetUseCase = ({
         ),
       );
       const storeDependencies = requireTaskResetStoreDependencies(taskStore);
-      if (taskSessionBootstrapCoordinator) {
-        const canonicalInputRepo = yield* dependencies.gitPort.canonicalizePath(repoPath);
-        yield* taskSessionBootstrapCoordinator.acquireLifecycle(
-          canonicalInputRepo,
-          [taskId],
-          "reset task",
-        );
-      }
+      const canonicalInputRepo = yield* dependencies.gitPort.canonicalizePath(repoPath);
+      yield* taskSessionBootstrapCoordinator.acquireLifecycle(
+        canonicalInputRepo,
+        [taskId],
+        "reset task",
+      );
       const currentTasks = yield* taskStore.listTasks({ repoPath });
       const current = currentTasks.find((task) => task.id === taskId);
       if (!current) {
@@ -114,9 +112,7 @@ export const createTaskFullResetUseCase = ({
         workflowCleanupSessionRoles,
         "reset task",
       );
-      if (taskSessionBootstrapCoordinator) {
-        yield* taskSessionBootstrapCoordinator.acquireWorktreeLifecycle(worktreePaths);
-      }
+      yield* taskSessionBootstrapCoordinator.acquireWorktreeLifecycle(worktreePaths);
       const branchNames = yield* collectRelatedTaskBranches(
         dependencies.gitPort,
         effectiveRepoPath,
