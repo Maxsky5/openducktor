@@ -374,12 +374,29 @@ describe("createRuntimeTaskActivityGuard", () => {
     );
   });
   test("reports sessions stopped before a later stop failure", async () => {
+    const releaseCalls: string[] = [];
+    const buildSnapshot = snapshot();
+    const qaSnapshot: AgentSessionLiveSnapshot = {
+      ...buildSnapshot,
+      ref: {
+        ...buildSnapshot.ref,
+        externalSessionId: "external-qa-session",
+      },
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+    };
     const guard = createRuntimeTaskActivityGuard({
       runtimeRegistry: registry({
         liveSessions: new Set(["external-build-session", "external-qa-session"]),
         stopError: "runtime rejected abort",
         stopErrorSessionId: "external-qa-session",
       }),
+      sessionService: {
+        list: () => Effect.succeed([buildSnapshot, qaSnapshot]),
+        releaseSession: (ref) =>
+          Effect.sync(() => {
+            releaseCalls.push(ref.externalSessionId);
+          }),
+      },
     });
 
     const error = await Effect.runPromise(
@@ -403,5 +420,6 @@ describe("createRuntimeTaskActivityGuard", () => {
       "Failed stopping live qa session external-qa-session after stopping 1 earlier live agent session",
     );
     expect(error.details).toMatchObject({ stoppedSessionCount: 1 });
+    expect(releaseCalls).toEqual(["external-build-session"]);
   });
 });

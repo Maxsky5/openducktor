@@ -168,20 +168,26 @@ export const listOpencodeRuntimeSnapshotSources = async ({
   const directoryEntries = await Promise.all(
     sessionDirectories.map((directory) =>
       readDirectory(directory, async () => {
-        const [statusPayload, pendingInput] = await Promise.all([
+        const [statusResult, pendingInputResult] = await Promise.allSettled([
           unscopedClient.session.status({ directory }),
           listOpencodeLiveSessionPendingInput(createClient, {
             runtimeEndpoint,
             workingDirectory: directory,
           }),
         ]);
+        if (statusResult.status === "rejected") {
+          throw statusResult.reason;
+        }
+        if (pendingInputResult.status === "rejected") {
+          throw pendingInputResult.reason;
+        }
         return {
           directory,
           statuses: toOpencodeSessionStatusMap(
-            unwrapData(statusPayload, "get session status"),
+            unwrapData(statusResult.value, "get session status"),
             directory,
           ),
-          pendingInput,
+          pendingInput: pendingInputResult.value,
         };
       }),
     ),

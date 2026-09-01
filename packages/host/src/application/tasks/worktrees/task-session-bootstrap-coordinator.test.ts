@@ -67,25 +67,24 @@ test("worktree lifecycle waits for active reads and blocks new reads", async () 
   ]);
 });
 
-test("bootstrap blocks worktree reads until it ends", async () => {
+test("bootstrap lock does not block reads after worktree setup", async () => {
   const coordinator = createTaskSessionBootstrapCoordinator();
   const events: string[] = [];
 
-  await Effect.runPromise(
-    coordinator.acquireBootstrap("/repo", "task-1", "bootstrap-1", "build", "/repo/task-1"),
-  );
+  await Effect.runPromise(coordinator.acquireBootstrap("/repo", "task-1", "bootstrap-1", "build"));
   const read = Effect.runPromise(
     coordinator.runWorktreeRead(
       "/repo/task-1",
       Effect.sync(() => events.push("read")),
     ),
   );
-  await Promise.resolve();
-  expect(events).toEqual([]);
-
-  await Effect.runPromise(
-    coordinator.finishBootstrap("/repo", "task-1", "bootstrap-1", "completed"),
-  );
-  await read;
-  expect(events).toEqual(["read"]);
+  try {
+    await Promise.resolve();
+    expect(events).toEqual(["read"]);
+  } finally {
+    await Effect.runPromise(
+      coordinator.finishBootstrap("/repo", "task-1", "bootstrap-1", "completed"),
+    );
+    await read;
+  }
 });

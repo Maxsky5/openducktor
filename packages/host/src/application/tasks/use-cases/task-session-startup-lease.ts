@@ -71,13 +71,7 @@ export const createTaskSessionStartupLeaseUseCase = ({
         });
         yield* validateTaskSessionWorkflowAvailable(task, input.role, canonicalRepoPath);
         const leaseId = crypto.randomUUID();
-        yield* coordinator.acquireBootstrap(
-          canonicalRepoPath,
-          input.taskId,
-          leaseId,
-          input.role,
-          null,
-        );
+        yield* coordinator.acquireBootstrap(canonicalRepoPath, input.taskId, leaseId, input.role);
         return leaseId;
       });
     },

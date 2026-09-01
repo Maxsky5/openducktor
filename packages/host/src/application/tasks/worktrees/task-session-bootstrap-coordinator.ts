@@ -24,7 +24,6 @@ export type TaskSessionBootstrapTerminalOutcome = {
 type TaskSessionBootstrapLock = {
   bootstrapId: string;
   role: AgentRole;
-  worktreeGate: Effect.Semaphore | null;
 };
 
 export type TaskSessionBootstrapCoordinator = ReturnType<
@@ -103,14 +102,10 @@ export const createTaskSessionBootstrapCoordinator = () => {
   };
 
   const releaseActiveBootstrap = (repoPath: string, taskId: string) =>
-    Effect.gen(function* () {
+    Effect.sync(() => {
       const taskKey = key(repoPath, taskId);
-      const lock = bootstrapLocks.get(taskKey);
       reservations.delete(taskKey);
       bootstrapLocks.delete(taskKey);
-      if (lock?.worktreeGate) {
-        yield* lock.worktreeGate.release(1);
-      }
     });
 
   const beginLifecycle = (repoPath: string, taskIds: string[], operation: string) => {
@@ -177,13 +172,7 @@ export const createTaskSessionBootstrapCoordinator = () => {
         reservations.set(key(reservation.canonicalRepoPath, reservation.taskId), reservation);
       });
     },
-    acquireBootstrap(
-      repoPath: string,
-      taskId: string,
-      bootstrapId: string,
-      role: AgentRole,
-      worktreePath: string | null,
-    ) {
+    acquireBootstrap(repoPath: string, taskId: string, bootstrapId: string, role: AgentRole) {
       const taskKey = key(repoPath, taskId);
       const lifecycle = lifecycleLocks.get(taskKey);
       const active = bootstrapLocks.get(taskKey);
@@ -200,15 +189,9 @@ export const createTaskSessionBootstrapCoordinator = () => {
           }),
         );
       }
-      const gate = worktreePath ? worktreeGate(worktreePath) : null;
-      return Effect.uninterruptible(
-        Effect.gen(function* () {
-          bootstrapLocks.set(taskKey, { bootstrapId, role, worktreeGate: gate });
-          if (gate) {
-            yield* gate.take(1);
-          }
-        }),
-      );
+      return Effect.sync(() => {
+        bootstrapLocks.set(taskKey, { bootstrapId, role });
+      });
     },
     inspectBootstrap,
     finishBootstrap(

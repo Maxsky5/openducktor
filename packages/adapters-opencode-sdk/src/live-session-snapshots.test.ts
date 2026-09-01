@@ -75,4 +75,56 @@ describe("OpenCode live session snapshots", () => {
     expect(calls).toEqual(["status", "permissions", "questions"]);
     expect(reading).toBe(false);
   });
+
+  test("keeps the directory guard until all started calls settle", async () => {
+    const calls: string[] = [];
+    let finishQuestion = () => undefined;
+    const questionGate = new Promise<void>((resolve) => {
+      finishQuestion = resolve;
+    });
+    const baseClient = makeClient(calls);
+    const client: OpencodeClient = {
+      ...baseClient,
+      session: {
+        ...baseClient.session,
+        status: async () => {
+          calls.push("status");
+          throw new Error("status failed");
+        },
+      },
+      question: {
+        ...baseClient.question,
+        list: async () => {
+          calls.push("questions");
+          await questionGate;
+          return { data: [], error: undefined };
+        },
+      },
+    };
+    let reading = false;
+    let settled = false;
+    const listing = listOpencodeRuntimeSnapshotSources({
+      createClient: () => client,
+      runtimeEndpoint: "http://runtime-1",
+      now: () => "2026-07-16T10:02:00.000Z",
+      readDirectory: async (_directory, read) => {
+        reading = true;
+        try {
+          return await read();
+        } finally {
+          reading = false;
+        }
+      },
+    }).finally(() => {
+      settled = true;
+    });
+    await Bun.sleep(0);
+    const settledBeforeQuestionFinished = settled;
+    finishQuestion();
+
+    await expect(listing).rejects.toThrow("status failed");
+    expect(settledBeforeQuestionFinished).toBe(false);
+    expect(reading).toBe(false);
+    expect(calls).toEqual(["status", "permissions", "questions"]);
+  });
 });

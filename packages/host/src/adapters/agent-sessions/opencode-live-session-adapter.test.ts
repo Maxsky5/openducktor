@@ -202,6 +202,53 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     await Effect.runPromise(adapter.releaseRuntime());
   });
 
+  test("does not hold the runtime state lock while a session refresh waits", async () => {
+    const harness = createRuntimeHarness();
+    let markReadStarted: () => void = () => undefined;
+    let finishRead: () => void = () => undefined;
+    const readStarted = new Promise<void>((resolve) => {
+      markReadStarted = resolve;
+    });
+    const readGate = new Promise<void>((resolve) => {
+      finishRead = resolve;
+    });
+    const basePrepare = harness.prepareRuntime;
+    const prepareRuntime: PrepareOpencodeSessionRuntime = async (input) => {
+      const prepared = await basePrepare(input);
+      return {
+        ...prepared,
+        connection: {
+          ...prepared.connection,
+          readSessionSources: async () => {
+            markReadStarted();
+            await readGate;
+            return prepared.connection.readSessionSources();
+          },
+        },
+      };
+    };
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle([]),
+        prepareRuntime,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+
+    const refresh = harness.emit({ type: "sessions_invalidated" });
+    await readStarted;
+    const release = Effect.runPromise(prepared.adapter.releaseSession(ref));
+    const releaseFinishedWhileReadWaited = await Promise.race([
+      release.then(() => true),
+      Bun.sleep(200).then(() => false),
+    ]);
+    finishRead();
+    await Promise.all([refresh, release]);
+
+    expect(releaseFinishedWhileReadWaited).toBe(true);
+    await Effect.runPromise(prepared.adapter.releaseRuntime());
+  });
+
   test("keeps missing-context work demand-driven and shares one in-flight request", async () => {
     const harness = createRuntimeHarness();
     harness.setSources([

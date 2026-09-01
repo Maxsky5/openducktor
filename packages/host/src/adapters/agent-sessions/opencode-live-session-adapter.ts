@@ -170,15 +170,15 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
       });
 
       const refreshProjection = (): Effect.Effect<void, HostError> =>
-        serializeRuntime(
-          Effect.tryPromise({
-            try: () => prepared.connection.readSessionSources(),
-            catch: (cause) =>
-              toHostOperationError(cause, "opencode-live-session.refresh-sessions", {
-                runtimeId: runtime.runtimeId,
-              }),
-          }).pipe(
-            Effect.flatMap((sources) =>
+        Effect.tryPromise({
+          try: () => prepared.connection.readSessionSources(),
+          catch: (cause) =>
+            toHostOperationError(cause, "opencode-live-session.refresh-sessions", {
+              runtimeId: runtime.runtimeId,
+            }),
+        }).pipe(
+          Effect.flatMap((sources) =>
+            serializeRuntime(
               commit("opencode-live-session.commit-refresh", () => ({
                 value: undefined,
                 changes: state.refresh(sources),

@@ -108,13 +108,14 @@ export const createTaskSessionBootstrapUseCase = ({
           );
         }
         const bootstrapId = crypto.randomUUID();
-        yield* coordinator.acquireBootstrap(
-          canonicalRepoPath,
-          taskId,
-          bootstrapId,
-          role,
-          worktreePath,
-        );
+        yield* coordinator.acquireBootstrap(canonicalRepoPath, taskId, bootstrapId, role);
+        let cleanup: TaskSessionBootstrapReservation["cleanup"] = () => Effect.succeed("");
+        const releaseFailedBootstrap = () =>
+          Effect.gen(function* () {
+            const cleanupError = yield* cleanup();
+            yield* coordinator.releaseBootstrap(canonicalRepoPath, taskId, bootstrapId);
+            return cleanupError;
+          });
         const prepared = yield* Effect.either(
           Effect.gen(function* () {
             const task = yield* taskStore.getTask({ repoPath: canonicalRepoPath, taskId });
@@ -132,45 +133,49 @@ export const createTaskSessionBootstrapUseCase = ({
               cleanup: () => Effect.succeed(""),
             });
             const branch = buildBranchName(repoConfig.branchPrefix, taskId, task.title);
-            const exists = yield* dependencies.settingsConfig.pathExists(worktreePath);
-            let cleanup: TaskSessionBootstrapReservation["cleanup"] = () => Effect.succeed("");
-            if (exists) {
-              if (!(yield* dependencies.gitPort.isGitRepository(worktreePath))) {
-                return yield* Effect.fail(
-                  new HostValidationError({
-                    field: "taskId",
-                    message: `Canonical task worktree path exists but is not a Git worktree: ${worktreePath}`,
-                    details: { repoPath: canonicalRepoPath, taskId, role, worktreePath },
-                  }),
-                );
-              }
-              yield* validateExistingGitTaskWorktree(
-                dependencies,
-                canonicalRepoPath,
-                worktreePath,
-                taskId,
-                branch,
-              );
-            } else {
-              const newWorktree = yield* prepareNewTaskWorktree(
-                dependencies,
-                repoConfig,
-                task,
-                canonicalRepoPath,
-                worktreeBase,
-                worktreePath,
-                branch,
-              );
-              cleanup = newWorktree.cleanup;
-            }
-            yield* coordinator.attachBootstrapReservation({
-              bootstrapId,
-              canonicalRepoPath,
-              taskId,
-              role,
-              preparedStatus: task.status,
-              cleanup,
-            });
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                yield* coordinator.acquireWorktreeLifecycle([worktreePath]);
+                const exists = yield* dependencies.settingsConfig.pathExists(worktreePath);
+                if (exists) {
+                  if (!(yield* dependencies.gitPort.isGitRepository(worktreePath))) {
+                    return yield* Effect.fail(
+                      new HostValidationError({
+                        field: "taskId",
+                        message: `Canonical task worktree path exists but is not a Git worktree: ${worktreePath}`,
+                        details: { repoPath: canonicalRepoPath, taskId, role, worktreePath },
+                      }),
+                    );
+                  }
+                  yield* validateExistingGitTaskWorktree(
+                    dependencies,
+                    canonicalRepoPath,
+                    worktreePath,
+                    taskId,
+                    branch,
+                  );
+                } else {
+                  const newWorktree = yield* prepareNewTaskWorktree(
+                    dependencies,
+                    repoConfig,
+                    task,
+                    canonicalRepoPath,
+                    worktreeBase,
+                    worktreePath,
+                    branch,
+                  );
+                  cleanup = newWorktree.cleanup;
+                }
+                yield* coordinator.attachBootstrapReservation({
+                  bootstrapId,
+                  canonicalRepoPath,
+                  taskId,
+                  role,
+                  preparedStatus: task.status,
+                  cleanup,
+                });
+              }),
+            );
             yield* dependencies.runtimeRegistry
               .ensureWorkspaceRuntime({
                 runtimeKind,
@@ -203,17 +208,14 @@ export const createTaskSessionBootstrapUseCase = ({
                   cause,
                 }),
             });
-          }),
+          }).pipe(
+            Effect.onInterrupt(() => releaseFailedBootstrap().pipe(Effect.orDie, Effect.asVoid)),
+          ),
         );
         if (prepared._tag === "Right") {
           return prepared.right;
         }
-        const active = yield* coordinator.inspectBootstrap(canonicalRepoPath, taskId, bootstrapId);
-        let cleanupError = "";
-        if (active.state === "active" && active.reservation) {
-          cleanupError = yield* active.reservation.cleanup();
-        }
-        yield* coordinator.releaseBootstrap(canonicalRepoPath, taskId, bootstrapId);
+        const cleanupError = yield* releaseFailedBootstrap();
         return yield* Effect.fail(
           new HostOperationError({
             operation: "task.session_bootstrap.prepare",

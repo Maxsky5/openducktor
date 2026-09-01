@@ -675,13 +675,7 @@ describe("TaskService.closeTask", () => {
     await metadataRead;
     const bootstrap = await run(
       Effect.either(
-        taskSessionBootstrapCoordinator.acquireBootstrap(
-          "/repo",
-          "task-1",
-          "bootstrap-1",
-          "build",
-          null,
-        ),
+        taskSessionBootstrapCoordinator.acquireBootstrap("/repo", "task-1", "bootstrap-1", "build"),
       ),
     );
     if (bootstrap._tag === "Right") {

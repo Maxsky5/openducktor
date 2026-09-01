@@ -20,7 +20,7 @@ export type CreateRuntimeTaskActivityGuardInput = {
 type LiveSession = {
   externalSessionId: string;
   role: string;
-  runtimeKind: string;
+  runtimeKind: AgentSessionRecord["runtimeKind"];
   workingDirectory: string;
 };
 
@@ -63,7 +63,7 @@ const collectLiveSessions = (
         liveSessions.push({
           externalSessionId,
           role: session.role.trim(),
-          runtimeKind: session.runtimeKind.trim(),
+          runtimeKind: session.runtimeKind,
           workingDirectory: session.workingDirectory,
         });
       }
@@ -103,6 +103,7 @@ const collectTaskLiveSessions = (
 
 const stopLiveSessionRecords = (
   runtimeRegistry: RuntimeRegistryPort,
+  sessionService: Pick<AgentSessionLiveStateService, "list" | "releaseSession">,
   repoPath: string,
   operation: string,
   liveSessions: LiveSession[],
@@ -139,6 +140,29 @@ const stopLiveSessionRecords = (
           }),
         );
       stoppedSessionCount += 1;
+      yield* sessionService
+        .releaseSession({
+          repoPath,
+          runtimeKind: session.runtimeKind,
+          workingDirectory: session.workingDirectory,
+          externalSessionId: session.externalSessionId,
+        })
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new HostOperationError({
+                operation,
+                message: `Stopped session ${session.externalSessionId}, but failed releasing its live state: ${cause instanceof Error ? cause.message : String(cause)}`,
+                cause,
+                details: {
+                  externalSessionId: session.externalSessionId,
+                  role: session.role,
+                  runtimeKind: session.runtimeKind,
+                  stoppedSessionCount,
+                },
+              }),
+          ),
+        );
     }
     return stoppedSessionCount;
   });
@@ -193,6 +217,7 @@ export const createRuntimeTaskActivityGuard = ({
       });
       const stoppedSessionCount = yield* stopLiveSessionRecords(
         runtimeRegistry,
+        sessionService,
         input.repoPath,
         "runtimeTaskActivityGuard.cleanupTaskSessions",
         liveSessions,
