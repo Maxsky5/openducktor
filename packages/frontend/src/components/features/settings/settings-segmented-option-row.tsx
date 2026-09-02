@@ -40,6 +40,7 @@ export function SettingsSegmentedOptionRow<Value extends string>({
             active={value === option.value}
             size="sm"
             disabled={disabled}
+            inactiveClassName="text-foreground/70 hover:text-foreground"
             onClick={() => {
               if (value === option.value) {
                 return;

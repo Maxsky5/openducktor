@@ -62,6 +62,7 @@ describe("SettingsNotificationsSection", () => {
     await screen.findByText("Permission will be requested only when you test OS notifications.");
 
     expect(screen.getAllByRole("switch")).toHaveLength(NOTIFICATION_KIND_VALUES.length);
+    expect(screen.getByRole("group", { name: "Delivery for Permission Prompt" })).not.toBeNull();
     const idleSwitch = screen.getByRole("switch", { name: "Enable Agent Session Idle" });
     expect(idleSwitch.getAttribute("aria-checked")).toBe("false");
     fireEvent.click(idleSwitch);
