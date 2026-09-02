@@ -44,13 +44,14 @@ describe("Electron notification service", () => {
     FakeNativeNotification.instances = [];
     const service = createElectronNotificationService({
       Notification: FakeNativeNotification,
+      getPermission: () => "granted",
       getWindows: () => [],
     });
 
     expect(service.getCapability()).toEqual({
       platform: "electron",
       supported: true,
-      permission: "not_applicable",
+      permission: "granted",
       canGuaranteeSilent: true,
     });
     const delivery = service.show(request);
@@ -68,6 +69,7 @@ describe("Electron notification service", () => {
     FakeNativeNotification.supported = false;
     const unsupported = createElectronNotificationService({
       Notification: FakeNativeNotification,
+      getPermission: () => "not_applicable",
       getWindows: () => [],
     });
     expect(await unsupported.show(request)).toEqual({
@@ -79,6 +81,7 @@ describe("Electron notification service", () => {
     FakeNativeNotification.instances = [];
     const service = createElectronNotificationService({
       Notification: FakeNativeNotification,
+      getPermission: () => "granted",
       getWindows: () => [],
     });
     const delivery = service.show(request);
@@ -96,6 +99,7 @@ describe("Electron notification service", () => {
     const send = mock(() => {});
     const service = createElectronNotificationService({
       Notification: FakeNativeNotification,
+      getPermission: () => "granted",
       getWindows: () => [
         {
           isDestroyed: () => false,
@@ -121,6 +125,20 @@ describe("Electron notification service", () => {
     expect(focus).toHaveBeenCalledTimes(1);
     expect(send).toHaveBeenCalledWith(ELECTRON_NOTIFICATION_CLICKED_CHANNEL, {
       navigationTarget: request.navigationTarget,
+    });
+  });
+
+  test("reports denied native notification permission", () => {
+    const service = createElectronNotificationService({
+      Notification: FakeNativeNotification,
+      getPermission: () => "denied",
+      getWindows: () => [],
+    });
+
+    expect(service.getCapability()).toMatchObject({
+      platform: "electron",
+      supported: true,
+      permission: "denied",
     });
   });
 });

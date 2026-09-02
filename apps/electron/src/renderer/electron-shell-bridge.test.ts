@@ -93,6 +93,24 @@ const createElectronApi = () => {
           return unsubscribeAppUpdates;
         }),
       },
+      notifications: {
+        getCapability: mock(async () => ({
+          platform: "electron" as const,
+          supported: true,
+          permission: "granted" as const,
+          canGuaranteeSilent: true,
+        })),
+        requestPermission: mock(async () => ({
+          platform: "electron" as const,
+          supported: true,
+          permission: "granted" as const,
+          canGuaranteeSilent: true,
+        })),
+        openSystemSettings: mock(async () => {}),
+        isAppFocused: mock(async () => false),
+        show: mock(async () => ({ status: "shown" as const })),
+        subscribeClicks: mock(() => unsubscribe),
+      },
       openExternalUrl: mock(async () => {}),
       resolveLocalAttachmentPreviewSrc: mock(async () => "file:///tmp/brief.md"),
       editorClipboard: {
@@ -388,11 +406,13 @@ describe("electron shell bridge", () => {
     setElectronApi(electronApi);
 
     const bridge = createElectronShellBridge();
+    await bridge.notifications.openSystemSettings();
     await bridge.openExternalUrl("https://openducktor.local/docs");
     await expect(bridge.resolveLocalAttachmentPreviewSrc("brief.md")).resolves.toBe(
       "file:///tmp/brief.md",
     );
 
+    expect(electronApi.notifications.openSystemSettings).toHaveBeenCalledTimes(1);
     expect(electronApi.openExternalUrl).toHaveBeenCalledWith("https://openducktor.local/docs");
     expect(electronApi.resolveLocalAttachmentPreviewSrc).toHaveBeenCalledWith("brief.md");
   });

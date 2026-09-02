@@ -40,6 +40,18 @@ const createCoordinator = () => ({
 });
 
 describe("browser notification bridge", () => {
+  test("does not claim that it can open browser notification settings", async () => {
+    const bridge = createBrowserNotificationBridge({
+      NativeNotification: null,
+      coordinator: createCoordinator(),
+      focusWindow: () => {},
+    });
+
+    await expect(bridge.openSystemSettings()).rejects.toThrow(
+      "System notification settings cannot be opened from browser mode.",
+    );
+  });
+
   test("claims external delivery before dispatch starts", async () => {
     const coordinator = createCoordinator();
     const bridge = createBrowserNotificationBridge({

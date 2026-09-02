@@ -29,6 +29,7 @@ export const useNotificationTestControls = (settings: NotificationSettings | nul
   const capabilityQuery = useQuery(notificationOsCapabilityQueryOptions(runtime.getCapability));
   const [status, setStatus] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
+  const [isOpeningSettings, setIsOpeningSettings] = useState(false);
 
   const testNotification = async (target: "in_app" | "os"): Promise<void> => {
     if (!settings) {
@@ -55,6 +56,19 @@ export const useNotificationTestControls = (settings: NotificationSettings | nul
     }
   };
 
+  const openSystemSettings = async (): Promise<void> => {
+    setIsOpeningSettings(true);
+    setStatus(null);
+    try {
+      await runtime.openSystemSettings();
+      setStatus("System notification settings opened.");
+    } catch (cause) {
+      setStatus(errorMessage(cause));
+    } finally {
+      setIsOpeningSettings(false);
+    }
+  };
+
   return {
     capability: capabilityQuery.data,
     capabilityDescription: describeNotificationOsCapability(
@@ -62,6 +76,8 @@ export const useNotificationTestControls = (settings: NotificationSettings | nul
       capabilityQuery.error,
     ),
     isTesting,
+    isOpeningSettings,
+    openSystemSettings,
     status,
     testNotification,
   };

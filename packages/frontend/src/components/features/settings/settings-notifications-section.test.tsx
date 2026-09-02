@@ -24,6 +24,7 @@ const createNotificationContext = (
     permission: "prompt",
     canGuaranteeSilent: true,
   }),
+  openSystemSettings: async () => {},
   previewCue: async () => {},
   testInApp: async () => {},
   testOs: async () => ({ status: "shown" }),
@@ -114,6 +115,29 @@ describe("SettingsNotificationsSection", () => {
     fireEvent.click(testOsButton);
     await waitFor(() => expect(testOs).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(getCapability).toHaveBeenCalledTimes(2));
+  });
+
+  test("opens system settings when Electron notification permission is denied", async () => {
+    const openSystemSettings = mock(async () => {});
+    render(
+      <NotificationsHarness
+        context={createNotificationContext({
+          getCapability: async () => ({
+            platform: "electron",
+            supported: true,
+            permission: "denied",
+            canGuaranteeSilent: true,
+          }),
+          openSystemSettings,
+        })}
+      />,
+    );
+
+    await screen.findByText("OS notification permission is denied.");
+    fireEvent.click(screen.getByRole("button", { name: "Open system settings" }));
+
+    await waitFor(() => expect(openSystemSettings).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("System notification settings opened.")).toBeTruthy();
   });
 
   test("uses a slider for volume", async () => {

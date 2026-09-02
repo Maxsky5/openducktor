@@ -154,6 +154,7 @@ export const createNotificationRuntime = ({
       };
     },
     getCapability: () => bridge.getCapability(),
+    openSystemSettings: () => bridge.openSystemSettings(),
     previewCue(cue: NotificationCue, volumePercent: number): Promise<void> {
       return sound.play(cue, volumePercent);
     },

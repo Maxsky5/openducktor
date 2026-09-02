@@ -35,6 +35,7 @@ const notificationContextValue = {
     permission: "prompt" as const,
     canGuaranteeSilent: true,
   }),
+  openSystemSettings: async () => {},
   previewCue: async () => {},
   testInApp: async () => {},
   testOs: async () => ({ status: "shown" as const }),

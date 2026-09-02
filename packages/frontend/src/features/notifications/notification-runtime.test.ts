@@ -21,6 +21,7 @@ const createBridge = (overrides: Partial<NotificationBridge> = {}): Notification
     permission: "granted",
     canGuaranteeSilent: true,
   }),
+  openSystemSettings: async () => {},
   isAppFocused: async () => false,
   withExternalDeliveryOwnership: async (_occurrenceId, dispatch) => dispatch(true),
   showOsNotification: async () => ({ status: "shown" }),

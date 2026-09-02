@@ -192,6 +192,7 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
     () => ({
       osFailure: selectNotificationFailure(failureState),
       getCapability: runtime.getCapability,
+      openSystemSettings: runtime.openSystemSettings,
       previewCue: runtime.previewCue,
       testInApp: runtime.testInApp,
       testOs: runtime.testOs,

@@ -173,6 +173,9 @@ export const createBrowserNotificationBridge = ({
       }
       return getCapability();
     },
+    async openSystemSettings() {
+      throw new Error("System notification settings cannot be opened from browser mode.");
+    },
     isAppFocused: () => coordinator.isAnyTabFocused(),
     async withExternalDeliveryOwnership(occurrenceId, dispatch) {
       await dispatch(await coordinator.claimExternalDelivery(occurrenceId));

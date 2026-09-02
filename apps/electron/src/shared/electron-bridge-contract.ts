@@ -56,6 +56,7 @@ export const ELECTRON_NOTIFICATION_GET_CAPABILITY_CHANNEL =
   "openducktor:notification:get-capability";
 export const ELECTRON_NOTIFICATION_REQUEST_PERMISSION_CHANNEL =
   "openducktor:notification:request-permission";
+export const ELECTRON_NOTIFICATION_OPEN_SETTINGS_CHANNEL = "openducktor:notification:open-settings";
 export const ELECTRON_NOTIFICATION_GET_APP_FOCUS_CHANNEL = "openducktor:notification:get-app-focus";
 export const ELECTRON_NOTIFICATION_SHOW_CHANNEL = "openducktor:notification:show";
 export const ELECTRON_WINDOW_TITLE_BAR_HEIGHT = 40;
@@ -174,6 +175,7 @@ export const electronNotificationClickEventSchema = notificationClickEventSchema
 export type OpenDucktorElectronNotificationApi = {
   getCapability(): Promise<NotificationOsCapability>;
   requestPermission(): Promise<NotificationOsCapability>;
+  openSystemSettings(): Promise<void>;
   isAppFocused(): Promise<boolean>;
   show(request: NotificationOsDeliveryRequest): Promise<NotificationDeliveryResult>;
   subscribeClicks(listener: (event: NotificationClickEvent) => void): () => void;
