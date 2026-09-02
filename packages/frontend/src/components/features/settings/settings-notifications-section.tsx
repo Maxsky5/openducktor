@@ -8,10 +8,10 @@ import {
   type NotificationTarget,
 } from "@openducktor/contracts";
 import { Bell, BellRing } from "lucide-react";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -50,6 +50,74 @@ const soundFocusOptions: SegmentedOption<NotificationSettings["soundFocus"]>[] =
 const AGENT_KINDS = NOTIFICATION_KIND_VALUES.filter((kind) => kind.startsWith("agent."));
 const WORKFLOW_KINDS = NOTIFICATION_KIND_VALUES.filter((kind) => kind.startsWith("workflow."));
 
+type SettingsRadioGroupProps<Value extends string> = {
+  label: string;
+  idPrefix: string;
+  value: Value;
+  options: readonly SegmentedOption<Value>[];
+  disabled: boolean;
+  onValueChange: (value: Value) => void;
+};
+
+function SettingsRadioGroup<Value extends string>({
+  label,
+  idPrefix,
+  value,
+  options,
+  disabled,
+  onValueChange,
+}: SettingsRadioGroupProps<Value>): ReactElement {
+  return (
+    <RadioGroup
+      aria-label={label}
+      value={value}
+      disabled={disabled}
+      className="flex flex-wrap gap-x-5 gap-y-2"
+      onValueChange={(nextValue) => {
+        const option = options.find((candidate) => candidate.value === nextValue);
+        if (option && option.value !== value) {
+          onValueChange(option.value);
+        }
+      }}
+    >
+      {options.map((option) => {
+        const optionId = `${idPrefix}-${option.value}`;
+        return (
+          <div key={option.value} className="flex items-center gap-2">
+            <RadioGroupItem id={optionId} value={option.value} />
+            <Label
+              htmlFor={optionId}
+              className="cursor-pointer text-sm font-normal text-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-50"
+            >
+              {option.label}
+            </Label>
+          </div>
+        );
+      })}
+    </RadioGroup>
+  );
+}
+
+function NotificationSettingCard({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}): ReactElement {
+  return (
+    <div className="grid content-between gap-4 rounded-md border border-border bg-card p-4">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 type NotificationKindRowProps = {
   kind: NotificationKind;
   settings: NotificationSettings;
@@ -78,53 +146,45 @@ function NotificationKindRow({
   };
 
   return (
-    <div className="grid gap-4 p-4 sm:grid-cols-2 xl:grid-cols-[minmax(16rem,1fr)_15rem_15rem] xl:items-center">
-      <div className="flex min-w-0 items-start gap-3 sm:col-span-2 xl:col-span-1">
+    <div className="grid gap-4 rounded-md border border-border bg-card p-4">
+      <div className="flex min-w-0 items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-foreground">{kindLabel}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {NOTIFICATION_KIND_DESCRIPTIONS[kind]}
+          </p>
+        </div>
         <Switch
           checked={kindSettings.enabled}
           disabled={disabled}
           aria-label={`Enable ${kindLabel}`}
-          className="mt-0.5"
+          className="shrink-0"
           onCheckedChange={(enabled) => updateKind({ enabled })}
         />
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-foreground">{kindLabel}</p>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            {NOTIFICATION_KIND_DESCRIPTIONS[kind]}
-          </p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid min-w-0 content-start gap-2">
+          <Label className="text-xs text-muted-foreground">Delivery</Label>
+          <SettingsRadioGroup
+            label={`Delivery for ${kindLabel}`}
+            idPrefix={`notification-${kind}-target`}
+            value={kindSettings.target}
+            options={targetOptions}
+            disabled={disabled || !kindSettings.enabled}
+            onValueChange={(target) => updateKind({ target })}
+          />
         </div>
-      </div>
-      <div className="grid min-w-0 gap-2">
-        <Label className="text-xs text-muted-foreground xl:sr-only">Delivery</Label>
-        <SegmentedControlRoot size="sm" className="w-full" aria-label={`Delivery for ${kindLabel}`}>
-          {targetOptions.map((option) => (
-            <SegmentedControlItem
-              key={option.value}
-              active={kindSettings.target === option.value}
-              size="sm"
-              disabled={disabled || !kindSettings.enabled}
-              inactiveClassName="text-foreground/70 hover:text-foreground"
-              onClick={() => {
-                if (kindSettings.target !== option.value) {
-                  updateKind({ target: option.value });
-                }
-              }}
-            >
-              {option.label}
-            </SegmentedControlItem>
-          ))}
-        </SegmentedControlRoot>
-      </div>
-      <div className="grid min-w-0 gap-2">
-        <Label className="text-xs text-muted-foreground xl:sr-only">Sound</Label>
-        <NotificationSoundPicker
-          label={`Sound for ${kindLabel}`}
-          value={kindSettings.sound}
-          options={createNotificationSoundOptions(settings.globalCue)}
-          disabled={disabled || !kindSettings.enabled}
-          onValueChange={(sound) => updateKind({ sound: notificationSoundSchema.parse(sound) })}
-          onPreview={onPreview}
-        />
+        <div className="grid min-w-0 content-start gap-2">
+          <Label className="text-xs text-muted-foreground">Sound</Label>
+          <NotificationSoundPicker
+            label={`Sound for ${kindLabel}`}
+            value={kindSettings.sound}
+            options={createNotificationSoundOptions(settings.globalCue)}
+            disabled={disabled || !kindSettings.enabled}
+            onValueChange={(sound) => updateKind({ sound: notificationSoundSchema.parse(sound) })}
+            onPreview={onPreview}
+          />
+        </div>
       </div>
     </div>
   );
@@ -150,24 +210,17 @@ function NotificationKindGroup({
   return (
     <section className="grid gap-3">
       <h4 className="text-sm font-semibold text-foreground">{title}</h4>
-      <div className="overflow-hidden rounded-lg border border-border bg-card">
-        <div className="hidden grid-cols-[minmax(16rem,1fr)_15rem_15rem] gap-4 border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground xl:grid">
-          <span>Event</span>
-          <span>Delivery</span>
-          <span>Sound</span>
-        </div>
-        <div className="divide-y divide-border">
-          {kinds.map((kind) => (
-            <NotificationKindRow
-              key={kind}
-              kind={kind}
-              settings={settings}
-              disabled={disabled}
-              onUpdate={onUpdate}
-              onPreview={onPreview}
-            />
-          ))}
-        </div>
+      <div className="grid gap-3 xl:grid-cols-2">
+        {kinds.map((kind) => (
+          <NotificationKindRow
+            key={kind}
+            kind={kind}
+            settings={settings}
+            disabled={disabled}
+            onUpdate={onUpdate}
+            onPreview={onPreview}
+          />
+        ))}
       </div>
     </section>
   );
@@ -191,30 +244,16 @@ function FocusSettingRow<Value extends string>({
   onValueChange,
 }: FocusSettingRowProps<Value>): ReactElement {
   return (
-    <div className="grid gap-4 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] sm:items-center">
-      <div className="min-w-0">
-        <p className="text-sm font-medium text-foreground">{title}</p>
-        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
-      </div>
-      <SegmentedControlRoot size="sm" className="w-full" aria-label={title}>
-        {options.map((option) => (
-          <SegmentedControlItem
-            key={option.value}
-            active={option.value === value}
-            size="sm"
-            disabled={disabled}
-            inactiveClassName="text-foreground/70 hover:text-foreground"
-            onClick={() => {
-              if (option.value !== value) {
-                onValueChange(option.value);
-              }
-            }}
-          >
-            {option.label}
-          </SegmentedControlItem>
-        ))}
-      </SegmentedControlRoot>
-    </div>
+    <NotificationSettingCard title={title} description={description}>
+      <SettingsRadioGroup
+        label={title}
+        idPrefix={`notification-focus-${title.toLowerCase().replaceAll(" ", "-")}`}
+        value={value}
+        options={options}
+        disabled={disabled}
+        onValueChange={onValueChange}
+      />
+    </NotificationSettingCard>
   );
 }
 
@@ -242,10 +281,10 @@ export function SettingsNotificationsSection({
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 p-5 md:p-6">
+    <div className="grid gap-6 p-4">
       <div>
-        <h3 className="text-base font-semibold text-foreground">Notifications</h3>
-        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+        <h3 className="text-sm font-semibold text-foreground">Notifications</h3>
+        <p className="mt-2 text-xs text-muted-foreground">
           Choose which agent and workflow events notify you, where they appear, and which sound they
           play.
         </p>
@@ -258,14 +297,11 @@ export function SettingsNotificationsSection({
             Set the default sound, volume, and behavior while OpenDucktor has focus.
           </p>
         </div>
-        <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
-          <div className="grid gap-4 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] sm:items-center">
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground">Default sound</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                New notification rules use this sound unless you choose another one.
-              </p>
-            </div>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <NotificationSettingCard
+            title="Default sound"
+            description="New notification rules use this sound unless you choose another one."
+          >
             <NotificationSoundPicker
               label="Default sound"
               value={notifications.globalCue}
@@ -279,14 +315,11 @@ export function SettingsNotificationsSection({
               }
               onPreview={previewCue}
             />
-          </div>
-          <div className="grid gap-4 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] sm:items-center">
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground">Volume</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Applies to every notification sound.
-              </p>
-            </div>
+          </NotificationSettingCard>
+          <NotificationSettingCard
+            title="Volume"
+            description="Applies to every notification sound."
+          >
             <div className="flex items-center gap-4">
               <Slider
                 aria-label="Volume"
@@ -307,7 +340,7 @@ export function SettingsNotificationsSection({
                 {notifications.volumePercent}%
               </output>
             </div>
-          </div>
+          </NotificationSettingCard>
           <FocusSettingRow
             title="OS notifications"
             description="Show OS notices only when the app is unfocused, or show them at all times."
