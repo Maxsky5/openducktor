@@ -3,24 +3,29 @@ status: accepted
 date: 2026-06-25
 ---
 
-# Implement Claude as a Claude Agent SDK Runtime
+# Implement Claude as a Claude Agent SDK runtime
 
-OpenDucktor will implement Claude as a first-class Runtime through the official Claude Agent SDK. This supersedes [ADR 0004](./0004-use-claude-agent-sdk-for-claude-runtime.md): the previous decision treated the SDK as the right path if OpenDucktor later built a managed Claude Runtime, while this decision says to build that Runtime. Anthropic has paused the planned June 15, 2026 separate Agent SDK credit model, so subscription-authenticated Claude Agent SDK usage, `claude -p`, Claude Code GitHub Actions, and third-party Agent SDK app usage currently still draw from subscription usage limits; the managed Runtime choice should therefore be based on integration control, where the SDK is the better surface because it gives OpenDucktor structured control over system prompts, MCP servers, permission decisions, streaming messages, settings sources, and session lifecycle.
+## Decision
 
-## Considered Options
+Implement Claude as a runtime with the official Claude Agent SDK. This decision supersedes [ADR 0004](./0004-use-claude-agent-sdk-for-claude-runtime.md), which chose the SDK but did not approve the implementation.
 
-- Claude Agent SDK. Accepted because it is the documented programmable Claude Code surface for TypeScript/Python applications and exposes the controls OpenDucktor needs for a managed Runtime.
-- `claude -p`. Rejected as the primary Runtime path because it has the same current subscription-usage treatment as SDK usage, while making OpenDucktor own process lifecycle, stream parsing, pending-permission routing, and error mapping that the SDK exposes directly.
-- Interactive Claude Code in a terminal or IDE. Rejected as the managed Runtime path because it still uses normal subscription limits but does not expose OpenDucktor's structured Runtime contract. It can remain a separate launcher or terminal integration later.
+Anthropic paused its planned June 15, 2026 Agent SDK credit model. At the date of this decision, subscription-authenticated SDK use, `claude -p`, Claude Code GitHub Actions, and third-party SDK apps use subscription limits. Choose the SDK for its runtime controls, not for a billing assumption. It gives OpenDucktor structured system prompts, MCP servers, permission decisions, stream messages, settings sources, and session lifecycle.
+
+## Options we rejected
+
+- `claude -p` as the main runtime. It has the same subscription treatment, but OpenDucktor would own process control, stream parsing, permission routing, and error mapping.
+- Interactive Claude Code as the managed runtime. It does not expose the structured OpenDucktor runtime contract. A later terminal launcher can remain separate.
 
 ## Consequences
 
-Claude Runtime implementation work should add a `claude` Runtime Descriptor, host starter, Runtime Adapter, permission policy, MCP wiring, settings/auth/billing setup, and focused contract tests across the same runtime seams used by OpenCode and Codex. Product setup must link users to Anthropic's current plan policy instead of hard-coding quota assumptions, because subscription-authenticated SDK billing and usage treatment has already changed direction once. Shared production automation should prefer Claude Platform API-key billing when predictable pay-as-you-go usage is more important than using a user's Claude subscription limits.
+Add a `claude` descriptor, host starter, runtime adapter, permission policy, MCP setup, settings, auth, billing guidance, and focused contract tests. Use the same runtime boundaries as OpenCode and Codex.
 
-Relevant references:
+Link users to Anthropic's current plan policy instead of hard-coding quota rules. For shared automation, prefer Claude Platform API-key billing when fixed pay-as-you-go use matters more than a user's subscription limits.
 
-- [ADR 0004: Use Claude Agent SDK for the Managed Claude Runtime](./0004-use-claude-agent-sdk-for-claude-runtime.md)
+## References
+
+- [ADR 0004](./0004-use-claude-agent-sdk-for-claude-runtime.md)
 - [Claude Agent SDK TypeScript reference](https://docs.anthropic.com/en/docs/claude-code/sdk/sdk-typescript)
 - [Run Claude Code programmatically](https://docs.anthropic.com/en/docs/claude-code/headless)
-- [Claude plan policy for Agent SDK usage](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan)
-- [OpenDucktor runtime integration guide](../runtime-integration-guide.md)
+- [Claude plan policy](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan)
+- [Runtime integration guide](../runtime-integration-guide.md)

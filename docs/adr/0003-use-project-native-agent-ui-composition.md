@@ -3,44 +3,37 @@ status: accepted
 date: 2026-02-18
 ---
 
-# Use Project-Native Agent UI Composition
-
-OpenDucktor's agent surfaces are workflow tools, not generic chat widgets: they combine role-specific launch controls, permission and question handling, task documents, runtime status, tool timelines, and host actions. We will keep the agent UI built from project-native React, shadcn components, Tailwind tokens, and OpenDucktor state/query primitives instead of adopting a third-party assistant UI component system. This keeps workflow semantics in the app while leaving runtime orchestration behind replaceable adapter boundaries.
+# Use project-native Agent UI composition
 
 ## Context
 
-At the start of the project, it was reasonable to ask whether OpenDucktor should use an agent UI library instead of building its own Agent Studio surfaces. Since then, the product surface has become more specific:
+Agent Studio is a workflow UI, not a general chat widget. It shows role launch controls, permission requests, questions, task documents, runtime status, tool calls, and host actions.
 
-- task roles map to OpenDucktor workflow states and `odt_*` tools,
-- sessions are tied to local runtimes, build worktrees, Beads metadata, and host-managed shell actions,
-- permission prompts, structured questions, queued user turns, task documents, todos, git status, and runtime diagnostics all need product-specific rendering and refresh behavior,
-- OpenCode and Codex expose different runtime-native event and transport shapes behind the same `AgentEnginePort`.
-
-Those constraints make a generic chat UI kit a poor owner for the primary interaction model.
+Its sessions also depend on local runtimes, task worktrees, task metadata, shell actions, queued user turns, todos, Git status, and runtime checks. OpenCode and Codex expose different events and transports behind `AgentEnginePort`. A general chat UI library does not own these product rules.
 
 ## Decision
 
-Use project-native composition for Agent Studio:
+Build Agent Studio from project-owned parts:
 
-- React feature components in `packages/frontend`,
-- shadcn primitives from `packages/frontend/src/components/ui`,
-- Tailwind semantic tokens from the shared frontend theme,
-- TanStack Query for stable host/runtime reads,
-- OpenDucktor state and operation hooks for live session orchestration,
-- `@openducktor/adapters-opencode-sdk` and `@openducktor/adapters-codex-app-server` behind `AgentEnginePort`,
+- React feature components in `packages/frontend`.
+- shadcn components from `packages/frontend/src/components/ui`.
+- Tailwind semantic theme tokens.
+- TanStack Query for stable host and runtime reads.
+- OpenDucktor state and operation hooks for live sessions.
+- Runtime adapters behind `AgentEnginePort`.
 - `@openducktor/host-client` for host commands, task transitions, and runtime control.
 
-Third-party UI libraries may still be used for focused primitives when they fit the local design system, but they must not become the owner of OpenDucktor's agent workflow semantics.
+A third-party UI library can provide a small component that fits the local design system. It must not own OpenDucktor workflow rules.
 
-## Considered Options
+## Options we rejected
 
-- Vercel AI SDK UI (`@ai-sdk/react`). Rejected as the primary UI layer because it is a headless message/state layer, not a complete OpenDucktor workflow surface. It may still be useful as a reference for streaming and message-state ideas.
-- Assistant-focused component libraries. Rejected as the primary UI layer because they optimize for generic chat assistants, while OpenDucktor needs local runtime lifecycle, Beads workflow transitions, task documents, and host-command semantics on screen.
-- Project-native shadcn + Tailwind composition. Accepted because it matches the existing app shell, keeps UI ownership close to OpenDucktor's workflow model, and preserves runtime replaceability at the adapter boundary.
+- Vercel AI SDK UI as the main UI layer. It manages messages and state, but it does not model the OpenDucktor workflow.
+- An assistant UI component library as the main UI layer. General chat controls do not model local runtime and task rules.
+- Project-native shadcn and Tailwind composition. We chose this option because it uses the current app shell and keeps runtime code behind adapters.
 
 ## Consequences
 
-- Agent Studio UI changes must stay aligned with OpenDucktor contracts and host/runtime ownership, not library-owned chat abstractions.
-- New controls should use existing shadcn primitives and semantic theme tokens rather than introducing a parallel visual system.
-- Shared agent logic should be extracted into focused local hooks or components only when it removes real duplication across OpenDucktor surfaces.
-- Runtime-specific behavior belongs in runtime descriptors, adapters, and host orchestration, not in generic UI component assumptions.
+- Keep Agent Studio UI changes in step with OpenDucktor contracts and host ownership.
+- Use current shadcn components and theme tokens.
+- Extract a shared hook or component only when two OpenDucktor views have the same rule.
+- Put runtime-specific rules in descriptors, adapters, and host orchestration.

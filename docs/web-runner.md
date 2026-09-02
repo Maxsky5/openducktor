@@ -1,59 +1,57 @@
-# OpenDucktor Web Runner
+# OpenDucktor web runner
 
-The web runner lets OpenDucktor run in a browser without a desktop window. It uses the same shared React frontend and TypeScript host boundary as the Electron shell.
+The web runner opens OpenDucktor in a browser. It uses the same React frontend and TypeScript host contract as the Electron app.
 
-## Command
+## Start the runner
+
+Use the published package:
 
 ```sh
 bunx @openducktor/web
 ```
 
-During repository development, use the root wrapper:
+Use this command while you work in the repository:
 
 ```sh
 bun run browser:dev
 ```
 
-Both commands start a loopback-only TypeScript host backend and serve the shared frontend.
+Both commands start a loopback-only host and serve the shared frontend.
 
 ## Architecture
 
-- `packages/frontend` owns the shared React app and shell bootstrap. It exposes `bootstrapOpenDucktorShell` and the `ShellBridge` contract types.
-- `apps/electron` is a thin Electron shell that implements the bridge with Electron IPC/preload and delegates host behavior to `@openducktor/host`.
-- `packages/openducktor-web` is a browser shell and launcher. It implements the bridge with HTTP invoke calls and SSE subscriptions against the local TypeScript host backend.
-- `packages/openducktor-web/src/typescript-host-backend.ts` adapts `@openducktor/host` to the browser HTTP/SSE contract.
+- `packages/frontend` owns the React app, `bootstrapOpenDucktorShell`, and `ShellBridge` types.
+- `apps/electron` implements the bridge with preload IPC and delegates host work to `@openducktor/host`.
+- `packages/openducktor-web` implements the bridge with HTTP calls and SSE subscriptions.
+- `packages/openducktor-web/src/typescript-host-backend.ts` maps `@openducktor/host` to the HTTP and SSE contract.
 
-Shared frontend code must not import shell internals directly. The root `bun run frontend:boundary-guard` check enforces that boundary.
+Shared frontend code cannot import shell internals. `bun run frontend:boundary-guard` checks this rule.
 
-## Control Plane
+## Access control
 
-The launcher generates two tokens for each run and passes both to the TypeScript host backend:
+The launcher creates two tokens for each run:
 
-- a control token for launcher-only operations such as `/shutdown`, sent with the `x-openducktor-control-token` header;
-- an app token for browser-facing API bootstrap. The browser shell sends it once to `/session` with the `x-openducktor-app-token` header. The host then sets an HttpOnly `openducktor_web_session` cookie for SSE streams and attachment previews, so app tokens are not placed in URLs. Invoke requests still include the app-token header and credentials.
+- The control token authorizes launcher calls such as `/shutdown`. The launcher sends it in `x-openducktor-control-token`.
+- The app token starts a browser session. The browser sends it once to `/session` in `x-openducktor-app-token`.
 
-The browser shell fails fast if the launcher does not inject `VITE_ODT_BROWSER_BACKEND_URL` and `VITE_ODT_BROWSER_AUTH_TOKEN`. There is no default backend URL, so a page cannot accidentally attach to a stale local host.
+The host then sets the HttpOnly `openducktor_web_session` cookie for SSE and attachment previews. Invoke requests keep the app-token header and credentials. Tokens do not appear in URLs.
 
-The web host validates the configured frontend origin for CORS. The origin must be an `http` loopback origin with an explicit port and no credentials, path, query, or fragment. There is no fallback from the web host to a desktop runtime route.
+The browser shell requires `VITE_ODT_BROWSER_BACKEND_URL` and `VITE_ODT_BROWSER_AUTH_TOKEN`. It does not use a default URL. The host accepts only a configured `http` loopback origin with an explicit port and no user info, path, query, or fragment. The web host does not fall back to a desktop runtime route.
 
-## Release Packaging
+## Package
 
-Published installs are self-contained in the `@openducktor/web` package:
+The published `@openducktor/web` package contains:
 
-- `dist/cli.js` contains the launcher and TypeScript host backend.
-- `dist/web-shell/**` contains the built browser shell.
+- `dist/cli.js` for the launcher and TypeScript host.
+- `dist/web-shell/**` for the built browser UI.
 
-Release automation owns the package in `.github/workflows/publish-web.yml`. The workflow builds `@openducktor/web`, verifies package contents with `scripts/prepare-web-publish-packages.ts`, runs `npm publish --dry-run`, and publishes the package through npm Trusted Publisher.
+`.github/workflows/publish-web.yml` builds and checks the package. It runs `scripts/prepare-web-publish-packages.ts` and `npm publish --dry-run`, then publishes through npm Trusted Publisher.
 
-Workspace development mode (`bun run browser:dev`) runs the same launcher in `--workspace` mode. It starts the TypeScript host backend in-process and serves the repo-local frontend with Vite.
+`bun run browser:dev` runs the same launcher in workspace mode and serves the local frontend with Vite. Both modes stop with an error when config, session setup, or a host command fails.
 
-The published package and workspace mode both fail fast if runtime config is missing, if the launcher cannot establish a session with the app token, or if a host command is unavailable.
+The web runner supports local browser use. Its platform behavior follows the TypeScript host and local runtime discovery.
 
-The web runner is currently intended for local development and local browser use. Platform behavior follows the TypeScript host and local runtime discovery behavior.
-
-## Verification
-
-Relevant checks for web-runner changes:
+## Verify a change
 
 ```sh
 bun run frontend:boundary-guard
@@ -64,4 +62,4 @@ bun run --filter @openducktor/web typecheck
 bun run --filter @openducktor/web build
 ```
 
-Full release confidence also requires the root repo checks (`bun run lint`, `bun run typecheck`, `bun run test`, `bun run build`) and a browser smoke against the live `bun run browser:dev` app. Desktop changes should be smoke-tested with `bun run electron:dev` or a packaged desktop artifact before publishing the draft release.
+Before a release, also run the root lint, typecheck, test, and build. Test the live browser app. Test desktop changes with `bun run electron:dev` or a packaged app before you publish the draft.

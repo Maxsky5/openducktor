@@ -1,31 +1,29 @@
-# MCP Runtime Security Assumptions
+# MCP runtime security
 
-This document defines allowed runtime transports and threat assumptions for `@openducktor/mcp`.
+This document defines the allowed transport and threat model for `@openducktor/mcp` version 1.
 
-## Allowed Transports (V1)
+## Allowed transport
 
-- Allowed: MCP `stdio` transport only.
-- Not allowed: network transports (`streamable-http`, SSE, WebSocket, Lambda adapters, reverse-proxied HTTP endpoints).
+Use MCP `stdio` only. `packages/openducktor-mcp/src/index.ts` uses `StdioServerTransport`.
 
-Current implementation uses `StdioServerTransport` in
-`packages/openducktor-mcp/src/index.ts`.
+Do not expose `streamable-http`, SSE, WebSocket, Lambda, or a reverse-proxied HTTP endpoint.
 
-## Threat Assumptions (V1)
+## Threat model
 
-- The MCP server is launched as a local child process by a trusted OpenDucktor runtime.
-- Transport channel is process-local stdio, not internet-reachable.
-- Request metadata from external network boundaries (for example `x-forwarded-for`) is not part of auth decisions in V1.
+- A trusted local OpenDucktor runtime starts the MCP server as a child process.
+- The transport is process-local stdio and cannot accept an Internet connection.
+- External network headers such as `x-forwarded-for` do not take part in version 1 access decisions.
 
-## Supply-Chain Guardrails
+## Supply chain
 
-- `hono` is pinned via root `package.json` override to `^4.12.2` or later.
-- CI runs the Hono policy through the single-request `bun run deps:audit` step in `bun run deps:check`. The policy fails on GHSA-`xh87-mx6m-69f3` or GHSA-`v8w9-8mx6-g223` regression.
+- The root `package.json` override must resolve `hono` to `>=4.12.7`.
+- CI applies the Hono policy through the single-request `bun run deps:audit` step in `bun run deps:check`. It rejects GHSA-`xh87-mx6m-69f3` or GHSA-`v8w9-8mx6-g223`.
 
-## Change Control for Future Transport Expansion
+## Add a network transport
 
-Before enabling any network-facing transport:
+Before you add a network transport:
 
-1. Complete a security design review for authn/authz and proxy trust boundaries.
-2. Reassess dependency advisories for transport framework code paths.
-3. Add integration tests that verify spoofed client-IP headers cannot bypass authentication.
-4. Update this document and `docs/dependency-hygiene.md` in the same change.
+1. Review authentication, authorization, and proxy trust.
+2. Review advisories for every transport dependency and code path.
+3. Add integration tests that prove spoofed client IP headers cannot bypass authentication.
+4. Update this file and [dependency hygiene](dependency-hygiene.md) in the same change.

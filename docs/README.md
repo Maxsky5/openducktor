@@ -1,35 +1,33 @@
-# Documentation Guide
+# Documentation guide
 
-This folder contains the project documentation for OpenDucktor's current architecture, runtime model, release process, and task workflow.
+Use this index to find the document for your task.
 
-## Read This First
+## Start here
 
-- [../README.md](../README.md): public project overview, install guide, and contribution entry point.
-- [architecture-overview.md](architecture-overview.md): high-level map of the shared frontend, Electron/browser shells, TypeScript host, SQLite task-store persistence, and runtime data flows.
-- [cli-tool-discovery.md](cli-tool-discovery.md): host-owned CLI discovery architecture, descriptor source order, distribution-mode boundaries, and the checklist for adding new tools.
-- [effect.md](effect.md): current Effect conventions for host ports, services, adapters, lifecycle, testing, and public boundaries.
-- [tanstack-query-cache-strategy.md](tanstack-query-cache-strategy.md): frontend cache strategy and the boundary between Query-owned reads and host/runtime execution.
-- [runtime-integration-guide.md](runtime-integration-guide.md): how OpenCode and Codex fit into OpenDucktor and what another runtime integration requires.
-- [web-runner.md](web-runner.md): local browser runner architecture, command usage, and package/release expectations for the TypeScript host backend.
-- [adr/](adr/): architecture decision records explaining durable technical choices and rejected alternatives.
+- Read [the project README](../README.md) for the product summary, install steps, and contribution links.
+- Read [the architecture overview](architecture-overview.md) before you change a cross-package data flow or ownership boundary.
+- Read [the Effect guide](effect.md) before you change a host port, service, adapter, lifecycle, or typed error.
+- Read [the runtime integration guide](runtime-integration-guide.md) before you add a runtime or change runtime capabilities, sessions, history, approvals, prompts, or catalogs.
+- Read [the CLI and tool discovery guide](cli-tool-discovery.md) before you add a CLI tool or change how a shell finds one.
+- Read [the TanStack Query cache strategy](tanstack-query-cache-strategy.md) before you add or change a frontend read from the host or backend.
 
-## Workflow Docs
+## Task workflow
 
-- [task-workflow-status-model.md](task-workflow-status-model.md): canonical task statuses, metadata ownership, and issue-type rules.
-- [task-workflow-actions.md](task-workflow-actions.md): canonical workflow actions and UI rendering expectations.
-- [task-workflow-transition-matrix.md](task-workflow-transition-matrix.md): allowed transitions, guards, and invalid examples.
+- [Task status model](task-workflow-status-model.md) defines task statuses, issue types, and document ownership.
+- [Task actions](task-workflow-actions.md) defines action IDs and their effects.
+- [Task transition matrix](task-workflow-transition-matrix.md) defines allowed transitions and guards.
+- [Task description Markdown](task-description-markdown.md) defines task Markdown, image assets, and agent access.
 
-## Runtime And Architecture Docs
+## Runtimes and tools
 
-- [agent-orchestrator-module-map.md](agent-orchestrator-module-map.md): maintainer map for the shared frontend agent orchestration modules.
-- [cli-tool-discovery.md](cli-tool-discovery.md): TypeScript host CLI/tool discovery map for Electron, web, and source/package distributions.
-- [external-mcp.md](external-mcp.md): public MCP package usage, host-bridge startup contract, and the external task tools.
-- [runtime-integration-guide.md](runtime-integration-guide.md): runtime vocabulary, capability model, integration checklist, and verification path.
-- [tanstack-query-cache-strategy.md](tanstack-query-cache-strategy.md): frontend read-cache ownership, invalidation rules, and how Effect-backed host calls should coexist with TanStack Query.
-- [web-runner.md](web-runner.md): how `@openducktor/web` starts the local TypeScript host and serves the shared frontend in browser mode.
+- [Agent orchestrator module map](agent-orchestrator-module-map.md) maps frontend agent orchestration code and ownership.
+- [External MCP](external-mcp.md) defines package use, host bridge startup, workspace scope, and public task tools.
+- [Interactive terminal architecture](interactive-terminal-architecture.md) defines terminal ownership, transport, replay, and cleanup.
+- [Web runner](web-runner.md) defines the local browser runner and its release package.
+- [Architecture decision records](adr/) record accepted and superseded technical decisions.
 
-## Security And Maintenance Docs
+## Security and maintenance
 
-- [mcp-runtime-security.md](mcp-runtime-security.md): current MCP transport and threat assumptions.
-- [dependency-hygiene.md](dependency-hygiene.md): dependency update and audit policy.
-- [release-process.md](release-process.md): Electron desktop, MCP, web package, Homebrew, version sync, and draft publishing steps.
+- [MCP runtime security](mcp-runtime-security.md) defines the allowed MCP transport and threat assumptions.
+- [Dependency hygiene](dependency-hygiene.md) defines dependency checks and update rules.
+- [Release process](release-process.md) defines desktop, web, MCP, and Homebrew releases.

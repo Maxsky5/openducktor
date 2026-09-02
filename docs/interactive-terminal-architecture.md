@@ -1,63 +1,65 @@
 # Interactive terminal architecture
 
-Interactive terminals are transient resources owned by the host process. The host owns each PTY, its process tree, and its in-memory session state. The renderer owns the xterm instances and transient terminal presentation state.
+The host owns each PTY, process tree, and in-memory terminal session. The renderer owns xterm and tab display state.
 
-Terminal sessions, tab state, and transcripts are not stored in settings or in the SQLite task store. After a renderer reload, the UI rediscovers and reattaches to terminals that still belong to the same running host. Stopping the app or host terminates and forgets them.
+The app does not store terminal sessions, tabs, or transcripts in settings or SQLite. After a renderer reload, the UI finds terminals that still belong to the same host and attaches again. Host shutdown stops and forgets them.
 
-## Components and boundaries
+## Ownership and transport
 
-- `packages/contracts` defines terminal commands, summaries, typed failures, and the versioned binary protocol. Each frame contains a four-byte big-endian length for the JSON header, the JSON header itself, and an optional binary payload.
-- `packages/host` owns terminal IDs, launch policy, admission limits, the in-memory session registry, output replay, byte sequencing, flow control, title tracking, and cleanup. Runtime-specific PTY implementations use the `TerminalPtyPort` interface.
-- Electron uses `node-pty` and carries terminal frames over a dedicated preload IPC bridge.
-- The browser runner uses `Bun.spawn({ terminal })` and carries frames over one authenticated, origin-checked, multiplexed WebSocket with the `openducktor-terminal.v1` subprotocol.
-- `packages/frontend/src/features/terminals` contains the reusable terminal panel, collection hook, tab presentation state, transport controller, xterm renderer, and input policies. Agent Studio uses a thin adapter that resolves the selected task worktree and supplies its task context to this module. The transport controller shares one connection across the mounted terminal emulators.
+- `packages/contracts` defines commands, summaries, typed failures, and the binary protocol. A frame has a four-byte big-endian JSON header length, the JSON header, and an optional binary body.
+- `packages/host` owns IDs, launch rules, limits, in-memory sessions, output replay, byte order, flow control, titles, and cleanup. PTY adapters implement `TerminalPtyPort`.
+- Electron uses `node-pty` over a dedicated preload IPC bridge.
+- The web runner uses `Bun.spawn({ terminal })` over one authenticated WebSocket. It checks origin and requires the `openducktor-terminal.v1` subprotocol.
+- `packages/frontend/src/features/terminals` owns the shared panel, collection hook, tabs, transport controller, xterm renderer, and input rules. Agent Studio only supplies the task worktree and task context.
 
-Create, list, close, and path-preparation requests use the normal host command interface. Interactive input, resize, attach, detach, ACK, output, lifecycle, and title messages use the terminal frame transport. Electron and the browser runner compose their PTY adapters explicitly; neither transport falls back to another adapter.
+Create, list, close, and path setup use host commands. Input, resize, attach, detach, ACK, output, lifecycle, and title use terminal frames. Electron and web each provide one PTY adapter. Neither falls back to the other.
 
-## Launch and terminal context
+## Start a terminal
 
-`workingDir` is required when creating a terminal. The host canonicalizes the path, verifies that it is an accessible directory, and records it as `initialWorkingDir`. This field is the launch directory, not the shell's current directory after later `cd` commands.
+`workingDir` is required. The host makes it canonical, checks that it is an accessible directory, and saves it as `initialWorkingDir`. Later `cd` commands do not change that field.
 
-The host chooses the shell, arguments, and sanitized child-process environment. The renderer cannot provide an executable, arguments, or environment variables. On Unix-like systems, terminals use the user's login shell with `TERM=xterm-256color` and `COLORTERM=truecolor`.
+The host selects the shell, arguments, and clean child environment. The renderer cannot choose an executable, arguments, or environment variables. On Unix, use the login shell with `TERM=xterm-256color` and `COLORTERM=truecolor`.
 
-A terminal can be unassociated or include a task context containing `repoPath` and `taskId`. The context is used for listing, limits, and cleanup. It does not restrict filesystem access inside the shell.
+A terminal can have no task or have `repoPath` and `taskId`. The host uses this context for lists, limits, and cleanup. It does not restrict file access inside the shell.
 
-The initial terminal title is the canonical launch directory. The host then observes bounded OSC 0 and OSC 2 title sequences without changing the PTY output. It sanitizes the latest title, stores it in the in-memory summary, and sends it in attachment snapshots and live title events. The renderer uses this host-provided title instead of deriving a second title from terminal output.
+The first title is the canonical start directory. The host then reads bounded OSC 0 and OSC 2 title codes without changing PTY output. It cleans and stores the latest title, then sends it in snapshots and title events.
 
-## Attachment, replay, and flow control
+## Attach and replay
 
-Attaching adds the renderer as an output consumer before sending a snapshot. The snapshot contains the current lifecycle, title, earliest retained sequence, and snapshot end sequence. The host then sends the retained output followed by live output. Output bytes use monotonically increasing sequence ranges, and exit is emitted after the final output sequence has been published.
+The host adds an output consumer before it sends the attachment snapshot. The snapshot has lifecycle, title, first retained byte sequence, and snapshot end sequence. The host then sends retained output followed by live output. Exit comes after the final output sequence.
 
-The renderer records the last sequence consumed by xterm. An ACK is sent only after xterm's write callback completes. On reattachment, the renderer provides that sequence so the host sends only the required retained output. If the requested range has already been discarded, the host sends a `replay_gap` event and the renderer resets the emulator before continuing.
+The renderer records the last sequence written to xterm. It sends ACK only after the xterm write callback finishes. On another attach, it sends that sequence so the host sends only missing output.
 
-During initial attachment, the terminal remains hidden until xterm has consumed output through the snapshot boundary. This rebuilds the current screen without exposing replay as a visible animation.
+If the host already dropped the requested range, it sends `replay_gap`. The renderer resets xterm before it applies later output. During first attach, keep xterm hidden until it reaches the snapshot boundary.
 
-Replay and unacknowledged output are byte-bounded. The `node-pty` adapter pauses and resumes output when consumers fall behind. An adapter that cannot pause output, such as the Bun PTY adapter, emits an overflow event and terminates the terminal instead of buffering without a limit.
+Replay and unacknowledged output have byte limits. `node-pty` can pause and resume. An adapter that cannot pause, such as Bun PTY, sends overflow and stops the terminal.
 
-The frontend reconnects the frame transport automatically and reattaches mounted terminals. A transport disconnect only removes the affected attachments; it does not terminate or recreate the PTY. If the host instance changes while the renderer still holds terminal tabs, those tabs are marked as lost. A stale attach receives `terminal_forgotten`. Lost terminals are never recreated automatically.
+The frontend reconnects the frame transport and attaches mounted terminals again. A transport loss removes attachments, not the PTY. If the host instance changes, old tabs become lost. A stale attach gets `terminal_forgotten`. Do not recreate a lost terminal.
 
-## Lifecycle and cleanup
+## Close and clean up
 
-Closing a terminal without confirmation first checks whether its PTY has child processes. If no child process is running, the terminal closes without prompting. If a child process is running, the host returns `confirmation_required`; a confirmed close terminates the process tree and removes the session. The UI hides a tab while close is pending and restores it if confirmation is required or the close fails.
+Before an unconfirmed close, the host checks for child processes. With no child, it closes at once. With a child, it returns `confirmation_required`. A confirmed close stops the process tree and removes the session.
 
-Task close, delete, reset, and merged-worktree cleanup acquire a terminal cleanup lease and terminate the associated terminals before stopping dev servers or removing worktrees, branches, and task records. A terminal cleanup failure stops the remaining cleanup. The lease also prevents a new terminal from being admitted for that task while cleanup is in progress.
+The UI hides a tab while close is pending. It restores the tab when confirmation is needed or close fails.
 
-Host shutdown stops terminal admission, terminates all PTYs and their process trees, and then continues normal host teardown. Exited sessions may remain in host memory for bounded replay and inspection, but they are removed after the retention limit or when the retained-session limit is reached.
+Task close, delete, reset, and merged-worktree cleanup take a terminal cleanup lease. They stop task terminals before dev servers, worktrees, branches, or task records. A terminal failure stops later cleanup. The lease blocks a new task terminal during cleanup.
 
-No PTY handle, PID, route, terminal ID, live interaction state, or transcript is persisted. Adding terminal persistence would require a separate decision covering privacy, retention, recovery, and access control.
+Host shutdown stops admission, stops all PTYs and process trees, then continues host cleanup. An exited session can stay in memory for bounded replay until time or count limits remove it.
 
-## Keyboard, clipboard, and image input
+Do not persist a PTY handle, PID, route, terminal ID, live state, or transcript. Terminal persistence needs a separate decision about privacy, retention, recovery, and access.
 
-The frontend reads the platform from the host and applies platform-specific terminal shortcuts. Normal terminal input is UTF-8 encoded and sent in ordered chunks within the protocol input limit.
+## Keyboard, clipboard, and images
 
-Clipboard image paste sends the terminal's native paste control input so compatible TUIs can read the image from the operating-system clipboard. Image drag and drop follows a different path: the renderer stages each image as a local attachment, asks the host to format shell-safe paths for the terminal's shell, and pastes those paths into xterm. Image bytes are not sent through the terminal protocol.
+The frontend gets the platform from the host and applies terminal shortcuts. It sends normal input as ordered UTF-8 chunks within the input limit.
 
-Drag and drop accepts at most eight images, 20 MiB per image, and 40 MiB in total. Interaction failures are reported without replacing the terminal screen. Renderer initialization or WebGL failure is blocking for that emulator and is shown in the terminal body.
+Image paste sends the terminal's native paste control so a compatible TUI can read the OS clipboard. Image drag and drop stages each image, asks the host for shell-safe paths, and pastes those paths into xterm. It does not send image bytes through the terminal protocol.
 
-## Limits and transport security
+Drag and drop accepts at most eight images, 20 MiB each, and 40 MiB total. An interaction error does not replace the terminal screen. xterm or WebGL startup failure blocks that emulator and appears in its body.
 
-The host limits live terminals per task and per host, input size, grid dimensions, replay bytes, unacknowledged output, and retained exited sessions. The transports also limit frame size and outbound queues. Every operation uses an opaque terminal ID.
+## Limits and security
 
-Browser WebSocket upgrades require the established HttpOnly app session, an allowed frontend origin, and the exact terminal protocol subprotocol. Invalid directions, malformed frames, and unsupported protocol versions fail explicitly.
+The host limits terminals per task and host, input bytes, grid size, replay bytes, unacknowledged output, and retained exited sessions. The transports limit frame size and output queues. Each operation uses an opaque terminal ID.
 
-Electron keeps `node-pty` as a production dependency, excludes its build scripts from the package, and unpacks its native files from ASAR through Electron Builder configuration. The terminal feature does not use a dependency-specific packaging script.
+A browser WebSocket upgrade needs the HttpOnly app session, an allowed frontend origin, and the exact protocol name. Invalid direction, frame, or protocol version fails.
+
+Electron keeps `node-pty` as a production dependency. The package excludes its build scripts and unpacks native files from ASAR through Electron Builder. No dependency-specific package script handles terminals.
