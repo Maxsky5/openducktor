@@ -15,7 +15,21 @@ const capability = (
 describe("notification OS capability description", () => {
   test("distinguishes denied permission from available delivery", () => {
     expect(describeNotificationOsCapability(capability({ permission: "denied" }), null)).toBe(
-      "OS notification permission is denied.",
+      "OS notifications are disabled in browser settings. Allow notifications for OpenDucktor to receive alerts outside the app.",
+    );
+    expect(
+      describeNotificationOsCapability(
+        capability({ platform: "electron", permission: "denied" }),
+        null,
+      ),
+    ).toBe(
+      "OS notifications are disabled in system settings. Allow OpenDucktor notifications to receive alerts outside the app.",
+    );
+    expect(describeNotificationOsCapability(capability(), null)).toBe(
+      "OS notifications are enabled. OpenDucktor can send alerts outside the app.",
+    );
+    expect(describeNotificationOsCapability(capability({ permission: "prompt" }), null)).toBe(
+      "OS notifications are not enabled yet. Test OS to choose whether to allow them.",
     );
   });
 

@@ -16,12 +16,20 @@ export const describeNotificationOsCapability = (
   if (!capability.supported) {
     return capability.failureMessage ?? "OS notifications are unavailable.";
   }
-  if (capability.permission === "denied") return "OS notification permission is denied.";
+  if (capability.permission === "denied") {
+    if (capability.platform === "browser") {
+      return "OS notifications are disabled in browser settings. Allow notifications for OpenDucktor to receive alerts outside the app.";
+    }
+    return "OS notifications are disabled in system settings. Allow OpenDucktor notifications to receive alerts outside the app.";
+  }
   if (capability.permission === "prompt") {
-    return "Permission will be requested only when you test OS notifications.";
+    return "OS notifications are not enabled yet. Test OS to choose whether to allow them.";
   }
   if (capability.failureMessage) return capability.failureMessage;
-  return "OS notifications are ready.";
+  if (capability.permission === "granted") {
+    return "OS notifications are enabled. OpenDucktor can send alerts outside the app.";
+  }
+  return "OS notifications are available. This platform does not report per-app permission.";
 };
 
 export const useNotificationTestControls = (settings: NotificationSettings | null) => {
@@ -61,7 +69,6 @@ export const useNotificationTestControls = (settings: NotificationSettings | nul
     setStatus(null);
     try {
       await runtime.openSystemSettings();
-      setStatus("System notification settings opened.");
     } catch (cause) {
       setStatus(errorMessage(cause));
     } finally {

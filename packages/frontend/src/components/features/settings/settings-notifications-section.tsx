@@ -267,6 +267,7 @@ export function SettingsNotificationsSection({
   } = useNotificationTestControls(notifications);
   const canOpenSystemSettings =
     capability?.platform === "electron" && capability.permission === "denied";
+  const isOsTestDisabled = capability?.supported === false || capability?.permission === "denied";
   const previewCue = (cue: NotificationCue): void => {
     void notificationRuntime.previewCue(cue, notifications.volumePercent);
   };
@@ -280,6 +281,70 @@ export function SettingsNotificationsSection({
           play.
         </p>
       </div>
+
+      <section className="grid gap-3">
+        <h4 className="text-sm font-semibold text-foreground">Status and tests</h4>
+        <div className="divide-y divide-border overflow-hidden rounded-md border border-border bg-card">
+          <div className="grid gap-4 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">OS notifications</p>
+              <p className="mt-1 text-xs text-muted-foreground">{capabilityDescription}</p>
+              {capability?.supported && !capability.canGuaranteeSilent ? (
+                <p className="mt-1 text-xs text-warning-muted">
+                  This platform cannot guarantee silent OS delivery.
+                </p>
+              ) : null}
+              {notificationRuntime.osFailure ? (
+                <p className="mt-1 text-xs text-destructive">
+                  Last OS error: {notificationRuntime.osFailure.message}
+                </p>
+              ) : null}
+            </div>
+            {canOpenSystemSettings ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="justify-self-start sm:justify-self-end"
+                disabled={disabled || isOpeningSettings || isTesting}
+                onClick={() => void openSystemSettings()}
+              >
+                <Settings data-icon="inline-start" /> Open system settings
+              </Button>
+            ) : null}
+          </div>
+          <div className="grid gap-4 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">Test notifications</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Send a test without changing your notification settings.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 sm:justify-self-end">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={disabled || isOpeningSettings || isTesting}
+                onClick={() => void testNotification("in_app")}
+              >
+                <Bell data-icon="inline-start" /> Test in-app
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={disabled || isOpeningSettings || isTesting || isOsTestDisabled}
+                onClick={() => void testNotification("os")}
+              >
+                <BellRing data-icon="inline-start" /> Test OS
+              </Button>
+            </div>
+          </div>
+          {testStatus ? (
+            <p className="px-4 py-3 text-xs text-foreground" role="status">
+              {testStatus}
+            </p>
+          ) : null}
+        </div>
+      </section>
 
       <section className="grid gap-3">
         <div>
@@ -377,57 +442,6 @@ export function SettingsNotificationsSection({
         onUpdate={onUpdateNotifications}
         onPreview={previewCue}
       />
-
-      <section className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-foreground">Test notifications</p>
-          <p className="mt-1 text-xs text-muted-foreground">{capabilityDescription}</p>
-          {capability?.supported && !capability.canGuaranteeSilent ? (
-            <p className="mt-1 text-xs text-warning-muted">
-              This platform cannot guarantee a silent OS notice. OpenDucktor still requests silent
-              delivery.
-            </p>
-          ) : null}
-          {notificationRuntime.osFailure ? (
-            <p className="mt-1 text-xs text-destructive">
-              Last OS error: {notificationRuntime.osFailure.message}
-            </p>
-          ) : null}
-          {testStatus ? (
-            <p className="mt-1 text-xs text-foreground" role="status">
-              {testStatus}
-            </p>
-          ) : null}
-        </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          {canOpenSystemSettings ? (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={disabled || isOpeningSettings || isTesting}
-              onClick={() => void openSystemSettings()}
-            >
-              <Settings data-icon="inline-start" /> Open system settings
-            </Button>
-          ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            disabled={disabled || isOpeningSettings || isTesting}
-            onClick={() => void testNotification("in_app")}
-          >
-            <Bell data-icon="inline-start" /> Test in-app
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={disabled || isOpeningSettings || isTesting || capability?.supported === false}
-            onClick={() => void testNotification("os")}
-          >
-            <BellRing data-icon="inline-start" /> Test OS
-          </Button>
-        </div>
-      </section>
     </div>
   );
 }
