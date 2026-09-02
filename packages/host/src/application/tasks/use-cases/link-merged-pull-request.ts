@@ -5,6 +5,7 @@ import { requirePullRequestProviderMatch } from "../../pull-requests/pull-reques
 import {
   requireDependencies,
   requireLinkMergedPullRequestDependencies,
+  requirePullRequestLinkDependencies,
 } from "../support/required-task-dependencies";
 import { createTaskCleanupProgressState } from "../support/task-cleanup-progress";
 import { runTaskRuntimeCleanup } from "../support/task-cleanup-support";
@@ -49,6 +50,27 @@ export const createTaskLinkMergedPullRequestUseCase = ({
         metadata.pullRequest?.providerId === pullRequest.providerId &&
         metadata.pullRequest.number === pullRequest.number &&
         metadata.pullRequest.state === "merged";
+
+      const providerDependencies = yield* requireDependencies(() =>
+        requirePullRequestLinkDependencies({
+          gitProviderResolver,
+          workspaceSettingsService,
+        }),
+      );
+      const repoConfig =
+        yield* providerDependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const provider = yield* providerDependencies.gitProviderResolver.resolve(repoConfig);
+      const configuredProviderId = provider.getDescriptor().id;
+      yield* requirePullRequestProviderMatch({
+        configuredProviderId,
+        linkedProviderId: pullRequest.providerId,
+      });
+      if (metadata.pullRequest !== undefined) {
+        yield* requirePullRequestProviderMatch({
+          configuredProviderId,
+          linkedProviderId: metadata.pullRequest.providerId,
+        });
+      }
       if (current.status === "closed" && sameExistingPullRequest) {
         return enrichTask(current, currentTasks);
       }
@@ -65,13 +87,6 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           workspaceSettingsService,
         }),
       );
-      const repoConfig =
-        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-      const provider = yield* dependencies.gitProviderResolver.resolve(repoConfig);
-      yield* requirePullRequestProviderMatch({
-        configuredProviderId: provider.getDescriptor().id,
-        linkedProviderId: pullRequest.providerId,
-      });
       yield* validatePullRequestManagementStatusEffect(current.status);
       if (metadata.directMerge !== undefined) {
         return yield* Effect.fail(

@@ -52,8 +52,19 @@ const selectLatestMergedPullRequestForBranch = (
 ): ResolvedPullRequest | undefined =>
   pullRequests
     .filter((pullRequest) => pullRequest.record.state === "merged")
-    .sort((left, right) => left.record.updatedAt.localeCompare(right.record.updatedAt))
-    .at(-1);
+    .map((pullRequest) => {
+      const mergedAt = pullRequest.record.mergedAt;
+      if (mergedAt === undefined) {
+        throw new HostValidationError({
+          field: "mergedAt",
+          message: `GitHub merged pull request ${pullRequest.record.number} has no merge timestamp.`,
+          details: { pullRequestNumber: pullRequest.record.number },
+        });
+      }
+      return { mergedAt, pullRequest };
+    })
+    .sort((left, right) => left.mergedAt.localeCompare(right.mergedAt))
+    .at(-1)?.pullRequest;
 
 const findGithubPullRequestsForBranch = (
   githubCli: GithubCli,
@@ -221,7 +232,10 @@ export const createGithubPullRequestProviderPort = ({
           input.sourceBranch,
           "all",
         );
-        return selectLatestMergedPullRequestForBranch(pullRequests);
+        return yield* Effect.try({
+          try: () => selectLatestMergedPullRequestForBranch(pullRequests),
+          catch: toPullRequestValidationError,
+        });
       }),
     getByNumber,
     refresh: (input) =>

@@ -86,6 +86,10 @@ export const createTaskPullRequestDetectionUseCase = ({
         sourceBranch: taskContext.sourceBranch,
       });
       if (pullRequest !== undefined) {
+        yield* requirePullRequestProviderMatch({
+          configuredProviderId: provider.getDescriptor().id,
+          linkedProviderId: pullRequest.record.providerId,
+        });
         return {
           outcome: "merged",
           pullRequest: pullRequest.record,

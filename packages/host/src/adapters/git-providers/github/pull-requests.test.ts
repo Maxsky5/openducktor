@@ -209,13 +209,14 @@ describe("createGithubPullRequestProviderPort", () => {
       number: 41,
       state: "closed",
       merged_at: "2026-05-02T09:00:00Z",
-      updated_at: "2026-05-02T09:00:00Z",
+      updated_at: "2026-05-02T11:00:00Z",
     };
     const latest = {
       ...githubPullResponse,
       number: 42,
       state: "closed",
       merged_at: "2026-05-02T10:00:00Z",
+      updated_at: "2026-05-02T10:00:00Z",
     };
     const port = createGithubPullRequestProviderPort({
       githubCli: githubCliForPayload(JSON.stringify([latest, older])),

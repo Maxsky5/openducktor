@@ -42,6 +42,12 @@ const mergedPullRequest = (providerId: string): PullRequest => ({
   mergedAt: "2026-05-02T10:00:00Z",
 });
 
+const resolvedMergedPullRequest = (providerId: string): ProviderPullRequest => ({
+  record: mergedPullRequest(providerId),
+  sourceBranch: "odt/task-42",
+  targetBranch: "main",
+});
+
 const unexpected = <Success>(): Effect.Effect<Success, never> =>
   Effect.dieMessage("unexpected provider operation");
 
@@ -113,6 +119,30 @@ const workspaceSettingsService = createBuildWorkspaceSettingsService({
   },
 });
 
+const createClosedLinkService = (persistedProviderId: string) => {
+  const provider = createProvider(gitlabDescriptor, createPullRequestPort("gitlab"));
+  const gitProviderResolver = Effect.runSync(createGitProviderResolver([provider]));
+  const setPullRequest = mock(() => Effect.succeed(true));
+  const transitionTask = mock(() => Effect.succeed(task({ status: "closed" })));
+  const service = createTaskService({
+    gitProviderResolver,
+    taskStore: {
+      listTasks: () => Effect.succeed([task({ status: "closed" })]),
+      getTaskMetadata: () =>
+        Effect.succeed({
+          spec: { markdown: "# Spec" },
+          plan: { markdown: "# Plan" },
+          pullRequest: mergedPullRequest(persistedProviderId),
+          agentSessions: [],
+        }),
+      setPullRequest,
+      transitionTask,
+    },
+    workspaceSettingsService,
+  });
+  return { service, setPullRequest, transitionTask };
+};
+
 describe("createTaskService Pull Request provider ports", () => {
   test("detects an open Pull Request through the configured provider port", async () => {
     const findOpenForSourceBranch = mock(() => Effect.succeed(resolvedPullRequest("gitlab")));
@@ -155,6 +185,51 @@ describe("createTaskService Pull Request provider ports", () => {
       repoConfig: expect.objectContaining({ repoPath: "/repo" }),
       sourceBranch: "odt/task-42",
     });
+  });
+
+  test("rejects a detected merged Pull Request from another provider", async () => {
+    const findLatestMergedForSourceBranch = mock(() =>
+      Effect.succeed(resolvedMergedPullRequest("github")),
+    );
+    const pullRequests = createPullRequestPort("gitlab", {
+      findOpenForSourceBranch: () => Effect.succeed(undefined),
+      findLatestMergedForSourceBranch,
+    });
+    const provider = createProvider(gitlabDescriptor, pullRequests);
+    const gitProviderResolver = Effect.runSync(createGitProviderResolver([provider]));
+    const setPullRequest = mock(() => Effect.succeed(true));
+    const service = createTaskService({
+      gitPort: createDirectMergeGitPort({
+        calls: [],
+        currentBranches: {
+          "/worktrees/repo/task-1": { name: "odt/task-42", detached: false },
+        },
+      }),
+      gitProviderResolver,
+      taskStore: {
+        getTask: () => Effect.succeed(task({ status: "human_review" })),
+        getTaskMetadata: () =>
+          Effect.succeed({
+            spec: { markdown: "# Spec" },
+            plan: { markdown: "# Plan" },
+            agentSessions: [],
+          }),
+        setPullRequest,
+      },
+      taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+      workspaceSettingsService,
+    });
+
+    const failure = await Effect.runPromise(
+      service.detectPullRequest({ repoPath: "/repo", taskId: "task-1" }).pipe(Effect.flip),
+    );
+
+    expect(failure).toMatchObject({
+      _tag: "HostValidationError",
+      field: "pullRequest.providerId",
+    });
+    expect(findLatestMergedForSourceBranch).toHaveBeenCalledTimes(1);
+    expect(setPullRequest).not.toHaveBeenCalled();
   });
 
   test("links a Pull Request through the configured provider port", async () => {
@@ -349,7 +424,7 @@ describe("createTaskService Pull Request provider ports", () => {
     );
   });
 
-  test("rejects a detected merged Pull Request from another provider", async () => {
+  test("rejects linking a merged Pull Request from another provider", async () => {
     const pullRequests = createPullRequestPort("gitlab");
     const provider = createProvider(gitlabDescriptor, pullRequests);
     const gitProviderResolver = Effect.runSync(createGitProviderResolver([provider]));
@@ -386,5 +461,42 @@ describe("createTaskService Pull Request provider ports", () => {
       _tag: "HostValidationError",
       field: "pullRequest.providerId",
     });
+  });
+
+  test("returns a closed task unchanged when the persisted Pull Request matches the provider", async () => {
+    const { service, setPullRequest, transitionTask } = createClosedLinkService("gitlab");
+
+    const result = await Effect.runPromise(
+      service.linkMergedPullRequest({
+        repoPath: "/repo",
+        taskId: "task-1",
+        pullRequest: mergedPullRequest("gitlab"),
+      }),
+    );
+
+    expect(result).toMatchObject({ id: "task-1", status: "closed" });
+    expect(setPullRequest).not.toHaveBeenCalled();
+    expect(transitionTask).not.toHaveBeenCalled();
+  });
+
+  test("rejects a closed idempotent link when the persisted Pull Request has provider drift", async () => {
+    const { service, setPullRequest, transitionTask } = createClosedLinkService("github");
+
+    const failure = await Effect.runPromise(
+      service
+        .linkMergedPullRequest({
+          repoPath: "/repo",
+          taskId: "task-1",
+          pullRequest: mergedPullRequest("github"),
+        })
+        .pipe(Effect.flip),
+    );
+
+    expect(failure).toMatchObject({
+      _tag: "HostValidationError",
+      field: "pullRequest.providerId",
+    });
+    expect(setPullRequest).not.toHaveBeenCalled();
+    expect(transitionTask).not.toHaveBeenCalled();
   });
 });
