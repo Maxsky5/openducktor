@@ -386,6 +386,52 @@ describe("notification runtime tests", () => {
     expect(onCoordinationRecovered).toHaveBeenCalledTimes(1);
   });
 
+  test("reports publication recovery after a later non-owner publication succeeds", async () => {
+    let publishAttempt = 0;
+    let resolveFailure = (): void => {};
+    const failed = new Promise<void>((resolve) => {
+      resolveFailure = resolve;
+    });
+    let resolveDelivery = (): void => {};
+    const delivered = new Promise<void>((resolve) => {
+      resolveDelivery = resolve;
+    });
+    const onCoordinationRecovered = mock(() => {});
+    const onFailure = mock(() => resolveFailure());
+    const runtime = createNotificationRuntime({
+      bridge: createBridge({
+        async publishOccurrence(publishedOccurrence, publishedSettings) {
+          publishAttempt += 1;
+          if (publishAttempt === 1) {
+            throw new Error("Occurrence publication failed.");
+          }
+          return { occurrence: publishedOccurrence, settings: publishedSettings };
+        },
+        withExternalDeliveryOwnership: async (_occurrenceId, dispatch) => dispatch(false),
+      }),
+      loadSettings: async () => createDefaultNotificationSettings(),
+      navigate: async () => {},
+      onFailure,
+      onCoordinationRecovered,
+      inApp: { deliver: async () => resolveDelivery() },
+      sound: { play: async () => {} },
+    });
+
+    runtime.publish(workflowClosedOccurrence("event-publication-failure"));
+    await failed;
+    expect(onFailure).toHaveBeenCalledWith({
+      channel: "coordination",
+      kind: "workflow.closed",
+      occurrenceId: "workflow.closed:/repo:task-1:event-publication-failure",
+      repoPath: "/repo",
+      message: "Occurrence publication failed.",
+    });
+    runtime.publish(workflowClosedOccurrence("event-publication-recovery"));
+    await delivered;
+
+    expect(onCoordinationRecovered).toHaveBeenCalledTimes(1);
+  });
+
   test("uses current focus when a later dispatch owns external delivery", async () => {
     const delivery = createDeliveryAdapters();
     const owners = [false, true];
