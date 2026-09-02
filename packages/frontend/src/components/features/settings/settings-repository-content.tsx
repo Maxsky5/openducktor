@@ -1,3 +1,4 @@
+import type { GitProviderHealth } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { errorMessage } from "@/lib/errors";
@@ -77,6 +78,45 @@ const resolveRepositoryAvailabilityNotice = ({
   return null;
 };
 
+const resolveProviderHealth = (
+  loadProviderHealth: boolean,
+  query: {
+    data: GitProviderHealth | undefined;
+    error: Error | null;
+    isError: boolean;
+    isPending: boolean;
+  },
+): GitProviderHealthState => {
+  if (!loadProviderHealth) {
+    return { status: "idle" };
+  }
+  if (query.isPending) {
+    return { status: "pending" };
+  }
+  if (query.isError) {
+    return { status: "error", message: errorMessage(query.error) };
+  }
+  return query.data ? { status: "loaded", health: query.data } : { status: "idle" };
+};
+
+const RepositoryAvailabilityBanner = ({
+  notice,
+}: {
+  notice: RepositoryAvailabilityNotice | null;
+}): ReactElement | null => {
+  if (!notice) {
+    return null;
+  }
+  return (
+    <div
+      role={notice.role}
+      className="rounded-md border border-warning-border bg-warning-surface p-3 text-sm text-warning-surface-foreground"
+    >
+      {notice.message}
+    </div>
+  );
+};
+
 export function SettingsRepositoryContent({
   repositorySection,
   repoPromptRoleTab,
@@ -142,16 +182,7 @@ export function SettingsRepositoryContent({
     ...gitProviderHealthQueryOptions(selectedRepoPath),
     enabled: loadProviderHealth,
   });
-  let providerHealth: GitProviderHealthState = { status: "idle" };
-  if (loadProviderHealth) {
-    if (providerHealthQuery.isPending) {
-      providerHealth = { status: "pending" };
-    } else if (providerHealthQuery.isError) {
-      providerHealth = { status: "error", message: errorMessage(providerHealthQuery.error) };
-    } else if (providerHealthQuery.data) {
-      providerHealth = { status: "loaded", health: providerHealthQuery.data };
-    }
-  }
+  const providerHealth = resolveProviderHealth(loadProviderHealth, providerHealthQuery);
 
   return (
     <div className="grid h-full lg:grid-cols-[240px_minmax(0,1fr)]">
@@ -169,14 +200,7 @@ export function SettingsRepositoryContent({
       />
 
       <div className="min-w-0 space-y-4">
-        {repositoryAvailabilityNotice ? (
-          <div
-            role={repositoryAvailabilityNotice.role}
-            className="rounded-md border border-warning-border bg-warning-surface p-3 text-sm text-warning-surface-foreground"
-          >
-            {repositoryAvailabilityNotice.message}
-          </div>
-        ) : null}
+        <RepositoryAvailabilityBanner notice={repositoryAvailabilityNotice} />
 
         {selectedRepoConfig && repositorySection === "configuration" ? (
           <RepositoryConfigurationSection

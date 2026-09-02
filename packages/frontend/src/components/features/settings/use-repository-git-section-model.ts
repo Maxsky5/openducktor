@@ -265,46 +265,22 @@ const repositoryGitSectionReducer = (
   }
 };
 
-export function useRepositoryGitSectionModel({
+const getGithubView = ({
   disabled,
-  onDetectGithubRepository,
-  onUpdateSelectedRepoConfig,
   providerHealth,
   selectedRepoConfig,
-  selectedRepoPath,
-}: UseRepositoryGitSectionModelArgs): UseRepositoryGitSectionModelResult {
-  const initialProvider = selectedRepoConfig?.git.provider;
-  const initialGithubRepository =
-    initialProvider?.id === GITHUB_PROVIDER_DESCRIPTOR.id ? initialProvider.repository : undefined;
-  const initialHasRepositoryCoordinates = Boolean(
-    initialGithubRepository?.host && initialGithubRepository.owner && initialGithubRepository.name,
-  );
-  const attemptedAutoDetectByRepoRef = useRef<Set<string> | null>(null);
-  if (attemptedAutoDetectByRepoRef.current === null) {
-    attemptedAutoDetectByRepoRef.current = new Set();
-  }
-  const attemptedAutoDetectByRepo = attemptedAutoDetectByRepoRef.current;
-  const activeDetectionSequenceRef = useRef(0);
-  const activeRepoPathRef = useRef<string | null>(selectedRepoPath);
-  const activeProviderIdRef = useRef(selectedRepoConfig?.git.provider?.id);
-  const [sectionState, dispatchSectionState] = useReducer(
-    repositoryGitSectionReducer,
-    {
-      hasRepositoryCoordinates: initialHasRepositoryCoordinates,
-      providerId: selectedRepoConfig?.git.provider?.id,
-      repository: initialGithubRepository,
-      repoPath: selectedRepoPath,
-    },
-    createRepositoryGitSectionState,
-  );
-
+}: {
+  disabled: boolean;
+  providerHealth: GitProviderHealthState;
+  selectedRepoConfig: RepoConfig | null;
+}) => {
   const configuredProvider = selectedRepoConfig?.git.provider;
   const github =
     configuredProvider?.id === GITHUB_PROVIDER_DESCRIPTOR.id
       ? configuredProvider
       : EMPTY_GITHUB_CONFIG;
   const hasConfiguredNonGithubProvider = hasNonGithubProvider(selectedRepoConfig);
-  const configuredProviderId = selectedRepoConfig?.git.provider?.id;
+  const configuredProviderId = configuredProvider?.id;
   const githubControlsDisabled = disabled || hasConfiguredNonGithubProvider;
   const githubEnabled = github.enabled ?? false;
   const health = providerHealth.status === "loaded" ? providerHealth.health : null;
@@ -367,6 +343,76 @@ export function useRepositoryGitSectionModel({
       cliStatusLabel = hasGithubCli ? "CLI installed" : "CLI missing";
     }
   }
+
+  return {
+    cliStatus,
+    cliStatusLabel,
+    configuredProviderId,
+    github,
+    githubControlsDisabled,
+    githubEnabled,
+    githubHost,
+    githubReadinessLabel,
+    githubReadinessMessage,
+    githubReady,
+    hasConfiguredNonGithubProvider,
+    hasRepositoryCoordinates,
+    providerStatusLabel,
+    repositorySlug,
+    usesDefaultGithubHost,
+  };
+};
+
+export function useRepositoryGitSectionModel({
+  disabled,
+  onDetectGithubRepository,
+  onUpdateSelectedRepoConfig,
+  providerHealth,
+  selectedRepoConfig,
+  selectedRepoPath,
+}: UseRepositoryGitSectionModelArgs): UseRepositoryGitSectionModelResult {
+  const initialProvider = selectedRepoConfig?.git.provider;
+  const initialGithubRepository =
+    initialProvider?.id === GITHUB_PROVIDER_DESCRIPTOR.id ? initialProvider.repository : undefined;
+  const initialHasRepositoryCoordinates = Boolean(
+    initialGithubRepository?.host && initialGithubRepository.owner && initialGithubRepository.name,
+  );
+  const attemptedAutoDetectByRepoRef = useRef<Set<string> | null>(null);
+  if (attemptedAutoDetectByRepoRef.current === null) {
+    attemptedAutoDetectByRepoRef.current = new Set();
+  }
+  const attemptedAutoDetectByRepo = attemptedAutoDetectByRepoRef.current;
+  const activeDetectionSequenceRef = useRef(0);
+  const activeRepoPathRef = useRef<string | null>(selectedRepoPath);
+  const activeProviderIdRef = useRef(selectedRepoConfig?.git.provider?.id);
+  const [sectionState, dispatchSectionState] = useReducer(
+    repositoryGitSectionReducer,
+    {
+      hasRepositoryCoordinates: initialHasRepositoryCoordinates,
+      providerId: selectedRepoConfig?.git.provider?.id,
+      repository: initialGithubRepository,
+      repoPath: selectedRepoPath,
+    },
+    createRepositoryGitSectionState,
+  );
+
+  const {
+    cliStatus,
+    cliStatusLabel,
+    configuredProviderId,
+    github,
+    githubControlsDisabled,
+    githubEnabled,
+    githubHost,
+    githubReadinessLabel,
+    githubReadinessMessage,
+    githubReady,
+    hasConfiguredNonGithubProvider,
+    hasRepositoryCoordinates,
+    providerStatusLabel,
+    repositorySlug,
+    usesDefaultGithubHost,
+  } = getGithubView({ disabled, providerHealth, selectedRepoConfig });
   const repositorySectionContext = useMemo<RepositoryGitSectionContext>(
     () => ({
       hasRepositoryCoordinates,
