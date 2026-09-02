@@ -81,7 +81,7 @@ export const requireImplementationResetActivityGuard = (activity: Implementation
   );
 };
 
-export const stopActiveImplementationResetActivity = (
+export const cleanupImplementationResetActivity = (
   activity: ImplementationResetActivity,
   progress: TaskCleanupProgressState,
 ) =>
@@ -90,7 +90,7 @@ export const stopActiveImplementationResetActivity = (
     if (!activityGuard) {
       return;
     }
-    const { stoppedSessionCount } = yield* activityGuard.stopLiveSessions({
+    const { stoppedSessionCount } = yield* activityGuard.cleanupTaskSessions({
       repoPath: activity.repoPath,
       taskSessions: [{ taskId: activity.taskId, sessions: activity.sessions }],
     });

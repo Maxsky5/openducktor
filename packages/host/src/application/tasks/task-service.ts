@@ -45,7 +45,10 @@ import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "../workspaces/workspace-settings-service";
-import { createTaskGithubDependencies } from "./support/required-task-dependencies";
+import {
+  createTaskGithubDependencies,
+  type TaskGithubDependencyInput,
+} from "./support/required-task-dependencies";
 import { createTaskStopImpactUseCase } from "./use-cases/get-task-stop-impact";
 import type {
   AgentSessionDeleteInput,
@@ -268,6 +271,12 @@ export type CreateTaskServiceInput = {
   worktreeFiles?: WorktreeFilePort;
   taskSessionBootstrapCoordinator?: TaskSessionBootstrapCoordinator;
 };
+export type TaskServiceUseCaseInput = Omit<
+  CreateTaskServiceInput,
+  "taskSessionBootstrapCoordinator"
+> & {
+  taskSessionBootstrapCoordinator: TaskSessionBootstrapCoordinator;
+};
 const isTaskServiceError = (cause: unknown): cause is TaskServiceError =>
   cause instanceof TaskAssetError || cause instanceof TaskPolicyError || isHostError(cause);
 
@@ -314,7 +323,11 @@ const createTaskServiceImplementation = (
   const githubDependencies = createTaskGithubDependencies(input);
   const taskSessionBootstrapCoordinator =
     input.taskSessionBootstrapCoordinator ?? createTaskSessionBootstrapCoordinator();
-  const useCaseInput = { ...input, githubDependencies, taskSessionBootstrapCoordinator };
+  const useCaseInput: TaskServiceUseCaseInput & TaskGithubDependencyInput = {
+    ...input,
+    githubDependencies,
+    taskSessionBootstrapCoordinator,
+  };
   const taskSessionBootstrap = createTaskSessionBootstrapUseCase(useCaseInput);
   const service = {
     ...createTaskQueryUseCases(useCaseInput),

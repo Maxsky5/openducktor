@@ -1,5 +1,4 @@
 import {
-  createPrepareOpencodeSessionRuntime,
   type OpencodeSessionRuntimeSignal,
   type PrepareOpencodeSessionRuntime,
 } from "@openducktor/adapters-opencode-sdk";
@@ -52,7 +51,7 @@ export type CreateOpenCodeLiveSessionAdapterPreparerInput = {
     RuntimeLiveSessionLifecyclePort,
     "releaseRuntime" | "runAdapterMutation"
   >;
-  readonly prepareRuntime?: PrepareOpencodeSessionRuntime;
+  readonly prepareRuntime: PrepareOpencodeSessionRuntime;
 };
 
 const stateEffect = <Value, Details extends object>(
@@ -85,7 +84,7 @@ const runtimeActivityFromTranscriptEvent = (
 
 export const createOpenCodeLiveSessionAdapterPreparer = ({
   liveSessionLifecycle,
-  prepareRuntime = createPrepareOpencodeSessionRuntime(),
+  prepareRuntime,
 }: CreateOpenCodeLiveSessionAdapterPreparerInput): OpenCodeRuntimeSessionAdapterPreparer => {
   let nextOccurrence = 1;
 
@@ -171,22 +170,22 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
       });
 
       const refreshProjection = (): Effect.Effect<void, HostError> =>
-        serializeRuntime(
-          Effect.tryPromise({
+        Effect.gen(function* () {
+          const dropCount = state.dropCount();
+          const sources = yield* Effect.tryPromise({
             try: () => prepared.connection.readSessionSources(),
             catch: (cause) =>
               toHostOperationError(cause, "opencode-live-session.refresh-sessions", {
                 runtimeId: runtime.runtimeId,
               }),
-          }).pipe(
-            Effect.flatMap((sources) =>
-              commit("opencode-live-session.commit-refresh", () => ({
-                value: undefined,
-                changes: state.refresh(sources),
-              })),
-            ),
-          ),
-        );
+          });
+          yield* serializeRuntime(
+            commit("opencode-live-session.commit-refresh", () => ({
+              value: undefined,
+              changes: dropCount === state.dropCount() ? state.refresh(sources) : [],
+            })),
+          );
+        });
 
       const handleSignal = (
         signal: OpencodeSessionRuntimeSignal,

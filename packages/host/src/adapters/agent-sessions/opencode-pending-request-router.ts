@@ -85,12 +85,17 @@ export const createOpenCodePendingRequestRouter = ({
         requestId: occurrenceId,
       });
     },
-    finishProjection: (activeNativeKeys: ReadonlySet<string>): void => {
+    finishProjection: (
+      activeNativeKeys: ReadonlySet<string>,
+      observedSessionKeys: ReadonlySet<string>,
+    ): void => {
       for (const [key, occurrenceId] of occurrenceIdByNativeKey) {
-        if (!activeNativeKeys.has(key)) {
-          occurrenceIdByNativeKey.delete(key);
-          routesByOccurrenceId.delete(occurrenceId);
+        const route = routesByOccurrenceId.get(occurrenceId);
+        if (activeNativeKeys.has(key) || (route && !observedSessionKeys.has(refKey(route.ref)))) {
+          continue;
         }
+        occurrenceIdByNativeKey.delete(key);
+        routesByOccurrenceId.delete(occurrenceId);
       }
     },
     require: (

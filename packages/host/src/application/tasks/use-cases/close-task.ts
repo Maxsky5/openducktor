@@ -24,7 +24,7 @@ import { collectCloseWorktreePaths } from "../support/task-close-cleanup";
 import { completeTaskClosure } from "../support/task-closure";
 import { validateManualCloseTaskEffect } from "../support/task-validation-effects";
 import { enrichTask } from "../support/task-workflow-helpers";
-import type { CreateTaskServiceInput, TaskService } from "../task-service";
+import type { TaskService, TaskServiceUseCaseInput } from "../task-service";
 
 export const createTaskCloseUseCase = ({
   devServerService,
@@ -37,7 +37,7 @@ export const createTaskCloseUseCase = ({
   worktreeFiles,
   workspaceSettingsService,
   taskSessionBootstrapCoordinator,
-}: CreateTaskServiceInput): Pick<TaskService, "closeTask"> => ({
+}: TaskServiceUseCaseInput): Pick<TaskService, "closeTask"> => ({
   closeTask(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
@@ -93,19 +93,6 @@ export const createTaskCloseUseCase = ({
             }),
           );
         }
-        if (hasWorkflowSessions && taskActivityGuard) {
-          const { stoppedSessionCount } = yield* taskActivityGuard.stopLiveSessions({
-            repoPath: effectiveRepoPath,
-            taskSessions: [
-              {
-                taskId,
-                sessions: selectWorkflowCleanupSessionRecords(currentSessions),
-              },
-            ],
-          });
-          recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
-        }
-
         const taskWorktreePath = dependencies.settingsConfig.join(managedWorktreeBasePath, taskId);
         const taskWorktreePathExists =
           yield* dependencies.settingsConfig.pathExists(taskWorktreePath);
@@ -125,6 +112,19 @@ export const createTaskCloseUseCase = ({
           current,
           currentSessions,
         );
+        yield* taskSessionBootstrapCoordinator.acquireWorktreeLifecycle(worktreePaths);
+        if (hasWorkflowSessions && taskActivityGuard) {
+          const { stoppedSessionCount } = yield* taskActivityGuard.cleanupTaskSessions({
+            repoPath: effectiveRepoPath,
+            taskSessions: [
+              {
+                taskId,
+                sessions: selectWorkflowCleanupSessionRecords(currentSessions),
+              },
+            ],
+          });
+          recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
+        }
         const branchNames = yield* collectRelatedTaskBranches(
           dependencies.gitPort,
           effectiveRepoPath,

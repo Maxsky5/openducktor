@@ -2,16 +2,14 @@ import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createCodexLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/codex-live-session-adapter";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
-import { createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/opencode-live-session-adapter";
 import { createCodexWorkspaceRuntimeStarter } from "../../adapters/codex/codex-workspace-runtime-starter";
 import {
   createMcpHostBridgeServer,
   resolveMcpBridgeDiscoveryPath,
 } from "../../adapters/mcp/mcp-host-bridge-server";
-import { createOpenCodeWorkspaceRuntimeStarter } from "../../adapters/opencode/opencode-workspace-runtime-starter";
 import { createRuntimeRegistry } from "../../adapters/runtimes/runtime-registry";
 import { createRuntimeSessionOperations } from "../../adapters/runtimes/runtime-session-operations";
-import { createRuntimeTaskActivityGuard } from "../../adapters/runtimes/runtime-task-activity-guard";
+import { createRuntimeTaskActivityGuard } from "../../application/tasks/runtime-task-activity-guard";
 import { createRuntimeWorkspaceStarterDispatcher } from "../../adapters/runtimes/runtime-workspace-starter-dispatcher";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import { createLocalAttachmentService } from "../../application/attachments/local-attachment-service";
@@ -30,6 +28,7 @@ import { readSavedRuntimeExecutablePath } from "../../application/runtimes/saved
 import { createOpenInToolsService } from "../../application/system/open-in-tools-service";
 import type { TaskSyncLoopHandle } from "../../application/tasks/sync/task-sync-service";
 import { createTaskServiceWithMutationProgress } from "../../application/tasks/task-service";
+import { createTaskSessionBootstrapCoordinator } from "../../application/tasks/worktrees/task-session-bootstrap-coordinator";
 import { createTaskWorktreeService } from "../../application/tasks/worktrees/task-worktree-service";
 import { createTerminalService } from "../../application/terminals/terminal-service";
 import { loadGlobalConfig } from "../../application/workspaces/workspace-settings-model";
@@ -81,6 +80,7 @@ import { createNodeGitProviderResolver } from "./git-provider-composition";
 import { createNodeRuntimeExecutableCommandHandlers } from "./node-runtime-executable-command-handlers";
 import { createNodeTaskAssetServices } from "./node-task-asset-services";
 import { createNodeTaskEventServices } from "./node-task-event-services";
+import { createOpenCodeRuntimeComposition } from "./opencode-runtime-composition";
 import { createRuntimeActiveSessionResolver } from "./runtime-active-session-resolver";
 import { resolveWorkspaceRuntimeMcpBridgeConnection } from "./workspace-runtime-mcp-bridge-connection";
 
@@ -166,6 +166,8 @@ const assembleNodeEffectHostCommandRouter = (
   });
   const claudeWorkingDirectoryDependencies = { settingsConfig, workspaceSettingsService };
   let resolvedMcpHostBridge = mcpHostBridge;
+  const resolveRuntimeMcpBridge = (kind: "codex" | "opencode", repoPath: string) =>
+    resolveWorkspaceRuntimeMcpBridgeConnection(resolvedMcpHostBridge, kind, repoPath);
   const claudeRuntime = createClaudeRuntimeComposition({
     liveSessionLifecycle: agentSessionLiveStateService,
     onBackgroundFailure,
@@ -215,33 +217,24 @@ const assembleNodeEffectHostCommandRouter = (
     processEnv,
     runtimeDistribution,
     resolveMcpBridgeConnection: (runtimeInput) =>
-      resolveWorkspaceRuntimeMcpBridgeConnection(
-        resolvedMcpHostBridge,
-        "codex",
-        runtimeInput.repoPath,
-      ),
+      resolveRuntimeMcpBridge("codex", runtimeInput.repoPath),
   };
   if (clientVersion) {
     codexWorkspaceRuntimeStarterInput.clientVersion = clientVersion;
   }
+  const taskSessionBootstrapCoordinator = createTaskSessionBootstrapCoordinator();
   const workspaceStarter = createRuntimeWorkspaceStarterDispatcher({
     claude: claudeRuntime.workspaceStarter,
     codex: createCodexWorkspaceRuntimeStarter(codexWorkspaceRuntimeStarterInput),
-    opencode: createOpenCodeWorkspaceRuntimeStarter({
+    opencode: createOpenCodeRuntimeComposition({
       toolDiscovery,
       settingsConfig,
       processEnv,
       runtimeDistribution,
       liveSessionLifecycle: agentSessionLiveStateService,
-      prepareLiveSessionAdapter: createOpenCodeLiveSessionAdapterPreparer({
-        liveSessionLifecycle: agentSessionLiveStateService,
-      }),
+      taskSessionBootstrapCoordinator,
       resolveMcpBridgeConnection: (runtimeInput) =>
-        resolveWorkspaceRuntimeMcpBridgeConnection(
-          resolvedMcpHostBridge,
-          "opencode",
-          runtimeInput.repoPath,
-        ),
+        resolveRuntimeMcpBridge("opencode", runtimeInput.repoPath),
     }),
   });
   const effectiveRuntimeRegistry =
@@ -281,6 +274,8 @@ const assembleNodeEffectHostCommandRouter = (
   const devServerService = createDevServerService(devServerServiceInput);
   const taskActivityGuard = createRuntimeTaskActivityGuard({
     runtimeRegistry: effectiveRuntimeRegistry,
+    sessionService: agentSessionLiveStateService,
+    settingsConfig,
   });
   const baseTaskService = createTaskServiceWithMutationProgress({
     devServerService,
@@ -296,6 +291,7 @@ const assembleNodeEffectHostCommandRouter = (
     runtimeDefinitionsService,
     runtimeRegistry: effectiveRuntimeRegistry,
     worktreeFiles,
+    taskSessionBootstrapCoordinator,
   });
   const { taskEventStream, taskService, taskSyncService } = createNodeTaskEventServices({
     baseTaskService,
@@ -338,7 +334,6 @@ const assembleNodeEffectHostCommandRouter = (
         );
         return;
       }
-
       yield* pullRequestSyncLoop.stop();
       pullRequestSyncLoop = null;
       yield* writeHostLifecycleLog(lifecycleLogger, "info", "Pull request sync loop stopped");

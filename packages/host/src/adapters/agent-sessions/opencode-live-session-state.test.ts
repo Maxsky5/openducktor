@@ -159,6 +159,25 @@ describe("OpenCode host live-session state", () => {
     );
   });
 
+  test("keeps a confirmed session when a later list omits it", () => {
+    const state = createState();
+    state.initialize([source("session-1", "request-1")], new Map());
+    const retained = state.listSnapshots()[0];
+    if (!retained) {
+      throw new Error("Expected a retained session.");
+    }
+    const requestId = retained.pendingApprovals[0]?.requestId;
+    if (!requestId) {
+      throw new Error("Expected a retained approval.");
+    }
+
+    expect(state.refresh([])).toEqual([]);
+    expect(state.readSnapshot(retained.ref)).toEqual({ type: "live", session: retained });
+    expect(state.requirePendingRoute(retained.ref, requestId, "approval").nativeRequestId).toBe(
+      "request-1",
+    );
+  });
+
   test("clears all routes and snapshots when its runtime is released", () => {
     const state = createState();
     state.initialize(
