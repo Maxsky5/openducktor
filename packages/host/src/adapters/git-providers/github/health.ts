@@ -51,7 +51,16 @@ export const createGithubProviderHealthPort = ({
           reason: "GitHub repository coordinates are missing.",
         });
       }
-      const authResult = yield* Effect.either(command.getAuth(provider.repository.host));
+      const repositoryResult = yield* Effect.either(repositoryPort.getRepository(repoConfig));
+      if (repositoryResult._tag === "Left") {
+        return unhealthy({
+          executablePath: command.executablePath,
+          version,
+          repositoryMappingValid: false,
+          reason: errorMessage(repositoryResult.left),
+        });
+      }
+      const authResult = yield* Effect.either(command.getAuth(repositoryResult.right.host));
       if (authResult._tag === "Left") {
         return unhealthy({
           executablePath: command.executablePath,

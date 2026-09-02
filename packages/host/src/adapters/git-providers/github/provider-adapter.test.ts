@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { GITHUB_PROVIDER_DESCRIPTOR, repoConfigSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createGitProviderResolver } from "../../../application/git/git-provider-resolver";
-import { HostDependencyError } from "../../../effect/host-errors";
+import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
 import { GitProviderRepositoryError } from "../../../ports/git-provider-errors";
 import type { SystemCommandPort, SystemCommandRunResult } from "../../../ports/system-command-port";
 import { createGitPortTestDouble } from "../../../test-support/service-test-doubles";
@@ -47,6 +47,17 @@ const createHealthDependencies = ({
     },
   };
 };
+
+const createDetectionAdapter = (urls: string[]) =>
+  new GithubProviderAdapter({
+    ...createHealthDependencies(),
+    gitPort: createGitPortTestDouble({
+      canonicalizePath: () => Effect.succeed("/repo"),
+      isGitRepository: () => Effect.succeed(true),
+      listRemotes: () =>
+        Effect.succeed(urls.map((url, index) => ({ name: `remote-${index}`, url }))),
+    }),
+  });
 
 describe("GithubProviderAdapter", () => {
   test("resolves as the configured provider with typed capability access", async () => {
@@ -149,19 +160,11 @@ describe("GithubProviderAdapter", () => {
   });
 
   test("detects one GitHub repository identity across supported remote URL forms", async () => {
-    const github = new GithubProviderAdapter({
-      ...createHealthDependencies(),
-      gitPort: createGitPortTestDouble({
-        canonicalizePath: () => Effect.succeed("/canonical/repo"),
-        isGitRepository: () => Effect.succeed(true),
-        listRemotes: () =>
-          Effect.succeed([
-            { name: "https", url: "https://token@github.com/Maxsky5/openducktor.git" },
-            { name: "scp", url: "git@github.com:Maxsky5/openducktor.git" },
-            { name: "ssh", url: "ssh://git@github.com/Maxsky5/openducktor.git" },
-          ]),
-      }),
-    });
+    const github = createDetectionAdapter([
+      "https://token@github.com/Maxsky5/openducktor.git",
+      "git@github.com:Maxsky5/openducktor.git",
+      "ssh://git@github.com/Maxsky5/openducktor.git",
+    ]);
 
     await expect(Effect.runPromise(github.repository().detectRepository("/repo"))).resolves.toEqual(
       { host: "github.com", owner: "Maxsky5", name: "openducktor" },
@@ -169,20 +172,7 @@ describe("GithubProviderAdapter", () => {
   });
 
   test("detects GitHub Enterprise repositories", async () => {
-    const github = new GithubProviderAdapter({
-      ...createHealthDependencies(),
-      gitPort: createGitPortTestDouble({
-        canonicalizePath: () => Effect.succeed("/repo"),
-        isGitRepository: () => Effect.succeed(true),
-        listRemotes: () =>
-          Effect.succeed([
-            {
-              name: "origin",
-              url: "ssh://git@github.mycorp.com/Maxsky5/openducktor.git",
-            },
-          ]),
-      }),
-    });
+    const github = createDetectionAdapter(["ssh://git@github.mycorp.com/Maxsky5/openducktor.git"]);
 
     await expect(Effect.runPromise(github.repository().detectRepository("/repo"))).resolves.toEqual(
       {
@@ -193,24 +183,45 @@ describe("GithubProviderAdapter", () => {
     );
   });
 
-  test("returns typed failures for missing and ambiguous repository remotes", async () => {
-    const adapter = (urls: string[]) =>
-      new GithubProviderAdapter({
-        ...createHealthDependencies(),
-        gitPort: createGitPortTestDouble({
-          canonicalizePath: () => Effect.succeed("/repo"),
-          isGitRepository: () => Effect.succeed(true),
-          listRemotes: () =>
-            Effect.succeed(urls.map((url, index) => ({ name: `remote-${index}`, url }))),
-        }),
-      });
+  test("accepts the default HTTPS port for GitHub Enterprise", async () => {
+    const github = createDetectionAdapter([
+      "https://github.mycorp.com:443/Maxsky5/openducktor.git",
+    ]);
 
+    await expect(Effect.runPromise(github.repository().detectRepository("/repo"))).resolves.toEqual(
+      {
+        host: "github.mycorp.com",
+        owner: "Maxsky5",
+        name: "openducktor",
+      },
+    );
+  });
+
+  test("rejects GitHub remotes with a non-default HTTPS port", async () => {
+    const github = createDetectionAdapter([
+      "https://github.mycorp.com:8443/Maxsky5/openducktor.git",
+    ]);
+
+    const result = await Effect.runPromise(
+      Effect.either(github.repository().detectRepository("/repo")),
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") {
+      expect(result.left).toBeInstanceOf(GitProviderRepositoryError);
+      if (result.left instanceof GitProviderRepositoryError) {
+        expect(result.left.reason).toBe("no_matching_remote");
+      }
+    }
+  });
+
+  test("returns typed failures for missing and ambiguous repository remotes", async () => {
     const missing = await Effect.runPromise(
-      Effect.either(adapter([]).repository().detectRepository("/repo")),
+      Effect.either(createDetectionAdapter([]).repository().detectRepository("/repo")),
     );
     const ambiguous = await Effect.runPromise(
       Effect.either(
-        adapter([
+        createDetectionAdapter([
           "git@github.com:Maxsky5/openducktor.git",
           "git@github.com:someone/openducktor.git",
         ])
@@ -282,6 +293,40 @@ describe("GithubProviderAdapter", () => {
     expect(authCalls).toEqual(
       authCalls.map(() => ["api", "user", "--hostname", "github.com", "--jq", ".login"]),
     );
+  });
+
+  test("rejects a configured port-qualified host before checking authentication", async () => {
+    const authCalls: string[][] = [];
+    const github = new GithubProviderAdapter({
+      ...createHealthDependencies({
+        runAuth: (args) => {
+          authCalls.push(args);
+          return { ok: true, stdout: "active-user\n", stderr: "" };
+        },
+      }),
+      gitPort: createGitPortTestDouble({}),
+    });
+    const config = repoConfig("github.mycorp.com:8443");
+
+    const repository = await Effect.runPromise(
+      Effect.either(github.repository().getRepository(config)),
+    );
+    const health = await Effect.runPromise(github.health().getStatus(config));
+
+    expect(repository._tag).toBe("Left");
+    if (repository._tag === "Left") {
+      expect(repository.left).toBeInstanceOf(HostValidationError);
+      if (repository.left instanceof HostValidationError) {
+        expect(repository.left.field).toBe("git.provider.repository.host");
+      }
+    }
+    expect(health).toMatchObject({
+      available: false,
+      authenticated: false,
+      repositoryMappingValid: false,
+      reason: "GitHub CLI does not support repository hosts with ports: github.mycorp.com:8443.",
+    });
+    expect(authCalls).toEqual([]);
   });
 
   test("rejects duplicate configured repository mappings in the repository port and health", async () => {

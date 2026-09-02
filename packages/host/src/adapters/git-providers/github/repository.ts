@@ -97,6 +97,15 @@ const configuredRepository = (repoConfig: RepoConfig) =>
         }),
       );
     }
+    if (!isGithubCliHost(provider.repository.host)) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          field: "git.provider.repository.host",
+          message: `GitHub CLI does not support repository hosts with ports: ${provider.repository.host}.`,
+          details: { repoPath: repoConfig.repoPath },
+        }),
+      );
+    }
     return provider.repository;
   });
 
@@ -104,12 +113,14 @@ const uniqueRepositories = (urls: readonly string[]): GitProviderRepository[] =>
   const repositories = new Map<string, GitProviderRepository>();
   for (const url of urls) {
     const repository = parseGitRepositoryUrl(url);
-    if (repository) {
+    if (repository && isGithubCliHost(repository.host)) {
       repositories.set(gitRepositoryKey(repository), repository);
     }
   }
   return [...repositories.values()];
 };
+
+const isGithubCliHost = (host: string): boolean => !host.includes(":");
 
 const mappingError = ({
   repoPath,

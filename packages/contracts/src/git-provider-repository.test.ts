@@ -46,7 +46,7 @@ describe("git provider repository parsing", () => {
     });
   });
 
-  test("keeps an HTTPS port that is part of an enterprise API host", () => {
+  test("keeps a non-default HTTPS port in the parsed host", () => {
     expect(parseGitRepositoryUrl("https://github.mycorp.com:8443/openai/openducktor.git")).toEqual({
       host: "github.mycorp.com:8443",
       owner: "openai",
