@@ -60,7 +60,14 @@ function NotificationsHarness({ context }: { context: NotificationContextValue }
 describe("SettingsNotificationsSection", () => {
   test("renders every notification kind and retains disabled row choices", async () => {
     render(<NotificationsHarness context={createNotificationContext()} />);
-    await screen.findByText("Permission will be requested only when you test OS notifications.");
+    await screen.findByText(
+      "OS notifications are not enabled yet. Test OS to choose whether to allow them.",
+    );
+
+    const sectionText = document.body.textContent ?? "";
+    expect(sectionText.indexOf("Status and tests")).toBeLessThan(
+      sectionText.indexOf("Sound and focus"),
+    );
 
     expect(screen.getAllByRole("switch")).toHaveLength(NOTIFICATION_KIND_VALUES.length);
     const delivery = screen.getByRole("radiogroup", {
@@ -133,11 +140,33 @@ describe("SettingsNotificationsSection", () => {
       />,
     );
 
-    await screen.findByText("OS notification permission is denied.");
+    await screen.findByText(
+      "OS notifications are disabled in system settings. Allow OpenDucktor notifications to receive alerts outside the app.",
+    );
+    expect(screen.getByRole("button", { name: "Test OS" }).hasAttribute("disabled")).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Open system settings" }));
 
     await waitFor(() => expect(openSystemSettings).toHaveBeenCalledTimes(1));
-    expect(screen.getByText("System notification settings opened.")).toBeTruthy();
+  });
+
+  test("explains when OS notifications are enabled", async () => {
+    render(
+      <NotificationsHarness
+        context={createNotificationContext({
+          getCapability: async () => ({
+            platform: "electron",
+            supported: true,
+            permission: "granted",
+            canGuaranteeSilent: true,
+          }),
+        })}
+      />,
+    );
+
+    await screen.findByText(
+      "OS notifications are enabled. OpenDucktor can send alerts outside the app.",
+    );
+    expect(screen.queryByRole("button", { name: "Open system settings" })).toBeNull();
   });
 
   test("uses a slider for volume", async () => {
@@ -154,7 +183,9 @@ describe("SettingsNotificationsSection", () => {
     const previewCue = mock(async () => {});
     render(<NotificationsHarness context={createNotificationContext({ previewCue })} />);
 
-    await screen.findByText("Permission will be requested only when you test OS notifications.");
+    await screen.findByText(
+      "OS notifications are not enabled yet. Test OS to choose whether to allow them.",
+    );
     const soundPicker = screen.getByRole("button", { name: "Sound for Permission Prompt" });
     expect(soundPicker.textContent).toContain("Use global sound");
 
