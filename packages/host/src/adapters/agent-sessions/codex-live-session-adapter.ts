@@ -257,13 +257,12 @@ export const createCodexLiveSessionAdapterPreparer =
           runtimeKind: "codex",
           repoPath: runtime.repoPath,
         },
-        matches: projection.matches,
-        listRetainedSnapshots: projection.listRetainedSnapshots,
-        readRetainedSnapshot: projection.readRetainedSnapshot,
+        listSnapshots: projection.listSnapshots,
+        readSnapshot: projection.readSnapshot,
         loadContext: (input) =>
           Effect.gen(function* () {
-            const retained = projection.hasSnapshot(input);
-            const usage = retained
+            const hasSnapshot = projection.hasSnapshot(input);
+            const usage = hasSnapshot
               ? yield* Effect.tryPromise({
                   try: () =>
                     controller.loadLiveSessionContextUsage({

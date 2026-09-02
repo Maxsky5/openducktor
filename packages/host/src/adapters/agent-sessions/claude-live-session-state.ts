@@ -158,9 +158,9 @@ export const createClaudeLiveSessionState = ({
     ref: AgentSessionLiveRef,
     timestamp: string,
   ): AgentSessionLiveSnapshot => {
-    const retained = readSnapshot(ref);
-    if (retained) {
-      return retained;
+    const current = readSnapshot(ref);
+    if (current) {
+      return current;
     }
     const isRoot = ref.externalSessionId === session.externalSessionId;
     const snapshot: AgentSessionLiveSnapshot = {
@@ -437,10 +437,9 @@ export const createClaudeLiveSessionState = ({
     },
     contextRevision: (ref: AgentSessionLiveRef): number =>
       contextRevisionsByRef.get(refKey(ref)) ?? 0,
-    listRetainedSnapshots: (repoPath: string): AgentSessionLiveSnapshot[] =>
+    listSnapshots: (repoPath: string): AgentSessionLiveSnapshot[] =>
       repoPath === runtime.repoPath ? [...snapshotsByRef.values()].map(cloneSnapshot) : [],
-    matches: (ref: AgentSessionLiveRef): boolean => snapshotsByRef.has(refKey(ref)),
-    readRetainedSnapshot: (ref: AgentSessionLiveRef) => {
+    readSnapshot: (ref: AgentSessionLiveRef) => {
       const snapshot = readSnapshot(ref);
       return snapshot
         ? ({ type: "live", session: cloneSnapshot(snapshot) } as const)
@@ -458,11 +457,11 @@ export const createClaudeLiveSessionState = ({
       retiredSessionKeys.delete(refKey(ref));
     },
     removeSession: removeSessionTree,
-    retainControlSummary: (
+    applyControlSummary: (
       summary: AgentSessionSummary,
       options: {
         readonly parentExternalSessionId?: string;
-        readonly preserveRetainedActivity?: boolean;
+        readonly keepActivity?: boolean;
       } = {},
     ): AgentSessionLiveAdapterChange[] => {
       const ref: AgentSessionLiveRef = {
@@ -475,7 +474,7 @@ export const createClaudeLiveSessionState = ({
       retiredSessionKeys.delete(key);
       const current = readSnapshot(ref);
       let activity = activityForSummary(summary.status);
-      if (options.preserveRetainedActivity && current) {
+      if (options.keepActivity && current) {
         activity = current.activity;
       }
       const nextSnapshot: AgentSessionLiveSnapshot = {

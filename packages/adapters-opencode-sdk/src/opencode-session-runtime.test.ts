@@ -787,7 +787,7 @@ describe("OpenCode session runtime connection", () => {
     await prepared.release();
   });
 
-  test("forwards pending input as retained session state events", async () => {
+  test("forwards pending input as live session state events", async () => {
     const harness = createLiveClientHarness();
     const prepared = await createPrepareRuntime(harness)(runtimeInput);
     const signals: OpencodeSessionRuntimeSignal[] = [];

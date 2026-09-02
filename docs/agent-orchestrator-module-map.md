@@ -232,8 +232,8 @@ Files:
 Owns:
 
 - requesting generic host context loading when the selected live session has no
-  retained usage and the runtime is ready
-- leaving retained context usage on the live snapshot fast path
+  context usage and the runtime is ready
+- leaving current context usage on the live snapshot fast path
 
 Invariant: context recovery is explicit and session-scoped. The frontend does not
 know whether an adapter performs a native read or a Codex resume with turns. A
@@ -919,7 +919,7 @@ A successful current-scope record read clears prior task-record failures only; l
    shared task-session query keys.
 3. The renderer observes the existing generic host-event channel, then requests one live-state refresh for the active repository with the exact roots from durable task session records.
 4. Each runtime adapter reads only those roots and their verified descendants. `buildAgentSessionLiveCollection` rejects any other root, reapplies workflow session records, and commits the collection once.
-5. Session rows, activity, pending input, retained context usage, and sidebar
+5. Session rows, activity, pending input, current context usage, and sidebar
    counters all derive from that same committed collection.
 6. Subsequent ordered upserts, removals, transcript events, faults, and catalog
    invalidations arrive on the same generic host-event connection. On browser

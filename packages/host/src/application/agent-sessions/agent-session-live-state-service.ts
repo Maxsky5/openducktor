@@ -199,14 +199,10 @@ export const createAgentSessionLiveStateService = ({
   const listSnapshots = (repoPath: string) =>
     Effect.gen(function* () {
       const snapshots = yield* Effect.forEach(adapterRegistry.listForRepo(repoPath), (adapter) =>
-        adapter.listRetainedSnapshots(repoPath),
+        adapter.listSnapshots(repoPath),
       );
       const flattened = yield* Effect.forEach(snapshots.flat(), (snapshot) =>
-        parseAdapterOutput(
-          agentSessionLiveSnapshotSchema,
-          snapshot,
-          "agent-session-live.list-retained",
-        ),
+        parseAdapterOutput(agentSessionLiveSnapshotSchema, snapshot, "agent-session-live.list"),
       );
       const seen = new Set<string>();
       for (const snapshot of flattened) {
@@ -251,15 +247,18 @@ export const createAgentSessionLiveStateService = ({
     read: (input) =>
       coordinator.run(
         Effect.gen(function* () {
-          const adapter = yield* adapterRegistry.find(input);
+          const adapter = yield* adapterRegistry.resolveForScope(input).pipe(
+            Effect.map((value): AgentSessionLiveAdapterPort | null => value),
+            Effect.catchTag("HostResourceError", () => Effect.succeed(null)),
+          );
           if (!adapter) {
             return { type: "missing", ref: input } satisfies AgentSessionLiveReadResult;
           }
-          const result = yield* adapter.readRetainedSnapshot(input);
+          const result = yield* adapter.readSnapshot(input);
           const parsed = yield* parseAdapterOutput(
             agentSessionLiveReadResultSchema,
             result,
-            "agent-session-live.read-retained",
+            "agent-session-live.read",
           );
           if (parsed.type === "missing") {
             return parsed;
@@ -279,7 +278,7 @@ export const createAgentSessionLiveStateService = ({
         ),
       ),
     loadSessionDiff: (input) =>
-      adapterRegistry.resolve(input).pipe(
+      adapterRegistry.resolveForScope(input).pipe(
         Effect.flatMap((adapter) => {
           if (!adapter.loadSessionDiff) {
             return Effect.fail(
@@ -302,11 +301,11 @@ export const createAgentSessionLiveStateService = ({
       ),
     replyApproval: (input) =>
       adapterRegistry
-        .resolve(input)
+        .resolveForScope(input)
         .pipe(Effect.flatMap((adapter) => adapter.replyApproval(input))),
     replyQuestion: (input) =>
       adapterRegistry
-        .resolve(input)
+        .resolveForScope(input)
         .pipe(Effect.flatMap((adapter) => adapter.replyQuestion(input))),
     startSession: (input) =>
       adapterRegistry
@@ -326,15 +325,15 @@ export const createAgentSessionLiveStateService = ({
         .pipe(Effect.flatMap((adapter) => adapter.sendUserMessage(input))),
     updateSessionModel: (input) =>
       adapterRegistry
-        .resolveControl(input)
+        .resolveControlForScope(input)
         .pipe(Effect.flatMap((adapter) => adapter.updateSessionModel(input))),
     stopSession: (input) =>
       adapterRegistry
-        .resolveControl(input)
+        .resolveControlForScope(input)
         .pipe(Effect.flatMap((adapter) => adapter.stopSession(input))),
     releaseSession: (input) =>
       adapterRegistry
-        .resolveControl(input)
+        .resolveControlForScope(input)
         .pipe(Effect.flatMap((adapter) => adapter.releaseSession(input))),
     registerRuntimeAdapter: (adapter) => {
       let registered = false;
@@ -342,7 +341,7 @@ export const createAgentSessionLiveStateService = ({
         Effect.gen(function* () {
           yield* adapterRegistry.register(adapter);
           registered = true;
-          const snapshots = yield* adapter.listRetainedSnapshots(adapter.binding.repoPath);
+          const snapshots = yield* adapter.listSnapshots(adapter.binding.repoPath);
           const validatedSnapshots = yield* Effect.forEach(snapshots, (snapshot) =>
             parseAdapterOutput(
               agentSessionLiveSnapshotSchema,
@@ -372,10 +371,10 @@ export const createAgentSessionLiveStateService = ({
           if (!adapter) {
             return [];
           }
-          const retainedExit = yield* Effect.exit(
+          const snapshotExit = yield* Effect.exit(
             Effect.gen(function* () {
-              const retained = yield* adapter.listRetainedSnapshots(adapter.binding.repoPath);
-              const validated = yield* Effect.forEach(retained, (snapshot) =>
+              const snapshots = yield* adapter.listSnapshots(adapter.binding.repoPath);
+              const validated = yield* Effect.forEach(snapshots, (snapshot) =>
                 parseAdapterOutput(
                   agentSessionLiveSnapshotSchema,
                   snapshot,
@@ -398,14 +397,14 @@ export const createAgentSessionLiveStateService = ({
               )
             : null;
           let refs: ReadonlyArray<AgentSessionLiveRef> = [];
-          if (Exit.isSuccess(retainedExit)) {
-            refs = retainedExit.value;
+          if (Exit.isSuccess(snapshotExit)) {
+            refs = snapshotExit.value;
           } else if (releasedRefsExit && Exit.isSuccess(releasedRefsExit)) {
             refs = releasedRefsExit.value;
           }
           yield* publishChanges(refs.map((ref) => ({ type: "session_removed" as const, ref })));
           const needsAuthoritativeSnapshot =
-            Exit.isFailure(retainedExit) && (!releasedRefsExit || Exit.isFailure(releasedRefsExit));
+            Exit.isFailure(snapshotExit) && (!releasedRefsExit || Exit.isFailure(releasedRefsExit));
           const authoritativeSnapshotExit = needsAuthoritativeSnapshot
             ? yield* Effect.exit(
                 Effect.gen(function* () {
@@ -420,8 +419,8 @@ export const createAgentSessionLiveStateService = ({
             : null;
 
           const failures: string[] = [];
-          if (Exit.isFailure(retainedExit)) {
-            failures.push(`retained snapshots: ${Cause.pretty(retainedExit.cause)}`);
+          if (Exit.isFailure(snapshotExit)) {
+            failures.push(`live snapshots: ${Cause.pretty(snapshotExit.cause)}`);
           }
           if (Exit.isFailure(releaseExit)) {
             failures.push(`adapter cleanup: ${Cause.pretty(releaseExit.cause)}`);

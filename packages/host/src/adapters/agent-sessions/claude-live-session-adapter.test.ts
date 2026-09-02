@@ -456,7 +456,7 @@ describe("Claude host live-session adapter", () => {
 
     expect(
       await Effect.runPromise(
-        harness.adapter.readRetainedSnapshot({
+        harness.adapter.readSnapshot({
           repoPath: "/repo",
           runtimeKind: "claude",
           workingDirectory: "/repo/worktree",
@@ -501,22 +501,22 @@ describe("Claude host live-session adapter", () => {
       status: "idle",
     });
 
-    const retained = await Effect.runPromise(
-      harness.adapter.readRetainedSnapshot({
+    const current = await Effect.runPromise(
+      harness.adapter.readSnapshot({
         repoPath: "/repo",
         runtimeKind: "claude",
         workingDirectory: "/repo/worktree",
         externalSessionId: "session-1",
       }),
     );
-    expect(retained).toMatchObject({
+    expect(current).toMatchObject({
       type: "live",
       session: { activity: "idle" },
     });
-    if (retained.type !== "live") {
-      throw new Error("Expected retained fork snapshot.");
+    if (current.type !== "live") {
+      throw new Error("Expected a live fork snapshot.");
     }
-    expect(retained.session.parentExternalSessionId).toBeUndefined();
+    expect(current.session.parentExternalSessionId).toBeUndefined();
   });
 
   test("publishes accepted input before draining its runtime response", async () => {
@@ -643,7 +643,7 @@ describe("Claude host live-session adapter", () => {
     ]);
     await expect(
       Effect.runPromise(
-        harness.adapter.readRetainedSnapshot({
+        harness.adapter.readSnapshot({
           repoPath: "/repo",
           runtimeKind: "claude",
           workingDirectory: "/repo/worktree",
@@ -656,7 +656,7 @@ describe("Claude host live-session adapter", () => {
     });
   });
 
-  test("keeps pending activity when an already-retained session is resumed", async () => {
+  test("keeps pending activity when an already-live session is resumed", async () => {
     const harness = await createHarness();
     await Effect.runPromise(harness.adapter.startSession(startInput));
     harness.eventHub.emit(session, {
@@ -678,7 +678,7 @@ describe("Claude host live-session adapter", () => {
 
     await expect(
       Effect.runPromise(
-        harness.adapter.readRetainedSnapshot({
+        harness.adapter.readSnapshot({
           repoPath: "/repo",
           runtimeKind: "claude",
           workingDirectory: "/repo/worktree",
@@ -694,7 +694,7 @@ describe("Claude host live-session adapter", () => {
     });
   });
 
-  test("keeps a retained running session running when it is resumed", async () => {
+  test("keeps a current running session running when it is resumed", async () => {
     const harness = await createHarness();
     await Effect.runPromise(harness.adapter.startSession(startInput));
     harness.eventHub.emit(session, {
@@ -713,7 +713,7 @@ describe("Claude host live-session adapter", () => {
 
     await expect(
       Effect.runPromise(
-        harness.adapter.readRetainedSnapshot({
+        harness.adapter.readSnapshot({
           repoPath: "/repo",
           runtimeKind: "claude",
           workingDirectory: "/repo/worktree",
@@ -726,7 +726,7 @@ describe("Claude host live-session adapter", () => {
     });
   });
 
-  test("keeps a retained pending question intact when it is resumed", async () => {
+  test("keeps a current pending question intact when it is resumed", async () => {
     const harness = await createHarness();
     await Effect.runPromise(harness.adapter.startSession(startInput));
     harness.eventHub.emit(session, {
@@ -754,7 +754,7 @@ describe("Claude host live-session adapter", () => {
 
     await expect(
       Effect.runPromise(
-        harness.adapter.readRetainedSnapshot({
+        harness.adapter.readSnapshot({
           repoPath: "/repo",
           runtimeKind: "claude",
           workingDirectory: "/repo/worktree",
@@ -814,7 +814,7 @@ describe("Claude host live-session adapter", () => {
     expect(completed).toEqual([]);
     await expect(
       Effect.runPromise(
-        harness.adapter.readRetainedSnapshot({
+        harness.adapter.readSnapshot({
           repoPath: "/repo",
           runtimeKind: "claude",
           workingDirectory: "/repo/worktree",
@@ -841,7 +841,7 @@ describe("Claude host live-session adapter", () => {
     expect(completed).toEqual(["approval-1"]);
     await expect(
       Effect.runPromise(
-        harness.adapter.readRetainedSnapshot({
+        harness.adapter.readSnapshot({
           repoPath: "/repo",
           runtimeKind: "claude",
           workingDirectory: "/repo/worktree",
@@ -899,7 +899,7 @@ describe("Claude host live-session adapter", () => {
     expect(completed).toEqual([]);
     await expect(
       Effect.runPromise(
-        harness.adapter.readRetainedSnapshot({
+        harness.adapter.readSnapshot({
           repoPath: "/repo",
           runtimeKind: "claude",
           workingDirectory: "/repo/worktree",
@@ -926,7 +926,7 @@ describe("Claude host live-session adapter", () => {
     expect(completed).toEqual(["question-1"]);
     await expect(
       Effect.runPromise(
-        harness.adapter.readRetainedSnapshot({
+        harness.adapter.readSnapshot({
           repoPath: "/repo",
           runtimeKind: "claude",
           workingDirectory: "/repo/worktree",
@@ -984,7 +984,7 @@ describe("Claude host live-session adapter", () => {
     expect(completed).toEqual(["approval-1"]);
     await expect(
       Effect.runPromise(
-        harness.adapter.readRetainedSnapshot({
+        harness.adapter.readSnapshot({
           repoPath: "/repo",
           runtimeKind: "claude",
           workingDirectory: "/repo/worktree",
@@ -1048,7 +1048,7 @@ describe("Claude host live-session adapter", () => {
     expect(completed).toEqual(["question-1"]);
     await expect(
       Effect.runPromise(
-        harness.adapter.readRetainedSnapshot({
+        harness.adapter.readSnapshot({
           repoPath: "/repo",
           runtimeKind: "claude",
           workingDirectory: "/repo/worktree",
@@ -1061,7 +1061,7 @@ describe("Claude host live-session adapter", () => {
     });
   });
 
-  test("uses the SDK summary when resuming a session that is not retained", async () => {
+  test("uses the SDK summary when resuming a session that is not loaded", async () => {
     const harness = await createHarness();
     harness.setResumeSession(() => Effect.succeed(summary));
 
@@ -1074,7 +1074,7 @@ describe("Claude host live-session adapter", () => {
 
     await expect(
       Effect.runPromise(
-        harness.adapter.readRetainedSnapshot({
+        harness.adapter.readSnapshot({
           repoPath: "/repo",
           runtimeKind: "claude",
           workingDirectory: "/repo/worktree",
@@ -1352,7 +1352,7 @@ describe("Claude host live-session adapter", () => {
     );
     await expect(
       Effect.runPromise(
-        harness.adapter.readRetainedSnapshot({
+        harness.adapter.readSnapshot({
           repoPath: "/repo",
           runtimeKind: "claude",
           workingDirectory: "/repo/worktree",

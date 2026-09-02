@@ -49,19 +49,9 @@ const fakeAdapter = (input: {
   const adapter = {
     supportsSessionControl: false,
     binding: { runtimeId: input.runtimeId, runtimeKind, repoPath: "/repo" },
-    matches: (ref) =>
-      input
-        .snapshots()
-        .some(
-          (snapshot) =>
-            snapshot.ref.runtimeKind === ref.runtimeKind &&
-            snapshot.ref.externalSessionId === ref.externalSessionId &&
-            snapshot.ref.workingDirectory === ref.workingDirectory &&
-            snapshot.ref.repoPath === ref.repoPath,
-        ),
-    listRetainedSnapshots: () =>
+    listSnapshots: () =>
       input.listEffect ? input.listEffect() : Effect.succeed(input.snapshots()),
-    readRetainedSnapshot: (ref) => {
+    readSnapshot: (ref) => {
       const snapshot = input
         .snapshots()
         .find((candidate) => candidate.ref.externalSessionId === ref.externalSessionId);
@@ -338,11 +328,11 @@ describe("createAgentSessionLiveStateService", () => {
     const { events, service } = createHarness();
     const entered = await Effect.runPromise(Deferred.make<void>());
     const release = await Effect.runPromise(Deferred.make<void>());
-    const retained = {
+    const current = {
       ...liveSnapshot("session-1"),
       contextUsage: { totalTokens: 10 },
     };
-    let snapshots: ReadonlyArray<AgentSessionLiveSnapshot> = [retained];
+    let snapshots: ReadonlyArray<AgentSessionLiveSnapshot> = [current];
     let listCallCount = 0;
     await Effect.runPromise(
       service.registerRuntimeAdapter(
@@ -369,7 +359,7 @@ describe("createAgentSessionLiveStateService", () => {
     const refreshFiber = Effect.runFork(service.refresh({ repoPath: "/repo" }));
     await Effect.runPromise(Deferred.await(entered));
     const updated = {
-      ...retained,
+      ...current,
       contextUsage: { totalTokens: 25 },
     };
     const contextFiber = Effect.runFork(
@@ -726,7 +716,7 @@ describe("createAgentSessionLiveStateService", () => {
     expect(faultLogs).toEqual([]);
   });
 
-  test("context failure does not make retained pending/session state unreadable", async () => {
+  test("context failure does not make current pending/session state unreadable", async () => {
     const { events, service } = createHarness();
     const snapshot = liveSnapshot("session-1");
     const adapter = fakeAdapter({
@@ -752,39 +742,6 @@ describe("createAgentSessionLiveStateService", () => {
       type: "snapshot",
       sessions: [expect.objectContaining({ ref: snapshot.ref })],
     });
-  });
-
-  test("fails context loading when repository/runtime scope is ambiguous", async () => {
-    const { service } = createHarness();
-    const first = liveSnapshot("session-1");
-    const second = liveSnapshot("session-2");
-    await Effect.runPromise(
-      service.registerRuntimeAdapter(
-        fakeAdapter({
-          runtimeId: "runtime-1",
-          snapshots: () => [first],
-          contextEffect: () => Effect.succeed({ totalTokens: 10 }),
-        }),
-      ),
-    );
-    await Effect.runPromise(
-      service.registerRuntimeAdapter(
-        fakeAdapter({
-          runtimeId: "runtime-2",
-          snapshots: () => [second],
-          contextEffect: () => Effect.succeed({ totalTokens: 20 }),
-        }),
-      ),
-    );
-
-    await expect(
-      Effect.runPromise(
-        service.loadContext({
-          ...first.ref,
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-        }),
-      ),
-    ).rejects.toThrow("Multiple live runtimes match");
   });
 
   test("a blocked explicit context load does not delay snapshot or pending hydration", async () => {
@@ -854,10 +811,10 @@ describe("createAgentSessionLiveStateService", () => {
 
   test("keeps the registered runtime when a duplicate registration is rejected", async () => {
     const { service } = createHarness();
-    const retained = liveSnapshot("original-session");
+    const current = liveSnapshot("original-session");
     await Effect.runPromise(
       service.registerRuntimeAdapter(
-        fakeAdapter({ runtimeId: "runtime-1", snapshots: () => [retained] }),
+        fakeAdapter({ runtimeId: "runtime-1", snapshots: () => [current] }),
       ),
     );
 
@@ -873,7 +830,7 @@ describe("createAgentSessionLiveStateService", () => {
     ).rejects.toThrow("already registered");
 
     await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([
-      retained,
+      current,
     ]);
   });
 
@@ -901,25 +858,25 @@ describe("createAgentSessionLiveStateService", () => {
       type: "session_removed",
       ref: expect.objectContaining({ externalSessionId: "codex-1" }),
     });
-    const retained = await Effect.runPromise(service.list({ repoPath: "/repo" }));
-    expect(retained.map((entry) => entry.ref.externalSessionId)).toEqual(["opencode-1"]);
+    const current = await Effect.runPromise(service.list({ repoPath: "/repo" }));
+    expect(current.map((entry) => entry.ref.externalSessionId)).toEqual(["opencode-1"]);
   });
 
-  test("releases adapter state and removes sessions when the final retained read fails", async () => {
+  test("releases adapter state and removes sessions when the final current read fails", async () => {
     const { events, service } = createHarness();
     const snapshot = liveSnapshot("session-1");
-    let failRetainedRead = false;
+    let failSnapshotRead = false;
     let releaseCalled = false;
     const adapter = {
       ...fakeAdapter({
         runtimeId: "runtime-1",
         snapshots: () => [snapshot],
         listEffect: () =>
-          failRetainedRead
+          failSnapshotRead
             ? Effect.fail(
                 new HostOperationError({
-                  operation: "test.list-retained",
-                  message: "retained snapshot read failed",
+                  operation: "test.list-snapshots",
+                  message: "live snapshot read failed",
                 }),
               )
             : Effect.succeed([snapshot]),
@@ -932,10 +889,10 @@ describe("createAgentSessionLiveStateService", () => {
     } satisfies AgentSessionLiveAdapterPort;
     await Effect.runPromise(service.registerRuntimeAdapter(adapter));
     await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
-    failRetainedRead = true;
+    failSnapshotRead = true;
 
     await expect(Effect.runPromise(service.releaseRuntime("runtime-1"))).rejects.toThrow(
-      "retained snapshot read failed",
+      "live snapshot read failed",
     );
 
     expect(releaseCalled).toBe(true);
@@ -943,20 +900,20 @@ describe("createAgentSessionLiveStateService", () => {
     await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([]);
   });
 
-  test("publishes an authoritative snapshot when retained reads and cleanup both fail", async () => {
+  test("publishes an authoritative snapshot when current reads and cleanup both fail", async () => {
     const { events, service } = createHarness();
     const snapshot = liveSnapshot("session-1");
-    let failRetainedRead = false;
+    let failSnapshotRead = false;
     const adapter = {
       ...fakeAdapter({
         runtimeId: "runtime-1",
         snapshots: () => [snapshot],
         listEffect: () =>
-          failRetainedRead
+          failSnapshotRead
             ? Effect.fail(
                 new HostOperationError({
-                  operation: "test.list-retained",
-                  message: "retained snapshot read failed",
+                  operation: "test.list-snapshots",
+                  message: "live snapshot read failed",
                 }),
               )
             : Effect.succeed([snapshot]),
@@ -970,11 +927,11 @@ describe("createAgentSessionLiveStateService", () => {
         ),
     } satisfies AgentSessionLiveAdapterPort;
     await Effect.runPromise(service.registerRuntimeAdapter(adapter));
-    failRetainedRead = true;
+    failSnapshotRead = true;
     events.length = 0;
 
     await expect(Effect.runPromise(service.releaseRuntime("runtime-1"))).rejects.toThrow(
-      "retained snapshot read failed",
+      "live snapshot read failed",
     );
 
     expect(events).toEqual([{ type: "snapshot", repoPath: "/repo", sessions: [] }]);
@@ -1024,9 +981,9 @@ describe("createAgentSessionLiveStateService", () => {
     expect(resumeInput).toEqual(input);
   });
 
-  test("routes an unloaded Codex session send through the repository runtime scope", async () => {
+  test("routes unloaded session controls through the repository runtime scope", async () => {
     const { service } = createHarness();
-    let sendInput: unknown;
+    const calls: Array<{ operation: string; input: unknown }> = [];
     const accepted = {
       type: "user_message" as const,
       externalSessionId: "persisted-session",
@@ -1047,12 +1004,21 @@ describe("createAgentSessionLiveStateService", () => {
       forkSession: () => Effect.dieMessage("unexpected fork"),
       sendUserMessage: (input) =>
         Effect.sync(() => {
-          sendInput = input;
+          calls.push({ operation: "send", input });
           return accepted;
         }),
-      updateSessionModel: () => Effect.dieMessage("unexpected model update"),
-      stopSession: () => Effect.dieMessage("unexpected stop"),
-      releaseSession: () => Effect.dieMessage("unexpected release"),
+      updateSessionModel: (input) =>
+        Effect.sync(() => {
+          calls.push({ operation: "model", input });
+        }),
+      stopSession: (input) =>
+        Effect.sync(() => {
+          calls.push({ operation: "stop", input });
+        }),
+      releaseSession: (input) =>
+        Effect.sync(() => {
+          calls.push({ operation: "release", input });
+        }),
     } satisfies AgentSessionRuntimeAdapterPort;
     await Effect.runPromise(service.registerRuntimeAdapter(adapter));
     const input = {
@@ -1062,7 +1028,16 @@ describe("createAgentSessionLiveStateService", () => {
     };
 
     await expect(Effect.runPromise(service.sendUserMessage(input))).resolves.toEqual(accepted);
-    expect(sendInput).toEqual(input);
+    await Effect.runPromise(service.updateSessionModel({ ...input, model: null }));
+    await Effect.runPromise(service.stopSession(input));
+    await Effect.runPromise(service.releaseSession(input));
+
+    expect(calls).toEqual([
+      { operation: "send", input },
+      { operation: "model", input: { ...input, model: null } },
+      { operation: "stop", input },
+      { operation: "release", input },
+    ]);
   });
 
   test("fails scoped operations when the workspace has no live runtime", async () => {

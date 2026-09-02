@@ -60,7 +60,7 @@ Every session operation uses the runtime kind and working directory stored with 
 |---|---|---|
 | Shared contracts | Runtime descriptors, routes, session identity, prompt parts, events, snapshots, and history items | Native SDK types or runtime-specific parsing |
 | Runtime-native adapter | Client construction, native configuration, requests, events, history, catalogs, permissions, questions, errors, and cleanup | Shared orchestration or renderer state |
-| Live-session adapter | Ordered controls and events, retained snapshots, context, pending input, and child sessions | A second native protocol implementation |
+| Live-session adapter | Ordered controls and events, live snapshots, context, pending input, and child sessions | A second native protocol implementation |
 | Host composition | Runtime startup, route registration, service wiring, command handlers, and lifecycle guards | Reconstructed or guessed routes |
 | Frontend | Capability-driven UI, normalized transcript display, stable queries, and operation errors | Native messages, tools, or pending-input payloads |
 
@@ -91,7 +91,7 @@ Before mapping native behavior, inspect the runtime's official SDK types, docume
 | `sessionLifecycle.supportedStartModes` | Supported start modes: `fresh`, `reuse`, and `fork` |
 | `sessionLifecycle.supportsSessionFork` | Whether the runtime can fork an existing session |
 | `sessionLifecycle.forkTargets` | Native fork boundaries: `session`, `message`, or `item` |
-| `sessionLifecycle.supportsListLiveSessions` | Whether the adapter can return retained live state for sessions that OpenDucktor registered |
+| `sessionLifecycle.supportsListLiveSessions` | Whether the adapter can return live state for sessions that OpenDucktor registered |
 | `sessionLifecycle.supportsQueuedUserMessages` | Whether a busy session can accept messages whose queued state remains observable |
 | `sessionLifecycle.supportsPendingInputSnapshots` | Whether live snapshots retain unresolved approvals and questions |
 
@@ -224,25 +224,25 @@ OpenDucktor accepts a runtime definition only when the descriptor schema is vali
 
 ### Session lifecycle and live state
 
-OpenDucktor owns root-session admission. Start, resume, and fork controls register the returned runtime metadata before the session enters the live-state list. A runtime adapter must not scan a native session inventory to add roots. Runtime events may add a descendant only through a parent that OpenDucktor already retained.
+OpenDucktor owns root-session admission. Start, resume, and fork controls register the returned runtime metadata before the session enters the live-state list. A runtime adapter must not scan a native session inventory to add roots. Runtime events may add a descendant only through a parent that OpenDucktor already registered.
 
 On reload, durable task session records provide the exact root references to refresh. The OpenCode adapter may call `session.get`, `session.children`, `session.status`, `permission.list`, and `question.list` for those roots and their verified descendants. It must not call `session.list` or treat runtime data as proof that a new root belongs to OpenDucktor.
 
 Fresh and forked sessions start with a running lease. Replayed native idle state must not make a new session flicker from running to idle and back before its first turn settles.
 
-Resume preserves a retained running turn, pending permission, or pending question until a newer native event replaces it. Control results and native events pass through one ordered coordinator so they cannot update retained state in an arbitrary order.
+Resume keeps the current running turn, pending permission, or pending question until a newer native event replaces it. Control results and native events pass through one ordered coordinator so they cannot update live state in an arbitrary order.
 
 Renderer attachment is atomic: the first envelope contains the current snapshot, and later changes follow on the same ordered channel. Separate snapshot and subscribe operations create a race.
 
 Native completion, stream end, runtime failure, explicit stop, and release have different meanings and must map separately. Final release removes the parent-child session tree and rejects unresolved pending requests.
 
-Current context usage is live state, not cumulative result usage. When a direct context read races streamed context events, queued events establish the read baseline and any context event processed during the read wins, even when it repeats the retained value.
+Current context usage is live state, not cumulative result usage. When a direct context read races streamed context events, queued events establish the read baseline and any context event processed during the read wins, even when it repeats the current value.
 
 ### Transcript and history
 
 Live events and hydrated history must produce the same OpenDucktor meaning for item identity, role, order, timestamp, completion, errors, tool names, display parts, prompt references, todos, subagents, and compaction.
 
-Use thin native live and history readers that feed the same canonical projector. Load history through the public SDK or API; history loading must not resume a session, drain live events, discover pending input, or mutate retained state.
+Use thin native live and history readers that feed the same canonical projector. Load history through the public SDK or API; history loading must not resume a session, drain live events, discover pending input, or mutate live state.
 
 Native history may include tool-result wrappers, synthetic messages, queue operations, local command output, compaction records, and child-agent delivery records. Classify them through native fields before generic message projection. Never filter them through displayed text, exact sentences, or regular expressions.
 

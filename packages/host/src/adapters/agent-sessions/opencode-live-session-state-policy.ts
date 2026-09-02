@@ -7,7 +7,7 @@ import type { AgentEvent } from "@openducktor/core";
 import type { z } from "zod";
 import { HostValidationError } from "../../effect/host-errors";
 
-export type OpenCodeRetainedSession = {
+export type OpenCodeLiveSession = {
   snapshot: AgentSessionLiveSnapshot;
   runtimeActivity: AgentSessionActivity;
 };
@@ -19,9 +19,7 @@ export const openCodeLiveSnapshotsEqual = (
   right: AgentSessionLiveSnapshot,
 ): boolean => JSON.stringify(left) === JSON.stringify(right);
 
-export const openCodeActivityForPending = (
-  session: OpenCodeRetainedSession,
-): AgentSessionActivity => {
+export const openCodeActivityForPending = (session: OpenCodeLiveSession): AgentSessionActivity => {
   if (session.snapshot.pendingQuestions.length > 0) {
     return "waiting_for_question";
   }

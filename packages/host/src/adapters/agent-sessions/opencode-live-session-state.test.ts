@@ -40,7 +40,7 @@ describe("OpenCode host live-session state", () => {
 
     expect(state.listSnapshots()).toEqual([]);
 
-    state.retainControlSummary(summary());
+    state.applyControlSummary(summary());
 
     expect(state.listSnapshots()).toEqual([
       expect.objectContaining({
@@ -52,10 +52,10 @@ describe("OpenCode host live-session state", () => {
 
   test("retains and resolves pending input from runtime events", () => {
     const state = createState();
-    state.retainControlSummary(summary());
+    state.applyControlSummary(summary());
     const ref = state.listSnapshots()[0]?.ref;
     if (!ref) {
-      throw new Error("Expected a retained OpenDucktor session.");
+      throw new Error("Expected a live OpenDucktor session.");
     }
 
     state.applyEvent(ref, {
@@ -87,10 +87,10 @@ describe("OpenCode host live-session state", () => {
 
   test("keeps pending input authoritative when a later control summary arrives", () => {
     const state = createState();
-    state.retainControlSummary(summary());
+    state.applyControlSummary(summary());
     const ref = state.listSnapshots()[0]?.ref;
     if (!ref) {
-      throw new Error("Expected a retained OpenDucktor session.");
+      throw new Error("Expected a live OpenDucktor session.");
     }
     state.applyEvent(ref, {
       type: "approval_required",
@@ -101,7 +101,7 @@ describe("OpenCode host live-session state", () => {
       title: "Edit a file",
     });
 
-    state.retainControlSummary({ ...summary(), status: "idle" });
+    state.applyControlSummary({ ...summary(), status: "idle" });
 
     expect(state.listSnapshots()[0]).toMatchObject({
       activity: "waiting_for_permission",
@@ -111,10 +111,10 @@ describe("OpenCode host live-session state", () => {
 
   test("admits descendants only through registered parent lineage", () => {
     const state = createState();
-    state.retainControlSummary(summary("parent"));
+    state.applyControlSummary(summary("parent"));
     const parentRef = state.listSnapshots()[0]?.ref;
     if (!parentRef) {
-      throw new Error("Expected a retained OpenDucktor parent.");
+      throw new Error("Expected a live OpenDucktor parent.");
     }
 
     state.applyEvent(parentRef, {
@@ -156,10 +156,10 @@ describe("OpenCode host live-session state", () => {
 
   test("rejects a descendant event whose parent was not registered", () => {
     const state = createState();
-    state.retainControlSummary(summary("parent"));
+    state.applyControlSummary(summary("parent"));
     const parentRef = state.listSnapshots()[0]?.ref;
     if (!parentRef) {
-      throw new Error("Expected a retained OpenDucktor parent.");
+      throw new Error("Expected a live OpenDucktor parent.");
     }
 
     expect(() =>
@@ -178,10 +178,10 @@ describe("OpenCode host live-session state", () => {
 
   test("keeps context demand-driven and removes a controlled session tree", () => {
     const state = createState();
-    state.retainControlSummary(summary());
+    state.applyControlSummary(summary());
     const ref = state.listSnapshots()[0]?.ref;
     if (!ref) {
-      throw new Error("Expected a retained OpenDucktor session.");
+      throw new Error("Expected a live OpenDucktor session.");
     }
 
     expect(state.applyLoadedContext(ref, { totalTokens: 42 })).toMatchObject({
@@ -194,10 +194,10 @@ describe("OpenCode host live-session state", () => {
 
   test("removes a vanished descendant when a registered root refresh omits it", () => {
     const state = createState();
-    state.retainControlSummary(summary("parent"));
+    state.applyControlSummary(summary("parent"));
     const parentRef = state.listSnapshots()[0]?.ref;
     if (!parentRef) {
-      throw new Error("Expected a retained OpenDucktor parent.");
+      throw new Error("Expected a live OpenDucktor parent.");
     }
     state.applyEvent(parentRef, {
       type: "question_required",
@@ -235,10 +235,10 @@ describe("OpenCode host live-session state", () => {
 
   test("removes a registered root when OpenCode confirms it is missing", () => {
     const state = createState();
-    state.retainControlSummary(summary("parent"));
+    state.applyControlSummary(summary("parent"));
     const parentRef = state.listSnapshots()[0]?.ref;
     if (!parentRef) {
-      throw new Error("Expected a retained OpenDucktor parent.");
+      throw new Error("Expected a live OpenDucktor parent.");
     }
 
     expect(state.applyWorkflowRoots([{ type: "missing", ref: parentRef }])).toEqual([
@@ -249,10 +249,10 @@ describe("OpenCode host live-session state", () => {
 
   test("rejects a registered ref when OpenCode says it has a parent", () => {
     const state = createState();
-    state.retainControlSummary(summary("child"));
+    state.applyControlSummary(summary("child"));
     const childRef = state.listSnapshots()[0]?.ref;
     if (!childRef) {
-      throw new Error("Expected a retained OpenDucktor session.");
+      throw new Error("Expected a live OpenDucktor session.");
     }
 
     expect(() =>
@@ -280,10 +280,10 @@ describe("OpenCode host live-session state", () => {
 
   test("removes a root only after its durable registration is omitted", () => {
     const state = createState();
-    state.retainControlSummary(summary("parent"));
+    state.applyControlSummary(summary("parent"));
     const parentRef = state.listSnapshots()[0]?.ref;
     if (!parentRef) {
-      throw new Error("Expected a retained OpenDucktor parent.");
+      throw new Error("Expected a live OpenDucktor parent.");
     }
 
     expect(state.applyWorkflowRoots([])).toEqual([]);
@@ -316,10 +316,10 @@ describe("OpenCode host live-session state", () => {
       runtime,
       nextOccurrenceId: () => "",
     });
-    state.retainControlSummary(summary());
+    state.applyControlSummary(summary());
     const ref = state.listSnapshots()[0]?.ref;
     if (!ref) {
-      throw new Error("Expected a retained OpenDucktor session.");
+      throw new Error("Expected a live OpenDucktor session.");
     }
 
     expect(() =>

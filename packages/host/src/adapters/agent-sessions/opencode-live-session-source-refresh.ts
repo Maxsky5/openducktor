@@ -15,7 +15,7 @@ import type {
 import {
   openCodeActivityForPending,
   type OpenCodeLiveSnapshotInput,
-  type OpenCodeRetainedSession,
+  type OpenCodeLiveSession,
   parseOpenCodeLiveSnapshot,
 } from "./opencode-live-session-state-policy";
 
@@ -26,7 +26,7 @@ type ApplyOpenCodeWorkflowRootsInput = {
   snapshots: ReadonlyArray<AgentSessionLiveSnapshot>;
   contextUsageBySessionId: ReadonlyMap<string, AgentSessionContextUsage>;
   pendingRequests: OpenCodePendingRequestRouter;
-  saveSession: (session: OpenCodeRetainedSession) => AgentSessionLiveAdapterChange[];
+  saveSession: (session: OpenCodeLiveSession) => AgentSessionLiveAdapterChange[];
   removeSession: (ref: AgentSessionLiveRef) => AgentSessionLiveAdapterChange[];
 };
 
@@ -36,7 +36,7 @@ type StagedRequest = StagedOpenCodeRequest<
 >;
 
 type StagedSession = {
-  readonly session: OpenCodeRetainedSession;
+  readonly session: OpenCodeLiveSession;
   readonly requests: ReadonlyArray<StagedRequest>;
 };
 
@@ -152,7 +152,7 @@ export const applyOpenCodeWorkflowRoots = ({
       if (source.sessionAssociation.kind === "repository") {
         snapshotInput.repositoryScope = source.sessionAssociation;
       }
-      const base: OpenCodeRetainedSession = {
+      const base: OpenCodeLiveSession = {
         runtimeActivity: source.runtimeActivity,
         snapshot: parseOpenCodeLiveSnapshot(
           snapshotInput,

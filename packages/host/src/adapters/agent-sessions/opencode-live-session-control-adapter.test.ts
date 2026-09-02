@@ -38,12 +38,12 @@ describe("OpenCode live session controls", () => {
         operation: "fork",
         input: expect.objectContaining({ parentExternalSessionId: "planner-session" }),
       });
-      const snapshots = await Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo"));
+      const snapshots = await Effect.runPromise(prepared.adapter.listSnapshots("/repo"));
       const fork = snapshots.find(
         (snapshot) => snapshot.ref.externalSessionId === "controlled-session",
       );
       if (!fork) {
-        throw new Error("Expected a retained workflow fork.");
+        throw new Error("Expected a live workflow fork.");
       }
       expect(fork).not.toHaveProperty("sessionAssociation");
       expect(fork.repositoryScope).toBeUndefined();
@@ -71,7 +71,7 @@ describe("OpenCode live session controls", () => {
           sessionScope: controlSummary.sessionAssociation,
         }),
       );
-      const snapshots = await Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo"));
+      const snapshots = await Effect.runPromise(prepared.adapter.listSnapshots("/repo"));
       expect(snapshots).toEqual([
         expect.objectContaining({
           ref: expect.objectContaining({ externalSessionId: "controlled-session" }),
@@ -79,6 +79,43 @@ describe("OpenCode live session controls", () => {
       ]);
       expect(snapshots[0]?.parentExternalSessionId).toBeUndefined();
       expect(snapshots[0]).not.toHaveProperty("sessionAssociation");
+    } finally {
+      await Effect.runPromise(prepared.adapter.releaseRuntime());
+    }
+  });
+
+  test("sends to a stored workflow session without live state", async () => {
+    const harness = createRuntimeHarness();
+    const publishedChanges: AgentSessionLiveAdapterChange[] = [];
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle(publishedChanges),
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime),
+    );
+    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+
+    try {
+      await expect(
+        Effect.runPromise(
+          prepared.adapter.sendUserMessage({
+            ...ref,
+            sessionScope,
+            parts: [{ kind: "text", text: "Hello" }],
+          }),
+        ),
+      ).resolves.toMatchObject({ type: "user_message", externalSessionId: "session-1" });
+      expect(harness.controlCalls).toContainEqual({
+        operation: "send",
+        input: expect.objectContaining({ externalSessionId: "session-1", sessionScope }),
+      });
+      expect(publishedChanges).toContainEqual({
+        type: "transcript_event",
+        event: expect.objectContaining({
+          type: "user_message",
+          externalSessionId: "session-1",
+        }),
+      });
     } finally {
       await Effect.runPromise(prepared.adapter.releaseRuntime());
     }
@@ -107,7 +144,9 @@ describe("OpenCode live session controls", () => {
     await expect(Effect.runPromise(adapter.startSession(startInput))).resolves.toEqual(
       controlMetadata,
     );
-    expect(adapter.matches(controlRef)).toBe(true);
+    await expect(Effect.runPromise(adapter.readSnapshot(controlRef))).resolves.toMatchObject({
+      type: "live",
+    });
     await Effect.runPromise(
       adapter.resumeSession({
         ...controlRef,
@@ -152,16 +191,24 @@ describe("OpenCode live session controls", () => {
       }),
     );
     await Effect.runPromise(adapter.stopSession(controlRef));
-    expect(adapter.matches(controlRef)).toBe(false);
+    await expect(Effect.runPromise(adapter.readSnapshot(controlRef))).resolves.toEqual({
+      type: "missing",
+      ref: controlRef,
+    });
     await Effect.runPromise(
       adapter.resumeSession({
         ...controlRef,
         sessionScope: startInput.sessionScope,
       }),
     );
-    expect(adapter.matches(controlRef)).toBe(true);
+    await expect(Effect.runPromise(adapter.readSnapshot(controlRef))).resolves.toMatchObject({
+      type: "live",
+    });
     await Effect.runPromise(adapter.releaseSession(controlRef));
-    expect(adapter.matches(controlRef)).toBe(false);
+    await expect(Effect.runPromise(adapter.readSnapshot(controlRef))).resolves.toEqual({
+      type: "missing",
+      ref: controlRef,
+    });
 
     expect(harness.controlCalls.map((call) => call.operation)).toEqual([
       "start",
@@ -243,9 +290,7 @@ describe("OpenCode live session controls", () => {
         ]);
         expect(result).toBe("forwarded");
         await expect(
-          Effect.runPromise(
-            adapter.readRetainedSnapshot({ ...ref, externalSessionId: "session-2" }),
-          ),
+          Effect.runPromise(adapter.readSnapshot({ ...ref, externalSessionId: "session-2" })),
         ).resolves.toMatchObject({ type: "live", session: { activity: "running" } });
 
         await harness.emit({
@@ -284,7 +329,7 @@ describe("OpenCode live session controls", () => {
         await forwarding;
       }
 
-      await expect(Effect.runPromise(adapter.readRetainedSnapshot(ref))).resolves.toMatchObject({
+      await expect(Effect.runPromise(adapter.readSnapshot(ref))).resolves.toMatchObject({
         type: "live",
         session: { activity: "idle" },
       });
@@ -382,7 +427,7 @@ describe("OpenCode live session controls", () => {
     }
   });
 
-  test("rejects a send result that arrives after the session is released", async () => {
+  test("accepts a send result that arrives after live state is released", async () => {
     let resolveSendStarted: () => void = () => undefined;
     let releaseSend: () => void = () => undefined;
     const sendStarted = new Promise<void>((resolve) => {
@@ -419,17 +464,31 @@ describe("OpenCode live session controls", () => {
       await Effect.runPromise(adapter.releaseSession(ref));
       releaseSend();
 
-      await expect(sending).rejects.toThrow("is no longer retained");
-      expect(adapter.matches(ref)).toBe(false);
+      await expect(sending).resolves.toMatchObject({
+        type: "user_message",
+        externalSessionId: "session-1",
+      });
+      await expect(Effect.runPromise(adapter.readSnapshot(ref))).resolves.toEqual({
+        type: "missing",
+        ref,
+      });
       expect(
         publishedChanges.filter(
           (change) =>
             change.type === "transcript_event" && change.event.externalSessionId === "session-1",
         ),
-      ).toEqual([]);
+      ).toEqual([
+        {
+          type: "transcript_event",
+          event: expect.objectContaining({
+            type: "user_message",
+            externalSessionId: "session-1",
+          }),
+        },
+      ]);
     } finally {
       releaseSend();
-      await sending.catch(() => undefined);
+      await sending;
       await Effect.runPromise(adapter.releaseRuntime());
     }
   });
@@ -489,7 +548,7 @@ describe("OpenCode live session controls", () => {
         },
       });
 
-      const snapshots = await Effect.runPromise(adapter.listRetainedSnapshots("/repo"));
+      const snapshots = await Effect.runPromise(adapter.listSnapshots("/repo"));
       expect(snapshots).toEqual(
         expect.arrayContaining([expect.objectContaining({ ref: controlRef })]),
       );
@@ -501,12 +560,12 @@ describe("OpenCode live session controls", () => {
       }
       expect(snapshot).not.toHaveProperty("sessionAssociation");
       expect(snapshot.repositoryScope).toBeUndefined();
-      const retained = await Effect.runPromise(adapter.readRetainedSnapshot(controlRef));
-      expect(retained).toMatchObject({ type: "live", session: { ref: controlRef } });
-      if (retained.type !== "live") {
-        throw new Error("Expected a retained live session.");
+      const current = await Effect.runPromise(adapter.readSnapshot(controlRef));
+      expect(current).toMatchObject({ type: "live", session: { ref: controlRef } });
+      if (current.type !== "live") {
+        throw new Error("Expected a live session.");
       }
-      expect(retained.session).not.toHaveProperty("sessionAssociation");
+      expect(current.session).not.toHaveProperty("sessionAssociation");
       expect(
         publishedChanges.filter(
           (change) =>
@@ -562,12 +621,12 @@ describe("OpenCode live session controls", () => {
       },
     });
 
-    await expect(Effect.runPromise(adapter.readRetainedSnapshot(ref))).resolves.toMatchObject({
+    await expect(Effect.runPromise(adapter.readSnapshot(ref))).resolves.toMatchObject({
       type: "live",
       session: { activity: "running" },
     });
     await expect(
-      Effect.runPromise(adapter.readRetainedSnapshot({ ...ref, externalSessionId: "session-2" })),
+      Effect.runPromise(adapter.readSnapshot({ ...ref, externalSessionId: "session-2" })),
     ).resolves.toMatchObject({
       type: "live",
       session: { activity: "running" },
@@ -584,7 +643,7 @@ describe("OpenCode live session controls", () => {
       },
     });
 
-    await expect(Effect.runPromise(adapter.readRetainedSnapshot(ref))).resolves.toMatchObject({
+    await expect(Effect.runPromise(adapter.readSnapshot(ref))).resolves.toMatchObject({
       type: "live",
       session: { activity: "idle" },
     });
@@ -625,7 +684,7 @@ describe("OpenCode live session controls", () => {
         },
       });
 
-      await expect(Effect.runPromise(adapter.readRetainedSnapshot(ref))).resolves.toMatchObject({
+      await expect(Effect.runPromise(adapter.readSnapshot(ref))).resolves.toMatchObject({
         type: "live",
         session: { activity: "idle" },
       });

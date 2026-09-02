@@ -5,11 +5,11 @@ import type { OpenCodeRuntimeInstance } from "./opencode-live-session-normalizat
 import {
   openCodeActivityForPending,
   type OpenCodeLiveSnapshotInput,
-  type OpenCodeRetainedSession,
+  type OpenCodeLiveSession,
   parseOpenCodeLiveSnapshot,
 } from "./opencode-live-session-state-policy";
 
-export const toOpenCodeRetainedControlSummary = ({
+export const toOpenCodeLiveSession = ({
   runtime,
   summary,
   previous,
@@ -17,9 +17,9 @@ export const toOpenCodeRetainedControlSummary = ({
 }: {
   runtime: OpenCodeRuntimeInstance;
   summary: AgentSessionSummary;
-  previous: OpenCodeRetainedSession | undefined;
+  previous: OpenCodeLiveSession | undefined;
   contextUsage: AgentSessionContextUsage | undefined;
-}): OpenCodeRetainedSession => {
+}): OpenCodeLiveSession => {
   if (summary.runtimeKind !== "opencode") {
     throw new HostValidationError({
       field: "runtimeKind",
@@ -47,16 +47,13 @@ export const toOpenCodeRetainedControlSummary = ({
   if (summary.sessionAssociation.kind === "repository") {
     snapshotInput.repositoryScope = summary.sessionAssociation;
   }
-  const retained: OpenCodeRetainedSession = {
+  const session: OpenCodeLiveSession = {
     runtimeActivity,
-    snapshot: parseOpenCodeLiveSnapshot(
-      snapshotInput,
-      "opencode-live-session.retain-control-summary",
-    ),
+    snapshot: parseOpenCodeLiveSnapshot(snapshotInput, "opencode-live-session.control-summary"),
   };
-  retained.snapshot = parseOpenCodeLiveSnapshot(
-    { ...retained.snapshot, activity: openCodeActivityForPending(retained) },
-    "opencode-live-session.retain-control-activity",
+  session.snapshot = parseOpenCodeLiveSnapshot(
+    { ...session.snapshot, activity: openCodeActivityForPending(session) },
+    "opencode-live-session.control-activity",
   );
-  return retained;
+  return session;
 };

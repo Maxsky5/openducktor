@@ -242,7 +242,7 @@ export const createClaudeLiveSessionAdapterPreparer =
         run: () => Effect.Effect<AgentSessionSummary, HostError>,
         options: {
           readonly parentExternalSessionId?: string;
-          readonly preserveRetainedActivity?: boolean;
+          readonly keepActivity?: boolean;
         } = {},
       ): Effect.Effect<AgentSessionControlSummary, HostError> =>
         eventCoordinator.runControlMutation(
@@ -250,7 +250,7 @@ export const createClaudeLiveSessionAdapterPreparer =
             Effect.flatMap((summary) =>
               commit(`${operation}.retain-summary`, () => ({
                 value: summary,
-                changes: state.retainControlSummary(summary, options),
+                changes: state.applyControlSummary(summary, options),
               })),
             ),
             Effect.flatMap((summary) => toAgentSessionControlSummary(summary, operation)),
@@ -274,9 +274,8 @@ export const createClaudeLiveSessionAdapterPreparer =
           runtimeKind: "claude",
           repoPath: runtime.repoPath,
         },
-        matches: state.matches,
-        listRetainedSnapshots: (repoPath) => Effect.succeed(state.listRetainedSnapshots(repoPath)),
-        readRetainedSnapshot: (ref) => Effect.succeed(state.readRetainedSnapshot(ref)),
+        listSnapshots: (repoPath) => Effect.succeed(state.listSnapshots(repoPath)),
+        readSnapshot: (ref) => Effect.succeed(state.readSnapshot(ref)),
         loadContext: (input) =>
           requireSessionWorkingDirectory(input, "load-context").pipe(
             Effect.zipRight(eventCoordinator.flush()),
@@ -365,7 +364,7 @@ export const createClaudeLiveSessionAdapterPreparer =
               runSummary(
                 "claude-live-session.resume-session",
                 () => service.resumeSession(toClaudeResumeInput(input), runtime.runtimeId),
-                { preserveRetainedActivity: true },
+                { keepActivity: true },
               ),
             ),
           ),

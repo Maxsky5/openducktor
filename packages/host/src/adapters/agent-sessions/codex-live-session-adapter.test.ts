@@ -204,7 +204,7 @@ const createControllerHarness = ({
           const usage = liveContextUsage;
           const snapshot = snapshots[0];
           if (!snapshot) {
-            throw new Error("Expected a retained Codex snapshot before loading context.");
+            throw new Error("Expected a live Codex snapshot before loading context.");
           }
           snapshots = [{ ...snapshot, contextUsage: usage }];
           return usage;
@@ -237,7 +237,7 @@ const createControllerHarness = ({
         replyLiveApproval: async () => {
           const snapshot = snapshots[0];
           if (!snapshot) {
-            throw new Error("Expected a retained Codex snapshot before replying to approval.");
+            throw new Error("Expected a live Codex snapshot before replying to approval.");
           }
           snapshots = [
             {
@@ -414,9 +414,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
         params: { threadId: "thread-1", turnId: "turn-1" },
       },
     ]);
-    await expect(
-      Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo")),
-    ).resolves.toEqual([]);
+    await expect(Effect.runPromise(prepared.adapter.listSnapshots("/repo"))).resolves.toEqual([]);
   });
 
   test("resolves and injects Codex policy behind the normalized control boundary", async () => {
@@ -580,7 +578,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     });
   });
 
-  test("clears the retained projection when controller cleanup fails", async () => {
+  test("clears the current projection when controller cleanup fails", async () => {
     const changes: AgentSessionLiveAdapterChange[] = [];
     const harness = createControllerHarness({
       initialSnapshots: [liveSnapshot()],
@@ -608,12 +606,10 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       "controller cleanup failed",
     );
 
-    await expect(
-      Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo")),
-    ).resolves.toEqual([]);
+    await expect(Effect.runPromise(prepared.adapter.listSnapshots("/repo"))).resolves.toEqual([]);
   });
 
-  test("rehydrates three retained pending approvals in the first snapshot after renderer reload", async () => {
+  test("rehydrates three current pending approvals in the first snapshot after renderer reload", async () => {
     const snapshots = Array.from({ length: 3 }, (_, index) => {
       const sessionNumber = index + 1;
       const snapshot = liveSnapshot();
@@ -705,9 +701,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await Effect.runPromise(prepared.startForwarding());
     await firstMutation;
     expect(changes).toEqual([{ type: "session_upsert", snapshot: liveSnapshot() }]);
-    await expect(
-      Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo")),
-    ).resolves.toEqual([liveSnapshot()]);
+    await expect(Effect.runPromise(prepared.adapter.listSnapshots("/repo"))).resolves.toEqual([
+      liveSnapshot(),
+    ]);
 
     const removeMutation = harness.getOptions().onLiveSessionMutation?.({
       runtimeId: "runtime-1",
@@ -745,9 +741,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       }),
     ).rejects.toThrow("externalSessionId");
     expect(changes).toEqual([]);
-    await expect(
-      Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo")),
-    ).resolves.toEqual([]);
+    await expect(Effect.runPromise(prepared.adapter.listSnapshots("/repo"))).resolves.toEqual([]);
   });
 
   test("reports a failed runtime event projection through the host background-failure boundary", async () => {
@@ -919,9 +913,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await mutation;
 
     expect(changes).toEqual([]);
-    await expect(
-      Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo")),
-    ).resolves.toEqual([]);
+    await expect(Effect.runPromise(prepared.adapter.listSnapshots("/repo"))).resolves.toEqual([]);
   });
 
   test("commits context and pending replies while leaving runtime removal to the lifecycle", async () => {
@@ -972,9 +964,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const releasedRefs = await Effect.runPromise(prepared.adapter.releaseRuntime());
     expect(releasedRefs).toEqual([ref]);
     expect(changes).toHaveLength(changeCountBeforeRelease);
-    await expect(
-      Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo")),
-    ).resolves.toEqual([]);
+    await expect(Effect.runPromise(prepared.adapter.listSnapshots("/repo"))).resolves.toEqual([]);
   });
 
   test("returns nullable Codex context usage through the public host adapter", async () => {

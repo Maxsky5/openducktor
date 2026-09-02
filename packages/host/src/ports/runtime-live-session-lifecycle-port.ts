@@ -21,7 +21,7 @@ export type RuntimeLiveSessionLifecyclePort = {
 
 export type PreparedRuntimeLiveSessionAdapter = {
   readonly adapter: AgentSessionLiveAdapterPort;
-  /** Starts ordered forwarding only after the retained projection is registered. */
+  /** Starts ordered forwarding only after the live adapter is registered. */
   readonly startForwarding: () => Effect.Effect<void, HostError>;
   /** Releases adapter-local observation/state when startup fails before registration. */
   readonly discard: () => Effect.Effect<void, HostError>;

@@ -243,18 +243,17 @@ export const createCodexLiveSessionProjection = ({
     applyMutation,
     enqueueMutation,
     hasSnapshot: (ref: AgentSessionLiveRef): boolean => snapshotsByRef.has(refKey(ref)),
-    matches: (ref: AgentSessionLiveRef): boolean => snapshotsByRef.has(refKey(ref)),
-    listRetainedSnapshots: (repoPath: string) =>
+    listSnapshots: (repoPath: string) =>
       repoPath === runtime.repoPath
         ? Effect.forEach([...snapshotsByRef.values()], (snapshot) =>
             parseProjectionValue(
               agentSessionLiveSnapshotSchema,
               snapshot,
-              "codex-live-session.clone-retained-snapshot",
+              "codex-live-session.clone-snapshot",
             ),
           )
         : Effect.succeed([]),
-    readRetainedSnapshot: (ref: AgentSessionLiveRef) => {
+    readSnapshot: (ref: AgentSessionLiveRef) => {
       const snapshot = snapshotsByRef.get(refKey(ref));
       return Effect.succeed(
         snapshot && refsEqual(snapshot.ref, ref)

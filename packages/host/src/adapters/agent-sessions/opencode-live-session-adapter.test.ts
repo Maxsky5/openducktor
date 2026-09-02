@@ -56,9 +56,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     await Effect.runPromise(refreshRegisteredSessions([ref]));
 
     expect(harness.refreshRegisteredSessionCalls).toEqual([["session-1"]]);
-    await expect(
-      Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo")),
-    ).resolves.toEqual([
+    await expect(Effect.runPromise(prepared.adapter.listSnapshots("/repo"))).resolves.toEqual([
       expect.objectContaining({
         ref,
         activity: "waiting_for_permission",
@@ -67,7 +65,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     ]);
   });
 
-  test("removes retained state when OpenCode deletes an owned session", async () => {
+  test("removes current state when OpenCode deletes an owned session", async () => {
     const harness = createRuntimeHarness();
     const publishedChanges: AgentSessionLiveAdapterChange[] = [];
     const prepared = await Effect.runPromise(
@@ -86,13 +84,13 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
 
     await harness.emit({ type: "session_removed", externalSessionId: ref.externalSessionId });
 
-    await expect(
-      Effect.runPromise(prepared.adapter.listRetainedSnapshots(ref.repoPath)),
-    ).resolves.toEqual([]);
+    await expect(Effect.runPromise(prepared.adapter.listSnapshots(ref.repoPath))).resolves.toEqual(
+      [],
+    );
     expect(publishedChanges).toContainEqual({ type: "session_removed", ref });
   });
 
-  test("owns strict snapshots, opaque replies, retained context, and normalized signals", async () => {
+  test("owns strict snapshots, opaque replies, current context, and normalized signals", async () => {
     const harness = createRuntimeHarness();
     const publishedChanges: AgentSessionLiveAdapterChange[] = [];
     const prepared = await Effect.runPromise(
@@ -147,7 +145,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       },
     });
 
-    const snapshots = await Effect.runPromise(adapter.listRetainedSnapshots("/repo"));
+    const snapshots = await Effect.runPromise(adapter.listSnapshots("/repo"));
     expect(snapshots).toEqual([
       {
         ref,
@@ -254,7 +252,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     ]);
   });
 
-  test("clears retained pending input when a session errors", async () => {
+  test("clears current pending input when a session errors", async () => {
     const harness = createRuntimeHarness();
     const publishedChanges: AgentSessionLiveAdapterChange[] = [];
     const prepared = await Effect.runPromise(
@@ -283,9 +281,9 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         title: "Edit a file",
       },
     });
-    const before = await Effect.runPromise(adapter.readRetainedSnapshot(ref));
+    const before = await Effect.runPromise(adapter.readSnapshot(ref));
     if (before.type !== "live") {
-      throw new Error("Expected the OpenCode session to be retained.");
+      throw new Error("Expected the OpenCode session to be current.");
     }
     const approvalRequestId = before.session.pendingApprovals[0]?.requestId;
     if (!approvalRequestId) {
@@ -304,7 +302,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       },
     });
 
-    await expect(Effect.runPromise(adapter.readRetainedSnapshot(ref))).resolves.toMatchObject({
+    await expect(Effect.runPromise(adapter.readSnapshot(ref))).resolves.toMatchObject({
       type: "live",
       session: {
         activity: "idle",
@@ -400,7 +398,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     await Promise.all([refresh, release]);
 
     expect(releaseFinishedWhileReadWaited).toBe(true);
-    await expect(Effect.runPromise(prepared.adapter.readRetainedSnapshot(ref))).resolves.toEqual({
+    await expect(Effect.runPromise(prepared.adapter.readSnapshot(ref))).resolves.toEqual({
       type: "missing",
       ref,
     });
@@ -460,9 +458,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       modelId: "gpt-5.1",
     });
     expect(harness.contextLoadCalls).toEqual(["session-1"]);
-    await expect(
-      Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo")),
-    ).resolves.toEqual([]);
+    await expect(Effect.runPromise(prepared.adapter.listSnapshots("/repo"))).resolves.toEqual([]);
   });
 
   test("keeps pending replies usable after context or native reply failures", async () => {
@@ -528,7 +524,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       ),
     ).rejects.toThrow("approval endpoint unavailable");
 
-    const afterFailures = await Effect.runPromise(adapter.readRetainedSnapshot(ref));
+    const afterFailures = await Effect.runPromise(adapter.readSnapshot(ref));
     expect(afterFailures).toMatchObject({
       type: "live",
       session: { pendingApprovals: [{ requestId: "opencode-pending-1" }] },
@@ -541,7 +537,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         outcome: "approve_once",
       }),
     );
-    const afterReply = await Effect.runPromise(adapter.readRetainedSnapshot(ref));
+    const afterReply = await Effect.runPromise(adapter.readSnapshot(ref));
     expect(afterReply).toMatchObject({ type: "live", session: { pendingApprovals: [] } });
     expect(harness.approvalReplies).toHaveLength(1);
   });
@@ -596,8 +592,8 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         title: "Edit a file",
       },
     });
-    const firstSnapshot = await Effect.runPromise(firstAdapter.readRetainedSnapshot(ref));
-    const secondSnapshot = await Effect.runPromise(secondAdapter.readRetainedSnapshot(secondRef));
+    const firstSnapshot = await Effect.runPromise(firstAdapter.readSnapshot(ref));
+    const secondSnapshot = await Effect.runPromise(secondAdapter.readSnapshot(secondRef));
     if (firstSnapshot.type !== "live" || secondSnapshot.type !== "live") {
       throw new Error("Expected both OpenCode runtime snapshots to be live.");
     }
@@ -615,7 +611,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         outcome: "approve_once",
       }),
     );
-    const retainedSecond = await Effect.runPromise(secondAdapter.readRetainedSnapshot(secondRef));
+    const retainedSecond = await Effect.runPromise(secondAdapter.readSnapshot(secondRef));
     expect(retainedSecond).toMatchObject({
       type: "live",
       session: { pendingApprovals: [{ requestId: secondRequestId }] },
@@ -646,7 +642,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       }),
     );
 
-    const otherRef = { ...ref, externalSessionId: "session-2" };
+    const otherRef = { ...ref, runtimeKind: "codex" as const, externalSessionId: "session-2" };
     const otherSnapshot: AgentSessionLiveSnapshot = {
       ref: otherRef,
       activity: "idle",
@@ -658,11 +654,9 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     };
     const otherAdapter: AgentSessionLiveAdapterPort = {
       supportsSessionControl: false,
-      binding: { runtimeId: "runtime-2", runtimeKind: "opencode", repoPath: "/repo" },
-      matches: (candidate) => candidate.externalSessionId === otherRef.externalSessionId,
-      listRetainedSnapshots: (repoPath) =>
-        Effect.succeed(repoPath === "/repo" ? [otherSnapshot] : []),
-      readRetainedSnapshot: (candidate) =>
+      binding: { runtimeId: "runtime-2", runtimeKind: "codex", repoPath: "/repo" },
+      listSnapshots: (repoPath) => Effect.succeed(repoPath === "/repo" ? [otherSnapshot] : []),
+      readSnapshot: (candidate) =>
         Effect.succeed(
           candidate.externalSessionId === otherRef.externalSessionId
             ? ({ type: "live", session: otherSnapshot } as const)
@@ -683,8 +677,8 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       message: "OpenCode live event observation failed: connection lost",
     });
 
-    const retained = await Effect.runPromise(service.list({ repoPath: "/repo" }));
-    expect(retained.map((snapshot) => snapshot.ref.externalSessionId)).toEqual(["session-2"]);
+    const current = await Effect.runPromise(service.list({ repoPath: "/repo" }));
+    expect(current.map((snapshot) => snapshot.ref.externalSessionId)).toEqual(["session-2"]);
     expect(harness.releaseCalls).toEqual(["runtime-1"]);
     expect(envelopes.map((envelope) => envelope.type)).toEqual(["fault", "session_removed"]);
     await Effect.runPromise(service.releaseRuntime("runtime-2"));

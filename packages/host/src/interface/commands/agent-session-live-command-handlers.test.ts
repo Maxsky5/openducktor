@@ -47,10 +47,8 @@ const createHarness = async (resolveAttachment?: LocalAttachmentService["resolve
   const adapter: AgentSessionRuntimeAdapterPort = {
     supportsSessionControl: true,
     binding: { runtimeId: "runtime-1", runtimeKind: "opencode", repoPath: "/repo" },
-    matches: (ref) =>
-      snapshots.some((snapshot) => snapshot.ref.externalSessionId === ref.externalSessionId),
-    listRetainedSnapshots: () => Effect.succeed(snapshots),
-    readRetainedSnapshot: (ref) => {
+    listSnapshots: () => Effect.succeed(snapshots),
+    readSnapshot: (ref) => {
       const session = snapshots.find(
         (snapshot) => snapshot.ref.externalSessionId === ref.externalSessionId,
       );

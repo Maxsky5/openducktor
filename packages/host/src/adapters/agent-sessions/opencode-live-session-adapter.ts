@@ -165,7 +165,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
             return serializeRuntime(
               commit("opencode-live-session.commit-context", () => ({
                 value: undefined,
-                changes: state.retainContext(signal.externalSessionId, signal.contextUsage),
+                changes: state.setContext(signal.externalSessionId, signal.contextUsage),
               })),
             );
           case "session_event":
@@ -271,25 +271,23 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
           runtimeKind: runtime.kind,
           repoPath: runtime.repoPath,
         },
-        matches: (ref) => !released && state.has(ref),
-        listRetainedSnapshots: (repoPath) =>
+        listSnapshots: (repoPath) =>
           repoPath === runtime.repoPath
-            ? stateEffect("opencode-live-session.list-retained-snapshots", state.listSnapshots, {
+            ? stateEffect("opencode-live-session.list-snapshots", state.listSnapshots, {
                 runtimeId: runtime.runtimeId,
               })
             : Effect.succeed([]),
-        readRetainedSnapshot: (ref) =>
-          stateEffect(
-            "opencode-live-session.read-retained-snapshot",
-            () => state.readSnapshot(ref),
-            { runtimeId: runtime.runtimeId, externalSessionId: ref.externalSessionId },
-          ),
+        readSnapshot: (ref) =>
+          stateEffect("opencode-live-session.read-snapshot", () => state.readSnapshot(ref), {
+            runtimeId: runtime.runtimeId,
+            externalSessionId: ref.externalSessionId,
+          }),
         refreshRegisteredSessions,
         loadContext: (input) =>
           Effect.suspend(() => {
-            const retained = state.contextUsage(input);
-            if (retained) {
-              return Effect.succeed(retained);
+            const usage = state.contextUsage(input);
+            if (usage) {
+              return Effect.succeed(usage);
             }
             const key = refKey(input);
             const existing = contextLoads.get(key);

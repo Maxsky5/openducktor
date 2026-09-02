@@ -424,7 +424,7 @@ export class OpencodeSdkAdapter
     return resolveOpencodePolicyBoundSession({
       request: input,
       action,
-      retainedSession: this.sessions.get(input.externalSessionId),
+      session: this.sessions.get(input.externalSessionId),
       bindSession: async () => {
         await this.ensureSessionState(input);
         return requireSession(this.sessions, input.externalSessionId);

@@ -216,7 +216,7 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     unsubscribeUnbound();
   });
 
-  test("rejects a mismatched scope before subscribing to a retained session", async () => {
+  test("rejects a mismatched scope before subscribing to a loaded session", async () => {
     const mock = makeMockClient();
     const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
     const unsubscribeWorkflow = await adapter.subscribeEvents(
@@ -240,7 +240,7 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     unsubscribeWorkflow();
   });
 
-  test("rejects a mismatched scope before reading todos from a retained session", async () => {
+  test("rejects a mismatched scope before reading todos from a loaded session", async () => {
     const mock = makeMockClient();
     const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
     const unsubscribeWorkflow = await adapter.subscribeEvents(
@@ -262,7 +262,7 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     unsubscribeWorkflow();
   });
 
-  test("keeps a retained session unbound when subscription policy binding fails", async () => {
+  test("keeps a loaded session unbound when subscription policy binding fails", async () => {
     const mock = makeMockClient();
     const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
     const unsubscribeUnbound = await adapter.subscribeEvents(
@@ -289,7 +289,7 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     unsubscribeUnbound();
   });
 
-  test("keeps a retained session unbound when approval policy binding fails", async () => {
+  test("keeps a loaded session unbound when approval policy binding fails", async () => {
     const mock = makeMockClient();
     const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
     const unsubscribe = await adapter.subscribeEvents(
