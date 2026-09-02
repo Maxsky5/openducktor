@@ -92,3 +92,63 @@ describe("SQLite task agent session batches", () => {
     }
   });
 });
+
+describe("SQLite task session model updates", () => {
+  test("updates an existing record and never inserts a missing session", async () => {
+    const { cleanup, repoPath, store } = await createSqliteTaskStoreHarness();
+    try {
+      const task = await Effect.runPromise(
+        store.createTask({
+          repoPath,
+          task: {
+            title: "Session model",
+            issueType: "task",
+            priority: 2,
+            aiReviewEnabled: true,
+          },
+        }),
+      );
+      const session = createAgentSessionRecord({ externalSessionId: "session-1" });
+      const model = {
+        runtimeKind: "opencode" as const,
+        providerId: "openai",
+        modelId: "gpt-5",
+      };
+      await Effect.runPromise(store.upsertAgentSession({ repoPath, taskId: task.id, session }));
+
+      await Effect.runPromise(
+        store.updateAgentSessionModel({
+          repoPath,
+          taskId: task.id,
+          identity: session,
+          selectedModel: model,
+        }),
+      );
+      await expect(
+        Effect.runPromise(store.getTaskMetadata({ repoPath, taskId: task.id })),
+      ).resolves.toMatchObject({
+        agentSessions: [
+          expect.objectContaining({ externalSessionId: "session-1", selectedModel: model }),
+        ],
+      });
+
+      await expect(
+        Effect.runPromise(
+          store.updateAgentSessionModel({
+            repoPath,
+            taskId: task.id,
+            identity: { ...session, externalSessionId: "missing-session" },
+            selectedModel: null,
+          }),
+        ),
+      ).rejects.toThrow("Task session not found: missing-session");
+      await expect(
+        Effect.runPromise(store.getTaskMetadata({ repoPath, taskId: task.id })),
+      ).resolves.toMatchObject({
+        agentSessions: [expect.objectContaining({ externalSessionId: "session-1" })],
+      });
+    } finally {
+      await cleanup();
+    }
+  });
+});

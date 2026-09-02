@@ -15,7 +15,10 @@ import type {
 import { STALE_START_ERROR } from "./start-session-constants";
 import { executeReuseStart } from "./start-session-reuse-strategy";
 import { resolveStartTask } from "./start-session-policies";
-import { rollbackBootstrapAfterStartFailure } from "./start-session-rollback";
+import {
+  rollbackBootstrapAfterStartFailure,
+  stopStoredWorkflowSessionAfterLaunchFailure,
+} from "./start-session-rollback";
 import { serializeSelectedModelKey } from "./start-session-runtime";
 import {
   registerWorkflowSessionLaunch,
@@ -49,7 +52,6 @@ export const createStartAgentSession = ({
 }: StartSessionDependencies) => {
   const executePreparedLaunch = createExecutePreparedSessionLaunch({
     adapter: runtime.adapter,
-    removeSession: session.removeSession,
     loadSettingsSnapshot: model.loadSettingsSnapshot,
     repoEpochRef: repo.repoEpochRef,
     currentWorkspaceRepoPathRef: repo.currentWorkspaceRepoPathRef,
@@ -142,6 +144,24 @@ export const createStartAgentSession = ({
                 ctx: startCtx,
                 deps: { session, runtime },
               });
+            },
+            rollback: async (rollbackInput) => {
+              registrationStarted = true;
+              const cleanupInput: Parameters<
+                typeof stopStoredWorkflowSessionAfterLaunchFailure
+              >[0] = {
+                message: rollbackInput.message,
+                cause: rollbackInput.cause,
+                startedCtx: { ...startCtx, summary: rollbackInput.summary },
+                identity: rollbackInput.identity,
+                clearSessionObservationState: session.clearSessionObservationState,
+                runtime,
+                stopReason: rollbackInput.stopReason,
+              };
+              if (rollbackInput.finishBootstrap && prepared.bootstrap) {
+                cleanupInput.bootstrapToComplete = prepared.bootstrap;
+              }
+              return stopStoredWorkflowSessionAfterLaunchFailure(cleanupInput);
             },
           });
           return toAgentSessionIdentity(result.summary);

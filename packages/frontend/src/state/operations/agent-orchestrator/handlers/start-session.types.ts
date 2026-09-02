@@ -1,4 +1,4 @@
-import type { AgentSessionRecord, RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
+import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentRole, AgentUserMessagePart } from "@openducktor/core";
 import type { SessionStartGate } from "@/features/session-start/session-start-gate";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
@@ -11,13 +11,10 @@ export type { StartAgentSessionInput, StartAgentSessionResult };
 
 export type SessionDependencies = {
   replaceSession: (session: AgentSessionState) => void;
-  removeSession: (identity: AgentSessionIdentity) => void;
   readSessionSnapshot: (identity: AgentSessionIdentity) => AgentSessionState | null;
   sessionStartGateRef: { current: SessionStartGate<StartAgentSessionResult> };
   loadSourceSession: LoadSourceSession;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
-  persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
-  deleteSessionRecord: (taskId: string, identity: AgentSessionIdentity) => Promise<void>;
   clearSessionObservationState: (identity: AgentSessionIdentity) => void;
 };
 

@@ -5,6 +5,7 @@ import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { loadAgentSessionContextFromQuery } from "@/state/queries/agent-session-context";
 import { agentSessionHistoryQueryKeys } from "@/state/queries/agent-session-history";
 import { updateSessionTodosQueryData } from "@/state/queries/agent-session-todos";
+import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
 import { loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import type {
   ActiveWorkspace,
@@ -32,12 +33,8 @@ import {
 } from "./runtime/runtime";
 import { toContextUsage } from "./session-read-model/agent-session-live-projection";
 import { createLoadSourceSession } from "./session-read-model/source-session-loader";
-import { runOrchestratorSideEffect } from "./support/async-side-effects";
 import { createDefaultAgentOrchestratorDependencies } from "./support/orchestrator-dependency-defaults";
 import type { AgentOrchestratorDependencies } from "./support/orchestrator-ports";
-import { toPersistedSessionRecord } from "./support/persistence";
-import { createSessionCacheEffects } from "./support/session-cache-effects";
-import { isWorkflowAgentSession } from "./support/workflow-session";
 
 type UseAgentOrchestratorOperationsArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -87,48 +84,14 @@ export function useAgentOrchestratorOperations({
     workspaceRepoPath,
     tasks,
   });
-  const sessionCacheEffects = useMemo(
-    () => createSessionCacheEffects({ workspaceRepoPath, queryClient, hostPort }),
-    [workspaceRepoPath, queryClient, hostPort],
+  const invalidateSessionStopQueries = useCallback(
+    ({ repoPath }: { repoPath: string; taskId: string }) =>
+      invalidateRepoTaskQueries(queryClient, repoPath),
+    [queryClient],
   );
-  const { deleteSessionRecord, persistSessionRecord, invalidateSessionStopQueries } =
-    sessionCacheEffects;
   const updateSession = useCallback<UpdateSession>(
-    (identity, updater, options) => {
-      const shouldPersist = options?.persist === true;
-      const nextSession = sessionStore.updateSession(identity, (current) => {
-        const next = updater(current);
-        if (shouldPersist && !isWorkflowAgentSession(next)) {
-          throw new Error(`Session '${identity.externalSessionId}' is not a workflow session.`);
-        }
-        return next;
-      });
-      if (!nextSession) {
-        return null;
-      }
-
-      if (shouldPersist) {
-        if (!isWorkflowAgentSession(nextSession)) {
-          throw new Error(`Session '${nextSession.externalSessionId}' is not a workflow session.`);
-        }
-        const { taskId, role } = nextSession.sessionAssociation;
-        runOrchestratorSideEffect(
-          "operations-persist-session-snapshot",
-          persistSessionRecord(taskId, toPersistedSessionRecord(nextSession)),
-          {
-            tags: {
-              repoPath: workspaceRepoPath,
-              externalSessionId: nextSession.externalSessionId,
-              taskId,
-              role,
-            },
-          },
-        );
-      }
-
-      return nextSession;
-    },
-    [persistSessionRecord, sessionStore, workspaceRepoPath],
+    (identity, updater) => sessionStore.updateSession(identity, updater),
+    [sessionStore],
   );
   const ensureSession = useCallback<EnsureSession>(
     (identity, createSession) => {
@@ -258,7 +221,6 @@ export function useAgentOrchestratorOperations({
         workspaceId,
         adapter: agentEngine,
         replaceSession: sessionStore.replaceSession,
-        removeSession: sessionStore.removeSession,
         readSessionSnapshot: sessionStore.getSessionSnapshot,
         taskRef,
         repoEpochRef,
@@ -280,8 +242,6 @@ export function useAgentOrchestratorOperations({
         loadSourceSession,
         loadAgentSessionHistory: sessionHistoryLoaders.loadAgentSessionHistory,
         refreshTaskData,
-        persistSessionRecord,
-        deleteSessionRecord,
         invalidateSessionStopQueries,
       }),
     [
@@ -292,8 +252,6 @@ export function useAgentOrchestratorOperations({
       hostPort,
       invalidateSessionStopQueries,
       loadSourceSession,
-      persistSessionRecord,
-      deleteSessionRecord,
       queryBackedPromptOverrides,
       queryClient,
       repoEpochRef,

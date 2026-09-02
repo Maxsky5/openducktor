@@ -56,9 +56,6 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
         loadRepoPromptOverrides: async () => {
           throw new Error("repository sends must not load workflow prompts");
         },
-        persistSessionRecord: async () => {
-          throw new Error("repository sends must not persist task sessions");
-        },
         refreshTaskData: async () => {
           throw new Error("repository sends must not refresh task data");
         },

@@ -45,6 +45,7 @@ const createLiveClientHarness = (
     totalTokens?: number;
     pendingQuestion?: boolean;
     childSessionIdsByParent?: Readonly<Record<string, ReadonlyArray<string>>>;
+    parentSessionIdsBySessionId?: Readonly<Record<string, string>>;
     missingSessionIds?: string[];
     busySessionIds?: string[];
     listBarrier?: () => Promise<void>;
@@ -129,6 +130,7 @@ const createLiveClientHarness = (
         return {
           data: createOpencodeSessionFixture({
             id: sessionID,
+            parentID: input.parentSessionIdsBySessionId?.[sessionID],
             directory: "/repo",
             title: "OpenDucktor session",
             time: {
@@ -447,6 +449,36 @@ describe("OpenCode session runtime connection", () => {
     expect(harness.callOrder.indexOf("get:session-1")).toBeLessThan(
       harness.callOrder.indexOf("status"),
     );
+    await prepared.release();
+  });
+
+  test("keeps parent lineage when a registered ref points to a child session", async () => {
+    const harness = createLiveClientHarness({
+      externalSessionIds: ["child-session"],
+      parentSessionIdsBySessionId: { "child-session": "parent-session" },
+    });
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+
+    const results = await prepared.connection.refreshRegisteredSessions([
+      {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+        externalSessionId: "child-session",
+      },
+    ]);
+
+    expect(results).toEqual([
+      expect.objectContaining({
+        type: "present",
+        sources: [
+          expect.objectContaining({
+            externalSessionId: "child-session",
+            parentExternalSessionId: "parent-session",
+          }),
+        ],
+      }),
+    ]);
     await prepared.release();
   });
 

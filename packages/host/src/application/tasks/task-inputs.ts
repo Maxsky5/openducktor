@@ -31,6 +31,11 @@ export type AgentSessionUpsertInput = TaskIdInput & {
   session: AgentSessionRecord;
 };
 
+export type AgentSessionUpdateModelInput = TaskIdInput & {
+  identity: AgentSessionIdentity;
+  selectedModel: AgentSessionRecord["selectedModel"];
+};
+
 export type AgentSessionDeleteInput = TaskIdInput & {
   identity: AgentSessionIdentity;
 };

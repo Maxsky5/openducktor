@@ -9,12 +9,9 @@ import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orch
 import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
 
-export type PersistSessionUpdateOptions = { persist: true };
-
 export type UpdateSession = (
   identity: AgentSessionIdentity,
   updater: (current: AgentSessionState) => AgentSessionState,
-  options?: PersistSessionUpdateOptions,
 ) => AgentSessionState | null;
 
 export type ReadSession = (identity: AgentSessionIdentity) => AgentSessionState | null;

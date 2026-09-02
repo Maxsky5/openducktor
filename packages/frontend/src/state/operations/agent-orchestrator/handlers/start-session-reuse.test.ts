@@ -227,7 +227,6 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
   });
 
   test("keeps existing selected model when reusing an in-memory session", async () => {
-    let persistedSessions = 0;
     const existingSelectedModel: AgentModelSelection = {
       runtimeKind: "opencode",
       providerId: "openai",
@@ -256,9 +255,6 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
         runtimeId: "runtime-2",
         workingDirectory: "/tmp/repo",
       }),
-      persistSessionRecord: async () => {
-        persistedSessions += 1;
-      },
     });
 
     try {
@@ -277,7 +273,6 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
       expect(getSession(sessionsRef.current, "external-reused")?.selectedModel).toEqual(
         existingSelectedModel,
       );
-      expect(persistedSessions).toBe(0);
     } finally {
       host.agentSessionsList = originalAgentSessionsList;
     }

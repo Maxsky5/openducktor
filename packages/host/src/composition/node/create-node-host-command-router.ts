@@ -12,6 +12,7 @@ import { createRuntimeSessionOperations } from "../../adapters/runtimes/runtime-
 import { createRuntimeTaskActivityGuard } from "../../application/tasks/runtime-task-activity-guard";
 import { createRuntimeWorkspaceStarterDispatcher } from "../../adapters/runtimes/runtime-workspace-starter-dispatcher";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
+import { createTaskWorkflowSessionControlService } from "../../application/agent-sessions/task-workflow-session-control-service";
 import { createLocalAttachmentService } from "../../application/attachments/local-attachment-service";
 import { createDevServerService } from "../../application/dev-servers/dev-server-service";
 import { createSystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
@@ -299,6 +300,14 @@ export const assembleNodeEffectHostCommandRouter = (
     taskEventPublicationReporter,
     workspaceSettingsService,
   });
+  const taskWorkflowSessionControlService = createTaskWorkflowSessionControlService({
+    runtime: agentSessionLiveStateService,
+    tasks: taskService,
+  });
+  const agentSessionCommandService = {
+    ...agentSessionLiveStateService,
+    ...taskWorkflowSessionControlService,
+  };
   const odtMcpBridgeService = createOdtMcpBridgeService({
     taskAssetReadService,
     taskService,
@@ -438,10 +447,7 @@ export const assembleNodeEffectHostCommandRouter = (
         }
       }),
     handlers: {
-      ...createAgentSessionLiveCommandHandlers(
-        agentSessionLiveStateService,
-        localAttachmentService,
-      ),
+      ...createAgentSessionLiveCommandHandlers(agentSessionCommandService, localAttachmentService),
       ...createClaudeRuntimeCommandHandlers(
         claudeRuntime.agentSdkService,
         effectiveRuntimeRegistry,

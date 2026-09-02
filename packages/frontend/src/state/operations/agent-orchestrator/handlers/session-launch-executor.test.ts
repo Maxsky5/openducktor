@@ -95,6 +95,7 @@ const createExecutorHarness = () => {
 
   const deps: SessionLaunchExecutorDependencies & {
     replaceSession: (session: AgentSessionState) => void;
+    removeSession: (identity: AgentSessionIdentity) => void;
   } = {
     adapter,
     replaceSession: (session) => {
@@ -116,9 +117,44 @@ const createExecutorHarness = () => {
     deps.replaceSession(sessionState);
   };
   const execute = (
-    input: Omit<ExecutePreparedSessionLaunchInput, "register"> &
-      Partial<Pick<ExecutePreparedSessionLaunchInput, "register">>,
-  ) => executePrepared({ ...input, register: input.register ?? registerLocally });
+    input: Omit<ExecutePreparedSessionLaunchInput, "register" | "rollback"> &
+      Partial<Pick<ExecutePreparedSessionLaunchInput, "register" | "rollback">>,
+  ) => {
+    const rollback: ExecutePreparedSessionLaunchInput["rollback"] = async (rollbackInput) => {
+      const sessionRef = {
+        repoPath: input.launch.repoPath,
+        ...rollbackInput.identity,
+      };
+      try {
+        if (input.launch.mode === "resume") {
+          await deps.adapter.releaseSession(sessionRef);
+        } else {
+          await deps.adapter.stopSession(sessionRef);
+        }
+      } catch (error) {
+        const cause = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `${rollbackInput.message} Failed to stop stale started session '${rollbackInput.identity.externalSessionId}': ${cause}`,
+        );
+      }
+      if (!rollbackInput.finishBootstrap) {
+        try {
+          deps.removeSession(rollbackInput.identity);
+        } catch (error) {
+          const cause = error instanceof Error ? error.message : String(error);
+          throw new Error(
+            `${rollbackInput.message} The stale started session '${rollbackInput.identity.externalSessionId}' was finalized but its local registration could not be removed: ${cause}`,
+          );
+        }
+      }
+      throw new Error(rollbackInput.message, { cause: rollbackInput.cause });
+    };
+    return executePrepared({
+      ...input,
+      register: input.register ?? registerLocally,
+      rollback: input.rollback ?? rollback,
+    });
+  };
 
   return { calls, deps, execute, repoEpochRef, currentWorkspaceRepoPathRef, sessionsRef };
 };

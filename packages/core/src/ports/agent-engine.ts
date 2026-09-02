@@ -150,6 +150,11 @@ export type UpdateAgentSessionModelInput = SessionRef & {
   model: AgentModelSelection | null;
 };
 
+export type UpdateControlledAgentSessionModelInput = SessionRef & {
+  sessionScope: AgentSessionScope;
+  model: AgentModelSelection | null;
+};
+
 export type AgentSessionHistorySystemPromptContext = {
   systemPrompt: string;
   startedAt: string;
@@ -268,7 +273,7 @@ export interface AgentSessionControlPort {
   resumeSession(input: AgentSessionControlResumeInput): Promise<AgentSessionControlSummary>;
   releaseSession(input: SessionRef): Promise<void>;
   forkSession(input: AgentSessionControlForkInput): Promise<AgentSessionControlSummary>;
-  updateSessionModel(input: UpdateAgentSessionModelInput): Promise<void>;
+  updateSessionModel(input: UpdateControlledAgentSessionModelInput): Promise<void>;
   sendUserMessage(input: AgentSessionControlSendInput): Promise<AcceptedAgentUserMessage>;
   stopSession(input: SessionRef): Promise<void>;
 }

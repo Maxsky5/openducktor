@@ -10,7 +10,6 @@ import {
   emptyAgentSessionCollection,
   getAgentSession,
   listAgentSessions,
-  removeAgentSession,
   replaceAgentSession,
 } from "@/state/agent-session-collection";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
@@ -211,15 +210,12 @@ export const toStartSessionDependencies = (
     },
     session: {
       replaceSession: deps.replaceSession,
-      removeSession: deps.removeSession,
       readSessionSnapshot:
         deps.readSessionSnapshot ??
         ((identity) => getAgentSession(deps.sessionsRef.current, identity)),
       sessionStartGateRef: deps.sessionStartGateRef ?? { current: createSessionStartGate() },
       loadSourceSession: deps.loadSourceSession,
       loadAgentSessionHistory: deps.loadAgentSessionHistory ?? (async () => null),
-      persistSessionRecord: deps.persistSessionRecord,
-      deleteSessionRecord: deps.deleteSessionRecord,
       clearSessionObservationState: deps.clearSessionObservationState,
     },
     runtime: {
@@ -246,12 +242,11 @@ export const toStartSessionDependencies = (
 
 type StartSessionHarnessOptions = Omit<
   Partial<FlatStartSessionDependencies>,
-  "adapter" | "replaceSession" | "removeSession"
+  "adapter" | "replaceSession"
 > & {
   adapter?: AgentEnginePort | OpencodeSdkAdapter;
   sessionsRef?: { current: AgentSessionCollection };
   replaceSession?: StartSessionDependencies["session"]["replaceSession"];
-  removeSession?: StartSessionDependencies["session"]["removeSession"];
   onSessionCollectionChange?: (collection: AgentSessionCollection) => void;
 };
 
@@ -268,8 +263,6 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
     loadSourceSession = async ({ sourceSession }) =>
       getAgentSession(sessionsRef.current, sourceSession),
     loadAgentSessionHistory = async () => null,
-    persistSessionRecord = async () => {},
-    deleteSessionRecord = async () => {},
     canonicalizePath = async (path: string) => path,
     prepareTaskSessionStartupLease = async () => "lease-1",
     completeTaskSessionStartupLease = async () => {},
@@ -290,12 +283,6 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
       sessionsRef.current = replaceAgentSession(sessionsRef.current, session);
       onSessionCollectionChange?.(sessionsRef.current);
     });
-  const removeSession =
-    options.removeSession ??
-    ((identity: Parameters<StartSessionDependencies["session"]["removeSession"]>[0]) => {
-      sessionsRef.current = removeAgentSession(sessionsRef.current, identity);
-      onSessionCollectionChange?.(sessionsRef.current);
-    });
 
   const agentEngine =
     adapter instanceof OpencodeSdkAdapter ? createOpenCodeAgentEngineTestAdapter(adapter) : adapter;
@@ -305,15 +292,12 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
     adapter: agentEngine,
     sessionsRef,
     replaceSession,
-    removeSession,
     taskRef,
     repoEpochRef,
     currentWorkspaceRepoPathRef,
     clearSessionObservationState,
     loadSourceSession,
     loadAgentSessionHistory,
-    persistSessionRecord,
-    deleteSessionRecord,
     canonicalizePath,
     prepareTaskSessionStartupLease,
     completeTaskSessionStartupLease,

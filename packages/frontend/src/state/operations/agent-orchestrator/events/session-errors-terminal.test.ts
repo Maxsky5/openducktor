@@ -462,12 +462,9 @@ describe("agent-orchestrator session errors and terminal state", () => {
       }),
     ]);
 
-    const updateSessionOptions: Array<Parameters<SessionUpdateFn>[2]> = [];
     const applySessionUpdate = createSessionUpdater(sessionsRef);
-    const updateSession: SessionUpdateFn = (identity, updater, options) => {
-      updateSessionOptions.push(options);
-      return applySessionUpdate(identity, updater);
-    };
+    const updateSession: SessionUpdateFn = (identity, updater) =>
+      applySessionUpdate(identity, updater);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -510,7 +507,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
     expect(toolMessage.meta.error).toBe("Aborted");
     expect(findSession(sessionsRef, "session-1")?.status).toBe("stopped");
     expect(findSession(sessionsRef, "session-1")?.stopRequestedAt).toBeNull();
-    expect(updateSessionOptions).toEqual([undefined]);
     expect(
       getSessionMessages(sessionsRef).some((message) => message.content.includes("Session error:")),
     ).toBe(false);
@@ -539,12 +535,9 @@ describe("agent-orchestrator session errors and terminal state", () => {
       buildSession({ sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } }),
     ]);
 
-    const updateSessionOptions: Array<Parameters<SessionUpdateFn>[2]> = [];
     const applySessionUpdate = createSessionUpdater(sessionsRef);
-    const updateSession: SessionUpdateFn = (identity, updater, options) => {
-      updateSessionOptions.push(options);
-      return applySessionUpdate(identity, updater);
-    };
+    const updateSession: SessionUpdateFn = (identity, updater) =>
+      applySessionUpdate(identity, updater);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -577,8 +570,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
 
     expect(todosRecorder.getTodos()).toHaveLength(1);
     expect(findSession(sessionsRef, "session-1")?.status).toBe("idle");
-    expect(updateSessionOptions).toContain(undefined);
-    expect(updateSessionOptions).toContainEqual({ persist: true });
   });
 
   test("does not update runtime todos when the observed session is gone", async () => {

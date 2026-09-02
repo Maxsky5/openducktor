@@ -774,7 +774,7 @@ Owns:
 - start, reuse, fork, send, stop, model update, permission reply, and question reply
 - asking the runtime to create a session and accepting metadata-only control results
 - registering a workflow session in the fixed order: create it in the runtime, persist its task record, then attach it to local task state
-- rolling back failed starts
+- aborting preparation failures before host control succeeds, then keeping host-stored task sessions when later frontend work fails
 - passing route refs to listeners and context refs to runtime actions
 
 Invariant: only the explicit workflow start path may register task ownership. The runtime control result supplies metadata for the session that OpenDucktor just started; runtime events cannot create or attach an unrelated root session.

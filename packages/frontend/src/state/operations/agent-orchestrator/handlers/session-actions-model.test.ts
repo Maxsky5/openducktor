@@ -9,7 +9,7 @@ import {
 } from "./session-actions.test-helpers";
 
 describe("agent-orchestrator/handlers/session-actions model", () => {
-  test("persists an accepted model update when the selected model is unchanged", async () => {
+  test("keeps an accepted model update when the selected model is unchanged", async () => {
     const session = buildSession({
       selectedModel: {
         runtimeKind: "opencode",
@@ -22,23 +22,18 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
     store.replaceSession(session);
     const adapter = new OpencodeSdkAdapter();
     adapter.updateSessionModel = async () => {};
-    let persistenceCalls = 0;
     const actions = createSessionActions({
       adapter,
       readSessionSnapshot: store.getSessionSnapshot,
       updateSession: store.updateSession,
-      persistSessionRecord: async () => {
-        persistenceCalls += 1;
-      },
     });
 
     await actions.updateAgentSessionModel(session, selection);
 
     expect(store.getSessionSnapshot(session)?.selectedModel).toEqual(selection);
-    expect(persistenceCalls).toBe(1);
   });
 
-  test("updates the host session and persists the selected model for an idle session", async () => {
+  test("updates the host session and local state for an idle session", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalUpdateSessionModel = adapter.updateSessionModel;
     const modelCalls: Array<Parameters<OpencodeSdkAdapter["updateSessionModel"]>[0]> = [];
@@ -47,17 +42,9 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
     };
 
     const sessionsRef = createSessionsRef([buildSession({ status: "idle" })]);
-    const persistedModels: Array<{
-      taskId: string;
-      modelId: string | undefined;
-    }> = [];
-
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      persistSessionRecord: async (taskId, record) => {
-        persistedModels.push({ taskId, modelId: record.selectedModel?.modelId });
-      },
     });
 
     try {
@@ -69,7 +56,6 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
 
       expect(modelCalls).toHaveLength(1);
       expect(getSession(sessionsRef)?.selectedModel?.modelId).toBe("gpt-5");
-      expect(persistedModels).toEqual([{ taskId: "task-1", modelId: "gpt-5" }]);
     } finally {
       adapter.updateSessionModel = originalUpdateSessionModel;
     }
@@ -84,14 +70,9 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
     };
 
     const sessionsRef = createSessionsRef([buildSession()]);
-    let persistenceCalls = 0;
-
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      persistSessionRecord: async () => {
-        persistenceCalls += 1;
-      },
     });
 
     try {
@@ -114,7 +95,6 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
         },
       });
       expect(getSession(sessionsRef)?.selectedModel?.modelId).toBe("gpt-5");
-      expect(persistenceCalls).toBe(1);
     } finally {
       adapter.updateSessionModel = originalUpdateSessionModel;
     }
@@ -159,14 +139,10 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
         workingDirectory: "/tmp/repo/repository-chat",
       }),
     ]);
-    let persistenceCalls = 0;
     const actions = createSessionActions({
       adapter,
       sessionsRef,
       workspaceRepoPath: "/tmp/active-workspace",
-      persistSessionRecord: async () => {
-        persistenceCalls += 1;
-      },
     });
 
     await actions.updateAgentSessionModel(getSession(sessionsRef), {
@@ -189,24 +165,17 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
       },
     ]);
     expect(getSession(sessionsRef).selectedModel?.modelId).toBe("gpt-5");
-    expect(persistenceCalls).toBe(0);
   });
 
-  test("reports workflow model persistence failure after the runtime accepts the change", async () => {
+  test("keeps local state unchanged when the host rejects the stored model update", async () => {
     const adapter = new OpencodeSdkAdapter();
-    let runtimeCalls = 0;
     adapter.updateSessionModel = async () => {
-      runtimeCalls += 1;
+      throw new Error("task session persistence failed");
     };
     const sessionsRef = createSessionsRef([buildSession()]);
-    let persistenceCalls = 0;
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      persistSessionRecord: async () => {
-        persistenceCalls += 1;
-        throw new Error("task session persistence failed");
-      },
     });
 
     await expect(
@@ -216,8 +185,7 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
         modelId: "gpt-5",
       }),
     ).rejects.toThrow("task session persistence failed");
-    expect(runtimeCalls).toBe(1);
-    expect(persistenceCalls).toBe(1);
+    expect(getSession(sessionsRef)?.selectedModel).toBeNull();
   });
 
   test("rejects an unbound model change before calling the runtime", async () => {
@@ -250,16 +218,12 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
       runtimeCalls += 1;
     };
     const sessionsRef = createSessionsRef([buildSession()]);
-    let persistenceCalls = 0;
     const actions = createSessionActions({
       adapter,
       sessionsRef,
       updateSession: () => {
         sessionsRef.current = createSessionsRef().current;
         return null;
-      },
-      persistSessionRecord: async () => {
-        persistenceCalls += 1;
       },
     });
 
@@ -271,7 +235,6 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
       }),
     ).rejects.toThrow("Session 'session-1' became unavailable after its model changed.");
     expect(runtimeCalls).toBe(1);
-    expect(persistenceCalls).toBe(0);
   });
 
   test("fails instead of silently ignoring model changes for an unloaded session", async () => {

@@ -5,6 +5,7 @@ import {
   clearAgentSessionsByRoles,
   deleteAgentSession,
   listAgentSessionsForTasks,
+  updateAgentSessionModel,
   upsertAgentSession,
 } from "./sqlite-task-agent-sessions";
 import { getTaskCard, listTasksInDatabase } from "./sqlite-task-card-read-model";
@@ -307,6 +308,16 @@ export const createSqliteTaskRepository = ({
         ({ session }) =>
           session.transaction("sqliteTaskRepository.upsertAgentSession", (transaction) =>
             upsertAgentSession(transaction, input, now()),
+          ),
+      );
+    },
+    updateAgentSessionModel(input) {
+      return withDatabase(
+        input.repoPath,
+        "sqliteTaskRepository.updateAgentSessionModel",
+        ({ session }) =>
+          session.transaction("sqliteTaskRepository.updateAgentSessionModel", (transaction) =>
+            updateAgentSessionModel(transaction, input, now()),
           ),
       );
     },

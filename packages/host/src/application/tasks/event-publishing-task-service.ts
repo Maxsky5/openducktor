@@ -110,7 +110,20 @@ export const createEventPublishingTaskService = ({
     getTaskMetadata: (input) => taskService.getTaskMetadata(input),
     agentSessionsList: (input) => taskService.agentSessionsList(input),
     agentSessionsListForTasks: (input) => taskService.agentSessionsListForTasks(input),
-    agentSessionUpsert: (input) => taskService.agentSessionUpsert(input),
+    agentSessionUpsert: (input) =>
+      publishAfterMutation(
+        "agent-session-create",
+        input.repoPath,
+        changeForTask(input.taskId),
+        taskService.agentSessionUpsert(input),
+      ),
+    agentSessionUpdateModel: (input) =>
+      publishAfterMutation(
+        "agent-session-update-model",
+        input.repoPath,
+        changeForTask(input.taskId),
+        taskService.agentSessionUpdateModel(input),
+      ),
     agentSessionDelete: (input) => taskService.agentSessionDelete(input),
     getApprovalContext: (input) => taskService.getApprovalContext(input),
     detectPullRequest: (input) =>

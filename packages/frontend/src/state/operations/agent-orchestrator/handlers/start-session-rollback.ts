@@ -5,16 +5,9 @@ import { runOrchestratorTask } from "../support/async-side-effects";
 import { SessionLaunchStopError } from "./session-launch-errors";
 import type {
   RuntimeDependencies,
-  SessionDependencies,
   SessionStartTags,
   StartedSessionContext,
 } from "./start-session.types";
-
-const toStartedSessionIdentity = (startedCtx: StartedSessionContext): AgentSessionIdentity => ({
-  externalSessionId: startedCtx.summary.externalSessionId,
-  runtimeKind: startedCtx.summary.runtimeKind,
-  workingDirectory: startedCtx.summary.workingDirectory,
-});
 
 const toStartedSessionTags = (startedCtx: StartedSessionContext): SessionStartTags => ({
   repoPath: startedCtx.repoPath,
@@ -23,21 +16,7 @@ const toStartedSessionTags = (startedCtx: StartedSessionContext): SessionStartTa
   externalSessionId: startedCtx.summary.externalSessionId,
 });
 
-class BootstrapFinalizationHandledError extends Error {}
-
 type SessionBootstrap = NonNullable<RuntimeInfo["bootstrap"]>;
-
-const describeRollbackStep = (
-  failed: boolean,
-  cause: unknown,
-  failurePrefix: string,
-  successMessage: string,
-): string => {
-  if (failed) {
-    return `${failurePrefix}: ${errorMessage(cause)}.`;
-  }
-  return successMessage;
-};
 
 export const rollbackBootstrapAfterStartFailure = async ({
   cause,
@@ -46,10 +25,7 @@ export const rollbackBootstrapAfterStartFailure = async ({
   cause: unknown;
   bootstrap: { abort: () => Promise<void> };
 }): Promise<never> => {
-  if (
-    cause instanceof SessionLaunchStopError ||
-    cause instanceof BootstrapFinalizationHandledError
-  ) {
+  if (cause instanceof SessionLaunchStopError) {
     throw cause;
   }
   try {
@@ -63,57 +39,24 @@ export const rollbackBootstrapAfterStartFailure = async ({
   throw cause;
 };
 
-export const rollbackStartedSessionAfterPersistenceFailure = async ({
-  error,
-  startedCtx,
-  session,
-  runtime,
-  bootstrap,
-}: {
-  error: unknown;
-  startedCtx: StartedSessionContext;
-  session: SessionDependencies;
-  runtime: RuntimeDependencies;
-  bootstrap?: SessionBootstrap;
-}): Promise<never> => {
-  const externalSessionId = startedCtx.summary.externalSessionId;
-  const input: Parameters<typeof rollbackWorkflowSessionRegistration>[0] = {
-    message: `Failed to persist started session "${externalSessionId}": ${errorMessage(error)}.`,
-    cause: error,
-    startedCtx,
-    identity: toStartedSessionIdentity(startedCtx),
-    session,
-    runtime,
-    stopReason: "start-session-stop-after-persist-failure",
-  };
-  if (bootstrap) {
-    input.bootstrap = bootstrap;
-  }
-  return rollbackWorkflowSessionRegistration(input);
-};
-
-export const rollbackWorkflowSessionRegistration = async ({
+export const stopStoredWorkflowSessionAfterLaunchFailure = async ({
   message,
   cause,
   startedCtx,
   identity,
-  session,
+  clearSessionObservationState,
   runtime,
   stopReason,
-  bootstrap,
-  commitBootstrapOnDeleteFailure = true,
-  durableRecordExists = true,
+  bootstrapToComplete,
 }: {
   message: string;
   cause: unknown;
   startedCtx: StartedSessionContext;
   identity: AgentSessionIdentity;
-  session: SessionDependencies;
+  clearSessionObservationState: (identity: AgentSessionIdentity) => void;
   runtime: RuntimeDependencies;
   stopReason: string;
-  bootstrap?: SessionBootstrap;
-  commitBootstrapOnDeleteFailure?: boolean;
-  durableRecordExists?: boolean;
+  bootstrapToComplete?: SessionBootstrap;
 }): Promise<never> => {
   try {
     await runOrchestratorTask(
@@ -128,90 +71,28 @@ export const rollbackWorkflowSessionRegistration = async ({
     );
   }
 
-  if (durableRecordExists) {
+  clearSessionObservationState(identity);
+
+  let bootstrapError: unknown;
+  if (bootstrapToComplete) {
     try {
-      await session.deleteSessionRecord(startedCtx.taskId, identity);
+      await bootstrapToComplete.complete();
     } catch (error) {
-      session.clearSessionObservationState(identity);
-      let preserveFailed = false;
-      let preserveError: unknown;
-      if (bootstrap && commitBootstrapOnDeleteFailure) {
-        try {
-          await bootstrap.complete();
-        } catch (completionError) {
-          preserveFailed = true;
-          preserveError = completionError;
-        }
-      }
-
-      const progress = [
-        "The started session was stopped.",
-        `Failed to delete the durable session record: ${errorMessage(error)}.`,
-        "The stopped session remains durably recorded for recovery.",
-      ];
-      if (bootstrap) {
-        if (commitBootstrapOnDeleteFailure) {
-          progress.push(
-            describeRollbackStep(
-              preserveFailed,
-              preserveError,
-              "Failed to commit the task worktree bootstrap while preserving its resources",
-              "The task worktree bootstrap was committed to preserve its resources.",
-            ),
-          );
-        } else {
-          progress.push(
-            "The task worktree resources were left intact without retrying bootstrap completion.",
-          );
-        }
-      }
-
-      const rollbackMessage = `${message} ${progress.join(" ")}`;
-      if (bootstrap) {
-        throw new BootstrapFinalizationHandledError(
-          rollbackMessage,
-          cause instanceof Error ? { cause } : undefined,
-        );
-      }
-      throw new Error(rollbackMessage, cause instanceof Error ? { cause } : undefined);
+      bootstrapError = error;
     }
   }
 
-  session.clearSessionObservationState(identity);
-  session.removeSession(identity);
-
-  let abortFailed = false;
-  let abortError: unknown;
-  if (bootstrap) {
-    try {
-      await bootstrap.abort();
-    } catch (error) {
-      abortFailed = true;
-      abortError = error;
-    }
-  }
-
-  const progress = ["The started session was stopped and its local state was cleared."];
-  if (durableRecordExists) {
-    progress.push("The durable session record was deleted.");
-  }
-  if (bootstrap) {
+  const progress = ["The started session was stopped.", "The stored task session was kept."];
+  if (bootstrapToComplete && bootstrapError === undefined) {
+    progress.push("The task worktree bootstrap was completed to keep its resources.");
+  } else if (bootstrapError !== undefined) {
     progress.push(
-      describeRollbackStep(
-        abortFailed,
-        abortError,
-        "Failed to roll back task worktree bootstrap",
-        "The task worktree bootstrap was rolled back.",
-      ),
+      `Failed to complete the task worktree bootstrap: ${errorMessage(bootstrapError)}.`,
     );
   }
 
-  const rollbackMessage = `${message} ${progress.join(" ")}`;
-  if (bootstrap) {
-    throw new BootstrapFinalizationHandledError(
-      rollbackMessage,
-      cause instanceof Error ? { cause } : undefined,
-    );
-  }
-  throw new Error(rollbackMessage, cause instanceof Error ? { cause } : undefined);
+  throw new Error(
+    `${message} ${progress.join(" ")}`,
+    cause instanceof Error ? { cause } : undefined,
+  );
 };

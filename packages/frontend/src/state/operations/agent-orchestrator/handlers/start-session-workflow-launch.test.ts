@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentSessionSummary } from "@openducktor/core";
 import { createSessionStartGate } from "@/features/session-start/session-start-gate";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
@@ -66,10 +65,7 @@ type Harness = {
     completeLease: string[];
     abortLease: string[];
     stopSession: string[];
-    persistSessionRecord: Array<{ taskId: string; record: AgentSessionRecord }>;
-    deleteSessionRecord: string[];
     clearObservation: string[];
-    removeSession: string[];
     bootstrapComplete: number;
     bootstrapAbort: number;
   };
@@ -90,10 +86,7 @@ const createHarness = (
     completeLease: [],
     abortLease: [],
     stopSession: [],
-    persistSessionRecord: [],
-    deleteSessionRecord: [],
     clearObservation: [],
-    removeSession: [],
     bootstrapComplete: 0,
     bootstrapAbort: 0,
   };
@@ -119,9 +112,6 @@ const createHarness = (
   const deps: StartSessionExecutionDependencies = {
     session: {
       replaceSession: () => undefined,
-      removeSession: (identity) => {
-        calls.removeSession.push(identity.externalSessionId);
-      },
       readSessionSnapshot: (identity) =>
         (options.sourceSessions ?? [workflowSourceSession()]).find(
           (session) => session.externalSessionId === identity.externalSessionId,
@@ -132,12 +122,6 @@ const createHarness = (
         ) ?? null,
       loadAgentSessionHistory: async () => null,
       sessionStartGateRef: { current: createSessionStartGate() },
-      persistSessionRecord: async (taskId, record) => {
-        calls.persistSessionRecord.push({ taskId, record });
-      },
-      deleteSessionRecord: async (_taskId, identity) => {
-        calls.deleteSessionRecord.push(identity.externalSessionId);
-      },
       clearSessionObservationState: (identity) => {
         calls.clearObservation.push(identity.externalSessionId);
       },
@@ -308,7 +292,6 @@ describe("prepareWorkflowFreshLaunch", () => {
       }),
     ).rejects.toThrow("Task not found: task-1");
     expect(harness.calls.ensureRuntime).toHaveLength(0);
-    expect(harness.calls.persistSessionRecord).toHaveLength(0);
   });
 
   test("performs no runtime side effects when the role is unavailable for the task", async () => {
@@ -454,38 +437,50 @@ describe("prepareWorkflowForkLaunch", () => {
 });
 
 describe("registerWorkflowSessionLaunch", () => {
-  test("persists the workflow session record and completes the bootstrap", async () => {
+  test("completes the bootstrap for the host-stored workflow session", async () => {
     const harness = createHarness();
 
     await registerWorkflowSessionLaunch(registrationInputFor(harness));
 
-    expect(harness.calls.persistSessionRecord).toHaveLength(1);
-    expect(harness.calls.persistSessionRecord[0]?.taskId).toBe("task-1");
-    expect(harness.calls.persistSessionRecord[0]?.record).toMatchObject({
-      externalSessionId: "external-commit",
-      role: "build",
-    });
     expect(harness.calls.bootstrapComplete).toBe(1);
     expect(harness.calls.stopSession).toHaveLength(0);
   });
 
-  test("runs the verified cleanup when persistence fails", async () => {
+  test("attaches the session before bootstrap can publish newer live state", async () => {
     const harness = createHarness();
-    harness.deps.session.persistSessionRecord = async () => {
-      throw new Error("persist failed");
+    const input = registrationInputFor(harness);
+    let current: AgentSessionState = input.sessionState;
+    harness.deps.session.replaceSession = (session) => {
+      current = session;
+    };
+    input.bootstrap.complete = async () => {
+      current = {
+        ...current,
+        livePresence: "present",
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [
+              {
+                header: "Choice",
+                question: "Continue?",
+                options: [{ label: "Yes", description: "Continue." }],
+                multiple: false,
+                custom: false,
+              },
+            ],
+          },
+        ],
+      };
     };
 
-    await expect(registerWorkflowSessionLaunch(registrationInputFor(harness))).rejects.toThrow(
-      'Failed to persist started session "external-commit": persist failed. The started session was stopped and its local state was cleared. The durable session record was deleted.',
-    );
-    expect(harness.calls.stopSession).toEqual(["external-commit"]);
-    expect(harness.calls.deleteSessionRecord).toEqual(["external-commit"]);
-    expect(harness.calls.clearObservation).toEqual(["external-commit"]);
-    expect(harness.calls.removeSession).toEqual(["external-commit"]);
-    expect(harness.calls.bootstrapAbort).toBe(1);
+    await registerWorkflowSessionLaunch(input);
+
+    expect(current.livePresence).toBe("present");
+    expect(current.pendingQuestions).toHaveLength(1);
   });
 
-  test("rolls back without retrying bootstrap completion when completion fails", async () => {
+  test("keeps the stored session when bootstrap completion fails", async () => {
     const harness = createHarness();
     const registrationInput = registrationInputFor(harness);
     registrationInput.bootstrap.complete = async () => {
@@ -496,9 +491,7 @@ describe("registerWorkflowSessionLaunch", () => {
       "bootstrap completion failed",
     );
     expect(harness.calls.stopSession).toEqual(["external-commit"]);
-    expect(harness.calls.deleteSessionRecord).toEqual(["external-commit"]);
-    expect(harness.calls.removeSession).toEqual(["external-commit"]);
-    expect(harness.calls.bootstrapAbort).toBe(1);
+    expect(harness.calls.bootstrapAbort).toBe(0);
   });
 
   test("cleans up the session while preserving committed resources when stale after bootstrap commits", async () => {
@@ -514,13 +507,10 @@ describe("registerWorkflowSessionLaunch", () => {
       "Workspace changed while starting session.",
     );
     expect(harness.calls.stopSession).toEqual(["external-commit"]);
-    expect(harness.calls.persistSessionRecord).toHaveLength(1);
-    expect(harness.calls.deleteSessionRecord).toEqual(["external-commit"]);
-    expect(harness.calls.removeSession).toEqual(["external-commit"]);
     expect(harness.calls.bootstrapAbort).toBe(0);
   });
 
-  test("aborts the uncommitted worktree bootstrap when stale before bootstrap completion", async () => {
+  test("keeps the stored session and its worktree when stale before bootstrap completion", async () => {
     const harness = createHarness();
     harness.setStale();
 
@@ -528,26 +518,20 @@ describe("registerWorkflowSessionLaunch", () => {
       STALE_START_ERROR,
     );
     expect(harness.calls.stopSession).toEqual(["external-commit"]);
-    expect(harness.calls.persistSessionRecord).toHaveLength(0);
-    expect(harness.calls.deleteSessionRecord).toHaveLength(0);
-    expect(harness.calls.removeSession).toEqual(["external-commit"]);
-    expect(harness.calls.bootstrapAbort).toBe(1);
-    expect(harness.calls.bootstrapComplete).toBe(0);
+    expect(harness.calls.bootstrapAbort).toBe(0);
+    expect(harness.calls.bootstrapComplete).toBe(1);
   });
 
   test("keeps rollback failure visible when cleanup cannot stop the session", async () => {
     const harness = createHarness();
-    harness.deps.session.persistSessionRecord = async () => {
-      throw new Error("persist failed");
-    };
+    harness.setStale();
     harness.deps.runtime.adapter.stopSession = async () => {
       throw new Error("runtime unavailable");
     };
 
     await expect(registerWorkflowSessionLaunch(registrationInputFor(harness))).rejects.toThrow(
-      'Failed to persist started session "external-commit": persist failed. Failed to stop the started session during rollback: runtime unavailable. Cleanup was not continued.',
+      "Workspace changed while starting session. Failed to stop the started session during rollback: runtime unavailable. Cleanup was not continued.",
     );
-    expect(harness.calls.deleteSessionRecord).toHaveLength(0);
-    expect(harness.calls.removeSession).toHaveLength(0);
+    expect(harness.calls.clearObservation).toHaveLength(0);
   });
 });

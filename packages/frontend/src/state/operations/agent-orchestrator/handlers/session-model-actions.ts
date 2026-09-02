@@ -10,14 +10,12 @@ import {
   requireBoundSessionAssociation,
   toRuntimeSessionRef,
 } from "../support/session-runtime-ref";
-import type { CommitSessionModelChange } from "./workflow-session-operation-policy";
 
 export type SessionModelActionDependencies = {
   workspaceRepoPath: string | null;
   adapter: Pick<AgentEnginePort, "updateSessionModel">;
   readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
-  commitSessionModelChange: CommitSessionModelChange;
 };
 
 export const createSessionModelActions = ({
@@ -25,17 +23,17 @@ export const createSessionModelActions = ({
   adapter,
   readSessionSnapshot,
   updateSession,
-  commitSessionModelChange,
 }: SessionModelActionDependencies) => {
   const updateAgentSessionModel = async (
     identity: AgentSessionIdentity,
     selection: AgentModelSelection | null,
   ): Promise<void> => {
     const session = requireLoadedSession(readSessionSnapshot, identity);
-    requireBoundSessionAssociation(session, "change model");
+    const sessionScope = requireBoundSessionAssociation(session, "change model");
 
     await adapter.updateSessionModel({
       ...toRuntimeSessionRef(requireWorkspaceRepoPath(workspaceRepoPath), session),
+      sessionScope,
       model: selection,
     });
 
@@ -49,7 +47,6 @@ export const createSessionModelActions = ({
         `Session '${session.externalSessionId}' became unavailable after its model changed.`,
       );
     }
-    await commitSessionModelChange(nextSession);
   };
 
   return { updateAgentSessionModel };

@@ -304,7 +304,6 @@ describe("HostClient", () => {
       "qaApproved",
       "qaRejected",
       "agentSessionsList",
-      "agentSessionUpsert",
       "taskStopImpactGet",
       "agentSessionLiveList",
       "agentSessionLiveLoadContext",
@@ -368,7 +367,7 @@ describe("HostClient", () => {
         workingDirectory: "/repo/worktree",
         externalSessionId: "session-1",
       },
-      sessionAssociation: { kind: "repository" as const },
+      repositoryScope: { kind: "repository" as const },
       activity: "idle" as const,
       title: "Build session",
       startedAt: "2026-07-16T10:00:00.000Z",
@@ -429,7 +428,6 @@ describe("HostClient", () => {
       runtimeKind: "opencode" as const,
       workingDirectory: "/repo/worktree",
       title: "Build session",
-      sessionAssociation: { kind: "repository" as const },
       startedAt: "2026-07-16T10:00:00.000Z",
       status: "idle" as const,
     };
@@ -2273,7 +2271,7 @@ describe("HostClient", () => {
       if (command === "agent_sessions_list") {
         return makeTaskMetadataPayload().agentSessions;
       }
-      if (command === "agent_session_upsert" || command === "agent_session_delete") {
+      if (command === "agent_session_delete") {
         return true;
       }
       throw new Error(`Unexpected command: ${command}`);
@@ -2284,13 +2282,11 @@ describe("HostClient", () => {
     if (!first) {
       throw new Error("Expected persisted session history entry");
     }
-    await client.agentSessionUpsert("/repo", "task-1", first);
     await client.agentSessionDelete("/repo", "task-1", first);
 
     expect(history).toHaveLength(1);
     expect(calls.map((entry) => entry.command)).toEqual([
       "agent_sessions_list",
-      "agent_session_upsert",
       "agent_session_delete",
     ]);
     expect(calls[0].args).toEqual({

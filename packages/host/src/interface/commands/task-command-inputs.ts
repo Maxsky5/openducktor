@@ -13,7 +13,6 @@ import {
 import { z } from "zod";
 import type {
   AgentSessionDeleteInput,
-  AgentSessionUpsertInput,
   BuildBlockedInput,
   BuildCompletedInput,
   BuildStartInput,
@@ -38,13 +37,10 @@ import type {
 } from "../../application/tasks/task-inputs";
 import { HostValidationError } from "../../effect/host-errors";
 import {
-  compactAgentSessionForStorage,
   normalizedAgentSessionIdentitySchema,
-  normalizedAgentSessionRecordSchema,
   optionalBoolean,
   optionalNonNegativeInteger,
   parseAgentSessionIdentity,
-  parseAgentSessionRecord,
   parseCreateInput,
   parseDescriptionAssets,
   parseOptionalNote,
@@ -142,20 +138,6 @@ export const parseListAgentSessionsForTasksInput = (
   return {
     repoPath: readRequiredString(record, "repoPath"),
     taskIds: Array.from(new Set(taskIds)),
-  };
-};
-
-export const parseAgentSessionUpsertInput = (input: HostCommandArgs): AgentSessionUpsertInput => {
-  const record = requireParsedRecord(
-    commandInputRecordSchema.safeParse(input),
-    "agent_session_upsert input",
-  );
-  return {
-    repoPath: readRequiredString(record, "repoPath"),
-    taskId: readRequiredString(record, "taskId"),
-    session: compactAgentSessionForStorage(
-      parseAgentSessionRecord(normalizedAgentSessionRecordSchema.safeParse(record.session)),
-    ),
   };
 };
 

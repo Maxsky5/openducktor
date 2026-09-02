@@ -17,19 +17,15 @@ import { createPrepareSessionSend } from "./prepare-session-send";
 import { createSendAgentMessage } from "./send-agent-message";
 import { createSessionModelActions } from "./session-model-actions";
 import { createStartAgentSession } from "./start-session";
-import type { RuntimeDependencies, SessionDependencies } from "./start-session.types";
+import type { RuntimeDependencies } from "./start-session.types";
 import { createStopAgentSession } from "./stop-session";
-import {
-  createCommitSessionModelChangePolicy,
-  createCommitStoppedSessionPolicy,
-} from "./workflow-session-operation-policy";
+import { createRefreshStoppedWorkflowSession } from "./workflow-session-operation-policy";
 
 type SessionActionsDependencies = {
   workspaceRepoPath: string | null;
   workspaceId: string | null;
   adapter: AgentEnginePort;
   replaceSession: (session: AgentSessionState) => void;
-  removeSession: (identity: AgentSessionIdentity) => void;
   readSessionSnapshot: (identity: AgentSessionIdentity) => AgentSessionState | null;
   taskRef: { current: TaskCard[] };
   repoEpochRef: { current: number };
@@ -50,8 +46,6 @@ type SessionActionsDependencies = {
   loadSourceSession: LoadSourceSession;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
-  persistSessionRecord: SessionDependencies["persistSessionRecord"];
-  deleteSessionRecord: SessionDependencies["deleteSessionRecord"];
   invalidateSessionStopQueries: (input: { repoPath: string; taskId: string }) => Promise<void>;
 };
 
@@ -60,7 +54,6 @@ export const createAgentSessionActions = ({
   workspaceId,
   adapter,
   replaceSession,
-  removeSession,
   readSessionSnapshot,
   taskRef,
   repoEpochRef,
@@ -81,8 +74,6 @@ export const createAgentSessionActions = ({
   loadSourceSession,
   loadAgentSessionHistory,
   refreshTaskData,
-  persistSessionRecord,
-  deleteSessionRecord,
   invalidateSessionStopQueries,
 }: SessionActionsDependencies) => {
   const prepareSessionSend = createPrepareSessionSend({
@@ -106,12 +97,8 @@ export const createAgentSessionActions = ({
     recordTurnUserMessageTimestamp: sessionTurnState.timing.recordTurnUserMessageTimestamp,
   });
 
-  const commitSessionModelChange = createCommitSessionModelChangePolicy({
-    persistSessionRecord,
-  });
-  const commitStoppedSession = createCommitStoppedSessionPolicy({
+  const refreshStoppedWorkflowSession = createRefreshStoppedWorkflowSession({
     workspaceRepoPath,
-    persistSessionRecord,
     invalidateSessionStopQueries,
     refreshTaskData,
   });
@@ -125,13 +112,10 @@ export const createAgentSessionActions = ({
     },
     session: {
       replaceSession,
-      removeSession,
       readSessionSnapshot,
       sessionStartGateRef,
       loadSourceSession,
       loadAgentSessionHistory,
-      persistSessionRecord,
-      deleteSessionRecord,
       clearSessionObservationState: sessionTurnState.clearSession,
     },
     runtime: {
@@ -160,7 +144,7 @@ export const createAgentSessionActions = ({
     readSessionSnapshot,
     updateSession,
     clearSessionTurnState: sessionTurnState.clearSession,
-    commitStoppedSession,
+    refreshStoppedWorkflowSession,
   });
 
   const pendingInputActions = createPendingInputActions({
@@ -177,7 +161,6 @@ export const createAgentSessionActions = ({
     adapter,
     readSessionSnapshot,
     updateSession,
-    commitSessionModelChange,
   });
 
   return {

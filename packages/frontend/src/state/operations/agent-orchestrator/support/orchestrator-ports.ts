@@ -1,8 +1,6 @@
 import type {
-  AgentSessionIdentity,
   AgentSessionLiveEnvelope,
   AgentSessionLiveRefreshInput,
-  AgentSessionRecord,
   TaskWorktreeSummary,
 } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
@@ -10,16 +8,6 @@ import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
 import type { host } from "../../shared/host";
 
 export type AgentOrchestratorHostPort = AgentSessionReadPort & {
-  agentSessionDelete: (
-    repoPath: string,
-    taskId: string,
-    identity: AgentSessionIdentity,
-  ) => Promise<void>;
-  agentSessionUpsert: (
-    repoPath: string,
-    taskId: string,
-    record: AgentSessionRecord,
-  ) => Promise<void>;
   taskMetadataGetFresh: typeof host.taskMetadataGetFresh;
   taskWorktreeGet: (repoPath: string, taskId: string) => Promise<TaskWorktreeSummary | null>;
 };

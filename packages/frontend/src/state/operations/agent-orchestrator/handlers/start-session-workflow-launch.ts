@@ -14,11 +14,9 @@ import type {
 } from "./start-session.types";
 import { STALE_START_ERROR } from "./start-session-constants";
 import { acquireTaskSessionStartupLease } from "./task-session-startup-lease";
-import { persistInitialSession } from "./start-session-local-state";
 import {
   rollbackBootstrapAfterStartFailure,
-  rollbackStartedSessionAfterPersistenceFailure,
-  rollbackWorkflowSessionRegistration,
+  stopStoredWorkflowSessionAfterLaunchFailure,
 } from "./start-session-rollback";
 import { loadStartSystemPrompt } from "./start-session-runtime";
 import { resolveStartTask } from "./start-session-policies";
@@ -194,55 +192,23 @@ export const registerWorkflowSessionLaunch = async ({
 
   if (isStaleOperation()) {
     const cause = new Error(STALE_START_ERROR);
-    const rollbackInput: Parameters<typeof rollbackWorkflowSessionRegistration>[0] = {
+    const cleanupInput: Parameters<typeof stopStoredWorkflowSessionAfterLaunchFailure>[0] = {
       message: STALE_START_ERROR,
       cause,
       startedCtx,
       identity,
-      session: deps.session,
+      clearSessionObservationState: deps.session.clearSessionObservationState,
       runtime: deps.runtime,
-      stopReason: "start-session-stop-on-stale-before-persist",
-      durableRecordExists: false,
+      stopReason: "start-session-stop-on-stale-before-attach",
     };
     if (bootstrap) {
-      rollbackInput.bootstrap = bootstrap;
+      cleanupInput.bootstrapToComplete = bootstrap;
     }
-    await rollbackWorkflowSessionRegistration(rollbackInput);
-  }
-
-  try {
-    await persistInitialSession({
-      initialSession: sessionState,
-      session: deps.session,
-      tags: {
-        repoPath: startedCtx.repoPath,
-        taskId: startedCtx.taskId,
-        role: startedCtx.role,
-        externalSessionId: startedCtx.summary.externalSessionId,
-      },
-    });
-  } catch (error) {
-    const rollbackInput: Parameters<typeof rollbackStartedSessionAfterPersistenceFailure>[0] = {
-      error,
-      startedCtx,
-      session: deps.session,
-      runtime: deps.runtime,
-    };
-    if (bootstrap) {
-      rollbackInput.bootstrap = bootstrap;
-    }
-    await rollbackStartedSessionAfterPersistenceFailure(rollbackInput);
+    await stopStoredWorkflowSessionAfterLaunchFailure(cleanupInput);
   }
 
   let bootstrapCompletionAttempted = false;
-  let bootstrapCompleted = false;
   try {
-    if (isStaleOperation()) {
-      throw new Error(STALE_START_ERROR);
-    }
-    bootstrapCompletionAttempted = !!bootstrap;
-    await bootstrap?.complete();
-    bootstrapCompleted = !!bootstrap;
     if (isStaleOperation()) {
       throw new Error(STALE_START_ERROR);
     }
@@ -254,20 +220,24 @@ export const registerWorkflowSessionLaunch = async ({
         cause instanceof Error ? { cause } : undefined,
       );
     }
+    bootstrapCompletionAttempted = !!bootstrap;
+    await bootstrap?.complete();
+    if (isStaleOperation()) {
+      throw new Error(STALE_START_ERROR);
+    }
   } catch (cause) {
-    const rollbackInput: Parameters<typeof rollbackWorkflowSessionRegistration>[0] = {
+    const cleanupInput: Parameters<typeof stopStoredWorkflowSessionAfterLaunchFailure>[0] = {
       message: cause instanceof Error ? cause.message : String(cause),
       cause,
       startedCtx,
       identity,
-      session: deps.session,
+      clearSessionObservationState: deps.session.clearSessionObservationState,
       runtime: deps.runtime,
       stopReason: "start-session-stop-after-bootstrap-failure",
     };
-    if (bootstrap && !bootstrapCompleted) {
-      rollbackInput.bootstrap = bootstrap;
-      rollbackInput.commitBootstrapOnDeleteFailure = !bootstrapCompletionAttempted;
+    if (bootstrap && !bootstrapCompletionAttempted) {
+      cleanupInput.bootstrapToComplete = bootstrap;
     }
-    await rollbackWorkflowSessionRegistration(rollbackInput);
+    await stopStoredWorkflowSessionAfterLaunchFailure(cleanupInput);
   }
 };

@@ -5,7 +5,6 @@ import {
   type AgentSessionCollection,
   emptyAgentSessionCollection,
   getAgentSession,
-  removeAgentSession,
   replaceAgentSession,
 } from "@/state/agent-session-collection";
 import {
@@ -48,16 +47,11 @@ export const createSessionDependenciesFixture = (
     replaceSession: (session) => {
       sessionsRef.current = replaceAgentSession(sessionsRef.current, session);
     },
-    removeSession: (identity) => {
-      sessionsRef.current = removeAgentSession(sessionsRef.current, identity);
-    },
     readSessionSnapshot: (identity) => getAgentSession(sessionsRef.current, identity),
     sessionStartGateRef: { current: createSessionStartGate() },
     loadSourceSession: async ({ sourceSession }) =>
       getAgentSession(sessionsRef.current, sourceSession),
     loadAgentSessionHistory: async () => null,
-    persistSessionRecord: async () => {},
-    deleteSessionRecord: async () => {},
     clearSessionObservationState: () => undefined,
     ...sessionOverrides,
   };

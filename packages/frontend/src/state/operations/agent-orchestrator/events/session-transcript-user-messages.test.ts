@@ -162,7 +162,6 @@ describe("agent-orchestrator session transcript events", () => {
 
   test("upserts session compaction notices without replacing native lifecycle state", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
-    const updateSessionOptions: Array<Parameters<SessionUpdateFn>[2]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(handler);
@@ -223,10 +222,8 @@ describe("agent-orchestrator session transcript events", () => {
     ]);
 
     const applySessionUpdate = createSessionUpdater(sessionsRef);
-    const updateSession: SessionUpdateFn = (identity, updater, options) => {
-      updateSessionOptions.push(options);
-      return applySessionUpdate(identity, updater);
-    };
+    const updateSession: SessionUpdateFn = (identity, updater) =>
+      applySessionUpdate(identity, updater);
     await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
@@ -310,12 +307,6 @@ describe("agent-orchestrator session transcript events", () => {
         },
       }),
     );
-    expect(updateSessionOptions).toEqual([
-      { persist: true },
-      { persist: true },
-      { persist: true },
-      { persist: true },
-    ]);
     expect(session).toEqual(
       expect.objectContaining({
         ...protectedSessionState,
@@ -326,7 +317,6 @@ describe("agent-orchestrator session transcript events", () => {
 
   test("keeps repository compaction notices live-only", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
-    const updateSessionOptions: Array<Parameters<SessionUpdateFn>[2]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(handler);
@@ -338,10 +328,8 @@ describe("agent-orchestrator session transcript events", () => {
       buildSession({ sessionAssociation: { kind: "repository" } }),
     ]);
     const applySessionUpdate = createSessionUpdater(sessionsRef);
-    const updateSession: SessionUpdateFn = (identity, updater, options) => {
-      updateSessionOptions.push(options);
-      return applySessionUpdate(identity, updater);
-    };
+    const updateSession: SessionUpdateFn = (identity, updater) =>
+      applySessionUpdate(identity, updater);
     await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
@@ -378,7 +366,6 @@ describe("agent-orchestrator session transcript events", () => {
       message: "Session compacted.",
     });
 
-    expect(updateSessionOptions).toEqual([undefined, undefined]);
     expect(getSessionMessages(sessionsRef).at(-1)).toEqual(
       expect.objectContaining({
         id: "compact-repository",

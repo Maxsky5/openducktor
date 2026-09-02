@@ -55,6 +55,7 @@ import type {
 import { createTaskStopImpactUseCase } from "./use-cases/get-task-stop-impact";
 import type {
   AgentSessionDeleteInput,
+  AgentSessionUpdateModelInput,
   AgentSessionUpsertInput,
   BuildBlockedInput,
   BuildCompletedInput,
@@ -135,6 +136,9 @@ export type TaskService = {
     input: ListAgentSessionsForTasksInput,
   ): Effect.Effect<TaskAgentSessions[], TaskServiceError>;
   agentSessionUpsert(input: AgentSessionUpsertInput): Effect.Effect<boolean, TaskServiceError>;
+  agentSessionUpdateModel(
+    input: AgentSessionUpdateModelInput,
+  ): Effect.Effect<boolean, TaskServiceError>;
   agentSessionDelete(input: AgentSessionDeleteInput): Effect.Effect<boolean, TaskServiceError>;
   getApprovalContext(
     input: TaskIdInput,
@@ -398,6 +402,8 @@ const createTaskServiceImplementation = (
   };
   return {
     agentSessionDelete: (input) => mapTaskServiceErrors(service.agentSessionDelete(input)),
+    agentSessionUpdateModel: (input) =>
+      mapTaskServiceErrors(service.agentSessionUpdateModel(input)),
     agentSessionsList: (input) => mapTaskServiceErrors(service.agentSessionsList(input)),
     agentSessionsListForTasks: (input) =>
       mapTaskServiceErrors(service.agentSessionsListForTasks(input)),

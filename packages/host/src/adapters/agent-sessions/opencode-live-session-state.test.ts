@@ -247,6 +247,37 @@ describe("OpenCode host live-session state", () => {
     expect(state.listSnapshots()).toEqual([]);
   });
 
+  test("rejects a registered ref when OpenCode says it has a parent", () => {
+    const state = createState();
+    state.retainControlSummary(summary("child"));
+    const childRef = state.listSnapshots()[0]?.ref;
+    if (!childRef) {
+      throw new Error("Expected a retained OpenDucktor session.");
+    }
+
+    expect(() =>
+      state.applyWorkflowRoots([
+        {
+          type: "present",
+          ref: childRef,
+          sources: [
+            {
+              externalSessionId: "child",
+              parentExternalSessionId: "parent",
+              workingDirectory: childRef.workingDirectory,
+              sessionAssociation: { kind: "unbound" },
+              title: "OpenCode subagent",
+              startedAt: "2026-07-16T10:01:00.000Z",
+              runtimeActivity: "idle",
+              pendingApprovals: [],
+              pendingQuestions: [],
+            },
+          ],
+        },
+      ]),
+    ).toThrow("OpenCode did not return registered session 'child'");
+  });
+
   test("removes a root only after its durable registration is omitted", () => {
     const state = createState();
     state.retainControlSummary(summary("parent"));

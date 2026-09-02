@@ -64,6 +64,7 @@ const taskStoreWithTasks = (
     setSpecDocument: () => Effect.dieMessage("unexpected setSpecDocument"),
     transitionTask: () => Effect.dieMessage("unexpected transitionTask"),
     updateTask: () => Effect.dieMessage("unexpected updateTask"),
+    updateAgentSessionModel: () => Effect.dieMessage("unexpected updateAgentSessionModel"),
     upsertAgentSession: () => Effect.dieMessage("unexpected upsertAgentSession"),
   }) satisfies RealTaskStorePort;
 

@@ -147,6 +147,57 @@ describe("browser shell bridge", () => {
     });
   });
 
+  test("uses current registered session refs when the live stream reconnects", async () => {
+    configureBrowserRuntimeConfig({ backendUrl: "http://127.0.0.1:14327", appToken: "app-token" });
+    // @ts-expect-error test EventSource shim
+    globalThis.EventSource = TaskEventSource;
+    const fetchMock = mock(
+      async (url: string | URL | Request, _init?: RequestInit) =>
+        new Response(url.toString().endsWith("/session") ? JSON.stringify({ ok: true }) : "null", {
+          status: 200,
+        }),
+    );
+    globalThis.fetch = createFetchFixture(fetchMock);
+    const bridge = createBrowserShellBridge();
+    const firstInput = { repoPath: "/repo", registeredSessionRefs: [] };
+    const currentInput = {
+      repoPath: "/repo",
+      registeredSessionRefs: [
+        {
+          repoPath: "/repo",
+          runtimeKind: "opencode" as const,
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "root-2",
+        },
+      ],
+    };
+
+    const observation = bridge.observeAgentSessionLive(firstInput, () => undefined);
+    const eventSource = await waitForTaskEventSource();
+    await waitForTaskEventSourceListener(eventSource, "open");
+    eventSource.emit("open", "");
+    const stop = await observation;
+    await bridge.client.agentSessionLiveRefresh(currentInput);
+    eventSource.emit("open", "");
+
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const count = fetchMock.mock.calls.filter(([url]) =>
+        url.toString().endsWith("/invoke/agent_session_live_refresh"),
+      ).length;
+      if (count === 3) {
+        break;
+      }
+      await Promise.resolve();
+    }
+
+    const refreshCalls = fetchMock.mock.calls.filter(([url]) =>
+      url.toString().endsWith("/invoke/agent_session_live_refresh"),
+    );
+    expect(refreshCalls).toHaveLength(3);
+    expect(refreshCalls[2]?.[1]).toMatchObject({ body: JSON.stringify(currentInput) });
+    stop();
+  });
+
   test("fails when the web build version is missing", () => {
     delete process.env.VITE_ODT_APP_VERSION;
 

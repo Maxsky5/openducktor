@@ -26,6 +26,7 @@ export const createTaskStoreTestDouble = <Overrides extends Partial<TaskStorePor
   setSpecDocument: unexpectedTaskStoreCall("setSpecDocument"),
   transitionTask: unexpectedTaskStoreCall("transitionTask"),
   updateTask: unexpectedTaskStoreCall("updateTask"),
+  updateAgentSessionModel: unexpectedTaskStoreCall("updateAgentSessionModel"),
   upsertAgentSession: unexpectedTaskStoreCall("upsertAgentSession"),
   ...overrides,
 });

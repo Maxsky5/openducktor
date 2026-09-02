@@ -6,7 +6,6 @@ import {
   createAgentSessionCollection,
   getAgentSession,
   listAgentSessions,
-  removeAgentSession,
   replaceAgentSession,
   replaceAgentSessionByIdentity,
 } from "@/state/agent-session-collection";
@@ -102,9 +101,6 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
     replaceSession: (session) => {
       sessionsRef.current = replaceAgentSession(sessionsRef.current, session);
     },
-    removeSession: (identity) => {
-      sessionsRef.current = removeAgentSession(sessionsRef.current, identity);
-    },
     readSessionSnapshot: (identity) => getAgentSession(sessionsRef.current, identity),
     taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
     repoEpochRef: { current: 1 },
@@ -145,8 +141,6 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
       getAgentSession(sessionsRef.current, sourceSession),
     loadAgentSessionHistory: async () => null,
     refreshTaskData: async () => {},
-    persistSessionRecord: async () => {},
-    deleteSessionRecord: async () => {},
     invalidateSessionStopQueries: async () => {},
   };
 

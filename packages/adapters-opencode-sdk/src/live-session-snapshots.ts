@@ -365,7 +365,7 @@ export const readOpencodeWorkflowRoots = async ({
             pendingApprovals: pending.approvals,
             pendingQuestions: pending.questions,
           };
-          if (session.id !== ref.externalSessionId && session.parentID) {
+          if (session.parentID) {
             source.parentExternalSessionId = session.parentID;
           }
           return source;

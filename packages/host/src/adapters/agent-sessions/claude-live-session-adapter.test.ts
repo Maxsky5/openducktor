@@ -1402,6 +1402,7 @@ describe("Claude host live-session adapter", () => {
     const firstUpdate = Effect.runPromise(
       harness.adapter.updateSessionModel({
         ...controlRef,
+        sessionScope: { kind: "repository" },
         model: {
           runtimeKind: "claude",
           providerId: "claude",
@@ -1413,6 +1414,7 @@ describe("Claude host live-session adapter", () => {
     const secondUpdate = Effect.runPromise(
       harness.adapter.updateSessionModel({
         ...controlRef,
+        sessionScope: { kind: "repository" },
         model: {
           runtimeKind: "claude",
           providerId: "claude",

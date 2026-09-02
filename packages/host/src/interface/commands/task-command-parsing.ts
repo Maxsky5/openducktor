@@ -1,6 +1,5 @@
 import {
   type AgentSessionIdentity,
-  type AgentSessionRecord,
   agentSessionRecordSchema,
   type PlanSubtaskInput,
   type PullRequest,
@@ -11,7 +10,6 @@ import {
   type TaskUpdatePatch,
 } from "@openducktor/contracts";
 import { z } from "zod";
-import { compactAgentSessionRecord } from "../../domain/agent-session-records";
 import { HostValidationError } from "../../effect/host-errors";
 import {
   commandInputStringSchema,
@@ -142,12 +140,7 @@ export const parsePlanSubtasks = (
   );
 };
 
-const agentSessionStringKeys: ReadonlyArray<
-  keyof Pick<
-    AgentSessionRecord,
-    "externalSessionId" | "role" | "startedAt" | "runtimeKind" | "workingDirectory"
-  >
-> = ["externalSessionId", "role", "startedAt", "runtimeKind", "workingDirectory"];
+const agentSessionStringKeys = ["externalSessionId", "runtimeKind", "workingDirectory"] as const;
 const normalizedAgentSessionInputSchema = z.record(z.string(), z.json()).transform((record) => {
   const normalized = { ...record };
   for (const key of agentSessionStringKeys) {
@@ -159,30 +152,6 @@ const normalizedAgentSessionInputSchema = z.record(z.string(), z.json()).transfo
   }
   return normalized;
 });
-
-export const normalizedAgentSessionRecordSchema = normalizedAgentSessionInputSchema.transform(
-  (record, context) => {
-    const parsed = agentSessionRecordSchema.safeParse(record);
-    if (parsed.success) return parsed.data;
-    for (const issue of parsed.error.issues) {
-      context.addIssue({ code: "custom", message: issue.message, path: issue.path });
-    }
-    return z.NEVER;
-  },
-);
-
-export const parseAgentSessionRecord = (
-  result: z.ZodSafeParseResult<AgentSessionRecord>,
-): AgentSessionRecord => {
-  if (result.success) {
-    return result.data;
-  }
-
-  throw invalidInput(
-    `agent_session_upsert input.session is invalid: ${result.error.message}`,
-    "input.session",
-  );
-};
 
 const agentSessionIdentitySchema = agentSessionRecordSchema.pick({
   externalSessionId: true,
@@ -248,13 +217,4 @@ export const parseTaskDirectMergeInput = (
     `task_direct_merge input.input is invalid: ${result.error.message}`,
     "input.input",
   );
-};
-
-export const compactAgentSessionForStorage = (session: AgentSessionRecord): AgentSessionRecord => {
-  const compacted = compactAgentSessionRecord(session);
-  if (compacted.success) {
-    return compacted.session;
-  }
-
-  throw invalidInput(compacted.error.message, compacted.error.field);
 };

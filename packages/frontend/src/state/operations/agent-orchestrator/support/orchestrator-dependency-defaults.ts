@@ -6,13 +6,9 @@ import type { AgentOrchestratorDependencies } from "./orchestrator-ports";
 export const createDefaultAgentOrchestratorDependencies = (): AgentOrchestratorDependencies => ({
   queryClient: appQueryClient,
   hostPort: {
-    agentSessionDelete: (repoPath, taskId, identity) =>
-      host.agentSessionDelete(repoPath, taskId, identity),
     agentSessionsList: (repoPath, taskId) => host.agentSessionsList(repoPath, taskId),
     agentSessionsListForTasks: (repoPath, taskIds) =>
       host.agentSessionsListForTasks(repoPath, taskIds),
-    agentSessionUpsert: (repoPath, taskId, record) =>
-      host.agentSessionUpsert(repoPath, taskId, record),
     taskMetadataGetFresh: (repoPath, taskId) => host.taskMetadataGetFresh(repoPath, taskId),
     taskWorktreeGet: (repoPath, taskId) => host.taskWorktreeGet(repoPath, taskId),
   },

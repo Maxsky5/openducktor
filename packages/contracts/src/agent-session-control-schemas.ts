@@ -126,6 +126,7 @@ export type AgentSessionControlSendInput = z.infer<typeof agentSessionControlSen
 
 export const agentSessionControlUpdateModelInputSchema = agentSessionLiveRefSchema
   .extend({
+    sessionScope: agentSessionScopeSchema,
     model: agentModelSelectionSchema.nullable(),
   })
   .strict();

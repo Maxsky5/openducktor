@@ -109,11 +109,9 @@ export const createTestDependencies = (
       },
     }),
     hostPort: {
-      agentSessionDelete: async () => undefined,
       agentSessionsList: async () => [],
       agentSessionsListForTasks: async (_repoPath, taskIds) =>
         taskIds.map((taskId) => ({ taskId, agentSessions: [] })),
-      agentSessionUpsert: (...args) => host.agentSessionUpsert(...args),
       taskMetadataGetFresh: (...args) => host.taskMetadataGetFresh(...args),
       taskWorktreeGet: (...args) => host.taskWorktreeGet(...args),
       ...hostOverrides,
@@ -243,8 +241,6 @@ export const createHookHarness = (args: {
         agentSessionsList: (repoPath, taskId) => host.agentSessionsList(repoPath, taskId),
         agentSessionsListForTasks: (repoPath, taskIds) =>
           host.agentSessionsListForTasks(repoPath, taskIds),
-        agentSessionUpsert: (repoPath, taskId, record) =>
-          host.agentSessionUpsert(repoPath, taskId, record),
         taskWorktreeGet: (repoPath, taskId) => host.taskWorktreeGet(repoPath, taskId),
       },
       {

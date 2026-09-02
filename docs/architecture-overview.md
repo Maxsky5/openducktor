@@ -89,12 +89,12 @@ Key boundary:
 8. The host selects the registered runtime-specific live-session adapter, starts, resumes, or forks the session, and updates the normalized host projection.
 9. The renderer consumes that projection through one ordered attachment: its initial snapshot is the first envelope, followed by normalized changes and transcript events on the same channel.
 10. On prompt send, the host adapter applies the effective role-scoped runtime policy and sends the runtime-native request.
-11. Only the durable session record is persisted via `host.agentSessionUpsert` into task metadata for restart/reuse continuity. Pending input, activity, context usage, routes, and reply identities remain ephemeral host state.
+11. For a workflow session, the host stores the durable session record from the successful runtime control result before it returns the result to the frontend. Pending input, activity, context usage, routes, and reply identities remain ephemeral host state.
 
 Critical session invariants:
 
 - Read-only roles (`spec`, `planner`, `qa`) must auto-reject mutating permission prompts; on auto-reply failure, permission remains actionable and a system error is emitted.
-- Stale workspace protection must roll back newly started/resumed sessions with best-effort `stopSession` cleanup.
+- Before host control succeeds, stale workspace protection aborts session preparation. After host control succeeds, cleanup may stop the runtime but must keep the stored task session and its worktree resources.
 - The runtime-specific live adapter must be registered and observing before its runtime can emit events, and it must be released when that runtime ends.
 - Transcript history is an on-demand read for the selected session. It must not discover pending input, recover context implicitly, or delay live-session hydration.
 

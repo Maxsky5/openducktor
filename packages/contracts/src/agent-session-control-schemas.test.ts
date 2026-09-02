@@ -6,6 +6,7 @@ import {
   agentSessionControlSendInputSchema,
   agentSessionControlStartInputSchema,
   agentSessionControlSummarySchema,
+  agentSessionControlUpdateModelInputSchema,
 } from "./agent-session-control-schemas";
 
 const workflowScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
@@ -201,6 +202,30 @@ describe("agent session control contracts", () => {
         parts: [{ kind: "text", text: "hello" }],
       }),
     ).toMatchObject({ sessionScope: repositoryScope });
+    expect(
+      agentSessionControlUpdateModelInputSchema.parse({
+        ...ref,
+        model: null,
+      }),
+    ).toMatchObject({ sessionScope: repositoryScope });
+  });
+
+  test("requires task scope for workflow model persistence", () => {
+    const input = {
+      repoPath: "/repo",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+      model: null,
+    };
+
+    expect(agentSessionControlUpdateModelInputSchema.safeParse(input).success).toBe(false);
+    expect(
+      agentSessionControlUpdateModelInputSchema.parse({
+        ...input,
+        sessionScope: workflowScope,
+      }),
+    ).toMatchObject({ sessionScope: workflowScope });
   });
 
   test("rejects unbound scope from startable controls", () => {

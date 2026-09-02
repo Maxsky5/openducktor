@@ -151,7 +151,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     }
   });
 
-  test("persists terminal event state when the host stop later fails", async () => {
+  test("keeps terminal event state when the host stop later fails", async () => {
     const adapter = new OpencodeSdkAdapter();
     const session = buildSession();
     const sessionsRef = createSessionsRef([session]);
@@ -165,15 +165,11 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       }));
       throw new Error("stop failed after terminal event");
     };
-    let persistenceCalls = 0;
     const actions = createSessionActions({
       adapter,
       sessionsRef,
       readSessionSnapshot: sessionsStore.getSessionSnapshot,
       updateSession: sessionsStore.updateSession,
-      persistSessionRecord: async () => {
-        persistenceCalls += 1;
-      },
     });
 
     await expect(actions.stopAgentSession(session)).rejects.toThrow(
@@ -181,7 +177,6 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     );
 
     expect(sessionsStore.getSessionSnapshot(session)?.status).toBe("stopped");
-    expect(persistenceCalls).toBe(1);
   });
 
   test("records stop intent before awaiting authoritative session stop", async () => {
@@ -264,17 +259,10 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     const sessionsRef = createSessionsRef([session]);
     const sessionsStore = createAgentSessionsStore("/tmp/repo");
     sessionsStore.replaceSession(session);
-    const persistenceOptions: Array<{ persist: true } | undefined> = [];
-    let persistSessionRecordCalls = 0;
-
     const updateSession = (
       identity: AgentSessionIdentity,
       updater: (current: AgentSessionState) => AgentSessionState,
-      options?: { persist: true },
-    ) => {
-      persistenceOptions.push(options);
-      return sessionsStore.updateSession(identity, updater);
-    };
+    ) => sessionsStore.updateSession(identity, updater);
 
     const unsubscribe = await listenToAgentSessionEvents({
       adapter,
@@ -323,9 +311,6 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       taskRef: { current: [] },
       readSessionSnapshot: sessionsStore.getSessionSnapshot,
       updateSession,
-      persistSessionRecord: async () => {
-        persistSessionRecordCalls += 1;
-      },
     });
 
     try {
@@ -355,8 +340,6 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       expect(toolMessage.meta.error).toBe("Session stopped at your request.");
       expect(stoppedSession.status).toBe("stopped");
       expect(stoppedSession.stopRequestedAt).toBeNull();
-      expect(persistenceOptions).not.toContainEqual({ persist: true });
-      expect(persistSessionRecordCalls).toBe(1);
     } finally {
       adapter.subscribeEvents = originalSubscribeEvents;
       adapter.stopSession = originalStopSession;
@@ -488,10 +471,9 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     expect(getSession(sessionsRef)?.status).toBe("stopped");
   });
 
-  test("persists stopped snapshot before refreshing task-owned state", async () => {
+  test("refreshes task-owned state after the host stops the session", async () => {
     const adapter = new OpencodeSdkAdapter();
 
-    const persistDeferred = createDeferred<void>();
     const callOrder: string[] = [];
     adapter.stopSession = async () => {
       callOrder.push("stop-authoritative-session");
@@ -543,11 +525,6 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       refreshTaskData: async () => {
         callOrder.push("refresh-task-data");
       },
-      persistSessionRecord: async () => {
-        callOrder.push("persist-start");
-        await persistDeferred.promise;
-        callOrder.push("persist-end");
-      },
       invalidateSessionStopQueries: async () => {
         callOrder.push("invalidate-stop-queries");
       },
@@ -559,13 +536,10 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     expect(callOrder).toContain("stop-authoritative-session");
     expect(callOrder).not.toContain("force-read-model-refresh");
 
-    persistDeferred.resolve();
     await stopPromise;
 
-    const persistEndIndex = callOrder.indexOf("persist-end");
-    expect(persistEndIndex).toBeGreaterThan(-1);
-    expect(callOrder.indexOf("invalidate-stop-queries")).toBeGreaterThan(persistEndIndex);
-    expect(callOrder.indexOf("refresh-task-data")).toBeGreaterThan(persistEndIndex);
+    expect(callOrder).toContain("invalidate-stop-queries");
+    expect(callOrder).toContain("refresh-task-data");
     expect(callOrder).not.toContain("force-read-model-refresh");
     expect(getSession(sessionsRef)?.status).toBe("stopped");
     expect(getSession(sessionsRef)?.pendingApprovals).toHaveLength(0);
@@ -617,7 +591,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     ]);
   });
 
-  test("does not call task persistence or task refresh for a repository session", async () => {
+  test("does not refresh task state for a repository session", async () => {
     const adapter = new OpencodeSdkAdapter();
     const stopTargets: SessionRef[] = [];
     adapter.stopSession = async (target) => {
@@ -633,9 +607,6 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       adapter,
       sessionsRef,
       workspaceRepoPath: "/tmp/active-workspace",
-      persistSessionRecord: async () => {
-        taskCalls.push("persist");
-      },
       refreshTaskData: async () => {
         taskCalls.push("refresh");
       },
@@ -674,9 +645,6 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      persistSessionRecord: async () => {
-        taskCalls.push("persist");
-      },
       refreshTaskData: async () => {
         taskCalls.push("refresh");
       },
@@ -716,7 +684,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     expect(stopCalls).toBe(0);
   });
 
-  test("reports workflow stop persistence failure without task invalidation", async () => {
+  test("reports workflow stop refresh failure", async () => {
     const adapter = new OpencodeSdkAdapter();
     adapter.stopSession = async () => {};
     const taskCalls: string[] = [];
@@ -724,24 +692,21 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      persistSessionRecord: async () => {
-        taskCalls.push("persist");
-        throw new Error("stopped session persistence failed");
-      },
       refreshTaskData: async () => {
         taskCalls.push("refresh");
       },
       invalidateSessionStopQueries: async () => {
         taskCalls.push("invalidate");
+        throw new Error("stopped session refresh failed");
       },
     });
 
     await expect(actions.stopAgentSession(getSession(sessionsRef))).rejects.toThrow(
-      "stopped session persistence failed",
+      "stopped session refresh failed",
     );
 
     expect(getSession(sessionsRef).status).toBe("stopped");
-    expect(taskCalls).toEqual(["persist"]);
+    expect(taskCalls).toContain("invalidate");
   });
 
   test("rejects stop without an active workspace", async () => {

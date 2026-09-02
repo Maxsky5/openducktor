@@ -144,7 +144,13 @@ describe("OpenCode live session controls", () => {
       },
     ]);
 
-    await Effect.runPromise(adapter.updateSessionModel({ ...controlRef, model: null }));
+    await Effect.runPromise(
+      adapter.updateSessionModel({
+        ...controlRef,
+        sessionScope: startInput.sessionScope,
+        model: null,
+      }),
+    );
     await Effect.runPromise(adapter.stopSession(controlRef));
     expect(adapter.matches(controlRef)).toBe(false);
     await Effect.runPromise(

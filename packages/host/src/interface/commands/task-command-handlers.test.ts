@@ -94,20 +94,6 @@ describe("createTaskCommandHandlers", () => {
           return true;
         });
       },
-      agentSessionUpsert(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "agent_session_upsert", input });
-            return true;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       agentSessionsList(input) {
         return Effect.tryPromise({
           try: async () => {
@@ -623,22 +609,6 @@ describe("createTaskCommandHandlers", () => {
     ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.agent_session_upsert?.({
-          repoPath: "/repo",
-          taskId: "task-1",
-          session: {
-            externalSessionId: "session-1",
-            role: "build",
-            startedAt: "2026-05-10T10:00:00.000Z",
-            runtimeKind: "opencode",
-            workingDirectory: "/repo/task-1",
-            selectedModel: null,
-          },
-        }),
-      ),
-    ).resolves.toBe(true);
-    await expect(
-      runHandler(
         handlers.agent_session_delete?.({
           repoPath: "/repo",
           taskId: "task-1",
@@ -827,21 +797,6 @@ describe("createTaskCommandHandlers", () => {
       {
         command: "task_metadata_get",
         input: { repoPath: "/repo", taskId: "task-1" },
-      },
-      {
-        command: "agent_session_upsert",
-        input: {
-          repoPath: "/repo",
-          taskId: "task-1",
-          session: {
-            externalSessionId: "session-1",
-            role: "build",
-            startedAt: "2026-05-10T10:00:00.000Z",
-            runtimeKind: "opencode",
-            workingDirectory: "/repo/task-1",
-            selectedModel: null,
-          },
-        },
       },
       {
         command: "agent_session_delete",
