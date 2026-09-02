@@ -73,7 +73,7 @@ function SettingsRadioGroup<Value extends string>({
       value={value}
       disabled={disabled}
       data-variant="segmented"
-      className="flex h-8 w-full items-center gap-0.5 rounded-md bg-muted p-0.5"
+      className="flex h-8 w-full items-center gap-1 rounded-lg bg-muted p-1"
       onValueChange={(nextValue) => {
         const option = options.find((candidate) => candidate.value === nextValue);
         if (option && option.value !== value) {
