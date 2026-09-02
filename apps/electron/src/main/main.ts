@@ -49,6 +49,7 @@ import {
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
   ELECTRON_NOTIFICATION_GET_APP_FOCUS_CHANNEL,
   ELECTRON_NOTIFICATION_GET_CAPABILITY_CHANNEL,
+  ELECTRON_NOTIFICATION_OPEN_SETTINGS_CHANNEL,
   ELECTRON_NOTIFICATION_REQUEST_PERMISSION_CHANNEL,
   ELECTRON_NOTIFICATION_SHOW_CHANNEL,
   ELECTRON_OPEN_EXTERNAL_URL_CHANNEL,
@@ -89,6 +90,11 @@ import { createElectronMainLogger, initializeElectronMainLogger } from "./electr
 import { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindings";
 import { resolveElectronRuntimeDistribution } from "./electron-runtime-distribution";
 import { createElectronNotificationService } from "./electron-notification-service";
+import {
+  readMacosNotificationAuthorizationStatus,
+  resolveElectronNotificationPermission,
+  resolveElectronNotificationSettingsUrl,
+} from "./electron-notification-permission";
 import { disableElectronKeychainStorage } from "./electron-storage-policy";
 import { registerElectronTaskAssetProtocol } from "./electron-task-asset-protocol";
 import { registerElectronTaskStreamIpc } from "./electron-task-stream-ipc";
@@ -748,6 +754,27 @@ const registerIpcHandlers = (
   ipcMain.handle(ELECTRON_NOTIFICATION_REQUEST_PERMISSION_CHANNEL, () =>
     notificationService.getCapability(),
   );
+  ipcMain.handle(ELECTRON_NOTIFICATION_OPEN_SETTINGS_CHANNEL, async () => {
+    const settingsUrl = resolveElectronNotificationSettingsUrl(process.platform);
+    if (!settingsUrl) {
+      throw new ElectronOperationError({
+        operation: "electron.notifications.open-system-settings",
+        message: "This platform does not provide notification settings that OpenDucktor can open.",
+      });
+    }
+    await runElectronEffect(
+      Effect.tryPromise({
+        try: () => shell.openExternal(settingsUrl),
+        catch: (cause) =>
+          new ElectronOperationError({
+            operation: "electron.notifications.open-system-settings",
+            message: errorMessage(cause),
+            cause,
+            details: { url: settingsUrl },
+          }),
+      }),
+    );
+  });
   ipcMain.handle(ELECTRON_NOTIFICATION_GET_APP_FOCUS_CHANNEL, () =>
     notificationService.isAppFocused(),
   );
@@ -935,6 +962,11 @@ const configureElectronReadyRuntimeEffect = ({
       }
       const notificationService = createElectronNotificationService({
         Notification,
+        getPermission: () =>
+          resolveElectronNotificationPermission(
+            process.platform,
+            readMacosNotificationAuthorizationStatus,
+          ),
         getWindows: () => BrowserWindow.getAllWindows(),
       });
       activeNotificationService = notificationService;

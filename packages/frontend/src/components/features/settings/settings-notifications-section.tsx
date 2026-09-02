@@ -7,7 +7,7 @@ import {
   type NotificationSettings,
   type NotificationTarget,
 } from "@openducktor/contracts";
-import { Bell, BellRing } from "lucide-react";
+import { Bell, BellRing, Settings } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -259,10 +259,14 @@ export function SettingsNotificationsSection({
   const {
     capability,
     capabilityDescription,
+    isOpeningSettings,
     isTesting,
+    openSystemSettings,
     status: testStatus,
     testNotification,
   } = useNotificationTestControls(notifications);
+  const canOpenSystemSettings =
+    capability?.platform === "electron" && capability.permission === "denied";
   const previewCue = (cue: NotificationCue): void => {
     void notificationRuntime.previewCue(cue, notifications.volumePercent);
   };
@@ -396,10 +400,20 @@ export function SettingsNotificationsSection({
           ) : null}
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
+          {canOpenSystemSettings ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={disabled || isOpeningSettings || isTesting}
+              onClick={() => void openSystemSettings()}
+            >
+              <Settings data-icon="inline-start" /> Open system settings
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="outline"
-            disabled={disabled || isTesting}
+            disabled={disabled || isOpeningSettings || isTesting}
             onClick={() => void testNotification("in_app")}
           >
             <Bell data-icon="inline-start" /> Test in-app
@@ -407,7 +421,7 @@ export function SettingsNotificationsSection({
           <Button
             type="button"
             variant="outline"
-            disabled={disabled || isTesting || capability?.supported === false}
+            disabled={disabled || isOpeningSettings || isTesting || capability?.supported === false}
             onClick={() => void testNotification("os")}
           >
             <BellRing data-icon="inline-start" /> Test OS

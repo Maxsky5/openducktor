@@ -84,6 +84,7 @@ export type TerminalBridge = {
 export type NotificationBridge = {
   getCapability(): Promise<NotificationOsCapability>;
   requestPermission(): Promise<NotificationOsCapability>;
+  openSystemSettings(): Promise<void>;
   isAppFocused(): Promise<boolean>;
   withExternalDeliveryOwnership(
     occurrenceId: string,
@@ -196,6 +197,7 @@ export const createUnavailableShellBridge = (): ShellBridge => ({
       permission: "not_applicable",
       canGuaranteeSilent: false,
     }),
+    openSystemSettings: failUnavailable,
     isAppFocused: async () => false,
     withExternalDeliveryOwnership: async (_occurrenceId, dispatch) => dispatch(false),
     showOsNotification: async () => ({

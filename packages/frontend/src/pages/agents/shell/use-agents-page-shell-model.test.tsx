@@ -532,6 +532,7 @@ const notificationContextValue: NotificationContextValue = {
     permission: "not_applicable",
     canGuaranteeSilent: false,
   }),
+  openSystemSettings: async () => {},
   previewCue: async () => {},
   testInApp: async () => {},
   testOs: async () => ({ status: "shown" }),

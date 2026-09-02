@@ -12,5 +12,6 @@ export const notificationOsCapabilityQueryOptions = (
   queryOptions({
     queryKey: notificationQueryKeys.osCapability(),
     queryFn: getCapability,
+    refetchOnWindowFocus: true,
     staleTime: 0,
   });

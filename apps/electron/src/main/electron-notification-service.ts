@@ -36,11 +36,13 @@ type ElectronNotificationWindow = {
 
 type CreateElectronNotificationServiceOptions = {
   Notification: ElectronNotificationConstructor;
+  getPermission(): NotificationOsCapability["permission"];
   getWindows(): ElectronNotificationWindow[];
 };
 
 export const createElectronNotificationService = ({
   Notification,
+  getPermission,
   getWindows,
 }: CreateElectronNotificationServiceOptions) => {
   const retainedNotifications = new Set<ElectronNotificationInstance>();
@@ -50,7 +52,7 @@ export const createElectronNotificationService = ({
     const capability: NotificationOsCapability = {
       platform: "electron",
       supported: Notification.isSupported(),
-      permission: "not_applicable",
+      permission: getPermission(),
       canGuaranteeSilent: true,
     };
     if (latestFailureMessage) {
