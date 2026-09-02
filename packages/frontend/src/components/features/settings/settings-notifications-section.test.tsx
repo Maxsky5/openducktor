@@ -3,7 +3,7 @@ import {
   createDefaultNotificationSettings,
   NOTIFICATION_KIND_VALUES,
 } from "@openducktor/contracts";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { act, type ReactElement, useState } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import {
@@ -62,7 +62,16 @@ describe("SettingsNotificationsSection", () => {
     await screen.findByText("Permission will be requested only when you test OS notifications.");
 
     expect(screen.getAllByRole("switch")).toHaveLength(NOTIFICATION_KIND_VALUES.length);
-    expect(screen.getByRole("group", { name: "Delivery for Permission Prompt" })).not.toBeNull();
+    const delivery = screen.getByRole("radiogroup", {
+      name: "Delivery for Permission Prompt",
+    });
+    expect(within(delivery).getByRole("radio", { name: "Both" }).getAttribute("data-state")).toBe(
+      "checked",
+    );
+    fireEvent.click(within(delivery).getByRole("radio", { name: "OS" }));
+    expect(within(delivery).getByRole("radio", { name: "OS" }).getAttribute("data-state")).toBe(
+      "checked",
+    );
     const idleSwitch = screen.getByRole("switch", { name: "Enable Agent Session Idle" });
     expect(idleSwitch.getAttribute("aria-checked")).toBe("false");
     fireEvent.click(idleSwitch);
