@@ -18,6 +18,7 @@ type UseRepositoryGitSectionModelArgs = {
 
 export type GitProviderHealthState =
   | { status: "idle" }
+  | { status: "draft" }
   | { status: "pending" }
   | { status: "error"; message: string }
   | { status: "loaded"; health: GitProviderHealth };
@@ -307,6 +308,8 @@ const getGithubView = ({
   } else if (!github.enabled) {
     githubReadinessMessage =
       "Enable GitHub for this repository to offer “Open pull request” during human approval.";
+  } else if (providerHealth.status === "draft") {
+    githubReadinessMessage = "Save settings to check GitHub health.";
   } else if (providerHealth.status === "pending") {
     githubReadinessMessage = "Checking GitHub CLI, authentication, and repository mapping.";
   } else if (providerHealth.status === "error") {

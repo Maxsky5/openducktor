@@ -168,6 +168,24 @@ describe("settings git sections", () => {
     expect(html).not.toContain("CLI missing");
   });
 
+  test("does not use saved health for an unsaved GitHub provider", () => {
+    const html = renderToStaticMarkup(
+      createElement(RepositoryGitSection, {
+        selectedRepoPath: "/repo",
+        selectedRepoConfig: baseRepoConfig,
+        providerHealth: { status: "draft" },
+        disabled: false,
+        onDetectGithubRepository: async () => null,
+        onUpdateSelectedRepoConfig: () => baseRepoConfig,
+      }),
+    );
+
+    expect(html).toContain("Not ready");
+    expect(html).toContain("Save settings to check GitHub health.");
+    expect(html).not.toContain("GitHub pull requests are ready");
+    expect(html).not.toContain("CLI installed");
+  });
+
   test("renders enterprise host repository readiness without assuming github.com auth", () => {
     const html = renderToStaticMarkup(
       createElement(RepositoryGitSection, {

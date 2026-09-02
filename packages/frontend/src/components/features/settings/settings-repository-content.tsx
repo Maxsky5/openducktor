@@ -1,4 +1,8 @@
-import type { GitProviderHealth } from "@openducktor/contracts";
+import type {
+  GitProviderConfig,
+  GitProviderHealth,
+  SettingsSnapshot,
+} from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { errorMessage } from "@/lib/errors";
@@ -6,6 +10,7 @@ import {
   gitProviderHealthQueryOptions,
   shouldLoadGitProviderHealth,
 } from "@/state/queries/git-provider-health";
+import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import type { SettingsContentFocusRequest } from "./settings-deep-link";
 import type { PromptRoleTabId, RepositorySectionId } from "./settings-modal-constants";
 import { RepositorySidebar } from "./settings-modal-sidebars";
@@ -79,6 +84,7 @@ const resolveRepositoryAvailabilityNotice = ({
 };
 
 const resolveProviderHealth = (
+  providerDirty: boolean,
   loadProviderHealth: boolean,
   query: {
     data: GitProviderHealth | undefined;
@@ -87,6 +93,9 @@ const resolveProviderHealth = (
     isPending: boolean;
   },
 ): GitProviderHealthState => {
+  if (providerDirty) {
+    return { status: "draft" };
+  }
   if (!loadProviderHealth) {
     return { status: "idle" };
   }
@@ -97,6 +106,43 @@ const resolveProviderHealth = (
     return { status: "error", message: errorMessage(query.error) };
   }
   return query.data ? { status: "loaded", health: query.data } : { status: "idle" };
+};
+
+const shouldLoadProviderHealth = ({
+  providerDirty,
+  repositorySection,
+  provider,
+  repoPath,
+}: {
+  providerDirty: boolean;
+  repositorySection: RepositorySectionId;
+  provider: GitProviderConfig | undefined;
+  repoPath: string;
+}): boolean =>
+  !providerDirty &&
+  shouldLoadGitProviderHealth({
+    isGitSection: repositorySection === "git",
+    provider,
+    repoPath,
+  });
+
+const isProviderHealthDirty = (
+  draft: SettingsSnapshot | null,
+  saved: SettingsSnapshot | undefined,
+  workspaceId: string | null,
+): boolean => {
+  if (!workspaceId) {
+    return false;
+  }
+  const draftProvider = draft?.workspaces[workspaceId]?.git.provider;
+  const savedProvider = saved?.workspaces[workspaceId]?.git.provider;
+  return (
+    draftProvider?.id !== savedProvider?.id ||
+    draftProvider?.enabled !== savedProvider?.enabled ||
+    draftProvider?.repository?.host !== savedProvider?.repository?.host ||
+    draftProvider?.repository?.owner !== savedProvider?.repository?.owner ||
+    draftProvider?.repository?.name !== savedProvider?.repository?.name
+  );
 };
 
 const RepositoryAvailabilityBanner = ({
@@ -137,6 +183,7 @@ export function SettingsRepositoryContent({
     availableRuntimeDefinitions,
     catalogResources,
     favoriteState,
+    snapshotDraft,
     workspaceIds,
     selectedWorkspace,
     selectedWorkspaceId,
@@ -173,8 +220,11 @@ export function SettingsRepositoryContent({
     ? (repoScriptValidationErrorCountByWorkspaceId[selectedWorkspaceId] ?? 0)
     : 0;
   const selectedRepoPath = selectedWorkspace?.repoPath ?? "";
-  const loadProviderHealth = shouldLoadGitProviderHealth({
-    isGitSection: repositorySection === "git",
+  const savedSettings = useQuery(settingsSnapshotQueryOptions()).data;
+  const providerDirty = isProviderHealthDirty(snapshotDraft, savedSettings, selectedWorkspaceId);
+  const loadProviderHealth = shouldLoadProviderHealth({
+    providerDirty,
+    repositorySection,
     provider: selectedRepoConfig?.git.provider,
     repoPath: selectedRepoPath,
   });
@@ -182,7 +232,11 @@ export function SettingsRepositoryContent({
     ...gitProviderHealthQueryOptions(selectedRepoPath),
     enabled: loadProviderHealth,
   });
-  const providerHealth = resolveProviderHealth(loadProviderHealth, providerHealthQuery);
+  const providerHealth = resolveProviderHealth(
+    providerDirty,
+    loadProviderHealth,
+    providerHealthQuery,
+  );
 
   return (
     <div className="grid h-full lg:grid-cols-[240px_minmax(0,1fr)]">
