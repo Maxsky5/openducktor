@@ -28,6 +28,7 @@
   --selected-accent: oklch(0.588 0.158 241.966); /* ~sky-600 */
   --selected-control: oklch(0.55 0.158 241.966); /* vivid selected blue */
   --selected-control-foreground: oklch(1 0 0); /* white */
+  --segmented-selected: oklch(1 0 0); /* white */
   --switch-checked: oklch(0.5 0.31 277.49); /* #5100FF */
   --switch-thumb: oklch(1 0 0); /* white */
 
@@ -160,6 +161,7 @@
   --selected-accent: oklch(0.631 0.158 241.966); /* ~sky-500 */
   --selected-control: oklch(0.54 0.17 245); /* deep vivid blue */
   --selected-control-foreground: oklch(1 0 0); /* white */
+  --segmented-selected: oklch(0.372 0.044 257.287); /* ~slate-700 */
   --switch-checked: oklch(0.55 0.32 277.49); /* saturated brand indigo for dark controls */
   --switch-thumb: oklch(0.869 0.022 252.894); /* ~slate-300 */
 
@@ -275,6 +277,7 @@
   --color-selected-accent: var(--selected-accent);
   --color-selected-control: var(--selected-control);
   --color-selected-control-foreground: var(--selected-control-foreground);
+  --color-segmented-selected: var(--segmented-selected);
   --color-switch-checked: var(--switch-checked);
   --color-switch-thumb: var(--switch-thumb);
   --color-secondary: var(--secondary);
