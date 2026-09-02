@@ -4,7 +4,7 @@ import {
   NOTIFICATION_KIND_VALUES,
 } from "@openducktor/contracts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { type ReactElement, useState } from "react";
+import { act, type ReactElement, useState } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import {
   NotificationContext,
@@ -101,13 +101,32 @@ describe("SettingsNotificationsSection", () => {
     await waitFor(() => expect(getCapability).toHaveBeenCalledTimes(2));
   });
 
-  test("previews an inherited row sound with the draft global cue and volume", async () => {
+  test("uses a slider for volume", async () => {
+    render(<NotificationsHarness context={createNotificationContext()} />);
+
+    const volume = screen.getByRole("slider", { name: "Volume" });
+    expect(volume.getAttribute("aria-valuenow")).toBe("30");
+
+    fireEvent.keyDown(volume, { key: "ArrowRight" });
+    expect(volume.getAttribute("aria-valuenow")).toBe("31");
+  });
+
+  test("previews a row sound from the dropdown without selecting it", async () => {
     const previewCue = mock(async () => {});
     render(<NotificationsHarness context={createNotificationContext({ previewCue })} />);
 
     await screen.findByText("Permission will be requested only when you test OS notifications.");
-    fireEvent.click(screen.getByRole("button", { name: "Preview Permission Prompt sound" }));
+    const soundPicker = screen.getByRole("button", { name: "Sound for Permission Prompt" });
+    expect(soundPicker.textContent).toContain("Use global sound");
 
-    expect(previewCue).toHaveBeenCalledWith("chime", 30);
+    await act(async () => {
+      fireEvent.click(soundPicker);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Preview Sparkle" }));
+    });
+
+    expect(previewCue).toHaveBeenCalledWith("sparkle", 30);
+    expect(soundPicker.textContent).toContain("Use global sound");
   });
 });
