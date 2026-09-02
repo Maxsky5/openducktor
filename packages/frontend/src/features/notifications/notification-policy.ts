@@ -88,19 +88,31 @@ export const createNotificationPolicy = ({
     });
   };
 
+  const loadSettingsCandidate = (
+    occurrence: NotificationOccurrence,
+  ): Promise<NotificationSettings | null> =>
+    loadSettings()
+      .then((settings) => notificationSettingsSchema.parse(settings))
+      .catch((cause: unknown) => {
+        reportFailure(occurrence, "settings", cause);
+        return null;
+      });
+
   const loadSettingsSnapshot = (
     occurrence: NotificationOccurrence,
     suppliedSettings?: NotificationSettings,
   ): Promise<NotificationSettings | null> => {
     const existing = settingsSnapshots.get(occurrence.occurrenceId);
     if (existing) return existing;
-    const snapshot = Promise.resolve(suppliedSettings)
-      .then((settings) => settings ?? loadSettings())
-      .then((settings) => notificationSettingsSchema.parse(settings))
-      .catch((cause: unknown) => {
-        reportFailure(occurrence, "settings", cause);
-        return null;
-      });
+    const snapshot =
+      suppliedSettings === undefined
+        ? loadSettingsCandidate(occurrence)
+        : Promise.resolve(suppliedSettings)
+            .then((settings) => notificationSettingsSchema.parse(settings))
+            .catch((cause: unknown) => {
+              reportFailure(occurrence, "settings", cause);
+              return null;
+            });
     settingsSnapshots.set(occurrence.occurrenceId, snapshot);
     return snapshot;
   };
@@ -125,9 +137,10 @@ export const createNotificationPolicy = ({
   const dispatch = async (
     rawOccurrence: NotificationOccurrence,
     context: NotificationDispatchContext,
+    suppliedSettings?: NotificationSettings,
   ): Promise<NotificationExternalDeliveryPlan | null> => {
     const occurrence = notificationOccurrenceSchema.parse(rawOccurrence);
-    const settings = await loadSettingsSnapshot(occurrence);
+    const settings = await loadSettingsSnapshot(occurrence, suppliedSettings);
     if (!settings) return null;
 
     const kindSettings = settings.kinds[occurrence.kind];
@@ -192,5 +205,5 @@ export const createNotificationPolicy = ({
     };
   };
 
-  return { dispatch, loadSettingsSnapshot };
+  return { dispatch, loadSettingsCandidate };
 };

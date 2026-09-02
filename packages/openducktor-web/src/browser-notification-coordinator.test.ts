@@ -8,7 +8,11 @@ import { createBrowserNotificationBridge } from "./browser-notification-bridge";
 import { createBrowserNotificationCoordinator } from "./browser-notification-coordinator";
 
 type CoordinatorMessage =
-  | { type: "occurrence"; occurrence: NotificationOccurrence; settings: NotificationSettings }
+  | {
+      type: "occurrence_candidate" | "occurrence_selected";
+      occurrence: NotificationOccurrence;
+      settings: NotificationSettings;
+    }
   | { type: "external_delivery_claimed"; occurrenceId: string }
   | { type: "external_delivery_claim_ack"; occurrenceId: string; tabId: string };
 
@@ -345,6 +349,61 @@ describe("FakeLockManager", () => {
 });
 
 describe("browser notification coordinator", () => {
+  test("selects one settings snapshot for concurrent publishers", async () => {
+    const locks = new FakeLockManager();
+    const hub = new FakeBroadcastHub(false);
+    let ownerChannel!: FakeBroadcastChannel;
+    let firstPublisherChannel!: FakeBroadcastChannel;
+    let secondPublisherChannel!: FakeBroadcastChannel;
+    const owner = createBrowserNotificationCoordinator({
+      createChannel: () => {
+        ownerChannel = hub.createChannel();
+        return ownerChannel;
+      },
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+      tabId: "owner",
+    });
+    const firstPublisher = createBrowserNotificationCoordinator({
+      createChannel: () => {
+        firstPublisherChannel = hub.createChannel();
+        return firstPublisherChannel;
+      },
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+      tabId: "publisher-a",
+    });
+    const secondPublisher = createBrowserNotificationCoordinator({
+      createChannel: () => {
+        secondPublisherChannel = hub.createChannel();
+        return secondPublisherChannel;
+      },
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+      tabId: "publisher-b",
+    });
+    await waitFor(() => owner.isExternalDeliveryOwner());
+    const enabledSettings = createDefaultNotificationSettings();
+    enabledSettings.kinds["workflow.closed"].enabled = true;
+    const disabledSettings = createDefaultNotificationSettings();
+    disabledSettings.kinds["workflow.closed"].enabled = false;
+
+    const firstSelection = firstPublisher.publishOccurrence(occurrence, enabledSettings);
+    const secondSelection = secondPublisher.publishOccurrence(occurrence, disabledSettings);
+    await hub.flushNext(ownerChannel, "occurrence_candidate");
+    await hub.flushNext(firstPublisherChannel, "occurrence_selected");
+    await hub.flushNext(secondPublisherChannel, "occurrence_selected");
+
+    expect((await firstSelection).settings).toEqual(enabledSettings);
+    expect((await secondSelection).settings).toEqual(enabledSettings);
+    owner.dispose();
+    firstPublisher.dispose();
+    secondPublisher.dispose();
+  });
+
   test("delivers an occurrence once when leadership starts after publication", async () => {
     const locks = new FakeLockManager(true);
     const hub = new FakeBroadcastHub();
@@ -469,7 +528,7 @@ describe("browser notification coordinator", () => {
     await waitFor(() => firstCoordinator.isExternalDeliveryOwner());
 
     secondBridge.publishOccurrence(occurrence, settings);
-    await hub.flushNext(firstChannel, "occurrence");
+    await hub.flushNext(firstChannel, "occurrence_candidate");
     expect(showOsNotification).not.toHaveBeenCalled();
     firstBridge.dispose();
     await Promise.resolve();
@@ -522,7 +581,7 @@ describe("browser notification coordinator", () => {
     await waitFor(() => owner.isExternalDeliveryOwner());
 
     recipient.publishOccurrence(occurrence, settings);
-    await hub.flushNext(ownerChannel, "occurrence");
+    await hub.flushNext(ownerChannel, "occurrence_candidate");
     expect(claims).toBe(0);
     recipient.dispose();
     await waitFor(() => claims === 1);
@@ -605,11 +664,11 @@ describe("browser notification coordinator", () => {
     await waitFor(() => firstCoordinator.isExternalDeliveryOwner());
 
     publisherBridge.publishOccurrence(occurrence, settings);
-    await hub.flushNext(firstChannel, "occurrence");
+    await hub.flushNext(firstChannel, "occurrence_candidate");
     await hub.flushNext(publisherChannel, "external_delivery_claimed");
     await hub.flushNext(firstChannel, "external_delivery_claim_ack");
     expect(showOsNotification).not.toHaveBeenCalled();
-    await hub.flushNext(nextOwnerChannel, "occurrence");
+    await hub.flushNext(nextOwnerChannel, "occurrence_selected");
     firstBridge.dispose();
     await Promise.resolve();
     expect(nextOwnerCoordinator.isExternalDeliveryOwner()).toBe(false);
@@ -701,7 +760,7 @@ describe("browser notification coordinator", () => {
     expect(hub.channels.size).toBe(2);
 
     publisherBridge.publishOccurrence(occurrence, settings);
-    await hub.flushNext(ownerChannel, "occurrence");
+    await hub.flushNext(ownerChannel, "occurrence_candidate");
     await hub.flushNext(publisherChannel, "external_delivery_claimed");
     await hub.flushNext(ownerChannel, "external_delivery_claim_ack");
     await waitFor(() => showOsNotification.mock.calls.length === 1);

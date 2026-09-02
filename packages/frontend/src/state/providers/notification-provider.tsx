@@ -21,6 +21,7 @@ import {
 import { createNotificationRuntime } from "@/features/notifications/notification-runtime";
 import type { NotificationDispatchFailure } from "@/features/notifications/notification-policy";
 import {
+  clearCoordinationNotificationFailure,
   clearOsNotificationFailure,
   createNotificationFailureState,
   type NotificationFailureState,
@@ -67,7 +68,8 @@ const unavailableNotificationNavigator: NotificationNavigator = async () => {
 
 type NotificationFailureAction =
   | { type: "reported"; failure: NotificationDispatchFailure }
-  | { type: "os-shown" };
+  | { type: "os-shown" }
+  | { type: "coordination-recovered" };
 
 const reduceNotificationFailureState = (
   state: NotificationFailureState,
@@ -76,7 +78,10 @@ const reduceNotificationFailureState = (
   if (action.type === "reported") {
     return recordNotificationFailure(state, action.failure);
   }
-  return clearOsNotificationFailure(state);
+  if (action.type === "os-shown") {
+    return clearOsNotificationFailure(state);
+  }
+  return clearCoordinationNotificationFailure(state);
 };
 
 export function NotificationProvider({ children }: PropsWithChildren): ReactElement {
@@ -117,6 +122,7 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
           updateFailureState({ type: "reported", failure });
         }
       },
+      onCoordinationRecovered: () => updateFailureState({ type: "coordination-recovered" }),
       onOsShown: () => updateFailureState({ type: "os-shown" }),
     });
   }, [queryClient, shellNotifications]);

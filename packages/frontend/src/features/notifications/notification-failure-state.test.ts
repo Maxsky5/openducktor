@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { NotificationDispatchFailure } from "./notification-policy";
 import {
+  clearCoordinationNotificationFailure,
   clearOsNotificationFailure,
   createNotificationFailureState,
   recordNotificationFailure,
@@ -53,5 +54,22 @@ describe("notification failure state", () => {
     const state = recordNotificationFailure(createNotificationFailureState(), coordinationFailure);
 
     expect(selectNotificationFailure(clearOsNotificationFailure(state))).toBe(coordinationFailure);
+  });
+
+  test("shows a later OS failure after coordination recovers", () => {
+    const coordinationFailure = {
+      ...failure("coordination-failure"),
+      channel: "coordination" as const,
+    };
+    const withCoordinationFailure = recordNotificationFailure(
+      createNotificationFailureState(),
+      coordinationFailure,
+    );
+    const recovered = clearCoordinationNotificationFailure(withCoordinationFailure);
+    const osFailure = failure("os-failure");
+
+    expect(selectNotificationFailure(recordNotificationFailure(recovered, osFailure))).toBe(
+      osFailure,
+    );
   });
 });

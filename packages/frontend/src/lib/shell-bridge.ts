@@ -90,7 +90,10 @@ export type NotificationBridge = {
     dispatch: (externalDeliveryOwner: boolean) => Promise<void>,
   ): Promise<void>;
   showOsNotification(request: NotificationOsDeliveryRequest): Promise<NotificationDeliveryResult>;
-  publishOccurrence(occurrence: NotificationOccurrence, settings: NotificationSettings): void;
+  publishOccurrence(
+    occurrence: NotificationOccurrence,
+    settings: NotificationSettings,
+  ): Promise<{ occurrence: NotificationOccurrence; settings: NotificationSettings }>;
   subscribeOccurrences(
     listener: (occurrence: NotificationOccurrence, settings: NotificationSettings) => void,
   ): () => void;
