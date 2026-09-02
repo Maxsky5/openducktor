@@ -65,6 +65,12 @@ describe("SettingsNotificationsSection", () => {
     const delivery = screen.getByRole("radiogroup", {
       name: "Delivery for Permission Prompt",
     });
+    expect(delivery.getAttribute("data-variant")).toBe("segmented");
+    expect(
+      within(delivery)
+        .getAllByRole("radio")
+        .every((radio) => radio.getAttribute("data-slot") === "radio-group-segment-item"),
+    ).toBe(true);
     expect(within(delivery).getByRole("radio", { name: "Both" }).getAttribute("data-state")).toBe(
       "checked",
     );

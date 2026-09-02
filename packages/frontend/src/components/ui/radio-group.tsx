@@ -39,4 +39,20 @@ function RadioGroupItem({
   );
 }
 
-export { RadioGroup, RadioGroupItem };
+function RadioGroupSegmentItem({
+  className,
+  ...props
+}: React.ComponentProps<typeof RadioGroupPrimitive.Item>) {
+  return (
+    <RadioGroupPrimitive.Item
+      data-slot="radio-group-segment-item"
+      className={cn(
+        "inline-flex h-7 flex-1 cursor-pointer items-center justify-center rounded-sm px-3 text-xs font-medium text-muted-foreground outline-none transition-colors hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-50 data-[state=checked]:bg-selected-control data-[state=checked]:text-selected-control-foreground data-[state=checked]:shadow-sm",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export { RadioGroup, RadioGroupItem, RadioGroupSegmentItem };
