@@ -6,7 +6,7 @@ import {
   GitProviderRegistrationError,
   GitProviderResolutionError,
 } from "../../ports/git-provider-errors";
-import type { GitProviderPort } from "../../ports/git-provider-port";
+import type { GitProviderPort, PullRequestProviderPort } from "../../ports/git-provider-port";
 import type { PullRequestReviewProviderPort } from "../../ports/pull-request-review-provider-port";
 
 export {
@@ -101,6 +101,7 @@ function checkProvider(
       capability: "pull_requests",
       supported: capabilities.supportsPullRequests,
       getPort: () => provider.pullRequests(),
+      checkPort: checkPullRequestPortOwner,
     });
     yield* checkCapability(provider, {
       capability: "pull_request_review",
@@ -145,6 +146,24 @@ function checkCapability<Port>(
       yield* rule.checkPort(portResult.right, providerId);
     }
   });
+}
+
+function checkPullRequestPortOwner(
+  port: PullRequestProviderPort,
+  providerId: GitProviderId,
+): Effect.Effect<void, GitProviderRegistrationError> {
+  if (port.providerId === providerId) {
+    return Effect.void;
+  }
+
+  return Effect.fail(
+    new GitProviderRegistrationError({
+      reason: "capability_provider_id_mismatch",
+      providerId,
+      capability: "pull_requests",
+      message: `Git provider '${providerId}' supplies a Pull Request port owned by '${port.providerId}'.`,
+    }),
+  );
 }
 
 function checkReviewPortOwner(

@@ -1,4 +1,10 @@
-import { type GitProviderRepository, type TaskApprovalContext } from "@openducktor/contracts";
+import {
+  GITHUB_PROVIDER_DESCRIPTOR,
+  type GitProviderRepository,
+  type PullRequest,
+  type RepoConfig,
+  type TaskApprovalContext,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { checkoutBranch } from "../../../domain/task";
 import {
@@ -6,20 +12,18 @@ import {
   type HostValidationErrorAggregate,
 } from "../../../effect/host-errors";
 import { runGithubApi, type GithubCli } from "./cli";
+import type {
+  GitProviderRepositoryPort,
+  PullRequestProviderPort,
+} from "../../../ports/git-provider-port";
 import {
-  type GithubPullRequestContext,
   isEditablePullRequest,
   parseGithubPullListResponse,
   parseGithubPullResponse,
   type ResolvedPullRequest,
 } from "./pull-request-model";
 
-export {
-  type GithubPullBranchRef,
-  type GithubPullRequestContext,
-  type GithubPullResponse,
-  type ResolvedPullRequest,
-} from "./pull-request-model";
+const GITHUB_PROVIDER_ID = GITHUB_PROVIDER_DESCRIPTOR.id;
 
 const toPullRequestValidationError = (cause: unknown): HostValidationErrorAggregate =>
   cause instanceof HostValidationError
@@ -29,17 +33,10 @@ const toPullRequestValidationError = (cause: unknown): HostValidationErrorAggreg
         cause,
       });
 
-const selectGithubPullRequestForBranch = (
-  pullRequests: ResolvedPullRequest[],
+const selectOpenPullRequestForBranch = (
+  pullRequests: readonly ResolvedPullRequest[],
   sourceBranch: string,
-  state: "open" | "all",
 ): ResolvedPullRequest | undefined => {
-  if (state === "all") {
-    return pullRequests
-      .filter((pullRequest) => pullRequest.record.state === "merged")
-      .sort((left, right) => left.record.updatedAt.localeCompare(right.record.updatedAt))
-      .at(-1);
-  }
   if (pullRequests.length > 1) {
     throw new HostValidationError({
       field: "sourceBranch",
@@ -49,7 +46,16 @@ const selectGithubPullRequestForBranch = (
   }
   return pullRequests[0];
 };
-export const findGithubPullRequestForBranch = (
+
+const selectLatestMergedPullRequestForBranch = (
+  pullRequests: readonly ResolvedPullRequest[],
+): ResolvedPullRequest | undefined =>
+  pullRequests
+    .filter((pullRequest) => pullRequest.record.state === "merged")
+    .sort((left, right) => left.record.updatedAt.localeCompare(right.record.updatedAt))
+    .at(-1);
+
+const findGithubPullRequestsForBranch = (
   githubCli: GithubCli,
   repoPath: string,
   repository: GitProviderRepository,
@@ -72,12 +78,10 @@ export const findGithubPullRequestForBranch = (
       try: () => parseGithubPullListResponse(payload),
       catch: toPullRequestValidationError,
     });
-    return yield* Effect.try({
-      try: () => selectGithubPullRequestForBranch(parsed, sourceBranch, state),
-      catch: toPullRequestValidationError,
-    });
+    return parsed;
   });
-export const fetchGithubPullRequestByNumber = (
+
+const fetchGithubPullRequestByNumber = (
   githubCli: GithubCli,
   repoPath: string,
   repository: GitProviderRepository,
@@ -94,17 +98,32 @@ export const fetchGithubPullRequestByNumber = (
       catch: toPullRequestValidationError,
     });
   });
-export const upsertGithubPullRequest = (
+const upsertGithubPullRequest = (
   githubCli: GithubCli,
   repoPath: string,
-  context: GithubPullRequestContext,
+  repository: GitProviderRepository,
   approval: TaskApprovalContext,
   title: string,
   body: string,
 ) =>
   Effect.gen(function* () {
-    const repoSlug = `${context.repository.owner}/${context.repository.name}`;
+    const repoSlug = `${repository.owner}/${repository.name}`;
     const existingPullRequest = approval.pullRequest;
+    if (
+      existingPullRequest !== undefined &&
+      existingPullRequest.providerId !== GITHUB_PROVIDER_ID
+    ) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          field: "pullRequest.providerId",
+          message: `Pull request provider '${existingPullRequest.providerId}' does not match configured provider '${GITHUB_PROVIDER_ID}'.`,
+          details: {
+            providerId: existingPullRequest.providerId,
+            configuredProviderId: GITHUB_PROVIDER_ID,
+          },
+        }),
+      );
+    }
     const args =
       existingPullRequest !== undefined && isEditablePullRequest(existingPullRequest)
         ? [
@@ -131,10 +150,101 @@ export const upsertGithubPullRequest = (
             "-f",
             `body=${body}`,
           ];
-    const payload = yield* runGithubApi(githubCli, repoPath, context.repository.host, args);
+    const payload = yield* runGithubApi(githubCli, repoPath, repository.host, args);
     const pullRequest = yield* Effect.try({
       try: () => parseGithubPullResponse(payload),
       catch: toPullRequestValidationError,
     });
     return pullRequest.record;
   });
+
+export const createGithubPullRequestProviderPort = ({
+  githubCli,
+  repositoryPort,
+}: {
+  githubCli: GithubCli;
+  repositoryPort: GitProviderRepositoryPort;
+}): PullRequestProviderPort => {
+  const getRepository = (repoConfig: RepoConfig) => repositoryPort.getRepository(repoConfig);
+
+  const getByNumber: PullRequestProviderPort["getByNumber"] = (input) =>
+    Effect.gen(function* () {
+      const repository = yield* getRepository(input.repoConfig);
+      return yield* fetchGithubPullRequestByNumber(
+        githubCli,
+        input.repoConfig.repoPath,
+        repository,
+        input.number,
+      );
+    });
+
+  const validateLinkedPullRequest = (linkedPullRequest: PullRequest) => {
+    if (linkedPullRequest.providerId === GITHUB_PROVIDER_ID) {
+      return Effect.void;
+    }
+    return Effect.fail(
+      new HostValidationError({
+        field: "pullRequest.providerId",
+        message: `Pull request provider '${linkedPullRequest.providerId}' does not match configured provider '${GITHUB_PROVIDER_ID}'.`,
+        details: {
+          providerId: linkedPullRequest.providerId,
+          configuredProviderId: GITHUB_PROVIDER_ID,
+        },
+      }),
+    );
+  };
+
+  return {
+    providerId: GITHUB_PROVIDER_ID,
+    findOpenForSourceBranch: (input) =>
+      Effect.gen(function* () {
+        const repository = yield* getRepository(input.repoConfig);
+        const pullRequests = yield* findGithubPullRequestsForBranch(
+          githubCli,
+          input.repoConfig.repoPath,
+          repository,
+          input.sourceBranch,
+          "open",
+        );
+        return yield* Effect.try({
+          try: () => selectOpenPullRequestForBranch(pullRequests, input.sourceBranch),
+          catch: toPullRequestValidationError,
+        });
+      }),
+    findLatestMergedForSourceBranch: (input) =>
+      Effect.gen(function* () {
+        const repository = yield* getRepository(input.repoConfig);
+        const pullRequests = yield* findGithubPullRequestsForBranch(
+          githubCli,
+          input.repoConfig.repoPath,
+          repository,
+          input.sourceBranch,
+          "all",
+        );
+        return selectLatestMergedPullRequestForBranch(pullRequests);
+      }),
+    getByNumber,
+    refresh: (input) =>
+      Effect.gen(function* () {
+        yield* validateLinkedPullRequest(input.linkedPullRequest);
+        return yield* getByNumber({
+          repoConfig: input.repoConfig,
+          number: input.linkedPullRequest.number,
+        });
+      }),
+    resolvePublishRemote: (input) =>
+      repositoryPort.getMapping(input.repoConfig).pipe(Effect.map(({ remoteName }) => remoteName)),
+    upsert: (input) =>
+      Effect.gen(function* () {
+        const repository = yield* getRepository(input.repoConfig);
+        return yield* upsertGithubPullRequest(
+          githubCli,
+          input.repoConfig.repoPath,
+          repository,
+          input.approval,
+          input.title,
+          input.body,
+        );
+      }),
+  };
+};

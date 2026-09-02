@@ -211,6 +211,9 @@ describe("createTaskService direct merge", () => {
     };
     const service = createTaskService({
       devServerService: createDirectMergeDevServerService(calls),
+      gitProviderResolver: {
+        resolve: () => Effect.dieMessage("direct merge must not resolve a Git provider"),
+      },
       gitPort: extendGitPort(
         createDirectMergeGitPort({
           calls,
@@ -291,7 +294,6 @@ describe("createTaskService direct merge", () => {
           },
         },
       ),
-      systemCommands: createApprovalSystemCommands(),
       taskStore,
       taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
       worktreeFiles: createBuildStartWorktreeFiles(calls),

@@ -39,10 +39,9 @@ describe("provider-neutral task dependency gates", () => {
     });
   });
 
-  test("direct merge requires only Git and provider-neutral services", () => {
+  test("direct merge does not require a Git provider", () => {
     const devServerService = dependencyStub<DevServerService>();
     const gitPort = dependencyStub<GitPort>();
-    const gitProviderResolver = dependencyStub<GitProviderResolver>();
     const settingsConfig = dependencyStub<SettingsConfigPort>();
     const taskWorktreeService = dependencyStub<TaskWorktreeService>();
     const terminalService = dependencyStub<TaskTerminalCleanupPort>();
@@ -56,7 +55,6 @@ describe("provider-neutral task dependency gates", () => {
       requireDirectMergeDependencies({
         devServerService,
         gitPort,
-        gitProviderResolver,
         settingsConfig,
         taskWorktreeService,
         terminalService,
@@ -66,7 +64,6 @@ describe("provider-neutral task dependency gates", () => {
     ).toEqual({
       devServerService,
       gitPort,
-      gitProviderResolver,
       settingsConfig,
       taskWorktreeService,
       terminalService,

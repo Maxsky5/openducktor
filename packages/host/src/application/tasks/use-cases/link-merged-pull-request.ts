@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import { requireWorktreeFiles } from "../../git/git-service-inputs";
+import { requirePullRequestProviderMatch } from "../../pull-requests/pull-request-provider-match";
 import {
   requireDependencies,
   requireLinkMergedPullRequestDependencies,
@@ -29,6 +30,7 @@ type TaskBranchCleanup = {
 export const createTaskLinkMergedPullRequestUseCase = ({
   devServerService,
   gitPort,
+  gitProviderResolver,
   taskStore,
   settingsConfig,
   taskSessionBootstrapCoordinator,
@@ -52,16 +54,24 @@ export const createTaskLinkMergedPullRequestUseCase = ({
       }
 
       const dependencies = yield* requireDependencies(() =>
-        requireLinkMergedPullRequestDependencies(
+        requireLinkMergedPullRequestDependencies({
           devServerService,
           gitPort,
+          gitProviderResolver,
           settingsConfig,
           taskWorktreeService,
           terminalService,
           worktreeFiles,
           workspaceSettingsService,
-        ),
+        }),
       );
+      const repoConfig =
+        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const provider = yield* dependencies.gitProviderResolver.resolve(repoConfig);
+      yield* requirePullRequestProviderMatch({
+        configuredProviderId: provider.getDescriptor().id,
+        linkedProviderId: pullRequest.providerId,
+      });
       yield* validatePullRequestManagementStatusEffect(current.status);
       if (metadata.directMerge !== undefined) {
         return yield* Effect.fail(

@@ -177,6 +177,54 @@ export const requireMergedTaskCleanupDependencies = (
 export const requireDirectMergeDependencies = ({
   devServerService,
   gitPort,
+  settingsConfig,
+  taskWorktreeService,
+  terminalService,
+  worktreeFiles,
+  workspaceSettingsService,
+}: {
+  devServerService: DevServerService | undefined;
+  gitPort: GitPort | undefined;
+  settingsConfig: SettingsConfigPort | undefined;
+  taskWorktreeService: TaskWorktreeService | undefined;
+  terminalService: TaskTerminalCleanupPort | undefined;
+  worktreeFiles: WorktreeFilePort | undefined;
+  workspaceSettingsService: WorkspaceSettingsService | undefined;
+}): MergedTaskCleanupDependencies & { workspaceSettingsService: WorkspaceSettingsService } => {
+  if (!devServerService) {
+    throw missingTaskDependency("Dev server service is required for task_direct_merge.");
+  }
+  if (!settingsConfig) {
+    throw missingTaskDependency("Settings config port is required for task_direct_merge.");
+  }
+  if (!gitPort) {
+    throw missingTaskDependency("Git port is required for task_direct_merge.");
+  }
+  if (!taskWorktreeService) {
+    throw missingTaskDependency("Task worktree service is required for task_direct_merge.");
+  }
+  if (!terminalService) {
+    throw missingTaskDependency("Terminal service is required for task_direct_merge.");
+  }
+  if (!worktreeFiles) {
+    throw missingTaskDependency("Worktree file port is required for task_direct_merge.");
+  }
+  if (!workspaceSettingsService) {
+    throw missingTaskDependency("Workspace settings service is required for task_direct_merge.");
+  }
+  return {
+    devServerService,
+    gitPort,
+    settingsConfig,
+    taskWorktreeService,
+    terminalService,
+    worktreeFiles,
+    workspaceSettingsService,
+  };
+};
+export const requireLinkMergedPullRequestDependencies = ({
+  devServerService,
+  gitPort,
   gitProviderResolver,
   settingsConfig,
   taskWorktreeService,
@@ -197,58 +245,17 @@ export const requireDirectMergeDependencies = ({
   workspaceSettingsService: WorkspaceSettingsService;
 } => {
   if (!devServerService) {
-    throw missingTaskDependency("Dev server service is required for task_direct_merge.");
-  }
-  if (!settingsConfig) {
-    throw missingTaskDependency("Settings config port is required for task_direct_merge.");
-  }
-  if (!gitProviderResolver) {
-    throw missingTaskDependency("Git provider resolver is required for task_direct_merge.");
-  }
-  if (!gitPort) {
-    throw missingTaskDependency("Git port is required for task_direct_merge.");
-  }
-  if (!taskWorktreeService) {
-    throw missingTaskDependency("Task worktree service is required for task_direct_merge.");
-  }
-  if (!terminalService) {
-    throw missingTaskDependency("Terminal service is required for task_direct_merge.");
-  }
-  if (!worktreeFiles) {
-    throw missingTaskDependency("Worktree file port is required for task_direct_merge.");
-  }
-  if (!workspaceSettingsService) {
-    throw missingTaskDependency("Workspace settings service is required for task_direct_merge.");
-  }
-  return {
-    devServerService,
-    gitPort,
-    gitProviderResolver,
-    settingsConfig,
-    taskWorktreeService,
-    terminalService,
-    worktreeFiles,
-    workspaceSettingsService,
-  };
-};
-export const requireLinkMergedPullRequestDependencies = (
-  devServerService: DevServerService | undefined,
-  gitPort: GitPort | undefined,
-  settingsConfig: SettingsConfigPort | undefined,
-  taskWorktreeService: TaskWorktreeService | undefined,
-  terminalService: TaskTerminalCleanupPort | undefined,
-  worktreeFiles: WorktreeFilePort | undefined,
-  workspaceSettingsService: WorkspaceSettingsService | undefined,
-): MergedTaskCleanupDependencies & {
-  workspaceSettingsService: WorkspaceSettingsService;
-} => {
-  if (!devServerService) {
     throw missingTaskDependency(
       "Dev server service is required for task_pull_request_link_merged.",
     );
   }
   if (!gitPort) {
     throw missingTaskDependency("Git port is required for task_pull_request_link_merged.");
+  }
+  if (!gitProviderResolver) {
+    throw missingTaskDependency(
+      "Git provider resolver is required for task_pull_request_link_merged.",
+    );
   }
   if (!settingsConfig) {
     throw missingTaskDependency(
@@ -269,10 +276,12 @@ export const requireLinkMergedPullRequestDependencies = (
     );
   }
   const dependencies: MergedTaskCleanupDependencies & {
+    gitProviderResolver: GitProviderResolver;
     workspaceSettingsService: WorkspaceSettingsService;
   } = {
     devServerService,
     gitPort,
+    gitProviderResolver,
     settingsConfig,
     taskWorktreeService,
     terminalService,

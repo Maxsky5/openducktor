@@ -17,7 +17,6 @@ import { effectiveTargetBranchForTask } from "./task-worktree-cleanup";
 export const loadOpenApprovalContext = (
   dependencies: {
     gitPort: GitPort;
-    gitProviderResolver: GitProviderResolver;
     settingsConfig: SettingsConfigPort;
     taskWorktreeService: TaskWorktreeService;
     workspaceSettingsService: WorkspaceSettingsService;
@@ -38,7 +37,6 @@ export const loadOpenApprovalContext = (
     });
     const effectiveRepoPath = repoConfig.repoPath;
     const defaultMergeMethod = yield* loadDefaultMergeMethod(dependencies.settingsConfig);
-    const providers = yield* providerStatuses(dependencies.gitProviderResolver, repoConfig);
     const taskWorktree = yield* dependencies.taskWorktreeService.getTaskWorktree({
       repoPath: effectiveRepoPath,
       taskId,
@@ -107,7 +105,7 @@ export const loadOpenApprovalContext = (
       hasUncommittedChanges: worktreeStatus.fileStatusCounts.total > 0,
       uncommittedFileCount: worktreeStatus.fileStatusCounts.total,
       pullRequest: metadata.pullRequest,
-      providers,
+      providers: [],
       suggestedSquashCommitMessage,
     };
   });

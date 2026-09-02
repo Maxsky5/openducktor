@@ -120,7 +120,7 @@ export {
   GitProviderResolutionError,
 } from "./ports/git-provider-errors";
 export type {
-  FindPullRequestByBranchInput,
+  FindPullRequestForSourceBranchInput,
   GetPullRequestByNumberInput,
   GitProviderHealthPort,
   GitProviderPort,
@@ -128,6 +128,7 @@ export type {
   GitProviderRepositoryPort,
   PullRequestProviderInput,
   PullRequestProviderPort,
+  RefreshPullRequestInput,
   UpsertPullRequestInput,
 } from "./ports/git-provider-port";
 export type { LocalAttachmentPort } from "./ports/local-attachment-port";

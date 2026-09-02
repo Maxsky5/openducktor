@@ -1,6 +1,5 @@
 import {
   GITHUB_PROVIDER_DESCRIPTOR,
-  type GitProviderRepository,
   type PullRequest,
   pullRequestSchema,
 } from "@openducktor/contracts";
@@ -53,11 +52,6 @@ export type ResolvedPullRequest = {
   record: PullRequest;
   sourceBranch: string;
   targetBranch: string;
-};
-
-export type GithubPullRequestContext = {
-  repository: GitProviderRepository;
-  remoteName: string;
 };
 
 const parseGithubPullPayload = (value: JSONType): GithubPullResponse => {
