@@ -1,16 +1,17 @@
-import { pullRequestReviewContextSchema } from "@openducktor/contracts";
+import {
+  GITHUB_PROVIDER_DESCRIPTOR,
+  pullRequestReviewContextSchema,
+  type GitProviderRepository,
+  type RepoConfig,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
-import {
-  GITHUB_PROVIDER_ID,
-  type GithubCommandDependencies,
-  requireGithubPullRequestReadRepository,
-} from "../../../application/tasks/support/github-pull-requests";
-import { errorMessage, HostValidationError } from "../../../effect/host-errors";
-import type { PullRequestReviewProviderPort } from "../../../ports/pull-request-review-provider-port";
-import {
-  createGithubPullRequestReviewReader,
-  type GithubPullRequestReviewReader,
-} from "./github-pull-request-review-reader";
+import { errorMessage, type HostError, HostValidationError } from "../../../../effect/host-errors";
+import type { GitProviderRepositoryError } from "../../../../ports/git-provider-errors";
+import type { PullRequestReviewProviderPort } from "../../../../ports/pull-request-review-provider-port";
+import type { GithubCli } from "../cli";
+import { createGithubPullRequestReviewReader, type GithubPullRequestReviewReader } from "./reader";
+
+const GITHUB_PROVIDER_ID = GITHUB_PROVIDER_DESCRIPTOR.id;
 
 const unavailable = (reason: string) =>
   pullRequestReviewContextSchema.parse({
@@ -20,10 +21,14 @@ const unavailable = (reason: string) =>
   });
 
 export const createGithubPullRequestReviewAdapter = ({
-  githubDependencies,
+  githubCli,
+  getRepository,
   reviewReader = createGithubPullRequestReviewReader(),
 }: {
-  githubDependencies: GithubCommandDependencies;
+  githubCli: GithubCli;
+  getRepository: (
+    repoConfig: RepoConfig,
+  ) => Effect.Effect<GitProviderRepository, HostError | GitProviderRepositoryError>;
   reviewReader?: GithubPullRequestReviewReader;
 }): PullRequestReviewProviderPort => {
   return {
@@ -40,15 +45,13 @@ export const createGithubPullRequestReviewAdapter = ({
         }
 
         const repoPath = input.repoConfig.repoPath;
-        const repositoryResult = yield* Effect.either(
-          requireGithubPullRequestReadRepository(githubDependencies, repoPath, input.repoConfig),
-        );
+        const repositoryResult = yield* Effect.either(getRepository(input.repoConfig));
         if (repositoryResult._tag === "Left") {
           return unavailable(errorMessage(repositoryResult.left));
         }
 
         return yield* reviewReader.read({
-          dependencies: githubDependencies,
+          githubCli,
           repoPath,
           repository: repositoryResult.right,
           pullRequestNumber: input.linkedPullRequest.number,

@@ -10,7 +10,6 @@ import { loadOpenApprovalContext } from "../support/approval-readiness";
 import {
   requireDependencies,
   requireDirectMergeDependencies,
-  type TaskGithubDependencyInput,
 } from "../support/required-task-dependencies";
 import { completeTaskClosure } from "../support/task-closure";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
@@ -21,7 +20,8 @@ import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskDirectMergeUseCase = ({
   devServerService,
-  githubDependencies,
+  gitPort,
+  gitProviderResolver,
   taskStore,
   settingsConfig,
   taskSessionBootstrapCoordinator,
@@ -29,7 +29,7 @@ export const createTaskDirectMergeUseCase = ({
   terminalService,
   worktreeFiles,
   workspaceSettingsService,
-}: CreateTaskServiceInput & TaskGithubDependencyInput) => ({
+}: CreateTaskServiceInput) => ({
   directMerge(input: Parameters<TaskService["directMerge"]>[0]) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
@@ -37,7 +37,8 @@ export const createTaskDirectMergeUseCase = ({
       const dependencies = yield* requireDependencies(() =>
         requireDirectMergeDependencies({
           devServerService,
-          githubDependencies,
+          gitPort,
+          gitProviderResolver,
           settingsConfig,
           taskWorktreeService,
           terminalService,

@@ -131,7 +131,6 @@ export function SettingsModalContent({
     return (
       <SettingsGitSection
         git={snapshotDraft.git}
-        runtimeCheck={controller.runtimeCheck}
         disabled={isInteractionDisabled}
         onUpdateGit={updateGlobalGitConfig}
       />

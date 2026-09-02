@@ -30,7 +30,6 @@ describe("check-diagnostics helpers", () => {
     ).toEqual(
       expect.objectContaining({
         gitOk: false,
-        ghAuthError: "Timed out after 15000ms",
         runtimes: [
           expect.objectContaining({
             kind: "opencode",
@@ -198,18 +197,13 @@ describe("check-diagnostics helpers", () => {
     );
   });
 
-  test("keeps GitHub CLI and auth failures out of CLI toast-level issues", () => {
+  test("does not add a CLI issue when Git is healthy", () => {
     const issues = buildDiagnosticsToastIssues({
       activeWorkspace: createActiveWorkspace("/repo"),
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        ghOk: false,
-        ghVersion: null,
-        ghAuthOk: false,
-        ghAuthLogin: null,
-        ghAuthError: "gh auth missing",
         runtimes: [
           { kind: "opencode", ok: true, executablePath: "/bin/opencode", version: "1.2.9" },
         ],

@@ -44,11 +44,6 @@ const buildCliToolsModel = ({
     runtimeCheck: {
       gitOk: true,
       gitVersion: "git version 2.50.1",
-      ghOk: true,
-      ghVersion: "gh version 2.73.0",
-      ghAuthOk: true,
-      ghAuthLogin: "octocat",
-      ghAuthError: null,
       runtimes: runtimes.map((runtime) => ({ executablePath: null, ...runtime })),
       errors: [],
     },
@@ -77,7 +72,6 @@ describe("buildDiagnosticsPanelModel CLI Tools", () => {
 
     expect(cliToolsSection?.rows).toEqual([
       { label: "Git", value: "git version 2.50.1" },
-      { label: "GitHub CLI", value: "gh version 2.73.0" },
       { label: "OpenCode", value: opencodeValue, breakAll: true },
       { label: "Codex", value: codexValue, breakAll: true },
       { label: "Claude", value: claudeValue, breakAll: true },
@@ -107,7 +101,7 @@ describe("buildDiagnosticsPanelModel CLI Tools", () => {
     const model = buildCliToolsModel({ runtimes: [...runtimes] });
     const cliToolsSection = model.sections.find((section) => section.key === "cli-tools");
 
-    expect(cliToolsSection?.rows.slice(2).map((row) => row.value)).toEqual([...expectedValues]);
+    expect(cliToolsSection?.rows.slice(1).map((row) => row.value)).toEqual([...expectedValues]);
   });
 
   test("formats a runtime with no reported version as detected", () => {
@@ -120,7 +114,7 @@ describe("buildDiagnosticsPanelModel CLI Tools", () => {
     });
     const cliToolsSection = model.sections.find((section) => section.key === "cli-tools");
 
-    expect(cliToolsSection?.rows.slice(2).map((row) => row.value)).toEqual([
+    expect(cliToolsSection?.rows.slice(1).map((row) => row.value)).toEqual([
       "detected",
       "detected",
       "detected",
@@ -156,7 +150,7 @@ describe("buildDiagnosticsPanelModel CLI Tools", () => {
     });
     const cliToolsSection = model.sections.find((section) => section.key === "cli-tools");
 
-    expect(cliToolsSection?.rows.map((row) => row.label)).toEqual(["Git", "GitHub CLI"]);
+    expect(cliToolsSection?.rows.map((row) => row.label)).toEqual(["Git"]);
     expect(cliToolsSection?.errors).toEqual(["Runtime definitions unavailable"]);
   });
 
@@ -171,7 +165,7 @@ describe("buildDiagnosticsPanelModel CLI Tools", () => {
     });
     const cliToolsSection = model.sections.find((section) => section.key === "cli-tools");
 
-    expect(cliToolsSection?.rows.at(3)).toEqual({
+    expect(cliToolsSection?.rows.at(2)).toEqual({
       label: "Codex",
       value: `${codexValue} (runtime disabled)`,
       breakAll: true,
@@ -188,11 +182,6 @@ describe("buildDiagnosticsPanelModel CLI Tools", () => {
       runtimeCheck: {
         gitOk: false,
         gitVersion: null,
-        ghOk: false,
-        ghVersion: null,
-        ghAuthOk: false,
-        ghAuthLogin: null,
-        ghAuthError: "Timed out after 15000ms",
         runtimes: [{ kind: "opencode", ok: false, executablePath: null, version: null }],
         errors: ["Timed out after 15000ms"],
       },
@@ -226,7 +215,7 @@ describe("buildDiagnosticsPanelModel CLI Tools", () => {
     const cliToolsSection = model.sections.find((section) => section.key === "cli-tools");
     expect(cliToolsSection?.badge).toEqual({ label: "Timed out", variant: "warning" });
     expect(cliToolsSection?.errors[0]).toContain("CLI tools are not yet available");
-    expect(cliToolsSection?.rows.map((row) => row.label)).toEqual(["Git", "GitHub CLI"]);
+    expect(cliToolsSection?.rows.map((row) => row.label)).toEqual(["Git"]);
     const taskStoreSection = model.sections.find((section) => section.key === "task-store");
     expect(taskStoreSection?.badge).toEqual({ label: "Timed out", variant: "warning" });
     expect(taskStoreSection?.errors[0]).toContain("Task store is not yet available");
@@ -242,11 +231,6 @@ describe("buildDiagnosticsPanelModel CLI Tools", () => {
       runtimeCheck: {
         gitOk: false,
         gitVersion: null,
-        ghOk: false,
-        ghVersion: null,
-        ghAuthOk: false,
-        ghAuthLogin: null,
-        ghAuthError: "Timed out after 15000ms",
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: false, version: null }),
         errors: ["Timed out after 15000ms"],
       },
@@ -289,7 +273,7 @@ describe("buildDiagnosticsPanelModel CLI Tools", () => {
     expect(model.criticalReasons).toEqual(expect.arrayContaining(["runtime failed"]));
   });
 
-  test("treats GitHub CLI auth failures as optional warnings", () => {
+  test("uses Git status for global CLI health", () => {
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
@@ -299,17 +283,12 @@ describe("buildDiagnosticsPanelModel CLI Tools", () => {
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        ghOk: false,
-        ghVersion: null,
-        ghAuthOk: false,
-        ghAuthLogin: null,
-        ghAuthError: "gh auth missing",
         runtimes: makeBuiltInRuntimeDiagnostics({
           kind: "opencode",
           ok: true,
           version: "1.2.9",
         }),
-        errors: ["gh auth missing"],
+        errors: ["runtime warning"],
       },
       taskStoreCheck: makeTaskStoreCheck(),
       runtimeCheckFailureKind: null,
@@ -323,9 +302,9 @@ describe("buildDiagnosticsPanelModel CLI Tools", () => {
       isLoadingChecks: false,
     });
 
-    expect(model.criticalReasons).not.toContain("gh auth missing");
+    expect(model.criticalReasons).not.toContain("runtime warning");
     const cliToolsSection = model.sections.find((section) => section.key === "cli-tools");
-    expect(cliToolsSection?.badge).toEqual({ label: "GitHub optional", variant: "warning" });
+    expect(cliToolsSection?.badge).toEqual({ label: "Available", variant: "success" });
     expect(cliToolsSection?.errors).toEqual([]);
   });
 });

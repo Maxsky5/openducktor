@@ -276,6 +276,7 @@ describe("HostClient", () => {
       "workspaceUpdateAgentModelFavorites",
       "workspaceUpdateGlobalGitConfig",
       "workspaceDetectGithubRepository",
+      "workspaceGetGitProviderHealth",
       "workspaceSaveSettingsSnapshot",
       "systemGetPlatform",
       "systemListOpenInTools",
@@ -1271,6 +1272,33 @@ describe("HostClient", () => {
         args: {
           repoPath: "/repo",
         },
+      },
+    ]);
+  });
+
+  test("workspaceGetGitProviderHealth uses the provider health IPC route", async () => {
+    const health = {
+      providerId: "github" as const,
+      enabled: true,
+      available: true,
+      executablePath: "/opt/homebrew/bin/gh",
+      version: "gh version 2.80.0",
+      authenticated: true,
+      account: "octocat",
+      repositoryMappingValid: true,
+    };
+    const { client, calls } = createClient((command) => {
+      if (command === "workspace_get_git_provider_health") {
+        return health;
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(client.workspaceGetGitProviderHealth("/repo")).resolves.toEqual(health);
+    expect(calls).toEqual([
+      {
+        command: "workspace_get_git_provider_health",
+        args: { repoPath: "/repo" },
       },
     ]);
   });

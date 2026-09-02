@@ -3,10 +3,10 @@ import type { JSONType } from "zod";
 
 type GithubApiObject = Record<string, JSONType>;
 import { Effect } from "effect";
-import type { GithubCommandDependencies } from "../../../application/tasks/support/github-pull-requests";
-import { HostOperationError } from "../../../effect/host-errors";
-import { createGithubPullRequestReviewReader } from "./github-pull-request-review-reader";
-import { createGithubReviewTestDependencies } from "./github-pull-request-review.test-support";
+import { HostOperationError } from "../../../../effect/host-errors";
+import type { GithubCli } from "../cli";
+import { createGithubPullRequestReviewReader } from "./reader";
+import { createGithubReviewTestCli } from "./test-support";
 
 type PullRequestActorFixture = {
   login: string;
@@ -41,7 +41,7 @@ type PullRequestViewFixture = {
   reviews: PullRequestReviewFixture[];
 };
 
-const createDependencies = ({
+const createCommands = ({
   commandActivity,
   commandDelayMs = 0,
   commands = [],
@@ -63,7 +63,7 @@ const createDependencies = ({
     stderr?: string;
     exitCode?: number | null;
   };
-} = {}): GithubCommandDependencies => {
+} = {}): GithubCli => {
   const succeed = (stdout: JSONType) =>
     Effect.gen(function* () {
       if (commandActivity) {
@@ -82,7 +82,7 @@ const createDependencies = ({
         stderr: "",
       };
     });
-  return createGithubReviewTestDependencies((_command, args) => {
+  return createGithubReviewTestCli((_command, args) => {
     commands.push(args);
     const command = args.join(" ");
     if (command.includes("pr checks")) {
@@ -392,7 +392,7 @@ describe("createGithubPullRequestReviewReader", () => {
 
     const context = await Effect.runPromise(
       provider.read({
-        dependencies: createDependencies({ commands }),
+        githubCli: createCommands({ commands }),
         repoPath: "/repo",
         repository: { host: "github.com", owner: "openai", name: "openducktor" },
         pullRequestNumber: 42,
@@ -458,7 +458,7 @@ describe("createGithubPullRequestReviewReader", () => {
 
     await Effect.runPromise(
       provider.read({
-        dependencies: createDependencies({ commands }),
+        githubCli: createCommands({ commands }),
         repoPath: "/repo",
         repository: { host: "github.com", owner: "openai", name: "openducktor" },
         pullRequestNumber: 42,
@@ -492,7 +492,7 @@ describe("createGithubPullRequestReviewReader", () => {
 
     const context = await Effect.runPromise(
       provider.read({
-        dependencies: createDependencies({ pullRequestViewResponse }),
+        githubCli: createCommands({ pullRequestViewResponse }),
         repoPath: "/repo",
         repository: { host: "github.com", owner: "openai", name: "openducktor" },
         pullRequestNumber: 42,
@@ -543,7 +543,7 @@ describe("createGithubPullRequestReviewReader", () => {
 
     const context = await Effect.runPromise(
       provider.read({
-        dependencies: createDependencies({
+        githubCli: createCommands({
           commands,
           pullRequestViewResponse,
           reviewThreadNodes: [
@@ -612,7 +612,7 @@ describe("createGithubPullRequestReviewReader", () => {
 
     const context = await Effect.runPromise(
       provider.read({
-        dependencies: createDependencies({
+        githubCli: createCommands({
           commands,
           pullRequestViewResponse: fairnestPullRequestViewResponse,
           reviewThreadNodes: fairnestPullRequestReviewThreadNodes,
@@ -693,7 +693,7 @@ describe("createGithubPullRequestReviewReader", () => {
     const provider = createGithubPullRequestReviewReader();
     const context = await Effect.runPromise(
       provider.read({
-        dependencies: createDependencies({
+        githubCli: createCommands({
           pullRequestViewResponse: fairnestPullRequestViewResponse,
           reviewThreadNodes: [
             {
@@ -742,7 +742,7 @@ describe("createGithubPullRequestReviewReader", () => {
     const provider = createGithubPullRequestReviewReader();
     const context = await Effect.runPromise(
       provider.read({
-        dependencies: createDependencies({
+        githubCli: createCommands({
           pullRequestViewResponse: fairnestPullRequestViewResponse,
           reviewThreadNodes: [
             {
@@ -796,7 +796,7 @@ describe("createGithubPullRequestReviewReader", () => {
     const provider = createGithubPullRequestReviewReader();
     const context = await Effect.runPromise(
       provider.read({
-        dependencies: createDependencies({
+        githubCli: createCommands({
           pullRequestViewResponse: fairnestPullRequestViewResponse,
           reviewThreadNodes: [
             {
@@ -901,7 +901,7 @@ describe("createGithubPullRequestReviewReader", () => {
     const provider = createGithubPullRequestReviewReader();
     const context = await Effect.runPromise(
       provider.read({
-        dependencies: createDependencies({
+        githubCli: createCommands({
           pullRequestViewResponse: fairnestPullRequestViewResponse,
           reviewThreadNodes: [
             {
@@ -1083,7 +1083,7 @@ describe("createGithubPullRequestReviewReader", () => {
 
     const context = await Effect.runPromise(
       provider.read({
-        dependencies: createDependencies({ commands, reviewThreadResponse }),
+        githubCli: createCommands({ commands, reviewThreadResponse }),
         repoPath: "/repo",
         repository: { host: "github.com", owner: "openai", name: "openducktor" },
         pullRequestNumber: 42,
@@ -1101,6 +1101,21 @@ describe("createGithubPullRequestReviewReader", () => {
     ).toEqual(["thread-1-comment-1", "thread-1-comment-2", "thread-2-comment-1"]);
     expect(context.reviewThreads).toEqual({ openCount: 2 });
     expect(commands.filter((args) => args.includes("api"))).toHaveLength(4);
+    const graphqlVariables = commands
+      .filter((args) => args.includes("graphql"))
+      .flatMap((args) =>
+        args.flatMap((arg, index) =>
+          arg.includes("=") && (args[index - 1] === "-f" || args[index - 1] === "-F")
+            ? [[args[index - 1], arg]]
+            : [],
+        ),
+      );
+    expect(graphqlVariables).toContainEqual(["-f", "owner=openai"]);
+    expect(graphqlVariables).toContainEqual(["-f", "name=openducktor"]);
+    expect(graphqlVariables).toContainEqual(["-F", "number=42"]);
+    expect(graphqlVariables).toContainEqual(["-f", "threadId=thread-1"]);
+    expect(graphqlVariables).toContainEqual(["-f", "commentsCursor=comments-page-2"]);
+    expect(graphqlVariables).toContainEqual(["-f", "threadsCursor=threads-page-2"]);
   });
 
   test("loads independent pull request resources concurrently", async () => {
@@ -1109,7 +1124,7 @@ describe("createGithubPullRequestReviewReader", () => {
 
     await Effect.runPromise(
       provider.read({
-        dependencies: createDependencies({ commandActivity, commandDelayMs: 20 }),
+        githubCli: createCommands({ commandActivity, commandDelayMs: 20 }),
         repoPath: "/repo",
         repository: { host: "github.com", owner: "openai", name: "openducktor" },
         pullRequestNumber: 42,
@@ -1124,7 +1139,7 @@ describe("createGithubPullRequestReviewReader", () => {
 
     const context = await Effect.runPromise(
       provider.read({
-        dependencies: createDependencies({
+        githubCli: createCommands({
           checksResponse: {
             ok: false,
             exitCode: 8,
@@ -1160,7 +1175,7 @@ describe("createGithubPullRequestReviewReader", () => {
 
     const context = await Effect.runPromise(
       provider.read({
-        dependencies: createDependencies({
+        githubCli: createCommands({
           checksResponse: {
             ok: false,
             exitCode: 1,
@@ -1193,7 +1208,7 @@ describe("createGithubPullRequestReviewReader", () => {
     const result = await Effect.runPromise(
       provider
         .read({
-          dependencies: createDependencies({ pullRequestViewResponse: malformedView }),
+          githubCli: createCommands({ pullRequestViewResponse: malformedView }),
           repoPath: "/repo",
           repository: { host: "github.com", owner: "openai", name: "openducktor" },
           pullRequestNumber: 42,
@@ -1213,7 +1228,7 @@ describe("createGithubPullRequestReviewReader", () => {
     const result = await Effect.runPromise(
       reader
         .read({
-          dependencies: createDependencies({ reviewThreadNodes: [null] }),
+          githubCli: createCommands({ reviewThreadNodes: [null] }),
           repoPath: "/repo",
           repository: { host: "github.com", owner: "openai", name: "openducktor" },
           pullRequestNumber: 42,
@@ -1233,7 +1248,7 @@ describe("createGithubPullRequestReviewReader", () => {
     const result = await Effect.runPromise(
       reader
         .read({
-          dependencies: createDependencies({
+          githubCli: createCommands({
             checksResponse: { ok: true, stdout: [null] },
           }),
           repoPath: "/repo",
@@ -1255,7 +1270,7 @@ describe("createGithubPullRequestReviewReader", () => {
 
     const context = await Effect.runPromise(
       provider.read({
-        dependencies: createDependencies({
+        githubCli: createCommands({
           checksResponse: {
             ok: true,
             stdout: [
@@ -1289,7 +1304,7 @@ describe("createGithubPullRequestReviewReader", () => {
     await expect(
       Effect.runPromise(
         provider.read({
-          dependencies: createDependencies({
+          githubCli: createCommands({
             checksResponse: {
               ok: false,
               exitCode: 1,

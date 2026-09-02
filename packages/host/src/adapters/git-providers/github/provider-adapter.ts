@@ -7,21 +7,22 @@ import { Effect } from "effect";
 import {
   findGithubPullRequestForBranch,
   fetchGithubPullRequestByNumber,
-  type GithubCommandDependencies,
-  githubProviderStatus,
-  requireGithubPullRequestContext,
-  requireGithubPullRequestReadRepository,
   upsertGithubPullRequest,
-} from "../../application/tasks/support/github-pull-requests";
-import type { GitPort } from "../../ports/git-port";
+} from "./pull-requests";
+import type { GitPort } from "../../../ports/git-port";
 import type {
   GitProviderHealthPort,
   GitProviderPort,
   GitProviderRepositoryPort,
   PullRequestProviderPort,
-} from "../../ports/git-provider-port";
-import type { PullRequestReviewProviderPort } from "../../ports/pull-request-review-provider-port";
-import { createGithubPullRequestReviewAdapter } from "../pull-requests/github/github-pull-request-review-adapter";
+} from "../../../ports/git-provider-port";
+import type { PullRequestReviewProviderPort } from "../../../ports/pull-request-review-provider-port";
+import type { SystemCommandPort } from "../../../ports/system-command-port";
+import type { ToolDiscoveryPort } from "../../../ports/tool-discovery-port";
+import { createGithubCli } from "./cli";
+import { createGithubProviderHealthPort } from "./health";
+import { createGithubPullRequestReviewAdapter } from "./review/adapter";
+import { createGithubProviderRepositoryAdapter } from "./repository";
 
 export class GithubProviderAdapter implements GitProviderPort {
   private readonly repositoryPort: GitProviderRepositoryPort;
@@ -30,54 +31,55 @@ export class GithubProviderAdapter implements GitProviderPort {
   private readonly pullRequestReviewPort: PullRequestReviewProviderPort;
 
   constructor({
-    githubDependencies,
     gitPort,
+    systemCommands,
+    toolDiscovery,
   }: {
-    githubDependencies: GithubCommandDependencies;
     gitPort: GitPort;
+    systemCommands: SystemCommandPort;
+    toolDiscovery: ToolDiscoveryPort;
   }) {
-    const repositoryDependencies = { ...githubDependencies, gitPort };
-    const getReadRepository = (repoConfig: RepoConfig) =>
-      requireGithubPullRequestReadRepository(githubDependencies, repoConfig.repoPath, repoConfig);
-    const getWriteContext = (repoConfig: RepoConfig) =>
-      requireGithubPullRequestContext(repositoryDependencies, repoConfig.repoPath, repoConfig);
-    this.repositoryPort = {
-      getReadRepository,
-      getWriteContext,
-    };
-    this.healthPort = {
-      getStatus: (repoConfig) =>
-        githubProviderStatus(repositoryDependencies, repoConfig.repoPath, repoConfig),
-    };
+    const githubCli = createGithubCli({ systemCommands, toolDiscovery });
+    const repositoryPort = createGithubProviderRepositoryAdapter({
+      gitPort,
+    });
+    const getRepository = (repoConfig: RepoConfig) => repositoryPort.getRepository(repoConfig);
+    const getMapping = (repoConfig: RepoConfig) => repositoryPort.getMapping(repoConfig);
+
+    this.repositoryPort = repositoryPort;
+    this.healthPort = createGithubProviderHealthPort({
+      githubCli,
+      repositoryPort,
+    });
     this.pullRequestsPort = {
       findByBranch: (input) =>
         Effect.gen(function* () {
-          const repository = yield* getReadRepository(input.repoConfig);
+          const { repository } = yield* getMapping(input.repoConfig);
           const pullRequest = yield* findGithubPullRequestForBranch(
-            githubDependencies,
+            githubCli,
             input.repoConfig.repoPath,
             repository,
             input.sourceBranch,
             input.state,
           );
-          return pullRequest?.record;
+          return pullRequest;
         }),
       getByNumber: (input) =>
         Effect.gen(function* () {
-          const repository = yield* getReadRepository(input.repoConfig);
+          const repository = yield* getRepository(input.repoConfig);
           const pullRequest = yield* fetchGithubPullRequestByNumber(
-            githubDependencies,
+            githubCli,
             input.repoConfig.repoPath,
             repository,
             input.number,
           );
-          return pullRequest.record;
+          return pullRequest;
         }),
       upsert: (input) =>
         Effect.gen(function* () {
-          const context = yield* getWriteContext(input.repoConfig);
+          const context = yield* getMapping(input.repoConfig);
           return yield* upsertGithubPullRequest(
-            githubDependencies,
+            githubCli,
             input.repoConfig.repoPath,
             context,
             input.approval,
@@ -86,7 +88,10 @@ export class GithubProviderAdapter implements GitProviderPort {
           );
         }),
     };
-    this.pullRequestReviewPort = createGithubPullRequestReviewAdapter({ githubDependencies });
+    this.pullRequestReviewPort = createGithubPullRequestReviewAdapter({
+      githubCli,
+      getRepository,
+    });
   }
 
   getDescriptor(): GitProviderDescriptor {

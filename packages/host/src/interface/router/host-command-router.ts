@@ -13,6 +13,11 @@ import {
 import { TaskAssetError } from "../../effect/task-asset-error";
 import type { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
 import type { DevServerProcessStartExitError } from "../../ports/dev-server-process-port";
+import {
+  GitProviderCapabilityError,
+  GitProviderRepositoryError,
+  GitProviderResolutionError,
+} from "../../ports/git-provider-errors";
 import type { HostCommandArgs } from "../commands/command-inputs";
 import { type HostCommandName, parseHostCommandName } from "../commands/host-command-registry";
 import type { HostCommandResultMap } from "./host-command-contract-map";
@@ -24,6 +29,9 @@ export type HostCommandHandlerError =
   | CodexSessionHistoryError
   | DevServerProcessStartExitError
   | FilesystemListDirectoryError
+  | GitProviderCapabilityError
+  | GitProviderRepositoryError
+  | GitProviderResolutionError
   | HostError
   | TaskAssetError
   | TaskPolicyError
@@ -71,6 +79,13 @@ const toHostCommandHandlerError = (
   command: HostCommandName,
 ): HostCommandHandlerError => {
   if (isHostError(cause)) {
+    return cause;
+  }
+  if (
+    cause instanceof GitProviderCapabilityError ||
+    cause instanceof GitProviderRepositoryError ||
+    cause instanceof GitProviderResolutionError
+  ) {
     return cause;
   }
   if (cause instanceof TaskAssetError) {

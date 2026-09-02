@@ -1,20 +1,29 @@
 import {
   GITHUB_PROVIDER_DESCRIPTOR,
   type GitProviderConfig,
+  type GitProviderHealth,
   type GitProviderRepository,
   type RepoConfig,
-  type RuntimeCheck,
 } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 
 type UseRepositoryGitSectionModelArgs = {
   selectedRepoPath: string | null;
   selectedRepoConfig: RepoConfig | null;
-  runtimeCheck: RuntimeCheck | null;
+  providerHealth: GitProviderHealthState;
   disabled: boolean;
   onDetectGithubRepository: () => Promise<GitProviderRepository | null>;
   onUpdateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
 };
+
+export type GitProviderHealthState =
+  | { status: "idle" }
+  | { status: "draft" }
+  | { status: "pending" }
+  | { status: "error"; message: string }
+  | { status: "loaded"; health: GitProviderHealth };
+
+export type GithubCliStatus = "hidden" | "pending" | "error" | "installed" | "missing";
 
 export type GithubRepositoryDraft = {
   host: string;
@@ -76,6 +85,7 @@ type RepositoryGitSectionAction =
 
 type UseRepositoryGitSectionModelResult = {
   cliStatusLabel: string;
+  cliStatus: GithubCliStatus;
   detectionMessage: string | null;
   githubEnabled: boolean;
   githubHost: string;
@@ -85,7 +95,6 @@ type UseRepositoryGitSectionModelResult = {
   githubControlsDisabled: boolean;
   configuredProviderId: string | undefined;
   hasConfiguredNonGithubProvider: boolean;
-  hasGithubCli: boolean;
   isDetecting: boolean;
   isManualConfigOpen: boolean;
   providerStatusLabel: string;
@@ -257,11 +266,111 @@ const repositoryGitSectionReducer = (
   }
 };
 
+const getGithubView = ({
+  disabled,
+  providerHealth,
+  selectedRepoConfig,
+}: {
+  disabled: boolean;
+  providerHealth: GitProviderHealthState;
+  selectedRepoConfig: RepoConfig | null;
+}) => {
+  const configuredProvider = selectedRepoConfig?.git.provider;
+  const github =
+    configuredProvider?.id === GITHUB_PROVIDER_DESCRIPTOR.id
+      ? configuredProvider
+      : EMPTY_GITHUB_CONFIG;
+  const hasConfiguredNonGithubProvider = hasNonGithubProvider(selectedRepoConfig);
+  const configuredProviderId = configuredProvider?.id;
+  const githubControlsDisabled = disabled || hasConfiguredNonGithubProvider;
+  const githubEnabled = github.enabled ?? false;
+  const health = providerHealth.status === "loaded" ? providerHealth.health : null;
+  const hasGithubCli = health?.executablePath != null;
+  const githubHost = github.repository?.host ?? "github.com";
+  const usesDefaultGithubHost = githubHost === "github.com";
+  const hasRepositoryCoordinates = Boolean(
+    github.repository?.host && github.repository?.owner && github.repository?.name,
+  );
+  const repositorySlug = hasRepositoryCoordinates
+    ? `${github.repository?.owner}/${github.repository?.name}`
+    : null;
+  const githubReady = githubEnabled && hasRepositoryCoordinates && health?.available === true;
+  let githubReadinessLabel = "Not ready";
+  if (hasConfiguredNonGithubProvider) {
+    githubReadinessLabel = "Unavailable";
+  } else if (githubReady) {
+    githubReadinessLabel = usesDefaultGithubHost ? "Ready" : "Configured";
+  }
+
+  let githubReadinessMessage: string;
+  if (hasConfiguredNonGithubProvider) {
+    githubReadinessMessage = `Git provider ${configuredProviderId} is configured. Remove it before you configure GitHub.`;
+  } else if (!github.enabled) {
+    githubReadinessMessage =
+      "Enable GitHub for this repository to offer “Open pull request” during human approval.";
+  } else if (providerHealth.status === "draft") {
+    githubReadinessMessage = "Save settings to check GitHub health.";
+  } else if (providerHealth.status === "pending") {
+    githubReadinessMessage = "Checking GitHub CLI, authentication, and repository mapping.";
+  } else if (providerHealth.status === "error") {
+    githubReadinessMessage = providerHealth.message;
+  } else if (providerHealth.status === "idle") {
+    githubReadinessMessage = "GitHub health has not been checked.";
+  } else if (!hasGithubCli) {
+    githubReadinessMessage = "Install GitHub CLI (`gh`) to enable provider-backed pull requests.";
+  } else if (!hasRepositoryCoordinates) {
+    githubReadinessMessage = "Repository host, owner, and name are still missing.";
+  } else if (health?.available) {
+    githubReadinessMessage = "GitHub pull requests are ready for this repository.";
+  } else {
+    githubReadinessMessage = health?.reason ?? `GitHub is not ready for ${githubHost}.`;
+  }
+
+  let providerStatusLabel = "Pull requests disabled";
+  if (hasConfiguredNonGithubProvider) {
+    providerStatusLabel = `${configuredProviderId} configured`;
+  } else if (githubEnabled) {
+    providerStatusLabel = "Pull requests enabled";
+  }
+  let cliStatus: GithubCliStatus = "hidden";
+  let cliStatusLabel = "";
+  if (githubEnabled && !hasConfiguredNonGithubProvider) {
+    if (providerHealth.status === "pending") {
+      cliStatus = "pending";
+      cliStatusLabel = "Checking CLI";
+    } else if (providerHealth.status === "error") {
+      cliStatus = "error";
+      cliStatusLabel = "Health check failed";
+    } else if (providerHealth.status === "loaded") {
+      cliStatus = hasGithubCli ? "installed" : "missing";
+      cliStatusLabel = hasGithubCli ? "CLI installed" : "CLI missing";
+    }
+  }
+
+  return {
+    cliStatus,
+    cliStatusLabel,
+    configuredProviderId,
+    github,
+    githubControlsDisabled,
+    githubEnabled,
+    githubHost,
+    githubReadinessLabel,
+    githubReadinessMessage,
+    githubReady,
+    hasConfiguredNonGithubProvider,
+    hasRepositoryCoordinates,
+    providerStatusLabel,
+    repositorySlug,
+    usesDefaultGithubHost,
+  };
+};
+
 export function useRepositoryGitSectionModel({
   disabled,
   onDetectGithubRepository,
   onUpdateSelectedRepoConfig,
-  runtimeCheck,
+  providerHealth,
   selectedRepoConfig,
   selectedRepoPath,
 }: UseRepositoryGitSectionModelArgs): UseRepositoryGitSectionModelResult {
@@ -290,62 +399,23 @@ export function useRepositoryGitSectionModel({
     createRepositoryGitSectionState,
   );
 
-  const configuredProvider = selectedRepoConfig?.git.provider;
-  const github =
-    configuredProvider?.id === GITHUB_PROVIDER_DESCRIPTOR.id
-      ? configuredProvider
-      : EMPTY_GITHUB_CONFIG;
-  const hasConfiguredNonGithubProvider = hasNonGithubProvider(selectedRepoConfig);
-  const configuredProviderId = selectedRepoConfig?.git.provider?.id;
-  const githubControlsDisabled = disabled || hasConfiguredNonGithubProvider;
-  const githubEnabled = github.enabled ?? false;
-  const hasGithubCli = runtimeCheck?.ghOk ?? false;
-  const githubHost = github.repository?.host ?? "github.com";
-  const usesDefaultGithubHost = githubHost === "github.com";
-  const hasRepositoryCoordinates = Boolean(
-    github.repository?.host && github.repository?.owner && github.repository?.name,
-  );
-  const repositorySlug = hasRepositoryCoordinates
-    ? `${github.repository?.owner}/${github.repository?.name}`
-    : null;
-  const githubReady =
-    githubEnabled &&
-    hasGithubCli &&
-    hasRepositoryCoordinates &&
-    (usesDefaultGithubHost ? (runtimeCheck?.ghAuthOk ?? false) : true);
-  let githubReadinessLabel = "Not ready";
-  if (hasConfiguredNonGithubProvider) {
-    githubReadinessLabel = "Unavailable";
-  } else if (githubReady) {
-    githubReadinessLabel = usesDefaultGithubHost ? "Ready" : "Configured";
-  }
-
-  let githubReadinessMessage: string;
-  if (hasConfiguredNonGithubProvider) {
-    githubReadinessMessage = `Git provider ${configuredProviderId} is configured. Remove it before you configure GitHub.`;
-  } else if (!github.enabled) {
-    githubReadinessMessage =
-      "Enable GitHub for this repository to offer “Open pull request” during human approval.";
-  } else if (!runtimeCheck?.ghOk) {
-    githubReadinessMessage = "Install GitHub CLI (`gh`) to enable provider-backed pull requests.";
-  } else if (usesDefaultGithubHost && !runtimeCheck.ghAuthOk) {
-    githubReadinessMessage =
-      runtimeCheck.ghAuthError ?? "Run `gh auth login` to authenticate GitHub.";
-  } else if (!hasRepositoryCoordinates) {
-    githubReadinessMessage = "Repository host, owner, and name are still missing.";
-  } else if (usesDefaultGithubHost) {
-    githubReadinessMessage = "GitHub pull requests are ready for this repository.";
-  } else {
-    githubReadinessMessage = `GitHub pull requests are configured for ${githubHost}. Authentication for that host is validated during approval.`;
-  }
-
-  let providerStatusLabel = "Pull requests disabled";
-  if (hasConfiguredNonGithubProvider) {
-    providerStatusLabel = `${configuredProviderId} configured`;
-  } else if (githubEnabled) {
-    providerStatusLabel = "Pull requests enabled";
-  }
-  const cliStatusLabel = hasGithubCli ? "CLI installed" : "CLI missing";
+  const {
+    cliStatus,
+    cliStatusLabel,
+    configuredProviderId,
+    github,
+    githubControlsDisabled,
+    githubEnabled,
+    githubHost,
+    githubReadinessLabel,
+    githubReadinessMessage,
+    githubReady,
+    hasConfiguredNonGithubProvider,
+    hasRepositoryCoordinates,
+    providerStatusLabel,
+    repositorySlug,
+    usesDefaultGithubHost,
+  } = getGithubView({ disabled, providerHealth, selectedRepoConfig });
   const repositorySectionContext = useMemo<RepositoryGitSectionContext>(
     () => ({
       hasRepositoryCoordinates,
@@ -534,6 +604,7 @@ export function useRepositoryGitSectionModel({
   ]);
 
   return {
+    cliStatus,
     cliStatusLabel,
     configuredProviderId,
     detectionMessage,
@@ -544,7 +615,6 @@ export function useRepositoryGitSectionModel({
     githubReadinessMessage,
     githubReady,
     hasConfiguredNonGithubProvider,
-    hasGithubCli,
     isDetecting,
     isManualConfigOpen,
     providerStatusLabel,

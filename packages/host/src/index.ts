@@ -51,9 +51,9 @@ export {
 } from "./application/terminals/terminal-service";
 export {
   type CreateNodeHostCommandRouterInput,
-  createNodeEffectHostCommandRouter,
   type EffectNodeHostCommandRouter,
 } from "./composition/node/create-node-host-command-router";
+export { createNodeEffectHostCommandRouter } from "./composition/node/create-node-effect-host-command-router";
 export { createNodeHostCommandRouter } from "./composition/node/create-node-host-command-router-promise";
 export {
   type DevelopmentInstanceMode,
@@ -116,6 +116,7 @@ export type { GitPort } from "./ports/git-port";
 export {
   GitProviderCapabilityError,
   GitProviderRegistrationError,
+  GitProviderRepositoryError,
   GitProviderResolutionError,
 } from "./ports/git-provider-errors";
 export type {
@@ -123,7 +124,7 @@ export type {
   GetPullRequestByNumberInput,
   GitProviderHealthPort,
   GitProviderPort,
-  GitProviderRepositoryContext,
+  GitProviderRepositoryMapping,
   GitProviderRepositoryPort,
   PullRequestProviderInput,
   PullRequestProviderPort,

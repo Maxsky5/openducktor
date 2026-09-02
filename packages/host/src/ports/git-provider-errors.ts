@@ -1,4 +1,4 @@
-import type { GitProviderId } from "@openducktor/contracts";
+import type { GitProviderId, GitProviderRepository } from "@openducktor/contracts";
 import { Data } from "effect";
 
 export type GitProviderCapability = "pull_requests" | "pull_request_review";
@@ -15,6 +15,19 @@ export class GitProviderResolutionError extends Data.TaggedError("GitProviderRes
   readonly reason: GitProviderResolutionFailureReason;
   readonly providerId?: GitProviderId;
   readonly message: string;
+}> {}
+
+export type GitProviderRepositoryFailureReason =
+  | "no_matching_remote"
+  | "ambiguous_matching_remotes";
+
+export class GitProviderRepositoryError extends Data.TaggedError("GitProviderRepositoryError")<{
+  readonly reason: GitProviderRepositoryFailureReason;
+  readonly providerId: GitProviderId;
+  readonly repoPath: string;
+  readonly message: string;
+  readonly remoteNames?: readonly string[];
+  readonly repositories?: readonly GitProviderRepository[];
 }> {}
 
 export type GitProviderRegistrationFailureReason =

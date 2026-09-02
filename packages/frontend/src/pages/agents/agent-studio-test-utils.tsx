@@ -211,11 +211,6 @@ const TEST_CHECKS_OPERATIONS_CONTEXT = {
   refreshRuntimeCheck: async () => ({
     gitOk: true,
     gitVersion: null,
-    ghOk: true,
-    ghVersion: null,
-    ghAuthOk: true,
-    ghAuthLogin: null,
-    ghAuthError: null,
     runtimes: [],
     errors: [],
   }),

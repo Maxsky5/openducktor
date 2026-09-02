@@ -1,30 +1,27 @@
 import { Effect } from "effect";
 import { HostValidationError } from "../../../effect/host-errors";
 import {
-  findGithubPullRequestForBranch,
-  requireGithubPullRequestContext,
-} from "../support/github-pull-requests";
-import {
   requireDependencies,
   requirePullRequestDetectionDependencies,
-  type TaskGithubDependencyInput,
 } from "../support/required-task-dependencies";
 import { validatePullRequestManagementStatusEffect } from "../support/task-validation-effects";
 import { loadTaskBranchCleanup } from "../support/task-worktree-cleanup";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskPullRequestDetectionUseCase = ({
-  githubDependencies,
+  gitPort,
+  gitProviderResolver,
   taskStore,
   taskWorktreeService,
   workspaceSettingsService,
-}: CreateTaskServiceInput & TaskGithubDependencyInput): Pick<TaskService, "detectPullRequest"> => ({
+}: CreateTaskServiceInput): Pick<TaskService, "detectPullRequest"> => ({
   detectPullRequest(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const dependencies = yield* requireDependencies(() =>
         requirePullRequestDetectionDependencies({
-          githubDependencies,
+          gitPort,
+          gitProviderResolver,
           taskWorktreeService,
           workspaceSettingsService,
         }),
@@ -61,18 +58,13 @@ export const createTaskPullRequestDetectionUseCase = ({
         taskId,
         "Pull request detection",
       );
-      const githubContext = yield* requireGithubPullRequestContext(
-        dependencies,
-        effectiveRepoPath,
+      const provider = yield* dependencies.gitProviderResolver.resolve(repoConfig);
+      const pullRequests = yield* provider.pullRequests();
+      const openPullRequest = yield* pullRequests.findByBranch({
         repoConfig,
-      );
-      const openPullRequest = yield* findGithubPullRequestForBranch(
-        dependencies,
-        effectiveRepoPath,
-        githubContext.repository,
-        taskContext.sourceBranch,
-        "open",
-      );
+        sourceBranch: taskContext.sourceBranch,
+        state: "open",
+      });
       if (openPullRequest !== undefined) {
         yield* taskStore.setPullRequest({
           repoPath: effectiveRepoPath,
@@ -85,13 +77,11 @@ export const createTaskPullRequestDetectionUseCase = ({
         };
       }
 
-      const pullRequest = yield* findGithubPullRequestForBranch(
-        dependencies,
-        effectiveRepoPath,
-        githubContext.repository,
-        taskContext.sourceBranch,
-        "all",
-      );
+      const pullRequest = yield* pullRequests.findByBranch({
+        repoConfig,
+        sourceBranch: taskContext.sourceBranch,
+        state: "all",
+      });
       if (pullRequest?.record.state === "merged") {
         return {
           outcome: "merged",

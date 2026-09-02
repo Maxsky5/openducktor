@@ -15,14 +15,13 @@ import {
 } from "../../effect/host-errors";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
-import type { SystemCommandPort, SystemCommandRunResult } from "../../ports/system-command-port";
+import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { RepoStoreDiagnostics, TaskStoreError } from "../../ports/task-repository-ports";
 import type {
   ToolDiscoveryError,
   ToolDiscoveryId,
   ToolDiscoveryPort,
 } from "../../ports/tool-discovery-port";
-import { readGithubCliVersion, runGithubCliCommand } from "../git/github-cli";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
 
 type CachedRuntimeCheck = {
@@ -46,52 +45,6 @@ const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
   Effect.gen(function* () {
     return (yield* settingsConfig.readConfig()) ?? createDefaultGlobalConfig();
   });
-const parseGithubAuthLogin = (output: string): string | null => {
-  const accountMarker = "account ";
-  const markerIndex = output.indexOf(accountMarker);
-  if (markerIndex < 0) {
-    return null;
-  }
-  const remainder = output.slice(markerIndex + accountMarker.length).trimStart();
-  const login = remainder.split(/[\s(']/)[0]?.trim() ?? "";
-  return login.length > 0 ? login : null;
-};
-const probeGithubAuthStatus = (systemCommands: SystemCommandPort, ghCommand: string) =>
-  Effect.gen(function* () {
-    const result: SystemCommandRunResult = yield* runGithubCliCommand(systemCommands, ghCommand, [
-      "auth",
-      "status",
-      "--hostname",
-      "github.com",
-    ]);
-    const stdout = result.stdout.trim();
-    const stderr = result.stderr.trim();
-    const combined =
-      stderr.length === 0 ? stdout : stdout.length === 0 ? stderr : `${stdout}\n${stderr}`;
-    if (result.ok) {
-      return {
-        ghAuthOk: true,
-        ghAuthLogin: parseGithubAuthLogin(combined),
-        ghAuthError: null,
-      };
-    }
-    return {
-      ghAuthOk: false,
-      ghAuthLogin: null,
-      ghAuthError:
-        combined.length > 0
-          ? combined
-          : "GitHub authentication is not configured. Run `gh auth login`.",
-    };
-  }).pipe(
-    Effect.catchAll(() =>
-      Effect.succeed({
-        ghAuthOk: false,
-        ghAuthLogin: null,
-        ghAuthError: "Failed to query GitHub authentication status.",
-      }),
-    ),
-  );
 const buildTaskStoreCheck = (repoStoreHealth: RepoStoreHealth): TaskStoreCheck => {
   const taskStoreError = !repoStoreHealth.isReady ? repoStoreHealth.detail : null;
   return {
@@ -176,21 +129,11 @@ export const createSystemDiagnosticsService = ({
   const probeRuntimeCheck = (config: LoadedGlobalConfig) =>
     Effect.gen(function* () {
       const gitTool = yield* resolveToolAvailability(toolDiscovery, "git");
-      const ghTool = yield* resolveToolAvailability(toolDiscovery, "githubCli");
       const gitVersion = yield* versionForResolvedTool("git", gitTool.path, (path) =>
         systemCommands.versionCommand(path, ["--version"]),
       );
-      const ghVersion = yield* versionForResolvedTool("gh", ghTool.path, (path) =>
-        readGithubCliVersion(systemCommands, path),
-      );
       const gitError = gitTool.error ?? gitVersion.error;
-      const ghError = ghTool.error ?? ghVersion.error;
       const gitOk = gitError === null;
-      const ghOk = ghError === null;
-      const githubAuth =
-        ghOk && ghTool.path !== null
-          ? yield* probeGithubAuthStatus(systemCommands, ghTool.path)
-          : { ghAuthOk: false, ghAuthLogin: null, ghAuthError: ghError };
       const runtimes: RuntimeHealth[] = yield* Effect.forEach(
         runtimeDefinitionsService.listRuntimeDefinitions(),
         (definition) => {
@@ -220,9 +163,6 @@ export const createSystemDiagnosticsService = ({
       return {
         gitOk,
         gitVersion: gitVersion.version,
-        ghOk,
-        ghVersion: ghVersion.version,
-        ...githubAuth,
         runtimes,
         errors,
       };
@@ -270,11 +210,6 @@ export const createSystemDiagnosticsService = ({
       return {
         gitOk: runtime.gitOk,
         gitVersion: runtime.gitVersion,
-        ghOk: runtime.ghOk,
-        ghVersion: runtime.ghVersion,
-        ghAuthOk: runtime.ghAuthOk,
-        ghAuthLogin: runtime.ghAuthLogin,
-        ghAuthError: runtime.ghAuthError,
         runtimes: runtime.runtimes,
         repoStoreHealth: taskStore.repoStoreHealth,
         taskStoreOk: taskStore.taskStoreOk,

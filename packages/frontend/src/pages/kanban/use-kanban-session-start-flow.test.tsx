@@ -121,11 +121,6 @@ const createHookHarness = (initialProps: HookArgs) => {
           refreshRuntimeCheck: async () => ({
             gitOk: true,
             gitVersion: null,
-            ghOk: true,
-            ghVersion: null,
-            ghAuthOk: true,
-            ghAuthLogin: null,
-            ghAuthError: null,
             runtimes: [],
             errors: [],
           }),

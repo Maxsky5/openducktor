@@ -18,6 +18,7 @@ import {
 import { Effect } from "effect";
 import { TaskPolicyError } from "../../domain/task/task-policy-error";
 import type {
+  HostCommandErrorAggregate,
   HostDependencyErrorAggregate,
   HostInvariantErrorAggregate,
   HostOperationErrorAggregate,
@@ -30,6 +31,11 @@ import {
   isHostError,
 } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
+import {
+  GitProviderCapabilityError,
+  GitProviderRepositoryError,
+  GitProviderResolutionError,
+} from "../../ports/git-provider-errors";
 import type { GitPort, GitPortError } from "../../ports/git-port";
 import type { RuntimeRegistryError, RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
@@ -39,16 +45,13 @@ import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-
 import type { ToolDiscoveryError, ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { WorktreeFileError, WorktreeFilePort } from "../../ports/worktree-file-port";
 import type { DevServerService, DevServerServiceError } from "../dev-servers/dev-server-service";
+import type { GitProviderResolver } from "../git/git-provider-resolver";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
 import type { TerminalService, TerminalServiceError } from "../terminals/terminal-service";
 import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "../workspaces/workspace-settings-service";
-import {
-  createTaskGithubDependencies,
-  type TaskGithubDependencyInput,
-} from "./support/required-task-dependencies";
 import { createTaskStopImpactUseCase } from "./use-cases/get-task-stop-impact";
 import type {
   AgentSessionDeleteInput,
@@ -103,6 +106,10 @@ import type { TaskWorktreeService } from "./worktrees/task-worktree-service";
 
 export type TaskServiceError =
   | DevServerServiceError
+  | GitProviderRepositoryError
+  | GitProviderCapabilityError
+  | GitProviderResolutionError
+  | HostCommandErrorAggregate
   | GitPortError
   | HostDependencyErrorAggregate
   | HostInvariantErrorAggregate
@@ -259,6 +266,7 @@ export type CreateTaskServiceInput = {
   devServerService?: DevServerService;
   terminalService?: TaskTerminalCleanupPort;
   gitPort?: GitPort;
+  gitProviderResolver?: GitProviderResolver;
   taskStore: TaskStorePort;
   taskActivityGuard?: TaskActivityGuardPort;
   settingsConfig?: SettingsConfigPort;
@@ -278,7 +286,12 @@ export type TaskServiceUseCaseInput = Omit<
   taskSessionBootstrapCoordinator: TaskSessionBootstrapCoordinator;
 };
 const isTaskServiceError = (cause: unknown): cause is TaskServiceError =>
-  cause instanceof TaskAssetError || cause instanceof TaskPolicyError || isHostError(cause);
+  cause instanceof GitProviderCapabilityError ||
+  cause instanceof GitProviderRepositoryError ||
+  cause instanceof GitProviderResolutionError ||
+  cause instanceof TaskAssetError ||
+  cause instanceof TaskPolicyError ||
+  isHostError(cause);
 
 const toTaskServiceError = (cause: unknown): TaskServiceError => {
   if (isTaskServiceError(cause)) {
@@ -320,12 +333,10 @@ export const createTaskServiceWithMutationProgress = (
 const createTaskServiceImplementation = (
   input: CreateTaskServiceInput,
 ): TaskServiceWithMutationProgress => {
-  const githubDependencies = createTaskGithubDependencies(input);
   const taskSessionBootstrapCoordinator =
     input.taskSessionBootstrapCoordinator ?? createTaskSessionBootstrapCoordinator();
-  const useCaseInput: TaskServiceUseCaseInput & TaskGithubDependencyInput = {
+  const useCaseInput: TaskServiceUseCaseInput = {
     ...input,
-    githubDependencies,
     taskSessionBootstrapCoordinator,
   };
   const taskSessionBootstrap = createTaskSessionBootstrapUseCase(useCaseInput);

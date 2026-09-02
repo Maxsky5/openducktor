@@ -2,11 +2,16 @@ import { describe, expect, test } from "bun:test";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
+  type GitProviderHealth,
   type SettingsSnapshot,
 } from "@openducktor/contracts";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
+import { gitProviderHealthQueryOptions } from "@/state/queries/git-provider-health";
+import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { SettingsModalContent } from "./settings-modal-content";
 
@@ -170,10 +175,18 @@ describe("settings modal content", () => {
     };
 
     const scriptsHtml = renderToStaticMarkup(
-      createElement(SettingsModalContent, { ...baseProps, repositorySection: "scripts" }),
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(SettingsModalContent, { ...baseProps, repositorySection: "scripts" }),
+      ),
     );
     const configurationHtml = renderToStaticMarkup(
-      createElement(SettingsModalContent, { ...baseProps, repositorySection: "configuration" }),
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(SettingsModalContent, { ...baseProps, repositorySection: "configuration" }),
+      ),
     );
 
     expect(scriptsHtml).toContain("Worktree setup script");
@@ -227,23 +240,108 @@ describe("settings modal content", () => {
     };
 
     const html = renderToStaticMarkup(
-      createElement(SettingsModalContent, {
-        section: "repositories",
-        repositorySection: "configuration",
-        globalPromptRoleTab: "shared",
-        repoPromptRoleTab: "shared",
-        selectedReusablePromptId: null,
-        isInteractionDisabled: false,
-        controller,
-        onRepositorySectionChange: () => {},
-        onGlobalPromptRoleTabChange: () => {},
-        onRepoPromptRoleTabChange: () => {},
-        onSelectedReusablePromptIdChange: () => {},
-      }),
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(SettingsModalContent, {
+          section: "repositories",
+          repositorySection: "configuration",
+          globalPromptRoleTab: "shared",
+          repoPromptRoleTab: "shared",
+          selectedReusablePromptId: null,
+          isInteractionDisabled: false,
+          controller,
+          onRepositorySectionChange: () => {},
+          onGlobalPromptRoleTabChange: () => {},
+          onRepoPromptRoleTabChange: () => {},
+          onSelectedReusablePromptIdChange: () => {},
+        }),
+      ),
     );
 
     expect(html).toContain('title="1 error in Scripts"');
     expect(html).toContain("background-color:hsl(var(--destructive))");
+  });
+
+  test("does not show saved provider health for an unsaved repository", () => {
+    const savedSnapshot = createMockSnapshot();
+    savedSnapshot.workspaces.repo = {
+      workspaceId: "repo",
+      workspaceName: "Repo",
+      repoPath: "/repo",
+      defaultRuntimeKind: "opencode",
+      branchPrefix: "odt",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      git: {
+        provider: {
+          id: "github",
+          enabled: true,
+          autoDetected: false,
+          repository: { host: "github.com", owner: "openai", name: "saved" },
+        },
+      },
+      hooks: { preStart: [], postComplete: [] },
+      devServers: [],
+      worktreeCopyPaths: [],
+      promptOverrides: {},
+      agentDefaults: {},
+    };
+    const draftSnapshot = structuredClone(savedSnapshot);
+    draftSnapshot.workspaces.repo!.git.provider!.repository!.name = "draft";
+    const workspace = {
+      workspaceId: "repo",
+      workspaceName: "Repo",
+      repoPath: "/repo",
+      isActive: true,
+      hasConfig: true,
+      configuredWorktreeBasePath: null,
+      defaultWorktreeBasePath: "/tmp/worktrees",
+      effectiveWorktreeBasePath: "/tmp/worktrees",
+    };
+    const controller = {
+      ...createMockController(draftSnapshot),
+      workspaces: [workspace],
+      workspaceIds: ["repo"],
+      selectedWorkspaceId: "repo",
+      selectedWorkspace: workspace,
+      selectedRepoConfig: draftSnapshot.workspaces.repo!,
+    };
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, savedSnapshot);
+    queryClient.setQueryData(gitProviderHealthQueryOptions("/repo").queryKey, {
+      providerId: "github",
+      enabled: true,
+      available: true,
+      executablePath: "gh",
+      version: "gh version 2.73.0",
+      authenticated: true,
+      account: "octocat",
+      repositoryMappingValid: true,
+    } satisfies GitProviderHealth);
+
+    const html = renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        createElement(SettingsModalContent, {
+          section: "repositories",
+          repositorySection: "git",
+          globalPromptRoleTab: "shared",
+          repoPromptRoleTab: "shared",
+          selectedReusablePromptId: null,
+          isInteractionDisabled: false,
+          controller,
+          onRepositorySectionChange: () => {},
+          onGlobalPromptRoleTabChange: () => {},
+          onRepoPromptRoleTabChange: () => {},
+          onSelectedReusablePromptIdChange: () => {},
+        }),
+      ),
+    );
+
+    expect(html).toContain("Save settings to check GitHub health.");
+    expect(html).not.toContain("GitHub pull requests are ready");
+    expect(html).not.toContain("CLI installed");
   });
 
   test("shows an actionable state instead of falling back from a required repository", () => {
@@ -254,19 +352,23 @@ describe("settings modal content", () => {
       requiredWorkspaceRepoPath: "/missing/repo",
     };
     const html = renderToStaticMarkup(
-      createElement(SettingsModalContent, {
-        section: "repositories",
-        repositorySection: "scripts",
-        globalPromptRoleTab: "shared",
-        repoPromptRoleTab: "shared",
-        selectedReusablePromptId: null,
-        isInteractionDisabled: false,
-        controller,
-        onRepositorySectionChange: () => {},
-        onGlobalPromptRoleTabChange: () => {},
-        onRepoPromptRoleTabChange: () => {},
-        onSelectedReusablePromptIdChange: () => {},
-      }),
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(SettingsModalContent, {
+          section: "repositories",
+          repositorySection: "scripts",
+          globalPromptRoleTab: "shared",
+          repoPromptRoleTab: "shared",
+          selectedReusablePromptId: null,
+          isInteractionDisabled: false,
+          controller,
+          onRepositorySectionChange: () => {},
+          onGlobalPromptRoleTabChange: () => {},
+          onRepoPromptRoleTabChange: () => {},
+          onSelectedReusablePromptIdChange: () => {},
+        }),
+      ),
     );
 
     expect(html).toContain("Add a repository first");

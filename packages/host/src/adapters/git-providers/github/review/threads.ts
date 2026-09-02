@@ -1,16 +1,10 @@
 import type { GitProviderRepository, PullRequestReviewActivity } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { z } from "zod";
-import {
-  type GithubCommandDependencies,
-  runGithubCommand,
-} from "../../../application/tasks/support/github-pull-requests";
-import { errorMessage, HostValidationError } from "../../../effect/host-errors";
-import { parseGithubJson } from "./github-pull-request-review-payload";
-import {
-  type GithubReviewCommentLineRange,
-  parseGithubReviewCommentContent,
-} from "./github-pull-request-review-suggestions";
+import { errorMessage, HostValidationError } from "../../../../effect/host-errors";
+import { runGithubApi, type GithubCli } from "../cli";
+import { parseGithubJson } from "./payload";
+import { type GithubReviewCommentLineRange, parseGithubReviewCommentContent } from "./suggestions";
 
 export type ReviewThreadCommentsCursor = {
   threadId: string;
@@ -296,23 +290,29 @@ const parseReviewThreadCommentsPage = (payload: string): ParsedReviewThreadComme
 };
 
 type GithubReviewThreadsReadInput = {
-  dependencies: GithubCommandDependencies;
+  githubCli: GithubCli;
   repoPath: string;
   repository: GitProviderRepository;
   pullRequestNumber: number;
 };
 
+type GithubReviewGraphqlVariable = {
+  flag: "-f" | "-F";
+  name: string;
+  value: string | number;
+};
+
 const runReviewGraphql = (
   input: GithubReviewThreadsReadInput,
   query: string,
-  variables: readonly { name: string; value: string | number }[],
+  variables: readonly GithubReviewGraphqlVariable[],
 ) =>
-  runGithubCommand(input.dependencies, input.repoPath, input.repository.host, [
+  runGithubApi(input.githubCli, input.repoPath, input.repository.host, [
     "api",
     "graphql",
     "-f",
     `query=${query}`,
-    ...variables.flatMap(({ name, value }) => ["-F", `${name}=${value}`]),
+    ...variables.flatMap(({ flag, name, value }) => [flag, `${name}=${value}`]),
   ]).pipe(
     Effect.mapError(
       (cause) =>
@@ -333,13 +333,13 @@ export const loadGithubReviewThreads = (input: GithubReviewThreadsReadInput) =>
     let threadsCursor: string | null = null;
 
     do {
-      const variables: { name: string; value: string | number }[] = [
-        { name: "owner", value: input.repository.owner },
-        { name: "name", value: input.repository.name },
-        { name: "number", value: input.pullRequestNumber },
+      const variables: GithubReviewGraphqlVariable[] = [
+        { flag: "-f", name: "owner", value: input.repository.owner },
+        { flag: "-f", name: "name", value: input.repository.name },
+        { flag: "-F", name: "number", value: input.pullRequestNumber },
       ];
       if (threadsCursor) {
-        variables.push({ name: "threadsCursor", value: threadsCursor });
+        variables.push({ flag: "-f", name: "threadsCursor", value: threadsCursor });
       }
       const payload = yield* runReviewGraphql(input, REVIEW_THREADS_QUERY, variables);
       const page = yield* Effect.try({
@@ -370,8 +370,8 @@ export const loadGithubReviewThreads = (input: GithubReviewThreadsReadInput) =>
             input,
             REVIEW_THREAD_COMMENTS_QUERY,
             [
-              { name: "threadId", value: commentPage.threadId },
-              { name: "commentsCursor", value: commentsCursor },
+              { flag: "-f", name: "threadId", value: commentPage.threadId },
+              { flag: "-f", name: "commentsCursor", value: commentsCursor },
             ],
           );
           const parsedCommentsPage: ParsedReviewThreadCommentsPage = yield* Effect.try({

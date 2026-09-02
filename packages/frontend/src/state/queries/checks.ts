@@ -64,7 +64,7 @@ export const classifyDiagnosticsQueryError = (cause: unknown): ClassifiedDiagnos
   };
 };
 
-const withDiagnosticsQueryTimeout = async <T>(
+export const withDiagnosticsQueryTimeout = async <T>(
   promise: Promise<T>,
   scheduler: ScheduleTask,
 ): Promise<T> => {

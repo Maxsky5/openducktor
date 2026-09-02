@@ -1138,12 +1138,29 @@ describe("createElectronHostCommandRouter", () => {
     ).resolves.toEqual({ ok: true });
   });
 
-  test("registers migrated GitHub repository detection command", async () => {
+  test("registers migrated Git provider commands", async () => {
+    const configuredRepo = repoConfig({
+      git: {
+        provider: {
+          id: "github",
+          enabled: true,
+          autoDetected: false,
+          repository: { host: "github.com", owner: "openai", name: "openducktor" },
+        },
+      },
+    });
     const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(),
+      settingsConfig: createSettingsConfig(
+        globalConfig({
+          workspaces: { repo: configuredRepo },
+          workspaceOrder: ["repo"],
+          recentWorkspaces: ["repo"],
+        }),
+      ),
+      systemCommands: createSystemCommands(),
     });
 
     await expect(
@@ -1154,6 +1171,16 @@ describe("createElectronHostCommandRouter", () => {
       host: "github.com",
       owner: "openai",
       name: "openducktor",
+    });
+    await expect(
+      router.invoke("workspace_get_git_provider_health", { repoPath: "/repo" }),
+    ).resolves.toMatchObject({
+      providerId: "github",
+      enabled: true,
+      available: true,
+      version: "gh version 1.0.0",
+      authenticated: true,
+      repositoryMappingValid: true,
     });
   });
 
@@ -1169,8 +1196,6 @@ describe("createElectronHostCommandRouter", () => {
 
     await expect(router.invoke("runtime_check", { force: true })).resolves.toMatchObject({
       gitOk: true,
-      ghOk: true,
-      ghAuthLogin: "octocat",
       runtimes: [
         { kind: "opencode", ok: false, enabled: false },
         { kind: "codex", ok: false, enabled: false },

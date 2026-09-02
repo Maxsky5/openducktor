@@ -1,14 +1,9 @@
+import type { PullRequest } from "@openducktor/contracts";
 import { Effect } from "effect";
-import {
-  fetchLinkedPullRequest,
-  githubPullRequestSyncPolicy,
-  pullRequestRecordsMatch,
-} from "../support/github-pull-requests";
 import {
   requireDependencies,
   requireMergedTaskCleanupDependencies,
   requirePullRequestSyncDependencies,
-  type TaskGithubDependencyInput,
 } from "../support/required-task-dependencies";
 import { completeTaskClosure } from "../support/task-closure";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
@@ -20,7 +15,7 @@ import type { CreateTaskServiceInput, TaskService, TaskServiceError } from "../t
 export const createTaskPullRequestSyncUseCases = ({
   devServerService,
   gitPort,
-  githubDependencies,
+  gitProviderResolver,
   taskStore,
   settingsConfig,
   taskSessionBootstrapCoordinator,
@@ -28,7 +23,7 @@ export const createTaskPullRequestSyncUseCases = ({
   terminalService,
   worktreeFiles,
   workspaceSettingsService,
-}: CreateTaskServiceInput & TaskGithubDependencyInput): Pick<
+}: CreateTaskServiceInput): Pick<
   TaskService,
   "repoPullRequestSync" | "repoPullRequestSyncDetailed"
 > => {
@@ -39,17 +34,28 @@ export const createTaskPullRequestSyncUseCases = ({
         const { repoPath } = input;
         const dependencies = yield* requireDependencies(() =>
           requirePullRequestSyncDependencies({
-            githubDependencies,
+            gitProviderResolver,
             workspaceSettingsService,
           }),
         );
         const repoConfig =
           yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
         const effectiveRepoPath = repoConfig.repoPath;
-        const policy = yield* githubPullRequestSyncPolicy(dependencies, repoConfig);
-        if (!policy.available) {
-          return { ran: false, changedTaskIds: [] };
+        const providerResult = yield* Effect.either(
+          dependencies.gitProviderResolver.resolve(repoConfig),
+        );
+        if (providerResult._tag === "Left") {
+          if (
+            providerResult.left.reason === "not_configured" ||
+            providerResult.left.reason === "disabled"
+          ) {
+            return { ran: false, changedTaskIds: [] };
+          }
+          return yield* Effect.fail(providerResult.left);
         }
+        const provider = providerResult.right;
+        const pullRequests = yield* provider.pullRequests();
+        const providerId = provider.getDescriptor().id;
 
         const tasks = yield* taskStore.listPullRequestSyncCandidates({
           repoPath: effectiveRepoPath,
@@ -60,15 +66,13 @@ export const createTaskPullRequestSyncUseCases = ({
             continue;
           }
 
-          const updated = yield* fetchLinkedPullRequest(
-            dependencies,
-            effectiveRepoPath,
-            policy,
-            pullRequest,
-          );
-          if (!updated) {
+          if (pullRequest.providerId !== providerId) {
             continue;
           }
+          const updated = yield* pullRequests.getByNumber({
+            repoConfig,
+            number: pullRequest.number,
+          });
 
           if (updated.record.state === "merged" && task.status !== "closed") {
             const cleanupDependencies = yield* requireDependencies(() =>
@@ -156,4 +160,10 @@ export const createTaskPullRequestSyncUseCases = ({
     },
     repoPullRequestSyncDetailed,
   };
+};
+
+const pullRequestRecordsMatch = (left: PullRequest, right: PullRequest): boolean => {
+  const { lastSyncedAt: _leftSync, ...leftRecord } = left;
+  const { lastSyncedAt: _rightSync, ...rightRecord } = right;
+  return JSON.stringify(leftRecord) === JSON.stringify(rightRecord);
 };

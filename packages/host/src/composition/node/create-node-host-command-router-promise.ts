@@ -3,7 +3,7 @@ import {
   type HostCommandRouter,
   toPromiseHostCommandRouter,
 } from "../../interface/router/host-command-router";
-import { createNodeEffectHostCommandRouter } from "./create-node-host-command-router";
+import { createNodeEffectHostCommandRouter } from "./create-node-effect-host-command-router";
 import type { CreateNodeHostCommandRouterInput } from "./node-host-command-router-types";
 
 export const createNodeHostCommandRouter = (

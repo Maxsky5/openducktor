@@ -1,4 +1,16 @@
+import type {
+  GitProviderConfig,
+  GitProviderHealth,
+  SettingsSnapshot,
+} from "@openducktor/contracts";
 import type { ReactElement } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { errorMessage } from "@/lib/errors";
+import {
+  gitProviderHealthQueryOptions,
+  shouldLoadGitProviderHealth,
+} from "@/state/queries/git-provider-health";
+import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import type { SettingsContentFocusRequest } from "./settings-deep-link";
 import type { PromptRoleTabId, RepositorySectionId } from "./settings-modal-constants";
 import { RepositorySidebar } from "./settings-modal-sidebars";
@@ -9,6 +21,7 @@ import { RepositoryConfigurationSection } from "./settings-repository-configurat
 import { RepositoryGitSection } from "./settings-repository-git-section";
 import { RepositoryScriptsSection } from "./settings-repository-scripts-section";
 import type { SettingsModalController } from "./use-settings-modal-controller";
+import type { GitProviderHealthState } from "./use-repository-git-section-model";
 
 type SettingsRepositoryContentProps = {
   repositorySection: RepositorySectionId;
@@ -70,6 +83,86 @@ const resolveRepositoryAvailabilityNotice = ({
   return null;
 };
 
+const resolveProviderHealth = (
+  providerDirty: boolean,
+  loadProviderHealth: boolean,
+  query: {
+    data: GitProviderHealth | undefined;
+    error: Error | null;
+    isError: boolean;
+    isPending: boolean;
+  },
+): GitProviderHealthState => {
+  if (providerDirty) {
+    return { status: "draft" };
+  }
+  if (!loadProviderHealth) {
+    return { status: "idle" };
+  }
+  if (query.isPending) {
+    return { status: "pending" };
+  }
+  if (query.isError) {
+    return { status: "error", message: errorMessage(query.error) };
+  }
+  return query.data ? { status: "loaded", health: query.data } : { status: "idle" };
+};
+
+const shouldLoadProviderHealth = ({
+  providerDirty,
+  repositorySection,
+  provider,
+  repoPath,
+}: {
+  providerDirty: boolean;
+  repositorySection: RepositorySectionId;
+  provider: GitProviderConfig | undefined;
+  repoPath: string;
+}): boolean =>
+  !providerDirty &&
+  shouldLoadGitProviderHealth({
+    isGitSection: repositorySection === "git",
+    provider,
+    repoPath,
+  });
+
+const isProviderHealthDirty = (
+  draft: SettingsSnapshot | null,
+  saved: SettingsSnapshot | undefined,
+  workspaceId: string | null,
+): boolean => {
+  if (!workspaceId) {
+    return false;
+  }
+  const draftProvider = draft?.workspaces[workspaceId]?.git.provider;
+  const savedProvider = saved?.workspaces[workspaceId]?.git.provider;
+  return (
+    draftProvider?.id !== savedProvider?.id ||
+    draftProvider?.enabled !== savedProvider?.enabled ||
+    draftProvider?.repository?.host !== savedProvider?.repository?.host ||
+    draftProvider?.repository?.owner !== savedProvider?.repository?.owner ||
+    draftProvider?.repository?.name !== savedProvider?.repository?.name
+  );
+};
+
+const RepositoryAvailabilityBanner = ({
+  notice,
+}: {
+  notice: RepositoryAvailabilityNotice | null;
+}): ReactElement | null => {
+  if (!notice) {
+    return null;
+  }
+  return (
+    <div
+      role={notice.role}
+      className="rounded-md border border-warning-border bg-warning-surface p-3 text-sm text-warning-surface-foreground"
+    >
+      {notice.message}
+    </div>
+  );
+};
+
 export function SettingsRepositoryContent({
   repositorySection,
   repoPromptRoleTab,
@@ -90,6 +183,7 @@ export function SettingsRepositoryContent({
     availableRuntimeDefinitions,
     catalogResources,
     favoriteState,
+    snapshotDraft,
     workspaceIds,
     selectedWorkspace,
     selectedWorkspaceId,
@@ -125,6 +219,24 @@ export function SettingsRepositoryContent({
   const selectedRepoScriptValidationErrorCount = selectedWorkspaceId
     ? (repoScriptValidationErrorCountByWorkspaceId[selectedWorkspaceId] ?? 0)
     : 0;
+  const selectedRepoPath = selectedWorkspace?.repoPath ?? "";
+  const savedSettings = useQuery(settingsSnapshotQueryOptions()).data;
+  const providerDirty = isProviderHealthDirty(snapshotDraft, savedSettings, selectedWorkspaceId);
+  const loadProviderHealth = shouldLoadProviderHealth({
+    providerDirty,
+    repositorySection,
+    provider: selectedRepoConfig?.git.provider,
+    repoPath: selectedRepoPath,
+  });
+  const providerHealthQuery = useQuery({
+    ...gitProviderHealthQueryOptions(selectedRepoPath),
+    enabled: loadProviderHealth,
+  });
+  const providerHealth = resolveProviderHealth(
+    providerDirty,
+    loadProviderHealth,
+    providerHealthQuery,
+  );
 
   return (
     <div className="grid h-full lg:grid-cols-[240px_minmax(0,1fr)]">
@@ -142,14 +254,7 @@ export function SettingsRepositoryContent({
       />
 
       <div className="min-w-0 space-y-4">
-        {repositoryAvailabilityNotice ? (
-          <div
-            role={repositoryAvailabilityNotice.role}
-            className="rounded-md border border-warning-border bg-warning-surface p-3 text-sm text-warning-surface-foreground"
-          >
-            {repositoryAvailabilityNotice.message}
-          </div>
-        ) : null}
+        <RepositoryAvailabilityBanner notice={repositoryAvailabilityNotice} />
 
         {selectedRepoConfig && repositorySection === "configuration" ? (
           <RepositoryConfigurationSection
@@ -183,7 +288,7 @@ export function SettingsRepositoryContent({
           <RepositoryGitSection
             selectedRepoPath={selectedWorkspace?.repoPath ?? null}
             selectedRepoConfig={selectedRepoConfig}
-            runtimeCheck={controller.runtimeCheck}
+            providerHealth={providerHealth}
             disabled={isInteractionDisabled}
             onDetectGithubRepository={controller.detectSelectedRepoGithubRepository}
             onUpdateSelectedRepoConfig={updateSelectedRepoConfig}

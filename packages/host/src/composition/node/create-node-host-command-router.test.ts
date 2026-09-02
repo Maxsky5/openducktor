@@ -13,11 +13,9 @@ import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import type { TerminalPtyPort } from "../../ports/terminal-pty-port";
 import type { HostLifecycleLogger } from "../host-lifecycle";
-import {
-  type CreateNodeHostCommandRouterInput,
-  createNodeEffectHostCommandRouter,
-} from "./create-node-host-command-router";
+import { createNodeEffectHostCommandRouter } from "./create-node-effect-host-command-router";
 import { createNodeHostCommandRouter } from "./create-node-host-command-router-promise";
+import type { CreateNodeHostCommandRouterInput } from "./node-host-command-router-types";
 import { createLiveSessionFaultLogger } from "./node-host-lifecycle-logger";
 
 const createRuntimeDistribution = () =>

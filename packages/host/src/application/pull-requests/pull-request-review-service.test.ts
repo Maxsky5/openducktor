@@ -129,8 +129,9 @@ const makeProvider = (
   return {
     getDescriptor: () => providerDescriptor,
     repository: () => ({
-      getReadRepository: () => unexpectedProviderOperation(),
-      getWriteContext: () => unexpectedProviderOperation(),
+      detectRepository: () => unexpectedProviderOperation(),
+      getRepository: () => unexpectedProviderOperation(),
+      getMapping: () => unexpectedProviderOperation(),
     }),
     health: () => ({
       getStatus: () => unexpectedProviderOperation(),

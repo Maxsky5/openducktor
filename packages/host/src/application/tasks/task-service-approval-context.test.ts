@@ -1,6 +1,8 @@
 import { Effect } from "effect";
+import { GITHUB_PROVIDER_DESCRIPTOR, type GitProviderHealth } from "@openducktor/contracts";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { HostOperationError } from "../../effect/host-errors";
+import type { GitProviderResolver } from "../git/git-provider-resolver";
 import {
   createAgentSessionRecord,
   createApprovalSystemCommands,
@@ -14,6 +16,36 @@ import {
   type TaskStorePort,
   task,
 } from "./test-support/task-workflow-harness";
+
+const createGitProviderResolver = (health: GitProviderHealth): GitProviderResolver => ({
+  resolve: () =>
+    Effect.succeed({
+      getDescriptor: () => GITHUB_PROVIDER_DESCRIPTOR,
+      repository: () => ({
+        detectRepository: () => Effect.die("Unexpected detectRepository call"),
+        getRepository: () => Effect.die("Unexpected getRepository call"),
+        getMapping: () => Effect.die("Unexpected getMapping call"),
+      }),
+      health: () => ({ getStatus: () => Effect.succeed(health) }),
+      pullRequests: () => Effect.die("Unexpected pullRequests call"),
+      pullRequestReview: () => Effect.die("Unexpected pullRequestReview call"),
+    }),
+});
+
+const healthyGithub: GitProviderHealth = {
+  providerId: "github",
+  enabled: true,
+  available: true,
+  executablePath: "gh",
+  version: "gh version 2.95.0",
+  authenticated: true,
+  account: "openai",
+  repositoryMappingValid: true,
+};
+
+const unusedGitProviderResolver: GitProviderResolver = {
+  resolve: () => Effect.die("Unexpected Git provider resolution"),
+};
 
 describe("createTaskService approval context", () => {
   test("loads approval context from the active task worktree", async () => {
@@ -160,6 +192,7 @@ describe("createTaskService approval context", () => {
       },
     };
     const service = createTaskService({
+      gitProviderResolver: createGitProviderResolver(healthyGithub),
       gitPort: extendGitPort(
         createDirectMergeGitPort({
           calls,
@@ -274,7 +307,7 @@ describe("createTaskService approval context", () => {
         hasUncommittedChanges: true,
         uncommittedFileCount: 2,
         pullRequest: undefined,
-        providers: [{ providerId: "github", enabled: true, available: true }],
+        providers: [healthyGithub],
         suggestedSquashCommitMessage: "Ship task approval context",
       },
     });
@@ -431,6 +464,7 @@ describe("createTaskService approval context", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
+          gitProviderResolver: unusedGitProviderResolver,
           gitPort: createDirectMergeGitPort({ calls: [] }),
           settingsConfig: extendSettingsConfigPort(createBuildSettingsConfig(new Set(["/repo"])), {
             readConfig() {
@@ -613,6 +647,7 @@ describe("createTaskService approval context", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
+          gitProviderResolver: unusedGitProviderResolver,
           gitPort: createDirectMergeGitPort({
             calls,
             currentBranches: {

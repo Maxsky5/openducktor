@@ -8,11 +8,8 @@ import {
 } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
 import { providerStatuses } from "../support/approval-readiness";
-import {
-  requireApprovalContextDependencies,
-  requireDependencies,
-  type TaskGithubDependencyInput,
-} from "../support/required-task-dependencies";
+import { requireApprovalContextDependencies } from "../support/required-provider-task-dependencies";
+import { requireDependencies } from "../support/required-task-dependencies";
 import { loadDefaultMergeMethod } from "../support/task-workflow-helpers";
 import {
   effectiveTargetBranchForTask,
@@ -21,21 +18,20 @@ import {
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskApprovalContextUseCase = ({
-  githubDependencies,
+  gitPort,
+  gitProviderResolver,
   taskStore,
   settingsConfig,
   taskWorktreeService,
   workspaceSettingsService,
-}: CreateTaskServiceInput & TaskGithubDependencyInput): Pick<
-  TaskService,
-  "getApprovalContext"
-> => ({
+}: CreateTaskServiceInput): Pick<TaskService, "getApprovalContext"> => ({
   getApprovalContext(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const dependencies = yield* requireDependencies(() =>
         requireApprovalContextDependencies({
-          githubDependencies,
+          gitPort,
+          gitProviderResolver,
           settingsConfig,
           taskWorktreeService,
           workspaceSettingsService,
@@ -56,7 +52,7 @@ export const createTaskApprovalContextUseCase = ({
       const effectiveRepoPath = repoConfig.repoPath;
       const metadata = yield* taskStore.getTaskMetadata({ repoPath: effectiveRepoPath, taskId });
       const defaultMergeMethod = yield* loadDefaultMergeMethod(dependencies.settingsConfig);
-      const providers = yield* providerStatuses(dependencies, effectiveRepoPath, repoConfig);
+      const providers = yield* providerStatuses(dependencies.gitProviderResolver, repoConfig);
 
       if (metadata.directMerge !== undefined) {
         const directMerge = metadata.directMerge;

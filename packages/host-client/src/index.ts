@@ -68,6 +68,8 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       workspaceClient.workspaceUpdateGlobalGitConfig.bind(workspaceClient),
     workspaceDetectGithubRepository:
       workspaceClient.workspaceDetectGithubRepository.bind(workspaceClient),
+    workspaceGetGitProviderHealth:
+      workspaceClient.workspaceGetGitProviderHealth.bind(workspaceClient),
     workspaceSaveSettingsSnapshot:
       workspaceClient.workspaceSaveSettingsSnapshot.bind(workspaceClient),
     workspaceStageLocalAttachment:

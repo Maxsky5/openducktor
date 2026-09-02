@@ -335,11 +335,6 @@ describe("AgentRuntimesSection", () => {
         runtimeCheck: {
           gitOk: true,
           gitVersion: "git version 2.50.0",
-          ghOk: true,
-          ghVersion: null,
-          ghAuthOk: true,
-          ghAuthLogin: null,
-          ghAuthError: null,
           runtimes: [
             {
               kind: "claude",

@@ -172,6 +172,15 @@ export const gitProviderAvailabilitySchema = z.object({
 });
 export type GitProviderAvailability = z.infer<typeof gitProviderAvailabilitySchema>;
 
+export const gitProviderHealthSchema = gitProviderAvailabilitySchema.extend({
+  executablePath: z.string().nullable(),
+  version: z.string().nullable(),
+  authenticated: z.boolean(),
+  account: z.string().nullable(),
+  repositoryMappingValid: z.boolean().nullable(),
+});
+export type GitProviderHealth = z.infer<typeof gitProviderHealthSchema>;
+
 export const taskApprovalContextSchema = z.object({
   taskId: z.string(),
   taskStatus: z.string(),

@@ -1,10 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
 import { type PullRequestReviewContext, repoConfigSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostValidationError } from "../../../effect/host-errors";
-import { createGithubPullRequestReviewAdapter } from "./github-pull-request-review-adapter";
-import type { GithubPullRequestReviewReader } from "./github-pull-request-review-reader";
-import { createGithubReviewTestDependencies } from "./github-pull-request-review.test-support";
+import { HostValidationError } from "../../../../effect/host-errors";
+import { createGithubPullRequestReviewAdapter } from "./adapter";
+import type { GithubPullRequestReviewReader } from "./reader";
+import { createGithubReviewTestCli } from "./test-support";
 
 const loadedContext: PullRequestReviewContext = {
   status: "loaded",
@@ -47,22 +47,20 @@ const linkedPullRequest = (providerId = "github") => ({
   updatedAt: "2026-07-10T08:00:00.000Z",
 });
 
-const createGithubDependencies = () => {
-  const runCommandAllowFailure = mock((_command: string, args: string[]) => {
-    expect(args).toEqual(["auth", "status", "--hostname", "github.com"]);
-    return Effect.succeed({ ok: true, stdout: "", stderr: "" });
-  });
-  const dependencies = createGithubReviewTestDependencies(runCommandAllowFailure);
-  return { dependencies, runCommandAllowFailure };
-};
+const createGithubCommands = () =>
+  createGithubReviewTestCli(() => Effect.dieMessage("unexpected GitHub command"));
+
+const repository = { host: "github.com", owner: "openai", name: "openducktor" };
 
 describe("createGithubPullRequestReviewAdapter", () => {
   test("uses the linked pull request without requiring a local Git remote", async () => {
-    const { dependencies: githubDependencies, runCommandAllowFailure } = createGithubDependencies();
+    const githubCli = createGithubCommands();
+    const getRepository = mock(() => Effect.succeed(repository));
     const read = mock(() => Effect.succeed(loadedContext));
     const reviewReader: GithubPullRequestReviewReader = { read };
     const adapter = createGithubPullRequestReviewAdapter({
-      githubDependencies,
+      githubCli,
+      getRepository,
       reviewReader,
     });
 
@@ -75,19 +73,21 @@ describe("createGithubPullRequestReviewAdapter", () => {
 
     expect(context).toBe(loadedContext);
     expect(read).toHaveBeenCalledWith({
-      dependencies: githubDependencies,
+      githubCli,
       repoPath: "/repo",
-      repository: { host: "github.com", owner: "openai", name: "openducktor" },
+      repository,
       pullRequestNumber: 42,
     });
-    expect(runCommandAllowFailure).toHaveBeenCalledTimes(1);
+    expect(getRepository).toHaveBeenCalledTimes(1);
   });
 
   test("rejects a linked pull request from another provider", async () => {
-    const { dependencies: githubDependencies, runCommandAllowFailure } = createGithubDependencies();
+    const githubCli = createGithubCommands();
+    const getRepository = mock(() => Effect.succeed(repository));
     const read = mock(() => Effect.succeed(loadedContext));
     const adapter = createGithubPullRequestReviewAdapter({
-      githubDependencies,
+      githubCli,
+      getRepository,
       reviewReader: { read },
     });
 
@@ -106,14 +106,23 @@ describe("createGithubPullRequestReviewAdapter", () => {
       expect(result.left.field).toBe("pullRequest.providerId");
     }
     expect(read).not.toHaveBeenCalled();
-    expect(runCommandAllowFailure).not.toHaveBeenCalled();
+    expect(getRepository).not.toHaveBeenCalled();
   });
 
   test("returns unavailable when the configured GitHub repository cannot be read", async () => {
-    const { dependencies: githubDependencies, runCommandAllowFailure } = createGithubDependencies();
+    const githubCli = createGithubCommands();
+    const getRepository = mock(() =>
+      Effect.fail(
+        new HostValidationError({
+          field: "git.provider",
+          message: "GitHub provider is not enabled.",
+        }),
+      ),
+    );
     const read = mock(() => Effect.succeed(loadedContext));
     const adapter = createGithubPullRequestReviewAdapter({
-      githubDependencies,
+      githubCli,
+      getRepository,
       reviewReader: { read },
     });
 
@@ -130,18 +139,20 @@ describe("createGithubPullRequestReviewAdapter", () => {
       reason: expect.stringContaining("not enabled"),
     });
     expect(read).not.toHaveBeenCalled();
-    expect(runCommandAllowFailure).not.toHaveBeenCalled();
+    expect(getRepository).toHaveBeenCalledTimes(1);
   });
 
   test("preserves typed reader failures", async () => {
-    const { dependencies: githubDependencies, runCommandAllowFailure } = createGithubDependencies();
+    const githubCli = createGithubCommands();
+    const getRepository = mock(() => Effect.succeed(repository));
     const failure = new HostValidationError({
       field: "github.review",
       message: "GitHub review response is invalid.",
     });
     const read = mock(() => Effect.fail(failure));
     const adapter = createGithubPullRequestReviewAdapter({
-      githubDependencies,
+      githubCli,
+      getRepository,
       reviewReader: { read },
     });
 
@@ -158,6 +169,6 @@ describe("createGithubPullRequestReviewAdapter", () => {
     if (result._tag === "Left") {
       expect(result.left).toBe(failure);
     }
-    expect(runCommandAllowFailure).toHaveBeenCalledTimes(1);
+    expect(getRepository).toHaveBeenCalledTimes(1);
   });
 });

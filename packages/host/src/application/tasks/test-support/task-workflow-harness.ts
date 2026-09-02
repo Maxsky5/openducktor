@@ -35,6 +35,7 @@ import {
   createTaskServiceWithMutationProgress as createRealTaskServiceWithMutationProgress,
 } from "../task-service";
 import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
+import { createDefaultGitProviderResolver } from "./git-provider-test-support";
 
 const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   id: "task-1",
@@ -146,12 +147,12 @@ const extendSettingsConfigPort = (
 ): SettingsConfigPort => createSettingsConfigPort({ ...base, ...overrides });
 const createTaskStorePort = (overrides: TaskStorePort): RealTaskStorePort =>
   createTaskStoreTestDouble(overrides);
-const createTaskService = (
-  input: Omit<CreateTaskServiceInput, "taskStore" | "taskActivityGuard"> & {
-    taskActivityGuard?: TaskActivityGuardPort;
-    taskStore: TaskStorePort;
-  },
-) => {
+type TaskServiceTestInput = Omit<CreateTaskServiceInput, "taskStore" | "taskActivityGuard"> & {
+  taskActivityGuard?: TaskActivityGuardPort;
+  taskStore: TaskStorePort;
+};
+
+const createTaskServiceInput = (input: TaskServiceTestInput): CreateTaskServiceInput => {
   const {
     taskActivityGuard,
     taskStore,
@@ -162,16 +163,17 @@ const createTaskService = (
   const workspaceSettingsService = createWorkspaceSettingsServicePort(
     workspaceSettingsServiceInput,
   );
+  const systemCommands = rest.systemCommands ?? defaultSystemCommands;
+  const resolvedToolDiscovery = toolDiscovery ?? createToolDiscoveryAdapter({ systemCommands });
   const taskServiceInput: CreateTaskServiceInput = {
     ...rest,
+    gitProviderResolver: rest.gitProviderResolver ?? createDefaultGitProviderResolver(),
     terminalService:
       rest.terminalService ??
       ({
         acquireTaskCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
       } satisfies NonNullable<CreateTaskServiceInput["terminalService"]>),
-    toolDiscovery:
-      toolDiscovery ??
-      createToolDiscoveryAdapter({ systemCommands: rest.systemCommands ?? defaultSystemCommands }),
+    toolDiscovery: resolvedToolDiscovery,
     taskStore: createTaskStorePort(taskStore),
   };
   if (workspaceSettingsService) {
@@ -180,44 +182,12 @@ const createTaskService = (
   if (taskActivityGuard) {
     taskServiceInput.taskActivityGuard = taskActivityGuard;
   }
-  return createRealTaskService(taskServiceInput);
+  return taskServiceInput;
 };
-const createTaskServiceWithMutationProgress = (
-  input: Omit<CreateTaskServiceInput, "taskStore" | "taskActivityGuard"> & {
-    taskActivityGuard?: TaskActivityGuardPort;
-    taskStore: TaskStorePort;
-  },
-) => {
-  const {
-    taskActivityGuard,
-    taskStore,
-    toolDiscovery,
-    workspaceSettingsService: workspaceSettingsServiceInput,
-    ...rest
-  } = input;
-  const workspaceSettingsService = createWorkspaceSettingsServicePort(
-    workspaceSettingsServiceInput,
-  );
-  const taskServiceInput: CreateTaskServiceInput = {
-    ...rest,
-    terminalService:
-      rest.terminalService ??
-      ({
-        acquireTaskCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
-      } satisfies NonNullable<CreateTaskServiceInput["terminalService"]>),
-    toolDiscovery:
-      toolDiscovery ??
-      createToolDiscoveryAdapter({ systemCommands: rest.systemCommands ?? defaultSystemCommands }),
-    taskStore: createTaskStorePort(taskStore),
-  };
-  if (workspaceSettingsService) {
-    taskServiceInput.workspaceSettingsService = workspaceSettingsService;
-  }
-  if (taskActivityGuard) {
-    taskServiceInput.taskActivityGuard = taskActivityGuard;
-  }
-  return createRealTaskServiceWithMutationProgress(taskServiceInput);
-};
+const createTaskService = (input: TaskServiceTestInput) =>
+  createRealTaskService(createTaskServiceInput(input));
+const createTaskServiceWithMutationProgress = (input: TaskServiceTestInput) =>
+  createRealTaskServiceWithMutationProgress(createTaskServiceInput(input));
 const createAgentSessionTaskStore = (calls: unknown[]): TaskStorePort => ({
   upsertAgentSession(input) {
     return Effect.sync(() => {
@@ -774,6 +744,9 @@ const createApprovalSystemCommands = (available = true): SystemCommandPort =>
     },
     runCommandAllowFailure(command, args, options) {
       return Effect.sync(() => {
+        if (args[0] === "api" && args[1] === "user") {
+          return { ok: true, stdout: "octocat\n", stderr: "" };
+        }
         return {
           ok: true,
           stdout: `Logged in to ${options?.env?.GH_PROMPT_DISABLED ? "github.com" : command} account octocat\n`,
@@ -847,10 +820,10 @@ const createPullRequestDetectSystemCommands = ({
     },
     runCommandAllowFailure(command, args, options) {
       calls.push({ type: "command", command, args, options });
-      if (args.includes("auth")) {
+      if (args[0] === "api" && args[1] === "user") {
         return Effect.succeed({
           ok: true,
-          stdout: "Logged in to github.com account octocat\n",
+          stdout: "octocat\n",
           stderr: "",
         });
       }
@@ -882,14 +855,14 @@ const createPullRequestUpsertSystemCommands = ({
       return Effect.succeed(command === "gh" ? command : null);
     },
     versionCommand() {
-      return Effect.dieMessage("unexpected version command");
+      return Effect.succeed("gh version test");
     },
     runCommandAllowFailure(command, args, options) {
       calls.push({ type: "command", command, args, options });
-      if (args.includes("auth")) {
+      if (args[0] === "api" && args[1] === "user") {
         return Effect.succeed({
           ok: true,
-          stdout: "Logged in to github.com account octocat\n",
+          stdout: "octocat\n",
           stderr: "",
         });
       }
@@ -920,10 +893,13 @@ const createPullRequestSyncSystemCommands = ({
       return Effect.succeed(command === "gh" && available ? command : null);
     },
     versionCommand() {
-      return Effect.dieMessage("unexpected version command");
+      return Effect.succeed("gh version test");
     },
     runCommandAllowFailure(command, args, options) {
       calls.push({ type: "command", command, args, options });
+      if (args[0] === "api" && args[1] === "user") {
+        return Effect.succeed({ ok: true, stdout: "octocat\n", stderr: "" });
+      }
       if (args.some((arg) => arg.includes("pulls/42"))) {
         return Effect.succeed({ ok: true, stdout: payload, stderr: "" });
       }

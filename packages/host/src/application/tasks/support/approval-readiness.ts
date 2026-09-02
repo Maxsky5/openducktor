@@ -6,15 +6,18 @@ import {
   normalizeApprovalTargetBranch,
   publishTargetFromTargetBranch,
 } from "../../../domain/task";
-import { HostValidationError } from "../../../effect/host-errors";
+import { errorMessage, HostValidationError } from "../../../effect/host-errors";
+import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
+import type { GitProviderResolver } from "../../git/git-provider-resolver";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
-import { type GithubRepositoryDependencies, githubProviderStatus } from "./github-pull-requests";
 import { loadDefaultMergeMethod } from "./task-workflow-helpers";
 import { effectiveTargetBranchForTask } from "./task-worktree-cleanup";
 export const loadOpenApprovalContext = (
-  dependencies: GithubRepositoryDependencies & {
+  dependencies: {
+    gitPort: GitPort;
+    gitProviderResolver: GitProviderResolver;
     settingsConfig: SettingsConfigPort;
     taskWorktreeService: TaskWorktreeService;
     workspaceSettingsService: WorkspaceSettingsService;
@@ -35,7 +38,7 @@ export const loadOpenApprovalContext = (
     });
     const effectiveRepoPath = repoConfig.repoPath;
     const defaultMergeMethod = yield* loadDefaultMergeMethod(dependencies.settingsConfig);
-    const providers = yield* providerStatuses(dependencies, effectiveRepoPath, repoConfig);
+    const providers = yield* providerStatuses(dependencies.gitProviderResolver, repoConfig);
     const taskWorktree = yield* dependencies.taskWorktreeService.getTaskWorktree({
       repoPath: effectiveRepoPath,
       taskId,
@@ -108,11 +111,34 @@ export const loadOpenApprovalContext = (
       suggestedSquashCommitMessage,
     };
   });
-export const providerStatuses = (
-  dependencies: GithubRepositoryDependencies,
-  repoPath: string,
-  repoConfig: RepoConfig,
-) =>
+export const providerStatuses = (resolver: GitProviderResolver, repoConfig: RepoConfig) =>
   Effect.gen(function* () {
-    return [yield* githubProviderStatus(dependencies, repoPath, repoConfig)];
+    const selection = repoConfig.git.provider;
+    if (!selection) {
+      return [];
+    }
+    const providerResult = yield* Effect.either(resolver.resolve(repoConfig));
+    if (providerResult._tag === "Left") {
+      return [
+        {
+          providerId: selection.id,
+          enabled: selection.enabled,
+          available: false,
+          reason: errorMessage(providerResult.left),
+        },
+      ];
+    }
+    const health = yield* providerResult.right
+      .health()
+      .getStatus(repoConfig)
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new HostValidationError({
+              message: errorMessage(cause),
+              cause,
+            }),
+        ),
+      );
+    return [health];
   });
