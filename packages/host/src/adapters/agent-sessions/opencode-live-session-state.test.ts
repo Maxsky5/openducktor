@@ -34,6 +34,12 @@ const createState = () => {
   });
 };
 
+type LiveState = ReturnType<typeof createState>;
+type WorkflowRootResults = Parameters<LiveState["applyWorkflowRoots"]>[0];
+
+const applyRoots = (state: LiveState, results: WorkflowRootResults) =>
+  state.applyWorkflowRoots(results, state.rootVersions(results.map(({ ref }) => ref)));
+
 describe("OpenCode host live-session state", () => {
   test("starts empty and admits a root only from an OpenDucktor control result", () => {
     const state = createState();
@@ -209,7 +215,7 @@ describe("OpenCode host live-session state", () => {
       questions: [],
     });
 
-    state.applyWorkflowRoots([
+    applyRoots(state, [
       {
         type: "present",
         ref: parentRef,
@@ -241,7 +247,7 @@ describe("OpenCode host live-session state", () => {
       throw new Error("Expected a live OpenDucktor parent.");
     }
 
-    expect(state.applyWorkflowRoots([{ type: "missing", ref: parentRef }])).toEqual([
+    expect(applyRoots(state, [{ type: "missing", ref: parentRef }])).toEqual([
       { type: "session_removed", ref: parentRef },
     ]);
     expect(state.listSnapshots()).toEqual([]);
@@ -256,7 +262,7 @@ describe("OpenCode host live-session state", () => {
     }
 
     expect(() =>
-      state.applyWorkflowRoots([
+      applyRoots(state, [
         {
           type: "present",
           ref: childRef,
@@ -286,9 +292,9 @@ describe("OpenCode host live-session state", () => {
       throw new Error("Expected a live OpenDucktor parent.");
     }
 
-    expect(state.applyWorkflowRoots([])).toEqual([]);
+    expect(applyRoots(state, [])).toEqual([]);
     expect(state.listSnapshots()).toHaveLength(1);
-    state.applyWorkflowRoots([
+    applyRoots(state, [
       {
         type: "present",
         ref: parentRef,
@@ -307,7 +313,7 @@ describe("OpenCode host live-session state", () => {
       },
     ]);
 
-    expect(state.applyWorkflowRoots([])).toEqual([{ type: "session_removed", ref: parentRef }]);
+    expect(applyRoots(state, [])).toEqual([{ type: "session_removed", ref: parentRef }]);
     expect(state.listSnapshots()).toEqual([]);
   });
 

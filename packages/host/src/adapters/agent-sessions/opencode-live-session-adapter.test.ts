@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { PrepareOpencodeSessionRuntime } from "@openducktor/adapters-opencode-sdk";
 import type {
+  AgentSessionLiveRef,
   AgentSessionLiveSnapshot,
   AgentSessionTranscriptEvent,
   RuntimeInstanceSummary,
@@ -683,5 +684,112 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     expect(harness.releaseCalls).toEqual(["runtime-1"]);
     expect(envelopes.map((envelope) => envelope.type)).toEqual(["fault", "session_removed"]);
     await Effect.runPromise(service.releaseRuntime("runtime-2"));
+  });
+
+  test("keeps a live event newer than an overlapping refresh", async () => {
+    const harness = createRuntimeHarness();
+    const nextRef = { ...ref, externalSessionId: "session-2" };
+    let markRefreshReadStarted: () => void = () => undefined;
+    let finishRefreshRead: () => void = () => undefined;
+    let markEventCommitStarted: () => void = () => undefined;
+    const refreshReadStarted = new Promise<void>((resolve) => {
+      markRefreshReadStarted = resolve;
+    });
+    const refreshReadGate = new Promise<void>((resolve) => {
+      finishRefreshRead = resolve;
+    });
+    const eventCommitStarted = new Promise<void>((resolve) => {
+      markEventCommitStarted = resolve;
+    });
+    let blockRefresh = false;
+    const basePrepare = harness.prepareRuntime;
+    const readRefs = (refs: ReadonlyArray<AgentSessionLiveRef>) =>
+      refs.map((candidate) => ({
+        type: "present" as const,
+        ref: candidate,
+        sources: [
+          {
+            externalSessionId: candidate.externalSessionId,
+            workingDirectory: candidate.workingDirectory,
+            sessionAssociation: { kind: "unbound" as const },
+            title: `Known ${candidate.externalSessionId}`,
+            startedAt: "2026-07-16T10:00:00.000Z",
+            runtimeActivity: "running" as const,
+            pendingApprovals: [],
+            pendingQuestions: [],
+          },
+        ],
+      }));
+    const prepareRuntime: PrepareOpencodeSessionRuntime = async (input) => {
+      const prepared = await basePrepare(input);
+      return {
+        ...prepared,
+        connection: {
+          ...prepared.connection,
+          refreshRegisteredSessions: async (refs) => {
+            if (!blockRefresh) {
+              return readRefs(refs);
+            }
+            markRefreshReadStarted();
+            await refreshReadGate;
+            return readRefs(refs);
+          },
+        },
+      };
+    };
+    const adapterRegistry = createLiveSessionAdapterRegistry();
+    let roots = [ref];
+    const service = createAgentSessionLiveStateService({
+      adapterRegistry,
+      readWorkflowRoots: () => Effect.succeed(roots),
+      faultLog: () => Effect.void,
+      publish: () => undefined,
+    });
+    let adapterCommitCount = 0;
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: {
+          releaseRuntime: service.releaseRuntime,
+          runAdapterMutation: (mutation) => {
+            adapterCommitCount += 1;
+            if (adapterCommitCount === 1) {
+              markEventCommitStarted();
+            }
+            return service.runAdapterMutation(mutation);
+          },
+        },
+        prepareRuntime,
+      })(runtime),
+    );
+    await Effect.runPromise(service.registerRuntimeAdapter(prepared.adapter));
+    await Effect.runPromise(prepared.startForwarding());
+
+    roots = [ref, nextRef];
+    blockRefresh = true;
+    const refresh = Effect.runPromise(service.refresh({ repoPath: ref.repoPath }));
+    await refreshReadStarted;
+    const event = harness.emit({
+      type: "session_event",
+      externalSessionId: ref.externalSessionId,
+      event: {
+        type: "session_idle",
+        externalSessionId: ref.externalSessionId,
+        timestamp: "2026-07-16T10:04:00.000Z",
+      },
+    });
+    const eventPassedRefresh = await Promise.race([
+      eventCommitStarted.then(() => true),
+      Bun.sleep(50).then(() => false),
+    ]);
+    expect(eventPassedRefresh).toBe(true);
+    finishRefreshRead();
+
+    await Promise.all([refresh, event]);
+    await expect(
+      Effect.runPromise(service.list({ repoPath: ref.repoPath })),
+    ).resolves.toMatchObject([
+      { ref, activity: "idle" },
+      { ref: nextRef, activity: "running" },
+    ]);
   });
 });

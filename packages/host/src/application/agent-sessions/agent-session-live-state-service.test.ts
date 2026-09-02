@@ -130,8 +130,8 @@ describe("createAgentSessionLiveStateService", () => {
     roots = [nextRef];
     await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
 
-    expect(readCalls).toEqual(["/repo", "/repo"]);
-    expect(refreshCalls).toEqual([[registeredRef], [nextRef]]);
+    expect(readCalls).toEqual(["/repo", "/repo", "/repo"]);
+    expect(refreshCalls).toEqual([[registeredRef], [registeredRef], [nextRef]]);
     expect(events).toEqual([
       {
         type: "snapshot",
@@ -143,6 +143,88 @@ describe("createAgentSessionLiveStateService", () => {
         repoPath: "/repo",
         sessions: [liveSnapshot("next", "opencode")],
       },
+    ]);
+  });
+
+  test("keeps refresh requests in order", async () => {
+    const firstRef = sessionRef("first", "opencode");
+    const nextRef = sessionRef("next", "opencode");
+    let readCount = 0;
+    const { adapterRegistry, service } = createHarness(() =>
+      Effect.sync(() => (readCount++ === 0 ? [firstRef] : [nextRef])),
+    );
+    let snapshots: AgentSessionLiveSnapshot[] = [];
+    let markFirstRefreshStarted: () => void = () => undefined;
+    let finishFirstRefresh: () => void = () => undefined;
+    const firstRefreshStarted = new Promise<void>((resolve) => {
+      markFirstRefreshStarted = resolve;
+    });
+    const firstRefreshGate = new Promise<void>((resolve) => {
+      finishFirstRefresh = resolve;
+    });
+    const refreshCalls: ReadonlyArray<AgentSessionLiveRef>[] = [];
+    await Effect.runPromise(
+      adapterRegistry.register(
+        fakeAdapter({
+          runtimeId: "runtime-opencode",
+          runtimeKind: "opencode",
+          snapshots: () => snapshots,
+          refreshRegisteredSessions: (refs) =>
+            Effect.promise(async () => {
+              refreshCalls.push(refs);
+              if (refreshCalls.length === 1) {
+                markFirstRefreshStarted();
+                await firstRefreshGate;
+              }
+              snapshots = refs.map((ref) => liveSnapshot(ref.externalSessionId, "opencode"));
+            }),
+        }),
+      ),
+    );
+
+    const firstRefresh = Effect.runPromise(service.refresh({ repoPath: "/repo" }));
+    await firstRefreshStarted;
+    const nextRefresh = Effect.runPromise(service.refresh({ repoPath: "/repo" }));
+    await Promise.resolve();
+    expect(refreshCalls).toEqual([[firstRef]]);
+    finishFirstRefresh();
+    await Promise.all([firstRefresh, nextRefresh]);
+
+    expect(refreshCalls).toEqual([[firstRef], [nextRef]]);
+    await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([
+      liveSnapshot("next", "opencode"),
+    ]);
+  });
+
+  test("loads saved workflow roots when a runtime adapter joins after the first refresh", async () => {
+    const registeredRef = sessionRef("registered", "opencode");
+    const { events, service } = createHarness(() => Effect.succeed([registeredRef]));
+    let snapshots: AgentSessionLiveSnapshot[] = [];
+    const refreshCalls: ReadonlyArray<AgentSessionLiveRef>[] = [];
+
+    await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
+    await Effect.runPromise(
+      service.registerRuntimeAdapter(
+        fakeAdapter({
+          runtimeId: "runtime-opencode",
+          runtimeKind: "opencode",
+          snapshots: () => snapshots,
+          refreshRegisteredSessions: (refs) =>
+            Effect.sync(() => {
+              refreshCalls.push(refs);
+              snapshots = refs.map((ref) => liveSnapshot(ref.externalSessionId, "opencode"));
+            }),
+        }),
+      ),
+    );
+
+    expect(refreshCalls).toEqual([[registeredRef]]);
+    await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([
+      liveSnapshot("registered", "opencode"),
+    ]);
+    expect(events).toEqual([
+      { type: "snapshot", repoPath: "/repo", sessions: [] },
+      { type: "session_upsert", session: liveSnapshot("registered", "opencode") },
     ]);
   });
 

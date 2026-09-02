@@ -134,6 +134,8 @@ export const createAgentSessionLiveStateService = ({
   readWorkflowRoots,
   coordinator = createLiveStateCoordinator(),
 }: CreateAgentSessionLiveStateServiceInput): AgentSessionLiveStateService => {
+  // Runtime reads can wait on the network, so they need a gate that does not block live events.
+  const refreshGate = createLiveStateCoordinator();
   const publishEnvelopeResult = (envelope: AgentSessionLiveEnvelope) =>
     Effect.gen(function* () {
       if (envelope.type === "fault") {
@@ -226,7 +228,7 @@ export const createAgentSessionLiveStateService = ({
 
   const service: AgentSessionLiveStateService = {
     refresh: (input) =>
-      coordinator.run(
+      refreshGate.run(
         Effect.gen(function* () {
           const registeredRefs = yield* readWorkflowRoots(input.repoPath);
           yield* Effect.forEach(adapterRegistry.listForRepo(input.repoPath), (adapter) => {
@@ -238,12 +240,16 @@ export const createAgentSessionLiveStateService = ({
             );
             return adapter.refreshRegisteredSessions(adapterRefs);
           });
-          const snapshots = yield* listSnapshots(input.repoPath);
-          yield* publishEnvelope({
-            type: "snapshot",
-            repoPath: input.repoPath,
-            sessions: [...snapshots],
-          });
+          yield* coordinator.run(
+            Effect.gen(function* () {
+              const snapshots = yield* listSnapshots(input.repoPath);
+              yield* publishEnvelope({
+                type: "snapshot",
+                repoPath: input.repoPath,
+                sessions: [...snapshots],
+              });
+            }),
+          );
         }),
       ),
     list: (input) => coordinator.run(listSnapshots(input.repoPath)),
@@ -340,30 +346,38 @@ export const createAgentSessionLiveStateService = ({
         .pipe(Effect.flatMap((adapter) => adapter.releaseSession(input))),
     registerRuntimeAdapter: (adapter) => {
       let registered = false;
-      return coordinator.run(
-        Effect.gen(function* () {
-          yield* adapterRegistry.register(adapter);
-          registered = true;
-          const snapshots = yield* adapter.listSnapshots(adapter.binding.repoPath);
-          const validatedSnapshots = yield* Effect.forEach(snapshots, (snapshot) =>
-            parseAdapterOutput(
-              agentSessionLiveSnapshotSchema,
-              snapshot,
-              "agent-session-live.register-runtime",
-            ),
+      return Effect.gen(function* () {
+        if (adapter.refreshRegisteredSessions) {
+          const roots = yield* readWorkflowRoots(adapter.binding.repoPath);
+          yield* adapter.refreshRegisteredSessions(
+            roots.filter((ref) => ref.runtimeKind === adapter.binding.runtimeKind),
           );
-          yield* publishChanges(
-            validatedSnapshots.map((snapshot) => ({
-              type: "session_upsert" as const,
-              snapshot,
-            })),
-          );
-        }).pipe(
-          Effect.onError(() =>
-            registered
-              ? adapterRegistry.remove(adapter.binding.runtimeId).pipe(Effect.asVoid)
-              : Effect.void,
-          ),
+        }
+        yield* coordinator.run(
+          Effect.gen(function* () {
+            yield* adapterRegistry.register(adapter);
+            registered = true;
+            const snapshots = yield* adapter.listSnapshots(adapter.binding.repoPath);
+            const validatedSnapshots = yield* Effect.forEach(snapshots, (snapshot) =>
+              parseAdapterOutput(
+                agentSessionLiveSnapshotSchema,
+                snapshot,
+                "agent-session-live.register-runtime",
+              ),
+            );
+            yield* publishChanges(
+              validatedSnapshots.map((snapshot) => ({
+                type: "session_upsert" as const,
+                snapshot,
+              })),
+            );
+          }),
+        );
+      }).pipe(
+        Effect.onError(() =>
+          registered
+            ? adapterRegistry.remove(adapter.binding.runtimeId).pipe(Effect.asVoid)
+            : Effect.void,
         ),
       );
     },

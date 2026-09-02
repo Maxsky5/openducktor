@@ -9,6 +9,7 @@ import type { AgentEvent, AgentSessionSummary } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
 import type { OpenCodeRuntimeInstance } from "./opencode-live-session-normalization";
+import { createOpenCodeLiveSessionRootVersions } from "./opencode-live-session-root-versions";
 import {
   refKey,
   refsEqual,
@@ -29,6 +30,7 @@ import {
   openCodeLiveSnapshotsEqual,
   type OpenCodeLiveSession,
   parseOpenCodeLiveSnapshot,
+  requireOpenCodeLiveSession,
 } from "./opencode-live-session-state-policy";
 
 export const createOpenCodeLiveSessionState = ({
@@ -39,7 +41,9 @@ export const createOpenCodeLiveSessionState = ({
   readonly nextOccurrenceId: () => string;
 }) => {
   const sessionsByRef = new Map<string, OpenCodeLiveSession>();
-  let dropCount = 0;
+  const rootVersions = createOpenCodeLiveSessionRootVersions((ref) =>
+    sessionsByRef.get(refKey(ref)),
+  );
   const workflowRootsByRef = new Map<string, AgentSessionLiveRef>();
   const contextUsageBySessionId = new Map<string, AgentSessionContextUsage>();
   const pendingRequests = createOpenCodePendingRequestRouter({
@@ -47,25 +51,18 @@ export const createOpenCodeLiveSessionState = ({
     nextOccurrenceId,
   });
 
-  const requireSession = (ref: AgentSessionLiveRef): OpenCodeLiveSession => {
-    const session = sessionsByRef.get(refKey(ref));
-    if (!session || !refsEqual(session.snapshot.ref, ref)) {
-      throw new HostValidationError({
-        field: "sessionRef",
-        message: `OpenCode session '${ref.externalSessionId}' does not belong to runtime '${runtime.runtimeId}' with the supplied reference.`,
-        details: { runtimeId: runtime.runtimeId, ref },
-      });
-    }
-    return session;
-  };
+  const requireSession = (ref: AgentSessionLiveRef): OpenCodeLiveSession =>
+    requireOpenCodeLiveSession(sessionsByRef, runtime.runtimeId, ref);
 
   const commitSnapshot = (session: OpenCodeLiveSession): AgentSessionLiveAdapterChange[] => {
     const key = refKey(session.snapshot.ref);
     const previous = sessionsByRef.get(key)?.snapshot;
     sessionsByRef.set(key, session);
-    return previous && openCodeLiveSnapshotsEqual(previous, session.snapshot)
-      ? []
-      : [{ type: "session_upsert", snapshot: session.snapshot }];
+    if (previous && openCodeLiveSnapshotsEqual(previous, session.snapshot)) {
+      return [];
+    }
+    rootVersions.mark(session.snapshot.ref);
+    return [{ type: "session_upsert", snapshot: session.snapshot }];
   };
 
   const ensureEventSession = (
@@ -414,8 +411,8 @@ export const createOpenCodeLiveSessionState = ({
       if (!session || !refsEqual(session.snapshot.ref, candidate)) {
         continue;
       }
+      rootVersions.mark(candidate);
       sessionsByRef.delete(key);
-      dropCount += 1;
       contextUsageBySessionId.delete(candidate.externalSessionId);
       pendingRequests.removeSession(candidate);
       changes.push({ type: "session_removed", ref: candidate });
@@ -439,17 +436,21 @@ export const createOpenCodeLiveSessionState = ({
     },
     contextUsage: (ref: AgentSessionLiveRef): AgentSessionContextUsage | null =>
       sessionsByRef.get(refKey(ref))?.snapshot.contextUsage ?? null,
-    dropCount: (): number => dropCount,
+    rootVersions: rootVersions.read,
     setContext,
     applyLoadedContext,
     applyControlSummary,
     applyWorkflowRoots: (
       results: Parameters<typeof applyOpenCodeWorkflowRoots>[0]["results"],
+      readVersions: ReadonlyMap<string, number>,
     ): AgentSessionLiveAdapterChange[] => {
+      const fresh = rootVersions.selectFresh(results, readVersions);
       const changes = applyOpenCodeWorkflowRoots({
         runtime,
-        results,
-        oldRoots: [...workflowRootsByRef.values()],
+        results: fresh.values,
+        oldRoots: [...workflowRootsByRef.values()].filter(
+          (root) => !fresh.changedKeys.has(refKey(root)),
+        ),
         snapshots: [...sessionsByRef.values()].map(({ snapshot }) => snapshot),
         contextUsageBySessionId,
         pendingRequests,
@@ -481,7 +482,9 @@ export const createOpenCodeLiveSessionState = ({
     },
     release: (): AgentSessionLiveRef[] => {
       const refs = [...sessionsByRef.values()].map(({ snapshot }) => toSessionRef(snapshot.ref));
-      dropCount += refs.length;
+      for (const ref of refs) {
+        rootVersions.mark(ref);
+      }
       sessionsByRef.clear();
       workflowRootsByRef.clear();
       pendingRequests.clear();

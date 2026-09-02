@@ -135,7 +135,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
         refs: ReadonlyArray<AgentSessionLiveRef>,
       ): Effect.Effect<void, HostError> =>
         Effect.gen(function* () {
-          const dropCount = state.dropCount();
+          const rootVersions = state.rootVersions(refs);
           const results = yield* Effect.tryPromise({
             try: () => prepared.connection.refreshRegisteredSessions(refs),
             catch: (cause) =>
@@ -147,10 +147,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
             stateEffect(
               "opencode-live-session.refresh-registered-state",
               () => {
-                if (dropCount !== state.dropCount()) {
-                  return;
-                }
-                state.applyWorkflowRoots(results);
+                state.applyWorkflowRoots(results, rootVersions);
               },
               { runtimeId: runtime.runtimeId },
             ),
