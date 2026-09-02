@@ -304,7 +304,11 @@ const prepareElectronPreReadyRuntimeEffect = (): Effect.Effect<
   ElectronError
 > =>
   Effect.gen(function* () {
-    configureElectronWindowsAppIdentity(app, process.platform);
+    configureElectronWindowsAppIdentity(app, {
+      isPackaged: app.isPackaged,
+      platform: process.platform,
+      processExecPath: process.execPath,
+    });
     const developmentInstanceClaim = yield* prepareElectronDevelopmentInstanceEffect({
       app,
       appName: APPLICATION_NAME,

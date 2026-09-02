@@ -2,6 +2,7 @@ import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { signAsync, type SignOptions } from "@electron/osx-sign";
 import { resolveDevelopmentInstanceId } from "@openducktor/host";
 import { Effect, Exit } from "effect";
 import { z } from "zod";
@@ -39,7 +40,7 @@ const workspaceRoot = path.resolve(packageRoot, "../..");
 const nodeRequire = createRequire(import.meta.url);
 
 const APPLICATION_NAME = "OpenDucktor";
-const MACOS_DEV_BUNDLE_IDENTIFIER = "com.openducktor.app.dev";
+const MACOS_DEV_BUNDLE_IDENTIFIER_PREFIX = "com.openducktor.app.dev";
 const MACOS_DEV_ICON_FILE_NAME = "openducktor-dev-rounded.icns";
 const ELECTRON_RESTART_DEBOUNCE_MS = 100;
 const ELECTRON_STOP_TIMEOUT_MS = 30_000;
@@ -238,7 +239,42 @@ export const resolveMacosDevAppPath = (): string =>
 export const resolveMacosDevExecutablePath = (devAppPath: string, executableName: string): string =>
   path.posix.join(devAppPath, "Contents", "MacOS", executableName);
 
+export const resolveMacosDevBundleIdentifier = (developmentInstanceId: string): string =>
+  `${MACOS_DEV_BUNDLE_IDENTIFIER_PREFIX}.${developmentInstanceId}`;
+
+export const macosDevSignOptions = (devAppPath: string): SignOptions => ({
+  app: devAppPath,
+  identity: "-",
+  identityValidation: false,
+  optionsForFile: () => ({ hardenedRuntime: false, timestamp: "none" }),
+  platform: "darwin",
+});
+
+export const macosDevAppRegistrationCommand = (devAppPath: string): string[] => [
+  "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
+  "-f",
+  devAppPath,
+];
+
 const resolveElectronExecutablePath = (): string => String(nodeRequire("electron"));
+
+const signMacosDevAppEffect = (
+  devAppPath: string,
+): Effect.Effect<void, ElectronOperationError<ElectronDevCommandErrorDetails>> =>
+  Effect.tryPromise({
+    try: () => signAsync(macosDevSignOptions(devAppPath)),
+    catch: (cause) =>
+      new ElectronOperationError({
+        operation: "electron.dev.sign-macos-app",
+        message: errorMessage(cause),
+        path: devAppPath,
+        cause,
+        details: {
+          command: ["@electron/osx-sign", devAppPath],
+          label: "Electron macOS dev app signing",
+        },
+      }),
+  });
 
 const runDevFileOperationEffect = (
   operation: string,
@@ -285,11 +321,13 @@ const replacePlistStringEffect = (
   ]);
 
 const buildMacosDevAppSignatureEffect = ({
+  bundleIdentifier,
   devAppPath,
   iconPath,
   sourceAppPath,
   sourceExecutablePath,
 }: {
+  bundleIdentifier: string;
   devAppPath: string;
   iconPath: string;
   sourceAppPath: string;
@@ -305,7 +343,7 @@ const buildMacosDevAppSignatureEffect = ({
     return `${JSON.stringify(
       {
         appName: APPLICATION_NAME,
-        bundleIdentifier: MACOS_DEV_BUNDLE_IDENTIFIER,
+        bundleIdentifier,
         devAppPath,
         icon,
         iconFileName: MACOS_DEV_ICON_FILE_NAME,
@@ -329,9 +367,11 @@ const resolveRequiredMacosAppBundlePathEffect = (
 
 const prepareMacosDevElectronBundleEffect = (
   sourceExecutablePath: string,
+  developmentInstanceId: string,
 ): Effect.Effect<string, ElectronOperationErrorAggregate> =>
   Effect.gen(function* () {
     const sourceAppPath = yield* resolveRequiredMacosAppBundlePathEffect(sourceExecutablePath);
+    const bundleIdentifier = resolveMacosDevBundleIdentifier(developmentInstanceId);
 
     const devRoot = path.join(packageRoot, ".electron-dev");
     const devAppPath = resolveMacosDevAppPath();
@@ -342,6 +382,7 @@ const prepareMacosDevElectronBundleEffect = (
     const markerPath = path.join(devRoot, "app-source.json");
     yield* assertFileExistsEffect(iconPath, "Electron macOS dev icon");
     const signature = yield* buildMacosDevAppSignatureEffect({
+      bundleIdentifier,
       devAppPath,
       iconPath,
       sourceAppPath,
@@ -380,21 +421,22 @@ const prepareMacosDevElectronBundleEffect = (
         sourceAppPath,
         devAppPath,
       ]);
+      yield* copyIconResourceEffect(MACOS_DEV_ICON_FILE_NAME);
+      yield* copyIconResourceEffect("icon.icns");
+      yield* copyIconResourceEffect("electron.icns");
+      yield* replacePlistStringEffect(infoPlistPath, "CFBundleDisplayName", APPLICATION_NAME);
+      yield* replacePlistStringEffect(infoPlistPath, "CFBundleName", APPLICATION_NAME);
+      yield* replacePlistStringEffect(infoPlistPath, "CFBundleIdentifier", bundleIdentifier);
+      yield* replacePlistStringEffect(infoPlistPath, "CFBundleIconFile", MACOS_DEV_ICON_FILE_NAME);
+      yield* signMacosDevAppEffect(devAppPath);
+      yield* runDevFileOperationEffect("electron.dev.write-macos-dev-marker", markerPath, () =>
+        writeFile(markerPath, signature, "utf8"),
+      );
     }
 
-    yield* copyIconResourceEffect(MACOS_DEV_ICON_FILE_NAME);
-    yield* copyIconResourceEffect("icon.icns");
-    yield* copyIconResourceEffect("electron.icns");
-    yield* replacePlistStringEffect(infoPlistPath, "CFBundleDisplayName", APPLICATION_NAME);
-    yield* replacePlistStringEffect(infoPlistPath, "CFBundleName", APPLICATION_NAME);
-    yield* replacePlistStringEffect(
-      infoPlistPath,
-      "CFBundleIdentifier",
-      MACOS_DEV_BUNDLE_IDENTIFIER,
-    );
-    yield* replacePlistStringEffect(infoPlistPath, "CFBundleIconFile", MACOS_DEV_ICON_FILE_NAME);
-    yield* runDevFileOperationEffect("electron.dev.write-macos-dev-marker", markerPath, () =>
-      writeFile(markerPath, signature, "utf8"),
+    yield* runStepEffect(
+      "Electron macOS dev app LaunchServices registration",
+      macosDevAppRegistrationCommand(devAppPath),
     );
 
     return devExecutablePath;
@@ -415,10 +457,9 @@ export const buildElectronBundlesEffect = (): Effect.Effect<
     );
   });
 
-const resolveElectronDevExecutablePathEffect = (): Effect.Effect<
-  string,
-  ElectronOperationErrorAggregate
-> =>
+const resolveElectronDevExecutablePathEffect = (
+  developmentInstanceId: string,
+): Effect.Effect<string, ElectronOperationErrorAggregate> =>
   Effect.gen(function* () {
     const electronExecutablePath = yield* Effect.try({
       try: resolveElectronExecutablePath,
@@ -428,7 +469,10 @@ const resolveElectronDevExecutablePathEffect = (): Effect.Effect<
       return electronExecutablePath;
     }
 
-    return yield* prepareMacosDevElectronBundleEffect(electronExecutablePath);
+    return yield* prepareMacosDevElectronBundleEffect(
+      electronExecutablePath,
+      developmentInstanceId,
+    );
   });
 
 export const electronDevServerLogLines = (
@@ -828,7 +872,8 @@ export const mainEffect = (): Effect.Effect<
           path: workspaceRoot,
         }),
     });
-    const electronExecutablePath = yield* resolveElectronDevExecutablePathEffect();
+    const electronExecutablePath =
+      yield* resolveElectronDevExecutablePathEffect(developmentInstanceId);
     const renderer = yield* createElectronRendererDevServerEffect({
       packageRoot,
       port: rendererPort,

@@ -76,7 +76,7 @@ describe("resolveElectronProfilePath", () => {
 });
 
 describe("configureElectronWindowsAppIdentity", () => {
-  test("sets the packaged app identity used by Windows notifications", () => {
+  test("uses the executable path for Windows development notifications", () => {
     const appUserModelIds: string[] = [];
 
     configureElectronWindowsAppIdentity(
@@ -85,7 +85,30 @@ describe("configureElectronWindowsAppIdentity", () => {
           appUserModelIds.push(id);
         },
       },
-      "win32",
+      {
+        isPackaged: false,
+        platform: "win32",
+        processExecPath: "C:\\repo\\node_modules\\electron\\dist\\electron.exe",
+      },
+    );
+
+    expect(appUserModelIds).toEqual(["C:\\repo\\node_modules\\electron\\dist\\electron.exe"]);
+  });
+
+  test("uses the application id for packaged Windows notifications", () => {
+    const appUserModelIds: string[] = [];
+
+    configureElectronWindowsAppIdentity(
+      {
+        setAppUserModelId(id) {
+          appUserModelIds.push(id);
+        },
+      },
+      {
+        isPackaged: true,
+        platform: "win32",
+        processExecPath: "C:\\Program Files\\OpenDucktor\\OpenDucktor.exe",
+      },
     );
 
     expect(appUserModelIds).toEqual(["com.openducktor.app"]);
