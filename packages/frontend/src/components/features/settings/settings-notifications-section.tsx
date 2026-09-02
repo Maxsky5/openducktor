@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { Switch } from "@/components/ui/switch";
 import {
   type SettingsSegmentedOption,
@@ -47,13 +48,13 @@ const targetOptions: SettingsSegmentedOption<NotificationTarget>[] = [
 ];
 
 const osFocusOptions: SettingsSegmentedOption<NotificationSettings["osFocus"]>[] = [
-  { value: "suppress_if_focused", label: "Only when unfocused" },
+  { value: "suppress_if_focused", label: "Unfocused" },
   { value: "always_send", label: "Always" },
 ];
 
 const soundFocusOptions: SettingsSegmentedOption<NotificationSettings["soundFocus"]>[] = [
-  { value: "mute_while_focused", label: "Mute when focused" },
-  { value: "always_play", label: "Always play" },
+  { value: "mute_while_focused", label: "Mute" },
+  { value: "always_play", label: "Always" },
 ];
 
 const AGENT_KINDS = NOTIFICATION_KIND_VALUES.filter((kind) => kind.startsWith("agent."));
@@ -75,6 +76,7 @@ function NotificationKindRow({
   onPreview,
 }: NotificationKindRowProps): ReactElement {
   const kindSettings = settings.kinds[kind];
+  const kindLabel = NOTIFICATION_KIND_LABELS[kind];
   const previewCue = resolveNotificationCue(kindSettings.sound, settings.globalCue);
   const soundLabelId = `notification-sound-label-${kind}`;
   const updateKind = (next: Partial<typeof kindSettings>): void => {
@@ -88,10 +90,10 @@ function NotificationKindRow({
   };
 
   return (
-    <div className="grid gap-4 rounded-lg border border-border bg-card p-4 lg:grid-cols-[minmax(14rem,1fr)_18rem_14rem] lg:items-center">
-      <div className="flex items-start justify-between gap-3 lg:pr-3">
+    <div className="grid gap-4 rounded-lg border border-border bg-card p-4 lg:grid-cols-[minmax(14rem,1fr)_13rem_13rem] lg:items-center">
+      <div className="flex items-start justify-between gap-4 lg:pr-2">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-foreground">{NOTIFICATION_KIND_LABELS[kind]}</p>
+          <p className="text-sm font-medium text-foreground">{kindLabel}</p>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
             {NOTIFICATION_KIND_DESCRIPTIONS[kind]}
           </p>
@@ -99,18 +101,31 @@ function NotificationKindRow({
         <Switch
           checked={kindSettings.enabled}
           disabled={disabled}
-          aria-label={`Enable ${NOTIFICATION_KIND_LABELS[kind]}`}
+          aria-label={`Enable ${kindLabel}`}
           onCheckedChange={(enabled) => updateKind({ enabled })}
         />
       </div>
-      <SettingsSegmentedOptionRow<NotificationTarget>
-        title="Delivery"
-        description="Choose where this notice appears."
-        value={kindSettings.target}
-        options={targetOptions}
-        disabled={disabled || !kindSettings.enabled}
-        onValueChange={(target) => updateKind({ target })}
-      />
+      <div className="grid min-w-0 gap-2">
+        <Label>Delivery</Label>
+        <SegmentedControlRoot size="sm" className="w-full" aria-label={`Delivery for ${kindLabel}`}>
+          {targetOptions.map((option) => (
+            <SegmentedControlItem
+              key={option.value}
+              active={kindSettings.target === option.value}
+              size="sm"
+              disabled={disabled || !kindSettings.enabled}
+              inactiveClassName="text-foreground/70 hover:text-foreground"
+              onClick={() => {
+                if (kindSettings.target !== option.value) {
+                  updateKind({ target: option.value });
+                }
+              }}
+            >
+              {option.label}
+            </SegmentedControlItem>
+          ))}
+        </SegmentedControlRoot>
+      </div>
       <div className="grid gap-2">
         <Label id={soundLabelId}>Sound</Label>
         <div className="flex gap-2">
@@ -127,7 +142,7 @@ function NotificationKindRow({
             type="button"
             size="icon"
             variant="outline"
-            aria-label={`Preview ${NOTIFICATION_KIND_LABELS[kind]} sound`}
+            aria-label={`Preview ${kindLabel} sound`}
             disabled={disabled || !kindSettings.enabled || !previewCue}
             onClick={() => {
               if (previewCue) onPreview(previewCue);
@@ -238,7 +253,7 @@ export function SettingsNotificationsSection({
             <Volume2 data-icon="inline-start" /> Preview sound
           </Button>
         </div>
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 xl:grid-cols-2">
           <SettingsSegmentedOptionRow
             title="OS notifications"
             description="Control notices while OpenDucktor has focus."
