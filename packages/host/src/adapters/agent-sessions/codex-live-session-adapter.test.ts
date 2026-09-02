@@ -520,7 +520,6 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const events: AgentSessionLiveEnvelope[] = [];
     const service = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
-      readWorkflowRoots: () => Effect.succeed([]),
       faultLog: () => Effect.void,
       publish: (event) => events.push(event),
     });
@@ -630,7 +629,6 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const events: AgentSessionLiveEnvelope[] = [];
     const service = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
-      readWorkflowRoots: () => Effect.succeed([]),
       faultLog: () => Effect.void,
       publish: (event) => events.push(event),
     });

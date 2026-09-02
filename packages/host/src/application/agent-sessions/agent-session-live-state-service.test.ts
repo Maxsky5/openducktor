@@ -41,14 +41,18 @@ const fakeAdapter = (input: {
   runtimeId: string;
   runtimeKind?: RuntimeKind;
   snapshots: () => ReadonlyArray<AgentSessionLiveSnapshot>;
+  refreshEffect?: () => Effect.Effect<void, HostError>;
   listEffect?: () => Effect.Effect<ReadonlyArray<AgentSessionLiveSnapshot>, HostError>;
   contextEffect?: AgentSessionLiveAdapterPort["loadContext"];
-  refreshRegisteredSessions?: AgentSessionLiveAdapterPort["refreshRegisteredSessions"];
 }): AgentSessionLiveAdapterPort => {
   const runtimeKind = input.runtimeKind ?? "codex";
+  const refreshSnapshots = input.refreshEffect
+    ? { refreshSnapshots: () => input.refreshEffect?.() ?? Effect.void }
+    : {};
   const adapter = {
     supportsSessionControl: false,
     binding: { runtimeId: input.runtimeId, runtimeKind, repoPath: "/repo" },
+    ...refreshSnapshots,
     listSnapshots: () =>
       input.listEffect ? input.listEffect() : Effect.succeed(input.snapshots()),
     readSnapshot: (ref) => {
@@ -64,16 +68,10 @@ const fakeAdapter = (input: {
     replyQuestion: () => Effect.void,
     releaseRuntime: () => Effect.succeed(input.snapshots().map((snapshot) => snapshot.ref)),
   } satisfies AgentSessionLiveAdapterPort;
-  return input.refreshRegisteredSessions
-    ? { ...adapter, refreshRegisteredSessions: input.refreshRegisteredSessions }
-    : adapter;
+  return adapter;
 };
 
-const createHarness = (
-  readWorkflowRoots: (
-    repoPath: string,
-  ) => Effect.Effect<ReadonlyArray<AgentSessionLiveRef>, HostError> = () => Effect.succeed([]),
-) => {
+const createHarness = () => {
   const events: AgentSessionLiveEnvelope[] = [];
   const faultLogs: string[] = [];
   const adapterRegistry = createLiveSessionAdapterRegistry();
@@ -81,7 +79,6 @@ const createHarness = (
     adapterRegistry,
     faultLog: (message) => Effect.sync(() => faultLogs.push(message)),
     publish: (event) => events.push(event),
-    readWorkflowRoots,
   });
   return { adapterRegistry, events, faultLogs, service };
 };
@@ -97,62 +94,44 @@ const expectHostFailure = async <Success>(
 };
 
 describe("createAgentSessionLiveStateService", () => {
-  test("reads current workflow roots before each refresh", async () => {
-    const registeredRef = sessionRef("registered", "opencode");
-    const nextRef = sessionRef("next", "opencode");
-    let roots = [registeredRef];
-    const readCalls: string[] = [];
-    const { events, service } = createHarness((repoPath) =>
-      Effect.sync(() => {
-        readCalls.push(repoPath);
-        return roots;
-      }),
-    );
-    let snapshots: AgentSessionLiveSnapshot[] = [];
-    const refreshCalls: ReadonlyArray<AgentSessionLiveRef>[] = [];
+  test("asks each runtime for all current sessions on refresh", async () => {
+    let snapshots = [liveSnapshot("runtime-session", "opencode")];
+    const refreshCalls: string[] = [];
+    const { events, service } = createHarness();
     await Effect.runPromise(
       service.registerRuntimeAdapter(
         fakeAdapter({
           runtimeId: "runtime-opencode",
           runtimeKind: "opencode",
           snapshots: () => snapshots,
-          refreshRegisteredSessions: (refs) =>
-            Effect.sync(() => {
-              refreshCalls.push(refs);
-              snapshots = refs.map((ref) => liveSnapshot(ref.externalSessionId, "opencode"));
-            }),
+          refreshEffect: () => Effect.sync(() => refreshCalls.push("opencode")),
         }),
       ),
     );
     events.length = 0;
+    refreshCalls.length = 0;
 
     await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
-    roots = [nextRef];
+    snapshots = [liveSnapshot("next-runtime-session", "opencode")];
     await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
 
-    expect(readCalls).toEqual(["/repo", "/repo", "/repo"]);
-    expect(refreshCalls).toEqual([[registeredRef], [registeredRef], [nextRef]]);
+    expect(refreshCalls).toEqual(["opencode", "opencode"]);
     expect(events).toEqual([
       {
         type: "snapshot",
         repoPath: "/repo",
-        sessions: [liveSnapshot("registered", "opencode")],
+        sessions: [liveSnapshot("runtime-session", "opencode")],
       },
       {
         type: "snapshot",
         repoPath: "/repo",
-        sessions: [liveSnapshot("next", "opencode")],
+        sessions: [liveSnapshot("next-runtime-session", "opencode")],
       },
     ]);
   });
 
   test("keeps refresh requests in order", async () => {
-    const firstRef = sessionRef("first", "opencode");
-    const nextRef = sessionRef("next", "opencode");
-    let readCount = 0;
-    const { adapterRegistry, service } = createHarness(() =>
-      Effect.sync(() => (readCount++ === 0 ? [firstRef] : [nextRef])),
-    );
+    const { adapterRegistry, service } = createHarness();
     let snapshots: AgentSessionLiveSnapshot[] = [];
     let markFirstRefreshStarted: () => void = () => undefined;
     let finishFirstRefresh: () => void = () => undefined;
@@ -162,21 +141,22 @@ describe("createAgentSessionLiveStateService", () => {
     const firstRefreshGate = new Promise<void>((resolve) => {
       finishFirstRefresh = resolve;
     });
-    const refreshCalls: ReadonlyArray<AgentSessionLiveRef>[] = [];
+    let listCount = 0;
     await Effect.runPromise(
       adapterRegistry.register(
         fakeAdapter({
           runtimeId: "runtime-opencode",
           runtimeKind: "opencode",
           snapshots: () => snapshots,
-          refreshRegisteredSessions: (refs) =>
+          listEffect: () =>
             Effect.promise(async () => {
-              refreshCalls.push(refs);
-              if (refreshCalls.length === 1) {
+              listCount += 1;
+              if (listCount === 1) {
                 markFirstRefreshStarted();
                 await firstRefreshGate;
               }
-              snapshots = refs.map((ref) => liveSnapshot(ref.externalSessionId, "opencode"));
+              snapshots = [liveSnapshot(listCount === 1 ? "first" : "next", "opencode")];
+              return snapshots;
             }),
         }),
       ),
@@ -186,21 +166,20 @@ describe("createAgentSessionLiveStateService", () => {
     await firstRefreshStarted;
     const nextRefresh = Effect.runPromise(service.refresh({ repoPath: "/repo" }));
     await Promise.resolve();
-    expect(refreshCalls).toEqual([[firstRef]]);
+    expect(listCount).toBe(1);
     finishFirstRefresh();
     await Promise.all([firstRefresh, nextRefresh]);
 
-    expect(refreshCalls).toEqual([[firstRef], [nextRef]]);
+    expect(listCount).toBe(2);
     await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([
       liveSnapshot("next", "opencode"),
     ]);
   });
 
-  test("loads saved workflow roots when a runtime adapter joins after the first refresh", async () => {
-    const registeredRef = sessionRef("registered", "opencode");
-    const { events, service } = createHarness(() => Effect.succeed([registeredRef]));
-    let snapshots: AgentSessionLiveSnapshot[] = [];
-    const refreshCalls: ReadonlyArray<AgentSessionLiveRef>[] = [];
+  test("loads all runtime sessions when an adapter joins after the first refresh", async () => {
+    const { events, service } = createHarness();
+    const snapshots = [liveSnapshot("runtime-session", "opencode")];
+    const refreshCalls: string[] = [];
 
     await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
     await Effect.runPromise(
@@ -209,23 +188,19 @@ describe("createAgentSessionLiveStateService", () => {
           runtimeId: "runtime-opencode",
           runtimeKind: "opencode",
           snapshots: () => snapshots,
-          refreshRegisteredSessions: (refs) =>
-            Effect.sync(() => {
-              refreshCalls.push(refs);
-              snapshots = refs.map((ref) => liveSnapshot(ref.externalSessionId, "opencode"));
-            }),
+          refreshEffect: () => Effect.sync(() => refreshCalls.push("opencode")),
         }),
       ),
     );
 
-    expect(refreshCalls).toEqual([[registeredRef]]);
     await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([
-      liveSnapshot("registered", "opencode"),
+      liveSnapshot("runtime-session", "opencode"),
     ]);
     expect(events).toEqual([
       { type: "snapshot", repoPath: "/repo", sessions: [] },
-      { type: "session_upsert", session: liveSnapshot("registered", "opencode") },
+      { type: "session_upsert", session: liveSnapshot("runtime-session", "opencode") },
     ]);
+    expect(refreshCalls).toEqual(["opencode"]);
   });
 
   test("preserves repository scope across snapshots, list, read, and events", async () => {
@@ -595,7 +570,6 @@ describe("createAgentSessionLiveStateService", () => {
     });
     const service = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
-      readWorkflowRoots: () => Effect.succeed([]),
       faultLog: () =>
         Effect.sync(() => {
           logAttempts += 1;
@@ -638,7 +612,6 @@ describe("createAgentSessionLiveStateService", () => {
     const snapshot = liveSnapshot("session-1");
     const service = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
-      readWorkflowRoots: () => Effect.succeed([]),
       faultLog: () => Effect.fail(logFailure),
       publish: (event) => events.push(event),
     });
@@ -679,7 +652,6 @@ describe("createAgentSessionLiveStateService", () => {
     });
     const service = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
-      readWorkflowRoots: () => Effect.succeed([]),
       faultLog: () =>
         Effect.sync(() => {
           logAttempts += 1;
@@ -719,7 +691,6 @@ describe("createAgentSessionLiveStateService", () => {
     const snapshot = liveSnapshot("session-1");
     const service = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
-      readWorkflowRoots: () => Effect.succeed([]),
       faultLog: () => Effect.void,
       publish: (event) => {
         published.push(event);
@@ -768,7 +739,6 @@ describe("createAgentSessionLiveStateService", () => {
     });
     const service = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
-      readWorkflowRoots: () => Effect.succeed([]),
       faultLog: () =>
         Effect.sync(() => {
           logAttempts += 1;

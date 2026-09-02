@@ -131,26 +131,24 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
         commit,
       });
 
-      const refreshRegisteredSessions = (
-        refs: ReadonlyArray<AgentSessionLiveRef>,
-      ): Effect.Effect<void, HostError> =>
+      const refreshSnapshots = (repoPath: string): Effect.Effect<void, HostError> =>
         Effect.gen(function* () {
-          const rootVersions = state.rootVersions(refs);
-          const results = yield* Effect.tryPromise({
-            try: () => prepared.connection.refreshRegisteredSessions(refs),
+          if (repoPath !== runtime.repoPath) {
+            return;
+          }
+          const readVersions = state.versions();
+          const sources = yield* Effect.tryPromise({
+            try: () => prepared.connection.readSessionSources(),
             catch: (cause) =>
-              toHostOperationError(cause, "opencode-live-session.refresh-registered-sessions", {
+              toHostOperationError(cause, "opencode-live-session.refresh-snapshots", {
                 runtimeId: runtime.runtimeId,
               }),
           });
           yield* serializeRuntime(
-            stateEffect(
-              "opencode-live-session.refresh-registered-state",
-              () => {
-                state.applyWorkflowRoots(results, rootVersions);
-              },
-              { runtimeId: runtime.runtimeId },
-            ),
+            commit("opencode-live-session.commit-refreshed-snapshots", () => ({
+              value: undefined,
+              changes: state.applySessionSources(sources, readVersions),
+            })),
           );
         });
 
@@ -268,6 +266,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
           runtimeKind: runtime.kind,
           repoPath: runtime.repoPath,
         },
+        refreshSnapshots,
         listSnapshots: (repoPath) =>
           repoPath === runtime.repoPath
             ? stateEffect("opencode-live-session.list-snapshots", state.listSnapshots, {
@@ -279,7 +278,6 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
             runtimeId: runtime.runtimeId,
             externalSessionId: ref.externalSessionId,
           }),
-        refreshRegisteredSessions,
         loadContext: (input) =>
           Effect.suspend(() => {
             const usage = state.contextUsage(input);

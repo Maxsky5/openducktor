@@ -75,15 +75,13 @@ export type AgentSessionLiveAdapterScope = Pick<AgentSessionLiveRef, "repoPath" 
 
 type AgentSessionLiveAdapterBase = {
   readonly binding: AgentSessionLiveAdapterBinding;
+  readonly refreshSnapshots?: (repoPath: string) => Effect.Effect<void, HostError>;
   readonly listSnapshots: (
     repoPath: string,
   ) => Effect.Effect<ReadonlyArray<AgentSessionLiveSnapshot>, HostError>;
   readonly readSnapshot: (
     ref: AgentSessionLiveRef,
   ) => Effect.Effect<AgentSessionLiveReadResult, HostError>;
-  readonly refreshRegisteredSessions?: (
-    refs: ReadonlyArray<AgentSessionLiveRef>,
-  ) => Effect.Effect<void, HostError>;
   readonly loadContext: (
     input: AgentSessionLiveLoadContextInput,
   ) => Effect.Effect<AgentSessionContextUsage | null, HostError>;

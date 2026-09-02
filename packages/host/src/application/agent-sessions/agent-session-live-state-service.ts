@@ -48,7 +48,6 @@ import {
   toAgentSessionLiveEnvelopePublishError,
 } from "./agent-session-live-envelope";
 import { createLiveStateCoordinator, type LiveStateCoordinator } from "./live-state-coordinator";
-import type { TaskWorkflowRootReader } from "./task-workflow-root-reader";
 
 export type AgentSessionLiveEnvelopePublisher = (envelope: AgentSessionLiveEnvelope) => void;
 
@@ -108,7 +107,6 @@ export type CreateAgentSessionLiveStateServiceInput = {
   readonly adapterRegistry: AgentSessionLiveAdapterRegistryPort;
   readonly faultLog: AgentSessionLiveFaultLogger;
   readonly publish: AgentSessionLiveEnvelopePublisher;
-  readonly readWorkflowRoots: TaskWorkflowRootReader;
   readonly coordinator?: LiveStateCoordinator;
 };
 
@@ -131,7 +129,6 @@ export const createAgentSessionLiveStateService = ({
   adapterRegistry,
   faultLog,
   publish,
-  readWorkflowRoots,
   coordinator = createLiveStateCoordinator(),
 }: CreateAgentSessionLiveStateServiceInput): AgentSessionLiveStateService => {
   // Runtime reads can wait on the network, so they need a gate that does not block live events.
@@ -230,16 +227,10 @@ export const createAgentSessionLiveStateService = ({
     refresh: (input) =>
       refreshGate.run(
         Effect.gen(function* () {
-          const registeredRefs = yield* readWorkflowRoots(input.repoPath);
-          yield* Effect.forEach(adapterRegistry.listForRepo(input.repoPath), (adapter) => {
-            if (!adapter.refreshRegisteredSessions) {
-              return Effect.void;
-            }
-            const adapterRefs = registeredRefs.filter(
-              (ref) => ref.runtimeKind === adapter.binding.runtimeKind,
-            );
-            return adapter.refreshRegisteredSessions(adapterRefs);
-          });
+          yield* Effect.forEach(
+            adapterRegistry.listForRepo(input.repoPath),
+            (adapter) => adapter.refreshSnapshots?.(input.repoPath) ?? Effect.void,
+          );
           yield* coordinator.run(
             Effect.gen(function* () {
               const snapshots = yield* listSnapshots(input.repoPath);
@@ -347,16 +338,11 @@ export const createAgentSessionLiveStateService = ({
     registerRuntimeAdapter: (adapter) => {
       let registered = false;
       return Effect.gen(function* () {
-        if (adapter.refreshRegisteredSessions) {
-          const roots = yield* readWorkflowRoots(adapter.binding.repoPath);
-          yield* adapter.refreshRegisteredSessions(
-            roots.filter((ref) => ref.runtimeKind === adapter.binding.runtimeKind),
-          );
-        }
+        yield* coordinator.run(adapterRegistry.register(adapter));
+        registered = true;
+        yield* adapter.refreshSnapshots?.(adapter.binding.repoPath) ?? Effect.void;
         yield* coordinator.run(
           Effect.gen(function* () {
-            yield* adapterRegistry.register(adapter);
-            registered = true;
             const snapshots = yield* adapter.listSnapshots(adapter.binding.repoPath);
             const validatedSnapshots = yield* Effect.forEach(snapshots, (snapshot) =>
               parseAdapterOutput(

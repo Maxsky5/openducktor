@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { PrepareOpencodeSessionRuntime } from "@openducktor/adapters-opencode-sdk";
 import type {
-  AgentSessionLiveRef,
   AgentSessionLiveSnapshot,
   AgentSessionTranscriptEvent,
   RuntimeInstanceSummary,
@@ -22,9 +21,9 @@ import {
 } from "./opencode-live-session-adapter.test-support";
 
 describe("createOpenCodeLiveSessionAdapterPreparer", () => {
-  test("refreshes only OpenDucktor-registered roots from OpenCode", async () => {
+  test("loads every OpenCode session for task matching", async () => {
     const harness = createRuntimeHarness({
-      registeredSources: [
+      sessionSources: [
         {
           externalSessionId: ref.externalSessionId,
           workingDirectory: ref.workingDirectory,
@@ -50,13 +49,13 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       })(runtime),
     );
 
-    const refreshRegisteredSessions = prepared.adapter.refreshRegisteredSessions;
-    if (!refreshRegisteredSessions) {
-      throw new Error("Expected OpenCode to support registered-session refresh.");
+    const refreshSnapshots = prepared.adapter.refreshSnapshots;
+    if (!refreshSnapshots) {
+      throw new Error("Expected OpenCode to support runtime snapshot refresh.");
     }
-    await Effect.runPromise(refreshRegisteredSessions([ref]));
+    await Effect.runPromise(refreshSnapshots(ref.repoPath));
 
-    expect(harness.refreshRegisteredSessionCalls).toEqual([["session-1"]]);
+    expect(harness.sessionSourceReadCalls).toBe(1);
     await expect(Effect.runPromise(prepared.adapter.listSnapshots("/repo"))).resolves.toEqual([
       expect.objectContaining({
         ref,
@@ -333,9 +332,9 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     await Effect.runPromise(adapter.releaseRuntime());
   });
 
-  test("does not restore a released session when an earlier registered refresh finishes", async () => {
+  test("does not restore a released session when an earlier runtime refresh finishes", async () => {
     const harness = createRuntimeHarness({
-      registeredSources: [
+      sessionSources: [
         {
           externalSessionId: ref.externalSessionId,
           workingDirectory: ref.workingDirectory,
@@ -363,10 +362,10 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         ...prepared,
         connection: {
           ...prepared.connection,
-          refreshRegisteredSessions: async (refs) => {
+          readSessionSources: async () => {
             markReadStarted();
             await readGate;
-            return prepared.connection.refreshRegisteredSessions(refs);
+            return prepared.connection.readSessionSources();
           },
         },
       };
@@ -383,12 +382,12 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
       }),
     );
-    const refreshRegisteredSessions = prepared.adapter.refreshRegisteredSessions;
-    if (!refreshRegisteredSessions) {
-      throw new Error("Expected OpenCode to support registered-session refresh.");
+    const refreshSnapshots = prepared.adapter.refreshSnapshots;
+    if (!refreshSnapshots) {
+      throw new Error("Expected OpenCode to support runtime snapshot refresh.");
     }
 
-    const refresh = Effect.runPromise(refreshRegisteredSessions([ref]));
+    const refresh = Effect.runPromise(refreshSnapshots(ref.repoPath));
     await readStarted;
     const release = Effect.runPromise(prepared.adapter.releaseSession(ref));
     const releaseFinishedWhileReadWaited = await Promise.race([
@@ -622,11 +621,23 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
   });
 
   test("releases only the owning adapter after an observation fault", async () => {
-    const harness = createRuntimeHarness();
+    const harness = createRuntimeHarness({
+      sessionSources: [
+        {
+          externalSessionId: ref.externalSessionId,
+          workingDirectory: ref.workingDirectory,
+          sessionAssociation: { kind: "unbound" },
+          title: "Known builder",
+          startedAt: "2026-07-16T10:00:00.000Z",
+          runtimeActivity: "idle",
+          pendingApprovals: [],
+          pendingQuestions: [],
+        },
+      ],
+    });
     const envelopes: Array<{ type: string }> = [];
     const service = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
-      readWorkflowRoots: () => Effect.succeed([]),
       faultLog: () => Effect.void,
       publish: (envelope) => envelopes.push(envelope),
     });
@@ -703,22 +714,16 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     });
     let blockRefresh = false;
     const basePrepare = harness.prepareRuntime;
-    const readRefs = (refs: ReadonlyArray<AgentSessionLiveRef>) =>
-      refs.map((candidate) => ({
-        type: "present" as const,
-        ref: candidate,
-        sources: [
-          {
-            externalSessionId: candidate.externalSessionId,
-            workingDirectory: candidate.workingDirectory,
-            sessionAssociation: { kind: "unbound" as const },
-            title: `Known ${candidate.externalSessionId}`,
-            startedAt: "2026-07-16T10:00:00.000Z",
-            runtimeActivity: "running" as const,
-            pendingApprovals: [],
-            pendingQuestions: [],
-          },
-        ],
+    const readSources = () =>
+      [ref, nextRef].map((candidate) => ({
+        externalSessionId: candidate.externalSessionId,
+        workingDirectory: candidate.workingDirectory,
+        sessionAssociation: { kind: "unbound" as const },
+        title: `Known ${candidate.externalSessionId}`,
+        startedAt: "2026-07-16T10:00:00.000Z",
+        runtimeActivity: "running" as const,
+        pendingApprovals: [],
+        pendingQuestions: [],
       }));
     const prepareRuntime: PrepareOpencodeSessionRuntime = async (input) => {
       const prepared = await basePrepare(input);
@@ -726,33 +731,31 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         ...prepared,
         connection: {
           ...prepared.connection,
-          refreshRegisteredSessions: async (refs) => {
+          readSessionSources: async () => {
             if (!blockRefresh) {
-              return readRefs(refs);
+              return readSources();
             }
             markRefreshReadStarted();
             await refreshReadGate;
-            return readRefs(refs);
+            return readSources();
           },
         },
       };
     };
     const adapterRegistry = createLiveSessionAdapterRegistry();
-    let roots = [ref];
     const service = createAgentSessionLiveStateService({
       adapterRegistry,
-      readWorkflowRoots: () => Effect.succeed(roots),
       faultLog: () => Effect.void,
       publish: () => undefined,
     });
-    let adapterCommitCount = 0;
+    let watchCommit = false;
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: {
           releaseRuntime: service.releaseRuntime,
           runAdapterMutation: (mutation) => {
-            adapterCommitCount += 1;
-            if (adapterCommitCount === 1) {
+            if (watchCommit) {
+              watchCommit = false;
               markEventCommitStarted();
             }
             return service.runAdapterMutation(mutation);
@@ -762,12 +765,18 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       })(runtime),
     );
     await Effect.runPromise(service.registerRuntimeAdapter(prepared.adapter));
+    await Effect.runPromise(
+      prepared.adapter.resumeSession({
+        ...ref,
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      }),
+    );
     await Effect.runPromise(prepared.startForwarding());
 
-    roots = [ref, nextRef];
     blockRefresh = true;
     const refresh = Effect.runPromise(service.refresh({ repoPath: ref.repoPath }));
     await refreshReadStarted;
+    watchCommit = true;
     const event = harness.emit({
       type: "session_event",
       externalSessionId: ref.externalSessionId,

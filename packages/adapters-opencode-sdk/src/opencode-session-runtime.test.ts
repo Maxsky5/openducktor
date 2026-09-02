@@ -105,6 +105,7 @@ const createLiveClientHarness = (
           data: externalSessionIds.map((sessionId) =>
             createOpencodeSessionFixture({
               id: sessionId,
+              parentID: input.parentSessionIdsBySessionId?.[sessionId],
               directory: "/repo",
               title: "Live session",
               time: {
@@ -400,125 +401,70 @@ describe("OpenCode session runtime connection", () => {
     await prepared.release();
   });
 
-  test("refreshes only registered OpenDucktor roots without listing sessions", async () => {
+  test("lists every runtime session for task matching", async () => {
     const harness = createLiveClientHarness({
       externalSessionIds: ["session-1", "child-session", "unknown-session"],
       busySessionIds: ["session-1", "child-session"],
-      childSessionIdsByParent: { "session-1": ["child-session"] },
+      parentSessionIdsBySessionId: { "child-session": "session-1" },
     });
     const prepared = await createPrepareRuntime(harness)(runtimeInput);
 
-    const results = await prepared.connection.refreshRegisteredSessions([
-      {
-        repoPath: "/repo",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo",
-        externalSessionId: "session-1",
-      },
-    ]);
+    const results = await prepared.connection.readSessionSources();
 
-    expect(results).toEqual([
-      {
-        type: "present",
-        ref: expect.objectContaining({ externalSessionId: "session-1" }),
-        sources: [
-          expect.objectContaining({
-            externalSessionId: "session-1",
-            runtimeActivity: "running",
-            pendingApprovals: [expect.objectContaining({ requestId: "native-request-1" })],
-          }),
-          expect.objectContaining({
-            externalSessionId: "child-session",
-            parentExternalSessionId: "session-1",
-            runtimeActivity: "running",
-          }),
-        ],
-      },
-    ]);
-    expect(
-      results.some(
-        (result) =>
-          result.type === "present" &&
-          result.sources.some((source) => source.externalSessionId === "unknown-session"),
-      ),
-    ).toBe(false);
-    expect(harness.callOrder).toContain("get:session-1");
-    expect(harness.callOrder).toContain("children:session-1");
-    expect(harness.callOrder).not.toContain("list");
-    expect(harness.callOrder.filter((call) => call === "get:session-1")).toHaveLength(1);
-    expect(harness.callOrder.indexOf("get:session-1")).toBeLessThan(
-      harness.callOrder.indexOf("status"),
+    expect(results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          externalSessionId: "session-1",
+          runtimeActivity: "running",
+          pendingApprovals: [expect.objectContaining({ requestId: "native-request-1" })],
+        }),
+        expect.objectContaining({
+          externalSessionId: "child-session",
+          parentExternalSessionId: "session-1",
+          runtimeActivity: "running",
+        }),
+        expect.objectContaining({ externalSessionId: "unknown-session" }),
+      ]),
     );
+    expect(harness.callOrder).toContain("list");
+    expect(harness.callOrder).not.toContain("get:session-1");
+    expect(harness.callOrder).not.toContain("children:session-1");
     await prepared.release();
   });
 
-  test("keeps parent lineage when a registered ref points to a child session", async () => {
+  test("lists parent lineage for a child session", async () => {
     const harness = createLiveClientHarness({
       externalSessionIds: ["child-session"],
       parentSessionIdsBySessionId: { "child-session": "parent-session" },
     });
     const prepared = await createPrepareRuntime(harness)(runtimeInput);
 
-    const results = await prepared.connection.refreshRegisteredSessions([
-      {
-        repoPath: "/repo",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo",
-        externalSessionId: "child-session",
-      },
-    ]);
+    const results = await prepared.connection.readSessionSources();
 
     expect(results).toEqual([
       expect.objectContaining({
-        type: "present",
-        sources: [
-          expect.objectContaining({
-            externalSessionId: "child-session",
-            parentExternalSessionId: "parent-session",
-          }),
-        ],
+        externalSessionId: "child-session",
+        parentExternalSessionId: "parent-session",
       }),
     ]);
     await prepared.release();
   });
 
-  test("reports a missing registered root without failing other roots", async () => {
-    const harness = createLiveClientHarness({
-      externalSessionIds: ["session-1", "missing-session"],
-      missingSessionIds: ["missing-session"],
-    });
+  test("keeps task ownership out of runtime snapshots", async () => {
+    const harness = createLiveClientHarness();
     const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    await prepared.connection.resumeSession({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+      runtimePolicy: { kind: "opencode" },
+      workingDirectory: "/repo",
+      externalSessionId: "session-1",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+    });
 
-    const results = await prepared.connection.refreshRegisteredSessions([
-      {
-        repoPath: "/repo",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo",
-        externalSessionId: "session-1",
-      },
-      {
-        repoPath: "/repo",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo",
-        externalSessionId: "missing-session",
-      },
-    ]);
+    const sources = await prepared.connection.readSessionSources();
 
-    expect(results).toEqual([
-      expect.objectContaining({
-        type: "present",
-        ref: expect.objectContaining({ externalSessionId: "session-1" }),
-      }),
-      {
-        type: "missing",
-        ref: {
-          repoPath: "/repo",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo",
-          externalSessionId: "missing-session",
-        },
-      },
-    ]);
+    expect(sources[0]?.sessionAssociation).toEqual({ kind: "unbound" });
     await prepared.release();
   });
 
@@ -529,14 +475,7 @@ describe("OpenCode session runtime connection", () => {
     });
     const prepared = await createPrepareRuntime(harness)(runtimeInput);
     const signals: OpencodeSessionRuntimeSignal[] = [];
-    await prepared.connection.refreshRegisteredSessions([
-      {
-        repoPath: "/repo",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo",
-        externalSessionId: "session-1",
-      },
-    ]);
+    await prepared.connection.readSessionSources();
     await prepared.startForwarding((signal) => {
       signals.push(signal);
     });
@@ -578,21 +517,14 @@ describe("OpenCode session runtime connection", () => {
     await prepared.release();
   });
 
-  test("forwards deletion only for a registered root lineage", async () => {
+  test("forwards deletion for a watched session tree", async () => {
     const harness = createLiveClientHarness({
       externalSessionIds: ["session-1", "child-session"],
       childSessionIdsByParent: { "session-1": ["child-session"] },
     });
     const prepared = await createPrepareRuntime(harness)(runtimeInput);
     const signals: OpencodeSessionRuntimeSignal[] = [];
-    await prepared.connection.refreshRegisteredSessions([
-      {
-        repoPath: "/repo",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo",
-        externalSessionId: "session-1",
-      },
-    ]);
+    await prepared.connection.readSessionSources();
     await prepared.startForwarding((signal) => {
       signals.push(signal);
     });

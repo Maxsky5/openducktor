@@ -12,7 +12,6 @@ import { createRuntimeSessionOperations } from "../../adapters/runtimes/runtime-
 import { createRuntimeTaskActivityGuard } from "../../application/tasks/runtime-task-activity-guard";
 import { createRuntimeWorkspaceStarterDispatcher } from "../../adapters/runtimes/runtime-workspace-starter-dispatcher";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
-import { createTaskWorkflowRootReader } from "../../application/agent-sessions/task-workflow-root-reader";
 import { createTaskWorkflowSessionControlService } from "../../application/agent-sessions/task-workflow-session-control-service";
 import { createLocalAttachmentService } from "../../application/attachments/local-attachment-service";
 import { createDevServerService } from "../../application/dev-servers/dev-server-service";
@@ -155,7 +154,6 @@ export const assembleNodeEffectHostCommandRouter = (
         payload: envelope,
       });
     },
-    readWorkflowRoots: createTaskWorkflowRootReader(taskStore),
   });
   const systemDiagnosticsService = createSystemDiagnosticsService({
     runtimeDefinitionsService,

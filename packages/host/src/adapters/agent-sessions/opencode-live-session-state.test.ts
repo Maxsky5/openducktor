@@ -35,13 +35,13 @@ const createState = () => {
 };
 
 type LiveState = ReturnType<typeof createState>;
-type WorkflowRootResults = Parameters<LiveState["applyWorkflowRoots"]>[0];
+type SessionSources = Parameters<LiveState["applySessionSources"]>[0];
 
-const applyRoots = (state: LiveState, results: WorkflowRootResults) =>
-  state.applyWorkflowRoots(results, state.rootVersions(results.map(({ ref }) => ref)));
+const applySources = (state: LiveState, sources: SessionSources) =>
+  state.applySessionSources(sources, state.versions());
 
 describe("OpenCode host live-session state", () => {
-  test("starts empty and admits a root only from an OpenDucktor control result", () => {
+  test("starts empty and adds a session from an OpenDucktor control result", () => {
     const state = createState();
 
     expect(state.listSnapshots()).toEqual([]);
@@ -198,7 +198,7 @@ describe("OpenCode host live-session state", () => {
     expect(state.listSnapshots()).toEqual([]);
   });
 
-  test("removes a vanished descendant when a registered root refresh omits it", () => {
+  test("removes a vanished descendant when the runtime list omits it", () => {
     const state = createState();
     state.applyControlSummary(summary("parent"));
     const parentRef = state.listSnapshots()[0]?.ref;
@@ -215,22 +215,16 @@ describe("OpenCode host live-session state", () => {
       questions: [],
     });
 
-    applyRoots(state, [
+    applySources(state, [
       {
-        type: "present",
-        ref: parentRef,
-        sources: [
-          {
-            externalSessionId: "parent",
-            workingDirectory: parentRef.workingDirectory,
-            sessionAssociation: { kind: "unbound" },
-            title: "OpenDucktor session",
-            startedAt: "2026-07-16T10:01:00.000Z",
-            runtimeActivity: "idle",
-            pendingApprovals: [],
-            pendingQuestions: [],
-          },
-        ],
+        externalSessionId: "parent",
+        workingDirectory: parentRef.workingDirectory,
+        sessionAssociation: { kind: "unbound" },
+        title: "OpenDucktor session",
+        startedAt: "2026-07-16T10:01:00.000Z",
+        runtimeActivity: "idle",
+        pendingApprovals: [],
+        pendingQuestions: [],
       },
     ]);
 
@@ -239,7 +233,7 @@ describe("OpenCode host live-session state", () => {
     ]);
   });
 
-  test("removes a registered root when OpenCode confirms it is missing", () => {
+  test("removes a session when the runtime list omits it", () => {
     const state = createState();
     state.applyControlSummary(summary("parent"));
     const parentRef = state.listSnapshots()[0]?.ref;
@@ -247,13 +241,11 @@ describe("OpenCode host live-session state", () => {
       throw new Error("Expected a live OpenDucktor parent.");
     }
 
-    expect(applyRoots(state, [{ type: "missing", ref: parentRef }])).toEqual([
-      { type: "session_removed", ref: parentRef },
-    ]);
+    expect(applySources(state, [])).toEqual([{ type: "session_removed", ref: parentRef }]);
     expect(state.listSnapshots()).toEqual([]);
   });
 
-  test("rejects a registered ref when OpenCode says it has a parent", () => {
+  test("keeps parent lineage from the runtime list", () => {
     const state = createState();
     state.applyControlSummary(summary("child"));
     const childRef = state.listSnapshots()[0]?.ref;
@@ -261,30 +253,26 @@ describe("OpenCode host live-session state", () => {
       throw new Error("Expected a live OpenDucktor session.");
     }
 
-    expect(() =>
-      applyRoots(state, [
-        {
-          type: "present",
-          ref: childRef,
-          sources: [
-            {
-              externalSessionId: "child",
-              parentExternalSessionId: "parent",
-              workingDirectory: childRef.workingDirectory,
-              sessionAssociation: { kind: "unbound" },
-              title: "OpenCode subagent",
-              startedAt: "2026-07-16T10:01:00.000Z",
-              runtimeActivity: "idle",
-              pendingApprovals: [],
-              pendingQuestions: [],
-            },
-          ],
-        },
-      ]),
-    ).toThrow("OpenCode did not return registered session 'child'");
+    applySources(state, [
+      {
+        externalSessionId: "child",
+        parentExternalSessionId: "parent",
+        workingDirectory: childRef.workingDirectory,
+        sessionAssociation: { kind: "unbound" },
+        title: "OpenCode subagent",
+        startedAt: "2026-07-16T10:01:00.000Z",
+        runtimeActivity: "idle",
+        pendingApprovals: [],
+        pendingQuestions: [],
+      },
+    ]);
+
+    expect(state.listSnapshots()).toEqual([
+      expect.objectContaining({ ref: childRef, parentExternalSessionId: "parent" }),
+    ]);
   });
 
-  test("removes a root only after its durable registration is omitted", () => {
+  test("keeps a source when the runtime still lists it", () => {
     const state = createState();
     state.applyControlSummary(summary("parent"));
     const parentRef = state.listSnapshots()[0]?.ref;
@@ -292,29 +280,22 @@ describe("OpenCode host live-session state", () => {
       throw new Error("Expected a live OpenDucktor parent.");
     }
 
-    expect(applyRoots(state, [])).toEqual([]);
-    expect(state.listSnapshots()).toHaveLength(1);
-    applyRoots(state, [
-      {
-        type: "present",
-        ref: parentRef,
-        sources: [
-          {
-            externalSessionId: "parent",
-            workingDirectory: parentRef.workingDirectory,
-            sessionAssociation: { kind: "unbound" },
-            title: "OpenDucktor session",
-            startedAt: "2026-07-16T10:01:00.000Z",
-            runtimeActivity: "idle",
-            pendingApprovals: [],
-            pendingQuestions: [],
-          },
-        ],
-      },
-    ]);
+    expect(
+      applySources(state, [
+        {
+          externalSessionId: "parent",
+          workingDirectory: parentRef.workingDirectory,
+          sessionAssociation: { kind: "unbound" },
+          title: "OpenDucktor session",
+          startedAt: "2026-07-16T10:01:00.000Z",
+          runtimeActivity: "idle",
+          pendingApprovals: [],
+          pendingQuestions: [],
+        },
+      ]),
+    ).toEqual([expect.objectContaining({ type: "session_upsert" })]);
 
-    expect(applyRoots(state, [])).toEqual([{ type: "session_removed", ref: parentRef }]);
-    expect(state.listSnapshots()).toEqual([]);
+    expect(state.listSnapshots()).toHaveLength(1);
   });
 
   test("does not retain a pending route when event validation fails", () => {
