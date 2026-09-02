@@ -16,6 +16,8 @@ import {
 import { prepareNotificationOccurrence } from "./notification-occurrence";
 import { createNotificationPolicy, type NotificationDispatchFailure } from "./notification-policy";
 
+type CoordinationFailurePhase = "publication" | "external_delivery";
+
 export const createNotificationRuntime = ({
   bridge,
   loadSettings,
@@ -35,7 +37,7 @@ export const createNotificationRuntime = ({
   inApp: ReturnType<typeof createSonnerNotificationAdapter>;
   sound: ReturnType<typeof createCuelumeNotificationSoundAdapter>;
 }) => {
-  let coordinationFailureActive = false;
+  const activeCoordinationFailures = new Set<CoordinationFailurePhase>();
   const os = createShellOsNotificationAdapter(bridge, onOsShown);
   const policy = createNotificationPolicy({
     loadSettings,
@@ -68,8 +70,12 @@ export const createNotificationRuntime = ({
     }
   };
 
-  const reportCoordinationFailure = (occurrence: NotificationOccurrence, cause: unknown): void => {
-    coordinationFailureActive = true;
+  const reportCoordinationFailure = (
+    phase: CoordinationFailurePhase,
+    occurrence: NotificationOccurrence,
+    cause: unknown,
+  ): void => {
+    activeCoordinationFailures.add(phase);
     const message = cause instanceof Error ? cause.message : String(cause);
     onFailure({
       channel: "coordination",
@@ -78,6 +84,11 @@ export const createNotificationRuntime = ({
       repoPath: occurrence.repoPath,
       message: message.slice(0, 500),
     });
+  };
+
+  const recoverCoordinationFailure = (phase: CoordinationFailurePhase): void => {
+    if (!activeCoordinationFailures.delete(phase) || activeCoordinationFailures.size > 0) return;
+    onCoordinationRecovered();
   };
 
   const dispatch = async (
@@ -98,7 +109,7 @@ export const createNotificationRuntime = ({
             appFocused = await bridge.isAppFocused();
           } catch (cause) {
             coordinationFailed = true;
-            reportCoordinationFailure(occurrence, cause);
+            reportCoordinationFailure("external_delivery", occurrence, cause);
           }
         }
         await policy.dispatch(occurrence, { phase: "external", appFocused });
@@ -106,11 +117,10 @@ export const createNotificationRuntime = ({
       });
     } catch (cause) {
       coordinationFailed = true;
-      reportCoordinationFailure(occurrence, cause);
+      reportCoordinationFailure("external_delivery", occurrence, cause);
     }
-    if (coordinationCompleted && !coordinationFailed && coordinationFailureActive) {
-      coordinationFailureActive = false;
-      onCoordinationRecovered();
+    if (coordinationCompleted && !coordinationFailed) {
+      recoverCoordinationFailure("external_delivery");
     }
   };
 
@@ -124,9 +134,10 @@ export const createNotificationRuntime = ({
         if (!settings) return;
         try {
           const selected = await bridge.publishOccurrence(occurrence, settings);
+          recoverCoordinationFailure("publication");
           await dispatch(selected.occurrence, selected.settings);
         } catch (cause) {
-          reportCoordinationFailure(occurrence, cause);
+          reportCoordinationFailure("publication", occurrence, cause);
         }
       });
     },

@@ -10,6 +10,8 @@ const OCCURRENCE_CHANNEL_NAME = "openducktor:notifications:occurrences";
 const EXTERNAL_DELIVERY_LOCK_NAME = "openducktor:notifications:external-delivery";
 const TAB_LOCK_NAME_PREFIX = "openducktor:notifications:tab:";
 const APP_FOCUS_LOCK_NAME = "openducktor:notifications:app-focus";
+const COORDINATION_DISPOSED_MESSAGE =
+  "Browser notification coordination stopped before occurrence selection.";
 
 const coordinatorMessageSchema = z.discriminatedUnion("type", [
   z.object({
@@ -93,6 +95,11 @@ type PendingOccurrence = {
   settings: NotificationSettings;
 };
 
+type PublicationSettlement = {
+  resolve(selection: PendingOccurrence): void;
+  reject(cause: Error): void;
+};
+
 const getDefaultChannelFactory = (): (() => BroadcastChannelLike) | null => {
   const NativeBroadcastChannel = globalThis.BroadcastChannel;
   if (!NativeBroadcastChannel) {
@@ -163,12 +170,23 @@ export const createBrowserNotificationCoordinator = ({
     (occurrence: NotificationOccurrence, settings: NotificationSettings) => void
   >();
   const claimAcknowledgements = new Map<string, Map<string, () => void>>();
-  const publicationResolvers = new Map<string, Set<(selection: PendingOccurrence) => void>>();
+  const publicationSettlements = new Map<string, Set<PublicationSettlement>>();
   const activeClaimPropagations = new Set<Promise<void>>();
   const tabLockName = `${TAB_LOCK_NAME_PREFIX}${tabId}`;
 
   const recordFailure = (operation: CoordinationOperation, cause: unknown): void => {
     failureMessages.set(operation, cause instanceof Error ? cause.message : String(cause));
+  };
+
+  const rejectPendingPublications = (cause: unknown): void => {
+    const error = cause instanceof Error ? cause : new Error(String(cause));
+    for (const settlements of publicationSettlements.values()) {
+      for (const settlement of settlements) {
+        settlement.reject(error);
+      }
+    }
+    publicationSettlements.clear();
+    candidateOccurrences.clear();
   };
 
   const releaseTabState = (): void => {
@@ -207,6 +225,7 @@ export const createBrowserNotificationCoordinator = ({
         }
         if (!controller.signal.aborted) {
           recordFailure("tab_registration", cause);
+          rejectPendingPublications(cause);
         }
       });
   };
@@ -302,10 +321,10 @@ export const createBrowserNotificationCoordinator = ({
     if (!claimedOccurrences.has(occurrenceId)) {
       pendingOccurrences.set(occurrenceId, selection);
     }
-    for (const resolve of publicationResolvers.get(occurrenceId) ?? []) {
-      resolve(selection);
+    for (const settlement of publicationSettlements.get(occurrenceId) ?? []) {
+      settlement.resolve(selection);
     }
-    publicationResolvers.delete(occurrenceId);
+    publicationSettlements.delete(occurrenceId);
     notifyOccurrenceListeners(selection);
     return true;
   };
@@ -395,6 +414,7 @@ export const createBrowserNotificationCoordinator = ({
         }
         if (!controller.signal.aborted) {
           recordFailure("external_ownership", cause);
+          rejectPendingPublications(cause);
         }
       });
   };
@@ -446,17 +466,25 @@ export const createBrowserNotificationCoordinator = ({
     async publishOccurrence(occurrence, settings) {
       const parsed = notificationOccurrenceSchema.parse(occurrence);
       const parsedSettings = notificationSettingsSchema.removeDefault().parse(settings);
+      if (disposed) {
+        throw new Error(COORDINATION_DISPOSED_MESSAGE);
+      }
       const selected = selectedOccurrences.get(parsed.occurrenceId);
       if (selected) return selected;
+      const selectionFailure =
+        failureMessages.get("tab_registration") ?? failureMessages.get("external_ownership");
+      if (selectionFailure) {
+        throw new Error(selectionFailure);
+      }
       const candidate = candidateOccurrences.get(parsed.occurrenceId) ?? {
         occurrence: parsed,
         settings: parsedSettings,
       };
       candidateOccurrences.set(parsed.occurrenceId, candidate);
-      const selection = new Promise<PendingOccurrence>((resolve) => {
-        const resolvers = publicationResolvers.get(parsed.occurrenceId) ?? new Set();
-        resolvers.add(resolve);
-        publicationResolvers.set(parsed.occurrenceId, resolvers);
+      const selection = new Promise<PendingOccurrence>((resolve, reject) => {
+        const settlements = publicationSettlements.get(parsed.occurrenceId) ?? new Set();
+        settlements.add({ resolve, reject });
+        publicationSettlements.set(parsed.occurrenceId, settlements);
       });
       if (externalDeliveryOwner) {
         selectCandidate(candidate);
@@ -504,10 +532,9 @@ export const createBrowserNotificationCoordinator = ({
       externalDeliveryLockAbortController?.abort();
       externalDeliveryLockAbortController = null;
       releaseFocusedState();
-      candidateOccurrences.clear();
+      rejectPendingPublications(new Error(COORDINATION_DISPOSED_MESSAGE));
       selectedOccurrences.clear();
       pendingOccurrences.clear();
-      publicationResolvers.clear();
       const finishExternalDeliveryOwnership = (): void => {
         releaseExternalDeliveryLock?.();
         releaseExternalDeliveryLock = null;

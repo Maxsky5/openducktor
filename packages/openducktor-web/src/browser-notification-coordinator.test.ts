@@ -307,6 +307,15 @@ const waitFor = async (condition: () => boolean): Promise<void> => {
   await waitForAsync(async () => condition());
 };
 
+const observeSettlement = async (promise: Promise<unknown>): Promise<string> =>
+  Promise.race([
+    promise.then(
+      () => "resolved",
+      (cause: unknown) => (cause instanceof Error ? cause.message : String(cause)),
+    ),
+    new Promise<string>((resolve) => setTimeout(() => resolve("pending"), 20)),
+  ]);
+
 const occurrence: NotificationOccurrence = {
   occurrenceId: "workflow.closed:/repo:task-1:event-1",
   kind: "workflow.closed",
@@ -349,6 +358,44 @@ describe("FakeLockManager", () => {
 });
 
 describe("browser notification coordinator", () => {
+  test("rejects a pending publication when owner selection fails", async () => {
+    const locks = new FakeLockManager(true);
+    locks.rejectNextRequest(EXTERNAL_DELIVERY_LOCK_NAME, new Error("Owner lock failed."));
+    const coordinator = createBrowserNotificationCoordinator({
+      createChannel: () => new FakeBroadcastHub().createChannel(),
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+    });
+    const publication = coordinator.publishOccurrence(occurrence, settings);
+
+    locks.resume();
+    await waitFor(() => coordinator.getFailureMessage() === "Owner lock failed.");
+
+    expect(await observeSettlement(publication)).toBe("Owner lock failed.");
+    expect(await observeSettlement(coordinator.publishOccurrence(occurrence, settings))).toBe(
+      "Owner lock failed.",
+    );
+    coordinator.dispose();
+  });
+
+  test("rejects a pending publication when disposed before selection", async () => {
+    const locks = new FakeLockManager(true);
+    const coordinator = createBrowserNotificationCoordinator({
+      createChannel: () => new FakeBroadcastHub().createChannel(),
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+    });
+    const publication = coordinator.publishOccurrence(occurrence, settings);
+
+    coordinator.dispose();
+
+    expect(await observeSettlement(publication)).toBe(
+      "Browser notification coordination stopped before occurrence selection.",
+    );
+  });
+
   test("selects one settings snapshot for concurrent publishers", async () => {
     const locks = new FakeLockManager();
     const hub = new FakeBroadcastHub(false);
@@ -580,10 +627,14 @@ describe("browser notification coordinator", () => {
     });
     await waitFor(() => owner.isExternalDeliveryOwner());
 
-    recipient.publishOccurrence(occurrence, settings);
+    const publication = recipient.publishOccurrence(occurrence, settings);
+    void publication.catch(() => {});
     await hub.flushNext(ownerChannel, "occurrence_candidate");
     expect(claims).toBe(0);
     recipient.dispose();
+    expect(await observeSettlement(publication)).toBe(
+      "Browser notification coordination stopped before occurrence selection.",
+    );
     await waitFor(() => claims === 1);
 
     expect(claims).toBe(1);
@@ -663,12 +714,14 @@ describe("browser notification coordinator", () => {
     subscribe(publisherBridge);
     await waitFor(() => firstCoordinator.isExternalDeliveryOwner());
 
-    publisherBridge.publishOccurrence(occurrence, settings);
+    const publication = publisherBridge.publishOccurrence(occurrence, settings);
     await hub.flushNext(firstChannel, "occurrence_candidate");
     await hub.flushNext(publisherChannel, "external_delivery_claimed");
     await hub.flushNext(firstChannel, "external_delivery_claim_ack");
     expect(showOsNotification).not.toHaveBeenCalled();
     await hub.flushNext(nextOwnerChannel, "occurrence_selected");
+    await hub.flushNext(publisherChannel, "occurrence_selected");
+    expect((await publication).settings).toEqual(settings);
     firstBridge.dispose();
     await Promise.resolve();
     expect(nextOwnerCoordinator.isExternalDeliveryOwner()).toBe(false);
