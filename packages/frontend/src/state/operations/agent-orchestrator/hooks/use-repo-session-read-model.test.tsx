@@ -139,9 +139,7 @@ const createState = (
   const agentSessionLiveReplyApproval = mock(
     async (_input: AgentSessionLiveReplyApprovalInput) => undefined,
   );
-  const agentSessionLiveRefresh = mock(async (_input: AgentSessionLiveRefreshInput) => undefined);
   const liveSessionPort: AgentSessionLiveFrontendPort = {
-    agentSessionLiveRefresh,
     observeAgentSessionLive,
     agentSessionLiveReplyApproval,
   };
@@ -182,7 +180,6 @@ const createState = (
     harness: createHookHarness(useRepoSessionReadModel, props),
     props,
     observeAgentSessionLive,
-    agentSessionLiveRefresh,
     unsubscribe,
     agentSessionLiveReplyApproval,
     recoverTranscriptGap,
@@ -250,17 +247,7 @@ describe("useRepoSessionReadModel", () => {
         role: "build",
       });
       expect(state.observeAgentSessionLive).toHaveBeenCalledWith(
-        {
-          repoPath: "/repo",
-          registeredSessionRefs: [
-            {
-              repoPath: "/repo",
-              runtimeKind: "codex",
-              workingDirectory: "/repo/worktree",
-              externalSessionId: "thread-1",
-            },
-          ],
-        },
+        { repoPath: "/repo" },
         expect.any(Function),
       );
     } finally {
@@ -312,51 +299,6 @@ describe("useRepoSessionReadModel", () => {
         kind: "workflow",
         taskId: "task-1",
         role: "build",
-      });
-    } finally {
-      await state.harness.unmount();
-    }
-  });
-
-  test("refreshes registered roots when task session records change in the same repository", async () => {
-    const refreshedRecord = { ...record, externalSessionId: "thread-refreshed-in" };
-    const state = createState((emit, observeIndex) => {
-      const currentRecord = observeIndex === 1 ? record : refreshedRecord;
-      emit({
-        type: "snapshot",
-        repoPath: "/repo",
-        sessions: [
-          snapshot({
-            ref: {
-              ...snapshot().ref,
-              externalSessionId: currentRecord.externalSessionId,
-            },
-          }),
-        ],
-      });
-    });
-
-    try {
-      await state.harness.mount();
-      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
-
-      await state.harness.run(() => {
-        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [
-          refreshedRecord,
-        ]);
-      });
-      await state.harness.waitFor(() => state.agentSessionLiveRefresh.mock.calls.length === 1);
-
-      expect(state.agentSessionLiveRefresh.mock.calls[0]?.[0]).toEqual({
-        repoPath: "/repo",
-        registeredSessionRefs: [
-          {
-            repoPath: "/repo",
-            runtimeKind: "codex",
-            workingDirectory: "/repo/worktree",
-            externalSessionId: "thread-refreshed-in",
-          },
-        ],
       });
     } finally {
       await state.harness.unmount();

@@ -625,6 +625,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     const envelopes: Array<{ type: string }> = [];
     const service = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
+      readWorkflowRoots: () => Effect.succeed([]),
       faultLog: () => Effect.void,
       publish: (envelope) => envelopes.push(envelope),
     });

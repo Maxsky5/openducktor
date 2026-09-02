@@ -128,7 +128,6 @@ export const createTestDependencies = (
       ...runtimeHostOverrides,
     },
     liveSessionHostPort: {
-      agentSessionLiveRefresh: async () => undefined,
       observeAgentSessionLive: async ({ repoPath }, listener) => {
         listener({
           type: "snapshot",

@@ -122,6 +122,7 @@ const createHarness = async (resolveAttachment?: LocalAttachmentService["resolve
   };
   const service = createAgentSessionLiveStateService({
     adapterRegistry: createLiveSessionAdapterRegistry(),
+    readWorkflowRoots: () => Effect.succeed([]),
     faultLog: () => Effect.void,
     publish: (envelope) => envelopes.push(envelope),
   });

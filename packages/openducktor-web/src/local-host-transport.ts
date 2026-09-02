@@ -543,7 +543,6 @@ export const subscribeLocalHostDevServerEvents = async (
 export const observeLocalHostAgentSessions = async (
   input: AgentSessionLiveRefreshInput,
   listener: (envelope: AgentSessionLiveEnvelope) => void,
-  readInput: () => AgentSessionLiveRefreshInput = () => input,
 ): Promise<() => void> => {
   return runWebBoundary(
     Effect.gen(function* () {
@@ -556,7 +555,7 @@ export const observeLocalHostAgentSessions = async (
         refreshTail = refreshTail
           .then(async () => {
             if (!closed) {
-              await client.agentSessionLiveRefresh(readInput());
+              await client.agentSessionLiveRefresh(input);
             }
           })
           .catch((cause: unknown) => {
@@ -589,7 +588,7 @@ export const observeLocalHostAgentSessions = async (
       );
       const initialRefreshExit = yield* Effect.exit(
         Effect.tryPromise({
-          try: () => client.agentSessionLiveRefresh(readInput()),
+          try: () => client.agentSessionLiveRefresh(input),
           catch: (cause) =>
             isWebError(cause)
               ? cause

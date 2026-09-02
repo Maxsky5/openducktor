@@ -140,7 +140,11 @@ export const parsePlanSubtasks = (
   );
 };
 
-const agentSessionStringKeys = ["externalSessionId", "runtimeKind", "workingDirectory"] as const;
+const agentSessionStringKeys = [
+  "externalSessionId",
+  "runtimeKind",
+  "workingDirectory",
+] as const satisfies ReadonlyArray<keyof AgentSessionIdentity>;
 const normalizedAgentSessionInputSchema = z.record(z.string(), z.json()).transform((record) => {
   const normalized = { ...record };
   for (const key of agentSessionStringKeys) {

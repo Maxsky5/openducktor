@@ -12,6 +12,7 @@ import { createRuntimeSessionOperations } from "../../adapters/runtimes/runtime-
 import { createRuntimeTaskActivityGuard } from "../../application/tasks/runtime-task-activity-guard";
 import { createRuntimeWorkspaceStarterDispatcher } from "../../adapters/runtimes/runtime-workspace-starter-dispatcher";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
+import { createTaskWorkflowRootReader } from "../../application/agent-sessions/task-workflow-root-reader";
 import { createTaskWorkflowSessionControlService } from "../../application/agent-sessions/task-workflow-session-control-service";
 import { createLocalAttachmentService } from "../../application/attachments/local-attachment-service";
 import { createDevServerService } from "../../application/dev-servers/dev-server-service";
@@ -117,23 +118,6 @@ export const assembleNodeEffectHostCommandRouter = (
   } = defaultPorts;
   const codexAppServerService = createCodexAppServerService(effectiveCodexAppServer);
   const liveSessionAdapterRegistry = createLiveSessionAdapterRegistry();
-  const agentSessionLiveStateService = createAgentSessionLiveStateService({
-    adapterRegistry: liveSessionAdapterRegistry,
-    faultLog: createLiveSessionFaultLogger(lifecycleLogger),
-    publish: (envelope) => {
-      if (!eventBus) {
-        throw new HostResourceError({
-          resource: "host-event-bus",
-          operation: "agent-session-live.publish",
-          message: "Live agent-session events require a configured host event bus.",
-        });
-      }
-      eventBus.publish({
-        channel: "openducktor://agent-session-live-event",
-        payload: envelope,
-      });
-    },
-  });
   const filesystemService = createFilesystemService(filesystem);
   const workspaceFilesService = createWorkspaceFilesService(filesystem, git);
   const gitService = createGitService({ gitPort: git, settingsConfig, worktreeFiles });
@@ -155,6 +139,24 @@ export const assembleNodeEffectHostCommandRouter = (
   }
   const assets = createNodeTaskAssetServices(taskAssetServiceInput);
   const { startupSweep, taskAssetReadService, taskAssetStagingService, taskStore } = assets;
+  const agentSessionLiveStateService = createAgentSessionLiveStateService({
+    adapterRegistry: liveSessionAdapterRegistry,
+    faultLog: createLiveSessionFaultLogger(lifecycleLogger),
+    publish: (envelope) => {
+      if (!eventBus) {
+        throw new HostResourceError({
+          resource: "host-event-bus",
+          operation: "agent-session-live.publish",
+          message: "Live agent-session events require a configured host event bus.",
+        });
+      }
+      eventBus.publish({
+        channel: "openducktor://agent-session-live-event",
+        payload: envelope,
+      });
+    },
+    readWorkflowRoots: createTaskWorkflowRootReader(taskStore),
+  });
   const systemDiagnosticsService = createSystemDiagnosticsService({
     runtimeDefinitionsService,
     runtimeHealth,

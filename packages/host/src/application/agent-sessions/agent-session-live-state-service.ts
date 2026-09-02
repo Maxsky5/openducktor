@@ -48,6 +48,7 @@ import {
   toAgentSessionLiveEnvelopePublishError,
 } from "./agent-session-live-envelope";
 import { createLiveStateCoordinator, type LiveStateCoordinator } from "./live-state-coordinator";
+import type { TaskWorkflowRootReader } from "./task-workflow-root-reader";
 
 export type AgentSessionLiveEnvelopePublisher = (envelope: AgentSessionLiveEnvelope) => void;
 
@@ -107,6 +108,7 @@ export type CreateAgentSessionLiveStateServiceInput = {
   readonly adapterRegistry: AgentSessionLiveAdapterRegistryPort;
   readonly faultLog: AgentSessionLiveFaultLogger;
   readonly publish: AgentSessionLiveEnvelopePublisher;
+  readonly readWorkflowRoots: TaskWorkflowRootReader;
   readonly coordinator?: LiveStateCoordinator;
 };
 
@@ -129,6 +131,7 @@ export const createAgentSessionLiveStateService = ({
   adapterRegistry,
   faultLog,
   publish,
+  readWorkflowRoots,
   coordinator = createLiveStateCoordinator(),
 }: CreateAgentSessionLiveStateServiceInput): AgentSessionLiveStateService => {
   const publishEnvelopeResult = (envelope: AgentSessionLiveEnvelope) =>
@@ -225,7 +228,7 @@ export const createAgentSessionLiveStateService = ({
     refresh: (input) =>
       coordinator.run(
         Effect.gen(function* () {
-          const registeredRefs = input.registeredSessionRefs ?? [];
+          const registeredRefs = yield* readWorkflowRoots(input.repoPath);
           yield* Effect.forEach(adapterRegistry.listForRepo(input.repoPath), (adapter) => {
             if (!adapter.refreshRegisteredSessions) {
               return Effect.void;

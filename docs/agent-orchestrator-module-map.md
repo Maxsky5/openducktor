@@ -877,7 +877,6 @@ Owns:
 
 - reading durable task session records through per-task session-list queries
 - keeping per-task session-list query keys as the only frontend cache for persisted session records
-- supplying exact durable root session references when the host refreshes live runtime state
 - applying loaded durable records onto the projected live collection during repo reads
 - presenting task session history to Agent Studio, Kanban, task details, and autopilot
 
@@ -896,10 +895,7 @@ model. Task-session query invalidation/refresh owns persisted session-record
 changes for UI history surfaces. Orchestrator internals must not reload the repo
 session read model for explicit start/reuse preparation; they may load exactly
 one source session through `source-session-loader.ts`.
-`useTaskSessionRecords` is the only hook that fans out per-task session-record
-queries for repo startup. `useRepoSessionReadModel` consumes that result, passes
-its exact root references to the host refresh, attaches to the generic host live-state
-stream, and owns the one collection projection/commit.
+`useTaskSessionRecords` is the only hook that fans out per-task session-record queries for repo startup. `useRepoSessionReadModel` consumes that result, attaches to the generic host live-state stream, and owns the one collection projection/commit. The host reads root references from the task store when it refreshes live runtime state.
 It must not select a runtime adapter or load transcript history. Task reset pages
 must not call a session refresh command after reset. Reset
 operations invalidate the exact task-session-record query, and the repo read
@@ -917,7 +913,7 @@ A successful current-scope record read clears prior task-record failures only; l
 1. The app loads task IDs from the task store.
 2. `use-task-session-records.ts` reads per-task session records through the
    shared task-session query keys.
-3. The renderer observes the existing generic host-event channel, then requests one live-state refresh for the active repository with the exact roots from durable task session records.
+3. The renderer observes the existing generic host-event channel, then requests one live-state refresh for the active repository. The host reads the exact roots from durable task session records.
 4. Each runtime adapter reads only those roots and their verified descendants. `buildAgentSessionLiveCollection` rejects any other root, reapplies workflow session records, and commits the collection once.
 5. Session rows, activity, pending input, current context usage, and sidebar
    counters all derive from that same committed collection.

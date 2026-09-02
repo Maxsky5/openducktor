@@ -69,7 +69,11 @@ const fakeAdapter = (input: {
     : adapter;
 };
 
-const createHarness = () => {
+const createHarness = (
+  readWorkflowRoots: (
+    repoPath: string,
+  ) => Effect.Effect<ReadonlyArray<AgentSessionLiveRef>, HostError> = () => Effect.succeed([]),
+) => {
   const events: AgentSessionLiveEnvelope[] = [];
   const faultLogs: string[] = [];
   const adapterRegistry = createLiveSessionAdapterRegistry();
@@ -77,6 +81,7 @@ const createHarness = () => {
     adapterRegistry,
     faultLog: (message) => Effect.sync(() => faultLogs.push(message)),
     publish: (event) => events.push(event),
+    readWorkflowRoots,
   });
   return { adapterRegistry, events, faultLogs, service };
 };
@@ -92,9 +97,17 @@ const expectHostFailure = async <Success>(
 };
 
 describe("createAgentSessionLiveStateService", () => {
-  test("refreshes only explicit OpenDucktor-registered session refs before publishing", async () => {
-    const { events, service } = createHarness();
+  test("reads current workflow roots before each refresh", async () => {
     const registeredRef = sessionRef("registered", "opencode");
+    const nextRef = sessionRef("next", "opencode");
+    let roots = [registeredRef];
+    const readCalls: string[] = [];
+    const { events, service } = createHarness((repoPath) =>
+      Effect.sync(() => {
+        readCalls.push(repoPath);
+        return roots;
+      }),
+    );
     let snapshots: AgentSessionLiveSnapshot[] = [];
     const refreshCalls: ReadonlyArray<AgentSessionLiveRef>[] = [];
     await Effect.runPromise(
@@ -106,23 +119,29 @@ describe("createAgentSessionLiveStateService", () => {
           refreshRegisteredSessions: (refs) =>
             Effect.sync(() => {
               refreshCalls.push(refs);
-              snapshots = [liveSnapshot("registered", "opencode")];
+              snapshots = refs.map((ref) => liveSnapshot(ref.externalSessionId, "opencode"));
             }),
         }),
       ),
     );
     events.length = 0;
 
-    await Effect.runPromise(
-      service.refresh({ repoPath: "/repo", registeredSessionRefs: [registeredRef] }),
-    );
+    await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
+    roots = [nextRef];
+    await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
 
-    expect(refreshCalls).toEqual([[registeredRef]]);
+    expect(readCalls).toEqual(["/repo", "/repo"]);
+    expect(refreshCalls).toEqual([[registeredRef], [nextRef]]);
     expect(events).toEqual([
       {
         type: "snapshot",
         repoPath: "/repo",
         sessions: [liveSnapshot("registered", "opencode")],
+      },
+      {
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [liveSnapshot("next", "opencode")],
       },
     ]);
   });
@@ -494,6 +513,7 @@ describe("createAgentSessionLiveStateService", () => {
     });
     const service = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
+      readWorkflowRoots: () => Effect.succeed([]),
       faultLog: () =>
         Effect.sync(() => {
           logAttempts += 1;
@@ -536,6 +556,7 @@ describe("createAgentSessionLiveStateService", () => {
     const snapshot = liveSnapshot("session-1");
     const service = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
+      readWorkflowRoots: () => Effect.succeed([]),
       faultLog: () => Effect.fail(logFailure),
       publish: (event) => events.push(event),
     });
@@ -576,6 +597,7 @@ describe("createAgentSessionLiveStateService", () => {
     });
     const service = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
+      readWorkflowRoots: () => Effect.succeed([]),
       faultLog: () =>
         Effect.sync(() => {
           logAttempts += 1;
@@ -615,6 +637,7 @@ describe("createAgentSessionLiveStateService", () => {
     const snapshot = liveSnapshot("session-1");
     const service = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
+      readWorkflowRoots: () => Effect.succeed([]),
       faultLog: () => Effect.void,
       publish: (event) => {
         published.push(event);
@@ -663,6 +686,7 @@ describe("createAgentSessionLiveStateService", () => {
     });
     const service = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
+      readWorkflowRoots: () => Effect.succeed([]),
       faultLog: () =>
         Effect.sync(() => {
           logAttempts += 1;

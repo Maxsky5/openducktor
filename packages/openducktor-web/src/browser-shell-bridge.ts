@@ -72,15 +72,7 @@ export const createBrowserShellBridge = (): ShellBridge => {
       field: "VITE_ODT_APP_VERSION",
     });
   }
-  const baseClient = createLocalHostClient();
-  const liveInputs = new Map<string, Parameters<typeof baseClient.agentSessionLiveRefresh>[0]>();
-  const client: typeof baseClient = {
-    ...baseClient,
-    agentSessionLiveRefresh: async (input) => {
-      liveInputs.set(input.repoPath, input);
-      await baseClient.agentSessionLiveRefresh(input);
-    },
-  };
+  const client = createLocalHostClient();
 
   return {
     client,
@@ -96,14 +88,7 @@ export const createBrowserShellBridge = (): ShellBridge => {
     },
     subscribeRunEvents: subscribeLocalHostRunEvents,
     subscribeDevServerEvents: subscribeLocalHostDevServerEvents,
-    observeAgentSessionLive: (input, listener) => {
-      liveInputs.set(input.repoPath, input);
-      return observeLocalHostAgentSessions(
-        input,
-        listener,
-        () => liveInputs.get(input.repoPath) ?? input,
-      );
-    },
+    observeAgentSessionLive: observeLocalHostAgentSessions,
     subscribeTaskStream: subscribeLocalHostTaskStream,
     openExternalUrl: (url) => runWebBoundary(openExternalUrlEffect(url)),
     resolveLocalAttachmentPreviewSrc: (path) =>

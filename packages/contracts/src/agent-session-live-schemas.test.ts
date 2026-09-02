@@ -86,16 +86,13 @@ describe("agent-session live contracts", () => {
     ).toBe(false);
   });
 
-  test("accepts registered roots but rejects runtime-native routing fields", () => {
-    expect(
-      agentSessionLiveRefreshInputSchema.parse({
-        repoPath: "/repo",
-        registeredSessionRefs: [ref],
-      }),
-    ).toEqual({ repoPath: "/repo", registeredSessionRefs: [ref] });
+  test("accepts only the repository path for live refresh", () => {
+    expect(agentSessionLiveRefreshInputSchema.parse({ repoPath: "/repo" })).toEqual({
+      repoPath: "/repo",
+    });
     expect(
       agentSessionLiveRefreshInputSchema.safeParse({
-        repoPath: "/another-repo",
+        repoPath: "/repo",
         registeredSessionRefs: [ref],
       }).success,
     ).toBe(false);
