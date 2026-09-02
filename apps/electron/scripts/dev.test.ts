@@ -12,8 +12,11 @@ import {
   electronDevServerLogLines,
   electronGracefulShutdownSignal,
   electronRuntimeEnv,
+  macosDevAppRegistrationCommand,
+  macosDevSignOptions,
   mainEffect,
   resolveMacosAppBundlePath,
+  resolveMacosDevBundleIdentifier,
   resolveMacosDevExecutablePath,
   resolveRendererDevPort,
   resolveRequiredMacosAppBundlePath,
@@ -187,6 +190,38 @@ describe("electron dev script", () => {
         "Electron",
       ),
     ).toBe("/repo/apps/electron/.electron-dev/OpenDucktor.app/Contents/MacOS/Electron");
+  });
+
+  test("uses a stable macOS bundle identifier for each development worktree", () => {
+    expect(resolveMacosDevBundleIdentifier("electron-0123456789ab")).toBe(
+      "com.openducktor.app.dev.electron-0123456789ab",
+    );
+  });
+
+  test("uses a complete ad-hoc signature for the macOS development app", () => {
+    const devAppPath = "/repo/apps/electron/.electron-dev/OpenDucktor.app";
+    const options = macosDevSignOptions(devAppPath);
+
+    expect(options).toMatchObject({
+      app: devAppPath,
+      identity: "-",
+      identityValidation: false,
+      platform: "darwin",
+    });
+    expect(options.optionsForFile?.(devAppPath)).toEqual({
+      hardenedRuntime: false,
+      timestamp: "none",
+    });
+  });
+
+  test("registers the signed macOS development app with LaunchServices", () => {
+    const devAppPath = "/repo/apps/electron/.electron-dev/OpenDucktor.app";
+
+    expect(macosDevAppRegistrationCommand(devAppPath)).toEqual([
+      "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
+      "-f",
+      devAppPath,
+    ]);
   });
 
   test("requests interrupt-driven Electron shutdown on Windows", () => {

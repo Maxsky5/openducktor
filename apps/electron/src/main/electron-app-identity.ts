@@ -33,10 +33,18 @@ const OPEN_DUCKTOR_APP_USER_MODEL_ID = "com.openducktor.app";
 
 export const configureElectronWindowsAppIdentity = (
   app: ElectronWindowsAppIdentity,
-  platform: NodeJS.Platform,
+  {
+    isPackaged,
+    platform,
+    processExecPath,
+  }: {
+    isPackaged: boolean;
+    platform: NodeJS.Platform;
+    processExecPath: string;
+  },
 ): void => {
   if (platform === "win32") {
-    app.setAppUserModelId(OPEN_DUCKTOR_APP_USER_MODEL_ID);
+    app.setAppUserModelId(isPackaged ? OPEN_DUCKTOR_APP_USER_MODEL_ID : processExecPath);
   }
 };
 
