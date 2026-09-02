@@ -43,7 +43,7 @@ export type ProviderPullRequest = {
   targetBranch: string;
 };
 
-export type FindPullRequestForSourceBranchInput = PullRequestProviderInput & {
+export type PullRequestBranchInput = PullRequestProviderInput & {
   sourceBranch: string;
 };
 
@@ -64,10 +64,10 @@ export type RefreshPullRequestInput = PullRequestProviderInput & {
 export type PullRequestProviderPort = {
   providerId: GitProviderId;
   findOpenForSourceBranch(
-    input: FindPullRequestForSourceBranchInput,
+    input: PullRequestBranchInput,
   ): Effect.Effect<ProviderPullRequest | undefined, HostError | GitProviderRepositoryError>;
   findLatestMergedForSourceBranch(
-    input: FindPullRequestForSourceBranchInput,
+    input: PullRequestBranchInput,
   ): Effect.Effect<ProviderPullRequest | undefined, HostError | GitProviderRepositoryError>;
   getByNumber(
     input: GetPullRequestByNumberInput,

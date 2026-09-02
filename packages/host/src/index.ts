@@ -120,12 +120,12 @@ export {
   GitProviderResolutionError,
 } from "./ports/git-provider-errors";
 export type {
-  FindPullRequestForSourceBranchInput,
   GetPullRequestByNumberInput,
   GitProviderHealthPort,
   GitProviderPort,
   GitProviderRepositoryMapping,
   GitProviderRepositoryPort,
+  PullRequestBranchInput,
   PullRequestProviderInput,
   PullRequestProviderPort,
   RefreshPullRequestInput,
