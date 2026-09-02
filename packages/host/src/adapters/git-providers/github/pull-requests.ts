@@ -2,7 +2,6 @@ import {
   GITHUB_PROVIDER_DESCRIPTOR,
   type GitProviderRepository,
   type PullRequest,
-  type RepoConfig,
   type TaskApprovalContext,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -32,35 +31,17 @@ export const createGithubPullRequestProviderPort = ({
   githubCli: GithubCli;
   repositoryPort: GitProviderRepositoryPort;
 }): PullRequestProviderPort => {
-  const getRepository = (repoConfig: RepoConfig) => repositoryPort.getRepository(repoConfig);
-
   const getByNumber: PullRequestProviderPort["getByNumber"] = (input) =>
     Effect.gen(function* () {
-      const repository = yield* getRepository(input.repoConfig);
+      const repository = yield* repositoryPort.getRepository(input.repoConfig);
       return yield* getPullRequest(githubCli, input.repoConfig.repoPath, repository, input.number);
     });
-
-  const validateLinkedPullRequest = (linkedPullRequest: PullRequest) => {
-    if (linkedPullRequest.providerId === GITHUB_PROVIDER_ID) {
-      return Effect.void;
-    }
-    return Effect.fail(
-      new HostValidationError({
-        field: "pullRequest.providerId",
-        message: `Pull request provider '${linkedPullRequest.providerId}' does not match configured provider '${GITHUB_PROVIDER_ID}'.`,
-        details: {
-          providerId: linkedPullRequest.providerId,
-          configuredProviderId: GITHUB_PROVIDER_ID,
-        },
-      }),
-    );
-  };
 
   return {
     providerId: GITHUB_PROVIDER_ID,
     findOpenForSourceBranch: (input) =>
       Effect.gen(function* () {
-        const repository = yield* getRepository(input.repoConfig);
+        const repository = yield* repositoryPort.getRepository(input.repoConfig);
         const pullRequests = yield* listPullRequests(
           githubCli,
           input.repoConfig.repoPath,
@@ -75,7 +56,7 @@ export const createGithubPullRequestProviderPort = ({
       }),
     findLatestMergedForSourceBranch: (input) =>
       Effect.gen(function* () {
-        const repository = yield* getRepository(input.repoConfig);
+        const repository = yield* repositoryPort.getRepository(input.repoConfig);
         const pullRequests = yield* listPullRequests(
           githubCli,
           input.repoConfig.repoPath,
@@ -91,7 +72,7 @@ export const createGithubPullRequestProviderPort = ({
     getByNumber,
     refresh: (input) =>
       Effect.gen(function* () {
-        yield* validateLinkedPullRequest(input.linkedPullRequest);
+        yield* checkPullRequestProvider(input.linkedPullRequest);
         return yield* getByNumber({
           repoConfig: input.repoConfig,
           number: input.linkedPullRequest.number,
@@ -101,7 +82,7 @@ export const createGithubPullRequestProviderPort = ({
       repositoryPort.getMapping(input.repoConfig).pipe(Effect.map(({ remoteName }) => remoteName)),
     upsert: (input) =>
       Effect.gen(function* () {
-        const repository = yield* getRepository(input.repoConfig);
+        const repository = yield* repositoryPort.getRepository(input.repoConfig);
         return yield* upsertPullRequest(
           githubCli,
           input.repoConfig.repoPath,
@@ -112,6 +93,24 @@ export const createGithubPullRequestProviderPort = ({
         );
       }),
   };
+};
+
+const checkPullRequestProvider = (
+  pullRequest: PullRequest | undefined,
+): Effect.Effect<void, HostValidationErrorAggregate> => {
+  if (pullRequest === undefined || pullRequest.providerId === GITHUB_PROVIDER_ID) {
+    return Effect.void;
+  }
+  return Effect.fail(
+    new HostValidationError({
+      field: "pullRequest.providerId",
+      message: `Pull request provider '${pullRequest.providerId}' does not match configured provider '${GITHUB_PROVIDER_ID}'.`,
+      details: {
+        providerId: pullRequest.providerId,
+        configuredProviderId: GITHUB_PROVIDER_ID,
+      },
+    }),
+  );
 };
 
 const toPullRequestValidationError = (cause: unknown): HostValidationErrorAggregate =>
@@ -174,11 +173,10 @@ const listPullRequests = (
       "-f",
       `head=${repository.owner}:${sourceBranch}`,
     ]);
-    const parsed = yield* Effect.try({
+    return yield* Effect.try({
       try: () => parseGithubPullListResponse(payload),
       catch: toPullRequestValidationError,
     });
-    return parsed;
   });
 
 const getPullRequest = (
@@ -210,21 +208,7 @@ const upsertPullRequest = (
   Effect.gen(function* () {
     const repoSlug = `${repository.owner}/${repository.name}`;
     const existingPullRequest = approval.pullRequest;
-    if (
-      existingPullRequest !== undefined &&
-      existingPullRequest.providerId !== GITHUB_PROVIDER_ID
-    ) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "pullRequest.providerId",
-          message: `Pull request provider '${existingPullRequest.providerId}' does not match configured provider '${GITHUB_PROVIDER_ID}'.`,
-          details: {
-            providerId: existingPullRequest.providerId,
-            configuredProviderId: GITHUB_PROVIDER_ID,
-          },
-        }),
-      );
-    }
+    yield* checkPullRequestProvider(existingPullRequest);
     const args =
       existingPullRequest !== undefined && isEditablePullRequest(existingPullRequest)
         ? [
