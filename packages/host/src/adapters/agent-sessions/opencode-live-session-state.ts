@@ -80,6 +80,7 @@ export const createOpenCodeLiveSessionState = ({
   nextOccurrenceId,
 }: CreateOpenCodeLiveSessionStateInput) => {
   let sessionsByRef = new Map<string, RetainedSession>();
+  let dropCount = 0;
   const contextUsageBySessionId = new Map<string, AgentSessionContextUsage>();
   const pendingRequests = createOpenCodePendingRequestRouter({
     runtimeId: runtime.runtimeId,
@@ -134,21 +135,24 @@ export const createOpenCodeLiveSessionState = ({
     return parseSnapshot(snapshot, "opencode-live-session.normalize-snapshot");
   };
 
-  const replaceSources = (
+  const updateSources = (
     sources: OpencodeRuntimeSnapshotSource[],
     emitChanges: boolean,
   ): AgentSessionLiveAdapterChange[] => {
     const previous = sessionsByRef;
-    const next = new Map<string, RetainedSession>();
+    const next = new Map(previous);
     const activeNativeKeys = new Set<string>();
+    const observedSessionKeys = new Set<string>();
     for (const source of sources) {
       const snapshot = buildSnapshot(source, activeNativeKeys);
-      next.set(refKey(snapshot.ref), {
+      const key = refKey(snapshot.ref);
+      observedSessionKeys.add(key);
+      next.set(key, {
         snapshot,
         runtimeActivity: source.runtimeActivity,
       });
     }
-    pendingRequests.finishProjection(activeNativeKeys);
+    pendingRequests.finishProjection(activeNativeKeys, observedSessionKeys);
     sessionsByRef = next;
     if (!emitChanges) {
       return [];
@@ -158,12 +162,6 @@ export const createOpenCodeLiveSessionState = ({
       const previousSnapshot = previous.get(key)?.snapshot;
       if (!previousSnapshot || !snapshotsEqual(previousSnapshot, retained.snapshot)) {
         changes.push({ type: "session_upsert", snapshot: retained.snapshot });
-      }
-    }
-    for (const [key, retained] of previous) {
-      if (!next.has(key)) {
-        contextUsageBySessionId.delete(retained.snapshot.ref.externalSessionId);
-        changes.push({ type: "session_removed", ref: retained.snapshot.ref });
       }
     }
     return changes;
@@ -354,6 +352,7 @@ export const createOpenCodeLiveSessionState = ({
       return [];
     }
     sessionsByRef.delete(key);
+    dropCount += 1;
     contextUsageBySessionId.delete(ref.externalSessionId);
     pendingRequests.removeSession(ref);
     return [{ type: "session_removed", ref: toSessionRef(ref) }];
@@ -367,10 +366,11 @@ export const createOpenCodeLiveSessionState = ({
       for (const [sessionId, usage] of initialContextUsageBySessionId) {
         contextUsageBySessionId.set(sessionId, toContextUsage(usage));
       }
-      replaceSources(sources, false);
+      updateSources(sources, false);
     },
     refresh: (sources: OpencodeRuntimeSnapshotSource[]): AgentSessionLiveAdapterChange[] =>
-      replaceSources(sources, true),
+      updateSources(sources, true),
+    dropCount: (): number => dropCount,
     has: (ref: AgentSessionLiveRef): boolean => sessionsByRef.has(refKey(ref)),
     listSnapshots: (): AgentSessionLiveSnapshot[] =>
       [...sessionsByRef.values()].map(({ snapshot }) =>

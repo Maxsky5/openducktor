@@ -36,6 +36,7 @@ import {
 import { observeRuntimeEvents, registerSession, releaseSessionRuntime } from "./session-registry";
 import type {
   OpencodeSdkAdapterOptions,
+  ReadOpencodeDirectory,
   RuntimeEventTransportRecord,
   SessionRecord,
 } from "./types";
@@ -80,6 +81,10 @@ export type PreparedOpencodeSessionRuntime = {
 export type PrepareOpencodeSessionRuntime = (
   input: PrepareOpencodeSessionRuntimeInput,
 ) => Promise<PreparedOpencodeSessionRuntime>;
+
+type PrepareOpencodeSessionRuntimeOptions = OpencodeSdkAdapterOptions & {
+  readonly readDirectory: ReadOpencodeDirectory;
+};
 
 const runtimeInitializationAbortFailure = (signal: AbortSignal, runtimeId: string): Error =>
   signal.reason instanceof Error
@@ -139,17 +144,18 @@ const releaseEventSessions = async (
 };
 
 export const createPrepareOpencodeSessionRuntime = (
-  options: OpencodeSdkAdapterOptions = {},
+  options: PrepareOpencodeSessionRuntimeOptions,
 ): PrepareOpencodeSessionRuntime => {
-  const createClient = options.createClient ?? buildDefaultFactory();
-  const now = options.now ?? nowIso;
+  const { readDirectory, ...adapterOptions } = options;
+  const createClient = adapterOptions.createClient ?? buildDefaultFactory();
+  const now = adapterOptions.now ?? nowIso;
   const runtimeEventTransports = new Map<string, RuntimeEventTransportRecord>();
 
   return async (input) => {
     const eventSessions = new Map<string, SessionRecord>();
     const controlAdapter = new OpencodeSdkAdapter(
       {
-        ...options,
+        ...adapterOptions,
         repoRuntimeResolver: {
           requireRepoRuntime: async () => ({
             kind: "opencode",
@@ -227,13 +233,6 @@ export const createPrepareOpencodeSessionRuntime = (
     };
 
     const syncEventSessions = async (sources: OpencodeRuntimeSnapshotSource[]): Promise<void> => {
-      const activeSessionIds = new Set(sources.map((source) => source.externalSessionId));
-      // oxlint-disable-next-line unicorn/no-useless-spread -- cleanup awaits and must not include new sessions
-      for (const session of [...eventSessions.values()]) {
-        if (!activeSessionIds.has(session.externalSessionId)) {
-          await releaseSessionRuntime(session, eventSessions, runtimeEventTransports);
-        }
-      }
       for (const source of sources) {
         const existing = eventSessions.get(source.externalSessionId);
         if (existing?.input.workingDirectory === source.workingDirectory) {
@@ -274,8 +273,8 @@ export const createPrepareOpencodeSessionRuntime = (
             }
           },
         };
-        if (options.logEvent) {
-          registrationInput.logEvent = options.logEvent;
+        if (adapterOptions.logEvent) {
+          registrationInput.logEvent = adapterOptions.logEvent;
         }
         registerSession(registrationInput);
       }
@@ -288,6 +287,7 @@ export const createPrepareOpencodeSessionRuntime = (
         const snapshotInput: Parameters<typeof listOpencodeRuntimeSnapshotSources>[0] = {
           createClient,
           runtimeEndpoint: input.runtimeEndpoint,
+          readDirectory,
           now,
         };
         if (input.directories) {
@@ -344,8 +344,8 @@ export const createPrepareOpencodeSessionRuntime = (
     if (input.signal) {
       observationInput.signal = input.signal;
     }
-    if (options.logEvent) {
-      observationInput.logEvent = options.logEvent;
+    if (adapterOptions.logEvent) {
+      observationInput.logEvent = adapterOptions.logEvent;
     }
     const observation = await observeRuntimeEvents(observationInput);
 

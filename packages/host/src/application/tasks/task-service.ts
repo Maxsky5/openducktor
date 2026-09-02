@@ -279,6 +279,12 @@ export type CreateTaskServiceInput = {
   worktreeFiles?: WorktreeFilePort;
   taskSessionBootstrapCoordinator?: TaskSessionBootstrapCoordinator;
 };
+export type TaskServiceUseCaseInput = Omit<
+  CreateTaskServiceInput,
+  "taskSessionBootstrapCoordinator"
+> & {
+  taskSessionBootstrapCoordinator: TaskSessionBootstrapCoordinator;
+};
 const isTaskServiceError = (cause: unknown): cause is TaskServiceError =>
   cause instanceof GitProviderCapabilityError ||
   cause instanceof GitProviderRepositoryError ||
@@ -329,7 +335,10 @@ const createTaskServiceImplementation = (
 ): TaskServiceWithMutationProgress => {
   const taskSessionBootstrapCoordinator =
     input.taskSessionBootstrapCoordinator ?? createTaskSessionBootstrapCoordinator();
-  const useCaseInput = { ...input, taskSessionBootstrapCoordinator };
+  const useCaseInput: TaskServiceUseCaseInput = {
+    ...input,
+    taskSessionBootstrapCoordinator,
+  };
   const taskSessionBootstrap = createTaskSessionBootstrapUseCase(useCaseInput);
   const service = {
     ...createTaskQueryUseCases(useCaseInput),

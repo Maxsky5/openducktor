@@ -1,5 +1,6 @@
 import type { AgentRole, TaskStatus } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { HostOperationError, HostValidationError } from "../../../effect/host-errors";
 
 export type TaskSessionBootstrapCleanup = () => Effect.Effect<string>;
@@ -33,8 +34,19 @@ export const createTaskSessionBootstrapCoordinator = () => {
   const reservations = new Map<string, TaskSessionBootstrapReservation>();
   const bootstrapLocks = new Map<string, TaskSessionBootstrapLock>();
   const lifecycleLocks = new Map<string, string>();
+  const worktreeGates = new Map<string, Effect.Semaphore>();
   const terminalOutcomes = new Map<string, TaskSessionBootstrapTerminalOutcome>();
   const key = (repoPath: string, taskId: string): string => `${repoPath}\0${taskId}`;
+  const worktreeGate = (path: string): Effect.Semaphore => {
+    const pathKey = normalizePathForComparison(path);
+    const current = worktreeGates.get(pathKey);
+    if (current) {
+      return current;
+    }
+    const gate = Effect.runSync(Effect.makeSemaphore(1));
+    worktreeGates.set(pathKey, gate);
+    return gate;
+  };
   const recordTerminal = (
     bootstrapId: string,
     outcome: TaskSessionBootstrapTerminalOutcome["outcome"],
@@ -89,11 +101,12 @@ export const createTaskSessionBootstrapCoordinator = () => {
     });
   };
 
-  const releaseActiveBootstrap = (repoPath: string, taskId: string): void => {
-    const taskKey = key(repoPath, taskId);
-    reservations.delete(taskKey);
-    bootstrapLocks.delete(taskKey);
-  };
+  const releaseActiveBootstrap = (repoPath: string, taskId: string) =>
+    Effect.sync(() => {
+      const taskKey = key(repoPath, taskId);
+      reservations.delete(taskKey);
+      bootstrapLocks.delete(taskKey);
+    });
 
   const beginLifecycle = (repoPath: string, taskIds: string[], operation: string) => {
     const existingLifecycle = taskIds.find((taskId) => lifecycleLocks.has(key(repoPath, taskId)));
@@ -176,8 +189,9 @@ export const createTaskSessionBootstrapCoordinator = () => {
           }),
         );
       }
-      bootstrapLocks.set(taskKey, { bootstrapId, role });
-      return Effect.succeed(undefined);
+      return Effect.sync(() => {
+        bootstrapLocks.set(taskKey, { bootstrapId, role });
+      });
     },
     inspectBootstrap,
     finishBootstrap(
@@ -190,20 +204,35 @@ export const createTaskSessionBootstrapCoordinator = () => {
       return Effect.gen(function* () {
         const current = yield* inspectBootstrap(repoPath, taskId, bootstrapId);
         if (current.state === "terminal") return current.terminal;
-        releaseActiveBootstrap(repoPath, taskId);
+        yield* releaseActiveBootstrap(repoPath, taskId);
         return recordTerminal(bootstrapId, outcome, repoPath, taskId, failureMessage);
       });
     },
     releaseBootstrap(repoPath: string, taskId: string, bootstrapId: string) {
       return Effect.gen(function* () {
         const current = yield* inspectBootstrap(repoPath, taskId, bootstrapId);
-        if (current.state === "active") releaseActiveBootstrap(repoPath, taskId);
+        if (current.state === "active") yield* releaseActiveBootstrap(repoPath, taskId);
       });
     },
     acquireLifecycle(repoPath: string, taskIds: string[], operation: string) {
       return Effect.acquireRelease(beginLifecycle(repoPath, taskIds, operation), (release) =>
         Effect.sync(release),
       ).pipe(Effect.asVoid);
+    },
+    acquireWorktreeLifecycle(paths: readonly string[]) {
+      const uniquePaths = [...new Set(paths.map(normalizePathForComparison))].sort();
+      return Effect.gen(function* () {
+        for (const path of uniquePaths) {
+          const gate = worktreeGate(path);
+          yield* Effect.acquireRelease(gate.take(1), () => gate.release(1));
+        }
+      });
+    },
+    runWorktreeRead<Value, Error, Requirements>(
+      path: string,
+      read: Effect.Effect<Value, Error, Requirements>,
+    ): Effect.Effect<Value, Error, Requirements> {
+      return worktreeGate(path).withPermits(1)(read);
     },
   };
 };

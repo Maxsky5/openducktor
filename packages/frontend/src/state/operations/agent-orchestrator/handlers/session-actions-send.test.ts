@@ -150,9 +150,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
-    adapter.readSessionRuntimeSnapshot = async () => {
-      throw new Error("send must not probe runtime snapshots");
-    };
     adapter.sendUserMessage = async (input) => {
       sendCalls += 1;
       expect(input.systemPrompt).toContain("Implement the task");

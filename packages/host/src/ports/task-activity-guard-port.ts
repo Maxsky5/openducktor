@@ -7,11 +7,11 @@ import type {
 
 export type TaskActivityGuardError = HostOperationErrorAggregate | HostValidationErrorAggregate;
 
-export type TaskActivityGuardStopResult = {
+export type TaskActivityCleanupResult = {
   stoppedSessionCount: number;
 };
 
-// Callers choose the sessions. The adapter checks and stops only those sessions.
+// Callers choose the sessions to check and clean up.
 export type TaskActivityGuardTaskSessions = {
   repoPath: string;
   taskSessions: Array<{
@@ -24,7 +24,7 @@ export type TaskActivityGuardPort = {
   countLiveSessions(
     input: TaskActivityGuardTaskSessions,
   ): Effect.Effect<{ liveSessionCount: number }, TaskActivityGuardError>;
-  stopLiveSessions(
+  cleanupTaskSessions(
     input: TaskActivityGuardTaskSessions,
-  ): Effect.Effect<TaskActivityGuardStopResult, TaskActivityGuardError>;
+  ): Effect.Effect<TaskActivityCleanupResult, TaskActivityGuardError>;
 };

@@ -407,7 +407,7 @@ describe("TaskService.closeTask", () => {
     };
     const activityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      stopLiveSessions: () => Effect.succeed({ stoppedSessionCount: 0 }),
+      cleanupTaskSessions: () => Effect.succeed({ stoppedSessionCount: 0 }),
     };
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls, { "task-1": [buildSession] }),
@@ -492,7 +492,7 @@ describe("TaskService.closeTask", () => {
     };
     const activityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      stopLiveSessions: () => Effect.succeed({ stoppedSessionCount: 0 }),
+      cleanupTaskSessions: () => Effect.succeed({ stoppedSessionCount: 0 }),
     };
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls, { "task-1": [buildSession] }),
@@ -555,7 +555,7 @@ describe("TaskService.closeTask", () => {
     };
     const activityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      stopLiveSessions: (input) => {
+      cleanupTaskSessions: (input) => {
         calls.push(
           `close task:${input.repoPath}:${input.taskSessions[0]?.sessions.length ?? 0} sessions`,
         );
@@ -714,7 +714,7 @@ describe("TaskService.closeTask", () => {
     };
     const activityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      stopLiveSessions: (input) => {
+      cleanupTaskSessions: (input) => {
         calls.push(
           `close task:${input.taskSessions[0]?.sessions.map((session) => session.role).join(",")}`,
         );
@@ -761,7 +761,7 @@ describe("TaskService.closeTask", () => {
     };
     const activityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      stopLiveSessions: () => Effect.succeed({ stoppedSessionCount: 2 }),
+      cleanupTaskSessions: () => Effect.succeed({ stoppedSessionCount: 2 }),
     };
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls, { "task-1": [buildSession] }),
@@ -805,10 +805,10 @@ describe("TaskService.closeTask", () => {
     };
     const activityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      stopLiveSessions: () =>
+      cleanupTaskSessions: () =>
         Effect.fail(
           new HostOperationError({
-            operation: "runtimeTaskActivityGuard.stopLiveSessions",
+            operation: "runtimeTaskActivityGuard.cleanupTaskSessions",
             message: "Failed stopping live build session session-1.",
           }),
         ),

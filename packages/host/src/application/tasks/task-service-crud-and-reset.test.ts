@@ -804,7 +804,7 @@ describe("createTaskService task mutations and reset", () => {
     };
     const taskActivityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      stopLiveSessions(input) {
+      cleanupTaskSessions(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "activityGuard", input });
@@ -976,7 +976,7 @@ describe("createTaskService task mutations and reset", () => {
     };
     const taskActivityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      stopLiveSessions(input) {
+      cleanupTaskSessions(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "activityGuard", input });
@@ -1067,7 +1067,7 @@ describe("createTaskService task mutations and reset", () => {
     };
     const taskActivityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      stopLiveSessions(input) {
+      cleanupTaskSessions(input) {
         return Effect.sync(() => {
           calls.push({ type: "activityGuard", input });
           return { stoppedSessionCount: 0 };
@@ -1246,7 +1246,7 @@ describe("createTaskService task mutations and reset", () => {
     };
     const taskActivityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      stopLiveSessions: () =>
+      cleanupTaskSessions: () =>
         Effect.fail(
           new HostOperationError({ operation: "test.stop", message: "runtime stop failed" }),
         ),
@@ -1273,7 +1273,7 @@ describe("createTaskService task mutations and reset", () => {
     };
     const taskActivityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      stopLiveSessions: () => Effect.succeed({ stoppedSessionCount: 2 }),
+      cleanupTaskSessions: () => Effect.succeed({ stoppedSessionCount: 2 }),
     };
 
     await expect(
@@ -1492,7 +1492,7 @@ describe("createTaskService task mutations and reset", () => {
     };
     const taskActivityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      stopLiveSessions(input) {
+      cleanupTaskSessions(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "resetActivityGuard", input });
@@ -1789,7 +1789,7 @@ describe("createTaskService task mutations and reset", () => {
     };
     const taskActivityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      stopLiveSessions(input) {
+      cleanupTaskSessions(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "resetActivityGuard", input });
@@ -1896,7 +1896,7 @@ describe("createTaskService task mutations and reset", () => {
     });
     const taskActivityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      stopLiveSessions: () =>
+      cleanupTaskSessions: () =>
         Effect.fail(
           new HostOperationError({ operation: "test.stop", message: "runtime stop failed" }),
         ),
@@ -1921,7 +1921,7 @@ describe("createTaskService task mutations and reset", () => {
     });
     const taskActivityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      stopLiveSessions: () => Effect.succeed({ stoppedSessionCount: 2 }),
+      cleanupTaskSessions: () => Effect.succeed({ stoppedSessionCount: 2 }),
     };
 
     await expect(
@@ -1955,7 +1955,7 @@ describe("createTaskService task mutations and reset", () => {
       settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
       taskActivityGuard: {
         countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-        stopLiveSessions: () => Effect.succeed({ stoppedSessionCount: 2 }),
+        cleanupTaskSessions: () => Effect.succeed({ stoppedSessionCount: 2 }),
       },
       taskStore,
       workspaceSettingsService: createBuildWorkspaceSettingsService({

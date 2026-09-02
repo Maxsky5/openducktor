@@ -1132,6 +1132,69 @@ describe("createTaskService build start worktree handling", () => {
     ).toEqual([]);
   });
 
+  test("releases bootstrap state and worktree state when runtime startup is interrupted", async () => {
+    const calls: unknown[] = [];
+    const coordinator = createTaskSessionBootstrapCoordinator();
+    const ensureStarted = await Effect.runPromise(Deferred.make<void>());
+    const ensureBlocked = await Effect.runPromise(Deferred.make<never>());
+    const runtimeRegistry = {
+      ...createBuildStartRuntimeRegistry(calls),
+      ensureWorkspaceRuntime(input) {
+        calls.push({ type: "ensureRuntime", input });
+        return Deferred.succeed(ensureStarted, undefined).pipe(
+          Effect.zipRight(Deferred.await(ensureBlocked)),
+        );
+      },
+    } satisfies RuntimeRegistryPort;
+    const service = createTaskService({
+      taskStore: {
+        getTask: () => Effect.succeed(task({ status: "ready_for_dev" })),
+      } satisfies TaskStorePort,
+      taskSessionBootstrapCoordinator: coordinator,
+      gitPort: createBuildStartGitPort({ calls }),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry,
+      settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+      systemCommands: createBuildSystemCommands(calls),
+      worktreeFiles: createBuildStartWorktreeFiles(calls),
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: [], postComplete: [] },
+      }),
+    });
+    const controller = new AbortController();
+    const preparing = Effect.runPromise(
+      service.taskSessionBootstrapPrepare({
+        repoPath: "/repo",
+        taskId: "task-1",
+        role: "spec",
+        runtimeKind: "opencode",
+      }),
+      { signal: controller.signal },
+    );
+    await Effect.runPromise(Deferred.await(ensureStarted));
+
+    controller.abort();
+    await preparing.catch(() => undefined);
+
+    await expect(
+      Effect.runPromise(coordinator.acquireBootstrap("/repo", "task-1", "bootstrap-2", "spec")),
+    ).resolves.toBeUndefined();
+    await Effect.runPromise(
+      coordinator.finishBootstrap("/repo", "task-1", "bootstrap-2", "completed"),
+    );
+    await expect(
+      Effect.runPromise(coordinator.runWorktreeRead("/worktrees/repo/task-1", Effect.void)),
+    ).resolves.toBeUndefined();
+    expect(calls).toContainEqual({
+      type: "removeWorktree",
+      repoPath: "/repo",
+      worktreePath: "/worktrees/repo/task-1",
+      force: true,
+    });
+  });
+
   test("rolls back the task worktree when the task transition fails", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {

@@ -18,7 +18,7 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionTurnState } from "../support/session-turn-state";
-import { createAgentSessionRuntimeSnapshotFixture, createTaskCardFixture } from "../test-utils";
+import { createTaskCardFixture } from "../test-utils";
 import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
 import { createAgentSessionActions } from "./session-actions";
 
@@ -72,17 +72,6 @@ export const createSessionTurnStateFixture = () => {
     clearSessionTurnState: sessionTurnState.clearSession,
     sessionTurnState,
   };
-};
-
-export const mockAgentSessionRuntimeSnapshot = (
-  adapter: OpencodeSdkAdapter,
-  snapshot: ReturnType<
-    typeof createAgentSessionRuntimeSnapshotFixture
-  > = createAgentSessionRuntimeSnapshotFixture({ ref: { externalSessionId: "session-1" } }),
-): ReturnType<typeof createAgentSessionRuntimeSnapshotFixture> => {
-  adapter.listSessionRuntimeSnapshots = async () => [snapshot];
-  adapter.readSessionRuntimeSnapshot = async () => snapshot;
-  return snapshot;
 };
 
 type SessionActionDependencies = Parameters<typeof createAgentSessionActions>[0];

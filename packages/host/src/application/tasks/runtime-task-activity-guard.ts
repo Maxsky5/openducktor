@@ -1,26 +1,32 @@
 import { type AgentSessionRecord } from "@openducktor/contracts";
 import { Effect } from "effect";
+import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
+import { hasSameAgentSessionIdentity } from "../../domain/agent-session-identity";
 import { HostOperationError } from "../../effect/host-errors";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
+import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type {
   TaskActivityGuardPort,
-  TaskActivityGuardStopResult,
+  TaskActivityCleanupResult,
   TaskActivityGuardTaskSessions,
 } from "../../ports/task-activity-guard-port";
 
 export type CreateRuntimeTaskActivityGuardInput = {
   runtimeRegistry: RuntimeRegistryPort;
+  sessionService: Pick<AgentSessionLiveStateService, "list" | "releaseSession">;
+  settingsConfig: Pick<SettingsConfigPort, "pathExists">;
 };
 
 type LiveSession = {
   externalSessionId: string;
   role: string;
-  runtimeKind: string;
+  runtimeKind: AgentSessionRecord["runtimeKind"];
   workingDirectory: string;
 };
 
 const collectLiveSessions = (
   runtimeRegistry: RuntimeRegistryPort,
+  settingsConfig: Pick<SettingsConfigPort, "pathExists">,
   repoPath: string,
   sessions: AgentSessionRecord[],
 ) =>
@@ -29,6 +35,9 @@ const collectLiveSessions = (
     for (const session of sessions) {
       const externalSessionId = session.externalSessionId.trim();
       if (!externalSessionId) {
+        continue;
+      }
+      if (!(yield* settingsConfig.pathExists(session.workingDirectory))) {
         continue;
       }
       const probe = yield* runtimeRegistry.probeSessionStatus({
@@ -54,7 +63,7 @@ const collectLiveSessions = (
         liveSessions.push({
           externalSessionId,
           role: session.role.trim(),
-          runtimeKind: session.runtimeKind.trim(),
+          runtimeKind: session.runtimeKind,
           workingDirectory: session.workingDirectory,
         });
       }
@@ -64,6 +73,7 @@ const collectLiveSessions = (
 
 const collectTaskLiveSessions = (
   runtimeRegistry: RuntimeRegistryPort,
+  settingsConfig: Pick<SettingsConfigPort, "pathExists">,
   input: TaskActivityGuardTaskSessions & { operation: string; failureContext: string },
 ) =>
   Effect.gen(function* () {
@@ -71,6 +81,7 @@ const collectTaskLiveSessions = (
     for (const task of input.taskSessions) {
       const taskLiveSessions = yield* collectLiveSessions(
         runtimeRegistry,
+        settingsConfig,
         input.repoPath,
         task.sessions,
       ).pipe(
@@ -92,6 +103,7 @@ const collectTaskLiveSessions = (
 
 const stopLiveSessionRecords = (
   runtimeRegistry: RuntimeRegistryPort,
+  sessionService: Pick<AgentSessionLiveStateService, "list" | "releaseSession">,
   repoPath: string,
   operation: string,
   liveSessions: LiveSession[],
@@ -128,16 +140,67 @@ const stopLiveSessionRecords = (
           }),
         );
       stoppedSessionCount += 1;
+      yield* sessionService
+        .releaseSession({
+          repoPath,
+          runtimeKind: session.runtimeKind,
+          workingDirectory: session.workingDirectory,
+          externalSessionId: session.externalSessionId,
+        })
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new HostOperationError({
+                operation,
+                message: `Stopped session ${session.externalSessionId}, but failed releasing its live state: ${cause instanceof Error ? cause.message : String(cause)}`,
+                cause,
+                details: {
+                  externalSessionId: session.externalSessionId,
+                  role: session.role,
+                  runtimeKind: session.runtimeKind,
+                  stoppedSessionCount,
+                },
+              }),
+          ),
+        );
     }
     return stoppedSessionCount;
   });
 
+const releaseTaskSessions = (
+  sessionService: Pick<AgentSessionLiveStateService, "list" | "releaseSession">,
+  input: TaskActivityGuardTaskSessions,
+) =>
+  Effect.gen(function* () {
+    const taskSessions = input.taskSessions.flatMap((task) => task.sessions);
+    const snapshots = yield* sessionService.list({ repoPath: input.repoPath });
+    for (const snapshot of snapshots) {
+      const isTaskSession = taskSessions.some((session) =>
+        hasSameAgentSessionIdentity(session, snapshot.ref),
+      );
+      if (isTaskSession) {
+        yield* sessionService.releaseSession(snapshot.ref);
+      }
+    }
+  }).pipe(
+    Effect.mapError(
+      (cause) =>
+        new HostOperationError({
+          operation: "runtimeTaskActivityGuard.releaseSessions",
+          message: `Failed releasing task session state: ${cause instanceof Error ? cause.message : String(cause)}`,
+          cause,
+        }),
+    ),
+  );
+
 export const createRuntimeTaskActivityGuard = ({
   runtimeRegistry,
+  sessionService,
+  settingsConfig,
 }: CreateRuntimeTaskActivityGuardInput): TaskActivityGuardPort => ({
   countLiveSessions(input) {
     return Effect.gen(function* () {
-      const liveSessions = yield* collectTaskLiveSessions(runtimeRegistry, {
+      const liveSessions = yield* collectTaskLiveSessions(runtimeRegistry, settingsConfig, {
         ...input,
         operation: "runtimeTaskActivityGuard.countLiveSessions",
         failureContext: "counting live task sessions",
@@ -145,20 +208,22 @@ export const createRuntimeTaskActivityGuard = ({
       return { liveSessionCount: liveSessions.length };
     });
   },
-  stopLiveSessions(input) {
+  cleanupTaskSessions(input) {
     return Effect.gen(function* () {
-      const liveSessions = yield* collectTaskLiveSessions(runtimeRegistry, {
+      const liveSessions = yield* collectTaskLiveSessions(runtimeRegistry, settingsConfig, {
         ...input,
-        operation: "runtimeTaskActivityGuard.stopLiveSessions",
-        failureContext: "stopping live task sessions",
+        operation: "runtimeTaskActivityGuard.cleanupTaskSessions",
+        failureContext: "cleaning up task sessions",
       });
       const stoppedSessionCount = yield* stopLiveSessionRecords(
         runtimeRegistry,
+        sessionService,
         input.repoPath,
-        "runtimeTaskActivityGuard.stopLiveSessions",
+        "runtimeTaskActivityGuard.cleanupTaskSessions",
         liveSessions,
       );
-      return { stoppedSessionCount } satisfies TaskActivityGuardStopResult;
+      yield* releaseTaskSessions(sessionService, input);
+      return { stoppedSessionCount } satisfies TaskActivityCleanupResult;
     });
   },
 });
