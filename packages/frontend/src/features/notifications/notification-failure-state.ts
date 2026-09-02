@@ -32,6 +32,13 @@ export const clearOsNotificationFailure = (
   return { ...state, os: null };
 };
 
+export const clearCoordinationNotificationFailure = (
+  state: NotificationFailureState,
+): NotificationFailureState => {
+  if (!state.coordination) return state;
+  return { ...state, coordination: null };
+};
+
 export const selectNotificationFailure = (
   state: NotificationFailureState,
 ): NotificationDispatchFailure | null => state.coordination ?? state.os;

@@ -67,7 +67,7 @@ export const createElectronShellBridge = (): ShellBridge => {
       isAppFocused: () => electronApi.notifications.isAppFocused(),
       withExternalDeliveryOwnership: async (_occurrenceId, dispatch) => dispatch(true),
       showOsNotification: (request) => electronApi.notifications.show(request),
-      publishOccurrence: () => {},
+      publishOccurrence: async (occurrence, settings) => ({ occurrence, settings }),
       subscribeOccurrences: () => () => {},
       subscribeClicks: (listener) => electronApi.notifications.subscribeClicks(listener),
       dispose: () => {},

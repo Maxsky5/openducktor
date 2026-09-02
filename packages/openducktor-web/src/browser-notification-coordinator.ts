@@ -13,7 +13,12 @@ const APP_FOCUS_LOCK_NAME = "openducktor:notifications:app-focus";
 
 const coordinatorMessageSchema = z.discriminatedUnion("type", [
   z.object({
-    type: z.literal("occurrence"),
+    type: z.literal("occurrence_candidate"),
+    occurrence: notificationOccurrenceSchema,
+    settings: notificationSettingsSchema.removeDefault(),
+  }),
+  z.object({
+    type: z.literal("occurrence_selected"),
     occurrence: notificationOccurrenceSchema,
     settings: notificationSettingsSchema.removeDefault(),
   }),
@@ -62,7 +67,10 @@ type CoordinationOperation =
 export type BrowserNotificationCoordinator = {
   readonly supported: boolean;
   getFailureMessage(): string | null;
-  publishOccurrence(occurrence: NotificationOccurrence, settings: NotificationSettings): void;
+  publishOccurrence(
+    occurrence: NotificationOccurrence,
+    settings: NotificationSettings,
+  ): Promise<{ occurrence: NotificationOccurrence; settings: NotificationSettings }>;
   subscribeOccurrences(
     listener: (occurrence: NotificationOccurrence, settings: NotificationSettings) => void,
   ): () => void;
@@ -128,7 +136,7 @@ export const createBrowserNotificationCoordinator = ({
       supported: false,
       getFailureMessage: () =>
         "This browser cannot coordinate notifications and sound across tabs.",
-      publishOccurrence: () => {},
+      publishOccurrence: async (occurrence, settings) => ({ occurrence, settings }),
       subscribeOccurrences: () => () => {},
       isExternalDeliveryOwner: () => false,
       claimExternalDelivery: async () => false,
@@ -147,13 +155,15 @@ export const createBrowserNotificationCoordinator = ({
   let focusLockAbortController: AbortController | null = null;
   let releaseTabLock: (() => void) | null = null;
   let tabLockAbortController: AbortController | null = null;
+  const candidateOccurrences = new Map<string, PendingOccurrence>();
+  const selectedOccurrences = new Map<string, PendingOccurrence>();
   const pendingOccurrences = new Map<string, PendingOccurrence>();
-  const queuedPublications = new Map<string, PendingOccurrence>();
   const claimedOccurrences = new Set<string>();
   const occurrenceListeners = new Set<
     (occurrence: NotificationOccurrence, settings: NotificationSettings) => void
   >();
   const claimAcknowledgements = new Map<string, Map<string, () => void>>();
+  const publicationResolvers = new Map<string, Set<(selection: PendingOccurrence) => void>>();
   const activeClaimPropagations = new Set<Promise<void>>();
   const tabLockName = `${TAB_LOCK_NAME_PREFIX}${tabId}`;
 
@@ -179,10 +189,9 @@ export const createBrowserNotificationCoordinator = ({
         const registeredChannel = createChannel();
         channel = registeredChannel;
         registeredChannel.addEventListener("message", handleMessage);
-        for (const pending of queuedPublications.values()) {
-          registeredChannel.postMessage({ type: "occurrence", ...pending });
+        for (const candidate of candidateOccurrences.values()) {
+          registeredChannel.postMessage({ type: "occurrence_candidate", ...candidate });
         }
-        queuedPublications.clear();
         holdExternalDeliveryOwnership();
         if (focusDocument.hasFocus()) {
           holdFocusedState();
@@ -285,6 +294,31 @@ export const createBrowserNotificationCoordinator = ({
     }
   };
 
+  const acceptSelection = (selection: PendingOccurrence): boolean => {
+    const occurrenceId = selection.occurrence.occurrenceId;
+    if (selectedOccurrences.has(occurrenceId)) return false;
+    selectedOccurrences.set(occurrenceId, selection);
+    candidateOccurrences.delete(occurrenceId);
+    if (!claimedOccurrences.has(occurrenceId)) {
+      pendingOccurrences.set(occurrenceId, selection);
+    }
+    for (const resolve of publicationResolvers.get(occurrenceId) ?? []) {
+      resolve(selection);
+    }
+    publicationResolvers.delete(occurrenceId);
+    notifyOccurrenceListeners(selection);
+    return true;
+  };
+
+  const selectCandidate = (candidate: PendingOccurrence): void => {
+    const occurrenceId = candidate.occurrence.occurrenceId;
+    acceptSelection(candidate);
+    const selection = selectedOccurrences.get(occurrenceId);
+    if (selection) {
+      channel?.postMessage({ type: "occurrence_selected", ...selection });
+    }
+  };
+
   const replayPendingOccurrences = (): void => {
     if (!externalDeliveryOwner) return;
     for (const pending of pendingOccurrences.values()) {
@@ -310,10 +344,26 @@ export const createBrowserNotificationCoordinator = ({
       return;
     }
     const pending = { occurrence: parsed.data.occurrence, settings: parsed.data.settings };
-    if (!claimedOccurrences.has(pending.occurrence.occurrenceId)) {
-      pendingOccurrences.set(pending.occurrence.occurrenceId, pending);
+    const occurrenceId = pending.occurrence.occurrenceId;
+    if (parsed.data.type === "occurrence_selected") {
+      acceptSelection(pending);
+      return;
     }
-    notifyOccurrenceListeners(pending);
+    const selected = selectedOccurrences.get(occurrenceId);
+    if (selected) {
+      if (externalDeliveryOwner) {
+        channel?.postMessage({ type: "occurrence_selected", ...selected });
+      }
+      return;
+    }
+    if (claimedOccurrences.has(occurrenceId)) return;
+    if (!candidateOccurrences.has(occurrenceId)) {
+      candidateOccurrences.set(occurrenceId, pending);
+    }
+    if (externalDeliveryOwner) {
+      const candidate = candidateOccurrences.get(occurrenceId);
+      if (candidate) selectCandidate(candidate);
+    }
   };
 
   const holdExternalDeliveryOwnership = (): void => {
@@ -329,6 +379,9 @@ export const createBrowserNotificationCoordinator = ({
           externalDeliveryLockAbortController = null;
           externalDeliveryOwner = true;
           replayPendingOccurrences();
+          for (const candidate of candidateOccurrences.values()) {
+            selectCandidate(candidate);
+          }
           await new Promise<void>((resolve) => {
             releaseExternalDeliveryLock = resolve;
           });
@@ -390,18 +443,27 @@ export const createBrowserNotificationCoordinator = ({
   return {
     supported,
     getFailureMessage: () => [...failureMessages.values()].join(" ") || null,
-    publishOccurrence(occurrence, settings) {
+    async publishOccurrence(occurrence, settings) {
       const parsed = notificationOccurrenceSchema.parse(occurrence);
       const parsedSettings = notificationSettingsSchema.removeDefault().parse(settings);
-      const pending = { occurrence: parsed, settings: parsedSettings };
-      if (!claimedOccurrences.has(parsed.occurrenceId)) {
-        pendingOccurrences.set(parsed.occurrenceId, pending);
+      const selected = selectedOccurrences.get(parsed.occurrenceId);
+      if (selected) return selected;
+      const candidate = candidateOccurrences.get(parsed.occurrenceId) ?? {
+        occurrence: parsed,
+        settings: parsedSettings,
+      };
+      candidateOccurrences.set(parsed.occurrenceId, candidate);
+      const selection = new Promise<PendingOccurrence>((resolve) => {
+        const resolvers = publicationResolvers.get(parsed.occurrenceId) ?? new Set();
+        resolvers.add(resolve);
+        publicationResolvers.set(parsed.occurrenceId, resolvers);
+      });
+      if (externalDeliveryOwner) {
+        selectCandidate(candidate);
+      } else if (channel) {
+        channel.postMessage({ type: "occurrence_candidate", ...candidate });
       }
-      if (channel) {
-        channel.postMessage({ type: "occurrence", ...pending });
-      } else {
-        queuedPublications.set(parsed.occurrenceId, pending);
-      }
+      return selection;
     },
     subscribeOccurrences(listener) {
       occurrenceListeners.add(listener);
@@ -442,8 +504,10 @@ export const createBrowserNotificationCoordinator = ({
       externalDeliveryLockAbortController?.abort();
       externalDeliveryLockAbortController = null;
       releaseFocusedState();
+      candidateOccurrences.clear();
+      selectedOccurrences.clear();
       pendingOccurrences.clear();
-      queuedPublications.clear();
+      publicationResolvers.clear();
       const finishExternalDeliveryOwnership = (): void => {
         releaseExternalDeliveryLock?.();
         releaseExternalDeliveryLock = null;

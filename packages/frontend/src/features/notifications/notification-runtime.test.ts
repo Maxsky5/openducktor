@@ -24,7 +24,7 @@ const createBridge = (overrides: Partial<NotificationBridge> = {}): Notification
   isAppFocused: async () => false,
   withExternalDeliveryOwnership: async (_occurrenceId, dispatch) => dispatch(true),
   showOsNotification: async () => ({ status: "shown" }),
-  publishOccurrence: () => {},
+  publishOccurrence: async (occurrence, settings) => ({ occurrence, settings }),
   subscribeOccurrences: () => () => {},
   subscribeClicks: () => () => {},
   dispose: () => {},
@@ -53,14 +53,15 @@ const createDeliveryAdapters = () => {
 };
 
 type RuntimeOptions = Parameters<typeof createProductionNotificationRuntime>[0];
-type TestRuntimeOptions = Omit<RuntimeOptions, "inApp" | "sound"> &
-  Partial<Pick<RuntimeOptions, "inApp" | "sound">>;
+type TestRuntimeOptions = Omit<RuntimeOptions, "inApp" | "sound" | "onCoordinationRecovered"> &
+  Partial<Pick<RuntimeOptions, "inApp" | "sound" | "onCoordinationRecovered">>;
 
 const createNotificationRuntime = (options: TestRuntimeOptions) => {
   const delivery = createDeliveryAdapters();
   return createProductionNotificationRuntime({
     inApp: delivery.inApp,
     sound: delivery.sound,
+    onCoordinationRecovered: () => {},
     ...options,
   });
 };
@@ -71,9 +72,12 @@ describe("notification runtime tests", () => {
     const publishedOccurrence = new Promise<NotificationOccurrence>((resolve) => {
       resolvePublished = resolve;
     });
-    const publishOccurrence = mock((published: NotificationOccurrence) => {
-      resolvePublished(published);
-    });
+    const publishOccurrence = mock(
+      async (published: NotificationOccurrence, settings: NotificationSettings) => {
+        resolvePublished(published);
+        return { occurrence: published, settings };
+      },
+    );
     const runtime = createNotificationRuntime({
       bridge: createBridge({ publishOccurrence }),
       loadSettings: async () => createDefaultNotificationSettings(),
@@ -114,8 +118,9 @@ describe("notification runtime tests", () => {
       resolvePublished = resolve;
     });
     const publishOccurrence = mock(
-      (_occurrence: NotificationOccurrence, publishedSettings?: NotificationSettings) => {
+      async (occurrence: NotificationOccurrence, publishedSettings: NotificationSettings) => {
         resolvePublished(publishedSettings);
+        return { occurrence, settings: publishedSettings };
       },
     );
     const delivery = createDeliveryAdapters();
@@ -171,8 +176,9 @@ describe("notification runtime tests", () => {
     const publisherDelivery = createDeliveryAdapters();
     const publisher = createNotificationRuntime({
       bridge: createBridge({
-        publishOccurrence(occurrence, settings) {
+        async publishOccurrence(occurrence, settings) {
           receiveOccurrence?.(occurrence, settings);
+          return { occurrence, settings };
         },
       }),
       loadSettings: async () => publisherSettings,
@@ -187,6 +193,40 @@ describe("notification runtime tests", () => {
 
     expect(recipientInApp).toHaveBeenCalledTimes(1);
     expect(recipientLoadSettings).not.toHaveBeenCalled();
+  });
+
+  test("uses the settings snapshot selected by publication", async () => {
+    const candidateSettings = createDefaultNotificationSettings();
+    candidateSettings.kinds["workflow.closed"].enabled = false;
+    const selectedSettings = createDefaultNotificationSettings();
+    selectedSettings.kinds["workflow.closed"] = {
+      enabled: true,
+      target: "in_app",
+      sound: "none",
+    };
+    let resolveDelivery = (): void => {};
+    const delivered = new Promise<void>((resolve) => {
+      resolveDelivery = resolve;
+    });
+    const deliverInApp = mock(async () => resolveDelivery());
+    const runtime = createNotificationRuntime({
+      bridge: createBridge({
+        publishOccurrence: async (occurrence) => ({
+          occurrence,
+          settings: selectedSettings,
+        }),
+      }),
+      loadSettings: async () => candidateSettings,
+      navigate: async () => {},
+      onFailure: () => {},
+      inApp: { deliver: deliverInApp },
+      sound: { play: async () => {} },
+    });
+
+    runtime.publish(workflowClosedOccurrence("event-selected-settings"));
+    await delivered;
+
+    expect(deliverInApp).toHaveBeenCalledTimes(1);
   });
 
   test("requests permission only from the explicit OS test", async () => {
@@ -317,6 +357,33 @@ describe("notification runtime tests", () => {
       repoPath: "/repo",
       message: "Claim propagation failed.",
     });
+  });
+
+  test("reports recovery after a later healthy coordination cycle", async () => {
+    let attempt = 0;
+    const onCoordinationRecovered = mock(() => {});
+    const runtime = createNotificationRuntime({
+      bridge: createBridge({
+        withExternalDeliveryOwnership: async (_occurrenceId, dispatch) => {
+          attempt += 1;
+          if (attempt === 1) {
+            throw new Error("Claim propagation failed.");
+          }
+          await dispatch(true);
+        },
+      }),
+      loadSettings: async () => createDefaultNotificationSettings(),
+      navigate: async () => {},
+      onFailure: () => {},
+      onCoordinationRecovered,
+    });
+    const occurrence = workflowClosedOccurrence("event-coordination-recovery");
+
+    await runtime.dispatch(occurrence);
+    expect(onCoordinationRecovered).not.toHaveBeenCalled();
+    await runtime.dispatch(occurrence);
+
+    expect(onCoordinationRecovered).toHaveBeenCalledTimes(1);
   });
 
   test("uses current focus when a later dispatch owns external delivery", async () => {

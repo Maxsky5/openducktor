@@ -24,7 +24,10 @@ const createCoordinator = () => ({
   supported: true,
   getFailureMessage: mock((): string | null => null),
   publishOccurrence: mock(
-    (_occurrence: NotificationOccurrence, _settings: NotificationSettings) => {},
+    async (occurrence: NotificationOccurrence, settings: NotificationSettings) => ({
+      occurrence,
+      settings,
+    }),
   ),
   subscribeOccurrences: mock(
     (_listener: (value: NotificationOccurrence, settings: NotificationSettings) => void) =>
