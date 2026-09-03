@@ -125,18 +125,25 @@ describe("SettingsNotificationsSection", () => {
     await waitFor(() => expect(getCapability).toHaveBeenCalledTimes(2));
   });
 
-  test("opens system settings when Electron notification permission is denied", async () => {
+  test("opens system settings and rechecks denied Electron notification permission", async () => {
     const openSystemSettings = mock(async () => {});
+    let capabilityChecks = 0;
+    const getCapability = mock(async () => {
+      capabilityChecks += 1;
+      return {
+        platform: "electron" as const,
+        supported: true,
+        permission: capabilityChecks === 1 ? ("denied" as const) : ("granted" as const),
+        canGuaranteeSilent: true,
+      };
+    });
+    const testOs = mock(async () => ({ status: "shown" as const }));
     render(
       <NotificationsHarness
         context={createNotificationContext({
-          getCapability: async () => ({
-            platform: "electron",
-            supported: true,
-            permission: "denied",
-            canGuaranteeSilent: true,
-          }),
+          getCapability,
           openSystemSettings,
+          testOs,
         })}
       />,
     );
@@ -148,10 +155,17 @@ describe("SettingsNotificationsSection", () => {
     expect(permissionAlert).not.toBeNull();
     expect(permissionAlert?.className).toContain("bg-warning-surface");
     expect(permissionAlert?.textContent).toContain("OS notifications are off");
-    expect(screen.getByRole("button", { name: "Test OS" }).hasAttribute("disabled")).toBe(true);
+    const testOsButton = screen.getByRole("button", { name: "Test OS" });
+    expect(testOsButton.hasAttribute("disabled")).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Open system settings" }));
-
     await waitFor(() => expect(openSystemSettings).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(testOsButton);
+    await waitFor(() => expect(testOs).toHaveBeenCalledTimes(1));
+    await screen.findByText(
+      "OS notifications are enabled. OpenDucktor can send alerts outside the app.",
+    );
+    expect(getCapability).toHaveBeenCalledTimes(2);
   });
 
   test("explains when OS notifications are enabled", async () => {
