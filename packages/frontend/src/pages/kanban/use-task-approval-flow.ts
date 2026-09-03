@@ -1,6 +1,6 @@
 import type { RepositoryGitProviderContext, TaskCard } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useReducer, useRef } from "react";
+import { useCallback, useLayoutEffect, useMemo, useReducer, useRef } from "react";
 import { toast } from "sonner";
 import type { GitConflict } from "@/features/agent-studio-git";
 import { errorMessage } from "@/lib/errors";
@@ -23,6 +23,7 @@ import {
   isTaskApprovalOpen,
   isTaskApprovalReady,
   taskApprovalFlowReducer,
+  type TaskApprovalWorkspaceIdentity,
 } from "./task-approval-flow-state";
 import { buildTaskApprovalModalModel } from "./task-approval-modal-model";
 import {
@@ -48,6 +49,11 @@ type UseTaskApprovalFlowResult = {
   openTaskApproval: (taskId: string, options?: TaskApprovalOpenOptions) => void;
 };
 
+const hasSameWorkspaceIdentity = (
+  left: TaskApprovalWorkspaceIdentity | null,
+  right: TaskApprovalWorkspaceIdentity | null,
+): boolean => left?.workspaceId === right?.workspaceId && left?.repoPath === right?.repoPath;
+
 export function useTaskApprovalFlow({
   activeWorkspace,
   loadGitProviderContext,
@@ -65,20 +71,47 @@ export function useTaskApprovalFlow({
   const queryClient = useQueryClient();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
+  const workspaceIdentity = useMemo(
+    () =>
+      workspaceRepoPath && activeWorkspaceId
+        ? { repoPath: workspaceRepoPath, workspaceId: activeWorkspaceId }
+        : null,
+    [activeWorkspaceId, workspaceRepoPath],
+  );
   const [state, dispatch] = useReducer(taskApprovalFlowReducer, CLOSED_TASK_APPROVAL_STATE);
   const approvalRequestVersionRef = useRef(0);
+  const workspaceIdentityRef = useRef<TaskApprovalWorkspaceIdentity | null>(workspaceIdentity);
 
   const reset = useCallback(() => {
     approvalRequestVersionRef.current += 1;
     dispatch({ type: "close" });
   }, []);
 
+  useLayoutEffect(() => {
+    if (hasSameWorkspaceIdentity(workspaceIdentityRef.current, workspaceIdentity)) {
+      return;
+    }
+    workspaceIdentityRef.current = workspaceIdentity;
+    reset();
+  }, [reset, workspaceIdentity]);
+
+  const isApprovalRequestCurrent = useCallback(
+    (requestVersion: number, requestWorkspace: TaskApprovalWorkspaceIdentity): boolean =>
+      approvalRequestVersionRef.current === requestVersion &&
+      hasSameWorkspaceIdentity(workspaceIdentityRef.current, requestWorkspace),
+    [],
+  );
+
   const openTaskApproval = useCallback(
     function openTaskApprovalRequest(taskId: string, options?: TaskApprovalOpenOptions): void {
-      if (!workspaceRepoPath) {
+      if (
+        !workspaceIdentity ||
+        !hasSameWorkspaceIdentity(workspaceIdentityRef.current, workspaceIdentity)
+      ) {
         return;
       }
 
+      const requestWorkspace = workspaceIdentity;
       const task = tasks.find((entry) => entry.id === taskId);
       const requestVersion = ++approvalRequestVersionRef.current;
       const title = task?.title ?? "";
@@ -91,7 +124,7 @@ export function useTaskApprovalFlow({
         try {
           resolvedGitProviderContext = await loadGitProviderContext();
         } catch (error) {
-          if (approvalRequestVersionRef.current === requestVersion) {
+          if (isApprovalRequestCurrent(requestVersion, requestWorkspace)) {
             toast.error("Failed to load Git provider context", {
               description: errorMessage(error),
               action: {
@@ -102,7 +135,7 @@ export function useTaskApprovalFlow({
           }
           return;
         }
-        if (approvalRequestVersionRef.current !== requestVersion) {
+        if (!isApprovalRequestCurrent(requestVersion, requestWorkspace)) {
           return;
         }
 
@@ -120,15 +153,16 @@ export function useTaskApprovalFlow({
           body,
           errorMessage: openErrorMessage,
           gitProviderContext: resolvedGitProviderContext,
+          workspaceIdentity: requestWorkspace,
         });
 
         try {
           const approvalContextResult = await loadTaskApprovalContextFromQuery(
             queryClient,
-            workspaceRepoPath,
+            requestWorkspace.repoPath,
             taskId,
           );
-          if (approvalRequestVersionRef.current === requestVersion) {
+          if (isApprovalRequestCurrent(requestVersion, requestWorkspace)) {
             if (approvalContextResult.outcome === "missing_builder_worktree") {
               dispatch({
                 type: "load_missing_builder_worktree",
@@ -139,6 +173,7 @@ export function useTaskApprovalFlow({
                 body,
                 errorMessage: openErrorMessage,
                 gitProviderContext: resolvedGitProviderContext,
+                workspaceIdentity: requestWorkspace,
               });
             } else {
               const approvalContext = approvalContextResult.approvalContext;
@@ -157,11 +192,12 @@ export function useTaskApprovalFlow({
                 errorMessage: openErrorMessage,
                 approvalContext,
                 gitProviderContext: resolvedGitProviderContext,
+                workspaceIdentity: requestWorkspace,
               });
             }
           }
         } catch (error) {
-          if (approvalRequestVersionRef.current === requestVersion) {
+          if (isApprovalRequestCurrent(requestVersion, requestWorkspace)) {
             reset();
             toast.error("Failed to open approval flow", {
               description: errorMessage(error),
@@ -170,7 +206,14 @@ export function useTaskApprovalFlow({
         }
       })();
     },
-    [loadGitProviderContext, workspaceRepoPath, queryClient, reset, tasks],
+    [
+      isApprovalRequestCurrent,
+      loadGitProviderContext,
+      queryClient,
+      reset,
+      tasks,
+      workspaceIdentity,
+    ],
   );
   const { taskGitConflictDialog, openGitConflictDialog } = useTaskApprovalGitConflictFlow({
     onResolveGitConflict,
@@ -180,7 +223,17 @@ export function useTaskApprovalFlow({
   });
 
   const confirm = useCallback((): void => {
-    const submissionRoute = resolveTaskApprovalSubmissionRoute(state, workspaceRepoPath);
+    if (
+      !isTaskApprovalOpen(state) ||
+      !hasSameWorkspaceIdentity(workspaceIdentityRef.current, state.workspaceIdentity)
+    ) {
+      reset();
+      return;
+    }
+
+    const submissionWorkspace = state.workspaceIdentity;
+    const submissionVersion = approvalRequestVersionRef.current;
+    const submissionRoute = resolveTaskApprovalSubmissionRoute(state, submissionWorkspace.repoPath);
     if (submissionRoute.kind === "ignore") {
       return;
     }
@@ -192,8 +245,14 @@ export function useTaskApprovalFlow({
         dispatch({ type: "start_submitting" });
         try {
           await humanApproveTask(approvalState.taskId);
+          if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
+            return;
+          }
           reset();
         } catch (error) {
+          if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
+            return;
+          }
           const description = errorMessage(error);
           dispatch({ type: "return_to_editable", errorMessage: description });
           toast.error("Approval failed", {
@@ -215,8 +274,11 @@ export function useTaskApprovalFlow({
             queryClient,
             repoPath,
             refreshTasks,
-            workspaceId: activeWorkspaceId,
+            workspaceId: submissionWorkspace.workspaceId,
           });
+          if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
+            return;
+          }
           if (directMergeResult.outcome === "conflicts") {
             reset();
             openGitConflictDialog(approvalState.taskId, directMergeResult.conflict);
@@ -244,6 +306,9 @@ export function useTaskApprovalFlow({
           requestPullRequestGeneration,
           refreshTasks,
         });
+        if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
+          return;
+        }
         if (pullRequestResult.outcome === "generation_started") {
           reset();
           return;
@@ -268,6 +333,9 @@ export function useTaskApprovalFlow({
         });
         reset();
       } catch (error) {
+        if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
+          return;
+        }
         const description = errorMessage(error);
         dispatch({ type: "return_to_editable", errorMessage: description });
         toast.error("Approval failed", {
@@ -276,9 +344,8 @@ export function useTaskApprovalFlow({
       }
     })();
   }, [
-    workspaceRepoPath,
-    activeWorkspaceId,
     humanApproveTask,
+    isApprovalRequestCurrent,
     queryClient,
     openGitConflictDialog,
     refreshTasks,
@@ -288,7 +355,11 @@ export function useTaskApprovalFlow({
   ]);
 
   const resetMissingBuilderWorktree = useCallback((): void => {
-    if (!isTaskApprovalInteractive(state) || state.stage !== "missing_builder_worktree") {
+    if (
+      !isTaskApprovalInteractive(state) ||
+      state.stage !== "missing_builder_worktree" ||
+      !hasSameWorkspaceIdentity(workspaceIdentityRef.current, state.workspaceIdentity)
+    ) {
       return;
     }
 
@@ -298,11 +369,16 @@ export function useTaskApprovalFlow({
   }, [openResetImplementation, reset, state]);
 
   const completeDirectMerge = useCallback((): void => {
-    if (!workspaceRepoPath || !isTaskApprovalReady(state)) {
+    if (
+      !isTaskApprovalReady(state) ||
+      !hasSameWorkspaceIdentity(workspaceIdentityRef.current, state.workspaceIdentity)
+    ) {
       return;
     }
 
     const approvalState = state;
+    const submissionWorkspace = approvalState.workspaceIdentity;
+    const submissionVersion = approvalRequestVersionRef.current;
     void (async () => {
       dispatch({ type: "clear_error" });
       dispatch({ type: "start_submitting" });
@@ -310,15 +386,21 @@ export function useTaskApprovalFlow({
         const result = await completeDirectMergeApproval({
           approval: approvalState,
           queryClient,
-          repoPath: workspaceRepoPath,
+          repoPath: submissionWorkspace.repoPath,
           refreshTasks,
-          workspaceId: activeWorkspaceId,
+          workspaceId: submissionWorkspace.workspaceId,
         });
+        if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
+          return;
+        }
         reset();
         toast.success("Task moved to Done", {
           description: result.successDescription,
         });
       } catch (error) {
+        if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
+          return;
+        }
         const description = errorMessage(error);
         dispatch({ type: "return_to_editable", errorMessage: description });
         toast.error("Failed to finish direct merge", {
@@ -326,7 +408,7 @@ export function useTaskApprovalFlow({
         });
       }
     })();
-  }, [workspaceRepoPath, activeWorkspaceId, queryClient, refreshTasks, reset, state]);
+  }, [isApprovalRequestCurrent, queryClient, refreshTasks, reset, state]);
 
   if (!isTaskApprovalOpen(state)) {
     return {

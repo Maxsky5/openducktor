@@ -86,6 +86,7 @@ const openState = (overrides: Partial<Extract<TaskApprovalFlowState, { kind: "op
     errorMessage: null,
     approvalContext: approvalContext(),
     gitProviderContext: null,
+    workspaceIdentity: { workspaceId: "workspace-repo", repoPath: "/repo" },
     ...overrides,
   }) satisfies TaskApprovalFlowState;
 

@@ -7,6 +7,11 @@ export type TaskApprovalFlowStage =
   | "missing_builder_worktree";
 export type TaskApprovalMergeMethod = "merge_commit" | "squash" | "rebase";
 
+export type TaskApprovalWorkspaceIdentity = {
+  workspaceId: string;
+  repoPath: string;
+};
+
 export type TaskApprovalFlowOpenState = {
   kind: "open";
   phase: "loading" | "ready" | "submitting";
@@ -22,6 +27,7 @@ export type TaskApprovalFlowOpenState = {
   errorMessage: string | null;
   approvalContext: TaskApprovalContext | null;
   gitProviderContext: RepositoryGitProviderContext;
+  workspaceIdentity: TaskApprovalWorkspaceIdentity;
 };
 
 export type TaskApprovalFlowReadyState = TaskApprovalFlowOpenState & {
@@ -43,6 +49,7 @@ type TaskApprovalFlowOpenPayload = {
   body: string;
   errorMessage: string | null;
   gitProviderContext: RepositoryGitProviderContext;
+  workspaceIdentity: TaskApprovalWorkspaceIdentity;
 };
 
 export type TaskApprovalFlowAction =
@@ -110,6 +117,7 @@ const buildTaskApprovalLoadingState = (
   errorMessage: payload.errorMessage,
   approvalContext: null,
   gitProviderContext: payload.gitProviderContext,
+  workspaceIdentity: payload.workspaceIdentity,
 });
 
 const buildTaskApprovalLoadedState = (
@@ -129,6 +137,7 @@ const buildTaskApprovalLoadedState = (
   errorMessage: payload.errorMessage,
   approvalContext: payload.approvalContext,
   gitProviderContext: payload.gitProviderContext,
+  workspaceIdentity: payload.workspaceIdentity,
 });
 
 const buildMissingBuilderWorktreeState = (
@@ -148,6 +157,7 @@ const buildMissingBuilderWorktreeState = (
   errorMessage: payload.errorMessage,
   approvalContext: null,
   gitProviderContext: payload.gitProviderContext,
+  workspaceIdentity: payload.workspaceIdentity,
 });
 
 export function taskApprovalFlowReducer(

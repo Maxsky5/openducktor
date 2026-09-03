@@ -10,6 +10,7 @@ import { waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { act } from "react";
 import { toast } from "sonner";
+import { z } from "zod";
 import { createTextSegment } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import {
   type AgentChatDraftSessionIdentity,
@@ -379,6 +380,14 @@ const expectMissingBuilderWorktreeModal = (): TaskApprovalMissingBuilderWorktree
   return modal;
 };
 
+const toastActionSchema = z.object({
+  label: z.string(),
+  onClick: z.function(),
+});
+
+const latestToastAction = () =>
+  toastActionSchema.parse(toastErrorMock.mock.calls.at(-1)?.[1]?.action);
+
 describe("useTaskApprovalFlow", () => {
   beforeEach(() => {
     resetAgentChatDraftStoreForTests();
@@ -463,6 +472,130 @@ describe("useTaskApprovalFlow", () => {
     });
   });
 
+  test("discards a pending provider context after switching repositories", async () => {
+    const pendingProviderContext = createDeferred<RepositoryGitProviderContext>();
+    let activeWorkspace = {
+      workspaceId: "workspace-a",
+      workspaceName: "Repository A",
+      repoPath: "/repo-a",
+    };
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeWorkspace,
+          loadGitProviderContext: async () => pendingProviderContext.promise,
+        }),
+      );
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+    });
+
+    activeWorkspace = {
+      workspaceId: "workspace-b",
+      workspaceName: "Repository B",
+      repoPath: "/repo-b",
+    };
+    await harness.update(undefined);
+    pendingProviderContext.resolve(healthyGitProviderContext());
+    await act(async () => {
+      await pendingProviderContext.promise;
+      await Promise.resolve();
+    });
+
+    expect(latestHarnessValue?.taskApprovalModal).toBeNull();
+    expect(taskApprovalContextGetMock).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
+
+  test("closes approval when switching repositories during the approval-context read", async () => {
+    const pendingApprovalContext = createDeferred<TaskApprovalContextLoadResult>();
+    taskApprovalContextGetMock.mockImplementationOnce(async () => pendingApprovalContext.promise);
+    let activeWorkspace = {
+      workspaceId: "workspace-a",
+      workspaceName: "Repository A",
+      repoPath: "/repo-a",
+    };
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeWorkspace,
+          loadGitProviderContext: async () => healthyGitProviderContext(),
+        }),
+      );
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    expect(expectApprovalModal().isLoading).toBe(true);
+
+    activeWorkspace = {
+      workspaceId: "workspace-b",
+      workspaceName: "Repository B",
+      repoPath: "/repo-b",
+    };
+    await harness.update(undefined);
+    expect(latestHarnessValue?.taskApprovalModal).toBeNull();
+
+    pendingApprovalContext.resolve(createReadyTaskApprovalContextResult());
+    await act(async () => {
+      await pendingApprovalContext.promise;
+      await Promise.resolve();
+    });
+    expect(latestHarnessValue?.taskApprovalModal).toBeNull();
+
+    await harness.unmount();
+  });
+
+  test("does not submit stale approval state after switching repositories", async () => {
+    taskApprovalContextGetMock.mockResolvedValue(createReadyTaskApprovalContextResult());
+    let activeWorkspace = {
+      workspaceId: "workspace-a",
+      workspaceName: "Repository A",
+      repoPath: "/repo-a",
+    };
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow(createUseTaskApprovalFlowArgs({ activeWorkspace }));
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+    const staleConfirm = expectApprovalModal().onConfirm;
+
+    activeWorkspace = {
+      workspaceId: "workspace-b",
+      workspaceName: "Repository B",
+      repoPath: "/repo-b",
+    };
+    await harness.update(undefined);
+    await act(async () => {
+      staleConfirm();
+      await Promise.resolve();
+    });
+
+    expect(taskDirectMergeMock).not.toHaveBeenCalled();
+    expect(taskPullRequestUpsertMock).not.toHaveBeenCalled();
+    expect(latestHarnessValue?.taskApprovalModal).toBeNull();
+
+    await harness.unmount();
+  });
+
   test("shows a provider read error and retries the full approval open", async () => {
     const loadGitProviderContext = mock(async (): Promise<RepositoryGitProviderContext> => {
       throw new Error("provider context read failed");
@@ -506,6 +639,49 @@ describe("useTaskApprovalFlow", () => {
     await act(async () => {
       await harness.unmount();
     });
+  });
+
+  test("ignores a provider-read Retry action after switching repositories", async () => {
+    const loadGitProviderContext = mock(async (): Promise<RepositoryGitProviderContext> => {
+      throw new Error("provider context read failed");
+    });
+    let activeWorkspace = {
+      workspaceId: "workspace-a",
+      workspaceName: "Repository A",
+      repoPath: "/repo-a",
+    };
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({ activeWorkspace, loadGitProviderContext }),
+      );
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    const retryAction = latestToastAction();
+
+    activeWorkspace = {
+      workspaceId: "workspace-b",
+      workspaceName: "Repository B",
+      repoPath: "/repo-b",
+    };
+    await harness.update(undefined);
+    loadGitProviderContext.mockImplementationOnce(async () => healthyGitProviderContext());
+
+    await act(async () => {
+      retryAction.onClick();
+      await Promise.resolve();
+    });
+
+    expect(loadGitProviderContext).toHaveBeenCalledTimes(1);
+    expect(latestHarnessValue?.taskApprovalModal).toBeNull();
+
+    await harness.unmount();
   });
 
   test("opens immediately in loading state and does not fetch the settings snapshot", async () => {
