@@ -1404,7 +1404,6 @@ describe("Claude host live-session adapter", () => {
         ...controlRef,
         sessionScope: { kind: "repository" },
         model: {
-          runtimeKind: "claude",
           providerId: "claude",
           modelId: "claude-a",
         },
@@ -1416,7 +1415,6 @@ describe("Claude host live-session adapter", () => {
         ...controlRef,
         sessionScope: { kind: "repository" },
         model: {
-          runtimeKind: "claude",
           providerId: "claude",
           modelId: "claude-b",
         },

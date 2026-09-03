@@ -5,6 +5,7 @@ import type {
   AgentSessionControlSendInput,
   AgentSessionControlStartInput,
   AgentSessionControlSummary,
+  AgentSessionModelSettings,
   AgentSessionScope,
   AgentSessionWorkflowScope,
   CodexEffectivePolicy,
@@ -147,12 +148,12 @@ export type SendAgentUserMessageInput = PolicyBoundSessionControlRef & {
 export type AcceptedAgentUserMessage = Extract<AgentEvent, { type: "user_message" }>;
 
 export type UpdateAgentSessionModelInput = SessionRef & {
-  model: AgentModelSelection | null;
+  model: AgentSessionModelSettings | null;
 };
 
 export type UpdateControlledAgentSessionModelInput = SessionRef & {
   sessionScope: AgentSessionScope;
-  model: AgentModelSelection | null;
+  model: AgentSessionModelSettings | null;
 };
 
 export type AgentSessionHistorySystemPromptContext = {

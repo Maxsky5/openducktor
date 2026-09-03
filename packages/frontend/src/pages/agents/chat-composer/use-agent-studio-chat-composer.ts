@@ -218,6 +218,9 @@ export function useAgentStudioChatComposer({
     [promptInputRuntimeKind, selectedTargetRuntimeDefinitions],
   );
   const supportsProfiles = useMemo(() => {
+    if (hasSessionTarget) {
+      return false;
+    }
     if (!selectedTargetRuntimeKind) {
       return true;
     }
@@ -226,7 +229,7 @@ export function useAgentStudioChatComposer({
       selectedTargetRuntimeKind,
     );
     return definition?.capabilities.optionalSurfaces.supportsProfiles ?? false;
-  }, [selectedTargetRuntimeDefinitions, selectedTargetRuntimeKind]);
+  }, [hasSessionTarget, selectedTargetRuntimeDefinitions, selectedTargetRuntimeKind]);
 
   const modelPickerRuntimeDefinitions = useMemo<RuntimeDescriptor[]>(() => {
     if (!hasSessionTarget) {

@@ -124,10 +124,19 @@ export const agentSessionControlSendInputSchema = agentSessionLiveRefSchema
   });
 export type AgentSessionControlSendInput = z.infer<typeof agentSessionControlSendInputSchema>;
 
+export const agentSessionModelSettingsSchema = z
+  .object({
+    providerId: z.string(),
+    modelId: z.string(),
+    variant: z.string().optional(),
+  })
+  .strict();
+export type AgentSessionModelSettings = z.infer<typeof agentSessionModelSettingsSchema>;
+
 export const agentSessionControlUpdateModelInputSchema = agentSessionLiveRefSchema
   .extend({
     sessionScope: agentSessionScopeSchema,
-    model: agentModelSelectionSchema.nullable(),
+    model: agentSessionModelSettingsSchema.nullable(),
   })
   .strict();
 export type AgentSessionControlUpdateModelInput = z.infer<

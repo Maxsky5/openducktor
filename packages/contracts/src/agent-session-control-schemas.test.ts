@@ -7,6 +7,7 @@ import {
   agentSessionControlStartInputSchema,
   agentSessionControlSummarySchema,
   agentSessionControlUpdateModelInputSchema,
+  agentSessionModelSettingsSchema,
 } from "./agent-session-control-schemas";
 
 const workflowScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
@@ -226,6 +227,41 @@ describe("agent session control contracts", () => {
         sessionScope: workflowScope,
       }),
     ).toMatchObject({ sessionScope: workflowScope });
+  });
+
+  test("limits live model changes to model settings", () => {
+    const session = {
+      repoPath: "/repo",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+      sessionScope: repositoryScope,
+    };
+    const settings = {
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+    };
+
+    expect(agentSessionModelSettingsSchema.parse(settings)).toEqual(settings);
+    expect(
+      agentSessionControlUpdateModelInputSchema.parse({
+        ...session,
+        model: settings,
+      }).model,
+    ).toEqual(settings);
+    expect(
+      agentSessionControlUpdateModelInputSchema.safeParse({
+        ...session,
+        model: { ...settings, runtimeKind: "codex" },
+      }).success,
+    ).toBe(false);
+    expect(
+      agentSessionControlUpdateModelInputSchema.safeParse({
+        ...session,
+        model: { ...settings, profileId: "build" },
+      }).success,
+    ).toBe(false);
   });
 
   test("rejects unbound scope from startable controls", () => {

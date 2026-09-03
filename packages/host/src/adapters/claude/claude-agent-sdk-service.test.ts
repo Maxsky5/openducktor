@@ -610,7 +610,6 @@ describe("createClaudeAgentSdkService", () => {
           workingDirectory: "/repo/worktree/",
           externalSessionId: "session-1",
           model: {
-            runtimeKind: "claude",
             providerId: "claude",
             modelId: "claude-opus-4-6",
             variant: "xhigh",
@@ -677,7 +676,6 @@ describe("createClaudeAgentSdkService", () => {
           workingDirectory: "/repo/worktree/",
           externalSessionId: "session-1",
           model: {
-            runtimeKind: "claude",
             providerId: "claude",
             modelId: "claude-opus-4-6",
             variant: "xhigh",

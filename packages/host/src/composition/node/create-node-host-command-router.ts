@@ -301,8 +301,10 @@ export const assembleNodeEffectHostCommandRouter = (
     workspaceSettingsService,
   });
   const taskWorkflowSessionControlService = createTaskWorkflowSessionControlService({
+    canonicalizeRepoPath: (repoPath) => git.canonicalizePath(repoPath),
     runtime: agentSessionLiveStateService,
     tasks: taskService,
+    taskLifecycle: taskSessionBootstrapCoordinator,
   });
   const agentSessionCommandService = {
     ...agentSessionLiveStateService,

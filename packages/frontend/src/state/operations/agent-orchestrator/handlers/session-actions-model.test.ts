@@ -80,6 +80,8 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
         runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
+        variant: "high",
+        profileId: "build",
       });
 
       expect(modelCalls).toHaveLength(1);
@@ -89,12 +91,13 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
         runtimeKind: "opencode",
         workingDirectory: "/tmp/repo/worktree",
         model: {
-          runtimeKind: "opencode",
           providerId: "openai",
           modelId: "gpt-5",
+          variant: "high",
         },
       });
       expect(getSession(sessionsRef)?.selectedModel?.modelId).toBe("gpt-5");
+      expect(getSession(sessionsRef)?.selectedModel?.profileId).toBe("build");
     } finally {
       adapter.updateSessionModel = originalUpdateSessionModel;
     }
@@ -158,7 +161,6 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
         runtimeKind: "opencode",
         workingDirectory: "/tmp/repo/repository-chat",
         model: {
-          runtimeKind: "opencode",
           providerId: "openai",
           modelId: "gpt-5",
         },
@@ -208,6 +210,25 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
     ).rejects.toThrow(
       "Cannot change model for unbound session 'session-1'; repository or workflow context is required.",
     );
+    expect(runtimeCalls).toBe(0);
+  });
+
+  test("rejects a runtime change before calling the host", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    let runtimeCalls = 0;
+    adapter.updateSessionModel = async () => {
+      runtimeCalls += 1;
+    };
+    const sessionsRef = createSessionsRef([buildSession()]);
+    const actions = createSessionActions({ adapter, sessionsRef });
+
+    await expect(
+      actions.updateAgentSessionModel(getSession(sessionsRef), {
+        runtimeKind: "codex",
+        providerId: "openai",
+        modelId: "gpt-5",
+      }),
+    ).rejects.toThrow("Session 'session-1' cannot move from 'opencode' to 'codex'.");
     expect(runtimeCalls).toBe(0);
   });
 

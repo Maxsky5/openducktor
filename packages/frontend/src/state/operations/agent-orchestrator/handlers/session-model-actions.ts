@@ -1,5 +1,9 @@
-import type { AgentEnginePort, AgentModelSelection } from "@openducktor/core";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type {
+  AgentEnginePort,
+  AgentModelSelection,
+  UpdateControlledAgentSessionModelInput,
+} from "@openducktor/core";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
 import {
   type ReadSessionSnapshot,
@@ -18,6 +22,25 @@ export type SessionModelActionDependencies = {
   updateSession: UpdateSession;
 };
 
+const toSessionModelSettings = (
+  session: AgentSessionState,
+  selection: AgentModelSelection | null,
+): UpdateControlledAgentSessionModelInput["model"] => {
+  if (!selection) {
+    return null;
+  }
+  if (selection.runtimeKind && selection.runtimeKind !== session.runtimeKind) {
+    throw new Error(
+      `Session '${session.externalSessionId}' cannot move from '${session.runtimeKind}' to '${selection.runtimeKind}'.`,
+    );
+  }
+  return {
+    providerId: selection.providerId,
+    modelId: selection.modelId,
+    variant: selection.variant,
+  };
+};
+
 export const createSessionModelActions = ({
   workspaceRepoPath,
   adapter,
@@ -30,11 +53,12 @@ export const createSessionModelActions = ({
   ): Promise<void> => {
     const session = requireLoadedSession(readSessionSnapshot, identity);
     const sessionScope = requireBoundSessionAssociation(session, "change model");
+    const model = toSessionModelSettings(session, selection);
 
     await adapter.updateSessionModel({
       ...toRuntimeSessionRef(requireWorkspaceRepoPath(workspaceRepoPath), session),
       sessionScope,
-      model: selection,
+      model,
     });
 
     const nextSession =

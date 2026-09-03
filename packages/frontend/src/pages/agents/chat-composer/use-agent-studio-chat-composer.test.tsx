@@ -602,6 +602,24 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
+  test("does not offer runtime profiles for an existing session", async () => {
+    const loadedSession = createLoadedSession();
+    const harness = createHookHarness(
+      createBaseProps({
+        loadedSession,
+        sessionRuntimeData: createSessionRuntimeData({ modelCatalog: CATALOG }),
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().supportsProfiles).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("keeps existing-session catalog rows when an unrelated runtime-data read fails", async () => {
     const loadedSession = createLoadedSession();
     const harness = createHookHarness(
