@@ -76,6 +76,39 @@ describe("OpenCode live session snapshots", () => {
     expect(reading).toBe(false);
   });
 
+  test("requests the full session list when OpenCode fills its first page", async () => {
+    const calls: string[] = [];
+    const listLimits: number[] = [];
+    const sessions = Array.from({ length: 101 }, (_, index) =>
+      createOpencodeSessionFixture({
+        id: `session-${index + 1}`,
+        directory: "/worktree",
+      }),
+    );
+    const baseClient = makeClient(calls);
+    const client: OpencodeClient = {
+      ...baseClient,
+      session: {
+        ...baseClient.session,
+        list: async (input) => {
+          const limit = input?.limit ?? 100;
+          listLimits.push(limit);
+          return { data: sessions.slice(0, limit), error: undefined };
+        },
+      },
+    };
+
+    const snapshots = await listOpencodeRuntimeSnapshotSources({
+      createClient: () => client,
+      runtimeEndpoint: "http://runtime-1",
+      now: () => "2026-07-16T10:02:00.000Z",
+      readDirectory: async (_directory, read) => read(),
+    });
+
+    expect(listLimits).toEqual([100, 200]);
+    expect(snapshots).toHaveLength(101);
+  });
+
   test("keeps the directory guard until all started calls settle", async () => {
     const calls: string[] = [];
     let finishQuestion = () => undefined;

@@ -91,6 +91,8 @@ const opencodeSessionStatusMapSchema = z.record(z.string(), opencodeSessionStatu
 type OpencodeSessionStatus = z.output<typeof opencodeSessionStatusSchema>;
 type OpencodeSessionStatusMap = z.output<typeof opencodeSessionStatusMapSchema>;
 
+const OPENCODE_SESSION_LIST_LIMIT = 100;
+
 const toOpencodeRuntimeActivity = (
   status: OpencodeSessionStatus | undefined,
 ): AgentSessionRuntimeActivity => {
@@ -166,6 +168,20 @@ const mergeOpencodePendingInputBySession = (
   return merged satisfies OpencodeLiveSessionPendingInputBySessionId;
 };
 
+const listAllOpencodeSessions = async (
+  client: ReturnType<ClientFactory>,
+): Promise<ParsedOpencodeSession[]> => {
+  let limit = OPENCODE_SESSION_LIST_LIMIT;
+  for (;;) {
+    const payload = await client.session.list({ limit });
+    const sessions = parseOpencodeSessionListPayload(unwrapData(payload, "list sessions"));
+    if (sessions.length < limit) {
+      return sessions;
+    }
+    limit *= 2;
+  }
+};
+
 export const listOpencodeRuntimeSnapshotSources = async ({
   createClient,
   runtimeEndpoint,
@@ -174,8 +190,7 @@ export const listOpencodeRuntimeSnapshotSources = async ({
   now,
 }: ListOpencodeRuntimeSnapshotSourcesInput): Promise<OpencodeRuntimeSnapshotSource[]> => {
   const unscopedClient = createClient({ runtimeEndpoint });
-  const sessionsPayload = await unscopedClient.session.list();
-  const sessions = parseOpencodeSessionListPayload(unwrapData(sessionsPayload, "list sessions"));
+  const sessions = await listAllOpencodeSessions(unscopedClient);
   const requestedDirectorySet =
     directories && directories.length > 0
       ? new Set(

@@ -130,8 +130,16 @@ export function useAgentOrchestratorOperations({
         currentWorkspaceRepoPathRef,
         readSessionSnapshot: sessionStore.getSessionSnapshot,
         queryClient,
+        readPort: hostPort,
       }),
-    [currentWorkspaceRepoPathRef, queryClient, repoEpochRef, sessionStore, workspaceRepoPath],
+    [
+      currentWorkspaceRepoPathRef,
+      hostPort,
+      queryClient,
+      repoEpochRef,
+      sessionStore,
+      workspaceRepoPath,
+    ],
   );
   const sessionHistoryLoaders = useMemo(() => {
     const loaderArgs = {

@@ -4,10 +4,16 @@ import type {
   AgentSessionControlStartInput,
   AgentSessionControlStopInput,
   AgentSessionControlSummary,
+  AgentSessionRecord,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { TaskService } from "../tasks/task-service";
-import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
+import {
+  type HostError,
+  HostOperationError,
+  HostValidationError,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import type { AgentSessionLiveStateService } from "./agent-session-live-state-service";
 
 type RuntimeControl = Pick<
@@ -18,9 +24,13 @@ type RuntimeControl = Pick<
   | "updateSessionModel"
   | "stopSession"
   | "releaseSession"
+  | "publishSession"
 >;
 
-type TaskSessions = Pick<TaskService, "agentSessionUpsert" | "agentSessionUpdateModel">;
+type TaskSessions = Pick<
+  TaskService,
+  "agentSessionsList" | "agentSessionUpsert" | "agentSessionUpdateModel"
+>;
 
 type ControlledLaunchInput =
   | AgentSessionControlStartInput
@@ -31,6 +41,7 @@ const storeWorkflowSession = (
   tasks: TaskSessions,
   input: ControlledLaunchInput,
   summary: AgentSessionControlSummary,
+  selectedModel: AgentSessionRecord["selectedModel"] = null,
 ) => {
   if (input.sessionScope.kind !== "workflow") {
     return Effect.void;
@@ -46,7 +57,9 @@ const storeWorkflowSession = (
         startedAt: summary.startedAt,
         runtimeKind: summary.runtimeKind,
         workingDirectory: summary.workingDirectory,
-        selectedModel: input.model ? { ...input.model, runtimeKind: summary.runtimeKind } : null,
+        selectedModel: input.model
+          ? { ...input.model, runtimeKind: summary.runtimeKind }
+          : selectedModel,
       },
     })
     .pipe(
@@ -58,6 +71,46 @@ const storeWorkflowSession = (
         }),
       ),
     );
+};
+
+const readStoredResumeSession = (
+  tasks: TaskSessions,
+  input: AgentSessionControlResumeInput,
+): Effect.Effect<AgentSessionRecord | null, HostError> => {
+  if (input.sessionScope.kind !== "workflow") {
+    return Effect.succeed(null);
+  }
+  const scope = input.sessionScope;
+  return tasks.agentSessionsList({ repoPath: input.repoPath, taskId: scope.taskId }).pipe(
+    Effect.mapError((cause) =>
+      toHostOperationError(cause, "task-workflow-session.read-resume", {
+        repoPath: input.repoPath,
+        taskId: scope.taskId,
+        externalSessionId: input.externalSessionId,
+      }),
+    ),
+    Effect.flatMap((sessions) => {
+      const stored = sessions.find(
+        (session) =>
+          session.externalSessionId === input.externalSessionId &&
+          session.runtimeKind === input.runtimeKind &&
+          session.workingDirectory === input.workingDirectory,
+      );
+      return stored
+        ? Effect.succeed(stored)
+        : Effect.fail(
+            new HostValidationError({
+              field: "externalSessionId",
+              message: `Task '${scope.taskId}' does not own session '${input.externalSessionId}'.`,
+              details: {
+                repoPath: input.repoPath,
+                taskId: scope.taskId,
+                externalSessionId: input.externalSessionId,
+              },
+            }),
+          );
+    }),
+  );
 };
 
 const controlSessionRef = (
@@ -76,10 +129,14 @@ const storeControlResult = (
   input: ControlledLaunchInput,
   summary: AgentSessionControlSummary,
   cleanup: "release" | "stop",
+  selectedModel?: AgentSessionRecord["selectedModel"],
 ) =>
   Effect.gen(function* () {
-    const stored = yield* Effect.either(storeWorkflowSession(tasks, input, summary));
+    const stored = yield* Effect.either(storeWorkflowSession(tasks, input, summary, selectedModel));
     if (stored._tag === "Right") {
+      if (input.sessionScope.kind === "workflow") {
+        yield* runtime.publishSession(controlSessionRef(input.repoPath, summary));
+      }
       return summary;
     }
     const ref = controlSessionRef(input.repoPath, summary);
@@ -119,8 +176,16 @@ export const createTaskWorkflowSessionControlService = ({
     }),
   resumeSession: (input) =>
     Effect.gen(function* () {
+      const storedSession = yield* readStoredResumeSession(tasks, input);
       const summary = yield* runtime.resumeSession(input);
-      return yield* storeControlResult(tasks, runtime, input, summary, "release");
+      return yield* storeControlResult(
+        tasks,
+        runtime,
+        input,
+        summary,
+        "release",
+        storedSession?.selectedModel,
+      );
     }),
   forkSession: (input) =>
     Effect.gen(function* () {

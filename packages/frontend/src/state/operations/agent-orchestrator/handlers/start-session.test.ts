@@ -619,7 +619,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     ).rejects.toThrow("bootstrap completion failed");
     expect(stopCalls).toBe(1);
     expect(abortCalls).toBe(0);
-    expect(getSession(sessionsRef.current, "external-bootstrap-fail")).toBeDefined();
+    expect(getSession(sessionsRef.current, "external-bootstrap-fail")?.status).toBe("stopped");
   });
 
   test("keeps the host-stored session attached when rollback cannot stop it", async () => {

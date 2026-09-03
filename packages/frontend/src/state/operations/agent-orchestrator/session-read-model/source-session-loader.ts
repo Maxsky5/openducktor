@@ -4,7 +4,10 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
-import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
+import {
+  type AgentSessionReadPort,
+  loadAgentSessionListFromQuery,
+} from "@/state/queries/agent-sessions";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { createRepoStaleGuard } from "../support/core";
 import { toPersistedSessionIdentity } from "../support/persistence";
@@ -17,6 +20,7 @@ type CreateSourceSessionLoaderArgs = {
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   readSessionSnapshot: ReadSessionSnapshot;
   queryClient: QueryClient;
+  readPort: AgentSessionReadPort;
 };
 
 export type LoadSourceSessionInput = {
@@ -45,6 +49,7 @@ export const createLoadSourceSession = ({
   currentWorkspaceRepoPathRef,
   readSessionSnapshot,
   queryClient,
+  readPort,
 }: CreateSourceSessionLoaderArgs): LoadSourceSession => {
   return async ({ taskId, role, sourceSession }): Promise<AgentSessionState | null> => {
     if (!workspaceRepoPath || taskId.trim().length === 0) {
@@ -63,6 +68,7 @@ export const createLoadSourceSession = ({
 
     const records = await loadAgentSessionListFromQuery(queryClient, repoPath, taskId, {
       forceFresh: true,
+      readPort,
     });
     if (isStaleRepoOperation()) {
       return null;

@@ -154,6 +154,8 @@ export const createStartAgentSession = ({
                 cause: rollbackInput.cause,
                 startedCtx: { ...startCtx, summary: rollbackInput.summary },
                 identity: rollbackInput.identity,
+                readSessionSnapshot: session.readSessionSnapshot,
+                replaceSession: session.replaceSession,
                 clearSessionObservationState: session.clearSessionObservationState,
                 runtime,
                 stopReason: rollbackInput.stopReason,

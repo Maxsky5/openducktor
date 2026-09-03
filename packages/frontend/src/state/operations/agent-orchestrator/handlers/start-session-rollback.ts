@@ -1,5 +1,5 @@
 import { errorMessage } from "@/lib/errors";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { RuntimeInfo } from "../runtime/runtime";
 import { runOrchestratorTask } from "../support/async-side-effects";
 import { SessionLaunchStopError } from "./session-launch-errors";
@@ -44,6 +44,8 @@ export const stopStoredWorkflowSessionAfterLaunchFailure = async ({
   cause,
   startedCtx,
   identity,
+  readSessionSnapshot,
+  replaceSession,
   clearSessionObservationState,
   runtime,
   stopReason,
@@ -53,6 +55,8 @@ export const stopStoredWorkflowSessionAfterLaunchFailure = async ({
   cause: unknown;
   startedCtx: StartedSessionContext;
   identity: AgentSessionIdentity;
+  readSessionSnapshot: (identity: AgentSessionIdentity) => AgentSessionState | null;
+  replaceSession: (session: AgentSessionState) => void;
   clearSessionObservationState: (identity: AgentSessionIdentity) => void;
   runtime: RuntimeDependencies;
   stopReason: string;
@@ -71,6 +75,17 @@ export const stopStoredWorkflowSessionAfterLaunchFailure = async ({
     );
   }
 
+  const storedSession = readSessionSnapshot(identity);
+  if (storedSession) {
+    replaceSession({
+      ...storedSession,
+      status: "stopped",
+      runtimeStatusMessage: null,
+      stopRequestedAt: null,
+      pendingApprovals: [],
+      pendingQuestions: [],
+    });
+  }
   clearSessionObservationState(identity);
 
   let bootstrapError: unknown;
