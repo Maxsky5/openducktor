@@ -79,7 +79,6 @@ export const createTaskLinkMergedPullRequestUseCase = ({
         requireLinkMergedPullRequestDependencies({
           devServerService,
           gitPort,
-          gitProviderResolver,
           settingsConfig,
           taskWorktreeService,
           terminalService,
