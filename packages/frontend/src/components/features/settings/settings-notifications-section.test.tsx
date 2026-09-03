@@ -65,7 +65,8 @@ describe("SettingsNotificationsSection", () => {
     );
 
     const sectionText = document.body.textContent ?? "";
-    expect(sectionText.indexOf("Status and tests")).toBeLessThan(
+    expect(sectionText).not.toContain("Status and tests");
+    expect(sectionText.indexOf("Test notifications")).toBeLessThan(
       sectionText.indexOf("Sound and focus"),
     );
 
@@ -140,9 +141,13 @@ describe("SettingsNotificationsSection", () => {
       />,
     );
 
-    await screen.findByText(
+    const description = await screen.findByText(
       "OS notifications are disabled in system settings. Allow OpenDucktor notifications to receive alerts outside the app.",
     );
+    const permissionAlert = description.closest("[role='alert']");
+    expect(permissionAlert).not.toBeNull();
+    expect(permissionAlert?.className).toContain("bg-warning-surface");
+    expect(permissionAlert?.textContent).toContain("OS notifications are off");
     expect(screen.getByRole("button", { name: "Test OS" }).hasAttribute("disabled")).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Open system settings" }));
 
@@ -163,9 +168,13 @@ describe("SettingsNotificationsSection", () => {
       />,
     );
 
-    await screen.findByText(
+    const description = await screen.findByText(
       "OS notifications are enabled. OpenDucktor can send alerts outside the app.",
     );
+    const permissionStatus = description.closest("[role='status']");
+    expect(permissionStatus).not.toBeNull();
+    expect(permissionStatus?.className).toContain("bg-success-surface");
+    expect(permissionStatus?.textContent).toContain("OS notifications are on");
     expect(screen.queryByRole("button", { name: "Open system settings" })).toBeNull();
   });
 

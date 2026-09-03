@@ -4,10 +4,11 @@ import {
   notificationSoundSchema,
   type NotificationCue,
   type NotificationKind,
+  type NotificationOsCapability,
   type NotificationSettings,
   type NotificationTarget,
 } from "@openducktor/contracts";
-import { Bell, BellRing, Settings } from "lucide-react";
+import { Bell, BellRing, CircleAlert, CircleCheck, Settings } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -46,6 +47,70 @@ const soundFocusOptions: SegmentedOption<NotificationSettings["soundFocus"]>[] =
   { value: "mute_while_focused", label: "Mute when focused" },
   { value: "always_play", label: "Always play" },
 ];
+
+type PermissionNoticePresentation = {
+  title: string;
+  className: string;
+  iconClassName: string;
+  icon: typeof BellRing;
+  role: "alert" | "status";
+};
+
+const getPermissionNoticePresentation = (
+  capability: NotificationOsCapability | undefined,
+): PermissionNoticePresentation => {
+  if (capability?.supported && capability.permission === "granted") {
+    return {
+      title: "OS notifications are on",
+      className: "border-success-border bg-success-surface text-success-surface-foreground",
+      iconClassName:
+        "border-success-border bg-background/60 text-success-muted dark:bg-background/30",
+      icon: CircleCheck,
+      role: "status",
+    };
+  }
+
+  if (capability?.permission === "denied") {
+    return {
+      title: "OS notifications are off",
+      className: "border-warning-border bg-warning-surface text-warning-surface-foreground",
+      iconClassName:
+        "border-warning-border bg-background/60 text-warning-muted dark:bg-background/30",
+      icon: CircleAlert,
+      role: "alert",
+    };
+  }
+
+  if (capability?.supported === false) {
+    return {
+      title: "OS notifications are unavailable",
+      className: "border-warning-border bg-warning-surface text-warning-surface-foreground",
+      iconClassName:
+        "border-warning-border bg-background/60 text-warning-muted dark:bg-background/30",
+      icon: CircleAlert,
+      role: "alert",
+    };
+  }
+
+  if (capability?.permission === "prompt") {
+    return {
+      title: "Turn on OS notifications",
+      className: "border-warning-border bg-warning-surface text-warning-surface-foreground",
+      iconClassName:
+        "border-warning-border bg-background/60 text-warning-muted dark:bg-background/30",
+      icon: BellRing,
+      role: "status",
+    };
+  }
+
+  return {
+    title: capability ? "OS notifications are available" : "Checking OS notifications",
+    className: "border-border bg-muted/40 text-foreground",
+    iconClassName: "border-border bg-background text-muted-foreground",
+    icon: BellRing,
+    role: "status",
+  };
+};
 
 const AGENT_KINDS = NOTIFICATION_KIND_VALUES.filter((kind) => kind.startsWith("agent."));
 const WORKFLOW_KINDS = NOTIFICATION_KIND_VALUES.filter((kind) => kind.startsWith("workflow."));
@@ -268,6 +333,8 @@ export function SettingsNotificationsSection({
   const canOpenSystemSettings =
     capability?.platform === "electron" && capability.permission === "denied";
   const isOsTestDisabled = capability?.supported === false || capability?.permission === "denied";
+  const permissionNotice = getPermissionNoticePresentation(capability);
+  const PermissionIcon = permissionNotice.icon;
   const previewCue = (cue: NotificationCue): void => {
     void notificationRuntime.previewCue(cue, notifications.volumePercent);
   };
@@ -282,68 +349,76 @@ export function SettingsNotificationsSection({
         </p>
       </div>
 
-      <section className="grid gap-3">
-        <h4 className="text-sm font-semibold text-foreground">Status and tests</h4>
-        <div className="divide-y divide-border overflow-hidden rounded-md border border-border bg-card">
-          <div className="grid gap-4 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground">OS notifications</p>
-              <p className="mt-1 text-xs text-muted-foreground">{capabilityDescription}</p>
-              {capability?.supported && !capability.canGuaranteeSilent ? (
-                <p className="mt-1 text-xs text-warning-muted">
-                  This platform cannot guarantee silent OS delivery.
-                </p>
-              ) : null}
-              {notificationRuntime.osFailure ? (
-                <p className="mt-1 text-xs text-destructive">
-                  Last OS error: {notificationRuntime.osFailure.message}
-                </p>
-              ) : null}
-            </div>
-            {canOpenSystemSettings ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="justify-self-start sm:justify-self-end"
-                disabled={disabled || isOpeningSettings || isTesting}
-                onClick={() => void openSystemSettings()}
-              >
-                <Settings data-icon="inline-start" /> Open system settings
-              </Button>
+      <div
+        className={`flex flex-col gap-4 rounded-md border px-4 py-4 sm:flex-row sm:items-center sm:justify-between ${permissionNotice.className}`}
+        role={permissionNotice.role}
+      >
+        <div className="flex min-w-0 items-start gap-3">
+          <div
+            className={`mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md border ${permissionNotice.iconClassName}`}
+          >
+            <PermissionIcon className="size-4" aria-hidden="true" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold">{permissionNotice.title}</p>
+            <p className="mt-1 text-sm leading-5">{capabilityDescription}</p>
+            {capability?.supported && !capability.canGuaranteeSilent ? (
+              <p className="mt-1 text-sm leading-5">
+                This platform cannot guarantee silent OS delivery.
+              </p>
+            ) : null}
+            {notificationRuntime.osFailure ? (
+              <p className="mt-1 text-sm leading-5">
+                Last OS error: {notificationRuntime.osFailure.message}
+              </p>
             ) : null}
           </div>
-          <div className="grid gap-4 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground">Test notifications</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Send a test without changing your notification settings.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2 sm:justify-self-end">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={disabled || isOpeningSettings || isTesting}
-                onClick={() => void testNotification("in_app")}
-              >
-                <Bell data-icon="inline-start" /> Test in-app
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={disabled || isOpeningSettings || isTesting || isOsTestDisabled}
-                onClick={() => void testNotification("os")}
-              >
-                <BellRing data-icon="inline-start" /> Test OS
-              </Button>
-            </div>
-          </div>
-          {testStatus ? (
-            <p className="px-4 py-3 text-xs text-foreground" role="status">
-              {testStatus}
-            </p>
-          ) : null}
         </div>
+        {canOpenSystemSettings ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0 self-start sm:self-center"
+            disabled={disabled || isOpeningSettings || isTesting}
+            onClick={() => void openSystemSettings()}
+          >
+            <Settings data-icon="inline-start" /> Open system settings
+          </Button>
+        ) : null}
+      </div>
+
+      <section className="grid gap-3">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h4 className="text-sm font-semibold text-foreground">Test notifications</h4>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Send a test without changing your notification settings.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={disabled || isOpeningSettings || isTesting}
+              onClick={() => void testNotification("in_app")}
+            >
+              <Bell data-icon="inline-start" /> Test in-app
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={disabled || isOpeningSettings || isTesting || isOsTestDisabled}
+              onClick={() => void testNotification("os")}
+            >
+              <BellRing data-icon="inline-start" /> Test OS
+            </Button>
+          </div>
+        </div>
+        {testStatus ? (
+          <p className="text-xs text-foreground" role="status">
+            {testStatus}
+          </p>
+        ) : null}
       </section>
 
       <section className="grid gap-3">
