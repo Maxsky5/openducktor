@@ -14,7 +14,7 @@ import { RepositoryConfigurationSection } from "./settings-repository-configurat
 import { RepositoryGitSection } from "./settings-repository-git-section";
 import { RepositoryScriptsSection } from "./settings-repository-scripts-section";
 import type { SettingsModalController } from "./use-settings-modal-controller";
-import type { RepositoryGitProviderContextState } from "./use-repository-git-section-model";
+import type { GitProviderState } from "./use-repository-git-section-model";
 
 type SettingsRepositoryContentProps = {
   repositorySection: RepositorySectionId;
@@ -76,7 +76,7 @@ const resolveRepositoryAvailabilityNotice = ({
   return null;
 };
 
-const resolveProviderContext = (
+const getProviderState = (
   providerDirty: boolean,
   loadProviderContext: boolean,
   query: {
@@ -85,7 +85,7 @@ const resolveProviderContext = (
     isError: boolean;
     isPending: boolean;
   },
-): RepositoryGitProviderContextState => {
+): GitProviderState => {
   if (providerDirty) {
     return { status: "draft" };
   }
@@ -101,7 +101,7 @@ const resolveProviderContext = (
   return query.data !== undefined ? { status: "loaded", context: query.data } : { status: "idle" };
 };
 
-const shouldLoadProviderContext = ({
+const shouldLoadProvider = ({
   providerDirty,
   repositorySection,
   repoPath,
@@ -111,7 +111,7 @@ const shouldLoadProviderContext = ({
   repoPath: string;
 }): boolean => !providerDirty && repositorySection === "git" && repoPath.length > 0;
 
-const isProviderContextDirty = (
+const hasProviderEdits = (
   draft: SettingsSnapshot | null,
   saved: SettingsSnapshot | undefined,
   workspaceId: string | null,
@@ -206,8 +206,8 @@ export function SettingsRepositoryContent({
     : 0;
   const selectedRepoPath = selectedWorkspace?.repoPath ?? "";
   const savedSettings = useQuery(settingsSnapshotQueryOptions()).data;
-  const providerDirty = isProviderContextDirty(snapshotDraft, savedSettings, selectedWorkspaceId);
-  const loadProviderContext = shouldLoadProviderContext({
+  const providerDirty = hasProviderEdits(snapshotDraft, savedSettings, selectedWorkspaceId);
+  const loadProviderContext = shouldLoadProvider({
     providerDirty,
     repositorySection,
     repoPath: selectedRepoPath,
@@ -216,11 +216,7 @@ export function SettingsRepositoryContent({
     ...repositoryGitProviderContextQueryOptions(selectedRepoPath),
     enabled: loadProviderContext,
   });
-  const providerContext = resolveProviderContext(
-    providerDirty,
-    loadProviderContext,
-    providerContextQuery,
-  );
+  const providerState = getProviderState(providerDirty, loadProviderContext, providerContextQuery);
 
   return (
     <div className="grid h-full lg:grid-cols-[240px_minmax(0,1fr)]">
@@ -272,7 +268,7 @@ export function SettingsRepositoryContent({
           <RepositoryGitSection
             selectedRepoPath={selectedWorkspace?.repoPath ?? null}
             selectedRepoConfig={selectedRepoConfig}
-            providerContext={providerContext}
+            providerState={providerState}
             disabled={isInteractionDisabled}
             onDetectGithubRepository={controller.detectSelectedRepoGithubRepository}
             onUpdateSelectedRepoConfig={updateSelectedRepoConfig}

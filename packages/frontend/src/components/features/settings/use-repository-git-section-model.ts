@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 type UseRepositoryGitSectionModelArgs = {
   selectedRepoPath: string | null;
   selectedRepoConfig: SettingsRepoConfig | null;
-  providerContext: RepositoryGitProviderContextState;
+  providerState: GitProviderState;
   disabled: boolean;
   onDetectGithubRepository: () => Promise<GitProviderRepository | null>;
   onUpdateSelectedRepoConfig: (
@@ -18,7 +18,7 @@ type UseRepositoryGitSectionModelArgs = {
   ) => void;
 };
 
-export type RepositoryGitProviderContextState =
+export type GitProviderState =
   | { status: "idle" }
   | { status: "draft" }
   | { status: "pending" }
@@ -272,11 +272,11 @@ const repositoryGitSectionReducer = (
 
 const getGithubView = ({
   disabled,
-  providerContext,
+  providerState,
   selectedRepoConfig,
 }: {
   disabled: boolean;
-  providerContext: RepositoryGitProviderContextState;
+  providerState: GitProviderState;
   selectedRepoConfig: SettingsRepoConfig | null;
 }) => {
   const configuredProvider = selectedRepoConfig?.git.provider;
@@ -289,9 +289,8 @@ const getGithubView = ({
   const githubControlsDisabled = disabled || hasConfiguredNonGithubProvider;
   const githubEnabled = github.enabled ?? false;
   const resolvedContext =
-    providerContext.status === "loaded" &&
-    providerContext.context?.config.id === configuredProvider?.id
-      ? providerContext.context
+    providerState.status === "loaded" && providerState.context?.config.id === configuredProvider?.id
+      ? providerState.context
       : null;
   const descriptor = resolvedContext?.descriptor ?? GITHUB_PROVIDER_DESCRIPTOR;
   const health = resolvedContext?.health ?? null;
@@ -318,13 +317,13 @@ const getGithubView = ({
   } else if (!github.enabled) {
     githubReadinessMessage =
       "Enable GitHub for this repository to offer “Open pull request” during human approval.";
-  } else if (providerContext.status === "draft") {
+  } else if (providerState.status === "draft") {
     githubReadinessMessage = "Save settings to check GitHub health.";
-  } else if (providerContext.status === "pending") {
+  } else if (providerState.status === "pending") {
     githubReadinessMessage = "Checking GitHub CLI, authentication, and repository mapping.";
-  } else if (providerContext.status === "error") {
-    githubReadinessMessage = providerContext.message;
-  } else if (providerContext.status === "idle") {
+  } else if (providerState.status === "error") {
+    githubReadinessMessage = providerState.message;
+  } else if (providerState.status === "idle") {
     githubReadinessMessage = "GitHub health has not been checked.";
   } else if (!hasGithubCli) {
     githubReadinessMessage = "Install GitHub CLI (`gh`) to enable provider-backed pull requests.";
@@ -345,13 +344,13 @@ const getGithubView = ({
   let cliStatus: GithubCliStatus = "hidden";
   let cliStatusLabel = "";
   if (githubEnabled && !hasConfiguredNonGithubProvider) {
-    if (providerContext.status === "pending") {
+    if (providerState.status === "pending") {
       cliStatus = "pending";
       cliStatusLabel = "Checking CLI";
-    } else if (providerContext.status === "error") {
+    } else if (providerState.status === "error") {
       cliStatus = "error";
       cliStatusLabel = "Health check failed";
-    } else if (providerContext.status === "loaded") {
+    } else if (providerState.status === "loaded") {
       cliStatus = hasGithubCli ? "installed" : "missing";
       cliStatusLabel = hasGithubCli ? "CLI installed" : "CLI missing";
     }
@@ -382,7 +381,7 @@ export function useRepositoryGitSectionModel({
   disabled,
   onDetectGithubRepository,
   onUpdateSelectedRepoConfig,
-  providerContext,
+  providerState,
   selectedRepoConfig,
   selectedRepoPath,
 }: UseRepositoryGitSectionModelArgs): UseRepositoryGitSectionModelResult {
@@ -429,7 +428,7 @@ export function useRepositoryGitSectionModel({
     providerLabel,
     repositorySlug,
     usesDefaultGithubHost,
-  } = getGithubView({ disabled, providerContext, selectedRepoConfig });
+  } = getGithubView({ disabled, providerState, selectedRepoConfig });
   const repositorySectionContext = useMemo<RepositoryGitSectionContext>(
     () => ({
       hasRepositoryCoordinates,

@@ -177,15 +177,10 @@ export function useTaskApprovalFlow({
               });
             } else {
               const approvalContext = approvalContextResult.approvalContext;
-              const updatedEffectiveMode = resolveTaskApprovalOpenMode({
-                gitProviderContext: resolvedGitProviderContext,
-                requestedMode: options?.mode,
-                task,
-              });
               dispatch({
                 type: "load_succeeded",
                 taskId,
-                mode: updatedEffectiveMode,
+                mode: effectiveMode,
                 pullRequestDraftMode,
                 title,
                 body,

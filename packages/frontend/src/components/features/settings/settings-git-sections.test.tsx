@@ -10,7 +10,7 @@ import { act, createElement, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SettingsGitSection } from "./settings-git-section";
 import { RepositoryGitSection } from "./settings-repository-git-section";
-import type { RepositoryGitProviderContextState } from "./use-repository-git-section-model";
+import type { GitProviderState } from "./use-repository-git-section-model";
 
 const authenticatedGitProviderHealth: GitProviderHealth = {
   providerId: "github",
@@ -23,7 +23,7 @@ const authenticatedGitProviderHealth: GitProviderHealth = {
   repositoryMappingValid: true,
 };
 
-const loadedContext = (health: GitProviderHealth): RepositoryGitProviderContextState => ({
+const loadedState = (health: GitProviderHealth): GitProviderState => ({
   status: "loaded",
   context: {
     descriptor: GITHUB_PROVIDER_DESCRIPTOR,
@@ -103,7 +103,7 @@ describe("settings git sections", () => {
       createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: baseRepoConfig,
-        providerContext: loadedContext({
+        providerState: loadedState({
           ...authenticatedGitProviderHealth,
           available: false,
           authenticated: false,
@@ -133,7 +133,7 @@ describe("settings git sections", () => {
           ...baseRepoConfig,
           git: { provider: gitlabProvider },
         },
-        providerContext: {
+        providerState: {
           status: "loaded",
           context: {
             descriptor: {
@@ -181,7 +181,7 @@ describe("settings git sections", () => {
             },
           },
         },
-        providerContext: { status: "idle" },
+        providerState: { status: "idle" },
         disabled: false,
         onDetectGithubRepository: async () => null,
         onUpdateSelectedRepoConfig: () => baseRepoConfig,
@@ -197,7 +197,7 @@ describe("settings git sections", () => {
       createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: baseRepoConfig,
-        providerContext: { status: "pending" },
+        providerState: { status: "pending" },
         disabled: false,
         onDetectGithubRepository: async () => null,
         onUpdateSelectedRepoConfig: () => baseRepoConfig,
@@ -213,7 +213,7 @@ describe("settings git sections", () => {
       createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: baseRepoConfig,
-        providerContext: { status: "error", message: "Health command failed." },
+        providerState: { status: "error", message: "Health command failed." },
         disabled: false,
         onDetectGithubRepository: async () => null,
         onUpdateSelectedRepoConfig: () => baseRepoConfig,
@@ -230,7 +230,7 @@ describe("settings git sections", () => {
       createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: baseRepoConfig,
-        providerContext: { status: "draft" },
+        providerState: { status: "draft" },
         disabled: false,
         onDetectGithubRepository: async () => null,
         onUpdateSelectedRepoConfig: () => baseRepoConfig,
@@ -262,7 +262,7 @@ describe("settings git sections", () => {
             },
           },
         },
-        providerContext: loadedContext(authenticatedGitProviderHealth),
+        providerState: loadedState(authenticatedGitProviderHealth),
         disabled: false,
         onDetectGithubRepository: async () => null,
         onUpdateSelectedRepoConfig: () => baseRepoConfig,
@@ -295,7 +295,7 @@ describe("settings git sections", () => {
       return createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: repoConfig,
-        providerContext: loadedContext(authenticatedGitProviderHealth),
+        providerState: loadedState(authenticatedGitProviderHealth),
         disabled: false,
         onDetectGithubRepository: async () => null,
         onUpdateSelectedRepoConfig: (updater) => {
@@ -357,7 +357,7 @@ describe("settings git sections", () => {
       createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: repoConfig,
-        providerContext: loadedContext(authenticatedGitProviderHealth),
+        providerState: loadedState(authenticatedGitProviderHealth),
         disabled: false,
         onDetectGithubRepository,
         onUpdateSelectedRepoConfig,
@@ -409,7 +409,7 @@ describe("settings git sections", () => {
         createElement(RepositoryGitSection, {
           selectedRepoPath: "/repo",
           selectedRepoConfig: repoConfig,
-          providerContext: loadedContext(authenticatedGitProviderHealth),
+          providerState: loadedState(authenticatedGitProviderHealth),
           disabled: false,
           onDetectGithubRepository,
           onUpdateSelectedRepoConfig: setRepoConfig,
@@ -459,7 +459,7 @@ describe("settings git sections", () => {
     const props = () => ({
       selectedRepoPath: "/repo",
       selectedRepoConfig: repoConfig,
-      providerContext: loadedContext(authenticatedGitProviderHealth),
+      providerState: loadedState(authenticatedGitProviderHealth),
       disabled: false,
       onDetectGithubRepository: () => pendingDetection.promise,
       onUpdateSelectedRepoConfig,
@@ -522,7 +522,7 @@ describe("settings git sections", () => {
       createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: repoConfig,
-        providerContext: loadedContext(authenticatedGitProviderHealth),
+        providerState: loadedState(authenticatedGitProviderHealth),
         disabled: false,
         onDetectGithubRepository: () => pendingDetection.promise,
         onUpdateSelectedRepoConfig,
@@ -583,7 +583,7 @@ describe("settings git sections", () => {
       return createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: repoConfig,
-        providerContext: loadedContext(authenticatedGitProviderHealth),
+        providerState: loadedState(authenticatedGitProviderHealth),
         disabled: false,
         onDetectGithubRepository: () => detection.promise,
         onUpdateSelectedRepoConfig: (updater) => {
@@ -637,7 +637,7 @@ describe("settings git sections", () => {
         createElement(RepositoryGitSection, {
           selectedRepoPath: "/repo",
           selectedRepoConfig: null,
-          providerContext: loadedContext(authenticatedGitProviderHealth),
+          providerState: loadedState(authenticatedGitProviderHealth),
           disabled: false,
           onDetectGithubRepository,
           onUpdateSelectedRepoConfig: () => baseRepoConfig,
@@ -666,7 +666,7 @@ describe("settings git sections", () => {
                 },
               },
             },
-            providerContext: loadedContext(authenticatedGitProviderHealth),
+            providerState: loadedState(authenticatedGitProviderHealth),
             disabled: false,
             onDetectGithubRepository,
             onUpdateSelectedRepoConfig: () => baseRepoConfig,

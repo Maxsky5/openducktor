@@ -10,14 +10,14 @@ import { Switch } from "@/components/ui/switch";
 import {
   type GithubCliStatus,
   type GithubRepositoryDraft,
-  type RepositoryGitProviderContextState,
+  type GitProviderState,
   useRepositoryGitSectionModel,
 } from "./use-repository-git-section-model";
 
 type RepositoryGitSectionProps = {
   selectedRepoPath: string | null;
   selectedRepoConfig: SettingsRepoConfig | null;
-  providerContext: RepositoryGitProviderContextState;
+  providerState: GitProviderState;
   disabled: boolean;
   onDetectGithubRepository: () => Promise<GitProviderRepository | null>;
   onUpdateSelectedRepoConfig: (
@@ -214,7 +214,7 @@ function RepositoryGitManualConfigForm({
 export function RepositoryGitSection({
   selectedRepoPath,
   selectedRepoConfig,
-  providerContext,
+  providerState,
   disabled,
   onDetectGithubRepository,
   onUpdateSelectedRepoConfig,
@@ -248,7 +248,7 @@ export function RepositoryGitSection({
     disabled,
     onDetectGithubRepository,
     onUpdateSelectedRepoConfig,
-    providerContext,
+    providerState,
     selectedRepoConfig,
     selectedRepoPath,
   });
