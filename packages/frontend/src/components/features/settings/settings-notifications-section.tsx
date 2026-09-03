@@ -332,7 +332,7 @@ export function SettingsNotificationsSection({
   } = useNotificationTestControls(notifications);
   const canOpenSystemSettings =
     capability?.platform === "electron" && capability.permission === "denied";
-  const isOsTestDisabled = capability?.supported === false || capability?.permission === "denied";
+  const isOsTestDisabled = capability?.supported === false;
   const permissionNotice = getPermissionNoticePresentation(capability);
   const PermissionIcon = permissionNotice.icon;
   const previewCue = (cue: NotificationCue): void => {
