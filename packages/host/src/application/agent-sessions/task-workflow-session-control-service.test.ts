@@ -52,10 +52,6 @@ describe("createTaskWorkflowSessionControlService", () => {
         updateSessionModel: () => Effect.dieMessage("unexpected model update"),
         stopSession: () => Effect.dieMessage("unexpected stop"),
         releaseSession: () => Effect.dieMessage("unexpected release"),
-        publishSession: () =>
-          Effect.sync(() => {
-            calls.push("publish");
-          }),
       },
       tasks: {
         agentSessionsList: () => Effect.dieMessage("unexpected list"),
@@ -71,7 +67,7 @@ describe("createTaskWorkflowSessionControlService", () => {
 
     await Effect.runPromise(service.startSession(workflowStart));
 
-    expect(calls).toEqual(["runtime", "store", "publish"]);
+    expect(calls).toEqual(["runtime", "store"]);
     expect(stored).toEqual([
       {
         repoPath: "/repo",
@@ -102,7 +98,6 @@ describe("createTaskWorkflowSessionControlService", () => {
         updateSessionModel: () => Effect.dieMessage("unexpected model update"),
         stopSession: () => Effect.dieMessage("unexpected stop"),
         releaseSession: () => Effect.dieMessage("unexpected release"),
-        publishSession: () => Effect.dieMessage("unexpected publish"),
       },
       tasks: {
         agentSessionsList: () => Effect.dieMessage("unexpected list"),
@@ -127,7 +122,6 @@ describe("createTaskWorkflowSessionControlService", () => {
 
   test("stores controlled resume and fork results", async () => {
     const stored: AgentSessionRecord[] = [];
-    const published: string[] = [];
     const service = createTaskWorkflowSessionControlService({
       runtime: {
         startSession: () => Effect.dieMessage("unexpected start"),
@@ -137,10 +131,6 @@ describe("createTaskWorkflowSessionControlService", () => {
         updateSessionModel: () => Effect.dieMessage("unexpected model update"),
         stopSession: () => Effect.dieMessage("unexpected stop"),
         releaseSession: () => Effect.dieMessage("unexpected release"),
-        publishSession: (input) =>
-          Effect.sync(() => {
-            published.push(input.externalSessionId);
-          }),
       },
       tasks: {
         agentSessionsList: () =>
@@ -186,7 +176,6 @@ describe("createTaskWorkflowSessionControlService", () => {
       "fork-1",
     ]);
     expect(stored[0]?.selectedModel).toEqual(storedModel);
-    expect(published).toEqual(["session-1", "fork-1"]);
   });
 
   test("stops a new runtime session when its task record cannot be stored", async () => {
@@ -202,7 +191,6 @@ describe("createTaskWorkflowSessionControlService", () => {
             stopped.push(input.externalSessionId);
           }),
         releaseSession: () => Effect.dieMessage("unexpected release"),
-        publishSession: () => Effect.dieMessage("unexpected publish"),
       },
       tasks: {
         agentSessionsList: () => Effect.dieMessage("unexpected list"),
@@ -237,7 +225,6 @@ describe("createTaskWorkflowSessionControlService", () => {
           }),
         stopSession: () => Effect.dieMessage("unexpected stop"),
         releaseSession: () => Effect.dieMessage("unexpected release"),
-        publishSession: () => Effect.dieMessage("unexpected publish"),
       },
       tasks: {
         agentSessionsList: () => Effect.dieMessage("unexpected list"),

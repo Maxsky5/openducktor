@@ -44,6 +44,7 @@ import {
   type PendingApprovalPolicyAction,
 } from "../session-read-model/pending-approval-policy";
 import {
+  readCachedTaskSessionRecords,
   toLoadedWorkflowSessionRecords,
   type TaskSessionRecords,
 } from "../session-read-model/task-session-records";
@@ -144,6 +145,7 @@ export const useRepoSessionReadModel = ({
   const taskIdsKey = taskIdsScopeKey(taskIds);
   const readReloadGeneration = useEffectEvent(() => reloadGeneration);
   const readCurrentTaskIdsKey = useEffectEvent(() => taskIdsKey);
+  const readCurrentTaskIds = useEffectEvent(() => normalizeAgentSessionTaskIds(taskIds));
   const observeLiveSessions = useEffectEvent(
     (
       input: Parameters<AgentSessionLiveFrontendPort["observeAgentSessionLive"]>[0],
@@ -529,6 +531,10 @@ export const useRepoSessionReadModel = ({
     let cancelled = false;
     let unsubscribe: (() => void) | null = null;
     const readLoadedWorkflowRecords = (): LoadedWorkflowSessionRecords | null => {
+      const cached = readCachedTaskSessionRecords(queryClient, repoPath, readCurrentTaskIds());
+      if (cached) {
+        return toLoadedWorkflowSessionRecords(cached);
+      }
       const current = taskRecordApplyRef.current;
       if (!current || current.repoPath !== repoPath || current.kind !== "ready") {
         return null;

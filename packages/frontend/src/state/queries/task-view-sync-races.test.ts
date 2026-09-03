@@ -33,6 +33,7 @@ const waitFor = async (predicate: () => boolean, remainingAttempts = 20): Promis
 const createPorts = (overrides: Partial<TaskViewSyncPorts> = {}): TaskViewSyncPorts => ({
   loadSettings: async () => settings,
   listTasks: async () => [createTaskCardFixture({ id: "task-1", status: "open" })],
+  refreshAgentSessions: async () => undefined,
   loadFreshDocument: async () => ({ markdown: "# Fresh", updatedAt: "2026-04-10T13:10:00.000Z" }),
   ...overrides,
 });

@@ -125,15 +125,33 @@ describe("createTaskService build start worktree handling", () => {
   });
 
   test.each([
-    { role: "spec", before: task({ status: "open" }), after: task({ status: "closed" }) },
+    {
+      role: "spec",
+      before: task({ status: "open" }),
+      after: task({ status: "closed" }),
+      error: "spec workflow is not available for task task-1",
+    },
     {
       role: "planner",
       before: task({ issueType: "feature", status: "spec_ready" }),
       after: task({ issueType: "feature", status: "closed" }),
+      error: "planner workflow is not available for task task-1",
     },
-    { role: "qa", before: task({ status: "blocked" }), after: task({ status: "in_progress" }) },
+    {
+      role: "qa",
+      before: task({ status: "blocked" }),
+      after: task({ status: "in_progress" }),
+      error: "qa workflow is not available for task task-1",
+    },
+    {
+      role: "build",
+      before: task({ status: "ready_for_dev" }),
+      after: task({ status: "blocked" }),
+      error:
+        "Task task-1 changed from ready_for_dev to blocked while Builder startup was in progress.",
+    },
   ] as const)(
-    "rejects a $role bootstrap when its workflow becomes unavailable before completion",
+    "releases a $role bootstrap when completion rejects its changed task",
     async (entry) => {
       const calls: unknown[] = [];
       const coordinator = createTaskSessionBootstrapCoordinator();
@@ -173,25 +191,31 @@ describe("createTaskService build start worktree handling", () => {
             bootstrapId: bootstrap.bootstrapId,
           }),
         ),
-      ).rejects.toThrow(`${entry.role} workflow is not available for task task-1`);
-      await expect(
-        Effect.runPromise(
-          Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "reset task")),
-        ),
-      ).rejects.toThrow("bootstrap is in progress");
-
-      await Effect.runPromise(
-        service.taskSessionBootstrapAbort({
-          repoPath: "/repo",
-          taskId: "task-1",
-          bootstrapId: bootstrap.bootstrapId,
-        }),
-      );
+      ).rejects.toThrow(entry.error);
       await expect(
         Effect.runPromise(
           Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "reset task")),
         ),
       ).resolves.toBeUndefined();
+
+      await expect(
+        Effect.runPromise(
+          service.taskSessionBootstrapComplete({
+            repoPath: "/repo",
+            taskId: "task-1",
+            bootstrapId: bootstrap.bootstrapId,
+          }),
+        ),
+      ).rejects.toThrow(entry.error);
+      await expect(
+        Effect.runPromise(
+          service.taskSessionBootstrapAbort({
+            repoPath: "/repo",
+            taskId: "task-1",
+            bootstrapId: bootstrap.bootstrapId,
+          }),
+        ),
+      ).resolves.toBe(true);
     },
   );
 

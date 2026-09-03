@@ -305,6 +305,44 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("matches a runtime root after another client refreshes its task record", async () => {
+    const remoteRecord = { ...record, externalSessionId: "thread-from-other-client" };
+    const remoteSnapshot = snapshot({
+      ref: { ...snapshot().ref, externalSessionId: remoteRecord.externalSessionId },
+      activity: "running",
+    });
+    const state = createState((emit) => {
+      emit({ type: "snapshot", repoPath: "/repo", sessions: [remoteSnapshot] });
+    }, []);
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(state.getStoredSession(remoteSnapshot.ref)).toBeNull();
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
+
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [
+          remoteRecord,
+        ]);
+        state.emit({ type: "snapshot", repoPath: "/repo", sessions: [remoteSnapshot] });
+      });
+
+      await state.harness.waitFor(
+        () => state.getStoredSession(remoteSnapshot.ref)?.livePresence === "present",
+      );
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
+      expect(state.getStoredSession(remoteSnapshot.ref)?.status).toBe("running");
+      expect(state.getStoredSession(remoteSnapshot.ref)?.sessionAssociation).toEqual({
+        kind: "workflow",
+        taskId: "task-1",
+        role: "build",
+      });
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
   test("preserves a fresher selected model across live snapshots", async () => {
     const state = createState((emit) => {
       emit({

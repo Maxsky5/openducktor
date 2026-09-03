@@ -2,6 +2,7 @@ import type { ExternalTaskSyncEvent, SettingsSnapshot, TaskCard } from "@openduc
 import { isCancelledError, type QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { hostClient as host } from "@/lib/host-client";
+import { refreshAgentSessionLists } from "./agent-sessions";
 import { resolveLatestDocumentPayload } from "./document-utils";
 import { documentQueryKeys, type TaskDocument, type TaskDocumentSection } from "./documents";
 import { invalidateRepoTaskQueries, taskQueryKeys } from "./tasks";
@@ -10,6 +11,7 @@ import { workspaceQueryKeys } from "./workspace";
 export type TaskViewSyncPorts = {
   loadSettings: () => Promise<SettingsSnapshot>;
   listTasks: (repoPath: string, doneVisibleDays?: number) => Promise<TaskCard[]>;
+  refreshAgentSessions: (repoPath: string) => Promise<void>;
   loadFreshDocument: (
     repoPath: string,
     taskId: string,
@@ -396,6 +398,7 @@ export const createTaskViewSync = ({
           await Promise.all([
             cancelDocuments(event.repoPath),
             cancelRepoTaskQueries(event.repoPath),
+            refreshAgentSessionLists(queryClient, event.repoPath, retainedTaskIds),
           ]);
           removeDocuments(event.repoPath, removedTaskIds);
           await Promise.all([
@@ -405,19 +408,25 @@ export const createTaskViewSync = ({
         });
         return;
       }
+      let sessionOwnershipChanged = false;
       await refreshActive(event.repoPath, {
         impact: { kind: "task-list-only" },
         refreshKanban: false,
         refreshDocumentsFor: retainedTaskIds,
         prepare: async () => {
-          await Promise.all([
+          const [, , ownershipChanged] = await Promise.all([
             cancelDocuments(event.repoPath, affectedTaskIds),
             cancelRepoTaskQueries(event.repoPath),
+            refreshAgentSessionLists(queryClient, event.repoPath, retainedTaskIds),
           ]);
+          sessionOwnershipChanged = ownershipChanged;
           removeDocuments(event.repoPath, removedTaskIds);
           await invalidateDocuments(event.repoPath, retainedTaskIds);
         },
       });
+      if (sessionOwnershipChanged) {
+        await ports.refreshAgentSessions(event.repoPath);
+      }
     },
     reconcileStreamSnapshot: async (activeRepoPath) => {
       const activeDocumentEntries = activeRepoPath
@@ -482,6 +491,7 @@ const createProductionTaskViewSync = (queryClient: QueryClient): TaskViewSync =>
     ports: {
       loadSettings: () => host.workspaceGetSettingsSnapshot(),
       listTasks: (repoPath, doneVisibleDays) => host.tasksList(repoPath, doneVisibleDays),
+      refreshAgentSessions: (repoPath) => host.agentSessionLiveRefresh({ repoPath }),
       loadFreshDocument: (repoPath, taskId, section) =>
         host.taskDocumentGetFresh(repoPath, taskId, section),
     },

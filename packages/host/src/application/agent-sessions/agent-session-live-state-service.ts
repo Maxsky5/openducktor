@@ -61,7 +61,6 @@ export type AgentSessionLiveStateService = {
   readonly read: (
     input: AgentSessionLiveReadInput,
   ) => Effect.Effect<AgentSessionLiveReadResult, HostError>;
-  readonly publishSession: (input: AgentSessionLiveRef) => Effect.Effect<void, HostError>;
   readonly loadContext: (
     input: AgentSessionLiveLoadContextInput,
   ) => Effect.Effect<AgentSessionContextUsage | null, HostError>;
@@ -265,28 +264,6 @@ export const createAgentSessionLiveStateService = ({
             return parsed;
           }
           return parsed;
-        }),
-      ),
-    publishSession: (input) =>
-      coordinator.run(
-        Effect.gen(function* () {
-          const adapter = yield* adapterRegistry.resolveForScope(input);
-          const result = yield* adapter.readSnapshot(input);
-          const parsed = yield* parseAdapterOutput(
-            agentSessionLiveReadResultSchema,
-            result,
-            "agent-session-live.publish-session",
-          );
-          if (parsed.type === "missing") {
-            return yield* Effect.fail(
-              new HostInvariantError({
-                invariant: "published_session_exists_in_live_state",
-                message: `Live session '${input.externalSessionId}' is missing after its task record was stored.`,
-                details: { ref: input },
-              }),
-            );
-          }
-          yield* publishEnvelope({ type: "session_upsert", session: parsed.session });
         }),
       ),
     loadContext: (input) =>

@@ -94,25 +94,6 @@ const expectHostFailure = async <Success>(
 };
 
 describe("createAgentSessionLiveStateService", () => {
-  test("publishes one stored workflow session from its live state", async () => {
-    const snapshot = liveSnapshot("stored-session", "opencode");
-    const { events, service } = createHarness();
-    await Effect.runPromise(
-      service.registerRuntimeAdapter(
-        fakeAdapter({
-          runtimeId: "runtime-opencode",
-          runtimeKind: "opencode",
-          snapshots: () => [snapshot],
-        }),
-      ),
-    );
-    events.length = 0;
-
-    await Effect.runPromise(service.publishSession(snapshot.ref));
-
-    expect(events).toEqual([{ type: "session_upsert", session: snapshot }]);
-  });
-
   test("asks each runtime for all current sessions on refresh", async () => {
     let snapshots = [liveSnapshot("runtime-session", "opencode")];
     const refreshCalls: string[] = [];

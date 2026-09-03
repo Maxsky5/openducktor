@@ -24,7 +24,6 @@ type RuntimeControl = Pick<
   | "updateSessionModel"
   | "stopSession"
   | "releaseSession"
-  | "publishSession"
 >;
 
 type TaskSessions = Pick<
@@ -134,9 +133,6 @@ const storeControlResult = (
   Effect.gen(function* () {
     const stored = yield* Effect.either(storeWorkflowSession(tasks, input, summary, selectedModel));
     if (stored._tag === "Right") {
-      if (input.sessionScope.kind === "workflow") {
-        yield* runtime.publishSession(controlSessionRef(input.repoPath, summary));
-      }
       return summary;
     }
     const ref = controlSessionRef(input.repoPath, summary);

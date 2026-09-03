@@ -1,6 +1,10 @@
 import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
-import { loadAgentSessionListsFromQuery } from "@/state/queries/agent-sessions";
+import {
+  agentSessionQueryKeys,
+  loadAgentSessionListsFromQuery,
+  normalizeAgentSessionTaskIds,
+} from "@/state/queries/agent-sessions";
 import type { PersistedTaskSessionRecord } from "../support/persistence";
 import type { LoadedWorkflowSessionRecords } from "./agent-session-workflow-records";
 
@@ -32,6 +36,28 @@ export const toTaskSessionRecords = (
     taskIds: tasks.map((task) => task.id),
     records,
   };
+};
+
+export const readCachedTaskSessionRecords = (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskIds: string[],
+): TaskSessionRecords | null => {
+  const normalizedTaskIds = normalizeAgentSessionTaskIds(taskIds);
+  const recordsByTaskId: TaskSessionRecordsByTaskId = {};
+  for (const taskId of normalizedTaskIds) {
+    const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
+    const state = queryClient.getQueryState(queryKey);
+    const records = queryClient.getQueryData<AgentSessionRecord[]>(queryKey);
+    if (state?.status !== "success" || state.isInvalidated || records === undefined) {
+      return null;
+    }
+    recordsByTaskId[taskId] = records;
+  }
+  return toTaskSessionRecords(
+    normalizedTaskIds.map((id) => ({ id })),
+    recordsByTaskId,
+  );
 };
 
 export const loadTaskSessionRecordsForTasks = async ({
