@@ -180,13 +180,8 @@ describe("session occurrence projector", () => {
     ).toEqual([]);
 
     projector.accept({
-      type: "transcript_event",
-      event: transcript({
-        type: "session_status",
-        externalSessionId: ref.externalSessionId,
-        timestamp: "2026-08-31T10:03:00.000Z",
-        status: { type: "busy", message: null },
-      }),
+      type: "session_upsert",
+      session: snapshot({ activity: "running" }),
     });
     const laterError = transcript({
       type: "session_error",
@@ -242,13 +237,8 @@ describe("session occurrence projector", () => {
     expect(events.flatMap((event) => projector.accept(event))).toEqual([]);
 
     projector.accept({
-      type: "transcript_event",
-      event: transcript({
-        type: "session_status",
-        externalSessionId: ref.externalSessionId,
-        timestamp: "2026-08-31T10:02:00.000Z",
-        status: { type: "busy", message: null },
-      }),
+      type: "session_upsert",
+      session: snapshot({ activity: "running" }),
     });
     expect(
       projector.accept({
@@ -261,6 +251,48 @@ describe("session occurrence projector", () => {
         }),
       }),
     ).toMatchObject([{ kind: "agent.session_idle" }]);
+  });
+
+  test("does not start a new cycle from a late busy transcript event", () => {
+    const projector = createProjector();
+    projector.accept({
+      type: "snapshot",
+      repoPath: "/repo",
+      sessions: [snapshot({ activity: "running" })],
+    });
+
+    expect(
+      projector.accept({
+        type: "session_upsert",
+        session: snapshot({ activity: "idle" }),
+      }),
+    ).toMatchObject([
+      {
+        kind: "agent.session_idle",
+        occurrenceId: expect.stringContaining("cycle-1"),
+      },
+    ]);
+
+    projector.accept({
+      type: "transcript_event",
+      event: transcript({
+        type: "session_status",
+        externalSessionId: ref.externalSessionId,
+        timestamp: "2026-08-31T10:00:00.000Z",
+        status: { type: "busy", message: null },
+      }),
+    });
+
+    expect(
+      projector.accept({
+        type: "transcript_event",
+        event: transcript({
+          type: "session_idle",
+          externalSessionId: ref.externalSessionId,
+          timestamp: "2026-08-31T10:01:00.000Z",
+        }),
+      }),
+    ).toEqual([]);
   });
 
   test("baselines a newly discovered session and excludes child sessions", () => {

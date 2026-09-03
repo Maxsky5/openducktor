@@ -233,9 +233,6 @@ export const createSessionOccurrenceProjector = ({
     }
 
     if (event.type === "session_status") {
-      if (event.status.type === "busy") {
-        startRunningCycle(projection);
-      }
       if (event.status.type === "idle") {
         return finishIdleCycle(projection);
       }
