@@ -4,21 +4,23 @@ This matrix lists every allowed task transition. The backend validates it. The U
 
 ## Workflow tools
 
-- `odt_read_task(taskId)`
-- `odt_read_task_assets(taskId, assetIds)`
-- `odt_read_task_documents(taskId, includeSpec?, includePlan?, includeQaReport?)`
-- `odt_set_spec(taskId, markdown)`
-- `odt_set_plan(taskId, markdown, subtasks?)`
-- `odt_build_blocked(taskId, reason)`
-- `odt_build_resumed(taskId)`
-- `odt_build_completed(taskId, summary?)`
-- `odt_set_pull_request(taskId, providerId, number)`
-- `odt_qa_approved(taskId, reportMarkdown)`
-- `odt_qa_rejected(taskId, reportMarkdown)`
+- `odt_read_task`: `taskId`
+- `odt_read_task_assets`: `taskId`, `assetIds`
+- `odt_read_task_documents`: `taskId`, `includeSpec?`, `includePlan?`, `includeQaReport?`
+- `odt_set_spec`: `taskId`, `markdown`
+- `odt_set_plan`: `taskId`, `markdown`, `subtasks?`
+- `odt_build_blocked`: `taskId`, `reason`
+- `odt_build_resumed`: `taskId`
+- `odt_build_completed`: `taskId`, `summary?`
+- `odt_set_pull_request`: `taskId`, `providerId`, `number`
+- `odt_qa_approved`: `taskId`, `reportMarkdown`
+- `odt_qa_rejected`: `taskId`, `reportMarkdown`
 
-Call `odt_read_task` first. Use its `task` object for status, `qaVerdict`, and document presence. Read document bodies only when the work needs them. Read image assets only when the work needs them.
+Call `odt_read_task` first for the returned `task` summary object, including task state, `qaVerdict`, and document presence booleans.
 
-One `odt_read_task_assets` call can contain at most 50 unique IDs and 20 MiB of raw data. Split only a larger set.
+When task Markdown contains `odt-asset:<assetId>` images needed for the work, collect the relevant IDs and call `odt_read_task_assets` once when their raw total is at most 20 MiB. Split only larger sets.
+
+Call `odt_read_task_documents` only when spec, implementation plan, or latest QA markdown bodies are needed.
 
 An epic `subtasks` item has a required `title`, an optional `description`, an `issueType` of `task`, `feature`, or `bug`, and a `priority` from 0 through 4. The defaults are `task` and 2. Children can have one level only.
 
@@ -30,9 +32,9 @@ Human actions are `human_request_changes(taskId, note)` and `human_approve(taskI
 |---|---|---|---|
 | `task_create` | none | Always. | `open` |
 | `odt_set_spec` | `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | Markdown is not empty. | `spec_ready` from `open`; otherwise unchanged. |
-| `odt_set_plan` for `feature` or `epic` | `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | Markdown is not empty. | `ready_for_dev` from `spec_ready`; otherwise unchanged. |
-| `odt_set_plan` for `task` or `bug` | `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | Markdown is not empty. | `ready_for_dev` from `open` or `spec_ready`; otherwise unchanged. |
-| `odt_set_plan` with epic children | Same as epic plan. | Replacement requires all current direct children to be `open`, `spec_ready`, or `ready_for_dev`. | Same as epic plan. |
+| `odt_set_plan` (feature/epic) | `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | Markdown is not empty. | `ready_for_dev` from `spec_ready`; otherwise unchanged. |
+| `odt_set_plan` (task/bug) | `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | Markdown is not empty. | `ready_for_dev` from `open` or `spec_ready`; otherwise unchanged. |
+| `odt_set_plan` (epic with subtasks) | Same as epic plan. | Replacement requires all current direct children to be `open`, `spec_ready`, or `ready_for_dev`. | Same as epic plan. |
 | `odt_build_resumed` for `feature` or `epic` | `ready_for_dev` | Standard flow. | `in_progress` |
 | `odt_build_resumed` for `task` or `bug` | `open`, `spec_ready`, `ready_for_dev`, `blocked` | Optional short flow or blocked resume. | `in_progress` |
 | `odt_build_blocked` | `in_progress` | `reason` is present. | `blocked` |
