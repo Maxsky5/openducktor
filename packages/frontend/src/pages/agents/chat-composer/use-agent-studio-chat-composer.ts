@@ -108,6 +108,55 @@ type AgentStudioChatComposerState = {
   handleSelectVariant: (variant: string) => void;
 };
 
+const canSelectProfile = (
+  hasSessionTarget: boolean,
+  runtimeKind: RuntimeDescriptor["kind"] | null | undefined,
+  runtimeDefinitions: RuntimeDescriptor[],
+): boolean => {
+  if (hasSessionTarget) {
+    return false;
+  }
+  if (!runtimeKind) {
+    return true;
+  }
+  const definition = findRuntimeDefinition(runtimeDefinitions, runtimeKind);
+  return definition?.capabilities.optionalSurfaces.supportsProfiles ?? false;
+};
+
+const listModelPickerRuntimes = (
+  hasSessionTarget: boolean,
+  availableRuntimeDefinitions: RuntimeDescriptor[],
+  allRuntimeDefinitions: RuntimeDescriptor[],
+  sessionRuntimeKind: AgentSessionIdentity["runtimeKind"] | undefined,
+): RuntimeDescriptor[] => {
+  if (!hasSessionTarget) {
+    return availableRuntimeDefinitions;
+  }
+  const availableKinds = new Set(availableRuntimeDefinitions.map((runtime) => runtime.kind));
+  return allRuntimeDefinitions.filter(
+    (runtime) => runtime.kind === sessionRuntimeKind || availableKinds.has(runtime.kind),
+  );
+};
+
+const listEnabledModelPickerRuntimes = (
+  hasSessionTarget: boolean,
+  isRepoRuntimeReady: boolean,
+  isModelPickerOpen: boolean,
+  runtimeKinds: RuntimeDescriptor["kind"][],
+  selectedRuntimeKind: RuntimeDescriptor["kind"] | null | undefined,
+): RuntimeDescriptor["kind"][] => {
+  if (hasSessionTarget || !isRepoRuntimeReady) {
+    return [];
+  }
+  if (isModelPickerOpen) {
+    return runtimeKinds;
+  }
+  return selectedRuntimeKind ? [selectedRuntimeKind] : [];
+};
+
+const pickLoader = <Loader>(load: Loader | undefined, defaultLoad: Loader): Loader =>
+  load ?? defaultLoad;
+
 export function useAgentStudioChatComposer({
   workspaceRepoPath,
   selectedSession,
@@ -133,11 +182,11 @@ export function useAgentStudioChatComposer({
   } = useRuntimeAvailabilityContext();
   const queryClient = useQueryClient();
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
-  const loadCatalogForRepo = loadCatalog ?? loadRepoRuntimeCatalog;
-  const loadSlashCommandsForRepo = loadSlashCommands ?? loadRepoRuntimeSlashCommands;
-  const loadSkillsForRepo = loadSkills ?? loadRepoRuntimeSkills;
-  const loadSubagentsForRepo = loadSubagents ?? loadRepoRuntimeSubagents;
-  const loadFileSearchForRepo = loadFileSearch ?? loadRepoRuntimeFileSearch;
+  const loadCatalogForRepo = pickLoader(loadCatalog, loadRepoRuntimeCatalog);
+  const loadSlashCommandsForRepo = pickLoader(loadSlashCommands, loadRepoRuntimeSlashCommands);
+  const loadSkillsForRepo = pickLoader(loadSkills, loadRepoRuntimeSkills);
+  const loadSubagentsForRepo = pickLoader(loadSubagents, loadRepoRuntimeSubagents);
+  const loadFileSearchForRepo = pickLoader(loadFileSearch, loadRepoRuntimeFileSearch);
   const loadedSession = selectedSession.loadedSession;
   const selectedSessionIdentity = selectedSession.identity;
   const selectedSessionModel = selectedSession.selectedModel;
@@ -217,54 +266,47 @@ export function useAgentStudioChatComposer({
       }),
     [promptInputRuntimeKind, selectedTargetRuntimeDefinitions],
   );
-  const supportsProfiles = useMemo(() => {
-    if (hasSessionTarget) {
-      return false;
-    }
-    if (!selectedTargetRuntimeKind) {
-      return true;
-    }
-    const definition = findRuntimeDefinition(
-      selectedTargetRuntimeDefinitions,
-      selectedTargetRuntimeKind,
-    );
-    return definition?.capabilities.optionalSurfaces.supportsProfiles ?? false;
-  }, [hasSessionTarget, selectedTargetRuntimeDefinitions, selectedTargetRuntimeKind]);
+  const supportsProfiles = useMemo(
+    () =>
+      canSelectProfile(
+        hasSessionTarget,
+        selectedTargetRuntimeKind,
+        selectedTargetRuntimeDefinitions,
+      ),
+    [hasSessionTarget, selectedTargetRuntimeDefinitions, selectedTargetRuntimeKind],
+  );
 
-  const modelPickerRuntimeDefinitions = useMemo<RuntimeDescriptor[]>(() => {
-    if (!hasSessionTarget) {
-      return availableRuntimeDefinitions;
-    }
-    const availableKinds = new Set(availableRuntimeDefinitions.map((runtime) => runtime.kind));
-    return allRuntimeDefinitions.filter(
-      (runtime) =>
-        runtime.kind === selectedSessionIdentity?.runtimeKind || availableKinds.has(runtime.kind),
-    );
-  }, [
-    allRuntimeDefinitions,
-    availableRuntimeDefinitions,
-    hasSessionTarget,
-    selectedSessionIdentity,
-  ]);
+  const modelPickerRuntimeDefinitions = useMemo(
+    () =>
+      listModelPickerRuntimes(
+        hasSessionTarget,
+        availableRuntimeDefinitions,
+        allRuntimeDefinitions,
+        selectedSessionIdentity?.runtimeKind,
+      ),
+    [allRuntimeDefinitions, availableRuntimeDefinitions, hasSessionTarget, selectedSessionIdentity],
+  );
   const modelPickerRuntimeKinds = useMemo(
     () => modelPickerRuntimeDefinitions.map((runtime) => runtime.kind),
     [modelPickerRuntimeDefinitions],
   );
-  const enabledModelPickerRuntimeKinds = useMemo(() => {
-    if (hasSessionTarget || !isRepoRuntimeReady) {
-      return [];
-    }
-    if (isModelPickerOpen) {
-      return modelPickerRuntimeKinds;
-    }
-    return selectedRuntimeKind ? [selectedRuntimeKind] : [];
-  }, [
-    hasSessionTarget,
-    isModelPickerOpen,
-    isRepoRuntimeReady,
-    modelPickerRuntimeKinds,
-    selectedRuntimeKind,
-  ]);
+  const enabledModelPickerRuntimeKinds = useMemo(
+    () =>
+      listEnabledModelPickerRuntimes(
+        hasSessionTarget,
+        isRepoRuntimeReady,
+        isModelPickerOpen,
+        modelPickerRuntimeKinds,
+        selectedRuntimeKind,
+      ),
+    [
+      hasSessionTarget,
+      isModelPickerOpen,
+      isRepoRuntimeReady,
+      modelPickerRuntimeKinds,
+      selectedRuntimeKind,
+    ],
+  );
   const { resources: repoModelPickerResources } = useRuntimeModelCatalogs({
     repoPath: workspaceRepoPath,
     runtimeKinds: modelPickerRuntimeKinds,
