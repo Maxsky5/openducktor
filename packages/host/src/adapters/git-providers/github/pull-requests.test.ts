@@ -69,6 +69,11 @@ const repositoryPort: GitProviderRepositoryPort = {
     }),
 };
 
+const mappedRepositoryPort: GitProviderRepositoryPort = {
+  ...repositoryPort,
+  getRepository: () => Effect.die("Expected Pull Request operation to check repository mapping"),
+};
+
 const approvalContext = (pullRequest?: PullRequest): TaskApprovalContext => {
   const context: TaskApprovalContext = {
     taskId: "task-42",
@@ -218,9 +223,10 @@ describe("createGithubPullRequestProviderPort", () => {
       merged_at: "2026-05-02T10:00:00Z",
       updated_at: "2026-05-02T10:00:00Z",
     };
+    const calls: string[][] = [];
     const port = createGithubPullRequestProviderPort({
-      githubCli: githubCliForPayload(JSON.stringify([latest, older])),
-      repositoryPort,
+      githubCli: githubCliForPayload(JSON.stringify([[latest, older]]), calls),
+      repositoryPort: mappedRepositoryPort,
     });
 
     const pullRequest = await Effect.runPromise(
@@ -229,6 +235,18 @@ describe("createGithubPullRequestProviderPort", () => {
 
     expect(pullRequest?.record.number).toBe(42);
     expect(pullRequest?.record.state).toBe("merged");
+    expect(calls[0]).toEqual(expect.arrayContaining(["--paginate", "--slurp"]));
+  });
+
+  test("checks repository mapping before reading a pull request by number", async () => {
+    const port = createGithubPullRequestProviderPort({
+      githubCli: githubCliForPayload(JSON.stringify(githubPullResponse)),
+      repositoryPort: mappedRepositoryPort,
+    });
+
+    const pullRequest = await Effect.runPromise(port.getByNumber({ repoConfig, number: 42 }));
+
+    expect(pullRequest.record.number).toBe(42);
   });
 
   test("resolves the matching remote used to publish the task branch", async () => {
@@ -265,14 +283,20 @@ describe("createGithubPullRequestProviderPort", () => {
     );
 
     expect(failure).toBeInstanceOf(HostValidationError);
-    expect(failure).toMatchObject({ field: "pullRequest.providerId" });
+    expect(failure).toMatchObject({
+      field: "pullRequest.providerId",
+      details: {
+        linkedProviderId: "gitlab",
+        configuredProviderId: "github",
+      },
+    });
   });
 
   test("creates a pull request with provider-private GitHub arguments", async () => {
     const calls: string[][] = [];
     const port = createGithubPullRequestProviderPort({
       githubCli: githubCliForPayload(JSON.stringify(githubPullResponse), calls),
-      repositoryPort,
+      repositoryPort: mappedRepositoryPort,
     });
 
     const pullRequest = await Effect.runPromise(
@@ -301,7 +325,7 @@ describe("createGithubPullRequestProviderPort", () => {
     const calls: string[][] = [];
     const port = createGithubPullRequestProviderPort({
       githubCli: githubCliForPayload(JSON.stringify(githubPullResponse), calls),
-      repositoryPort,
+      repositoryPort: mappedRepositoryPort,
     });
 
     await Effect.runPromise(

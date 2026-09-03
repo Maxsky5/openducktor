@@ -128,6 +128,7 @@ export type {
   PullRequestBranchInput,
   PullRequestProviderInput,
   PullRequestProviderPort,
+  ProviderPullRequest,
   RefreshPullRequestInput,
   UpsertPullRequestInput,
 } from "./ports/git-provider-port";

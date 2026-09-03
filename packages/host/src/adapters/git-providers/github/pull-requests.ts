@@ -33,7 +33,7 @@ export const createGithubPullRequestProviderPort = ({
 }): PullRequestProviderPort => {
   const getByNumber: PullRequestProviderPort["getByNumber"] = (input) =>
     Effect.gen(function* () {
-      const repository = yield* repositoryPort.getRepository(input.repoConfig);
+      const { repository } = yield* repositoryPort.getMapping(input.repoConfig);
       return yield* getPullRequest(githubCli, input.repoConfig.repoPath, repository, input.number);
     });
 
@@ -41,7 +41,7 @@ export const createGithubPullRequestProviderPort = ({
     providerId: GITHUB_PROVIDER_ID,
     findOpenForSourceBranch: (input) =>
       Effect.gen(function* () {
-        const repository = yield* repositoryPort.getRepository(input.repoConfig);
+        const { repository } = yield* repositoryPort.getMapping(input.repoConfig);
         const pullRequests = yield* listPullRequests(
           githubCli,
           input.repoConfig.repoPath,
@@ -56,7 +56,7 @@ export const createGithubPullRequestProviderPort = ({
       }),
     findLatestMergedForSourceBranch: (input) =>
       Effect.gen(function* () {
-        const repository = yield* repositoryPort.getRepository(input.repoConfig);
+        const { repository } = yield* repositoryPort.getMapping(input.repoConfig);
         const pullRequests = yield* listPullRequests(
           githubCli,
           input.repoConfig.repoPath,
@@ -73,16 +73,19 @@ export const createGithubPullRequestProviderPort = ({
     refresh: (input) =>
       Effect.gen(function* () {
         yield* checkPullRequestProvider(input.linkedPullRequest);
-        return yield* getByNumber({
-          repoConfig: input.repoConfig,
-          number: input.linkedPullRequest.number,
-        });
+        const repository = yield* repositoryPort.getRepository(input.repoConfig);
+        return yield* getPullRequest(
+          githubCli,
+          input.repoConfig.repoPath,
+          repository,
+          input.linkedPullRequest.number,
+        );
       }),
     resolvePublishRemote: (input) =>
       repositoryPort.getMapping(input.repoConfig).pipe(Effect.map(({ remoteName }) => remoteName)),
     upsert: (input) =>
       Effect.gen(function* () {
-        const repository = yield* repositoryPort.getRepository(input.repoConfig);
+        const { repository } = yield* repositoryPort.getMapping(input.repoConfig);
         return yield* upsertPullRequest(
           githubCli,
           input.repoConfig.repoPath,
@@ -106,7 +109,7 @@ const checkPullRequestProvider = (
       field: "pullRequest.providerId",
       message: `Pull request provider '${pullRequest.providerId}' does not match configured provider '${GITHUB_PROVIDER_ID}'.`,
       details: {
-        providerId: pullRequest.providerId,
+        linkedProviderId: pullRequest.providerId,
         configuredProviderId: GITHUB_PROVIDER_ID,
       },
     }),
@@ -165,6 +168,8 @@ const listPullRequests = (
     const repoSlug = `${repository.owner}/${repository.name}`;
     const payload = yield* runGithubApi(githubCli, repoPath, repository.host, [
       "api",
+      "--paginate",
+      "--slurp",
       "--method",
       "GET",
       `repos/${repoSlug}/pulls`,
