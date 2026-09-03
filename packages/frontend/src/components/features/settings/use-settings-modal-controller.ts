@@ -3,7 +3,7 @@ import type {
   AgentRuntimes,
   GitBranch,
   GitProviderRepository,
-  RepoConfig,
+  SettingsRepoConfig,
   RepoPromptOverrides,
   ReusablePrompt,
   RuntimeCheck,
@@ -73,7 +73,7 @@ export type SettingsModalController = {
   workspaces: WorkspaceRecord[];
   workspaceIds: string[];
   selectedWorkspaceId: string | null;
-  selectedRepoConfig: RepoConfig | null;
+  selectedRepoConfig: SettingsRepoConfig | null;
   requiredWorkspaceSelectionUnresolved: boolean;
   requiredWorkspaceRepoPath: string | null;
   selectedWorkspace: WorkspaceRecord | null;
@@ -109,7 +109,7 @@ export type SettingsModalController = {
   retryRuntimeDefinitions: () => Promise<RuntimeDescriptor[]>;
   checkRuntimeExecutablesAgain: () => Promise<void>;
   detectSelectedRepoGithubRepository: () => Promise<GitProviderRepository | null>;
-  updateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
+  updateSelectedRepoConfig: (updater: (current: SettingsRepoConfig) => SettingsRepoConfig) => void;
   updateGlobalGitConfig: (
     updater: (current: SettingsSnapshot["git"]) => SettingsSnapshot["git"],
   ) => void;

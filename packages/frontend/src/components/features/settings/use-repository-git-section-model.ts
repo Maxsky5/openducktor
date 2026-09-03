@@ -3,17 +3,19 @@ import {
   type GitProviderConfig,
   type GitProviderHealth,
   type GitProviderRepository,
-  type RepoConfig,
+  type SettingsRepoConfig,
 } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 
 type UseRepositoryGitSectionModelArgs = {
   selectedRepoPath: string | null;
-  selectedRepoConfig: RepoConfig | null;
+  selectedRepoConfig: SettingsRepoConfig | null;
   providerHealth: GitProviderHealthState;
   disabled: boolean;
   onDetectGithubRepository: () => Promise<GitProviderRepository | null>;
-  onUpdateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
+  onUpdateSelectedRepoConfig: (
+    updater: (current: SettingsRepoConfig) => SettingsRepoConfig,
+  ) => void;
 };
 
 export type GitProviderHealthState =
@@ -114,15 +116,15 @@ const EMPTY_GITHUB_CONFIG = {
   repository: undefined,
 } as const;
 
-const hasNonGithubProvider = (repoConfig: RepoConfig | null): boolean => {
+const hasNonGithubProvider = (repoConfig: SettingsRepoConfig | null): boolean => {
   const provider = repoConfig?.git.provider;
   return provider !== undefined && provider.id !== GITHUB_PROVIDER_DESCRIPTOR.id;
 };
 
 const updateGithubProviderConfig = (
-  repoConfig: RepoConfig,
+  repoConfig: SettingsRepoConfig,
   overrides: Partial<Omit<GitProviderConfig, "id">>,
-): RepoConfig => {
+): SettingsRepoConfig => {
   if (hasNonGithubProvider(repoConfig)) {
     return repoConfig;
   }
@@ -273,7 +275,7 @@ const getGithubView = ({
 }: {
   disabled: boolean;
   providerHealth: GitProviderHealthState;
-  selectedRepoConfig: RepoConfig | null;
+  selectedRepoConfig: SettingsRepoConfig | null;
 }) => {
   const configuredProvider = selectedRepoConfig?.git.provider;
   const github =

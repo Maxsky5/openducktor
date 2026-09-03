@@ -15,12 +15,6 @@ import {
   resolveFallbackTaskId,
 } from "./agent-studio-task-tabs-list";
 import {
-  addTaskToPersistedTaskTabs,
-  canPersistTaskTabs,
-  parsePersistedTaskTabs,
-  toPersistedTaskTabs,
-} from "./agent-studio-task-tabs-storage";
-import {
   type AgentSessionWorkflowSummary,
   buildLatestSessionByRoleMap,
   buildLatestSessionByTaskMap,
@@ -176,100 +170,6 @@ describe("agents-page-session-tabs", () => {
     ).toBe(tabTaskIds);
   });
 
-  test("parses persisted task tabs and deduplicates invalid entries", () => {
-    expect(parsePersistedTaskTabs(null)).toEqual({ tabs: [], activeTaskId: null });
-    expect(parsePersistedTaskTabs("not-json")).toEqual({ tabs: [], activeTaskId: null });
-    expect(parsePersistedTaskTabs(JSON.stringify({ tabs: ["task-1"] }))).toEqual({
-      tabs: ["task-1"],
-      activeTaskId: null,
-    });
-    expect(
-      parsePersistedTaskTabs(
-        JSON.stringify(["task-1", "", "task-2", "task-1", 42, "task-3", "   "]),
-      ),
-    ).toEqual({
-      tabs: ["task-1", "task-2", "task-3"],
-      activeTaskId: null,
-    });
-    expect(
-      parsePersistedTaskTabs(
-        JSON.stringify({
-          tabs: ["task-1", "task-2", "task-1"],
-          activeTaskId: "task-2",
-        }),
-      ),
-    ).toEqual({
-      tabs: ["task-1", "task-2"],
-      activeTaskId: "task-2",
-    });
-  });
-
-  test("serializes persisted tabs with valid active task id", () => {
-    const serialized = toPersistedTaskTabs({
-      tabs: ["task-1", "task-2", "task-1"],
-      activeTaskId: "task-2",
-    });
-
-    expect(parsePersistedTaskTabs(serialized)).toEqual({
-      tabs: ["task-1", "task-2"],
-      activeTaskId: "task-2",
-    });
-
-    const serializedInvalidActive = toPersistedTaskTabs({
-      tabs: ["task-1"],
-      activeTaskId: "task-2",
-    });
-    expect(parsePersistedTaskTabs(serializedInvalidActive)).toEqual({
-      tabs: ["task-1"],
-      activeTaskId: null,
-    });
-  });
-
-  test("adds task to persisted tabs without changing active task", () => {
-    const serialized = addTaskToPersistedTaskTabs({
-      raw: JSON.stringify({ tabs: ["task-1"], activeTaskId: "task-1" }),
-      taskId: "task-2",
-      tasks: [buildTask({ id: "task-1" }), buildTask({ id: "task-2" })],
-    });
-
-    expect(parsePersistedTaskTabs(serialized)).toEqual({
-      tabs: ["task-1", "task-2"],
-      activeTaskId: "task-1",
-    });
-  });
-
-  test("does not duplicate an existing persisted task tab", () => {
-    const serialized = addTaskToPersistedTaskTabs({
-      raw: JSON.stringify({ tabs: ["task-1", "task-2"], activeTaskId: "task-2" }),
-      taskId: "task-2",
-      tasks: [buildTask({ id: "task-1" }), buildTask({ id: "task-2" })],
-    });
-
-    expect(parsePersistedTaskTabs(serialized)).toEqual({
-      tabs: ["task-1", "task-2"],
-      activeTaskId: "task-2",
-    });
-  });
-
-  test("skips missing and closed tasks when adding persisted task tabs", () => {
-    const raw = JSON.stringify({ tabs: ["task-1"], activeTaskId: "task-1" });
-
-    expect(
-      addTaskToPersistedTaskTabs({
-        raw,
-        taskId: "task-missing",
-        tasks: [buildTask({ id: "task-1" })],
-      }),
-    ).toBeNull();
-    expect(
-      addTaskToPersistedTaskTabs({
-        raw,
-        taskId: "task-2",
-        tasks: [buildTask({ id: "task-1" }), buildTask({ id: "task-2", status: "closed" })],
-      }),
-    ).toBeNull();
-  });
-
   test("prefers persisted active tab for fallback selection", () => {
     expect(
       resolveFallbackTaskId({
@@ -284,13 +184,6 @@ describe("agents-page-session-tabs", () => {
         persistedActiveTaskId: "task-3",
       }),
     ).toBe("task-1");
-  });
-
-  test("persists tabs only after storage is loaded for the active repo", () => {
-    expect(canPersistTaskTabs(null, null)).toBe(false);
-    expect(canPersistTaskTabs("/repo-a", null)).toBe(false);
-    expect(canPersistTaskTabs("/repo-a", "/repo-b")).toBe(false);
-    expect(canPersistTaskTabs("/repo-a", "/repo-a")).toBe(true);
   });
 
   test("builds role enablement from backend workflow payload", () => {

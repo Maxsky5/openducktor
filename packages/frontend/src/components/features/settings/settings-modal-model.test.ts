@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
-  type RepoConfig,
+  type SettingsRepoConfig,
   type RepoPromptOverrides,
   type RuntimeDescriptor,
 } from "@openducktor/contracts";
@@ -60,7 +60,7 @@ const CODEX_DESCRIPTOR = {
   description: "Codex runtime",
 } satisfies RuntimeDescriptor;
 
-const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
+const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): SettingsRepoConfig => ({
   workspaceId: "repo",
   workspaceName: "Repo",
   repoPath: "/repo",

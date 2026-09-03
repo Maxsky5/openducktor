@@ -1,5 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { GitProviderConfig, RepoConfig, GitProviderHealth } from "@openducktor/contracts";
+import type {
+  GitProviderConfig,
+  GitProviderHealth,
+  SettingsRepoConfig,
+} from "@openducktor/contracts";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -34,7 +38,7 @@ const createDeferred = <T,>() => {
   return { promise, resolve, reject };
 };
 
-const baseRepoConfig: RepoConfig = {
+const baseRepoConfig: SettingsRepoConfig = {
   workspaceId: "repo",
   workspaceName: "Repo",
   repoPath: "/repo",
@@ -219,7 +223,7 @@ describe("settings git sections", () => {
 
   test("allows editing repository inputs without crashing when the field is temporarily blank", () => {
     const ControlledRepositoryGitSection = (): ReturnType<typeof createElement> => {
-      const [repoConfig, setRepoConfig] = useState<RepoConfig>({
+      const [repoConfig, setRepoConfig] = useState<SettingsRepoConfig>({
         ...baseRepoConfig,
         git: {
           provider: {
@@ -267,7 +271,7 @@ describe("settings git sections", () => {
   });
 
   test("detecting from origin updates the repository draft that gets saved", async () => {
-    let repoConfig: RepoConfig = {
+    let repoConfig: SettingsRepoConfig = {
       ...baseRepoConfig,
       git: {
         provider: {
@@ -290,8 +294,8 @@ describe("settings git sections", () => {
     }));
 
     const onUpdateSelectedRepoConfig = (
-      updater: (current: RepoConfig) => RepoConfig,
-    ): RepoConfig => {
+      updater: (current: SettingsRepoConfig) => SettingsRepoConfig,
+    ): SettingsRepoConfig => {
       repoConfig = updater(repoConfig);
       return repoConfig;
     };
@@ -333,7 +337,7 @@ describe("settings git sections", () => {
   test("allows removing another configured provider before configuring GitHub", async () => {
     const onDetectGithubRepository = mock(async () => null);
     const gitlabProvider = createGitlabProvider();
-    const initialRepoConfig: RepoConfig = {
+    const initialRepoConfig: SettingsRepoConfig = {
       ...baseRepoConfig,
       git: {
         provider: gitlabProvider,
@@ -387,15 +391,15 @@ describe("settings git sections", () => {
   });
 
   test("does not replace a provider configured during origin detection", async () => {
-    let repoConfig: RepoConfig = baseRepoConfig;
+    let repoConfig: SettingsRepoConfig = baseRepoConfig;
     const pendingDetection = createDeferred<{
       host: string;
       owner: string;
       name: string;
     } | null>();
     const onUpdateSelectedRepoConfig = (
-      updater: (current: RepoConfig) => RepoConfig,
-    ): RepoConfig => {
+      updater: (current: SettingsRepoConfig) => SettingsRepoConfig,
+    ): SettingsRepoConfig => {
       repoConfig = updater(repoConfig);
       return repoConfig;
     };
@@ -437,7 +441,7 @@ describe("settings git sections", () => {
   });
 
   test("same-repo manual edits invalidate an in-flight origin detection", async () => {
-    let repoConfig: RepoConfig = {
+    let repoConfig: SettingsRepoConfig = {
       ...baseRepoConfig,
       git: {
         provider: {
@@ -455,8 +459,8 @@ describe("settings git sections", () => {
     } | null>();
 
     const onUpdateSelectedRepoConfig = (
-      updater: (current: RepoConfig) => RepoConfig,
-    ): RepoConfig => {
+      updater: (current: SettingsRepoConfig) => SettingsRepoConfig,
+    ): SettingsRepoConfig => {
       repoConfig = updater(repoConfig);
       return repoConfig;
     };
@@ -511,7 +515,7 @@ describe("settings git sections", () => {
     }>();
 
     const ControlledRepositoryGitSection = (): ReturnType<typeof createElement> => {
-      const [repoConfig, setRepoConfig] = useState<RepoConfig>({
+      const [repoConfig, setRepoConfig] = useState<SettingsRepoConfig>({
         ...baseRepoConfig,
         git: {
           provider: {

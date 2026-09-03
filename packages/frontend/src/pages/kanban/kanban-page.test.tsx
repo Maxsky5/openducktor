@@ -394,6 +394,7 @@ function createRepoConfigFixture(promptOverrides: RepoPromptOverrides = {}): Rep
     devServers: [],
     worktreeCopyPaths: [],
     promptOverrides,
+    agentStudioState: { openTaskIds: [] },
     agentDefaults: {
       spec: {
         runtimeKind: "opencode",

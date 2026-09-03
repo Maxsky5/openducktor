@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import type { TerminalDependencies, TerminalPanelModel, TerminalScope } from "@/features/terminals";
 import { useTerminals } from "@/features/terminals";
 import { getShellBridge } from "@/lib/shell-bridge";
@@ -17,9 +17,6 @@ const defaultDependencies = (): AgentStudioTerminalDependencies => ({
   hostClient: host,
   terminalBridge: getShellBridge().terminals,
 });
-
-const legacyPreferenceKey = (repoPath: string, taskId: string): string =>
-  `openducktor:agent-studio-terminals:${repoPath}:${taskId}`;
 
 const terminalScopeKey = (workspaceId: string, taskId: string): string =>
   JSON.stringify([workspaceId, taskId]);
@@ -57,10 +54,6 @@ export const useAgentStudioTerminals = (
     ...worktreeOptions,
     enabled,
   });
-
-  useEffect(() => {
-    if (repoPath && taskId) localStorage.removeItem(legacyPreferenceKey(repoPath, taskId));
-  }, [repoPath, taskId]);
 
   const mountedScopeKeys = useMemo(() => {
     if (!workspaceId) return [];

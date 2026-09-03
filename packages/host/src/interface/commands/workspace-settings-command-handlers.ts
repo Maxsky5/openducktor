@@ -7,6 +7,7 @@ import {
   themeSchema,
   workspaceRepoConfigInputSchema,
   workspaceRepoSettingsInputSchema,
+  workspaceAgentStudioStateSchema,
   type WorkspaceRepoConfigInput,
   type WorkspaceRepoSettingsInput,
 } from "@openducktor/contracts";
@@ -107,6 +108,16 @@ const parseRepoSettingsInput = (
   });
 };
 
+const parseAgentStudioStateInput = (record: CommandInputRecord) => {
+  const result = workspaceAgentStudioStateSchema.safeParse(record.state);
+  if (result.success) return result.data;
+  throw new HostValidationError({
+    message: `workspace_replace_agent_studio_state state is invalid: ${result.error.message}`,
+    field: "state",
+    cause: result.error,
+  });
+};
+
 export const createWorkspaceSettingsCommandHandlers = (
   workspaceSettingsService: Pick<
     WorkspaceSettingsService,
@@ -115,6 +126,7 @@ export const createWorkspaceSettingsCommandHandlers = (
     | "getSettingsSnapshot"
     | "listWorkspaces"
     | "reorderWorkspaces"
+    | "replaceAgentStudioState"
     | "saveRepoSettings"
     | "saveSettingsSnapshot"
     | "selectWorkspace"
@@ -166,6 +178,15 @@ export const createWorkspaceSettingsCommandHandlers = (
       ).workspaceOrder;
       return workspaceSettingsService.reorderWorkspaces(
         requireStringArray(commandInputArraySchema.safeParse(workspaceOrder), "workspaceOrder"),
+      );
+    },
+    workspace_replace_agent_studio_state: (args) => {
+      const record = requireObjectArgs("workspace_replace_agent_studio_state", args, "workspaceId");
+      return workspaceSettingsService.replaceAgentStudioState(
+        requireString(commandInputStringSchema.safeParse(record.workspaceId), "workspaceId"),
+        parseAgentStudioStateInput(
+          requireObjectArgs("workspace_replace_agent_studio_state", args, "state"),
+        ),
       );
     },
     workspace_get_repo_config: (args) =>

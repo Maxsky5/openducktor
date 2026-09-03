@@ -150,6 +150,7 @@ import type {
   QaWorkflowVerdict,
   RepoAgentDefaults,
   RepoConfig,
+  SettingsRepoConfig,
   RepoDevServerScript,
   RepoHooks,
   RepoPromptOverrides,
@@ -161,6 +162,8 @@ import type {
   RepoRuntimeMcpStatus,
   RepoRuntimeStartupStage,
   RepoRuntimeStartupStatus,
+  WorkspaceAgentStudioActiveTask,
+  WorkspaceAgentStudioState,
   RepoStoreAttachmentHealth,
   RepoStoreHealth,
   RepoStoreHealthCategory,
@@ -659,9 +662,12 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "repoPromptOverridesSchema",
   "repoAgentDefaultsSchema",
   "repoConfigSchema",
+  "settingsRepoConfigSchema",
   "repoDevServerScriptSchema",
   "repoGitConfigSchema",
   "repoHooksSchema",
+  "workspaceAgentStudioActiveTaskSchema",
+  "workspaceAgentStudioStateSchema",
   "gitRebaseBranchRequestSchema",
   "gitRebaseBranchResultSchema",
   "gitRebaseAbortRequestSchema",
@@ -1030,6 +1036,7 @@ type ExportedTypeContract = {
   QaWorkflowVerdict: QaWorkflowVerdict;
   RepoAgentDefaults: RepoAgentDefaults;
   RepoConfig: RepoConfig;
+  SettingsRepoConfig: SettingsRepoConfig;
   RepoDevServerScript: RepoDevServerScript;
   RepoHooks: RepoHooks;
   RepoPromptOverrides: RepoPromptOverrides;
@@ -1075,6 +1082,8 @@ type ExportedTypeContract = {
   RepoRuntimeMcpStatus: RepoRuntimeMcpStatus;
   RepoRuntimeStartupStage: RepoRuntimeStartupStage;
   RepoRuntimeStartupStatus: RepoRuntimeStartupStatus;
+  WorkspaceAgentStudioActiveTask: WorkspaceAgentStudioActiveTask;
+  WorkspaceAgentStudioState: WorkspaceAgentStudioState;
   ReusablePrompt: ReusablePrompt;
   SoftGuardrails: SoftGuardrails;
   RuntimeKind: RuntimeKind;

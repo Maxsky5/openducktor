@@ -20,11 +20,7 @@ import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orch
 import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
 import { AGENT_ROLE_ORDER } from "./agents-page-constants";
 
-export {
-  toContextStorageKey,
-  toRightPanelStorageKey,
-  toTabsStorageKey,
-} from "./query-sync/agent-studio-navigation";
+export { toRightPanelStorageKey } from "./query-sync/agent-studio-navigation";
 
 const ISO_TIMESTAMP_PATTERN = /\d{4}-\d{2}-\d{2}T[0-9:.+-]+(?:Z|[+-]\d{2}:\d{2})/;
 

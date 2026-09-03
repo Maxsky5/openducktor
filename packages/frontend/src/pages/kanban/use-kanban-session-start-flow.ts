@@ -1,5 +1,6 @@
 import type { GitBranch, GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import type { NavigateFunction } from "react-router";
 import { toast } from "sonner";
@@ -31,6 +32,7 @@ import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { buildAgentStudioHref } from "../agents/query-sync/agent-studio-navigation";
+import { addTaskToWorkspaceAgentStudioState } from "../agents/agent-studio-state-host";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 import { startKanbanSessionFlow } from "./kanban-session-start-actions";
 
@@ -138,6 +140,7 @@ export function useKanbanSessionStartFlow({
   setTaskTargetBranch,
   runSessionStartWorkflow,
 }: UseKanbanSessionStartFlowArgs): UseKanbanSessionStartFlowResult {
+  const queryClient = useQueryClient();
   const [isSubmittingHumanReviewFeedback, setIsSubmittingHumanReviewFeedback] = useState(false);
 
   const { sessionStartModal, runSessionStartRequest } = useSessionStartModalRunner({
@@ -175,6 +178,20 @@ export function useKanbanSessionStartFlow({
     },
     [navigate],
   );
+  const saveAgentStudioTab = useCallback(
+    async (taskId: string): Promise<void> => {
+      if (!activeWorkspaceId) {
+        throw new Error("No active workspace is selected.");
+      }
+      await addTaskToWorkspaceAgentStudioState({
+        queryClient,
+        workspaceId: activeWorkspaceId,
+        taskId,
+        tasks,
+      });
+    },
+    [activeWorkspaceId, queryClient, tasks],
+  );
 
   const startSessionIntent = useCallback(
     async (intent: KanbanSessionStartIntent): Promise<AgentSessionIdentity | undefined> => {
@@ -204,6 +221,7 @@ export function useKanbanSessionStartFlow({
             runSessionStartWorkflow,
             humanRequestChangesTask,
             openSessionInAgentStudio,
+            saveAgentStudioTab,
           };
           if (setTaskTargetBranch) {
             input.setTaskTargetBranch = setTaskTargetBranch;
@@ -219,6 +237,7 @@ export function useKanbanSessionStartFlow({
       openSessionInAgentStudio,
       runSessionStartWorkflow,
       runSessionStartRequest,
+      saveAgentStudioTab,
       setTaskTargetBranch,
       sessions,
       tasks,

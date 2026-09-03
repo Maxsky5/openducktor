@@ -1,4 +1,4 @@
-import type { RepoConfig, SettingsSnapshot } from "@openducktor/contracts";
+import type { SettingsRepoConfig, SettingsSnapshot } from "@openducktor/contracts";
 import { useMemo } from "react";
 import {
   buildDevServerDraftValidationMap,
@@ -7,7 +7,7 @@ import {
 
 type UseSettingsModalRepoScriptValidationArgs = {
   snapshotDraft: SettingsSnapshot | null;
-  selectedRepoConfig: RepoConfig | null;
+  selectedRepoConfig: SettingsRepoConfig | null;
 };
 
 type SettingsModalRepoScriptValidation = {

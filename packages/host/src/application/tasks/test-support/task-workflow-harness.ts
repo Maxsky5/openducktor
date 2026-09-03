@@ -320,6 +320,7 @@ const createBuildWorkspaceSettingsService = (
           worktreeCopyPaths: [],
           promptOverrides: {},
           agentDefaults: {},
+          agentStudioState: { openTaskIds: [] },
           ...repoConfig,
         } satisfies RepoConfig;
       });

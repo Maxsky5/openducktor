@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { GitProviderRepository, RepoConfig } from "@openducktor/contracts";
+import type { GitProviderRepository, SettingsRepoConfig } from "@openducktor/contracts";
 import { useState } from "react";
 import {
   createHookHarness as createSharedHookHarness,
@@ -11,11 +11,11 @@ enableReactActEnvironment();
 
 type HookArgs = {
   selectedRepoPath: string | null;
-  initialRepoConfig: RepoConfig;
+  initialRepoConfig: SettingsRepoConfig;
   detectGithubRepository: (repoPath: string) => Promise<GitProviderRepository | null>;
 };
 
-const createRepoConfig = (): RepoConfig => ({
+const createRepoConfig = (): SettingsRepoConfig => ({
   workspaceId: "repo-a",
   workspaceName: "Repo A",
   repoPath: "/repo-a",
@@ -86,7 +86,7 @@ describe("useSettingsModalRepositoryActions", () => {
       owner: "duck",
       name: "repo",
     }));
-    const initialRepoConfig: RepoConfig = {
+    const initialRepoConfig: SettingsRepoConfig = {
       ...createRepoConfig(),
       git: {
         provider: {

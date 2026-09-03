@@ -1,55 +1,60 @@
+import type { WorkspaceAgentStudioState } from "@openducktor/contracts";
 import type { Dispatch, SetStateAction } from "react";
-import { useCallback, useEffect, useReducer, useRef } from "react";
-import { errorMessage } from "@/lib/errors";
-import { scheduleTask, type ScheduleTask } from "@/lib/scheduling";
+import { useEffect, useReducer, useRef } from "react";
 import {
   type AgentStudioNavigationState,
   clearAgentStudioNavigationState,
   hasAgentStudioNavigationSelection,
-  type PersistedAgentStudioContext,
-  parsePersistedContext,
-  restoreNavigationFromPersistedContext,
-  serializePersistedContext,
-  toContextStorageKey,
+  restoreNavigationFromWorkspaceState,
 } from "./agent-studio-navigation";
 
 type UseRepoNavigationPersistenceArgs = {
   activeWorkspaceId: string | null;
+  agentStudioState: WorkspaceAgentStudioState | null;
+  isLoadingAgentStudioState: boolean;
+  agentStudioStateError: Error | null;
   navigation: AgentStudioNavigationState;
+  retryPersistenceRestore: () => void;
   setNavigation: Dispatch<SetStateAction<AgentStudioNavigationState>>;
-  scheduleTask?: ScheduleTask;
 };
 
 type UseRepoNavigationPersistenceResult = {
   isRepoNavigationBoundaryPending: boolean;
+  isWorkspaceStateLoaded: boolean;
   persistenceError: Error | null;
   retryPersistenceRestore: () => void;
 };
 
 export type RepoNavigationBoundaryPhase = "idle" | "detecting" | "clearing";
 
-type RepoNavigationPersistenceState = {
+type RepoNavigationRestoreState = {
   boundaryWorkspaceId: string | null;
-  persistenceError: Error | null;
+  restoredWorkspaceId: string | null;
 };
 
-type RepoNavigationPersistenceAction =
-  | { type: "setBoundaryWorkspaceId"; boundaryWorkspaceId: string | null }
-  | { type: "setPersistenceError"; persistenceError: Error | null };
+type RepoNavigationRestoreAction =
+  | {
+      type: "workspaceChanged";
+      activeWorkspaceId: string | null;
+      previousWorkspaceId: string | null;
+    }
+  | { type: "boundaryCleared" }
+  | { type: "workspaceRestored"; workspaceId: string };
 
-const repoNavigationPersistenceReducer = (
-  state: RepoNavigationPersistenceState,
-  action: RepoNavigationPersistenceAction,
-): RepoNavigationPersistenceState => {
+const repoNavigationRestoreReducer = (
+  state: RepoNavigationRestoreState,
+  action: RepoNavigationRestoreAction,
+): RepoNavigationRestoreState => {
   switch (action.type) {
-    case "setBoundaryWorkspaceId":
-      return state.boundaryWorkspaceId === action.boundaryWorkspaceId
-        ? state
-        : { ...state, boundaryWorkspaceId: action.boundaryWorkspaceId };
-    case "setPersistenceError":
-      return state.persistenceError === action.persistenceError
-        ? state
-        : { ...state, persistenceError: action.persistenceError };
+    case "workspaceChanged": {
+      const boundaryWorkspaceId =
+        action.previousWorkspaceId && action.activeWorkspaceId ? action.activeWorkspaceId : null;
+      return { boundaryWorkspaceId, restoredWorkspaceId: null };
+    }
+    case "boundaryCleared":
+      return { ...state, boundaryWorkspaceId: null };
+    case "workspaceRestored":
+      return { ...state, restoredWorkspaceId: action.workspaceId };
   }
 };
 
@@ -77,44 +82,21 @@ export const resolveRepoNavigationBoundaryPhase = ({
   return "idle";
 };
 
-const readPersistedContextPayload = (storageKey: string): string | null => {
-  try {
-    return globalThis.localStorage.getItem(storageKey);
-  } catch (cause) {
-    throw new Error(
-      `Failed to read agent studio context storage key "${storageKey}": ${errorMessage(cause)}`,
-      { cause },
-    );
-  }
-};
-
-const writePersistedContextPayload = (storageKey: string, payload: string): void => {
-  try {
-    globalThis.localStorage.setItem(storageKey, payload);
-  } catch (cause) {
-    throw new Error(
-      `Failed to persist agent studio context storage key "${storageKey}": ${errorMessage(cause)}`,
-      { cause },
-    );
-  }
-};
-
 export function useRepoNavigationPersistence({
   activeWorkspaceId,
+  agentStudioState,
+  isLoadingAgentStudioState,
+  agentStudioStateError,
   navigation,
+  retryPersistenceRestore,
   setNavigation,
-  scheduleTask: scheduler = scheduleTask,
 }: UseRepoNavigationPersistenceArgs): UseRepoNavigationPersistenceResult {
   const lastWorkspaceIdRef = useRef<string | null>(activeWorkspaceId);
-  const restoredContextWorkspaceIdRef = useRef<string | null>(null);
-  const persistedContextPayloadRef = useRef<string | null>(null);
-  const pendingContextPersistRef = useRef<{ key: string; payload: string } | null>(null);
-  const pendingPersistCancellationRef = useRef<(() => void) | null>(null);
-  const [{ boundaryWorkspaceId, persistenceError }, dispatchPersistenceState] = useReducer(
-    repoNavigationPersistenceReducer,
+  const [{ boundaryWorkspaceId, restoredWorkspaceId }, dispatchRestore] = useReducer(
+    repoNavigationRestoreReducer,
     {
       boundaryWorkspaceId: null,
-      persistenceError: null,
+      restoredWorkspaceId: null,
     },
   );
   const repoNavigationBoundaryPhase = resolveRepoNavigationBoundaryPhase({
@@ -122,52 +104,11 @@ export function useRepoNavigationPersistence({
     lastWorkspaceId: lastWorkspaceIdRef.current,
     boundaryWorkspaceId,
   });
-  const isRepoNavigationBoundaryPending = repoNavigationBoundaryPhase !== "idle";
-
-  const flushPendingContextPersist = useCallback((): void => {
-    const pendingPersist = pendingContextPersistRef.current;
-    if (!pendingPersist) {
-      return;
-    }
-
-    pendingPersistCancellationRef.current?.();
-    pendingPersistCancellationRef.current = null;
-
-    writePersistedContextPayload(pendingPersist.key, pendingPersist.payload);
-    pendingContextPersistRef.current = null;
-  }, []);
-
-  const retryPersistenceRestore = useCallback((): void => {
-    restoredContextWorkspaceIdRef.current = null;
-    persistedContextPayloadRef.current = null;
-    dispatchPersistenceState({ type: "setPersistenceError", persistenceError: null });
-  }, []);
-
-  const surfacePersistenceWriteError = useCallback((cause: unknown): void => {
-    persistedContextPayloadRef.current = null;
-    pendingContextPersistRef.current = null;
-    pendingPersistCancellationRef.current?.();
-    pendingPersistCancellationRef.current = null;
-    dispatchPersistenceState({
-      type: "setPersistenceError",
-      persistenceError: cause instanceof Error ? cause : new Error(errorMessage(cause)),
-    });
-  }, []);
-
-  const tryFlushPendingContextPersist = useCallback((): boolean => {
-    try {
-      flushPendingContextPersist();
-      return true;
-    } catch (cause) {
-      surfacePersistenceWriteError(cause);
-      return false;
-    }
-  }, [flushPendingContextPersist, surfacePersistenceWriteError]);
-  const tryFlushPendingContextPersistRef = useRef(tryFlushPendingContextPersist);
-
-  useEffect(() => {
-    tryFlushPendingContextPersistRef.current = tryFlushPendingContextPersist;
-  }, [tryFlushPendingContextPersist]);
+  const isWorkspaceStateLoaded =
+    activeWorkspaceId !== null && restoredWorkspaceId === activeWorkspaceId;
+  const isRepoNavigationBoundaryPending =
+    repoNavigationBoundaryPhase !== "idle" ||
+    (activeWorkspaceId !== null && !isWorkspaceStateLoaded && agentStudioStateError === null);
 
   useEffect(() => {
     if (lastWorkspaceIdRef.current === activeWorkspaceId) {
@@ -176,29 +117,8 @@ export function useRepoNavigationPersistence({
 
     const previousWorkspaceId = lastWorkspaceIdRef.current;
     lastWorkspaceIdRef.current = activeWorkspaceId;
-    restoredContextWorkspaceIdRef.current = null;
-    persistedContextPayloadRef.current = null;
-    dispatchPersistenceState({
-      type: "setBoundaryWorkspaceId",
-      boundaryWorkspaceId: previousWorkspaceId && activeWorkspaceId ? activeWorkspaceId : null,
-    });
-
-    if (persistenceError) {
-      dispatchPersistenceState({ type: "setPersistenceError", persistenceError: null });
-    }
-  }, [activeWorkspaceId, persistenceError]);
-
-  useEffect(() => {
-    if (!activeWorkspaceId) {
-      if (!tryFlushPendingContextPersist()) {
-        return;
-      }
-      dispatchPersistenceState({ type: "setBoundaryWorkspaceId", boundaryWorkspaceId: null });
-      restoredContextWorkspaceIdRef.current = null;
-      persistedContextPayloadRef.current = null;
-      dispatchPersistenceState({ type: "setPersistenceError", persistenceError: null });
-    }
-  }, [activeWorkspaceId, tryFlushPendingContextPersist]);
+    dispatchRestore({ type: "workspaceChanged", activeWorkspaceId, previousWorkspaceId });
+  }, [activeWorkspaceId]);
 
   useEffect(() => {
     if (!activeWorkspaceId || repoNavigationBoundaryPhase !== "clearing") {
@@ -206,7 +126,7 @@ export function useRepoNavigationPersistence({
     }
 
     if (!hasAgentStudioNavigationSelection(navigation)) {
-      dispatchPersistenceState({ type: "setBoundaryWorkspaceId", boundaryWorkspaceId: null });
+      dispatchRestore({ type: "boundaryCleared" });
       return;
     }
 
@@ -214,35 +134,14 @@ export function useRepoNavigationPersistence({
   }, [activeWorkspaceId, navigation, repoNavigationBoundaryPhase, setNavigation]);
 
   useEffect(() => {
-    if (!activeWorkspaceId) {
-      return;
-    }
-    if (persistenceError || isRepoNavigationBoundaryPending) {
-      return;
-    }
-    if (restoredContextWorkspaceIdRef.current === activeWorkspaceId) {
-      return;
-    }
-
-    let raw: string | null;
-    let persisted: PersistedAgentStudioContext | null = null;
-    try {
-      raw = readPersistedContextPayload(toContextStorageKey(activeWorkspaceId));
-      if (raw) {
-        persisted = parsePersistedContext(raw);
-      }
-    } catch (cause) {
-      dispatchPersistenceState({
-        type: "setPersistenceError",
-        persistenceError: cause instanceof Error ? cause : new Error(errorMessage(cause)),
-      });
-      return;
-    }
-
-    restoredContextWorkspaceIdRef.current = activeWorkspaceId;
-    persistedContextPayloadRef.current = raw;
-
-    if (!persisted) {
+    if (
+      !activeWorkspaceId ||
+      !agentStudioState ||
+      isLoadingAgentStudioState ||
+      agentStudioStateError ||
+      repoNavigationBoundaryPhase !== "idle" ||
+      restoredWorkspaceId === activeWorkspaceId
+    ) {
       return;
     }
 
@@ -250,90 +149,23 @@ export function useRepoNavigationPersistence({
       if (hasAgentStudioNavigationSelection(current)) {
         return current;
       }
-
-      return restoreNavigationFromPersistedContext(current, persisted);
+      return restoreNavigationFromWorkspaceState(current, agentStudioState);
     });
-  }, [activeWorkspaceId, isRepoNavigationBoundaryPending, persistenceError, setNavigation]);
-
-  useEffect(() => {
-    if (
-      !activeWorkspaceId ||
-      isRepoNavigationBoundaryPending ||
-      persistenceError ||
-      restoredContextWorkspaceIdRef.current !== activeWorkspaceId
-    ) {
-      return;
-    }
-
-    const serializedPayload = serializePersistedContext(navigation);
-    if (serializedPayload === persistedContextPayloadRef.current) {
-      return;
-    }
-
-    persistedContextPayloadRef.current = serializedPayload;
-    const storageKey = toContextStorageKey(activeWorkspaceId);
-    pendingContextPersistRef.current = { key: storageKey, payload: serializedPayload };
-
-    pendingPersistCancellationRef.current?.();
-    pendingPersistCancellationRef.current = null;
-
-    const cancelPersist = scheduler(() => {
-      const pendingPersist = pendingContextPersistRef.current;
-      if (!pendingPersist || pendingPersist.key !== storageKey) {
-        pendingPersistCancellationRef.current = null;
-        return;
-      }
-      try {
-        writePersistedContextPayload(pendingPersist.key, pendingPersist.payload);
-        pendingContextPersistRef.current = null;
-        pendingPersistCancellationRef.current = null;
-      } catch (cause) {
-        surfacePersistenceWriteError(cause);
-      }
-    }, 0);
-    pendingPersistCancellationRef.current = cancelPersist;
-
-    return () => {
-      if (pendingPersistCancellationRef.current === cancelPersist) {
-        tryFlushPendingContextPersist();
-      }
-    };
+    dispatchRestore({ type: "workspaceRestored", workspaceId: activeWorkspaceId });
   }, [
     activeWorkspaceId,
-    isRepoNavigationBoundaryPending,
-    navigation,
-    persistenceError,
-    scheduler,
-    surfacePersistenceWriteError,
-    tryFlushPendingContextPersist,
+    agentStudioState,
+    agentStudioStateError,
+    isLoadingAgentStudioState,
+    repoNavigationBoundaryPhase,
+    restoredWorkspaceId,
+    setNavigation,
   ]);
-
-  useEffect(() => {
-    if (globalThis.window === undefined || globalThis.document === undefined) {
-      return;
-    }
-
-    const handleVisibilityChange = (): void => {
-      if (document.visibilityState === "hidden") {
-        tryFlushPendingContextPersistRef.current();
-      }
-    };
-    const handlePageHide = (): void => {
-      tryFlushPendingContextPersistRef.current();
-    };
-
-    window.addEventListener("pagehide", handlePageHide);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      window.removeEventListener("pagehide", handlePageHide);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, []);
 
   return {
     isRepoNavigationBoundaryPending,
-    persistenceError,
+    isWorkspaceStateLoaded,
+    persistenceError: agentStudioStateError,
     retryPersistenceRestore,
   };
 }

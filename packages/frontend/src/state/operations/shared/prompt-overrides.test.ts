@@ -26,6 +26,7 @@ const createRepoConfig = (): RepoConfig => ({
     },
   },
   worktreeCopyPaths: [],
+  agentStudioState: { openTaskIds: [] },
   agentDefaults: {},
 });
 

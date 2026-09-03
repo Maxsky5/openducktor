@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { CODEX_RUNTIME_DESCRIPTOR, type RepoConfig } from "@openducktor/contracts";
+import { CODEX_RUNTIME_DESCRIPTOR, type SettingsRepoConfig } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -22,7 +22,7 @@ const codexCatalog: AgentModelCatalog = {
   profiles: [],
 };
 
-const repoConfig: RepoConfig = {
+const repoConfig: SettingsRepoConfig = {
   workspaceId: "repo",
   workspaceName: "Repo",
   repoPath: "/repo",

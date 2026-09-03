@@ -303,6 +303,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       devServers: [],
       worktreeCopyPaths: [],
       promptOverrides: {},
+      agentStudioState: { openTaskIds: [] },
       agentDefaults: {},
     });
     host.buildStart = async () => buildBootstrapFixture;
@@ -461,6 +462,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       devServers: [],
       worktreeCopyPaths: [],
       promptOverrides: {},
+      agentStudioState: { openTaskIds: [] },
       agentDefaults: {},
     });
     host.buildStart = async () => buildBootstrapFixture;
@@ -747,6 +749,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
         devServers: [],
         worktreeCopyPaths: [],
         promptOverrides: {},
+        agentStudioState: { openTaskIds: [] },
         agentDefaults: {},
       });
 

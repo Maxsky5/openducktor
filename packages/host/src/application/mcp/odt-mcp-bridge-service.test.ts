@@ -25,6 +25,7 @@ const repoConfig: RepoConfig = {
   worktreeCopyPaths: [],
   promptOverrides: {},
   agentDefaults: {},
+  agentStudioState: { openTaskIds: [] },
 };
 const taskCard = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   id: "task-1",

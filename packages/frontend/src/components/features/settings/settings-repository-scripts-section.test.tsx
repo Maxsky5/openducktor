@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { RepoConfig } from "@openducktor/contracts";
+import type { SettingsRepoConfig } from "@openducktor/contracts";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { createElement, useState } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
@@ -8,7 +8,7 @@ import { RepositoryScriptsSection } from "./settings-repository-scripts-section"
 
 enableReactActEnvironment();
 
-const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
+const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): SettingsRepoConfig => ({
   workspaceId: "repo",
   workspaceName: "Repo",
   repoPath: "/repo",
@@ -26,7 +26,7 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
 });
 
 const renderStatefulSection = (
-  initialRepoConfig: RepoConfig,
+  initialRepoConfig: SettingsRepoConfig,
   options?: {
     showValidation?: boolean;
     focusRequest?: SettingsContentFocusRequest;
@@ -42,7 +42,9 @@ const renderStatefulSection = (
       loadingState: { isLoadingSettings: false, isSaving: false },
       validationState: { showDevServerValidationErrors: options?.showValidation ?? false },
       focusRequest: options?.focusRequest,
-      onUpdateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => {
+      onUpdateSelectedRepoConfig: (
+        updater: (current: SettingsRepoConfig) => SettingsRepoConfig,
+      ) => {
         setSelectedRepoConfig((current) => updater(current));
       },
     });

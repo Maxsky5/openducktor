@@ -39,6 +39,7 @@ describe("useDelegationOperations", () => {
       devServers: [],
       worktreeCopyPaths: [],
       promptOverrides: {},
+      agentStudioState: { openTaskIds: [] },
       agentDefaults: {},
     };
     const workspaceGetRepoConfig = mock(async () => repoConfig);

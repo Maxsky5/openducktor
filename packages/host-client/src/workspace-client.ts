@@ -12,6 +12,7 @@ import {
   type SettingsSnapshotSaveInput,
   settingsSnapshotSchema,
   type WorkspaceRecord,
+  type WorkspaceAgentStudioState,
   type WorkspaceRepoConfigInput,
   type WorkspaceRepoHooksInput,
   type WorkspaceRepoSettingsInput,
@@ -102,6 +103,14 @@ const workspaceGetRepoConfig = async (
   workspaceId: string,
 ): Promise<RepoConfig> => {
   return invokeFn("workspace_get_repo_config", { workspaceId }, repoConfigSchema);
+};
+
+const workspaceReplaceAgentStudioState = async (
+  invokeFn: InvokeFn,
+  workspaceId: string,
+  state: WorkspaceAgentStudioState,
+): Promise<RepoConfig> => {
+  return invokeFn("workspace_replace_agent_studio_state", { workspaceId, state }, repoConfigSchema);
 };
 
 const workspaceGetSettingsSnapshot = async (invokeFn: InvokeFn): Promise<SettingsSnapshot> => {
@@ -217,6 +226,13 @@ export class HostWorkspaceClient {
 
   async workspaceGetRepoConfig(workspaceId: string): Promise<RepoConfig> {
     return workspaceGetRepoConfig(this.invokeFn, workspaceId);
+  }
+
+  async workspaceReplaceAgentStudioState(
+    workspaceId: string,
+    state: WorkspaceAgentStudioState,
+  ): Promise<RepoConfig> {
+    return workspaceReplaceAgentStudioState(this.invokeFn, workspaceId, state);
   }
 
   async workspaceGetSettingsSnapshot(): Promise<SettingsSnapshot> {

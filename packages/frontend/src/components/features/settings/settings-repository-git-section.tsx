@@ -1,4 +1,4 @@
-import type { GitProviderRepository, RepoConfig } from "@openducktor/contracts";
+import type { GitProviderRepository, SettingsRepoConfig } from "@openducktor/contracts";
 import { Github, LoaderCircle, PencilLine, RefreshCcw } from "lucide-react";
 import type { ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -16,11 +16,13 @@ import {
 
 type RepositoryGitSectionProps = {
   selectedRepoPath: string | null;
-  selectedRepoConfig: RepoConfig | null;
+  selectedRepoConfig: SettingsRepoConfig | null;
   providerHealth: GitProviderHealthState;
   disabled: boolean;
   onDetectGithubRepository: () => Promise<GitProviderRepository | null>;
-  onUpdateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
+  onUpdateSelectedRepoConfig: (
+    updater: (current: SettingsRepoConfig) => SettingsRepoConfig,
+  ) => void;
 };
 
 const cliStatusBadgeVariant = (

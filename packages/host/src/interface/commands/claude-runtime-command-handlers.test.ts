@@ -77,6 +77,7 @@ const claudeCommandDependencies: Parameters<typeof createClaudeRuntimeCommandHan
         promptOverrides: {},
         worktreeCopyPaths: [],
         agentDefaults: {},
+        agentStudioState: { openTaskIds: [] },
         worktreeBasePath: "/worktrees/repo",
       }),
   },

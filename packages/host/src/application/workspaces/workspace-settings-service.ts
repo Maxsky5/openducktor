@@ -7,6 +7,7 @@ import {
   repoConfigSchema,
   settingsSnapshotSaveInputSchema,
   themeSchema,
+  workspaceAgentStudioStateSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
@@ -46,6 +47,8 @@ const withSerializedConfigWrites = (
     addWorkspace: (input) => serialize(service.addWorkspace(input)),
     selectWorkspace: (workspaceId) => serialize(service.selectWorkspace(workspaceId)),
     reorderWorkspaces: (workspaceOrder) => serialize(service.reorderWorkspaces(workspaceOrder)),
+    replaceAgentStudioState: (workspaceId, state) =>
+      serialize(service.replaceAgentStudioState(workspaceId, state)),
     updateRepoConfig: (workspaceId, update) =>
       serialize(service.updateRepoConfig(workspaceId, update)),
     saveRepoSettings: (workspaceId, settings) =>
@@ -207,6 +210,49 @@ const createUnserializedWorkspaceSettingsService = (
     return Effect.gen(function* () {
       const config = yield* loadGlobalConfig(settingsConfig);
       return yield* findRepoConfigByRepoPath(settingsConfig, config, rawRepoPath);
+    });
+  },
+  replaceAgentStudioState(workspaceId, rawState) {
+    return Effect.gen(function* () {
+      const config = yield* loadGlobalConfig(settingsConfig);
+      const existing = yield* Effect.try({
+        try: () => requireConfiguredWorkspace(config, workspaceId),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
+      const nextRepoConfig = yield* Effect.try({
+        try: () =>
+          repoConfigSchema.parse({
+            ...existing,
+            agentStudioState: workspaceAgentStudioStateSchema.parse(rawState),
+          }),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
+      const nextConfig = yield* Effect.try({
+        try: () =>
+          globalConfigSchema.parse({
+            ...config,
+            workspaces: {
+              ...config.workspaces,
+              [workspaceId]: nextRepoConfig,
+            },
+          }),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
+
+      yield* settingsConfig.writeConfig(nextConfig);
+      return nextRepoConfig;
     });
   },
   updateRepoConfig(workspaceId, update) {

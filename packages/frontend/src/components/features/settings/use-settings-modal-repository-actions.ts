@@ -2,14 +2,14 @@ import {
   GITHUB_PROVIDER_DESCRIPTOR,
   type GitProviderConfig,
   type GitProviderRepository,
-  type RepoConfig,
+  type SettingsRepoConfig,
 } from "@openducktor/contracts";
 import { useCallback } from "react";
 
 type UseSettingsModalRepositoryActionsArgs = {
   selectedRepoPath: string | null;
   detectGithubRepository: (repoPath: string) => Promise<GitProviderRepository | null>;
-  updateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
+  updateSelectedRepoConfig: (updater: (current: SettingsRepoConfig) => SettingsRepoConfig) => void;
 };
 
 type SettingsModalRepositoryActions = {

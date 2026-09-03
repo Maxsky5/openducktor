@@ -23,6 +23,7 @@ const repoConfig: RepoConfig = {
   worktreeCopyPaths: [],
   promptOverrides: {},
   agentDefaults: {},
+  agentStudioState: { openTaskIds: [] },
 };
 
 const createRuntime = (): DevServerGroupRuntime => ({

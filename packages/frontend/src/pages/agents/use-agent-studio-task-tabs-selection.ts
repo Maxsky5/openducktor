@@ -9,7 +9,7 @@ type UseTaskTabSelectionArgs = {
   taskId: string;
   openTaskTabs: string[];
   persistedActiveTaskId: string | null;
-  loadedTabsStorageWorkspaceId: string | null;
+  loadedStateWorkspaceId: string | null;
   selectTask: (taskId: string) => void;
   setOpenTaskTabs: SetState<string[]>;
   setPersistedActiveTaskId: SetState<string | null>;
@@ -28,7 +28,7 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
     taskId,
     openTaskTabs,
     persistedActiveTaskId,
-    loadedTabsStorageWorkspaceId,
+    loadedStateWorkspaceId,
     selectTask,
     setOpenTaskTabs,
     setPersistedActiveTaskId,
@@ -53,7 +53,7 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
   useEffect(() => {
     if (
       !activeWorkspaceId ||
-      loadedTabsStorageWorkspaceId !== activeWorkspaceId ||
+      loadedStateWorkspaceId !== activeWorkspaceId ||
       isRepoNavigationBoundaryPending
     ) {
       return;
@@ -80,7 +80,7 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
     persistedActiveTaskId,
     selectTask,
     tabTaskIds,
-    loadedTabsStorageWorkspaceId,
+    loadedStateWorkspaceId,
     taskId,
   ]);
 

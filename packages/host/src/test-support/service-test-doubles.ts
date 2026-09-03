@@ -119,6 +119,10 @@ export const createWorkspaceSettingsServiceTestDouble = <
   getSettingsSnapshot: unexpectedEffectCall("workspace settings service", "getSettingsSnapshot"),
   listWorkspaces: unexpectedEffectCall("workspace settings service", "listWorkspaces"),
   reorderWorkspaces: unexpectedEffectCall("workspace settings service", "reorderWorkspaces"),
+  replaceAgentStudioState: unexpectedEffectCall(
+    "workspace settings service",
+    "replaceAgentStudioState",
+  ),
   saveRepoSettings: unexpectedEffectCall("workspace settings service", "saveRepoSettings"),
   saveSettingsSnapshot: unexpectedEffectCall("workspace settings service", "saveSettingsSnapshot"),
   selectWorkspace: unexpectedEffectCall("workspace settings service", "selectWorkspace"),

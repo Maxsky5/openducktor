@@ -4,7 +4,6 @@ import type { TerminalSummary } from "@openducktor/contracts";
 import { HostTerminalClientError } from "@openducktor/host-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
-import { useLayoutEffect } from "react";
 import type { TerminalTab } from "@/features/terminals";
 import { terminalTabLabel } from "@/features/terminals/terminal-presentation-state";
 import { QueryProvider } from "@/lib/query-provider";
@@ -99,55 +98,7 @@ describe("useAgentStudioTerminals", () => {
     }
   });
 
-  test("removes the legacy terminal preference after layout work", async () => {
-    const legacyKey = "openducktor:agent-studio-terminals:/repo:task-a";
-    localStorage.setItem(legacyKey, "legacy");
-    const dependencies = createTerminalTestDependencies();
-    let preferencePresentDuringLayout = false;
-    const Harness = () => {
-      useAgentStudioTerminals(
-        {
-          workspaceId: "workspace-1",
-          repoPath: "/repo",
-          taskId: "task-a",
-          taskVersion: null,
-          mountedTaskIds: ["task-a"],
-        },
-        dependencies,
-      );
-      useLayoutEffect(() => {
-        preferencePresentDuringLayout = localStorage.getItem(legacyKey) !== null;
-      }, []);
-      return null;
-    };
-    const view = render(
-      <QueryProvider useIsolatedClient>
-        <Harness />
-      </QueryProvider>,
-    );
-
-    try {
-      expect(preferencePresentDuringLayout).toBe(true);
-      await waitFor(() => expect(localStorage.getItem(legacyKey)).toBeNull());
-    } finally {
-      view.unmount();
-    }
-  });
-
   test("reopens the panel when the host lists existing task terminals", async () => {
-    localStorage.setItem(
-      "openducktor:agent-studio-terminals:/repo:task-a",
-      JSON.stringify({
-        hostInstanceId: "host-1",
-        visible: true,
-        activeTerminalId: "terminal-6",
-        terminals: Array.from({ length: 6 }, (_, index) => ({
-          terminalId: `terminal-${index + 1}`,
-          label: `Shell ${index + 1}`,
-          initialWorkingDir: "/repo/worktrees/task-a",
-        })),
-      }),
-    );
     const dependencies = createTerminalTestDependencies();
     type HookResult = ReturnType<typeof useAgentStudioTerminals>;
     let latest: HookResult | null = null;
@@ -180,7 +131,6 @@ describe("useAgentStudioTerminals", () => {
       expect(getLatest().tabs.map((tab) => tab.terminalId)).toEqual(["terminal-task-a"]);
       expect(getLatest().activeTabId).toBe("tab:terminal-task-a");
       expect(getLatest().isVisible).toBe(true);
-      expect(localStorage.getItem("openducktor:agent-studio-terminals:/repo:task-a")).toBeNull();
     } finally {
       view.unmount();
     }

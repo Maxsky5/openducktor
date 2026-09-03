@@ -209,6 +209,7 @@ describe("session-start-workflow", () => {
       devServers: [],
       worktreeCopyPaths: [],
       promptOverrides: {},
+      agentStudioState: { openTaskIds: [] },
       agentDefaults: {},
     } satisfies RepoConfig;
     queryClient.setQueryData(workspaceQueryKeys.repoConfig("workspace-pr"), repoConfig);

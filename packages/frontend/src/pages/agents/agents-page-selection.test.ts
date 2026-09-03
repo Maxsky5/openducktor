@@ -11,9 +11,7 @@ import {
   resolveAgentStudioBuilderSessionsForTask,
   resolveAgentStudioDefaultRoleForTask,
   resolveAgentStudioSessionSelection,
-  toContextStorageKey,
   toRightPanelStorageKey,
-  toTabsStorageKey,
 } from "./agents-page-selection";
 
 const resolveAgentStudioSelectedSessionSummary = (args: {
@@ -60,11 +58,7 @@ const catalogFixture: AgentModelCatalog = {
 };
 
 describe("agents-page-selection", () => {
-  test("builds storage keys and empty role selections", () => {
-    expect(toContextStorageKey("workspace-repo")).toBe(
-      "openducktor:agent-studio:context:workspace-repo",
-    );
-    expect(toTabsStorageKey("workspace-repo")).toBe("openducktor:agent-studio:tabs:workspace-repo");
+  test("builds the client-local panel key and empty role selections", () => {
     expect(toRightPanelStorageKey()).toBe("openducktor:agent-studio:right-panel");
     expect(emptyDraftSelections()).toEqual({ spec: null, planner: null, build: null, qa: null });
   });

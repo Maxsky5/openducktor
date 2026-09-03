@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { TaskCard, WorkspaceAgentStudioState } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useMemo } from "react";
 import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
@@ -24,6 +24,7 @@ import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
 type UseAgentStudioSelectionControllerArgs = {
   activeWorkspaceId: string | null;
+  agentStudioState: WorkspaceAgentStudioState | null;
   workspaceRepoPath: string | null;
   isRepoNavigationBoundaryPending: boolean;
   tasks: TaskCard[];
@@ -57,6 +58,7 @@ export type AgentStudioSelectionControllerResult = {
   queryUpdate: ReturnType<typeof resolveAgentStudioNavigationState>["queryUpdate"];
   isLoadingTasks: boolean;
   activeTaskTabId: string;
+  loadedStateWorkspaceId: string | null;
   tabTaskIds: string[];
   availableTabTasks: TaskCard[];
   taskTabs: ReturnType<typeof useAgentStudioTaskTabs>["taskTabs"];
@@ -73,6 +75,7 @@ export type AgentStudioSelectionControllerResult = {
 
 export function useAgentStudioSelectionController({
   activeWorkspaceId,
+  agentStudioState,
   workspaceRepoPath,
   isRepoNavigationBoundaryPending,
   tasks,
@@ -156,8 +159,10 @@ export function useAgentStudioSelectionController({
     handleCreateTab,
     handleCloseTab,
     handleReorderTab,
+    loadedStateWorkspaceId,
   } = useAgentStudioTaskTabs({
     activeWorkspaceId,
+    agentStudioState,
     isRepoNavigationBoundaryPending,
     taskId: navigationBase.taskId,
     selectedTask: navigationBase.selectedTask,
@@ -251,6 +256,7 @@ export function useAgentStudioSelectionController({
       queryUpdate: navigationState.queryUpdate,
       isLoadingTasks,
       activeTaskTabId,
+      loadedStateWorkspaceId,
       tabTaskIds,
       availableTabTasks,
       taskTabs,
@@ -276,6 +282,7 @@ export function useAgentStudioSelectionController({
       isActiveTaskReady,
       isLoadingTasks,
       navigationState,
+      loadedStateWorkspaceId,
       selectedSessionViewWithContextError,
       sessions,
       taskTabs,

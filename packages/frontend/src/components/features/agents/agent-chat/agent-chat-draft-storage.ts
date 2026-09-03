@@ -66,7 +66,6 @@ export type AgentChatDraftStorageReadResult =
   | { status: "oversized"; byteLength: number };
 
 export const AGENT_CHAT_DRAFT_STORAGE_PREFIX = "openducktor:agent-chat:draft:v2";
-const LEGACY_AGENT_CHAT_DRAFT_STORAGE_PREFIX = "openducktor:agent-chat:draft:v1";
 export const AGENT_CHAT_DRAFT_STORAGE_MAX_BYTES = 20_480;
 export const AGENT_CHAT_DRAFT_STORAGE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -144,8 +143,7 @@ export const toAgentChatDraftStorageKey = (identity: AgentChatDraftSessionIdenti
   )}:${agentSessionIdentityKey(identity)}`;
 
 export const isAgentChatDraftStorageKey = (key: string): boolean =>
-  key.startsWith(`${AGENT_CHAT_DRAFT_STORAGE_PREFIX}:`) ||
-  key.startsWith(`${LEGACY_AGENT_CHAT_DRAFT_STORAGE_PREFIX}:`);
+  key.startsWith(`${AGENT_CHAT_DRAFT_STORAGE_PREFIX}:`);
 
 export const measureAgentChatDraftPayloadBytes = (payload: string): number =>
   encoder.encode(payload).byteLength;
@@ -429,11 +427,6 @@ export const cleanupExpiredAgentChatDraftStorage = ({
   }
 
   for (const key of keys) {
-    if (key.startsWith(`${LEGACY_AGENT_CHAT_DRAFT_STORAGE_PREFIX}:`)) {
-      removeDraftStoragePayload(storage, key);
-      continue;
-    }
-
     const raw = readDraftStoragePayload(storage, key);
     const identity = parseDraftStorageKeyIdentity(key);
     if (!identity) {

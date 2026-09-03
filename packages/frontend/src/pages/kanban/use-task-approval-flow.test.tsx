@@ -184,6 +184,7 @@ const registerDependencySpies = (): void => {
     devServers: [],
     promptOverrides: {},
     worktreeCopyPaths: [],
+    agentStudioState: { openTaskIds: [] },
     agentDefaults: {},
   });
   hostClient.workspaceGetSettingsSnapshot = async () => createSettingsSnapshotFixture();

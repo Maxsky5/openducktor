@@ -383,7 +383,6 @@ describe("agent chat draft storage", () => {
       draft: { segments: [createTextSegment("fresh", "text-1")], attachments: [] },
       updatedAt: "2026-07-08T09:00:00.000Z",
     });
-    storage.setItem("openducktor:agent-chat:draft:v1:workspace:legacy-session", "legacy");
     storage.setItem("openducktor:other-feature", "keep");
 
     cleanupExpiredAgentChatDraftStorage({
@@ -393,7 +392,6 @@ describe("agent chat draft storage", () => {
 
     expect(storage.getItem(toAgentChatDraftStorageKey(expiredIdentity))).toBeNull();
     expect(storage.getItem(toAgentChatDraftStorageKey(freshIdentity))).not.toBeNull();
-    expect(storage.getItem("openducktor:agent-chat:draft:v1:workspace:legacy-session")).toBeNull();
     expect(storage.getItem("openducktor:other-feature")).toBe("keep");
   });
 });

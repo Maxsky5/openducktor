@@ -96,6 +96,34 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             }),
         });
       },
+      replaceAgentStudioState(_workspaceId, state) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push("replaceAgentStudioState");
+            return {
+              workspaceId: "repo",
+              workspaceName: "repo",
+              repoPath: "/repo",
+              defaultRuntimeKind: "opencode" as const,
+              branchPrefix: "odt",
+              defaultTargetBranch: { remote: "origin", branch: "main" },
+              git: {},
+              hooks: { preStart: [], postComplete: [] },
+              devServers: [],
+              worktreeCopyPaths: [],
+              promptOverrides: {},
+              agentDefaults: {},
+              agentStudioState: state,
+            };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+      },
       getRepoConfig() {
         return Effect.tryPromise({
           try: async () => {
@@ -113,6 +141,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
               worktreeCopyPaths: [],
               promptOverrides: {},
               agentDefaults: {},
+              agentStudioState: { openTaskIds: [] },
             };
           },
           catch: (cause) =>
@@ -333,6 +362,20 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
       [],
     );
     await expect(
+      router.invoke("workspace_replace_agent_studio_state", {
+        workspaceId: "repo",
+        state: {
+          openTaskIds: ["task-1"],
+          activeTask: { taskId: "task-1", role: "build", externalSessionId: "session-1" },
+        },
+      }),
+    ).resolves.toMatchObject({
+      agentStudioState: {
+        openTaskIds: ["task-1"],
+        activeTask: { taskId: "task-1", role: "build", externalSessionId: "session-1" },
+      },
+    });
+    await expect(
       router.invoke("workspace_get_repo_config", { workspaceId: "repo" }),
     ).resolves.toMatchObject({ workspaceId: "repo" });
     await expect(
@@ -394,6 +437,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
       "addWorkspace",
       "selectWorkspace",
       "reorderWorkspaces",
+      "replaceAgentStudioState",
       "getRepoConfig",
       "updateRepoConfig",
       "saveRepoSettings",
@@ -601,6 +645,12 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
     await expect(router.invoke("workspace_select")).rejects.toThrow(
       "workspace_select expects argument 'workspaceId'.",
     );
+    await expect(
+      router.invoke("workspace_replace_agent_studio_state", {
+        workspaceId: "repo",
+        state: { openTaskIds: [42] },
+      }),
+    ).rejects.toThrow("workspace_replace_agent_studio_state state is invalid");
     await expect(
       router.invoke("workspace_add", {
         workspaceId: "repo",

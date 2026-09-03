@@ -33,6 +33,7 @@ const repoConfig = (workspaceId: string, repoPath: string): RepoConfig => ({
   worktreeCopyPaths: [],
   promptOverrides: {},
   agentDefaults: {},
+  agentStudioState: { openTaskIds: [] },
 });
 const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   version: 3,
@@ -526,6 +527,70 @@ describe("createWorkspaceSettingsService", () => {
     });
     expect(settingsConfig.writtenConfigs[0]?.chat).toEqual(explicitChatSettings);
     expect(settingsConfig.writtenConfigs[0]?.appearance).toEqual(explicitAppearanceSettings);
+  });
+  test("replaces only the selected workspace Agent Studio state", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        theme: "dark",
+        workspaces: {
+          repo: repoConfig("repo", "/repos/repo"),
+          other: repoConfig("other", "/repos/other"),
+        },
+      }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const updatedRepo = await Effect.runPromise(
+      service.replaceAgentStudioState("repo", {
+        openTaskIds: ["task-2", "task-1"],
+        activeTask: {
+          taskId: "task-2",
+          role: "build",
+          externalSessionId: "session-2",
+        },
+      }),
+    );
+
+    expect(updatedRepo.agentStudioState).toEqual({
+      openTaskIds: ["task-2", "task-1"],
+      activeTask: {
+        taskId: "task-2",
+        role: "build",
+        externalSessionId: "session-2",
+      },
+    });
+    expect(settingsConfig.writtenConfigs[0]?.theme).toBe("dark");
+    expect(settingsConfig.writtenConfigs[0]?.workspaces.other).toEqual(
+      repoConfig("other", "/repos/other"),
+    );
+  });
+  test("preserves the latest Agent Studio state during a stale settings snapshot save", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        workspaces: { repo: repoConfig("repo", "/repos/repo") },
+      }),
+      existingPaths: new Set(["/repos/repo", "/repos/repo/.git"]),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+    const staleSnapshot = await Effect.runPromise(service.getSettingsSnapshot());
+
+    await Effect.runPromise(
+      service.replaceAgentStudioState("repo", {
+        openTaskIds: ["task-1"],
+        activeTask: { taskId: "task-1", role: "qa" },
+      }),
+    );
+    await Effect.runPromise(
+      service.saveSettingsSnapshot({
+        ...staleSnapshot,
+        general: { openAgentStudioTabOnBackgroundSessionStart: false },
+      }),
+    );
+
+    expect(settingsConfig.writtenConfigs.at(-1)?.workspaces.repo?.agentStudioState).toEqual({
+      openTaskIds: ["task-1"],
+      activeTask: { taskId: "task-1", role: "qa" },
+    });
   });
   test("does not let a failed theme write escape through a concurrent settings save", async () => {
     let rejectThemeWrite: ((reason: Error) => void) | undefined;

@@ -268,6 +268,7 @@ const noopSelectAgentStudioSelection: SelectAgentStudioSelection = () => {};
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
   const baseArgs: Omit<HookArgs, "selectionState"> = {
     activeWorkspaceId: null,
+    agentStudioState: null,
     workspaceRepoPath: null,
     isRepoNavigationBoundaryPending: false,
     tasks: [createTask("task-1"), createTask("task-2")],

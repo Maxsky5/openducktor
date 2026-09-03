@@ -305,6 +305,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       devServers: [],
       worktreeCopyPaths: [],
       promptOverrides: {},
+      agentStudioState: { openTaskIds: [] },
       agentDefaults: {},
     });
 

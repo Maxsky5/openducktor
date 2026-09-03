@@ -1,4 +1,4 @@
-import type { RepoConfig } from "@openducktor/contracts";
+import type { SettingsRepoConfig } from "@openducktor/contracts";
 import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 import { normalizeRepoAgentDefaultForSave } from "@/lib/repo-agent-defaults";
 import { normalizeTargetBranch } from "@/lib/target-branch";
@@ -10,12 +10,12 @@ const trimmedNonEmpty = (value: string): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
-export const prepareRepoConfigForSave = (repo: RepoConfig): RepoConfig => {
+export const prepareRepoConfigForSave = (repo: SettingsRepoConfig): SettingsRepoConfig => {
   const spec = normalizeRepoAgentDefaultForSave("spec", repo.agentDefaults.spec);
   const planner = normalizeRepoAgentDefaultForSave("planner", repo.agentDefaults.planner);
   const build = normalizeRepoAgentDefaultForSave("build", repo.agentDefaults.build);
   const qa = normalizeRepoAgentDefaultForSave("qa", repo.agentDefaults.qa);
-  const agentDefaults: RepoConfig["agentDefaults"] = {};
+  const agentDefaults: SettingsRepoConfig["agentDefaults"] = {};
   if (spec) {
     agentDefaults.spec = spec;
   }

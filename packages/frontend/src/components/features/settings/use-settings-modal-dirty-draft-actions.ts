@@ -1,6 +1,6 @@
 import type {
   AgentRuntimes,
-  RepoConfig,
+  SettingsRepoConfig,
   RepoPromptOverrides,
   ReusablePrompt,
   SettingsSnapshot,
@@ -32,7 +32,7 @@ export const useSettingsModalDirtyDraftActions = ({
   );
 
   const updateSelectedRepoConfig = useCallback(
-    (updater: (current: RepoConfig) => RepoConfig): void => {
+    (updater: (current: SettingsRepoConfig) => SettingsRepoConfig): void => {
       runDirtyAction("repoSettings", () => {
         draftActions.updateSelectedRepoConfig(updater);
       });
