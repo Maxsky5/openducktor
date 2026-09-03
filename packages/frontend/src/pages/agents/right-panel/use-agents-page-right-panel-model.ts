@@ -38,6 +38,7 @@ export type UseAgentsPageRightPanelModelArgs = {
   activeTabId: Parameters<typeof buildTaskExecutionPanelModel>[0]["activeTabId"];
   onActiveTabChange: Parameters<typeof buildTaskExecutionPanelModel>[0]["onActiveTabChange"];
   isPanelOpen: boolean;
+  pullRequestReviewUnavailableReason: string | null;
   documentsModel: Parameters<typeof buildTaskExecutionPanelModel>[0]["documentModel"];
   selectedFile: TaskExecutionSelectedFile | null;
   onSelectFile: (file: TaskExecutionSelectedFile) => TaskExecutionFileSelectionResult;
@@ -251,6 +252,7 @@ export function useAgentsPageRightPanelModel({
   activeTabId,
   onActiveTabChange,
   isPanelOpen,
+  pullRequestReviewUnavailableReason,
   documentsModel,
   selectedFile,
   onSelectFile,
@@ -407,7 +409,8 @@ export function useAgentsPageRightPanelModel({
       workspaceRepoPath &&
       selectedView.taskId &&
       linkedPullRequestProviderId &&
-      linkedPullRequestNumber
+      linkedPullRequestNumber &&
+      pullRequestReviewUnavailableReason === null
         ? {
             repoPath: workspaceRepoPath,
             taskId: selectedView.taskId,
@@ -417,7 +420,13 @@ export function useAgentsPageRightPanelModel({
             },
           }
         : null,
-    [linkedPullRequestNumber, linkedPullRequestProviderId, selectedView.taskId, workspaceRepoPath],
+    [
+      linkedPullRequestNumber,
+      linkedPullRequestProviderId,
+      pullRequestReviewUnavailableReason,
+      selectedView.taskId,
+      workspaceRepoPath,
+    ],
   );
   const hasLinkedPullRequest =
     linkedPullRequestProviderId !== null && linkedPullRequestNumber !== null;
@@ -435,9 +444,16 @@ export function useAgentsPageRightPanelModel({
         ? {
             isActive: activeTabId === "ci_checks" && isPanelOpen,
             queryInput: ciReviewQueryInput,
+            unavailableReason: pullRequestReviewUnavailableReason,
           }
         : null,
-    [activeTabId, ciReviewQueryInput, hasCiChecksTab, isPanelOpen],
+    [
+      activeTabId,
+      ciReviewQueryInput,
+      hasCiChecksTab,
+      isPanelOpen,
+      pullRequestReviewUnavailableReason,
+    ],
   );
   const rightPanelModel = useMemo(
     () =>

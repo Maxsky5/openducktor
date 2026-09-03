@@ -2,19 +2,19 @@ import { GITHUB_PROVIDER_DESCRIPTOR } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { GitProviderResolver } from "../../git/git-provider-resolver";
 
-export const createDefaultGitProviderResolver = (): GitProviderResolver => ({
-  resolve: (repoConfig) =>
+export const createDefaultGitProviderResolver = (): GitProviderResolver => {
+  const resolve = (repoConfig: Parameters<GitProviderResolver["resolve"]>[0]) =>
     Effect.succeed({
       getDescriptor: () => GITHUB_PROVIDER_DESCRIPTOR,
       repository: () => ({
         detectRepository: () => Effect.dieMessage("unexpected repository detection"),
-        getRepository: (configuredRepo) => {
+        getRepository: (configuredRepo: Parameters<GitProviderResolver["resolve"]>[0]) => {
           const repository = configuredRepo.git.provider?.repository;
           return repository
             ? Effect.succeed(repository)
             : Effect.dieMessage("test repository mapping is missing");
         },
-        getMapping: (configuredRepo) => {
+        getMapping: (configuredRepo: Parameters<GitProviderResolver["resolve"]>[0]) => {
           const repository = configuredRepo.git.provider?.repository;
           return repository
             ? Effect.succeed({ repository, remoteName: "origin" })
@@ -36,5 +36,6 @@ export const createDefaultGitProviderResolver = (): GitProviderResolver => ({
       }),
       pullRequests: () => Effect.dieMessage("unexpected Pull Request port"),
       pullRequestReview: () => Effect.dieMessage("unexpected Pull Request review port"),
-    }),
-});
+    });
+  return { resolve, resolveConfigured: resolve };
+};

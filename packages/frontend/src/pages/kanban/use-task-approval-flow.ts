@@ -1,14 +1,11 @@
-import type { TaskApprovalContextLoadResult, TaskCard } from "@openducktor/contracts";
+import type { RepositoryGitProviderContext, TaskCard } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useReducer, useRef } from "react";
 import { toast } from "sonner";
 import type { GitConflict } from "@/features/agent-studio-git";
 import { errorMessage } from "@/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
-import {
-  loadTaskApprovalContextFromQuery,
-  taskApprovalQueryKeys,
-} from "@/state/queries/task-approval";
+import { loadTaskApprovalContextFromQuery } from "@/state/queries/task-approval";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type {
   KanbanPageModels,
@@ -36,6 +33,7 @@ import { useTaskApprovalGitConflictFlow } from "./use-task-approval-git-conflict
 
 type UseTaskApprovalFlowArgs = {
   activeWorkspace: ActiveWorkspace | null;
+  gitProviderContext: RepositoryGitProviderContext;
   tasks: TaskCard[];
   requestPullRequestGeneration: (taskId: string) => Promise<string | undefined>;
   refreshTasks: () => Promise<void>;
@@ -52,6 +50,7 @@ type UseTaskApprovalFlowResult = {
 
 export function useTaskApprovalFlow({
   activeWorkspace,
+  gitProviderContext,
   tasks,
   requestPullRequestGeneration,
   refreshTasks,
@@ -83,13 +82,8 @@ export function useTaskApprovalFlow({
       const task = tasks.find((entry) => entry.id === taskId);
       const requestVersion = ++approvalRequestVersionRef.current;
 
-      const cachedContext = queryClient.getQueryData<TaskApprovalContextLoadResult>(
-        taskApprovalQueryKeys.context(workspaceRepoPath, taskId),
-      );
-      const cachedApprovalContext =
-        cachedContext?.outcome === "ready" ? cachedContext.approvalContext : undefined;
       const effectiveMode = resolveTaskApprovalOpenMode({
-        cachedContext: cachedApprovalContext,
+        gitProviderContext,
         requestedMode: options?.mode,
         task,
       });
@@ -129,7 +123,7 @@ export function useTaskApprovalFlow({
             } else {
               const approvalContext = approvalContextResult.approvalContext;
               const updatedEffectiveMode = resolveTaskApprovalOpenMode({
-                cachedContext: approvalContext,
+                gitProviderContext,
                 requestedMode: options?.mode,
                 task,
               });
@@ -155,7 +149,7 @@ export function useTaskApprovalFlow({
         }
       })();
     },
-    [workspaceRepoPath, queryClient, reset, tasks],
+    [gitProviderContext, workspaceRepoPath, queryClient, reset, tasks],
   );
   const { taskGitConflictDialog, openGitConflictDialog } = useTaskApprovalGitConflictFlow({
     onResolveGitConflict,
@@ -327,6 +321,7 @@ export function useTaskApprovalFlow({
     dispatch,
     reset,
     resetMissingBuilderWorktree,
+    gitProviderContext,
     state,
   });
 

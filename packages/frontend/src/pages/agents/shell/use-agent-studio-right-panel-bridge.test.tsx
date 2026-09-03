@@ -13,18 +13,18 @@ enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioRightPanelBridge>[0];
 
-const createPanelState = (
-  panel: HookArgs["panel"] = {
-    tabs: [
-      { id: "document", label: "Document" },
-      { id: "git", label: "Git" },
-      { id: "file_explorer", label: "File explorer" },
-    ],
-    activeTabId: "git",
-    isPanelOpen: true,
-    onActiveTabChange: mock(() => {}),
-  },
-): HookArgs["panel"] => panel;
+const createPanelState = (panel: Partial<HookArgs["panel"]> = {}): HookArgs["panel"] => ({
+  tabs: [
+    { id: "document", label: "Document" },
+    { id: "git", label: "Git" },
+    { id: "file_explorer", label: "File explorer" },
+  ],
+  activeTabId: "git",
+  isPanelOpen: true,
+  onActiveTabChange: mock(() => {}),
+  pullRequestReviewUnavailableReason: null,
+  ...panel,
+});
 
 const createSelectionView = (
   overrides: Partial<HookArgs["selection"]["view"]> = {},

@@ -11,7 +11,7 @@ import { createGitProviderResolver } from "./git-provider-resolver";
 import { createGitProviderService } from "./git-provider-service";
 
 describe("GitProviderService", () => {
-  test("loads repository settings and runs provider repository and health operations", async () => {
+  test("loads repository settings and returns the resolved provider context", async () => {
     const calls: string[] = [];
     const repository: GitProviderRepositoryPort = {
       detectRepository(repoPath) {
@@ -28,15 +28,17 @@ describe("GitProviderService", () => {
     const health: GitProviderHealthPort = {
       getStatus: (config) => {
         calls.push(`health:${config.repoPath}`);
+        const enabled = config.git.provider?.enabled === true;
         return Effect.succeed({
           providerId: "github",
-          enabled: true,
-          available: true,
-          executablePath: "gh",
-          version: "gh version test",
-          authenticated: true,
-          account: "octocat",
-          repositoryMappingValid: true,
+          enabled,
+          available: enabled,
+          executablePath: enabled ? "gh" : null,
+          version: enabled ? "gh version test" : null,
+          authenticated: enabled,
+          account: enabled ? "octocat" : null,
+          repositoryMappingValid: enabled ? true : null,
+          reason: enabled ? undefined : "GitHub provider is not enabled for this repository.",
         });
       },
     };
@@ -69,14 +71,14 @@ describe("GitProviderService", () => {
       defaultRuntimeKind: "opencode",
       git: {},
     });
-    const healthRepoConfig = repoConfigSchema.parse({
+    const contextRepoConfig = repoConfigSchema.parse({
       workspaceId: "repo",
       workspaceName: "Repo",
       repoPath: "/repo",
       defaultRuntimeKind: "opencode",
-      git: { provider: { id: "github", enabled: true } },
+      git: { provider: { id: "github", enabled: false } },
     });
-    const repoConfigs = [detectionRepoConfig, healthRepoConfig];
+    const repoConfigs = [detectionRepoConfig, contextRepoConfig];
     const service = createGitProviderService({
       resolver,
       workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
@@ -97,10 +99,40 @@ describe("GitProviderService", () => {
       owner: "openai",
       name: "openducktor",
     });
-    await expect(Effect.runPromise(service.getHealth("/repo"))).resolves.toMatchObject({
-      providerId: "github",
-      available: true,
+    await expect(Effect.runPromise(service.getContext("/repo"))).resolves.toEqual({
+      descriptor: GITHUB_PROVIDER_DESCRIPTOR,
+      config: contextRepoConfig.git.provider!,
+      health: {
+        providerId: "github",
+        enabled: false,
+        available: false,
+        executablePath: null,
+        version: null,
+        authenticated: false,
+        account: null,
+        repositoryMappingValid: null,
+        reason: "GitHub provider is not enabled for this repository.",
+      },
     });
     expect(calls).toEqual(["settings:/repo", "/repo", "settings:/repo", "health:/repo"]);
+  });
+
+  test("returns null when no provider is configured", async () => {
+    const repoConfig = repoConfigSchema.parse({
+      workspaceId: "repo",
+      workspaceName: "Repo",
+      repoPath: "/repo",
+      defaultRuntimeKind: "opencode",
+      git: {},
+    });
+    const resolver = await Effect.runPromise(createGitProviderResolver([]));
+    const service = createGitProviderService({
+      resolver,
+      workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
+        getRepoConfigByRepoPath: () => Effect.succeed(repoConfig),
+      }),
+    });
+
+    await expect(Effect.runPromise(service.getContext("/repo"))).resolves.toBeNull();
   });
 });

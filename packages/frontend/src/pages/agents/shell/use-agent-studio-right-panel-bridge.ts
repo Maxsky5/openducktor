@@ -9,7 +9,11 @@ type AgentStudioRightPanelBridgeSelection = Pick<AgentStudioOrchestrationSelecti
 
 type AgentStudioRightPanelPanelState = Pick<
   UseAgentsPageRightPanelModelArgs,
-  "tabs" | "activeTabId" | "isPanelOpen" | "onActiveTabChange"
+  | "tabs"
+  | "activeTabId"
+  | "isPanelOpen"
+  | "onActiveTabChange"
+  | "pullRequestReviewUnavailableReason"
 >;
 
 type UseAgentStudioRightPanelBridgeArgs = {
@@ -40,6 +44,7 @@ export type AgentStudioRightPanelRuntimeModel = {
   tabs: UseAgentsPageRightPanelModelArgs["tabs"];
   activeTabId: UseAgentsPageRightPanelModelArgs["activeTabId"];
   onActiveTabChange: UseAgentsPageRightPanelModelArgs["onActiveTabChange"];
+  pullRequestReviewUnavailableReason: UseAgentsPageRightPanelModelArgs["pullRequestReviewUnavailableReason"];
   isPanelOpen: UseAgentsPageRightPanelModelArgs["isPanelOpen"];
   documentsModel: UseAgentsPageRightPanelModelArgs["documentsModel"];
   selectedFile: UseAgentsPageRightPanelModelArgs["selectedFile"];
@@ -89,6 +94,7 @@ type BuildAgentStudioRightPanelBridgeModelArgs = Omit<
   tabs: AgentStudioRightPanelPanelState["tabs"];
   isPanelOpen: AgentStudioRightPanelPanelState["isPanelOpen"];
   onActiveTabChange: AgentStudioRightPanelPanelState["onActiveTabChange"];
+  pullRequestReviewUnavailableReason: AgentStudioRightPanelPanelState["pullRequestReviewUnavailableReason"];
 };
 
 function buildAgentStudioRightPanelBridgeModel({
@@ -100,6 +106,7 @@ function buildAgentStudioRightPanelBridgeModel({
   tabs,
   isPanelOpen,
   onActiveTabChange,
+  pullRequestReviewUnavailableReason,
   documentsModel,
   selectedFile,
   onSelectFile,
@@ -128,6 +135,7 @@ function buildAgentStudioRightPanelBridgeModel({
       tabs,
       activeTabId,
       onActiveTabChange,
+      pullRequestReviewUnavailableReason,
       isPanelOpen,
       documentsModel,
       selectedFile,
@@ -164,6 +172,7 @@ export function useAgentStudioRightPanelBridge({
   const tabs = panel.tabs;
   const isPanelOpen = panel.isPanelOpen;
   const onActiveTabChange = panel.onActiveTabChange;
+  const pullRequestReviewUnavailableReason = panel.pullRequestReviewUnavailableReason;
   const isRightPanelVisible = Boolean(activeTabId && isPanelOpen);
 
   const rightPanelBridge = useMemo<AgentStudioRightPanelBridgeModel | null>(() => {
@@ -180,6 +189,7 @@ export function useAgentStudioRightPanelBridge({
       tabs,
       isPanelOpen,
       onActiveTabChange,
+      pullRequestReviewUnavailableReason,
       documentsModel,
       selectedFile,
       onSelectFile,
@@ -203,6 +213,7 @@ export function useAgentStudioRightPanelBridge({
     onDetectPullRequest,
     onSelectFile,
     onActiveTabChange,
+    pullRequestReviewUnavailableReason,
     onGitConflictQuickActionContextChange,
     onResolveGitConflict,
     repoSettings,

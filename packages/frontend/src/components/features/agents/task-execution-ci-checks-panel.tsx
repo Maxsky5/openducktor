@@ -16,6 +16,7 @@ import {
 export type TaskExecutionCiChecksPanelModel = {
   isActive: boolean;
   queryInput: PullRequestReviewContextQueryInput | null;
+  unavailableReason?: string | null;
 };
 
 type NonLoadedPullRequestReviewContext = Exclude<PullRequestReviewContext, { status: "loaded" }>;
@@ -66,6 +67,17 @@ export const TaskExecutionCiChecksPanel = memo(function TaskExecutionCiChecksPan
     ...pullRequestReviewContextQueryOptions(queryInput ?? INACTIVE_QUERY_INPUT),
     enabled: model.isActive && queryInput !== null,
   });
+
+  if (model.unavailableReason) {
+    return (
+      <TaskExecutionCiPanelState
+        title="Pull request checks unavailable"
+        message="The configured Git provider cannot load CI checks or review comments."
+        detail={model.unavailableReason}
+        kind="unavailable"
+      />
+    );
+  }
 
   if (!queryInput) {
     return (

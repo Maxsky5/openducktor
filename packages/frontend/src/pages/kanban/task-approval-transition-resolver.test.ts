@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import type { TaskAction, TaskApprovalContext, TaskCard } from "@openducktor/contracts";
+import {
+  GITHUB_PROVIDER_DESCRIPTOR,
+  type GitProviderHealth,
+  type RepositoryGitProviderContext,
+  type TaskAction,
+  type TaskApprovalContext,
+  type TaskCard,
+} from "@openducktor/contracts";
 import type { TaskApprovalFlowState } from "./task-approval-flow-state";
 import {
   resolveTaskApprovalOpenMode,
@@ -32,6 +39,36 @@ const approvalContext = (overrides: Partial<TaskApprovalContext> = {}): TaskAppr
   providers: [],
   ...overrides,
 });
+
+const providerContext = (
+  supportsPullRequests: boolean,
+  available = true,
+): NonNullable<RepositoryGitProviderContext> => {
+  const health: GitProviderHealth = {
+    providerId: "github",
+    enabled: true,
+    available,
+    executablePath: available ? "gh" : null,
+    version: available ? "gh version test" : null,
+    authenticated: available,
+    account: available ? "octocat" : null,
+    repositoryMappingValid: available,
+  };
+  if (!available) {
+    health.reason = "Run `gh auth login` to connect GitHub.";
+  }
+  return {
+    descriptor: {
+      ...GITHUB_PROVIDER_DESCRIPTOR,
+      capabilities: {
+        ...GITHUB_PROVIDER_DESCRIPTOR.capabilities,
+        supportsPullRequests,
+      },
+    },
+    config: { id: "github", enabled: true, autoDetected: false },
+    health,
+  };
+};
 
 const openState = (overrides: Partial<Extract<TaskApprovalFlowState, { kind: "open" }>> = {}) =>
   ({
@@ -191,9 +228,7 @@ describe("resolveTaskApprovalOpenMode", () => {
     {
       name: "keeps an explicit requested mode",
       requestedMode: "direct_merge" as const,
-      cachedContext: approvalContext({
-        providers: [{ providerId: "github", enabled: true, available: true }],
-      }),
+      gitProviderContext: providerContext(true),
       task: task({
         status: "human_review",
         availableActions: ["human_approve"],
@@ -211,7 +246,7 @@ describe("resolveTaskApprovalOpenMode", () => {
     {
       name: "defaults PR-linked approval to pull request mode",
       requestedMode: undefined,
-      cachedContext: undefined,
+      gitProviderContext: providerContext(true),
       task: task({
         status: "human_review",
         availableActions: ["human_approve"],
@@ -227,20 +262,16 @@ describe("resolveTaskApprovalOpenMode", () => {
       expected: "pull_request" as const,
     },
     {
-      name: "uses cached provider availability when there is no PR-linked approval",
+      name: "uses provider capability when there is no PR-linked approval",
       requestedMode: undefined,
-      cachedContext: approvalContext({
-        providers: [{ providerId: "github", enabled: true, available: true }],
-      }),
+      gitProviderContext: providerContext(true),
       task: task({ status: "human_review", availableActions: ["human_approve"] }),
       expected: "pull_request" as const,
     },
     {
-      name: "uses cached provider availability when approval transition is unavailable",
+      name: "keeps Pull Request mode when health is unavailable",
       requestedMode: undefined,
-      cachedContext: approvalContext({
-        providers: [{ providerId: "github", enabled: true, available: true }],
-      }),
+      gitProviderContext: providerContext(true, false),
       task: task({
         status: "blocked",
         availableActions: ["open_builder"],
@@ -258,21 +289,21 @@ describe("resolveTaskApprovalOpenMode", () => {
     {
       name: "falls back to direct merge when task data is unavailable",
       requestedMode: undefined,
-      cachedContext: undefined,
+      gitProviderContext: null,
       task: undefined,
       expected: "direct_merge" as const,
     },
     {
-      name: "falls back to direct merge without a cached GitHub provider",
+      name: "falls back to direct merge when Pull Requests are unsupported",
       requestedMode: undefined,
-      cachedContext: approvalContext(),
+      gitProviderContext: providerContext(false),
       task: task({ status: "blocked", availableActions: ["open_builder"] }),
       expected: "direct_merge" as const,
     },
-  ])("$name", ({ cachedContext, expected, requestedMode, task: taskFixture }) => {
+  ])("$name", ({ gitProviderContext, expected, requestedMode, task: taskFixture }) => {
     expect(
       resolveTaskApprovalOpenMode({
-        cachedContext,
+        gitProviderContext,
         requestedMode,
         task: taskFixture,
       }),

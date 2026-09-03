@@ -3,6 +3,7 @@ import {
   gitProviderCapabilitiesSchema,
   gitProviderConfigSchema,
   gitProviderDescriptorSchema,
+  repositoryGitProviderContextSchema,
   repoGitConfigSchema,
 } from "./git-schemas";
 import { GITHUB_PROVIDER_DESCRIPTOR } from "./git-provider-descriptors";
@@ -65,5 +66,30 @@ describe("Git provider descriptors", () => {
       }).success,
     ).toBe(false);
     expect(repoGitConfigSchema.safeParse({ providers: {} }).success).toBe(false);
+  });
+
+  test("keeps provider support, configuration, and health as separate context fields", () => {
+    const context = {
+      descriptor: GITHUB_PROVIDER_DESCRIPTOR,
+      config: {
+        id: "github",
+        enabled: false,
+        autoDetected: false,
+      },
+      health: {
+        providerId: "github",
+        enabled: false,
+        available: false,
+        reason: "GitHub provider is not enabled for this repository.",
+        executablePath: null,
+        version: null,
+        authenticated: false,
+        account: null,
+        repositoryMappingValid: null,
+      },
+    };
+
+    expect(repositoryGitProviderContextSchema.parse(context)).toEqual(context);
+    expect(repositoryGitProviderContextSchema.parse(null)).toBeNull();
   });
 });

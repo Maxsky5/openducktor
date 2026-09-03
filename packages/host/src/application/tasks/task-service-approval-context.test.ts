@@ -17,8 +17,8 @@ import {
   task,
 } from "./test-support/task-workflow-harness";
 
-const createGitProviderResolver = (health: GitProviderHealth): GitProviderResolver => ({
-  resolve: () =>
+const createGitProviderResolver = (health: GitProviderHealth): GitProviderResolver => {
+  const resolve = () =>
     Effect.succeed({
       getDescriptor: () => GITHUB_PROVIDER_DESCRIPTOR,
       repository: () => ({
@@ -29,8 +29,9 @@ const createGitProviderResolver = (health: GitProviderHealth): GitProviderResolv
       health: () => ({ getStatus: () => Effect.succeed(health) }),
       pullRequests: () => Effect.die("Unexpected pullRequests call"),
       pullRequestReview: () => Effect.die("Unexpected pullRequestReview call"),
-    }),
-});
+    });
+  return { resolve, resolveConfigured: resolve };
+};
 
 const healthyGithub: GitProviderHealth = {
   providerId: "github",
@@ -45,6 +46,7 @@ const healthyGithub: GitProviderHealth = {
 
 const unusedGitProviderResolver: GitProviderResolver = {
   resolve: () => Effect.die("Unexpected Git provider resolution"),
+  resolveConfigured: () => Effect.die("Unexpected configured Git provider resolution"),
 };
 
 describe("createTaskService approval context", () => {

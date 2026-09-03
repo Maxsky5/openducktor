@@ -1,4 +1,4 @@
-import type { TaskApprovalContext } from "@openducktor/contracts";
+import type { RepositoryGitProviderContext, TaskApprovalContext } from "@openducktor/contracts";
 import type { PullRequestDraftMode, TaskApprovalMode } from "./kanban-page-model-types";
 
 export type TaskApprovalFlowStage =
@@ -70,11 +70,9 @@ export const CLOSED_TASK_APPROVAL_STATE: TaskApprovalFlowState = {
 };
 
 export const determineDefaultTaskApprovalMode = (
-  context: TaskApprovalContext | undefined,
-): TaskApprovalMode => {
-  const githubProvider = context?.providers?.find((entry) => entry.providerId === "github");
-  return githubProvider?.available ? "pull_request" : "direct_merge";
-};
+  context: RepositoryGitProviderContext,
+): TaskApprovalMode =>
+  context?.descriptor.capabilities.supportsPullRequests === true ? "pull_request" : "direct_merge";
 
 export const resolveTaskApprovalStage = (
   approvalContext: TaskApprovalContext | null,

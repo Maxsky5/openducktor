@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type RepositoryGitProviderContext,
+} from "@openducktor/contracts";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
@@ -12,7 +15,10 @@ import {
 import { ROLE_OPTIONS } from "./agents-page-constants";
 import { buildRoleLabelByRole } from "./agents-page-view-model";
 import { buildAgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
-import { buildAgentStudioPageModelsArgs } from "./use-agent-studio-orchestration-controller";
+import {
+  buildAgentStudioPageModelsArgs,
+  resolvePullRequestReviewAvailability,
+} from "./use-agent-studio-orchestration-controller";
 
 type BuildArgs = Parameters<typeof buildAgentStudioPageModelsArgs>[0];
 
@@ -272,6 +278,51 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(failed.selectedSession.selectedSession.transcriptState).toEqual({
       kind: "failed",
       message: "Selected session failed",
+    });
+  });
+});
+
+describe("resolvePullRequestReviewAvailability", () => {
+  test("hides review for a linked Pull Request when the provider does not support review", () => {
+    const gitProviderContext = {
+      descriptor: {
+        id: "fake",
+        label: "Fake Git",
+        description: "Fake provider without Pull Request review.",
+        capabilities: {
+          supportsPullRequests: true,
+          supportsPullRequestReview: false,
+        },
+      },
+      config: { id: "fake", enabled: true, autoDetected: false },
+      health: {
+        providerId: "fake",
+        enabled: true,
+        available: true,
+        executablePath: "fake-git",
+        version: "1.0.0",
+        authenticated: true,
+        account: "test",
+        repositoryMappingValid: true,
+      },
+    } satisfies NonNullable<RepositoryGitProviderContext>;
+
+    expect(
+      resolvePullRequestReviewAvailability({
+        gitProviderContext,
+        linkedPullRequest: {
+          providerId: "fake",
+          number: 7,
+          url: "https://example.com/pulls/7",
+          state: "open",
+          createdAt: "2026-09-03T10:00:00.000Z",
+          updatedAt: "2026-09-03T10:00:00.000Z",
+        },
+      }),
+    ).toEqual({
+      supportsPullRequestReview: false,
+      hasLinkedPullRequest: true,
+      unavailableReason: null,
     });
   });
 });

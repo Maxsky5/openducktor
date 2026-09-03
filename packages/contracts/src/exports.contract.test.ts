@@ -275,6 +275,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "gitProviderCapabilitiesSchema",
   "gitProviderAvailabilitySchema",
   "gitProviderHealthSchema",
+  "repositoryGitProviderContextSchema",
   "gitProviderConfigSchema",
   "gitProviderDescriptorSchema",
   "gitProviderIdSchema",

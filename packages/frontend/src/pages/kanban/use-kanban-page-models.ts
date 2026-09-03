@@ -65,7 +65,10 @@ export function useKanbanPageModels({
   const favoriteState = useAgentModelFavorites({ saveAgentModelFavorites });
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const { repoSettings } = useAgentStudioRepoSettings({ activeWorkspaceId });
+  const { gitProviderContext, repoSettings } = useAgentStudioRepoSettings({
+    activeRepoPath: workspaceRepoPath,
+    activeWorkspaceId,
+  });
   const { startAgentSession, sendAgentMessage } = useAgentOperations();
   const sessions = useAgentSessionSummaries();
   const {
@@ -286,6 +289,7 @@ export function useKanbanPageModels({
 
   const { taskApprovalModal, taskGitConflictDialog, openTaskApproval } = useTaskApprovalFlow({
     activeWorkspace,
+    gitProviderContext,
     tasks: kanbanTasks,
     requestPullRequestGeneration: onPullRequestGenerate,
     refreshTasks,

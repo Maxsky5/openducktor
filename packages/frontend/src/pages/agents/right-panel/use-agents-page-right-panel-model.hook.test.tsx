@@ -319,6 +319,7 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeTabId: "document",
   onActiveTabChange: () => {},
   isPanelOpen: false,
+  pullRequestReviewUnavailableReason: null,
   documentsModel: { activeDocument: null },
   selectedFile: null,
   onSelectFile: () => {},

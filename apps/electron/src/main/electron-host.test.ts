@@ -1173,14 +1173,27 @@ describe("createElectronHostCommandRouter", () => {
       name: "openducktor",
     });
     await expect(
-      router.invoke("workspace_get_git_provider_health", { repoPath: "/repo" }),
+      router.invoke("workspace_get_git_provider_context", { repoPath: "/repo" }),
     ).resolves.toMatchObject({
-      providerId: "github",
-      enabled: true,
-      available: true,
-      version: "gh version 1.0.0",
-      authenticated: true,
-      repositoryMappingValid: true,
+      descriptor: {
+        id: "github",
+        capabilities: {
+          supportsPullRequests: true,
+          supportsPullRequestReview: true,
+        },
+      },
+      config: {
+        id: "github",
+        enabled: true,
+      },
+      health: {
+        providerId: "github",
+        enabled: true,
+        available: true,
+        version: "gh version 1.0.0",
+        authenticated: true,
+        repositoryMappingValid: true,
+      },
     });
   });
 

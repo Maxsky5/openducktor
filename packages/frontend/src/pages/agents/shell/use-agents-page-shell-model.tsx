@@ -55,10 +55,10 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { allRuntimeDefinitions: runtimeDefinitions } = useRuntimeAvailabilityContext();
-  const { repoSettings, githubIntegrationEnabled, isLoadingRepoSettings } =
-    useAgentStudioRepoSettings({
-      activeWorkspaceId,
-    });
+  const { repoSettings, gitProviderContext, isLoadingRepoSettings } = useAgentStudioRepoSettings({
+    activeRepoPath: workspaceRepoPath,
+    activeWorkspaceId,
+  });
   const {
     tasksAreCurrent,
     isForegroundLoadingTasks,
@@ -131,7 +131,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     branches: branches ?? [],
     runtimeDefinitions,
     repoSettings,
-    githubIntegrationEnabled,
+    gitProviderContext,
     workspaceRepoPath,
     isForegroundLoadingTasks,
     routeSession,

@@ -2,6 +2,8 @@ import type {
   ChatSettings,
   GitBranch,
   GitTargetBranch,
+  PullRequest,
+  RepositoryGitProviderContext,
   RuntimeDescriptor,
 } from "@openducktor/contracts";
 import { useMemo } from "react";
@@ -56,13 +58,33 @@ type UseAgentStudioOrchestrationControllerArgs = {
   branches: GitBranch[];
   runtimeDefinitions: RuntimeDescriptor[];
   repoSettings: RepoSettingsInput | null;
-  githubIntegrationEnabled: boolean;
+  gitProviderContext: RepositoryGitProviderContext;
   workspaceRepoPath: string | null;
   selection: AgentStudioOrchestrationSelectionContext;
   taskExecutionFilePreview: UseTaskExecutionFilePreviewControllerResult;
   hasActiveGitConflict: boolean;
   composer: AgentStudioOrchestrationComposerContext;
   actions: AgentStudioOrchestrationActionsContext;
+};
+
+export const resolvePullRequestReviewAvailability = ({
+  gitProviderContext,
+  linkedPullRequest,
+}: {
+  gitProviderContext: RepositoryGitProviderContext;
+  linkedPullRequest: PullRequest | undefined;
+}) => {
+  const supportsPullRequestReview =
+    gitProviderContext?.descriptor.capabilities.supportsPullRequestReview === true;
+  const hasLinkedPullRequest =
+    linkedPullRequest !== undefined &&
+    linkedPullRequest.providerId === gitProviderContext?.config.id;
+  const unavailableReason =
+    supportsPullRequestReview && gitProviderContext.health.available === false
+      ? (gitProviderContext.health.reason ??
+        `${gitProviderContext.descriptor.label} is not available for Pull Request review.`)
+      : null;
+  return { supportsPullRequestReview, hasLinkedPullRequest, unavailableReason };
 };
 
 type UseAgentStudioOrchestrationControllerResult = {
@@ -204,7 +226,7 @@ export function useAgentStudioOrchestrationController({
   branches,
   runtimeDefinitions,
   repoSettings,
-  githubIntegrationEnabled,
+  gitProviderContext,
   workspaceRepoPath,
   selection,
   taskExecutionFilePreview,
@@ -467,12 +489,21 @@ export function useAgentStudioOrchestrationController({
     agentChatModel,
   } = useAgentStudioPageModels(pageModelsArgs);
 
+  const {
+    supportsPullRequestReview,
+    hasLinkedPullRequest,
+    unavailableReason: pullRequestReviewUnavailableReason,
+  } = resolvePullRequestReviewAvailability({
+    gitProviderContext,
+    linkedPullRequest: view.selectedTask?.pullRequest,
+  });
   const rightPanel = useAgentStudioRightPanel({
     role: selectedSessionContext.role,
     hasTaskContext: Boolean(selectedSessionContext.taskId),
     hasDocumentPanel: selectedSessionContext.documents.activeDocument !== null,
-    hasGithubIntegration: githubIntegrationEnabled,
-    hasLinkedGithubPullRequest: view.selectedTask?.pullRequest?.providerId === "github",
+    supportsPullRequestReview,
+    hasLinkedPullRequest,
+    pullRequestReviewUnavailableReason,
   });
   const { model: taskExecutionSelectedFilePreviewModel, onSelectFile: onSelectTaskExecutionFile } =
     taskExecutionFilePreview;

@@ -1,8 +1,8 @@
 import type {
-  GitProviderHealth,
   GitProviderId,
   GitProviderRepository,
   RepoConfig,
+  RepositoryGitProviderContext,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { type HostError, HostValidationError } from "../../effect/host-errors";
@@ -27,7 +27,9 @@ export type GitProviderService = {
     repoPath: string;
     providerId: GitProviderId;
   }): Effect.Effect<GitProviderRepository, GitProviderServiceError>;
-  getHealth(repoPath: string): Effect.Effect<GitProviderHealth, GitProviderServiceError>;
+  getContext(
+    repoPath: string,
+  ): Effect.Effect<RepositoryGitProviderContext, GitProviderServiceError>;
 };
 
 export const createGitProviderService = ({
@@ -44,11 +46,20 @@ export const createGitProviderService = ({
       return yield* provider.repository().detectRepository(repoConfig.repoPath);
     });
   },
-  getHealth(repoPath) {
+  getContext(repoPath) {
     return Effect.gen(function* () {
       const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-      const provider = yield* resolver.resolve(repoConfig);
-      return yield* provider.health().getStatus(repoConfig);
+      const config = repoConfig.git.provider;
+      if (!config) {
+        return null;
+      }
+      const provider = yield* resolver.resolveConfigured(repoConfig);
+      const health = yield* provider.health().getStatus(repoConfig);
+      return {
+        descriptor: provider.getDescriptor(),
+        config,
+        health,
+      };
     });
   },
 });

@@ -41,6 +41,7 @@ export type TaskApprovalApprovalModalModel = TaskApprovalModalBase & {
   mode: TaskApprovalMode;
   mergeMethod: "merge_commit" | "squash" | "rebase";
   pullRequestDraftMode: PullRequestDraftMode;
+  pullRequestSupported: boolean;
   pullRequestAvailable: boolean;
   pullRequestUnavailableReason: string | null;
   hasUncommittedChanges: boolean;

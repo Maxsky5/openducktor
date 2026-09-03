@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
+import { DEFAULT_AGENT_RUNTIMES, type RepositoryGitProviderContext } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents/session-start-modal";
 import type { TaskExecutionSelectedFilePreviewModel } from "@/components/features/agents/task-execution-file-preview";
@@ -49,7 +49,8 @@ import {
 
 interface RepoSettingsStateContract {
   repoSettings: RepoSettingsInput | null;
-  githubIntegrationEnabled: boolean;
+  gitProviderContext: RepositoryGitProviderContext;
+  isLoadingGitProviderContext: boolean;
   isLoadingRepoSettings: boolean;
 }
 
@@ -167,6 +168,7 @@ type OrchestrationState = {
       isOpen: boolean;
       onToggle: () => void;
     };
+    pullRequestReviewUnavailableReason: string | null;
   };
   taskExecutionSelectedFilePreviewModel: TaskExecutionSelectedFilePreviewModel;
   onSelectTaskExecutionFile: (file: { rootPath: string; relativePath: string }) => void;
@@ -246,7 +248,8 @@ let agentSessions = [createSession()];
 let sessionStore = createAgentSessionsStore("/repo");
 let repoSettingsState: RepoSettingsStateContract = {
   repoSettings: null,
-  githubIntegrationEnabled: false,
+  gitProviderContext: null,
+  isLoadingGitProviderContext: false,
   isLoadingRepoSettings: false,
 };
 const sessionIdentity = (externalSessionId: string) => ({
@@ -411,6 +414,7 @@ let orchestrationState: OrchestrationState = {
     onActiveTabChange: mock(() => {}),
     isPanelOpen: true,
     rightPanelToggleModel,
+    pullRequestReviewUnavailableReason: null,
   },
   taskExecutionSelectedFilePreviewModel: {
     selectedFile: null,
@@ -645,7 +649,8 @@ beforeEach(async () => {
   syncAgentSessionsStore();
   repoSettingsState = {
     repoSettings: null,
-    githubIntegrationEnabled: false,
+    gitProviderContext: null,
+    isLoadingGitProviderContext: false,
     isLoadingRepoSettings: false,
   };
   agentOperations = {
@@ -749,6 +754,7 @@ beforeEach(async () => {
       onActiveTabChange: mock(() => {}),
       isPanelOpen: true,
       rightPanelToggleModel,
+      pullRequestReviewUnavailableReason: null,
     },
     taskExecutionSelectedFilePreviewModel: {
       selectedFile: null,

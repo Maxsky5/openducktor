@@ -1,4 +1,5 @@
 import type { Dispatch } from "react";
+import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import type {
   TaskApprovalApprovalModalModel,
   TaskApprovalCompletionModalModel,
@@ -13,6 +14,7 @@ type BuildTaskApprovalModalModelArgs = {
   dispatch: Dispatch<TaskApprovalFlowAction>;
   reset: () => void;
   resetMissingBuilderWorktree: () => void;
+  gitProviderContext: RepositoryGitProviderContext;
   state: TaskApprovalFlowOpenState;
 };
 
@@ -22,10 +24,21 @@ export const buildTaskApprovalModalModel = ({
   dispatch,
   reset,
   resetMissingBuilderWorktree,
+  gitProviderContext,
   state,
 }: BuildTaskApprovalModalModelArgs): TaskApprovalModalModel => {
   const approvalContext = state.approvalContext;
-  const githubProvider = approvalContext?.providers.find((entry) => entry.providerId === "github");
+  const pullRequestSupported =
+    gitProviderContext?.descriptor.capabilities.supportsPullRequests === true;
+  const pullRequestAvailable =
+    pullRequestSupported &&
+    gitProviderContext.config.enabled &&
+    gitProviderContext.health.available;
+  const pullRequestUnavailableReason =
+    pullRequestSupported && !pullRequestAvailable
+      ? (gitProviderContext.health.reason ??
+        `${gitProviderContext.descriptor.label} is not available for Pull Requests.`)
+      : null;
   const baseModal = {
     open: true,
     taskId: state.taskId,
@@ -65,8 +78,9 @@ export const buildTaskApprovalModalModel = ({
     mode: state.mode,
     mergeMethod: state.mergeMethod,
     pullRequestDraftMode: state.pullRequestDraftMode,
-    pullRequestAvailable: githubProvider?.available ?? false,
-    pullRequestUnavailableReason: githubProvider?.reason ?? null,
+    pullRequestSupported,
+    pullRequestAvailable,
+    pullRequestUnavailableReason,
     hasUncommittedChanges: approvalContext?.hasUncommittedChanges ?? false,
     uncommittedFileCount: approvalContext?.uncommittedFileCount ?? 0,
     pullRequestUrl: approvalContext?.pullRequest?.url ?? null,

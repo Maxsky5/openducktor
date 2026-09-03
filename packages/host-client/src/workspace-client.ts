@@ -1,10 +1,10 @@
 import {
   type AgentModelFavorite,
   type GitProviderRepository,
-  type GitProviderHealth,
   type GlobalGitConfig,
   gitProviderRepositorySchema,
-  gitProviderHealthSchema,
+  type RepositoryGitProviderContext,
+  repositoryGitProviderContextSchema,
   type RepoConfig,
   type RuntimeKind,
   repoConfigSchema,
@@ -153,11 +153,15 @@ const workspaceDetectGithubRepository = async (
   );
 };
 
-const workspaceGetGitProviderHealth = async (
+const workspaceGetGitProviderContext = async (
   invokeFn: InvokeFn,
   repoPath: string,
-): Promise<GitProviderHealth> => {
-  return invokeFn("workspace_get_git_provider_health", { repoPath }, gitProviderHealthSchema);
+): Promise<RepositoryGitProviderContext> => {
+  return invokeFn(
+    "workspace_get_git_provider_context",
+    { repoPath },
+    repositoryGitProviderContextSchema,
+  );
 };
 
 const setTheme = async (invokeFn: InvokeFn, theme: string): Promise<void> => {
@@ -259,8 +263,8 @@ export class HostWorkspaceClient {
     return workspaceDetectGithubRepository(this.invokeFn, repoPath);
   }
 
-  async workspaceGetGitProviderHealth(repoPath: string): Promise<GitProviderHealth> {
-    return workspaceGetGitProviderHealth(this.invokeFn, repoPath);
+  async workspaceGetGitProviderContext(repoPath: string): Promise<RepositoryGitProviderContext> {
+    return workspaceGetGitProviderContext(this.invokeFn, repoPath);
   }
 
   async workspaceStageLocalAttachment(input: {

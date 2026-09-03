@@ -20,18 +20,9 @@ describe("createGitProviderCommandHandlers", () => {
         calls.push(input);
         return Effect.succeed({ host: "github.com", owner: "openai", name: "openducktor" });
       },
-      getHealth(repoPath) {
+      getContext(repoPath) {
         calls.push(repoPath);
-        return Effect.succeed({
-          providerId: "github",
-          enabled: true,
-          available: true,
-          executablePath: "gh",
-          version: "gh version 2.95.0",
-          authenticated: true,
-          account: "octocat",
-          repositoryMappingValid: true,
-        });
+        return Effect.succeed(null);
       },
     };
     const router = createHostCommandRouter({
@@ -54,8 +45,8 @@ describe("createGitProviderCommandHandlers", () => {
     ]);
 
     await expect(
-      router.invoke("workspace_get_git_provider_health", { repoPath: "/repo" }),
-    ).resolves.toMatchObject({ providerId: "github", available: true });
+      router.invoke("workspace_get_git_provider_context", { repoPath: "/repo" }),
+    ).resolves.toBeNull();
     expect(calls.at(-1)).toBe("/repo");
   });
 
@@ -69,7 +60,7 @@ describe("createGitProviderCommandHandlers", () => {
     });
     const service: GitProviderService = {
       detectRepository: () => Effect.fail(failure),
-      getHealth: () => Effect.die("unexpected health read"),
+      getContext: () => Effect.die("unexpected provider context read"),
     };
     const router = createEffectHostCommandRouter({
       handlers: createGitProviderCommandHandlers({ service }),

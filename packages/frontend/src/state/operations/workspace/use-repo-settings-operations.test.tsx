@@ -1041,7 +1041,7 @@ describe("use-repo-settings-operations", () => {
         queryKey: checksQueryKeys.all,
       });
       expect(invalidateQueries).toHaveBeenCalledWith({
-        queryKey: ["git-provider-health"],
+        queryKey: ["repository-git-provider-context"],
       });
       refreshResult.resolve();
     } finally {

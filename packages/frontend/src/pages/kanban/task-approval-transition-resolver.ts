@@ -1,4 +1,9 @@
-import type { TaskAction, TaskApprovalContext, TaskCard, TaskStatus } from "@openducktor/contracts";
+import type {
+  RepositoryGitProviderContext,
+  TaskAction,
+  TaskCard,
+  TaskStatus,
+} from "@openducktor/contracts";
 import type { TaskApprovalMode } from "./kanban-page-model-types";
 import {
   determineDefaultTaskApprovalMode,
@@ -101,11 +106,21 @@ export const resolveTaskApprovalWorkflowTransition = (
 };
 
 export const resolveTaskApprovalOpenMode = (args: {
-  cachedContext: TaskApprovalContext | undefined;
+  gitProviderContext: RepositoryGitProviderContext;
   requestedMode: TaskApprovalMode | undefined;
   task: Pick<TaskCard, "availableActions" | "pullRequest" | "status"> | undefined;
 }): TaskApprovalMode => {
-  if (args.requestedMode) {
+  if (args.requestedMode === "direct_merge") {
+    return args.requestedMode;
+  }
+
+  const supportsPullRequests =
+    args.gitProviderContext?.descriptor.capabilities.supportsPullRequests === true;
+  if (!supportsPullRequests) {
+    return "direct_merge";
+  }
+
+  if (args.requestedMode === "pull_request") {
     return args.requestedMode;
   }
 
@@ -116,7 +131,7 @@ export const resolveTaskApprovalOpenMode = (args: {
     }
   }
 
-  return determineDefaultTaskApprovalMode(args.cachedContext);
+  return determineDefaultTaskApprovalMode(args.gitProviderContext);
 };
 
 export const resolveTaskApprovalSubmissionRoute = (
