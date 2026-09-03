@@ -1,6 +1,6 @@
 import type { RepoConfig, WorkspaceAgentStudioState } from "@openducktor/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { host } from "@/state/operations/host";
 import { workspaceQueryKeys } from "@/state/queries/workspace";
 
@@ -29,7 +29,9 @@ export function useAgentStudioWorkspaceStatePersistence({
 }) {
   const queryClient = useQueryClient();
   const activeWorkspaceIdRef = useRef(workspaceId);
-  activeWorkspaceIdRef.current = workspaceId;
+  useLayoutEffect(() => {
+    activeWorkspaceIdRef.current = workspaceId;
+  }, [workspaceId]);
   const baselineRef = useRef<{ workspaceId: string | null; key: string | null }>({
     workspaceId: null,
     key: null,

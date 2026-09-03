@@ -38,6 +38,7 @@ describe("agent-studio-workspace-state", () => {
         state: { openTaskIds: ["task-1"], activeTask: { taskId: "missing", role: "qa" } },
         tasks: [task],
         sessions: [],
+        sessionListAuthoritative: true,
       }),
     ).toEqual({ openTaskIds: ["task-1"] });
     expect(
@@ -52,8 +53,34 @@ describe("agent-studio-workspace-state", () => {
         },
         tasks: [task],
         sessions: [],
+        sessionListAuthoritative: true,
       }),
     ).toEqual({ openTaskIds: ["task-1"], activeTask: { taskId: "task-1", role: "planner" } });
+  });
+
+  test("preserves a saved session when the session list is not authoritative", () => {
+    expect(
+      reconcileAgentStudioStateForReadModel({
+        state: {
+          openTaskIds: ["task-1"],
+          activeTask: {
+            taskId: "task-1",
+            role: "planner",
+            externalSessionId: "session-saved",
+          },
+        },
+        tasks: [createTask("task-1")],
+        sessions: [],
+        sessionListAuthoritative: false,
+      }),
+    ).toEqual({
+      openTaskIds: ["task-1"],
+      activeTask: {
+        taskId: "task-1",
+        role: "planner",
+        externalSessionId: "session-saved",
+      },
+    });
   });
 
   test("uses the matched session role and canonical external session id", () => {
@@ -73,6 +100,7 @@ describe("agent-studio-workspace-state", () => {
         },
         tasks: [createTask("task-1")],
         sessions: [session],
+        sessionListAuthoritative: true,
       }),
     ).toEqual({
       openTaskIds: ["task-1"],

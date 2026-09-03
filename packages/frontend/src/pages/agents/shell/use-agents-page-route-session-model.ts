@@ -1,18 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
 import { startTransition, useCallback, useEffect, useMemo } from "react";
 import { useLocation, useNavigationType, useSearchParams } from "react-router";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useAgentSessionReadModelState } from "@/state/app-state-provider";
-import { repoConfigQueryOptions } from "@/state/queries/workspace";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigation";
-import {
-  createAgentStudioStateSnapshot,
-  reconcileAgentStudioStateForReadModel,
-} from "../agent-studio-workspace-state";
+import { createAgentStudioStateSnapshot } from "../agent-studio-workspace-state";
 import { useAgentStudioQuerySync } from "../query-sync/use-agent-studio-query-sync";
 import { useAgentStudioSelectionController } from "../use-agent-studio-selection-controller";
 import { useAgentStudioWorkspaceStatePersistence } from "../use-agent-studio-workspace-state-persistence";
+import { useAgentStudioWorkspaceStateLoad } from "../use-agent-studio-workspace-state-load";
 import {
   type UseTaskExecutionFilePreviewControllerResult,
   useTaskExecutionFilePreviewController,
@@ -29,8 +25,6 @@ type UseAgentsPageRouteSessionModelArgs = {
   repoSettings: RepoSettingsInput | null;
   isLoadingRepoSettings: boolean;
 };
-
-const INACTIVE_AGENT_STUDIO_WORKSPACE_ID = "__inactive_agent_studio_workspace__";
 
 export type AgentsPageRouteSessionModel = {
   navigationPersistenceError: Error | null;
@@ -54,31 +48,20 @@ export function useAgentsPageRouteSessionModel({
   const [searchParams, setSearchParams] = useSearchParams();
   const navigationType = useNavigationType();
   const { sessionReadModelLoadState } = useAgentSessionReadModelState();
-  const repoConfigQuery = useQuery({
-    ...repoConfigQueryOptions(activeWorkspaceId ?? INACTIVE_AGENT_STUDIO_WORKSPACE_ID),
-    enabled: activeWorkspaceId !== null,
+  const {
+    loadedAgentStudioState,
+    agentStudioState,
+    isLoading: isLoadingAgentStudioState,
+    error: agentStudioStateLoadError,
+    retry: retryAgentStudioStateLoad,
+    canPersist: canPersistAgentStudioState,
+  } = useAgentStudioWorkspaceStateLoad({
+    activeWorkspaceId,
+    tasks,
+    isLoadingTasks: isForegroundLoadingTasks,
+    sessions,
+    sessionReadModelLoadState,
   });
-  const loadedAgentStudioState = repoConfigQuery.data?.agentStudioState ?? null;
-  const isWaitingForSavedSession = Boolean(
-    loadedAgentStudioState?.activeTask?.externalSessionId &&
-    sessionReadModelLoadState.kind === "loading",
-  );
-  const agentStudioState = useMemo(() => {
-    if (!loadedAgentStudioState || isForegroundLoadingTasks || isWaitingForSavedSession) {
-      return null;
-    }
-    return reconcileAgentStudioStateForReadModel({
-      state: loadedAgentStudioState,
-      tasks,
-      sessions,
-    });
-  }, [isForegroundLoadingTasks, isWaitingForSavedSession, loadedAgentStudioState, sessions, tasks]);
-  const agentStudioStateLoadError =
-    repoConfigQuery.error instanceof Error ? repoConfigQuery.error : null;
-  const refetchAgentStudioState = repoConfigQuery.refetch;
-  const retryAgentStudioStateLoad = useCallback((): void => {
-    void refetchAgentStudioState();
-  }, [refetchAgentStudioState]);
 
   const {
     taskIdParam,
@@ -92,8 +75,7 @@ export function useAgentsPageRouteSessionModel({
   } = useAgentStudioQuerySync({
     activeWorkspaceId,
     agentStudioState,
-    isLoadingAgentStudioState:
-      repoConfigQuery.isLoading || isForegroundLoadingTasks || isWaitingForSavedSession,
+    isLoadingAgentStudioState,
     agentStudioStateError: agentStudioStateLoadError,
     retryAgentStudioStateLoad,
     locationKey,
@@ -164,6 +146,7 @@ export function useAgentsPageRouteSessionModel({
       loadedState: loadedAgentStudioState,
       state: stateSnapshot,
       enabled:
+        canPersistAgentStudioState &&
         isWorkspaceStateLoaded &&
         !isRepoNavigationBoundaryPending &&
         !isForegroundLoadingTasks &&

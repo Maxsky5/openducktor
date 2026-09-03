@@ -41,10 +41,12 @@ export const reconcileAgentStudioStateForReadModel = ({
   state,
   tasks,
   sessions,
+  sessionListAuthoritative,
 }: {
   state: WorkspaceAgentStudioState;
   tasks: readonly TaskCard[];
   sessions: readonly AgentSessionSummary[];
+  sessionListAuthoritative: boolean;
 }): WorkspaceAgentStudioState => {
   const openTaskIds = reconcileAgentStudioOpenTaskIds(state.openTaskIds, tasks);
   const activeTask = state.activeTask;
@@ -71,6 +73,8 @@ export const reconcileAgentStudioStateForReadModel = ({
   }
   if (session) {
     reconciledActiveTask.externalSessionId = session.externalSessionId;
+  } else if (activeTask.externalSessionId && !sessionListAuthoritative) {
+    reconciledActiveTask.externalSessionId = activeTask.externalSessionId;
   }
 
   return { openTaskIds, activeTask: reconciledActiveTask };
