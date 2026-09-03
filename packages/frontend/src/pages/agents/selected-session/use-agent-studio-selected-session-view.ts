@@ -41,7 +41,6 @@ type UseAgentStudioSelectedSessionViewArgs = {
   sessionlessRole: AgentRole;
   keepExplicitRoleSessionless: boolean;
   sessionIdentityFromRoute: AgentSessionIdentity | null;
-  isRepositorySessionRoute: boolean;
   repoSettings: RepoSettingsInput | null;
   isLoadingRepoSettings: boolean;
 };
@@ -89,7 +88,6 @@ export function useAgentStudioSelectedSessionView({
   sessionlessRole,
   keepExplicitRoleSessionless,
   sessionIdentityFromRoute,
-  isRepositorySessionRoute,
   repoSettings,
   isLoadingRepoSettings,
 }: UseAgentStudioSelectedSessionViewArgs): AgentStudioSelectedSessionView {
@@ -162,17 +160,6 @@ export function useAgentStudioSelectedSessionView({
   });
   const repoReadinessState = runtimeReadiness.state;
   const selectedSessionViewProjection = useMemo(() => {
-    if (isRepositorySessionRoute && !loadedSession && sessionReadModelLoadState.kind === "ready") {
-      return {
-        activityState: null,
-        selectedModel: null,
-        transcriptState: {
-          kind: "failed",
-          message: `Agent session "${sessionExternalId}" was not found for this repository.`,
-        } as const,
-        sessionAuxiliaryError: null,
-      };
-    }
     if (isUnresolvedExplicitRouteSession && routeSessionResolution.kind === "pending") {
       return {
         activityState: null,
@@ -216,11 +203,9 @@ export function useAgentStudioSelectedSessionView({
     });
   }, [
     repoReadinessState,
-    isRepositorySessionRoute,
     isUnresolvedExplicitRouteSession,
     routeSessionResolution,
     selectedSessionIdentity,
-    sessionExternalId,
     selectedTask,
     loadedSession,
     selection.sessionSummary,

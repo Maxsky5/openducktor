@@ -5,7 +5,6 @@ import type {
   TaskCard,
 } from "@openducktor/contracts";
 import { buildAgentStudioHref } from "@/pages/agents/query-sync/agent-studio-navigation";
-import { notificationSessionNavigationState } from "./notification-navigation-state";
 
 export const ATTENTION_KIND_QUERY_KEY = "attention";
 export const ATTENTION_ID_QUERY_KEY = "attentionId";
@@ -46,10 +45,7 @@ export const matchesNotificationSession = (
     NotificationNavigationTarget,
     { type: "agent_session" | "pending_input" | "session_error" }
   >,
-): boolean =>
-  session.externalSessionId === target.session.externalSessionId &&
-  session.runtimeKind === target.session.runtimeKind &&
-  session.workingDirectory === target.session.workingDirectory;
+): boolean => session.externalSessionId === target.session.externalSessionId;
 
 type NotificationNavigationDependencies = {
   activeWorkspaceId: string | null;
@@ -82,11 +78,7 @@ export const navigateToNotificationTarget = async (
     if (target.type === "agent_studio_task" || target.type === "kanban_task") {
       return;
     }
-    const href = `/agents?session=${encodeURIComponent(target.session.externalSessionId)}`;
-    dependencies.navigate(
-      target.type === "agent_session" ? href : addNotificationAttention(href, target),
-      { state: notificationSessionNavigationState(target.session) },
-    );
+    dependencies.reportStale("Repository session notifications cannot be opened yet.");
     return;
   }
 

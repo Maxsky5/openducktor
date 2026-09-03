@@ -92,7 +92,7 @@ export type SessionStartNotificationPublisher = {
   publishSessionStarted(
     input: SessionStartNotificationInput & { session: AgentSessionIdentity },
   ): void;
-  publishSessionError(input: SessionStartNotificationInput): void;
+  publishSessionError(input: SessionStartNotificationInput): Promise<boolean>;
   reportFailure(cause: unknown, input: SessionStartNotificationInput): void;
 };
 
@@ -348,8 +348,7 @@ export const createSessionStartWorkflowRunner = ({
       let feedbackHandled = false;
       try {
         if (notifications) {
-          notifications.publishSessionError(notificationInput);
-          feedbackHandled = true;
+          feedbackHandled = await notifications.publishSessionError(notificationInput);
         }
       } catch (notificationCause) {
         reportNotificationFailure(notificationCause);
@@ -362,7 +361,7 @@ export const createSessionStartWorkflowRunner = ({
     const notificationWithSession = { ...notificationInput, session };
     try {
       if (postStartActionError) {
-        notifications?.publishSessionError(notificationWithSession);
+        await notifications?.publishSessionError(notificationWithSession);
       } else if (input.decision.startMode === "fresh" || input.decision.startMode === "fork") {
         notifications?.publishSessionStarted(notificationWithSession);
       }

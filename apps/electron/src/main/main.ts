@@ -47,11 +47,6 @@ import {
   ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL,
   ELECTRON_HOST_EVENT_CHANNEL,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
-  ELECTRON_NOTIFICATION_GET_APP_FOCUS_CHANNEL,
-  ELECTRON_NOTIFICATION_GET_CAPABILITY_CHANNEL,
-  ELECTRON_NOTIFICATION_OPEN_SETTINGS_CHANNEL,
-  ELECTRON_NOTIFICATION_REQUEST_PERMISSION_CHANNEL,
-  ELECTRON_NOTIFICATION_SHOW_CHANNEL,
   ELECTRON_OPEN_EXTERNAL_URL_CHANNEL,
   type ElectronAppUpdateCheckInput,
 } from "../shared/electron-bridge-contract";
@@ -89,11 +84,10 @@ import {
 import { createElectronMainLogger, initializeElectronMainLogger } from "./electron-main-logger";
 import { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindings";
 import { resolveElectronRuntimeDistribution } from "./electron-runtime-distribution";
-import { createElectronNotificationService } from "./electron-notification-service";
+import { createElectronNotificationRuntime } from "./electron-notification-runtime";
 import {
   readMacosNotificationAuthorizationStatus,
   resolveElectronNotificationPermission,
-  resolveElectronNotificationSettingsUrl,
 } from "./electron-notification-permission";
 import { disableElectronKeychainStorage } from "./electron-storage-policy";
 import { registerElectronTaskAssetProtocol } from "./electron-task-asset-protocol";
@@ -163,7 +157,7 @@ const hostEventBus = createHostEventBus({
 });
 let activeHostCommandRouter: EffectHostCommandRouter | null = null;
 let activeAppUpdateService: ElectronAppUpdateService | null = null;
-let activeNotificationService: ReturnType<typeof createElectronNotificationService> | null = null;
+let activeNotificationRuntime: ReturnType<typeof createElectronNotificationRuntime> | null = null;
 
 const isTaggedHostValidationError = (
   cause: unknown,
@@ -705,7 +699,6 @@ const createRejectedAppUpdateCommandResult = (
 const registerIpcHandlers = (
   hostCommandRouter: EffectNodeHostCommandRouter,
   appUpdateService: ElectronAppUpdateService,
-  notificationService: ReturnType<typeof createElectronNotificationService>,
 ): void => {
   registerElectronEditorClipboardIpc({ clipboard, ipcMain });
   registerElectronTaskStreamIpc({
@@ -747,40 +740,6 @@ const registerIpcHandlers = (
     );
     return createElectronLocalAttachmentPreviewUrl(resolvedPath);
   });
-
-  ipcMain.handle(ELECTRON_NOTIFICATION_GET_CAPABILITY_CHANNEL, () =>
-    notificationService.getCapability(),
-  );
-  ipcMain.handle(ELECTRON_NOTIFICATION_REQUEST_PERMISSION_CHANNEL, () =>
-    notificationService.getCapability(),
-  );
-  ipcMain.handle(ELECTRON_NOTIFICATION_OPEN_SETTINGS_CHANNEL, async () => {
-    const settingsUrl = resolveElectronNotificationSettingsUrl(process.platform);
-    if (!settingsUrl) {
-      throw new ElectronOperationError({
-        operation: "electron.notifications.open-system-settings",
-        message: "This platform does not provide notification settings that OpenDucktor can open.",
-      });
-    }
-    await runElectronEffect(
-      Effect.tryPromise({
-        try: () => shell.openExternal(settingsUrl),
-        catch: (cause) =>
-          new ElectronOperationError({
-            operation: "electron.notifications.open-system-settings",
-            message: errorMessage(cause),
-            cause,
-            details: { url: settingsUrl },
-          }),
-      }),
-    );
-  });
-  ipcMain.handle(ELECTRON_NOTIFICATION_GET_APP_FOCUS_CHANNEL, () =>
-    notificationService.isAppFocused(),
-  );
-  ipcMain.handle(ELECTRON_NOTIFICATION_SHOW_CHANNEL, (_event, request) =>
-    notificationService.show(request),
-  );
 
   ipcMain.handle(ELECTRON_APP_UPDATE_GET_STATE_CHANNEL, () =>
     readAppUpdateStateForIpc(appUpdateService.getState()),
@@ -843,16 +802,16 @@ const disposeActiveAppUpdateService = async (): Promise<void> => {
   await service?.dispose();
 };
 
-const disposeActiveNotificationService = (): void => {
-  activeNotificationService?.dispose();
-  activeNotificationService = null;
+const disposeActiveNotificationRuntime = (): void => {
+  activeNotificationRuntime?.dispose();
+  activeNotificationRuntime = null;
 };
 
 const disposeActiveElectronRuntimeEffect = (
   reason: string,
 ): Effect.Effect<void, ElectronLifecycleError> =>
   Effect.gen(function* () {
-    yield* Effect.sync(disposeActiveNotificationService);
+    yield* Effect.sync(disposeActiveNotificationRuntime);
     const updaterResult = yield* Effect.either(
       Effect.tryPromise({
         try: disposeActiveAppUpdateService,
@@ -954,13 +913,13 @@ const configureElectronReadyRuntimeEffect = ({
         resourcesPath: process.resourcesPath,
       });
       activeAppUpdateService = appUpdateService;
-      if (activeNotificationService) {
+      if (activeNotificationRuntime) {
         throw new ElectronLifecycleError({
           operation: "electron.main.configure-notifications",
           message: "Electron notification service is already configured.",
         });
       }
-      const notificationService = createElectronNotificationService({
+      const notificationRuntime = createElectronNotificationRuntime({
         Notification,
         getPermission: () =>
           resolveElectronNotificationPermission(
@@ -968,8 +927,11 @@ const configureElectronReadyRuntimeEffect = ({
             readMacosNotificationAuthorizationStatus,
           ),
         getWindows: () => BrowserWindow.getAllWindows(),
+        ipcMain,
+        openExternal: (url) => shell.openExternal(url),
+        platform: process.platform,
       });
-      activeNotificationService = notificationService;
+      activeNotificationRuntime = notificationRuntime;
       configureElectronLoopbackCorsPolicy(
         rendererSession,
         resolveElectronLoopbackCorsOrigin(rendererDevUrl),
@@ -991,7 +953,7 @@ const configureElectronReadyRuntimeEffect = ({
           runElectronMainTask(() => appUpdateService.check({ initiator: "menu" }).then(() => {}));
         },
       });
-      registerIpcHandlers(hostCommandRouter, appUpdateService, notificationService);
+      registerIpcHandlers(hostCommandRouter, appUpdateService);
       registerHostEventForwarding();
       registerAppUpdateStateForwarding(appUpdateService);
       configureElectronDockIcon();

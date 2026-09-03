@@ -87,8 +87,6 @@ describe("notification contracts", () => {
         repoPath: "/repo",
         taskId: "task-1",
         session: {
-          runtimeKind: "opencode",
-          workingDirectory: "/repo",
           externalSessionId: "session-1",
         },
       },
@@ -133,8 +131,6 @@ describe("notification contracts", () => {
       type: "agent_session",
       repoPath: "/repo",
       session: {
-        runtimeKind: "opencode",
-        workingDirectory: "/repo",
         externalSessionId: "session-1",
       },
     } as const;

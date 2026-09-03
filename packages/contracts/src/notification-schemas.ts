@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { runtimeKindSchema } from "./agent-runtime-schemas";
 import { agentRoleSchema } from "./agent-workflow-schemas";
 
 export const NOTIFICATION_KIND_VALUES = [
@@ -128,8 +127,6 @@ const notificationSessionTargetFields = {
 } as const;
 
 export const notificationSessionIdentitySchema = z.strictObject({
-  runtimeKind: runtimeKindSchema,
-  workingDirectory: z.string().trim().min(1).max(1024),
   externalSessionId: z.string().trim().min(1).max(512),
 });
 export type NotificationSessionIdentity = z.infer<typeof notificationSessionIdentitySchema>;

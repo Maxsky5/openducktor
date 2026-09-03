@@ -85,32 +85,6 @@ describe("resolveAgentStudioNavigationState", () => {
     expect(state.queryUpdate).toBeNull();
   });
 
-  test("keeps an exact repository session identity from notification navigation", () => {
-    const repositorySessionIdentity = {
-      externalSessionId: "repository-session",
-      runtimeKind: "codex" as const,
-      workingDirectory: "/repo/worktrees/repository-session",
-    };
-    const selectionState = createAgentStudioRouteSelectionState({
-      isRepoNavigationBoundaryPending: false,
-      taskIdParam: "",
-      sessionExternalIdParam: repositorySessionIdentity.externalSessionId,
-      sessionIdentityFromNavigation: repositorySessionIdentity,
-      hasExplicitRoleParam: false,
-      roleFromQuery: "spec",
-    });
-    const state = createNavigationState({
-      taskIdParam: "",
-      sessionExternalIdParam: repositorySessionIdentity.externalSessionId,
-      selectionState,
-    });
-
-    expect(state.routeSessionResolution).toEqual({ kind: "none" });
-    expect(state.view.sessionIdentity).toEqual(repositorySessionIdentity);
-    expect(state.view.taskId).toBe("");
-    expect(state.queryUpdate).toBeNull();
-  });
-
   test("does not clear a session deep link before the session catalog can resolve it", () => {
     const state = createNavigationState({
       tasks: [createTask("task-1")],

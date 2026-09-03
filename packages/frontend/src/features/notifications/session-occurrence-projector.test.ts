@@ -117,8 +117,6 @@ describe("session occurrence projector", () => {
           repoPath: "/repo",
           taskId: "task-1",
           session: {
-            runtimeKind: "opencode",
-            workingDirectory: "/repo/worktrees/task-1",
             externalSessionId: "session-1",
           },
           inputKind: "permission",

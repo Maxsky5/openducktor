@@ -1,6 +1,5 @@
 import type { AgentRole } from "@openducktor/core";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigation";
 import {
   type AgentStudioSelectionState,
@@ -14,7 +13,6 @@ type UseAgentStudioSelectionStateArgs = {
   isWorkspaceRestorePending: boolean;
   taskIdParam: string;
   sessionExternalIdParam: string | null;
-  sessionIdentityFromNavigation?: AgentSessionIdentity | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
@@ -39,7 +37,6 @@ export function useAgentStudioSelectionState({
   isWorkspaceRestorePending,
   taskIdParam,
   sessionExternalIdParam,
-  sessionIdentityFromNavigation = null,
   hasExplicitRoleParam,
   roleFromQuery,
   scheduleQueryUpdate,
@@ -51,7 +48,6 @@ export function useAgentStudioSelectionState({
         isWorkspaceRestorePending,
         taskIdParam,
         sessionExternalIdParam,
-        sessionIdentityFromNavigation,
         hasExplicitRoleParam,
         roleFromQuery,
       }),
@@ -59,7 +55,6 @@ export function useAgentStudioSelectionState({
       hasExplicitRoleParam,
       isWorkspaceRestorePending,
       roleFromQuery,
-      sessionIdentityFromNavigation,
       sessionExternalIdParam,
       taskIdParam,
     ],
