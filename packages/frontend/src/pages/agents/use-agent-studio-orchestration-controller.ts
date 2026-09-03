@@ -58,7 +58,7 @@ type UseAgentStudioOrchestrationControllerArgs = {
   branches: GitBranch[];
   runtimeDefinitions: RuntimeDescriptor[];
   repoSettings: RepoSettingsInput | null;
-  gitProviderContext: RepositoryGitProviderContext;
+  gitProviderContext: RepositoryGitProviderContext | undefined;
   workspaceRepoPath: string | null;
   selection: AgentStudioOrchestrationSelectionContext;
   taskExecutionFilePreview: UseTaskExecutionFilePreviewControllerResult;
@@ -71,7 +71,7 @@ export const resolvePullRequestReviewAvailability = ({
   gitProviderContext,
   linkedPullRequest,
 }: {
-  gitProviderContext: RepositoryGitProviderContext;
+  gitProviderContext: RepositoryGitProviderContext | undefined;
   linkedPullRequest: PullRequest | undefined;
 }) => {
   const supportsPullRequestReview =

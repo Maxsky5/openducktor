@@ -1592,6 +1592,7 @@ describe("KanbanPage session start modal flow", () => {
       currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
       const originalTaskApprovalContextGet = hostClient.taskApprovalContextGet;
       const originalTaskDirectMerge = hostClient.taskDirectMerge;
+      const originalWorkspaceGetGitProviderContext = hostClient.workspaceGetGitProviderContext;
       const originalWorkspaceGetRepoConfig = hostClient.workspaceGetRepoConfig;
       const originalWorkspaceGetSettingsSnapshot = hostClient.workspaceGetSettingsSnapshot;
       const approvalContext: TaskApprovalContext = {
@@ -1624,6 +1625,7 @@ describe("KanbanPage session start modal flow", () => {
             workingDir: "/repo/worktrees/conflict",
           },
         });
+        hostClient.workspaceGetGitProviderContext = async () => null;
         hostClient.workspaceGetRepoConfig = async () => currentRepoConfigFixture;
         hostClient.workspaceGetSettingsSnapshot = async () => currentSettingsSnapshotFixture;
 
@@ -1676,6 +1678,7 @@ describe("KanbanPage session start modal flow", () => {
       } finally {
         hostClient.taskApprovalContextGet = originalTaskApprovalContextGet;
         hostClient.taskDirectMerge = originalTaskDirectMerge;
+        hostClient.workspaceGetGitProviderContext = originalWorkspaceGetGitProviderContext;
         hostClient.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
         hostClient.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
         await unmountPageIfRendered(renderer);

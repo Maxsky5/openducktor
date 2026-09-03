@@ -25,9 +25,11 @@ type AgentsPageShellModel = {
   activeWorkspace: ReturnType<typeof useWorkspaceState>["activeWorkspace"];
   navigationPersistenceError: Error | null;
   chatSettingsLoadError: Error | null;
+  gitProviderContextLoadError: Error | null;
   activeTabValue: string;
   onRetryNavigationPersistence: () => void;
   onRetryChatSettingsLoad: () => void;
+  onRetryGitProviderContext: () => void;
   onTabValueChange: (value: string) => void;
   taskTabsModel: ReturnType<
     typeof useAgentStudioOrchestrationController
@@ -55,7 +57,13 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { allRuntimeDefinitions: runtimeDefinitions } = useRuntimeAvailabilityContext();
-  const { repoSettings, gitProviderContext, isLoadingRepoSettings } = useAgentStudioRepoSettings({
+  const {
+    repoSettings,
+    gitProviderContext,
+    gitProviderContextError,
+    isLoadingRepoSettings,
+    retryGitProviderContext,
+  } = useAgentStudioRepoSettings({
     activeRepoPath: workspaceRepoPath,
     activeWorkspaceId,
   });
@@ -197,9 +205,11 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     activeWorkspace,
     navigationPersistenceError,
     chatSettingsLoadError: orchestration.chatSettingsLoadError,
+    gitProviderContextLoadError: gitProviderContextError,
     activeTabValue: orchestration.activeTabValue,
     onRetryNavigationPersistence: retryNavigationPersistence,
     onRetryChatSettingsLoad: orchestration.retryChatSettingsLoad,
+    onRetryGitProviderContext: retryGitProviderContext,
     onTabValueChange: selection.handleSelectTab,
     taskTabsModel: orchestration.agentStudioTaskTabsModel,
     rightPanelToggleModel: orchestration.rightPanel.rightPanelToggleModel,

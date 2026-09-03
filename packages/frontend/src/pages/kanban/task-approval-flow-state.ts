@@ -21,6 +21,7 @@ export type TaskApprovalFlowOpenState = {
   squashCommitMessageTouched: boolean;
   errorMessage: string | null;
   approvalContext: TaskApprovalContext | null;
+  gitProviderContext: RepositoryGitProviderContext;
 };
 
 export type TaskApprovalFlowReadyState = TaskApprovalFlowOpenState & {
@@ -41,6 +42,7 @@ type TaskApprovalFlowOpenPayload = {
   title: string;
   body: string;
   errorMessage: string | null;
+  gitProviderContext: RepositoryGitProviderContext;
 };
 
 export type TaskApprovalFlowAction =
@@ -107,6 +109,7 @@ const buildTaskApprovalLoadingState = (
   squashCommitMessageTouched: false,
   errorMessage: payload.errorMessage,
   approvalContext: null,
+  gitProviderContext: payload.gitProviderContext,
 });
 
 const buildTaskApprovalLoadedState = (
@@ -125,6 +128,7 @@ const buildTaskApprovalLoadedState = (
   squashCommitMessageTouched: false,
   errorMessage: payload.errorMessage,
   approvalContext: payload.approvalContext,
+  gitProviderContext: payload.gitProviderContext,
 });
 
 const buildMissingBuilderWorktreeState = (
@@ -143,6 +147,7 @@ const buildMissingBuilderWorktreeState = (
   squashCommitMessageTouched: false,
   errorMessage: payload.errorMessage,
   approvalContext: null,
+  gitProviderContext: payload.gitProviderContext,
 });
 
 export function taskApprovalFlowReducer(

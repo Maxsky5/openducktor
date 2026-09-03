@@ -1,5 +1,4 @@
 import type { Dispatch } from "react";
-import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import type {
   TaskApprovalApprovalModalModel,
   TaskApprovalCompletionModalModel,
@@ -14,7 +13,6 @@ type BuildTaskApprovalModalModelArgs = {
   dispatch: Dispatch<TaskApprovalFlowAction>;
   reset: () => void;
   resetMissingBuilderWorktree: () => void;
-  gitProviderContext: RepositoryGitProviderContext;
   state: TaskApprovalFlowOpenState;
 };
 
@@ -24,10 +22,10 @@ export const buildTaskApprovalModalModel = ({
   dispatch,
   reset,
   resetMissingBuilderWorktree,
-  gitProviderContext,
   state,
 }: BuildTaskApprovalModalModelArgs): TaskApprovalModalModel => {
   const approvalContext = state.approvalContext;
+  const gitProviderContext = state.gitProviderContext;
   const pullRequestSupported =
     gitProviderContext?.descriptor.capabilities.supportsPullRequests === true;
   const pullRequestAvailable =

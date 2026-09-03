@@ -165,6 +165,42 @@ describe("useAgentStudioRepoSettings", () => {
     await harness.unmount();
   });
 
+  test("keeps pending, failed, and valid null provider reads distinct and supports retry", async () => {
+    const pendingContext = createDeferred<RepositoryGitProviderContext>();
+    const loadProviderContext = mock(() => pendingContext.promise);
+    const hostClient = createRepoConfigHost(undefined, loadProviderContext);
+    const harness = createHookHarness({
+      activeWorkspaceId: "workspace-repo",
+      activeRepoPath: "/repo",
+      hostClient,
+    });
+
+    await harness.mount();
+
+    expect(harness.getLatest()).toMatchObject({
+      gitProviderContext: undefined,
+      gitProviderContextError: null,
+      isLoadingGitProviderContext: true,
+    });
+
+    pendingContext.reject(new Error("provider context read failed"));
+    await harness.waitFor((state) => state.gitProviderContextError !== null);
+
+    expect(harness.getLatest().gitProviderContext).toBeUndefined();
+    expect(harness.getLatest().gitProviderContextError?.message).toBe(
+      "provider context read failed",
+    );
+
+    loadProviderContext.mockImplementationOnce(async () => null);
+    harness.getLatest().retryGitProviderContext();
+    await harness.waitFor((state) => state.gitProviderContext === null);
+
+    expect(harness.getLatest().gitProviderContextError).toBeNull();
+    expect(loadProviderContext).toHaveBeenCalledTimes(2);
+
+    await harness.unmount();
+  });
+
   test("resets settings when active repo becomes null", async () => {
     const hostClient = createRepoConfigHost();
     const harness = createHookHarness({

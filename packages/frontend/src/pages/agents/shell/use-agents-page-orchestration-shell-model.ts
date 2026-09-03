@@ -16,7 +16,7 @@ type UseAgentsPageOrchestrationShellModelArgs = {
     typeof useAgentStudioOrchestrationController
   >[0]["runtimeDefinitions"];
   repoSettings: RepoSettingsInput | null;
-  gitProviderContext: RepositoryGitProviderContext;
+  gitProviderContext: RepositoryGitProviderContext | undefined;
   workspaceRepoPath: string | null;
   isForegroundLoadingTasks: boolean;
   routeSession: AgentsPageRouteSessionModel;

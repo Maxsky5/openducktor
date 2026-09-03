@@ -85,6 +85,7 @@ const openState = (overrides: Partial<Extract<TaskApprovalFlowState, { kind: "op
     squashCommitMessageTouched: false,
     errorMessage: null,
     approvalContext: approvalContext(),
+    gitProviderContext: null,
     ...overrides,
   }) satisfies TaskApprovalFlowState;
 

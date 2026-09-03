@@ -17,9 +17,11 @@ describe("AgentsPageShell", () => {
         activeWorkspace: createActiveWorkspace("/repo"),
         navigationPersistenceError: new Error("restore failed"),
         chatSettingsLoadError: null,
+        gitProviderContextLoadError: null,
         activeTabValue: "task-1",
         onRetryNavigationPersistence: () => {},
         onRetryChatSettingsLoad: () => {},
+        onRetryGitProviderContext: () => {},
         onTabValueChange: () => {},
         taskTabs: createElement("div", undefined, "tabs"),
         workspace: createElement("div", undefined, "workspace"),
@@ -36,9 +38,11 @@ describe("AgentsPageShell", () => {
         activeWorkspace: null,
         navigationPersistenceError: new Error("restore failed"),
         chatSettingsLoadError: null,
+        gitProviderContextLoadError: null,
         activeTabValue: "task-1",
         onRetryNavigationPersistence: () => {},
         onRetryChatSettingsLoad: () => {},
+        onRetryGitProviderContext: () => {},
         onTabValueChange: () => {},
         taskTabs: createElement("div", undefined, "tabs"),
         workspace: createElement("div", undefined, "workspace"),
@@ -54,9 +58,11 @@ describe("AgentsPageShell", () => {
         activeWorkspace: createActiveWorkspace("/repo"),
         navigationPersistenceError: null,
         chatSettingsLoadError: null,
+        gitProviderContextLoadError: null,
         activeTabValue: "task-1",
         onRetryNavigationPersistence: () => {},
         onRetryChatSettingsLoad: () => {},
+        onRetryGitProviderContext: () => {},
         onTabValueChange: () => {},
         taskTabs: createElement("div", undefined, "tabs"),
         workspace: createElement("div", undefined, "workspace"),
@@ -73,9 +79,11 @@ describe("AgentsPageShell", () => {
         activeWorkspace: createActiveWorkspace("/repo"),
         navigationPersistenceError: null,
         chatSettingsLoadError: new Error("settings read failed"),
+        gitProviderContextLoadError: null,
         activeTabValue: "task-1",
         onRetryNavigationPersistence: () => {},
         onRetryChatSettingsLoad: () => {},
+        onRetryGitProviderContext: () => {},
         onTabValueChange: () => {},
         taskTabs: createElement("div", undefined, "tabs"),
         workspace: createElement("div", undefined, "workspace"),
@@ -85,6 +93,29 @@ describe("AgentsPageShell", () => {
     expect(html).toContain("Agent Studio couldn&#x27;t load chat settings.");
     expect(html).toContain("settings read failed");
     expect(html).toContain("Retry load");
+    expect(html).toContain("workspace");
+  });
+
+  test("renders a retryable Git provider error without hiding Agent Studio", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentsPageShell, {
+        activeWorkspace: createActiveWorkspace("/repo"),
+        navigationPersistenceError: null,
+        chatSettingsLoadError: null,
+        gitProviderContextLoadError: new Error("provider context read failed"),
+        activeTabValue: "task-1",
+        onRetryNavigationPersistence: () => {},
+        onRetryChatSettingsLoad: () => {},
+        onRetryGitProviderContext: () => {},
+        onTabValueChange: () => {},
+        taskTabs: createElement("div", undefined, "tabs"),
+        workspace: createElement("div", undefined, "workspace"),
+      }),
+    );
+
+    expect(html).toContain("Agent Studio couldn&#x27;t load Git provider features.");
+    expect(html).toContain("provider context read failed");
+    expect(html).toContain("Retry provider load");
     expect(html).toContain("workspace");
   });
 });

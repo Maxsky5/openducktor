@@ -121,7 +121,10 @@ const agentSessionsListMock = mock(defaultAgentSessionsList);
 const agentSessionsListForTasksMock = mock(defaultAgentSessionsListForTasks);
 const toastLoadingMock = mock(() => "toast-id");
 const toastSuccessMock = mock(() => "success-toast-id");
-const toastErrorMock = mock(() => "error-toast-id");
+const toastErrorMock = mock(
+  (_message: Parameters<typeof toast.error>[0], _options?: Parameters<typeof toast.error>[1]) =>
+    "error-toast-id",
+);
 
 type TestStorage = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">;
 
@@ -341,7 +344,7 @@ const createUseTaskApprovalFlowArgs = (
     repoPath: "/repo",
   },
   tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-  gitProviderContext: null,
+  loadGitProviderContext: async () => null,
   requestPullRequestGeneration: async () => undefined,
   refreshTasks: async () => {},
   humanApproveTask: humanApproveTaskMock,
@@ -413,6 +416,98 @@ describe("useTaskApprovalFlow", () => {
     restoreDependencySpies = [];
   });
 
+  test("waits for a pending provider context before opening in Pull Request mode", async () => {
+    const pendingProviderContext = createDeferred<RepositoryGitProviderContext>();
+    const pendingApprovalContext = createDeferred<TaskApprovalContextLoadResult>();
+    taskApprovalContextGetMock.mockImplementationOnce(async () => pendingApprovalContext.promise);
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          loadGitProviderContext: async () => pendingProviderContext.promise,
+        }),
+      );
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+    });
+
+    expect(latestHarnessValue?.taskApprovalModal).toBeNull();
+    expect(taskApprovalContextGetMock).not.toHaveBeenCalled();
+
+    pendingProviderContext.resolve(healthyGitProviderContext());
+    await act(async () => {
+      await pendingProviderContext.promise;
+      await Promise.resolve();
+    });
+
+    expect(taskApprovalContextGetMock).toHaveBeenCalledWith("/repo", "TASK-1");
+    expect(expectApprovalModal().isLoading).toBe(true);
+    expect(expectApprovalModal().mode).toBe("pull_request");
+
+    pendingApprovalContext.resolve(createReadyTaskApprovalContextResult());
+    await act(async () => {
+      await pendingApprovalContext.promise;
+      await Promise.resolve();
+    });
+
+    expect(expectApprovalModal().isLoading).toBe(false);
+    expect(expectApprovalModal().mode).toBe("pull_request");
+
+    await act(async () => {
+      await harness.unmount();
+    });
+  });
+
+  test("shows a provider read error and retries the full approval open", async () => {
+    const loadGitProviderContext = mock(async (): Promise<RepositoryGitProviderContext> => {
+      throw new Error("provider context read failed");
+    });
+    taskApprovalContextGetMock.mockResolvedValue(createReadyTaskApprovalContextResult());
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({ loadGitProviderContext }),
+      );
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+
+    expect(latestHarnessValue?.taskApprovalModal).toBeNull();
+    expect(taskApprovalContextGetMock).not.toHaveBeenCalled();
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      "Failed to load Git provider context",
+      expect.objectContaining({
+        description: "provider context read failed",
+        action: expect.objectContaining({ label: "Retry" }),
+      }),
+    );
+
+    loadGitProviderContext.mockImplementationOnce(async () => healthyGitProviderContext());
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+
+    expect(loadGitProviderContext).toHaveBeenCalledTimes(2);
+    expect(expectApprovalModal().mode).toBe("pull_request");
+
+    await act(async () => {
+      await harness.unmount();
+    });
+  });
+
   test("opens immediately in loading state and does not fetch the settings snapshot", async () => {
     const pendingApprovalContext = createDeferred<TaskApprovalContextLoadResult>();
     taskApprovalContextGetMock.mockImplementationOnce(async () => pendingApprovalContext.promise);
@@ -482,7 +577,7 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          gitProviderContext: healthyGitProviderContext(),
+          loadGitProviderContext: async () => healthyGitProviderContext(),
           activeWorkspace: {
             workspaceId: "workspace-repo",
             workspaceName: "Repo",
@@ -604,7 +699,7 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          gitProviderContext: {
+          loadGitProviderContext: async () => ({
             ...context,
             config: { ...context.config, enabled: false },
             health: {
@@ -613,7 +708,7 @@ describe("useTaskApprovalFlow", () => {
               available: false,
               reason: "Enable GitHub for this repository.",
             },
-          },
+          }),
         }),
       );
       return null;
@@ -1592,7 +1687,7 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          gitProviderContext: healthyGitProviderContext(),
+          loadGitProviderContext: async () => healthyGitProviderContext(),
           activeWorkspace: {
             workspaceId: "workspace-repo",
             workspaceName: "Repo",
@@ -1674,7 +1769,7 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          gitProviderContext: healthyGitProviderContext(),
+          loadGitProviderContext: async () => healthyGitProviderContext(),
           activeWorkspace: {
             workspaceId: "workspace-repo",
             workspaceName: "Repo",

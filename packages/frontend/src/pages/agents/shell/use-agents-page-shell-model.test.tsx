@@ -49,9 +49,12 @@ import {
 
 interface RepoSettingsStateContract {
   repoSettings: RepoSettingsInput | null;
-  gitProviderContext: RepositoryGitProviderContext;
+  gitProviderContext: RepositoryGitProviderContext | undefined;
+  gitProviderContextError: Error | null;
   isLoadingGitProviderContext: boolean;
   isLoadingRepoSettings: boolean;
+  loadGitProviderContext: () => Promise<RepositoryGitProviderContext>;
+  retryGitProviderContext: () => void;
 }
 
 enableReactActEnvironment();
@@ -71,6 +74,7 @@ const retryNavigationPersistence = mock(() => {});
 const updateQuery = mock((_updates?: AgentStudioQueryUpdate) => {});
 const handleSelectTab = mock((_value: string) => {});
 const retryChatSettingsLoad = mock(() => {});
+const retryGitProviderContext = mock(() => {});
 const handleResolveRebaseConflict = mock(async () => true);
 
 type QuerySyncState = {
@@ -188,8 +192,10 @@ type AgentsPageShellModelState = {
   activeWorkspace: WorkspaceStateContextValue["activeWorkspace"];
   navigationPersistenceError: Error | null;
   chatSettingsLoadError: Error | null;
+  gitProviderContextLoadError: Error | null;
   onRetryNavigationPersistence: () => void;
   onRetryChatSettingsLoad: () => void;
+  onRetryGitProviderContext: () => void;
   hasSelectedTask: boolean;
   isRightPanelVisible: boolean;
   rightPanelBridge: AgentStudioRightPanelBridgeModel | null;
@@ -249,8 +255,11 @@ let sessionStore = createAgentSessionsStore("/repo");
 let repoSettingsState: RepoSettingsStateContract = {
   repoSettings: null,
   gitProviderContext: null,
+  gitProviderContextError: null,
   isLoadingGitProviderContext: false,
   isLoadingRepoSettings: false,
+  loadGitProviderContext: async () => null,
+  retryGitProviderContext,
 };
 const sessionIdentity = (externalSessionId: string) => ({
   externalSessionId,
@@ -650,8 +659,11 @@ beforeEach(async () => {
   repoSettingsState = {
     repoSettings: null,
     gitProviderContext: null,
+    gitProviderContextError: null,
     isLoadingGitProviderContext: false,
     isLoadingRepoSettings: false,
+    loadGitProviderContext: async () => null,
+    retryGitProviderContext,
   };
   agentOperations = {
     readSessionTodos: mock(async () => []),
@@ -812,8 +824,10 @@ describe("useAgentsPageShellModel", () => {
       expect(state.activeWorkspace?.repoPath).toBe("/repo");
       expect(state.navigationPersistenceError).toBe(querySyncState.navigationPersistenceError);
       expect(state.chatSettingsLoadError).toBe(orchestrationState.chatSettingsLoadError);
+      expect(state.gitProviderContextLoadError).toBe(repoSettingsState.gitProviderContextError);
       expect(state.onRetryNavigationPersistence).toBe(retryNavigationPersistence);
       expect(state.onRetryChatSettingsLoad).toBe(retryChatSettingsLoad);
+      expect(state.onRetryGitProviderContext).toBe(retryGitProviderContext);
       expect(state.hasSelectedTask).toBe(true);
       expect(state.isRightPanelVisible).toBe(true);
       expect(state.rightPanelBridge?.rightPanel.selectedView.taskId).toBe(

@@ -33,7 +33,7 @@ import { useTaskApprovalGitConflictFlow } from "./use-task-approval-git-conflict
 
 type UseTaskApprovalFlowArgs = {
   activeWorkspace: ActiveWorkspace | null;
-  gitProviderContext: RepositoryGitProviderContext;
+  loadGitProviderContext: () => Promise<RepositoryGitProviderContext>;
   tasks: TaskCard[];
   requestPullRequestGeneration: (taskId: string) => Promise<string | undefined>;
   refreshTasks: () => Promise<void>;
@@ -50,7 +50,7 @@ type UseTaskApprovalFlowResult = {
 
 export function useTaskApprovalFlow({
   activeWorkspace,
-  gitProviderContext,
+  loadGitProviderContext,
   tasks,
   requestPullRequestGeneration,
   refreshTasks,
@@ -74,35 +74,54 @@ export function useTaskApprovalFlow({
   }, []);
 
   const openTaskApproval = useCallback(
-    (taskId: string, options?: TaskApprovalOpenOptions): void => {
+    function openTaskApprovalRequest(taskId: string, options?: TaskApprovalOpenOptions): void {
       if (!workspaceRepoPath) {
         return;
       }
 
       const task = tasks.find((entry) => entry.id === taskId);
       const requestVersion = ++approvalRequestVersionRef.current;
-
-      const effectiveMode = resolveTaskApprovalOpenMode({
-        gitProviderContext,
-        requestedMode: options?.mode,
-        task,
-      });
       const title = task?.title ?? "";
       const body = task?.description ?? "";
       const pullRequestDraftMode = options?.pullRequestDraftMode ?? "generate_ai";
       const openErrorMessage = options?.errorMessage ?? null;
 
-      dispatch({
-        type: "open_loading",
-        taskId,
-        mode: effectiveMode,
-        pullRequestDraftMode,
-        title,
-        body,
-        errorMessage: openErrorMessage,
-      });
-
       void (async () => {
+        let resolvedGitProviderContext: RepositoryGitProviderContext;
+        try {
+          resolvedGitProviderContext = await loadGitProviderContext();
+        } catch (error) {
+          if (approvalRequestVersionRef.current === requestVersion) {
+            toast.error("Failed to load Git provider context", {
+              description: errorMessage(error),
+              action: {
+                label: "Retry",
+                onClick: () => openTaskApprovalRequest(taskId, options),
+              },
+            });
+          }
+          return;
+        }
+        if (approvalRequestVersionRef.current !== requestVersion) {
+          return;
+        }
+
+        const effectiveMode = resolveTaskApprovalOpenMode({
+          gitProviderContext: resolvedGitProviderContext,
+          requestedMode: options?.mode,
+          task,
+        });
+        dispatch({
+          type: "open_loading",
+          taskId,
+          mode: effectiveMode,
+          pullRequestDraftMode,
+          title,
+          body,
+          errorMessage: openErrorMessage,
+          gitProviderContext: resolvedGitProviderContext,
+        });
+
         try {
           const approvalContextResult = await loadTaskApprovalContextFromQuery(
             queryClient,
@@ -119,11 +138,12 @@ export function useTaskApprovalFlow({
                 title,
                 body,
                 errorMessage: openErrorMessage,
+                gitProviderContext: resolvedGitProviderContext,
               });
             } else {
               const approvalContext = approvalContextResult.approvalContext;
               const updatedEffectiveMode = resolveTaskApprovalOpenMode({
-                gitProviderContext,
+                gitProviderContext: resolvedGitProviderContext,
                 requestedMode: options?.mode,
                 task,
               });
@@ -136,6 +156,7 @@ export function useTaskApprovalFlow({
                 body,
                 errorMessage: openErrorMessage,
                 approvalContext,
+                gitProviderContext: resolvedGitProviderContext,
               });
             }
           }
@@ -149,7 +170,7 @@ export function useTaskApprovalFlow({
         }
       })();
     },
-    [gitProviderContext, workspaceRepoPath, queryClient, reset, tasks],
+    [loadGitProviderContext, workspaceRepoPath, queryClient, reset, tasks],
   );
   const { taskGitConflictDialog, openGitConflictDialog } = useTaskApprovalGitConflictFlow({
     onResolveGitConflict,
@@ -321,7 +342,6 @@ export function useTaskApprovalFlow({
     dispatch,
     reset,
     resetMissingBuilderWorktree,
-    gitProviderContext,
     state,
   });
 

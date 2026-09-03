@@ -1,5 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RepositoryGitProviderContext } from "@openducktor/contracts";
+import { useCallback } from "react";
 import type { host } from "@/state/operations/host";
 import { repositoryGitProviderContextQueryOptions } from "@/state/queries/git-provider-context";
 import { repoConfigQueryOptions, toRepoSettingsInput } from "@/state/queries/workspace";
@@ -18,6 +19,7 @@ export function useAgentStudioRepoSettings(args: {
   hostClient?: RepoConfigQueryHost;
 }) {
   const { activeRepoPath, activeWorkspaceId, hostClient } = args;
+  const queryClient = useQueryClient();
   const { data: repoConfig, isLoading: isLoadingRepoConfig } = useQuery({
     ...repoConfigQueryOptions(
       activeWorkspaceId ?? INACTIVE_WORKSPACE_REPO_CONFIG_QUERY_KEY,
@@ -34,17 +36,40 @@ export function useAgentStudioRepoSettings(args: {
   });
   const repoSettings =
     activeWorkspaceId !== null && repoConfig ? toRepoSettingsInput(repoConfig) : null;
-  const gitProviderContext = activeRepoPath !== null ? (providerContextQuery.data ?? null) : null;
+  const gitProviderContext =
+    activeRepoPath !== null && providerContextQuery.isSuccess
+      ? providerContextQuery.data
+      : undefined;
+  const gitProviderContextError =
+    activeRepoPath !== null && providerContextQuery.isError ? providerContextQuery.error : null;
+  const refetchGitProviderContext = providerContextQuery.refetch;
+  const loadGitProviderContext = useCallback((): Promise<RepositoryGitProviderContext> => {
+    if (activeRepoPath === null) {
+      return Promise.reject(new Error("Select a repository before loading Git provider context."));
+    }
+    return queryClient.fetchQuery(
+      repositoryGitProviderContextQueryOptions(activeRepoPath, hostClient),
+    );
+  }, [activeRepoPath, hostClient, queryClient]);
+  const retryGitProviderContext = useCallback((): void => {
+    void refetchGitProviderContext();
+  }, [refetchGitProviderContext]);
 
   return {
     repoSettings,
     gitProviderContext,
+    gitProviderContextError,
     isLoadingGitProviderContext: activeRepoPath !== null && providerContextQuery.isLoading,
     isLoadingRepoSettings: activeWorkspaceId !== null && isLoadingRepoConfig,
+    loadGitProviderContext,
+    retryGitProviderContext,
   } satisfies {
     repoSettings: RepoSettingsInput | null;
-    gitProviderContext: RepositoryGitProviderContext;
+    gitProviderContext: RepositoryGitProviderContext | undefined;
+    gitProviderContextError: Error | null;
     isLoadingGitProviderContext: boolean;
     isLoadingRepoSettings: boolean;
+    loadGitProviderContext: () => Promise<RepositoryGitProviderContext>;
+    retryGitProviderContext: () => void;
   };
 }
