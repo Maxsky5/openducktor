@@ -29,7 +29,7 @@ For a beta, npm packages keep the full prerelease version. The Electron reposito
 
 `Release Desktop Electron` gets the tag from `Prepare Release`. A maintainer can rerun it with the same tag.
 
-The workflow checks the tag version and draft release. It lints, typechecks, and tests the Electron workspace. It builds Linux x64, macOS arm64, macOS x64, and Windows x64 files.
+The workflow checks that the checked-out repository version matches the selected tag and draft release. It lints, typechecks, and tests the Electron workspace. It builds Linux x64, macOS arm64, macOS x64, and Windows x64 files.
 
 It signs and notarizes macOS files, packages the MCP sidecar, creates updater metadata, and uploads all files to the draft. It merges the two macOS manifests into `latest-mac.yml` or `beta-mac.yml`.
 

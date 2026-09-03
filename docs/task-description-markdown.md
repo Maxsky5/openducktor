@@ -30,6 +30,8 @@ The browser route requires the app-session cookie. Electron uses a privileged ap
 
 A workflow agent calls `odt_read_task_assets({ taskId, assetIds })`. It gets UUIDs from the description's `odt-asset:<assetId>` values.
 
+The call requires `workspaceId` when the process has no default workspace.
+
 Send one non-empty batch of at most 50 unique IDs when the raw data is at most 20 MiB. Split a larger set. The host checks the task and every asset before it reads a file. One missing or invalid asset fails the full call.
 
 The result keeps request order. It returns a short label and one native image block for each asset. It does not return file paths, browser URLs, `structuredContent`, or an MCP `outputSchema`.

@@ -29,7 +29,6 @@ A third-party UI library can provide a small component that fits the local desig
 
 - Vercel AI SDK UI as the main UI layer. It manages messages and state, but it does not model the OpenDucktor workflow.
 - An assistant UI component library as the main UI layer. General chat controls do not model local runtime and task rules.
-- Project-native shadcn and Tailwind composition. We chose this option because it uses the current app shell and keeps runtime code behind adapters.
 
 ## Consequences
 

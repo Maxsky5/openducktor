@@ -69,6 +69,7 @@ export type SettingsConfigError = HostOperationError | HostPathAccessError | Hos
 export type SettingsConfigPort = {
   readConfig(): Effect.Effect<GlobalConfig | null, SettingsConfigError>;
   canonicalizePath(path: string): Effect.Effect<string, HostOperationError>;
+  pathExists(path: string): Effect.Effect<boolean, HostPathAccessError>;
   join(...paths: Array<string>): string;
 };
 
@@ -126,7 +127,7 @@ return yield* new HostOperationError({
 });
 ```
 
-Use `Effect.catchTag` when the product handles one known error. Use `Effect.catchAll` only when the product handles every error in the channel. A JavaScript `try` block inside `Effect.gen` does not catch an Effect failure.
+Use `Effect.catchTag` when the product handles one known error. Use `Effect.catchAll` only when the product handles every error in the channel. Use `Effect.result` when the caller needs the failure as a `Result`. A JavaScript `try` block inside `Effect.gen` does not catch an Effect failure.
 
 | Category | Example | Treatment |
 |---|---|---|
@@ -170,6 +171,8 @@ Use `Effect.sync` for synchronous work that must run inside the Effect runtime. 
 Use `Effect.gen` for ordered application steps:
 
 ```ts
+import { HostPathNotFoundError } from "../effect/host-errors";
+
 const loadWorkspace = (repoPath: string) =>
   Effect.gen(function* () {
     const settings = yield* SettingsConfigPortTag;

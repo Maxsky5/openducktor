@@ -10,7 +10,7 @@ The app does not store terminal sessions, tabs, or transcripts in settings or SQ
 - `packages/host` owns IDs, launch rules, limits, in-memory sessions, output replay, byte order, flow control, titles, and cleanup. PTY adapters implement `TerminalPtyPort`.
 - Electron uses `node-pty` over a dedicated preload IPC bridge.
 - The web runner uses `Bun.spawn({ terminal })` over one authenticated WebSocket. It checks origin and requires the `openducktor-terminal.v1` subprotocol.
-- `packages/frontend/src/features/terminals` owns the shared panel, collection hook, tabs, transport controller, xterm renderer, and input rules. Agent Studio only supplies the task worktree and task context.
+- `packages/frontend/src/features/terminals` owns the shared panel, collection hook, tabs, transport controller, xterm renderer, and input rules. Its transport controller shares one connection across the mounted terminal emulators. Agent Studio only supplies the task worktree and task context.
 
 Create, list, close, and path setup use host commands. Input, resize, attach, detach, ACK, output, lifecycle, and title use terminal frames. Electron and web each provide one PTY adapter. Neither falls back to the other.
 
@@ -26,7 +26,7 @@ The first title is the canonical start directory. The host then reads bounded OS
 
 ## Attach and replay
 
-The host adds an output consumer before it sends the attachment snapshot. The snapshot has lifecycle, title, first retained byte sequence, and snapshot end sequence. The host then sends retained output followed by live output. Exit comes after the final output sequence.
+The host adds an output consumer before it sends the attachment snapshot. The snapshot has lifecycle, title, first retained byte sequence, and snapshot end sequence. The host then sends retained output followed by live output. Output byte sequences increase monotonically. Exit comes after the final output sequence.
 
 The renderer records the last sequence written to xterm. It sends ACK only after the xterm write callback finishes. On another attach, it sends that sequence so the host sends only missing output.
 

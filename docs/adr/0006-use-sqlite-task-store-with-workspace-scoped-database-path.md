@@ -16,7 +16,8 @@ Use a one-time migration script. It reads Beads through the `bd` CLI and writes 
 - Treat Beads and Dolt as read-only. If the old store cannot be read, stop with a migration error. Do not start, repair, initialize, or restore it.
 - Parse and validate the full Beads snapshot before the SQLite write.
 - Preserve all Beads task data that OpenDucktor owns, including document history.
-- Keep each task ID unchanged. Generate new SQLite task IDs in the same format.
+- Keep each Beads task ID as the SQLite task ID.
+- Generate IDs in the same format only for tasks created after the migration.
 - Write all rows in one SQLite transaction.
 - Insert into an existing `database.sqlite`. The native task store owns database creation and schema setup.
 - Store clean OpenDucktor data. Do not add a catch-all legacy payload table.

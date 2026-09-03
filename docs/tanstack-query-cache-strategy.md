@@ -78,6 +78,8 @@ Use `ensureQueryData` for configuration that can return a fresh cached value. Ex
 
 Use `fetchQuery` for an imperative read that still needs the shared key and in-flight deduplication. Examples include task refresh, session history, documents, and worktree status.
 
+Use `prefetchQuery` to warm the cache for a read that the user is likely to need next.
+
 Task documents use a 60 second stale time for normal views. Workflow refreshes force a new fetch through `packages/frontend/src/state/queries/documents.ts` so an external ODT write appears without polling.
 
 ## Mutations

@@ -211,7 +211,7 @@ The tool has no MCP `outputSchema` or `structuredContent`. It does not return st
 
 Unknown fields fail. `workspaceId` is optional only when the process has a default workspace.
 
-A requested key always appears. A missing spec or plan returns empty Markdown and `updatedAt: null`. A missing QA report also returns `verdict: "not_reviewed"`.
+A requested spec or plan key always appears. A missing spec or plan returns empty Markdown and `updatedAt: null`. The response omits `latestQaReport` when no QA report exists.
 
 The host stores and returns plain Markdown. If it cannot decode the latest stored body, that document gets an optional `error` with a host message. The read does not migrate old metadata.
 
@@ -226,11 +226,6 @@ The host stores and returns plain Markdown. If it cannot decode the latest store
     "implementationPlan": {
       "markdown": "## Plan",
       "updatedAt": "<ISO 8601 timestamp>"
-    },
-    "latestQaReport": {
-      "markdown": "",
-      "updatedAt": null,
-      "verdict": "not_reviewed"
     }
   }
 }

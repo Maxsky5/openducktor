@@ -35,7 +35,7 @@ Human actions are `human_request_changes(taskId, note)` and `human_approve(taskI
 | `odt_set_plan` (feature/epic) | `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | Markdown is not empty. | `ready_for_dev` from `spec_ready`; otherwise unchanged. |
 | `odt_set_plan` (task/bug) | `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | Markdown is not empty. | `ready_for_dev` from `open` or `spec_ready`; otherwise unchanged. |
 | `odt_set_plan` (epic with subtasks) | Same as epic plan. | Replacement requires all current direct children to be `open`, `spec_ready`, or `ready_for_dev`. | Same as epic plan. |
-| `odt_build_resumed` for `feature` or `epic` | `ready_for_dev` | Standard flow. | `in_progress` |
+| `odt_build_resumed` for `feature` or `epic` | `ready_for_dev`, `blocked` | Standard flow or blocked resume. | `in_progress` |
 | `odt_build_resumed` for `task` or `bug` | `open`, `spec_ready`, `ready_for_dev`, `blocked` | Optional short flow or blocked resume. | `in_progress` |
 | `odt_build_blocked` | `in_progress` | `reason` is present. | `blocked` |
 | `reset_implementation` | `in_progress`, `blocked`, `ai_review`, `human_review` | No live build or QA activity. Branch cleanup is safe. | `ready_for_dev`, `spec_ready`, or `open` from retained documents. |
