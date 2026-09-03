@@ -5,6 +5,7 @@ import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { loadAgentSessionContextFromQuery } from "@/state/queries/agent-session-context";
 import { agentSessionHistoryQueryKeys } from "@/state/queries/agent-session-history";
 import { updateSessionTodosQueryData } from "@/state/queries/agent-session-todos";
+import { refreshAgentSessionListQuery } from "@/state/queries/agent-sessions";
 import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
 import { loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import type {
@@ -88,6 +89,11 @@ export function useAgentOrchestratorOperations({
     ({ repoPath }: { repoPath: string; taskId: string }) =>
       invalidateRepoTaskQueries(queryClient, repoPath),
     [queryClient],
+  );
+  const refreshSessionRecords = useCallback(
+    (repoPath: string, taskId: string) =>
+      refreshAgentSessionListQuery(queryClient, repoPath, taskId, hostPort),
+    [hostPort, queryClient],
   );
   const updateSession = useCallback<UpdateSession>(
     (identity, updater) => sessionStore.updateSession(identity, updater),
@@ -249,6 +255,7 @@ export function useAgentOrchestratorOperations({
         liveSessionHost: liveSessionHostPort,
         loadSourceSession,
         loadAgentSessionHistory: sessionHistoryLoaders.loadAgentSessionHistory,
+        refreshSessionRecords,
         refreshTaskData,
         invalidateSessionStopQueries,
       }),
@@ -263,6 +270,7 @@ export function useAgentOrchestratorOperations({
       queryBackedPromptOverrides,
       queryClient,
       repoEpochRef,
+      refreshSessionRecords,
       refreshTaskData,
       runtimeHostPort,
       liveSessionHostPort,

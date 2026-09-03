@@ -45,6 +45,7 @@ type SessionActionsDependencies = {
   liveSessionHost: PendingInputActionDependencies["liveSessionHost"];
   loadSourceSession: LoadSourceSession;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
+  refreshSessionRecords: (repoPath: string, taskId: string) => Promise<void>;
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
   invalidateSessionStopQueries: (input: { repoPath: string; taskId: string }) => Promise<void>;
 };
@@ -73,6 +74,7 @@ export const createAgentSessionActions = ({
   liveSessionHost,
   loadSourceSession,
   loadAgentSessionHistory,
+  refreshSessionRecords,
   refreshTaskData,
   invalidateSessionStopQueries,
 }: SessionActionsDependencies) => {
@@ -129,6 +131,7 @@ export const createAgentSessionActions = ({
     task: {
       taskRef,
       loadTaskDocuments,
+      refreshSessionRecords,
       refreshTaskData,
       sendAgentMessage,
     },

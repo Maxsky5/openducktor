@@ -230,6 +230,7 @@ export const toStartSessionDependencies = (
     task: {
       taskRef: deps.taskRef,
       loadTaskDocuments: deps.loadTaskDocuments,
+      refreshSessionRecords: deps.refreshSessionRecords,
       refreshTaskData: deps.refreshTaskData,
       sendAgentMessage: deps.sendAgentMessage,
     },
@@ -269,6 +270,7 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
     abortTaskSessionStartupLease = async () => {},
     ensureRuntime = ensureRuntimeWithKind,
     loadTaskDocuments = async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+    refreshSessionRecords = async () => {},
     refreshTaskData = async () => {},
     sendAgentMessage = async () => {},
     loadRepoPromptOverrides = async () => ({}),
@@ -304,6 +306,7 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
     abortTaskSessionStartupLease,
     ensureRuntime,
     loadTaskDocuments,
+    refreshSessionRecords,
     refreshTaskData,
     sendAgentMessage,
     loadRepoPromptOverrides,

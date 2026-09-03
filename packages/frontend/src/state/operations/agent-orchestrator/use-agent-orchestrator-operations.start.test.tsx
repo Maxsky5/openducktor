@@ -270,6 +270,9 @@ describe("use-agent-orchestrator-operations start and send", () => {
     let startCalls = 0;
     let persistedListCalls = 0;
     let persistedSessions: Array<typeof persistedSessionFixture> = [];
+    const sessionStored = createDeferred<void>();
+    const initialListStarted = createDeferred<void>();
+    const releaseInitialList = createDeferred<void>();
 
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
@@ -326,6 +329,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
           selectedModel: BUILD_SELECTION,
         },
       ];
+      sessionStored.resolve();
       return summary;
     };
     OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
@@ -346,16 +350,20 @@ describe("use-agent-orchestrator-operations start and send", () => {
         },
         agentSessionsListForTasks: async () => {
           persistedListCalls += 1;
-          return [{ taskId: "task-1", agentSessions: persistedSessions }];
+          const snapshot = persistedSessions;
+          initialListStarted.resolve();
+          await releaseInitialList.promise;
+          return [{ taskId: "task-1", agentSessions: snapshot }];
         },
       }),
     });
 
     try {
       await harness.mount();
+      await initialListStarted.promise;
 
       let firstSessionId = "";
-      await harness.run(async () => {
+      const firstStart = harness.run(async () => {
         const session = await harness.getLatest().operations.startAgentSession({
           taskId: "task-1",
           role: "build",
@@ -364,6 +372,12 @@ describe("use-agent-orchestrator-operations start and send", () => {
         });
         firstSessionId = session.externalSessionId;
       });
+      await sessionStored.promise;
+      releaseInitialList.resolve();
+      await firstStart;
+      await harness.waitFor(
+        (state) => state.readModelState.sessionReadModelLoadState.kind === "ready",
+      );
 
       let secondSessionId = "";
       await harness.run(async () => {
@@ -383,7 +397,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       expect(firstSessionId).toBe("external-in-memory");
       expect(secondSessionId).toBe("external-in-memory");
       expect(startCalls).toBe(1);
-      expect(persistedListCalls).toBe(1);
+      expect(persistedListCalls).toBe(2);
     } finally {
       await harness.unmount();
 
@@ -526,7 +540,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       expect(secondSessionId).toBe("external-concurrent");
       expect(startCalls).toBe(1);
       expect(persistedBatchListCalls).toBe(1);
-      expect(persistedSingleListCalls).toBe(0);
+      expect(persistedSingleListCalls).toBe(1);
     } finally {
       await harness.unmount();
 

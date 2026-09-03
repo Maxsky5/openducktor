@@ -77,6 +77,7 @@ export const createTaskDependenciesFixture = (
   taskRef: { current: [] },
   loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
   refreshTaskData: async () => {},
+  refreshSessionRecords: async () => {},
   sendAgentMessage: async () => {},
   ...overrides,
 });

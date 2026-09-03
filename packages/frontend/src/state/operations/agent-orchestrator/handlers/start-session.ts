@@ -142,7 +142,7 @@ export const createStartAgentSession = ({
                 ...registrationInput,
                 bootstrap: prepared.bootstrap,
                 ctx: startCtx,
-                deps: { session, runtime },
+                deps: { session, runtime, task },
               });
             },
             rollback: async (rollbackInput) => {

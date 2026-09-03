@@ -140,6 +140,7 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
     loadSourceSession: async ({ sourceSession }) =>
       getAgentSession(sessionsRef.current, sourceSession),
     loadAgentSessionHistory: async () => null,
+    refreshSessionRecords: async () => {},
     refreshTaskData: async () => {},
     invalidateSessionStopQueries: async () => {},
   };

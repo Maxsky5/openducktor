@@ -186,7 +186,7 @@ export const registerWorkflowSessionLaunch = async ({
 }: PreparedSessionRegistrationInput & {
   bootstrap: RuntimeInfo["bootstrap"];
   ctx: StartSessionContext;
-  deps: Pick<StartSessionExecutionDependencies, "session" | "runtime">;
+  deps: Pick<StartSessionExecutionDependencies, "session" | "runtime" | "task">;
 }): Promise<void> => {
   const startedCtx: StartedSessionContext = { ...ctx, summary };
 
@@ -211,6 +211,10 @@ export const registerWorkflowSessionLaunch = async ({
 
   let bootstrapCompletionAttempted = false;
   try {
+    if (isStaleOperation()) {
+      throw new Error(STALE_START_ERROR);
+    }
+    await deps.task.refreshSessionRecords(ctx.repoPath, ctx.taskId);
     if (isStaleOperation()) {
       throw new Error(STALE_START_ERROR);
     }

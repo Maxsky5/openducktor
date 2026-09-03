@@ -151,6 +151,7 @@ const createHarness = (
     task: {
       taskRef: { current: options.taskCards ?? [taskCard()] },
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      refreshSessionRecords: async () => undefined,
       refreshTaskData: async () => undefined,
       sendAgentMessage: async () => undefined,
     },
@@ -247,7 +248,11 @@ const registrationInputFor = (harness: Harness) => {
       },
     },
     ctx: harness.ctx,
-    deps: { session: harness.deps.session, runtime: harness.deps.runtime },
+    deps: {
+      session: harness.deps.session,
+      runtime: harness.deps.runtime,
+      task: harness.deps.task,
+    },
   };
 };
 
