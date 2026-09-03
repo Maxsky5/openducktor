@@ -394,6 +394,42 @@ describe("TaskViewSync", () => {
     }
   });
 
+  test("propagates active session record refresh failures", async () => {
+    const refreshAgentSessions = mock(async () => undefined);
+    const { queryClient, sync } = createSync(createPorts({ refreshAgentSessions }));
+    const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
+    const loadSessions = mock(async () => {
+      throw new Error("session records unavailable");
+    });
+    const unsubscribe = new QueryObserver(queryClient, {
+      queryKey,
+      queryFn: loadSessions,
+      initialData: [],
+      staleTime: Infinity,
+    }).subscribe(() => {});
+
+    try {
+      await expect(
+        sync.reconcileExternalEvent(
+          {
+            kind: "tasks_updated",
+            eventId: "event-session-refresh-failed",
+            repoPath: "/repo",
+            taskIds: ["task-1"],
+            removedTaskIds: [],
+            emittedAt: "2026-09-04T10:00:00.000Z",
+          },
+          "/repo",
+        ),
+      ).rejects.toThrow("session records unavailable");
+
+      expect(loadSessions).toHaveBeenCalledTimes(1);
+      expect(refreshAgentSessions).not.toHaveBeenCalled();
+    } finally {
+      unsubscribe();
+    }
+  });
+
   test("leaves retained cached documents invalidated when active task-list refresh fails", async () => {
     const loadFreshDocument = mock(async () => ({ markdown: "# Fresh", updatedAt: null }));
     const { queryClient, sync } = createSync(

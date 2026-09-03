@@ -404,7 +404,10 @@ export const refreshAgentSessionLists = async (
         repoPath,
         taskId,
         async ({ queryKey: currentQueryKey }) => {
-          await queryClient.refetchQueries({ queryKey, exact: true, type: "active" });
+          await queryClient.refetchQueries(
+            { queryKey, exact: true, type: "active" },
+            { throwOnError: true },
+          );
           changed =
             before !==
             sessionOwnershipKey(

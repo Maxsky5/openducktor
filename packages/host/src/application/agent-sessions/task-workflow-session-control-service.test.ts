@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type {
   AgentSessionControlStartInput,
   AgentSessionControlSummary,
+  AgentSessionControlUpdateModelInput,
   AgentSessionRecord,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -42,6 +43,43 @@ const createControlDeps = () => ({
   canonicalizeRepoPath: (repoPath: string) => Effect.succeed(repoPath),
   taskLifecycle: createTaskSessionBootstrapCoordinator(),
 });
+
+const workflowModelUpdate: AgentSessionControlUpdateModelInput = {
+  repoPath: "/repo",
+  runtimeKind: "opencode",
+  workingDirectory: "/repo/worktree",
+  externalSessionId: "session-1",
+  sessionScope: workflowStart.sessionScope,
+  model: { providerId: "openai", modelId: "gpt-5.1" },
+};
+
+type ControlDeps = Parameters<typeof createTaskWorkflowSessionControlService>[0];
+
+const createModelUpdateService = ({
+  selectedModel = storedModel,
+  updateRuntimeModel,
+  updateStoredModel,
+}: {
+  selectedModel?: AgentSessionRecord["selectedModel"];
+  updateRuntimeModel: ControlDeps["runtime"]["updateSessionModel"];
+  updateStoredModel: ControlDeps["tasks"]["agentSessionUpdateModel"];
+}) =>
+  createTaskWorkflowSessionControlService({
+    ...createControlDeps(),
+    runtime: {
+      startSession: () => Effect.dieMessage("unexpected start"),
+      resumeSession: () => Effect.dieMessage("unexpected resume"),
+      forkSession: () => Effect.dieMessage("unexpected fork"),
+      updateSessionModel: updateRuntimeModel,
+      stopSession: () => Effect.dieMessage("unexpected stop"),
+      releaseSession: () => Effect.dieMessage("unexpected release"),
+    },
+    tasks: {
+      agentSessionsList: () => Effect.succeed([{ ...summary, role: "build", selectedModel }]),
+      agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
+      agentSessionUpdateModel: updateStoredModel,
+    },
+  });
 
 describe("createTaskWorkflowSessionControlService", () => {
   test("stores a workflow session only from its runtime control result", async () => {
@@ -303,6 +341,129 @@ describe("createTaskWorkflowSessionControlService", () => {
         },
       },
     ]);
+  });
+
+  test("restores the runtime model when the task record update fails", async () => {
+    const calls: string[] = [];
+    const runtimeModels: unknown[] = [];
+    const service = createModelUpdateService({
+      updateRuntimeModel: (input) =>
+        Effect.sync(() => {
+          calls.push("runtime");
+          runtimeModels.push(input.model);
+        }),
+      updateStoredModel: () => {
+        calls.push("store");
+        return Effect.fail(
+          new HostOperationError({
+            operation: "task-session.update-model",
+            message: "task store unavailable",
+          }),
+        );
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.updateSessionModel({
+          ...workflowModelUpdate,
+          model: {
+            providerId: "openai",
+            modelId: "gpt-5.1",
+            variant: "high",
+          },
+        }),
+      ),
+    ).rejects.toThrow("task store unavailable");
+
+    expect(calls).toEqual(["runtime", "store", "runtime"]);
+    expect(runtimeModels).toEqual([
+      {
+        providerId: "openai",
+        modelId: "gpt-5.1",
+        variant: "high",
+      },
+      {
+        providerId: "openai",
+        modelId: "gpt-5",
+      },
+    ]);
+  });
+
+  test("clears the runtime model when a failed task record update had no stored model", async () => {
+    const runtimeModels: unknown[] = [];
+    const service = createModelUpdateService({
+      selectedModel: null,
+      updateRuntimeModel: (input) =>
+        Effect.sync(() => {
+          runtimeModels.push(input.model);
+        }),
+      updateStoredModel: () =>
+        Effect.fail(
+          new HostOperationError({
+            operation: "task-session.update-model",
+            message: "task store unavailable",
+          }),
+        ),
+    });
+
+    await expect(
+      Effect.runPromise(service.updateSessionModel(workflowModelUpdate)),
+    ).rejects.toThrow("task store unavailable");
+
+    expect(runtimeModels).toEqual([{ providerId: "openai", modelId: "gpt-5.1" }, null]);
+  });
+
+  test("restores the runtime model when no task record is updated", async () => {
+    const runtimeModels: unknown[] = [];
+    const service = createModelUpdateService({
+      updateRuntimeModel: (input) =>
+        Effect.sync(() => {
+          runtimeModels.push(input.model);
+        }),
+      updateStoredModel: () => Effect.succeed(false),
+    });
+
+    await expect(
+      Effect.runPromise(service.updateSessionModel(workflowModelUpdate)),
+    ).rejects.toThrow("Task 'task-1' did not update session 'session-1'.");
+
+    expect(runtimeModels).toEqual([
+      { providerId: "openai", modelId: "gpt-5.1" },
+      { providerId: "openai", modelId: "gpt-5" },
+    ]);
+  });
+
+  test("reports both failures when it cannot restore the runtime model", async () => {
+    const storeFailure = new HostOperationError({
+      operation: "task-session.update-model",
+      message: "task store unavailable",
+    });
+    const restoreFailure = new HostOperationError({
+      operation: "agent-session.update-model",
+      message: "runtime restore unavailable",
+    });
+    let runtimeCalls = 0;
+    const service = createModelUpdateService({
+      updateRuntimeModel: () => {
+        runtimeCalls += 1;
+        return runtimeCalls === 1 ? Effect.void : Effect.fail(restoreFailure);
+      },
+      updateStoredModel: () => Effect.fail(storeFailure),
+    });
+
+    const result = await Effect.runPromise(
+      Effect.either(service.updateSessionModel(workflowModelUpdate)),
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") {
+      expect(result.left).toBeInstanceOf(HostOperationError);
+      expect(result.left.message).toBe(
+        "task store unavailable Runtime model restore failed: runtime restore unavailable",
+      );
+      expect(result.left.cause).toEqual({ storeFailure, restoreFailure });
+    }
   });
 
   test("checks workflow ownership before it changes the runtime model", async () => {

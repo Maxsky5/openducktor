@@ -5,6 +5,7 @@ import type {
   AgentSessionControlStopInput,
   AgentSessionControlSummary,
   AgentSessionLiveRef,
+  AgentSessionModelSettings,
   AgentSessionRecord,
   AgentSessionWorkflowScope,
 } from "@openducktor/contracts";
@@ -164,6 +165,16 @@ const storeControlResult = (
     return yield* Effect.fail(stored.left);
   });
 
+const toRuntimeModel = (
+  selectedModel: AgentSessionRecord["selectedModel"],
+): AgentSessionModelSettings | null => {
+  if (!selectedModel) {
+    return null;
+  }
+  const { providerId, modelId, variant } = selectedModel;
+  return variant === undefined ? { providerId, modelId } : { providerId, modelId, variant };
+};
+
 export const createTaskWorkflowSessionControlService = ({
   canonicalizeRepoPath,
   runtime,
@@ -247,27 +258,72 @@ export const createTaskWorkflowSessionControlService = ({
               profileId,
             }
           : null;
-        yield* tasks
-          .agentSessionUpdateModel({
-            repoPath,
-            taskId: scope.taskId,
-            identity: {
-              externalSessionId: stored.externalSessionId,
-              runtimeKind: stored.runtimeKind,
-              workingDirectory: stored.workingDirectory,
-            },
-            selectedModel,
-          })
-          .pipe(
-            Effect.asVoid,
-            Effect.mapError((cause) =>
-              toHostOperationError(cause, "task-workflow-session.update-model", {
+        const storedUpdate = yield* Effect.either(
+          tasks
+            .agentSessionUpdateModel({
+              repoPath,
+              taskId: scope.taskId,
+              identity: {
+                externalSessionId: stored.externalSessionId,
+                runtimeKind: stored.runtimeKind,
+                workingDirectory: stored.workingDirectory,
+              },
+              selectedModel,
+            })
+            .pipe(
+              Effect.flatMap((updated) =>
+                updated
+                  ? Effect.void
+                  : Effect.fail(
+                      new HostOperationError({
+                        operation: "task-workflow-session.update-model",
+                        message: `Task '${scope.taskId}' did not update session '${stored.externalSessionId}'.`,
+                        details: {
+                          repoPath,
+                          taskId: scope.taskId,
+                          externalSessionId: stored.externalSessionId,
+                        },
+                      }),
+                    ),
+              ),
+              Effect.mapError((cause) =>
+                toHostOperationError(cause, "task-workflow-session.update-model", {
+                  repoPath,
+                  taskId: scope.taskId,
+                  externalSessionId: stored.externalSessionId,
+                }),
+              ),
+            ),
+        );
+        if (storedUpdate._tag === "Right") {
+          return;
+        }
+        const restored = yield* Effect.either(
+          runtime.updateSessionModel({
+            ...runtimeInput,
+            model: toRuntimeModel(stored.selectedModel),
+          }),
+        );
+        if (restored._tag === "Left") {
+          return yield* Effect.fail(
+            new HostOperationError({
+              operation: "task-workflow-session.update-model",
+              message: `${storedUpdate.left.message} Runtime model restore failed: ${restored.left.message}`,
+              cause: {
+                storeFailure: storedUpdate.left,
+                restoreFailure: restored.left,
+              },
+              details: {
                 repoPath,
                 taskId: scope.taskId,
                 externalSessionId: stored.externalSessionId,
-              }),
-            ),
+                storeFailure: storedUpdate.left,
+                restoreFailure: restored.left,
+              },
+            }),
           );
+        }
+        return yield* Effect.fail(storedUpdate.left);
       }),
     );
   },
