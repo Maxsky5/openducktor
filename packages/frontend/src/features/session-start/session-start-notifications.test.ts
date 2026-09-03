@@ -43,7 +43,7 @@ const session = {
 
 const createPublisher = (): SessionStartNotificationPublisher => ({
   publishSessionStarted: mock(() => {}),
-  publishSessionError: mock(() => {}),
+  publishSessionError: mock(async () => true),
   reportFailure: mock(() => {}),
 });
 
@@ -158,6 +158,29 @@ describe("session-start notifications", () => {
     expect(isSessionStartFailureFeedbackHandled(rejected)).toBe(true);
   });
 
+  test("leaves feedback to the caller when no in-app notification appears", async () => {
+    const notifications = createPublisher();
+    notifications.publishSessionError = mock(async () => false);
+    const runner = createSessionStartWorkflowRunner({
+      queryClient: new QueryClient(),
+      workspaceId: "workspace-1",
+      startAgentSession: mock(async () => {
+        throw new Error("start failed");
+      }),
+      notifications,
+      createLaunchAttemptId: () => "launch-no-in-app",
+    });
+
+    let rejected: unknown;
+    try {
+      await runner(baseInput);
+    } catch (cause) {
+      rejected = cause;
+    }
+
+    expect(isSessionStartFailureFeedbackHandled(rejected)).toBe(false);
+  });
+
   test("leaves feedback to the caller when the error notification cannot publish", async () => {
     const notifications = createPublisher();
     notifications.publishSessionError = mock(() => {
@@ -236,13 +259,14 @@ describe("session-start notifications", () => {
     const occurrences: NotificationOccurrence[] = [];
     const notifications: SessionStartNotificationPublisher = {
       publishSessionStarted: mock(() => {}),
-      publishSessionError: mock((input) => {
+      publishSessionError: mock(async (input) => {
         occurrences.push(
           buildSessionStartErrorOccurrence(
             { repoPath: "/tmp/repo", repositoryLabel: "OpenDucktor" },
             input,
           ),
         );
+        return true;
       }),
       reportFailure: mock(() => {}),
     };

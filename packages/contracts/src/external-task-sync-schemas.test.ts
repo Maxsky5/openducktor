@@ -51,6 +51,20 @@ describe("external-task-sync-schemas", () => {
     }
   });
 
+  test("allows an empty task title in update snapshots", () => {
+    const parsed = tasksUpdatedEventSchema.parse({
+      eventId: "event-empty-title",
+      kind: "tasks_updated",
+      repoPath: "/repo",
+      taskIds: ["task-8"],
+      removedTaskIds: [],
+      taskSnapshots: [{ id: "task-8", title: "", status: "ready_for_dev" }],
+      emittedAt: "2026-04-10T13:05:00.000Z",
+    });
+
+    expect(parsed.taskSnapshots[0]?.title).toBe("");
+  });
+
   test("rejects task event values with surrounding whitespace", () => {
     const validEvent = {
       eventId: "event-1",

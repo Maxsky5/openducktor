@@ -31,7 +31,7 @@ const createNotificationContext = (
   registerNavigator: () => () => {},
   sessionStartNotifications: {
     publishSessionStarted: () => {},
-    publishSessionError: () => {},
+    publishSessionError: async () => true,
     reportFailure: () => {},
   },
   taskStreamSink: {

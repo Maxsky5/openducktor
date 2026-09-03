@@ -19,8 +19,6 @@ const occurrence: NotificationOccurrence = {
     repoPath: "/repo",
     taskId: "task-1",
     session: {
-      runtimeKind: "opencode",
-      workingDirectory: "/repo",
       externalSessionId: "session-1",
     },
   },

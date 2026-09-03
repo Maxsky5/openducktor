@@ -6,8 +6,6 @@ import {
   matchesNotificationSession,
   navigateToNotificationTarget,
 } from "./notification-navigation-logic";
-import { notificationSessionIdentityFromNavigationState } from "./notification-navigation-state";
-import type { NotificationSessionNavigationState } from "./notification-navigation-state";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 
 const session: AgentSessionRecord = {
@@ -25,26 +23,18 @@ const target: Extract<NotificationNavigationTarget, { type: "pending_input" }> =
   taskId: "task-1",
   session: {
     externalSessionId: "session-1",
-    runtimeKind: "codex",
-    workingDirectory: "/repo/worktree",
   },
   inputKind: "permission",
   requestId: "request-1",
 };
 
 describe("notification navigation", () => {
-  test("requires the full session identity", () => {
+  test("matches a task-scoped session by its external ID", () => {
     expect(matchesNotificationSession(session, target)).toBe(true);
     expect(
       matchesNotificationSession(session, {
         ...target,
-        session: { ...target.session, runtimeKind: "opencode" },
-      }),
-    ).toBe(false);
-    expect(
-      matchesNotificationSession(session, {
-        ...target,
-        session: { ...target.session, workingDirectory: "/repo/other" },
+        session: { externalSessionId: "session-other" },
       }),
     ).toBe(false);
   });
@@ -61,25 +51,17 @@ describe("notification navigation", () => {
     expect(href).not.toContain("workingDirectory");
   });
 
-  test("opens a repository session by its full identity after selecting its workspace", async () => {
+  test("reports a taskless session target without routing to Agent Studio", async () => {
     const calls: string[] = [];
-    const navigate = mock((href: string, options?: { state?: unknown }) => {
-      calls.push("navigate");
-      expect(href).toBe("/agents?session=session-1");
-      expect(options).toEqual({
-        state: {
-          notificationSession: {
-            externalSessionId: "session-1",
-            runtimeKind: "codex",
-            workingDirectory: "/repo/worktree",
-          },
-        },
-      });
-    });
+    const navigate = mock(() => calls.push("navigate"));
     const selectWorkspace = mock(async () => {
       calls.push("select-workspace");
     });
     const loadTasks = mock(async () => []);
+    const reportStale = mock((message: string) => {
+      calls.push("report-stale");
+      expect(message).toBe("Repository session notifications cannot be opened yet.");
+    });
 
     await navigateToNotificationTarget(
       {
@@ -94,12 +76,13 @@ describe("notification navigation", () => {
         loadTasks,
         loadTaskSessions: mock(async () => []),
         navigate,
-        reportStale: mock(() => {}),
+        reportStale,
       },
     );
 
-    expect(calls).toEqual(["select-workspace", "navigate"]);
+    expect(calls).toEqual(["select-workspace", "report-stale"]);
     expect(loadTasks).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   test("loads task data while workspace selection is pending", async () => {
@@ -155,20 +138,5 @@ describe("notification navigation", () => {
       findNotificationAttentionTarget("error", "error-2")?.dataset.notificationAttentionId,
     ).toBe("error-2");
     expect(findNotificationAttentionTarget("error", "missing")).toBeNull();
-  });
-
-  test("accepts navigation state only for the routed external session", () => {
-    const state = { notificationSession: target.session };
-    expect(notificationSessionIdentityFromNavigationState(state, "session-1")).toEqual(
-      target.session,
-    );
-    expect(notificationSessionIdentityFromNavigationState(state, "session-other")).toBeNull();
-    // SAFETY: Deliberately forge malformed browser history state to verify boundary validation.
-    expect(
-      notificationSessionIdentityFromNavigationState(
-        { notificationSession: {} } as NotificationSessionNavigationState,
-        "session-1",
-      ),
-    ).toBeNull();
   });
 });

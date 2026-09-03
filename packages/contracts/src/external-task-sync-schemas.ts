@@ -51,7 +51,7 @@ export type TaskChangeSet = z.infer<typeof taskChangeSetSchema>;
 export const taskEventTaskSnapshotSchema = z
   .object({
     id: strictTaskEventValueSchema,
-    title: z.string().min(1),
+    title: z.string(),
     status: taskStatusSchema,
   })
   .strict();

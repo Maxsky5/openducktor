@@ -98,8 +98,6 @@ describe("notification runtime tests", () => {
         type: "agent_session",
         repoPath: "/repo",
         session: {
-          runtimeKind: "opencode",
-          workingDirectory: "/repo",
           externalSessionId: "session-1",
         },
       },
@@ -137,6 +135,74 @@ describe("notification runtime tests", () => {
     runtime.publish(workflowClosedOccurrence("event-settings-snapshot"));
 
     expect(await published).toEqual(settings);
+  });
+
+  test("reports no in-app feedback when the notification kind is disabled", async () => {
+    const settings = createDefaultNotificationSettings();
+    settings.kinds["workflow.closed"].enabled = false;
+    const delivery = createDeliveryAdapters();
+    const runtime = createNotificationRuntime({
+      bridge: createBridge(),
+      loadSettings: async () => settings,
+      navigate: async () => {},
+      onFailure: () => {},
+      inApp: delivery.inApp,
+      sound: delivery.sound,
+    });
+
+    const inAppDelivered = await runtime.publishAndWait(
+      workflowClosedOccurrence("event-disabled-feedback"),
+    );
+
+    expect(inAppDelivered).toBe(false);
+    expect(delivery.deliverInApp).not.toHaveBeenCalled();
+  });
+
+  test("reports confirmed in-app feedback after delivery", async () => {
+    const settings = createDefaultNotificationSettings();
+    settings.kinds["workflow.closed"] = {
+      enabled: true,
+      target: "in_app",
+      sound: "none",
+    };
+    const runtime = createNotificationRuntime({
+      bridge: createBridge(),
+      loadSettings: async () => settings,
+      navigate: async () => {},
+      onFailure: () => {},
+    });
+
+    const inAppDelivered = await runtime.publishAndWait(
+      workflowClosedOccurrence("event-in-app-feedback"),
+    );
+
+    expect(inAppDelivered).toBe(true);
+  });
+
+  test("reports no in-app feedback when delivery fails", async () => {
+    const settings = createDefaultNotificationSettings();
+    settings.kinds["workflow.closed"] = {
+      enabled: true,
+      target: "in_app",
+      sound: "none",
+    };
+    const onFailure = mock(() => {});
+    const runtime = createNotificationRuntime({
+      bridge: createBridge(),
+      loadSettings: async () => settings,
+      navigate: async () => {},
+      onFailure,
+      inApp: { deliver: async () => Promise.reject(new Error("toast failed")) },
+    });
+
+    const inAppDelivered = await runtime.publishAndWait(
+      workflowClosedOccurrence("event-in-app-failure"),
+    );
+
+    expect(inAppDelivered).toBe(false);
+    expect(onFailure).toHaveBeenCalledWith(
+      expect.objectContaining({ channel: "in_app", message: "toast failed" }),
+    );
   });
 
   test("uses one settings snapshot when another tab receives the occurrence", async () => {

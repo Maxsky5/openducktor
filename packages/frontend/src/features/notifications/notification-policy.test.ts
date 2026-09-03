@@ -19,8 +19,6 @@ const occurrence: NotificationOccurrence = {
     repoPath: "/repo",
     taskId: "task-1",
     session: {
-      runtimeKind: "opencode",
-      workingDirectory: "/repo",
       externalSessionId: "session-1",
     },
     inputKind: "permission",
@@ -49,8 +47,8 @@ const dispatchAsOwner = async (
   harness: ReturnType<typeof createHarness>,
   appFocused = false,
 ): Promise<void> => {
-  const plan = await harness.policy.dispatch(occurrence, { phase: "local" });
-  if (plan) {
+  const result = await harness.policy.dispatch(occurrence, { phase: "local" });
+  if (result.externalPlan) {
     await harness.policy.dispatch(occurrence, { phase: "external", appFocused });
   }
 };

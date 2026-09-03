@@ -42,7 +42,7 @@ const notificationContextValue = {
   registerNavigator: () => () => {},
   sessionStartNotifications: {
     publishSessionStarted: () => {},
-    publishSessionError: () => {},
+    publishSessionError: async () => true,
     reportFailure: () => {},
   },
   taskStreamSink: {

@@ -213,36 +213,6 @@ describe("useAgentStudioSelectionState", () => {
     await harness.unmount();
   });
 
-  test("keeps the full repository session identity from route state", async () => {
-    const firstIdentity = {
-      externalSessionId: "repository-session",
-      runtimeKind: "codex" as const,
-      workingDirectory: "/repo/worktrees/first",
-    };
-    const harness = createHookHarness(
-      baseProps({
-        taskIdParam: "",
-        sessionExternalIdParam: firstIdentity.externalSessionId,
-        sessionIdentityFromNavigation: firstIdentity,
-      }),
-    );
-
-    await harness.mount();
-    expect(harness.getLatest().selection.sessionIdentity).toEqual(firstIdentity);
-
-    const secondIdentity = { ...firstIdentity, workingDirectory: "/repo/worktrees/second" };
-    await harness.update(
-      baseProps({
-        taskIdParam: "",
-        sessionExternalIdParam: secondIdentity.externalSessionId,
-        sessionIdentityFromNavigation: secondIdentity,
-      }),
-    );
-    expect(harness.getLatest().selection.sessionIdentity).toEqual(secondIdentity);
-
-    await harness.unmount();
-  });
-
   test("keeps local task selection while stale route params are catching up", async () => {
     const harness = createHookHarness(baseProps());
 

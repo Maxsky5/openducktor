@@ -17,8 +17,6 @@ const roleLabel = (role: SessionStartNotificationInput["role"]): string => {
 const toSession = (
   session: NonNullable<SessionStartNotificationInput["session"]>,
 ): NotificationSessionIdentity => ({
-  runtimeKind: session.runtimeKind,
-  workingDirectory: session.workingDirectory,
   externalSessionId: session.externalSessionId,
 });
 

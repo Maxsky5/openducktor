@@ -94,10 +94,11 @@ export const createNotificationRuntime = ({
   const dispatch = async (
     rawOccurrence: NotificationOccurrence,
     suppliedSettings?: NotificationSettings,
-  ): Promise<void> => {
+  ): Promise<boolean> => {
     const occurrence = notificationOccurrenceSchema.parse(rawOccurrence);
-    const externalPlan = await policy.dispatch(occurrence, { phase: "local" }, suppliedSettings);
-    if (!externalPlan) return;
+    const localResult = await policy.dispatch(occurrence, { phase: "local" }, suppliedSettings);
+    const externalPlan = localResult.externalPlan;
+    if (!externalPlan) return localResult.inAppDelivered;
     let coordinationFailed = false;
     let coordinationCompleted = false;
     try {
@@ -122,25 +123,31 @@ export const createNotificationRuntime = ({
     if (coordinationCompleted && !coordinationFailed) {
       recoverCoordinationFailure("external_delivery");
     }
+    return localResult.inAppDelivered;
+  };
+
+  const publishAndWait = async (rawOccurrence: NotificationOccurrence): Promise<boolean> => {
+    const occurrence = notificationOccurrenceSchema.parse(
+      prepareNotificationOccurrence(rawOccurrence),
+    );
+    const settings = await policy.loadSettingsCandidate(occurrence);
+    if (!settings) return false;
+    try {
+      const selected = await bridge.publishOccurrence(occurrence, settings);
+      recoverCoordinationFailure("publication");
+      return await dispatch(selected.occurrence, selected.settings);
+    } catch (cause) {
+      reportCoordinationFailure("publication", occurrence, cause);
+      return false;
+    }
   };
 
   return {
     dispatch,
     publish(rawOccurrence: NotificationOccurrence): void {
-      const occurrence = notificationOccurrenceSchema.parse(
-        prepareNotificationOccurrence(rawOccurrence),
-      );
-      void policy.loadSettingsCandidate(occurrence).then(async (settings) => {
-        if (!settings) return;
-        try {
-          const selected = await bridge.publishOccurrence(occurrence, settings);
-          recoverCoordinationFailure("publication");
-          await dispatch(selected.occurrence, selected.settings);
-        } catch (cause) {
-          reportCoordinationFailure("publication", occurrence, cause);
-        }
-      });
+      void publishAndWait(rawOccurrence);
     },
+    publishAndWait,
     subscribe(): () => void {
       const stopOccurrences = bridge.subscribeOccurrences((occurrence, settings) => {
         void dispatch(occurrence, settings);

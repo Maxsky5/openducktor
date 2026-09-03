@@ -14,8 +14,6 @@ const occurrence = (overrides: Partial<NotificationOccurrence> = {}): Notificati
     type: "agent_session",
     repoPath: "/repo",
     session: {
-      runtimeKind: "opencode",
-      workingDirectory: "/repo",
       externalSessionId: "session-1",
     },
   },

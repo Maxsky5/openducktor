@@ -96,7 +96,7 @@ const toastActionSchema = z.object({
   onClick: z.function(),
 });
 const publishSessionStartedMock = mock(() => {});
-const publishSessionErrorMock = mock(() => {});
+const publishSessionErrorMock = mock(async () => true);
 const reportSessionNotificationFailureMock = mock(() => {});
 let toastSpies: Array<{ mockRestore(): void }> = [];
 const loadRepoRuntimeCatalogMock = mock(async (): Promise<AgentModelCatalog> => ({

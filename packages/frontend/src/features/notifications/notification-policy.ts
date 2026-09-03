@@ -28,6 +28,11 @@ export type NotificationExternalDeliveryPlan = {
   requiresFocus: boolean;
 };
 
+export type NotificationDispatchResult = {
+  externalPlan: NotificationExternalDeliveryPlan | null;
+  inAppDelivered: boolean;
+};
+
 export type NotificationDispatchFailure = {
   channel: "coordination" | "in_app" | "os" | "sound" | "settings";
   kind: NotificationOccurrence["kind"];
@@ -138,14 +143,14 @@ export const createNotificationPolicy = ({
     rawOccurrence: NotificationOccurrence,
     context: NotificationDispatchContext,
     suppliedSettings?: NotificationSettings,
-  ): Promise<NotificationExternalDeliveryPlan | null> => {
+  ): Promise<NotificationDispatchResult> => {
     const occurrence = notificationOccurrenceSchema.parse(rawOccurrence);
     const settings = await loadSettingsSnapshot(occurrence, suppliedSettings);
-    if (!settings) return null;
+    if (!settings) return { externalPlan: null, inAppDelivered: false };
 
     const kindSettings = settings.kinds[occurrence.kind];
     if (!kindSettings.enabled) {
-      return null;
+      return { externalPlan: null, inAppDelivered: false };
     }
 
     const copy = buildNotificationCopy(occurrence);
@@ -184,25 +189,34 @@ export const createNotificationPolicy = ({
     }
 
     const results = await Promise.allSettled(deliveries.map(({ run }) => run()));
+    let inAppDelivered = false;
     for (const [index, result] of results.entries()) {
+      const delivery = deliveries[index];
+      if (delivery?.channel === "in_app" && result.status === "fulfilled") {
+        inAppDelivered = true;
+      }
       if (result.status === "rejected") {
-        const delivery = deliveries[index];
         if (delivery) {
           reportFailure(occurrence, delivery.channel, result.reason);
         }
       }
     }
 
-    if (context.phase === "external") return null;
+    if (context.phase === "external") {
+      return { externalPlan: null, inAppDelivered };
+    }
     const terminal = terminalChannels.get(occurrence.occurrenceId);
     const osPending = osSelected && !terminal?.has("os");
     const soundPending = Boolean(cue) && !terminal?.has("sound");
-    if (!osPending && !soundPending) return null;
-    return {
-      requiresFocus:
-        (osPending && settings.osFocus === "suppress_if_focused") ||
-        (soundPending && settings.soundFocus === "mute_while_focused"),
-    };
+    const externalPlan =
+      osPending || soundPending
+        ? {
+            requiresFocus:
+              (osPending && settings.osFocus === "suppress_if_focused") ||
+              (soundPending && settings.soundFocus === "mute_while_focused"),
+          }
+        : null;
+    return { externalPlan, inAppDelivered };
   };
 
   return { dispatch, loadSettingsCandidate };
