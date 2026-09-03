@@ -95,8 +95,12 @@ describe("GithubProviderAdapter", () => {
     );
     expect(pullRequests).toEqual(
       expect.objectContaining({
-        findByBranch: expect.any(Function),
+        providerId: "github",
+        findOpenForSourceBranch: expect.any(Function),
+        findLatestMergedForSourceBranch: expect.any(Function),
         getByNumber: expect.any(Function),
+        refresh: expect.any(Function),
+        resolvePublishRemote: expect.any(Function),
         upsert: expect.any(Function),
       }),
     );
@@ -151,7 +155,7 @@ describe("GithubProviderAdapter", () => {
     });
 
     const byBranch = await Effect.runPromise(
-      pullRequests.findByBranch({ repoConfig, sourceBranch: "odt/task-42", state: "open" }),
+      pullRequests.findOpenForSourceBranch({ repoConfig, sourceBranch: "odt/task-42" }),
     );
     const byNumber = await Effect.runPromise(pullRequests.getByNumber({ repoConfig, number: 42 }));
 

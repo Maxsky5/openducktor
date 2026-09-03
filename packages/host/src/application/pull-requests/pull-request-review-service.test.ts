@@ -138,8 +138,12 @@ const makeProvider = (
     }),
     pullRequests: () =>
       Effect.succeed<PullRequestProviderPort>({
-        findByBranch: () => unexpectedProviderOperation(),
+        providerId,
+        findOpenForSourceBranch: () => unexpectedProviderOperation(),
+        findLatestMergedForSourceBranch: () => unexpectedProviderOperation(),
         getByNumber: () => unexpectedProviderOperation(),
+        refresh: () => unexpectedProviderOperation(),
+        resolvePublishRemote: () => unexpectedProviderOperation(),
         upsert: () => unexpectedProviderOperation(),
       }),
     pullRequestReview:

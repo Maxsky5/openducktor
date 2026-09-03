@@ -46,8 +46,13 @@ describe("GitProviderService", () => {
       health: () => health,
       pullRequests: () =>
         Effect.succeed({
-          findByBranch: () => Effect.die("Unexpected findByBranch call"),
+          providerId: "github",
+          findOpenForSourceBranch: () => Effect.die("Unexpected findOpenForSourceBranch call"),
+          findLatestMergedForSourceBranch: () =>
+            Effect.die("Unexpected findLatestMergedForSourceBranch call"),
           getByNumber: () => Effect.die("Unexpected getByNumber call"),
+          refresh: () => Effect.die("Unexpected refresh call"),
+          resolvePublishRemote: () => Effect.die("Unexpected resolvePublishRemote call"),
           upsert: () => Effect.die("Unexpected upsert call"),
         }),
       pullRequestReview: () =>

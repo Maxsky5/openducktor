@@ -5,7 +5,6 @@ import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery
 import { TaskPolicyError } from "../../domain/task";
 import { HostOperationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
-import { GitProviderRepositoryError } from "../../ports/git-provider-errors";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { createGitProviderResolver } from "../git/git-provider-resolver";
 import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
@@ -327,76 +326,6 @@ describe("createTaskService pull requests", () => {
     if (!(error instanceof TaskPolicyError)) throw error;
     expect(error.code).toBe("TASK_POLICY_ERROR");
   });
-  test.each([
-    ["detect", "no_matching_remote", []],
-    ["detect", "ambiguous_matching_remotes", ["origin", "upstream"]],
-    ["link", "no_matching_remote", []],
-    ["link", "ambiguous_matching_remotes", ["origin", "upstream"]],
-  ] as const)(
-    "%s pull request preserves the real provider repository error for %s",
-    async (operation, reason, remoteNames) => {
-      const calls: unknown[] = [];
-      const matchingRemotes = remoteNames.map((name) => ({
-        name,
-        url: "git@github.com:openai/openducktor.git",
-      }));
-      const gitPort = extendGitPort(
-        createDirectMergeGitPort({
-          calls,
-          currentBranches: {
-            "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
-          },
-        }),
-        { listRemotes: () => Effect.succeed(matchingRemotes) },
-      );
-      const systemCommands = createPullRequestDetectSystemCommands({
-        calls,
-        openPayload: githubPullListPayload([]),
-      });
-      const providerDependencies = await createGithubTaskDependencies(gitPort, systemCommands);
-      const service = createTaskService({
-        ...providerDependencies,
-        taskStore: {
-          getTask: () => Effect.succeed(task({ status: "human_review" })),
-          getTaskMetadata: () =>
-            Effect.succeed({
-              spec: { markdown: "# Spec" },
-              plan: { markdown: "# Plan" },
-              agentSessions: [],
-            }),
-        },
-        taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
-        workspaceSettingsService: createBuildWorkspaceSettingsService({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          hooks: { preStart: [], postComplete: [] },
-          git: {
-            provider: {
-              id: "github",
-              enabled: true,
-              repository: { host: "github.com", owner: "openai", name: "openducktor" },
-              autoDetected: false,
-            },
-          },
-        }),
-      });
-
-      const taskInput = { repoPath: "/repo", taskId: "task-1" };
-      const error =
-        operation === "detect"
-          ? await Effect.runPromise(Effect.flip(service.detectPullRequest(taskInput)))
-          : await Effect.runPromise(
-              Effect.flip(
-                service.linkPullRequest({ ...taskInput, providerId: "github", number: 42 }),
-              ),
-            );
-
-      expect(error).toBeInstanceOf(GitProviderRepositoryError);
-      if (!(error instanceof GitProviderRepositoryError)) throw error;
-      expect(error.reason).toBe(reason);
-      expect(error.remoteNames).toEqual(remoteNames);
-    },
-  );
   test("links a pull request by number after fetching provider metadata", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {

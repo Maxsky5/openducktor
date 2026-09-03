@@ -1,5 +1,6 @@
 import type { PullRequest } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { requirePullRequestProviderMatch } from "../../pull-requests/pull-request-provider-match";
 import {
   requireDependencies,
   requireMergedTaskCleanupDependencies,
@@ -66,12 +67,17 @@ export const createTaskPullRequestSyncUseCases = ({
             continue;
           }
 
-          if (pullRequest.providerId !== providerId) {
-            continue;
-          }
-          const updated = yield* pullRequests.getByNumber({
+          yield* requirePullRequestProviderMatch({
+            configuredProviderId: providerId,
+            linkedProviderId: pullRequest.providerId,
+          });
+          const updated = yield* pullRequests.refresh({
             repoConfig,
-            number: pullRequest.number,
+            linkedPullRequest: pullRequest,
+          });
+          yield* requirePullRequestProviderMatch({
+            configuredProviderId: providerId,
+            linkedProviderId: updated.record.providerId,
           });
 
           if (updated.record.state === "merged" && task.status !== "closed") {

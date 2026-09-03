@@ -28,8 +28,12 @@ const healthPort = (): GitProviderHealthPort => ({
   getStatus: () => unexpectedPortCall(),
 });
 const pullRequestPort: PullRequestProviderPort = {
-  findByBranch: () => unexpectedPortCall(),
+  providerId: "github",
+  findOpenForSourceBranch: () => unexpectedPortCall(),
+  findLatestMergedForSourceBranch: () => unexpectedPortCall(),
   getByNumber: () => unexpectedPortCall(),
+  refresh: () => unexpectedPortCall(),
+  resolvePublishRemote: () => unexpectedPortCall(),
   upsert: () => unexpectedPortCall(),
 };
 const pullRequestReviewPort: PullRequestReviewProviderPort = {
@@ -222,6 +226,34 @@ describe("createGitProviderResolver", () => {
           _tag: "GitProviderRegistrationError",
           reason: "capability_provider_id_mismatch",
           capability: "pull_request_review",
+          providerId: "github",
+        }),
+      );
+    }
+  });
+
+  test("rejects a Pull Request port owned by another provider", async () => {
+    const foreignPullRequestPort: PullRequestProviderPort = {
+      ...pullRequestPort,
+      providerId: "gitlab",
+    };
+    const github = provider({
+      providerDescriptor: descriptor({
+        id: "github",
+        supportsPullRequests: true,
+      }),
+      pullRequests: foreignPullRequestPort,
+    });
+
+    const result = await registrationEither([github]);
+
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") {
+      expect(result.left).toEqual(
+        expect.objectContaining({
+          _tag: "GitProviderRegistrationError",
+          reason: "capability_provider_id_mismatch",
+          capability: "pull_requests",
           providerId: "github",
         }),
       );

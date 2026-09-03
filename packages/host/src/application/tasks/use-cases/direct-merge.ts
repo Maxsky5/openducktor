@@ -21,7 +21,6 @@ import type { CreateTaskServiceInput, TaskService } from "../task-service";
 export const createTaskDirectMergeUseCase = ({
   devServerService,
   gitPort,
-  gitProviderResolver,
   taskStore,
   settingsConfig,
   taskSessionBootstrapCoordinator,
@@ -38,7 +37,6 @@ export const createTaskDirectMergeUseCase = ({
         requireDirectMergeDependencies({
           devServerService,
           gitPort,
-          gitProviderResolver,
           settingsConfig,
           taskWorktreeService,
           terminalService,

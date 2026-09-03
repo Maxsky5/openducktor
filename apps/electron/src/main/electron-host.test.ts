@@ -2301,11 +2301,25 @@ describe("createElectronHostCommandRouter", () => {
       settingsConfig: createSettingsConfig(
         globalConfig({
           workspaces: {
-            repo: repoConfig(),
+            repo: repoConfig({
+              git: {
+                provider: {
+                  id: "github",
+                  enabled: true,
+                  repository: {
+                    host: "github.com",
+                    owner: "acme",
+                    name: "repo",
+                  },
+                  autoDetected: false,
+                },
+              },
+            }),
           },
           workspaceOrder: ["repo"],
         }),
       ),
+      systemCommands: createSystemCommands(),
       taskStore: {
         ...createTaskStore(),
         listTasks: () =>

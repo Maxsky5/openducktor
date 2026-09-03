@@ -1,6 +1,7 @@
 import type {
   GitProviderDescriptor,
   GitProviderHealth,
+  GitProviderId,
   GitProviderRepository,
   PullRequest,
   RepoConfig,
@@ -42,9 +43,8 @@ export type ProviderPullRequest = {
   targetBranch: string;
 };
 
-export type FindPullRequestByBranchInput = PullRequestProviderInput & {
+export type PullRequestBranchInput = PullRequestProviderInput & {
   sourceBranch: string;
-  state: "open" | "all";
 };
 
 export type GetPullRequestByNumberInput = PullRequestProviderInput & {
@@ -57,13 +57,27 @@ export type UpsertPullRequestInput = PullRequestProviderInput & {
   body: string;
 };
 
+export type RefreshPullRequestInput = PullRequestProviderInput & {
+  linkedPullRequest: PullRequest;
+};
+
 export type PullRequestProviderPort = {
-  findByBranch(
-    input: FindPullRequestByBranchInput,
+  providerId: GitProviderId;
+  findOpenForSourceBranch(
+    input: PullRequestBranchInput,
+  ): Effect.Effect<ProviderPullRequest | undefined, HostError | GitProviderRepositoryError>;
+  findLatestMergedForSourceBranch(
+    input: PullRequestBranchInput,
   ): Effect.Effect<ProviderPullRequest | undefined, HostError | GitProviderRepositoryError>;
   getByNumber(
     input: GetPullRequestByNumberInput,
   ): Effect.Effect<ProviderPullRequest, HostError | GitProviderRepositoryError>;
+  refresh(
+    input: RefreshPullRequestInput,
+  ): Effect.Effect<ProviderPullRequest, HostError | GitProviderRepositoryError>;
+  resolvePublishRemote(
+    input: PullRequestProviderInput,
+  ): Effect.Effect<string, HostError | GitProviderRepositoryError>;
   upsert(
     input: UpsertPullRequestInput,
   ): Effect.Effect<PullRequest, HostError | GitProviderRepositoryError>;

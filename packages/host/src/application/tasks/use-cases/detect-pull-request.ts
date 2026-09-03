@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import { HostValidationError } from "../../../effect/host-errors";
+import { requirePullRequestProviderMatch } from "../../pull-requests/pull-request-provider-match";
 import {
   requireDependencies,
   requirePullRequestDetectionDependencies,
@@ -60,12 +61,15 @@ export const createTaskPullRequestDetectionUseCase = ({
       );
       const provider = yield* dependencies.gitProviderResolver.resolve(repoConfig);
       const pullRequests = yield* provider.pullRequests();
-      const openPullRequest = yield* pullRequests.findByBranch({
+      const openPullRequest = yield* pullRequests.findOpenForSourceBranch({
         repoConfig,
         sourceBranch: taskContext.sourceBranch,
-        state: "open",
       });
       if (openPullRequest !== undefined) {
+        yield* requirePullRequestProviderMatch({
+          configuredProviderId: provider.getDescriptor().id,
+          linkedProviderId: openPullRequest.record.providerId,
+        });
         yield* taskStore.setPullRequest({
           repoPath: effectiveRepoPath,
           taskId,
@@ -77,12 +81,15 @@ export const createTaskPullRequestDetectionUseCase = ({
         };
       }
 
-      const pullRequest = yield* pullRequests.findByBranch({
+      const pullRequest = yield* pullRequests.findLatestMergedForSourceBranch({
         repoConfig,
         sourceBranch: taskContext.sourceBranch,
-        state: "all",
       });
-      if (pullRequest?.record.state === "merged") {
+      if (pullRequest !== undefined) {
+        yield* requirePullRequestProviderMatch({
+          configuredProviderId: provider.getDescriptor().id,
+          linkedProviderId: pullRequest.record.providerId,
+        });
         return {
           outcome: "merged",
           pullRequest: pullRequest.record,

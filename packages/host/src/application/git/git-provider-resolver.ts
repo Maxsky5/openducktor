@@ -7,7 +7,6 @@ import {
   GitProviderResolutionError,
 } from "../../ports/git-provider-errors";
 import type { GitProviderPort } from "../../ports/git-provider-port";
-import type { PullRequestReviewProviderPort } from "../../ports/pull-request-review-provider-port";
 
 export {
   GitProviderCapabilityError,
@@ -82,15 +81,16 @@ export const createGitProviderResolver = (
   });
 };
 
-type CapabilityRule<Port> = {
+type CapabilityRule<Port extends { providerId: GitProviderId }> = {
   capability: GitProviderCapability;
   supported: boolean;
   getPort: () => Effect.Effect<Port, GitProviderCapabilityError>;
-  checkPort?: (
-    port: Port,
-    providerId: GitProviderId,
-  ) => Effect.Effect<void, GitProviderRegistrationError>;
 };
+
+const PORT_LABELS = {
+  pull_requests: "Pull Request",
+  pull_request_review: "Pull Request review",
+} satisfies Record<GitProviderCapability, string>;
 
 function checkProvider(
   provider: GitProviderPort,
@@ -106,12 +106,11 @@ function checkProvider(
       capability: "pull_request_review",
       supported: capabilities.supportsPullRequestReview,
       getPort: () => provider.pullRequestReview(),
-      checkPort: checkReviewPortOwner,
     });
   });
 }
 
-function checkCapability<Port>(
+function checkCapability<Port extends { providerId: GitProviderId }>(
   provider: GitProviderPort,
   rule: CapabilityRule<Port>,
 ): Effect.Effect<void, GitProviderRegistrationError> {
@@ -141,26 +140,15 @@ function checkCapability<Port>(
       );
     }
 
-    if (portResult._tag === "Right" && rule.checkPort) {
-      yield* rule.checkPort(portResult.right, providerId);
+    if (portResult._tag === "Right" && portResult.right.providerId !== providerId) {
+      return yield* Effect.fail(
+        new GitProviderRegistrationError({
+          reason: "capability_provider_id_mismatch",
+          providerId,
+          capability: rule.capability,
+          message: `Git provider '${providerId}' supplies a ${PORT_LABELS[rule.capability]} port owned by '${portResult.right.providerId}'.`,
+        }),
+      );
     }
   });
-}
-
-function checkReviewPortOwner(
-  port: PullRequestReviewProviderPort,
-  providerId: GitProviderId,
-): Effect.Effect<void, GitProviderRegistrationError> {
-  if (port.providerId === providerId) {
-    return Effect.void;
-  }
-
-  return Effect.fail(
-    new GitProviderRegistrationError({
-      reason: "capability_provider_id_mismatch",
-      providerId,
-      capability: "pull_request_review",
-      message: `Git provider '${providerId}' supplies a Pull Request review port owned by '${port.providerId}'.`,
-    }),
-  );
 }

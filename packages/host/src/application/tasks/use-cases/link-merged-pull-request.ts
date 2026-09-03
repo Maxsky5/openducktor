@@ -1,9 +1,11 @@
 import { Effect } from "effect";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import { requireWorktreeFiles } from "../../git/git-service-inputs";
+import { requirePullRequestProviderMatch } from "../../pull-requests/pull-request-provider-match";
 import {
   requireDependencies,
   requireLinkMergedPullRequestDependencies,
+  requirePullRequestLinkDependencies,
 } from "../support/required-task-dependencies";
 import { createTaskCleanupProgressState } from "../support/task-cleanup-progress";
 import { runTaskRuntimeCleanup } from "../support/task-cleanup-support";
@@ -29,6 +31,7 @@ type TaskBranchCleanup = {
 export const createTaskLinkMergedPullRequestUseCase = ({
   devServerService,
   gitPort,
+  gitProviderResolver,
   taskStore,
   settingsConfig,
   taskSessionBootstrapCoordinator,
@@ -47,12 +50,33 @@ export const createTaskLinkMergedPullRequestUseCase = ({
         metadata.pullRequest?.providerId === pullRequest.providerId &&
         metadata.pullRequest.number === pullRequest.number &&
         metadata.pullRequest.state === "merged";
+
+      const providerDependencies = yield* requireDependencies(() =>
+        requirePullRequestLinkDependencies({
+          gitProviderResolver,
+          workspaceSettingsService,
+        }),
+      );
+      const repoConfig =
+        yield* providerDependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const provider = yield* providerDependencies.gitProviderResolver.resolve(repoConfig);
+      const configuredProviderId = provider.getDescriptor().id;
+      yield* requirePullRequestProviderMatch({
+        configuredProviderId,
+        linkedProviderId: pullRequest.providerId,
+      });
+      if (metadata.pullRequest !== undefined) {
+        yield* requirePullRequestProviderMatch({
+          configuredProviderId,
+          linkedProviderId: metadata.pullRequest.providerId,
+        });
+      }
       if (current.status === "closed" && sameExistingPullRequest) {
         return enrichTask(current, currentTasks);
       }
 
       const dependencies = yield* requireDependencies(() =>
-        requireLinkMergedPullRequestDependencies(
+        requireLinkMergedPullRequestDependencies({
           devServerService,
           gitPort,
           settingsConfig,
@@ -60,7 +84,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           terminalService,
           worktreeFiles,
           workspaceSettingsService,
-        ),
+        }),
       );
       yield* validatePullRequestManagementStatusEffect(current.status);
       if (metadata.directMerge !== undefined) {
