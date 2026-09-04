@@ -37,6 +37,34 @@ const createSync = (ports: TaskViewSyncPorts) => {
 };
 
 describe("TaskViewSync races", () => {
+  test("uses the snapshot task read for a workspace load started at the same time", async () => {
+    const taskList = createDeferred<TaskCard[]>();
+    const taskListStarted = createDeferred<void>();
+    const listTasks = mock(async () => {
+      taskListStarted.resolve();
+      return taskList.promise;
+    });
+    const { sync } = createSync(createPorts({ listTasks }));
+
+    const snapshot = sync.reconcileStreamSnapshot("/repo");
+    const workspaceLoad = sync.loadWorkspace("/repo");
+    void workspaceLoad.catch(() => {});
+
+    try {
+      await taskListStarted.promise;
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+      expect(listTasks).toHaveBeenCalledTimes(1);
+
+      taskList.resolve([createTaskCardFixture({ id: "task-1" })]);
+      await expect(snapshot).resolves.toEqual(["task-1"]);
+      await expect(workspaceLoad).resolves.toBeUndefined();
+    } finally {
+      taskList.resolve([createTaskCardFixture({ id: "task-1" })]);
+      await Promise.allSettled([snapshot, workspaceLoad]);
+    }
+  });
+
   test("runs external document refreshes in event order", async () => {
     const firstDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
     const secondDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();

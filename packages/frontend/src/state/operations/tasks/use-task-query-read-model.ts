@@ -1,9 +1,9 @@
 import type { TaskCard } from "@openducktor/contracts";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
-import { repoTaskDataQueryOptions } from "../../queries/tasks";
+import { repoTaskDataQueryOptions, taskQueryKeys } from "../../queries/tasks";
 import { settingsSnapshotQueryOptions } from "../../queries/workspace";
 
 type UseTaskQueryReadModelArgs = {
@@ -27,12 +27,16 @@ export function useTaskQueryReadModel({
   activeRepoPath,
   lastTaskLoadErrorToastRef,
 }: UseTaskQueryReadModelArgs): TaskQueryReadModel {
+  const queryClient = useQueryClient();
   const settingsSnapshotQuery = useQuery(settingsSnapshotQueryOptions());
   const settingsSnapshot = settingsSnapshotQuery.data ?? null;
   const doneVisibleDays = settingsSnapshot?.kanban.doneVisibleDays ?? null;
+  const taskRepoPath = activeRepoPath ?? "__disabled__";
+  const hasLoadedTaskData =
+    queryClient.getQueryState(taskQueryKeys.repoData(taskRepoPath))?.status === "success";
   const repoTaskDataQuery = useQuery({
-    ...repoTaskDataQueryOptions(activeRepoPath ?? "__disabled__"),
-    enabled: activeRepoPath !== null && doneVisibleDays !== null,
+    ...repoTaskDataQueryOptions(taskRepoPath),
+    enabled: activeRepoPath !== null && doneVisibleDays !== null && hasLoadedTaskData,
   });
 
   useEffect(() => {

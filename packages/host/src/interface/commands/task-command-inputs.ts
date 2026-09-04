@@ -27,7 +27,6 @@ import type {
   RepoPathInput,
   SetPlanInput,
   TaskIdInput,
-  TaskIdsInput,
   TaskSessionBootstrapFinalizeInput,
   TaskSessionBootstrapPrepareInput,
   TransitionTaskInput,
@@ -89,8 +88,13 @@ export const parseTaskIdInput = (input: HostCommandArgs, label: string): TaskIdI
   };
 };
 
-export const parseTaskIdsInput = (input: HostCommandArgs, label: string): TaskIdsInput => {
-  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), label);
+export const parseListAgentSessionsForTasksInput = (
+  input: HostCommandArgs,
+): ListAgentSessionsForTasksInput => {
+  const record = requireParsedRecord(
+    commandInputRecordSchema.safeParse(input),
+    "agent_sessions_list_for_tasks input",
+  );
   const parsedTaskIds = taskIdsSchema.safeParse(record.taskIds);
   if (!parsedTaskIds.success) {
     throw new HostValidationError({
@@ -117,11 +121,6 @@ export const parseTaskIdsInput = (input: HostCommandArgs, label: string): TaskId
     taskIds: Array.from(new Set(taskIds)),
   };
 };
-
-export const parseListAgentSessionsForTasksInput = (
-  input: HostCommandArgs,
-): ListAgentSessionsForTasksInput =>
-  parseTaskIdsInput(input, "agent_sessions_list_for_tasks input");
 
 export const parseAgentSessionDeleteInput = (input: HostCommandArgs): AgentSessionDeleteInput => {
   const record = requireParsedRecord(

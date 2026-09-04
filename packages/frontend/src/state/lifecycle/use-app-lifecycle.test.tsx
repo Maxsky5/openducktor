@@ -54,6 +54,74 @@ const taskViewSync: TaskViewSync = {
 };
 
 describe("useAppLifecycle task stream", () => {
+  test("waits for initial stream reconciliation before loading repository tasks", async () => {
+    let onInitialSnapshotStarted: (() => void) | undefined;
+    const loadWorkspaceTasks = mock(async () => {});
+    const refreshTaskStoreCheckForRepo = mock(async () => makeTaskStoreCheck());
+    const factory: TaskStreamControllerFactory = ({ onInitialSnapshotStarted: onStarted }) => {
+      onInitialSnapshotStarted = onStarted;
+      return { start: async () => {}, stop: async () => {} };
+    };
+    const args = {
+      ...lifecycleArgs,
+      activeWorkspace: {
+        workspaceId: "workspace-1",
+        workspaceName: "Repository",
+        repoPath: "/repo",
+      },
+      loadWorkspaceTasks,
+      refreshTaskStoreCheckForRepo,
+      taskStreamControllerFactory: factory,
+    };
+    const harness = createHookHarness(() => useAppLifecycle(args), undefined, {
+      wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider>,
+    });
+
+    try {
+      await harness.mount();
+      await waitFor(() => expect(refreshTaskStoreCheckForRepo).toHaveBeenCalledTimes(1));
+
+      expect(loadWorkspaceTasks).not.toHaveBeenCalled();
+      expect(onInitialSnapshotStarted).toBeFunction();
+
+      onInitialSnapshotStarted?.();
+      await waitFor(() => expect(loadWorkspaceTasks).toHaveBeenCalledWith("/repo"));
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("loads repository tasks when the initial stream subscription fails", async () => {
+    const loadWorkspaceTasks = mock(async () => {});
+    const streamFailure = new Error("stream unavailable");
+    const factory: TaskStreamControllerFactory = () => ({
+      start: async () => {
+        throw streamFailure;
+      },
+      stop: async () => {},
+    });
+    const args = {
+      ...lifecycleArgs,
+      activeWorkspace: {
+        workspaceId: "workspace-1",
+        workspaceName: "Repository",
+        repoPath: "/repo",
+      },
+      loadWorkspaceTasks,
+      taskStreamControllerFactory: factory,
+    };
+    const harness = createHookHarness(() => useAppLifecycle(args), undefined, {
+      wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider>,
+    });
+
+    try {
+      await harness.mount();
+      await waitFor(() => expect(loadWorkspaceTasks).toHaveBeenCalledWith("/repo"));
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("uses the isolated query client to construct and stop its controller", async () => {
     const unsubscribe = mock(async () => {});
     const start = mock(async () => {});

@@ -20,11 +20,23 @@ const createProductionTaskStreamController =
   (
     removeTaskSessions: (repoPath: string, taskIds: string[]) => void,
   ): TaskStreamControllerFactory =>
-  ({ queryClient, getActiveRepoPath, onDegraded }) =>
-    createTaskStreamController({
+  ({ queryClient, getActiveRepoPath, onDegraded, onInitialSnapshotStarted }) => {
+    const taskViewSync = getProductionTaskViewSync(queryClient);
+    let initialSnapshotStarted = false;
+    return createTaskStreamController({
       transport: hostBridge,
       metadata: hostClient,
-      taskViewSync: getProductionTaskViewSync(queryClient),
+      taskViewSync: {
+        ...taskViewSync,
+        reconcileStreamSnapshot: (activeRepoPath) => {
+          const snapshot = taskViewSync.reconcileStreamSnapshot(activeRepoPath);
+          if (!initialSnapshotStarted) {
+            initialSnapshotStarted = true;
+            onInitialSnapshotStarted();
+          }
+          return snapshot;
+        },
+      },
       agentSessionViewSync: createAgentSessionViewSync({
         queryClient,
         readPort: hostClient,
@@ -34,6 +46,7 @@ const createProductionTaskStreamController =
       getActiveRepoPath,
       onDegraded,
     });
+  };
 
 type AppLifecycleStateProviderProps = PropsWithChildren<{
   startRepoRuntime: (repoPath: string, runtimeKind: RuntimeKind) => Promise<RuntimeInstanceSummary>;

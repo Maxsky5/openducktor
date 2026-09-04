@@ -23,6 +23,7 @@ export type TaskStreamControllerFactory = (input: {
   queryClient: QueryClient;
   getActiveRepoPath: () => string | null;
   onDegraded: (cause: unknown) => void;
+  onInitialSnapshotStarted: () => void;
 }) => TaskStreamController;
 
 type UseAppLifecycleArgs = {
@@ -49,6 +50,8 @@ const lifecycleTimers: LifecycleTimerPort<ReturnType<typeof setTimeout>> = {
   clearTimeout: (timer) => clearTimeout(timer),
 };
 
+const resolvedInitialTaskSnapshot = Promise.resolve();
+
 export function useAppLifecycle({
   activeWorkspace,
   runtimeDefinitions,
@@ -64,6 +67,7 @@ export function useAppLifecycle({
   const queryClient = useQueryClient();
   const activeWorkspaceRef = useRef(activeWorkspace);
   const loadWorkspaceTasksRef = useRef(loadWorkspaceTasks);
+  const initialTaskSnapshotRef = useRef<Promise<void>>(resolvedInitialTaskSnapshot);
 
   useLayoutEffect(() => {
     activeWorkspaceRef.current = activeWorkspace;
@@ -93,6 +97,18 @@ export function useAppLifecycle({
   }, [activeWorkspace?.repoPath, refreshRepoRuntimeHealth, runtimeKinds, startRepoRuntime]);
 
   useEffect(() => {
+    let initialSnapshotStarted = false;
+    let resolveInitialSnapshot!: () => void;
+    initialTaskSnapshotRef.current = new Promise<void>((resolve) => {
+      resolveInitialSnapshot = resolve;
+    });
+    const markInitialSnapshotStarted = (): void => {
+      if (initialSnapshotStarted) {
+        return;
+      }
+      initialSnapshotStarted = true;
+      resolveInitialSnapshot();
+    };
     const controller = taskStreamControllerFactory({
       queryClient,
       getActiveRepoPath: () => activeWorkspaceRef.current?.repoPath ?? null,
@@ -100,11 +116,14 @@ export function useAppLifecycle({
         const description = summarizeTaskLoadError({ error });
         toast.error("Task stream degraded", { description });
       },
+      onInitialSnapshotStarted: markInitialSnapshotStarted,
     });
     void controller.start().catch((cause: unknown) => {
+      markInitialSnapshotStarted();
       toast.error("Task stream unavailable", { description: errorMessage(cause) });
     });
     return () => {
+      markInitialSnapshotStarted();
       void controller.stop();
     };
   }, [queryClient, taskStreamControllerFactory]);
@@ -117,14 +136,21 @@ export function useAppLifecycle({
     }
 
     const loadVersion = ++repoLoadVersionRef.current;
+    const initialTaskSnapshot = initialTaskSnapshotRef.current;
+    const isCurrent = () =>
+      repoLoadVersionRef.current === loadVersion &&
+      activeWorkspaceRef.current?.repoPath === activeRepoPath;
     return startRepositoryLoad({
       repoPath: activeRepoPath,
-      isCurrent: () =>
-        repoLoadVersionRef.current === loadVersion &&
-        activeWorkspaceRef.current?.repoPath === activeRepoPath,
+      isCurrent,
       refreshBranches,
       refreshTaskStoreCheckForRepo,
-      loadWorkspaceTasks: (repoPath) => loadWorkspaceTasksRef.current(repoPath),
+      loadWorkspaceTasks: async (repoPath) => {
+        await initialTaskSnapshot;
+        if (isCurrent()) {
+          await loadWorkspaceTasksRef.current(repoPath);
+        }
+      },
       notifications: lifecycleNotifications,
       timers: lifecycleTimers,
     });

@@ -233,13 +233,14 @@ export const createTaskViewSync = ({
     });
 
   return {
-    loadWorkspace: async (repoPath) => {
-      await loadSettings();
-      const state = queryClient.getQueryState(taskQueryKeys.repoData(repoPath));
-      if (state?.status !== "success") {
-        await fetchTasks(repoPath);
-      }
-    },
+    loadWorkspace: (repoPath) =>
+      runForRepo(repoPath, async () => {
+        await loadSettings();
+        const state = queryClient.getQueryState(taskQueryKeys.repoData(repoPath));
+        if (state?.status !== "success") {
+          await fetchTasks(repoPath);
+        }
+      }),
     refreshManually: (repoPath) =>
       refreshActive(repoPath, {
         impact: { kind: "task-list-only" },
