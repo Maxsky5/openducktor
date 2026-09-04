@@ -6,6 +6,7 @@ type UseTaskTabSelectionArgs = {
   activeWorkspaceId: string | null;
   isWorkspaceRestorePending: boolean;
   taskId: string;
+  routeTaskId: string;
   tabTaskIds: string[];
   persistedActiveTaskId: string | null;
   loadedStateWorkspaceId: string | null;
@@ -24,6 +25,7 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
     activeWorkspaceId,
     isWorkspaceRestorePending,
     taskId,
+    routeTaskId,
     tabTaskIds,
     persistedActiveTaskId,
     loadedStateWorkspaceId,
@@ -50,7 +52,7 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
     ) {
       return;
     }
-    if (taskId || tabTaskIds.length === 0) {
+    if (taskId || routeTaskId || tabTaskIds.length === 0) {
       return;
     }
     const fallbackTaskId = resolveFallbackTaskId({
@@ -70,6 +72,7 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
     activeWorkspaceId,
     isWorkspaceRestorePending,
     persistedActiveTaskId,
+    routeTaskId,
     selectTask,
     tabTaskIds,
     loadedStateWorkspaceId,

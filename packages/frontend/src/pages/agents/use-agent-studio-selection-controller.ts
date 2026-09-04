@@ -173,6 +173,7 @@ export function useAgentStudioSelectionController({
     agentStudioState,
     isWorkspaceRestorePending,
     taskId: navigationBase.taskId,
+    routeTaskId: taskIdParam,
     selectedTask: navigationBase.selectedTask,
     tasks,
     tasksAreCurrent,

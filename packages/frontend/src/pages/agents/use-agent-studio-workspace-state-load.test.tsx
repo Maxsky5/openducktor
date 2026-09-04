@@ -15,6 +15,8 @@ import {
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
 import { useAgentStudioQuerySync } from "./query-sync/use-agent-studio-query-sync";
+import type { AgentStudioQueryUpdate } from "./query-sync/agent-studio-navigation";
+import { useAgentStudioSelectionState } from "./shell/use-agent-studio-selection-state";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 import { useTaskTabState } from "./use-agent-studio-task-tabs-state";
 import { useAgentStudioWorkspaceStateLoad } from "./use-agent-studio-workspace-state-load";
@@ -67,6 +69,7 @@ const useWorkspaceRestore = (args: LoadHookArgs) => {
     agentStudioState: load.agentStudioState,
     isWorkspaceRestorePending: navigation.isWorkspaceRestorePending,
     taskId: navigation.taskIdParam,
+    routeTaskId: navigation.taskIdParam,
     selectedTask,
     tasks: args.tasks,
     tasksAreCurrent: args.tasksAreCurrent,
@@ -74,6 +77,48 @@ const useWorkspaceRestore = (args: LoadHookArgs) => {
     selectAgentStudioSelection: () => {},
   });
   return { load, navigation, tabs };
+};
+
+const useWorkspaceRestoreWithSelection = (
+  args: LoadHookArgs & { onQueryUpdate: (update: AgentStudioQueryUpdate) => void },
+) => {
+  const load = useAgentStudioWorkspaceStateLoad(args);
+  const navigation = useAgentStudioQuerySync({
+    activeWorkspaceId: args.activeWorkspaceId,
+    agentStudioState: load.agentStudioState,
+    isLoadingAgentStudioState: load.isLoading,
+    agentStudioStateError: load.error,
+    retryAgentStudioStateLoad: load.retry,
+    locationKey: "location-1",
+    navigationType: "REPLACE",
+    searchParams: emptySearchParams,
+    setSearchParams: () => {},
+  });
+  const selection = useAgentStudioSelectionState({
+    isWorkspaceRestorePending: navigation.isWorkspaceRestorePending,
+    taskIdParam: navigation.taskIdParam,
+    sessionExternalIdParam: navigation.sessionExternalIdParam,
+    hasExplicitRoleParam: navigation.hasExplicitRoleParam,
+    roleFromQuery: navigation.roleFromQuery,
+    scheduleQueryUpdate: args.onQueryUpdate,
+    requestContextTransition: (applyTransition) => applyTransition(),
+  });
+  const selectedTask = args.tasks.find((task) => task.id === selection.selection.taskId) ?? null;
+  const tabs = useAgentStudioTaskTabs({
+    activeWorkspaceId: args.activeWorkspaceId,
+    loadedAgentStudioState: load.loadedAgentStudioState,
+    agentStudioStateLoadKey: load.agentStudioStateLoadKey,
+    agentStudioState: load.agentStudioState,
+    isWorkspaceRestorePending: navigation.isWorkspaceRestorePending,
+    taskId: selection.selection.taskId,
+    routeTaskId: navigation.taskIdParam,
+    selectedTask,
+    tasks: args.tasks,
+    tasksAreCurrent: args.tasksAreCurrent,
+    latestSessionByTaskId: new Map(),
+    selectAgentStudioSelection: selection.selectAgentStudioSelection,
+  });
+  return { load, navigation, selection, tabs };
 };
 
 type WorkspaceStateHost = {
@@ -117,6 +162,45 @@ const useWorkspaceStatePersistence = (args: PersistenceHookArgs) => {
 };
 
 describe("useAgentStudioWorkspaceStateLoad", () => {
+  test("restores one saved selection without a task-only query write", async () => {
+    const savedSession = createAgentSessionSummaryFixture({
+      externalSessionId: "session-saved",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+    });
+    const savedState: WorkspaceAgentStudioState = {
+      openTaskIds: ["task-1"],
+      activeTask: {
+        taskId: "task-1",
+        role: "planner",
+        externalSessionId: "session-saved",
+      },
+    };
+    const queryUpdates: AgentStudioQueryUpdate[] = [];
+    const harness = createSharedHookHarness(useWorkspaceRestoreWithSelection, {
+      activeWorkspaceId: "repo-a",
+      tasks,
+      isLoadingTasks: false,
+      tasksAreCurrent: true,
+      sessions: [savedSession],
+      sessionReadModelLoadState: readyAgentSessionReadModelLoadState("/repo-a"),
+      hostClient: { workspaceGetRepoConfig: mock(async () => createRepoConfig(savedState)) },
+      onQueryUpdate: (update) => queryUpdates.push(update),
+    });
+
+    await harness.mount();
+    await harness.waitFor((result) => result.navigation.isWorkspaceStateLoaded);
+    await harness.waitFor((result) => result.selection.selection.taskId === "task-1");
+
+    expect(queryUpdates).toEqual([]);
+    expect(harness.getLatest().selection.selection).toMatchObject({
+      taskId: "task-1",
+      sessionExternalId: "session-saved",
+      role: "planner",
+      hasExplicitRoleSelection: true,
+    });
+    await harness.unmount();
+  });
+
   test("keeps the load key when the same workspace cache reloads", async () => {
     const savedState: WorkspaceAgentStudioState = {
       openTaskIds: ["task-1"],

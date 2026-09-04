@@ -20,6 +20,7 @@ export function useAgentStudioTaskTabs(args: {
   agentStudioState: WorkspaceAgentStudioState | null;
   isWorkspaceRestorePending?: boolean;
   taskId: string;
+  routeTaskId: string;
   selectedTask: TaskCard | null;
   tasks: TaskCard[];
   tasksAreCurrent: boolean;
@@ -34,6 +35,7 @@ export function useAgentStudioTaskTabs(args: {
     agentStudioState,
     isWorkspaceRestorePending = false,
     taskId,
+    routeTaskId,
     selectedTask,
     tasks,
     tasksAreCurrent,
@@ -70,6 +72,7 @@ export function useAgentStudioTaskTabs(args: {
     activeWorkspaceId,
     isWorkspaceRestorePending,
     taskId: taskIdForTabs,
+    routeTaskId,
     tabTaskIds: openTaskIds,
     persistedActiveTaskId,
     loadedStateWorkspaceId,
