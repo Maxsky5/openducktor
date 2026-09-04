@@ -115,6 +115,47 @@ describe("useAgentStudioWorkspaceStatePersistence", () => {
     await harness.unmount();
   });
 
+  test("hides an obsolete write error when the desired snapshot changes", async () => {
+    const loadedState = { openTaskIds: ["task-1"] };
+    const failedState = { openTaskIds: ["task-1", "task-2"] };
+    const nextState = { openTaskIds: ["task-1", "task-3"] };
+    const nextSave = createDeferred<RepoConfig>();
+    let requestCount = 0;
+    const workspaceReplaceAgentStudioState = mock(async () => {
+      requestCount += 1;
+      if (requestCount === 1) {
+        throw new Error("obsolete write failed");
+      }
+      return nextSave.promise;
+    });
+    const hostClient = { workspaceReplaceAgentStudioState };
+    const harness = createHookHarness({
+      workspaceId: "repo-a",
+      loadedState,
+      state: failedState,
+      enabled: true,
+      hostClient,
+    });
+
+    await harness.mount();
+    await harness.waitFor((result) => result.persistenceError?.message === "obsolete write failed");
+    await harness.update({
+      workspaceId: "repo-a",
+      loadedState,
+      state: nextState,
+      enabled: true,
+      hostClient,
+    });
+
+    expect(harness.getLatest().persistenceError).toBeNull();
+    await harness.waitFor(() => workspaceReplaceAgentStudioState.mock.calls.length === 2);
+    await harness.run(async () => {
+      nextSave.resolve(createRepoConfig(nextState));
+      await nextSave.promise;
+    });
+    await harness.unmount();
+  });
+
   test("ignores a save result from the prior workspace", async () => {
     const workspaceASave = createDeferred<RepoConfig>();
     const workspaceAState = { openTaskIds: ["task-a"] };

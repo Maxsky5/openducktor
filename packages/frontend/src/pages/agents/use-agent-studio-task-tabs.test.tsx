@@ -15,17 +15,22 @@ type HookArgs = Parameters<typeof useAgentStudioTaskTabs>[0];
 const createTask = (id: string, status: "open" | "closed" = "open") =>
   createTaskCardFixture({ id, title: id, status });
 
-const withDefaults = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  activeWorkspaceId: "repo-a",
-  agentStudioState: { openTaskIds: [] },
-  taskId: "",
-  selectedTask: null,
-  tasks: [],
-  isLoadingTasks: false,
-  latestSessionByTaskId: new Map(),
-  selectAgentStudioSelection: () => {},
-  ...overrides,
-});
+const withDefaults = (overrides: Partial<HookArgs> = {}): HookArgs => {
+  const agentStudioState = overrides.agentStudioState ?? { openTaskIds: [] };
+  return {
+    activeWorkspaceId: "repo-a",
+    loadedAgentStudioState: overrides.loadedAgentStudioState ?? agentStudioState,
+    loadedAgentStudioStateVersion: overrides.loadedAgentStudioStateVersion ?? "1:1",
+    agentStudioState,
+    taskId: "",
+    selectedTask: null,
+    tasks: [],
+    isLoadingTasks: false,
+    latestSessionByTaskId: new Map(),
+    selectAgentStudioSelection: () => {},
+    ...overrides,
+  };
+};
 
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioTaskTabs, initialProps);
@@ -113,6 +118,43 @@ describe("useAgentStudioTaskTabs", () => {
       sessionExternalId: null,
       sessionIdentity: null,
     });
+    await harness.unmount();
+  });
+
+  test("replaces a local tab draft when an unchanged snapshot reloads", async () => {
+    const loadedState: WorkspaceAgentStudioState = {
+      openTaskIds: ["task-1"],
+      activeTask: { taskId: "task-1" },
+    };
+    const allTasks = [createTask("task-1"), createTask("task-2")];
+    const harness = createHookHarness(
+      withDefaults({
+        loadedAgentStudioState: loadedState,
+        loadedAgentStudioStateVersion: "1:1",
+        agentStudioState: loadedState,
+        taskId: "task-1",
+        selectedTask: allTasks[0] ?? null,
+        tasks: allTasks,
+      }),
+    );
+
+    await harness.mount();
+    await harness.run((result) => result.handleSelectTab("task-2"));
+    expect(harness.getLatest().tabTaskIds).toEqual(["task-1", "task-2"]);
+
+    await harness.update(
+      withDefaults({
+        loadedAgentStudioState: loadedState,
+        loadedAgentStudioStateVersion: "2:1",
+        agentStudioState: loadedState,
+        taskId: "",
+        selectedTask: null,
+        tasks: allTasks,
+      }),
+    );
+
+    expect(harness.getLatest().tabTaskIds).toEqual(["task-1"]);
+    expect(harness.getLatest().activeTaskTabId).toBe("task-1");
     await harness.unmount();
   });
 

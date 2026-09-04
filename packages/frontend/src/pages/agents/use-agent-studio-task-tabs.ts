@@ -1,9 +1,8 @@
 import type { TaskCard, WorkspaceAgentStudioState } from "@openducktor/contracts";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { getAvailableTabTasks } from "./agent-studio-task-tabs-list";
-import { reconcileAgentStudioOpenTaskIds } from "./agent-studio-workspace-state";
 import { buildTaskTabs } from "./agents-page-session-tabs";
 import {
   emptyAgentStudioSelectionState,
@@ -16,6 +15,8 @@ import { useTaskTabState } from "./use-agent-studio-task-tabs-state";
 
 export function useAgentStudioTaskTabs(args: {
   activeWorkspaceId: string | null;
+  loadedAgentStudioState: WorkspaceAgentStudioState | null;
+  loadedAgentStudioStateVersion: string | null;
   agentStudioState: WorkspaceAgentStudioState | null;
   isRepoNavigationBoundaryPending?: boolean;
   taskId: string;
@@ -28,6 +29,8 @@ export function useAgentStudioTaskTabs(args: {
 }) {
   const {
     activeWorkspaceId,
+    loadedAgentStudioState,
+    loadedAgentStudioStateVersion,
     agentStudioState,
     isRepoNavigationBoundaryPending = false,
     taskId,
@@ -39,21 +42,7 @@ export function useAgentStudioTaskTabs(args: {
     selectAgentStudioSelection,
   } = args;
 
-  const [openTaskTabs, setOpenTaskTabs] = useState<string[]>([]);
-  const [persistedActiveTaskId, setPersistedActiveTaskId] = useState<string | null>(null);
-  const [loadedStateWorkspaceId, setLoadedStateWorkspaceId] = useState<string | null>(null);
   const taskIdForTabs = selectedTask?.status === "closed" ? "" : taskId;
-  const isWorkspaceStateReady =
-    activeWorkspaceId !== null &&
-    agentStudioState !== null &&
-    loadedStateWorkspaceId === activeWorkspaceId;
-
-  const selectableOpenTaskTabs = useMemo(() => {
-    if (isLoadingTasks) {
-      return openTaskTabs;
-    }
-    return reconcileAgentStudioOpenTaskIds(openTaskTabs, tasks);
-  }, [isLoadingTasks, openTaskTabs, tasks]);
 
   const selectTask = useCallback(
     (nextTaskId: string) => {
@@ -65,30 +54,27 @@ export function useAgentStudioTaskTabs(args: {
   const clearTaskSelection = useCallback((): void => {
     selectAgentStudioSelection(emptyAgentStudioSelectionState());
   }, [selectAgentStudioSelection]);
-  useTaskTabState({
-    activeWorkspaceId,
-    agentStudioState,
-    taskId: taskIdForTabs,
-    selectedTask,
-    tasks,
-    isLoadingTasks,
-    loadedStateWorkspaceId,
-    setOpenTaskTabs,
-    setPersistedActiveTaskId,
-    setLoadedStateWorkspaceId,
-  });
+  const { openTaskIds, persistedActiveTaskId, loadedStateWorkspaceId, updateState } =
+    useTaskTabState({
+      activeWorkspaceId,
+      loadedAgentStudioState,
+      loadedAgentStudioStateVersion,
+      agentStudioState,
+      taskId: taskIdForTabs,
+      selectedTask,
+      tasks,
+      isLoadingTasks,
+    });
 
   const { tabTaskIds, activeTaskTabId, handleSelectTab } = useTaskTabSelection({
     activeWorkspaceId,
-    isWorkspaceStateReady,
     isRepoNavigationBoundaryPending,
     taskId: taskIdForTabs,
-    openTaskTabs: selectableOpenTaskTabs,
+    tabTaskIds: openTaskIds,
     persistedActiveTaskId,
     loadedStateWorkspaceId,
     selectTask,
-    setOpenTaskTabs,
-    setPersistedActiveTaskId,
+    updateTaskTabState: updateState,
   });
 
   const availableTabTasks = useMemo(
@@ -113,8 +99,7 @@ export function useAgentStudioTaskTabs(args: {
     clearTaskSelection,
     selectTask,
     handleSelectTab,
-    setOpenTaskTabs,
-    setPersistedActiveTaskId,
+    updateTaskTabState: updateState,
   });
 
   return {

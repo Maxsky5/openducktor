@@ -266,9 +266,16 @@ const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContext
 const noopSelectAgentStudioSelection: SelectAgentStudioSelection = () => {};
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
+  const { loadedAgentStudioState, loadedAgentStudioStateVersion, selectionState, ...argOverrides } =
+    overrides;
+  const agentStudioState = argOverrides.agentStudioState ?? null;
+  const loadedState = loadedAgentStudioState ?? agentStudioState;
   const baseArgs: Omit<HookArgs, "selectionState"> = {
     activeWorkspaceId: null,
-    agentStudioState: null,
+    loadedAgentStudioState: loadedState,
+    loadedAgentStudioStateVersion:
+      loadedAgentStudioStateVersion ?? (loadedState === null ? null : "1:1"),
+    agentStudioState,
     workspaceRepoPath: null,
     isRepoNavigationBoundaryPending: false,
     tasks: [createTask("task-1"), createTask("task-2")],
@@ -281,12 +288,12 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
     repoSettings,
     isLoadingRepoSettings: false,
     selectAgentStudioSelection: noopSelectAgentStudioSelection,
-    ...overrides,
+    ...argOverrides,
   };
   return {
     ...baseArgs,
     selectionState:
-      overrides.selectionState ??
+      selectionState ??
       createAgentStudioRouteSelectionState({
         isRepoNavigationBoundaryPending: baseArgs.isRepoNavigationBoundaryPending,
         taskIdParam: baseArgs.taskIdParam,

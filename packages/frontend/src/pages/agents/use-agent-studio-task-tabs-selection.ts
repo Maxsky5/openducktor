@@ -1,19 +1,16 @@
-import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { ensureActiveTaskTab, resolveFallbackTaskId } from "./agent-studio-task-tabs-list";
-
-type SetState<T> = Dispatch<SetStateAction<T>>;
+import type { TaskTabStateUpdate } from "./use-agent-studio-task-tabs-state";
 
 type UseTaskTabSelectionArgs = {
   activeWorkspaceId: string | null;
-  isWorkspaceStateReady: boolean;
   isRepoNavigationBoundaryPending: boolean;
   taskId: string;
-  openTaskTabs: string[];
+  tabTaskIds: string[];
   persistedActiveTaskId: string | null;
   loadedStateWorkspaceId: string | null;
   selectTask: (taskId: string) => void;
-  setOpenTaskTabs: SetState<string[]>;
-  setPersistedActiveTaskId: SetState<string | null>;
+  updateTaskTabState: (state: TaskTabStateUpdate) => void;
 };
 
 type UseTaskTabSelectionResult = {
@@ -25,23 +22,14 @@ type UseTaskTabSelectionResult = {
 export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSelectionResult {
   const {
     activeWorkspaceId,
-    isWorkspaceStateReady,
     isRepoNavigationBoundaryPending,
     taskId,
-    openTaskTabs,
+    tabTaskIds,
     persistedActiveTaskId,
     loadedStateWorkspaceId,
     selectTask,
-    setOpenTaskTabs,
-    setPersistedActiveTaskId,
+    updateTaskTabState,
   } = args;
-
-  const tabTaskIds = useMemo(() => {
-    if (!isWorkspaceStateReady) {
-      return [];
-    }
-    return ensureActiveTaskTab(openTaskTabs, taskId);
-  }, [isWorkspaceStateReady, openTaskTabs, taskId]);
   const appliedFallbackKeyRef = useRef<string | null>(null);
 
   const activeTaskTabId = useMemo(() => {
@@ -103,16 +91,13 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
         return;
       }
 
-      setOpenTaskTabs((current) => {
-        if (current.includes(nextTaskId)) {
-          return current;
-        }
-        return [...current, nextTaskId];
+      updateTaskTabState({
+        openTaskIds: ensureActiveTaskTab(tabTaskIds, nextTaskId),
+        activeTaskId: nextTaskId,
       });
-      setPersistedActiveTaskId(nextTaskId);
       selectTask(nextTaskId);
     },
-    [activeTaskTabId, selectTask, setOpenTaskTabs, setPersistedActiveTaskId],
+    [activeTaskTabId, selectTask, tabTaskIds, updateTaskTabState],
   );
 
   return {

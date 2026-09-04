@@ -60,6 +60,8 @@ const useWorkspaceRestore = (args: LoadHookArgs) => {
   const selectedTask = tasks.find((task) => task.id === navigation.taskIdParam) ?? null;
   const tabs = useAgentStudioTaskTabs({
     activeWorkspaceId: args.activeWorkspaceId,
+    loadedAgentStudioState: load.loadedAgentStudioState,
+    loadedAgentStudioStateVersion: load.loadedAgentStudioStateVersion,
     agentStudioState: load.agentStudioState,
     isRepoNavigationBoundaryPending: navigation.isRepoNavigationBoundaryPending,
     taskId: navigation.taskIdParam,
@@ -73,6 +75,35 @@ const useWorkspaceRestore = (args: LoadHookArgs) => {
 };
 
 describe("useAgentStudioWorkspaceStateLoad", () => {
+  test("advances the load version when an unchanged host snapshot reloads", async () => {
+    const savedState: WorkspaceAgentStudioState = {
+      openTaskIds: ["task-1"],
+      activeTask: { taskId: "task-1" },
+    };
+    const repoConfig = createRepoConfig(savedState);
+    const workspaceGetRepoConfig = mock(async () => repoConfig);
+    const hookArgs: LoadHookArgs = {
+      activeWorkspaceId: "repo-a",
+      tasks,
+      isLoadingTasks: false,
+      sessions: [],
+      sessionReadModelLoadState: readyAgentSessionReadModelLoadState("/repo-a"),
+      hostClient: { workspaceGetRepoConfig },
+    };
+    const harness = createSharedHookHarness(useAgentStudioWorkspaceStateLoad, hookArgs);
+
+    await harness.mount();
+    await harness.waitFor((result) => result.loadedAgentStudioStateVersion !== null);
+    const firstVersion = harness.getLatest().loadedAgentStudioStateVersion;
+
+    await harness.run((result) => result.retry());
+    await harness.waitFor(() => workspaceGetRepoConfig.mock.calls.length === 2);
+    await harness.waitFor((result) => result.loadedAgentStudioStateVersion !== firstVersion);
+
+    expect(harness.getLatest().loadedAgentStudioState).toBe(savedState);
+    await harness.unmount();
+  });
+
   test("waits for a fresh host read before restoring a cached workspace snapshot", async () => {
     const cachedState: WorkspaceAgentStudioState = {
       openTaskIds: ["task-1"],

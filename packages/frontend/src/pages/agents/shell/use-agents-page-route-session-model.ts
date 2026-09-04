@@ -50,6 +50,7 @@ export function useAgentsPageRouteSessionModel({
   const { sessionReadModelLoadState } = useAgentSessionReadModelState();
   const {
     loadedAgentStudioState,
+    loadedAgentStudioStateVersion,
     agentStudioState,
     isLoading: isLoadingAgentStudioState,
     error: agentStudioStateLoadError,
@@ -109,6 +110,8 @@ export function useAgentsPageRouteSessionModel({
 
   const selection = useAgentStudioSelectionController({
     activeWorkspaceId,
+    loadedAgentStudioState,
+    loadedAgentStudioStateVersion,
     agentStudioState,
     workspaceRepoPath,
     isRepoNavigationBoundaryPending,

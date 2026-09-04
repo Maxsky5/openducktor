@@ -1,6 +1,6 @@
 import type { RepoConfig, WorkspaceAgentStudioState } from "@openducktor/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { host } from "@/state/operations/host";
 import { workspaceQueryKeys } from "@/state/queries/workspace";
 
@@ -10,6 +10,11 @@ type PersistRequest = {
   workspaceId: string;
   state: WorkspaceAgentStudioState;
   key: string;
+};
+
+type PersistFailure = {
+  request: PersistRequest;
+  error: Error;
 };
 
 const stateKey = (state: WorkspaceAgentStudioState): string => JSON.stringify(state);
@@ -28,17 +33,8 @@ export function useAgentStudioWorkspaceStatePersistence({
   hostClient?: AgentStudioStateHost;
 }) {
   const queryClient = useQueryClient();
-  const activeWorkspaceIdRef = useRef(workspaceId);
-  useLayoutEffect(() => {
-    activeWorkspaceIdRef.current = workspaceId;
-  }, [workspaceId]);
-  const baselineRef = useRef<{ workspaceId: string | null; key: string | null }>({
-    workspaceId: null,
-    key: null,
-  });
-  const lastRequestedKeyRef = useRef<string | null>(null);
-  const latestRequestRef = useRef<PersistRequest | null>(null);
-  const [persistenceError, setPersistenceError] = useState<Error | null>(null);
+  const lastRequestedRef = useRef<{ workspaceId: string; key: string } | null>(null);
+  const [failure, setFailure] = useState<PersistFailure | null>(null);
   const { mutate } = useMutation({
     mutationFn: (request: PersistRequest) =>
       hostClient.workspaceReplaceAgentStudioState(request.workspaceId, request.state),
@@ -48,66 +44,53 @@ export function useAgentStudioWorkspaceStatePersistence({
         workspaceQueryKeys.repoConfig(request.workspaceId),
         repoConfig,
       );
-      if (activeWorkspaceIdRef.current !== request.workspaceId) {
-        return;
-      }
-      baselineRef.current = { workspaceId: request.workspaceId, key: request.key };
-      setPersistenceError(null);
+      setFailure((current) => (current?.request === request ? null : current));
     },
     onError: (cause, request) => {
-      if (activeWorkspaceIdRef.current !== request.workspaceId) {
-        return;
-      }
-      setPersistenceError(cause instanceof Error ? cause : new Error(String(cause)));
+      setFailure({
+        request,
+        error: cause instanceof Error ? cause : new Error(String(cause)),
+      });
     },
   });
-
-  useEffect(() => {
-    baselineRef.current = { workspaceId, key: null };
-    lastRequestedKeyRef.current = null;
-    latestRequestRef.current = null;
-    setPersistenceError(null);
-  }, [workspaceId]);
-
-  useEffect(() => {
-    if (
-      !workspaceId ||
-      !loadedState ||
-      baselineRef.current.workspaceId !== workspaceId ||
-      baselineRef.current.key !== null ||
-      lastRequestedKeyRef.current !== null
-    ) {
-      return;
-    }
-    baselineRef.current = { workspaceId, key: stateKey(loadedState) };
-  }, [loadedState, workspaceId]);
+  const loadedKey = loadedState ? stateKey(loadedState) : null;
+  const desiredKey = stateKey(state);
+  const failedRequestIsCurrent = Boolean(
+    failure &&
+    failure.request.workspaceId === workspaceId &&
+    failure.request.key === desiredKey &&
+    loadedKey !== desiredKey,
+  );
+  const persistenceError = failedRequestIsCurrent ? (failure?.error ?? null) : null;
 
   useEffect(() => {
     if (!enabled || !workspaceId || !loadedState) {
       return;
     }
-    const key = stateKey(state);
-    const request = { workspaceId, state, key };
-    latestRequestRef.current = request;
-    if (
-      baselineRef.current.workspaceId === workspaceId &&
-      (baselineRef.current.key === key || lastRequestedKeyRef.current === key)
-    ) {
+    if (loadedKey === desiredKey) {
+      return;
+    }
+    const lastRequested = lastRequestedRef.current;
+    if (lastRequested?.workspaceId === workspaceId && lastRequested.key === desiredKey) {
       return;
     }
 
-    lastRequestedKeyRef.current = key;
+    const request = { workspaceId, state, key: desiredKey };
+    lastRequestedRef.current = { workspaceId, key: desiredKey };
     mutate(request);
-  }, [enabled, loadedState, mutate, state, workspaceId]);
+  }, [desiredKey, enabled, loadedKey, loadedState, mutate, state, workspaceId]);
 
   const retryPersistence = useCallback((): void => {
-    const request = latestRequestRef.current;
-    if (!request) {
+    if (!failedRequestIsCurrent || !failure) {
       return;
     }
-    setPersistenceError(null);
-    mutate(request);
-  }, [mutate]);
+    setFailure(null);
+    lastRequestedRef.current = {
+      workspaceId: failure.request.workspaceId,
+      key: failure.request.key,
+    };
+    mutate(failure.request);
+  }, [failedRequestIsCurrent, failure, mutate]);
 
   return { persistenceError, retryPersistence };
 }

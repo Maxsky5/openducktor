@@ -1,7 +1,6 @@
-import { type Dispatch, type SetStateAction, useCallback } from "react";
+import { useCallback } from "react";
 import { closeTaskTab, reorderTaskTabs } from "./agent-studio-task-tabs-list";
-
-type SetState<T> = Dispatch<SetStateAction<T>>;
+import type { TaskTabStateUpdate } from "./use-agent-studio-task-tabs-state";
 
 const focusTaskTabTrigger = (taskId: string): void => {
   globalThis.setTimeout(() => {
@@ -22,8 +21,7 @@ type UseTaskTabActionsArgs = {
   clearTaskSelection: () => void;
   selectTask: (taskId: string) => void;
   handleSelectTab: (nextTaskId: string) => void;
-  setOpenTaskTabs: SetState<string[]>;
-  setPersistedActiveTaskId: SetState<string | null>;
+  updateTaskTabState: (state: TaskTabStateUpdate) => void;
 };
 
 type UseTaskTabActionsResult = {
@@ -43,8 +41,7 @@ export function useTaskTabActions(args: UseTaskTabActionsArgs): UseTaskTabAction
     clearTaskSelection,
     selectTask,
     handleSelectTab,
-    setOpenTaskTabs,
-    setPersistedActiveTaskId,
+    updateTaskTabState,
   } = args;
 
   const handleCreateTab = useCallback(
@@ -66,8 +63,10 @@ export function useTaskTabActions(args: UseTaskTabActionsArgs): UseTaskTabAction
         return;
       }
 
-      setOpenTaskTabs(nextTabTaskIds);
-      setPersistedActiveTaskId(nextActiveTaskId ?? null);
+      updateTaskTabState({
+        openTaskIds: nextTabTaskIds,
+        activeTaskId: nextActiveTaskId,
+      });
 
       if (taskIdToClose !== activeTaskTabId) {
         return;
@@ -81,14 +80,7 @@ export function useTaskTabActions(args: UseTaskTabActionsArgs): UseTaskTabAction
       focusTaskTabTrigger(nextActiveTaskId);
       selectTask(nextActiveTaskId);
     },
-    [
-      activeTaskTabId,
-      clearTaskSelection,
-      selectTask,
-      setOpenTaskTabs,
-      setPersistedActiveTaskId,
-      tabTaskIds,
-    ],
+    [activeTaskTabId, clearTaskSelection, selectTask, tabTaskIds, updateTaskTabState],
   );
 
   const handleReorderTab = useCallback(
@@ -104,9 +96,12 @@ export function useTaskTabActions(args: UseTaskTabActionsArgs): UseTaskTabAction
         return;
       }
 
-      setOpenTaskTabs(nextTabTaskIds);
+      updateTaskTabState({
+        openTaskIds: nextTabTaskIds,
+        activeTaskId: activeTaskTabId || null,
+      });
     },
-    [setOpenTaskTabs, tabTaskIds],
+    [activeTaskTabId, tabTaskIds, updateTaskTabState],
   );
 
   return {
