@@ -24,6 +24,7 @@ import {
   workspaceQueryKeys,
 } from "../../queries/workspace";
 import { host } from "../shared/host";
+import { runSettingsWrite } from "../../mutations/settings-write-queue";
 
 type UseRepoSettingsOperationsArgs = {
   activeWorkspace: WorkspaceRecord | null;
@@ -162,66 +163,66 @@ export function useRepoSettingsOperations({
   );
 
   const saveGlobalGitConfig = useCallback(
-    async (git: GlobalGitConfig): Promise<void> => {
-      await host.workspaceUpdateGlobalGitConfig(git);
-      queryClient.removeQueries({
-        queryKey: settingsSnapshotQueryKey,
-        exact: true,
-      });
-      await loadSettingsSnapshotFromQuery(queryClient);
-    },
+    async (git: GlobalGitConfig): Promise<void> =>
+      runSettingsWrite(queryClient, async () => {
+        await host.workspaceUpdateGlobalGitConfig(git);
+        await queryClient.cancelQueries({ queryKey: settingsSnapshotQueryKey, exact: true });
+        await queryClient.fetchQuery({ ...settingsSnapshotQueryOptions(), staleTime: 0 });
+      }),
     [queryClient, settingsSnapshotQueryKey],
   );
 
   const saveSettingsSnapshot = useCallback(
-    async (snapshot: SettingsSnapshotSaveInput): Promise<void> => {
-      const previousSnapshot = queryClient.getQueryData<SettingsSnapshot>(settingsSnapshotQueryKey);
-      const workspaces = await host.workspaceSaveSettingsSnapshot(snapshot);
-      await queryClient.invalidateQueries({
-        queryKey: settingsSnapshotQueryKey,
-        exact: true,
-        refetchType: "none",
-      });
-      const normalizedSnapshot = await queryClient.fetchQuery(settingsSnapshotQueryOptions());
-      await queryClient.invalidateQueries({
-        queryKey: REPO_CONFIG_QUERY_KEY_PREFIX,
-      });
-      queryClient.setQueryData(settingsSnapshotQueryKey, normalizedSnapshot);
-      queryClient.setQueryData(workspaceQueryKeys.list(), workspaces);
-      applyWorkspaceRecords(workspaces);
-      const savedActiveWorkspace = workspaces.find((workspace) => workspace.isActive);
-      const retentionChanged =
-        previousSnapshot !== undefined &&
-        previousSnapshot.kanban.doneVisibleDays !== normalizedSnapshot.kanban.doneVisibleDays;
-      if (retentionChanged) {
-        await queryClient.cancelQueries({ queryKey: taskQueryKeys.all }, { silent: true });
-        await queryClient.invalidateQueries({
-          queryKey: taskQueryKeys.all,
-          refetchType: "none",
+    async (snapshot: SettingsSnapshotSaveInput): Promise<void> =>
+      runSettingsWrite(queryClient, async () => {
+        const previousSnapshot =
+          queryClient.getQueryData<SettingsSnapshot>(settingsSnapshotQueryKey);
+        const workspaces = await host.workspaceSaveSettingsSnapshot(snapshot);
+        await queryClient.cancelQueries({ queryKey: settingsSnapshotQueryKey, exact: true });
+        const normalizedSnapshot = await queryClient.fetchQuery({
+          ...settingsSnapshotQueryOptions(),
+          staleTime: 0,
         });
-        if (savedActiveWorkspace) {
-          try {
-            await queryClient.fetchQuery({
-              ...repoTaskDataQueryOptions(savedActiveWorkspace.repoPath),
-              staleTime: 0,
-            });
-          } catch {
-            // TanStack Query keeps the failure for the task-loading error path to report.
+        await queryClient.invalidateQueries({
+          queryKey: REPO_CONFIG_QUERY_KEY_PREFIX,
+        });
+        queryClient.setQueryData(workspaceQueryKeys.list(), workspaces);
+        applyWorkspaceRecords(workspaces);
+        const savedActiveWorkspace = workspaces.find((workspace) => workspace.isActive);
+        const retentionChanged =
+          previousSnapshot !== undefined &&
+          previousSnapshot.kanban.doneVisibleDays !== normalizedSnapshot.kanban.doneVisibleDays;
+        if (retentionChanged) {
+          await queryClient.cancelQueries({ queryKey: taskQueryKeys.all }, { silent: true });
+          await queryClient.invalidateQueries({
+            queryKey: taskQueryKeys.all,
+            refetchType: "none",
+          });
+          if (savedActiveWorkspace) {
+            try {
+              await queryClient.fetchQuery({
+                ...repoTaskDataQueryOptions(savedActiveWorkspace.repoPath),
+                staleTime: 0,
+              });
+            } catch {
+              // TanStack Query keeps the failure for the task-loading error path to report.
+            }
           }
         }
-      }
-      void queryClient.invalidateQueries({ queryKey: checksQueryKeys.all });
-      void queryClient.invalidateQueries({ queryKey: gitProviderHealthQueryKeys.all });
-    },
+        void queryClient.invalidateQueries({ queryKey: checksQueryKeys.all });
+        void queryClient.invalidateQueries({ queryKey: gitProviderHealthQueryKeys.all });
+      }),
     [applyWorkspaceRecords, queryClient, settingsSnapshotQueryKey],
   );
 
   const saveAgentModelFavorites = useCallback(
-    async (favorites: AgentModelFavorite[]): Promise<SettingsSnapshot> => {
-      const normalizedSnapshot = await host.workspaceUpdateAgentModelFavorites(favorites);
-      queryClient.setQueryData(settingsSnapshotQueryKey, normalizedSnapshot);
-      return normalizedSnapshot;
-    },
+    async (favorites: AgentModelFavorite[]): Promise<SettingsSnapshot> =>
+      runSettingsWrite(queryClient, async () => {
+        const normalizedSnapshot = await host.workspaceUpdateAgentModelFavorites(favorites);
+        await queryClient.cancelQueries({ queryKey: settingsSnapshotQueryKey, exact: true });
+        queryClient.setQueryData(settingsSnapshotQueryKey, normalizedSnapshot);
+        return normalizedSnapshot;
+      }),
     [queryClient, settingsSnapshotQueryKey],
   );
 

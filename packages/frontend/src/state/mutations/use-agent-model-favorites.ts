@@ -60,7 +60,9 @@ export function useAgentModelFavorites({
       );
     },
     onSuccess: (snapshot) => {
-      queryClient.setQueryData(settingsOptions.queryKey, snapshot);
+      queryClient.setQueryData<SettingsSnapshot>(settingsOptions.queryKey, (current) =>
+        current ? { ...current, agentModelFavorites: snapshot.agentModelFavorites } : snapshot,
+      );
     },
   });
   const favorites = settingsQuery.data?.agentModelFavorites ?? null;

@@ -441,6 +441,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
     await expect(
       router.invoke("workspace_save_settings_snapshot", {
         snapshot: {
+          expectedSystem: {},
           system: {},
           git: { defaultMergeMethod: "merge_commit" },
           general: { openAgentStudioTabOnBackgroundSessionStart: true },
@@ -660,6 +661,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
     await expect(
       router.invoke("workspace_save_settings_snapshot", {
         snapshot: {
+          expectedSystem: {},
           system: {},
           git: { defaultMergeMethod: "merge_commit" },
           general: { openAgentStudioTabOnBackgroundSessionStart: true },

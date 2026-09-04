@@ -352,6 +352,20 @@ const createUnserializedWorkspaceSettingsService = (
           }),
         );
       }
+      const systemChanged =
+        snapshot.system.preferredOpenInToolId !== snapshot.expectedSystem.preferredOpenInToolId;
+      if (
+        systemChanged &&
+        config.system.preferredOpenInToolId !== snapshot.expectedSystem.preferredOpenInToolId
+      ) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            message:
+              "Open In preference changed since settings were loaded. Reload settings and apply your choice again.",
+            field: "system.preferredOpenInToolId",
+          }),
+        );
+      }
       const workspaces = yield* normalizeSnapshotWorkspaces(
         settingsConfig,
         config,
@@ -363,7 +377,7 @@ const createUnserializedWorkspaceSettingsService = (
             ...config,
             git: snapshot.git,
             general: snapshot.general,
-            system: snapshot.system,
+            system: systemChanged ? snapshot.system : config.system,
             appearance: snapshot.appearance,
             chat: snapshot.chat,
             reusablePrompts: snapshot.reusablePrompts,

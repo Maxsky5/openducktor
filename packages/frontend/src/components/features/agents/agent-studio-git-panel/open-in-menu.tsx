@@ -9,8 +9,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { errorMessage } from "@/lib/errors";
 import { openInToolsQueryOptions, refreshOpenInToolsFromQuery } from "@/state/queries/system";
-import { settingsSnapshotQueryOptions, workspaceQueryKeys } from "@/state/queries/workspace";
-import { host } from "@/state/operations/host";
+import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { usePreferredOpenInTool } from "@/state/mutations/use-preferred-open-in-tool";
 import { OpenInToolIcon } from "./open-in-tool-metadata";
 import { getOpenInToolLabel } from "./open-in-tool-metadata-model";
 
@@ -191,6 +191,7 @@ export function OpenInMenu({
   const [isOpen, setIsOpen] = useState(false);
   const [pendingToolId, setPendingToolId] = useState<SystemOpenInToolId | null>(null);
   const settingsQuery = useQuery(settingsSnapshotQueryOptions());
+  const { savePreference, isSavingPreference } = usePreferredOpenInTool();
   const preferredToolId = settingsQuery.data?.system.preferredOpenInToolId;
   const [isRefreshingTools, setIsRefreshingTools] = useState(false);
   const queryClient = useQueryClient();
@@ -227,7 +228,8 @@ export function OpenInMenu({
     disabledReason,
     onOpenInTool,
   });
-  const isTriggerDisabled = resolvedDisabledReason != null || pendingToolId !== null;
+  const isTriggerDisabled =
+    resolvedDisabledReason != null || pendingToolId !== null || isSavingPreference;
   const isDefaultActionDisabled =
     isTriggerDisabled ||
     settingsQuery.isPending ||
@@ -259,14 +261,7 @@ export function OpenInMenu({
       return;
     }
     try {
-      const snapshot = await host.systemUpdatePreferredOpenInTool({
-        preferredOpenInToolId: toolId,
-      });
-      await queryClient.cancelQueries({
-        queryKey: workspaceQueryKeys.settingsSnapshot(),
-        exact: true,
-      });
-      queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), snapshot);
+      await savePreference({ preferredOpenInToolId: toolId });
     } catch (error) {
       toast.error("Opened tool, but failed to save preference", {
         description: errorMessage(error),

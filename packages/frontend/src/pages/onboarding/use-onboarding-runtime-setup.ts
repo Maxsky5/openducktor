@@ -178,7 +178,10 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
     setStageError(null);
     try {
       await saveSettingsSnapshot(
-        prepareSettingsSnapshotForSave({ ...settingsQuery.data, agentRuntimes: runtimeDraft }),
+        prepareSettingsSnapshotForSave(
+          { ...settingsQuery.data, agentRuntimes: runtimeDraft },
+          settingsQuery.data.system,
+        ),
       );
       setConfirmNoRuntime(false);
       onContinue();

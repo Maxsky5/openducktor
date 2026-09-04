@@ -98,6 +98,7 @@ describe("config-schemas", () => {
 
   test("limits bulk settings saves to explicitly owned fields", () => {
     expect(settingsSnapshotSaveInputSchema.keyof().options).toEqual([
+      "expectedSystem",
       "system",
       "git",
       "general",
@@ -874,6 +875,7 @@ describe("config-schemas", () => {
     });
 
     const saveInput = settingsSnapshotSaveInputSchema.parse({
+      expectedSystem: snapshot.system,
       system: snapshot.system,
       git: snapshot.git,
       general: snapshot.general,

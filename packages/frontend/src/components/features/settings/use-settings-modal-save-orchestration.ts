@@ -95,7 +95,7 @@ export const useSettingsModalSaveOrchestration = ({
   }
 
   const submit = useCallback(async (): Promise<boolean> => {
-    if (saveInFlightRef.current || !snapshotDraft) {
+    if (saveInFlightRef.current || !snapshotDraft || !loadedSnapshot) {
       return false;
     }
 
@@ -145,11 +145,14 @@ export const useSettingsModalSaveOrchestration = ({
         await saveGlobalGitConfig(saveReadyGit);
       } else {
         const latestSnapshot = await loadSettingsSnapshot();
-        const saveReadySnapshot = prepareSettingsSnapshotForSave({
-          ...snapshotDraft,
-          system: dirtySections.system ? snapshotDraft.system : latestSnapshot.system,
-          agentModelFavorites: latestSnapshot.agentModelFavorites,
-        });
+        const saveReadySnapshot = prepareSettingsSnapshotForSave(
+          {
+            ...snapshotDraft,
+            system: snapshotDraft.system,
+            agentModelFavorites: latestSnapshot.agentModelFavorites,
+          },
+          loadedSnapshot.system,
+        );
         await saveSettingsSnapshot(saveReadySnapshot);
       }
 

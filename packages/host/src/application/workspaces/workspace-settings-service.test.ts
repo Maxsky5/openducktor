@@ -171,6 +171,7 @@ describe("createWorkspaceSettingsService", () => {
     await Effect.runPromise(
       service.saveSettingsSnapshot({
         ...snapshot,
+        expectedSystem: snapshot.system,
         autopilot: {
           ...snapshot.autopilot,
           alwaysStartQaReviewsFresh: true,
@@ -244,6 +245,41 @@ describe("createWorkspaceSettingsService", () => {
     });
   });
 
+  test("preserves a newer preference when a stale full save did not edit System", async () => {
+    const settingsConfig = createFakeSettingsConfig({ config: globalConfig() });
+    const service = createWorkspaceSettingsService(settingsConfig);
+    const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
+    await Effect.runPromise(service.updatePreferredOpenInTool({ preferredOpenInToolId: "zed" }));
+    await Effect.runPromise(
+      service.saveSettingsSnapshot({
+        ...snapshot,
+        expectedSystem: snapshot.system,
+        general: { openAgentStudioTabOnBackgroundSessionStart: false },
+      }),
+    );
+    expect((await Effect.runPromise(service.getSettingsSnapshot())).system).toEqual({
+      preferredOpenInToolId: "zed",
+    });
+  });
+
+  test("rejects conflicting System edits without writing other draft settings", async () => {
+    const settingsConfig = createFakeSettingsConfig({ config: globalConfig() });
+    const service = createWorkspaceSettingsService(settingsConfig);
+    const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
+    await Effect.runPromise(service.updatePreferredOpenInTool({ preferredOpenInToolId: "zed" }));
+    await expect(
+      Effect.runPromise(
+        service.saveSettingsSnapshot({
+          ...snapshot,
+          expectedSystem: snapshot.system,
+          system: { preferredOpenInToolId: "cursor" },
+          general: { openAgentStudioTabOnBackgroundSessionStart: false },
+        }),
+      ),
+    ).rejects.toThrow("Open In preference changed");
+    expect(settingsConfig.writtenConfigs).toHaveLength(1);
+  });
+
   test("updates only the system preference and full saves can clear it", async () => {
     const config = globalConfig({ theme: "dark", recentWorkspaces: ["repo"] });
     const settingsConfig = createFakeSettingsConfig({ config });
@@ -253,7 +289,9 @@ describe("createWorkspaceSettingsService", () => {
     );
     expect(snapshot.system).toEqual({ preferredOpenInToolId: "zed" });
     expect(settingsConfig.writtenConfigs[0]).toEqual({ ...config, system: snapshot.system });
-    await Effect.runPromise(service.saveSettingsSnapshot({ ...snapshot, system: {} }));
+    await Effect.runPromise(
+      service.saveSettingsSnapshot({ ...snapshot, expectedSystem: snapshot.system, system: {} }),
+    );
     expect((await Effect.runPromise(service.getSettingsSnapshot())).system).toEqual({});
   });
 
@@ -538,6 +576,7 @@ describe("createWorkspaceSettingsService", () => {
     const records = await Effect.runPromise(
       service.saveSettingsSnapshot({
         ...snapshot,
+        expectedSystem: snapshot.system,
         appearance: explicitAppearanceSettings,
         chat: explicitChatSettings,
         agentRuntimes: {
@@ -712,6 +751,7 @@ describe("createWorkspaceSettingsService", () => {
     const settingsWrite = Effect.runPromise(
       service.saveSettingsSnapshot({
         ...snapshot,
+        expectedSystem: snapshot.system,
         general: { openAgentStudioTabOnBackgroundSessionStart: false },
       }),
     );
@@ -757,6 +797,7 @@ describe("createWorkspaceSettingsService", () => {
     const settingsWrite = Effect.runPromise(
       service.saveSettingsSnapshot({
         ...staleSnapshot,
+        expectedSystem: staleSnapshot.system,
         general: { openAgentStudioTabOnBackgroundSessionStart: false },
       }),
     );
@@ -805,6 +846,7 @@ describe("createWorkspaceSettingsService", () => {
     const settingsWrite = Effect.runPromise(
       service.saveSettingsSnapshot({
         ...staleSnapshot,
+        expectedSystem: staleSnapshot.system,
         general: { openAgentStudioTabOnBackgroundSessionStart: false },
       }),
     );
@@ -829,6 +871,7 @@ describe("createWorkspaceSettingsService", () => {
       Effect.runPromise(
         service.saveSettingsSnapshot({
           ...snapshot,
+          expectedSystem: snapshot.system,
           agentRuntimes: {
             ...snapshot.agentRuntimes,
             codex: {
@@ -854,6 +897,7 @@ describe("createWorkspaceSettingsService", () => {
       Effect.runPromise(
         service.saveSettingsSnapshot({
           ...snapshot,
+          expectedSystem: snapshot.system,
           workspaces: {
             repo: repoConfig("repo", "/repos/repo"),
           },
@@ -875,8 +919,10 @@ describe("createWorkspaceSettingsService", () => {
       }),
     );
     const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
-    await expect(Effect.runPromise(service.saveSettingsSnapshot(snapshot))).rejects.toThrow(
-      "Workspace is not a git repository: /repos/repo",
-    );
+    await expect(
+      Effect.runPromise(
+        service.saveSettingsSnapshot({ ...snapshot, expectedSystem: snapshot.system }),
+      ),
+    ).rejects.toThrow("Workspace is not a git repository: /repos/repo");
   });
 });

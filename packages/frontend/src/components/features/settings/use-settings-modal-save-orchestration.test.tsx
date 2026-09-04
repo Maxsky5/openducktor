@@ -83,7 +83,7 @@ const createDeferred = <TValue,>() => {
 };
 
 describe("useSettingsModalSaveOrchestration", () => {
-  test("saves and clears a dirty system preference and retains newer preferences for other edits", async () => {
+  test("sends the loaded System baseline instead of replacing it with a newer cached value", async () => {
     for (const systemDirty of [true, false]) {
       const latest = { ...createSnapshot(), system: { preferredOpenInToolId: "zed" as const } };
       const save = mock(async (_snapshot: Parameters<HookArgs["saveSettingsSnapshot"]>[0]) => {});
@@ -101,7 +101,8 @@ describe("useSettingsModalSaveOrchestration", () => {
       await harness.run(async (state) => {
         expect(await state.submit()).toBe(true);
       });
-      expect(save.mock.calls[0]?.[0].system).toEqual(systemDirty ? {} : latest.system);
+      expect(save.mock.calls[0]?.[0].system).toEqual({});
+      expect(save.mock.calls[0]?.[0].expectedSystem).toEqual({});
       await harness.unmount();
     }
   });
