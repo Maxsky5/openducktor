@@ -1,4 +1,4 @@
-import type { AgentSessionRecord, RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
+import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentRole, AgentUserMessagePart } from "@openducktor/core";
 import type { SessionStartGate } from "@/features/session-start/session-start-gate";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
@@ -11,33 +11,15 @@ export type { StartAgentSessionInput, StartAgentSessionResult };
 
 export type SessionDependencies = {
   replaceSession: (session: AgentSessionState) => void;
-  removeSession: (identity: AgentSessionIdentity) => void;
   readSessionSnapshot: (identity: AgentSessionIdentity) => AgentSessionState | null;
   sessionStartGateRef: { current: SessionStartGate<StartAgentSessionResult> };
   loadSourceSession: LoadSourceSession;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
-  persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
-  deleteSessionRecord: (taskId: string, identity: AgentSessionIdentity) => Promise<void>;
   clearSessionObservationState: (identity: AgentSessionIdentity) => void;
 };
 
 export type RuntimeDependencies = {
   canonicalizePath: (path: string) => Promise<string>;
-  prepareTaskSessionStartupLease: (
-    repoPath: string,
-    taskId: string,
-    role: AgentRole,
-  ) => Promise<string>;
-  completeTaskSessionStartupLease: (
-    repoPath: string,
-    taskId: string,
-    leaseId: string,
-  ) => Promise<void>;
-  abortTaskSessionStartupLease: (
-    repoPath: string,
-    taskId: string,
-    leaseId: string,
-  ) => Promise<void>;
   adapter: AgentEnginePort;
   ensureRuntime: EnsureRuntime;
 };
@@ -45,6 +27,7 @@ export type RuntimeDependencies = {
 export type TaskDependencies = {
   taskRef: { current: TaskCard[] };
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
+  refreshSessionRecords: (repoPath: string, taskId: string) => Promise<void>;
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
   sendAgentMessage: (session: AgentSessionIdentity, parts: AgentUserMessagePart[]) => Promise<void>;
 };

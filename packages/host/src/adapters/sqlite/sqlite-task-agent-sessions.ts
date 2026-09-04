@@ -129,6 +129,50 @@ export const upsertAgentSession = (
     return true;
   });
 
+export const updateAgentSessionModel = (
+  session: TaskStoreSession,
+  input: Parameters<TaskStorePort["updateAgentSessionModel"]>[0],
+  updatedAt: Date,
+): Effect.Effect<boolean, SqliteTaskStoreWriteError> =>
+  Effect.gen(function* () {
+    const row = yield* requireTaskRow(session, input.taskId, input.repoPath);
+    const sessions = yield* agentSessionsFromRow(row);
+    const existing = sessions.find((entry) => hasSameAgentSessionIdentity(entry, input.identity));
+    if (!existing) {
+      return yield* Effect.fail(
+        new HostResourceError({
+          resource: "task-session",
+          operation: "sqliteTaskRepository.updateAgentSessionModel",
+          message: `Task session not found: ${input.identity.externalSessionId}`,
+          details: {
+            repoPath: input.repoPath,
+            taskId: input.taskId,
+            identity: input.identity,
+          },
+        }),
+      );
+    }
+    const updated = yield* compactAgentSessionForStorage({
+      ...existing,
+      selectedModel: input.selectedModel,
+    });
+    const nextSessions = sessions.map((entry) =>
+      hasSameAgentSessionIdentity(entry, input.identity) ? updated : entry,
+    );
+    yield* session.execute(
+      (database) =>
+        database
+          .update(tasks)
+          .set({
+            agentSessionsJson: encodeJson(z.json().parse(nextSessions)),
+            updatedAt,
+          })
+          .where(eq(tasks.id, input.taskId)),
+      "sqliteTaskRepository.updateAgentSessionModel.updateTask",
+    );
+    return true;
+  });
+
 export const deleteAgentSession = (
   session: TaskStoreSession,
   input: Parameters<TaskStorePort["deleteAgentSession"]>[0],

@@ -1,8 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type {
   CodexAppServerProtocolMessage,
-  CodexAppServerThreadLoadedListResponse,
-  CodexAppServerThreadListResponse,
   CodexAppServerThreadStatus,
 } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY, type AgentEvent } from "@openducktor/core";
@@ -13,7 +11,6 @@ import {
   codexThreadStartResultFixture,
   codexTurnFixture,
   codexUserMessageInput,
-  createDeferred,
   createHarness,
   defaultCodexEffectivePolicy,
   flushCodexAdapterWork,
@@ -47,23 +44,6 @@ class ThreadIdOnlyResumeTransport extends RecordingTransport {
         threadId: requestThreadId(request.params),
         startedAt: "2026-05-07T00:00:00.000Z",
       };
-    }
-    return super.request(request);
-  }
-}
-
-class DeferredInventoryTransport extends RecordingTransport {
-  readonly loadedList = createDeferred<CodexAppServerThreadLoadedListResponse>();
-  readonly threadList = createDeferred<CodexAppServerThreadListResponse>();
-
-  async request(request: CodexJsonRpcRequest) {
-    if (request.method === "thread/loaded/list") {
-      this.calls.push(request);
-      return this.loadedList.promise;
-    }
-    if (request.method === "thread/list") {
-      this.calls.push(request);
-      return this.threadList.promise;
     }
     return super.request(request);
   }
@@ -252,58 +232,7 @@ const observeSessionState = async (
 };
 
 describe("CodexAppServerAdapter runtime snapshots", () => {
-  test("coalesces concurrent Codex runtime snapshot inventory scans", async () => {
-    const transport = new DeferredInventoryTransport("runtime-live", false);
-    const { adapter } = createHarness({
-      transportFactory: mock(() => transport),
-    });
-
-    const firstRuntimeSnapshotRead = adapter.listSessionRuntimeSnapshots({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      directories: ["/repo"],
-    });
-    const secondRuntimeSnapshotRead = adapter.listSessionRuntimeSnapshots({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      directories: ["/repo"],
-    });
-    await flushCodexAdapterWork();
-
-    expect(transport.calls.filter((call) => call.method === "thread/loaded/list")).toHaveLength(1);
-    expect(transport.calls.filter((call) => call.method === "thread/list")).toHaveLength(1);
-
-    transport.loadedList.resolve({ data: ["thread-saved"], nextCursor: null });
-    transport.threadList.resolve({
-      data: [
-        codexThreadFixture({
-          id: "thread-saved",
-          status: { type: "active", activeFlags: [] },
-        }),
-      ],
-      nextCursor: null,
-      backwardsCursor: null,
-    });
-
-    await expect(
-      Promise.all([firstRuntimeSnapshotRead, secondRuntimeSnapshotRead]),
-    ).resolves.toEqual([
-      [
-        expect.objectContaining({
-          ref: expect.objectContaining({ externalSessionId: "thread-saved" }),
-        }),
-      ],
-      [
-        expect.objectContaining({
-          ref: expect.objectContaining({ externalSessionId: "thread-saved" }),
-        }),
-      ],
-    ]);
-    expect(transport.calls.filter((call) => call.method === "thread/loaded/list")).toHaveLength(1);
-    expect(transport.calls.filter((call) => call.method === "thread/list")).toHaveLength(1);
-  });
-
-  test("refreshes Codex thread inventory during runtime snapshot reads", async () => {
+  test("does not discover root sessions from Codex runtime inventory", async () => {
     const { adapter, transports } = createHarness();
 
     await expect(
@@ -312,48 +241,9 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         runtimeKind: "codex",
         directories: ["/repo"],
       }),
-    ).resolves.toEqual([
-      expect.objectContaining({
-        ref: expect.objectContaining({ externalSessionId: "thread-saved" }),
-      }),
-      expect.objectContaining({
-        ref: expect.objectContaining({ externalSessionId: "thread-idle" }),
-      }),
-    ]);
-    await expect(
-      adapter.listSessionRuntimeSnapshots({
-        repoPath: "/repo",
-        runtimeKind: "codex",
-        directories: ["/repo"],
-      }),
-    ).resolves.toEqual([
-      expect.objectContaining({
-        ref: expect.objectContaining({ externalSessionId: "thread-saved" }),
-      }),
-      expect.objectContaining({
-        ref: expect.objectContaining({ externalSessionId: "thread-idle" }),
-      }),
-    ]);
+    ).resolves.toEqual([]);
 
-    const transport = transports.get("runtime-live");
-    expect(transport?.calls.filter((call) => call.method === "thread/loaded/list")).toHaveLength(2);
-    expect(transport?.calls.filter((call) => call.method === "thread/list")).toHaveLength(2);
-    await expect(
-      adapter.readSessionRuntimeSnapshot({
-        repoPath: "/repo",
-        runtimeKind: "codex",
-        workingDirectory: "/repo",
-        externalSessionId: "thread-saved",
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        availability: "runtime",
-        ref: expect.objectContaining({ externalSessionId: "thread-saved" }),
-      }),
-    );
-    expect(transport?.calls.filter((call) => call.method === "thread/read")).toHaveLength(0);
-    expect(transport?.calls.filter((call) => call.method === "thread/loaded/list")).toHaveLength(3);
-    expect(transport?.calls.filter((call) => call.method === "thread/list")).toHaveLength(3);
+    expect(transports.has("runtime-live")).toBe(false);
   });
 
   test("refreshes a known Codex session from runtime thread status", async () => {
@@ -379,7 +269,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     });
   });
 
-  test("detects live Codex sessions from App Server after adapter refresh", async () => {
+  test("reads live metadata for a session identified by OpenDucktor", async () => {
     const { adapter, transports } = createHarness();
 
     await expect(
@@ -589,8 +479,19 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     );
   });
 
-  test("lists loaded Codex sessions from App Server", async () => {
+  test("lists a root session after OpenDucktor resumes it", async () => {
     const { adapter } = createHarness();
+
+    await adapter.resumeSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      systemPrompt: "Use the repo rules.",
+      externalSessionId: "thread-idle",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
 
     await expect(
       adapter.listSessionRuntimeSnapshots({
@@ -599,38 +500,14 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         directories: ["/repo"],
       }),
     ).resolves.toEqual([
-      {
-        availability: "runtime",
-        classification: "running",
-        ref: {
-          externalSessionId: "thread-saved",
-          repoPath: "/repo",
-          runtimeKind: "codex",
-          workingDirectory: "/repo",
-        },
-        title: "Saved running session",
-        startedAt: "2026-05-07T00:00:00.000Z",
-        pendingApprovals: [],
-        pendingQuestions: [],
-      },
-      {
-        availability: "runtime",
+      expect.objectContaining({
         classification: "idle",
-        ref: {
-          externalSessionId: "thread-idle",
-          repoPath: "/repo",
-          runtimeKind: "codex",
-          workingDirectory: "/repo",
-        },
-        title: "Saved idle session",
-        startedAt: "2026-05-07T00:00:10.000Z",
-        pendingApprovals: [],
-        pendingQuestions: [],
-      },
+        ref: expect.objectContaining({ externalSessionId: "thread-idle" }),
+      }),
     ]);
   });
 
-  test("reports a newly started local session while loaded-thread inventory catches up", async () => {
+  test("reports a newly started OpenDucktor session", async () => {
     const { adapter } = createHarness();
 
     const summary = await adapter.startSession({
@@ -755,7 +632,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     ).rejects.toThrow(expectedMessage);
   });
 
-  test("lists a completed unloaded child after reload", async () => {
+  test("does not admit an unloaded child from Codex runtime inventory", async () => {
     const transport = new ChildThreadListTransport("runtime-live", false);
     const { adapter } = createHarness({
       transportFactory: mock(() => transport),
@@ -767,14 +644,9 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         runtimeKind: "codex",
         directories: ["/repo"],
       }),
-    ).resolves.toEqual([
-      expect.objectContaining({
-        availability: "runtime",
-        classification: "idle",
-        parentExternalSessionId: "parent-thread",
-        ref: expect.objectContaining({ externalSessionId: "child-thread" }),
-      }),
-    ]);
+    ).resolves.toEqual([]);
+    expect(transport.calls.filter((call) => call.method === "thread/loaded/list")).toHaveLength(0);
+    expect(transport.calls.filter((call) => call.method === "thread/list")).toHaveLength(0);
   });
 
   test("retains completed routed descendants in the live projection until runtime release", async () => {

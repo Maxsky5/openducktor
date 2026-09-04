@@ -15,10 +15,13 @@ import type {
 import { STALE_START_ERROR } from "./start-session-constants";
 import { executeReuseStart } from "./start-session-reuse-strategy";
 import { resolveStartTask } from "./start-session-policies";
-import { rollbackBootstrapAfterStartFailure } from "./start-session-rollback";
+import {
+  rollbackBootstrapAfterStartFailure,
+  stopStoredWorkflowSessionAfterLaunchFailure,
+} from "./start-session-rollback";
 import { serializeSelectedModelKey } from "./start-session-runtime";
 import {
-  commitWorkflowSessionLaunch,
+  registerWorkflowSessionLaunch,
   prepareWorkflowForkLaunch,
   prepareWorkflowFreshLaunch,
 } from "./start-session-workflow-launch";
@@ -49,8 +52,6 @@ export const createStartAgentSession = ({
 }: StartSessionDependencies) => {
   const executePreparedLaunch = createExecutePreparedSessionLaunch({
     adapter: runtime.adapter,
-    replaceSession: session.replaceSession,
-    removeSession: session.removeSession,
     loadSettingsSnapshot: model.loadSettingsSnapshot,
     repoEpochRef: repo.repoEpochRef,
     currentWorkspaceRepoPathRef: repo.currentWorkspaceRepoPathRef,
@@ -131,23 +132,43 @@ export const createStartAgentSession = ({
                 deps,
               });
 
-        let commitStarted = false;
+        let registrationStarted = false;
         try {
           const result: PreparedSessionLaunchResult = await executePreparedLaunch({
             launch: prepared.launch,
-            commit: async (commitInput) => {
-              commitStarted = true;
-              await commitWorkflowSessionLaunch({
-                ...commitInput,
+            register: async (registrationInput) => {
+              registrationStarted = true;
+              await registerWorkflowSessionLaunch({
+                ...registrationInput,
                 bootstrap: prepared.bootstrap,
                 ctx: startCtx,
-                deps: { session, runtime },
+                deps: { session, runtime, task },
               });
+            },
+            rollback: async (rollbackInput) => {
+              registrationStarted = true;
+              const cleanupInput: Parameters<
+                typeof stopStoredWorkflowSessionAfterLaunchFailure
+              >[0] = {
+                message: rollbackInput.message,
+                cause: rollbackInput.cause,
+                startedCtx: { ...startCtx, summary: rollbackInput.summary },
+                identity: rollbackInput.identity,
+                readSessionSnapshot: session.readSessionSnapshot,
+                replaceSession: session.replaceSession,
+                clearSessionObservationState: session.clearSessionObservationState,
+                runtime,
+                stopReason: rollbackInput.stopReason,
+              };
+              if (rollbackInput.finishBootstrap && prepared.bootstrap) {
+                cleanupInput.bootstrapToComplete = prepared.bootstrap;
+              }
+              return stopStoredWorkflowSessionAfterLaunchFailure(cleanupInput);
             },
           });
           return toAgentSessionIdentity(result.summary);
         } catch (cause) {
-          if (commitStarted || !prepared.bootstrap) {
+          if (registrationStarted || !prepared.bootstrap) {
             throw cause;
           }
           return rollbackBootstrapAfterStartFailure({

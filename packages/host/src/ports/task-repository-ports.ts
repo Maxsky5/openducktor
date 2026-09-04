@@ -119,6 +119,12 @@ export type AgentSessionRepository = {
     taskId: string;
     session: AgentSessionRecord;
   }): Effect.Effect<boolean, TaskStoreError>;
+  updateAgentSessionModel(input: {
+    repoPath: string;
+    taskId: string;
+    identity: AgentSessionIdentity;
+    selectedModel: AgentSessionRecord["selectedModel"];
+  }): Effect.Effect<boolean, TaskStoreError>;
   deleteAgentSession(input: {
     repoPath: string;
     taskId: string;

@@ -11,7 +11,7 @@ import {
   USER_STOPPED_NOTICE,
 } from "../support/session-notice-messages";
 import { requireSessionAssociation, toRuntimeSessionRef } from "../support/session-runtime-ref";
-import type { CommitStoppedSession } from "./workflow-session-operation-policy";
+import type { RefreshStoppedWorkflowSession } from "./workflow-session-operation-policy";
 
 export type StopAgentSessionDependencies = {
   workspaceRepoPath: string | null;
@@ -19,7 +19,7 @@ export type StopAgentSessionDependencies = {
   readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
   clearSessionTurnState: (session: AgentSessionIdentity) => void;
-  commitStoppedSession: CommitStoppedSession;
+  refreshStoppedWorkflowSession: RefreshStoppedWorkflowSession;
 };
 
 const appendUserStoppedNotice = (
@@ -43,7 +43,7 @@ export const createStopAgentSession = ({
   readSessionSnapshot,
   updateSession,
   clearSessionTurnState,
-  commitStoppedSession,
+  refreshStoppedWorkflowSession,
 }: StopAgentSessionDependencies) => {
   return async (identity: AgentSessionIdentity): Promise<void> => {
     const session = readSessionSnapshot(identity);
@@ -68,7 +68,7 @@ export const createStopAgentSession = ({
           stopRequestedAt: null,
         })) ?? readSessionSnapshot(session);
       if (stoppedSession?.status === "stopped") {
-        await commitStoppedSession(stoppedSession);
+        await refreshStoppedWorkflowSession(stoppedSession);
       }
       throw new Error(`Failed to stop session '${externalSessionId}': ${errorMessage(error)}`);
     }
@@ -93,7 +93,7 @@ export const createStopAgentSession = ({
     });
 
     if (nextStoppedSession) {
-      await commitStoppedSession(nextStoppedSession);
+      await refreshStoppedWorkflowSession(nextStoppedSession);
     }
   };
 };

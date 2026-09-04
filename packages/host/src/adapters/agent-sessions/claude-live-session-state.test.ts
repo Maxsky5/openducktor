@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import {
-  type AgentSessionControlSummary,
-  RUNTIME_DESCRIPTORS_BY_KIND,
-} from "@openducktor/contracts";
+import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
+import type { AgentSessionSummary } from "@openducktor/core";
 import { AsyncInputQueue } from "../claude/claude-agent-sdk-queue";
 import type { ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 import { createClaudeLiveSessionState } from "./claude-live-session-state";
@@ -27,7 +25,7 @@ const summary = {
   sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   startedAt: "2026-07-17T10:01:00.000Z",
   status: "idle",
-} as const satisfies AgentSessionControlSummary;
+} as const satisfies AgentSessionSummary;
 
 const session: ClaudeSessionContext = {
   acceptedUserMessages: [],
@@ -74,7 +72,7 @@ const ref = {
 describe("Claude host live-session state", () => {
   test("retains a subagent permission only on the child snapshot", () => {
     const state = createClaudeLiveSessionState({ runtime });
-    state.retainControlSummary(summary);
+    state.applyControlSummary(summary);
     const childExternalSessionId = "session-1::claude-subagent::child-1";
 
     state.applyEvent(session, {
@@ -89,25 +87,25 @@ describe("Claude host live-session state", () => {
       subagentCorrelationKey: "child-1",
     });
 
-    expect(state.readRetainedSnapshot(ref)).toMatchObject({
+    expect(state.readSnapshot(ref)).toMatchObject({
       type: "live",
       session: { pendingApprovals: [] },
     });
-    expect(
-      state.readRetainedSnapshot({ ...ref, externalSessionId: childExternalSessionId }),
-    ).toMatchObject({
-      type: "live",
-      session: {
-        activity: "waiting_for_permission",
-        parentExternalSessionId: "session-1",
-        pendingApprovals: [{ requestId: "opaque-1" }],
+    expect(state.readSnapshot({ ...ref, externalSessionId: childExternalSessionId })).toMatchObject(
+      {
+        type: "live",
+        session: {
+          activity: "waiting_for_permission",
+          parentExternalSessionId: "session-1",
+          pendingApprovals: [{ requestId: "opaque-1" }],
+        },
       },
-    });
+    );
   });
 
   test("retains nested subagent ancestry from the emitting transcript", () => {
     const state = createClaudeLiveSessionState({ runtime });
-    state.retainControlSummary(summary);
+    state.applyControlSummary(summary);
     const childExternalSessionId = "session-1::claude-subagent::child-1";
     const grandchildExternalSessionId = `${childExternalSessionId}::claude-subagent::grandchild-1`;
 
@@ -138,14 +136,14 @@ describe("Claude host live-session state", () => {
       },
     });
 
+    expect(state.readSnapshot({ ...ref, externalSessionId: childExternalSessionId })).toMatchObject(
+      {
+        type: "live",
+        session: { parentExternalSessionId: "session-1" },
+      },
+    );
     expect(
-      state.readRetainedSnapshot({ ...ref, externalSessionId: childExternalSessionId }),
-    ).toMatchObject({
-      type: "live",
-      session: { parentExternalSessionId: "session-1" },
-    });
-    expect(
-      state.readRetainedSnapshot({ ...ref, externalSessionId: grandchildExternalSessionId }),
+      state.readSnapshot({ ...ref, externalSessionId: grandchildExternalSessionId }),
     ).toMatchObject({
       type: "live",
       session: { parentExternalSessionId: childExternalSessionId },
@@ -162,9 +160,7 @@ describe("Claude host live-session state", () => {
         ref: { ...ref, externalSessionId: grandchildExternalSessionId },
       },
     ]);
-    expect(
-      state.readRetainedSnapshot({ ...ref, externalSessionId: grandchildExternalSessionId }),
-    ).toEqual({
+    expect(state.readSnapshot({ ...ref, externalSessionId: grandchildExternalSessionId })).toEqual({
       type: "missing",
       ref: { ...ref, externalSessionId: grandchildExternalSessionId },
     });
@@ -172,7 +168,7 @@ describe("Claude host live-session state", () => {
 
   test("drops late root and subagent events after release until an explicit resume", () => {
     const state = createClaudeLiveSessionState({ runtime });
-    state.retainControlSummary(summary);
+    state.applyControlSummary(summary);
     const childExternalSessionId = "session-1::claude-subagent::child-1";
 
     expect(state.removeSession(ref)).toEqual([{ type: "session_removed", ref }]);
@@ -198,9 +194,9 @@ describe("Claude host live-session state", () => {
         subagentCorrelationKey: "child-1",
       }),
     ).toEqual([]);
-    expect(state.readRetainedSnapshot(ref)).toEqual({ type: "missing", ref });
+    expect(state.readSnapshot(ref)).toEqual({ type: "missing", ref });
 
-    expect(state.retainControlSummary({ ...summary, status: "running" })).toContainEqual({
+    expect(state.applyControlSummary({ ...summary, status: "running" })).toContainEqual({
       type: "session_upsert",
       snapshot: expect.objectContaining({ activity: "running", ref }),
     });
@@ -220,7 +216,7 @@ describe("Claude host live-session state", () => {
 
   test("does not overwrite newer streamed context with an explicit load", () => {
     const state = createClaudeLiveSessionState({ runtime });
-    state.retainControlSummary(summary);
+    state.applyControlSummary(summary);
     const revision = state.contextRevision(ref);
     state.applyEvent(session, {
       type: "session_context_updated",
@@ -238,7 +234,7 @@ describe("Claude host live-session state", () => {
 
   test("advances context revisions only for streamed context events", () => {
     const state = createClaudeLiveSessionState({ runtime });
-    state.retainControlSummary(summary);
+    state.applyControlSummary(summary);
     const revision = state.contextRevision(ref);
 
     state.applyLoadedContext(ref, { totalTokens: 100, contextWindow: 200 }, revision);
@@ -283,7 +279,7 @@ describe("Claude host live-session state", () => {
 
   test("ignores late context refresh errors after session removal", () => {
     const state = createClaudeLiveSessionState({ runtime });
-    state.retainControlSummary(summary);
+    state.applyControlSummary(summary);
     state.removeSession(ref);
 
     expect(
@@ -298,7 +294,7 @@ describe("Claude host live-session state", () => {
 
   test("keeps a no-message session idle when its start event arrives", () => {
     const state = createClaudeLiveSessionState({ runtime });
-    state.retainControlSummary(summary);
+    state.applyControlSummary(summary);
 
     expect(
       state.applyEvent(session, {
@@ -313,15 +309,15 @@ describe("Claude host live-session state", () => {
         event: expect.objectContaining({ type: "session_started" }),
       },
     ]);
-    expect(state.readRetainedSnapshot(ref)).toMatchObject({
+    expect(state.readSnapshot(ref)).toMatchObject({
       type: "live",
       session: { activity: "idle" },
     });
   });
 
-  test("keeps retained session state after a recoverable turn error", () => {
+  test("keeps current session state after a recoverable turn error", () => {
     const state = createClaudeLiveSessionState({ runtime });
-    state.retainControlSummary({ ...summary, status: "running" });
+    state.applyControlSummary({ ...summary, status: "running" });
 
     expect(
       state.applyEvent(session, {
@@ -341,7 +337,7 @@ describe("Claude host live-session state", () => {
       externalSessionId: "session-1",
       timestamp: "2026-07-17T10:03:06.000Z",
     });
-    expect(state.readRetainedSnapshot(ref)).toMatchObject({
+    expect(state.readSnapshot(ref)).toMatchObject({
       type: "live",
       session: { activity: "idle" },
     });
@@ -349,7 +345,7 @@ describe("Claude host live-session state", () => {
 
   test("removes subagent snapshots owned by a retracted assistant message", () => {
     const state = createClaudeLiveSessionState({ runtime });
-    state.retainControlSummary(summary);
+    state.applyControlSummary(summary);
     const childExternalSessionId = "session-1::claude-subagent::child-1";
     const childRef = { ...ref, externalSessionId: childExternalSessionId };
     const grandchildExternalSessionId = `${childExternalSessionId}::claude-subagent::grandchild-1`;
@@ -396,7 +392,7 @@ describe("Claude host live-session state", () => {
         externalSessionId: retainedChildExternalSessionId,
       },
     });
-    expect(state.readRetainedSnapshot(childRef)).toMatchObject({ type: "live" });
+    expect(state.readSnapshot(childRef)).toMatchObject({ type: "live" });
 
     expect(
       state.applyEvent(session, {
@@ -416,18 +412,18 @@ describe("Claude host live-session state", () => {
       { type: "session_removed", ref: childRef },
       { type: "session_removed", ref: grandchildRef },
     ]);
-    expect(state.readRetainedSnapshot(ref)).toMatchObject({ type: "live" });
-    expect(state.readRetainedSnapshot(childRef)).toEqual({ type: "missing", ref: childRef });
-    expect(state.readRetainedSnapshot(grandchildRef)).toEqual({
+    expect(state.readSnapshot(ref)).toMatchObject({ type: "live" });
+    expect(state.readSnapshot(childRef)).toEqual({ type: "missing", ref: childRef });
+    expect(state.readSnapshot(grandchildRef)).toEqual({
       type: "missing",
       ref: grandchildRef,
     });
-    expect(state.readRetainedSnapshot(retainedChildRef)).toMatchObject({ type: "live" });
+    expect(state.readSnapshot(retainedChildRef)).toMatchObject({ type: "live" });
   });
 
-  test("removes retained session state after a terminal stream finish", () => {
+  test("removes current session state after a terminal stream finish", () => {
     const state = createClaudeLiveSessionState({ runtime });
-    state.retainControlSummary({ ...summary, status: "running" });
+    state.applyControlSummary({ ...summary, status: "running" });
 
     expect(
       state.applyEvent(session, {
@@ -443,7 +439,7 @@ describe("Claude host live-session state", () => {
       },
       { type: "session_removed", ref },
     ]);
-    expect(state.readRetainedSnapshot(ref)).toEqual({ type: "missing", ref });
+    expect(state.readSnapshot(ref)).toEqual({ type: "missing", ref });
   });
 
   test("keeps an independent fork when its source session finishes", () => {
@@ -459,8 +455,8 @@ describe("Claude host live-session state", () => {
       summary: forkSummary,
     };
 
-    state.retainControlSummary(summary);
-    state.retainControlSummary(forkSummary, { parentExternalSessionId: "session-1" });
+    state.applyControlSummary(summary);
+    state.applyControlSummary(forkSummary, { parentExternalSessionId: "session-1" });
     state.applyEvent(session, {
       type: "approval_required",
       externalSessionId: childExternalSessionId,
@@ -483,7 +479,7 @@ describe("Claude host live-session state", () => {
     expect(changes).toContainEqual({ type: "session_removed", ref });
     expect(changes).toContainEqual({ type: "session_removed", ref: childRef });
     expect(changes).not.toContainEqual({ type: "session_removed", ref: forkRef });
-    expect(state.readRetainedSnapshot(forkRef)).toMatchObject({
+    expect(state.readSnapshot(forkRef)).toMatchObject({
       type: "live",
       session: { parentExternalSessionId: "session-1" },
     });
@@ -501,9 +497,9 @@ describe("Claude host live-session state", () => {
     });
   });
 
-  test("replaces stale retained context when no newer context update arrives", () => {
+  test("replaces stale current context when no newer context update arrives", () => {
     const state = createClaudeLiveSessionState({ runtime });
-    state.retainControlSummary(summary);
+    state.applyControlSummary(summary);
     const firstRevision = state.contextRevision(ref);
     state.applyLoadedContext(ref, { totalTokens: 99, contextWindow: 200 }, firstRevision);
     const refreshRevision = state.contextRevision(ref);
@@ -516,9 +512,9 @@ describe("Claude host live-session state", () => {
     });
   });
 
-  test("keeps retained context when a direct context read returns null", () => {
+  test("keeps current context when a direct context read returns null", () => {
     const state = createClaudeLiveSessionState({ runtime });
-    state.retainControlSummary(summary);
+    state.applyControlSummary(summary);
     const firstRevision = state.contextRevision(ref);
     state.applyLoadedContext(ref, { totalTokens: 99, contextWindow: 200 }, firstRevision);
 
@@ -528,9 +524,9 @@ describe("Claude host live-session state", () => {
     });
   });
 
-  test("preserves retained activity when an already-live session is resumed", () => {
+  test("preserves current activity when an already-live session is resumed", () => {
     const state = createClaudeLiveSessionState({ runtime });
-    state.retainControlSummary({ ...summary, status: "running" });
+    state.applyControlSummary({ ...summary, status: "running" });
     state.applyEvent(session, {
       type: "approval_required",
       externalSessionId: "session-1",
@@ -540,9 +536,9 @@ describe("Claude host live-session state", () => {
       title: "Approve Bash",
     });
 
-    state.retainControlSummary(summary, { preserveRetainedActivity: true });
+    state.applyControlSummary(summary, { keepActivity: true });
 
-    expect(state.readRetainedSnapshot(ref)).toMatchObject({
+    expect(state.readSnapshot(ref)).toMatchObject({
       type: "live",
       session: {
         activity: "waiting_for_permission",
@@ -553,7 +549,7 @@ describe("Claude host live-session state", () => {
 
   test("publishes assistant duration through the normalized transcript", () => {
     const state = createClaudeLiveSessionState({ runtime });
-    state.retainControlSummary(summary);
+    state.applyControlSummary(summary);
 
     expect(
       state.applyEvent(session, {

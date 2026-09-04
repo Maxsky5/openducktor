@@ -6,6 +6,8 @@ import {
   agentSessionControlSendInputSchema,
   agentSessionControlStartInputSchema,
   agentSessionControlSummarySchema,
+  agentSessionControlUpdateModelInputSchema,
+  agentSessionModelSettingsSchema,
 } from "./agent-session-control-schemas";
 
 const workflowScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
@@ -201,6 +203,65 @@ describe("agent session control contracts", () => {
         parts: [{ kind: "text", text: "hello" }],
       }),
     ).toMatchObject({ sessionScope: repositoryScope });
+    expect(
+      agentSessionControlUpdateModelInputSchema.parse({
+        ...ref,
+        model: null,
+      }),
+    ).toMatchObject({ sessionScope: repositoryScope });
+  });
+
+  test("requires task scope for workflow model persistence", () => {
+    const input = {
+      repoPath: "/repo",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+      model: null,
+    };
+
+    expect(agentSessionControlUpdateModelInputSchema.safeParse(input).success).toBe(false);
+    expect(
+      agentSessionControlUpdateModelInputSchema.parse({
+        ...input,
+        sessionScope: workflowScope,
+      }),
+    ).toMatchObject({ sessionScope: workflowScope });
+  });
+
+  test("limits live model changes to model settings", () => {
+    const session = {
+      repoPath: "/repo",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+      sessionScope: repositoryScope,
+    };
+    const settings = {
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+    };
+
+    expect(agentSessionModelSettingsSchema.parse(settings)).toEqual(settings);
+    expect(
+      agentSessionControlUpdateModelInputSchema.parse({
+        ...session,
+        model: settings,
+      }).model,
+    ).toEqual(settings);
+    expect(
+      agentSessionControlUpdateModelInputSchema.safeParse({
+        ...session,
+        model: { ...settings, runtimeKind: "codex" },
+      }).success,
+    ).toBe(false);
+    expect(
+      agentSessionControlUpdateModelInputSchema.safeParse({
+        ...session,
+        model: { ...settings, profileId: "build" },
+      }).success,
+    ).toBe(false);
   });
 
   test("rejects unbound scope from startable controls", () => {
@@ -215,12 +276,11 @@ describe("agent session control contracts", () => {
     ).toBe(false);
   });
 
-  test("carries explicit association instead of a nullable role in control summaries", () => {
+  test("returns runtime metadata without task ownership in control summaries", () => {
     const summary = {
       externalSessionId: "session-1",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      sessionAssociation: workflowScope,
       startedAt: "2026-07-16T10:00:00.000Z",
       status: "idle",
     } as const;
@@ -229,7 +289,7 @@ describe("agent session control contracts", () => {
     expect(
       agentSessionControlSummarySchema.safeParse({
         ...summary,
-        role: "build",
+        sessionAssociation: workflowScope,
       }).success,
     ).toBe(false);
   });

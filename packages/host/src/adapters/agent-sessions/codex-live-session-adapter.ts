@@ -9,13 +9,13 @@ import {
   type AgentSessionLiveRef,
   type AgentSessionScope,
   acceptedAgentUserMessageSchema,
-  agentSessionControlSummarySchema,
   agentSessionLiveLoadContextResultSchema,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
-import type { AgentRuntimePolicyBinding } from "@openducktor/core";
+import type { AgentRuntimePolicyBinding, AgentSessionSummary } from "@openducktor/core";
 import { Effect } from "effect";
 import type { z } from "zod";
+import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
 import {
   type HostError,
   type HostOperationErrorAggregate,
@@ -179,16 +179,13 @@ export const createCodexLiveSessionAdapterPreparer =
 
       const runControlSummary = (
         operation: string,
-        run: () => Promise<AgentSessionControlSummary>,
+        run: () => Promise<AgentSessionSummary>,
       ): Effect.Effect<AgentSessionControlSummary, HostError> =>
         Effect.tryPromise({
           try: run,
           catch: (cause) =>
             toHostOperationError(cause, operation, { runtimeId: runtime.runtimeId }),
         }).pipe(
-          Effect.flatMap((summary) =>
-            parseOutput(agentSessionControlSummarySchema, summary, `${operation}.normalize`),
-          ),
           Effect.flatMap((summary) =>
             summary.runtimeKind === "codex"
               ? refreshProjection().pipe(Effect.as(summary))
@@ -200,6 +197,7 @@ export const createCodexLiveSessionAdapterPreparer =
                   }),
                 ),
           ),
+          Effect.flatMap((summary) => toAgentSessionControlSummary(summary, operation)),
         );
 
       const releaseRuntime = (): Effect.Effect<ReadonlyArray<AgentSessionLiveRef>, HostError> =>
@@ -259,13 +257,12 @@ export const createCodexLiveSessionAdapterPreparer =
           runtimeKind: "codex",
           repoPath: runtime.repoPath,
         },
-        matches: projection.matches,
-        listRetainedSnapshots: projection.listRetainedSnapshots,
-        readRetainedSnapshot: projection.readRetainedSnapshot,
+        listSnapshots: projection.listSnapshots,
+        readSnapshot: projection.readSnapshot,
         loadContext: (input) =>
           Effect.gen(function* () {
-            const retained = projection.hasSnapshot(input);
-            const usage = retained
+            const hasSnapshot = projection.hasSnapshot(input);
+            const usage = hasSnapshot
               ? yield* Effect.tryPromise({
                   try: () =>
                     controller.loadLiveSessionContextUsage({

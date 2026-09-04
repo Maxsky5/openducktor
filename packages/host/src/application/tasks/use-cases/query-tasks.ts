@@ -16,6 +16,7 @@ export const createTaskQueryUseCases = ({
   | "getTaskMetadata"
   | "agentSessionsList"
   | "agentSessionDelete"
+  | "agentSessionUpdateModel"
   | "agentSessionsListForTasks"
   | "agentSessionUpsert"
 > => ({
@@ -62,6 +63,10 @@ export const createTaskQueryUseCases = ({
 
       return true;
     });
+  },
+
+  agentSessionUpdateModel(input) {
+    return taskStore.updateAgentSessionModel(input);
   },
 
   agentSessionDelete({ repoPath, taskId, identity }) {

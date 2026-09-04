@@ -13,7 +13,6 @@ import {
 import { z } from "zod";
 import type {
   AgentSessionDeleteInput,
-  AgentSessionUpsertInput,
   BuildBlockedInput,
   BuildCompletedInput,
   BuildStartInput,
@@ -31,20 +30,15 @@ import type {
   TaskIdInput,
   TaskSessionBootstrapFinalizeInput,
   TaskSessionBootstrapPrepareInput,
-  TaskSessionStartupLeaseFinalizeInput,
-  TaskSessionStartupLeasePrepareInput,
   TransitionTaskInput,
   UpdateTaskInput,
 } from "../../application/tasks/task-inputs";
 import { HostValidationError } from "../../effect/host-errors";
 import {
-  compactAgentSessionForStorage,
   normalizedAgentSessionIdentitySchema,
-  normalizedAgentSessionRecordSchema,
   optionalBoolean,
   optionalNonNegativeInteger,
   parseAgentSessionIdentity,
-  parseAgentSessionRecord,
   parseCreateInput,
   parseDescriptionAssets,
   parseOptionalNote,
@@ -142,20 +136,6 @@ export const parseListAgentSessionsForTasksInput = (
   return {
     repoPath: readRequiredString(record, "repoPath"),
     taskIds: Array.from(new Set(taskIds)),
-  };
-};
-
-export const parseAgentSessionUpsertInput = (input: HostCommandArgs): AgentSessionUpsertInput => {
-  const record = requireParsedRecord(
-    commandInputRecordSchema.safeParse(input),
-    "agent_session_upsert input",
-  );
-  return {
-    repoPath: readRequiredString(record, "repoPath"),
-    taskId: readRequiredString(record, "taskId"),
-    session: compactAgentSessionForStorage(
-      parseAgentSessionRecord(normalizedAgentSessionRecordSchema.safeParse(record.session)),
-    ),
   };
 };
 
@@ -377,38 +357,6 @@ export const parseTaskSessionBootstrapFinalizeInput = (
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
     bootstrapId: readRequiredString(record, "bootstrapId"),
-  };
-};
-
-export const parseTaskSessionStartupLeasePrepareInput = (
-  input: HostCommandArgs,
-): TaskSessionStartupLeasePrepareInput => {
-  const record = requireParsedRecord(
-    commandInputRecordSchema.safeParse(input),
-    "task_session_startup_lease_prepare input",
-  );
-  const role = agentRoleSchema.safeParse(record.role);
-  if (!role.success)
-    throw new HostValidationError({
-      field: "role",
-      message: "A supported agent role is required.",
-    });
-  return {
-    repoPath: readRequiredString(record, "repoPath"),
-    taskId: readRequiredString(record, "taskId"),
-    role: role.data,
-  };
-};
-
-export const parseTaskSessionStartupLeaseFinalizeInput = (
-  input: HostCommandArgs,
-  label: string,
-): TaskSessionStartupLeaseFinalizeInput => {
-  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), label);
-  return {
-    repoPath: readRequiredString(record, "repoPath"),
-    taskId: readRequiredString(record, "taskId"),
-    leaseId: readRequiredString(record, "leaseId"),
   };
 };
 

@@ -29,7 +29,6 @@ import {
   normalizeSessionErrorMessage,
 } from "../support/tool-messages";
 import { toUserChatMessage } from "../support/user-message-event";
-import { isWorkflowAgentSession } from "../support/workflow-session";
 import type { SessionEvent, SessionLifecycleEventContext } from "./session-event-types";
 import { settleSessionToIdle } from "./session-helpers";
 
@@ -38,13 +37,6 @@ const clearTurnTracking = (
 ): void => {
   context.turn.turnMetadata.clearSession(context.session.key);
 };
-
-const workflowSessionPersistenceOptions = (
-  context: Pick<SessionLifecycleEventContext, "session" | "store">,
-) =>
-  isWorkflowAgentSession(context.store.readSession(context.session.identity))
-    ? ({ persist: true } as const)
-    : undefined;
 
 const nextContextUsageWasEstablishedForMessage = (
   context: Pick<SessionLifecycleEventContext, "session" | "turn" | "store">,
@@ -290,17 +282,13 @@ export const handleSessionCompacted = (
   event: Extract<SessionEvent, { type: "session_compacted" }>,
 ): void => {
   const messageId = event.messageId ?? `session-compaction:${event.externalSessionId}`;
-  context.store.updateSession(
-    context.session.identity,
-    (current) => ({
-      ...current,
-      messages: upsertSessionMessage(
-        current,
-        buildSessionCompactedNoticeMessage(event.timestamp, event.message, messageId),
-      ),
-    }),
-    workflowSessionPersistenceOptions(context),
-  );
+  context.store.updateSession(context.session.identity, (current) => ({
+    ...current,
+    messages: upsertSessionMessage(
+      current,
+      buildSessionCompactedNoticeMessage(event.timestamp, event.message, messageId),
+    ),
+  }));
 };
 
 export const handleSessionCompactionStarted = (
@@ -308,17 +296,13 @@ export const handleSessionCompactionStarted = (
   event: Extract<SessionEvent, { type: "session_compaction_started" }>,
 ): void => {
   const messageId = event.messageId ?? `session-compaction:${event.externalSessionId}`;
-  context.store.updateSession(
-    context.session.identity,
-    (current) => ({
-      ...current,
-      messages: upsertSessionMessage(
-        current,
-        buildSessionCompactionStartedNoticeMessage(event.timestamp, event.message, messageId),
-      ),
-    }),
-    workflowSessionPersistenceOptions(context),
-  );
+  context.store.updateSession(context.session.identity, (current) => ({
+    ...current,
+    messages: upsertSessionMessage(
+      current,
+      buildSessionCompactionStartedNoticeMessage(event.timestamp, event.message, messageId),
+    ),
+  }));
 };
 
 const settleTerminalMessages = (
@@ -358,41 +342,37 @@ export const handleSessionError = (
   const userStopAborted =
     Boolean(sessionBeforeUpdate?.stopRequestedAt) &&
     isStopAbortSessionErrorMessage(sessionErrorMessage);
-  context.store.updateSession(
-    context.session.identity,
-    (current) => {
-      return {
-        ...current,
-        pendingUserMessageStartedAt: undefined,
-        runtimeStatusMessage: null,
-        status: userStopAborted ? "stopped" : "error",
-        stopRequestedAt: null,
-        pendingApprovals: [],
-        pendingQuestions: [],
-        messages: userStopAborted
-          ? removeRunningSessionCompactionNotices(
-              settleTerminalMessages(current, event.timestamp, {
-                outcome: "error",
-                errorMessage: sessionErrorMessage,
-                appendUserStoppedNotice: true,
-              }),
-            )
-          : appendSessionMessage(
-              {
-                externalSessionId: current.externalSessionId,
-                messages: removeRunningSessionCompactionNotices(
-                  settleTerminalMessages(current, event.timestamp, {
-                    outcome: "error",
-                    errorMessage: sessionErrorMessage,
-                  }),
-                ),
-              },
-              buildSessionErrorNoticeMessage(event.timestamp, sessionErrorMessage),
-            ),
-      };
-    },
-    userStopAborted ? undefined : workflowSessionPersistenceOptions(context),
-  );
+  context.store.updateSession(context.session.identity, (current) => {
+    return {
+      ...current,
+      pendingUserMessageStartedAt: undefined,
+      runtimeStatusMessage: null,
+      status: userStopAborted ? "stopped" : "error",
+      stopRequestedAt: null,
+      pendingApprovals: [],
+      pendingQuestions: [],
+      messages: userStopAborted
+        ? removeRunningSessionCompactionNotices(
+            settleTerminalMessages(current, event.timestamp, {
+              outcome: "error",
+              errorMessage: sessionErrorMessage,
+              appendUserStoppedNotice: true,
+            }),
+          )
+        : appendSessionMessage(
+            {
+              externalSessionId: current.externalSessionId,
+              messages: removeRunningSessionCompactionNotices(
+                settleTerminalMessages(current, event.timestamp, {
+                  outcome: "error",
+                  errorMessage: sessionErrorMessage,
+                }),
+              ),
+            },
+            buildSessionErrorNoticeMessage(event.timestamp, sessionErrorMessage),
+          ),
+    };
+  });
   context.turn.clearTurnDuration(context.session.key, event.timestamp);
   clearTurnTracking(context);
 };
@@ -437,43 +417,33 @@ export const handleSessionFinished = (
   context: SessionLifecycleEventContext,
   event: Extract<SessionEvent, { type: "session_finished" }>,
 ): void => {
-  const sessionBeforeUpdate = context.store.readSession(context.session.identity);
-  const persistenceOptions = sessionBeforeUpdate?.stopRequestedAt
-    ? undefined
-    : workflowSessionPersistenceOptions(context);
-  context.store.updateSession(
-    context.session.identity,
-    (current) => {
-      const appendUserStoppedNotice = Boolean(current.stopRequestedAt);
-      let terminalStatus: AgentSessionState["status"] = appendUserStoppedNotice
-        ? "stopped"
-        : "idle";
-      if (current.status === "error") {
-        terminalStatus = "error";
-      }
-      return {
-        ...current,
-        pendingUserMessageStartedAt: undefined,
-        runtimeStatusMessage: null,
-        messages: settleTerminalMessages(
-          current,
-          event.timestamp,
-          appendUserStoppedNotice
-            ? {
-                outcome: "error" as const,
-                errorMessage: USER_STOPPED_NOTICE,
-                appendUserStoppedNotice: true,
-              }
-            : {},
-        ),
-        pendingApprovals: [],
-        pendingQuestions: [],
-        status: terminalStatus,
-        stopRequestedAt: null,
-      };
-    },
-    persistenceOptions,
-  );
+  context.store.updateSession(context.session.identity, (current) => {
+    const appendUserStoppedNotice = Boolean(current.stopRequestedAt);
+    let terminalStatus: AgentSessionState["status"] = appendUserStoppedNotice ? "stopped" : "idle";
+    if (current.status === "error") {
+      terminalStatus = "error";
+    }
+    return {
+      ...current,
+      pendingUserMessageStartedAt: undefined,
+      runtimeStatusMessage: null,
+      messages: settleTerminalMessages(
+        current,
+        event.timestamp,
+        appendUserStoppedNotice
+          ? {
+              outcome: "error" as const,
+              errorMessage: USER_STOPPED_NOTICE,
+              appendUserStoppedNotice: true,
+            }
+          : {},
+      ),
+      pendingApprovals: [],
+      pendingQuestions: [],
+      status: terminalStatus,
+      stopRequestedAt: null,
+    };
+  });
   context.turn.clearTurnDuration(context.session.key, event.timestamp);
   clearTurnTracking(context);
 };

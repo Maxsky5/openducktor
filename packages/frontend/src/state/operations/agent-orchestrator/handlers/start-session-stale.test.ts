@@ -48,7 +48,7 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
     }
   });
 
-  test("removes local registration when workspace becomes stale during initial session registration", async () => {
+  test("keeps the stored session when workspace becomes stale during initial attachment", async () => {
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
     let stopCalls = 0;
     const sessionsRef: SessionsRefContract = {
@@ -94,7 +94,9 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
           selectedModel: BUILD_SELECTION,
         }),
       ).rejects.toThrow("Workspace changed while starting session.");
-      expect(listAgentSessions(sessionsRef.current)).toEqual([]);
+      expect(listAgentSessions(sessionsRef.current)).toEqual([
+        expect.objectContaining({ externalSessionId: "external-created" }),
+      ]);
       expect(stopCalls).toBe(1);
     } finally {
       adapter.startSession = originalStartSession;
@@ -198,7 +200,7 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
     }
   });
 
-  test("rolls back a started remote session when persistence makes the workspace stale", async () => {
+  test("rolls back a host-started session when the workspace becomes stale", async () => {
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
     let stopCalls = 0;
 
@@ -206,6 +208,7 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
     const originalStartSession = adapter.startSession;
     const originalStopSession = adapter.stopSession;
     adapter.startSession = async (input) => {
+      currentWorkspaceRepoPathRef.current = "/tmp/other";
       return {
         runtimeKind: "opencode",
         workingDirectory: input.workingDirectory,
@@ -226,9 +229,6 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
       adapter,
       taskRef: { current: [taskFixture] },
       currentWorkspaceRepoPathRef,
-      persistSessionRecord: async () => {
-        currentWorkspaceRepoPathRef.current = "/tmp/other";
-      },
     });
 
     try {
@@ -288,7 +288,7 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
             selectedModel: BUILD_SELECTION,
           }),
         ).rejects.toThrow(
-          "Workspace changed while starting session. Failed to stop stale started session 'external-created': stop boom",
+          "Workspace changed while starting session. Failed to stop the started session during rollback: stop boom. Cleanup was not continued.",
         );
         expect(calls).toHaveLength(1);
         expect(String(calls[0]?.[1] ?? "")).toBe("start-session-stop-on-stale-after-start");

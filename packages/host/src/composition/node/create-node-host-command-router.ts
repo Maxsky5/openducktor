@@ -12,6 +12,7 @@ import { createRuntimeSessionOperations } from "../../adapters/runtimes/runtime-
 import { createRuntimeTaskActivityGuard } from "../../application/tasks/runtime-task-activity-guard";
 import { createRuntimeWorkspaceStarterDispatcher } from "../../adapters/runtimes/runtime-workspace-starter-dispatcher";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
+import { createTaskWorkflowSessionControlService } from "../../application/agent-sessions/task-workflow-session-control-service";
 import { createLocalAttachmentService } from "../../application/attachments/local-attachment-service";
 import { createDevServerService } from "../../application/dev-servers/dev-server-service";
 import { createSystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
@@ -80,7 +81,6 @@ import { createRuntimeActiveSessionResolver } from "./runtime-active-session-res
 import { resolveWorkspaceRuntimeMcpBridgeConnection } from "./workspace-runtime-mcp-bridge-connection";
 
 export type { CreateNodeHostCommandRouterInput, EffectNodeHostCommandRouter };
-
 export const assembleNodeEffectHostCommandRouter = (
   input: CreateNodeHostCommandRouterInput,
   defaultPorts: ReturnType<typeof createNodeHostDefaultPorts>,
@@ -116,26 +116,13 @@ export const assembleNodeEffectHostCommandRouter = (
   } = defaultPorts;
   const codexAppServerService = createCodexAppServerService(effectiveCodexAppServer);
   const liveSessionAdapterRegistry = createLiveSessionAdapterRegistry();
-  const agentSessionLiveStateService = createAgentSessionLiveStateService({
-    adapterRegistry: liveSessionAdapterRegistry,
-    faultLog: createLiveSessionFaultLogger(lifecycleLogger),
-    publish: (envelope) => {
-      if (!eventBus) {
-        throw new HostResourceError({
-          resource: "host-event-bus",
-          operation: "agent-session-live.publish",
-          message: "Live agent-session events require a configured host event bus.",
-        });
-      }
-      eventBus.publish({
-        channel: "openducktor://agent-session-live-event",
-        payload: envelope,
-      });
-    },
-  });
   const filesystemService = createFilesystemService(filesystem);
   const workspaceFilesService = createWorkspaceFilesService(filesystem, git);
-  const gitService = createGitService({ gitPort: git, settingsConfig, worktreeFiles });
+  const gitService = createGitService({
+    gitPort: git,
+    settingsConfig,
+    worktreeFiles,
+  });
   const workspaceSettingsService = createWorkspaceSettingsService(settingsConfig);
   const gitProviderService = createGitProviderService({
     resolver: gitProviderResolver,
@@ -154,6 +141,23 @@ export const assembleNodeEffectHostCommandRouter = (
   }
   const assets = createNodeTaskAssetServices(taskAssetServiceInput);
   const { startupSweep, taskAssetReadService, taskAssetStagingService, taskStore } = assets;
+  const agentSessionLiveStateService = createAgentSessionLiveStateService({
+    adapterRegistry: liveSessionAdapterRegistry,
+    faultLog: createLiveSessionFaultLogger(lifecycleLogger),
+    publish: (envelope) => {
+      if (!eventBus) {
+        throw new HostResourceError({
+          resource: "host-event-bus",
+          operation: "agent-session-live.publish",
+          message: "Live agent-session events require a configured host event bus.",
+        });
+      }
+      eventBus.publish({
+        channel: "openducktor://agent-session-live-event",
+        payload: envelope,
+      });
+    },
+  });
   const systemDiagnosticsService = createSystemDiagnosticsService({
     runtimeDefinitionsService,
     runtimeHealth,
@@ -162,7 +166,10 @@ export const assembleNodeEffectHostCommandRouter = (
     toolDiscovery,
     repoStoreDiagnostics: taskStore,
   });
-  const claudeWorkingDirectoryDependencies = { settingsConfig, workspaceSettingsService };
+  const claudeWorkingDirectoryDependencies = {
+    settingsConfig,
+    workspaceSettingsService,
+  };
   let resolvedMcpHostBridge = mcpHostBridge;
   const resolveRuntimeMcpBridge = (kind: "codex" | "opencode", repoPath: string) =>
     resolveWorkspaceRuntimeMcpBridgeConnection(resolvedMcpHostBridge, kind, repoPath);
@@ -299,6 +306,16 @@ export const assembleNodeEffectHostCommandRouter = (
     taskEventPublicationReporter,
     workspaceSettingsService,
   });
+  const agentSessionCommandService = {
+    ...agentSessionLiveStateService,
+    ...createTaskWorkflowSessionControlService({
+      canonicalizeRepoPath: (repoPath) => git.canonicalizePath(repoPath),
+      runtime: agentSessionLiveStateService,
+      taskReader: taskStore,
+      tasks: taskService,
+      taskLifecycle: taskSessionBootstrapCoordinator,
+    }),
+  };
   const odtMcpBridgeService = createOdtMcpBridgeService({
     taskAssetReadService,
     taskService,
@@ -438,10 +455,7 @@ export const assembleNodeEffectHostCommandRouter = (
         }
       }),
     handlers: {
-      ...createAgentSessionLiveCommandHandlers(
-        agentSessionLiveStateService,
-        localAttachmentService,
-      ),
+      ...createAgentSessionLiveCommandHandlers(agentSessionCommandService, localAttachmentService),
       ...createClaudeRuntimeCommandHandlers(
         claudeRuntime.agentSdkService,
         effectiveRuntimeRegistry,
@@ -477,5 +491,9 @@ export const assembleNodeEffectHostCommandRouter = (
       ...createWorkspaceSettingsCommandHandlers(workspaceSettingsService),
     },
   });
-  return Object.assign(router, { taskAssetReadService, taskEventStream, terminalService });
+  return Object.assign(router, {
+    taskAssetReadService,
+    taskEventStream,
+    terminalService,
+  });
 };

@@ -41,7 +41,6 @@ export const createAgentSessionLiveSnapshotFixture = (
       externalSessionId: "external-1",
       ...refOverrides,
     },
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
     activity: "idle",
     title: "BUILD task-1",
     startedAt: "2026-02-22T08:00:00.000Z",
@@ -110,11 +109,9 @@ export const createTestDependencies = (
       },
     }),
     hostPort: {
-      agentSessionDelete: async () => undefined,
       agentSessionsList: async () => [],
       agentSessionsListForTasks: async (_repoPath, taskIds) =>
         taskIds.map((taskId) => ({ taskId, agentSessions: [] })),
-      agentSessionUpsert: (...args) => host.agentSessionUpsert(...args),
       taskMetadataGetFresh: (...args) => host.taskMetadataGetFresh(...args),
       taskWorktreeGet: (...args) => host.taskWorktreeGet(...args),
       ...hostOverrides,
@@ -125,9 +122,6 @@ export const createTestDependencies = (
       taskSessionBootstrapPrepare: (...args) => host.taskSessionBootstrapPrepare(...args),
       taskSessionBootstrapComplete: (...args) => host.taskSessionBootstrapComplete(...args),
       taskSessionBootstrapAbort: (...args) => host.taskSessionBootstrapAbort(...args),
-      taskSessionStartupLeasePrepare: async () => "lease-1",
-      taskSessionStartupLeaseComplete: async () => undefined,
-      taskSessionStartupLeaseAbort: async () => undefined,
       ...runtimeHostOverrides,
     },
     liveSessionHostPort: {
@@ -243,8 +237,6 @@ export const createHookHarness = (args: {
         agentSessionsList: (repoPath, taskId) => host.agentSessionsList(repoPath, taskId),
         agentSessionsListForTasks: (repoPath, taskIds) =>
           host.agentSessionsListForTasks(repoPath, taskIds),
-        agentSessionUpsert: (repoPath, taskId, record) =>
-          host.agentSessionUpsert(repoPath, taskId, record),
         taskWorktreeGet: (repoPath, taskId) => host.taskWorktreeGet(repoPath, taskId),
       },
       {
@@ -273,7 +265,9 @@ export const createHookHarness = (args: {
       { value: runtimeDefinitionsContextValue },
       createElement(
         RepoRuntimeHealthContext.Provider,
-        { value: createRepoRuntimeHealthContextValue(currentArgs.runtimeHealthByRuntime) },
+        {
+          value: createRepoRuntimeHealthContextValue(currentArgs.runtimeHealthByRuntime),
+        },
         createElement(
           ChecksStateContext.Provider,
           { value: createChecksStateContextValue() },
@@ -282,7 +276,9 @@ export const createHookHarness = (args: {
       ),
     );
 
-  const sharedHarness = createSharedHookHarness(Harness, undefined, { wrapper });
+  const sharedHarness = createSharedHookHarness(Harness, undefined, {
+    wrapper,
+  });
 
   const mount = async () => {
     await sharedHarness.mount();

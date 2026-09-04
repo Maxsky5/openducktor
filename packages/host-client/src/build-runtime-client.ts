@@ -49,12 +49,6 @@ import {
 import type { InvokeFn } from "./invoke-utils";
 import { arrayResultSchema, booleanResultSchema, okResultSchema } from "./invoke-utils";
 import type { TaskMetadataCache } from "./task-metadata-cache";
-import { z } from "zod";
-
-const invalidStartupLeaseId = "task_session_startup_lease_prepare returned an invalid lease id.";
-const startupLeaseIdSchema = z
-  .string(invalidStartupLeaseId)
-  .refine((leaseId) => leaseId.trim().length > 0, invalidStartupLeaseId);
 
 type CodexAppServerClientRequestFor<Method extends CodexAppServerRequestMethod> = Extract<
   CodexAppServerClientRequest,
@@ -320,29 +314,6 @@ const finalizeTaskSessionBootstrap = async (
   bootstrapId: string,
 ): Promise<void> => {
   await invokeFn(command, { repoPath, taskId, bootstrapId }, booleanResultSchema);
-};
-
-const taskSessionStartupLeasePrepare = async (
-  invokeFn: InvokeFn,
-  repoPath: string,
-  taskId: string,
-  role: AgentRole,
-): Promise<string> => {
-  return invokeFn(
-    "task_session_startup_lease_prepare",
-    { repoPath, taskId, role },
-    startupLeaseIdSchema,
-  );
-};
-
-const finalizeTaskSessionStartupLease = async (
-  invokeFn: InvokeFn,
-  command: "task_session_startup_lease_complete" | "task_session_startup_lease_abort",
-  repoPath: string,
-  taskId: string,
-  leaseId: string,
-): Promise<void> => {
-  await invokeFn(command, { repoPath, taskId, leaseId }, booleanResultSchema);
 };
 
 const devServerGetState = async (
@@ -645,42 +616,6 @@ export class HostAgentClient {
       repoPath,
       taskId,
       bootstrapId,
-    );
-  }
-
-  async taskSessionStartupLeasePrepare(
-    repoPath: string,
-    taskId: string,
-    role: AgentRole,
-  ): Promise<string> {
-    return taskSessionStartupLeasePrepare(this.invokeFn, repoPath, taskId, role);
-  }
-
-  async taskSessionStartupLeaseComplete(
-    repoPath: string,
-    taskId: string,
-    leaseId: string,
-  ): Promise<void> {
-    return finalizeTaskSessionStartupLease(
-      this.invokeFn,
-      "task_session_startup_lease_complete",
-      repoPath,
-      taskId,
-      leaseId,
-    );
-  }
-
-  async taskSessionStartupLeaseAbort(
-    repoPath: string,
-    taskId: string,
-    leaseId: string,
-  ): Promise<void> {
-    return finalizeTaskSessionStartupLease(
-      this.invokeFn,
-      "task_session_startup_lease_abort",
-      repoPath,
-      taskId,
-      leaseId,
     );
   }
 

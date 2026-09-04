@@ -424,23 +424,6 @@ export class HostTaskClient {
     );
   }
 
-  async agentSessionUpsert(
-    repoPath: string,
-    taskId: string,
-    session: AgentSessionRecord,
-  ): Promise<void> {
-    await this.invokeFn(
-      "agent_session_upsert",
-      {
-        repoPath,
-        taskId,
-        session,
-      },
-      booleanResultSchema,
-    );
-    this.invalidateTaskMetadata(repoPath, taskId);
-  }
-
   async agentSessionDelete(
     repoPath: string,
     taskId: string,

@@ -144,7 +144,14 @@ export const createOpenCodeAgentEngineTestAdapter = (
   resumeSession: (input) => adapter.resumeSession(bindResumeInput(input)),
   releaseSession: (input) => adapter.releaseSession(input),
   forkSession: (input) => adapter.forkSession(bindForkInput(input)),
-  updateSessionModel: (input) => adapter.updateSessionModel(input),
+  updateSessionModel: (input) =>
+    adapter.updateSessionModel({
+      repoPath: input.repoPath,
+      runtimeKind: input.runtimeKind,
+      workingDirectory: input.workingDirectory,
+      externalSessionId: input.externalSessionId,
+      model: input.model,
+    }),
   sendUserMessage: (input) => adapter.sendUserMessage(bindSendInput(input)),
   stopSession: (input) => adapter.stopSession(input),
   loadSessionHistory: (input) => adapter.loadSessionHistory(bindPolicyInput(input)),

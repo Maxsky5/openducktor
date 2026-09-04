@@ -29,12 +29,10 @@ describe("agent-orchestrator session transcript events", () => {
     const sessionsRef = createSessionsRef([buildSession({ status: "starting" })]);
     const todosRecorder = createRecordingSessionTodosUpdater();
     let updateSessionCalls = 0;
-    const updateSessionOptions: Array<Parameters<SessionUpdateFn>[2]> = [];
 
     const applySessionUpdate = createSessionUpdater(sessionsRef);
-    const updateSession: SessionUpdateFn = (identity, updater, options) => {
+    const updateSession: SessionUpdateFn = (identity, updater) => {
       updateSessionCalls += 1;
-      updateSessionOptions.push(options);
       return applySessionUpdate(identity, updater);
     };
 
@@ -80,7 +78,6 @@ describe("agent-orchestrator session transcript events", () => {
     unsubscribe();
 
     expect(updateSessionCalls).toBe(1);
-    expect(updateSessionOptions).toEqual([undefined]);
     expect(findSession(sessionsRef, "session-1")?.status).toBe("running");
     expect(getSessionMessages(sessionsRef)).toEqual([]);
     expect(todosRecorder.getTodos()).toEqual([

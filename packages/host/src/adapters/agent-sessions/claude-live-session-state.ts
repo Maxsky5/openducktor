@@ -10,6 +10,7 @@ import {
   isAgentSessionTranscriptEventType,
 } from "@openducktor/contracts";
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
+import type { AgentSessionSummary } from "@openducktor/core";
 import type {
   AgentSessionLiveAdapterChange,
   AgentSessionLiveAdapterMutation,
@@ -157,14 +158,13 @@ export const createClaudeLiveSessionState = ({
     ref: AgentSessionLiveRef,
     timestamp: string,
   ): AgentSessionLiveSnapshot => {
-    const retained = readSnapshot(ref);
-    if (retained) {
-      return retained;
+    const current = readSnapshot(ref);
+    if (current) {
+      return current;
     }
     const isRoot = ref.externalSessionId === session.externalSessionId;
     const snapshot: AgentSessionLiveSnapshot = {
       ref,
-      sessionAssociation: session.summary.sessionAssociation,
       activity: session.activity === "idle" ? "idle" : "running",
       title: isRoot ? (session.summary.title ?? "Claude session") : "Claude subagent",
       startedAt: isRoot ? session.startedAt : timestamp,
@@ -172,6 +172,9 @@ export const createClaudeLiveSessionState = ({
       pendingQuestions: [],
       contextUsage: null,
     };
+    if (session.summary.sessionAssociation.kind === "repository") {
+      snapshot.repositoryScope = session.summary.sessionAssociation;
+    }
     if (!isRoot) {
       snapshot.parentExternalSessionId = session.externalSessionId;
     }
@@ -434,10 +437,9 @@ export const createClaudeLiveSessionState = ({
     },
     contextRevision: (ref: AgentSessionLiveRef): number =>
       contextRevisionsByRef.get(refKey(ref)) ?? 0,
-    listRetainedSnapshots: (repoPath: string): AgentSessionLiveSnapshot[] =>
+    listSnapshots: (repoPath: string): AgentSessionLiveSnapshot[] =>
       repoPath === runtime.repoPath ? [...snapshotsByRef.values()].map(cloneSnapshot) : [],
-    matches: (ref: AgentSessionLiveRef): boolean => snapshotsByRef.has(refKey(ref)),
-    readRetainedSnapshot: (ref: AgentSessionLiveRef) => {
+    readSnapshot: (ref: AgentSessionLiveRef) => {
       const snapshot = readSnapshot(ref);
       return snapshot
         ? ({ type: "live", session: cloneSnapshot(snapshot) } as const)
@@ -455,11 +457,11 @@ export const createClaudeLiveSessionState = ({
       retiredSessionKeys.delete(refKey(ref));
     },
     removeSession: removeSessionTree,
-    retainControlSummary: (
-      summary: AgentSessionControlSummary,
+    applyControlSummary: (
+      summary: AgentSessionSummary,
       options: {
         readonly parentExternalSessionId?: string;
-        readonly preserveRetainedActivity?: boolean;
+        readonly keepActivity?: boolean;
       } = {},
     ): AgentSessionLiveAdapterChange[] => {
       const ref: AgentSessionLiveRef = {
@@ -472,12 +474,11 @@ export const createClaudeLiveSessionState = ({
       retiredSessionKeys.delete(key);
       const current = readSnapshot(ref);
       let activity = activityForSummary(summary.status);
-      if (options.preserveRetainedActivity && current) {
+      if (options.keepActivity && current) {
         activity = current.activity;
       }
       const nextSnapshot: AgentSessionLiveSnapshot = {
         ref,
-        sessionAssociation: summary.sessionAssociation,
         activity,
         title: summary.title ?? current?.title ?? "Claude session",
         startedAt: summary.startedAt,
@@ -485,6 +486,9 @@ export const createClaudeLiveSessionState = ({
         pendingQuestions: current?.pendingQuestions ?? [],
         contextUsage: current?.contextUsage ?? null,
       };
+      if (summary.sessionAssociation.kind === "repository") {
+        nextSnapshot.repositoryScope = summary.sessionAssociation;
+      }
       if (options.parentExternalSessionId) {
         nextSnapshot.parentExternalSessionId = options.parentExternalSessionId;
       }

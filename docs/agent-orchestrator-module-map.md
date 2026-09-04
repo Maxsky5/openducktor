@@ -98,6 +98,11 @@ Files:
 
 Owns:
 
+- projecting runtime metadata onto roots registered by OpenDucktor and descendants observed through their event lineage
+- applying workflow ownership only from durable task session records or an explicit local start registration
+
+Invariant: live runtime state cannot create a root session. A root enters the renderer collection only through an OpenDucktor start registration or a durable task session record. Live state may update that root and add a descendant only when its parent already exists in the collection.
+
 - consuming query-backed durable task session records for the active task set
 - observing the generic host live-event transport before requesting a repository refresh
 - accepting the repository snapshot as the first item for each initial load or reconnect
@@ -227,8 +232,8 @@ Files:
 Owns:
 
 - requesting generic host context loading when the selected live session has no
-  retained usage and the runtime is ready
-- leaving retained context usage on the live snapshot fast path
+  context usage and the runtime is ready
+- leaving current context usage on the live snapshot fast path
 
 Invariant: context recovery is explicit and session-scoped. The frontend does not
 know whether an adapter performs a native read or a Codex resume with turns. A
@@ -755,6 +760,8 @@ selected-session/new-session model fallback or runtime-kind priority rules.
 Files:
 
 - `handlers/start-session.ts`
+- `handlers/session-launch-executor.ts`
+- `handlers/start-session-workflow-launch.ts`
 - `handlers/session-actions.ts`
 - `handlers/send-agent-message.ts`
 - `handlers/stop-session.ts`
@@ -765,9 +772,12 @@ Files:
 Owns:
 
 - start, reuse, fork, send, stop, model update, permission reply, and question reply
-- persisting durable session records after starts
-- rolling back failed starts
+- asking the runtime to create a session and accepting metadata-only control results
+- registering a workflow session in the fixed order: create it in the runtime, persist its task record, then attach it to local task state
+- aborting preparation failures before host control succeeds, then keeping host-stored task sessions when later frontend work fails
 - passing route refs to listeners and context refs to runtime actions
+
+Invariant: only the explicit workflow start path may register task ownership. The runtime control result supplies metadata for the session that OpenDucktor just started; runtime events cannot create or attach an unrelated root session.
 
 Invariant: session-action availability answers whether an action is valid for
 the selected task, role, launch action, and current loaded session. It must not
@@ -885,17 +895,15 @@ model. Task-session query invalidation/refresh owns persisted session-record
 changes for UI history surfaces. Orchestrator internals must not reload the repo
 session read model for explicit start/reuse preparation; they may load exactly
 one source session through `source-session-loader.ts`.
-`useTaskSessionRecords` is the only hook that fans out per-task session-record
-queries for repo startup. `useRepoSessionReadModel` consumes that result, attaches
-to the generic host live-state stream, and owns the one collection projection/commit.
+`useTaskSessionRecords` is the only hook that fans out per-task session-record queries for repo startup. `useRepoSessionReadModel` consumes that result, attaches to the generic host live-state stream, and owns the one collection projection/commit. The host reads root references from the task store when it refreshes live runtime state.
 It must not select a runtime adapter or load transcript history. Task reset pages
 must not call a session refresh command after reset. Reset
 operations invalidate the exact task-session-record query, and the repo read
 model reacts to that owned query data.
 Live projection during repo reads splits by ownership.
-`agent-session-live-projection.ts` applies host snapshots and ordered deltas and knows nothing about tasks or records.
-`agent-session-workflow-records.ts` applies saved task-store records onto that projection: it restores past sessions, fills matching live sessions with their saved fields, and prunes a workflow session only when its task is loaded, its record is gone, it is not starting, and `liveReported` is false.
-`useRepoSessionReadModel` projects, then applies records, then commits once for snapshots, deltas, and task refreshes alike.
+`agent-session-live-projection.ts` applies host snapshots and ordered deltas and knows nothing about tasks or records. It rejects unknown roots and accepts an unknown descendant only when its declared parent is already registered.
+`agent-session-live-projection.ts` never treats runtime state as task ownership. Only the OpenDucktor start transaction or a saved task-store record can attach a session to a task. `agent-session-workflow-records.ts` restores past sessions, fills matching live sessions with their saved fields, and prunes a workflow session only when its task is loaded, its record is gone, it is not starting, and `liveReported` is false.
+`useRepoSessionReadModel` applies loaded records before and after each live projection, then commits once for snapshots, deltas, and task refreshes alike. The first record pass admits only durable OpenDucktor roots; the second restores durable workflow fields after live status is applied.
 Unloaded, failed, or stale record reads skip that step because they cannot prove deletion.
 A successful current-scope record read clears prior task-record failures only; live-stream failures recover through the stream itself.
 `liveReported` commits inside the session state; do not add a presence store beside it.
@@ -905,16 +913,15 @@ A successful current-scope record read clears prior task-record failures only; l
 1. The app loads task IDs from the task store.
 2. `use-task-session-records.ts` reads per-task session records through the
    shared task-session query keys.
-3. The renderer observes the existing generic host-event channel, then requests
-   one live-state refresh for the active repository.
-4. The refresh publishes the complete normalized host snapshot before later deltas; `buildAgentSessionLiveCollection` projects it, workflow session records apply on top, and the collection commits once.
-5. Session rows, activity, pending input, retained context usage, and sidebar
+3. The renderer observes the existing generic host-event channel, then requests one live-state refresh for the active repository. The host reads the exact roots from durable task session records.
+4. Each runtime adapter reads only those roots and their verified descendants. `buildAgentSessionLiveCollection` rejects any other root, reapplies workflow session records, and commits the collection once.
+5. Session rows, activity, pending input, current context usage, and sidebar
    counters all derive from that same committed collection.
 6. Subsequent ordered upserts, removals, transcript events, faults, and catalog
    invalidations arrive on the same generic host-event connection. On browser
    reconnect, replayed live deltas are ignored until a fresh snapshot arrives.
 7. Transcript history and missing context are independent selected-session reads.
-   Neither blocks session discovery or pending-input hydration.
+   Neither blocks registered-session projection or pending-input updates.
 
 ## Regression Anchors
 

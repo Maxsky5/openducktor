@@ -11,8 +11,8 @@ import {
 import { agentSessionQuestionItemSchema } from "./agent-session-pending-schemas";
 import {
   agentModelSelectionSchema,
-  agentSessionAssociationSchema,
   agentSessionLiveRefSchema,
+  agentSessionRepositoryScopeSchema,
   agentSessionScopeSchema,
 } from "./agent-session-schemas";
 import { slashCommandCatalogSchema } from "./slash-command-schemas";
@@ -97,7 +97,7 @@ export type AgentSessionLivePendingQuestionRequest = z.infer<
 export const agentSessionLiveSnapshotSchema = z
   .object({
     ref: agentSessionLiveRefSchema,
-    sessionAssociation: agentSessionAssociationSchema,
+    repositoryScope: agentSessionRepositoryScopeSchema.optional(),
     activity: agentSessionActivitySchema,
     title: nonEmptyStringSchema,
     startedAt: isoTimestampSchema,
@@ -202,8 +202,10 @@ export const agentSessionLiveListInputSchema = z
   .strict();
 export type AgentSessionLiveListInput = z.infer<typeof agentSessionLiveListInputSchema>;
 
-export const agentSessionLiveRefreshInputSchema = agentSessionLiveListInputSchema;
-export type AgentSessionLiveRefreshInput = AgentSessionLiveListInput;
+export const agentSessionLiveRefreshInputSchema = z
+  .object({ repoPath: nonEmptyStringSchema })
+  .strict();
+export type AgentSessionLiveRefreshInput = z.infer<typeof agentSessionLiveRefreshInputSchema>;
 
 export const agentSessionLiveReadInputSchema = agentSessionLiveRefSchema;
 export type AgentSessionLiveReadInput = z.infer<typeof agentSessionLiveReadInputSchema>;

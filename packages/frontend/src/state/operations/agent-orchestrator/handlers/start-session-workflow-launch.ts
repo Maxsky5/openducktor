@@ -5,7 +5,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { EnsureRuntimeOptions, RuntimeInfo } from "../runtime/runtime";
 import { readFreshSessionRuntimeKind } from "../support/session-runtime-kind";
 import type { PreparedSessionLaunch } from "./prepared-session-launch";
-import type { PreparedSessionLaunchCommitInput } from "./session-launch-executor";
+import type { PreparedSessionRegistrationInput } from "./session-launch-executor";
 import type {
   StartAgentSessionInput,
   StartSessionContext,
@@ -13,13 +13,7 @@ import type {
   StartedSessionContext,
 } from "./start-session.types";
 import { STALE_START_ERROR } from "./start-session-constants";
-import { acquireTaskSessionStartupLease } from "./task-session-startup-lease";
-import { persistInitialSession } from "./start-session-local-state";
-import {
-  rollbackBootstrapAfterStartFailure,
-  rollbackRegisteredStartedSession,
-  rollbackStartedSessionAfterPersistenceFailure,
-} from "./start-session-rollback";
+import { stopStoredWorkflowSessionAfterLaunchFailure } from "./start-session-rollback";
 import { loadStartSystemPrompt } from "./start-session-runtime";
 import { resolveStartTask } from "./start-session-policies";
 import { resolveLoadedSourceSession } from "./start-session-reuse-strategy";
@@ -103,7 +97,10 @@ const readForkSourceRuntime = (sourceSession: AgentSessionState) => {
     );
   }
 
-  return { runtimeKind: sourceSession.runtimeKind, workingDirectory: sourceWorkingDirectory };
+  return {
+    runtimeKind: sourceSession.runtimeKind,
+    workingDirectory: sourceWorkingDirectory,
+  };
 };
 
 export const prepareWorkflowForkLaunch = async ({
@@ -116,68 +113,55 @@ export const prepareWorkflowForkLaunch = async ({
   deps: StartSessionExecutionDependencies;
 }): Promise<WorkflowPreparedLaunch> => {
   const taskCard = resolveStartTask({ ctx, task: deps.task });
-  const lease = await acquireTaskSessionStartupLease({
-    repoPath: ctx.repoPath,
-    taskId: ctx.taskId,
-    role: ctx.role,
-    prepare: deps.runtime.prepareTaskSessionStartupLease,
-    complete: deps.runtime.completeTaskSessionStartupLease,
-    abort: deps.runtime.abortTaskSessionStartupLease,
+  const sourceSession = await resolveLoadedSourceSession({
+    ctx,
+    deps,
+    sourceSession: input.sourceSession,
   });
-  try {
-    const sourceSession = await resolveLoadedSourceSession({
-      ctx,
-      deps,
-      sourceSession: input.sourceSession,
-    });
-    const { runtimeKind: sourceRuntimeKind, workingDirectory } =
-      readForkSourceRuntime(sourceSession);
-    const [canonicalWorkingDirectory, canonicalRepoPath] = await Promise.all([
-      deps.runtime.canonicalizePath(workingDirectory),
-      deps.runtime.canonicalizePath(ctx.repoPath),
-    ]);
-    if (
-      normalizeWorkingDirectory(canonicalWorkingDirectory) ===
-      normalizeWorkingDirectory(canonicalRepoPath)
-    ) {
-      throw new Error(
-        `Session "${sourceSession.externalSessionId}" is a legacy repository-root task session and cannot be forked. Start a fresh session in the task worktree instead.`,
-      );
-    }
-
-    const selectedModel = input.selectedModel;
-    if (selectedModel.runtimeKind && sourceRuntimeKind !== selectedModel.runtimeKind) {
-      throw new Error(
-        `Session "${input.sourceSession.externalSessionId}" cannot be forked with runtime "${selectedModel.runtimeKind}" because it belongs to runtime "${sourceRuntimeKind}".`,
-      );
-    }
-
-    const systemPrompt = await loadStartSystemPrompt({
-      ctx,
-      taskCard,
-      deps,
-    });
-
-    return {
-      launch: {
-        mode: "fork",
-        repoPath: ctx.repoPath,
-        runtimeKind: sourceRuntimeKind,
-        workingDirectory,
-        sessionAssociation: toWorkflowAssociation(ctx),
-        systemPrompt,
-        parentExternalSessionId: sourceSession.externalSessionId,
-        selectedModel,
-        holdForPostStartMessage: ctx.holdForPostStartMessage,
-      },
-      bootstrap: lease.bootstrap,
-    };
-  } catch (cause) {
-    return rollbackBootstrapAfterStartFailure({ cause, bootstrap: lease.bootstrap });
+  const { runtimeKind: sourceRuntimeKind, workingDirectory } = readForkSourceRuntime(sourceSession);
+  const [canonicalWorkingDirectory, canonicalRepoPath] = await Promise.all([
+    deps.runtime.canonicalizePath(workingDirectory),
+    deps.runtime.canonicalizePath(ctx.repoPath),
+  ]);
+  if (
+    normalizeWorkingDirectory(canonicalWorkingDirectory) ===
+    normalizeWorkingDirectory(canonicalRepoPath)
+  ) {
+    throw new Error(
+      `Session "${sourceSession.externalSessionId}" is a legacy repository-root task session and cannot be forked. Start a fresh session in the task worktree instead.`,
+    );
   }
+
+  const selectedModel = input.selectedModel;
+  if (selectedModel.runtimeKind && sourceRuntimeKind !== selectedModel.runtimeKind) {
+    throw new Error(
+      `Session "${input.sourceSession.externalSessionId}" cannot be forked with runtime "${selectedModel.runtimeKind}" because it belongs to runtime "${sourceRuntimeKind}".`,
+    );
+  }
+
+  const systemPrompt = await loadStartSystemPrompt({
+    ctx,
+    taskCard,
+    deps,
+  });
+
+  return {
+    launch: {
+      mode: "fork",
+      repoPath: ctx.repoPath,
+      runtimeKind: sourceRuntimeKind,
+      workingDirectory,
+      sessionAssociation: toWorkflowAssociation(ctx),
+      systemPrompt,
+      parentExternalSessionId: sourceSession.externalSessionId,
+      selectedModel,
+      holdForPostStartMessage: ctx.holdForPostStartMessage,
+    },
+    bootstrap: undefined,
+  };
 };
 
-export const commitWorkflowSessionLaunch = async ({
+export const registerWorkflowSessionLaunch = async ({
   bootstrap,
   ctx,
   summary,
@@ -185,81 +169,69 @@ export const commitWorkflowSessionLaunch = async ({
   sessionState,
   isStaleOperation,
   deps,
-}: PreparedSessionLaunchCommitInput & {
+}: PreparedSessionRegistrationInput & {
   bootstrap: RuntimeInfo["bootstrap"];
   ctx: StartSessionContext;
-  deps: Pick<StartSessionExecutionDependencies, "session" | "runtime">;
+  deps: Pick<StartSessionExecutionDependencies, "session" | "runtime" | "task">;
 }): Promise<void> => {
   const startedCtx: StartedSessionContext = { ...ctx, summary };
 
   if (isStaleOperation()) {
     const cause = new Error(STALE_START_ERROR);
-    const rollbackInput: Parameters<typeof rollbackRegisteredStartedSession>[0] = {
+    const cleanupInput: Parameters<typeof stopStoredWorkflowSessionAfterLaunchFailure>[0] = {
       message: STALE_START_ERROR,
       cause,
       startedCtx,
       identity,
-      session: deps.session,
+      readSessionSnapshot: deps.session.readSessionSnapshot,
+      replaceSession: deps.session.replaceSession,
+      clearSessionObservationState: deps.session.clearSessionObservationState,
       runtime: deps.runtime,
-      stopReason: "start-session-stop-on-stale-before-persist",
-      durableRecordExists: false,
+      stopReason: "start-session-stop-on-stale-before-attach",
     };
     if (bootstrap) {
-      rollbackInput.bootstrap = bootstrap;
+      cleanupInput.bootstrapToComplete = bootstrap;
     }
-    await rollbackRegisteredStartedSession(rollbackInput);
-  }
-
-  try {
-    await persistInitialSession({
-      initialSession: sessionState,
-      session: deps.session,
-      tags: {
-        repoPath: startedCtx.repoPath,
-        taskId: startedCtx.taskId,
-        role: startedCtx.role,
-        externalSessionId: startedCtx.summary.externalSessionId,
-      },
-    });
-  } catch (error) {
-    const rollbackInput: Parameters<typeof rollbackStartedSessionAfterPersistenceFailure>[0] = {
-      error,
-      startedCtx,
-      session: deps.session,
-      runtime: deps.runtime,
-    };
-    if (bootstrap) {
-      rollbackInput.bootstrap = bootstrap;
-    }
-    await rollbackStartedSessionAfterPersistenceFailure(rollbackInput);
+    await stopStoredWorkflowSessionAfterLaunchFailure(cleanupInput);
   }
 
   let bootstrapCompletionAttempted = false;
-  let bootstrapCompleted = false;
   try {
     if (isStaleOperation()) {
       throw new Error(STALE_START_ERROR);
     }
+    await deps.task.refreshSessionRecords(ctx.repoPath, ctx.taskId);
+    if (isStaleOperation()) {
+      throw new Error(STALE_START_ERROR);
+    }
+    try {
+      deps.session.replaceSession(sessionState);
+    } catch (cause) {
+      throw new Error(
+        `Failed to attach stored session "${identity.externalSessionId}" to task "${ctx.taskId}": ${errorMessage(cause)}.`,
+        cause instanceof Error ? { cause } : undefined,
+      );
+    }
     bootstrapCompletionAttempted = !!bootstrap;
     await bootstrap?.complete();
-    bootstrapCompleted = !!bootstrap;
     if (isStaleOperation()) {
       throw new Error(STALE_START_ERROR);
     }
   } catch (cause) {
-    const rollbackInput: Parameters<typeof rollbackRegisteredStartedSession>[0] = {
+    const cleanupInput: Parameters<typeof stopStoredWorkflowSessionAfterLaunchFailure>[0] = {
       message: cause instanceof Error ? cause.message : String(cause),
       cause,
       startedCtx,
       identity,
-      session: deps.session,
+      readSessionSnapshot: deps.session.readSessionSnapshot,
+      replaceSession: deps.session.replaceSession,
+      clearSessionObservationState: deps.session.clearSessionObservationState,
       runtime: deps.runtime,
       stopReason: "start-session-stop-after-bootstrap-failure",
     };
-    if (bootstrap && !bootstrapCompleted) {
-      rollbackInput.bootstrap = bootstrap;
-      rollbackInput.commitBootstrapOnDeleteFailure = !bootstrapCompletionAttempted;
+    if (bootstrap && !bootstrapCompletionAttempted) {
+      cleanupInput.bootstrapToComplete = bootstrap;
     }
-    await rollbackRegisteredStartedSession(rollbackInput);
+    await stopStoredWorkflowSessionAfterLaunchFailure(cleanupInput);
   }
 };

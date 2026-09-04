@@ -124,7 +124,6 @@ describe("use-agent-orchestrator-operations session state", () => {
     let sendCalls = 0;
 
     const originalAgentSessionsList = host.agentSessionsList;
-    const originalAgentSessionUpsert = host.agentSessionUpsert;
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
@@ -136,7 +135,6 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
     host.agentSessionsList = async () => [persistedSessionFixture];
-    host.agentSessionUpsert = async () => {};
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
@@ -253,7 +251,6 @@ describe("use-agent-orchestrator-operations session state", () => {
       await harness.unmount();
 
       host.agentSessionsList = originalAgentSessionsList;
-      host.agentSessionUpsert = originalAgentSessionUpsert;
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
@@ -271,7 +268,6 @@ describe("use-agent-orchestrator-operations session state", () => {
     let startWorkingDirectory = "";
 
     const originalAgentSessionsList = host.agentSessionsList;
-    const originalAgentSessionUpsert = host.agentSessionUpsert;
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
@@ -282,7 +278,6 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
 
     host.agentSessionsList = async () => [];
-    host.agentSessionUpsert = async () => {};
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
@@ -338,7 +333,6 @@ describe("use-agent-orchestrator-operations session state", () => {
       dependencies: createTestDependencies(
         {
           agentSessionsList: async () => [],
-          agentSessionUpsert: async () => undefined,
         },
         { taskSessionBootstrapPrepare },
       ),
@@ -362,7 +356,6 @@ describe("use-agent-orchestrator-operations session state", () => {
       await harness.unmount();
 
       host.agentSessionsList = originalAgentSessionsList;
-      host.agentSessionUpsert = originalAgentSessionUpsert;
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
@@ -409,7 +402,6 @@ describe("use-agent-orchestrator-operations session state", () => {
         agentSessionsListForTasks: async () => [
           { taskId: "task-1", agentSessions: [persistedSessionFixture] },
         ],
-        agentSessionUpsert: async () => {},
       }),
     });
 
@@ -445,7 +437,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     }
   });
 
-  test("persists explicit session model updates through the orchestrator commit boundary", async () => {
+  test("updates local state after the host accepts a model update", async () => {
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
@@ -454,8 +446,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
-    const upsertedRecords: unknown[] = [];
-    let storedSession = structuredClone(persistedSessionFixture);
+    const storedSession = structuredClone(persistedSessionFixture);
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
@@ -480,10 +471,6 @@ describe("use-agent-orchestrator-operations session state", () => {
           agentSessionsListForTasks: async () => [
             { taskId: "task-1", agentSessions: [storedSession] },
           ],
-          agentSessionUpsert: async (_repoPath, _taskId, record) => {
-            upsertedRecords.push(record);
-            storedSession = record;
-          },
         },
         {},
         liveStream.portOverrides,
@@ -516,14 +503,6 @@ describe("use-agent-orchestrator-operations session state", () => {
         (entry) => entry.externalSessionId === "external-1",
       );
       expect(updatedSession?.selectedModel).toEqual(BUILD_SELECTION);
-      expect(upsertedRecords).toEqual([
-        expect.objectContaining({
-          externalSessionId: "external-1",
-          runtimeKind: "opencode",
-          workingDirectory: "/tmp/repo/worktree",
-          selectedModel: BUILD_SELECTION,
-        }),
-      ]);
     } finally {
       await harness.unmount();
       host.specGet = originalSpecGet;
@@ -600,7 +579,6 @@ describe("use-agent-orchestrator-operations session state", () => {
             ],
           },
         ],
-        agentSessionUpsert: async () => {},
       }),
     });
 
@@ -730,7 +708,6 @@ describe("use-agent-orchestrator-operations session state", () => {
 
   test("uses the host live snapshot when persisted records omit status", async () => {
     const originalAgentSessionsList = host.agentSessionsList;
-    const originalAgentSessionUpsert = host.agentSessionUpsert;
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
@@ -739,7 +716,6 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
     host.agentSessionsList = async () => [persistedSessionFixture];
-    host.agentSessionUpsert = async () => {};
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
@@ -791,7 +767,6 @@ describe("use-agent-orchestrator-operations session state", () => {
     } finally {
       await harness.unmount();
       host.agentSessionsList = originalAgentSessionsList;
-      host.agentSessionUpsert = originalAgentSessionUpsert;
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
@@ -899,7 +874,6 @@ describe("use-agent-orchestrator-operations session state", () => {
 
   test("attaches idle host live sessions without resuming them on repo refresh", async () => {
     const originalAgentSessionsList = host.agentSessionsList;
-    const originalAgentSessionUpsert = host.agentSessionUpsert;
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
@@ -910,7 +884,6 @@ describe("use-agent-orchestrator-operations session state", () => {
     let resumeCalls = 0;
 
     host.agentSessionsList = async () => [persistedSessionFixture];
-    host.agentSessionUpsert = async () => {};
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
@@ -960,7 +933,6 @@ describe("use-agent-orchestrator-operations session state", () => {
     } finally {
       await harness.unmount();
       host.agentSessionsList = originalAgentSessionsList;
-      host.agentSessionUpsert = originalAgentSessionUpsert;
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;

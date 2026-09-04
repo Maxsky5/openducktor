@@ -9,12 +9,14 @@ import type {
   StartAgentSessionInput,
   UpdateAgentSessionModelInput,
 } from "@openducktor/core";
+import {
+  applyOpencodeAwaitingTurnStartToRuntimeSnapshot,
+  listOpencodeRuntimeSnapshotSources,
+  type OpencodeRuntimeSnapshotRead,
+} from "./live-session-snapshots";
+import { readSessionLifecycleEvent } from "./event-stream/shared";
 import type { ParsedOpencodeEvent as Event } from "./opencode-global-event-ingress";
 import { buildDefaultFactory, nowIso } from "./client-factory";
-import {
-  listOpencodeRuntimeSnapshotSources,
-  type OpencodeRuntimeSnapshotSource,
-} from "./live-session-snapshots";
 import { OpencodeSdkAdapter } from "./opencode-sdk-adapter";
 import {
   type OpencodeNativeApprovalReply,
@@ -23,12 +25,8 @@ import {
   replyToOpencodeApproval,
   replyToOpencodeQuestion,
 } from "./opencode-session-native-operations";
+import { readOpencodeSessionContextSignal } from "./opencode-agent-session-projection";
 import {
-  opencodeEventInvalidatesSessions,
-  readOpencodeSessionContextSignal,
-} from "./opencode-agent-session-projection";
-import {
-  isOpencodeSessionTranscriptEvent,
   type OpencodeSessionContextUsage,
   type OpencodeSessionRuntimeSignal,
   toOpencodeObservationFailureMessage,
@@ -55,7 +53,7 @@ export type {
 } from "./opencode-session-native-operations";
 
 export type OpencodeSessionRuntimeConnection = {
-  readonly readSessionSources: () => Promise<OpencodeRuntimeSnapshotSource[]>;
+  readonly readSessionSources: () => Promise<OpencodeRuntimeSnapshotRead>;
   readonly loadContextUsage: (ref: SessionRef) => Promise<OpencodeSessionContextUsage | null>;
   readonly replyApproval: (input: OpencodeNativeApprovalReply) => Promise<void>;
   readonly replyQuestion: (input: OpencodeNativeQuestionReply) => Promise<void>;
@@ -70,8 +68,6 @@ export type OpencodeSessionRuntimeConnection = {
 
 export type PreparedOpencodeSessionRuntime = {
   readonly connection: OpencodeSessionRuntimeConnection;
-  readonly initialSources: OpencodeRuntimeSnapshotSource[];
-  readonly initialContextUsageBySessionId: ReadonlyMap<string, OpencodeSessionContextUsage>;
   readonly startForwarding: (
     listener: (signal: OpencodeSessionRuntimeSignal) => void | Promise<void>,
   ) => Promise<void>;
@@ -168,10 +164,9 @@ export const createPrepareOpencodeSessionRuntime = (
       { sessions: eventSessions, runtimeEventTransports },
     );
     const pendingSignals: OpencodeSessionRuntimeSignal[] = [];
-    const pendingTranscriptSignals: OpencodeSessionRuntimeSignal[] = [];
+    const pendingSessionSignals: OpencodeSessionRuntimeSignal[] = [];
     const eventsBeforeSubscribers: Event[] = [];
     const initializationEvents: Event[] = [];
-    const contextUsageBySessionId = new Map<string, OpencodeSessionContextUsage>();
     let forwardingListener:
       | ((signal: OpencodeSessionRuntimeSignal) => void | Promise<void>)
       | null = null;
@@ -204,35 +199,53 @@ export const createPrepareOpencodeSessionRuntime = (
       await delivery;
     };
 
-    const drainTranscriptSignals = async (): Promise<void> => {
-      while (pendingTranscriptSignals.length > 0) {
-        const signal = pendingTranscriptSignals.shift();
+    const drainSessionSignals = async (): Promise<void> => {
+      while (pendingSessionSignals.length > 0) {
+        const signal = pendingSessionSignals.shift();
         if (signal) {
           await emitSignal(signal);
         }
       }
     };
 
-    const captureContext = (event: Event): void => {
-      const contextSignal = readOpencodeSessionContextSignal(event);
-      if (contextSignal) {
-        contextUsageBySessionId.set(contextSignal.externalSessionId, contextSignal.contextUsage);
+    const belongsToRegisteredRoot = (
+      externalSessionId: string,
+      parentExternalSessionId?: string,
+    ): boolean => {
+      const eventTransport = runtimeEventTransports.get(input.runtimeId);
+      let currentId: string | undefined = externalSessionId;
+      let parentId = parentExternalSessionId;
+      const visited = new Set<string>();
+      while (currentId && !visited.has(currentId)) {
+        visited.add(currentId);
+        if (eventSessions.has(currentId)) {
+          return true;
+        }
+        const nextId: string | undefined =
+          parentId ??
+          eventTransport?.parentExternalSessionIdByChildExternalSessionId.get(currentId);
+        currentId = nextId;
+        parentId = undefined;
       }
+      return false;
     };
 
-    const forwardEventSignals = async (event: Event): Promise<void> => {
-      await drainTranscriptSignals();
-      const contextSignal = readOpencodeSessionContextSignal(event);
-      if (contextSignal) {
-        contextUsageBySessionId.set(contextSignal.externalSessionId, contextSignal.contextUsage);
-        await emitSignal(contextSignal);
+    const syncEventSessions = async (
+      { sources, failures }: OpencodeRuntimeSnapshotRead,
+      sessionsAtReadStart: ReadonlyMap<string, SessionRecord>,
+    ): Promise<void> => {
+      const sourceIds = new Set([
+        ...sources.map((source) => source.externalSessionId),
+        ...failures.map((failure) => failure.externalSessionId),
+      ]);
+      for (const session of sessionsAtReadStart.values()) {
+        if (
+          !sourceIds.has(session.externalSessionId) &&
+          eventSessions.get(session.externalSessionId) === session
+        ) {
+          await releaseSessionRuntime(session, eventSessions, runtimeEventTransports);
+        }
       }
-      if (opencodeEventInvalidatesSessions(event)) {
-        await emitSignal({ type: "sessions_invalidated" });
-      }
-    };
-
-    const syncEventSessions = async (sources: OpencodeRuntimeSnapshotSource[]): Promise<void> => {
       for (const source of sources) {
         const existing = eventSessions.get(source.externalSessionId);
         if (existing?.input.workingDirectory === source.workingDirectory) {
@@ -263,14 +276,8 @@ export const createPrepareOpencodeSessionRuntime = (
           startedAt: source.startedAt,
           emitStartedEvent: false,
           now,
-          emit: (_externalSessionId, event) => {
-            if (isOpencodeSessionTranscriptEvent(event)) {
-              pendingTranscriptSignals.push({
-                type: "transcript_event",
-                externalSessionId: source.externalSessionId,
-                event,
-              });
-            }
+          emit: (externalSessionId, event) => {
+            pendingSessionSignals.push({ type: "session_event", externalSessionId, event });
           },
         };
         if (adapterOptions.logEvent) {
@@ -281,9 +288,10 @@ export const createPrepareOpencodeSessionRuntime = (
     };
 
     let readSessionSourcesTail = Promise.resolve();
-    const readSessionSources = (): Promise<OpencodeRuntimeSnapshotSource[]> => {
+    const readSessionSources = (): Promise<OpencodeRuntimeSnapshotRead> => {
       const read = readSessionSourcesTail.then(async () => {
         requireActive();
+        const sessionsAtReadStart = new Map(eventSessions);
         const snapshotInput: Parameters<typeof listOpencodeRuntimeSnapshotSources>[0] = {
           createClient,
           runtimeEndpoint: input.runtimeEndpoint,
@@ -293,27 +301,60 @@ export const createPrepareOpencodeSessionRuntime = (
         if (input.directories) {
           snapshotInput.directories = input.directories;
         }
-        const sources = await listOpencodeRuntimeSnapshotSources(snapshotInput);
+        const result = await listOpencodeRuntimeSnapshotSources(snapshotInput);
         requireActive();
-        await syncEventSessions(sources);
+        await syncEventSessions(result, sessionsAtReadStart);
         requireActive();
-        return sources.map((source) => {
-          if (source.sessionAssociation.kind !== "unbound") {
-            return source;
-          }
-          const retainedAssociation = eventSessions.get(source.externalSessionId)?.summary
-            .sessionAssociation;
-          if (!retainedAssociation || retainedAssociation.kind === "unbound") {
-            return source;
-          }
-          return { ...source, sessionAssociation: retainedAssociation };
-        });
+        return {
+          ...result,
+          sources: result.sources.map((source) => {
+            const withActivity = applyOpencodeAwaitingTurnStartToRuntimeSnapshot({
+              sessions: eventSessions,
+              runtimeId: input.runtimeId,
+              snapshot: source,
+            });
+            if (withActivity.sessionAssociation.kind !== "unbound") {
+              return withActivity;
+            }
+            const sessionAssociation = eventSessions.get(source.externalSessionId)?.summary
+              .sessionAssociation;
+            if (sessionAssociation?.kind !== "repository") {
+              return withActivity;
+            }
+            return { ...withActivity, sessionAssociation };
+          }),
+        };
       });
       readSessionSourcesTail = read.then(
         () => undefined,
         () => undefined,
       );
       return read;
+    };
+
+    const forwardEventSignals = async (event: Event): Promise<void> => {
+      await drainSessionSignals();
+      const lifecycleEvent = readSessionLifecycleEvent(event);
+      if (
+        lifecycleEvent?.type === "session.deleted" &&
+        belongsToRegisteredRoot(
+          lifecycleEvent.externalSessionId,
+          lifecycleEvent.parentExternalSessionId,
+        )
+      ) {
+        const session = eventSessions.get(lifecycleEvent.externalSessionId);
+        if (session) {
+          await releaseSessionRuntime(session, eventSessions, runtimeEventTransports);
+        }
+        await emitSignal({
+          type: "session_removed",
+          externalSessionId: lifecycleEvent.externalSessionId,
+        });
+      }
+      const contextSignal = readOpencodeSessionContextSignal(event);
+      if (contextSignal && belongsToRegisteredRoot(contextSignal.externalSessionId)) {
+        await emitSignal(contextSignal);
+      }
     };
 
     const observationInput: Parameters<typeof observeRuntimeEvents>[0] = {
@@ -324,9 +365,7 @@ export const createPrepareOpencodeSessionRuntime = (
       sessions: eventSessions,
       now,
       emit: (externalSessionId, event: AgentEvent) => {
-        if (isOpencodeSessionTranscriptEvent(event)) {
-          pendingTranscriptSignals.push({ type: "transcript_event", externalSessionId, event });
-        }
+        pendingSessionSignals.push({ type: "session_event", externalSessionId, event });
       },
       observer: async (event) => {
         if (initializing) {
@@ -349,40 +388,20 @@ export const createPrepareOpencodeSessionRuntime = (
     }
     const observation = await observeRuntimeEvents(observationInput);
 
-    const initialize = async (): Promise<OpencodeRuntimeSnapshotSource[]> => {
-      let initialSources = await readSessionSources();
+    const initialize = async (): Promise<void> => {
       subscribersReady = true;
       for (const event of eventsBeforeSubscribers.splice(0)) {
         await observation.dispatch(event);
         requireActive();
       }
-      const capturedEvents = initializationEvents.splice(0);
-      for (const event of capturedEvents) {
-        captureContext(event);
-      }
-      if (capturedEvents.some(opencodeEventInvalidatesSessions)) {
-        initialSources = await readSessionSources();
-      }
-      const eventsDuringFinalRead = initializationEvents.splice(0);
-      for (const event of eventsDuringFinalRead) {
-        captureContext(event);
-      }
-      await drainTranscriptSignals();
+      initializationEvents.length = 0;
+      await drainSessionSignals();
       requireActive();
-      if (eventsDuringFinalRead.some(opencodeEventInvalidatesSessions)) {
-        pendingSignals.push({ type: "sessions_invalidated" });
-      }
       initializing = false;
-      return initialSources;
     };
 
-    let initialSources: OpencodeRuntimeSnapshotSource[];
     try {
-      initialSources = await waitForRuntimeInitialization(
-        initialize(),
-        input.signal,
-        input.runtimeId,
-      );
+      await waitForRuntimeInitialization(initialize(), input.signal, input.runtimeId);
     } catch (error) {
       released = true;
       const cleanupFailures: unknown[] = [];
@@ -468,10 +487,9 @@ export const createPrepareOpencodeSessionRuntime = (
       } finally {
         eventSessions.clear();
         pendingSignals.length = 0;
-        pendingTranscriptSignals.length = 0;
+        pendingSessionSignals.length = 0;
         eventsBeforeSubscribers.length = 0;
         initializationEvents.length = 0;
-        contextUsageBySessionId.clear();
       }
       if (failures.length > 0) {
         throw new AggregateError(
@@ -485,8 +503,6 @@ export const createPrepareOpencodeSessionRuntime = (
 
     return {
       connection,
-      initialSources,
-      initialContextUsageBySessionId: new Map(contextUsageBySessionId),
       startForwarding,
       release,
     };

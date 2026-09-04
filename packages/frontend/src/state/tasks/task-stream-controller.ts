@@ -1,6 +1,7 @@
 import type { TaskEventCursor } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import type { TaskStreamFrame, TaskStreamSubscription } from "@/lib/shell-bridge";
+import type { AgentSessionViewSync } from "@/state/queries/agent-session-view-sync";
 import type { TaskViewSync } from "@/state/queries/task-view-sync";
 
 type TaskStreamTransport = {
@@ -35,12 +36,14 @@ export const createTaskStreamController = ({
   transport,
   metadata,
   taskViewSync,
+  agentSessionViewSync,
   getActiveRepoPath,
   onDegraded,
 }: {
   transport: TaskStreamTransport;
   metadata: TaskMetadataReconciler;
   taskViewSync: TaskViewSync;
+  agentSessionViewSync: AgentSessionViewSync;
   getActiveRepoPath: () => string | null;
   onDegraded: (cause: unknown) => void;
 }): TaskStreamController => {
@@ -136,7 +139,10 @@ export const createTaskStreamController = ({
     frameGeneration: number,
   ): Promise<boolean> => {
     metadata.reconcileExternalTaskSyncEvent(frame.event);
-    await taskViewSync.reconcileExternalEvent(frame.event, getActiveRepoPath());
+    await Promise.all([
+      taskViewSync.reconcileExternalEvent(frame.event, getActiveRepoPath()),
+      agentSessionViewSync.reconcileExternalEvent(frame.event),
+    ]);
     if (!isActive(owner, frameGeneration)) return false;
     processedCursor = frame.cursor;
     return acknowledge(owner, frame.cursor, frameGeneration);
@@ -148,7 +154,9 @@ export const createTaskStreamController = ({
     frameGeneration: number,
   ): Promise<boolean> => {
     metadata.invalidateAllTaskMetadata();
-    await taskViewSync.reconcileStreamSnapshot(getActiveRepoPath());
+    const activeRepoPath = getActiveRepoPath();
+    await taskViewSync.reconcileStreamSnapshot(activeRepoPath);
+    await agentSessionViewSync.reconcileStreamSnapshot(activeRepoPath);
     if (!isActive(owner, frameGeneration)) return false;
     processedCursor = frame.cursor;
     return acknowledge(owner, frame.cursor, frameGeneration);

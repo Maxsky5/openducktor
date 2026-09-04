@@ -134,21 +134,18 @@ export const resolveOpencodePolicyBoundSession = (input: {
   action: string;
   bindSession: () => Promise<SessionRecord>;
   request: PolicyBoundSessionRef;
-  retainedSession: SessionRecord | undefined;
+  session: SessionRecord | undefined;
 }): SessionRecord | Promise<SessionRecord> => {
-  const { request, retainedSession } = input;
-  if (
-    !retainedSession ||
-    (retainedSession.summary.sessionAssociation.kind === "unbound" && request.sessionScope)
-  ) {
+  const { request, session } = input;
+  if (!session || (session.summary.sessionAssociation.kind === "unbound" && request.sessionScope)) {
     return input.bindSession();
   }
-  const registeredSessionRef = opencodeSessionRef(retainedSession);
+  const registeredSessionRef = opencodeSessionRef(session);
   if (!agentSessionRefsEqual(registeredSessionRef, request)) {
     throw new Error(
       `Cannot ${input.action} OpenCode session '${request.externalSessionId}' from repo '${request.repoPath}' and working directory '${request.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
     );
   }
-  applyRuntimeContextToSession(retainedSession, request, input.action);
-  return retainedSession;
+  applyRuntimeContextToSession(session, request, input.action);
+  return session;
 };

@@ -3,12 +3,11 @@ import {
   type PrepareOpencodeSessionRuntime,
 } from "@openducktor/adapters-opencode-sdk";
 import {
-  type AgentSessionActivity,
   type AgentSessionContextUsage,
   type AgentSessionLiveLoadContextInput,
   type AgentSessionLiveRef,
-  type AgentSessionTranscriptEvent,
   agentSessionTranscriptEventSchema,
+  isAgentSessionTranscriptEventType,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -67,21 +66,6 @@ const stateEffect = <Value, Details extends object>(
         : toHostOperationError(cause, operation, details),
   });
 
-const runtimeActivityFromTranscriptEvent = (
-  event: AgentSessionTranscriptEvent,
-): AgentSessionActivity | null => {
-  if (event.type === "session_idle" || event.type === "session_error") {
-    return "idle";
-  }
-  if (event.type !== "session_status") {
-    return null;
-  }
-  if (event.status.type === "busy") {
-    return "running";
-  }
-  return event.status.type === "retry" ? "retrying" : "idle";
-};
-
 export const createOpenCodeLiveSessionAdapterPreparer = ({
   liveSessionLifecycle,
   prepareRuntime,
@@ -109,28 +93,6 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
         runtime,
         nextOccurrenceId: () => `opencode-pending-${nextOccurrence++}`,
       });
-      yield* Effect.tryPromise({
-        try: async () => {
-          try {
-            state.initialize(prepared.initialSources, prepared.initialContextUsageBySessionId);
-          } catch (cause) {
-            try {
-              await prepared.release();
-            } catch (cleanupCause) {
-              throw new AggregateError(
-                [cause, cleanupCause],
-                `Failed to initialize and release OpenCode runtime '${runtime.runtimeId}'.`,
-              );
-            }
-            throw cause;
-          }
-        },
-        catch: (cause) =>
-          toHostOperationError(cause, "opencode-live-session.initialize-state", {
-            runtimeId: runtime.runtimeId,
-          }),
-      });
-
       const runtimeSemaphore = Effect.unsafeMakeSemaphore(1);
       const serializeRuntime = runtimeSemaphore.withPermits(1);
       const contextLoads = new Map<string, Promise<AgentSessionContextUsage | null>>();
@@ -169,20 +131,23 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
         commit,
       });
 
-      const refreshProjection = (): Effect.Effect<void, HostError> =>
+      const refreshSnapshots = (repoPath: string): Effect.Effect<void, HostError> =>
         Effect.gen(function* () {
-          const dropCount = state.dropCount();
-          const sources = yield* Effect.tryPromise({
+          if (repoPath !== runtime.repoPath) {
+            return;
+          }
+          const readVersions = state.versions();
+          const read = yield* Effect.tryPromise({
             try: () => prepared.connection.readSessionSources(),
             catch: (cause) =>
-              toHostOperationError(cause, "opencode-live-session.refresh-sessions", {
+              toHostOperationError(cause, "opencode-live-session.refresh-snapshots", {
                 runtimeId: runtime.runtimeId,
               }),
           });
           yield* serializeRuntime(
-            commit("opencode-live-session.commit-refresh", () => ({
+            commit("opencode-live-session.commit-refreshed-snapshots", () => ({
               value: undefined,
-              changes: dropCount === state.dropCount() ? state.refresh(sources) : [],
+              changes: state.applySessionSources(read, readVersions),
             })),
           );
         });
@@ -191,38 +156,41 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
         signal: OpencodeSessionRuntimeSignal,
       ): Effect.Effect<void, HostError> => {
         switch (signal.type) {
-          case "sessions_invalidated":
-            return refreshProjection();
           case "context_updated":
             return serializeRuntime(
               commit("opencode-live-session.commit-context", () => ({
                 value: undefined,
-                changes: state.retainContext(signal.externalSessionId, signal.contextUsage),
+                changes: state.setContext(signal.externalSessionId, signal.contextUsage),
               })),
             );
-          case "transcript_event":
+          case "session_event":
             return serializeRuntime(
               commit("opencode-live-session.commit-transcript-event", () => {
                 const ref = state.refForExternalSession(signal.externalSessionId);
                 if (!ref) {
                   return { value: undefined, changes: [] };
                 }
+                const stateChanges = state.applyEvent(ref, signal.event);
+                if (!isAgentSessionTranscriptEventType(signal.event.type)) {
+                  return { value: undefined, changes: stateChanges };
+                }
                 const event = agentSessionTranscriptEventSchema.parse({
                   ...signal.event,
                   sessionRef: ref,
                 });
-                let stateChanges: AgentSessionLiveAdapterMutation<void>["changes"] = [];
-                if (event.type === "session_error") {
-                  stateChanges = state.settleSessionError(ref);
-                } else {
-                  const runtimeActivity = runtimeActivityFromTranscriptEvent(event);
-                  if (runtimeActivity) {
-                    stateChanges = state.setRuntimeActivity(ref, runtimeActivity);
-                  }
-                }
                 return {
                   value: undefined,
                   changes: [...stateChanges, { type: "transcript_event", event }],
+                };
+              }),
+            );
+          case "session_removed":
+            return serializeRuntime(
+              commit("opencode-live-session.commit-session-removal", () => {
+                const ref = state.refForExternalSession(signal.externalSessionId);
+                return {
+                  value: undefined,
+                  changes: ref ? state.removeSession(ref) : [],
                 };
               }),
             );
@@ -298,24 +266,23 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
           runtimeKind: runtime.kind,
           repoPath: runtime.repoPath,
         },
-        matches: (ref) => !released && state.has(ref),
-        listRetainedSnapshots: (repoPath) =>
+        refreshSnapshots,
+        listSnapshots: (repoPath) =>
           repoPath === runtime.repoPath
-            ? stateEffect("opencode-live-session.list-retained-snapshots", state.listSnapshots, {
+            ? stateEffect("opencode-live-session.list-snapshots", state.listSnapshots, {
                 runtimeId: runtime.runtimeId,
               })
             : Effect.succeed([]),
-        readRetainedSnapshot: (ref) =>
-          stateEffect(
-            "opencode-live-session.read-retained-snapshot",
-            () => state.readSnapshot(ref),
-            { runtimeId: runtime.runtimeId, externalSessionId: ref.externalSessionId },
-          ),
+        readSnapshot: (ref) =>
+          stateEffect("opencode-live-session.read-snapshot", () => state.readSnapshot(ref), {
+            runtimeId: runtime.runtimeId,
+            externalSessionId: ref.externalSessionId,
+          }),
         loadContext: (input) =>
           Effect.suspend(() => {
-            const retained = state.contextUsage(input);
-            if (retained) {
-              return Effect.succeed(retained);
+            const usage = state.contextUsage(input);
+            if (usage) {
+              return Effect.succeed(usage);
             }
             const key = refKey(input);
             const existing = contextLoads.get(key);

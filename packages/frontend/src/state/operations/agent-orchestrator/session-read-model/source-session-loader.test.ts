@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import {
@@ -11,7 +11,6 @@ import {
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { host } from "../../host";
 import { createSessionMessagesState } from "../support/messages";
 import { createLoadSourceSession } from "./source-session-loader";
 
@@ -64,9 +63,12 @@ const createLoaderHarness = ({
   const collection = createCommitSessionCollection(initialSessionCollection);
   const persistedSessionReads: string[] = [];
 
-  host.agentSessionsList = async (_repoPath, taskId) => {
-    persistedSessionReads.push(taskId);
-    return loadRecords ? loadRecords(taskId) : records;
+  const readPort = {
+    agentSessionsList: async (_repoPath: string, taskId: string) => {
+      persistedSessionReads.push(taskId);
+      return loadRecords ? loadRecords(taskId) : records;
+    },
+    agentSessionsListForTasks: async () => [],
   };
 
   const loadSourceSession = createLoadSourceSession({
@@ -75,6 +77,7 @@ const createLoaderHarness = ({
     currentWorkspaceRepoPathRef: { current: "/repo" },
     readSessionSnapshot: collection.getSessionSnapshot,
     queryClient,
+    readPort,
   });
 
   return {
@@ -85,16 +88,6 @@ const createLoaderHarness = ({
 };
 
 describe("source session loader", () => {
-  let originalAgentSessionsList: typeof host.agentSessionsList;
-
-  beforeEach(() => {
-    originalAgentSessionsList = host.agentSessionsList;
-  });
-
-  afterEach(() => {
-    host.agentSessionsList = originalAgentSessionsList;
-  });
-
   test("returns exactly the requested source session from the ordered projection", async () => {
     const attachedSession = createAgentSessionFixture({
       externalSessionId: record.externalSessionId,

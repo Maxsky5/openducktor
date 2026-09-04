@@ -132,7 +132,7 @@ describe("agent runtime services", () => {
           parts: [{ kind: "text", text: "Continue" }],
         }),
       ).resolves.toEqual(acceptedUserMessage);
-      await agentEngine.updateSessionModel({ ...sessionRef, model: null });
+      await agentEngine.updateSessionModel({ ...sessionRef, sessionScope, model: null });
       await agentEngine.stopSession(sessionRef);
       await agentEngine.releaseSession(sessionRef);
 

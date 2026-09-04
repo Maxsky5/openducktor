@@ -261,7 +261,7 @@ The frontend read boundary for **Task Session History**. Agent Studio, Kanban, t
 _Avoid_: TaskCard session source, duplicated session history state
 
 **Repo Session Read Model**:
-The startup projection that combines persisted **Task Session History** records with one runtime-owned **Session Runtime Snapshot** per runtime kind and working directory. The **Repo Session Read Model** owns the session list shown after reload; it is not a second session store.
+The startup projection that combines persisted **Task Session History** records with sessions that OpenDucktor has started in the current app run. Live runtime state may enrich those registered sessions and their observed descendants, but it cannot add a new root session. The **Repo Session Read Model** owns the session list shown after reload; it is not a second session store.
 _Avoid_: session hydration, reconciliation, presence store, reattach
 
 **Session Observer**:
@@ -285,8 +285,8 @@ The low-level registry step that resolves a **Runtime Session Reference** to the
 _Avoid_: runtime recovery, repo default fallback, persisted endpoint
 
 **Session Runtime Snapshot**:
-The runtime-backed startup snapshot for **Agent Sessions** known by a runtime kind and working directory. A **Session Runtime Snapshot** can mark sessions as running, idle, stopped, errored, or waiting for input, but ongoing updates come from the runtime event stream.
-_Avoid_: Session Status source, polling, reconciliation store
+The host-owned live-state snapshot for **Agent Sessions** that OpenDucktor has registered and their verified descendants. On reload, OpenDucktor supplies the exact durable root references that a runtime adapter may read for status and pending input. A **Session Runtime Snapshot** can mark those sessions as running, idle, stopped, errored, or waiting for input. It must not scan a runtime session inventory or add an unknown root session.
+_Avoid_: runtime session discovery, Session Status source, polling, reconciliation store
 
 **Agent Chat**:
 The OpenDucktor surface that displays a **Transcript** and, when interaction is allowed, a **Chat Composer**. **Agent Chat** can appear inside or outside Agent Studio; it is not a separate **Agent Session**.
@@ -558,11 +558,11 @@ Use **Agent Session** in OpenDucktor product language. **Thread** is runtime/pro
 Use **Transcript** for the ordered messages and events of one **Agent Session**. Use **Task Session History** for the history of **Agent Sessions** that belong to a specific **Task**.
 
 **Repo Session Read Model vs Session History Load**:
-Use **Repo Session Read Model** for the startup session list built from persisted records plus runtime snapshots. Use **Session History Load** for loading the selected session's runtime-owned transcript and session details.
+Use **Repo Session Read Model** for the startup session list built from persisted records plus current OpenDucktor start registrations. Use **Session History Load** for loading the selected session's runtime-owned transcript and session details.
 Expose Repo Session Read Model loading as one load state, not as separate loading and error facts; selected-session transcript state owns how that state is rendered.
 
 **Session Runtime Snapshot vs Session Status**:
-Use **Session Runtime Snapshot** for the startup runtime signal. Use **Session Status** for OpenDucktor's interaction classification, such as **Running Session**, **Idle Session**, **Stopped Session**, or **Errored Session**.
+Use **Session Runtime Snapshot** for live state about a session that OpenDucktor already registered. Use **Session Status** for OpenDucktor's interaction classification, such as **Running Session**, **Idle Session**, **Stopped Session**, or **Errored Session**.
 
 **Runtime vs Model**:
 Use **Runtime** for an integrated agent system such as OpenCode or Codex. Use **Model** for the selected AI model within that runtime.

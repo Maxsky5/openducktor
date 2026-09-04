@@ -9,8 +9,9 @@ import type { SessionStatus } from "@opencode-ai/sdk/v2/client";
 import { unwrapData } from "./data-utils";
 import { parseOpencodeSessionListPayload, type ParsedOpencodeSession } from "./opencode-ingress";
 import { listOpencodeLiveSessionPendingInput } from "./pending-input-ops";
+import { clearAwaitingRuntimeTurnStart, isAwaitingRuntimeTurnStart } from "./session-activity";
 import { toIsoFromEpoch } from "./session-runtime-utils";
-import type { ClientFactory, ReadOpencodeDirectory } from "./types";
+import type { ClientFactory, ReadOpencodeDirectory, SessionRecord } from "./types";
 import { z } from "zod";
 
 export type ListOpencodeRuntimeSnapshotSourcesInput = {
@@ -25,6 +26,47 @@ export type OpencodeRuntimeSnapshotSource = AgentSessionRuntimeSnapshotSource & 
   externalSessionId: string;
   sessionAssociation: AgentSessionAssociation;
   workingDirectory: string;
+};
+
+export type OpencodeRuntimeSnapshotFailure = {
+  externalSessionId: string;
+  workingDirectory: string;
+  message: string;
+};
+
+export type OpencodeRuntimeSnapshotRead = {
+  sources: OpencodeRuntimeSnapshotSource[];
+  failures: OpencodeRuntimeSnapshotFailure[];
+};
+
+type ApplyOpencodeAwaitingTurnStartToRuntimeSnapshotInput = {
+  sessions: ReadonlyMap<string, SessionRecord>;
+  runtimeId: string;
+  snapshot: OpencodeRuntimeSnapshotSource;
+};
+
+export const applyOpencodeAwaitingTurnStartToRuntimeSnapshot = ({
+  sessions,
+  runtimeId,
+  snapshot,
+}: ApplyOpencodeAwaitingTurnStartToRuntimeSnapshotInput): OpencodeRuntimeSnapshotSource => {
+  const localSession = sessions.get(snapshot.externalSessionId);
+  if (!localSession || localSession.runtimeId !== runtimeId) {
+    return snapshot;
+  }
+
+  const hasRuntimeTurnStartEvidence =
+    snapshot.runtimeActivity !== "idle" ||
+    snapshot.pendingApprovals.length > 0 ||
+    snapshot.pendingQuestions.length > 0;
+  if (hasRuntimeTurnStartEvidence) {
+    clearAwaitingRuntimeTurnStart(localSession);
+    return snapshot;
+  }
+  if (!isAwaitingRuntimeTurnStart(localSession)) {
+    return snapshot;
+  }
+  return { ...snapshot, runtimeActivity: "running" };
 };
 
 type OpencodeLiveSessionPendingInputBySessionId = Record<
@@ -59,6 +101,8 @@ const opencodeSessionStatusSchema = z.discriminatedUnion("type", [
 const opencodeSessionStatusMapSchema = z.record(z.string(), opencodeSessionStatusSchema);
 type OpencodeSessionStatus = z.output<typeof opencodeSessionStatusSchema>;
 type OpencodeSessionStatusMap = z.output<typeof opencodeSessionStatusMapSchema>;
+
+const OPENCODE_SESSION_LIST_LIMIT = 100;
 
 const toOpencodeRuntimeActivity = (
   status: OpencodeSessionStatus | undefined,
@@ -135,16 +179,29 @@ const mergeOpencodePendingInputBySession = (
   return merged satisfies OpencodeLiveSessionPendingInputBySessionId;
 };
 
+const listAllOpencodeSessions = async (
+  client: ReturnType<ClientFactory>,
+): Promise<ParsedOpencodeSession[]> => {
+  let limit = OPENCODE_SESSION_LIST_LIMIT;
+  for (;;) {
+    const payload = await client.session.list({ limit });
+    const sessions = parseOpencodeSessionListPayload(unwrapData(payload, "list sessions"));
+    if (sessions.length < limit) {
+      return sessions;
+    }
+    limit *= 2;
+  }
+};
+
 export const listOpencodeRuntimeSnapshotSources = async ({
   createClient,
   runtimeEndpoint,
   directories,
   readDirectory,
   now,
-}: ListOpencodeRuntimeSnapshotSourcesInput): Promise<OpencodeRuntimeSnapshotSource[]> => {
+}: ListOpencodeRuntimeSnapshotSourcesInput): Promise<OpencodeRuntimeSnapshotRead> => {
   const unscopedClient = createClient({ runtimeEndpoint });
-  const sessionsPayload = await unscopedClient.session.list();
-  const sessions = parseOpencodeSessionListPayload(unwrapData(sessionsPayload, "list sessions"));
+  const sessions = await listAllOpencodeSessions(unscopedClient);
   const requestedDirectorySet =
     directories && directories.length > 0
       ? new Set(
@@ -165,7 +222,7 @@ export const listOpencodeRuntimeSnapshotSources = async ({
       filteredSessions.map((session) => requireSessionDirectory(session.directory, session.id)),
     ),
   );
-  const directoryEntries = await Promise.all(
+  const directoryResults = await Promise.allSettled(
     sessionDirectories.map((directory) =>
       readDirectory(directory, async () => {
         const [statusResult, pendingInputResult] = await Promise.allSettled([
@@ -192,6 +249,26 @@ export const listOpencodeRuntimeSnapshotSources = async ({
       }),
     ),
   );
+  const directoryEntries = directoryResults.flatMap((result) =>
+    result.status === "fulfilled" ? [result.value] : [],
+  );
+  const failures = directoryResults.flatMap((result, index) => {
+    if (result.status === "fulfilled") {
+      return [];
+    }
+    const directory = sessionDirectories[index];
+    if (!directory) {
+      return [];
+    }
+    const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
+    return filteredSessions
+      .filter((session) => requireSessionDirectory(session.directory, session.id) === directory)
+      .map((session) => ({
+        externalSessionId: session.id,
+        workingDirectory: directory,
+        message,
+      }));
+  });
   const availableDirectoryEntries = directoryEntries.filter(
     (entry): entry is NonNullable<typeof entry> => entry !== null,
   );
@@ -203,7 +280,7 @@ export const listOpencodeRuntimeSnapshotSources = async ({
     availableDirectoryEntries.map(({ pendingInput }) => pendingInput),
   );
 
-  return filteredSessions.flatMap((session) => {
+  const sources = filteredSessions.flatMap((session) => {
     const normalizedDirectory = requireSessionDirectory(session.directory, session.id);
     if (!availableDirectories.has(normalizedDirectory)) {
       return [];
@@ -225,4 +302,5 @@ export const listOpencodeRuntimeSnapshotSources = async ({
     }
     return [snapshot];
   });
+  return { sources, failures };
 };

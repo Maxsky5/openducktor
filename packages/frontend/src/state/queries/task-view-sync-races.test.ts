@@ -23,13 +23,6 @@ const createDeferred = <T>() => {
   return { promise, resolve };
 };
 
-const waitFor = async (predicate: () => boolean, remainingAttempts = 20): Promise<void> => {
-  if (predicate()) return;
-  if (remainingAttempts === 0) throw new Error("Expected condition was not met.");
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  await waitFor(predicate, remainingAttempts - 1);
-};
-
 const createPorts = (overrides: Partial<TaskViewSyncPorts> = {}): TaskViewSyncPorts => ({
   loadSettings: async () => settings,
   listTasks: async () => [createTaskCardFixture({ id: "task-1", status: "open" })],
@@ -44,7 +37,7 @@ const createSync = (ports: TaskViewSyncPorts) => {
 };
 
 describe("TaskViewSync races", () => {
-  test("supersedes an older active external document refresh with the latest event", async () => {
+  test("runs external document refreshes in event order", async () => {
     const firstDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
     const secondDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
     const firstDocumentStarted = createDeferred<void>();
@@ -92,13 +85,15 @@ describe("TaskViewSync races", () => {
       },
       "/repo",
     );
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(documentReadCount).toBe(1);
+
+    firstDocument.resolve({ markdown: "# V1", updatedAt: "2026-04-10T13:10:00.000Z" });
+    await first;
     await secondDocumentStarted.promise;
 
     secondDocument.resolve({ markdown: "# V2", updatedAt: "2026-04-10T13:11:00.000Z" });
     await expect(Promise.all([first, second])).resolves.toEqual([undefined, undefined]);
-
-    firstDocument.resolve({ markdown: "# V1", updatedAt: "2026-04-10T13:10:00.000Z" });
-    await Promise.resolve();
     expect(
       queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(
         documentQueryKeys.spec("/repo", "task-1"),
@@ -106,7 +101,7 @@ describe("TaskViewSync races", () => {
     ).toEqual({ markdown: "# V2", updatedAt: "2026-04-10T13:11:00.000Z" });
   });
 
-  test("joins a completed successor after an older external event finishes late", async () => {
+  test("waits for an earlier external event before applying the next event", async () => {
     const firstDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
     const firstDocumentStarted = createDeferred<void>();
     const { queryClient, sync } = createSync(
@@ -146,7 +141,7 @@ describe("TaskViewSync races", () => {
     );
     await firstDocumentStarted.promise;
 
-    await sync.reconcileExternalEvent(
+    const second = sync.reconcileExternalEvent(
       {
         kind: "tasks_updated",
         eventId: "event-9",
@@ -157,23 +152,15 @@ describe("TaskViewSync races", () => {
       },
       "/repo",
     );
-
-    let firstSettled = false;
-    void first.then(() => {
-      firstSettled = true;
-    });
-    firstDocument.resolve({ markdown: "# A1", updatedAt: "2026-04-10T13:10:00.000Z" });
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    expect(
+      queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(
+        documentQueryKeys.spec("/repo", "task-b"),
+      ),
+    ).toEqual({ markdown: "# B0", updatedAt: null });
 
-    expect(firstSettled).toBe(true);
-    await expect(first).resolves.toBeUndefined();
+    firstDocument.resolve({ markdown: "# A1", updatedAt: "2026-04-10T13:10:00.000Z" });
+    await expect(Promise.all([first, second])).resolves.toEqual([undefined, undefined]);
     expect(
       queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(
         documentQueryKeys.spec("/repo", "task-b"),
@@ -181,103 +168,75 @@ describe("TaskViewSync races", () => {
     ).toEqual({ markdown: "# B2", updatedAt: "2026-04-10T13:11:00.000Z" });
   });
 
-  test("rejects a late predecessor with its failed successor error", async () => {
-    const firstDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
-    const firstDocumentStarted = createDeferred<void>();
-    const successorFailure = new Error("task list unavailable");
-    let listReadCount = 0;
+  test("runs the next task view refresh after an earlier refresh fails", async () => {
+    const firstFailure = new Error("task list unavailable");
+    let reads = 0;
     const { queryClient, sync } = createSync(
       createPorts({
         listTasks: async () => {
-          listReadCount += 1;
-          if (listReadCount === 2) {
-            throw successorFailure;
-          }
-          return [createTaskCardFixture({ id: "task-a", status: "open" })];
-        },
-        loadFreshDocument: async (_repoPath, taskId) => {
-          if (taskId === "task-a") {
-            firstDocumentStarted.resolve();
-            return firstDocument.promise;
-          }
-          return { markdown: "# B", updatedAt: "2026-04-10T13:11:00.000Z" };
-        },
-      }),
-    );
-    queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-a"), {
-      markdown: "# A0",
-      updatedAt: null,
-    });
-    queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-b"), {
-      markdown: "# B0",
-      updatedAt: null,
-    });
-
-    const first = sync.reconcileExternalEvent(
-      {
-        kind: "tasks_updated",
-        eventId: "event-10",
-        repoPath: "/repo",
-        taskIds: ["task-a"],
-        removedTaskIds: [],
-        emittedAt: "2026-04-10T13:10:00.000Z",
-      },
-      "/repo",
-    );
-    const firstResult = first.then(
-      () => null,
-      (error) => error,
-    );
-    await firstDocumentStarted.promise;
-
-    const second = sync.reconcileExternalEvent(
-      {
-        kind: "tasks_updated",
-        eventId: "event-11",
-        repoPath: "/repo",
-        taskIds: ["task-b"],
-        removedTaskIds: [],
-        emittedAt: "2026-04-10T13:11:00.000Z",
-      },
-      "/repo",
-    );
-    const secondResult = second.then(
-      () => null,
-      (error) => error,
-    );
-
-    expect(await secondResult).toBe(successorFailure);
-    firstDocument.resolve({ markdown: "# A1", updatedAt: "2026-04-10T13:10:00.000Z" });
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
-
-    expect(await firstResult).toBe(successorFailure);
-  });
-
-  test("joins the winning local mutation refresh after cancellation", async () => {
-    const staleRead = createDeferred<TaskCard[]>();
-    let calls = 0;
-    const { queryClient, sync } = createSync(
-      createPorts({
-        listTasks: async () => {
-          calls += 1;
-          return calls === 1 ? staleRead.promise : [createTaskCardFixture({ id: "fresh" })];
+          reads += 1;
+          if (reads === 1) throw firstFailure;
+          return [createTaskCardFixture({ id: "fresh" })];
         },
       }),
     );
 
     const first = sync.refreshAfterLocalMutation("/repo", { kind: "task-list-only" });
-    await waitFor(() => calls === 1);
     const second = sync.refreshAfterLocalMutation("/repo", { kind: "task-list-only" });
-    await waitFor(() => calls === 2);
 
-    await expect(first).resolves.toBeUndefined();
+    await expect(first).rejects.toBe(firstFailure);
     await expect(second).resolves.toBeUndefined();
     expect(
       queryClient.getQueryData<{ tasks: TaskCard[] }>(
         taskQueryKeys.repoData("/repo", doneVisibleDays),
       )?.tasks[0]?.id,
     ).toBe("fresh");
-    staleRead.resolve([createTaskCardFixture({ id: "stale" })]);
+  });
+
+  test("runs task view refreshes one at a time per repository", async () => {
+    const firstCancelStarted = createDeferred<void>();
+    const releaseFirstCancel = createDeferred<void>();
+    let reads = 0;
+    const { queryClient, sync } = createSync(
+      createPorts({
+        listTasks: async () => {
+          reads += 1;
+          return [createTaskCardFixture({ id: `task-${reads}` })];
+        },
+      }),
+    );
+    const cancelQueries = queryClient.cancelQueries.bind(queryClient);
+    let cancellations = 0;
+    queryClient.cancelQueries = async (...args) => {
+      cancellations += 1;
+      if (cancellations === 1) {
+        firstCancelStarted.resolve();
+        await releaseFirstCancel.promise;
+      }
+      return cancelQueries(...args);
+    };
+
+    const first = sync.refreshAfterLocalMutation("/repo", { kind: "task-list-only" });
+    await firstCancelStarted.promise;
+    const second = sync.refreshAfterLocalMutation("/repo", { kind: "task-list-only" });
+
+    try {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(reads).toBe(0);
+
+      releaseFirstCancel.resolve();
+      await Promise.all([first, second]);
+
+      expect(
+        queryClient.getQueryData<{ tasks: TaskCard[] }>(
+          taskQueryKeys.repoData("/repo", doneVisibleDays),
+        )?.tasks[0]?.id,
+      ).toBe("task-2");
+    } finally {
+      releaseFirstCancel.resolve();
+      await Promise.allSettled([first, second]);
+      queryClient.cancelQueries = cancelQueries;
+    }
   });
 
   test("cancels a pre-snapshot document read before invalidation so it cannot restore stale data", async () => {
@@ -342,7 +301,7 @@ describe("TaskViewSync races", () => {
     }
   });
 
-  test("keeps snapshot document refresh work after a task-list-only successor wins", async () => {
+  test("keeps a local refresh queued until snapshot document work finishes", async () => {
     const snapshotList = createDeferred<TaskCard[]>();
     const snapshotListStarted = createDeferred<void>();
     const freshDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
@@ -372,20 +331,21 @@ describe("TaskViewSync races", () => {
       staleTime: Infinity,
     });
     const unsubscribe = observer.subscribe(() => {});
-    let snapshotSettled = false;
 
     try {
-      const snapshot = sync.reconcileStreamSnapshot("/repo").then(() => {
-        snapshotSettled = true;
-      });
+      const snapshot = sync.reconcileStreamSnapshot("/repo");
       await snapshotListStarted.promise;
 
-      await sync.refreshAfterLocalMutation("/repo", { kind: "task-list-only" });
+      const localRefresh = sync.refreshAfterLocalMutation("/repo", { kind: "task-list-only" });
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(listReads).toBe(1);
+
+      snapshotList.resolve([createTaskCardFixture({ id: "task-1", status: "open" })]);
       await freshDocumentStarted.promise;
 
-      expect(snapshotSettled).toBe(false);
+      expect(listReads).toBe(1);
       freshDocument.resolve({ markdown: "# Fresh", updatedAt: "2026-04-10T13:11:00.000Z" });
-      await snapshot;
+      await Promise.all([snapshot, localRefresh]);
 
       expect(
         queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(documentKey),
@@ -400,7 +360,7 @@ describe("TaskViewSync races", () => {
     }
   });
 
-  test("retries a hidden-task lookup after a task-list-only successor cancels it", async () => {
+  test("finishes a hidden-task snapshot lookup before a queued local refresh", async () => {
     const hiddenTaskLookup = createDeferred<TaskCard[]>();
     const hiddenTaskLookupStarted = createDeferred<void>();
     let hiddenTaskReads = 0;
@@ -433,16 +393,17 @@ describe("TaskViewSync races", () => {
     const unsubscribe = observer.subscribe(() => {});
 
     try {
-      const snapshotResult = sync.reconcileStreamSnapshot("/repo").then(
-        () => null,
-        (error) => error,
-      );
+      const snapshot = sync.reconcileStreamSnapshot("/repo");
       await hiddenTaskLookupStarted.promise;
 
-      await sync.refreshAfterLocalMutation("/repo", { kind: "task-list-only" });
+      const localRefresh = sync.refreshAfterLocalMutation("/repo", { kind: "task-list-only" });
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(hiddenTaskReads).toBe(1);
 
-      expect(await snapshotResult).toBeNull();
-      expect(hiddenTaskReads).toBe(2);
+      hiddenTaskLookup.resolve([createTaskCardFixture({ id: "task-1", status: "closed" })]);
+      await Promise.all([snapshot, localRefresh]);
+
+      expect(hiddenTaskReads).toBe(1);
       expect(
         queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(documentKey),
       ).toEqual({
@@ -455,7 +416,7 @@ describe("TaskViewSync races", () => {
     }
   });
 
-  test("waits for a newer same-task document refresh after cancelling the snapshot read", async () => {
+  test("runs a same-task document refresh after the snapshot refresh", async () => {
     const snapshotDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
     const successorDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
     const snapshotDocumentStarted = createDeferred<void>();
@@ -482,23 +443,24 @@ describe("TaskViewSync races", () => {
       staleTime: Infinity,
     });
     const unsubscribe = observer.subscribe(() => {});
-    let snapshotSettled = false;
 
     try {
-      const snapshot = sync.reconcileStreamSnapshot("/repo").then(() => {
-        snapshotSettled = true;
-      });
+      const snapshot = sync.reconcileStreamSnapshot("/repo");
       await snapshotDocumentStarted.promise;
 
       const successor = sync.refreshAfterLocalMutation("/repo", {
         kind: "refresh-documents",
         taskIds: ["task-1"],
       });
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(documentReads).toBe(1);
+
+      snapshotDocument.resolve({ markdown: "# V1", updatedAt: "2026-04-10T13:10:00.000Z" });
+      await snapshot;
       await successorDocumentStarted.promise;
 
-      expect(snapshotSettled).toBe(false);
       successorDocument.resolve({ markdown: "# V2", updatedAt: "2026-04-10T13:11:00.000Z" });
-      await Promise.all([snapshot, successor]);
+      await successor;
 
       expect(
         queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(documentKey),
@@ -510,7 +472,7 @@ describe("TaskViewSync races", () => {
     }
   });
 
-  test("lets a snapshot replace an in-flight same-task document refresh", async () => {
+  test("runs a snapshot after an in-flight same-task document refresh", async () => {
     const staleDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
     const staleDocumentStarted = createDeferred<void>();
     let documentReads = 0;
@@ -543,17 +505,19 @@ describe("TaskViewSync races", () => {
       await staleDocumentStarted.promise;
       const snapshot = sync.reconcileStreamSnapshot("/repo");
 
+      staleDocument.resolve({ markdown: "# V1", updatedAt: "2026-04-10T13:10:00.000Z" });
       await expect(Promise.all([refresh, snapshot])).resolves.toEqual([undefined, undefined]);
 
       expect(
         queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(documentKey),
       ).toEqual({ markdown: "# V2", updatedAt: "2026-04-10T13:11:00.000Z" });
     } finally {
+      staleDocument.resolve({ markdown: "# V1", updatedAt: "2026-04-10T13:10:00.000Z" });
       unsubscribe();
     }
   });
 
-  test("waits for a deleting successor without restarting the deleted snapshot document", async () => {
+  test("applies a queued deletion after the snapshot document refresh", async () => {
     const snapshotDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
     const snapshotDocumentStarted = createDeferred<void>();
     const loadFreshDocument = mock(async () => {
@@ -574,11 +538,16 @@ describe("TaskViewSync races", () => {
       const snapshot = sync.reconcileStreamSnapshot("/repo");
       await snapshotDocumentStarted.promise;
 
-      await sync.refreshAfterLocalMutation("/repo", {
+      const remove = sync.refreshAfterLocalMutation("/repo", {
         kind: "remove-documents",
         taskIds: ["task-1"],
       });
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(queryClient.getQueryData(documentKey)).toBeDefined();
+
+      snapshotDocument.resolve({ markdown: "# V1", updatedAt: "2026-04-10T13:10:00.000Z" });
       await snapshot;
+      await remove;
 
       expect(loadFreshDocument).toHaveBeenCalledTimes(1);
       expect(queryClient.getQueryData(documentKey)).toBeUndefined();
@@ -588,7 +557,7 @@ describe("TaskViewSync races", () => {
     }
   });
 
-  test("propagates a same-task successor document refresh failure to the snapshot", async () => {
+  test("keeps a completed snapshot successful when a later document refresh fails", async () => {
     const snapshotDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
     const snapshotDocumentStarted = createDeferred<void>();
     const successorDocumentStarted = createDeferred<void>();
@@ -635,12 +604,16 @@ describe("TaskViewSync races", () => {
           () => null,
           (error) => error,
         );
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(documentReads).toBe(1);
+
+      snapshotDocument.resolve({ markdown: "# V1", updatedAt: "2026-04-10T13:10:00.000Z" });
+      expect(await snapshotResult).toBeNull();
       await successorDocumentStarted.promise;
 
       rejectSuccessorDocument(successorFailure);
 
       expect(await successorResult).toBe(successorFailure);
-      expect(await snapshotResult).toBe(successorFailure);
     } finally {
       snapshotDocument.resolve({ markdown: "# V1", updatedAt: "2026-04-10T13:10:00.000Z" });
       unsubscribe();
@@ -750,7 +723,7 @@ describe("TaskViewSync races", () => {
     }
   });
 
-  test("coordinates an inactive event with a cancelled local task-list refresh", async () => {
+  test("applies an inactive event after a local task-list refresh", async () => {
     const staleList = createDeferred<TaskCard[]>();
     const staleListStarted = createDeferred<void>();
     const listTasks = mock(async () => {
@@ -780,6 +753,7 @@ describe("TaskViewSync races", () => {
       "/active",
     );
 
+    staleList.resolve([createTaskCardFixture({ id: "task-1", status: "open" })]);
     await expect(Promise.all([refresh, event])).resolves.toEqual([undefined, undefined]);
 
     expect(listTasks).toHaveBeenCalledTimes(1);
@@ -788,7 +762,7 @@ describe("TaskViewSync races", () => {
     expect(loadFreshDocument).not.toHaveBeenCalled();
   });
 
-  test("globally cancels snapshot document reads while only refreshing retained active documents", async () => {
+  test("cancels snapshot document reads per repo and refreshes only active documents", async () => {
     const activeStaleDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
     const inactiveStaleDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
     const activeStaleStarted = createDeferred<void>();

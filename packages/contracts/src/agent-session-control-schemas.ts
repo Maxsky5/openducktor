@@ -3,7 +3,6 @@ import { runtimeKindSchema } from "./agent-runtime-schemas";
 import { agentUserMessageEventSchema } from "./agent-session-event-schemas";
 import {
   agentModelSelectionSchema,
-  agentSessionAssociationSchema,
   agentSessionLiveRefSchema,
   agentSessionScopeSchema,
 } from "./agent-session-schemas";
@@ -125,9 +124,19 @@ export const agentSessionControlSendInputSchema = agentSessionLiveRefSchema
   });
 export type AgentSessionControlSendInput = z.infer<typeof agentSessionControlSendInputSchema>;
 
+export const agentSessionModelSettingsSchema = z
+  .object({
+    providerId: z.string(),
+    modelId: z.string(),
+    variant: z.string().optional(),
+  })
+  .strict();
+export type AgentSessionModelSettings = z.infer<typeof agentSessionModelSettingsSchema>;
+
 export const agentSessionControlUpdateModelInputSchema = agentSessionLiveRefSchema
   .extend({
-    model: agentModelSelectionSchema.nullable(),
+    sessionScope: agentSessionScopeSchema,
+    model: agentSessionModelSettingsSchema.nullable(),
   })
   .strict();
 export type AgentSessionControlUpdateModelInput = z.infer<
@@ -146,7 +155,6 @@ export const agentSessionControlSummarySchema = z
     runtimeKind: runtimeKindSchema,
     workingDirectory: nonEmptyStringSchema,
     title: z.string().optional(),
-    sessionAssociation: agentSessionAssociationSchema,
     startedAt: z.string().datetime({ offset: true }),
     status: z.enum(["starting", "running", "idle", "error", "stopped"]),
   })

@@ -80,7 +80,7 @@ import {
   failOpencodeUserMessageSend,
   projectAdmittedOpencodeUserMessage,
 } from "./opencode-agent-session-projection";
-import { opencodeSessionDetailPayloadSchema } from "./opencode-ingress";
+import { opencodeSessionDetailPayloadSchema, type ParsedOpencodeSession } from "./opencode-ingress";
 import { replyApproval, replyQuestion } from "./pending-input-ops";
 import { toOpenCodeRequestError } from "./request-errors";
 import {
@@ -279,7 +279,26 @@ export class OpencodeSdkAdapter
     return registerSession(registrationInput);
   }
 
-  private async ensureSessionState(input: PolicyBoundSessionRef): Promise<AgentSessionSummary> {
+  async observeRegisteredSession(input: {
+    repoPath: string;
+    workingDirectory: string;
+    externalSessionId: string;
+    detail: ParsedOpencodeSession;
+  }): Promise<AgentSessionSummary> {
+    const sessionRef: PolicyBoundSessionRef = {
+      repoPath: input.repoPath,
+      workingDirectory: input.workingDirectory,
+      externalSessionId: input.externalSessionId,
+      runtimeKind: "opencode",
+      runtimePolicy: { kind: "opencode" },
+    };
+    return this.ensureSessionState(sessionRef, input.detail);
+  }
+
+  private async ensureSessionState(
+    input: PolicyBoundSessionRef,
+    knownDetail?: ParsedOpencodeSession,
+  ): Promise<AgentSessionSummary> {
     assertOpenCodeRuntimePolicyBinding(input, "ensure OpenCode session state");
     const existing = this.sessions.get(input.externalSessionId);
     if (existing) {
@@ -322,11 +341,24 @@ export class OpencodeSdkAdapter
         workingDirectory: input.workingDirectory,
       });
     }
-    const detail = await client.session.get({
-      directory: input.workingDirectory,
-      sessionID: input.externalSessionId,
-    });
-    const detailData = unwrapData(detail, "get session");
+    let detailRecord: ParsedOpencodeSession;
+    if (knownDetail) {
+      if (
+        knownDetail.id !== input.externalSessionId ||
+        knownDetail.directory !== input.workingDirectory
+      ) {
+        throw new Error(
+          `Cannot observe OpenCode session '${input.externalSessionId}' in '${input.workingDirectory}' from detail '${knownDetail.id}' in '${knownDetail.directory}'.`,
+        );
+      }
+      detailRecord = knownDetail;
+    } else {
+      const detail = await client.session.get({
+        directory: input.workingDirectory,
+        sessionID: input.externalSessionId,
+      });
+      detailRecord = opencodeSessionDetailPayloadSchema.parse(unwrapData(detail, "get session"));
+    }
     if (policy) {
       await applySessionPolicy({
         client,
@@ -335,7 +367,6 @@ export class OpencodeSdkAdapter
         workingDirectory: input.workingDirectory,
       });
     }
-    const detailRecord = opencodeSessionDetailPayloadSchema.parse(detailData);
     const startedAt = toIsoFromEpoch(detailRecord.time.created, this.now);
     const sessionInput = toExistingSessionInput(input);
 
@@ -393,7 +424,7 @@ export class OpencodeSdkAdapter
     return resolveOpencodePolicyBoundSession({
       request: input,
       action,
-      retainedSession: this.sessions.get(input.externalSessionId),
+      session: this.sessions.get(input.externalSessionId),
       bindSession: async () => {
         await this.ensureSessionState(input);
         return requireSession(this.sessions, input.externalSessionId);
@@ -704,7 +735,8 @@ export class OpencodeSdkAdapter
     const session = requireSession(this.sessions, input.externalSessionId);
     const nextInput: SessionInput = { ...session.input };
     if (input.model) {
-      nextInput.model = input.model;
+      const profileId = session.input.model?.profileId;
+      nextInput.model = profileId ? { ...input.model, profileId } : input.model;
     } else {
       delete nextInput.model;
     }

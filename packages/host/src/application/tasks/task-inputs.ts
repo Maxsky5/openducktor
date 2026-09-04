@@ -31,6 +31,11 @@ export type AgentSessionUpsertInput = TaskIdInput & {
   session: AgentSessionRecord;
 };
 
+export type AgentSessionUpdateModelInput = TaskIdInput & {
+  identity: AgentSessionIdentity;
+  selectedModel: AgentSessionRecord["selectedModel"];
+};
+
 export type AgentSessionDeleteInput = TaskIdInput & {
   identity: AgentSessionIdentity;
 };
@@ -95,9 +100,6 @@ export type TaskSessionBootstrapPrepareInput = BuildStartInput & {
 export type TaskSessionBootstrapFinalizeInput = TaskIdInput & {
   bootstrapId: string;
 };
-
-export type TaskSessionStartupLeasePrepareInput = TaskIdInput & { role: AgentRole };
-export type TaskSessionStartupLeaseFinalizeInput = TaskIdInput & { leaseId: string };
 
 export type BuildBlockedInput = TaskIdInput & {
   reason: string;

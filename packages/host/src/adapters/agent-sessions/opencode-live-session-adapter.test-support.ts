@@ -1,6 +1,7 @@
 import type {
   OpencodeNativeApprovalReply,
   OpencodeNativeQuestionReply,
+  OpencodeRuntimeSnapshotFailure,
   OpencodeRuntimeSnapshotSource,
   OpencodeSessionRuntimeConnection,
   OpencodeSessionRuntimeSignal,
@@ -31,48 +32,18 @@ export const ref = {
   externalSessionId: "session-1",
 };
 
-export const nativeSource = (
-  overrides: Partial<OpencodeRuntimeSnapshotSource> = {},
-): OpencodeRuntimeSnapshotSource => ({
-  externalSessionId: "session-1",
-  sessionAssociation: { kind: "unbound" },
-  title: "Live OpenCode session",
-  workingDirectory: "/repo/worktree",
-  startedAt: "2026-07-16T10:01:00.000Z",
-  runtimeActivity: "idle",
-  pendingApprovals: [
-    {
-      requestId: "permission-1",
-      requestInstanceId: "native-permission-instance",
-      requestType: "file_change",
-      title: "Edit a file",
-      metadata: { source: "opencode" },
-    },
-  ],
-  pendingQuestions: [
-    {
-      requestId: "question-1",
-      requestInstanceId: "native-question-instance",
-      questions: [
-        {
-          header: "Confirm",
-          question: "Continue?",
-          options: [{ label: "Yes", description: "Continue" }],
-        },
-      ],
-    },
-  ],
-  ...overrides,
-});
-
-export const controlSummary = {
+export const controlMetadata = {
   externalSessionId: "controlled-session",
   runtimeKind: "opencode" as const,
   workingDirectory: "/repo/worktree",
   title: "Controlled session",
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } as const,
   startedAt: "2026-07-16T10:02:00.000Z",
   status: "running" as const,
+};
+
+export const controlSummary = {
+  ...controlMetadata,
+  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } as const,
 };
 
 type ControlCall = {
@@ -100,25 +71,33 @@ type RuntimeHarness = {
   readonly controlCalls: ControlCall[];
   readonly releaseCalls: string[];
   readonly contextLoadCalls: string[];
-  readonly setSources: (sources: OpencodeRuntimeSnapshotSource[]) => void;
+  readonly sessionSourceReadCalls: number;
 };
 
 export const createRuntimeHarness = (
   options: {
     readonly sendUserMessageBarrier?: Promise<void>;
     readonly onSendUserMessage?: () => void;
+    readonly sessionFailures?: OpencodeRuntimeSnapshotFailure[];
+    readonly sessionSources?: OpencodeRuntimeSnapshotSource[];
   } = {},
 ): RuntimeHarness => {
   let listener: ((signal: OpencodeSessionRuntimeSignal) => void | Promise<void>) | null = null;
-  const sources = [nativeSource()];
   const approvalReplies: OpencodeNativeApprovalReply[] = [];
   const questionReplies: OpencodeNativeQuestionReply[] = [];
   const controlCalls: ControlCall[] = [];
   const releaseCalls: string[] = [];
   const contextLoadCalls: string[] = [];
+  let sessionSourceReadCalls = 0;
 
   const connection: OpencodeSessionRuntimeConnection = {
-    readSessionSources: async () => sources,
+    readSessionSources: async () => {
+      sessionSourceReadCalls += 1;
+      return {
+        sources: options.sessionSources ?? [],
+        failures: options.sessionFailures ?? [],
+      };
+    },
     loadContextUsage: async (input) => {
       contextLoadCalls.push(input.externalSessionId);
       return {
@@ -138,7 +117,12 @@ export const createRuntimeHarness = (
     },
     resumeSession: async (input) => {
       controlCalls.push({ operation: "resume", input });
-      return controlSummary;
+      return {
+        ...controlSummary,
+        externalSessionId: input.externalSessionId,
+        workingDirectory: input.workingDirectory,
+        sessionAssociation: input.sessionScope,
+      };
     },
     forkSession: async (input) => {
       controlCalls.push({ operation: "fork", input });
@@ -172,21 +156,6 @@ export const createRuntimeHarness = (
   return {
     prepareRuntime: async (input) => ({
       connection,
-      initialSources: sources,
-      initialContextUsageBySessionId: new Map([
-        [
-          "session-1",
-          {
-            totalTokens: 321,
-            model: {
-              runtimeKind: "opencode",
-              providerId: "openai",
-              modelId: "gpt-5",
-              variant: "high",
-            },
-          },
-        ],
-      ]),
       startForwarding: async (nextListener) => {
         listener = nextListener;
       },
@@ -206,8 +175,8 @@ export const createRuntimeHarness = (
     controlCalls,
     releaseCalls,
     contextLoadCalls,
-    setSources: (nextSources) => {
-      sources.splice(0, sources.length, ...nextSources);
+    get sessionSourceReadCalls() {
+      return sessionSourceReadCalls;
     },
   };
 };

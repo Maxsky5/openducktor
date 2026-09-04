@@ -124,6 +124,9 @@ describe("payload-mappers", () => {
           video: true,
           pdf: false,
         },
+        liveSessionUpdates: {
+          profile: false,
+        },
       },
     ]);
   });
@@ -169,6 +172,9 @@ describe("payload-mappers", () => {
           audio: false,
           video: false,
           pdf: true,
+        },
+        liveSessionUpdates: {
+          profile: false,
         },
       },
     ]);

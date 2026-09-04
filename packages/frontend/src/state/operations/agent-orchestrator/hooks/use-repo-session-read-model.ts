@@ -1,4 +1,8 @@
-import type { AgentSessionLiveEnvelope, AgentSessionLiveRef } from "@openducktor/contracts";
+import type {
+  AgentSessionLiveEnvelope,
+  AgentSessionLiveRef,
+  AgentSessionLiveRefreshInput,
+} from "@openducktor/contracts";
 import { agentSessionRefKey, buildReadOnlyPermissionRejectionMessage } from "@openducktor/core";
 import type { HostClient } from "@openducktor/host-client";
 import type { QueryClient } from "@tanstack/react-query";
@@ -40,6 +44,7 @@ import {
   type PendingApprovalPolicyAction,
 } from "../session-read-model/pending-approval-policy";
 import {
+  readCachedTaskSessionRecords,
   toLoadedWorkflowSessionRecords,
   type TaskSessionRecords,
 } from "../session-read-model/task-session-records";
@@ -49,7 +54,7 @@ import { createRepoStaleGuard } from "../support/core";
 
 export type AgentSessionLiveFrontendPort = Pick<HostClient, "agentSessionLiveReplyApproval"> & {
   observeAgentSessionLive: (
-    input: { repoPath: string },
+    input: AgentSessionLiveRefreshInput,
     listener: (envelope: AgentSessionLiveEnvelope) => void,
   ) => Promise<() => void>;
 };
@@ -140,6 +145,7 @@ export const useRepoSessionReadModel = ({
   const taskIdsKey = taskIdsScopeKey(taskIds);
   const readReloadGeneration = useEffectEvent(() => reloadGeneration);
   const readCurrentTaskIdsKey = useEffectEvent(() => taskIdsKey);
+  const readCurrentTaskIds = useEffectEvent(() => normalizeAgentSessionTaskIds(taskIds));
   const observeLiveSessions = useEffectEvent(
     (
       input: Parameters<AgentSessionLiveFrontendPort["observeAgentSessionLive"]>[0],
@@ -426,7 +432,7 @@ export const useRepoSessionReadModel = ({
       }
       return currentLoadState;
     });
-  }, [applyTaskRecords, taskRecords, workspaceRepoPath]);
+  }, [applyTaskRecords, currentWorkspaceRepoPathRef, repoEpochRef, taskRecords, workspaceRepoPath]);
 
   // react-doctor-disable-next-line react-doctor/no-derived-state-effect
   useEffect(() => {
@@ -525,6 +531,10 @@ export const useRepoSessionReadModel = ({
     let cancelled = false;
     let unsubscribe: (() => void) | null = null;
     const readLoadedWorkflowRecords = (): LoadedWorkflowSessionRecords | null => {
+      const cached = readCachedTaskSessionRecords(queryClient, repoPath, readCurrentTaskIds());
+      if (cached) {
+        return toLoadedWorkflowSessionRecords(cached);
+      }
       const current = taskRecordApplyRef.current;
       if (!current || current.repoPath !== repoPath || current.kind !== "ready") {
         return null;
@@ -561,6 +571,8 @@ export const useRepoSessionReadModel = ({
         ? pruneVanishedWorkflowSessions({ projected, records: workflowRecords })
         : projected;
     };
+    const isStaleRepoOperation = (): boolean =>
+      cancelled || isRepoStale() || readReloadGeneration() !== effectReloadGeneration;
     // Every stream write collects the pending-approval policy against the same
     // commit it belongs to.
     const commitProjected = (
@@ -579,8 +591,6 @@ export const useRepoSessionReadModel = ({
       });
       applyPendingApprovalPolicy(policyActions);
     };
-    const isStaleRepoOperation = (): boolean =>
-      cancelled || isRepoStale() || readReloadGeneration() !== effectReloadGeneration;
     const failObservation = (message: string): void => {
       if (!isStaleRepoOperation()) {
         liveStreamFailureRef.current = message;
@@ -621,8 +631,9 @@ export const useRepoSessionReadModel = ({
       envelope: Extract<AgentSessionLiveEnvelope, { type: "snapshot" }>,
     ): void => {
       commitProjected((current) => {
+        const registered = applyLoadedRecords(current, current);
         const projected = buildAgentSessionLiveCollection({
-          current,
+          current: registered,
           snapshots: envelope.sessions,
         });
         return applyLoadedRecords(projected, current);

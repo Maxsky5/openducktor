@@ -1,7 +1,4 @@
-import {
-  type AgentSessionTranscriptEventType,
-  isAgentSessionTranscriptEventType,
-} from "@openducktor/contracts";
+import { type AgentSessionTranscriptEventType } from "@openducktor/contracts";
 import type { AgentEvent, AgentModelSelection } from "@openducktor/core";
 import { readMessageModelSelection, toTokenTotal } from "./message-normalizers";
 import type { ParsedOpencodeEvent as Event } from "./opencode-global-event-ingress";
@@ -17,22 +14,18 @@ export type OpencodeSessionTranscriptEvent = Extract<
 >;
 
 export type OpencodeSessionRuntimeSignal =
-  | { readonly type: "sessions_invalidated" }
+  | {
+      readonly type: "session_event";
+      readonly externalSessionId: string;
+      readonly event: AgentEvent;
+    }
   | {
       readonly type: "context_updated";
       readonly externalSessionId: string;
       readonly contextUsage: OpencodeSessionContextUsage;
     }
-  | {
-      readonly type: "transcript_event";
-      readonly externalSessionId: string;
-      readonly event: OpencodeSessionTranscriptEvent;
-    }
+  | { readonly type: "session_removed"; readonly externalSessionId: string }
   | { readonly type: "fault"; readonly message: string };
-
-export const isOpencodeSessionTranscriptEvent = (
-  event: AgentEvent,
-): event is OpencodeSessionTranscriptEvent => isAgentSessionTranscriptEventType(event.type);
 
 export const readMessageUpdatedContextSignal = (
   event: Event,

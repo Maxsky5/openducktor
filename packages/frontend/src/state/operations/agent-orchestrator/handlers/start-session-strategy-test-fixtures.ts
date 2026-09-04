@@ -5,7 +5,6 @@ import {
   type AgentSessionCollection,
   emptyAgentSessionCollection,
   getAgentSession,
-  removeAgentSession,
   replaceAgentSession,
 } from "@/state/agent-session-collection";
 import {
@@ -43,21 +42,18 @@ export const createSessionDependenciesFixture = (
   } = {},
 ): SessionDependencies => {
   const { sessionsRef: overrideSessionsRef, ...sessionOverrides } = overrides;
-  const sessionsRef = overrideSessionsRef ?? { current: emptyAgentSessionCollection() };
+  const sessionsRef = overrideSessionsRef ?? {
+    current: emptyAgentSessionCollection(),
+  };
   return {
     replaceSession: (session) => {
       sessionsRef.current = replaceAgentSession(sessionsRef.current, session);
-    },
-    removeSession: (identity) => {
-      sessionsRef.current = removeAgentSession(sessionsRef.current, identity);
     },
     readSessionSnapshot: (identity) => getAgentSession(sessionsRef.current, identity),
     sessionStartGateRef: { current: createSessionStartGate() },
     loadSourceSession: async ({ sourceSession }) =>
       getAgentSession(sessionsRef.current, sourceSession),
     loadAgentSessionHistory: async () => null,
-    persistSessionRecord: async () => {},
-    deleteSessionRecord: async () => {},
     clearSessionObservationState: () => undefined,
     ...sessionOverrides,
   };
@@ -68,9 +64,6 @@ export const createRuntimeDependenciesFixture = (
 ): RuntimeDependencies => ({
   adapter: new OpencodeSdkAdapter(),
   canonicalizePath: async (path) => path,
-  prepareTaskSessionStartupLease: async () => "lease-1",
-  completeTaskSessionStartupLease: async () => {},
-  abortTaskSessionStartupLease: async () => {},
   ensureRuntime: async () => {
     throw new Error("should not resolve runtime");
   },
@@ -81,8 +74,13 @@ export const createTaskDependenciesFixture = (
   overrides: Partial<TaskDependencies> = {},
 ): TaskDependencies => ({
   taskRef: { current: [] },
-  loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+  loadTaskDocuments: async () => ({
+    specMarkdown: "",
+    planMarkdown: "",
+    qaMarkdown: "",
+  }),
   refreshTaskData: async () => {},
+  refreshSessionRecords: async () => {},
   sendAgentMessage: async () => {},
   ...overrides,
 });

@@ -235,6 +235,17 @@ export const createTaskSessionBootstrapUseCase = ({
         const current = yield* coordinator.inspectBootstrap(canonicalRepoPath, taskId, bootstrapId);
         if (current.state === "terminal") {
           if (current.terminal.outcome === "completed") return true;
+          if (current.terminal.outcome === "completion_failed") {
+            return yield* Effect.fail(
+              new HostOperationError({
+                operation: "task.session_bootstrap.complete",
+                message:
+                  current.terminal.failureMessage ??
+                  `Task session bootstrap ${bootstrapId} did not complete.`,
+                details: { repoPath: canonicalRepoPath, taskId, bootstrapId },
+              }),
+            );
+          }
           return yield* Effect.fail(
             new HostValidationError({
               field: "bootstrapId",
@@ -252,25 +263,43 @@ export const createTaskSessionBootstrapUseCase = ({
             }),
           );
         }
-        const task = yield* taskStore.getTask({ repoPath: canonicalRepoPath, taskId });
-        if (reservation.role === "build") {
-          if (task.status !== reservation.preparedStatus) {
-            return yield* Effect.fail(
-              new HostOperationError({
-                operation: "task.session_bootstrap.complete",
-                message: `Task ${taskId} changed from ${reservation.preparedStatus} to ${task.status} while Builder startup was in progress.`,
-                details: { repoPath: canonicalRepoPath, taskId, bootstrapId },
-              }),
-            );
-          }
-          yield* validateTaskTransitionEffect(task, [task], task.status, "in_progress");
-          yield* taskStore.transitionTask({
-            repoPath: canonicalRepoPath,
+        const completion = yield* Effect.either(
+          Effect.gen(function* () {
+            const task = yield* taskStore.getTask({ repoPath: canonicalRepoPath, taskId });
+            if (reservation.role === "build") {
+              if (task.status !== reservation.preparedStatus) {
+                return yield* Effect.fail(
+                  new HostOperationError({
+                    operation: "task.session_bootstrap.complete",
+                    message: `Task ${taskId} changed from ${reservation.preparedStatus} to ${task.status} while Builder startup was in progress.`,
+                    details: { repoPath: canonicalRepoPath, taskId, bootstrapId },
+                  }),
+                );
+              }
+              yield* validateTaskTransitionEffect(task, [task], task.status, "in_progress");
+              yield* taskStore.transitionTask({
+                repoPath: canonicalRepoPath,
+                taskId,
+                status: "in_progress",
+              });
+            } else {
+              yield* validateTaskSessionWorkflowAvailable(
+                task,
+                reservation.role,
+                canonicalRepoPath,
+              );
+            }
+          }),
+        );
+        if (completion._tag === "Left") {
+          yield* coordinator.finishBootstrap(
+            canonicalRepoPath,
             taskId,
-            status: "in_progress",
-          });
-        } else {
-          yield* validateTaskSessionWorkflowAvailable(task, reservation.role, canonicalRepoPath);
+            bootstrapId,
+            "completion_failed",
+            errorMessage(completion.left),
+          );
+          return yield* Effect.fail(completion.left);
         }
         yield* coordinator.finishBootstrap(canonicalRepoPath, taskId, bootstrapId, "completed");
         return true;
@@ -284,6 +313,23 @@ export const createTaskSessionBootstrapUseCase = ({
         const canonicalRepoPath = yield* gitPort.canonicalizePath(repoPath);
         const current = yield* coordinator.inspectBootstrap(canonicalRepoPath, taskId, bootstrapId);
         if (current.state === "terminal") {
+          if (current.terminal.outcome === "completion_failed") {
+            const cleanupError = yield* coordinator.abortFailedCompletion(
+              canonicalRepoPath,
+              taskId,
+              bootstrapId,
+            );
+            if (cleanupError) {
+              return yield* Effect.fail(
+                new HostOperationError({
+                  operation: "task.session_bootstrap.abort",
+                  message: `Task session bootstrap rollback did not complete.${cleanupError}`,
+                  details: { repoPath: canonicalRepoPath, taskId, bootstrapId },
+                }),
+              );
+            }
+            return true;
+          }
           if (current.terminal.outcome === "abort_failed") {
             return yield* Effect.fail(
               new HostOperationError({

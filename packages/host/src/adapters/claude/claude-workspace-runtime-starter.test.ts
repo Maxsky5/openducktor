@@ -93,9 +93,8 @@ const createLiveSessionDependencies = ({
   const adapter: AgentSessionLiveAdapterPort = {
     supportsSessionControl: false,
     binding: { runtimeId: "runtime-1", runtimeKind: "claude", repoPath: "/repo" },
-    matches: () => false,
-    listRetainedSnapshots: () => Effect.succeed([]),
-    readRetainedSnapshot: () => Effect.die("unused"),
+    listSnapshots: () => Effect.succeed([]),
+    readSnapshot: () => Effect.die("unused"),
     loadContext: () => Effect.die("unused"),
     replyApproval: () => Effect.die("unused"),
     replyQuestion: () => Effect.die("unused"),

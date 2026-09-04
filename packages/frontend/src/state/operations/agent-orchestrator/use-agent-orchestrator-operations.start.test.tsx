@@ -54,7 +54,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     let sendCalls = 0;
 
     const originalAgentSessionsList = host.agentSessionsList;
-    const originalAgentSessionUpsert = host.agentSessionUpsert;
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
@@ -65,7 +64,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
     host.agentSessionsList = async () => [{ ...persistedSessionFixture }];
-    host.agentSessionUpsert = async () => {};
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
@@ -125,7 +123,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
       await harness.unmount();
 
       host.agentSessionsList = originalAgentSessionsList;
-      host.agentSessionUpsert = originalAgentSessionUpsert;
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
@@ -139,13 +136,11 @@ describe("use-agent-orchestrator-operations start and send", () => {
 
   test("keeps one ordered live-session attachment during startup loading", async () => {
     const originalAgentSessionsList = host.agentSessionsList;
-    const originalAgentSessionUpsert = host.agentSessionUpsert;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
 
     host.agentSessionsList = async () => [{ ...persistedSessionFixture }];
-    host.agentSessionUpsert = async () => {};
     OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
     OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
@@ -183,7 +178,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     } finally {
       await harness.unmount();
       host.agentSessionsList = originalAgentSessionsList;
-      host.agentSessionUpsert = originalAgentSessionUpsert;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
       OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
@@ -194,7 +188,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     let sendCalls = 0;
 
     const originalAgentSessionsList = host.agentSessionsList;
-    const originalAgentSessionUpsert = host.agentSessionUpsert;
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
@@ -205,7 +198,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
     host.agentSessionsList = async () => [{ ...persistedSessionFixture }];
-    host.agentSessionUpsert = async () => {};
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
@@ -263,7 +255,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     } finally {
       await harness.unmount();
       host.agentSessionsList = originalAgentSessionsList;
-      host.agentSessionUpsert = originalAgentSessionUpsert;
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
@@ -279,6 +270,9 @@ describe("use-agent-orchestrator-operations start and send", () => {
     let startCalls = 0;
     let persistedListCalls = 0;
     let persistedSessions: Array<typeof persistedSessionFixture> = [];
+    const sessionStored = createDeferred<void>();
+    const initialListStarted = createDeferred<void>();
+    const releaseInitialList = createDeferred<void>();
 
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
@@ -318,7 +312,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
 
     OpencodeSdkAdapter.prototype.startSession = async (input) => {
       startCalls += 1;
-      return {
+      const summary = {
         runtimeKind: "opencode",
         workingDirectory: input.workingDirectory,
         externalSessionId: "external-in-memory",
@@ -326,6 +320,17 @@ describe("use-agent-orchestrator-operations start and send", () => {
         sessionAssociation: input.sessionScope,
         status: "idle",
       } as const;
+      persistedSessions = [
+        {
+          ...persistedSessionFixture,
+          externalSessionId: summary.externalSessionId,
+          startedAt: summary.startedAt,
+          workingDirectory: summary.workingDirectory,
+          selectedModel: BUILD_SELECTION,
+        },
+      ];
+      sessionStored.resolve();
+      return summary;
     };
     OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
       models: [],
@@ -345,19 +350,20 @@ describe("use-agent-orchestrator-operations start and send", () => {
         },
         agentSessionsListForTasks: async () => {
           persistedListCalls += 1;
-          return [{ taskId: "task-1", agentSessions: persistedSessions }];
-        },
-        agentSessionUpsert: async (_repoPath, _taskId, record) => {
-          persistedSessions = [record];
+          const snapshot = persistedSessions;
+          initialListStarted.resolve();
+          await releaseInitialList.promise;
+          return [{ taskId: "task-1", agentSessions: snapshot }];
         },
       }),
     });
 
     try {
       await harness.mount();
+      await initialListStarted.promise;
 
       let firstSessionId = "";
-      await harness.run(async () => {
+      const firstStart = harness.run(async () => {
         const session = await harness.getLatest().operations.startAgentSession({
           taskId: "task-1",
           role: "build",
@@ -366,6 +372,12 @@ describe("use-agent-orchestrator-operations start and send", () => {
         });
         firstSessionId = session.externalSessionId;
       });
+      await sessionStored.promise;
+      releaseInitialList.resolve();
+      await firstStart;
+      await harness.waitFor(
+        (state) => state.readModelState.sessionReadModelLoadState.kind === "ready",
+      );
 
       let secondSessionId = "";
       await harness.run(async () => {
@@ -455,7 +467,17 @@ describe("use-agent-orchestrator-operations start and send", () => {
 
     OpencodeSdkAdapter.prototype.startSession = async () => {
       startCalls += 1;
-      return startDeferred.promise;
+      const summary = await startDeferred.promise;
+      persistedSessions = [
+        {
+          ...persistedSessionFixture,
+          externalSessionId: summary.externalSessionId,
+          startedAt: summary.startedAt,
+          workingDirectory: summary.workingDirectory,
+          selectedModel: BUILD_SELECTION,
+        },
+      ];
+      return summary;
     };
     OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
       models: [],
@@ -476,9 +498,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
         agentSessionsListForTasks: async () => {
           persistedBatchListCalls += 1;
           return [{ taskId: "task-1", agentSessions: persistedSessions }];
-        },
-        agentSessionUpsert: async (_repoPath, _taskId, record) => {
-          persistedSessions = [record];
         },
       }),
     });
@@ -542,7 +561,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     let startCalls = 0;
 
     const originalAgentSessionsList = host.agentSessionsList;
-    const originalAgentSessionUpsert = host.agentSessionUpsert;
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
@@ -560,7 +578,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
         role: "build",
       },
     ];
-    host.agentSessionUpsert = async () => {};
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
@@ -655,7 +672,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
       await harness.unmount();
 
       host.agentSessionsList = originalAgentSessionsList;
-      host.agentSessionUpsert = originalAgentSessionUpsert;
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;

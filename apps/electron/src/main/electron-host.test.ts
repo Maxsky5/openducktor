@@ -1248,20 +1248,6 @@ describe("createElectronHostCommandRouter", () => {
       ],
     });
     await expect(
-      router.invoke("agent_session_upsert", {
-        repoPath: "/repo",
-        taskId: "task-1",
-        session: {
-          externalSessionId: "session-1",
-          role: "build",
-          startedAt: "2026-05-10T10:00:00.000Z",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo/task-1",
-          selectedModel: null,
-        },
-      }),
-    ).resolves.toBe(true);
-    await expect(
       router.invoke("task_transition", {
         repoPath: "/repo",
         taskId: "task-1",

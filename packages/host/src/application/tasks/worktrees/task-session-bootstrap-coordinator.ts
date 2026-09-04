@@ -15,7 +15,7 @@ export type TaskSessionBootstrapReservation = {
 };
 
 export type TaskSessionBootstrapTerminalOutcome = {
-  outcome: "aborted" | "abort_failed" | "completed";
+  outcome: "aborted" | "abort_failed" | "completed" | "completion_failed";
   repoPath: string;
   taskId: string;
   failureMessage?: string;
@@ -36,6 +36,7 @@ export const createTaskSessionBootstrapCoordinator = () => {
   const lifecycleLocks = new Map<string, string>();
   const worktreeGates = new Map<string, Effect.Semaphore>();
   const terminalOutcomes = new Map<string, TaskSessionBootstrapTerminalOutcome>();
+  const failedCompletionCleanup = new Map<string, TaskSessionBootstrapCleanup>();
   const key = (repoPath: string, taskId: string): string => `${repoPath}\0${taskId}`;
   const worktreeGate = (path: string): Effect.Semaphore => {
     const pathKey = normalizePathForComparison(path);
@@ -65,7 +66,10 @@ export const createTaskSessionBootstrapCoordinator = () => {
     terminalOutcomes.set(bootstrapId, terminal);
     if (terminalOutcomes.size > 128) {
       const oldest = terminalOutcomes.keys().next().value;
-      if (oldest) terminalOutcomes.delete(oldest);
+      if (oldest) {
+        terminalOutcomes.delete(oldest);
+        failedCompletionCleanup.delete(oldest);
+      }
     }
     return terminal;
   };
@@ -204,8 +208,32 @@ export const createTaskSessionBootstrapCoordinator = () => {
       return Effect.gen(function* () {
         const current = yield* inspectBootstrap(repoPath, taskId, bootstrapId);
         if (current.state === "terminal") return current.terminal;
+        if (outcome === "completion_failed" && current.reservation) {
+          failedCompletionCleanup.set(bootstrapId, current.reservation.cleanup);
+        }
         yield* releaseActiveBootstrap(repoPath, taskId);
         return recordTerminal(bootstrapId, outcome, repoPath, taskId, failureMessage);
+      });
+    },
+    abortFailedCompletion(repoPath: string, taskId: string, bootstrapId: string) {
+      return Effect.gen(function* () {
+        const current = yield* inspectBootstrap(repoPath, taskId, bootstrapId);
+        if (current.state !== "terminal" || current.terminal.outcome !== "completion_failed") {
+          return null;
+        }
+        const cleanup = failedCompletionCleanup.get(bootstrapId);
+        failedCompletionCleanup.delete(bootstrapId);
+        const cleanupError = cleanup ? yield* cleanup() : "";
+        recordTerminal(
+          bootstrapId,
+          cleanupError ? "abort_failed" : "aborted",
+          repoPath,
+          taskId,
+          cleanupError
+            ? `Task session bootstrap rollback did not complete.${cleanupError}`
+            : undefined,
+        );
+        return cleanupError;
       });
     },
     releaseBootstrap(repoPath: string, taskId: string, bootstrapId: string) {

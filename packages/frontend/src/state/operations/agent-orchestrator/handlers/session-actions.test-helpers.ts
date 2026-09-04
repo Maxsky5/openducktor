@@ -6,7 +6,6 @@ import {
   createAgentSessionCollection,
   getAgentSession,
   listAgentSessions,
-  removeAgentSession,
   replaceAgentSession,
   replaceAgentSessionByIdentity,
 } from "@/state/agent-session-collection";
@@ -102,9 +101,6 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
     replaceSession: (session) => {
       sessionsRef.current = replaceAgentSession(sessionsRef.current, session);
     },
-    removeSession: (identity) => {
-      sessionsRef.current = removeAgentSession(sessionsRef.current, identity);
-    },
     readSessionSnapshot: (identity) => getAgentSession(sessionsRef.current, identity),
     taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
     repoEpochRef: { current: 1 },
@@ -125,16 +121,17 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
       return nextSession;
     },
     canonicalizePath: async (path) => path,
-    prepareTaskSessionStartupLease: async () => "lease-1",
-    completeTaskSessionStartupLease: async () => {},
-    abortTaskSessionStartupLease: async () => {},
     ensureRuntime: async () => ({
       kind: "opencode",
       runtimeKind: "opencode",
       workingDirectory: "/tmp/repo",
     }),
     ensureExistingSessionRuntime: async () => {},
-    loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+    loadTaskDocuments: async () => ({
+      specMarkdown: "",
+      planMarkdown: "",
+      qaMarkdown: "",
+    }),
     loadRepoPromptOverrides: async () => ({}),
     loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
     liveSessionHost: {
@@ -144,9 +141,8 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
     loadSourceSession: async ({ sourceSession }) =>
       getAgentSession(sessionsRef.current, sourceSession),
     loadAgentSessionHistory: async () => null,
+    refreshSessionRecords: async () => {},
     refreshTaskData: async () => {},
-    persistSessionRecord: async () => {},
-    deleteSessionRecord: async () => {},
     invalidateSessionStopQueries: async () => {},
   };
 

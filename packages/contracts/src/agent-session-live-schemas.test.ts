@@ -19,7 +19,6 @@ const ref = {
 
 const snapshot = {
   ref,
-  sessionAssociation: { kind: "unbound" },
   activity: "waiting_for_permission",
   title: "Implement live state",
   startedAt: "2026-07-16T10:00:00.000Z",
@@ -87,7 +86,16 @@ describe("agent-session live contracts", () => {
     ).toBe(false);
   });
 
-  test("rejects runtime-native routing fields from public inputs and pending requests", () => {
+  test("accepts only the repository path for live refresh", () => {
+    expect(agentSessionLiveRefreshInputSchema.parse({ repoPath: "/repo" })).toEqual({
+      repoPath: "/repo",
+    });
+    expect(
+      agentSessionLiveRefreshInputSchema.safeParse({
+        repoPath: "/repo",
+        registeredSessionRefs: [ref],
+      }).success,
+    ).toBe(false);
     expect(
       agentSessionLiveRefreshInputSchema.safeParse({
         repoPath: "/repo",
@@ -147,23 +155,14 @@ describe("agent-session live contracts", () => {
     }
   });
 
-  test("requires explicit workflow, repository, or unbound association on live snapshots", () => {
+  test("keeps task ownership out of runtime snapshots", () => {
+    expect(agentSessionLiveSnapshotSchema.parse(snapshot)).toEqual(snapshot);
     expect(
-      agentSessionLiveSnapshotSchema.parse({
+      agentSessionLiveSnapshotSchema.safeParse({
         ...snapshot,
         sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-      }),
-    ).toMatchObject({
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-    });
-    expect(
-      agentSessionLiveSnapshotSchema.parse({
-        ...snapshot,
-        sessionAssociation: { kind: "repository" },
-      }),
-    ).toMatchObject({ sessionAssociation: { kind: "repository" } });
-    const { sessionAssociation: _, ...withoutAssociation } = snapshot;
-    expect(agentSessionLiveSnapshotSchema.safeParse(withoutAssociation).success).toBe(false);
+      }).success,
+    ).toBe(false);
   });
 
   test("routes ordered envelope variants by repository without attachment identity", () => {

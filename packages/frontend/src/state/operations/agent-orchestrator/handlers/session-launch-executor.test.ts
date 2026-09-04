@@ -10,7 +10,8 @@ import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orch
 import {
   buildLaunchedSessionState,
   createExecutePreparedSessionLaunch,
-  type PreparedSessionLaunchCommitInput,
+  type ExecutePreparedSessionLaunchInput,
+  type PreparedSessionRegistrationInput,
   type SessionLaunchExecutorDependencies,
 } from "./session-launch-executor";
 import type { PreparedSessionLaunch } from "./prepared-session-launch";
@@ -92,7 +93,10 @@ const createExecutorHarness = () => {
     },
   } satisfies SessionLaunchExecutorDependencies["adapter"];
 
-  const deps: SessionLaunchExecutorDependencies = {
+  const deps: SessionLaunchExecutorDependencies & {
+    replaceSession: (session: AgentSessionState) => void;
+    removeSession: (identity: AgentSessionIdentity) => void;
+  } = {
     adapter,
     replaceSession: (session) => {
       calls.replaceSession.push(session);
@@ -106,7 +110,51 @@ const createExecutorHarness = () => {
     currentWorkspaceRepoPathRef,
   };
 
-  const execute = createExecutePreparedSessionLaunch(deps);
+  const executePrepared = createExecutePreparedSessionLaunch(deps);
+  const registerLocally = async ({
+    sessionState,
+  }: PreparedSessionRegistrationInput): Promise<void> => {
+    deps.replaceSession(sessionState);
+  };
+  const execute = (
+    input: Omit<ExecutePreparedSessionLaunchInput, "register" | "rollback"> &
+      Partial<Pick<ExecutePreparedSessionLaunchInput, "register" | "rollback">>,
+  ) => {
+    const rollback: ExecutePreparedSessionLaunchInput["rollback"] = async (rollbackInput) => {
+      const sessionRef = {
+        repoPath: input.launch.repoPath,
+        ...rollbackInput.identity,
+      };
+      try {
+        if (input.launch.mode === "resume") {
+          await deps.adapter.releaseSession(sessionRef);
+        } else {
+          await deps.adapter.stopSession(sessionRef);
+        }
+      } catch (error) {
+        const cause = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `${rollbackInput.message} Failed to stop stale started session '${rollbackInput.identity.externalSessionId}': ${cause}`,
+        );
+      }
+      if (!rollbackInput.finishBootstrap) {
+        try {
+          deps.removeSession(rollbackInput.identity);
+        } catch (error) {
+          const cause = error instanceof Error ? error.message : String(error);
+          throw new Error(
+            `${rollbackInput.message} The stale started session '${rollbackInput.identity.externalSessionId}' was finalized but its local registration could not be removed: ${cause}`,
+          );
+        }
+      }
+      throw new Error(rollbackInput.message, { cause: rollbackInput.cause });
+    };
+    return executePrepared({
+      ...input,
+      register: input.register ?? registerLocally,
+      rollback: input.rollback ?? rollback,
+    });
+  };
 
   return { calls, deps, execute, repoEpochRef, currentWorkspaceRepoPathRef, sessionsRef };
 };
@@ -166,6 +214,7 @@ describe("session-launch-executor", () => {
     });
     expect(harness.calls.replaceSession[0]?.sessionAssociation).toEqual({ kind: "repository" });
     expect(harness.calls.stopSession).toHaveLength(0);
+    expect(harness.calls.removeSession).toHaveLength(0);
   });
 
   test("registers the launched session with the exact association and selected model", async () => {
@@ -183,7 +232,7 @@ describe("session-launch-executor", () => {
     expect(registered?.selectedModel).toEqual(launch.selectedModel);
     expect(registered?.status).toBe("idle");
     expect(registered?.historyLoadState).toBe("loaded");
-    expect(result.summary.sessionAssociation).toEqual({
+    expect(result.sessionAssociation).toEqual({
       kind: "workflow",
       taskId: "task-1",
       role: "build",
@@ -267,11 +316,8 @@ describe("session-launch-executor", () => {
     expect(harness.calls.replaceSession[0]?.status).toBe("running");
   });
 
-  test("releases a resumed session when local registration fails", async () => {
+  test("leaves resumed-session cleanup with the required registration owner", async () => {
     const harness = createExecutorHarness();
-    harness.deps.replaceSession = () => {
-      throw new Error("registration failed");
-    };
     const launch: PreparedSessionLaunch = {
       mode: "resume",
       repoPath: REPO_PATH,
@@ -281,12 +327,17 @@ describe("session-launch-executor", () => {
       externalSessionId: "existing-session",
     };
 
-    await expect(harness.execute({ launch })).rejects.toThrow(
-      'Failed to register started session "existing-session": registration failed.',
-    );
-    expect(harness.calls.releaseSession).toHaveLength(1);
+    await expect(
+      harness.execute({
+        launch,
+        register: async () => {
+          throw new Error("registration failed");
+        },
+      }),
+    ).rejects.toThrow("registration failed");
+    expect(harness.calls.releaseSession).toHaveLength(0);
     expect(harness.calls.stopSession).toHaveLength(0);
-    expect(harness.calls.removeSession).toHaveLength(1);
+    expect(harness.calls.removeSession).toHaveLength(0);
   });
 
   test("does not seed a system prompt header for a resume without a prompt", async () => {
@@ -615,69 +666,42 @@ describe("session-launch-executor", () => {
     expect(harness.calls.stopSession).toHaveLength(1);
   });
 
-  test("rolls back the launched runtime session when local registration fails", async () => {
+  test("keeps registration ownership explicit and passes stale guard plus session state", async () => {
     const harness = createExecutorHarness();
-    harness.deps.replaceSession = () => {
-      throw new Error("registration failed");
-    };
-
-    await expect(harness.execute({ launch: repositoryStartLaunch() })).rejects.toThrow(
-      'Failed to register started session "started-1": registration failed. The started session was stopped and removed locally.',
-    );
-    expect(harness.calls.stopSession).toHaveLength(1);
-    expect(harness.calls.removeSession).toHaveLength(1);
-  });
-
-  test("keeps rollback failure visible when registration cleanup cannot stop the runtime", async () => {
-    const harness = createExecutorHarness();
-    harness.deps.replaceSession = () => {
-      throw new Error("registration failed");
-    };
-    harness.deps.adapter.stopSession = async () => {
-      throw new Error("runtime unavailable");
-    };
-
-    await expect(harness.execute({ launch: repositoryStartLaunch() })).rejects.toThrow(
-      'Failed to register started session "started-1": registration failed. Failed to roll back the started session after the registration failure: runtime unavailable',
-    );
-    expect(harness.calls.removeSession).toHaveLength(0);
-  });
-
-  test("keeps commit ownership explicit and passes stale guard plus registered state", async () => {
-    const harness = createExecutorHarness();
-    const commitInputs: PreparedSessionLaunchCommitInput[] = [];
+    const registrationInputs: PreparedSessionRegistrationInput[] = [];
 
     await harness.execute({
       launch: repositoryStartLaunch(),
-      commit: async (input) => {
-        commitInputs.push(input);
+      register: async (input) => {
+        registrationInputs.push(input);
       },
     });
 
-    expect(commitInputs).toHaveLength(1);
-    const commitInput = commitInputs[0];
-    expect(commitInput).toBeDefined();
-    if (!commitInput) {
-      throw new Error("Expected the launch commit callback to receive its input.");
+    expect(registrationInputs).toHaveLength(1);
+    const registrationInput = registrationInputs[0];
+    expect(registrationInput).toBeDefined();
+    if (!registrationInput) {
+      throw new Error("Expected the launch registration callback to receive its input.");
     }
-    expect(commitInput.identity.externalSessionId).toBe("started-1");
-    expect(commitInput.sessionState.sessionAssociation).toEqual({ kind: "repository" });
-    expect(commitInput.isStaleOperation()).toBe(false);
+    expect(registrationInput.identity.externalSessionId).toBe("started-1");
+    expect(registrationInput.sessionState.sessionAssociation).toEqual({ kind: "repository" });
+    expect(registrationInput.isStaleOperation()).toBe(false);
   });
 
-  test("surfaces commit failures instead of masking them", async () => {
+  test("leaves registration failure cleanup with the required registration owner", async () => {
     const harness = createExecutorHarness();
 
     await expect(
       harness.execute({
         launch: repositoryStartLaunch(),
-        commit: async () => {
+        register: async () => {
           throw new Error("commit failed");
         },
       }),
     ).rejects.toThrow("commit failed");
     expect(harness.calls.stopSession).toHaveLength(0);
-    expect(listAgentSessions(harness.sessionsRef.current)).toHaveLength(1);
+    expect(harness.calls.removeSession).toHaveLength(0);
+    expect(listAgentSessions(harness.sessionsRef.current)).toHaveLength(0);
   });
 
   test("dispatches each launch mode through the matching runtime call", async () => {

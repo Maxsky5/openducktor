@@ -4,6 +4,8 @@ import type {
   AgentSessionControlResumeInput,
   AgentSessionControlSendInput,
   AgentSessionControlStartInput,
+  AgentSessionControlSummary,
+  AgentSessionModelSettings,
   AgentSessionScope,
   AgentSessionWorkflowScope,
   CodexEffectivePolicy,
@@ -146,7 +148,12 @@ export type SendAgentUserMessageInput = PolicyBoundSessionControlRef & {
 export type AcceptedAgentUserMessage = Extract<AgentEvent, { type: "user_message" }>;
 
 export type UpdateAgentSessionModelInput = SessionRef & {
-  model: AgentModelSelection | null;
+  model: AgentSessionModelSettings | null;
+};
+
+export type UpdateControlledAgentSessionModelInput = SessionRef & {
+  sessionScope: AgentSessionScope;
+  model: AgentSessionModelSettings | null;
 };
 
 export type AgentSessionHistorySystemPromptContext = {
@@ -263,11 +270,11 @@ export interface AgentSessionLivePort {
 
 /** Runtime-neutral session controls owned by the host application boundary. */
 export interface AgentSessionControlPort {
-  startSession(input: AgentSessionControlStartInput): Promise<AgentSessionSummary>;
-  resumeSession(input: AgentSessionControlResumeInput): Promise<AgentSessionSummary>;
+  startSession(input: AgentSessionControlStartInput): Promise<AgentSessionControlSummary>;
+  resumeSession(input: AgentSessionControlResumeInput): Promise<AgentSessionControlSummary>;
   releaseSession(input: SessionRef): Promise<void>;
-  forkSession(input: AgentSessionControlForkInput): Promise<AgentSessionSummary>;
-  updateSessionModel(input: UpdateAgentSessionModelInput): Promise<void>;
+  forkSession(input: AgentSessionControlForkInput): Promise<AgentSessionControlSummary>;
+  updateSessionModel(input: UpdateControlledAgentSessionModelInput): Promise<void>;
   sendUserMessage(input: AgentSessionControlSendInput): Promise<AcceptedAgentUserMessage>;
   stopSession(input: SessionRef): Promise<void>;
 }

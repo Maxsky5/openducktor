@@ -1,19 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
-import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import { createOpenCodeLiveSessionAdapterPreparer } from "./opencode-live-session-adapter";
 import {
+  controlMetadata,
   controlSummary,
   createLifecycle,
   createRuntimeHarness,
-  nativeSource,
   ref,
   runtime,
 } from "./opencode-live-session-adapter.test-support";
 
 describe("OpenCode live session controls", () => {
-  test("publishes workflow forks without a subagent parent", async () => {
+  test("publishes created forks without task ownership or a subagent parent", async () => {
     const harness = createRuntimeHarness();
     const publishedChanges: AgentSessionLiveAdapterChange[] = [];
     const prepared = await Effect.runPromise(
@@ -39,14 +38,15 @@ describe("OpenCode live session controls", () => {
         operation: "fork",
         input: expect.objectContaining({ parentExternalSessionId: "planner-session" }),
       });
-      const snapshots = await Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo"));
+      const snapshots = await Effect.runPromise(prepared.adapter.listSnapshots("/repo"));
       const fork = snapshots.find(
         (snapshot) => snapshot.ref.externalSessionId === "controlled-session",
       );
       if (!fork) {
-        throw new Error("Expected a retained workflow fork.");
+        throw new Error("Expected a live workflow fork.");
       }
-      expect(fork).toMatchObject({ sessionAssociation: controlSummary.sessionAssociation });
+      expect(fork).not.toHaveProperty("sessionAssociation");
+      expect(fork.repositoryScope).toBeUndefined();
       expect(fork.parentExternalSessionId).toBeUndefined();
       expect(publishedChanges).toContainEqual({ type: "session_upsert", snapshot: fork });
     } finally {
@@ -54,15 +54,8 @@ describe("OpenCode live session controls", () => {
     }
   });
 
-  test("preserves runtime-reported subagent ancestry when resuming a child", async () => {
+  test("registers a resumed session only from its OpenDucktor control result", async () => {
     const harness = createRuntimeHarness();
-    harness.setSources([
-      nativeSource({
-        externalSessionId: "controlled-session",
-        parentExternalSessionId: "builder-session",
-        sessionAssociation: controlSummary.sessionAssociation,
-      }),
-    ]);
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
@@ -78,20 +71,57 @@ describe("OpenCode live session controls", () => {
           sessionScope: controlSummary.sessionAssociation,
         }),
       );
-      await expect(
-        Effect.runPromise(prepared.adapter.listRetainedSnapshots("/repo")),
-      ).resolves.toEqual([
+      const snapshots = await Effect.runPromise(prepared.adapter.listSnapshots("/repo"));
+      expect(snapshots).toEqual([
         expect.objectContaining({
-          parentExternalSessionId: "builder-session",
-          sessionAssociation: controlSummary.sessionAssociation,
+          ref: expect.objectContaining({ externalSessionId: "controlled-session" }),
         }),
       ]);
+      expect(snapshots[0]?.parentExternalSessionId).toBeUndefined();
+      expect(snapshots[0]).not.toHaveProperty("sessionAssociation");
     } finally {
       await Effect.runPromise(prepared.adapter.releaseRuntime());
     }
   });
 
-  test("delegates controls while the host projection remains the only session authority", async () => {
+  test("sends to a stored workflow session without live state", async () => {
+    const harness = createRuntimeHarness();
+    const publishedChanges: AgentSessionLiveAdapterChange[] = [];
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle(publishedChanges),
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime),
+    );
+    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+
+    try {
+      await expect(
+        Effect.runPromise(
+          prepared.adapter.sendUserMessage({
+            ...ref,
+            sessionScope,
+            parts: [{ kind: "text", text: "Hello" }],
+          }),
+        ),
+      ).resolves.toMatchObject({ type: "user_message", externalSessionId: "session-1" });
+      expect(harness.controlCalls).toContainEqual({
+        operation: "send",
+        input: expect.objectContaining({ externalSessionId: "session-1", sessionScope }),
+      });
+      expect(publishedChanges).toContainEqual({
+        type: "transcript_event",
+        event: expect.objectContaining({
+          type: "user_message",
+          externalSessionId: "session-1",
+        }),
+      });
+    } finally {
+      await Effect.runPromise(prepared.adapter.releaseRuntime());
+    }
+  });
+
+  test("returns metadata-only controls while the host retains runtime state", async () => {
     const harness = createRuntimeHarness();
     const publishedChanges: AgentSessionLiveAdapterChange[] = [];
     const prepared = await Effect.runPromise(
@@ -112,9 +142,11 @@ describe("OpenCode live session controls", () => {
     };
 
     await expect(Effect.runPromise(adapter.startSession(startInput))).resolves.toEqual(
-      controlSummary,
+      controlMetadata,
     );
-    expect(adapter.matches(controlRef)).toBe(true);
+    await expect(Effect.runPromise(adapter.readSnapshot(controlRef))).resolves.toMatchObject({
+      type: "live",
+    });
     await Effect.runPromise(
       adapter.resumeSession({
         ...controlRef,
@@ -151,18 +183,32 @@ describe("OpenCode live session controls", () => {
       },
     ]);
 
-    await Effect.runPromise(adapter.updateSessionModel({ ...controlRef, model: null }));
+    await Effect.runPromise(
+      adapter.updateSessionModel({
+        ...controlRef,
+        sessionScope: startInput.sessionScope,
+        model: null,
+      }),
+    );
     await Effect.runPromise(adapter.stopSession(controlRef));
-    expect(adapter.matches(controlRef)).toBe(false);
+    await expect(Effect.runPromise(adapter.readSnapshot(controlRef))).resolves.toEqual({
+      type: "missing",
+      ref: controlRef,
+    });
     await Effect.runPromise(
       adapter.resumeSession({
         ...controlRef,
         sessionScope: startInput.sessionScope,
       }),
     );
-    expect(adapter.matches(controlRef)).toBe(true);
+    await expect(Effect.runPromise(adapter.readSnapshot(controlRef))).resolves.toMatchObject({
+      type: "live",
+    });
     await Effect.runPromise(adapter.releaseSession(controlRef));
-    expect(adapter.matches(controlRef)).toBe(false);
+    await expect(Effect.runPromise(adapter.readSnapshot(controlRef))).resolves.toEqual({
+      type: "missing",
+      ref: controlRef,
+    });
 
     expect(harness.controlCalls.map((call) => call.operation)).toEqual([
       "start",
@@ -179,7 +225,7 @@ describe("OpenCode live session controls", () => {
       runtimePolicy: { kind: "opencode" },
       sessionScope: startInput.sessionScope,
     });
-    await expect(Effect.runPromise(adapter.releaseRuntime())).resolves.toEqual([ref]);
+    await expect(Effect.runPromise(adapter.releaseRuntime())).resolves.toEqual([]);
     expect(harness.releaseCalls).toEqual(["runtime-1"]);
   });
 
@@ -196,15 +242,6 @@ describe("OpenCode live session controls", () => {
       sendUserMessageBarrier: sendBarrier,
       onSendUserMessage: resolveSendStarted,
     });
-    harness.setSources([
-      nativeSource({ pendingApprovals: [], pendingQuestions: [] }),
-      nativeSource({
-        externalSessionId: "session-2",
-        title: "Other OpenCode session",
-        pendingApprovals: [],
-        pendingQuestions: [],
-      }),
-    ]);
     const publishedChanges: AgentSessionLiveAdapterChange[] = [];
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
@@ -214,10 +251,16 @@ describe("OpenCode live session controls", () => {
     );
     await Effect.runPromise(prepared.startForwarding());
     const adapter = prepared.adapter;
+    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+    await Effect.runPromise(adapter.resumeSession({ ...ref, sessionScope }));
+    await Effect.runPromise(
+      adapter.resumeSession({ ...ref, externalSessionId: "session-2", sessionScope }),
+    );
+    publishedChanges.length = 0;
     const sending = Effect.runPromise(
       adapter.sendUserMessage({
         ...ref,
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope,
         parts: [
           {
             kind: "slash_command",
@@ -229,7 +272,7 @@ describe("OpenCode live session controls", () => {
     await sendStarted;
 
     const forwarding = harness.emit({
-      type: "transcript_event",
+      type: "session_event",
       externalSessionId: "session-2",
       event: {
         type: "session_status",
@@ -247,13 +290,11 @@ describe("OpenCode live session controls", () => {
         ]);
         expect(result).toBe("forwarded");
         await expect(
-          Effect.runPromise(
-            adapter.readRetainedSnapshot({ ...ref, externalSessionId: "session-2" }),
-          ),
+          Effect.runPromise(adapter.readSnapshot({ ...ref, externalSessionId: "session-2" })),
         ).resolves.toMatchObject({ type: "live", session: { activity: "running" } });
 
         await harness.emit({
-          type: "transcript_event",
+          type: "session_event",
           externalSessionId: "session-1",
           event: {
             type: "user_message",
@@ -274,7 +315,7 @@ describe("OpenCode live session controls", () => {
           }),
         });
         await harness.emit({
-          type: "transcript_event",
+          type: "session_event",
           externalSessionId: "session-1",
           event: {
             type: "session_idle",
@@ -288,7 +329,7 @@ describe("OpenCode live session controls", () => {
         await forwarding;
       }
 
-      await expect(Effect.runPromise(adapter.readRetainedSnapshot(ref))).resolves.toMatchObject({
+      await expect(Effect.runPromise(adapter.readSnapshot(ref))).resolves.toMatchObject({
         type: "live",
         session: { activity: "idle" },
       });
@@ -328,14 +369,6 @@ describe("OpenCode live session controls", () => {
         }
       },
     });
-    harness.setSources([
-      nativeSource({ pendingApprovals: [], pendingQuestions: [] }),
-      nativeSource({
-        externalSessionId: "session-2",
-        pendingApprovals: [],
-        pendingQuestions: [],
-      }),
-    ]);
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
@@ -344,6 +377,10 @@ describe("OpenCode live session controls", () => {
     );
     const adapter = prepared.adapter;
     const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+    await Effect.runPromise(adapter.resumeSession({ ...ref, sessionScope }));
+    await Effect.runPromise(
+      adapter.resumeSession({ ...ref, externalSessionId: "session-2", sessionScope }),
+    );
     const send = (externalSessionId: string) =>
       Effect.runPromise(
         adapter.sendUserMessage({
@@ -390,7 +427,7 @@ describe("OpenCode live session controls", () => {
     }
   });
 
-  test("rejects a send result that arrives after the session is released", async () => {
+  test("accepts a send result that arrives after live state is released", async () => {
     let resolveSendStarted: () => void = () => undefined;
     let releaseSend: () => void = () => undefined;
     const sendStarted = new Promise<void>((resolve) => {
@@ -412,10 +449,12 @@ describe("OpenCode live session controls", () => {
     );
     await Effect.runPromise(prepared.startForwarding());
     const adapter = prepared.adapter;
+    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+    await Effect.runPromise(adapter.resumeSession({ ...ref, sessionScope }));
     const sending = Effect.runPromise(
       adapter.sendUserMessage({
         ...ref,
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope,
         parts: [{ kind: "text", text: "Hello" }],
       }),
     );
@@ -425,23 +464,37 @@ describe("OpenCode live session controls", () => {
       await Effect.runPromise(adapter.releaseSession(ref));
       releaseSend();
 
-      await expect(sending).rejects.toThrow("is no longer retained");
-      expect(adapter.matches(ref)).toBe(false);
+      await expect(sending).resolves.toMatchObject({
+        type: "user_message",
+        externalSessionId: "session-1",
+      });
+      await expect(Effect.runPromise(adapter.readSnapshot(ref))).resolves.toEqual({
+        type: "missing",
+        ref,
+      });
       expect(
         publishedChanges.filter(
           (change) =>
             change.type === "transcript_event" && change.event.externalSessionId === "session-1",
         ),
-      ).toEqual([]);
+      ).toEqual([
+        {
+          type: "transcript_event",
+          event: expect.objectContaining({
+            type: "user_message",
+            externalSessionId: "session-1",
+          }),
+        },
+      ]);
     } finally {
       releaseSend();
-      await sending.catch(() => undefined);
+      await sending;
       await Effect.runPromise(adapter.releaseRuntime());
     }
   });
 
   for (const operation of ["start", "resume", "fork"] as const) {
-    test(`reports the latest runtime association after ${operation} invalidation and refresh`, async () => {
+    test(`does not publish runtime association after ${operation} invalidation and refresh`, async () => {
       const harness = createRuntimeHarness();
       const publishedChanges: AgentSessionLiveAdapterChange[] = [];
       const prepared = await Effect.runPromise(
@@ -485,35 +538,34 @@ describe("OpenCode live session controls", () => {
       }
 
       publishedChanges.length = 0;
-      harness.setSources([
-        nativeSource({
+      await harness.emit({
+        type: "session_event",
+        externalSessionId: "controlled-session",
+        event: {
+          type: "session_idle",
           externalSessionId: "controlled-session",
-          sessionAssociation: { kind: "unbound" },
-          title: "Refreshed runtime session",
-          runtimeActivity: "idle",
-          pendingApprovals: [],
-          pendingQuestions: [],
-        }),
-      ]);
-      await harness.emit({ type: "sessions_invalidated" });
-
-      await expect(Effect.runPromise(adapter.listRetainedSnapshots("/repo"))).resolves.toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            ref: controlRef,
-            sessionAssociation: { kind: "unbound" },
-          }),
-        ]),
-      );
-      await expect(
-        Effect.runPromise(adapter.readRetainedSnapshot(controlRef)),
-      ).resolves.toMatchObject({
-        type: "live",
-        session: {
-          ref: controlRef,
-          sessionAssociation: { kind: "unbound" },
+          timestamp: "2026-07-16T10:03:00.000Z",
         },
       });
+
+      const snapshots = await Effect.runPromise(adapter.listSnapshots("/repo"));
+      expect(snapshots).toEqual(
+        expect.arrayContaining([expect.objectContaining({ ref: controlRef })]),
+      );
+      const snapshot = snapshots.find(
+        (item) => item.ref.externalSessionId === controlRef.externalSessionId,
+      );
+      if (!snapshot) {
+        throw new Error("Expected the controlled live session.");
+      }
+      expect(snapshot).not.toHaveProperty("sessionAssociation");
+      expect(snapshot.repositoryScope).toBeUndefined();
+      const current = await Effect.runPromise(adapter.readSnapshot(controlRef));
+      expect(current).toMatchObject({ type: "live", session: { ref: controlRef } });
+      if (current.type !== "live") {
+        throw new Error("Expected a live session.");
+      }
+      expect(current.session).not.toHaveProperty("sessionAssociation");
       expect(
         publishedChanges.filter(
           (change) =>
@@ -525,85 +577,23 @@ describe("OpenCode live session controls", () => {
           type: "session_upsert",
           snapshot: expect.objectContaining({
             ref: controlRef,
-            sessionAssociation: { kind: "unbound" },
           }),
         },
       ]);
+      const upsert = publishedChanges.find(
+        (change) =>
+          change.type === "session_upsert" &&
+          change.snapshot.ref.externalSessionId === "controlled-session",
+      );
+      if (!upsert || upsert.type !== "session_upsert") {
+        throw new Error("Expected the refreshed session upsert.");
+      }
+      expect(upsert.snapshot).not.toHaveProperty("sessionAssociation");
     });
   }
 
-  test("commits an authoritative refresh only inside the host lifecycle mutation", async () => {
+  test("projects status events without changing another registered session", async () => {
     const harness = createRuntimeHarness();
-    let enterMutation: () => void = () => undefined;
-    let releaseMutation: () => void = () => undefined;
-    const mutationEntered = new Promise<void>((resolve) => {
-      enterMutation = resolve;
-    });
-    const mutationBarrier = new Promise<void>((resolve) => {
-      releaseMutation = resolve;
-    });
-    const publishedChanges: AgentSessionLiveAdapterChange[] = [];
-    const lifecycle: RuntimeLiveSessionLifecyclePort = {
-      registerRuntimeAdapter: () => Effect.void,
-      releaseRuntime: () => Effect.succeed([]),
-      runAdapterMutation: (mutation) =>
-        Effect.gen(function* () {
-          yield* Effect.sync(enterMutation);
-          yield* Effect.promise(() => mutationBarrier);
-          const result = yield* mutation;
-          publishedChanges.push(...result.changes);
-          return result.value;
-        }),
-    };
-    const prepared = await Effect.runPromise(
-      createOpenCodeLiveSessionAdapterPreparer({
-        liveSessionLifecycle: lifecycle,
-        prepareRuntime: harness.prepareRuntime,
-      })(runtime),
-    );
-    await Effect.runPromise(prepared.startForwarding());
-    const adapter = prepared.adapter;
-    harness.setSources([
-      nativeSource({
-        runtimeActivity: "running",
-        pendingApprovals: [],
-        pendingQuestions: [],
-      }),
-    ]);
-    const forwarding = harness.emit({ type: "sessions_invalidated" });
-    await mutationEntered;
-
-    const beforeCommit = await Effect.runPromise(adapter.listRetainedSnapshots("/repo"));
-    expect(beforeCommit[0]?.activity).toBe("waiting_for_question");
-    releaseMutation();
-    await forwarding;
-
-    const afterCommit = await Effect.runPromise(adapter.listRetainedSnapshots("/repo"));
-    expect(afterCommit[0]?.activity).toBe("running");
-    expect(publishedChanges).toEqual([
-      {
-        type: "session_upsert",
-        snapshot: expect.objectContaining({ ref, activity: "running" }),
-      },
-    ]);
-  });
-
-  test("projects status events without replacing them from a stale runtime read", async () => {
-    const harness = createRuntimeHarness();
-    harness.setSources([
-      nativeSource({
-        runtimeActivity: "idle",
-        pendingApprovals: [],
-        pendingQuestions: [],
-      }),
-      nativeSource({
-        externalSessionId: "session-2",
-        title: "Other OpenCode session",
-        runtimeActivity: "idle",
-        pendingApprovals: [],
-        pendingQuestions: [],
-      }),
-    ]);
     const publishedChanges: AgentSessionLiveAdapterChange[] = [];
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
@@ -613,9 +603,15 @@ describe("OpenCode live session controls", () => {
     );
     await Effect.runPromise(prepared.startForwarding());
     const adapter = prepared.adapter;
+    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+    await Effect.runPromise(adapter.resumeSession({ ...ref, sessionScope }));
+    await Effect.runPromise(
+      adapter.resumeSession({ ...ref, externalSessionId: "session-2", sessionScope }),
+    );
+    publishedChanges.length = 0;
 
     await harness.emit({
-      type: "transcript_event",
+      type: "session_event",
       externalSessionId: "session-1",
       event: {
         type: "session_status",
@@ -625,19 +621,19 @@ describe("OpenCode live session controls", () => {
       },
     });
 
-    await expect(Effect.runPromise(adapter.readRetainedSnapshot(ref))).resolves.toMatchObject({
+    await expect(Effect.runPromise(adapter.readSnapshot(ref))).resolves.toMatchObject({
       type: "live",
       session: { activity: "running" },
     });
     await expect(
-      Effect.runPromise(adapter.readRetainedSnapshot({ ...ref, externalSessionId: "session-2" })),
+      Effect.runPromise(adapter.readSnapshot({ ...ref, externalSessionId: "session-2" })),
     ).resolves.toMatchObject({
       type: "live",
-      session: { activity: "idle" },
+      session: { activity: "running" },
     });
 
     await harness.emit({
-      type: "transcript_event",
+      type: "session_event",
       externalSessionId: "session-1",
       event: {
         type: "session_status",
@@ -647,7 +643,7 @@ describe("OpenCode live session controls", () => {
       },
     });
 
-    await expect(Effect.runPromise(adapter.readRetainedSnapshot(ref))).resolves.toMatchObject({
+    await expect(Effect.runPromise(adapter.readSnapshot(ref))).resolves.toMatchObject({
       type: "live",
       session: { activity: "idle" },
     });
@@ -655,18 +651,11 @@ describe("OpenCode live session controls", () => {
       publishedChanges
         .filter((change) => change.type === "session_upsert")
         .map((change) => (change.type === "session_upsert" ? change.snapshot.activity : null)),
-    ).toEqual(["running", "idle"]);
+    ).toEqual(["idle"]);
   });
 
   test("projects a session error as authoritative idle activity", async () => {
     const harness = createRuntimeHarness();
-    harness.setSources([
-      nativeSource({
-        runtimeActivity: "running",
-        pendingApprovals: [],
-        pendingQuestions: [],
-      }),
-    ]);
     const publishedChanges: AgentSessionLiveAdapterChange[] = [];
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
@@ -676,10 +665,16 @@ describe("OpenCode live session controls", () => {
     );
     await Effect.runPromise(prepared.startForwarding());
     const adapter = prepared.adapter;
+    await Effect.runPromise(
+      adapter.resumeSession({
+        ...ref,
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      }),
+    );
 
     try {
       await harness.emit({
-        type: "transcript_event",
+        type: "session_event",
         externalSessionId: "session-1",
         event: {
           type: "session_error",
@@ -689,7 +684,7 @@ describe("OpenCode live session controls", () => {
         },
       });
 
-      await expect(Effect.runPromise(adapter.readRetainedSnapshot(ref))).resolves.toMatchObject({
+      await expect(Effect.runPromise(adapter.readSnapshot(ref))).resolves.toMatchObject({
         type: "live",
         session: { activity: "idle" },
       });

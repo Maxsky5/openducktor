@@ -1,9 +1,11 @@
 import type { RuntimeInstanceSummary, RuntimeKind } from "@openducktor/contracts";
-import type { PropsWithChildren, ReactElement } from "react";
+import { type PropsWithChildren, type ReactElement, useMemo } from "react";
 import { hostBridge, hostClient } from "@/lib/host-client";
+import { createAgentSessionViewSync } from "@/state/queries/agent-session-view-sync";
 import { getProductionTaskViewSync } from "@/state/queries/task-view-sync";
 import { createTaskStreamController } from "@/state/tasks/task-stream-controller";
 import {
+  useAgentSessionsContext,
   useChecksOperationsContext,
   useRepoRuntimeHealthContext,
   useRequiredContext,
@@ -14,18 +16,24 @@ import {
 } from "../app-state-contexts";
 import { type TaskStreamControllerFactory, useAppLifecycle } from "../lifecycle/use-app-lifecycle";
 
-const createProductionTaskStreamController: TaskStreamControllerFactory = ({
-  queryClient,
-  getActiveRepoPath,
-  onDegraded,
-}) =>
-  createTaskStreamController({
-    transport: hostBridge,
-    metadata: hostClient,
-    taskViewSync: getProductionTaskViewSync(queryClient),
-    getActiveRepoPath,
-    onDegraded,
-  });
+const createProductionTaskStreamController =
+  (
+    removeTaskSessions: (repoPath: string, taskIds: string[]) => void,
+  ): TaskStreamControllerFactory =>
+  ({ queryClient, getActiveRepoPath, onDegraded }) =>
+    createTaskStreamController({
+      transport: hostBridge,
+      metadata: hostClient,
+      taskViewSync: getProductionTaskViewSync(queryClient),
+      agentSessionViewSync: createAgentSessionViewSync({
+        queryClient,
+        readPort: hostClient,
+        removeTaskSessions,
+        refreshLiveSessions: (repoPath) => hostClient.agentSessionLiveRefresh({ repoPath }),
+      }),
+      getActiveRepoPath,
+      onDegraded,
+    });
 
 type AppLifecycleStateProviderProps = PropsWithChildren<{
   startRepoRuntime: (repoPath: string, runtimeKind: RuntimeKind) => Promise<RuntimeInstanceSummary>;
@@ -44,6 +52,25 @@ export function AppLifecycleStateProvider({
   const { refreshRepoRuntimeHealth } = useRepoRuntimeHealthContext();
   const { refreshTaskStoreCheckForRepo } = useChecksOperationsContext();
   const { loadWorkspaceTasks } = useTaskControlContext();
+  const sessionStore = useAgentSessionsContext();
+  const taskStreamControllerFactory = useMemo(
+    () =>
+      createProductionTaskStreamController((repoPath, taskIds) => {
+        if (sessionStore.getActivitySnapshot().workspaceRepoPath !== repoPath) {
+          return;
+        }
+        const taskIdSet = new Set(taskIds);
+        for (const session of sessionStore.listSessionSnapshots()) {
+          if (
+            session.sessionAssociation.kind === "workflow" &&
+            taskIdSet.has(session.sessionAssociation.taskId)
+          ) {
+            sessionStore.removeSession(session);
+          }
+        }
+      }),
+    [sessionStore],
+  );
 
   useAppLifecycle({
     activeWorkspace,
@@ -54,7 +81,7 @@ export function AppLifecycleStateProvider({
     loadWorkspaceTasks,
     startRepoRuntime,
     clearBranchData,
-    taskStreamControllerFactory: createProductionTaskStreamController,
+    taskStreamControllerFactory,
   });
 
   return <>{children}</>;

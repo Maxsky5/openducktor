@@ -487,7 +487,6 @@ describe("agent-orchestrator session event routing", () => {
       externalSessionId: "session-2",
       workingDirectory: "/tmp/repo/worktrees/session-2",
     });
-    const updateOptions: unknown[] = [];
     const { context, sessionsRef, updateSession } = createDirectRouterContext({
       sessionRef: rootRef,
       sessions: [
@@ -497,20 +496,16 @@ describe("agent-orchestrator session event routing", () => {
           workingDirectory: sessionTwoRef.workingDirectory,
         }),
       ],
-      onUpdateSession: (identity, updater, options) => {
-        updateOptions.push(options);
-        return updateSession(identity, updater);
-      },
+      onUpdateSession: (identity, updater) => updateSession(identity, updater),
     });
     const router = createSessionEventRouter({
       createBatcher: createSessionEventBatcher,
       context,
       handleEvent: (eventContext) => {
-        eventContext.store.updateSession(
-          sessionTwoRef,
-          (current) => ({ ...current, status: "idle" }),
-          { persist: true },
-        );
+        eventContext.store.updateSession(sessionTwoRef, (current) => ({
+          ...current,
+          status: "idle",
+        }));
       },
     });
 
@@ -518,7 +513,6 @@ describe("agent-orchestrator session event routing", () => {
 
     expect(() => router.flushReady()).not.toThrow();
     expect(getSession(sessionsRef, "session-2").status).toBe("idle");
-    expect(updateOptions).toContainEqual({ persist: true });
   });
 
   test("clears a routed session batcher after a forced flush", () => {

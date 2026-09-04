@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
-import type { AgentSessionRecord } from "@openducktor/contracts";
-import type { AgentModelSelection, StartAgentSessionInput } from "@openducktor/core";
+import type { AgentModelSelection, AgentSessionSummary } from "@openducktor/core";
 import { createSessionStartGate } from "@/features/session-start/session-start-gate";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { clearAppQueryClient } from "@/lib/query-client";
@@ -11,7 +10,6 @@ import {
   listAgentSessions,
 } from "@/state/agent-session-collection";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
-import { withCapturedConsole } from "@/test-utils/console-capture";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { host } from "../../shared/host";
@@ -27,22 +25,6 @@ import {
   taskFixture,
 } from "./start-session.test-helpers";
 import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
-
-const waitForSessionCount = async (
-  getCount: () => number,
-  expectedCount: number,
-  remainingAttempts = 10,
-): Promise<void> => {
-  if (getCount() === expectedCount) {
-    return;
-  }
-  if (remainingAttempts <= 0) {
-    return;
-  }
-  await Promise.resolve();
-  await Promise.resolve();
-  await waitForSessionCount(getCount, expectedCount, remainingAttempts - 1);
-};
 
 describe("agent-orchestrator/handlers/start-session", () => {
   beforeEach(async () => {
@@ -401,20 +383,13 @@ describe("agent-orchestrator/handlers/start-session", () => {
     ]);
   });
 
-  test("waits for the initial session snapshot to persist before resolving", async () => {
-    const persistDeferred = createDeferred<void>();
+  test("waits for the host-controlled session start before resolving", async () => {
+    const startDeferred = createDeferred<AgentSessionSummary>();
     let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
     const sessionsRef = { current: sessionCollection };
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
-    adapter.startSession = async (input) => ({
-      runtimeKind: "opencode",
-      workingDirectory: input.workingDirectory,
-      externalSessionId: "planner-external",
-      startedAt: "2026-02-22T08:00:10.000Z",
-      sessionAssociation: input.sessionScope,
-      status: "idle",
-    });
+    adapter.startSession = async () => startDeferred.promise;
 
     const { start } = createStartSessionTestHarness({
       adapter,
@@ -429,9 +404,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         runtimeId: "runtime-1",
         workingDirectory: "/tmp/repo",
       }),
-      persistSessionRecord: async () => {
-        await persistDeferred.promise;
-      },
     });
 
     try {
@@ -443,19 +415,24 @@ describe("agent-orchestrator/handlers/start-session", () => {
         holdForPostStartMessage: true,
       });
 
-      await waitForSessionCount(() => listAgentSessions(sessionCollection).length, 1);
-
-      expect(listAgentSessions(sessionCollection)).toHaveLength(1);
-      expect(listAgentSessions(sessionCollection)[0]?.status).toBe("starting");
       await expect(withTimeout(startPromise, 25)).resolves.toBe("timeout");
+      expect(listAgentSessions(sessionCollection)).toHaveLength(0);
 
-      persistDeferred.resolve();
+      startDeferred.resolve({
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo",
+        externalSessionId: "planner-external",
+        startedAt: "2026-02-22T08:00:10.000Z",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+        status: "idle",
+      });
 
       await expect(startPromise).resolves.toEqual(
         expect.objectContaining({ externalSessionId: "planner-external" }),
       );
+      expect(listAgentSessions(sessionCollection)).toHaveLength(1);
+      expect(listAgentSessions(sessionCollection)[0]?.status).toBe("starting");
     } finally {
-      persistDeferred.resolve();
       adapter.startSession = originalStartSession;
     }
   });
@@ -512,24 +489,16 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("publishes message-first starts to agent activity before persistence finishes", async () => {
-    const persistDeferred = createDeferred<void>();
+  test("publishes message-first starts after the host-controlled start finishes", async () => {
+    const startDeferred = createDeferred<AgentSessionSummary>();
     const sessionStore = createAgentSessionsStore("/tmp/repo");
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
-    adapter.startSession = async (input) => ({
-      runtimeKind: "opencode",
-      workingDirectory: input.workingDirectory,
-      externalSessionId: "message-first-session",
-      startedAt: "2026-02-22T08:00:10.000Z",
-      sessionAssociation: input.sessionScope,
-      status: "idle",
-    });
+    adapter.startSession = async () => startDeferred.promise;
 
     const { start } = createStartSessionTestHarness({
       adapter,
       replaceSession: sessionStore.replaceSession,
-      removeSession: sessionStore.removeSession,
       readSessionSnapshot: sessionStore.getSessionSnapshot,
       taskRef: { current: [taskFixture] },
       ensureRuntime: async () => ({
@@ -538,9 +507,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         runtimeId: "runtime-1",
         workingDirectory: "/tmp/repo",
       }),
-      persistSessionRecord: async () => {
-        await persistDeferred.promise;
-      },
     });
 
     try {
@@ -552,93 +518,36 @@ describe("agent-orchestrator/handlers/start-session", () => {
         holdForPostStartMessage: true,
       });
 
-      await waitForSessionCount(() => sessionStore.getActivitySnapshot().sessions.length, 1);
+      await expect(withTimeout(startPromise, 25)).resolves.toBe("timeout");
+      expect(sessionStore.getActivitySnapshot().sessions).toEqual([]);
 
+      startDeferred.resolve({
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo",
+        externalSessionId: "message-first-session",
+        startedAt: "2026-02-22T08:00:10.000Z",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+        status: "idle",
+      });
+      await expect(startPromise).resolves.toEqual(
+        expect.objectContaining({ externalSessionId: "message-first-session" }),
+      );
       expect(sessionStore.getActivitySnapshot().sessions).toEqual([
         expect.objectContaining({
           externalSessionId: "message-first-session",
           activityState: "starting",
         }),
       ]);
-      await expect(withTimeout(startPromise, 25)).resolves.toBe("timeout");
-
-      persistDeferred.resolve();
-      await expect(startPromise).resolves.toEqual(
-        expect.objectContaining({ externalSessionId: "message-first-session" }),
-      );
     } finally {
-      persistDeferred.resolve();
       adapter.startSession = originalStartSession;
     }
   });
 
-  test("persists only durable session record fields during start", async () => {
-    let persistedTaskId: string | null = null;
-    let persistedRecord: AgentSessionRecord | null = null;
-    const adapter = new OpencodeSdkAdapter();
-    adapter.startSession = async (input: StartAgentSessionInput) => ({
-      externalSessionId: "external-1",
-      runtimeKind: input.runtimeKind,
-      workingDirectory: input.workingDirectory,
-      sessionAssociation: input.sessionScope,
-      startedAt: "2026-03-21T10:00:00.000Z",
-      status: "running",
-    });
-    const { start } = createStartSessionTestHarness({
-      taskRef: {
-        current: [createTaskCardFixture({ id: "task-1", status: "open" })],
-      },
-      adapter,
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo",
-      }),
-      persistSessionRecord: async (taskId, record) => {
-        persistedTaskId = taskId;
-        persistedRecord = record;
-      },
-    });
-
-    await start({
-      taskId: "task-1",
-      role: "planner",
-      startMode: "fresh",
-      selectedModel: PLANNER_SELECTION,
-    });
-
-    if (persistedTaskId !== "task-1") {
-      throw new Error(`Expected persisted task id task-1, received ${String(persistedTaskId)}`);
-    }
-    if (!persistedRecord) {
-      throw new Error("Expected persisted record to be captured.");
-    }
-    const persistedSessionRecord: AgentSessionRecord = persistedRecord;
-
-    expect(persistedSessionRecord.externalSessionId).toBe("external-1");
-    expect("status" in persistedSessionRecord).toBe(false);
-    expect("taskId" in persistedSessionRecord).toBe(false);
-    expect("runtimeEndpoint" in persistedSessionRecord).toBe(false);
-    expect("baseUrl" in persistedSessionRecord).toBe(false);
-    expect("runtimeTransport" in persistedSessionRecord).toBe(false);
-  });
-
-  test("stops and removes the started session when initial persistence fails", async () => {
-    const stoppedSessionIds: string[] = [];
-    const deletedSessionIds: string[] = [];
+  test("does not attach a session when the host-controlled start fails", async () => {
     const sessionsRef = { current: emptyAgentSessionCollection() };
     const adapter = new OpencodeSdkAdapter();
-    adapter.startSession = async (input) => ({
-      runtimeKind: "opencode",
-      workingDirectory: input.workingDirectory,
-      externalSessionId: "external-session-persist-fail",
-      sessionAssociation: input.sessionScope,
-      status: "running",
-      startedAt: "2026-02-22T08:00:00.000Z",
-    });
-    adapter.stopSession = async (sessionRef) => {
-      stoppedSessionIds.push(sessionRef.externalSessionId);
+    adapter.startSession = async () => {
+      throw new Error("persist failed");
     };
 
     const { start } = createStartSessionTestHarness({
@@ -651,37 +560,22 @@ describe("agent-orchestrator/handlers/start-session", () => {
         runtimeId: "runtime-1",
         workingDirectory: "/tmp/repo",
       }),
-      persistSessionRecord: async () => {
-        throw new Error("persist failed");
-      },
-      deleteSessionRecord: async (_taskId, identity) => {
-        deletedSessionIds.push(identity.externalSessionId);
-      },
     });
 
-    await withCapturedConsole("error", async (calls) => {
-      await expect(
-        start({
-          taskId: "task-1",
-          role: "planner",
-          startMode: "fresh",
-          selectedModel: PLANNER_SELECTION,
-        }),
-      ).rejects.toThrow(
-        'Failed to persist started session "external-session-persist-fail": persist failed. The started session was stopped and removed locally. The durable session record was deleted.',
-      );
-      expect(calls).toHaveLength(1);
-      expect(calls[0]?.[0]).toBe("[agent-orchestrator]");
-      expect(calls[0]?.[1]).toBe("start-session-persist-initial-session");
-    });
+    await expect(
+      start({
+        taskId: "task-1",
+        role: "planner",
+        startMode: "fresh",
+        selectedModel: PLANNER_SELECTION,
+      }),
+    ).rejects.toThrow("persist failed");
 
-    expect(stoppedSessionIds).toEqual(["external-session-persist-fail"]);
-    expect(deletedSessionIds).toEqual(["external-session-persist-fail"]);
-    expect(getSession(sessionsRef.current, "external-session-persist-fail")).toBeUndefined();
+    expect(listAgentSessions(sessionsRef.current)).toHaveLength(0);
   });
 
-  test("deletes the durable record when bootstrap completion fails after persistence", async () => {
-    const deletedSessionIds: string[] = [];
+  test("keeps the stored session when bootstrap completion fails", async () => {
+    const sessionsRef = { current: emptyAgentSessionCollection() };
     let abortCalls = 0;
     let stopCalls = 0;
     const adapter = new OpencodeSdkAdapter();
@@ -699,6 +593,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
     const { start } = createStartSessionTestHarness({
       adapter,
+      sessionsRef,
       taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
       ensureRuntime: async () => ({
         runtimeKind: "opencode",
@@ -712,9 +607,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           },
         },
       }),
-      deleteSessionRecord: async (_taskId, identity) => {
-        deletedSessionIds.push(identity.externalSessionId);
-      },
     });
 
     await expect(
@@ -726,13 +618,12 @@ describe("agent-orchestrator/handlers/start-session", () => {
       }),
     ).rejects.toThrow("bootstrap completion failed");
     expect(stopCalls).toBe(1);
-    expect(deletedSessionIds).toEqual(["external-bootstrap-fail"]);
-    expect(abortCalls).toBe(1);
+    expect(abortCalls).toBe(0);
+    expect(getSession(sessionsRef.current, "external-bootstrap-fail")?.status).toBe("stopped");
   });
 
-  test("preserves a registered fresh session when rollback cannot stop it", async () => {
+  test("keeps the host-stored session attached when rollback cannot stop it", async () => {
     const sessionsRef = { current: emptyAgentSessionCollection() };
-    const deletedSessionIds: string[] = [];
     let abortCalls = 0;
     const adapter = new OpencodeSdkAdapter();
     adapter.startSession = async (input) => ({
@@ -763,9 +654,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           },
         },
       }),
-      deleteSessionRecord: async (_taskId, identity) => {
-        deletedSessionIds.push(identity.externalSessionId);
-      },
     });
 
     await expect(
@@ -779,13 +667,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
       "Failed to stop the started session during rollback: runtime unavailable. Cleanup was not continued.",
     );
     expect(getSession(sessionsRef.current, "external-stop-fail")).toBeDefined();
-    expect(deletedSessionIds).toEqual([]);
     expect(abortCalls).toBe(0);
   });
 
   test("keeps worktree resources un-aborted when registration cleanup cannot stop the runtime", async () => {
     const sessionsRef = { current: emptyAgentSessionCollection() };
-    const deletedSessionIds: string[] = [];
     let abortCalls = 0;
     const adapter = new OpencodeSdkAdapter();
     adapter.startSession = async (input) => ({
@@ -817,9 +703,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       replaceSession: () => {
         throw new Error("registration failed");
       },
-      deleteSessionRecord: async (_taskId, identity) => {
-        deletedSessionIds.push(identity.externalSessionId);
-      },
     });
 
     await expect(
@@ -830,10 +713,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
         selectedModel: PLANNER_SELECTION,
       }),
     ).rejects.toThrow(
-      'Failed to register started session "external-registration-stop-fail": registration failed. Failed to roll back the started session after the registration failure: runtime unavailable',
+      'Failed to attach stored session "external-registration-stop-fail" to task "task-1": registration failed. Failed to stop the started session during rollback: runtime unavailable. Cleanup was not continued.',
     );
     expect(abortCalls).toBe(0);
-    expect(deletedSessionIds).toEqual([]);
   });
 
   test("preserves fresh bootstrap resources when stale-session cleanup cannot stop the runtime", async () => {
@@ -882,29 +764,36 @@ describe("agent-orchestrator/handlers/start-session", () => {
         selectedModel: PLANNER_SELECTION,
       }),
     ).rejects.toThrow(
-      "Failed to stop stale started session 'external-stale-stop-fail': runtime unavailable",
+      "Workspace changed while starting session. Failed to stop the started session during rollback: runtime unavailable. Cleanup was not continued.",
     );
     expect(abortCalls).toBe(0);
   });
 
-  test("preserves the registered session and commits bootstrap resources when durable deletion fails", async () => {
+  test("keeps the stored session and completes bootstrap when the repository changes before attach", async () => {
     const sessionsRef = { current: emptyAgentSessionCollection() };
+    const repoEpochRef = { current: 1 };
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
     let completeCalls = 0;
     let abortCalls = 0;
     const adapter = new OpencodeSdkAdapter();
-    adapter.startSession = async (input) => ({
-      runtimeKind: "opencode",
-      workingDirectory: input.workingDirectory,
-      externalSessionId: "external-falsy-rollback-errors",
-      sessionAssociation: input.sessionScope,
-      status: "running",
-      startedAt: "2026-02-22T08:00:00.000Z",
-    });
+    adapter.startSession = async (input) => {
+      repoEpochRef.current += 1;
+      return {
+        runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
+        externalSessionId: "external-falsy-rollback-errors",
+        sessionAssociation: input.sessionScope,
+        status: "running",
+        startedAt: "2026-02-22T08:00:00.000Z",
+      };
+    };
     adapter.stopSession = async () => {};
 
     const { start } = createStartSessionTestHarness({
       adapter,
       sessionsRef,
+      repoEpochRef,
+      currentWorkspaceRepoPathRef,
       taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
       ensureRuntime: async () => ({
         runtimeKind: "opencode",
@@ -918,10 +807,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           },
         },
       }),
-      persistSessionRecord: async () => {
-        throw new Error("persist failed");
-      },
-      deleteSessionRecord: () => Promise.reject(undefined),
     });
 
     await expect(
@@ -931,21 +816,18 @@ describe("agent-orchestrator/handlers/start-session", () => {
         startMode: "fresh",
         selectedModel: PLANNER_SELECTION,
       }),
-    ).rejects.toThrow(
-      "Failed to delete the durable session record: Non-Error thrown: undefined. The stopped session remains registered locally and durably for recovery. The task worktree bootstrap was committed to preserve its resources.",
-    );
+    ).rejects.toThrow("The stored task session was kept.");
     expect(completeCalls).toBe(1);
     expect(abortCalls).toBe(0);
-    expect(getSession(sessionsRef.current, "external-falsy-rollback-errors")).toBeDefined();
+    expect(getSession(sessionsRef.current, "external-falsy-rollback-errors")).toBeUndefined();
   });
 
-  test("stops and deletes a fresh non-Builder session when the repository changes after bootstrap commits", async () => {
+  test("stops and keeps a fresh non-Builder session when the repository changes after bootstrap commits", async () => {
     const completionStarted = createDeferred<void>();
     const completion = createDeferred<void>();
     const repoEpochRef = { current: 1 };
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
     const sessionsRef = { current: emptyAgentSessionCollection() };
-    const deletedSessionIds: string[] = [];
     let abortCalls = 0;
     let stopCalls = 0;
     const adapter = new OpencodeSdkAdapter();
@@ -980,9 +862,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           },
         },
       }),
-      deleteSessionRecord: async (_taskId, identity) => {
-        deletedSessionIds.push(identity.externalSessionId);
-      },
     });
 
     const startPromise = start({
@@ -998,18 +877,16 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
     await expect(startPromise).rejects.toThrow("Workspace changed while starting session");
     expect(stopCalls).toBe(1);
-    expect(deletedSessionIds).toEqual(["external-stale-bootstrap"]);
     expect(abortCalls).toBe(0);
-    expect(getSession(sessionsRef.current, "external-stale-bootstrap")).toBeUndefined();
+    expect(getSession(sessionsRef.current, "external-stale-bootstrap")).toBeDefined();
   });
 
-  test("stops and deletes a fresh Builder session when the repository changes after bootstrap commits", async () => {
+  test("stops and keeps a fresh Builder session when the repository changes after bootstrap commits", async () => {
     const completionStarted = createDeferred<void>();
     const completion = createDeferred<void>();
     const repoEpochRef = { current: 1 };
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
     const sessionsRef = { current: emptyAgentSessionCollection() };
-    const deletedSessionIds: string[] = [];
     let abortCalls = 0;
     let stopCalls = 0;
     const adapter = new OpencodeSdkAdapter();
@@ -1044,9 +921,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           },
         },
       }),
-      deleteSessionRecord: async (_taskId, identity) => {
-        deletedSessionIds.push(identity.externalSessionId);
-      },
     });
 
     const startPromise = start({
@@ -1062,9 +936,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
     await expect(startPromise).rejects.toThrow("Workspace changed while starting session");
     expect(stopCalls).toBe(1);
-    expect(deletedSessionIds).toEqual(["external-committed-builder"]);
     expect(abortCalls).toBe(0);
-    expect(getSession(sessionsRef.current, "external-committed-builder")).toBeUndefined();
+    expect(getSession(sessionsRef.current, "external-committed-builder")).toBeDefined();
   });
 
   test("clears session observation state when bootstrap completion fails", async () => {
@@ -1110,7 +983,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     expect(clearedIdentities).toEqual([identity]);
   });
 
-  test("does not retry failed bootstrap completion when durable deletion also fails", async () => {
+  test("does not retry failed bootstrap completion", async () => {
     const sessionsRef = { current: emptyAgentSessionCollection() };
     let completeCalls = 0;
     let abortCalls = 0;
@@ -1142,9 +1015,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           },
         },
       }),
-      deleteSessionRecord: async () => {
-        throw new Error("durable delete failed");
-      },
     });
 
     await expect(
@@ -1154,9 +1024,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         startMode: "fresh",
         selectedModel: PLANNER_SELECTION,
       }),
-    ).rejects.toThrow(
-      "The task worktree resources were left intact without retrying bootstrap completion.",
-    );
+    ).rejects.toThrow("bootstrap completion failed");
     expect(completeCalls).toBe(1);
     expect(abortCalls).toBe(0);
     expect(getSession(sessionsRef.current, "external-bootstrap-delete-fail")).toBeDefined();
@@ -1390,7 +1258,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
   });
 
   test("creates a fresh session without sending a kickoff", async () => {
-    let persistCalls = 0;
     let kickoffCalls = 0;
     let refreshCalls = 0;
     let startCalls = 0;
@@ -1418,9 +1285,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       refreshTaskData: async () => {
         refreshCalls += 1;
       },
-      persistSessionRecord: async () => {
-        persistCalls += 1;
-      },
       sendAgentMessage: async () => {
         kickoffCalls += 1;
       },
@@ -1437,7 +1301,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         expect.objectContaining({ externalSessionId: "external-created" }),
       );
       expect(startCalls).toBe(1);
-      expect(persistCalls).toBe(1);
       expect(kickoffCalls).toBe(0);
       expect(refreshCalls).toBe(0);
       expect(getSession(sessionsRef.current, "external-created")).toBeDefined();
@@ -1511,7 +1374,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
     test(`does not start a fresh session when selected model runtime kind is ${caseLabel}`, async () => {
       let runtimeCalls = 0;
       let startCalls = 0;
-      let persistCalls = 0;
 
       const adapter = new OpencodeSdkAdapter();
       const originalStartSession = adapter.startSession;
@@ -1543,9 +1405,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             workingDirectory: "/tmp/repo/worktree",
           };
         },
-        persistSessionRecord: async () => {
-          persistCalls += 1;
-        },
       });
 
       try {
@@ -1563,7 +1422,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         ).rejects.toThrow(expectedError);
         expect(runtimeCalls).toBe(0);
         expect(startCalls).toBe(0);
-        expect(persistCalls).toBe(0);
       } finally {
         adapter.startSession = originalStartSession;
       }

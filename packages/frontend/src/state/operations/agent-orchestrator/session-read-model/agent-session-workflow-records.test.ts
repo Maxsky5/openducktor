@@ -7,11 +7,12 @@ import {
   listAgentSessions,
   replaceAgentSession,
 } from "@/state/agent-session-collection";
+import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "../support/messages";
 import {
   applyAgentSessionLiveDelta,
-  buildAgentSessionLiveCollection,
+  buildAgentSessionLiveCollection as projectLiveSessionCollection,
 } from "./agent-session-live-projection";
 import {
   applyWorkflowSessionRecords,
@@ -52,7 +53,6 @@ const snapshot = (
     workingDirectory,
     externalSessionId,
   },
-  sessionAssociation: { kind: "unbound" },
   activity: "idle",
   title: `Session ${externalSessionId}`,
   startedAt: "2026-07-16T08:00:00.000Z",
@@ -71,6 +71,39 @@ const identity = (
   externalSessionId,
   ...overrides,
 });
+
+const buildAgentSessionLiveCollection = ({
+  current,
+  snapshots,
+}: {
+  current: AgentSessionCollection;
+  snapshots: AgentSessionLiveSnapshot[];
+}): AgentSessionCollection => {
+  let registered = current;
+  for (const liveSession of snapshots) {
+    if (liveSession.parentExternalSessionId !== undefined) {
+      continue;
+    }
+    const sessionIdentity = identity(liveSession.ref.externalSessionId, {
+      runtimeKind: liveSession.ref.runtimeKind,
+      workingDirectory: liveSession.ref.workingDirectory,
+    });
+    if (getAgentSession(registered, sessionIdentity)) {
+      continue;
+    }
+    registered = replaceAgentSession(
+      registered,
+      createAgentSessionFixture({
+        ...sessionIdentity,
+        sessionAssociation: liveSession.repositoryScope ?? { kind: "unbound" },
+        status: "idle",
+        startedAt: liveSession.startedAt,
+        title: liveSession.title,
+      }),
+    );
+  }
+  return projectLiveSessionCollection({ current: registered, snapshots });
+};
 
 const projectAndApplyRecords = ({
   current = emptyAgentSessionCollection(),
@@ -122,7 +155,6 @@ describe("agent session workflow records", () => {
       current: emptyAgentSessionCollection(),
       snapshots: [
         snapshot("thread-1", {
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
           title: "Runtime title",
           contextUsage: { totalTokens: 900 },
         }),
@@ -152,7 +184,7 @@ describe("agent session workflow records", () => {
   test("rejects a persisted repository-to-workflow scope change", () => {
     const projected = buildAgentSessionLiveCollection({
       current: emptyAgentSessionCollection(),
-      snapshots: [snapshot("thread-1", { sessionAssociation: { kind: "repository" } })],
+      snapshots: [snapshot("thread-1", { repositoryScope: { kind: "repository" } })],
     });
 
     expect(() =>
@@ -168,7 +200,7 @@ describe("agent session workflow records", () => {
   test("preserves omitted repository scope as record-reconciliation evidence", () => {
     const current = buildAgentSessionLiveCollection({
       current: emptyAgentSessionCollection(),
-      snapshots: [snapshot("thread-1", { sessionAssociation: { kind: "repository" } })],
+      snapshots: [snapshot("thread-1", { repositoryScope: { kind: "repository" } })],
     });
     const projected = buildAgentSessionLiveCollection({ current, snapshots: [] });
 
@@ -213,14 +245,10 @@ describe("agent session workflow records", () => {
     });
   });
 
-  test("keeps a matching workflow scope from persisted records", () => {
+  test("hydrates an OpenDucktor-registered session from its matching task record", () => {
     const projected = buildAgentSessionLiveCollection({
       current: emptyAgentSessionCollection(),
-      snapshots: [
-        snapshot("thread-1", {
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-        }),
-      ],
+      snapshots: [snapshot("thread-1")],
     });
 
     const next = applyRecordsOnly({
@@ -236,13 +264,17 @@ describe("agent session workflow records", () => {
   });
 
   test("rejects a conflicting workflow scope from persisted records", () => {
-    const projected = buildAgentSessionLiveCollection({
+    const discovered = buildAgentSessionLiveCollection({
       current: emptyAgentSessionCollection(),
-      snapshots: [
-        snapshot("thread-1", {
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
-        }),
-      ],
+      snapshots: [snapshot("thread-1")],
+    });
+    const discoveredSession = getAgentSession(discovered, identity("thread-1"));
+    if (!discoveredSession) {
+      throw new Error("Expected discovered session.");
+    }
+    const projected = replaceAgentSession(discovered, {
+      ...discoveredSession,
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
     });
 
     expect(() =>
@@ -311,10 +343,8 @@ describe("agent session workflow records", () => {
   test("applies workflow records onto one mixed snapshot with workflow, repository, and unbound sessions", () => {
     const sessions = projectAndApplyRecords({
       snapshots: [
-        snapshot("live-workflow-thread", {
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-        }),
-        snapshot("repository-thread", { sessionAssociation: { kind: "repository" } }),
+        snapshot("live-workflow-thread"),
+        snapshot("repository-thread", { repositoryScope: { kind: "repository" } }),
         snapshot("unbound-thread"),
       ],
       records: loadedRecords(
@@ -344,7 +374,7 @@ describe("agent session workflow records", () => {
   test("a task refresh cannot remove repository or unbound sessions", () => {
     const composed = projectAndApplyRecords({
       snapshots: [
-        snapshot("repository-thread", { sessionAssociation: { kind: "repository" } }),
+        snapshot("repository-thread", { repositoryScope: { kind: "repository" } }),
         snapshot("unbound-thread"),
       ],
       records: loadedRecords(),
@@ -388,7 +418,7 @@ describe("agent session workflow records", () => {
   test("an unloaded or failed task-record read does not prune state", () => {
     const composed = projectAndApplyRecords({
       snapshots: [
-        snapshot("repository-thread", { sessionAssociation: { kind: "repository" } }),
+        snapshot("repository-thread", { repositoryScope: { kind: "repository" } }),
         snapshot("unbound-thread"),
       ],
       records: loadedRecords(
@@ -412,13 +442,13 @@ describe("agent session workflow records", () => {
   });
 
   test("keeps a live workflow session across snapshot and task refresh while the runtime reports it", () => {
+    const registered = applyRecordsOnly({
+      projected: emptyAgentSessionCollection(),
+      records: loadedRecords({ taskId: "task-1", record: record("live-thread") }),
+    });
     const projected = buildAgentSessionLiveCollection({
-      current: emptyAgentSessionCollection(),
-      snapshots: [
-        snapshot("live-thread", {
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-        }),
-      ],
+      current: registered,
+      snapshots: [snapshot("live-thread")],
     });
     expect(getAgentSession(projected, identity("live-thread"))?.livePresence).toBe("present");
 
@@ -439,13 +469,13 @@ describe("agent session workflow records", () => {
   });
 
   test("a task refresh prunes a workflow projection the runtime stopped reporting", () => {
+    const registered = applyRecordsOnly({
+      projected: emptyAgentSessionCollection(),
+      records: loadedRecords({ taskId: "task-1", record: record("live-thread") }),
+    });
     const projected = buildAgentSessionLiveCollection({
-      current: emptyAgentSessionCollection(),
-      snapshots: [
-        snapshot("live-thread", {
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-        }),
-      ],
+      current: registered,
+      snapshots: [snapshot("live-thread")],
     });
     // The runtime removed the session; the settled projection is no longer reported.
     const removed = applyAgentSessionLiveDelta({
@@ -461,13 +491,9 @@ describe("agent session workflow records", () => {
     expect(getAgentSession(afterTaskRefresh, identity("live-thread"))).toBeNull();
   });
 
-  test("protects a starting workflow session from record-disappearance pruning", () => {
+  test("protects a starting session from record-disappearance pruning", () => {
     const composed = projectAndApplyRecords({
-      snapshots: [
-        snapshot("launching-thread", {
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-        }),
-      ],
+      snapshots: [snapshot("launching-thread")],
       records: loadedRecords(),
     });
     const launching = getAgentSession(composed, identity("launching-thread"));
@@ -497,7 +523,6 @@ describe("agent session workflow records", () => {
               workingDirectory,
               externalSessionId: `${runtimeKind}-thread`,
             },
-            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
           }),
         ],
         records: loadedRecords({
@@ -517,11 +542,7 @@ describe("agent session workflow records", () => {
   test("pruning vanished records never rewrites saved fields on surviving sessions", () => {
     const projected = buildAgentSessionLiveCollection({
       current: emptyAgentSessionCollection(),
-      snapshots: [
-        snapshot("live-thread", {
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-        }),
-      ],
+      snapshots: [snapshot("live-thread")],
     });
     const liveSession = getAgentSession(projected, identity("live-thread"));
     if (!liveSession) {
@@ -581,11 +602,7 @@ describe("agent session workflow records", () => {
 
   test("finishes deletion when a removal follows an already-applied record disappearance", () => {
     const withRecord = projectAndApplyRecords({
-      snapshots: [
-        snapshot("live-thread", {
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-        }),
-      ],
+      snapshots: [snapshot("live-thread")],
       records: loadedRecords({ taskId: "task-1", record: record("live-thread") }),
     });
 

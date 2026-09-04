@@ -103,16 +103,10 @@ const applyQueuedSessionEvents = (
 
         return commit.nextSession;
       },
-      updateSession: (targetSessionIdentity, updater, options) => {
+      updateSession: (targetSessionIdentity, updater) => {
         const commit = commitsBySessionKey.get(agentSessionIdentityKey(targetSessionIdentity));
         if (!commit) {
-          return context.updateSession(targetSessionIdentity, updater, options);
-        }
-
-        if (options?.persist === true) {
-          throw new Error(
-            `Queued session event for '${targetSessionIdentity.externalSessionId}' requested durable persistence.`,
-          );
+          return context.updateSession(targetSessionIdentity, updater);
         }
 
         commit.nextSession = updater(commit.nextSession);

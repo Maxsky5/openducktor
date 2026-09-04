@@ -386,3 +386,49 @@ export const refreshAgentSessionListQuery = async (
     },
   );
 };
+
+export const refreshAgentSessionLists = async (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskIds: string[],
+): Promise<boolean> => {
+  const ownershipChanged = await Promise.all(
+    normalizeAgentSessionTaskIds(taskIds).map(async (taskId) => {
+      const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
+      const before = sessionOwnershipKey(
+        queryClient.getQueryData<AgentSessionRecord[]>(queryKey) ?? [],
+      );
+      let changed = false;
+      await runAuthoritativeAgentSessionListInvalidation(
+        queryClient,
+        repoPath,
+        taskId,
+        async ({ queryKey: currentQueryKey }) => {
+          await queryClient.refetchQueries(
+            { queryKey, exact: true, type: "active" },
+            { throwOnError: true },
+          );
+          changed =
+            before !==
+            sessionOwnershipKey(
+              queryClient.getQueryData<AgentSessionRecord[]>(currentQueryKey) ?? [],
+            );
+        },
+      );
+      return changed;
+    }),
+  );
+  return ownershipChanged.some(Boolean);
+};
+
+const sessionOwnershipKey = (records: AgentSessionRecord[]): string =>
+  JSON.stringify(
+    records
+      .map((record) => [
+        record.externalSessionId,
+        record.runtimeKind,
+        record.workingDirectory,
+        record.role,
+      ])
+      .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))),
+  );

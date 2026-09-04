@@ -23,6 +23,7 @@ describe("agent-orchestrator/handlers/start-session-policies", () => {
           taskRef: { current: [task] },
           loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
           refreshTaskData: async () => {},
+          refreshSessionRecords: async () => {},
           sendAgentMessage: async () => {},
         },
       }),

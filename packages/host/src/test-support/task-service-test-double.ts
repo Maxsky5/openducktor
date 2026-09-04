@@ -10,6 +10,7 @@ const unexpectedTaskServiceCall = (methodName: keyof TaskService) => () =>
 const createTaskServiceDefaults = () =>
   ({
     agentSessionDelete: unexpectedTaskServiceCall("agentSessionDelete"),
+    agentSessionUpdateModel: unexpectedTaskServiceCall("agentSessionUpdateModel"),
     agentSessionUpsert: unexpectedTaskServiceCall("agentSessionUpsert"),
     agentSessionsList: unexpectedTaskServiceCall("agentSessionsList"),
     agentSessionsListForTasks: unexpectedTaskServiceCall("agentSessionsListForTasks"),
@@ -47,9 +48,6 @@ const createTaskServiceDefaults = () =>
     taskSessionBootstrapAbort: unexpectedTaskServiceCall("taskSessionBootstrapAbort"),
     taskSessionBootstrapComplete: unexpectedTaskServiceCall("taskSessionBootstrapComplete"),
     taskSessionBootstrapPrepare: unexpectedTaskServiceCall("taskSessionBootstrapPrepare"),
-    taskSessionStartupLeaseAbort: unexpectedTaskServiceCall("taskSessionStartupLeaseAbort"),
-    taskSessionStartupLeaseComplete: unexpectedTaskServiceCall("taskSessionStartupLeaseComplete"),
-    taskSessionStartupLeasePrepare: unexpectedTaskServiceCall("taskSessionStartupLeasePrepare"),
     transitionTask: unexpectedTaskServiceCall("transitionTask"),
     unlinkPullRequest: unexpectedTaskServiceCall("unlinkPullRequest"),
     updateTask: unexpectedTaskServiceCall("updateTask"),

@@ -127,9 +127,6 @@ export const normalizeOpencodeGlobalEventPayload = (
 const readOpencodeEventPolicy = (event: Event): OpencodeEventPolicy =>
   OPENCODE_EVENT_POLICY_BY_TYPE[event.type];
 
-export const opencodeEventInvalidatesSessions = (event: Event): boolean =>
-  readOpencodeEventPolicy(event).invalidatesSessions;
-
 export const opencodeEventUsesParentSessionRouting = (event: Event): boolean =>
   readOpencodeEventPolicy(event).usesParentSessionRouting;
 

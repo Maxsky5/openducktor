@@ -33,6 +33,7 @@ import type {
   AgentSessionLiveRefreshInput,
   AgentSessionLiveReplyApprovalInput,
   AgentSessionLiveReplyQuestionInput,
+  AgentSessionModelSettings,
   AgentSessionLiveScope,
   AgentSessionLiveSnapshot,
   AgentSessionModelSelection,
@@ -368,6 +369,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionLiveRefreshInputSchema",
   "agentSessionLiveReplyApprovalInputSchema",
   "agentSessionLiveReplyQuestionInputSchema",
+  "agentSessionModelSettingsSchema",
   "agentSessionLiveScopeSchema",
   "agentSessionLiveSnapshotSchema",
   "agentSessionModelSelectionSchema",
@@ -898,6 +900,7 @@ type ExportedTypeContract = {
   AgentSessionLiveReadInput: AgentSessionLiveReadInput;
   AgentSessionLiveReadResult: AgentSessionLiveReadResult;
   AgentSessionLiveRef: AgentSessionLiveRef;
+  AgentSessionModelSettings: AgentSessionModelSettings;
   AgentSessionLiveRefreshInput: AgentSessionLiveRefreshInput;
   AgentSessionLiveReplyApprovalInput: AgentSessionLiveReplyApprovalInput;
   AgentSessionLiveReplyQuestionInput: AgentSessionLiveReplyQuestionInput;
