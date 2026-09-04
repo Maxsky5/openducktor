@@ -46,7 +46,7 @@ open -> in_progress
 
 `qaRequired` defaults to `true` for all four issue types.
 
-When `qaRequired` is `true`, build completion moves to `ai_review` until the latest QA result is `approved`. When it is `false`, or QA already approved the current work, build completion moves to `human_review`.
+When `qaRequired` is `true`, build completion moves to `ai_review` until the latest QA result is `approved`. When it is `false`, or the latest stored QA result is already `approved`, build completion moves to `human_review`.
 
 ## Epic rules
 

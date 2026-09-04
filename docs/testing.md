@@ -33,7 +33,7 @@ Bun can interleave test files in one process. A file-wide module mock or process
 - Provide the smallest required context providers for hooks and components.
 - Give each fixture new nested objects and arrays.
 
-A `renderToStaticMarkup` test needs the same Query and context providers as a client-rendered test.
+A `renderToStaticMarkup` test that uses Query or app context needs the same providers as a client-rendered test.
 
 ## Async and flaky tests
 

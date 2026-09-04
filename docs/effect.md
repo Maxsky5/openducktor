@@ -127,7 +127,7 @@ return yield* new HostOperationError({
 });
 ```
 
-Use `Effect.catchTag` when the product handles one known error. Use `Effect.catchAll` only when the product handles every error in the channel. Use `Effect.result` when the caller needs the failure as a `Result`. A JavaScript `try` block inside `Effect.gen` does not catch an Effect failure.
+Use `Effect.catchTag` when the product handles one known error. Use `Effect.catchAll` only when the product handles every error in the channel. Use `Effect.either` when the caller needs success or failure as a value. Use `Effect.exit` when the caller also needs defect or interruption data. A JavaScript `try` block inside `Effect.gen` does not catch an Effect failure.
 
 | Category | Example | Treatment |
 |---|---|---|

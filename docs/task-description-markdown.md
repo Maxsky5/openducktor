@@ -18,7 +18,7 @@ The task store checks the final Markdown, workspace, task, scope, file limits, a
 
 Files live at `task-assets/<workspaceId>/<taskId>/<assetId>` under the OpenDucktor config directory. SQLite stores the task, scope, name, media type, byte size, and creation time. Closing a task keeps its assets. Deleting a task quarantines its asset directory before it deletes the task and registry rows.
 
-Each host has an owner directory for staging and quarantine. Startup skips live owners, restores quarantines from dead owners, clears their staging files, and removes empty dead-owner state. Shutdown clears the current staging area. A later startup clears files left by a crash. There is no cleanup timer or polling loop. Invalid owner or quarantine data stops recovery and stays on disk for inspection.
+Each host has an owner directory for staging and quarantine. Startup skips live owners and reconciles quarantines from dead owners against SQLite. It restores uncommitted changes, purges committed changes, clears staging files, and removes empty dead-owner state. Shutdown clears the current staging area. A later startup clears files left by a crash. There is no cleanup timer or polling loop. Invalid owner or quarantine data stops recovery and stays on disk for inspection.
 
 ## Serving assets
 

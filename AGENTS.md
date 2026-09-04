@@ -4,7 +4,7 @@
 
 OpenDucktor is a Bun monorepo. It contains an Electron desktop app and a local browser runner for AI planning and build workflows. A workspace-scoped SQLite task store is the source of truth for tasks.
 
-Use Bun and `bun run`. Do not use npm or Yarn.
+Use Bun and `bun run` for dependency installation and workspace commands. Use npm only in Trusted Publisher workflows that run `npm publish`. Do not use Yarn.
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup and command details.
 
