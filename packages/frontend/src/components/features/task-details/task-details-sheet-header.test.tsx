@@ -44,7 +44,6 @@ describe("TaskDetailsSheetHeader", () => {
         task,
         subtasksCount: 0,
         taskLabels: [],
-        gitProviderContext: createGitProviderContextFixture(),
         gitProviderReadError: "Could not load the current Git provider: connection failed",
         onDetectPullRequest: () => {},
       }),

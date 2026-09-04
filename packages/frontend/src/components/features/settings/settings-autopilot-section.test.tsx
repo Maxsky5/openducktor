@@ -16,7 +16,7 @@ import { SettingsAutopilotSection } from "./settings-autopilot-section";
 const renderSection = (
   autopilot: AutopilotSettings,
   disabled = false,
-  gitProviderContext: RepositoryGitProviderContext = createGitProviderContextFixture(),
+  providerResult: RepositoryGitProviderContext | Error = createGitProviderContextFixture(),
 ) => {
   let latestAutopilot = autopilot;
   const onUpdateAutopilot = mock(
@@ -27,10 +27,17 @@ const renderSection = (
 
   const Harness = () => {
     const queryClient = useQueryClient();
-    queryClient.setQueryData(
-      repositoryGitProviderContextQueryOptions("/repo").queryKey,
-      gitProviderContext,
-    );
+    const providerQueryOptions = repositoryGitProviderContextQueryOptions("/repo");
+    if (providerResult instanceof Error) {
+      queryClient.setQueryDefaults(providerQueryOptions.queryKey, { enabled: false });
+      queryClient.setQueryData(providerQueryOptions.queryKey, null);
+      queryClient
+        .getQueryCache()
+        .find({ queryKey: providerQueryOptions.queryKey })
+        ?.setState({ data: undefined, error: providerResult, status: "error" });
+    } else {
+      queryClient.setQueryData(providerQueryOptions.queryKey, providerResult);
+    }
 
     return (
       <SettingsAutopilotSection
@@ -153,6 +160,24 @@ describe("settings Autopilot section", () => {
     expect(
       screen.getAllByText(/Start Generate Pull Request.*Sign in to GitHub CLI\./),
     ).not.toHaveLength(0);
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "When a task progresses to Human Review" }),
+      );
+    });
+    expect(
+      screen
+        .getByRole("option", { name: /Start Generate Pull Request/ })
+        .getAttribute("aria-disabled"),
+    ).toBe("true");
+  });
+
+  test("shows but disables Pull Request generation when the provider read fails", async () => {
+    renderSection(createDefaultAutopilotSettings(), false, new Error("connection failed"));
+
+    expect(screen.getAllByText(/Start Generate Pull Request.*connection failed/)).not.toHaveLength(
+      0,
+    );
     await act(async () => {
       fireEvent.click(
         screen.getByRole("button", { name: "When a task progresses to Human Review" }),

@@ -80,11 +80,10 @@ export function SettingsAutopilotSection({
             "startGeneratePullRequest",
           );
           const hasSavedPullRequestAction = selectedValue === "startGeneratePullRequest";
+          const showPullRequestAction =
+            supportsPullRequests || hasSavedPullRequestAction || providerReadError !== null;
           const availableActionIds = eventDefinition.availableActionIds.filter(
-            (actionId) =>
-              actionId !== "startGeneratePullRequest" ||
-              supportsPullRequests ||
-              hasSavedPullRequestAction,
+            (actionId) => actionId !== "startGeneratePullRequest" || showPullRequestAction,
           );
           const isCheckingProvider =
             hasPullRequestAction && repoPath !== null && providerQuery.isLoading;
@@ -100,7 +99,7 @@ export function SettingsAutopilotSection({
           let pullRequestNote: string | null = null;
           if (isCheckingProvider) {
             pullRequestNote = "Checking the current Git provider.";
-          } else if (pullRequestError && (supportsPullRequests || hasSavedPullRequestAction)) {
+          } else if (pullRequestError && showPullRequestAction) {
             pullRequestNote = `Start Generate Pull Request: ${pullRequestError}`;
           }
           const labelId = `autopilot-${eventDefinition.id}-label`;

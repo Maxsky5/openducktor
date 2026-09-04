@@ -135,7 +135,7 @@ export function TaskDetailsSheetHeader({
   const supportsPullRequests =
     gitProviderContext?.descriptor.capabilities.supportsPullRequests === true;
   const showDetectPullRequest =
-    supportsPullRequests &&
+    (supportsPullRequests || gitProviderReadError !== null) &&
     task.pullRequest == null &&
     canUnlinkTaskPullRequest(task.status) &&
     onDetectPullRequest !== undefined;
