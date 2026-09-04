@@ -46,7 +46,6 @@ const taskStoreWithTasks = (
     deleteAgentSession: () => Effect.dieMessage("unexpected deleteAgentSession"),
     deleteTask: () => Effect.dieMessage("unexpected deleteTask"),
     diagnoseRepoStore: () => Effect.dieMessage("unexpected diagnoseRepoStore"),
-    findExistingTaskIds: () => Effect.dieMessage("unexpected findExistingTaskIds"),
     getTask: () => Effect.dieMessage("unexpected getTask"),
     getTaskMetadata: ({ taskId }) =>
       Effect.succeed({

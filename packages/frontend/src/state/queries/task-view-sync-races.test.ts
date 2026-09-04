@@ -26,7 +26,6 @@ const createDeferred = <T>() => {
 const createPorts = (overrides: Partial<TaskViewSyncPorts> = {}): TaskViewSyncPorts => ({
   loadSettings: async () => settings,
   listTasks: async () => [createTaskCardFixture({ id: "task-1", status: "open" })],
-  findExistingTaskIds: async () => [],
   loadFreshDocument: async () => ({ markdown: "# Fresh", updatedAt: "2026-04-10T13:10:00.000Z" }),
   ...overrides,
 });
@@ -355,60 +354,6 @@ describe("TaskViewSync races", () => {
     } finally {
       snapshotList.resolve([createTaskCardFixture({ id: "task-1", status: "open" })]);
       freshDocument.resolve({ markdown: "# Fresh", updatedAt: "2026-04-10T13:11:00.000Z" });
-      unsubscribe();
-    }
-  });
-
-  test("finishes a hidden-task snapshot lookup before a queued local refresh", async () => {
-    const hiddenTaskLookup = createDeferred<string[]>();
-    const hiddenTaskLookupStarted = createDeferred<void>();
-    let hiddenTaskReads = 0;
-    const { queryClient, sync } = createSync(
-      createPorts({
-        listTasks: async () => [],
-        findExistingTaskIds: async () => {
-          hiddenTaskReads += 1;
-          if (hiddenTaskReads === 1) {
-            hiddenTaskLookupStarted.resolve();
-            return hiddenTaskLookup.promise;
-          }
-          return ["task-1"];
-        },
-        loadFreshDocument: async () => ({
-          markdown: "# Fresh",
-          updatedAt: "2026-04-10T13:11:00.000Z",
-        }),
-      }),
-    );
-    const documentKey = documentQueryKeys.spec("/repo", "task-1");
-    queryClient.setQueryData(documentKey, { markdown: "# Stale", updatedAt: null });
-    const observer = new QueryObserver(queryClient, {
-      queryKey: documentKey,
-      queryFn: async () => ({ markdown: "# Observed", updatedAt: null }),
-      staleTime: Infinity,
-    });
-    const unsubscribe = observer.subscribe(() => {});
-
-    try {
-      const snapshot = sync.reconcileStreamSnapshot("/repo");
-      await hiddenTaskLookupStarted.promise;
-
-      const localRefresh = sync.refreshAfterLocalMutation("/repo", { kind: "task-list-only" });
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      expect(hiddenTaskReads).toBe(1);
-
-      hiddenTaskLookup.resolve(["task-1"]);
-      await Promise.all([snapshot, localRefresh]);
-
-      expect(hiddenTaskReads).toBe(1);
-      expect(
-        queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(documentKey),
-      ).toEqual({
-        markdown: "# Fresh",
-        updatedAt: "2026-04-10T13:11:00.000Z",
-      });
-    } finally {
-      hiddenTaskLookup.resolve(["task-1"]);
       unsubscribe();
     }
   });

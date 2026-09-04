@@ -71,20 +71,6 @@ export const requireTaskRow = (
     return row;
   });
 
-export const findExistingTaskIdsInDatabase = (
-  session: TaskStoreSession,
-  taskIds: string[],
-): Effect.Effect<string[], SqliteTaskStoreReadError> =>
-  Effect.gen(function* () {
-    const rows = yield* session.execute(
-      (database) => database.select({ id: tasks.id }).from(tasks).where(inArray(tasks.id, taskIds)),
-      "sqliteTaskStore.findExistingTaskIds.selectTasks",
-      { taskIds },
-    );
-    const existingTaskIds = new Set(rows.map((row) => row.id));
-    return taskIds.filter((taskId) => existingTaskIds.has(taskId));
-  });
-
 export const descendantTaskIds = (
   session: TaskStoreSession,
   rootTaskId: string,

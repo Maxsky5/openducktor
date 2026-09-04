@@ -10,7 +10,6 @@ import { workspaceQueryKeys } from "./workspace";
 export type TaskViewSyncPorts = {
   loadSettings: () => Promise<SettingsSnapshot>;
   listTasks: (repoPath: string) => Promise<TaskCard[]>;
-  findExistingTaskIds: (repoPath: string, taskIds: string[]) => Promise<string[]>;
   loadFreshDocument: (
     repoPath: string,
     taskId: string,
@@ -102,22 +101,9 @@ export const createTaskViewSync = ({
     return taskData.tasks;
   };
 
-  const retainExistingTaskIds = async (
-    repoPath: string,
-    visibleTasks: TaskCard[],
-    taskIds: string[],
-  ): Promise<string[]> => {
+  const retainVisibleTaskIds = (visibleTasks: TaskCard[], taskIds: string[]): string[] => {
     const visibleTaskIds = new Set(visibleTasks.map((task) => task.id));
-    const missingTaskIds = taskIds.filter((taskId) => !visibleTaskIds.has(taskId));
-    if (missingTaskIds.length === 0) {
-      return taskIds;
-    }
-    const existingHiddenTaskIds = new Set(
-      await ports.findExistingTaskIds(repoPath, missingTaskIds),
-    );
-    return taskIds.filter(
-      (taskId) => visibleTaskIds.has(taskId) || existingHiddenTaskIds.has(taskId),
-    );
+    return taskIds.filter((taskId) => visibleTaskIds.has(taskId));
   };
 
   const refreshDocumentEntry = async (
@@ -235,12 +221,8 @@ export const createTaskViewSync = ({
       await refreshDocuments(repoPath, options.impact.taskIds);
     }
     if (options.refreshDocumentsFor) {
-      const existingTaskIds = await retainExistingTaskIds(
-        repoPath,
-        tasks,
-        options.refreshDocumentsFor,
-      );
-      await refreshDocuments(repoPath, existingTaskIds);
+      const visibleTaskIds = retainVisibleTaskIds(tasks, options.refreshDocumentsFor);
+      await refreshDocuments(repoPath, visibleTaskIds);
     }
     return tasks;
   };
@@ -354,8 +336,7 @@ export const createTaskViewSync = ({
         });
         activeTaskIds = tasks.map((task) => task.id);
         const retainedTaskIds = new Set(
-          await retainExistingTaskIds(
-            activeRepoPath,
+          retainVisibleTaskIds(
             tasks,
             activeDocumentEntries.map((entry) => entry.taskId),
           ),
@@ -377,7 +358,6 @@ const createProductionTaskViewSync = (queryClient: QueryClient): TaskViewSync =>
     ports: {
       loadSettings: () => host.workspaceGetSettingsSnapshot(),
       listTasks: (repoPath) => host.tasksList(repoPath),
-      findExistingTaskIds: (repoPath, taskIds) => host.findExistingTaskIds(repoPath, taskIds),
       loadFreshDocument: (repoPath, taskId, section) =>
         host.taskDocumentGetFresh(repoPath, taskId, section),
     },

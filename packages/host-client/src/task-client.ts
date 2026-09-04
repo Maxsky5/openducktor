@@ -28,7 +28,6 @@ import {
   taskUpdatePatchSchema,
 } from "@openducktor/contracts";
 import type { SetPlanOutput, SetSpecOutput } from "@openducktor/core";
-import { z } from "zod";
 import type { InvokeFn } from "./invoke-utils";
 import {
   arrayResultSchema,
@@ -76,7 +75,6 @@ export type TaskDocumentReadResult = {
 };
 
 type TasksListArgs = { repoPath: string };
-type TaskIdsArgs = { repoPath: string; taskIds: string[] };
 type TaskCreateArgs = {
   repoPath: string;
   input: TaskCreateInput;
@@ -167,15 +165,6 @@ export class HostTaskClient {
   async tasksList(repoPath: string): Promise<TaskCard[]> {
     const args: TasksListArgs = { repoPath };
     return this.invokeFn("tasks_list", args, arrayResultSchema(taskCardSchema, "tasks_list"));
-  }
-
-  async findExistingTaskIds(repoPath: string, taskIds: string[]): Promise<string[]> {
-    const args: TaskIdsArgs = { repoPath, taskIds };
-    return this.invokeFn(
-      "task_ids_existing",
-      args,
-      arrayResultSchema(z.string(), "task_ids_existing"),
-    );
   }
 
   async taskCreate(

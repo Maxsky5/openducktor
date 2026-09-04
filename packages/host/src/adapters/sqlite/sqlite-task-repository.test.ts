@@ -84,25 +84,6 @@ describe("resolveSqliteTaskStoreDatabasePath", () => {
 });
 
 describe("createSqliteTaskRepository SQLite integration", () => {
-  test("finds requested task IDs with one repository read", async () => {
-    const { databasePath, repoPath, store } = await createRepositoryHarness();
-    await Effect.runPromise(store.diagnoseRepoStore({ repoPath }));
-    insertRawTask({ databasePath, taskId: "task-1" });
-    insertRawTask({ databasePath, taskId: "task-2" });
-
-    await expect(
-      Effect.runPromise(
-        store.findExistingTaskIds({
-          repoPath,
-          taskIds: ["task-2", "missing-task", "task-1"],
-        }),
-      ),
-    ).resolves.toEqual(["task-2", "task-1"]);
-    await expect(
-      Effect.runPromise(store.findExistingTaskIds({ repoPath, taskIds: [] })),
-    ).resolves.toEqual([]);
-  });
-
   test("disposes retained connections when the test harness is cleaned up", async () => {
     const { cleanup, repoPath, store } = await createRepositoryHarness();
     await Effect.runPromise(store.listTasks({ repoPath }));

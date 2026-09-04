@@ -15,7 +15,6 @@ export const createTaskQueryUseCases = ({
   TaskService,
   | "listTasks"
   | "listKanbanTasks"
-  | "findExistingTaskIds"
   | "getTaskMetadata"
   | "agentSessionsList"
   | "agentSessionDelete"
@@ -50,10 +49,6 @@ export const createTaskQueryUseCases = ({
 
       return enrichTasks(tasks);
     });
-  },
-
-  findExistingTaskIds(input) {
-    return taskStore.findExistingTaskIds(input);
   },
 
   getTaskMetadata(input) {

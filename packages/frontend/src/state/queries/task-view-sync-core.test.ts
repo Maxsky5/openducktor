@@ -18,7 +18,6 @@ const settings: SettingsSnapshot = createSettingsSnapshotFixture({
 const createPorts = (overrides: Partial<TaskViewSyncPorts> = {}): TaskViewSyncPorts => ({
   loadSettings: async () => settings,
   listTasks: async () => [createTaskCardFixture({ id: "task-1", status: "open" })],
-  findExistingTaskIds: async () => [],
   loadFreshDocument: async () => ({ markdown: "# Fresh", updatedAt: "2026-04-10T13:10:00.000Z" }),
   ...overrides,
 });
@@ -221,39 +220,6 @@ describe("TaskViewSync", () => {
     ).toBe(true);
   });
 
-  test("refreshes cached documents for existing tasks hidden from the kanban list", async () => {
-    const listTasks = mock(async (): Promise<TaskCard[]> => []);
-    const findExistingTaskIds = mock(async () => ["task-1"]);
-    const loadFreshDocument = mock(async () => ({
-      markdown: "# Updated hidden task",
-      updatedAt: "2026-04-10T13:10:00.000Z",
-    }));
-    const { queryClient, sync } = createSync(
-      createPorts({ listTasks, findExistingTaskIds, loadFreshDocument }),
-    );
-    queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-1"), {
-      markdown: "# Stale",
-      updatedAt: null,
-    });
-
-    await sync.reconcileExternalEvent(
-      {
-        kind: "tasks_updated",
-        eventId: "event-hidden-task",
-        repoPath: "/repo",
-        taskIds: ["task-1"],
-        removedTaskIds: [],
-        emittedAt: "2026-04-10T13:10:00.000Z",
-      },
-      "/repo",
-    );
-
-    expect(listTasks).toHaveBeenCalledWith("/repo");
-    expect(listTasks).toHaveBeenCalledTimes(1);
-    expect(findExistingTaskIds).toHaveBeenCalledWith("/repo", ["task-1"]);
-    expect(loadFreshDocument).toHaveBeenCalledWith("/repo", "task-1", "spec");
-  });
-
   test("invalidates inactive repository caches without fetching", async () => {
     const listTasks = mock(async () => [] satisfies TaskCard[]);
     const loadFreshDocument = mock(async () => ({ markdown: "# Fresh", updatedAt: null }));
@@ -401,27 +367,24 @@ describe("TaskViewSync", () => {
     ).toBe(true);
   });
 
-  test("refreshes active snapshot documents for existing tasks hidden from the kanban list", async () => {
+  test("does not refresh active snapshot documents absent from the kanban list", async () => {
     const listTasks = mock(async (): Promise<TaskCard[]> => []);
-    const findExistingTaskIds = mock(async () => ["task-1"]);
     const loadFreshDocument = mock(async () => ({
       markdown: "# Updated hidden task",
       updatedAt: "2026-04-10T13:10:00.000Z",
     }));
-    const { queryClient, sync } = createSync(
-      createPorts({ listTasks, findExistingTaskIds, loadFreshDocument }),
-    );
+    const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
     const documentKey = documentQueryKeys.spec("/repo", "task-1");
     queryClient.setQueryData(documentKey, { markdown: "# Stale", updatedAt: null });
     const unsubscribe = observeDocument(queryClient, documentKey);
 
     try {
-      await sync.reconcileStreamSnapshot("/repo");
+      await expect(sync.reconcileStreamSnapshot("/repo")).resolves.toEqual([]);
 
       expect(listTasks).toHaveBeenCalledWith("/repo");
       expect(listTasks).toHaveBeenCalledTimes(1);
-      expect(findExistingTaskIds).toHaveBeenCalledWith("/repo", ["task-1"]);
-      expect(loadFreshDocument).toHaveBeenCalledWith("/repo", "task-1", "spec");
+      expect(loadFreshDocument).not.toHaveBeenCalled();
+      expect(queryClient.getQueryState(documentKey)?.isInvalidated).toBe(true);
     } finally {
       unsubscribe();
     }

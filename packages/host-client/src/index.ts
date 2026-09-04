@@ -89,7 +89,6 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     systemListOpenInTools: systemClient.systemListOpenInTools.bind(systemClient),
     systemOpenDirectoryInTool: systemClient.systemOpenDirectoryInTool.bind(systemClient),
     tasksList: taskClient.tasksList.bind(taskClient),
-    findExistingTaskIds: taskClient.findExistingTaskIds.bind(taskClient),
     taskCreate: taskClient.taskCreate.bind(taskClient),
     taskUpdate: taskClient.taskUpdate.bind(taskClient),
     taskAssetStage: taskClient.taskAssetStage.bind(taskClient),

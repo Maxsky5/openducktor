@@ -136,28 +136,16 @@ describe("HostClient", () => {
     expect(rewrittenAfterReplace).toHaveLength(1);
   });
 
-  test("uses host-owned retention and a targeted task-existence read", async () => {
+  test("uses host-owned retention for task lists", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "tasks_list") {
         return [];
-      }
-      if (command === "task_ids_existing") {
-        return ["task-2"];
       }
       throw new Error(`Unexpected command: ${command}`);
     });
 
     await expect(client.tasksList("/repo")).resolves.toEqual([]);
-    await expect(client.findExistingTaskIds("/repo", ["task-2", "missing-task"])).resolves.toEqual([
-      "task-2",
-    ]);
-    expect(calls).toEqual([
-      { command: "tasks_list", args: { repoPath: "/repo" } },
-      {
-        command: "task_ids_existing",
-        args: { repoPath: "/repo", taskIds: ["task-2", "missing-task"] },
-      },
-    ]);
+    expect(calls).toEqual([{ command: "tasks_list", args: { repoPath: "/repo" } }]);
   });
 
   test("parses filesystem directory listings from the host", async () => {
@@ -308,7 +296,6 @@ describe("HostClient", () => {
       "systemOpenDirectoryInTool",
       "setTheme",
       "tasksList",
-      "findExistingTaskIds",
       "taskCreate",
       "taskUpdate",
       "taskDelete",

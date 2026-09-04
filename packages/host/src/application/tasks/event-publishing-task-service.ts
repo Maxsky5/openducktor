@@ -107,7 +107,6 @@ export const createEventPublishingTaskService = ({
   return {
     listTasks: (input) => taskService.listTasks(input),
     listKanbanTasks: (input) => taskService.listKanbanTasks(input),
-    findExistingTaskIds: (input) => taskService.findExistingTaskIds(input),
     getTaskStopImpact: (input) => taskService.getTaskStopImpact(input),
     getTaskMetadata: (input) => taskService.getTaskMetadata(input),
     agentSessionsList: (input) => taskService.agentSessionsList(input),

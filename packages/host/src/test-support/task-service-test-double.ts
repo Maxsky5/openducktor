@@ -27,7 +27,6 @@ const createTaskServiceDefaults = () =>
     getApprovalContext: unexpectedTaskServiceCall("getApprovalContext"),
     getTaskMetadata: unexpectedTaskServiceCall("getTaskMetadata"),
     getTaskStopImpact: unexpectedTaskServiceCall("getTaskStopImpact"),
-    findExistingTaskIds: unexpectedTaskServiceCall("findExistingTaskIds"),
     humanApprove: unexpectedTaskServiceCall("humanApprove"),
     humanRequestChanges: unexpectedTaskServiceCall("humanRequestChanges"),
     linkMergedPullRequest: unexpectedTaskServiceCall("linkMergedPullRequest"),

@@ -131,7 +131,6 @@ describe("task stream controller recovery", () => {
       ports: {
         loadSettings: async () => createSettingsSnapshotFixture(),
         listTasks,
-        findExistingTaskIds: async () => [],
         loadFreshDocument: async () => ({ markdown: "", updatedAt: null }),
       },
     });
