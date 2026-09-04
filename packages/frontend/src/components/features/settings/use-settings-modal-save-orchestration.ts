@@ -148,7 +148,6 @@ export const useSettingsModalSaveOrchestration = ({
         const saveReadySnapshot = prepareSettingsSnapshotForSave(
           {
             ...snapshotDraft,
-            system: snapshotDraft.system,
             agentModelFavorites: latestSnapshot.agentModelFavorites,
           },
           loadedSnapshot.system,

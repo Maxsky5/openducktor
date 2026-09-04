@@ -14,169 +14,6 @@ import { usePreferredOpenInTool } from "@/state/mutations/use-preferred-open-in-
 import { OpenInToolIcon } from "./open-in-tool-metadata";
 import { getOpenInToolLabel } from "./open-in-tool-metadata-model";
 
-function renderOpenInMenuTriggerButton({ disabled }: { disabled: boolean }): ReactElement {
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      className="h-7 rounded-l-none border-l-0 px-1.5 text-[11px]"
-      data-testid="agent-studio-git-open-in-trigger"
-      aria-label="Choose a different tool"
-      disabled={disabled}
-    >
-      <ChevronDown className="size-3" />
-    </Button>
-  );
-}
-
-function renderOpenInDefaultButton({
-  targetLabel,
-  defaultToolLabel,
-  defaultToolIcon,
-  onClick,
-  disabled,
-  isPending,
-  hasMenuTrigger,
-}: {
-  targetLabel: string;
-  defaultToolLabel: string;
-  defaultToolIcon: ReactNode;
-  onClick: (() => void) | null;
-  disabled: boolean;
-  isPending: boolean;
-  hasMenuTrigger: boolean;
-}): ReactElement {
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      className={
-        hasMenuTrigger
-          ? "h-7 gap-1.5 rounded-r-none px-2 text-[11px]"
-          : "h-7 gap-1.5 px-2 text-[11px]"
-      }
-      data-testid="agent-studio-git-open-in-default-button"
-      aria-label={`Open ${targetLabel} in ${defaultToolLabel}`}
-      onClick={onClick ?? undefined}
-      disabled={disabled}
-    >
-      {isPending ? <LoaderCircle className="size-3.5 animate-spin" /> : defaultToolIcon}
-      <span className="truncate">{defaultToolLabel}</span>
-    </Button>
-  );
-}
-
-function DisabledOpenInTrigger({
-  disabledReason,
-  trigger,
-}: {
-  disabledReason: string;
-  trigger: ReactElement;
-}): ReactElement {
-  const descriptionId = useId();
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          className="inline-flex cursor-not-allowed"
-          data-testid="agent-studio-git-open-in-disabled-trigger"
-        >
-          {trigger}
-          <span id={descriptionId} className="sr-only">
-            {disabledReason}
-          </span>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="max-w-80">
-        <p>{disabledReason}</p>
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-function OpenInMenuBody({ children }: { children: ReactNode }): ReactElement {
-  return (
-    <PopoverContent align="end" className="w-80 p-0">
-      {children}
-    </PopoverContent>
-  );
-}
-
-function defaultUnavailableReason(contextMode: "repository" | "worktree"): string {
-  if (contextMode === "repository") {
-    return "Repository path is unavailable. Select a repository and try again.";
-  }
-
-  return "Task worktree path is unavailable. Refresh the Git panel and try again.";
-}
-
-function resolveOpenInDisabledReason({
-  contextMode,
-  targetLabel,
-  targetPath,
-  disabledReason,
-  onOpenInTool,
-}: {
-  contextMode: "repository" | "worktree";
-  targetLabel: string;
-  targetPath: string | null;
-  disabledReason: string | null;
-  onOpenInTool?: ((toolId: SystemOpenInToolId) => Promise<void>) | undefined;
-}): string | null {
-  if (disabledReason) {
-    return disabledReason;
-  }
-
-  if (!targetPath) {
-    return defaultUnavailableReason(contextMode);
-  }
-
-  if (!onOpenInTool) {
-    return `Open ${targetLabel} is unavailable right now.`;
-  }
-
-  return null;
-}
-
-function OpenInActionGroup({ children }: { children: ReactNode }): ReactElement {
-  return (
-    <div className="flex items-center" data-testid="agent-studio-git-open-in-actions">
-      {children}
-    </div>
-  );
-}
-
-function OpenInRefreshButton({
-  isRefreshingTools,
-  onRefresh,
-  label,
-}: {
-  isRefreshingTools: boolean;
-  onRefresh: () => void;
-  label: string;
-}): ReactElement {
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      className="h-7 text-[11px]"
-      onClick={onRefresh}
-      disabled={isRefreshingTools}
-    >
-      {isRefreshingTools ? (
-        <LoaderCircle className="size-3.5 animate-spin" />
-      ) : (
-        <RefreshCw className="size-3.5" />
-      )}
-      {label}
-    </Button>
-  );
-}
-
 export function OpenInMenu({
   contextMode,
   targetPath,
@@ -413,5 +250,168 @@ export function OpenInMenu({
         </OpenInMenuBody>
       </Popover>
     </OpenInActionGroup>
+  );
+}
+
+function renderOpenInMenuTriggerButton({ disabled }: { disabled: boolean }): ReactElement {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="h-7 rounded-l-none border-l-0 px-1.5 text-[11px]"
+      data-testid="agent-studio-git-open-in-trigger"
+      aria-label="Choose a different tool"
+      disabled={disabled}
+    >
+      <ChevronDown className="size-3" />
+    </Button>
+  );
+}
+
+function renderOpenInDefaultButton({
+  targetLabel,
+  defaultToolLabel,
+  defaultToolIcon,
+  onClick,
+  disabled,
+  isPending,
+  hasMenuTrigger,
+}: {
+  targetLabel: string;
+  defaultToolLabel: string;
+  defaultToolIcon: ReactNode;
+  onClick: (() => void) | null;
+  disabled: boolean;
+  isPending: boolean;
+  hasMenuTrigger: boolean;
+}): ReactElement {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className={
+        hasMenuTrigger
+          ? "h-7 gap-1.5 rounded-r-none px-2 text-[11px]"
+          : "h-7 gap-1.5 px-2 text-[11px]"
+      }
+      data-testid="agent-studio-git-open-in-default-button"
+      aria-label={`Open ${targetLabel} in ${defaultToolLabel}`}
+      onClick={onClick ?? undefined}
+      disabled={disabled}
+    >
+      {isPending ? <LoaderCircle className="size-3.5 animate-spin" /> : defaultToolIcon}
+      <span className="truncate">{defaultToolLabel}</span>
+    </Button>
+  );
+}
+
+function DisabledOpenInTrigger({
+  disabledReason,
+  trigger,
+}: {
+  disabledReason: string;
+  trigger: ReactElement;
+}): ReactElement {
+  const descriptionId = useId();
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className="inline-flex cursor-not-allowed"
+          data-testid="agent-studio-git-open-in-disabled-trigger"
+        >
+          {trigger}
+          <span id={descriptionId} className="sr-only">
+            {disabledReason}
+          </span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-80">
+        <p>{disabledReason}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function OpenInMenuBody({ children }: { children: ReactNode }): ReactElement {
+  return (
+    <PopoverContent align="end" className="w-80 p-0">
+      {children}
+    </PopoverContent>
+  );
+}
+
+function defaultUnavailableReason(contextMode: "repository" | "worktree"): string {
+  if (contextMode === "repository") {
+    return "Repository path is unavailable. Select a repository and try again.";
+  }
+
+  return "Task worktree path is unavailable. Refresh the Git panel and try again.";
+}
+
+function resolveOpenInDisabledReason({
+  contextMode,
+  targetLabel,
+  targetPath,
+  disabledReason,
+  onOpenInTool,
+}: {
+  contextMode: "repository" | "worktree";
+  targetLabel: string;
+  targetPath: string | null;
+  disabledReason: string | null;
+  onOpenInTool?: ((toolId: SystemOpenInToolId) => Promise<void>) | undefined;
+}): string | null {
+  if (disabledReason) {
+    return disabledReason;
+  }
+
+  if (!targetPath) {
+    return defaultUnavailableReason(contextMode);
+  }
+
+  if (!onOpenInTool) {
+    return `Open ${targetLabel} is unavailable right now.`;
+  }
+
+  return null;
+}
+
+function OpenInActionGroup({ children }: { children: ReactNode }): ReactElement {
+  return (
+    <div className="flex items-center" data-testid="agent-studio-git-open-in-actions">
+      {children}
+    </div>
+  );
+}
+
+function OpenInRefreshButton({
+  isRefreshingTools,
+  onRefresh,
+  label,
+}: {
+  isRefreshingTools: boolean;
+  onRefresh: () => void;
+  label: string;
+}): ReactElement {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="h-7 text-[11px]"
+      onClick={onRefresh}
+      disabled={isRefreshingTools}
+    >
+      {isRefreshingTools ? (
+        <LoaderCircle className="size-3.5 animate-spin" />
+      ) : (
+        <RefreshCw className="size-3.5" />
+      )}
+      {label}
+    </Button>
   );
 }
