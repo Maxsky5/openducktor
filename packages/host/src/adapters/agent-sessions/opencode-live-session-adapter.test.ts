@@ -714,8 +714,8 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     });
     let blockRefresh = false;
     const basePrepare = harness.prepareRuntime;
-    const readSources = () =>
-      [ref, nextRef].map((candidate) => ({
+    const readSources = () => ({
+      sources: [ref, nextRef].map((candidate) => ({
         externalSessionId: candidate.externalSessionId,
         workingDirectory: candidate.workingDirectory,
         sessionAssociation: { kind: "unbound" as const },
@@ -724,7 +724,9 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         runtimeActivity: "running" as const,
         pendingApprovals: [],
         pendingQuestions: [],
-      }));
+      })),
+      failures: [],
+    });
     const prepareRuntime: PrepareOpencodeSessionRuntime = async (input) => {
       const prepared = await basePrepare(input);
       return {

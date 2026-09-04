@@ -85,7 +85,7 @@ const storeWorkflowSession = (
 const readStoredWorkflowSession = (
   tasks: TaskSessions,
   input: StoredWorkflowSessionRef,
-  operation: "read-resume" | "update-model",
+  operation: "read-fork" | "read-resume" | "update-model",
 ): Effect.Effect<AgentSessionRecord, HostError> => {
   const scope = input.sessionScope;
   return tasks.agentSessionsList({ repoPath: input.repoPath, taskId: scope.taskId }).pipe(
@@ -100,6 +100,7 @@ const readStoredWorkflowSession = (
       const stored = sessions.find(
         (session) =>
           session.externalSessionId === input.externalSessionId &&
+          session.role === scope.role &&
           session.runtimeKind === input.runtimeKind &&
           session.workingDirectory === input.workingDirectory,
       );
@@ -108,7 +109,7 @@ const readStoredWorkflowSession = (
         : Effect.fail(
             new HostValidationError({
               field: "externalSessionId",
-              message: `Task '${scope.taskId}' does not own session '${input.externalSessionId}'.`,
+              message: `Task '${scope.taskId}' does not own session '${input.externalSessionId}' for role '${scope.role}'.`,
               details: {
                 repoPath: input.repoPath,
                 taskId: scope.taskId,
@@ -230,11 +231,37 @@ export const createTaskWorkflowSessionControlService = ({
       }),
     );
   },
-  forkSession: (input) =>
-    Effect.gen(function* () {
-      const summary = yield* runtime.forkSession(input);
-      return yield* storeControlResult(tasks, runtime, input, summary, "stop");
-    }),
+  forkSession: (input) => {
+    if (input.sessionScope.kind !== "workflow") {
+      return runtime.forkSession(input);
+    }
+    const scope = input.sessionScope;
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const repoPath = yield* canonicalizeRepoPath(input.repoPath);
+        yield* taskLifecycle.acquireLifecycle(repoPath, [scope.taskId], "fork session");
+        const parent = yield* readStoredWorkflowSession(
+          tasks,
+          {
+            repoPath,
+            runtimeKind: input.runtimeKind,
+            workingDirectory: input.workingDirectory,
+            externalSessionId: input.parentExternalSessionId,
+            sessionScope: scope,
+          },
+          "read-fork",
+        );
+        const runtimeInput = {
+          ...input,
+          repoPath,
+          runtimeKind: parent.runtimeKind,
+          workingDirectory: parent.workingDirectory,
+        };
+        const summary = yield* runtime.forkSession(runtimeInput);
+        return yield* storeControlResult(tasks, runtime, runtimeInput, summary, "stop");
+      }),
+    );
+  },
   updateSessionModel: (input) => {
     if (input.sessionScope.kind !== "workflow") {
       return runtime.updateSessionModel(input);

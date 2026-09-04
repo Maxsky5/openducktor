@@ -1,6 +1,7 @@
 import type {
   OpencodeNativeApprovalReply,
   OpencodeNativeQuestionReply,
+  OpencodeRuntimeSnapshotFailure,
   OpencodeRuntimeSnapshotSource,
   OpencodeSessionRuntimeConnection,
   OpencodeSessionRuntimeSignal,
@@ -77,6 +78,7 @@ export const createRuntimeHarness = (
   options: {
     readonly sendUserMessageBarrier?: Promise<void>;
     readonly onSendUserMessage?: () => void;
+    readonly sessionFailures?: OpencodeRuntimeSnapshotFailure[];
     readonly sessionSources?: OpencodeRuntimeSnapshotSource[];
   } = {},
 ): RuntimeHarness => {
@@ -91,7 +93,10 @@ export const createRuntimeHarness = (
   const connection: OpencodeSessionRuntimeConnection = {
     readSessionSources: async () => {
       sessionSourceReadCalls += 1;
-      return options.sessionSources ?? [];
+      return {
+        sources: options.sessionSources ?? [],
+        failures: options.sessionFailures ?? [],
+      };
     },
     loadContextUsage: async (input) => {
       contextLoadCalls.push(input.externalSessionId);

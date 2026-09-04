@@ -12,7 +12,7 @@ import type {
 import {
   applyOpencodeAwaitingTurnStartToRuntimeSnapshot,
   listOpencodeRuntimeSnapshotSources,
-  type OpencodeRuntimeSnapshotSource,
+  type OpencodeRuntimeSnapshotRead,
 } from "./live-session-snapshots";
 import { readSessionLifecycleEvent } from "./event-stream/shared";
 import type { ParsedOpencodeEvent as Event } from "./opencode-global-event-ingress";
@@ -53,7 +53,7 @@ export type {
 } from "./opencode-session-native-operations";
 
 export type OpencodeSessionRuntimeConnection = {
-  readonly readSessionSources: () => Promise<OpencodeRuntimeSnapshotSource[]>;
+  readonly readSessionSources: () => Promise<OpencodeRuntimeSnapshotRead>;
   readonly loadContextUsage: (ref: SessionRef) => Promise<OpencodeSessionContextUsage | null>;
   readonly replyApproval: (input: OpencodeNativeApprovalReply) => Promise<void>;
   readonly replyQuestion: (input: OpencodeNativeQuestionReply) => Promise<void>;
@@ -230,8 +230,14 @@ export const createPrepareOpencodeSessionRuntime = (
       return false;
     };
 
-    const syncEventSessions = async (sources: OpencodeRuntimeSnapshotSource[]): Promise<void> => {
-      const sourceIds = new Set(sources.map((source) => source.externalSessionId));
+    const syncEventSessions = async ({
+      sources,
+      failures,
+    }: OpencodeRuntimeSnapshotRead): Promise<void> => {
+      const sourceIds = new Set([
+        ...sources.map((source) => source.externalSessionId),
+        ...failures.map((failure) => failure.externalSessionId),
+      ]);
       // oxlint-disable-next-line unicorn/no-useless-spread -- release mutates eventSessions
       for (const session of [...eventSessions.values()]) {
         if (!sourceIds.has(session.externalSessionId)) {
@@ -280,7 +286,7 @@ export const createPrepareOpencodeSessionRuntime = (
     };
 
     let readSessionSourcesTail = Promise.resolve();
-    const readSessionSources = (): Promise<OpencodeRuntimeSnapshotSource[]> => {
+    const readSessionSources = (): Promise<OpencodeRuntimeSnapshotRead> => {
       const read = readSessionSourcesTail.then(async () => {
         requireActive();
         const snapshotInput: Parameters<typeof listOpencodeRuntimeSnapshotSources>[0] = {
@@ -292,26 +298,29 @@ export const createPrepareOpencodeSessionRuntime = (
         if (input.directories) {
           snapshotInput.directories = input.directories;
         }
-        const sources = await listOpencodeRuntimeSnapshotSources(snapshotInput);
+        const result = await listOpencodeRuntimeSnapshotSources(snapshotInput);
         requireActive();
-        await syncEventSessions(sources);
+        await syncEventSessions(result);
         requireActive();
-        return sources.map((source) => {
-          const withActivity = applyOpencodeAwaitingTurnStartToRuntimeSnapshot({
-            sessions: eventSessions,
-            runtimeId: input.runtimeId,
-            snapshot: source,
-          });
-          if (withActivity.sessionAssociation.kind !== "unbound") {
-            return withActivity;
-          }
-          const sessionAssociation = eventSessions.get(source.externalSessionId)?.summary
-            .sessionAssociation;
-          if (sessionAssociation?.kind !== "repository") {
-            return withActivity;
-          }
-          return { ...withActivity, sessionAssociation };
-        });
+        return {
+          ...result,
+          sources: result.sources.map((source) => {
+            const withActivity = applyOpencodeAwaitingTurnStartToRuntimeSnapshot({
+              sessions: eventSessions,
+              runtimeId: input.runtimeId,
+              snapshot: source,
+            });
+            if (withActivity.sessionAssociation.kind !== "unbound") {
+              return withActivity;
+            }
+            const sessionAssociation = eventSessions.get(source.externalSessionId)?.summary
+              .sessionAssociation;
+            if (sessionAssociation?.kind !== "repository") {
+              return withActivity;
+            }
+            return { ...withActivity, sessionAssociation };
+          }),
+        };
       });
       readSessionSourcesTail = read.then(
         () => undefined,

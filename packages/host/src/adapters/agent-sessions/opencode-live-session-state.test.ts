@@ -35,10 +35,10 @@ const createState = () => {
 };
 
 type LiveState = ReturnType<typeof createState>;
-type SessionSources = Parameters<LiveState["applySessionSources"]>[0];
+type SessionSources = Parameters<LiveState["applySessionSources"]>[0]["sources"];
 
 const applySources = (state: LiveState, sources: SessionSources) =>
-  state.applySessionSources(sources, state.versions());
+  state.applySessionSources({ sources, failures: [] }, state.versions());
 
 describe("OpenCode host live-session state", () => {
   test("starts empty and adds a session from an OpenDucktor control result", () => {
@@ -243,6 +243,40 @@ describe("OpenCode host live-session state", () => {
 
     expect(applySources(state, [])).toEqual([{ type: "session_removed", ref: parentRef }]);
     expect(state.listSnapshots()).toEqual([]);
+  });
+
+  test("keeps a session when its runtime directory read fails", () => {
+    const state = createState();
+    state.applyControlSummary(summary("parent"));
+    const parentRef = state.listSnapshots()[0]?.ref;
+    if (!parentRef) {
+      throw new Error("Expected a live OpenDucktor parent.");
+    }
+
+    expect(
+      state.applySessionSources(
+        {
+          sources: [],
+          failures: [
+            {
+              externalSessionId: parentRef.externalSessionId,
+              workingDirectory: parentRef.workingDirectory,
+              message: "status failed",
+            },
+          ],
+        },
+        state.versions(),
+      ),
+    ).toEqual([
+      {
+        type: "fault",
+        repoPath: runtime.repoPath,
+        ref: parentRef,
+        operation: "opencode-live-session.refresh-session",
+        message: `Failed to refresh OpenCode session 'parent' in '${parentRef.workingDirectory}': status failed`,
+      },
+    ]);
+    expect(state.listSnapshots()).toHaveLength(1);
   });
 
   test("keeps parent lineage from the runtime list", () => {

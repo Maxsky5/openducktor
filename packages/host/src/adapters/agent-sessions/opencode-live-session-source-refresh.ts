@@ -1,4 +1,7 @@
-import type { OpencodeRuntimeSnapshotSource } from "@openducktor/adapters-opencode-sdk";
+import type {
+  OpencodeRuntimeSnapshotFailure,
+  OpencodeRuntimeSnapshotSource,
+} from "@openducktor/adapters-opencode-sdk";
 import type {
   AgentSessionContextUsage,
   AgentSessionLiveRef,
@@ -21,6 +24,7 @@ import {
 type ApplyOpenCodeSessionSourcesInput = {
   runtime: OpenCodeRuntimeInstance;
   sources: ReadonlyArray<OpencodeRuntimeSnapshotSource>;
+  failures: ReadonlyArray<OpencodeRuntimeSnapshotFailure>;
   snapshots: ReadonlyArray<AgentSessionLiveSnapshot>;
   contextUsageBySessionId: ReadonlyMap<string, AgentSessionContextUsage>;
   pendingRequests: OpenCodePendingRequestRouter;
@@ -42,6 +46,7 @@ type StagedSession = {
 export const applyOpenCodeSessionSources = ({
   runtime,
   sources,
+  failures,
   snapshots,
   contextUsageBySessionId,
   pendingRequests,
@@ -50,7 +55,7 @@ export const applyOpenCodeSessionSources = ({
   removeSession,
 }: ApplyOpenCodeSessionSourcesInput): AgentSessionLiveAdapterChange[] => {
   const stagedSessions: StagedSession[] = [];
-  const sourceKeys = new Set<string>();
+  const seenKeys = new Set<string>();
   for (const source of sources) {
     const ref: AgentSessionLiveRef = {
       repoPath: runtime.repoPath,
@@ -58,7 +63,7 @@ export const applyOpenCodeSessionSources = ({
       workingDirectory: source.workingDirectory,
       externalSessionId: source.externalSessionId,
     };
-    sourceKeys.add(refKey(ref));
+    seenKeys.add(refKey(ref));
     if (!isFresh(ref)) {
       continue;
     }
@@ -99,9 +104,24 @@ export const applyOpenCodeSessionSources = ({
     });
   }
 
-  const changes: AgentSessionLiveAdapterChange[] = [];
+  const changes: AgentSessionLiveAdapterChange[] = failures.map((failure) => {
+    const ref: AgentSessionLiveRef = {
+      repoPath: runtime.repoPath,
+      runtimeKind: "opencode",
+      workingDirectory: failure.workingDirectory,
+      externalSessionId: failure.externalSessionId,
+    };
+    seenKeys.add(refKey(ref));
+    return {
+      type: "fault",
+      repoPath: runtime.repoPath,
+      ref,
+      operation: "opencode-live-session.refresh-session",
+      message: `Failed to refresh OpenCode session '${failure.externalSessionId}' in '${failure.workingDirectory}': ${failure.message}`,
+    };
+  });
   for (const snapshot of snapshots) {
-    if (!sourceKeys.has(refKey(snapshot.ref)) && isFresh(snapshot.ref)) {
+    if (!seenKeys.has(refKey(snapshot.ref)) && isFresh(snapshot.ref)) {
       changes.push(...removeSession(snapshot.ref));
     }
   }

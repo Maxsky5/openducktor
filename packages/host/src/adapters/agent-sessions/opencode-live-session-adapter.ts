@@ -137,7 +137,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
             return;
           }
           const readVersions = state.versions();
-          const sources = yield* Effect.tryPromise({
+          const read = yield* Effect.tryPromise({
             try: () => prepared.connection.readSessionSources(),
             catch: (cause) =>
               toHostOperationError(cause, "opencode-live-session.refresh-snapshots", {
@@ -147,7 +147,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
           yield* serializeRuntime(
             commit("opencode-live-session.commit-refreshed-snapshots", () => ({
               value: undefined,
-              changes: state.applySessionSources(sources, readVersions),
+              changes: state.applySessionSources(read, readVersions),
             })),
           );
         });

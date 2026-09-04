@@ -1,4 +1,8 @@
-export type { OpencodeRuntimeSnapshotSource } from "./live-session-snapshots";
+export type {
+  OpencodeRuntimeSnapshotFailure,
+  OpencodeRuntimeSnapshotRead,
+  OpencodeRuntimeSnapshotSource,
+} from "./live-session-snapshots";
 export { OpencodeSdkAdapter } from "./opencode-sdk-adapter";
 export type {
   OpencodeNativeApprovalReply,

@@ -28,6 +28,17 @@ export type OpencodeRuntimeSnapshotSource = AgentSessionRuntimeSnapshotSource & 
   workingDirectory: string;
 };
 
+export type OpencodeRuntimeSnapshotFailure = {
+  externalSessionId: string;
+  workingDirectory: string;
+  message: string;
+};
+
+export type OpencodeRuntimeSnapshotRead = {
+  sources: OpencodeRuntimeSnapshotSource[];
+  failures: OpencodeRuntimeSnapshotFailure[];
+};
+
 type ApplyOpencodeAwaitingTurnStartToRuntimeSnapshotInput = {
   sessions: ReadonlyMap<string, SessionRecord>;
   runtimeId: string;
@@ -188,7 +199,7 @@ export const listOpencodeRuntimeSnapshotSources = async ({
   directories,
   readDirectory,
   now,
-}: ListOpencodeRuntimeSnapshotSourcesInput): Promise<OpencodeRuntimeSnapshotSource[]> => {
+}: ListOpencodeRuntimeSnapshotSourcesInput): Promise<OpencodeRuntimeSnapshotRead> => {
   const unscopedClient = createClient({ runtimeEndpoint });
   const sessions = await listAllOpencodeSessions(unscopedClient);
   const requestedDirectorySet =
@@ -211,7 +222,7 @@ export const listOpencodeRuntimeSnapshotSources = async ({
       filteredSessions.map((session) => requireSessionDirectory(session.directory, session.id)),
     ),
   );
-  const directoryEntries = await Promise.all(
+  const directoryResults = await Promise.allSettled(
     sessionDirectories.map((directory) =>
       readDirectory(directory, async () => {
         const [statusResult, pendingInputResult] = await Promise.allSettled([
@@ -238,6 +249,26 @@ export const listOpencodeRuntimeSnapshotSources = async ({
       }),
     ),
   );
+  const directoryEntries = directoryResults.flatMap((result) =>
+    result.status === "fulfilled" ? [result.value] : [],
+  );
+  const failures = directoryResults.flatMap((result, index) => {
+    if (result.status === "fulfilled") {
+      return [];
+    }
+    const directory = sessionDirectories[index];
+    if (!directory) {
+      return [];
+    }
+    const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
+    return filteredSessions
+      .filter((session) => requireSessionDirectory(session.directory, session.id) === directory)
+      .map((session) => ({
+        externalSessionId: session.id,
+        workingDirectory: directory,
+        message,
+      }));
+  });
   const availableDirectoryEntries = directoryEntries.filter(
     (entry): entry is NonNullable<typeof entry> => entry !== null,
   );
@@ -249,7 +280,7 @@ export const listOpencodeRuntimeSnapshotSources = async ({
     availableDirectoryEntries.map(({ pendingInput }) => pendingInput),
   );
 
-  return filteredSessions.flatMap((session) => {
+  const sources = filteredSessions.flatMap((session) => {
     const normalizedDirectory = requireSessionDirectory(session.directory, session.id);
     if (!availableDirectories.has(normalizedDirectory)) {
       return [];
@@ -271,4 +302,5 @@ export const listOpencodeRuntimeSnapshotSources = async ({
     }
     return [snapshot];
   });
+  return { sources, failures };
 };

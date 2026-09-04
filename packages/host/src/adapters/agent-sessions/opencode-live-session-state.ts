@@ -1,4 +1,7 @@
-import type { OpencodeSessionContextUsage } from "@openducktor/adapters-opencode-sdk";
+import type {
+  OpencodeRuntimeSnapshotRead,
+  OpencodeSessionContextUsage,
+} from "@openducktor/adapters-opencode-sdk";
 import {
   type AgentSessionContextUsage,
   type AgentSessionLiveReadResult,
@@ -441,12 +444,13 @@ export const createOpenCodeLiveSessionState = ({
     applyLoadedContext,
     applyControlSummary,
     applySessionSources: (
-      sources: Parameters<typeof applyOpenCodeSessionSources>[0]["sources"],
+      read: OpencodeRuntimeSnapshotRead,
       readVersions: ReadonlyMap<string, number>,
     ): AgentSessionLiveAdapterChange[] => {
       return applyOpenCodeSessionSources({
         runtime,
-        sources,
+        sources: read.sources,
+        failures: read.failures,
         snapshots: [...sessionsByRef.values()].map(({ snapshot }) => snapshot),
         contextUsageBySessionId,
         pendingRequests,

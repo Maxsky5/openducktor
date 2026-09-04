@@ -409,9 +409,9 @@ describe("OpenCode session runtime connection", () => {
     });
     const prepared = await createPrepareRuntime(harness)(runtimeInput);
 
-    const results = await prepared.connection.readSessionSources();
+    const { sources } = await prepared.connection.readSessionSources();
 
-    expect(results).toEqual(
+    expect(sources).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           externalSessionId: "session-1",
@@ -439,9 +439,9 @@ describe("OpenCode session runtime connection", () => {
     });
     const prepared = await createPrepareRuntime(harness)(runtimeInput);
 
-    const results = await prepared.connection.readSessionSources();
+    const { sources } = await prepared.connection.readSessionSources();
 
-    expect(results).toEqual([
+    expect(sources).toEqual([
       expect.objectContaining({
         externalSessionId: "child-session",
         parentExternalSessionId: "parent-session",
@@ -462,7 +462,7 @@ describe("OpenCode session runtime connection", () => {
       sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
     });
 
-    const sources = await prepared.connection.readSessionSources();
+    const { sources } = await prepared.connection.readSessionSources();
 
     expect(sources[0]?.sessionAssociation).toEqual({ kind: "unbound" });
     await prepared.release();
