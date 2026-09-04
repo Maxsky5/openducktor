@@ -6,6 +6,7 @@ import {
   type AgentStudioQueryUpdate,
   clearAgentStudioNavigationState,
   hasAgentStudioNavigationSelection,
+  parseNavigationStateFromSearchParams,
   restoreNavigationFromWorkspaceState,
 } from "./agent-studio-navigation";
 import { useNavigationUrlSync } from "./use-navigation-url-sync";
@@ -49,7 +50,18 @@ export function useAgentStudioQuerySync({
   searchParams,
   setSearchParams,
 }: UseAgentStudioQuerySyncArgs) {
+  const searchNavigation = parseNavigationStateFromSearchParams(searchParams);
+  const startsWithWorkspaceState =
+    activeWorkspaceId !== null &&
+    agentStudioState !== null &&
+    !isLoadingAgentStudioState &&
+    agentStudioStateError === null;
+  const initialNavigation =
+    startsWithWorkspaceState && !hasAgentStudioNavigationSelection(searchNavigation)
+      ? restoreNavigationFromWorkspaceState(searchNavigation, agentStudioState)
+      : searchNavigation;
   const { navigation, setNavigation, updateQuery } = useNavigationUrlSync({
+    initialNavigation,
     locationKey,
     navigationType,
     searchParams,
@@ -60,7 +72,7 @@ export function useAgentStudioQuerySync({
     workspaceRestoreReducer,
     {
       boundaryWorkspaceId: null,
-      restoredWorkspaceId: null,
+      restoredWorkspaceId: startsWithWorkspaceState ? activeWorkspaceId : null,
     },
   );
   const restorePhase = getWorkspaceRestorePhase({

@@ -3,6 +3,7 @@ import {
   CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
+  type RepoConfig,
   type WorkspaceRecord,
 } from "@openducktor/contracts";
 import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -30,7 +31,7 @@ import {
 } from "@/state/queries/runtime";
 import { platformQueryOptions } from "@/state/queries/system";
 import { repoTaskDataQueryOptions } from "@/state/queries/tasks";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { repoConfigQueryOptions, settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type {
   ActiveWorkspace,
@@ -55,6 +56,22 @@ const activeWorkspace = {
   defaultWorktreeBasePath: null,
   effectiveWorktreeBasePath: null,
 } satisfies WorkspaceRecord;
+
+const activeRepoConfig = {
+  workspaceId: activeWorkspace.workspaceId,
+  workspaceName: activeWorkspace.workspaceName,
+  repoPath: activeWorkspace.repoPath,
+  defaultRuntimeKind: "opencode",
+  branchPrefix: "odt",
+  defaultTargetBranch: { remote: "origin", branch: "main" },
+  git: {},
+  hooks: { preStart: [], postComplete: [] },
+  devServers: [],
+  worktreeCopyPaths: [],
+  promptOverrides: {},
+  agentDefaults: {},
+  agentStudioState: { openTaskIds: [] },
+} satisfies RepoConfig;
 
 type MemoryStorageOverrides = {
   getItem?: (key: string) => string | null;
@@ -339,6 +356,10 @@ const renderAppShellForTest = (
   const queryClient = createQueryClient();
   const settingsSnapshot = createSettingsSnapshotFixture();
   queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, settingsSnapshot);
+  queryClient.setQueryData(
+    repoConfigQueryOptions(activeWorkspace.workspaceId).queryKey,
+    activeRepoConfig,
+  );
   queryClient.setQueryData(runtimeDefinitionsQueryOptions().queryKey, [
     OPENCODE_RUNTIME_DESCRIPTOR,
     CODEX_RUNTIME_DESCRIPTOR,
@@ -384,6 +405,21 @@ describe("AppShell", () => {
     }
 
     Reflect.deleteProperty(globalThis, "localStorage");
+  });
+
+  test("keeps the active repo config loaded outside Agent Studio", () => {
+    const queryClients: QueryClient[] = [];
+    renderAppShellForTest({
+      prepareQueryClient: (client) => {
+        queryClients.push(client);
+      },
+    });
+
+    const query = queryClients[0]?.getQueryCache().find({
+      queryKey: repoConfigQueryOptions(activeWorkspace.workspaceId).queryKey,
+      exact: true,
+    });
+    expect(query?.getObserversCount()).toBe(1);
   });
 
   test("waits for the workspace list before choosing an entry path", () => {

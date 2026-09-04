@@ -10,7 +10,7 @@ import { getWorkspaceRestorePhase, useAgentStudioQuerySync } from "./use-agent-s
 enableReactActEnvironment();
 
 const emptySearchParams = new URLSearchParams();
-const setSearchParams: SetURLSearchParams = () => {};
+const noopSetSearchParams: SetURLSearchParams = () => {};
 
 type HookArgs = {
   activeWorkspaceId: string | null;
@@ -19,6 +19,8 @@ type HookArgs = {
   isLoadingAgentStudioState?: boolean;
   agentStudioStateError?: Error | null;
   retry?: () => void;
+  onRender?: (state: ReturnType<typeof useAgentStudioQuerySync>) => void;
+  setSearchParams?: SetURLSearchParams;
 };
 
 const useHookHarness = ({
@@ -28,8 +30,10 @@ const useHookHarness = ({
   isLoadingAgentStudioState = false,
   agentStudioStateError = null,
   retry = () => {},
-}: HookArgs) =>
-  useAgentStudioQuerySync({
+  onRender,
+  setSearchParams = noopSetSearchParams,
+}: HookArgs) => {
+  const state = useAgentStudioQuerySync({
     activeWorkspaceId,
     agentStudioState,
     isLoadingAgentStudioState,
@@ -40,6 +44,9 @@ const useHookHarness = ({
     searchParams,
     setSearchParams,
   });
+  onRender?.(state);
+  return state;
+};
 
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useHookHarness, initialProps);
@@ -63,6 +70,11 @@ describe("useAgentStudioQuerySync", () => {
   });
 
   test("restores the host-owned workspace snapshot", async () => {
+    const renders: ReturnType<typeof useAgentStudioQuerySync>[] = [];
+    const searchWrites: string[] = [];
+    const writeSearchParams: SetURLSearchParams = (next) => {
+      searchWrites.push(String(next));
+    };
     const harness = createHookHarness({
       activeWorkspaceId: "repo-a",
       agentStudioState: {
@@ -73,11 +85,16 @@ describe("useAgentStudioQuerySync", () => {
           externalSessionId: "session-a",
         },
       },
+      onRender: (state) => renders.push(state),
+      setSearchParams: writeSearchParams,
     });
 
     await harness.mount();
     await harness.waitFor((state) => state.isWorkspaceStateLoaded);
 
+    expect(renders[0]?.taskIdParam).toBe("task-a");
+    expect(renders[0]?.isWorkspaceRestorePending).toBeFalse();
+    expect(searchWrites).toEqual(["task=task-a&session=session-a&agent=planner"]);
     expect(harness.getLatest().taskIdParam).toBe("task-a");
     expect(harness.getLatest().sessionExternalIdParam).toBe("session-a");
     expect(harness.getLatest().roleFromQuery).toBe("planner");

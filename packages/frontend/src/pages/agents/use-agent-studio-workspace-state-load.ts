@@ -41,10 +41,9 @@ export function useAgentStudioWorkspaceStateLoad({
   const repoConfigQuery = useQuery({
     ...queryOptions,
     enabled: activeWorkspaceId !== null,
-    refetchOnMount: "always",
+    refetchOnMount: false,
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,
-    staleTime: 0,
   });
   const loadModel = useMemo(
     () =>

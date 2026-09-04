@@ -314,17 +314,12 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
     await harness.unmount();
   });
 
-  test("waits for a fresh host read before restoring a cached workspace snapshot", async () => {
+  test("restores a cached workspace snapshot without a route refetch", async () => {
     const cachedState: WorkspaceAgentStudioState = {
       openTaskIds: ["task-1"],
       activeTask: { taskId: "task-1", role: "spec", externalSessionId: "session-old" },
     };
-    const freshState: WorkspaceAgentStudioState = {
-      openTaskIds: ["task-2", "task-1"],
-      activeTask: { taskId: "task-2", role: "qa", externalSessionId: "session-new" },
-    };
-    const freshRead = createDeferred<RepoConfig>();
-    const workspaceGetRepoConfig = mock(async () => freshRead.promise);
+    const workspaceGetRepoConfig = mock(async () => createRepoConfig(cachedState));
     const queryClient = createQueryClient();
     queryClient.setQueryData(
       repoConfigQueryOptions("repo-a").queryKey,
@@ -346,20 +341,14 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
     const harness = createSharedHookHarness(useWorkspaceRestore, hookArgs, { queryClient });
 
     await harness.mount();
-    expect(workspaceGetRepoConfig).toHaveBeenCalledTimes(1);
-    expect(harness.getLatest().load.agentStudioState).toBeNull();
-
-    await harness.run(async () => {
-      freshRead.resolve(createRepoConfig(freshState));
-      await freshRead.promise;
-    });
     await harness.waitFor((result) => result.navigation.isWorkspaceStateLoaded);
 
-    expect(harness.getLatest().tabs.tabTaskIds).toEqual(["task-2", "task-1"]);
-    expect(harness.getLatest().tabs.activeTaskTabId).toBe("task-2");
-    expect(harness.getLatest().navigation.taskIdParam).toBe("task-2");
-    expect(harness.getLatest().navigation.roleFromQuery).toBe("qa");
-    expect(harness.getLatest().navigation.sessionExternalIdParam).toBe("session-new");
+    expect(workspaceGetRepoConfig).not.toHaveBeenCalled();
+    expect(harness.getLatest().tabs.tabTaskIds).toEqual(["task-1"]);
+    expect(harness.getLatest().tabs.activeTaskTabId).toBe("task-1");
+    expect(harness.getLatest().navigation.taskIdParam).toBe("task-1");
+    expect(harness.getLatest().navigation.roleFromQuery).toBe("spec");
+    expect(harness.getLatest().navigation.sessionExternalIdParam).toBe("session-old");
     await harness.unmount();
   });
 
