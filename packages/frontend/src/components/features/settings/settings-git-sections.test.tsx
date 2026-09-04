@@ -164,7 +164,8 @@ describe("settings git sections", () => {
       }),
     );
 
-    expect(html).toContain("GitLab Pull Requests");
+    expect(html).toContain(">GitLab<");
+    expect(html).not.toContain("GitLab Pull Requests");
     expect(html).toContain("GitLab repository hosting.");
   });
 

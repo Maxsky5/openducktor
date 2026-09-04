@@ -96,10 +96,10 @@ describe("GitInfoHeader", () => {
       }),
     );
 
-    expect(screen.getByTestId("agent-studio-git-detect-pr-button").hasAttribute("disabled")).toBe(
-      true,
-    );
-    expect(screen.getByText("Sign in to GitHub CLI.")).toBeTruthy();
+    const button = screen.getByTestId("agent-studio-git-detect-pr-button");
+    const error = screen.getByText("Sign in to GitHub CLI.");
+    expect(button.hasAttribute("disabled")).toBe(true);
+    expect(button.getAttribute("aria-describedby")).toBe(error.id);
   });
 
   test("closes the target branch editor when editing becomes unavailable", async () => {

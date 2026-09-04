@@ -599,6 +599,28 @@ describe("useTaskApprovalFlow", () => {
     });
   });
 
+  test("opens an explicit Direct Merge approval when the provider context read fails", async () => {
+    const loadGitProviderContext = mock(async (): Promise<RepositoryGitProviderContext> => {
+      throw new Error("provider context read failed");
+    });
+    taskApprovalContextGetMock.mockResolvedValue(createReadyTaskApprovalContextResult());
+    const harness = await mountApprovalFlow(() =>
+      createUseTaskApprovalFlowArgs({ loadGitProviderContext }),
+    );
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1", { mode: "direct_merge" });
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+
+    expect(loadGitProviderContext).not.toHaveBeenCalled();
+    expect(expectApprovalModal().mode).toBe("direct_merge");
+    expect(toastErrorMock).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
+
   test("ignores a provider-read Retry action after switching repositories", async () => {
     const loadGitProviderContext = mock(async (): Promise<RepositoryGitProviderContext> => {
       throw new Error("provider context read failed");
@@ -907,6 +929,17 @@ describe("useTaskApprovalFlow", () => {
     });
     expect(requestPullRequestGeneration).not.toHaveBeenCalled();
     expect(taskPullRequestUpsertMock).not.toHaveBeenCalled();
+
+    gitProviderContext = undefined;
+    gitProviderContextError = null;
+    await harness.update(undefined);
+
+    expect(expectApprovalModal().mode).toBe("pull_request");
+    expect(expectApprovalModal().pullRequestSupported).toBe(true);
+    expect(expectApprovalModal().pullRequestAvailable).toBe(false);
+    expect(expectApprovalModal().pullRequestUnavailableReason).toBe(
+      "Checking the current Git provider.",
+    );
 
     await harness.unmount();
   });

@@ -395,9 +395,21 @@ type GitActionRowProps = {
   rebaseTooltip: string;
 };
 
-function GitActionRow({
+type GitSyncActionsProps = Omit<GitActionRowProps, "actionState" | "onDetectPullRequest"> & {
+  actionState: Pick<
+    GitActionRowProps["actionState"],
+    | "canPull"
+    | "canPush"
+    | "canRebase"
+    | "canRefresh"
+    | "isLoading"
+    | "isPushing"
+    | "isRepositoryMode"
+  >;
+};
+
+function GitSyncActions({
   actionState,
-  onDetectPullRequest,
   onRefresh,
   pullFromUpstream,
   pullTooltip,
@@ -408,113 +420,129 @@ function GitActionRow({
   rebaseBehindCount,
   rebaseOntoTarget,
   rebaseTooltip,
-}: GitActionRowProps): ReactElement {
-  const {
-    canPull,
-    canPush,
-    canRebase,
-    canRefresh,
-    isDetectingPullRequest,
-    isLoading,
-    isPushing,
-    isRepositoryMode,
-    showDetectPullRequest,
-    detectPullRequestDisabledReason,
-  } = actionState;
+}: GitSyncActionsProps): ReactElement {
+  const { canPull, canPush, canRebase, canRefresh, isLoading, isPushing, isRepositoryMode } =
+    actionState;
+  return (
+    <div className="inline-flex items-center gap-0.5 px-1">
+      <GitActionIconButton
+        testId="agent-studio-git-refresh-button"
+        srLabel="Refresh"
+        icon={RefreshCw}
+        onClick={onRefresh}
+        disabled={!canRefresh}
+        tooltip={isLoading ? "Refreshing" : "Refresh changes"}
+        isSpinning={isLoading}
+      />
+      {isRepositoryMode ? null : (
+        <GitActionIconButton
+          testId="agent-studio-git-rebase-button"
+          srLabel="Rebase onto target"
+          icon={Target}
+          onClick={rebaseOntoTarget ? () => void rebaseOntoTarget() : null}
+          disabled={!canRebase}
+          tooltip={rebaseTooltip}
+          badge={
+            rebaseBehindCount != null && rebaseBehindCount > 0
+              ? {
+                  testId: "agent-studio-git-behind-count",
+                  value: rebaseBehindCount,
+                  toneClassName: "text-rose-600 dark:text-rose-400",
+                }
+              : undefined
+          }
+          wrapTrigger
+        />
+      )}
+      <span className="inline-flex" data-testid="agent-studio-git-pull-tooltip-trigger">
+        <GitActionIconButton
+          testId="agent-studio-git-pull-button"
+          srLabel="Pull from upstream"
+          icon={ArrowDown}
+          onClick={pullFromUpstream ? () => void pullFromUpstream() : null}
+          disabled={!canPull}
+          tooltip={pullTooltip}
+          badge={
+            pushBehindCount != null && pushBehindCount > 0
+              ? {
+                  testId: "agent-studio-git-upstream-behind-count",
+                  value: pushBehindCount,
+                  toneClassName: "text-rose-600 dark:text-rose-400",
+                }
+              : undefined
+          }
+          wrapTrigger
+        />
+      </span>
+      <GitActionIconButton
+        testId="agent-studio-git-push-button"
+        srLabel="Push branch"
+        icon={isPushing ? LoaderCircle : ArrowUp}
+        onClick={pushBranch ? () => void pushBranch() : null}
+        disabled={!canPush}
+        tooltip={pushTooltip}
+        badge={
+          pushAheadCount != null && pushAheadCount > 0
+            ? {
+                testId: "agent-studio-git-ahead-count",
+                value: pushAheadCount,
+                toneClassName: "text-emerald-600 dark:text-emerald-400",
+              }
+            : undefined
+        }
+        isSpinning={isPushing}
+      />
+    </div>
+  );
+}
+
+function DetectPullRequestAction({
+  disabledReason,
+  isDetecting,
+  onDetect,
+}: {
+  disabledReason: string | null;
+  isDetecting: boolean;
+  onDetect?: (() => Promise<void> | void) | null | undefined;
+}): ReactElement {
+  const errorId = disabledReason ? "agent-studio-git-detect-pr-error" : undefined;
+  return (
+    <div className="flex flex-col items-end gap-1 px-1">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="text-muted-foreground hover:bg-muted hover:text-foreground"
+        onClick={() => void onDetect?.()}
+        disabled={isDetecting || disabledReason !== null}
+        aria-describedby={errorId}
+        data-testid="agent-studio-git-detect-pr-button"
+      >
+        <Link2 data-icon="inline-start" />
+        {isDetecting ? "Detecting PR" : "Detect PR"}
+      </Button>
+      {disabledReason ? (
+        <p id={errorId} className="max-w-72 text-right text-xs text-destructive">
+          {disabledReason}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function GitActionRow({ actionState, onDetectPullRequest, ...syncProps }: GitActionRowProps) {
   return (
     <div
       className="flex items-center justify-between gap-2 border-y border-border py-1"
       data-testid="agent-studio-git-action-row"
     >
-      <div className="inline-flex items-center gap-0.5 px-1">
-        <GitActionIconButton
-          testId="agent-studio-git-refresh-button"
-          srLabel="Refresh"
-          icon={RefreshCw}
-          onClick={onRefresh}
-          disabled={!canRefresh}
-          tooltip={isLoading ? "Refreshing" : "Refresh changes"}
-          isSpinning={isLoading}
+      <GitSyncActions actionState={actionState} {...syncProps} />
+      {actionState.showDetectPullRequest ? (
+        <DetectPullRequestAction
+          disabledReason={actionState.detectPullRequestDisabledReason}
+          isDetecting={actionState.isDetectingPullRequest}
+          onDetect={onDetectPullRequest}
         />
-        {isRepositoryMode ? null : (
-          <GitActionIconButton
-            testId="agent-studio-git-rebase-button"
-            srLabel="Rebase onto target"
-            icon={Target}
-            onClick={rebaseOntoTarget ? () => void rebaseOntoTarget() : null}
-            disabled={!canRebase}
-            tooltip={rebaseTooltip}
-            badge={
-              rebaseBehindCount != null && rebaseBehindCount > 0
-                ? {
-                    testId: "agent-studio-git-behind-count",
-                    value: rebaseBehindCount,
-                    toneClassName: "text-rose-600 dark:text-rose-400",
-                  }
-                : undefined
-            }
-            wrapTrigger
-          />
-        )}
-        <span className="inline-flex" data-testid="agent-studio-git-pull-tooltip-trigger">
-          <GitActionIconButton
-            testId="agent-studio-git-pull-button"
-            srLabel="Pull from upstream"
-            icon={ArrowDown}
-            onClick={pullFromUpstream ? () => void pullFromUpstream() : null}
-            disabled={!canPull}
-            tooltip={pullTooltip}
-            badge={
-              pushBehindCount != null && pushBehindCount > 0
-                ? {
-                    testId: "agent-studio-git-upstream-behind-count",
-                    value: pushBehindCount,
-                    toneClassName: "text-rose-600 dark:text-rose-400",
-                  }
-                : undefined
-            }
-            wrapTrigger
-          />
-        </span>
-        <GitActionIconButton
-          testId="agent-studio-git-push-button"
-          srLabel="Push branch"
-          icon={isPushing ? LoaderCircle : ArrowUp}
-          onClick={pushBranch ? () => void pushBranch() : null}
-          disabled={!canPush}
-          tooltip={pushTooltip}
-          badge={
-            pushAheadCount != null && pushAheadCount > 0
-              ? {
-                  testId: "agent-studio-git-ahead-count",
-                  value: pushAheadCount ?? 0,
-                  toneClassName: "text-emerald-600 dark:text-emerald-400",
-                }
-              : undefined
-          }
-          isSpinning={isPushing}
-        />
-      </div>
-      {showDetectPullRequest ? (
-        <div className="flex flex-col items-end gap-1 px-1">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground hover:bg-muted hover:text-foreground"
-            onClick={() => void onDetectPullRequest?.()}
-            disabled={Boolean(isDetectingPullRequest) || detectPullRequestDisabledReason !== null}
-            data-testid="agent-studio-git-detect-pr-button"
-          >
-            <Link2 data-icon="inline-start" />
-            {isDetectingPullRequest ? "Detecting PR" : "Detect PR"}
-          </Button>
-          {detectPullRequestDisabledReason ? (
-            <p className="max-w-72 text-right text-xs text-destructive">
-              {detectPullRequestDisabledReason}
-            </p>
-          ) : null}
-        </div>
       ) : null}
     </div>
   );
@@ -595,6 +623,228 @@ function GitInfoHeaderErrors({
   );
 }
 
+const getRebaseTooltip = ({
+  hasUncommittedFiles,
+  isGitActionsLocked,
+  isRebasing,
+  gitActionsLockReason,
+  rebaseBehindCount,
+}: {
+  hasUncommittedFiles: boolean;
+  isGitActionsLocked: boolean;
+  isRebasing: boolean;
+  gitActionsLockReason: string | null | undefined;
+  rebaseBehindCount: number | null;
+}): string => {
+  if (isRebasing) {
+    return "Rebasing";
+  }
+  if (isGitActionsLocked) {
+    return gitActionsLockReason ?? "Git actions are disabled.";
+  }
+  if (hasUncommittedFiles) {
+    return "Commit or stash changes before rebasing";
+  }
+  if (rebaseBehindCount != null && rebaseBehindCount > 0) {
+    return `Rebase onto target (${rebaseBehindCount} behind)`;
+  }
+  return "Rebase onto target";
+};
+
+const getPullTooltip = ({
+  gitActionsLockReason,
+  hasUncommittedFiles,
+  isGitActionsLocked,
+  isRebasing,
+  isRepositoryMode,
+  pushAheadCount,
+  pushBehindCount,
+  upstreamStatus,
+}: {
+  gitActionsLockReason: string | null | undefined;
+  hasUncommittedFiles: boolean;
+  isGitActionsLocked: boolean;
+  isRebasing: boolean;
+  isRepositoryMode: boolean;
+  pushAheadCount: number | null;
+  pushBehindCount: number | null;
+  upstreamStatus: GitInfoHeaderProps["upstreamStatus"];
+}): string => {
+  if (isRebasing) {
+    return "Pulling";
+  }
+  if (isGitActionsLocked) {
+    return gitActionsLockReason ?? "Git actions are disabled.";
+  }
+  if (isRepositoryMode && upstreamStatus === "untracked") {
+    return "No upstream branch yet. Push this branch first to create it.";
+  }
+  if (hasUncommittedFiles) {
+    return "Commit or stash changes before pulling";
+  }
+  if (
+    pushAheadCount != null &&
+    pushAheadCount > 0 &&
+    pushBehindCount != null &&
+    pushBehindCount > 0
+  ) {
+    const commitSuffix = pushAheadCount === 1 ? "" : "s";
+    return `Pull with rebase (${pushBehindCount} behind; ${pushAheadCount} local commit${commitSuffix} will be rewritten)`;
+  }
+  if (pushBehindCount != null && pushBehindCount > 0) {
+    return `Pull (${pushBehindCount} behind)`;
+  }
+  return "Pull";
+};
+
+const getPushTooltip = ({
+  canPublishUntrackedBranch,
+  gitActionsLockReason,
+  hasUpstreamAhead,
+  hasUpstreamBehind,
+  isGitActionsLocked,
+  isPushing,
+  pushAheadCount,
+  pushBehindCount,
+}: {
+  canPublishUntrackedBranch: boolean;
+  gitActionsLockReason: string | null | undefined;
+  hasUpstreamAhead: boolean;
+  hasUpstreamBehind: boolean;
+  isGitActionsLocked: boolean;
+  isPushing: boolean;
+  pushAheadCount: number | null;
+  pushBehindCount: number | null;
+}): string => {
+  if (isPushing) {
+    return "Pushing";
+  }
+  if (isGitActionsLocked) {
+    return gitActionsLockReason ?? "Git actions are disabled.";
+  }
+  if (canPublishUntrackedBranch) {
+    return "Publish branch";
+  }
+  if (hasUpstreamBehind) {
+    return `Push branch (${pushBehindCount} behind; confirmation may be required)`;
+  }
+  if (hasUpstreamAhead) {
+    return `Push branch (${pushAheadCount} ahead)`;
+  }
+  return "Branch is up to date with upstream";
+};
+
+type GitInfoHeaderStateInput = {
+  branch: GitInfoHeaderProps["branch"];
+  commitsAheadBehind: GitInfoHeaderProps["commitsAheadBehind"];
+  contextMode: GitInfoHeaderProps["contextMode"];
+  gitActionsLockReason: GitInfoHeaderProps["gitActionsLockReason"];
+  isCommitting: boolean | undefined;
+  isGitActionsLocked: boolean | undefined;
+  isLoading: boolean;
+  isPushing: boolean | undefined;
+  isRebasing: boolean | undefined;
+  onDetectPullRequest: GitInfoHeaderProps["onDetectPullRequest"];
+  onUpdateTargetBranch: GitInfoHeaderProps["onUpdateTargetBranch"];
+  pullFromUpstream: GitInfoHeaderProps["pullFromUpstream"];
+  pullRequest: GitInfoHeaderProps["pullRequest"] | undefined;
+  pushBranch: GitInfoHeaderProps["pushBranch"];
+  rebaseOntoTarget: GitInfoHeaderProps["rebaseOntoTarget"];
+  targetBranch: string;
+  targetBranchOptions: NonNullable<GitInfoHeaderProps["targetBranchOptions"]>;
+  uncommittedFileCount: number;
+  upstreamAheadBehind: GitInfoHeaderProps["upstreamAheadBehind"];
+  upstreamStatus: GitInfoHeaderProps["upstreamStatus"];
+};
+
+const getGitInfoHeaderState = (props: GitInfoHeaderStateInput) => {
+  const isRepositoryMode = props.contextMode === "repository";
+  const trimmedTargetBranch = props.targetBranch.trim();
+  const isDetachedHead = props.branch == null || props.branch.trim().length === 0;
+  const hasTargetBranch = trimmedTargetBranch.length > 0;
+  const targetAheadCount = props.commitsAheadBehind?.ahead ?? null;
+  const rebaseBehindCount = props.commitsAheadBehind?.behind ?? null;
+  const pushAheadCount = props.upstreamAheadBehind?.ahead ?? null;
+  const pushBehindCount = props.upstreamAheadBehind?.behind ?? null;
+  const hasTargetAhead = targetAheadCount != null && targetAheadCount > 0;
+  const hasUncommittedFiles = props.uncommittedFileCount > 0;
+  const hasUpstreamAhead = pushAheadCount != null && pushAheadCount > 0;
+  const hasUpstreamBehind = pushBehindCount != null && pushBehindCount > 0;
+  const canPublishUntrackedBranch = props.upstreamStatus === "untracked";
+  const hasPushAction = canPublishUntrackedBranch || hasUpstreamAhead || hasUpstreamBehind;
+  const isCommitting = Boolean(props.isCommitting);
+  const isGitActionsLocked = Boolean(props.isGitActionsLocked);
+  const isPushing = Boolean(props.isPushing);
+  const isRebasing = Boolean(props.isRebasing);
+  const isAnyActionInFlight = isCommitting || isPushing || isRebasing;
+  const canRefresh = !props.isLoading && !isAnyActionInFlight;
+  const canRebase =
+    !isRepositoryMode &&
+    !isDetachedHead &&
+    hasTargetBranch &&
+    !hasUncommittedFiles &&
+    !isAnyActionInFlight &&
+    !isGitActionsLocked &&
+    props.rebaseOntoTarget != null;
+  const canPull =
+    !isDetachedHead &&
+    hasUpstreamBehind &&
+    !hasUncommittedFiles &&
+    !isAnyActionInFlight &&
+    !isGitActionsLocked &&
+    props.pullFromUpstream != null;
+  const canPush =
+    !isDetachedHead &&
+    hasPushAction &&
+    !isAnyActionInFlight &&
+    !isGitActionsLocked &&
+    props.pushBranch != null;
+  const tooltipState = {
+    gitActionsLockReason: props.gitActionsLockReason,
+    hasUncommittedFiles,
+    isGitActionsLocked,
+    isRebasing,
+  };
+
+  return {
+    canEditTargetBranch:
+      !isRepositoryMode &&
+      props.onUpdateTargetBranch != null &&
+      props.targetBranchOptions.length > 0,
+    canPull,
+    canPush,
+    canRebase,
+    canRefresh,
+    currentBranchLabel: isDetachedHead ? "Detached HEAD" : (props.branch ?? ""),
+    hasTargetAhead,
+    isRepositoryMode,
+    pullTooltip: getPullTooltip({
+      ...tooltipState,
+      isRepositoryMode,
+      pushAheadCount,
+      pushBehindCount,
+      upstreamStatus: props.upstreamStatus,
+    }),
+    pushAheadCount,
+    pushBehindCount,
+    pushTooltip: getPushTooltip({
+      canPublishUntrackedBranch,
+      gitActionsLockReason: props.gitActionsLockReason,
+      hasUpstreamAhead,
+      hasUpstreamBehind,
+      isGitActionsLocked,
+      isPushing,
+      pushAheadCount,
+      pushBehindCount,
+    }),
+    rebaseBehindCount,
+    rebaseTooltip: getRebaseTooltip({ ...tooltipState, rebaseBehindCount }),
+    showDetectPullRequest: props.pullRequest == null && props.onDetectPullRequest != null,
+    targetAheadCount,
+    targetBranchLabel: hasTargetBranch ? props.targetBranch : "No comparison target",
+  };
+};
+
 export const GitInfoHeader = memo(function GitInfoHeader({
   contextMode = "worktree",
   pullRequest,
@@ -626,84 +876,28 @@ export const GitInfoHeader = memo(function GitInfoHeader({
   targetBranchSelectionValue = "",
   onUpdateTargetBranch,
 }: GitInfoHeaderProps): ReactElement {
-  const showDetectPullRequest = pullRequest == null && onDetectPullRequest != null;
-  const isRepositoryMode = contextMode === "repository";
-  const trimmedTargetBranch = targetBranch.trim();
-  const isDetachedHead = branch == null || branch.trim().length === 0;
-  const currentBranchLabel = isDetachedHead ? "Detached HEAD" : branch;
-  const hasTargetBranch = trimmedTargetBranch.length > 0;
-  const targetBranchLabel = hasTargetBranch ? targetBranch : "No comparison target";
-  const targetAheadCount = commitsAheadBehind?.ahead ?? null;
-  const rebaseBehindCount = commitsAheadBehind?.behind ?? null;
-  const pushAheadCount = upstreamAheadBehind?.ahead ?? null;
-  const pushBehindCount = upstreamAheadBehind?.behind ?? null;
-  const hasTargetAhead = targetAheadCount != null && targetAheadCount > 0;
-  const hasUncommittedFiles = uncommittedFileCount > 0;
-  const hasUpstreamAhead = pushAheadCount != null && pushAheadCount > 0;
-  const hasUpstreamBehind = pushBehindCount != null && pushBehindCount > 0;
-  const canPublishUntrackedBranch = upstreamStatus === "untracked";
-  const hasPushAction = canPublishUntrackedBranch || hasUpstreamAhead || hasUpstreamBehind;
-  const isAnyActionInFlight = isCommitting || isPushing || isRebasing;
-  const canRefresh = !isLoading && !isAnyActionInFlight;
-  const canRebase =
-    !isRepositoryMode &&
-    !isDetachedHead &&
-    hasTargetBranch &&
-    !hasUncommittedFiles &&
-    !isAnyActionInFlight &&
-    !isGitActionsLocked &&
-    rebaseOntoTarget != null;
-  const canPull =
-    !isDetachedHead &&
-    hasUpstreamBehind &&
-    !hasUncommittedFiles &&
-    !isAnyActionInFlight &&
-    !isGitActionsLocked &&
-    pullFromUpstream != null;
-  const canPush =
-    !isDetachedHead &&
-    hasPushAction &&
-    !isAnyActionInFlight &&
-    !isGitActionsLocked &&
-    pushBranch != null;
-  const rebaseTooltip = isRebasing
-    ? "Rebasing"
-    : isGitActionsLocked
-      ? (gitActionsLockReason ?? "Git actions are disabled.")
-      : hasUncommittedFiles
-        ? "Commit or stash changes before rebasing"
-        : rebaseBehindCount != null && rebaseBehindCount > 0
-          ? `Rebase onto target (${rebaseBehindCount} behind)`
-          : "Rebase onto target";
-  const pullTooltip = isRebasing
-    ? "Pulling"
-    : isGitActionsLocked
-      ? (gitActionsLockReason ?? "Git actions are disabled.")
-      : isRepositoryMode && upstreamStatus === "untracked"
-        ? "No upstream branch yet. Push this branch first to create it."
-        : hasUncommittedFiles
-          ? "Commit or stash changes before pulling"
-          : pushAheadCount != null &&
-              pushAheadCount > 0 &&
-              pushBehindCount != null &&
-              pushBehindCount > 0
-            ? `Pull with rebase (${pushBehindCount} behind; ${pushAheadCount} local commit${pushAheadCount === 1 ? "" : "s"} will be rewritten)`
-            : pushBehindCount != null && pushBehindCount > 0
-              ? `Pull (${pushBehindCount} behind)`
-              : "Pull";
-  const pushTooltip = isPushing
-    ? "Pushing"
-    : isGitActionsLocked
-      ? (gitActionsLockReason ?? "Git actions are disabled.")
-      : canPublishUntrackedBranch
-        ? "Publish branch"
-        : hasUpstreamBehind
-          ? `Push branch (${pushBehindCount} behind; confirmation may be required)`
-          : hasUpstreamAhead
-            ? `Push branch (${pushAheadCount} ahead)`
-            : "Branch is up to date with upstream";
-  const canEditTargetBranch =
-    !isRepositoryMode && onUpdateTargetBranch != null && targetBranchOptions.length > 0;
+  const state = getGitInfoHeaderState({
+    contextMode,
+    pullRequest,
+    branch,
+    targetBranch,
+    commitsAheadBehind,
+    upstreamAheadBehind,
+    upstreamStatus,
+    uncommittedFileCount,
+    isLoading,
+    isCommitting,
+    isPushing,
+    isRebasing,
+    isGitActionsLocked,
+    gitActionsLockReason,
+    pushBranch,
+    rebaseOntoTarget,
+    pullFromUpstream,
+    onDetectPullRequest,
+    targetBranchOptions,
+    onUpdateTargetBranch,
+  });
 
   const handleScopeChange = (scope: DiffScope): void => {
     if (diffScope === scope) {
@@ -715,14 +909,14 @@ export const GitInfoHeader = memo(function GitInfoHeader({
   return (
     <div className="flex flex-col border-b border-border">
       <GitBranchContextRow
-        currentBranchLabel={currentBranchLabel}
+        currentBranchLabel={state.currentBranchLabel}
         branchState={{
-          hasTargetAhead,
-          isRepositoryMode,
+          hasTargetAhead: state.hasTargetAhead,
+          isRepositoryMode: state.isRepositoryMode,
         }}
-        canEditTargetBranch={canEditTargetBranch}
-        targetAheadCount={targetAheadCount}
-        targetBranchLabel={targetBranchLabel}
+        canEditTargetBranch={state.canEditTargetBranch}
+        targetAheadCount={state.targetAheadCount}
+        targetBranchLabel={state.targetBranchLabel}
         targetBranchOptions={targetBranchOptions}
         targetBranchSelectionValue={targetBranchSelectionValue}
         onUpdateTargetBranch={onUpdateTargetBranch}
@@ -730,28 +924,28 @@ export const GitInfoHeader = memo(function GitInfoHeader({
 
       <GitActionRow
         actionState={{
-          canPull,
-          canPush,
-          canRebase,
-          canRefresh,
+          canPull: state.canPull,
+          canPush: state.canPush,
+          canRebase: state.canRebase,
+          canRefresh: state.canRefresh,
           isDetectingPullRequest: Boolean(isDetectingPullRequest),
           isLoading,
           isPushing: Boolean(isPushing),
-          isRepositoryMode,
-          showDetectPullRequest,
+          isRepositoryMode: state.isRepositoryMode,
+          showDetectPullRequest: state.showDetectPullRequest,
           detectPullRequestDisabledReason: detectPullRequestDisabledReason ?? null,
         }}
         onDetectPullRequest={onDetectPullRequest}
         onRefresh={onRefresh}
         pullFromUpstream={pullFromUpstream}
-        pullTooltip={pullTooltip}
-        pushAheadCount={pushAheadCount}
-        pushBehindCount={pushBehindCount}
+        pullTooltip={state.pullTooltip}
+        pushAheadCount={state.pushAheadCount}
+        pushBehindCount={state.pushBehindCount}
         pushBranch={pushBranch}
-        pushTooltip={pushTooltip}
-        rebaseBehindCount={rebaseBehindCount}
+        pushTooltip={state.pushTooltip}
+        rebaseBehindCount={state.rebaseBehindCount}
         rebaseOntoTarget={rebaseOntoTarget}
-        rebaseTooltip={rebaseTooltip}
+        rebaseTooltip={state.rebaseTooltip}
       />
 
       {showLockReasonBanner && isGitActionsLocked && gitActionsLockReason ? (

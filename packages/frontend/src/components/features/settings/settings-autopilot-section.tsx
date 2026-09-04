@@ -79,18 +79,28 @@ export function SettingsAutopilotSection({
           const hasPullRequestAction = eventDefinition.availableActionIds.includes(
             "startGeneratePullRequest",
           );
+          const hasSavedPullRequestAction = selectedValue === "startGeneratePullRequest";
           const availableActionIds = eventDefinition.availableActionIds.filter(
-            (actionId) => actionId !== "startGeneratePullRequest" || supportsPullRequests,
+            (actionId) =>
+              actionId !== "startGeneratePullRequest" ||
+              supportsPullRequests ||
+              hasSavedPullRequestAction,
           );
           const isCheckingProvider =
             hasPullRequestAction && repoPath !== null && providerQuery.isLoading;
-          const pullRequestError = hasPullRequestAction
-            ? (providerHealthError ?? providerReadError)
-            : null;
+          let pullRequestError = providerHealthError ?? providerReadError;
+          if (
+            hasPullRequestAction &&
+            !isCheckingProvider &&
+            pullRequestError === null &&
+            !supportsPullRequests
+          ) {
+            pullRequestError = "The current Git provider does not support Pull Requests.";
+          }
           let pullRequestNote: string | null = null;
           if (isCheckingProvider) {
             pullRequestNote = "Checking the current Git provider.";
-          } else if (pullRequestError) {
+          } else if (pullRequestError && (supportsPullRequests || hasSavedPullRequestAction)) {
             pullRequestNote = `Start Generate Pull Request: ${pullRequestError}`;
           }
           const labelId = `autopilot-${eventDefinition.id}-label`;
@@ -109,7 +119,9 @@ export function SettingsAutopilotSection({
                 value: actionId,
                 label: AUTOPILOT_ACTION_DEFINITIONS[actionId].label,
                 description: AUTOPILOT_ACTION_DEFINITIONS[actionId].description,
-                disabled: isPullRequestAction && pullRequestError !== null,
+                disabled:
+                  isPullRequestAction &&
+                  (isCheckingProvider || !supportsPullRequests || pullRequestError !== null),
               };
             }),
           ];

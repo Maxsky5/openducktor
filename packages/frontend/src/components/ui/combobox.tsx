@@ -175,6 +175,9 @@ function ComboboxOptionItem({
       keywords={getOptionFilterKeywords(option)}
       disabled={option.disabled === true}
       onSelect={() => {
+        if (option.disabled === true) {
+          return;
+        }
         onValueChange(option.value);
         onSelectComplete();
       }}

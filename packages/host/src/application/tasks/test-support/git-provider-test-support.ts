@@ -25,7 +25,7 @@ export const createDefaultGitProviderResolver = (): GitProviderResolver => {
         getStatus: () =>
           Effect.succeed({
             providerId: repoConfig.git.provider?.id ?? GITHUB_PROVIDER_DESCRIPTOR.id,
-            enabled: true,
+            enabled: repoConfig.git.provider?.enabled ?? false,
             available: true,
             executablePath: "gh",
             version: "gh version test",

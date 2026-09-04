@@ -42,7 +42,7 @@ type RepositoryGitStatusHeaderProps = {
   githubReadinessLabel: string;
   githubReadinessMessage: string;
   providerDescription: string;
-  providerLabel: string;
+  providerTitle: string;
 };
 
 function RepositoryGitStatusHeader({
@@ -50,7 +50,7 @@ function RepositoryGitStatusHeader({
   githubReadinessLabel,
   githubReadinessMessage,
   providerDescription,
-  providerLabel,
+  providerTitle,
 }: RepositoryGitStatusHeaderProps): ReactElement {
   return (
     <CardHeader className="gap-4 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
@@ -59,7 +59,7 @@ function RepositoryGitStatusHeader({
           <Github className="size-5" />
         </div>
         <div className="space-y-1">
-          <CardTitle>{providerLabel} Pull Requests</CardTitle>
+          <CardTitle>{providerTitle}</CardTitle>
           <CardDescription>{providerDescription}</CardDescription>
           <p className="text-sm text-muted-foreground">{githubReadinessMessage}</p>
         </div>
@@ -269,7 +269,9 @@ export function RepositoryGitSection({
           githubReadinessLabel={githubReadinessLabel}
           githubReadinessMessage={githubReadinessMessage}
           providerDescription={providerDescription}
-          providerLabel={providerLabel}
+          providerTitle={
+            hasConfiguredNonGithubProvider ? providerLabel : `${providerLabel} Pull Requests`
+          }
         />
         <CardContent className="grid gap-5 py-5">
           {hasConfiguredNonGithubProvider ? (

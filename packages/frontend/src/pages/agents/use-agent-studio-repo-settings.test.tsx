@@ -183,6 +183,27 @@ describe("useAgentStudioRepoSettings", () => {
     await harness.unmount();
   });
 
+  test("loads fresh provider context for an approval request", async () => {
+    const cachedContext = createGitProviderContextFixture();
+    const freshContext = createGitProviderContextFixture({ available: false });
+    const loadProviderContext = mock(async () => cachedContext);
+    const hostClient = createRepoConfigHost(undefined, loadProviderContext);
+    const harness = createHookHarness({
+      activeWorkspaceId: "workspace-repo",
+      activeRepoPath: "/repo",
+      hostClient,
+    });
+
+    await harness.mount();
+    await harness.waitFor((state) => state.gitProvider.context !== undefined);
+    loadProviderContext.mockImplementationOnce(async () => freshContext);
+
+    await expect(harness.getLatest().gitProvider.load()).resolves.toEqual(freshContext);
+    expect(loadProviderContext).toHaveBeenCalledTimes(2);
+
+    await harness.unmount();
+  });
+
   test("resets settings when active repo becomes null", async () => {
     const hostClient = createRepoConfigHost();
     const harness = createHookHarness({

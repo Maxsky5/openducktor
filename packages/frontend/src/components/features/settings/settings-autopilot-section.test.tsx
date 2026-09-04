@@ -4,10 +4,11 @@ import {
   createDefaultAutopilotSettings,
   type RepositoryGitProviderContext,
 } from "@openducktor/contracts";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { act } from "react";
-import { createQueryClient } from "@/lib/query-client";
+import { setAutopilotRuleAction } from "@/features/autopilot/autopilot-catalog";
+import { QueryProvider } from "@/lib/query-provider";
 import { repositoryGitProviderContextQueryOptions } from "@/state/queries/git-provider-context";
 import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
 import { SettingsAutopilotSection } from "./settings-autopilot-section";
@@ -18,26 +19,33 @@ const renderSection = (
   gitProviderContext: RepositoryGitProviderContext = createGitProviderContextFixture(),
 ) => {
   let latestAutopilot = autopilot;
-  const queryClient = createQueryClient();
-  queryClient.setQueryData(
-    repositoryGitProviderContextQueryOptions("/repo").queryKey,
-    gitProviderContext,
-  );
   const onUpdateAutopilot = mock(
     (updater: (current: AutopilotSettings) => AutopilotSettings): void => {
       latestAutopilot = updater(latestAutopilot);
     },
   );
 
-  render(
-    <QueryClientProvider client={queryClient}>
+  const Harness = () => {
+    const queryClient = useQueryClient();
+    queryClient.setQueryData(
+      repositoryGitProviderContextQueryOptions("/repo").queryKey,
+      gitProviderContext,
+    );
+
+    return (
       <SettingsAutopilotSection
         autopilot={autopilot}
         disabled={disabled}
         repoPath="/repo"
         onUpdateAutopilot={onUpdateAutopilot}
       />
-    </QueryClientProvider>,
+    );
+  };
+
+  render(
+    <QueryProvider useIsolatedClient>
+      <Harness />
+    </QueryProvider>,
   );
 
   return {
@@ -108,6 +116,33 @@ describe("settings Autopilot section", () => {
     expect(screen.queryByText("Start Generate Pull Request")).toBeNull();
   });
 
+  test("keeps a saved Pull Request action visible when the provider does not support it", async () => {
+    const autopilot = setAutopilotRuleAction(
+      createDefaultAutopilotSettings(),
+      "taskProgressedToHumanReview",
+      "startGeneratePullRequest",
+    );
+    renderSection(autopilot, false, null);
+
+    expect(
+      screen.getByRole("button", { name: "When a task progresses to Human Review" }).textContent,
+    ).toContain("Start Generate Pull Request");
+    expect(
+      screen.getByText(/Start Generate Pull Request.*does not support Pull Requests/),
+    ).toBeDefined();
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "When a task progresses to Human Review" }),
+      );
+    });
+    expect(
+      screen
+        .getByRole("option", { name: /Start Generate Pull Request/ })
+        .getAttribute("aria-disabled"),
+    ).toBe("true");
+  });
+
   test("shows but disables Pull Request generation when provider health blocks it", async () => {
     renderSection(
       createDefaultAutopilotSettings(),
@@ -115,7 +150,9 @@ describe("settings Autopilot section", () => {
       createGitProviderContextFixture({ available: false }),
     );
 
-    expect(screen.getByText(/Start Generate Pull Request.*Sign in to GitHub CLI\./)).toBeDefined();
+    expect(
+      screen.getAllByText(/Start Generate Pull Request.*Sign in to GitHub CLI\./),
+    ).not.toHaveLength(0);
     await act(async () => {
       fireEvent.click(
         screen.getByRole("button", { name: "When a task progresses to Human Review" }),

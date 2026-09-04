@@ -17,7 +17,7 @@ import {
 } from "@/features/session-start/session-start-selection";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
-import { pullRequestHealthError } from "@/lib/git-provider-health";
+import { gitProviderReadError, pullRequestHealthError } from "@/lib/git-provider-health";
 import { MISSING_BUILD_TARGET_ERROR } from "@/lib/session-start-errors";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { repositoryGitProviderContextQueryOptions } from "@/state/queries/git-provider-context";
@@ -84,9 +84,15 @@ const getPullRequestStartError = async ({
     return null;
   }
 
-  const context = await queryClient.fetchQuery(
-    repositoryGitProviderContextQueryOptions(activeWorkspace.repoPath),
-  );
+  let context;
+  try {
+    context = await queryClient.fetchQuery(
+      repositoryGitProviderContextQueryOptions(activeWorkspace.repoPath),
+    );
+  } catch (error) {
+    const cause = error instanceof Error ? error : new Error(errorMessage(error));
+    return gitProviderReadError(cause);
+  }
   if (!context?.descriptor.capabilities.supportsPullRequests) {
     return "The current Git provider does not support Pull Requests.";
   }

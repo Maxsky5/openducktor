@@ -43,9 +43,10 @@ export function useAgentStudioRepoSettings(args: {
     if (activeRepoPath === null) {
       return Promise.reject(new Error("Select a repository before loading Git provider context."));
     }
-    return queryClient.fetchQuery(
-      repositoryGitProviderContextQueryOptions(activeRepoPath, hostClient),
-    );
+    return queryClient.fetchQuery({
+      ...repositoryGitProviderContextQueryOptions(activeRepoPath, hostClient),
+      staleTime: 0,
+    });
   }, [activeRepoPath, hostClient, queryClient]);
   const retryGitProviderContext = useCallback((): void => {
     void refetchGitProviderContext();

@@ -34,6 +34,7 @@ describe("TaskDetailsSheetHeader", () => {
     expect(html).toContain("task-details-detect-pr-button");
     expect(html).toContain("disabled");
     expect(html).toContain("Sign in to GitHub CLI.");
+    expect(html).toContain('aria-describedby="task-details-detect-pr-error"');
   });
 
   test("disables Detect PR and shows the provider read error", () => {

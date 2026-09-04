@@ -349,6 +349,25 @@ describe("autopilot feature helpers", () => {
     expect(runSessionStartWorkflowMock).not.toHaveBeenCalled();
   });
 
+  test("skips pull request generation when the provider context read fails", async () => {
+    const args = createExecuteArgs(createTask({ id: "TASK-PR", status: "human_review" }));
+    args.queryClient.removeQueries({
+      queryKey: repositoryGitProviderContextQueryOptions("/repo").queryKey,
+    });
+
+    const outcome = await executeAutopilotAction({
+      ...args,
+      actionId: "startGeneratePullRequest",
+    });
+
+    expect(outcome).toEqual({
+      kind: "skipped",
+      message:
+        "Could not load the current Git provider: OpenDucktor shell bridge is not configured. Start through the desktop shell or @openducktor/web.",
+    });
+    expect(runSessionStartWorkflowMock).not.toHaveBeenCalled();
+  });
+
   test("skips builder follow-up when the build continuation target is missing", async () => {
     const args = createExecuteArgs(createTask({ id: "TASK-QA", status: "in_progress" }));
     args.loadTaskSessionRecords.mockResolvedValue([createBuilderSessionRecord()]);

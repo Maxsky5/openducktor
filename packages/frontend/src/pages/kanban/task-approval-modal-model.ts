@@ -49,6 +49,9 @@ export const buildTaskApprovalModalModel = ({
         gitProviderContext.health.reason ??
         `${gitProviderContext.descriptor.label} is not available for Pull Requests.`;
     }
+  } else if (mode === "pull_request" && gitProviderContext === undefined) {
+    pullRequestSupported = true;
+    pullRequestUnavailableReason = providerReadError ?? "Checking the current Git provider.";
   }
   const baseModal = {
     open: true,

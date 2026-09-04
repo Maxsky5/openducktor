@@ -125,29 +125,33 @@ export function useTaskApprovalFlow({
       const openErrorMessage = options?.errorMessage ?? null;
 
       void (async () => {
-        let resolvedGitProviderContext: RepositoryGitProviderContext;
-        try {
-          resolvedGitProviderContext = await loadGitProviderContext();
-        } catch (error) {
-          if (isApprovalRequestCurrent(requestVersion, requestWorkspace)) {
-            toast.error("Failed to load Git provider context", {
-              description: errorMessage(error),
-              action: {
-                label: "Retry",
-                onClick: () => openTaskApprovalRequest(taskId, options),
-              },
-            });
+        let effectiveMode = options?.mode;
+        if (effectiveMode !== "direct_merge") {
+          let resolvedGitProviderContext: RepositoryGitProviderContext;
+          try {
+            resolvedGitProviderContext = await loadGitProviderContext();
+          } catch (error) {
+            if (isApprovalRequestCurrent(requestVersion, requestWorkspace)) {
+              toast.error("Failed to load Git provider context", {
+                description: errorMessage(error),
+                action: {
+                  label: "Retry",
+                  onClick: () => openTaskApprovalRequest(taskId, options),
+                },
+              });
+            }
+            return;
           }
-          return;
+          effectiveMode = resolveTaskApprovalOpenMode({
+            gitProviderContext: resolvedGitProviderContext,
+            requestedMode: effectiveMode,
+          });
         }
         if (!isApprovalRequestCurrent(requestVersion, requestWorkspace)) {
           return;
         }
 
-        const effectiveMode = resolveTaskApprovalOpenMode({
-          gitProviderContext: resolvedGitProviderContext,
-          requestedMode: options?.mode,
-        });
+        effectiveMode ??= "direct_merge";
         dispatch({
           type: "open_loading",
           taskId,
