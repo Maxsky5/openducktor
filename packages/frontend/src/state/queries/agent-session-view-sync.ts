@@ -9,13 +9,9 @@ import {
   refreshAgentSessionLists,
 } from "./agent-sessions";
 
-type AgentSessionViewReadPort = AgentSessionReadPort & {
-  tasksList: (repoPath: string) => Promise<Array<{ id: string }>>;
-};
-
 export type AgentSessionViewSync = {
   reconcileExternalEvent: (event: ExternalTaskSyncEvent) => Promise<void>;
-  reconcileStreamSnapshot: (activeRepoPath: string | null) => Promise<void>;
+  reconcileStreamSnapshot: (activeRepoPath: string | null, taskIds: string[]) => Promise<void>;
 };
 
 export const createAgentSessionViewSync = ({
@@ -25,7 +21,7 @@ export const createAgentSessionViewSync = ({
   refreshLiveSessions,
 }: {
   queryClient: QueryClient;
-  readPort: AgentSessionViewReadPort;
+  readPort: AgentSessionReadPort;
   removeTaskSessions: (repoPath: string, taskIds: string[]) => void;
   refreshLiveSessions: (repoPath: string) => Promise<void>;
 }): AgentSessionViewSync => ({
@@ -45,9 +41,7 @@ export const createAgentSessionViewSync = ({
       await refreshLiveSessions(event.repoPath);
     }
   },
-  reconcileStreamSnapshot: async (activeRepoPath) => {
-    const tasks = activeRepoPath ? await readPort.tasksList(activeRepoPath) : [];
-    const taskIds = tasks.map((task) => task.id);
+  reconcileStreamSnapshot: async (activeRepoPath, taskIds) => {
     const taskIdSet = new Set(taskIds);
     const removedTaskIds = activeRepoPath
       ? cachedAgentSessionTaskIds(queryClient, activeRepoPath).filter(

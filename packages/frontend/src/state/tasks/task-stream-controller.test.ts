@@ -1,8 +1,16 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { ExternalTaskSyncEvent, TaskEventCursor } from "@openducktor/contracts";
+import { QueryClient } from "@tanstack/react-query";
 import type { TaskStreamFrame, TaskStreamSubscription } from "@/lib/shell-bridge";
-import type { AgentSessionViewSync } from "@/state/queries/agent-session-view-sync";
-import type { TaskViewSync } from "@/state/queries/task-view-sync";
+import {
+  createAgentSessionViewSync,
+  type AgentSessionViewSync,
+} from "@/state/queries/agent-session-view-sync";
+import { createTaskViewSync, type TaskViewSync } from "@/state/queries/task-view-sync";
+import {
+  createSettingsSnapshotFixture,
+  createTaskCardFixture,
+} from "@/test-utils/shared-test-fixtures";
 import { createTaskStreamController } from "./task-stream-controller";
 
 const epoch = "11111111-1111-4111-8111-111111111111";
@@ -44,10 +52,12 @@ type SubscriptionRecord = {
 const createHarness = ({
   onSubscribe,
   taskViewSync: taskViewSyncOverrides,
+  agentSessionViewSync: agentSessionViewSyncOverride,
   getActiveRepoPath = () => "/repo",
 }: {
   onSubscribe?: (record: SubscriptionRecord, index: number) => Promise<TaskStreamSubscription>;
   taskViewSync?: Partial<TaskViewSync>;
+  agentSessionViewSync?: AgentSessionViewSync;
   getActiveRepoPath?: () => string | null;
 } = {}) => {
   const records: SubscriptionRecord[] = [];
@@ -60,10 +70,10 @@ const createHarness = ({
     refreshManually: async () => {},
     refreshAfterLocalMutation: async () => {},
     reconcileExternalEvent: mock(async () => {}),
-    reconcileStreamSnapshot: mock(async () => {}),
+    reconcileStreamSnapshot: mock(async () => []),
     ...taskViewSyncOverrides,
   };
-  const agentSessionViewSync: AgentSessionViewSync = {
+  const agentSessionViewSync: AgentSessionViewSync = agentSessionViewSyncOverride ?? {
     reconcileExternalEvent: mock(async () => {}),
     reconcileStreamSnapshot: mock(async () => {}),
   };
@@ -113,6 +123,38 @@ const createHarness = ({
 };
 
 describe("task stream controller recovery", () => {
+  test("uses one task list read to reconcile task and session snapshots", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const listTasks = mock(async () => [createTaskCardFixture({ id: "task-1" })]);
+    const taskViewSync = createTaskViewSync({
+      queryClient,
+      ports: {
+        loadSettings: async () => createSettingsSnapshotFixture(),
+        listTasks,
+        findExistingTaskIds: async () => [],
+        loadFreshDocument: async () => ({ markdown: "", updatedAt: null }),
+      },
+    });
+    const loadSessionBatch = mock(async () => [{ taskId: "task-1", agentSessions: [] }]);
+    const agentSessionViewSync = createAgentSessionViewSync({
+      queryClient,
+      readPort: {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks: loadSessionBatch,
+      },
+      removeTaskSessions: () => {},
+      refreshLiveSessions: async () => {},
+    });
+    const harness = createHarness({ taskViewSync, agentSessionViewSync });
+
+    await harness.controller.start();
+    harness.emit(0, { type: "snapshot_required", cursor: cursor(7), reason: "buffer_gap" });
+    await flush();
+
+    expect(listTasks).toHaveBeenCalledTimes(1);
+    expect(loadSessionBatch).toHaveBeenCalledWith("/repo", ["task-1"]);
+  });
+
   test("applies task and session views before acknowledging a change", async () => {
     const sessionRefresh = deferred<void>();
     const harness = createHarness();
@@ -158,7 +200,7 @@ describe("task stream controller recovery", () => {
     await flush();
 
     expect(harness.taskViewSync.reconcileStreamSnapshot).toHaveBeenCalledWith("/repo");
-    expect(harness.agentSessionViewSync.reconcileStreamSnapshot).toHaveBeenCalledWith("/repo");
+    expect(harness.agentSessionViewSync.reconcileStreamSnapshot).toHaveBeenCalledWith("/repo", []);
     expect(harness.records[1]?.acknowledge.mock.calls).toEqual([[cursor(7)], [cursor(8)]]);
     expect(applications).toBe(2);
   });
@@ -337,7 +379,10 @@ describe("task stream controller recovery", () => {
     const snapshotRefresh = deferred<void>();
     const harness = createHarness({
       taskViewSync: {
-        reconcileStreamSnapshot: async () => snapshotRefresh.promise,
+        reconcileStreamSnapshot: async () => {
+          await snapshotRefresh.promise;
+          return [];
+        },
       },
     });
 
@@ -397,7 +442,7 @@ describe("task stream controller recovery", () => {
         refreshManually: async () => {},
         refreshAfterLocalMutation: async () => {},
         reconcileExternalEvent: async () => {},
-        reconcileStreamSnapshot: async () => {},
+        reconcileStreamSnapshot: async () => [],
       },
       agentSessionViewSync: {
         reconcileExternalEvent: async () => {},

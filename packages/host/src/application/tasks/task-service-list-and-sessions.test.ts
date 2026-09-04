@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { createDefaultGlobalConfig } from "../../config/global-config";
-import { HostOperationError, HostResourceError } from "../../effect/host-errors";
+import { HostOperationError } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
 import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
 import { toSettingsSnapshot } from "../workspaces/workspace-settings-model";
@@ -39,19 +39,11 @@ describe("createTaskService list and session reads", () => {
   });
 
   test("checks only requested task IDs when hidden tasks need existence checks", async () => {
-    const calls: Array<{ repoPath: string; taskId: string }> = [];
+    const calls: Array<{ repoPath: string; taskIds: string[] }> = [];
     const taskStore: TaskStorePort = {
-      getTask(input) {
+      findExistingTaskIds(input) {
         calls.push(input);
-        return input.taskId === "missing-task"
-          ? Effect.fail(
-              new HostResourceError({
-                resource: "task",
-                operation: "sqliteTaskRepository.getTask",
-                message: "Task not found: missing-task",
-              }),
-            )
-          : Effect.succeed(task({ id: input.taskId }));
+        return Effect.succeed(["task-2", "task-1"]);
       },
     };
     const service = createTaskService({ taskStore });
@@ -64,11 +56,7 @@ describe("createTaskService list and session reads", () => {
         }),
       ),
     ).resolves.toEqual(["task-2", "task-1"]);
-    expect(calls).toEqual([
-      { repoPath: "/repo", taskId: "task-2" },
-      { repoPath: "/repo", taskId: "missing-task" },
-      { repoPath: "/repo", taskId: "task-1" },
-    ]);
+    expect(calls).toEqual([{ repoPath: "/repo", taskIds: ["task-2", "missing-task", "task-1"] }]);
   });
 
   test("preserves typed task asset failures from task mutations", async () => {

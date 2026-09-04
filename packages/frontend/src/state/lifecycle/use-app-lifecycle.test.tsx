@@ -50,7 +50,7 @@ const taskViewSync: TaskViewSync = {
   refreshManually: async () => {},
   refreshAfterLocalMutation: async () => {},
   reconcileExternalEvent: async () => {},
-  reconcileStreamSnapshot: async () => {},
+  reconcileStreamSnapshot: async () => [],
 };
 
 describe("useAppLifecycle task stream", () => {

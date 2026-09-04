@@ -188,9 +188,8 @@ describe("TaskViewSync races", () => {
     await expect(first).rejects.toBe(firstFailure);
     await expect(second).resolves.toBeUndefined();
     expect(
-      queryClient.getQueryData<{ tasks: TaskCard[] }>(
-        taskQueryKeys.repoData("/repo", doneVisibleDays),
-      )?.tasks[0]?.id,
+      queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo"))?.tasks[0]
+        ?.id,
     ).toBe("fresh");
   });
 
@@ -229,9 +228,8 @@ describe("TaskViewSync races", () => {
       await Promise.all([first, second]);
 
       expect(
-        queryClient.getQueryData<{ tasks: TaskCard[] }>(
-          taskQueryKeys.repoData("/repo", doneVisibleDays),
-        )?.tasks[0]?.id,
+        queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo"))?.tasks[0]
+          ?.id,
       ).toBe("task-2");
     } finally {
       releaseFirstCancel.resolve();
@@ -505,7 +503,7 @@ describe("TaskViewSync races", () => {
       const snapshot = sync.reconcileStreamSnapshot("/repo");
 
       staleDocument.resolve({ markdown: "# V1", updatedAt: "2026-04-10T13:10:00.000Z" });
-      await expect(Promise.all([refresh, snapshot])).resolves.toEqual([undefined, undefined]);
+      await expect(Promise.all([refresh, snapshot])).resolves.toEqual([undefined, ["task-1"]]);
 
       expect(
         queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(documentKey),
@@ -731,7 +729,7 @@ describe("TaskViewSync races", () => {
     });
     const loadFreshDocument = mock(async () => ({ markdown: "# Unexpected", updatedAt: null }));
     const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
-    const taskKey = taskQueryKeys.repoData("/inactive", doneVisibleDays);
+    const taskKey = taskQueryKeys.repoData("/inactive");
     const documentKey = documentQueryKeys.spec("/inactive", "task-1");
     queryClient.setQueryData(taskKey, {
       tasks: [createTaskCardFixture({ id: "task-1", status: "open" })],

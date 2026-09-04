@@ -1,6 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
-import { z } from "zod";
 import { hostClient as host } from "@/lib/host-client";
 
 const TASK_DATA_STALE_TIME_MS = 30_000;
@@ -9,26 +8,23 @@ export type RepoTaskData = {
   tasks: TaskCard[];
 };
 
-export type ListTasks = (repoPath: string, doneVisibleDays: number) => Promise<TaskCard[]>;
+export type ListTasks = (repoPath: string) => Promise<TaskCard[]>;
 
 export const taskQueryKeys = {
   all: ["tasks"] as const,
   repoDataPrefix: (repoPath: string) => [...taskQueryKeys.all, "repo-data", repoPath] as const,
-  repoData: (repoPath: string, doneVisibleDays: number) =>
-    [...taskQueryKeys.repoDataPrefix(repoPath), doneVisibleDays] as const,
-  kanbanData: (repoPath: string, doneVisibleDays: number) =>
-    taskQueryKeys.repoData(repoPath, doneVisibleDays),
+  repoData: (repoPath: string) => taskQueryKeys.repoDataPrefix(repoPath),
+  kanbanData: (repoPath: string) => taskQueryKeys.repoData(repoPath),
 };
 
-export const createRepoTaskDataQueryOptions =
-  (listTasks: ListTasks) => (repoPath: string, doneVisibleDays: number) =>
-    queryOptions({
-      queryKey: taskQueryKeys.repoData(repoPath, doneVisibleDays),
-      queryFn: async (): Promise<RepoTaskData> => ({
-        tasks: await listTasks(repoPath, doneVisibleDays),
-      }),
-      staleTime: TASK_DATA_STALE_TIME_MS,
-    });
+export const createRepoTaskDataQueryOptions = (listTasks: ListTasks) => (repoPath: string) =>
+  queryOptions({
+    queryKey: taskQueryKeys.repoData(repoPath),
+    queryFn: async (): Promise<RepoTaskData> => ({
+      tasks: await listTasks(repoPath),
+    }),
+    staleTime: TASK_DATA_STALE_TIME_MS,
+  });
 
 export const repoTaskDataQueryOptions = createRepoTaskDataQueryOptions((repoPath) =>
   host.tasksList(repoPath),
@@ -37,9 +33,7 @@ export const repoTaskDataQueryOptions = createRepoTaskDataQueryOptions((repoPath
 export const loadRepoTaskDataFromQuery = (
   queryClient: QueryClient,
   repoPath: string,
-  doneVisibleDays: number,
-): Promise<RepoTaskData> =>
-  queryClient.fetchQuery(repoTaskDataQueryOptions(repoPath, doneVisibleDays));
+): Promise<RepoTaskData> => queryClient.fetchQuery(repoTaskDataQueryOptions(repoPath));
 
 const invalidateRepoTaskDataQueries = (
   queryClient: QueryClient,
@@ -67,47 +61,6 @@ export const refetchActiveKanbanQueries = (
     exact: false,
     type: "active",
   });
-
-const cachedKanbanQueryKeysForRepo = (
-  queryClient: QueryClient,
-  repoPath: string,
-): Array<ReturnType<typeof taskQueryKeys.repoData>> =>
-  queryClient
-    .getQueryCache()
-    .findAll({
-      queryKey: taskQueryKeys.repoDataPrefix(repoPath),
-      exact: false,
-    })
-    .reduce<Array<ReturnType<typeof taskQueryKeys.repoData>>>((keys, query) => {
-      const queryKey = query.queryKey;
-      const doneVisibleDaysResult = z.number().nonnegative().safeParse(queryKey[3]);
-      if (
-        queryKey[0] === taskQueryKeys.all[0] &&
-        queryKey[1] === "repo-data" &&
-        queryKey[2] === repoPath &&
-        doneVisibleDaysResult.success
-      ) {
-        keys.push(taskQueryKeys.repoData(repoPath, doneVisibleDaysResult.data));
-      }
-      return keys;
-    }, []);
-
-export const refreshCachedKanbanQueries = async (
-  queryClient: QueryClient,
-  repoPath: string,
-  options?: { force?: boolean; excludeDoneVisibleDays?: number },
-): Promise<void> => {
-  const cachedQueryKeys = cachedKanbanQueryKeysForRepo(queryClient, repoPath).filter(
-    ([, , , doneVisibleDays]) => doneVisibleDays !== options?.excludeDoneVisibleDays,
-  );
-  const force = options?.force ?? true;
-  await Promise.all(
-    cachedQueryKeys.map(([, , , doneVisibleDays]) => {
-      const query = repoTaskDataQueryOptions(repoPath, doneVisibleDays);
-      return queryClient.fetchQuery(force ? { ...query, staleTime: 0 } : query);
-    }),
-  );
-};
 
 const invalidateRepoTaskListQueries = (
   queryClient: QueryClient,

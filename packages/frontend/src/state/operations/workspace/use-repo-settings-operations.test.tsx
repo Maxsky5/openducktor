@@ -8,6 +8,7 @@ import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shar
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { checksQueryKeys } from "../../queries/checks";
 import { runtimeQueryKeys } from "../../queries/runtime";
+import { taskQueryKeys } from "../../queries/tasks";
 import { workspaceQueryKeys } from "../../queries/workspace";
 import { host } from "../shared/host";
 import { useRepoSettingsOperations } from "./use-repo-settings-operations";
@@ -678,6 +679,10 @@ describe("use-repo-settings-operations", () => {
     };
     const normalizedSnapshot: SettingsSnapshot = {
       ...createSettingsSnapshot(),
+      kanban: {
+        ...createSettingsSnapshot().kanban,
+        doneVisibleDays: 7,
+      },
       chat: explicitChatSettings,
       autopilot: {
         ...createSettingsSnapshot().autopilot,
@@ -708,6 +713,10 @@ describe("use-repo-settings-operations", () => {
     });
     const snapshot: SettingsSnapshot = {
       ...createSettingsSnapshot(),
+      kanban: {
+        ...createSettingsSnapshot().kanban,
+        doneVisibleDays: 7,
+      },
       chat: explicitChatSettings,
       autopilot: {
         ...createSettingsSnapshot().autopilot,
@@ -723,6 +732,10 @@ describe("use-repo-settings-operations", () => {
 
     try {
       await harness.mount();
+      harness
+        .getQueryClient()
+        .setQueryData(workspaceQueryKeys.settingsSnapshot(), createSettingsSnapshot());
+      harness.getQueryClient().setQueryData(taskQueryKeys.repoData("/repo-a"), { tasks: [] });
       await harness.getLatest().saveSettingsSnapshot(snapshot);
       expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith(snapshot);
       expect(workspaceSaveSettingsSnapshot.mock.calls[0]?.[0]?.chat).toEqual(explicitChatSettings);
@@ -738,6 +751,9 @@ describe("use-repo-settings-operations", () => {
           .alwaysStartQaReviewsFresh,
       ).toBe(true);
       expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
+      expect(
+        harness.getQueryClient().getQueryState(taskQueryKeys.repoData("/repo-a"))?.isInvalidated,
+      ).toBe(true);
     } finally {
       await harness.unmount();
       host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;

@@ -22,13 +22,10 @@ const unusedReadPort: AgentSessionReadPort = {
   },
 };
 
-type TestReadPort = AgentSessionReadPort & {
-  tasksList: (repoPath: string) => Promise<Array<{ id: string }>>;
-};
+type TestReadPort = AgentSessionReadPort;
 
 const readPort = (overrides: Partial<TestReadPort> = {}): TestReadPort => ({
   ...unusedReadPort,
-  tasksList: async () => [{ id: "task-1" }],
   ...overrides,
 });
 
@@ -179,7 +176,7 @@ describe("AgentSessionViewSync", () => {
     });
 
     try {
-      await sync.reconcileStreamSnapshot("/repo");
+      await sync.reconcileStreamSnapshot("/repo", ["task-1"]);
 
       expect(loadSessionBatch).toHaveBeenCalledWith("/repo", ["task-1"]);
       expect(refreshLiveSessions).toHaveBeenCalledWith("/repo");
@@ -203,13 +200,12 @@ describe("AgentSessionViewSync", () => {
       readPort: readPort({
         agentSessionsList: async () => [],
         agentSessionsListForTasks: loadSessionBatch,
-        tasksList: async () => [{ id: "current-task" }],
       }),
       removeTaskSessions,
       refreshLiveSessions,
     });
 
-    await sync.reconcileStreamSnapshot("/repo");
+    await sync.reconcileStreamSnapshot("/repo", ["current-task"]);
 
     expect(queryClient.getQueryData(staleActiveSessionKey)).toBeUndefined();
     expect(queryClient.getQueryData(inactiveSessionKey)).toBeUndefined();

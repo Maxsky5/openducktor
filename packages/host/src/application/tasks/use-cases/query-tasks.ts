@@ -52,19 +52,8 @@ export const createTaskQueryUseCases = ({
     });
   },
 
-  findExistingTaskIds({ repoPath, taskIds }) {
-    return Effect.gen(function* () {
-      const existingTaskIds = yield* Effect.forEach(taskIds, (taskId) =>
-        taskStore.getTask({ repoPath, taskId }).pipe(
-          Effect.map((): string | null => taskId),
-          Effect.catchTag("HostResourceError", (failure) =>
-            failure.resource === "task" ? Effect.succeed(null) : Effect.fail(failure),
-          ),
-        ),
-      );
-
-      return existingTaskIds.filter((taskId): taskId is string => taskId !== null);
-    });
+  findExistingTaskIds(input) {
+    return taskStore.findExistingTaskIds(input);
   },
 
   getTaskMetadata(input) {

@@ -26,10 +26,7 @@ describe("useOnboardingWorkspaceCompletion", () => {
     const addWorkspace = mock(async () => {});
     const onComplete = mock(() => {});
     const queryClient = createQueryClient();
-    queryClient.setQueryData(
-      repoTaskDataQueryOptions("/repos/project", settingsSnapshot.kanban.doneVisibleDays).queryKey,
-      { tasks: [] },
-    );
+    queryClient.setQueryData(repoTaskDataQueryOptions("/repos/project").queryKey, { tasks: [] });
     queryClient.setQueryData(platformQueryOptions().queryKey, "darwin");
     const workspaceState = {
       isSwitchingWorkspace: false,

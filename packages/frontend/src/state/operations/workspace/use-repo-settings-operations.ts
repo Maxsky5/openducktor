@@ -15,6 +15,7 @@ import { normalizeRepoScripts } from "@/state/read-models/settings-read-model";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
 import { checksQueryKeys } from "../../queries/checks";
 import { gitProviderHealthQueryKeys } from "../../queries/git-provider-health";
+import { taskQueryKeys } from "../../queries/tasks";
 import {
   loadRepoConfigFromQuery,
   loadSettingsSnapshotFromQuery,
@@ -174,6 +175,7 @@ export function useRepoSettingsOperations({
 
   const saveSettingsSnapshot = useCallback(
     async (snapshot: SettingsSnapshotSaveInput): Promise<void> => {
+      const previousSnapshot = queryClient.getQueryData<SettingsSnapshot>(settingsSnapshotQueryKey);
       const workspaces = await host.workspaceSaveSettingsSnapshot(snapshot);
       queryClient.removeQueries({
         queryKey: settingsSnapshotQueryKey,
@@ -186,6 +188,9 @@ export function useRepoSettingsOperations({
       queryClient.setQueryData(settingsSnapshotQueryKey, normalizedSnapshot);
       queryClient.setQueryData(workspaceQueryKeys.list(), workspaces);
       applyWorkspaceRecords(workspaces);
+      if (previousSnapshot?.kanban.doneVisibleDays !== normalizedSnapshot.kanban.doneVisibleDays) {
+        await queryClient.invalidateQueries({ queryKey: taskQueryKeys.all });
+      }
       void queryClient.invalidateQueries({ queryKey: checksQueryKeys.all });
       void queryClient.invalidateQueries({ queryKey: gitProviderHealthQueryKeys.all });
     },

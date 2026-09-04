@@ -20,7 +20,11 @@ import {
 } from "./sqlite-task-document-writes";
 import { taskMetadata } from "./sqlite-task-metadata-read-model";
 import { listPullRequestSyncCandidatesInDatabase } from "./sqlite-task-pull-request-read-model";
-import { descendantTaskIds, requireTaskRow } from "./sqlite-task-queries";
+import {
+  descendantTaskIds,
+  findExistingTaskIdsInDatabase,
+  requireTaskRow,
+} from "./sqlite-task-queries";
 import type { SqliteTaskRepositoryContextProvider } from "./sqlite-task-repository-context";
 import {
   applyTaskPatch,
@@ -153,6 +157,16 @@ export const createSqliteTaskRepository = ({
       );
       return Effect.catchAll(diagnose, (cause) =>
         Effect.succeed(blockingTaskStoreHealth(errorMessage(cause))),
+      );
+    },
+    findExistingTaskIds(input) {
+      if (input.taskIds.length === 0) {
+        return Effect.succeed([]);
+      }
+      return withDatabase(
+        input.repoPath,
+        "sqliteTaskRepository.findExistingTaskIds",
+        ({ session }) => findExistingTaskIdsInDatabase(session, input.taskIds),
       );
     },
     getTask(input) {

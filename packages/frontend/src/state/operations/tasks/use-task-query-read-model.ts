@@ -31,7 +31,7 @@ export function useTaskQueryReadModel({
   const settingsSnapshot = settingsSnapshotQuery.data ?? null;
   const doneVisibleDays = settingsSnapshot?.kanban.doneVisibleDays ?? null;
   const repoTaskDataQuery = useQuery({
-    ...repoTaskDataQueryOptions(activeRepoPath ?? "__disabled__", doneVisibleDays ?? -1),
+    ...repoTaskDataQueryOptions(activeRepoPath ?? "__disabled__"),
     enabled: activeRepoPath !== null && doneVisibleDays !== null,
   });
 

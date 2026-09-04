@@ -30,32 +30,52 @@ const task: TaskCard = {
 };
 
 describe("tasks query options", () => {
-  test("loads task data with the repository and done-visible-days query key", async () => {
+  test("loads task data with one repository-scoped query key", async () => {
     const queryClient = new QueryClient();
     const listTasks = mock(async (): Promise<TaskCard[]> => [task]);
 
-    await queryClient.fetchQuery(createRepoTaskDataQueryOptions(listTasks)("/repo", 7));
+    await queryClient.fetchQuery(createRepoTaskDataQueryOptions(listTasks)("/repo"));
 
-    expect(listTasks).toHaveBeenCalledWith("/repo", 7);
+    expect(listTasks).toHaveBeenCalledWith("/repo");
     expect(
-      queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo", 7)),
+      queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo")),
     ).toEqual({
       tasks: [task],
     });
   });
 
-  test("invalidates every cached task-query variant for a repository", async () => {
+  test("uses the same cache entry across 1 to 7 to 1 day retention changes and refreshes", async () => {
     const queryClient = new QueryClient();
-    queryClient.setQueryData(taskQueryKeys.repoData("/repo", 1), { tasks: [task] });
-    queryClient.setQueryData(taskQueryKeys.repoData("/repo", 7), { tasks: [task] });
-    queryClient.setQueryData(taskQueryKeys.repoData("/other", 1), { tasks: [task] });
+    let doneVisibleDays = 1;
+    const listTasks = mock(async (): Promise<TaskCard[]> => [
+      { ...task, title: `Visible for ${doneVisibleDays} days` },
+    ]);
+    const query = createRepoTaskDataQueryOptions(listTasks)("/repo");
+
+    await queryClient.fetchQuery({ ...query, staleTime: 0 });
+    doneVisibleDays = 7;
+    await queryClient.fetchQuery({ ...query, staleTime: 0 });
+    doneVisibleDays = 1;
+    await queryClient.fetchQuery({ ...query, staleTime: 0 });
+
+    expect(listTasks).toHaveBeenCalledTimes(3);
+    expect(
+      queryClient.getQueryCache().findAll({ queryKey: taskQueryKeys.repoData("/repo") }),
+    ).toHaveLength(1);
+    expect(
+      queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo"))?.tasks[0]
+        ?.title,
+    ).toBe("Visible for 1 days");
+  });
+
+  test("invalidates the repository task query", async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo"), { tasks: [task] });
+    queryClient.setQueryData(taskQueryKeys.repoData("/other"), { tasks: [task] });
 
     await invalidateRepoTaskQueries(queryClient, "/repo");
 
-    expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo", 1))?.isInvalidated).toBe(true);
-    expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo", 7))?.isInvalidated).toBe(true);
-    expect(queryClient.getQueryState(taskQueryKeys.repoData("/other", 1))?.isInvalidated).toBe(
-      false,
-    );
+    expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo"))?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(taskQueryKeys.repoData("/other"))?.isInvalidated).toBe(false);
   });
 });
