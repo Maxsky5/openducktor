@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { errorMessage } from "@/lib/errors";
 import { openInToolsQueryOptions } from "@/state/queries/system";
 
@@ -53,23 +54,28 @@ export function SettingsOpenInTool({
         ) : null}
       </div>
       <div className="grid gap-2">
-        <Combobox
-          value={defaultTool?.toolId ?? ""}
-          options={options}
-          placeholder="No supported apps found"
-          disabled={disabled || toolsQuery.isPending || toolsQuery.isError || tools.length === 0}
-          triggerAriaLabelledBy={labelId}
-          triggerAriaDescribedBy={descriptionId}
-          searchPlaceholder="Search tools..."
-          onValueChange={(value) =>
-            onUpdateSystem(() => ({
-              preferredOpenInToolId: systemOpenInToolIdSchema.parse(value),
-            }))
-          }
-        />
         {toolsQuery.isPending ? (
-          <p className="text-xs text-muted-foreground">Looking for supported apps…</p>
-        ) : null}
+          <Skeleton
+            className="h-9 w-full animate-none"
+            role="status"
+            aria-label="Loading supported apps"
+          />
+        ) : (
+          <Combobox
+            value={defaultTool?.toolId ?? ""}
+            options={options}
+            placeholder={toolsQuery.isError ? "Apps unavailable" : "No supported apps found"}
+            disabled={disabled || toolsQuery.isError || tools.length === 0}
+            triggerAriaLabelledBy={labelId}
+            triggerAriaDescribedBy={descriptionId}
+            searchPlaceholder="Search tools..."
+            onValueChange={(value) =>
+              onUpdateSystem(() => ({
+                preferredOpenInToolId: systemOpenInToolIdSchema.parse(value),
+              }))
+            }
+          />
+        )}
         {toolsQuery.isError ? (
           <div role="alert" className="grid gap-2 text-sm text-destructive">
             <p>Failed to load supported apps: {errorMessage(toolsQuery.error)}</p>
