@@ -41,7 +41,7 @@ The app uses shadcn semantic tokens with Tailwind CSS v4. Tokens are in `package
 | Input border | `border-input` |
 | Subtle surface | `bg-muted` |
 | Interactive accent | `bg-primary`, `text-primary-foreground` |
-| Destructive action | `bg-destructive`, `text-destructive` |
+| Destructive action | `bg-destructive`, `text-destructive-foreground` |
 | Sidebar | `bg-sidebar`, `text-sidebar-foreground`, `border-sidebar-border` |
 
 ## Hardcoded color exceptions
