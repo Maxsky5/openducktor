@@ -1,4 +1,4 @@
-import { AlertTriangle, LoaderCircle, RefreshCcw } from "lucide-react";
+import { AlertTriangle, RefreshCcw } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
@@ -7,7 +7,6 @@ import type { ActiveWorkspace } from "@/types/state-slices";
 type AgentsPageShellProps = {
   activeWorkspace: ActiveWorkspace | null;
   navigationPersistenceError: Error | null;
-  isRestoring: boolean;
   chatSettingsLoadError: Error | null;
   activeTabValue: string;
   onRetryNavigationPersistence: () => void;
@@ -21,7 +20,6 @@ type AgentsPageShellProps = {
 export function AgentsPageShell({
   activeWorkspace,
   navigationPersistenceError,
-  isRestoring,
   chatSettingsLoadError,
   activeTabValue,
   onRetryNavigationPersistence,
@@ -58,20 +56,6 @@ export function AgentsPageShell({
               Retry restore
             </Button>
           </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (isRestoring) {
-    return (
-      <div
-        className="flex h-full min-h-0 items-center justify-center bg-card text-sm text-muted-foreground"
-        aria-busy="true"
-      >
-        <div className="flex items-center gap-2" role="status">
-          <LoaderCircle className="size-4 animate-spin" />
-          Restoring Agent Studio…
         </div>
       </div>
     );

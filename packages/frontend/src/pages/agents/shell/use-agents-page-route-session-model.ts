@@ -29,7 +29,6 @@ type UseAgentsPageRouteSessionModelArgs = {
 
 export type AgentsPageRouteSessionModel = {
   navigationPersistenceError: Error | null;
-  isRestoring: boolean;
   retryNavigationPersistence: () => void;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
   selection: ReturnType<typeof useAgentStudioSelectionController>;
@@ -183,7 +182,6 @@ export function useAgentsPageRouteSessionModel({
 
   return {
     navigationPersistenceError: navigationPersistenceError ?? stateSaveError,
-    isRestoring: isWorkspaceRestorePending,
     retryNavigationPersistence,
     scheduleQueryUpdate,
     selection,

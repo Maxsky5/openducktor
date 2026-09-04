@@ -24,7 +24,6 @@ import { useAgentsPageRouteSessionModel } from "./use-agents-page-route-session-
 type AgentsPageShellModel = {
   activeWorkspace: ReturnType<typeof useWorkspaceState>["activeWorkspace"];
   navigationPersistenceError: Error | null;
-  isRestoring: boolean;
   chatSettingsLoadError: Error | null;
   activeTabValue: string;
   onRetryNavigationPersistence: () => void;
@@ -106,8 +105,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     repoSettings,
     isLoadingRepoSettings,
   });
-  const { navigationPersistenceError, isRestoring, retryNavigationPersistence, selection } =
-    routeSession;
+  const { navigationPersistenceError, retryNavigationPersistence, selection } = routeSession;
 
   const taskActions = useAgentStudioShellTaskActions({
     activeWorkspace,
@@ -198,7 +196,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   return {
     activeWorkspace,
     navigationPersistenceError,
-    isRestoring,
     chatSettingsLoadError: orchestration.chatSettingsLoadError,
     activeTabValue: orchestration.activeTabValue,
     onRetryNavigationPersistence: retryNavigationPersistence,

@@ -453,7 +453,10 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
       ...failedArgs,
       sessionReadModelLoadState: loadingAgentSessionReadModelLoadState("/repo-a"),
     });
-    expect(harness.getLatest().agentStudioState).toBeNull();
+    expect(harness.getLatest().agentStudioState?.activeTask?.externalSessionId).toBe(
+      "session-saved",
+    );
+    expect(harness.getLatest().isLoading).toBe(false);
     expect(harness.getLatest().canSave).toBe(false);
 
     const savedSession = createAgentSessionSummaryFixture({

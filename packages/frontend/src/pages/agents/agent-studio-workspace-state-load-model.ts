@@ -37,13 +37,8 @@ export const buildAgentStudioStateLoad = ({
   const error = queryError instanceof Error ? queryError : null;
   const loadedAgentStudioState =
     activeWorkspaceId && !isQueryFetching && !error ? (repoConfig?.agentStudioState ?? null) : null;
-  const waitsForSessions = Boolean(
-    loadedAgentStudioState?.activeTask?.externalSessionId &&
-    sessionReadModelLoadState.kind !== "ready" &&
-    sessionReadModelLoadState.kind !== "failed",
-  );
   let agentStudioState: WorkspaceAgentStudioState | null = null;
-  if (loadedAgentStudioState && !isLoadingTasks && !waitsForSessions) {
+  if (loadedAgentStudioState && !isLoadingTasks) {
     agentStudioState = tasksAreCurrent
       ? buildAgentStudioReadState({
           state: loadedAgentStudioState,
@@ -53,7 +48,7 @@ export const buildAgentStudioStateLoad = ({
         })
       : loadedAgentStudioState;
   }
-  const isLoading = isQueryPending || isQueryFetching || isLoadingTasks || waitsForSessions;
+  const isLoading = isQueryPending || isQueryFetching || isLoadingTasks;
   const canSave =
     activeWorkspaceId !== null &&
     agentStudioState !== null &&

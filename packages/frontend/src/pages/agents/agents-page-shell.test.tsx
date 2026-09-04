@@ -16,7 +16,6 @@ describe("AgentsPageShell", () => {
       createElement(AgentsPageShell, {
         activeWorkspace: createActiveWorkspace("/repo"),
         navigationPersistenceError: new Error("restore failed"),
-        isRestoring: false,
         chatSettingsLoadError: null,
         activeTabValue: "task-1",
         onRetryNavigationPersistence: () => {},
@@ -36,7 +35,6 @@ describe("AgentsPageShell", () => {
       createElement(AgentsPageShell, {
         activeWorkspace: null,
         navigationPersistenceError: new Error("restore failed"),
-        isRestoring: false,
         chatSettingsLoadError: null,
         activeTabValue: "task-1",
         onRetryNavigationPersistence: () => {},
@@ -55,7 +53,6 @@ describe("AgentsPageShell", () => {
       createElement(AgentsPageShell, {
         activeWorkspace: createActiveWorkspace("/repo"),
         navigationPersistenceError: null,
-        isRestoring: false,
         chatSettingsLoadError: null,
         activeTabValue: "task-1",
         onRetryNavigationPersistence: () => {},
@@ -70,32 +67,11 @@ describe("AgentsPageShell", () => {
     expect(html).toContain("tabs");
   });
 
-  test("hides the empty workspace while saved state loads", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentsPageShell, {
-        activeWorkspace: createActiveWorkspace("/repo"),
-        navigationPersistenceError: null,
-        isRestoring: true,
-        chatSettingsLoadError: null,
-        activeTabValue: "__empty__",
-        onRetryNavigationPersistence: () => {},
-        onRetryChatSettingsLoad: () => {},
-        onTabValueChange: () => {},
-        taskTabs: createElement("p", undefined, "Open a task tab to start working with an agent."),
-        workspace: createElement("p", undefined, "Open a task tab to start a workspace."),
-      }),
-    );
-
-    expect(html).toContain("Restoring Agent Studio");
-    expect(html).not.toContain("Open a task tab");
-  });
-
   test("renders a retryable chat settings error banner without hiding the workspace", () => {
     const html = renderToStaticMarkup(
       createElement(AgentsPageShell, {
         activeWorkspace: createActiveWorkspace("/repo"),
         navigationPersistenceError: null,
-        isRestoring: false,
         chatSettingsLoadError: new Error("settings read failed"),
         activeTabValue: "task-1",
         onRetryNavigationPersistence: () => {},
